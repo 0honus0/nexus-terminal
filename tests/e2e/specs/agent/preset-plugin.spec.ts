@@ -224,7 +224,14 @@ const installAndRunNexusAgent = async (
       grants: Array<{ capability: string }>;
     }>;
     expect(grantView.data.capabilityDefinitions.map((definition) => definition.id)).toEqual(
-      expect.arrayContaining(['file.read', 'file.write', 'file.delete', 'browser.read', 'browser.interact']),
+      expect.arrayContaining([
+        'file.read',
+        'file.write',
+        'file.delete',
+        'shell.execute',
+        'browser.read',
+        'browser.interact',
+      ]),
     );
     expect(grantView.data.grants).toHaveLength(0);
     const replaced = await request.put('/api/v1/agent/apps/nexus.agent/grants', {
@@ -236,7 +243,10 @@ const installAndRunNexusAgent = async (
             scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } },
           },
           { capability: 'machine.inspect', scope: { kind: 'global' } },
-          { capability: 'machine.shell.execute', scope: { kind: 'global' } },
+          {
+            capability: 'shell.execute',
+            scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } },
+          },
         ],
         expectedPolicyRevision: grantView.data.policyRevision,
       },

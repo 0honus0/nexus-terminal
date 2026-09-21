@@ -138,9 +138,10 @@ export class SubagentService {
         ? this.capabilities.intersect(capability, appGrant.scope, parentGrant.scope)
         : appGrant.scope;
       if (!inheritedScope) return [];
-      const delegatedScope = capability.startsWith('file.')
-        ? this.capabilities.restrictTargets(capability, inheritedScope, ['workspace'])
-        : inheritedScope;
+      const delegatedScope =
+        capability.startsWith('file.') || capability === 'shell.execute'
+          ? this.capabilities.restrictTargets(capability, inheritedScope, ['workspace'])
+          : inheritedScope;
       return delegatedScope ? [{ capability, schemaVersion: 2 as const, scope: delegatedScope }] : [];
     });
     const delegationId = randomUUID();

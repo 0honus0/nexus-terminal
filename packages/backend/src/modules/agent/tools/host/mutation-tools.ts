@@ -10,8 +10,6 @@ import type {
   ToolResult,
 } from '../../capabilities/tool.types';
 
-const MAX_SHELL_BYTES = 16 * 1024;
-
 const record = (value: JsonValue): Record<string, JsonValue> => {
   if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');
   return value as Record<string, JsonValue>;
@@ -95,108 +93,6 @@ const result = (
 
 const hasSelectedConnection = (context: { connectionIds?: readonly number[] }): boolean =>
   context.connectionIds === undefined || context.connectionIds.length > 0;
-
-const shellRisk = (command: string): 'mutate' | 'destructive' | 'forbidden' => {
-  if (
-    /(^|[;&|]\s*)rm\s+-rf\s+\/(?:\s|$)/i.test(command) ||
-    /\/var\/run\/docker\.sock/i.test(command) ||
-    /(^|\s)(?:mkfs(?:\.[a-z0-9]+)?|wipefs)\s/i.test(command)
-  ) {
-    return 'forbidden';
-  }
-  if (/(^|[;&|]\s*)(?:shutdown|reboot|poweroff)\b/i.test(command) || /\brm\s+-rf\b/i.test(command)) {
-    return 'destructive';
-  }
-  return 'mutate';
-};
-
-export const createShellTool = (machine: MachineCapabilityPort, cryptoHash: CryptoHashPort): AgentTool => ({
-  descriptor: {
-    name: 'machine_execute_shell',
-    version: '1.0.0',
-    description: 'Execute explicit shell text on an authorized SSH target. Mutations require user approval.',
-    inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        connectionId: { type: 'integer', minimum: 1 },
-        command: { type: 'string', minLength: 1, maxLength: MAX_SHELL_BYTES },
-        timeoutSeconds: { type: 'integer', minimum: 1, maximum: 300 },
-      },
-      required: ['connectionId', 'command'],
-    },
-    riskClass: 'mutate',
-    capability: 'machine.shell.execute',
-  },
-  isAvailable: hasSelectedConnection,
-  inspect: async (input, context, policyRevision) => {
-    const args = record(input);
-    onlyKeys(args, ['connectionId', 'command', 'timeoutSeconds']);
-    const connectionId = positiveInteger(args.connectionId);
-    const command = stringValue(args.command, MAX_SHELL_BYTES);
-    const timeoutSeconds = positiveInteger(
-      args.timeoutSeconds,
-      Math.min(60, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
-    );
-    const target = await machine.target(context, connectionId);
-    const normalizedArguments: JsonValue = { connectionId, command, timeoutSeconds };
-    const resourceKeys = [`connection:${connectionId}`];
-    const risk = shellRisk(command);
-    const preconditions: ToolPrecondition[] = [];
-    return {
-      toolName: 'machine_execute_shell',
-      toolVersion: '1.0.0',
-      normalizedArguments,
-      target,
-      resourceKeys,
-      risk,
-      mutation: risk !== 'forbidden',
-      operationHash: operation(
-        cryptoHash,
-        context,
-        'machine_execute_shell',
-        '1.0.0',
-        target,
-        normalizedArguments,
-        resourceKeys,
-        preconditions,
-        policyRevision,
-      ),
-      operationHashVersion: 1,
-      preconditions,
-      policyRevision,
-      inputRevision: context.inputRevision,
-    };
-  },
-  execute: async (inspection, context) => {
-    if (inspection.risk === 'forbidden') throw new Error('RESOURCE_FORBIDDEN');
-    const args = record(inspection.normalizedArguments);
-    const shell = await machine.executeShell(
-      context,
-      positiveInteger(args.connectionId),
-      stringValue(args.command, MAX_SHELL_BYTES),
-      positiveInteger(args.timeoutSeconds),
-      inspection.target.configurationHash,
-    );
-    const ok = shell.exitCode === 0;
-    return result(
-      ok,
-      ok ? 'Remote shell command completed successfully.' : `Remote shell command exited with code ${shell.exitCode}.`,
-      {
-        exitCode: shell.exitCode,
-        signal: shell.signal,
-        stdout: shell.stdout,
-        stderr: shell.stderr,
-        target: { ...inspection.target },
-      },
-      ok
-        ? 'The SSH command channel returned a confirmed zero exit status.'
-        : 'The SSH command channel returned a confirmed non-zero exit status.',
-      [],
-      shell.truncated,
-    );
-  },
-});
 
 export const createDockerMutationTool = (machine: MachineCapabilityPort, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {

@@ -3,6 +3,7 @@ import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-a
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
 import { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
+import { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
 import { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import { AgentMutationLeaseGuardAdapter } from '../../infrastructure/agent/capabilities/agent-mutation-lease-guard.adapter';
 import { NodeCryptoHashAdapter } from '../../infrastructure/agent/capabilities/node-crypto-hash.adapter';
@@ -118,6 +119,7 @@ import {
   createMcpToolContributionHooks,
   registerFileToolContributions,
   registerMachineToolContributions,
+  registerShellToolContributions,
   registerAcpToolContribution,
   registerBrowserToolContribution,
   registerRuntimeToolContributions,
@@ -364,17 +366,24 @@ export const composeAgent = ({
   const targets = new AgentTargetResolver(workspaceRepository, machine, cryptoHash);
   const workspaceRuntime = composedWorkspaceRuntime.service;
   const files = new FileCapabilityService(targets, workspaceRuntime, machine);
+  const shell = new ShellCapabilityService(
+    targets,
+    workspaceRepository,
+    workspaceRuntimeController,
+    machine,
+    cryptoHash,
+  );
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter(acpTransport);
   const toolCatalog = new ToolCatalog();
   registerFileToolContributions({ catalog: toolCatalog, files, cryptoHash });
+  registerShellToolContributions({ catalog: toolCatalog, shell, cryptoHash });
   registerMachineToolContributions({ catalog: toolCatalog, machine, cryptoHash });
   registerWorkspaceToolContributions({
     catalog: toolCatalog,
     repository: workspaceRepository,
     targets,
     runtime: workspaceRuntime,
-    gateway: workspaceRuntimeController,
     cryptoHash,
   });
   registerAcpToolContribution({

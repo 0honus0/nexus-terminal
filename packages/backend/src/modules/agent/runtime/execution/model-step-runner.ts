@@ -114,7 +114,14 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] =>
         if (logical !== PROJECT_WORK_ROOT && !logical.startsWith(PROJECT_WORK_ROOT + '/')) return;
         targets.add(fileTarget ? path.posix.dirname(logical) : logical);
       };
-      if (call.name === 'workspace_execute_argv') {
+      if (
+        call.name === 'shell_execute' &&
+        argumentsRecord.target === 'workspace' &&
+        argumentsRecord.command &&
+        !Array.isArray(argumentsRecord.command) &&
+        typeof argumentsRecord.command === 'object' &&
+        (argumentsRecord.command as Record<string, unknown>).kind === 'argv'
+      ) {
         addTarget(argumentsRecord.cwd ?? PROJECT_WORK_ROOT, 'workspace');
       } else if (argumentsRecord.target === 'workspace' && call.name === 'file_read') {
         addTarget(argumentsRecord.path, 'work', true);

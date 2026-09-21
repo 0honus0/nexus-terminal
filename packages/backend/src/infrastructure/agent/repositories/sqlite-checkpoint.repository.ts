@@ -74,28 +74,23 @@ const assertCheckpointKeys = (record: Record<string, unknown>, allowedKeys: read
 };
 
 const backgroundJobFromTool = (row: ToolRecoveryRow): CheckpointBackgroundJobEntry | null => {
-  if (!['workspace_execute_argv', 'workspace_job'].includes(row.tool_name) || !row.result_json) return null;
+  if (!row.result_json) return null;
   const result = parseToolResult(row.result_json);
-  if (!result.data || Array.isArray(result.data) || typeof result.data !== 'object') return null;
-  const data = result.data as Record<string, unknown>;
+  const semantic = result.semantic;
   if (
-    typeof data.jobId !== 'string' ||
-    !/^job-[a-f0-9]{64}$/.test(data.jobId) ||
-    typeof data.workspaceId !== 'string' ||
-    data.workspaceId.length < 1 ||
-    data.workspaceId.length > 128 ||
-    !Number.isSafeInteger(data.generation) ||
-    Number(data.generation) < 1 ||
-    typeof data.status !== 'string' ||
-    !backgroundJobStatuses.has(data.status as CheckpointBackgroundJobStatus)
+    semantic?.kind !== 'execution' ||
+    !semantic.job ||
+    semantic.target.target !== 'workspace' ||
+    semantic.target.id !== semantic.job.workspaceId ||
+    !backgroundJobStatuses.has(semantic.status as CheckpointBackgroundJobStatus)
   ) {
     return null;
   }
   return {
-    jobId: data.jobId,
-    workspaceId: data.workspaceId,
-    generation: Number(data.generation),
-    status: data.status as CheckpointBackgroundJobStatus,
+    jobId: semantic.job.jobId,
+    workspaceId: semantic.job.workspaceId,
+    generation: semantic.job.generation,
+    status: semantic.status as CheckpointBackgroundJobStatus,
   };
 };
 
@@ -641,7 +636,6 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
        FROM agent_tool_calls t
        JOIN agent_runs r ON r.id=t.run_id
        WHERE t.run_id=? AND r.user_id=? AND r.app_id=?
-         AND t.tool_name IN ('workspace_execute_argv','workspace_job')
          AND t.result_json IS NOT NULL
        ORDER BY t.created_at,t.id`,
       [runId, scope.userId, scope.appId],

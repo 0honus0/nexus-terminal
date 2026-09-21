@@ -490,6 +490,39 @@ export const parseToolResult = (raw: string): ToolResult => {
   if (!['confirmed', 'unknown'].includes(String(record.outcome))) return invalid();
   const verification = durableRecord(record.verification);
   if (!['verified', 'unverified', 'failed'].includes(String(verification.status))) return invalid();
+  let semantic: ToolResult['semantic'];
+  if (record.semantic !== undefined) {
+    const rawSemantic = durableRecord(record.semantic);
+    assertDurableKeys(rawSemantic, ['kind', 'target', 'status', 'job']);
+    if (rawSemantic.kind !== 'execution') return invalid();
+    const target = durableRecord(rawSemantic.target);
+    assertDurableKeys(target, ['target', 'id']);
+    if ((target.target !== 'workspace' && target.target !== 'ssh') || typeof target.id !== 'string' || !target.id) {
+      return invalid();
+    }
+    if (!['pending', 'running', 'succeeded', 'failed', 'unknown', 'cancelled'].includes(String(rawSemantic.status))) {
+      return invalid();
+    }
+    let job: NonNullable<ToolResult['semantic']>['job'];
+    if (rawSemantic.job !== undefined) {
+      const rawJob = durableRecord(rawSemantic.job);
+      assertDurableKeys(rawJob, ['jobId', 'workspaceId', 'generation']);
+      const jobId = durableString(rawJob.jobId) as string;
+      if (!/^job-[a-f0-9]{64}$/.test(jobId)) return invalid();
+      job = {
+        jobId,
+        workspaceId: durableString(rawJob.workspaceId) as string,
+        generation: durableInteger(rawJob.generation, 1),
+      };
+      if (target.target !== 'workspace' || job.workspaceId !== target.id) return invalid();
+    }
+    semantic = {
+      kind: 'execution',
+      target: { target: target.target, id: target.id } as NonNullable<ToolResult['semantic']>['target'],
+      status: rawSemantic.status as NonNullable<ToolResult['semantic']>['status'],
+      ...(job === undefined ? {} : { job }),
+    };
+  }
   return {
     ok: durableBoolean(record.ok),
     summary: durableString(record.summary) as string,
@@ -498,6 +531,7 @@ export const parseToolResult = (raw: string): ToolResult => {
     truncated: durableBoolean(record.truncated),
     outcome: record.outcome as ToolResult['outcome'],
     ...(record.errorCode === undefined ? {} : { errorCode: durableString(record.errorCode) as string }),
+    ...(semantic === undefined ? {} : { semantic }),
     verification: {
       status: verification.status as ToolResult['verification']['status'],
       summary: durableString(verification.summary) as string,

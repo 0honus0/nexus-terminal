@@ -1,7 +1,6 @@
 import type { CompletionEvidenceSnapshot } from '../runs/run.repository.port';
 import type { RunSnapshot } from '../runs/run.types';
 
-const EXECUTION_EVIDENCE_TOOLS = new Set(['workspace_execute_argv', 'workspace_job', 'machine_execute_shell']);
 const EXPLICIT_VERIFICATION_REQUEST =
   /(?:\b(?:test|tests|testing|build|compile|lint|typecheck|type-check|check|verify|verification|pytest|vitest|jest)\b|测试|构建|编译|检查|验证)/i;
 
@@ -90,7 +89,10 @@ export const completionGateDecision = (
   );
   const verifiedExecution = evidence.tools.filter(
     (item) =>
-      item.stepIndex >= latestMutationStep && EXECUTION_EVIDENCE_TOOLS.has(item.toolName) && verified(item.result),
+      item.stepIndex >= latestMutationStep &&
+      item.result.semantic?.kind === 'execution' &&
+      item.result.semantic.status === 'succeeded' &&
+      verified(item.result),
   );
   const hasRequiredEvidence = requiresExecutionEvidence
     ? verifiedExecution.length > 0 || hasPlanEvidence

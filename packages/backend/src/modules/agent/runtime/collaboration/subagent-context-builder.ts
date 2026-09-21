@@ -218,7 +218,7 @@ export class SubagentContextBuilder {
       delegation.mutationMode === 'governed' &&
       (descriptor?.capability === 'file.write' ||
         descriptor?.capability === 'file.delete' ||
-        descriptor?.capability === 'workspace.execute' ||
+        descriptor?.capability === 'shell.execute' ||
         descriptor?.capability === 'workspace.manage') &&
       (descriptor?.riskClass === 'mutate' || descriptor?.riskClass === 'destructive');
     const riskAllowed =
@@ -405,7 +405,7 @@ export class SubagentContextBuilder {
             (governedMutationsEnabled &&
               (descriptor.capability === 'file.write' ||
                 descriptor.capability === 'file.delete' ||
-                descriptor.capability === 'workspace.execute' ||
+                descriptor.capability === 'shell.execute' ||
                 descriptor.capability === 'workspace.manage') &&
               (descriptor.riskClass === 'mutate' || descriptor.riskClass === 'destructive'))),
       )

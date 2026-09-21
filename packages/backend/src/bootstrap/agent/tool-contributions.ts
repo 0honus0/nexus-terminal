@@ -10,14 +10,13 @@ import { createUnifiedFileTools } from '../../modules/agent/tools/host/file-tool
 import { createMcpTools } from '../../modules/agent/tools/host/mcp-tools';
 import { createAcpExecuteTool } from '../../modules/agent/tools/host/acp-tools';
 import { createBrowserTools } from '../../modules/agent/tools/host/browser-tools';
-import { createDockerMutationTool, createShellTool } from '../../modules/agent/tools/host/mutation-tools';
+import { createDockerMutationTool } from '../../modules/agent/tools/host/mutation-tools';
 import { createConnectionListTool, createDiagnosticsTool } from '../../modules/agent/tools/host/tools';
 import {
   createWorkspaceControlTool,
   createWorkspaceCreateTool,
   createWorkspaceSwitchToolVersionsTool,
 } from '../../modules/agent/tools/host/workspace-runtime-management-tools';
-import { createWorkspaceJobControlTool, createWorkspaceJobTool } from '../../modules/agent/tools/host/workspace-tools';
 import {
   createWorkspaceCodeIntelTool,
   createWorkspaceRepoMapTool,
@@ -29,6 +28,7 @@ import { createArtifactReadTool } from '../../modules/agent/tools/host/artifact-
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
+import type { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
 import type { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
 import type { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
@@ -38,9 +38,9 @@ import type { SubagentService } from '../../modules/agent/runtime/collaboration/
 import { createPlanUpdateTool } from '../../modules/agent/runtime/planning/plan-tool';
 import type { PlanService } from '../../modules/agent/runtime/planning/plan.service';
 import type { RunSnapshotReaderPort } from '../../modules/agent/runtime/runs/run.repository.port';
-import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type { AgentWorkspaceRepositoryPort } from '../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
+import { createUnifiedShellTools } from '../../modules/agent/tools/host/shell-tools';
 
 export interface FileToolContributionOptions {
   catalog: ToolCatalog;
@@ -74,13 +74,22 @@ export const registerMachineToolContributions = ({
   });
   catalog.registerContribution({
     schemaVersion: 1,
-    id: 'machine.shell',
-    tools: [createShellTool(machine, cryptoHash)],
-  });
-  catalog.registerContribution({
-    schemaVersion: 1,
     id: 'machine.docker',
     tools: [createDockerMutationTool(machine, cryptoHash)],
+  });
+};
+
+export interface ShellToolContributionOptions {
+  catalog: ToolCatalog;
+  shell: ShellCapabilityService;
+  cryptoHash: CryptoHashPort;
+}
+
+export const registerShellToolContributions = ({ catalog, shell, cryptoHash }: ShellToolContributionOptions): void => {
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'shell.tools',
+    tools: createUnifiedShellTools(shell, cryptoHash),
   });
 };
 
@@ -89,7 +98,6 @@ export interface WorkspaceToolContributionOptions {
   repository: AgentWorkspaceRepositoryPort;
   targets: AgentTargetResolver;
   runtime: WorkspaceRuntimeService;
-  gateway: WorkspaceRuntimeGatewayPort;
   cryptoHash: CryptoHashPort;
 }
 
@@ -98,7 +106,6 @@ export const registerWorkspaceToolContributions = ({
   repository,
   targets,
   runtime,
-  gateway,
   cryptoHash,
 }: WorkspaceToolContributionOptions): void => {
   catalog.registerContribution({
@@ -107,8 +114,6 @@ export const registerWorkspaceToolContributions = ({
     tools: [
       createWorkspaceRepoMapTool(targets, runtime, cryptoHash),
       createWorkspaceCodeIntelTool(targets, runtime, cryptoHash),
-      createWorkspaceJobTool(repository, gateway, cryptoHash),
-      createWorkspaceJobControlTool(repository, gateway, cryptoHash),
     ],
   });
   catalog.registerContribution({

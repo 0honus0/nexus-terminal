@@ -160,7 +160,6 @@ const server = http.createServer(async (request, response) => {
       'workspace_create',
       'workspace_control',
       'workspace_switch_tool_versions',
-      'workspace_execute_argv',
       'acp_execute',
     ].filter((name) => offeredToolNames.includes(name));
     if (unavailableWorkspaceTools.length > 0) {
@@ -289,7 +288,7 @@ const server = http.createServer(async (request, response) => {
   );
   const shellToolOffered =
     Array.isArray(body?.tools) &&
-    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_execute_shell');
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'shell_execute');
   const readFileToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'file_read');
@@ -575,10 +574,12 @@ const server = http.createServer(async (request, response) => {
                 id: 'call_e2e_approval',
                 type: 'function',
                 function: {
-                  name: 'machine_execute_shell',
+                  name: 'shell_execute',
                   arguments: JSON.stringify({
-                    connectionId: Number(approvalConnection[1]),
-                    command: 'printf approval-e2e',
+                    target: 'ssh',
+                    id: String(Number(approvalConnection[1])),
+                    command: { kind: 'shell', text: 'printf approval-e2e' },
+                    mode: 'foreground',
                     timeoutSeconds: 10,
                   }),
                 },
@@ -601,8 +602,10 @@ const server = http.createServer(async (request, response) => {
   if (duplicateMutationConnection && shellToolOffered && readFileToolOffered) {
     const connectionId = Number(duplicateMutationConnection[1]);
     const mutationArguments = JSON.stringify({
-      connectionId,
-      command: "printf 'duplicate-e2e\\n' >> duplicate-proof.txt",
+      target: 'ssh',
+      id: String(connectionId),
+      command: { kind: 'shell', text: "printf 'duplicate-e2e\\n' >> duplicate-proof.txt" },
+      mode: 'foreground',
       timeoutSeconds: 10,
     });
     const sendToolCall = (id, name, args) => {
@@ -631,11 +634,11 @@ const server = http.createServer(async (request, response) => {
       response.end('data: [DONE]\n\n');
     };
     if (!duplicateMutationFirstResult) {
-      sendToolCall('call_e2e_duplicate_first', 'machine_execute_shell', mutationArguments);
+      sendToolCall('call_e2e_duplicate_first', 'shell_execute', mutationArguments);
       return;
     }
     if (!duplicateMutationSecondResult) {
-      sendToolCall('call_e2e_duplicate_second', 'machine_execute_shell', mutationArguments);
+      sendToolCall('call_e2e_duplicate_second', 'shell_execute', mutationArguments);
       return;
     }
     if (!JSON.stringify(duplicateMutationSecondResult).includes('MUTATION_ALREADY_CONFIRMED')) {

@@ -1,6 +1,6 @@
 import type { Actor, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../agent.types';
 import type { AgentCapability } from '../host/app.types';
-import type { ToolTargetFingerprint } from './tool-target.types';
+import type { AgentTargetSelector, ToolTargetFingerprint } from './tool-target.types';
 
 export type ToolRisk = 'read' | 'control' | 'mutate' | 'destructive' | 'forbidden';
 export type ToolRiskClass = Exclude<ToolRisk, 'forbidden'>;
@@ -57,6 +57,23 @@ export interface ToolContext extends Scope {
   continuation?: JsonValue;
 }
 
+export type ToolExecutionStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
+
+export interface ToolExecutionJobSemantic {
+  jobId: string;
+  workspaceId: string;
+  generation: number;
+}
+
+export interface ToolExecutionSemantic {
+  kind: 'execution';
+  target: AgentTargetSelector;
+  status: ToolExecutionStatus;
+  job?: ToolExecutionJobSemantic;
+}
+
+export type ToolResultSemantic = ToolExecutionSemantic;
+
 export interface ToolResult {
   ok: boolean;
   summary: string;
@@ -65,6 +82,7 @@ export interface ToolResult {
   truncated: boolean;
   outcome: 'confirmed' | 'unknown';
   errorCode?: string;
+  semantic?: ToolResultSemantic;
   projection?: { originalBytes: number; sha256: string };
   verification: {
     status: 'verified' | 'unverified' | 'failed';

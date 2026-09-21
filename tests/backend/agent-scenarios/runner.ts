@@ -27,6 +27,7 @@ import { AgentNotificationBridge } from '../../../packages/backend/src/bootstrap
 import { createAgentConnectionResolver } from '../../../packages/backend/src/bootstrap/agent/machine-support';
 import {
   registerFileToolContributions,
+  registerShellToolContributions,
   registerWorkspaceToolContributions,
 } from '../../../packages/backend/src/bootstrap/agent/tool-contributions';
 import { LocalArtifactStore } from '../../../packages/backend/src/infrastructure/agent/artifacts/local-artifact-store';
@@ -98,6 +99,7 @@ import {
 } from '../../../packages/backend/src/modules/agent/agent-defaults';
 import { FileCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/file-capability.service';
 import type { MachineCapabilityPort } from '../../../packages/backend/src/modules/agent/capabilities/machine.port';
+import { ShellCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/shell-capability.service';
 import type { LeasePort } from '../../../packages/backend/src/modules/agent/capabilities/lease.port';
 import { LEASE_RENEW_INTERVAL_MS } from '../../../packages/backend/src/modules/agent/capabilities/lease-policy';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
@@ -119,10 +121,6 @@ import {
   createWorkspaceCodeIntelTool,
   createWorkspaceRepoMapTool,
 } from '../../../packages/backend/src/modules/agent/tools/host/workspace-coding-tools';
-import {
-  createWorkspaceJobControlTool,
-  createWorkspaceJobTool,
-} from '../../../packages/backend/src/modules/agent/tools/host/workspace-tools';
 import type { AgentWorkspaceRepositoryPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { WorkspaceRuntimeService } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.service';
 import type { WorkspaceRuntimeGatewayPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime-gateway.port';
@@ -160,10 +158,8 @@ import {
   createConnectionListTool,
   createDiagnosticsTool,
 } from '../../../packages/backend/src/modules/agent/tools/host/tools';
-import {
-  createDockerMutationTool,
-  createShellTool,
-} from '../../../packages/backend/src/modules/agent/tools/host/mutation-tools';
+import { createDockerMutationTool } from '../../../packages/backend/src/modules/agent/tools/host/mutation-tools';
+import { createUnifiedShellTools } from '../../../packages/backend/src/modules/agent/tools/host/shell-tools';
 import { createMcpTools } from '../../../packages/backend/src/modules/agent/tools/host/mcp-tools';
 import {
   mcpInputRequestFromToolResult,
@@ -1241,7 +1237,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
       'migration 30 must create the Context checkpoint owner',
     );
     assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
-    assert.equal(migrationVersion?.version, 38, 'legacy databases must advance through migration 38');
+    assert.equal(migrationVersion?.version, 44, 'legacy databases must advance through migration 44');
   } finally {
     legacyDb.close();
     fs.rmSync(upgradeDirectory, { recursive: true, force: true });
@@ -1255,7 +1251,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
     { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
     { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },
     { name: 'legacy_digest_tables', value: 0, unit: 'tables' },
-    { name: 'migration_version', value: 38, unit: 'version' },
+    { name: 'migration_version', value: 44, unit: 'version' },
   ];
 };
 
@@ -1286,7 +1282,11 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
         (1, 'both', 'workspace.read', 1, '{"targetSelection":"all-except-denylist"}', 12),
         (1, 'both', 'machine.files.read', 1, '{"targetSelection":"all-except-denylist"}', 13),
         (1, 'workspace-write', 'workspace.write', 1, '{"targetSelection":"all-except-denylist"}', 14),
-        (1, 'global', 'artifacts.read', 1, '{}', 15);
+        (1, 'global', 'artifacts.read', 1, '{}', 15),
+        (1, 'workspace-shell', 'workspace.execute', 1, '{}', 16),
+        (1, 'ssh-shell', 'machine.shell.execute', 1, '{}', 17),
+        (1, 'both-shell', 'workspace.execute', 1, '{}', 18),
+        (1, 'both-shell', 'machine.shell.execute', 1, '{}', 19);
 
       CREATE TABLE agent_delegations (
         id TEXT PRIMARY KEY,
@@ -1294,7 +1294,7 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
       );
       INSERT INTO agent_delegations VALUES (
         'legacy-delegation',
-        '["workspace.read","machine.files.read","workspace.write","artifacts.read"]'
+        '["workspace.read","machine.files.read","workspace.write","workspace.execute","machine.shell.execute","artifacts.read"]'
       );
 
       CREATE TABLE agent_plugin_versions (
@@ -1305,7 +1305,7 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
       INSERT INTO agent_plugin_versions VALUES (
         'legacy.plugin',
         '1.0.0',
-        '{"capabilities":["workspace.read","machine.files.write","artifacts.read"]}'
+        '{"capabilities":["workspace.read","machine.files.write","workspace.execute","machine.shell.execute","artifacts.read"]}'
       );
 
       CREATE TABLE agent_plugin_stages (
@@ -1314,7 +1314,26 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
       );
       INSERT INTO agent_plugin_stages VALUES (
         'legacy-stage',
-        '{"capabilities":["machine.files.read","workspace.write"]}'
+        '{"capabilities":["machine.files.read","workspace.write","workspace.execute"]}'
+      );
+
+      CREATE TABLE agent_tool_calls (
+        id TEXT PRIMARY KEY,
+        tool_name TEXT NOT NULL,
+        inspection_json TEXT NOT NULL,
+        result_json TEXT
+      );
+      INSERT INTO agent_tool_calls VALUES (
+        'legacy-workspace-shell',
+        'workspace_execute_argv',
+        '{"normalizedArguments":{"workspaceId":"legacy-workspace","generation":7},"target":{"kind":"workspace","target":"workspace","id":"legacy-workspace"}}',
+        '{"ok":true,"summary":"accepted","data":{"jobId":"job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","workspaceId":"legacy-workspace","generation":7,"status":"running"},"artifactRefs":[],"truncated":false,"outcome":"confirmed","verification":{"status":"unverified","summary":"pending","evidenceRefs":[]}}'
+      );
+      INSERT INTO agent_tool_calls VALUES (
+        'legacy-ssh-shell',
+        'machine_execute_shell',
+        '{"normalizedArguments":{"connectionId":42},"target":{"kind":"ssh","target":"ssh","id":"42"}}',
+        '{"ok":true,"summary":"done","data":{"exitCode":0},"artifactRefs":[],"truncated":false,"outcome":"confirmed","verification":{"status":"verified","summary":"done","evidenceRefs":[]}}'
       );
     `);
 
@@ -1351,6 +1370,18 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
       targets: { workspace: { mode: 'all' } },
     });
     assert.deepEqual(scopeFor('global', 'artifacts.read'), { kind: 'global' });
+    assert.deepEqual(scopeFor('workspace-shell', 'shell.execute'), {
+      kind: 'targets',
+      targets: { workspace: { mode: 'all' } },
+    });
+    assert.deepEqual(scopeFor('ssh-shell', 'shell.execute'), {
+      kind: 'targets',
+      targets: { ssh: { mode: 'all' } },
+    });
+    assert.deepEqual(scopeFor('both-shell', 'shell.execute'), {
+      kind: 'targets',
+      targets: { workspace: { mode: 'all' }, ssh: { mode: 'all' } },
+    });
 
     const delegation = db.prepare("SELECT grants_json FROM agent_delegations WHERE id='legacy-delegation'").get() as {
       grants_json: string;
@@ -1362,8 +1393,8 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
     }>;
     assert.deepEqual(
       delegatedGrants.map((grant) => grant.capability).sort(),
-      ['artifacts.read', 'file.read', 'file.write'],
-      'legacy Subagent file authorities must collapse to canonical delegated capabilities',
+      ['artifacts.read', 'file.read', 'file.write', 'shell.execute'],
+      'legacy Subagent file/shell authorities must collapse to canonical delegated capabilities',
     );
     for (const grant of delegatedGrants.filter((candidate) => candidate.capability.startsWith('file.'))) {
       assert.equal(grant.schemaVersion, 2);
@@ -1372,6 +1403,13 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
         targets: { workspace: { mode: 'all' } },
       });
     }
+    const delegatedShell = delegatedGrants.find((grant) => grant.capability === 'shell.execute');
+    assert.ok(delegatedShell);
+    assert.equal(delegatedShell.schemaVersion, 2);
+    assert.deepEqual(delegatedShell.scope, {
+      kind: 'targets',
+      targets: { workspace: { mode: 'all' }, ssh: { mode: 'all' } },
+    });
 
     const versionManifest = JSON.parse(
       (
@@ -1380,7 +1418,7 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
         }
       ).manifest_json,
     ) as { capabilities: string[] };
-    assert.deepEqual(versionManifest.capabilities, ['artifacts.read', 'file.read', 'file.write']);
+    assert.deepEqual(versionManifest.capabilities, ['artifacts.read', 'file.read', 'file.write', 'shell.execute']);
     const stageManifest = JSON.parse(
       (
         db.prepare("SELECT manifest_json FROM agent_plugin_stages WHERE id='legacy-stage'").get() as {
@@ -1388,12 +1426,46 @@ const capabilityGrantMigrationScenario: Scenario = async () => {
         }
       ).manifest_json,
     ) as { capabilities: string[] };
-    assert.deepEqual(stageManifest.capabilities, ['file.read', 'file.write']);
+    assert.deepEqual(stageManifest.capabilities, ['file.read', 'file.write', 'shell.execute']);
+
+    const migratedWorkspaceResult = JSON.parse(
+      (
+        db.prepare("SELECT result_json FROM agent_tool_calls WHERE id='legacy-workspace-shell'").get() as {
+          result_json: string;
+        }
+      ).result_json,
+    ) as ToolResult;
+    assert.deepEqual(migratedWorkspaceResult.semantic, {
+      kind: 'execution',
+      target: { target: 'workspace', id: 'legacy-workspace' },
+      status: 'running',
+      job: {
+        jobId: 'job-' + 'a'.repeat(64),
+        workspaceId: 'legacy-workspace',
+        generation: 7,
+      },
+    });
+    const migratedSshResult = JSON.parse(
+      (
+        db.prepare("SELECT result_json FROM agent_tool_calls WHERE id='legacy-ssh-shell'").get() as {
+          result_json: string;
+        }
+      ).result_json,
+    ) as ToolResult;
+    assert.deepEqual(migratedSshResult.semantic, {
+      kind: 'execution',
+      target: { target: 'ssh', id: '42' },
+      status: 'succeeded',
+    });
 
     return [
       { name: 'capability_grant_migration_schema_version', value: 2, unit: 'version' },
       { name: 'capability_grant_migration_workspace_only', value: 1, unit: 'cases' },
       { name: 'capability_grant_migration_ssh_only', value: 1, unit: 'cases' },
+      { name: 'capability_grant_migration_shell_workspace_only', value: 1, unit: 'cases' },
+      { name: 'capability_grant_migration_shell_ssh_only', value: 1, unit: 'cases' },
+      { name: 'capability_grant_migration_shell_combined', value: 1, unit: 'cases' },
+      { name: 'capability_grant_migration_execution_semantics', value: 2, unit: 'results' },
       { name: 'capability_grant_migration_widened_scopes', value: 0, unit: 'cases' },
     ];
   } finally {
@@ -1610,13 +1682,23 @@ const projectInstructionsContextScenario: Scenario = async () => {
         toolCalls: [
           {
             id: 'valid-cwd',
-            name: 'workspace_execute_argv',
-            argumentsJson: JSON.stringify({ cwd: '/workspace/work/src/parser' }),
+            name: 'shell_execute',
+            argumentsJson: JSON.stringify({
+              target: 'workspace',
+              id: 'workspace-audit',
+              command: { kind: 'argv', argv: ['pwd'] },
+              cwd: '/workspace/work/src/parser',
+            }),
           },
           {
             id: 'outside-cwd',
-            name: 'workspace_execute_argv',
-            argumentsJson: JSON.stringify({ cwd: '/workspace/work/../outside' }),
+            name: 'shell_execute',
+            argumentsJson: JSON.stringify({
+              target: 'workspace',
+              id: 'workspace-audit',
+              command: { kind: 'argv', argv: ['pwd'] },
+              cwd: '/workspace/work/../outside',
+            }),
           },
           {
             id: 'read-target',
@@ -1865,12 +1947,12 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
     files: null!,
     cryptoHash: codingCryptoHash,
   });
+  registerShellToolContributions({ catalog, shell: null!, cryptoHash: codingCryptoHash });
   registerWorkspaceToolContributions({
     catalog,
     repository: null!,
     targets: null!,
     runtime: null!,
-    gateway: null!,
     cryptoHash: codingCryptoHash,
   });
   const descriptors = new Map(catalog.list(scope).map((descriptor) => [descriptor.name, descriptor]));
@@ -1883,11 +1965,10 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
   );
   assert.equal(descriptors.get('workspace_repo_map')?.capability, 'file.read');
   assert.equal(descriptors.get('workspace_code_intel')?.capability, 'file.read');
-  assert.equal(
-    descriptors.get('workspace_execute_argv')?.riskClass,
-    'mutate',
-    'the existing argv escape hatch must remain governed as mutation',
-  );
+  assert.equal(descriptors.get('shell_execute')?.riskClass, 'mutate', 'canonical execution must remain governed');
+  assert.equal(descriptors.get('shell_execute')?.capability, 'shell.execute');
+  assert.equal(descriptors.get('shell_job')?.riskClass, 'control');
+  assert.equal(descriptors.get('shell_job')?.capability, 'shell.execute');
   const planToolNames = new Set(
     modelFacingToolSchemas(
       catalog,
@@ -1913,7 +1994,8 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
   assert.equal(planToolNames.has('file_patch'), false);
   assert.equal(planToolNames.has('workspace_repo_map'), true);
   assert.equal(planToolNames.has('workspace_code_intel'), true);
-  assert.equal(planToolNames.has('workspace_execute_argv'), false);
+  assert.equal(planToolNames.has('shell_execute'), false);
+  assert.equal(planToolNames.has('shell_job'), true);
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-workspace-coding-'));
   const workRoot = path.join(directory, 'work');
@@ -2763,31 +2845,28 @@ const workspaceRepoMapCodeIntelScenario: Scenario = async () => {
 
 const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
   const catalog = new ToolCatalog();
-  registerWorkspaceToolContributions({
+  registerShellToolContributions({
     catalog,
-    repository: null!,
-    targets: null!,
-    runtime: null!,
-    gateway: null!,
+    shell: null!,
     cryptoHash: {
       sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
     },
   });
   const descriptors = new Map(catalog.list(scope).map((descriptor) => [descriptor.name, descriptor]));
-  const execute = descriptors.get('workspace_execute_argv');
-  assert.ok(execute, 'workspace_execute_argv must remain registered');
+  const execute = descriptors.get('shell_execute');
+  assert.ok(execute, 'canonical shell_execute must remain registered');
   const executeSchema = execute.inputSchema as {
     properties?: { mode?: { enum?: unknown[] } };
   };
   assert.deepEqual(
     executeSchema.properties?.mode?.enum,
     ['foreground', 'background'],
-    'P-073 must let workspace_execute_argv explicitly choose foreground/background execution',
+    'canonical Workspace execution must explicitly choose foreground/background execution',
   );
   assert.equal(
-    descriptors.get('workspace_job')?.riskClass,
+    descriptors.get('shell_job')?.riskClass,
     'control',
-    'P-073 must expose one bounded workspace_job lifecycle control Tool',
+    'canonical Shell must expose one bounded shell_job lifecycle control Tool',
   );
   const planNames = new Set(
     modelFacingToolSchemas(
@@ -2809,8 +2888,8 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
       'plan',
     ).map((tool) => tool.name),
   );
-  assert.equal(planNames.has('workspace_job'), true, 'durable job status/wait control should remain plan-visible');
-  assert.equal(planNames.has('workspace_execute_argv'), false, 'plan mode must still hide argv mutation');
+  assert.equal(planNames.has('shell_job'), true, 'durable job status/wait control should remain plan-visible');
+  assert.equal(planNames.has('shell_execute'), false, 'plan mode must still hide command mutation');
 
   const toolWorkspace = {
     ...scope,
@@ -2898,11 +2977,19 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
     maxOutputBytes: 64 * 1024,
     inputRevision: 2,
   };
-  const executeTool = createWorkspaceJobTool(toolRepository, toolGateway, toolCrypto);
+  const shellTargets = new AgentTargetResolver(toolRepository, null!, toolCrypto);
+  const shellService = new ShellCapabilityService(shellTargets, toolRepository, toolGateway, null!, toolCrypto);
+  const shellTools = new Map(
+    createUnifiedShellTools(shellService, toolCrypto).map((tool) => [tool.descriptor.name, tool]),
+  );
+  const executeTool = shellTools.get('shell_execute');
+  const controlTool = shellTools.get('shell_job');
+  assert.ok(executeTool && controlTool);
   const backgroundInspection = await executeTool.inspect(
     {
-      workspaceId: toolWorkspace.id,
-      argv: ['pnpm', 'test'],
+      target: 'workspace',
+      id: toolWorkspace.id,
+      command: { kind: 'argv', argv: ['pnpm', 'test'] },
       mode: 'background',
       timeoutSeconds: 60,
     },
@@ -2928,9 +3015,8 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
     'durable argv inspections without the canonical mode field must fail closed',
   );
 
-  const controlTool = createWorkspaceJobControlTool(toolRepository, toolGateway, toolCrypto);
   const waitInspection = await controlTool.inspect(
-    { jobId: runningJob.jobId, action: 'wait', waitSeconds: 60 },
+    { target: 'workspace', id: toolWorkspace.id, jobId: runningJob.jobId, action: 'wait', waitSeconds: 60 },
     toolContext,
     7,
   );
@@ -2944,7 +3030,11 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
     'verified',
     'only terminal zero-exit durable job evidence is verified',
   );
-  const cancelInspection = await controlTool.inspect({ jobId: runningJob.jobId, action: 'cancel' }, toolContext, 7);
+  const cancelInspection = await controlTool.inspect(
+    { target: 'workspace', id: toolWorkspace.id, jobId: runningJob.jobId, action: 'cancel' },
+    toolContext,
+    7,
+  );
   const cancelledToolResult = await controlTool.execute(cancelInspection, toolContext);
   assert.equal(cancelledToolResult.ok, true, 'confirmed cancellation means the control action succeeded');
   assert.equal(
@@ -2959,7 +3049,7 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
   const backgroundOnlyEvidence = {
     tools: [
       {
-        toolName: 'workspace_execute_argv',
+        toolName: 'shell_execute',
         stepIndex: 1,
         inspection: backgroundInspection,
         result: backgroundLaunch,
@@ -2983,7 +3073,7 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
     tools: [
       ...backgroundOnlyEvidence.tools,
       {
-        toolName: 'workspace_job',
+        toolName: 'shell_job',
         stepIndex: 2,
         inspection: waitInspection,
         result: waitedToolResult,
@@ -3180,25 +3270,25 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
 
     return [
       { name: 'workspace_background_modes', value: 2, unit: 'modes' },
-      { name: 'workspace_job_control_tools', value: 1, unit: 'tools' },
+      { name: 'shell_job_control_tools', value: 1, unit: 'tools' },
       { name: 'workspace_foreground_backend_polls', value: foregroundQueryCalls, unit: 'polls' },
       { name: 'workspace_server_wait_cases', value: 2, unit: 'cases' },
-      { name: 'workspace_job_cancel_cases', value: cancelCalls, unit: 'cases' },
+      { name: 'shell_job_cancel_cases', value: cancelCalls, unit: 'cases' },
       { name: 'workspace_background_mutation_conflicts', value: 2, unit: 'cases' },
-      { name: 'workspace_job_generation_provenance', value: oldGeneration.generation === 7 ? 1 : 0, unit: 'cases' },
-      { name: 'workspace_job_plan_controls', value: planNames.has('workspace_job') ? 1 : 0, unit: 'tools' },
+      { name: 'shell_job_generation_provenance', value: oldGeneration.generation === 7 ? 1 : 0, unit: 'cases' },
+      { name: 'shell_job_plan_controls', value: planNames.has('shell_job') ? 1 : 0, unit: 'tools' },
       {
         name: 'workspace_background_launch_unverified',
         value: backgroundLaunch.verification.status === 'unverified' ? 1 : 0,
         unit: 'cases',
       },
       {
-        name: 'workspace_job_verified_terminal_results',
+        name: 'shell_job_verified_terminal_results',
         value: waitedToolResult.verification.status === 'verified' ? 1 : 0,
         unit: 'cases',
       },
       {
-        name: 'workspace_job_cancelled_verification_rejections',
+        name: 'shell_job_cancelled_verification_rejections',
         value: cancelledToolResult.verification.status === 'failed' ? 1 : 0,
         unit: 'cases',
       },
@@ -7609,6 +7699,16 @@ const restartRecoveryScenario: Scenario = async () => {
       artifactRefs: [],
       truncated: false,
       outcome: 'confirmed',
+      semantic: {
+        kind: 'execution',
+        target: { target: 'workspace', id: 'restart-job-workspace' },
+        status: 'running',
+        job: {
+          jobId: restartJobId,
+          workspaceId: 'restart-job-workspace',
+          generation: 1,
+        },
+      },
       verification: {
         status: 'unverified',
         summary: 'Background acceptance is not terminal execution evidence.',
@@ -7621,11 +7721,41 @@ const restartRecoveryScenario: Scenario = async () => {
          inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
          created_at, started_at, completed_at)
        VALUES ('restart-job-tool', ?, ?, 'restart-job-tool-step', 'restart-job-model-step', 'provider-restart-job',
-               'workspace_execute_argv', '1', ?, 'sha256:restart-job', 1, 'mutate', 'succeeded', ?, ?, ?, ?)`,
+               'shell_execute', '1', ?, 'sha256:restart-job', 1, 'mutate', 'succeeded', ?, ?, ?, ?)`,
       [
         jobRunId,
         jobRuntimeId,
-        toolInspection('workspace_execute_argv', 'workspace:restart-job', 'mutate', 'sha256:restart-job'),
+        JSON.stringify({
+          toolName: 'shell_execute',
+          toolVersion: '1',
+          normalizedArguments: {
+            target: 'workspace',
+            id: 'restart-job-workspace',
+            command: { kind: 'argv', argv: ['hold'] },
+            cwd: '/workspace/work',
+            timeoutSeconds: 60,
+            mode: 'background',
+          },
+          target: {
+            kind: 'workspace',
+            target: 'workspace',
+            id: 'restart-job-workspace',
+            targetIdentity: 'workspace:restart-job-workspace:1',
+            endpoint: 'workspace:restart-job-workspace',
+            loginUser: 'runner:65532',
+            configurationHash: 'restart-job-config',
+            workspaceId: 'restart-job-workspace',
+            generation: 1,
+          },
+          resourceKeys: ['workspace:restart-job-workspace:1'],
+          risk: 'mutate',
+          mutation: true,
+          operationHash: 'sha256:restart-job',
+          operationHashVersion: 1,
+          preconditions: [],
+          policyRevision: 1,
+          inputRevision: 0,
+        }),
         restartJobResult,
         now,
         now,
@@ -13679,7 +13809,7 @@ const progressAwareLoopGuardScenario: Scenario = async () => {
         expectedRunVersion: mixedVersion,
         observations: [
           {
-            toolName: 'machine_execute_shell',
+            toolName: 'shell_execute',
             risk: 'mutate',
             operationHash: `unique-shell-operation-${index}`,
             result: {
@@ -14044,13 +14174,18 @@ const completionGateScenario: Scenario = async () => {
       policyRevision: 1,
       inputRevision: 0,
     });
-  const successfulResult = (summary: string, verificationStatus: 'verified' | 'unverified'): string =>
+  const successfulResult = (
+    summary: string,
+    verificationStatus: 'verified' | 'unverified',
+    semantic?: ToolResult['semantic'],
+  ): string =>
     JSON.stringify({
       ok: true,
       summary,
       artifactRefs: [],
       truncated: false,
       outcome: 'confirmed',
+      ...(semantic === undefined ? {} : { semantic }),
       verification: {
         status: verificationStatus,
         summary: `${summary} ${verificationStatus}`,
@@ -14223,21 +14358,27 @@ const completionGateScenario: Scenario = async () => {
         (id, run_id, agent_runtime_id, step_id, source_model_step_id, provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, result_json, created_at, started_at, completed_at)
        VALUES ('completion-test', 'completion-run', 'completion-runtime', 'completion-test-step',
-               'completion-stop-step', 'provider-test', 'workspace_execute_argv', '1.0.0', ?, 'gate-test', 1,
+               'completion-stop-step', 'provider-test', 'shell_execute', '1.0.0', ?, 'gate-test', 1,
                'mutate', 'succeeded', ?, ?, ?, ?)`,
       [
         inspection(
-          'workspace_execute_argv',
+          'shell_execute',
           {
-            workspaceId: 'gate-workspace',
-            generation: 1,
-            argv: ['pnpm', 'test'],
+            target: 'workspace',
+            id: 'gate-workspace',
+            command: { kind: 'argv', argv: ['pnpm', 'test'] },
             cwd: '/workspace/work',
             timeoutSeconds: 60,
+            mode: 'foreground',
           },
           'gate-test',
         ),
-        successfulResult('Test command', 'verified'),
+        successfulResult('Test command', 'verified', {
+          kind: 'execution',
+          target: { target: 'workspace', id: 'gate-workspace' },
+          status: 'succeeded',
+          job: { jobId: 'job-' + 'a'.repeat(64), workspaceId: 'gate-workspace', generation: 1 },
+        }),
         now + 2,
         now + 2,
         now + 2,
@@ -19827,7 +19968,6 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
     tools: [
       createConnectionListTool(null!, availabilityCryptoHash),
       createDiagnosticsTool(null!, availabilityCryptoHash),
-      createShellTool(null!, availabilityCryptoHash),
       createDockerMutationTool(null!, availabilityCryptoHash),
     ],
   });
@@ -19835,6 +19975,11 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
     schemaVersion: 1,
     id: 'scenario.file-availability',
     tools: createUnifiedFileTools(null!, availabilityCryptoHash),
+  });
+  availabilityCatalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.shell-availability',
+    tools: createUnifiedShellTools(null!, availabilityCryptoHash),
   });
   const withoutTarget = new Set(
     modelFacingToolSchemas(
@@ -19848,13 +19993,7 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
     withoutTarget.has('machine_list_connections'),
     'connection discovery remains available without a frozen target',
   );
-  for (const toolName of [
-    'machine_diagnostics',
-    'file_read',
-    'file_write',
-    'machine_execute_shell',
-    'machine_docker_action',
-  ]) {
+  for (const toolName of ['machine_diagnostics', 'file_read', 'file_write', 'shell_execute', 'machine_docker_action']) {
     assert.equal(
       withoutTarget.has(toolName),
       false,
@@ -19869,13 +20008,7 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
       'execute',
     ).map((tool) => tool.name),
   );
-  for (const toolName of [
-    'machine_diagnostics',
-    'file_read',
-    'file_write',
-    'machine_execute_shell',
-    'machine_docker_action',
-  ]) {
+  for (const toolName of ['machine_diagnostics', 'file_read', 'file_write', 'shell_execute', 'machine_docker_action']) {
     assert.ok(withTarget.has(toolName), `${toolName} must remain available when a connection is selected`);
   }
 
@@ -20860,6 +20993,307 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
   }
 };
 
+const unifiedShellCapabilityScenario: Scenario = async () => {
+  let workspaceGeneration = 3;
+  const sshHashes = new Map<number, string>([
+    [1, 'ssh-config-one'],
+    [2, 'ssh-config-two'],
+  ]);
+  const workspaceCalls: Array<{ workspaceId: string; generation: number; argv: string[] }> = [];
+  const sshCalls: Array<{ connectionId: number; hash: string; command: string }> = [];
+  const cryptoHash = {
+    sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+  };
+
+  const targets = {
+    resolve: async (context: ToolContext, selector: { target: 'workspace' | 'ssh'; id: string }) => {
+      if (selector.target === 'workspace') {
+        if (selector.id !== 'ws-shell') throw new Error('NOT_FOUND');
+        return {
+          selector,
+          fingerprint: {
+            kind: 'workspace' as const,
+            target: 'workspace' as const,
+            id: selector.id,
+            workspaceId: selector.id,
+            generation: workspaceGeneration,
+            targetIdentity: `workspace:${selector.id}:${workspaceGeneration}`,
+            endpoint: `workspace:${selector.id}`,
+            loginUser: 'runner:65532',
+            configurationHash: `workspace-config-${workspaceGeneration}`,
+          },
+          resourceKeys: [`workspace:${selector.id}:${workspaceGeneration}`],
+          preconditions: [
+            {
+              kind: 'workspaceGeneration' as const,
+              key: selector.id,
+              observedValue: { generation: workspaceGeneration },
+            },
+          ],
+          workspaceGeneration,
+        };
+      }
+      const connectionId = Number(selector.id);
+      if (!Number.isSafeInteger(connectionId) || !context.connectionIds?.includes(connectionId)) {
+        throw new Error('TARGET_NOT_SELECTED');
+      }
+      const configurationHash = sshHashes.get(connectionId);
+      if (!configurationHash) throw new Error('NOT_FOUND');
+      return {
+        selector,
+        fingerprint: {
+          kind: 'ssh' as const,
+          target: 'ssh' as const,
+          id: selector.id,
+          connectionId,
+          targetIdentity: `ssh:${connectionId}`,
+          endpoint: `ssh-${connectionId}.example:22`,
+          loginUser: `user-${connectionId}`,
+          configurationHash,
+          hostKeyTrust: 'unavailable' as const,
+        },
+        resourceKeys: [`connection:${connectionId}`],
+        preconditions: [],
+        connectionId,
+      };
+    },
+  } as unknown as AgentTargetResolver;
+
+  const gateway = {
+    invoke: async (binding: { workspaceId: string; generation: number }, call: { argv: string[]; cwd: string }) => {
+      if (binding.workspaceId !== 'ws-shell' || binding.generation !== workspaceGeneration) {
+        throw new Error('WORKSPACE_GENERATION_CONFLICT');
+      }
+      workspaceCalls.push({ workspaceId: binding.workspaceId, generation: binding.generation, argv: [...call.argv] });
+      return {
+        jobId: 'job-' + 'b'.repeat(64),
+        workspaceId: binding.workspaceId,
+        generation: binding.generation,
+        status: 'succeeded' as const,
+        result: {
+          exitCode: 0,
+          signal: null,
+          stdout: 'workspace-ok\n',
+          stderr: '',
+          truncated: false,
+          timedOut: false,
+        },
+        error: null,
+        createdAt: 1_800_000_000,
+        completedAt: 1_800_000_001,
+      };
+    },
+    startJob: async () => {
+      throw new Error('UNEXPECTED_BACKGROUND_JOB');
+    },
+  } as unknown as WorkspaceRuntimeGatewayPort;
+
+  const machine = {
+    executeShell: async (
+      _context: ToolContext,
+      connectionId: number,
+      command: string,
+      _timeoutSeconds: number,
+      expectedConfigurationHash: string,
+    ) => {
+      if (sshHashes.get(connectionId) !== expectedConfigurationHash) throw new Error('RESOURCE_CHANGED');
+      sshCalls.push({ connectionId, hash: expectedConfigurationHash, command });
+      return {
+        exitCode: 0,
+        signal: null,
+        stdout: `ssh-${connectionId}-ok\n`,
+        stderr: '',
+        truncated: false,
+      };
+    },
+  } as unknown as MachineCapabilityPort;
+
+  const registry = new CapabilityRegistry();
+  let grantScope = registry.parseScope('shell.execute', {
+    kind: 'targets',
+    targets: { workspace: { mode: 'all' }, ssh: { mode: 'ids', ids: ['1', '2'] } },
+  });
+  const broker = {
+    authorize: async (
+      _scope: Scope,
+      capability: string | undefined,
+      resource: { target?: { target: 'workspace' | 'ssh'; id: string } },
+    ) => {
+      const allowed =
+        capability === undefined ||
+        (capability === 'shell.execute' && registry.allows('shell.execute', grantScope, resource.target));
+      return allowed
+        ? { allowed: true as const, policyRevision: 11 }
+        : { allowed: false as const, code: 'APP_CAPABILITY_DENIED' as const, policyRevision: 11 };
+    },
+  } as unknown as AppCapabilityBroker;
+
+  const service = new ShellCapabilityService(targets, null!, gateway, machine, cryptoHash);
+  const catalog = new ToolCatalog();
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.unified-shell',
+    tools: createUnifiedShellTools(service, cryptoHash),
+  });
+  const executor = new ToolExecutor(catalog, broker);
+  const context: ToolContext = {
+    userId: 1,
+    appId: 'scenario.unified-shell',
+    actor: {
+      kind: 'agent',
+      userId: 1,
+      appId: 'scenario.unified-shell',
+      runId: 'shell-run',
+      agentRuntimeId: 'shell-runtime',
+    },
+    runId: 'shell-run',
+    agentRuntimeId: 'shell-runtime',
+    connectionIds: [1, 2],
+    environment: {
+      kind: 'code',
+      recipeId: 'shell-recipe',
+      recipeRevision: '1',
+      runtimeDigest: 'shell-runtime-digest',
+      catalogRevision: 'shell-catalog',
+      toolchain: [],
+      runnerPlugins: [],
+      acpProfiles: [],
+      browserTarget: null,
+    },
+    stepId: 'shell-step',
+    signal: new AbortController().signal,
+    deadlineAt: Math.floor(Date.now() / 1000) + 60,
+    maxOutputBytes: 128 * 1024,
+    inputRevision: 1,
+  };
+  const proposal = (providerCallId: string, input: Record<string, JsonValue>) => ({
+    providerCallId,
+    name: 'shell_execute',
+    argumentsJson: JSON.stringify(input),
+  });
+
+  const workspaceInspection = await executor.inspect(
+    context,
+    proposal('workspace-exec', {
+      target: 'workspace',
+      id: 'ws-shell',
+      command: { kind: 'argv', argv: ['printf', 'workspace'] },
+      mode: 'foreground',
+    }),
+  );
+  const sshOneInspection = await executor.inspect(
+    context,
+    proposal('ssh-one-exec', {
+      target: 'ssh',
+      id: '1',
+      command: { kind: 'shell', text: 'printf ssh-one' },
+      mode: 'foreground',
+    }),
+  );
+  const sshTwoInspection = await executor.inspect(
+    context,
+    proposal('ssh-two-exec', {
+      target: 'ssh',
+      id: '2',
+      command: { kind: 'shell', text: 'printf ssh-two' },
+      mode: 'foreground',
+    }),
+  );
+  assert.notEqual(workspaceInspection.target.targetIdentity, sshOneInspection.target.targetIdentity);
+  assert.notEqual(sshOneInspection.target.targetIdentity, sshTwoInspection.target.targetIdentity);
+  assert.notEqual(workspaceInspection.operationHash, sshOneInspection.operationHash);
+  assert.notEqual(sshOneInspection.operationHash, sshTwoInspection.operationHash);
+
+  const workspaceResult = await executor.executeMutation(context, workspaceInspection);
+  const sshOneResult = await executor.executeMutation(context, sshOneInspection);
+  const sshTwoResult = await executor.executeMutation(context, sshTwoInspection);
+  assert.deepEqual(workspaceResult.semantic, {
+    kind: 'execution',
+    target: { target: 'workspace', id: 'ws-shell' },
+    status: 'succeeded',
+    job: { jobId: 'job-' + 'b'.repeat(64), workspaceId: 'ws-shell', generation: 3 },
+  });
+  assert.deepEqual(sshOneResult.semantic, {
+    kind: 'execution',
+    target: { target: 'ssh', id: '1' },
+    status: 'succeeded',
+  });
+  assert.deepEqual(sshTwoResult.semantic, {
+    kind: 'execution',
+    target: { target: 'ssh', id: '2' },
+    status: 'succeeded',
+  });
+  assert.deepEqual(workspaceCalls, [{ workspaceId: 'ws-shell', generation: 3, argv: ['printf', 'workspace'] }]);
+  assert.deepEqual(sshCalls, [
+    { connectionId: 1, hash: 'ssh-config-one', command: 'printf ssh-one' },
+    { connectionId: 2, hash: 'ssh-config-two', command: 'printf ssh-two' },
+  ]);
+
+  for (const [callId, input] of [
+    ['workspace-shell-text', { target: 'workspace', id: 'ws-shell', command: { kind: 'shell', text: 'echo invalid' } }],
+    ['ssh-argv', { target: 'ssh', id: '1', command: { kind: 'argv', argv: ['echo', 'invalid'] } }],
+    ['ssh-background', { target: 'ssh', id: '1', command: { kind: 'shell', text: 'sleep 1' }, mode: 'background' }],
+  ] as const) {
+    await assert.rejects(
+      () => executor.inspect(context, proposal(callId, input as unknown as Record<string, JsonValue>)),
+      /TOOL_ARGUMENTS_INVALID/,
+    );
+  }
+
+  grantScope = registry.parseScope('shell.execute', {
+    kind: 'targets',
+    targets: { workspace: { mode: 'all' }, ssh: { mode: 'ids', ids: ['1'] } },
+  });
+  await assert.rejects(
+    () =>
+      executor.inspect(
+        context,
+        proposal('ssh-two-denied', {
+          target: 'ssh',
+          id: '2',
+          command: { kind: 'shell', text: 'printf denied' },
+        }),
+      ),
+    /APP_CAPABILITY_DENIED/,
+  );
+  grantScope = registry.parseScope('shell.execute', {
+    kind: 'targets',
+    targets: { workspace: { mode: 'all' }, ssh: { mode: 'ids', ids: ['1', '2'] } },
+  });
+
+  const staleWorkspace = await executor.inspect(
+    context,
+    proposal('stale-workspace', {
+      target: 'workspace',
+      id: 'ws-shell',
+      command: { kind: 'argv', argv: ['printf', 'stale'] },
+    }),
+  );
+  workspaceGeneration = 4;
+  await assert.rejects(() => executor.executeMutation(context, staleWorkspace), /WORKSPACE_GENERATION_CONFLICT/);
+  workspaceGeneration = 3;
+
+  const staleSsh = await executor.inspect(
+    context,
+    proposal('stale-ssh', {
+      target: 'ssh',
+      id: '1',
+      command: { kind: 'shell', text: 'printf stale' },
+    }),
+  );
+  sshHashes.set(1, 'ssh-config-one-v2');
+  await assert.rejects(() => executor.executeMutation(context, staleSsh), /RESOURCE_CHANGED/);
+
+  return [
+    { name: 'unified_shell_targets', value: 3, unit: 'targets' },
+    { name: 'unified_shell_isolated_results', value: 3, unit: 'results' },
+    { name: 'unified_shell_transport_rejections', value: 3, unit: 'cases' },
+    { name: 'unified_shell_scope_rejections', value: 1, unit: 'cases' },
+    { name: 'unified_shell_stale_target_rejections', value: 2, unit: 'cases' },
+    { name: 'unified_shell_legacy_branches', value: 0, unit: 'branches' },
+  ];
+};
+
 const agentPublicContractAlignmentScenario: Scenario = async () => {
   const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
     ? path.join(process.cwd(), 'src')
@@ -20890,9 +21324,8 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
       'file.write',
       'file.delete',
       'machine.inspect',
-      'machine.shell.execute',
+      'shell.execute',
       'machine.docker.manage',
-      'workspace.execute',
       'workspace.manage',
       'browser.read',
       'browser.interact',
@@ -20926,6 +21359,15 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
   assert.match(fileTools, /capability: 'file\.read'/, 'Unified file reads must use file.read authority');
   assert.match(fileTools, /capability: 'file\.write'/, 'Unified file mutations must use file.write authority');
   assert.match(fileTools, /capability: 'file\.delete'/, 'Unified file deletion must use file.delete authority');
+  const shellTools = read('modules/agent/tools/host/shell-tools.ts');
+  assert.match(shellTools, /name: 'shell_execute'/, 'Unified execution must expose canonical shell_execute');
+  assert.match(shellTools, /name: 'shell_job'/, 'Workspace durable execution must expose canonical shell_job control');
+  assert.match(shellTools, /capability: 'shell\.execute'/, 'Unified execution must use shell.execute authority');
+  assert.doesNotMatch(
+    shellTools,
+    /workspace_execute_argv|workspace_job|machine_execute_shell|workspace\.execute|machine\.shell\.execute/,
+    'canonical Shell tools must not retain superseded Tool or capability names',
+  );
   const browserTools = read('modules/agent/tools/host/browser-tools.ts');
   assert.match(browserTools, /capability: 'browser\.read'/, 'Browser evidence/navigation must expose read authority');
   assert.match(
@@ -20949,7 +21391,7 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     path.join(frontendRoot, 'features/agent/settings/AppManagementSettings.vue'),
     'utf8',
   );
-  for (const category of ['files', 'machine', 'workspace', 'browser', 'integration', 'data']) {
+  for (const category of ['files', 'execution', 'machine', 'workspace', 'browser', 'integration', 'data']) {
     assert.ok(permissionUi.includes(`id: '${category}'`), `permission UI must expose the ${category} resource group`);
   }
 
@@ -21041,7 +21483,7 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
   return [
     { name: 'public_mcp_capability_descriptions', value: 2, unit: 'surfaces' },
     { name: 'permission_resource_capabilities', value: AGENT_CAPABILITIES.length, unit: 'capabilities' },
-    { name: 'permission_resource_groups', value: 6, unit: 'groups' },
+    { name: 'permission_resource_groups', value: 7, unit: 'groups' },
     { name: 'public_integration_management_returns', value: 4, unit: 'methods' },
     { name: 'public_contract_narrowing_drifts', value: 0, unit: 'contracts' },
   ];
@@ -21258,6 +21700,7 @@ const scenarios = new Map<string, Scenario>([
   ['context/project-instructions', projectInstructionsContextScenario],
   ['workspace/coding-tool-surface', workspaceCodingToolSurfaceScenario],
   ['file/unified-targets', unifiedFileCapabilityScenario],
+  ['shell/unified-targets', unifiedShellCapabilityScenario],
   ['workspace/repo-map-code-intel', workspaceRepoMapCodeIntelScenario],
   ['workspace/background-job-lifecycle', workspaceBackgroundJobLifecycleScenario],
   ['context/tool-result-projection', toolResultProjectionScenario],

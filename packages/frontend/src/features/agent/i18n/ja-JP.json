@@ -79,6 +79,7 @@
         "drainingNotice": "アプリのバックグラウンドタスクを排出中です...",
         "coreAppCannotUninstall": "コア組み込みアプリはアンインストールできません",
         "categoryFiles": "ファイルとターゲット",
+        "categoryExecution": "実行",
         "categoryMachine": "ホストマシン",
         "categoryWorkspace": "Workspace サンドボックス",
         "categoryBrowser": "ブラウザ",

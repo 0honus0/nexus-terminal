@@ -21,6 +21,7 @@ const TARGET_CAPABILITIES = new Map<AgentCapability, readonly AgentTargetKind[]>
   ['file.read', ['workspace', 'ssh']],
   ['file.write', ['workspace', 'ssh']],
   ['file.delete', ['workspace', 'ssh']],
+  ['shell.execute', ['workspace', 'ssh']],
 ]);
 
 const definitions = new Map<AgentCapability, CapabilityDefinition>(

@@ -331,7 +331,7 @@
   interface CapabilityMeta {
     name: string;
     desc: string;
-    category: 'files' | 'machine' | 'workspace' | 'browser' | 'integration' | 'data';
+    category: 'files' | 'execution' | 'machine' | 'workspace' | 'browser' | 'integration' | 'data';
     icon: string;
   }
 
@@ -360,10 +360,10 @@
       category: 'machine',
       icon: 'fa-solid fa-chart-line',
     },
-    'machine.shell.execute': {
-      name: '执行任意 Shell 命令',
-      desc: '高权限入口；可执行受策略与审批约束的远程 Shell',
-      category: 'machine',
+    'shell.execute': {
+      name: '执行命令',
+      desc: '在已授权 Workspace 或 SSH 目标执行受策略与审批约束的命令',
+      category: 'execution',
       icon: 'fa-solid fa-terminal',
     },
     'machine.docker.manage': {
@@ -371,12 +371,6 @@
       desc: '启停、重启或移除授权目标上的容器',
       category: 'machine',
       icon: 'fa-brands fa-docker',
-    },
-    'workspace.execute': {
-      name: '执行 Workspace 命令',
-      desc: '在隔离 Workspace 中启动命令并管理执行 Job',
-      category: 'workspace',
-      icon: 'fa-solid fa-terminal',
     },
     'workspace.manage': {
       name: '管理 Workspace 环境',
@@ -441,6 +435,7 @@
 
   const categoryGroups = [
     { id: 'files', label: 'agent.settings.apps.categoryFiles', icon: 'fa-solid fa-folder-tree' },
+    { id: 'execution', label: 'agent.settings.apps.categoryExecution', icon: 'fa-solid fa-terminal' },
     { id: 'machine', label: 'agent.settings.apps.categoryMachine', icon: 'fa-solid fa-server' },
     { id: 'workspace', label: 'agent.settings.apps.categoryWorkspace', icon: 'fa-solid fa-cubes' },
     { id: 'browser', label: 'agent.settings.apps.categoryBrowser', icon: 'fa-solid fa-globe' },

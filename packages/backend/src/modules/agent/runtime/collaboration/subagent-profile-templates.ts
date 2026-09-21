@@ -46,7 +46,7 @@ const templates: readonly SubagentProfileTemplate[] = [
     role: 'Governed coding worker for an explicitly bounded implementation assignment in its own Workspace.',
     delegationHint:
       'Use only for substantial implementation work with an explicit file/task boundary. Create and use a child-owned Workspace, run focused verification, and return durable evidence.',
-    capabilities: ['file.read', 'file.write', 'file.delete', 'workspace.execute', 'workspace.manage', 'artifacts.read'],
+    capabilities: ['file.read', 'file.write', 'file.delete', 'shell.execute', 'workspace.manage', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'governed',
     maxSteps: 24,

@@ -79,6 +79,7 @@
         "drainingNotice": "App is draining background tasks...",
         "coreAppCannotUninstall": "Core builtin app cannot be uninstalled",
         "categoryFiles": "Files & Targets",
+        "categoryExecution": "Execution",
         "categoryMachine": "Host Machine",
         "categoryWorkspace": "Workspace Sandbox",
         "categoryBrowser": "Browser",

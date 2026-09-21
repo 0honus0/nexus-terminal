@@ -147,7 +147,7 @@ The shared **file** split has now been removed from runtime code:
 
 There are no runtime aliases or legacy scope decoders. Database migrations 35–38 perform a one-time destructive rewrite of persisted grants, Subagent delegation authority, and persisted Plugin manifests into the canonical model; runtime repositories reject old durable shapes after migration.
 
-The remaining legacy split is **shell/execution**, not file I/O. Workspace argv/job execution and SSH shell execution remain separate until Unified Shell is implemented. Workspace lifecycle/runtime management also remains intentionally Workspace-specific.
+The shared **shell/execution** split has now also been removed from runtime code. `shell_execute` is the canonical model-facing execution Tool under target-scoped `shell.execute`; Workspace keeps argv + durable Runner Job transport semantics, SSH keeps bounded foreground shell-text transport semantics, and `shell_job` is the canonical Workspace durable-job control surface. Completion/recovery consume typed execution semantics rather than Tool-name sets. Workspace lifecycle/runtime management remains intentionally Workspace-specific.
 
 ## Implementation Plan
 
@@ -208,7 +208,7 @@ Target adapters:
 - Workspace -> Runner/container execution
 - SSH -> SSH execution
 
-Completion-gate evidence and recovery/checkpoint logic must use the new shared shell tool names.
+Completion-gate evidence and recovery/checkpoint logic must consume typed execution/job semantics and must not infer execution meaning from Tool names.
 
 ### 5. Target Adapters
 
@@ -338,15 +338,13 @@ Step 5 should converge on narrow backend capability adapters, for example:
 
 Workspace and SSH provide the adapters they support. Shared services own policy/precondition/verification semantics. Avoid one universal God `TargetAdapter`.
 
-### E. Durable semantics must stop depending on shell/job tool names
+### E. Durable execution semantics no longer depend on shell/job Tool names
 
-Unified File removed the file-name coupling from project-instruction targeting and Workspace code-intelligence fallback metadata: those paths now consume canonical file operations. The remaining name-based durable behavior is in shell/execution evidence and background Workspace job recovery.
+**Implemented during Unified Shell.** `ToolResult` now carries typed `semantic.kind = "execution"` with canonical target, execution status, and optional durable Workspace job identity. Completion Gate consumes verified successful execution semantic; checkpoint/restart recovery consumes the durable job semantic. Neither owner maintains a Tool-name allowlist. One-time migrations project historical split-shell ToolResults into the typed semantic so runtime recovery does not retain legacy Tool-name compatibility branches.
 
-During Unified Shell, introduce typed execution/result semantics (for example execution evidence and durable job references) so completion/recovery consume semantic metadata rather than execution Tool-name string sets. This is required before the remaining legacy shell names can be deleted safely.
+### F. Unified Shell unifies Host semantics without erasing transport differences
 
-### F. Unified Shell must unify Host semantics, not transport syntax
-
-Workspace currently executes explicit argv and supports durable Runner jobs; SSH currently executes shell text through the SSH transport. `shell_execute` should expose one Host execution capability with an explicit structured command variant and shared timeout/cwd/result semantics. Target adapters declare supported variants. If durable/background jobs remain, use a shared typed `JobRef` / `shell_job` control surface rather than Workspace-only job identity.
+**Implemented.** `shell_execute` exposes one Host execution capability with explicit command variants. Workspace accepts argv and supports foreground/background durable Runner jobs; SSH accepts shell text and currently supports foreground only. `shell_job` controls Workspace durable jobs. All executions share target-scoped authorization, inspection/operation-hash governance, frozen target fingerprint execution, approval/lease/reconciliation, and typed execution result semantics; backend transport syntax remains explicit instead of being falsely normalized.
 
 ### G. Frontend permission scope is contract-driven; Run target defaults still need tightening
 
@@ -385,13 +383,29 @@ Do **not** split StateCommit into multiple durable mutation authorities. Interna
 - [x] **1. Inventory** — legacy shared Workspace/Machine file and shell surfaces, capability strings, grants, frontend metadata, context/Subagent policy, completion gates, recovery references, deterministic fixtures, and docs were enumerated on `dev`.
 - [x] **2. Core Target Contract** — canonical `{ target: "workspace" | "ssh", id }` selector and `AgentTargetResolver` are wired through file/coding target resolution; SSH fingerprints use `ssh`; durable target decoding requires canonical target/id.
 - [x] **3. Unified File Capability** — canonical `file_read/list/search/write/patch/move/delete` now share one `FileCapabilityService` across Workspace and SSH. Superseded shared file Tool factories/capabilities are removed from production registration, repo-map/code-intel consume `file.read`, project-instruction targeting/fallback metadata use canonical file operations, and execute paths consume the inspection-frozen Workspace generation / SSH configuration fingerprint rather than re-resolving `target + id`. Workspace/SSH behavior, target-scope authorization, and stale-target rejection are covered by deterministic scenarios.
-- [ ] **4. Unified Shell Capability** — next major implementation entry point after this File change is committed.
-- [ ] **5. Target Adapters** — File currently shares semantics but still branches between broad WorkspaceRuntime/Machine ports; replace with narrow capability-specific adapters during the next structural pass.
-- [x] **6. Authorization / Grants (File + foundation)** — schema v2 typed `CapabilityGrantScope`, `CapabilityRegistry`, scoped App grant API/persistence/authorization, one-time durable migrations, and scoped Subagent delegation are implemented. Shell-specific target scope will reuse this foundation.
-- [x] **7. Frontend Permission Management (grant scope)** — permission UI consumes Host capability definitions and submits complete scoped grants. Least-authority Run target defaults/TaskRail target presentation remain later UI cleanup.
-- [x] **8. Agent Context / Tool Projection (File)** — model/project-instruction/code-intel file projection uses canonical file operations; Subagent proposal/inspection projection enforces delegated target scope. Shell/job semantic projection remains Step 4 work.
-- [x] **9. Remove Legacy File Code** — no runtime aliases/compatibility decoders or superseded shared file Tool/capability registration remain. Old strings exist only in destructive database migration SQL and migration fixtures that prove conversion.
-- [ ] **10. Verification** — the **Unified File checkpoint is fully verified**; this overall item remains open because Unified Shell / target-adapter work has not yet been implemented and therefore still requires its own final regression pass.
+- [x] **4. Unified Shell Capability** — canonical `shell_execute` now serves Workspace argv execution and SSH shell-text execution under target-scoped `shell.execute`; `shell_job` controls durable Workspace background jobs. ToolResult carries typed execution/job semantics, and completion/checkpoint/restart recovery no longer infer execution meaning from Tool names. Superseded Shell Tool factories are removed from production registration.
+- [ ] **5. Target Adapters** — File/Shell now share Host capability services but still consume broad WorkspaceRuntime/Gateway and Machine ports. Replace these with narrow capability-specific backend adapters during the next structural pass.
+- [x] **6. Authorization / Grants** — schema v2 typed `CapabilityGrantScope`, `CapabilityRegistry`, scoped App grant API/persistence/authorization, one-time durable migrations, and scoped Subagent delegation cover both File and Shell. Subagent File/Shell target authority is restricted to Workspace by default.
+- [x] **7. Frontend Permission Management (grant scope)** — permission UI consumes Host capability definitions and submits complete scoped File/Shell grants. Least-authority Run target defaults/TaskRail target presentation remain later UI cleanup.
+- [x] **8. Agent Context / Tool Projection (File + Shell)** — project-instruction/code-intel file projection uses canonical File operations; Workspace command path extraction uses canonical `shell_execute`; Subagent proposal/inspection projection enforces delegated target scope; durable execution projection uses typed semantics.
+- [x] **9. Remove Legacy Shared File/Shell Code** — no runtime aliases/compatibility decoders or superseded shared File/Shell Tool/capability registration remain. Old strings exist only in destructive database migration SQL, dedicated migration fixtures, and negative legacy-leak assertions.
+- [ ] **10. Verification** — Unified File and Unified Shell checkpoints are fully verified. This overall item remains open only because Step 5 narrow Target Adapters is still pending and will require its own final verification before the destructive refactor is complete.
+
+### Unified Shell verification checkpoint
+
+- Backend `tsc --noEmit`: PASS.
+- Agent Runner `tsc --noEmit`: PASS.
+- Frontend `vue-tsc --noEmit`: PASS.
+- Backend / Agent Runner / Frontend production builds: PASS.
+- `pnpm format:check`: PASS.
+- deterministic Agent scenarios: **73/73 PASS**, including the new `shell/unified-targets`, expanded `migration/capability-grants-v2`, Workspace durable background-job lifecycle, completion gate, restart recovery, Subagent governed mutation, Machine target availability, and public contract alignment.
+- canonical Shell target-isolation regressions: PASS for one Workspace plus multiple SSH targets in the same Run; fingerprints, operation hashes, backend calls, and typed execution results remain isolated per concrete target.
+- canonical Shell stale-target regressions: PASS for Workspace generation changes and SSH configuration changes after inspection; execution consumes the inspection-frozen fingerprint and fails closed instead of rebinding `target + id`.
+- canonical Shell transport-boundary regressions: PASS; Workspace accepts argv execution, SSH accepts foreground shell text, Workspace shell-text / SSH argv / SSH background misuse is rejected.
+- migration 39–44 regression: PASS for Workspace-only / SSH-only / combined `shell.execute` App scopes, scoped Subagent grants, persisted/staged Plugin manifests, and legacy Workspace/SSH ToolResult projection into typed execution/job semantics.
+- request-only Agent E2E directly affected by Unified Shell: **2/2 PASS** (`Agent Host installs Nexus Agent safely...` and `remote signed Nexus Agent plugin installs...`). The seeded database applies migrations 35–44, the provider emits canonical `shell_execute`, SSH mutation runs through approval/operation-hash governance, duplicate mutation is blocked, and subsequent `file_read` proves the side effect occurred once.
+- runtime/doc/current-E2E legacy scan: superseded split-shell Tool/capability identifiers are zero outside one-time database migration SQL, the dedicated migration fixture, and the negative leak assertion.
+- `git diff --check`: PASS at the Unified Shell verification checkpoint.
 
 ### Unified File verification checkpoint
 
