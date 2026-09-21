@@ -1673,6 +1673,40 @@
     </div>
   </section>
 
+  <BaseModal
+    :visible="Boolean(deletingProvider)"
+    :title="$t('agent.settings.providers.deleteConfirm')"
+    :aria-label="$t('agent.settings.providers.deleteConfirm')"
+    :focus-on-open="true"
+    :restore-focus="true"
+    panel-class="max-w-md p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    @close="deletingProvider = null"
+  >
+    <p class="text-sm leading-6 text-text-secondary">
+      {{ $t('agent.settings.providers.deleteProviderConfirmPrompt', { name: deletingProvider?.displayName || '' }) }}
+    </p>
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <button
+          type="button"
+          class="rounded-lg border border-border/80 bg-background px-3.5 py-1.8 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
+          :disabled="busy"
+          @click="deletingProvider = null"
+        >
+          {{ $t('common.cancel') }}
+        </button>
+        <button
+          type="button"
+          class="rounded-lg bg-error px-3.5 py-1.8 text-xs font-semibold text-white shadow-sm transition-all hover:bg-error/90 active:scale-95 disabled:opacity-50 cursor-pointer"
+          :disabled="busy"
+          @click="confirmDelete"
+        >
+          {{ $t('agent.settings.providers.deleteConfirm') }}
+        </button>
+      </div>
+    </template>
+  </BaseModal>
+
   <!-- 添加 Provider 模态弹窗（彻底移除原生下拉，全面升级现代化分段器与预设高亮） -->
   <BaseModal
     :visible="modalOpen"

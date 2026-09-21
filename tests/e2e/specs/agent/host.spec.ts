@@ -376,6 +376,180 @@ test('Agent settings surface exposes the production control plane and captures f
   expect(horizontalExcess).toBeLessThanOrEqual(1);
 });
 
+test('fallback settings drop stale models and provider deletion repairs the default route', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  const csrf = await csrfToken(context.request);
+  const headers = { 'X-Nexus-CSRF': csrf };
+  const model = (id: string) => ({ id, contextWindow: 8192, maxOutputTokens: 128, supportsTools: true });
+  const createProvider = async (displayName: string, models: ReturnType<typeof model>[]) => {
+    const response = await context.request.post('/api/v1/agent/ai/providers', {
+      headers,
+      data: {
+        kind: 'openai-compatible',
+        displayName,
+        baseUrl: `${E2E_URLS.openAiProviderOrigin}/v1`,
+        protocol: 'chat-completions',
+        credential: 'e2e-provider-secret',
+        models,
+        enabled: true,
+      },
+    });
+    expect(response.status(), await response.text()).toBe(201);
+    return (
+      (await response.json()) as AgentEnvelope<{
+        id: string;
+        version: number;
+        displayName: string;
+        models: ReturnType<typeof model>[];
+      }>
+    ).data;
+  };
+
+  let primary = await createProvider('Fallback Primary', [
+    model('primary-model'),
+    model('stale-fallback'),
+    model('valid-fallback'),
+  ]);
+  const backup = await createProvider('Fallback Backup', [model('backup-model')]);
+
+  const initialSettings = await context.request.get('/api/v1/agent/settings');
+  expect(initialSettings.ok(), await initialSettings.text()).toBeTruthy();
+  const initial = (
+    (await initialSettings.json()) as AgentEnvelope<{
+      revision: number;
+    }>
+  ).data;
+  const seededSettings = await context.request.patch('/api/v1/agent/settings', {
+    headers,
+    data: {
+      patch: {
+        model: {
+          defaultProviderId: primary.id,
+          defaultModelId: 'primary-model',
+          fallbackModels: [
+            { providerId: primary.id, modelId: 'stale-fallback' },
+            { providerId: primary.id, modelId: 'valid-fallback' },
+          ],
+        },
+      },
+      expectedVersion: initial.revision,
+    },
+  });
+  expect(seededSettings.ok(), await seededSettings.text()).toBeTruthy();
+
+  const removedStaleModel = await context.request.patch(`/api/v1/agent/ai/providers/${primary.id}`, {
+    headers,
+    data: {
+      models: [model('primary-model'), model('valid-fallback')],
+      expectedVersion: primary.version,
+    },
+  });
+  expect(removedStaleModel.ok(), await removedStaleModel.text()).toBeTruthy();
+  primary = (
+    (await removedStaleModel.json()) as AgentEnvelope<{
+      id: string;
+      version: number;
+      displayName: string;
+      models: ReturnType<typeof model>[];
+    }>
+  ).data;
+
+  const staleSettings = await context.request.get('/api/v1/agent/settings');
+  expect(staleSettings.ok(), await staleSettings.text()).toBeTruthy();
+  await expect(staleSettings.json()).resolves.toMatchObject({
+    data: {
+      requestedSettings: {
+        model: {
+          fallbackModels: [
+            { providerId: primary.id, modelId: 'stale-fallback' },
+            { providerId: primary.id, modelId: 'valid-fallback' },
+          ],
+        },
+      },
+    },
+  });
+
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+  const providersSection = page
+    .getByRole('heading', { name: 'Model providers', exact: true })
+    .locator('xpath=ancestor::section[1]');
+  await expect(providersSection.getByText('Fallback Primary', { exact: true })).toBeVisible();
+  await expect(providersSection.getByText('stale-fallback', { exact: true })).toHaveCount(0);
+
+  const validFallback = providersSection.getByRole('button', {
+    name: 'valid-fallback · Fallback Primary',
+    exact: true,
+  });
+  const normalizedOff = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
+  );
+  await validFallback.click();
+  expect((await normalizedOff).ok()).toBeTruthy();
+  const afterNormalize = await context.request.get('/api/v1/agent/settings');
+  expect(afterNormalize.ok(), await afterNormalize.text()).toBeTruthy();
+  await expect(afterNormalize.json()).resolves.toMatchObject({
+    data: { requestedSettings: { model: { fallbackModels: [] } } },
+  });
+
+  const restoredFallback = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
+  );
+  await validFallback.click();
+  expect((await restoredFallback).ok()).toBeTruthy();
+  const afterRestore = await context.request.get('/api/v1/agent/settings');
+  expect(afterRestore.ok(), await afterRestore.text()).toBeTruthy();
+  await expect(afterRestore.json()).resolves.toMatchObject({
+    data: {
+      requestedSettings: {
+        model: { fallbackModels: [{ providerId: primary.id, modelId: 'valid-fallback' }] },
+      },
+    },
+  });
+
+  const primaryCard = providersSection
+    .getByText('Fallback Primary', { exact: true })
+    .locator('xpath=ancestor::article[1]');
+  await primaryCard.getByTitle('Delete Provider').click();
+  const confirmDelete = page.getByRole('dialog', { name: 'Delete Provider', exact: true });
+  await expect(confirmDelete).toBeVisible();
+  await expect(
+    confirmDelete.getByText('Are you sure you want to delete provider Fallback Primary? This cannot be undone.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const deleted = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/v1/agent/ai/providers/${primary.id}`) && response.request().method() === 'DELETE',
+  );
+  const repairedSettings = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
+  );
+  await confirmDelete.getByRole('button', { name: 'Delete Provider', exact: true }).click();
+  expect((await deleted).ok()).toBeTruthy();
+  expect((await repairedSettings).ok()).toBeTruthy();
+  await expect(providersSection.getByText('Fallback Primary', { exact: true })).toHaveCount(0);
+
+  const finalSettings = await context.request.get('/api/v1/agent/settings');
+  expect(finalSettings.ok(), await finalSettings.text()).toBeTruthy();
+  await expect(finalSettings.json()).resolves.toMatchObject({
+    data: {
+      requestedSettings: {
+        model: {
+          defaultProviderId: backup.id,
+          defaultModelId: 'backup-model',
+          fallbackModels: [],
+        },
+      },
+    },
+  });
+});
+
 const csrfToken = async (request: import('@playwright/test').APIRequestContext): Promise<string> => {
   const response = await request.get('/api/v1/agent/security/csrf');
   expect(response.ok(), await response.text()).toBeTruthy();

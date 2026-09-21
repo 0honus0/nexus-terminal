@@ -85,6 +85,24 @@ test('regular connection form tests and creates a persisted working SSH connecti
   await form.locator('#conn-password').fill(E2E_SSH.password);
   await form.locator('#conn-notes').fill('created through the browser form');
 
+  await slowStep('failed SSH tests render an inline red result without replacing the form', async () => {
+    await form.locator('#conn-port').fill('1');
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
+    );
+    await form.getByTestId('connection-test-button').click();
+    const response = await responsePromise;
+    expect(response.status()).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({ success: false });
+    const result = form.getByTestId('connection-test-result');
+    await expect(result).toBeVisible();
+    await expect(result).toHaveClass(/text-error/);
+    await expect(result).toContainText('Failed');
+    await expect(form).toBeVisible();
+    await form.locator('#conn-port').fill(String(E2E_SSH.port));
+  });
+
   await slowStep('test the unsaved connection against the real SSH fixture', async () => {
     const responsePromise = page.waitForResponse(
       (response) =>

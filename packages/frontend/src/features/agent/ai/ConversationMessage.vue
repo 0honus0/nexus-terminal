@@ -169,9 +169,10 @@
 </script>
 
 <template>
-  <article ref="root" v-if="isToolCallEntry" class="mx-auto w-full max-w-3xl">
+  <article ref="root" v-if="isToolCallEntry" class="mx-auto w-full max-w-3xl" data-testid="agent-tool-call-entry">
     <details class="group/tool-call" @toggle="emit('layoutChange')">
       <summary
+        data-testid="agent-tool-call-summary"
         class="relative flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-2 py-1.5 text-[11px] text-text-secondary transition-colors select-none hover:bg-header/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
       >
         <span class="relative flex h-5 w-5 shrink-0 items-center justify-center">
@@ -182,6 +183,7 @@
         </span>
         <span
           v-if="toolCalls.length > 1"
+          data-testid="agent-tool-call-count"
           class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-primary"
         >
           {{ toolCalls.length }}
@@ -194,7 +196,13 @@
         </span>
       </summary>
       <div class="ml-4 mt-1.5 space-y-2 border-l border-primary/20 pl-5">
-        <div v-for="call in toolCalls" :key="call.id || call.name" class="min-w-0">
+        <div
+          v-for="call in toolCalls"
+          :key="call.id || call.name"
+          class="min-w-0"
+          data-testid="agent-tool-call-detail"
+          :data-tool-name="call.name"
+        >
           <div class="mb-1.5 flex min-w-0 items-center gap-1.5 text-[9px] text-text-secondary/60">
             <code class="min-w-0 truncate font-mono font-semibold text-foreground/80">{{ call.name }}</code>
             <span aria-hidden="true">·</span>

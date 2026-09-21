@@ -1146,6 +1146,36 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(taskRail).toHaveCount(0);
 
+    await step(
+      'batched tool calls use one group title and show concrete tool names only in expanded details',
+      async () => {
+        const batchThread = hub.getByRole('button').filter({ hasText: 'Parallel read batch E2E thread' });
+        await expect(batchThread).toBeVisible();
+        await batchThread.click();
+        await expect(batchThread).toHaveAttribute('aria-current', 'true');
+
+        const toolCall = hub.getByTestId('agent-tool-call-entry');
+        await expect(toolCall).toHaveCount(1);
+        const summary = toolCall.getByTestId('agent-tool-call-summary');
+        await expect(summary).toContainText('Tool call');
+        await expect(summary).not.toContainText('machine_list_connections');
+        await expect(summary).not.toContainText('machine_read_file');
+        await expect(toolCall.getByTestId('agent-tool-call-count')).toHaveText('2');
+
+        await summary.click();
+        const details = toolCall.getByTestId('agent-tool-call-detail');
+        await expect(details).toHaveCount(2);
+        await expect(details.nth(0)).toHaveAttribute('data-tool-name', 'machine_list_connections');
+        await expect(details.nth(1)).toHaveAttribute('data-tool-name', 'machine_read_file');
+        await expect(details.nth(0)).toContainText('machine_list_connections');
+        await expect(details.nth(1)).toContainText('machine_read_file');
+
+        await presetThread.click();
+        await expect(presetThread).toHaveAttribute('aria-current', 'true');
+        await expect(hub.getByText('OK', { exact: true }).last()).toBeVisible();
+      },
+    );
+
     await step('the next Run Environment uses the shared accessible Host popover contract', async () => {
       const environment = hub.getByRole('button', { name: 'Environment', exact: true });
       await expect(environment).toBeVisible();
