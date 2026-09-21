@@ -8975,9 +8975,26 @@ const failFastSiblingCancellationScenario: Scenario = async () => {
 
   assert.deepEqual(cancelledIds, [descendant.id, sibling.id]);
   assert.deepEqual(abortedRuntimeIds, [descendant.childRuntimeId, sibling.childRuntimeId]);
+  const failFastCancellationCount = cancelledIds.length;
+  const failFastAbortCount = abortedRuntimeIds.length;
+  cancelledIds.length = 0;
+  abortedRuntimeIds.length = 0;
+  await completion.completeToolDeadline(
+    scenarioScope,
+    { runId: failed.runId } as SchedulerWorkView,
+    failed,
+    'DELEGATION_DEADLINE_EXCEEDED',
+  );
+  assert.deepEqual(
+    cancelledIds,
+    [],
+    'tool_step deadline completion must preserve the existing non-fail-fast cancellation behavior',
+  );
+  assert.deepEqual(abortedRuntimeIds, []);
   return [
-    { name: 'fail_fast_cancelled_delegations', value: cancelledIds.length, unit: 'delegations' },
-    { name: 'fail_fast_runtime_aborts', value: abortedRuntimeIds.length, unit: 'runtimes' },
+    { name: 'fail_fast_cancelled_delegations', value: failFastCancellationCount, unit: 'delegations' },
+    { name: 'fail_fast_runtime_aborts', value: failFastAbortCount, unit: 'runtimes' },
+    { name: 'tool_deadline_fail_fast_cancellations', value: cancelledIds.length, unit: 'delegations' },
   ];
 };
 
