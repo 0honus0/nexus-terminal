@@ -11,7 +11,7 @@
     "specs/ssh/quick-command-collapsible-search.spec.ts",
     "specs/ssh/quick-command-management.spec.ts",
     "specs/ssh/quick-command-tags-variables.spec.ts",
-    "specs/ssh/progress-display-archive.spec.ts",
+    "specs/ssh/progress-display-upload-copy.spec.ts",
     "specs/ssh/suspend-resume.spec.ts"
   ]
 }
