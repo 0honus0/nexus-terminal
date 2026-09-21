@@ -1,4 +1,5 @@
 import type { AgentContextProfile } from '../agent-defaults';
+import { logger } from '../../../shared/logging/logger';
 import type { Scope } from '../agent.types';
 import type { AgentSettingsService, AgentSettingsView } from './agent-settings.service';
 import type { AppStoragePort } from './app-storage.port';
@@ -162,6 +163,16 @@ export class AgentExecutionPolicyService {
       STORAGE_KEY,
       { schemaVersion: 1, overrides: overrides as unknown as import('../agent.types').JsonValue },
       current?.version ?? null,
+    );
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        expectedVersion,
+        version: stored.version,
+        overrideCount: Object.keys(overrides).length,
+      },
+      'Agent execution policy replaced',
     );
     return { overrides, effective: { ...defaultsFrom(settings), ...overrides }, version: stored.version };
   }

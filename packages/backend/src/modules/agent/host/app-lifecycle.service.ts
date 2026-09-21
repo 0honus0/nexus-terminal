@@ -1,3 +1,4 @@
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import type { ClockPort, Scope } from '../agent.types';
 import type { AppGrantRepositoryPort } from './app-grant.repository.port';
 import { AppRegistryService } from './app-registry.service';
@@ -64,8 +65,12 @@ export class AppLifecycleService {
     const definition = this.registry.get(scope.appId, current.activeVersion);
     if (current.version !== expectedVersion) throw new Error('APP_STATE_VERSION_CONFLICT');
 
-    if (enabled) return this.toView(await this.enable(definition, current));
-    return this.toView(await this.disable(definition, current));
+    logger.debug(
+      { userId: scope.userId, appId: scope.appId, enabled, expectedVersion },
+      'Agent App lifecycle transition requested',
+    );
+    const next = enabled ? await this.enable(definition, current) : await this.disable(definition, current);
+    return this.toView(next);
   }
 
   async refreshHealth(userId: number): Promise<void> {
@@ -80,7 +85,17 @@ export class AppLifecycleService {
         health.status === 'healthy' ? 'running' : health.status === 'degraded' ? 'degraded' : 'failed';
       const healthReason = health.reason ?? null;
       if (current.observedState === observedState && current.healthReason === healthReason) continue;
-      await this.compareAndSetState(scope, current.version, { observedState, healthReason });
+      const updated = await this.compareAndSetState(scope, current.version, { observedState, healthReason });
+      logger.info(
+        {
+          userId,
+          appId: current.appId,
+          previousObservedState: current.observedState,
+          observedState: updated.observedState,
+          version: updated.version,
+        },
+        'Agent App health state changed',
+      );
     }
   }
 
@@ -114,10 +129,20 @@ export class AppLifecycleService {
         await this.compareAndSetState(scope, current.version, { observedState, healthReason });
       }
     } catch (error) {
-      await this.compareAndSetState(scope, current.version, {
+      const failed = await this.compareAndSetState(scope, current.version, {
         observedState: 'failed',
         healthReason: error instanceof Error ? error.message : 'APP_INITIALIZATION_FAILED',
       });
+      logger.warn(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          errorCode: logErrorCode(error, 'APP_INITIALIZATION_FAILED'),
+          observedState: failed.observedState,
+          version: failed.version,
+        },
+        'Agent App scope resume failed',
+      );
       throw error;
     }
   }
@@ -183,15 +208,35 @@ export class AppLifecycleService {
       const health = (await definition.health?.({ userId: starting.userId, appId: starting.appId })) ?? {
         status: 'healthy' as const,
       };
-      return this.compareAndSetState(starting, starting.version, {
+      const enabled = await this.compareAndSetState(starting, starting.version, {
         observedState: health.status === 'healthy' ? 'running' : health.status === 'degraded' ? 'degraded' : 'failed',
         healthReason: health.reason ?? null,
       });
+      logger.info(
+        {
+          userId: enabled.userId,
+          appId: enabled.appId,
+          observedState: enabled.observedState,
+          version: enabled.version,
+        },
+        'Agent App enable completed',
+      );
+      return enabled;
     } catch (error) {
       const failed = await this.compareAndSetState(starting, starting.version, {
         observedState: 'failed',
         healthReason: error instanceof Error ? error.message : 'APP_INITIALIZATION_FAILED',
       });
+      logger.warn(
+        {
+          userId: failed.userId,
+          appId: failed.appId,
+          errorCode: logErrorCode(error, 'APP_INITIALIZATION_FAILED'),
+          observedState: failed.observedState,
+          version: failed.version,
+        },
+        'Agent App enable failed',
+      );
       return failed;
     }
   }
@@ -213,22 +258,58 @@ export class AppLifecycleService {
       else await definition.quiesce?.(deadline);
       if (definition.disposeForScope) await definition.disposeForScope(scope);
       else await definition.dispose?.();
-      return await this.compareAndSetState(stopping, stopping.version, {
+      const disabled = await this.compareAndSetState(stopping, stopping.version, {
         observedState: 'disabled',
         healthReason: null,
       });
+      logger.info(
+        {
+          userId: disabled.userId,
+          appId: disabled.appId,
+          observedState: disabled.observedState,
+          version: disabled.version,
+        },
+        'Agent App disable completed',
+      );
+      return disabled;
     } catch (error) {
-      return this.compareAndSetState(stopping, stopping.version, {
+      const degraded = await this.compareAndSetState(stopping, stopping.version, {
         observedState: 'disabling',
         healthReason: error instanceof Error ? error.message : 'APP_QUIESCE_FAILED',
       });
+      logger.warn(
+        {
+          userId: degraded.userId,
+          appId: degraded.appId,
+          errorCode: logErrorCode(error, 'APP_QUIESCE_FAILED'),
+          observedState: degraded.observedState,
+          version: degraded.version,
+        },
+        'Agent App disable failed',
+      );
+      return degraded;
     }
   }
 
   private async compareAndSetState(scope: Scope, expectedVersion: number, patch: AppStatePatch): Promise<AppRecord> {
-    const updated = await this.states.compareAndSet(scope, expectedVersion, patch);
-    this.onHostStateCommitted(scope.userId);
-    return updated;
+    try {
+      const updated = await this.states.compareAndSet(scope, expectedVersion, patch);
+      this.onHostStateCommitted(scope.userId);
+      return updated;
+    } catch (error) {
+      logger.error(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          expectedVersion,
+          desiredState: patch.desiredState,
+          observedState: patch.observedState,
+          errorCode: logErrorCode(error, 'APP_STATE_COMMIT_FAILED'),
+        },
+        'Agent App state transition commit failed',
+      );
+      throw error;
+    }
   }
 
   private toView(record: AppRecord): AppView {

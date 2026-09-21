@@ -1,3 +1,4 @@
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import type { Scope } from '../agent.types';
 import type { ArtifactRef } from '../ai/artifact.port';
 import type { ArtifactService } from '../ai/artifact.service';
@@ -20,6 +21,15 @@ export class WorkspaceArtifactService {
   ) {}
 
   async export(scope: Scope, input: WorkspaceArtifactExportInput, signal: AbortSignal): Promise<ArtifactRef> {
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        workspaceId: input.workspaceId,
+        targetPluginId: input.targetPluginId,
+      },
+      'Agent Workspace Artifact export started',
+    );
     await this.requireCapability(scope, 'workspace.read');
     const read = await this.workspaceRuntime.openWorkspaceFileRead(
       scope,
@@ -34,9 +44,49 @@ export class WorkspaceArtifactService {
         mediaType: input.mediaType,
         declaredBytes: read.sizeBytes,
       });
-      return await this.artifacts.write(scope, reservation.artifactId, read.source, signal);
+      const artifact = await this.artifacts.write(scope, reservation.artifactId, read.source, signal);
+      logger.info(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          workspaceId: input.workspaceId,
+          targetPluginId: input.targetPluginId,
+          artifactId: artifact.id,
+          sizeBytes: artifact.sizeBytes,
+        },
+        'Agent Workspace Artifact export completed',
+      );
+      return artifact;
+    } catch (error) {
+      logger.warn(
+        {
+          errorCode: logErrorCode(error, signal.aborted ? 'ABORTED' : 'WORKSPACE_ARTIFACT_EXPORT_FAILED'),
+          userId: scope.userId,
+          appId: scope.appId,
+          workspaceId: input.workspaceId,
+          targetPluginId: input.targetPluginId,
+          sizeBytes: read.sizeBytes,
+          aborted: signal.aborted,
+        },
+        'Agent Workspace Artifact export failed',
+      );
+      throw error;
     } finally {
-      await read.close();
+      try {
+        await read.close();
+      } catch (error) {
+        logger.warn(
+          {
+            errorCode: logErrorCode(error, 'WORKSPACE_ARTIFACT_READ_CLOSE_FAILED'),
+            userId: scope.userId,
+            appId: scope.appId,
+            workspaceId: input.workspaceId,
+            targetPluginId: input.targetPluginId,
+          },
+          'Agent Workspace Artifact source close failed',
+        );
+        throw error;
+      }
     }
   }
 
@@ -45,29 +95,66 @@ export class WorkspaceArtifactService {
     input: WorkspaceArtifactImportInput,
     signal: AbortSignal,
   ): Promise<WorkspaceArtifactImportResult> {
-    await Promise.all([
-      this.requireCapability(scope, 'workspace.write'),
-      this.requireCapability(scope, 'artifacts.read'),
-    ]);
-    const artifact = await this.artifacts.get(scope, input.artifactId);
-    if (!artifact || artifact.status !== 'ready') throw new Error('ARTIFACT_NOT_READY');
-    const source = this.artifactChunks(scope, artifact, signal);
-    await this.workspaceRuntime.writeWorkspaceFileStream(
-      scope,
-      input.workspaceId,
-      input.targetPluginId,
-      input.path,
-      source,
-      artifact.sizeBytes,
-      signal,
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        workspaceId: input.workspaceId,
+        targetPluginId: input.targetPluginId,
+        artifactId: input.artifactId,
+      },
+      'Agent Workspace Artifact import started',
     );
-    return {
-      artifact,
-      workspaceId: input.workspaceId,
-      targetPluginId: input.targetPluginId,
-      path: input.path,
-      writtenBytes: artifact.sizeBytes,
-    };
+    try {
+      await Promise.all([
+        this.requireCapability(scope, 'workspace.write'),
+        this.requireCapability(scope, 'artifacts.read'),
+      ]);
+      const artifact = await this.artifacts.get(scope, input.artifactId);
+      if (!artifact || artifact.status !== 'ready') throw new Error('ARTIFACT_NOT_READY');
+      const source = this.artifactChunks(scope, artifact, signal);
+      await this.workspaceRuntime.writeWorkspaceFileStream(
+        scope,
+        input.workspaceId,
+        input.targetPluginId,
+        input.path,
+        source,
+        artifact.sizeBytes,
+        signal,
+      );
+      logger.info(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          workspaceId: input.workspaceId,
+          targetPluginId: input.targetPluginId,
+          artifactId: artifact.id,
+          sizeBytes: artifact.sizeBytes,
+        },
+        'Agent Workspace Artifact import completed',
+      );
+      return {
+        artifact,
+        workspaceId: input.workspaceId,
+        targetPluginId: input.targetPluginId,
+        path: input.path,
+        writtenBytes: artifact.sizeBytes,
+      };
+    } catch (error) {
+      logger.warn(
+        {
+          errorCode: logErrorCode(error, signal.aborted ? 'ABORTED' : 'WORKSPACE_ARTIFACT_IMPORT_FAILED'),
+          userId: scope.userId,
+          appId: scope.appId,
+          workspaceId: input.workspaceId,
+          targetPluginId: input.targetPluginId,
+          artifactId: input.artifactId,
+          aborted: signal.aborted,
+        },
+        'Agent Workspace Artifact import failed',
+      );
+      throw error;
+    }
   }
 
   private async *artifactChunks(scope: Scope, artifact: ArtifactRef, signal: AbortSignal): AsyncIterable<Uint8Array> {

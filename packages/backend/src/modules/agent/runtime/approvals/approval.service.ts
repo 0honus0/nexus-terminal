@@ -1,3 +1,4 @@
+import { logErrorCode, logger } from '../../../../shared/logging/logger';
 import type { ClockPort, Scope } from '../../agent.types';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
@@ -53,8 +54,24 @@ export class ApprovalService {
         ? (this.acpPermissions?.take(approvalId) ?? null)
         : null;
     if (approval.kind === 'acp_permission' && approval.status === 'requested' && !acpResolution) {
+      logger.warn(
+        { userId: scope.userId, appId: scope.appId, runId: approval.runId, approvalId, approvalKind: approval.kind },
+        'Agent approval resolution rejected as stale',
+      );
       throw new Error('APPROVAL_STALE');
     }
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId: approval.runId,
+        approvalId,
+        approvalKind: approval.kind,
+        decision,
+        expectedVersion,
+      },
+      'Agent approval resolution started',
+    );
     let committed: Awaited<ReturnType<ApprovalDecisionCommitPort['resolveToolApproval']>>;
     try {
       committed = await this.stateCommit.resolveToolApproval({
@@ -81,7 +98,34 @@ export class ApprovalService {
         now: this.clock.nowUnixSeconds(),
       });
     } catch (error) {
-      await acpResolution?.failClosed();
+      try {
+        await acpResolution?.failClosed();
+      } catch (failClosedError) {
+        logger.error(
+          {
+            userId: scope.userId,
+            appId: scope.appId,
+            runId: approval.runId,
+            approvalId,
+            approvalKind: approval.kind,
+            errorCode: logErrorCode(failClosedError, 'APPROVAL_FAIL_CLOSED_FAILED'),
+          },
+          'Agent approval fail-closed transition failed',
+        );
+        throw failClosedError;
+      }
+      logger.warn(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          runId: approval.runId,
+          approvalId,
+          approvalKind: approval.kind,
+          decision,
+          errorCode: logErrorCode(error, 'APPROVAL_RESOLUTION_FAILED'),
+        },
+        'Agent approval resolution failed',
+      );
       throw error;
     }
     if (approval.kind === 'acp_permission') {
@@ -91,6 +135,19 @@ export class ApprovalService {
     }
     const resolved = await this.approvals.get(scope, approvalId);
     if (!resolved) throw new Error('NOT_FOUND');
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId: approval.runId,
+        approvalId,
+        approvalKind: approval.kind,
+        decision,
+        status: resolved.status,
+        version: resolved.version,
+      },
+      'Agent approval resolved',
+    );
     return resolved;
   }
 }

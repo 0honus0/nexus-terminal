@@ -1,3 +1,4 @@
+import { logger } from '../../../../shared/logging/logger';
 import type { AgentRunEnvironmentSnapshot, Scope } from '../../agent.types';
 import type { ArtifactRef } from '../../ai/artifact.port';
 import type { ArtifactService } from '../../ai/artifact.service';
@@ -189,6 +190,19 @@ export class WorkspaceCheckpointService {
     if (manifestArtifact.status !== 'ready' || !manifestArtifact.sha256) {
       throw new Error('CHECKPOINT_ARTIFACT_UNAVAILABLE');
     }
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        workspaceId: workspace.id,
+        generation: workspace.generation,
+        manifestArtifactId: manifestArtifact.id,
+        archiveArtifactId: archive.id,
+        archiveBytes: archive.sizeBytes,
+      },
+      'Agent Workspace checkpoint captured',
+    );
     return [
       {
         workspaceId: workspace.id,
@@ -233,6 +247,17 @@ export class WorkspaceCheckpointService {
     ) {
       throw new Error('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
     }
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        sourceRunId,
+        workspaceId: manifest.source.workspaceId,
+        generation: manifest.source.generation,
+        manifestArtifactId: manifestArtifact.id,
+      },
+      'Agent Workspace checkpoint validated',
+    );
     return [manifest];
   }
 
@@ -285,6 +310,18 @@ export class WorkspaceCheckpointService {
     await this.runtime.action(scope, workspace.id, 'start', workspace.version, true);
     const restored = await this.repository.getWorkspace(scope, workspace.id);
     if (!restored || restored.status !== 'running') throw new Error('CHECKPOINT_WORKSPACE_RESTORE_FAILED');
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId: newRunId,
+        runtimeId: newRuntimeId,
+        workspaceId: restored.id,
+        generation: restored.generation,
+        archiveArtifactId: manifest.work.archiveArtifactId,
+      },
+      'Agent Workspace checkpoint restored',
+    );
   }
 
   private async readText(scope: Scope, artifact: ArtifactRef): Promise<string> {

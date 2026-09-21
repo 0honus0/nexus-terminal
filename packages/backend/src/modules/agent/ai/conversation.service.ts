@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import { AgentSettingsService } from '../host/agent-settings.service';
 import { AppLifecycleService } from '../host/app-lifecycle.service';
@@ -52,19 +53,36 @@ export class ConversationService {
       throw new Error('AGENT_APP_DISABLED');
     const now = this.clock.nowUnixSeconds();
     const normalized = normalizeTitle(title);
-    return this.repository.createThread(scope, randomUUID(), normalized.title, normalized.source, now);
+    const thread = await this.repository.createThread(scope, randomUUID(), normalized.title, normalized.source, now);
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        threadId: thread.id,
+        titleSource: thread.titleSource,
+        version: thread.version,
+      },
+      'Agent conversation thread created',
+    );
+    return thread;
   }
 
   async renameThread(scope: Scope, threadId: string, title: unknown, expectedVersion: unknown): Promise<ThreadView> {
     const normalized = normalizeTitle(title);
     if (normalized.source !== 'manual') throw new Error('VALIDATION_FAILED');
-    return this.repository.renameThread(
+    const version = normalizeExpectedVersion(expectedVersion);
+    const thread = await this.repository.renameThread(
       scope,
       threadId,
       normalized.title,
-      normalizeExpectedVersion(expectedVersion),
+      version,
       this.clock.nowUnixSeconds(),
     );
+    logger.info(
+      { userId: scope.userId, appId: scope.appId, threadId, expectedVersion: version, version: thread.version },
+      'Agent conversation thread renamed',
+    );
+    return thread;
   }
 
   async getThread(scope: Scope, threadId: string): Promise<ThreadView> {
@@ -77,19 +95,25 @@ export class ConversationService {
     return this.repository.listThreads(scope, validateLimit(limit, 100), before);
   }
 
-  deleteThread(scope: Scope, threadId: string, expectedVersion: unknown): Promise<ThreadDeleteResult> {
+  async deleteThread(scope: Scope, threadId: string, expectedVersion: unknown): Promise<ThreadDeleteResult> {
     if (!threadId) throw new Error('VALIDATION_FAILED');
-    return this.repository.deleteThread(
-      scope,
-      threadId,
-      normalizeExpectedVersion(expectedVersion),
-      this.clock.nowUnixSeconds(),
+    const version = normalizeExpectedVersion(expectedVersion);
+    const result = await this.repository.deleteThread(scope, threadId, version, this.clock.nowUnixSeconds());
+    logger.info(
+      { userId: scope.userId, appId: scope.appId, threadId, expectedVersion: version },
+      'Agent conversation thread deleted',
     );
+    return result;
   }
 
-  deleteAllThreads(scope: Scope, confirmation: unknown): Promise<ThreadDeleteAllResult> {
+  async deleteAllThreads(scope: Scope, confirmation: unknown): Promise<ThreadDeleteAllResult> {
     if (confirmation !== 'delete_all_threads') throw new Error('VALIDATION_FAILED');
-    return this.repository.deleteAllThreads(scope, this.clock.nowUnixSeconds());
+    const result = await this.repository.deleteAllThreads(scope, this.clock.nowUnixSeconds());
+    logger.info(
+      { userId: scope.userId, appId: scope.appId, deletedThreadCount: result.deletedCount },
+      'Agent conversation threads deleted',
+    );
+    return result;
   }
 
   readPage(scope: Scope, threadId: string, limit = 50, before?: string): Promise<LedgerPage> {

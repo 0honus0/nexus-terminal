@@ -1,4 +1,5 @@
 import { rcompare } from 'semver';
+import { logger } from '../../../shared/logging/logger';
 import type { AppGrantRepositoryPort } from './app-grant.repository.port';
 import type { AppLifecycleService } from './app-lifecycle.service';
 import type { AppView } from './app.types';
@@ -90,6 +91,16 @@ export class AgentOnboardingService {
       const current = await this.lifecycle.get(scope);
       const ready = current.desiredState === 'enabled' && ['running', 'degraded'].includes(current.observedState);
       const app = ready ? current : await this.lifecycle.setEnabled(scope, true, current.version);
+      logger.info(
+        {
+          userId,
+          appId: app.appId,
+          appVersion: app.version,
+          installedNow: false,
+          enabled: app.desiredState === 'enabled',
+        },
+        'Agent recommended plugin onboarding completed',
+      );
       return { app, installedNow: false };
     }
 
@@ -110,6 +121,16 @@ export class AgentOnboardingService {
       verified.plugin.appId !== this.source.recommendedAppId ||
       verified.plugin.publisherKeyId !== this.source.publisherKeyId
     ) {
+      logger.warn(
+        {
+          userId,
+          expectedAppId: this.source.recommendedAppId,
+          actualAppId: verified.plugin.appId,
+          expectedPublisherKeyId: this.source.publisherKeyId,
+          actualPublisherKeyId: verified.plugin.publisherKeyId,
+        },
+        'Agent recommended plugin identity verification failed',
+      );
       throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_IDENTITY_MISMATCH');
     }
     const installed = await this.plugins.install(userId, stage.id);
@@ -126,6 +147,17 @@ export class AgentOnboardingService {
     );
     const afterGrants = await this.lifecycle.get(scope);
     const app = await this.lifecycle.setEnabled(scope, true, afterGrants.version);
+    logger.info(
+      {
+        userId,
+        appId: app.appId,
+        appVersion: app.version,
+        installedVersion: installed.plugin.version,
+        grantedCapabilityCount: installed.plugin.manifest.capabilities.length,
+        installedNow: true,
+      },
+      'Agent recommended plugin onboarding completed',
+    );
     return { app, installedNow: true };
   }
 

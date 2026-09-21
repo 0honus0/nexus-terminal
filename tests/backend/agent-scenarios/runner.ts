@@ -19931,6 +19931,17 @@ const agentStructuredLoggingScenario: Scenario = async () => {
       'modules/agent/workspace-runtime/workspace-runtime.service.ts',
       'Agent Workspace failure status commit failed during reconfigure',
     ],
+    ['modules/agent/exchange/workspace-artifact.service.ts', 'Agent Workspace Artifact import failed'],
+    ['modules/agent/ai/conversation.service.ts', 'Agent conversation thread created'],
+    ['modules/agent/ai/provider.service.ts', 'Agent provider model discovery failed'],
+    ['modules/agent/host/app-lifecycle.service.ts', 'Agent App enable failed'],
+    ['modules/agent/runtime/approvals/approval.service.ts', 'Agent approval resolution failed'],
+    ['modules/agent/runtime/planning/plan.service.ts', 'Agent plan updated'],
+    ['modules/agent/host/agent-onboarding.service.ts', 'Agent recommended plugin onboarding completed'],
+    ['modules/agent/host/agent-execution-policy.service.ts', 'Agent execution policy replaced'],
+    ['modules/agent/runtime/collaboration/subagent.service.ts', 'Agent Subagent delegation created'],
+    ['modules/agent/runtime/collaboration/mailbox.service.ts', 'Agent Subagent mailbox message sent'],
+    ['modules/agent/runtime/recovery/workspace-checkpoint.service.ts', 'Agent Workspace checkpoint restored'],
   ] as const;
   for (const [relative, message] of diagnosticTargets) {
     const source = fs.readFileSync(path.join(backendSourceRoot, relative), 'utf8');

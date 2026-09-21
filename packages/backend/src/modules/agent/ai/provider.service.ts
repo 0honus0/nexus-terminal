@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import type { ClockPort } from '../agent.types';
 import type { LanguageModelPort } from './language-model.port';
 import {
@@ -318,7 +319,30 @@ export class ProviderService {
       createdAt: now,
       updatedAt: now,
     });
-    await this.onChanged(userId);
+    try {
+      await this.onChanged(userId);
+    } catch (error) {
+      logger.error(
+        {
+          userId,
+          providerId: created.id,
+          providerVersion: created.version,
+          errorCode: logErrorCode(error, 'PROVIDER_CHANGE_NOTIFICATION_FAILED'),
+        },
+        'Agent provider change notification failed after create',
+      );
+      throw error;
+    }
+    logger.info(
+      {
+        userId,
+        providerId: created.id,
+        providerVersion: created.version,
+        enabled: created.enabled,
+        modelCount: created.models.length,
+      },
+      'Agent provider created',
+    );
     return this.toView(created);
   }
 
@@ -336,13 +360,45 @@ export class ProviderService {
       clearCredential: input.clearCredential === true,
       updatedAt: this.clock.nowUnixSeconds(),
     });
-    await this.onChanged(userId);
+    try {
+      await this.onChanged(userId);
+    } catch (error) {
+      logger.error(
+        {
+          userId,
+          providerId,
+          providerVersion: updated.version,
+          errorCode: logErrorCode(error, 'PROVIDER_CHANGE_NOTIFICATION_FAILED'),
+        },
+        'Agent provider change notification failed after update',
+      );
+      throw error;
+    }
+    logger.info(
+      {
+        userId,
+        providerId,
+        providerVersion: updated.version,
+        enabled: updated.enabled,
+        modelCount: updated.models.length,
+      },
+      'Agent provider updated',
+    );
     return this.toView(updated);
   }
 
   async remove(userId: number, providerId: string, expectedVersion: number): Promise<void> {
     await this.repository.remove(userId, providerId, expectedVersion, this.clock.nowUnixSeconds());
-    await this.onChanged(userId);
+    try {
+      await this.onChanged(userId);
+    } catch (error) {
+      logger.error(
+        { userId, providerId, expectedVersion, errorCode: logErrorCode(error, 'PROVIDER_CHANGE_NOTIFICATION_FAILED') },
+        'Agent provider change notification failed after remove',
+      );
+      throw error;
+    }
+    logger.info({ userId, providerId, expectedVersion }, 'Agent provider removed');
   }
 
   async discoverModels(userId: number, providerId: string): Promise<DiscoveredProviderModel[]> {
@@ -350,6 +406,7 @@ export class ProviderService {
     if (!persisted) throw new Error('PROVIDER_NOT_FOUND');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error('PROVIDER_DISCOVERY_TIMEOUT')), 10_000);
+    logger.debug({ userId, providerId }, 'Agent provider model discovery started');
     try {
       const discovered = await this.languageModel.discoverModels(userId, providerId, controller.signal);
       const observedAt = this.clock.nowUnixSeconds();
@@ -386,7 +443,17 @@ export class ProviderService {
           [...existingByModel.values()].sort((left, right) => left.modelId.localeCompare(right.modelId)),
         );
       }
+      logger.info(
+        { userId, providerId, discoveredModelCount: result.length, capabilityObservationChanged: changed },
+        'Agent provider model discovery completed',
+      );
       return result;
+    } catch (error) {
+      logger.warn(
+        { userId, providerId, errorCode: logErrorCode(error, 'PROVIDER_DISCOVERY_FAILED') },
+        'Agent provider model discovery failed',
+      );
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -415,9 +482,14 @@ export class ProviderService {
       )) {
         if (event.type === 'usage') usage = event.usage;
       }
-      return { ok: true, latencyMs: Date.now() - startedAt, ...(usage ? { usage } : {}) };
+      const latencyMs = Date.now() - startedAt;
+      logger.info({ userId, providerId, modelId, latencyMs }, 'Agent provider test completed');
+      return { ok: true, latencyMs, ...(usage ? { usage } : {}) };
     } catch (error) {
-      return { ok: false, latencyMs: Date.now() - startedAt, errorCode: testErrorCode(error) };
+      const latencyMs = Date.now() - startedAt;
+      const errorCode = testErrorCode(error);
+      logger.warn({ userId, providerId, modelId, latencyMs, errorCode }, 'Agent provider test failed');
+      return { ok: false, latencyMs, errorCode };
     } finally {
       clearTimeout(timeout);
     }

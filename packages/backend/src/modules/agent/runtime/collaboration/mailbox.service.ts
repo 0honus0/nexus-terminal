@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../../shared/logging/logger';
 import type { JsonValue, Scope, ClockPort } from '../../agent.types';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
@@ -170,6 +171,22 @@ export class MailboxService {
       maxHardRunBytes: settings.hardLimits.maxSubagentMessageBytesPerRun,
     });
     this.onWorkAvailable();
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        senderRuntimeId,
+        recipientRuntimeId: message.recipientRuntimeId,
+        delegationId: message.delegationId,
+        messageId: receipt.messageId,
+        recipientSequence: receipt.recipientSequence,
+        kind: message.kind,
+        sizeBytes,
+        replayed: receipt.replayed,
+      },
+      'Agent Subagent mailbox message sent',
+    );
     return receipt;
   }
 
@@ -201,7 +218,7 @@ export class MailboxService {
     ) {
       throw new Error('VALIDATION_FAILED');
     }
-    return this.mailboxes.consumeMessages(
+    const consumed = await this.mailboxes.consumeMessages(
       scope,
       runId,
       runtimeId,
@@ -209,11 +226,26 @@ export class MailboxService {
       expectedConsumedSequence,
       this.clock.nowUnixSeconds(),
     );
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        runtimeId,
+        through,
+        expectedConsumedSequence,
+        consumedSequence: consumed,
+      },
+      'Agent Subagent mailbox messages consumed',
+    );
+    return consumed;
   }
 
   async sweepExpired(limit = 256): Promise<number> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) throw new Error('VALIDATION_FAILED');
-    return this.mailboxes.expireMessages(this.clock.nowUnixSeconds(), limit);
+    const expired = await this.mailboxes.expireMessages(this.clock.nowUnixSeconds(), limit);
+    if (expired > 0) logger.debug({ expiredMessages: expired, limit }, 'Agent Subagent mailbox sweep expired messages');
+    return expired;
   }
 
   private assertPeerPolicy(

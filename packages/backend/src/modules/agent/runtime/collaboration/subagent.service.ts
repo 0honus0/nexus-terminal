@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../../shared/logging/logger';
 import type { JsonValue, Scope, ClockPort } from '../../agent.types';
 import { snapshotProviderModelCapabilities } from '../../ai/model-capability-resolver';
 import type { ProviderService } from '../../ai/provider.service';
@@ -180,6 +181,20 @@ export class SubagentService {
     });
     await this.wake(scope, runId);
     this.onWorkAvailable();
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        delegationId: created.delegation.id,
+        parentRuntimeId,
+        childRuntimeId: created.delegation.childRuntimeId,
+        profileId: created.delegation.profileId,
+        depth: created.delegation.depth,
+        capabilityCount: created.delegation.capabilities.length,
+      },
+      'Agent Subagent delegation created',
+    );
     return created.delegation;
   }
 
@@ -225,6 +240,18 @@ export class SubagentService {
     );
     this.onRuntimeCancelled(runId, result.childRuntimeId);
     await this.wake(scope, runId);
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        delegationId,
+        childRuntimeId: result.childRuntimeId,
+        cancelledDescendants: descendants.length,
+        version: result.version,
+      },
+      'Agent Subagent delegation tree cancelled',
+    );
     return result;
   }
 
