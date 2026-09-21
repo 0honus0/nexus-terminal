@@ -1,5 +1,11 @@
-export interface ToolTargetFingerprint {
-  kind: 'machine' | 'workspace' | 'integration' | 'browser' | 'run';
+export type AgentTargetKind = 'workspace' | 'ssh';
+
+export interface AgentTargetSelector {
+  target: AgentTargetKind;
+  id: string;
+}
+
+interface ToolTargetFingerprintBase {
   targetIdentity: string;
   endpoint: string;
   loginUser: string;
@@ -13,3 +19,13 @@ export interface ToolTargetFingerprint {
   generation?: number;
   hostKeyTrust?: 'unavailable';
 }
+
+export interface CanonicalToolTargetFingerprint extends ToolTargetFingerprintBase, AgentTargetSelector {
+  kind: AgentTargetKind;
+}
+
+export interface NonTargetToolTargetFingerprint extends ToolTargetFingerprintBase {
+  kind: 'integration' | 'browser' | 'run';
+}
+
+export type ToolTargetFingerprint = CanonicalToolTargetFingerprint | NonTargetToolTargetFingerprint;

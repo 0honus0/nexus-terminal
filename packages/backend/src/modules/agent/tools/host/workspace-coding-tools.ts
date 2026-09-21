@@ -9,7 +9,7 @@ import type {
   ToolPrecondition,
   ToolResult,
 } from '../../capabilities/tool.types';
-import type { AgentWorkspaceRepositoryPort } from '../../workspace-runtime/workspace-runtime.repository.port';
+import type { AgentTargetResolver } from '../../capabilities/target-resolver';
 import type { WorkspaceRuntimeService } from '../../workspace-runtime/workspace-runtime.service';
 
 const MAX_PATH_BYTES = 4096;
@@ -87,8 +87,7 @@ const operationHash = (
   );
 
 const workspaceInspection = async (
-  repository: AgentWorkspaceRepositoryPort,
-  cryptoHash: CryptoHashPort,
+  targets: AgentTargetResolver,
   workspaceId: string,
   context: ToolContext,
 ): Promise<{
@@ -97,44 +96,13 @@ const workspaceInspection = async (
   resourceKeys: string[];
   preconditions: ToolPrecondition[];
 }> => {
-  const workspace = await repository.getWorkspace(context, workspaceId);
-  if (!workspace) throw new Error('NOT_FOUND');
-  if (workspace.runId !== context.runId || workspace.agentRuntimeId !== context.agentRuntimeId) {
-    throw new Error('RESOURCE_FORBIDDEN');
-  }
-  if (workspace.status !== 'running') throw new Error('WORKSPACE_NOT_RUNNING');
-  const target: ToolInspection['target'] = {
-    kind: 'workspace',
-    workspaceId,
-    generation: workspace.generation,
-    targetIdentity: `workspace:${workspaceId}:${workspace.generation}`,
-    endpoint: `workspace:${workspaceId}`,
-    loginUser: 'runner:65532',
-    configurationHash: hashOperation(
-      {
-        schemaVersion: 2,
-        workspaceId,
-        generation: workspace.generation,
-        profile: JSON.parse(JSON.stringify(workspace.profile)) as JsonValue,
-      },
-      cryptoHash,
-    ),
-  };
+  const resolved = await targets.resolve(context, { target: 'workspace', id: workspaceId });
+  if (resolved.workspaceGeneration === undefined) throw new Error('TOOL_STATE_CONFLICT');
   return {
-    generation: workspace.generation,
-    target,
-    resourceKeys: [`workspace:${workspaceId}:${workspace.generation}`],
-    preconditions: [
-      {
-        kind: 'workspaceGeneration',
-        key: workspaceId,
-        observedValue: {
-          generation: workspace.generation,
-          version: workspace.version,
-          status: workspace.status,
-        },
-      },
-    ],
+    generation: resolved.workspaceGeneration,
+    target: resolved.fingerprint,
+    resourceKeys: resolved.resourceKeys,
+    preconditions: resolved.preconditions,
   };
 };
 
@@ -153,7 +121,7 @@ const readResult = (data: Awaited<ReturnType<WorkspaceRuntimeService['readWorksp
 });
 
 export const createWorkspaceReadFileTool = (
-  repository: AgentWorkspaceRepositoryPort,
+  targets: AgentTargetResolver,
   runtime: WorkspaceRuntimeService,
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
@@ -192,7 +160,7 @@ export const createWorkspaceReadFileTool = (
     if (offsetBytes !== undefined && (startLine !== undefined || endLine !== undefined)) {
       throw new Error('TOOL_ARGUMENTS_INVALID');
     }
-    const binding = await workspaceInspection(repository, cryptoHash, workspaceId, context);
+    const binding = await workspaceInspection(targets, workspaceId, context);
     const normalizedArguments: JsonValue = {
       workspaceId,
       generation: binding.generation,
@@ -257,7 +225,7 @@ export const createWorkspaceReadFileTool = (
 });
 
 export const createWorkspaceSearchTool = (
-  repository: AgentWorkspaceRepositoryPort,
+  targets: AgentTargetResolver,
   runtime: WorkspaceRuntimeService,
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
@@ -293,7 +261,7 @@ export const createWorkspaceSearchTool = (
     const glob = args.glob === undefined ? undefined : stringValue(args.glob, 512);
     const maxResults = optionalInteger(args.maxResults, { minimum: 1, maximum: 100, fallback: 20 })!;
     const contextLines = optionalInteger(args.contextLines, { minimum: 0, maximum: 5, fallback: 2 })!;
-    const binding = await workspaceInspection(repository, cryptoHash, workspaceId, context);
+    const binding = await workspaceInspection(targets, workspaceId, context);
     const normalizedArguments: JsonValue = {
       workspaceId,
       generation: binding.generation,
@@ -362,7 +330,7 @@ export const createWorkspaceSearchTool = (
 });
 
 export const createWorkspaceRepoMapTool = (
-  repository: AgentWorkspaceRepositoryPort,
+  targets: AgentTargetResolver,
   runtime: WorkspaceRuntimeService,
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
@@ -402,7 +370,7 @@ export const createWorkspaceRepoMapTool = (
       maximum: 16 * 1024,
       fallback: 8 * 1024,
     })!;
-    const binding = await workspaceInspection(repository, cryptoHash, workspaceId, context);
+    const binding = await workspaceInspection(targets, workspaceId, context);
     const normalizedArguments: JsonValue = {
       workspaceId,
       generation: binding.generation,
@@ -477,7 +445,7 @@ export const createWorkspaceRepoMapTool = (
 });
 
 export const createWorkspaceCodeIntelTool = (
-  repository: AgentWorkspaceRepositoryPort,
+  targets: AgentTargetResolver,
   runtime: WorkspaceRuntimeService,
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
@@ -526,7 +494,7 @@ export const createWorkspaceCodeIntelTool = (
       maximum: 64 * 1024,
       fallback: 24 * 1024,
     })!;
-    const binding = await workspaceInspection(repository, cryptoHash, workspaceId, context);
+    const binding = await workspaceInspection(targets, workspaceId, context);
     const normalizedArguments: JsonValue = {
       workspaceId,
       generation: binding.generation,
@@ -621,7 +589,7 @@ const expectedFilesValue = (value: JsonValue | undefined): Array<{ path: string;
 };
 
 export const createWorkspaceApplyPatchTool = (
-  repository: AgentWorkspaceRepositoryPort,
+  targets: AgentTargetResolver,
   runtime: WorkspaceRuntimeService,
   cryptoHash: CryptoHashPort,
   artifacts: Pick<ArtifactService, 'begin' | 'write'> | null = null,
@@ -664,7 +632,7 @@ export const createWorkspaceApplyPatchTool = (
     const workspaceId = stringValue(args.workspaceId, 128);
     const patch = stringValue(args.patch, MAX_PATCH_BYTES);
     const expectedFiles = expectedFilesValue(args.expectedFiles);
-    const binding = await workspaceInspection(repository, cryptoHash, workspaceId, context);
+    const binding = await workspaceInspection(targets, workspaceId, context);
     const dryRun = await runtime.applyWorkspacePatch(
       context,
       workspaceId,

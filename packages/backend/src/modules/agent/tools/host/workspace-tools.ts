@@ -151,6 +151,8 @@ export const createWorkspaceJobTool = (
 
     const target: ToolInspection['target'] = {
       kind: 'workspace',
+      target: 'workspace',
+      id: workspaceId,
       workspaceId,
       generation: workspace.generation,
       targetIdentity: `workspace:${workspaceId}:${workspace.generation}`,
@@ -484,6 +486,8 @@ export const createWorkspaceJobControlTool = (
     }
     const target: ToolInspection['target'] = {
       kind: 'workspace',
+      target: 'workspace',
+      id: job.workspaceId,
       workspaceId: job.workspaceId,
       generation: job.generation,
       targetIdentity: `workspace:${job.workspaceId}:${job.generation}:job:${job.jobId}`,

@@ -301,6 +301,8 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
   const target = recordValue(record.target);
   assertRecordKeys(target, [
     'kind',
+    'target',
+    'id',
     'targetIdentity',
     'endpoint',
     'loginUser',
@@ -314,15 +316,23 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     'generation',
     'hostKeyTrust',
   ]);
-  if (!['machine', 'workspace', 'integration', 'browser', 'run'].includes(String(target.kind)))
+  const targetKind = String(target.kind);
+  if (!['ssh', 'workspace', 'integration', 'browser', 'run'].includes(targetKind)) return invalidDurableState();
+  const canonicalTarget = targetKind === 'ssh' || targetKind === 'workspace';
+  if (canonicalTarget) {
+    if (target.target !== targetKind || typeof target.id !== 'string' || target.id.length < 1)
+      return invalidDurableState();
+  } else if (target.target !== undefined || target.id !== undefined) {
     return invalidDurableState();
+  }
   if (!Array.isArray(record.preconditions) || record.preconditions.length > 256) return invalidDurableState();
   return {
     toolName: stringValue(record.toolName),
     toolVersion: stringValue(record.toolVersion),
     normalizedArguments: decodeJsonValue(record.normalizedArguments),
     target: {
-      kind: target.kind as RuntimeToolWorkView['inspection']['target']['kind'],
+      kind: targetKind as RuntimeToolWorkView['inspection']['target']['kind'],
+      ...(canonicalTarget ? { target: targetKind as 'ssh' | 'workspace', id: stringValue(target.id) } : {}),
       targetIdentity: stringValue(target.targetIdentity),
       endpoint: stringValue(target.endpoint),
       loginUser: stringValue(target.loginUser),
@@ -339,7 +349,7 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
         : target.hostKeyTrust === 'unavailable'
           ? { hostKeyTrust: 'unavailable' as const }
           : invalidDurableState()),
-    },
+    } as RuntimeToolWorkView['inspection']['target'],
     resourceKeys: decodeStringArray(record.resourceKeys, 256),
     risk: record.risk as RuntimeToolWorkView['inspection']['risk'],
     mutation: booleanValue(record.mutation),

@@ -2,6 +2,7 @@ import { logger } from '../../shared/logging/logger';
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
+import { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import { AgentMutationLeaseGuardAdapter } from '../../infrastructure/agent/capabilities/agent-mutation-lease-guard.adapter';
 import { NodeCryptoHashAdapter } from '../../infrastructure/agent/capabilities/node-crypto-hash.adapter';
 import { SqliteAgentSettingsRepository } from '../../infrastructure/agent/repositories/sqlite-agent-settings.repository';
@@ -349,6 +350,7 @@ export const composeAgent = ({
     now: () => systemClock.nowUnixSeconds(),
   });
   const workspaceRepository = composedWorkspaceRuntime.repository;
+  const targets = new AgentTargetResolver(workspaceRepository, machine, cryptoHash);
   const workspaceRuntime = composedWorkspaceRuntime.service;
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter(acpTransport);
@@ -357,6 +359,7 @@ export const composeAgent = ({
   registerWorkspaceToolContributions({
     catalog: toolCatalog,
     repository: workspaceRepository,
+    targets,
     runtime: workspaceRuntime,
     gateway: workspaceRuntimeController,
     artifacts,

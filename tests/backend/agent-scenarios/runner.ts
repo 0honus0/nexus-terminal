@@ -93,6 +93,7 @@ import { LEASE_RENEW_INTERVAL_MS } from '../../../packages/backend/src/modules/a
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
 import { modelFacingToolSchemas } from '../../../packages/backend/src/modules/agent/capabilities/tool-model-surface';
 import { PolicyService } from '../../../packages/backend/src/modules/agent/capabilities/policy.service';
+import { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
 import {
   projectToolResult,
   ToolExecutor,
@@ -1697,6 +1698,7 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
   registerWorkspaceToolContributions({
     catalog,
     repository: null!,
+    targets: null!,
     runtime: null!,
     gateway: null!,
     cryptoHash: {
@@ -1836,43 +1838,46 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
 
     const patchArtifactId = '11111111-1111-4111-8111-111111111111';
     let patchArtifactBytes = '';
+    const codingCryptoHash = {
+      sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+    };
+    const codingRepository = {
+      getWorkspace: async () => ({
+        ...scope,
+        id: 'workspace-coding',
+        runId: 'workspace-coding-run',
+        agentRuntimeId: 'workspace-coding-runtime',
+        retained: false,
+        profile: {
+          kind: 'code',
+          recipeId: 'scenario-code',
+          recipeRevision: '1',
+          runtimeDigest: 'scenario-runtime',
+          catalogRevision: 'scenario-catalog',
+          toolchain: [],
+          runnerPlugins: [],
+          acpProfiles: [],
+          browserTarget: null,
+        },
+        generation: 4,
+        status: 'running',
+        retainedManifestRef: null,
+        version: 2,
+        lastActiveAt: 1_800_000_000,
+        createdAt: 1_800_000_000,
+        updatedAt: 1_800_000_000,
+      }),
+    } as unknown as AgentWorkspaceRepositoryPort;
+    const codingTargets = new AgentTargetResolver(codingRepository, null!, codingCryptoHash);
     const inspectTool = createWorkspaceApplyPatchTool(
-      {
-        getWorkspace: async () => ({
-          ...scope,
-          id: 'workspace-coding',
-          runId: 'workspace-coding-run',
-          agentRuntimeId: 'workspace-coding-runtime',
-          retained: false,
-          profile: {
-            kind: 'code',
-            recipeId: 'scenario-code',
-            recipeRevision: '1',
-            runtimeDigest: 'scenario-runtime',
-            catalogRevision: 'scenario-catalog',
-            toolchain: [],
-            runnerPlugins: [],
-            acpProfiles: [],
-            browserTarget: null,
-          },
-          generation: 4,
-          status: 'running',
-          retainedManifestRef: null,
-          version: 2,
-          lastActiveAt: 1_800_000_000,
-          createdAt: 1_800_000_000,
-          updatedAt: 1_800_000_000,
-        }),
-      } as unknown as AgentWorkspaceRepositoryPort,
+      codingTargets,
       {
         applyWorkspacePatch: async (_scope, _workspaceId, _generation, request) => ({
           changes: dryRun.changes,
           applied: request.dryRun === true ? false : true,
         }),
       } as unknown as WorkspaceRuntimeService,
-      {
-        sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
-      },
+      codingCryptoHash,
       {
         begin: async (_scope, meta) => {
           assert.equal(meta.mediaType, 'text/x-diff');
@@ -1928,6 +1933,9 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
     );
     assert.equal(patchInspection.risk, 'mutate');
     assert.equal(patchInspection.mutation, true);
+    assert.equal(patchInspection.target.kind, 'workspace');
+    assert.equal(patchInspection.target.target, 'workspace');
+    assert.equal(patchInspection.target.id, 'workspace-coding');
     assert.ok(
       patchInspection.preconditions.some(
         (precondition) =>
@@ -2131,6 +2139,7 @@ const workspaceRepoMapCodeIntelScenario: Scenario = async () => {
   registerWorkspaceToolContributions({
     catalog,
     repository: null!,
+    targets: null!,
     runtime: null!,
     gateway: null!,
     cryptoHash: {
@@ -2202,6 +2211,7 @@ const workspaceRepoMapCodeIntelScenario: Scenario = async () => {
   const navCrypto = {
     sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
   };
+  const navTargets = new AgentTargetResolver(navRepository, null!, navCrypto);
   const navContext: ToolContext = {
     ...scope,
     actor: {
@@ -2222,17 +2232,20 @@ const workspaceRepoMapCodeIntelScenario: Scenario = async () => {
     inputRevision: 4,
   };
   const repoMapInspection = await createWorkspaceRepoMapTool(
-    navRepository,
+    navTargets,
     null! as WorkspaceRuntimeService,
     navCrypto,
   ).inspect({ workspaceId: navWorkspace.id, query: 'makeThing' }, navContext, 7);
   const codeIntelInspection = await createWorkspaceCodeIntelTool(
-    navRepository,
+    navTargets,
     null! as WorkspaceRuntimeService,
     navCrypto,
   ).inspect({ workspaceId: navWorkspace.id, action: 'symbols', path: '/workspace/work/src/a.ts' }, navContext, 7);
   for (const inspection of [repoMapInspection, codeIntelInspection]) {
     assert.equal(inspection.risk, 'read');
+    assert.equal(inspection.target.kind, 'workspace');
+    assert.equal(inspection.target.target, 'workspace');
+    assert.equal(inspection.target.id, navWorkspace.id);
     assert.equal(inspection.mutation, false, 'Repo navigation projections must never become mutation authority');
     assert.ok(
       inspection.preconditions.some(
@@ -2601,6 +2614,7 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
   registerWorkspaceToolContributions({
     catalog,
     repository: null!,
+    targets: null!,
     runtime: null!,
     gateway: null!,
     cryptoHash: {
@@ -7145,6 +7159,8 @@ const restartRecoveryScenario: Scenario = async () => {
       normalizedArguments: { path: '/workspace/example.txt' },
       target: {
         kind: 'workspace',
+        target: 'workspace',
+        id: 'scenario-workspace',
         targetIdentity: 'scenario-workspace',
         endpoint: '',
         loginUser: '',
@@ -9102,6 +9118,8 @@ const subagentGovernedMutationScenario: Scenario = async () => {
       normalizedArguments: {},
       target: {
         kind: 'workspace',
+        target: 'workspace',
+        id: 'scenario-child',
         workspaceId: 'scenario-child',
         generation: 1,
         targetIdentity: 'workspace:scenario-child:1',
@@ -9166,7 +9184,9 @@ const subagentGovernedMutationScenario: Scenario = async () => {
       ...(await mutationTool.inspect({}, context, policyRevision)),
       toolName: 'scenario_misdeclared_workspace_mutate',
       target: {
-        kind: 'machine',
+        kind: 'ssh',
+        target: 'ssh',
+        id: '42',
         connectionId: 42,
         targetIdentity: 'machine:42',
         endpoint: 'ssh://example.invalid',
@@ -9364,6 +9384,8 @@ const subagentGovernedMutationScenario: Scenario = async () => {
         ...persistedInspection,
         target: {
           kind: 'workspace',
+          target: 'workspace',
+          id: `new:${fullAccessRun.id}:${baseDelegation.childRuntimeId}`,
           targetIdentity: pendingWorkspaceResource,
           endpoint: 'workspace:new',
           loginUser: 'runner:65532',
@@ -9853,6 +9875,8 @@ const subagentGovernedMutationScenario: Scenario = async () => {
       normalizedArguments: {},
       target: {
         kind: 'workspace',
+        target: 'workspace',
+        id: 'governed-child',
         workspaceId: 'governed-child',
         generation: 1,
         targetIdentity: 'workspace:governed-child:1',
@@ -9995,7 +10019,9 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     const forbiddenDurableInspection: ToolInspection = {
       ...durableInspection,
       target: {
-        kind: 'machine',
+        kind: 'ssh',
+        target: 'ssh',
+        id: '42',
         connectionId: 42,
         targetIdentity: 'machine:42',
         endpoint: 'ssh://example.invalid',
@@ -13811,6 +13837,8 @@ const completionGateScenario: Scenario = async () => {
       normalizedArguments,
       target: {
         kind: 'workspace',
+        target: 'workspace',
+        id: 'gate-workspace',
         targetIdentity: 'workspace:gate-workspace:1',
         endpoint: 'workspace:gate-workspace',
         loginUser: 'runner:65532',

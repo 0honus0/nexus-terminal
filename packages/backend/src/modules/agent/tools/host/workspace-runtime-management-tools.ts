@@ -78,6 +78,8 @@ const workspaceTarget = (
     : `workspace:new:${input.runId}:${input.agentRuntimeId}`;
   return {
     kind: 'workspace',
+    target: 'workspace',
+    id: input.workspaceId ?? `new:${input.runId}:${input.agentRuntimeId}`,
     ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
     ...(input.generation ? { generation: input.generation } : {}),
     targetIdentity: identity,

@@ -11,7 +11,7 @@ import type {
   FileMutationInspection,
   FileMutationResult,
   MachineCapabilityPort,
-  MachineTargetFingerprint,
+  SshTargetFingerprint,
   MachineToolContext,
   ShellMutationResult,
 } from '../../../modules/agent/capabilities/machine.port';
@@ -91,7 +91,7 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
       }));
   }
 
-  async target(context: MachineToolContext, connectionId: number): Promise<MachineTargetFingerprint> {
+  async target(context: MachineToolContext, connectionId: number): Promise<SshTargetFingerprint> {
     if (!Number.isSafeInteger(connectionId) || connectionId < 1) throw new Error('VALIDATION_FAILED');
     assertConnectionSelected(context, connectionId);
     const connection = await this.connections.get(connectionId);
@@ -101,7 +101,9 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
       .update(`${endpoint}\n${connection.username}\n${connection.configurationHash}`, 'utf8')
       .digest('hex');
     return {
-      kind: 'machine',
+      kind: 'ssh',
+      target: 'ssh',
+      id: String(connectionId),
       connectionId,
       targetIdentity,
       endpoint,

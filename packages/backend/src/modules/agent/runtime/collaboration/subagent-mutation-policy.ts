@@ -8,16 +8,19 @@ export const governedSubagentWorkspaceMutation = (
   if (
     !inspection.mutation ||
     !['mutate', 'destructive'].includes(inspection.risk) ||
-    inspection.target.kind !== 'workspace'
+    inspection.target.kind !== 'workspace' ||
+    inspection.target.target !== 'workspace'
   ) {
     return false;
   }
 
   const workspaceId = inspection.target.workspaceId;
   const generation = inspection.target.generation;
+  const targetId = inspection.target.id;
   if (workspaceId === undefined && generation === undefined) {
     const pendingWorkspace = `workspace:new:${runId}:${runtimeId}`;
     return (
+      targetId === `new:${runId}:${runtimeId}` &&
       inspection.target.targetIdentity === pendingWorkspace &&
       inspection.target.endpoint === 'workspace:new' &&
       inspection.resourceKeys.includes(pendingWorkspace)
@@ -26,6 +29,7 @@ export const governedSubagentWorkspaceMutation = (
   if (
     typeof workspaceId !== 'string' ||
     workspaceId.length < 1 ||
+    targetId !== workspaceId ||
     !Number.isSafeInteger(generation) ||
     Number(generation) < 1
   ) {

@@ -414,6 +414,8 @@ export const parseToolInspection = (raw: string): ToolInspection => {
   const target = durableRecord(record.target);
   assertDurableKeys(target, [
     'kind',
+    'target',
+    'id',
     'targetIdentity',
     'endpoint',
     'loginUser',
@@ -427,14 +429,22 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     'generation',
     'hostKeyTrust',
   ]);
-  if (!['machine', 'workspace', 'integration', 'browser', 'run'].includes(String(target.kind))) return invalid();
+  const targetKind = String(target.kind);
+  if (!['ssh', 'workspace', 'integration', 'browser', 'run'].includes(targetKind)) return invalid();
+  const canonicalTarget = targetKind === 'ssh' || targetKind === 'workspace';
+  if (canonicalTarget) {
+    if (target.target !== targetKind || typeof target.id !== 'string' || target.id.length < 1) return invalid();
+  } else if (target.target !== undefined || target.id !== undefined) {
+    return invalid();
+  }
   if (!Array.isArray(record.preconditions) || record.preconditions.length > 256) return invalid();
   return {
     toolName: durableString(record.toolName) as string,
     toolVersion: durableString(record.toolVersion) as string,
     normalizedArguments: decodeDurableJsonValue(record.normalizedArguments),
     target: {
-      kind: target.kind as ToolInspection['target']['kind'],
+      kind: targetKind as ToolInspection['target']['kind'],
+      ...(canonicalTarget ? { target: targetKind as 'ssh' | 'workspace', id: durableString(target.id) as string } : {}),
       targetIdentity: durableString(target.targetIdentity) as string,
       endpoint: durableString(target.endpoint) as string,
       loginUser: durableString(target.loginUser) as string,
@@ -453,7 +463,7 @@ export const parseToolInspection = (raw: string): ToolInspection => {
         : target.hostKeyTrust === 'unavailable'
           ? { hostKeyTrust: 'unavailable' as const }
           : invalid()),
-    },
+    } as ToolInspection['target'],
     resourceKeys: decodeDurableStringArray(record.resourceKeys, 256),
     risk: record.risk as ToolInspection['risk'],
     mutation: durableBoolean(record.mutation),

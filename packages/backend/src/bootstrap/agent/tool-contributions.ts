@@ -38,6 +38,7 @@ import { createToolSearchTool } from '../../modules/agent/tools/host/tool-discov
 import { createArtifactReadTool } from '../../modules/agent/tools/host/artifact-tools';
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
+import type { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
 import type { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
 import type { SharedFactsService } from '../../modules/agent/runtime/collaboration/shared-facts.service';
@@ -93,6 +94,7 @@ export const registerMachineToolContributions = ({
 export interface WorkspaceToolContributionOptions {
   catalog: ToolCatalog;
   repository: AgentWorkspaceRepositoryPort;
+  targets: AgentTargetResolver;
   runtime: WorkspaceRuntimeService;
   gateway: WorkspaceRuntimeGatewayPort;
   artifacts: ArtifactService;
@@ -102,6 +104,7 @@ export interface WorkspaceToolContributionOptions {
 export const registerWorkspaceToolContributions = ({
   catalog,
   repository,
+  targets,
   runtime,
   gateway,
   artifacts,
@@ -111,11 +114,11 @@ export const registerWorkspaceToolContributions = ({
     schemaVersion: 1,
     id: 'workspace.tools',
     tools: [
-      createWorkspaceReadFileTool(repository, runtime, cryptoHash),
-      createWorkspaceSearchTool(repository, runtime, cryptoHash),
-      createWorkspaceRepoMapTool(repository, runtime, cryptoHash),
-      createWorkspaceCodeIntelTool(repository, runtime, cryptoHash),
-      createWorkspaceApplyPatchTool(repository, runtime, cryptoHash, artifacts),
+      createWorkspaceReadFileTool(targets, runtime, cryptoHash),
+      createWorkspaceSearchTool(targets, runtime, cryptoHash),
+      createWorkspaceRepoMapTool(targets, runtime, cryptoHash),
+      createWorkspaceCodeIntelTool(targets, runtime, cryptoHash),
+      createWorkspaceApplyPatchTool(targets, runtime, cryptoHash, artifacts),
       createWorkspaceJobTool(repository, gateway, cryptoHash),
       createWorkspaceJobControlTool(repository, gateway, cryptoHash),
     ],

@@ -1,6 +1,6 @@
 import type { ResolvedSshConnection } from '../../../platform/connection/ssh-connection';
 import type { JsonValue, Scope } from '../agent.types';
-import type { ToolTargetFingerprint } from './tool-target.types';
+import type { CanonicalToolTargetFingerprint } from './tool-target.types';
 
 export interface AgentConnectionView {
   id: number;
@@ -45,13 +45,10 @@ export interface MachineToolContext extends Scope {
   maxOutputBytes: number;
 }
 
-export interface MachineTargetFingerprint extends ToolTargetFingerprint {
-  kind: 'machine';
+export interface SshTargetFingerprint extends CanonicalToolTargetFingerprint {
+  kind: 'ssh';
+  target: 'ssh';
   connectionId: number;
-  targetIdentity: string;
-  endpoint: string;
-  loginUser: string;
-  configurationHash: string;
   hostKeyTrust: 'unavailable';
 }
 
@@ -101,7 +98,7 @@ export interface DockerMutationResult extends DockerMutationInspection {
 
 export interface MachineCapabilityPort {
   listConnections(context: MachineToolContext): Promise<MachineConnectionSummary[]>;
-  target(context: MachineToolContext, connectionId: number): Promise<MachineTargetFingerprint>;
+  target(context: MachineToolContext, connectionId: number): Promise<SshTargetFingerprint>;
   diagnose(
     context: MachineToolContext,
     connectionId: number,
