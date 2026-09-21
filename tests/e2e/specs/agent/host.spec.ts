@@ -479,7 +479,9 @@ test('fallback settings drop stale models and provider deletion repairs the defa
   const providersSection = page
     .getByRole('heading', { name: 'Model providers', exact: true })
     .locator('xpath=ancestor::section[1]');
-  await expect(providersSection.getByText('Fallback Primary', { exact: true })).toBeVisible();
+  const primaryCard = providersSection.locator(`[data-testid="agent-provider-card"][data-provider-id="${primary.id}"]`);
+  await expect(primaryCard).toBeVisible();
+  await expect(primaryCard.getByText('Fallback Primary', { exact: true })).toBeVisible();
   await expect(providersSection.getByText('stale-fallback', { exact: true })).toHaveCount(0);
 
   const validFallback = providersSection.getByRole('button', {
@@ -512,9 +514,6 @@ test('fallback settings drop stale models and provider deletion repairs the defa
     },
   });
 
-  const primaryCard = providersSection
-    .getByText('Fallback Primary', { exact: true })
-    .locator('xpath=ancestor::article[1]');
   await primaryCard.getByTitle('Delete Provider').click();
   const confirmDelete = page.getByRole('dialog', { name: 'Delete Provider', exact: true });
   await expect(confirmDelete).toBeVisible();
@@ -533,7 +532,7 @@ test('fallback settings drop stale models and provider deletion repairs the defa
   await confirmDelete.getByRole('button', { name: 'Delete Provider', exact: true }).click();
   expect((await deleted).ok()).toBeTruthy();
   expect((await repairedSettings).ok()).toBeTruthy();
-  await expect(providersSection.getByText('Fallback Primary', { exact: true })).toHaveCount(0);
+  await expect(primaryCard).toHaveCount(0);
 
   const finalSettings = await context.request.get('/api/v1/agent/settings');
   expect(finalSettings.ok(), await finalSettings.text()).toBeTruthy();

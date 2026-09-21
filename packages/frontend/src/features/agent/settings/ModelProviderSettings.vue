@@ -1146,6 +1146,8 @@
         <article
           v-for="provider in providers"
           :key="provider.id"
+          data-testid="agent-provider-card"
+          :data-provider-id="provider.id"
           class="rounded-xl border border-border/65 bg-background/60 shadow-2xs transition-all hover:border-border/90"
         >
           <!-- 服务商顶行摘要 -->
