@@ -549,61 +549,55 @@ test('resumed terminal pages older history through a bounded window and restores
     expect(historyRequestCount).toBe(0);
 
     const scrollable = terminal.locator('.xterm-scrollable-element').first();
+    await expect(scrollable).toBeVisible();
     const scrollableBox = await scrollable.boundingBox();
     expect(scrollableBox).toBeTruthy();
-    await page.mouse.move(scrollableBox!.x + scrollableBox!.width - 2, scrollableBox!.y + scrollableBox!.height / 2);
-    const scrollbar = scrollable.locator(':scope > .scrollbar.vertical').first();
-    await expect(scrollbar).toHaveClass(/visible/);
-    const slider = scrollbar.locator(':scope > .slider');
-    await expect(slider).toBeVisible();
-    const dragHistorySliderToTop = async () => {
-      const scrollbarBox = await scrollbar.boundingBox();
-      const sliderBox = await slider.boundingBox();
-      expect(scrollbarBox).toBeTruthy();
-      expect(sliderBox).toBeTruthy();
-      const x = sliderBox!.x + sliderBox!.width / 2;
-      await page.mouse.move(x, sliderBox!.y + sliderBox!.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(x, scrollbarBox!.y + 2, { steps: 8 });
-      await page.mouse.up();
-    };
-    const dragHistorySliderToBottom = async () => {
-      const scrollbarBox = await scrollbar.boundingBox();
-      const sliderBox = await slider.boundingBox();
-      expect(scrollbarBox).toBeTruthy();
-      expect(sliderBox).toBeTruthy();
-      const x = sliderBox!.x + sliderBox!.width / 2;
-      await page.mouse.move(x, sliderBox!.y + sliderBox!.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(x, scrollbarBox!.y + scrollbarBox!.height - 2, { steps: 8 });
-      await page.mouse.up();
+    await page.mouse.move(scrollableBox!.x + scrollableBox!.width / 2, scrollableBox!.y + scrollableBox!.height / 2);
+
+    const renderedTerminalText = async (): Promise<string> =>
+      (await rows.locator(':scope > div').allTextContents()).join('');
+    const wheelUntil = async (
+      deltaY: number,
+      predicate: () => boolean | Promise<boolean>,
+      failureMessage: string,
+    ): Promise<void> => {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        if (await predicate()) return;
+        await page.mouse.wheel(0, deltaY);
+        await page.waitForTimeout(75);
+      }
+      expect(await predicate(), failureMessage).toBe(true);
     };
 
-    // xterm 6 owns scrolling through its custom visible scrollbar rather than a native viewport.
-    // Dragging to the loaded-history boundary is the deterministic real-user equivalent of many
-    // wheel/page-up gestures across a multi-thousand-line retained tail.
-    await dragHistorySliderToTop();
-    await expect.poll(() => historyRequestCount, { timeout: 10_000 }).toBeGreaterThan(0);
+    // Use the public user-interaction path instead of xterm 6's private scrollbar/slider DOM.
+    // CI can legitimately render the custom slider after the terminal is already ready to accept
+    // wheel input, so slider visibility is not a reliable readiness signal.
+    await wheelUntil(-6_000, () => historyRequestCount > 0, 'scrolling upward should request older history');
     await expect.poll(() => historyResponseCount, { timeout: 10_000 }).toBeGreaterThan(0);
 
-    // The response confirms the previous page has finished rebuilding. Dragging to the top again
-    // now navigates into the prepended page without depending on xterm's internal slider geometry.
-    await dragHistorySliderToTop();
-    await expect
-      .poll(async () => (await rows.locator(':scope > div').allTextContents()).join(''), { timeout: 10_000 })
-      .toContain(earlyMarker);
+    // After the previous page arrives, keep scrolling through the rebuilt buffer until the oldest
+    // retained marker is actually rendered.
+    await wheelUntil(
+      -6_000,
+      async () => (await renderedTerminalText()).includes(earlyMarker),
+      'older history should become visible after the previous page is loaded',
+    );
 
     const requestsBeforeReturningToTail = historyRequestCount;
-    await dragHistorySliderToBottom();
-    await expect
-      .poll(async () => (await rows.locator(':scope > div').allTextContents()).join(''), { timeout: 10_000 })
-      .toContain(tailMarker);
+    await wheelUntil(
+      6_000,
+      async () => (await renderedTerminalText()).includes(tailMarker),
+      'scrolling downward should restore the live tail',
+    );
     await expect(rows).not.toContainText(earlyMarker);
 
     // Returning to the live tail resets the history cursor. Re-entering history should request
     // the newest previous page again instead of keeping an exhausted cursor from the prior browse.
-    await dragHistorySliderToTop();
-    await expect.poll(() => historyRequestCount, { timeout: 10_000 }).toBeGreaterThan(requestsBeforeReturningToTail);
+    await wheelUntil(
+      -6_000,
+      () => historyRequestCount > requestsBeforeReturningToTail,
+      're-entering history should request the newest previous page again',
+    );
   } finally {
     expect((await context.request.put('/api/v1/settings/layout', { data: originalLayout })).ok()).toBeTruthy();
   }
