@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { logger } from '../../../../shared/logging/logger';
+import { logErrorCode, logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import { ProviderService } from '../../ai/provider.service';
 import { snapshotProviderModelCapabilities } from '../../ai/model-capability-resolver';
@@ -216,15 +216,88 @@ export class RunService {
     for (const fallback of settings.requestedSettings?.model?.fallbackModels ?? []) {
       const key = `${fallback.providerId}\u0000${fallback.modelId}`;
       if (seenRootRoutes.has(key)) continue;
-      const fallbackProvider = await this.providers.get(scope.userId, fallback.providerId);
-      if (!fallbackProvider.enabled) throw new Error('PROVIDER_CONFIGURATION_STALE');
-      const fallbackModel = fallbackProvider.models.find((candidate) => candidate.id === fallback.modelId);
-      if (!fallbackModel) throw new Error('MODEL_NOT_FOUND');
-      const capabilities = snapshotProviderModelCapabilities(fallbackModel);
-      if (missingRequiredModelCapabilities(definitionInfo.requiredModelCapabilities, capabilities).length > 0) {
-        throw new Error('MODEL_CAPABILITY_UNSUPPORTED');
+
+      let fallbackProvider: Awaited<ReturnType<ProviderService['get']>>;
+      try {
+        fallbackProvider = await this.providers.get(scope.userId, fallback.providerId);
+      } catch (error) {
+        const errorCode = logErrorCode(error, 'FALLBACK_PROVIDER_LOOKUP_FAILED');
+        if (errorCode !== 'PROVIDER_NOT_FOUND') throw error;
+        logger.warn(
+          {
+            userId: scope.userId,
+            appId: scope.appId,
+            providerId: fallback.providerId,
+            modelId: fallback.modelId,
+            errorCode,
+          },
+          'Agent fallback model route skipped',
+        );
+        continue;
       }
-      if (!supportsFrozenReasoningEffort(fallbackModel)) throw new Error('MODEL_REASONING_EFFORT_UNSUPPORTED');
+
+      if (!fallbackProvider.enabled) {
+        logger.warn(
+          {
+            userId: scope.userId,
+            appId: scope.appId,
+            providerId: fallback.providerId,
+            modelId: fallback.modelId,
+            errorCode: 'PROVIDER_DISABLED',
+          },
+          'Agent fallback model route skipped',
+        );
+        continue;
+      }
+
+      const fallbackModel = fallbackProvider.models.find((candidate) => candidate.id === fallback.modelId);
+      if (!fallbackModel) {
+        logger.warn(
+          {
+            userId: scope.userId,
+            appId: scope.appId,
+            providerId: fallback.providerId,
+            modelId: fallback.modelId,
+            errorCode: 'MODEL_NOT_FOUND',
+          },
+          'Agent fallback model route skipped',
+        );
+        continue;
+      }
+
+      const capabilities = snapshotProviderModelCapabilities(fallbackModel);
+      const missingCapabilities = missingRequiredModelCapabilities(
+        definitionInfo.requiredModelCapabilities,
+        capabilities,
+      );
+      if (missingCapabilities.length > 0) {
+        logger.warn(
+          {
+            userId: scope.userId,
+            appId: scope.appId,
+            providerId: fallback.providerId,
+            modelId: fallback.modelId,
+            errorCode: 'MODEL_CAPABILITY_UNSUPPORTED',
+            missingCapabilities,
+          },
+          'Agent fallback model route skipped',
+        );
+        continue;
+      }
+      if (!supportsFrozenReasoningEffort(fallbackModel)) {
+        logger.warn(
+          {
+            userId: scope.userId,
+            appId: scope.appId,
+            providerId: fallback.providerId,
+            modelId: fallback.modelId,
+            errorCode: 'MODEL_REASONING_EFFORT_UNSUPPORTED',
+          },
+          'Agent fallback model route skipped',
+        );
+        continue;
+      }
+
       seenRootRoutes.add(key);
       rootModelRoutes.push({
         model: {

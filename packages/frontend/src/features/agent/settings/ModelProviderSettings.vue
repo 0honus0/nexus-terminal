@@ -8,7 +8,9 @@
     agentApi,
     formatAgentApiError,
     type AgentDiscoveredProviderModel,
+    type AgentModelRegistryStatus,
     type AgentProviderView,
+    type ModelCapabilityDefaults,
   } from '../api/agent-api';
 
   const props = defineProps<{
@@ -51,6 +53,54 @@
   const createdProviderId = ref<string | null>(null);
   const showApiKey = ref(false);
   const copiedUrl = ref<string | null>(null);
+  const modelRegistryStatus = ref<AgentModelRegistryStatus | null>(null);
+  const modelRegistryBusy = ref(false);
+
+  const loadModelRegistryStatus = async (): Promise<void> => {
+    try {
+      modelRegistryStatus.value = await agentApi.modelRegistryStatus();
+    } catch {
+      // Supplemental status only; provider management still works with the built-in snapshot.
+    }
+  };
+
+  const refreshModelRegistry = async (): Promise<void> => {
+    if (modelRegistryBusy.value) return;
+    modelRegistryBusy.value = true;
+    try {
+      modelRegistryStatus.value = await agentApi.refreshModelRegistry();
+      operationFeedback.notifySuccess(t('agent.settings.providers.registryUpdated'));
+    } catch (cause) {
+      operationFeedback.notifyError({
+        operation: 'refresh-model-registry',
+        message: formatAgentApiError(cause, t('agent.settings.providers.registryUpdateFailed')),
+        cause,
+      });
+      await loadModelRegistryStatus();
+    } finally {
+      modelRegistryBusy.value = false;
+    }
+  };
+
+  const setModelRegistryAutoUpdate = async (event: Event): Promise<void> => {
+    const enabled = Boolean((event.target as HTMLInputElement | null)?.checked);
+    if (modelRegistryBusy.value) return;
+    modelRegistryBusy.value = true;
+    try {
+      modelRegistryStatus.value = await agentApi.setModelRegistryAutoUpdate(enabled);
+    } catch (cause) {
+      operationFeedback.notifyError({
+        operation: 'set-model-registry-auto-update',
+        message: formatAgentApiError(cause, t('agent.ui.saveFailed')),
+        cause,
+      });
+      await loadModelRegistryStatus();
+    } finally {
+      modelRegistryBusy.value = false;
+    }
+  };
+
+  const formatRegistryDate = (value: number): string => new Date(value * 1000).toLocaleDateString();
 
   // 模型库同步抽屉与批量策略状态
   const drawerOpen = reactive<Record<string, boolean>>({});
@@ -407,20 +457,27 @@
   const discoveredModelConfig = (
     provider: AgentProviderView,
     modelId: string,
+    registryFallback?: ModelCapabilityDefaults | null,
+    allowIncomplete = false,
   ): AgentProviderView['models'][number] | null => {
     const discovered = (props.discoveries[provider.id] ?? []).find((model) => model.id === modelId);
-    const registry = discovered?.registryDefaults;
+    const registry = discovered?.registryDefaults ?? registryFallback ?? undefined;
     const providerObservation = discovered?.providerCapabilities;
     const live = providerObservation?.capabilities;
     const contextWindow = live?.contextWindow ?? registry?.contextWindow;
     const maxOutputTokens = live?.maxOutputTokens ?? registry?.maxOutputTokens;
     const supportsTools = live?.supportsTools ?? registry?.supportsTools;
-    if (contextWindow === undefined || maxOutputTokens === undefined || supportsTools === undefined) return null;
+    if (
+      !allowIncomplete &&
+      (contextWindow === undefined || maxOutputTokens === undefined || supportsTools === undefined)
+    ) {
+      return null;
+    }
 
     const sourceFor = (
       field: 'contextWindow' | 'maxOutputTokens' | 'supportsTools' | 'supportsImageInput' | 'supportsFileInput',
-    ): 'provider' | 'registry' | undefined =>
-      live?.[field] !== undefined ? 'provider' : registry?.[field] !== undefined ? 'registry' : undefined;
+    ): 'provider' | 'registry' | 'manual' =>
+      live?.[field] !== undefined ? 'provider' : registry?.[field] !== undefined ? 'registry' : 'manual';
     const reasoning = live?.reasoning ?? registry?.reasoning;
     const reasoningSource = live?.reasoning
       ? ('provider' as const)
@@ -430,17 +487,17 @@
 
     return {
       id: modelId,
-      contextWindow,
-      maxOutputTokens,
-      supportsTools,
+      contextWindow: contextWindow ?? 0,
+      maxOutputTokens: maxOutputTokens ?? 0,
+      supportsTools: supportsTools ?? false,
       supportsImageInput: live?.supportsImageInput ?? registry?.supportsImageInput ?? false,
       supportsFileInput: live?.supportsFileInput ?? registry?.supportsFileInput ?? false,
       capabilitySources: {
-        contextWindow: sourceFor('contextWindow')!,
-        maxOutputTokens: sourceFor('maxOutputTokens')!,
-        supportsTools: sourceFor('supportsTools')!,
-        ...(sourceFor('supportsImageInput') ? { supportsImageInput: sourceFor('supportsImageInput')! } : {}),
-        ...(sourceFor('supportsFileInput') ? { supportsFileInput: sourceFor('supportsFileInput')! } : {}),
+        contextWindow: sourceFor('contextWindow'),
+        maxOutputTokens: sourceFor('maxOutputTokens'),
+        supportsTools: sourceFor('supportsTools'),
+        supportsImageInput: sourceFor('supportsImageInput'),
+        supportsFileInput: sourceFor('supportsFileInput'),
         ...(reasoningSource ? { reasoning: reasoningSource } : {}),
       },
       ...(registry ? { registryDefaults: registry } : {}),
@@ -456,20 +513,40 @@
     };
   };
 
-  const capabilityEditor = ref<{ providerId: string; modelId: string } | null>(null);
+  const resolveRegistryDefaults = async (modelId: string): Promise<ModelCapabilityDefaults | null> => {
+    try {
+      return (await agentApi.resolveModelRegistry(modelId)).defaults;
+    } catch {
+      return null;
+    }
+  };
+
+  const capabilityEditor = ref<{
+    providerId: string;
+    modelId: string;
+    mode: 'edit' | 'add';
+    draft?: AgentProviderView['models'][number];
+  } | null>(null);
   const capabilityEditorProvider = computed(() =>
     capabilityEditor.value
       ? (props.providers.find((provider) => provider.id === capabilityEditor.value?.providerId) ?? null)
       : null,
   );
-  const capabilityEditorModel = computed(() =>
-    capabilityEditorProvider.value && capabilityEditor.value
-      ? (capabilityEditorProvider.value.models.find((model) => model.id === capabilityEditor.value?.modelId) ?? null)
-      : null,
-  );
+  const capabilityEditorModel = computed(() => {
+    if (!capabilityEditorProvider.value || !capabilityEditor.value) return null;
+    if (capabilityEditor.value.mode === 'add') return capabilityEditor.value.draft ?? null;
+    return capabilityEditorProvider.value.models.find((model) => model.id === capabilityEditor.value?.modelId) ?? null;
+  });
 
   const openCapabilityEditor = (provider: AgentProviderView, model: AgentProviderView['models'][number]): void => {
-    capabilityEditor.value = { providerId: provider.id, modelId: model.id };
+    capabilityEditor.value = { providerId: provider.id, modelId: model.id, mode: 'edit' };
+  };
+
+  const openCapabilityEditorForAdd = async (provider: AgentProviderView, modelId: string): Promise<void> => {
+    const registry = await resolveRegistryDefaults(modelId);
+    const draft = discoveredModelConfig(provider, modelId, registry, true);
+    if (!draft) return;
+    capabilityEditor.value = { providerId: provider.id, modelId, mode: 'add', draft };
   };
 
   const closeCapabilityEditor = (): void => {
@@ -479,10 +556,25 @@
 
   const saveCapabilities = async (model: AgentProviderView['models'][number]): Promise<void> => {
     const provider = capabilityEditorProvider.value;
-    if (!provider) return;
-    const next = provider.models.map((candidate) => (candidate.id === model.id ? model : candidate));
-    const saved = await updateModels(provider, next, t('agent.settings.providers.capabilitySaved'));
-    if (saved) capabilityEditor.value = null;
+    const editor = capabilityEditor.value;
+    if (!provider || !editor) return;
+    const next =
+      editor.mode === 'add'
+        ? [...provider.models, model]
+        : provider.models.map((candidate) => (candidate.id === model.id ? model : candidate));
+    const saved = await updateModels(
+      provider,
+      next,
+      editor.mode === 'add'
+        ? t('agent.settings.providers.saveNoticeAdded', { count: 1 })
+        : t('agent.settings.providers.capabilitySaved'),
+    );
+    if (!saved) return;
+    if (editor.mode === 'add') {
+      if (manualModelId[provider.id] === model.id) manualModelId[provider.id] = '';
+      if (selectedDiscovered[provider.id]) delete selectedDiscovered[provider.id][model.id];
+    }
+    capabilityEditor.value = null;
   };
 
   // 一键添加所有支持模型
@@ -491,23 +583,22 @@
     if (!available.length) return;
     isSavingModels[provider.id] = true;
     try {
-      const newModels = available.map((model) => discoveredModelConfig(provider, model.id));
-      if (newModels.some((model) => model === null)) {
+      const resolvedModels = available.map((model) => discoveredModelConfig(provider, model.id));
+      const newModels = resolvedModels.filter((model): model is AgentProviderView['models'][number] => model !== null);
+      if (newModels.length > 0) {
+        const noticeAdded = t('agent.settings.providers.saveNoticeAdded', { count: newModels.length });
+        const saved = await updateModels(provider, [...provider.models, ...newModels], noticeAdded);
+        if (!saved) return;
+        selectedDiscovered[provider.id] = {};
+      }
+      const needsReview = resolvedModels.length - newModels.length;
+      if (needsReview > 0) {
         operationFeedback.notifyError({
           operation: 'resolve-model-capabilities',
-          message: t('agent.settings.providers.capabilityUnavailable'),
+          message: t('agent.settings.providers.capabilityNeedsReview', { count: needsReview }),
           context: { providerId: provider.id },
         });
-        return;
       }
-      const noticeAdded = t('agent.settings.providers.saveNoticeAdded', { count: available.length });
-      const saved = await updateModels(
-        provider,
-        [...provider.models, ...(newModels as AgentProviderView['models'])],
-        noticeAdded,
-      );
-      if (!saved) return;
-      selectedDiscovered[provider.id] = {};
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -520,23 +611,22 @@
     if (!selectedIds.length) return;
     isSavingModels[provider.id] = true;
     try {
-      const newModels = selectedIds.map((id) => discoveredModelConfig(provider, id));
-      if (newModels.some((model) => model === null)) {
+      const resolvedModels = selectedIds.map((id) => discoveredModelConfig(provider, id));
+      const newModels = resolvedModels.filter((model): model is AgentProviderView['models'][number] => model !== null);
+      if (newModels.length > 0) {
+        const noticeSelected = t('agent.settings.providers.saveNoticeAdded', { count: newModels.length });
+        const saved = await updateModels(provider, [...provider.models, ...newModels], noticeSelected);
+        if (!saved) return;
+        selectedDiscovered[provider.id] = {};
+      }
+      const needsReview = resolvedModels.length - newModels.length;
+      if (needsReview > 0) {
         operationFeedback.notifyError({
           operation: 'resolve-model-capabilities',
-          message: t('agent.settings.providers.capabilityUnavailable'),
+          message: t('agent.settings.providers.capabilityNeedsReview', { count: needsReview }),
           context: { providerId: provider.id },
         });
-        return;
       }
-      const noticeSelected = t('agent.settings.providers.saveNoticeAdded', { count: selectedIds.length });
-      const saved = await updateModels(
-        provider,
-        [...provider.models, ...(newModels as AgentProviderView['models'])],
-        noticeSelected,
-      );
-      if (!saved) return;
-      selectedDiscovered[provider.id] = {};
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -546,13 +636,13 @@
   const addSingleDiscovered = async (provider: AgentProviderView, modelId: string): Promise<void> => {
     isSavingModels[provider.id] = true;
     try {
-      const newModel = discoveredModelConfig(provider, modelId);
+      let newModel = discoveredModelConfig(provider, modelId);
       if (!newModel) {
-        operationFeedback.notifyError({
-          operation: 'resolve-model-capabilities',
-          message: t('agent.settings.providers.capabilityUnavailable'),
-          context: { providerId: provider.id },
-        });
+        const registry = await resolveRegistryDefaults(modelId);
+        newModel = discoveredModelConfig(provider, modelId, registry);
+      }
+      if (!newModel) {
+        await openCapabilityEditorForAdd(provider, modelId);
         return;
       }
       const noticeSingle = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
@@ -567,6 +657,13 @@
   };
 
   // 取消已添加（单项）
+  const removeFallbackModels = (providerId: string, modelIds: ReadonlySet<string>): void => {
+    const next = props.fallbackModels.filter(
+      (fallback) => fallback.providerId !== providerId || !modelIds.has(fallback.modelId),
+    );
+    if (next.length !== props.fallbackModels.length) emit('fallbackModels', next);
+  };
+
   const removeConfiguredModel = async (provider: AgentProviderView, modelId: string): Promise<void> => {
     if (provider.models.length <= 1) return;
     isSavingModels[provider.id] = true;
@@ -578,6 +675,7 @@
       const noticeRemoved = t('agent.settings.providers.saveNoticeRemoved');
       const saved = await updateModels(provider, nextModels, noticeRemoved);
       if (!saved) return;
+      removeFallbackModels(provider.id, new Set([modelId]));
       if (selectedConfigured[provider.id]) {
         delete selectedConfigured[provider.id][modelId];
       }
@@ -599,6 +697,7 @@
       const noticeBatchRemoved = t('agent.settings.providers.saveNoticeRemoved');
       const saved = await updateModels(provider, nextModels, noticeBatchRemoved);
       if (!saved) return;
+      removeFallbackModels(provider.id, selectedIds);
       selectedConfigured[provider.id] = {};
     } finally {
       isSavingModels[provider.id] = false;
@@ -648,6 +747,7 @@
       const noticeAllRemoved = t('agent.settings.providers.saveNoticeRemovedAll', { count: removeCount });
       const saved = await updateModels(provider, nextModels, noticeAllRemoved);
       if (!saved) return;
+      removeFallbackModels(provider.id, removableIds);
       selectedConfigured[provider.id] = {};
     } finally {
       isSavingModels[provider.id] = false;
@@ -664,13 +764,13 @@
     }
     isSavingModels[provider.id] = true;
     try {
-      const newModel = discoveredModelConfig(provider, id);
+      let newModel = discoveredModelConfig(provider, id);
       if (!newModel) {
-        operationFeedback.notifyError({
-          operation: 'resolve-model-capabilities',
-          message: t('agent.settings.providers.capabilityUnavailable'),
-          context: { providerId: provider.id },
-        });
+        const registry = await resolveRegistryDefaults(id);
+        newModel = discoveredModelConfig(provider, id, registry);
+      }
+      if (!newModel) {
+        await openCapabilityEditorForAdd(provider, id);
         return;
       }
       const noticeManual = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
@@ -728,6 +828,7 @@
 
   onMounted(() => {
     document.addEventListener('click', handleDocumentClick);
+    void loadModelRegistryStatus();
   });
 
   onBeforeUnmount(() => {
@@ -747,16 +848,22 @@
       ),
   );
 
+  const validFallbackModels = computed(() => {
+    const configuredKeys = new Set(modelOptions.value.map((item) => item.key));
+    return props.fallbackModels.filter((item) => configuredKeys.has(`${item.providerId}\u0000${item.modelId}`));
+  });
+
   const fallbackModelKeys = computed(
-    () => new Set(props.fallbackModels.map((item) => `${item.providerId}${item.modelId}`)),
+    () => new Set(validFallbackModels.value.map((item) => `${item.providerId}\u0000${item.modelId}`)),
   );
   const toggleFallbackModel = (providerId: string, modelId: string) => {
-    const exists = props.fallbackModels.some((item) => item.providerId === providerId && item.modelId === modelId);
+    const normalized = validFallbackModels.value;
+    const exists = normalized.some((item) => item.providerId === providerId && item.modelId === modelId);
     emit(
       'fallbackModels',
       exists
-        ? props.fallbackModels.filter((item) => item.providerId !== providerId || item.modelId !== modelId)
-        : [...props.fallbackModels, { providerId, modelId }].slice(0, 8),
+        ? normalized.filter((item) => item.providerId !== providerId || item.modelId !== modelId)
+        : [...normalized, { providerId, modelId }].slice(0, 8),
     );
   };
 
@@ -840,6 +947,49 @@
     </div>
 
     <div class="space-y-4 p-4 sm:p-5">
+      <div
+        v-if="modelRegistryStatus"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-header/20 px-3 py-2 text-[11px]"
+      >
+        <div class="flex flex-wrap items-center gap-2 text-text-secondary">
+          <span class="font-medium text-foreground">{{ $t('agent.settings.providers.registryTitle') }}</span>
+          <span>{{ modelRegistryStatus.entryCount }} {{ $t('agent.settings.providers.registryModels') }}</span>
+          <span>·</span>
+          <span>{{ formatRegistryDate(modelRegistryStatus.generatedAt) }}</span>
+          <span
+            v-if="modelRegistryStatus.lastErrorCode"
+            class="rounded bg-error/10 px-1.5 py-0.5 font-mono text-[10px] text-error"
+          >
+            {{ modelRegistryStatus.lastErrorCode }}
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="flex items-center gap-1.5 text-text-secondary">
+            <input
+              type="checkbox"
+              class="rounded accent-primary"
+              :checked="modelRegistryStatus.autoUpdate"
+              :disabled="modelRegistryBusy"
+              @change="setModelRegistryAutoUpdate"
+            />
+            <span>{{ $t('agent.settings.providers.registryAutoUpdate') }}</span>
+          </label>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background px-2 py-1 font-medium text-foreground hover:bg-header disabled:opacity-50"
+            :disabled="modelRegistryBusy"
+            @click="refreshModelRegistry"
+          >
+            <i
+              class="fa-solid fa-arrows-rotate text-[9px]"
+              :class="{ 'fa-spin': modelRegistryBusy }"
+              aria-hidden="true"
+            ></i>
+            <span>{{ $t('agent.settings.providers.registryRefresh') }}</span>
+          </button>
+        </div>
+      </div>
+
       <!-- 默认模型选择微岛（现代定制无原生边框） -->
       <div
         class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-header/25 p-3.5 transition-all relative z-10"

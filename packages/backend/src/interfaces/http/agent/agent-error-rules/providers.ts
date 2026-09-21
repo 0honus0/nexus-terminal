@@ -47,5 +47,15 @@ export const providerErrorRules: readonly AgentErrorRule[] = [
     rawCode(502, 'Provider returned an invalid model catalog.'),
   ),
   onPrefixes(['PROVIDER_HTTP_'], rawCode(502, 'Provider returned an error response.')),
+  onCodes(['MODEL_REGISTRY_UPDATE_TIMEOUT'], rawCode(503, 'Model registry update timed out.')),
+  onCodes(
+    ['MODEL_REGISTRY_RESPONSE_INVALID', 'MODEL_REGISTRY_RESPONSE_TOO_LARGE'],
+    rawCode(502, 'Model registry returned an invalid catalog.'),
+  ),
+  onPrefixes(['MODEL_REGISTRY_HTTP_'], rawCode(502, 'Model registry returned an error response.')),
+  onCodes(
+    ['MODEL_REGISTRY_UPDATE_FAILED', 'MODEL_REGISTRY_CACHE_SAVE_FAILED'],
+    rawCode(500, 'Model registry update failed.'),
+  ),
   onCodes(['PROVIDER_CONFIGURATION_STALE'], rawCode(409, 'Agent runtime state changed; refresh and retry.')),
 ];

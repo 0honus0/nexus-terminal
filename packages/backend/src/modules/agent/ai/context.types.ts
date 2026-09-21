@@ -30,6 +30,7 @@ export interface ContextRequest {
   effectiveRunInputsByRun?: Record<string, ContextRunInput[]>;
   goal?: string;
   taskPlan?: string;
+  runScopeContext?: string;
   collaborationContext?: string;
   projectInstructions?: ProjectInstructionSnapshot[];
   modelContextWindow: number;
@@ -54,6 +55,7 @@ export interface ContextSourceRange {
     | 'project_instruction'
     | 'goal'
     | 'task_plan'
+    | 'run_scope'
     | 'collaboration'
     | 'current_input'
     | 'safety';
@@ -85,6 +87,7 @@ export interface ContextTokenDiagnostics {
   recallTokens: number;
   goalTokens: number;
   taskPlanTokens: number;
+  runScopeTokens: number;
   collaborationTokens: number;
 }
 

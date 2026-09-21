@@ -350,7 +350,10 @@ export class SubagentContextBuilder {
     const governedMutationsEnabled =
       delegation.mutationMode === 'governed' && run.definition.approvalMode === 'full_access';
     return this.toolCatalog
-      .discover(scope, '', 256, { environment: run.definition.environment ?? null })
+      .discover(scope, '', 256, {
+        environment: run.definition.environment ?? null,
+        connectionIds: run.definition.connectionIds,
+      })
       .filter(
         (descriptor) =>
           descriptor.name !== 'request_user_input' &&

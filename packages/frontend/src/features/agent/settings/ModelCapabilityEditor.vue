@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { BaseModal } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
-  import type { AgentProviderView } from '../api/agent-api';
+  import type { AgentProviderView, AgentReasoningEffort } from '../api/agent-api';
 
   type ProviderModel = AgentProviderView['models'][number];
   type CapabilityField =
@@ -25,12 +25,17 @@
   const operationFeedback = useOperationFeedback('agent.settings.model-capabilities');
   const capabilityEditorProvider = computed(() => props.provider);
   const capabilityEditorModel = computed(() => props.model);
+  const reasoningEffortOptions: AgentReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
   const capabilityForm = reactive({
-    contextWindow: 1,
-    maxOutputTokens: 1,
+    contextWindow: 0,
+    maxOutputTokens: 0,
     supportsTools: false,
     supportsImageInput: false,
     supportsFileInput: false,
+    reasoningEnabled: false,
+    reasoningEfforts: [] as AgentReasoningEffort[],
+    defaultReasoningEffort: '' as AgentReasoningEffort | '',
+    reasoningMandatory: false,
   });
 
   const syncForm = (model: ProviderModel | null): void => {
@@ -40,6 +45,10 @@
     capabilityForm.supportsTools = model.supportsTools;
     capabilityForm.supportsImageInput = model.supportsImageInput;
     capabilityForm.supportsFileInput = model.supportsFileInput;
+    capabilityForm.reasoningEnabled = Boolean(model.reasoningEfforts?.length);
+    capabilityForm.reasoningEfforts = [...(model.reasoningEfforts ?? [])];
+    capabilityForm.defaultReasoningEffort = model.defaultReasoningEffort ?? '';
+    capabilityForm.reasoningMandatory = model.reasoningMandatory ?? false;
   };
 
   watch(() => props.model, syncForm, { immediate: true });
@@ -91,6 +100,25 @@
 
   const formatCapabilityTimestamp = (value: number): string => new Date(value * 1000).toLocaleString();
 
+  const reasoningBaseline = computed(
+    () =>
+      capabilityEditorModel.value?.providerCapabilities?.capabilities.reasoning ??
+      capabilityEditorModel.value?.registryDefaults?.reasoning,
+  );
+
+  const toggleReasoningEffort = (effort: AgentReasoningEffort): void => {
+    const next = new Set(capabilityForm.reasoningEfforts);
+    if (next.has(effort)) next.delete(effort);
+    else next.add(effort);
+    capabilityForm.reasoningEfforts = reasoningEffortOptions.filter((candidate) => next.has(candidate));
+    if (
+      capabilityForm.defaultReasoningEffort &&
+      !capabilityForm.reasoningEfforts.includes(capabilityForm.defaultReasoningEffort)
+    ) {
+      capabilityForm.defaultReasoningEffort = '';
+    }
+  };
+
   const close = (): void => {
     if (props.busy) return;
     emit('close');
@@ -113,13 +141,37 @@
       });
       return;
     }
+    if (capabilityForm.reasoningEnabled && capabilityForm.reasoningEfforts.length === 0) {
+      operationFeedback.notifyError({
+        operation: 'validate-capability-edit',
+        message: t('agent.settings.providers.reasoningSelectOne'),
+        context: { providerId: capabilityEditorProvider.value.id, modelId: model.id },
+      });
+      return;
+    }
+    const {
+      reasoningEfforts: _reasoningEfforts,
+      defaultReasoningEffort: _defaultReasoningEffort,
+      reasoningSource: _reasoningSource,
+      reasoningMandatory: _reasoningMandatory,
+      ...baseModel
+    } = model;
     emit('save', {
-      ...model,
+      ...baseModel,
       contextWindow: capabilityForm.contextWindow,
       maxOutputTokens: capabilityForm.maxOutputTokens,
       supportsTools: capabilityForm.supportsTools,
       supportsImageInput: capabilityForm.supportsImageInput,
       supportsFileInput: capabilityForm.supportsFileInput,
+      ...(capabilityForm.reasoningEnabled
+        ? {
+            reasoningEfforts: [...capabilityForm.reasoningEfforts],
+            ...(capabilityForm.defaultReasoningEffort
+              ? { defaultReasoningEffort: capabilityForm.defaultReasoningEffort }
+              : {}),
+            reasoningMandatory: capabilityForm.reasoningMandatory,
+          }
+        : {}),
     });
   };
 </script>
@@ -251,24 +303,66 @@
           </div>
         </div>
 
-        <div
-          v-if="capabilityEditorModel.reasoningEfforts?.length"
-          class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5 text-xs"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-medium text-foreground">{{ $t('agent.settings.providers.reasoningCapability') }}</span>
-            <span class="text-[10px] text-primary">
+        <div class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5 text-xs">
+          <div class="flex items-center justify-between gap-3">
+            <label class="flex items-center gap-2 font-medium text-foreground">
+              <input
+                v-model="capabilityForm.reasoningEnabled"
+                type="checkbox"
+                class="rounded accent-primary"
+                :disabled="Boolean(reasoningBaseline)"
+              />
+              <span>{{ $t('agent.settings.providers.reasoningCapability') }}</span>
+            </label>
+            <span v-if="reasoningBaseline" class="text-[10px] text-primary">
               {{
                 capabilityEditorModel.reasoningSource === 'provider'
                   ? $t('agent.settings.providers.providerLive')
-                  : capabilityEditorModel.reasoningSource === 'manual'
-                    ? $t('agent.settings.providers.manualOverride')
-                    : $t('agent.settings.providers.registryManaged')
+                  : $t('agent.settings.providers.registryManaged')
               }}
             </span>
+            <span v-else class="text-[10px] text-text-secondary">
+              {{ $t('agent.settings.providers.reasoningOptional') }}
+            </span>
           </div>
-          <div class="mt-1 font-mono text-[11px] text-text-secondary">
-            {{ capabilityEditorModel.reasoningEfforts.join(' · ') }}
+
+          <div v-if="capabilityForm.reasoningEnabled" class="mt-2.5 space-y-2.5">
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="effort in reasoningEffortOptions"
+                :key="effort"
+                type="button"
+                class="rounded-md border px-2 py-1 font-mono text-[10px] transition-colors"
+                :class="
+                  capabilityForm.reasoningEfforts.includes(effort)
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border/70 bg-background text-text-secondary hover:text-foreground'
+                "
+                @click="toggleReasoningEffort(effort)"
+              >
+                {{ effort }}
+              </button>
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label class="block">
+                <span class="mb-1 block text-[10px] text-text-secondary">{{
+                  $t('agent.settings.providers.reasoningDefault')
+                }}</span>
+                <select
+                  v-model="capabilityForm.defaultReasoningEffort"
+                  class="h-8 w-full rounded-lg border border-border/80 bg-background px-2 text-xs text-foreground outline-none"
+                >
+                  <option value="">{{ $t('agent.settings.providers.reasoningNoDefault') }}</option>
+                  <option v-for="effort in capabilityForm.reasoningEfforts" :key="effort" :value="effort">
+                    {{ effort }}
+                  </option>
+                </select>
+              </label>
+              <label class="flex items-end gap-2 pb-1 text-[11px] text-foreground">
+                <input v-model="capabilityForm.reasoningMandatory" type="checkbox" class="rounded accent-primary" />
+                <span>{{ $t('agent.settings.providers.reasoningMandatory') }}</span>
+              </label>
+            </div>
           </div>
         </div>
       </div>

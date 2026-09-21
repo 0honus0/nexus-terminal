@@ -46,10 +46,35 @@ interface SkillIndex {
   postings: Map<string, Set<string>>;
 }
 
+interface SkillIndexCacheEntry {
+  packageHash: string;
+  index?: SkillIndex;
+  error?: Error;
+}
+
+const MAX_SKILL_INDEX_CACHE_ENTRIES = 256;
+
 interface ParsedFrontmatter {
   fields: Map<string, string>;
   metadata: Map<string, string>;
 }
+
+class SkillDocumentError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly source: string,
+  ) {
+    super(message);
+    this.name = 'SkillDocumentError';
+  }
+}
+
+const invalidFrontmatter = (source: string): SkillDocumentError =>
+  new SkillDocumentError('SKILL_FRONTMATTER_INVALID', `Invalid Skill frontmatter: ${source}`, source);
+
+const invalidMetadata = (source: string): SkillDocumentError =>
+  new SkillDocumentError('SKILL_METADATA_INVALID', `Invalid Skill metadata: ${source}`, source);
 
 const STANDARD_SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SKILL_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/;
@@ -57,20 +82,20 @@ const SKILL_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/;
 const parseScalar = (raw: string, source: string): string => {
   const value = raw.trim();
   if (Buffer.byteLength(value, 'utf8') > MAX_FRONTMATTER_VALUE_BYTES) {
-    throw new Error(`Invalid Skill frontmatter: ${source}`);
+    throw invalidFrontmatter(source);
   }
   if (value.startsWith('"') || value.endsWith('"')) {
-    if (!(value.startsWith('"') && value.endsWith('"'))) throw new Error(`Invalid Skill frontmatter: ${source}`);
+    if (!(value.startsWith('"') && value.endsWith('"'))) throw invalidFrontmatter(source);
     try {
       const parsed = JSON.parse(value) as unknown;
       if (typeof parsed !== 'string') throw new Error('invalid');
       return parsed;
     } catch {
-      throw new Error(`Invalid Skill frontmatter: ${source}`);
+      throw invalidFrontmatter(source);
     }
   }
   if (value.startsWith("'") || value.endsWith("'")) {
-    if (!(value.startsWith("'") && value.endsWith("'"))) throw new Error(`Invalid Skill frontmatter: ${source}`);
+    if (!(value.startsWith("'") && value.endsWith("'"))) throw invalidFrontmatter(source);
     return value.slice(1, -1).replaceAll("''", "'");
   }
   return value;
@@ -107,7 +132,7 @@ const blockScalar = (
     : normalized.join('\n');
   const value = marker.endsWith('-') ? folded.replace(/\n+$/g, '') : folded;
   if (Buffer.byteLength(value, 'utf8') > MAX_FRONTMATTER_VALUE_BYTES) {
-    throw new Error(`Invalid Skill frontmatter: ${source}`);
+    throw invalidFrontmatter(source);
   }
   return { value, next };
 };
@@ -123,15 +148,15 @@ const parseFrontmatter = (header: string, source: string): ParsedFrontmatter => 
       index += 1;
       continue;
     }
-    if (/^\s/.test(line)) throw new Error(`Invalid Skill frontmatter: ${source}`);
+    if (/^\s/.test(line)) throw invalidFrontmatter(source);
     const match = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(line);
-    if (!match) throw new Error(`Invalid Skill frontmatter: ${source}`);
+    if (!match) throw invalidFrontmatter(source);
     const key = match[1]!;
     const rawValue = match[2] ?? '';
     if (fields.has(key) || (key === 'metadata' && metadata.size > 0)) {
-      throw new Error(`Invalid Skill frontmatter: ${source}`);
+      throw invalidFrontmatter(source);
     }
-    if (fields.size >= MAX_FRONTMATTER_FIELDS) throw new Error(`Invalid Skill frontmatter: ${source}`);
+    if (fields.size >= MAX_FRONTMATTER_FIELDS) throw invalidFrontmatter(source);
 
     if (key === 'metadata' && rawValue.trim() === '') {
       index += 1;
@@ -144,10 +169,10 @@ const parseFrontmatter = (header: string, source: string): ParsedFrontmatter => 
         if (!/^\s/.test(metadataLine)) break;
         const item = /^\s+([A-Za-z0-9_.-]+):(?:\s*(.*))?$/.exec(metadataLine);
         if (!item || metadata.size >= MAX_FRONTMATTER_METADATA_FIELDS) {
-          throw new Error(`Invalid Skill frontmatter: ${source}`);
+          throw invalidFrontmatter(source);
         }
         const metadataKey = item[1]!;
-        if (metadata.has(metadataKey)) throw new Error(`Invalid Skill frontmatter: ${source}`);
+        if (metadata.has(metadataKey)) throw invalidFrontmatter(source);
         metadata.set(metadataKey, parseScalar(item[2] ?? '', source));
         index += 1;
       }
@@ -185,13 +210,13 @@ const parseSkill = (
   expectedHash: string,
   bundle: Pick<PluginSkillBundle, 'appId' | 'version'>,
 ): IndexedSkill => {
-  if (!content.startsWith('---\n')) throw new Error(`Invalid Skill frontmatter: ${source}`);
+  if (!content.startsWith('---\n')) throw invalidFrontmatter(source);
   const end = content.indexOf('\n---\n', 4);
-  if (end < 0) throw new Error(`Invalid Skill frontmatter: ${source}`);
+  if (end < 0) throw invalidFrontmatter(source);
   const { fields } = parseFrontmatter(content.slice(4, end), source);
   const allowedFields = new Set(['name', 'description', 'license', 'compatibility', 'metadata', 'allowed-tools']);
   if ([...fields.keys()].some((key) => !allowedFields.has(key))) {
-    throw new Error(`Invalid Skill metadata: ${source}`);
+    throw invalidMetadata(source);
   }
 
   const name = fields.get('name') ?? '';
@@ -207,16 +232,19 @@ const parseSkill = (
     !description ||
     Buffer.byteLength(description, 'utf8') > MAX_SKILL_DESCRIPTION_BYTES
   ) {
-    throw new Error(`Invalid Skill metadata: ${source}`);
+    throw invalidMetadata(source);
   }
 
   const id = standardSkillId(bundle.appId, name);
-  if (!SKILL_ID.test(id)) throw new Error(`Invalid Skill metadata: ${source}`);
+  if (!SKILL_ID.test(id)) throw invalidMetadata(source);
   const bodyOffset = end + '\n---\n'.length;
   const body = content.slice(bodyOffset);
-  if (Buffer.byteLength(body, 'utf8') > MAX_SKILL_BODY_BYTES) throw new Error(`Skill body too large: ${source}`);
+  if (Buffer.byteLength(body, 'utf8') > MAX_SKILL_BODY_BYTES)
+    throw new SkillDocumentError('SKILL_BODY_TOO_LARGE', `Skill body too large: ${source}`, source);
   const hash = createHash('sha256').update(content, 'utf8').digest('hex');
-  if (hash !== expectedHash) throw new Error('PLUGIN_SKILL_CHANGED');
+  if (hash !== expectedHash) {
+    throw new SkillDocumentError('PLUGIN_SKILL_CHANGED', 'PLUGIN_SKILL_CHANGED', source);
+  }
   return {
     id,
     name,
@@ -228,6 +256,20 @@ const parseSkill = (
     bodyOffset,
     content,
   };
+};
+
+export const validatePluginSkillDocument = (
+  content: string,
+  source: string,
+  expectedHash: string,
+  bundle: Pick<PluginSkillBundle, 'appId' | 'version'>,
+): void => {
+  try {
+    parseSkill(content, source, expectedHash, bundle);
+  } catch (error) {
+    if (error instanceof SkillDocumentError) throw new Error('PLUGIN_SKILL_DOCUMENT_INVALID');
+    throw error;
+  }
 };
 
 const rankSearch = (index: SkillIndex, query: string, limit: number): SkillMetadata[] => {
@@ -268,6 +310,8 @@ const rankSearch = (index: SkillIndex, query: string, limit: number): SkillMetad
 };
 
 export class SkillRegistry {
+  private readonly indexCache = new Map<string, SkillIndexCacheEntry>();
+
   constructor(private readonly pluginSkills?: PluginSkillSourcePort) {}
 
   async list(scope: Scope): Promise<SkillMetadata[]> {
@@ -339,16 +383,53 @@ export class SkillRegistry {
     }
   }
 
+  private cacheIndex(scopeKey: string, entry: SkillIndexCacheEntry): void {
+    if (!this.indexCache.has(scopeKey) && this.indexCache.size >= MAX_SKILL_INDEX_CACHE_ENTRIES) {
+      const oldest = this.indexCache.keys().next().value as string | undefined;
+      if (oldest) this.indexCache.delete(oldest);
+    }
+    this.indexCache.set(scopeKey, entry);
+  }
+
   private async pluginIndex(scope: Scope): Promise<SkillIndex> {
-    const byId = new Map<string, IndexedSkill>();
-    const postings = new Map<string, Set<string>>();
+    const scopeKey = `${scope.userId}:${scope.appId}`;
     let bundle: PluginSkillBundle | null | undefined;
     try {
       bundle = await this.pluginSkills?.load(scope);
-      if (!bundle) return { byId, postings };
+    } catch (error) {
+      logger.warn(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          pluginVersion: null,
+          documentCount: null,
+          documentPath: null,
+          errorCode: logErrorCode(error, 'AGENT_SKILL_INDEX_FAILED'),
+        },
+        'Agent Skill index build failed',
+      );
+      throw error;
+    }
+
+    if (!bundle) {
+      this.indexCache.delete(scopeKey);
+      return { byId: new Map<string, IndexedSkill>(), postings: new Map<string, Set<string>>() };
+    }
+
+    const cached = this.indexCache.get(scopeKey);
+    if (cached?.packageHash === bundle.packageHash) {
+      if (cached.error) throw cached.error;
+      if (cached.index) return cached.index;
+    }
+
+    const byId = new Map<string, IndexedSkill>();
+    const postings = new Map<string, Set<string>>();
+    try {
       for (const document of bundle.documents) {
         const skill = parseSkill(document.content, document.path, document.sha256, bundle);
-        if (byId.has(skill.id)) throw new Error(`Duplicate signed Skill id: ${skill.id}`);
+        if (byId.has(skill.id)) {
+          throw new SkillDocumentError('SKILL_ID_DUPLICATE', `Duplicate signed Skill id: ${skill.id}`, document.path);
+        }
         byId.set(skill.id, skill);
         for (const token of lexicalIndexTokens(`${skill.id} ${skill.name} ${skill.description}`)) {
           let ids = postings.get(token);
@@ -359,6 +440,8 @@ export class SkillRegistry {
           ids.add(skill.id);
         }
       }
+      const index = { byId, postings };
+      this.cacheIndex(scopeKey, { packageHash: bundle.packageHash, index });
       logger.debug(
         {
           userId: scope.userId,
@@ -369,19 +452,22 @@ export class SkillRegistry {
         },
         'Agent Skill index built',
       );
-      return { byId, postings };
+      return index;
     } catch (error) {
+      const cachedError = error instanceof Error ? error : new Error('AGENT_SKILL_INDEX_FAILED');
+      this.cacheIndex(scopeKey, { packageHash: bundle.packageHash, error: cachedError });
       logger.warn(
         {
           userId: scope.userId,
           appId: scope.appId,
-          pluginVersion: bundle?.version ?? null,
-          documentCount: bundle?.documents.length ?? null,
+          pluginVersion: bundle.version,
+          documentCount: bundle.documents.length,
+          documentPath: error instanceof SkillDocumentError ? error.source : null,
           errorCode: logErrorCode(error, 'AGENT_SKILL_INDEX_FAILED'),
         },
         'Agent Skill index build failed',
       );
-      throw error;
+      throw cachedError;
     }
   }
 }

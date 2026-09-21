@@ -22,7 +22,7 @@ import { mcpInputRequestFromToolResult } from '../runs/mcp-input-required';
 import { TOOL_APPROVAL_TTL_SECONDS } from '../approvals/approval-policy';
 import { toolLeaseTtlSeconds } from './tool-lease-policy';
 import { requestHash } from '../runs/idempotency';
-import { logger } from '../../../../shared/logging/logger';
+import { logErrorCode, logger } from '../../../../shared/logging/logger';
 
 const MAX_TOOL_CALLS_PER_MODEL_STEP = 64;
 
@@ -158,10 +158,26 @@ export class NativeAgentBackend implements AgentBackendPort {
         return;
       }
 
+      const stableErrorCode = logErrorCode(error, errorCode(error));
+      logger.warn(
+        {
+          runId: initial.id,
+          threadId: initial.threadId,
+          appId: initial.appId,
+          userId: initial.userId,
+          providerId: initial.definition.model.providerId,
+          modelId: initial.definition.model.modelId,
+          status: initial.status,
+          aborted: signal.aborted,
+          abortReason,
+          errorCode: stableErrorCode,
+        },
+        'Agent backend execution failed at outer boundary',
+      );
       const interrupted = await this.stateCommit.interruptUnexpectedRootExecution({
         scope,
         runId: initial.id,
-        errorCode: errorCode(error),
+        errorCode: stableErrorCode,
         now: this.clock.nowUnixSeconds(),
       });
       if (!interrupted) return;
@@ -199,7 +215,10 @@ export class NativeAgentBackend implements AgentBackendPort {
       const executionMode = snapshot.definition.executionMode;
       const offeredTools = this.toolCalls.schemas(
         scope,
-        { environment: snapshot.definition.environment ?? null },
+        {
+          environment: snapshot.definition.environment ?? null,
+          connectionIds: snapshot.definition.connectionIds,
+        },
         executionMode,
       );
       const toolMode: 'auto' | 'none' = remainingSteps >= 2 ? 'auto' : 'none';
@@ -688,8 +707,7 @@ export class NativeAgentBackend implements AgentBackendPort {
             modelStepClosed,
             aborted: signal.aborted,
             abortReason: signalReason(signal),
-            errorCode: errorCode(error),
-            err: error,
+            errorCode: logErrorCode(error, errorCode(error)),
           },
           'Agent model/tool step failed or was interrupted',
         );

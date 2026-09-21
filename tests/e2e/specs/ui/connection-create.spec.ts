@@ -94,6 +94,9 @@ test('regular connection form tests and creates a persisted working SSH connecti
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({ success: true });
+    const result = form.getByTestId('connection-test-result');
+    await expect(result).toBeVisible();
+    await expect(result).toHaveClass(/text-success/);
   });
 
   let connectionId = 0;

@@ -26,7 +26,7 @@
   const scriptMode = ref(false);
   const script = ref('');
   const testing = ref(false);
-  const testMessage = ref('');
+  const testResult = ref<{ success: boolean; message: string; latency?: number } | null>(null);
   const submitError = ref('');
   const remoteAppEnabled = ref(false);
   const form = reactive({
@@ -91,7 +91,7 @@
     remoteAppEnabled.value = Boolean(c?.rdpOptions?.remoteApp);
     scriptMode.value = false;
     script.value = '';
-    testMessage.value = '';
+    testResult.value = null;
     submitError.value = '';
   };
   watch(() => props.connection, resetFrom, { immediate: true });
@@ -232,16 +232,19 @@
   };
   const test = async () => {
     testing.value = true;
-    testMessage.value = '';
+    testResult.value = null;
     try {
       if (form.host.includes('~')) throw new Error(t('connections.form.errorIpRangeNotAllowedInEditMode'));
       if (!props.connection) validateRegular();
       const r = props.connection
         ? await connectionsApi.test(props.connection.id)
         : await connectionsApi.testUnsaved(regularInput());
-      testMessage.value = r.message;
+      testResult.value = r;
     } catch (cause) {
-      testMessage.value = apiErrorMessage(cause, t('connections.test.errorUnknown'));
+      testResult.value = {
+        success: false,
+        message: apiErrorMessage(cause, t('connections.test.errorUnknown')),
+      };
     } finally {
       testing.value = false;
     }
@@ -680,19 +683,32 @@
     </div>
 
     <footer class="mt-6 flex shrink-0 items-center justify-between border-t border-border/50 pt-5">
-      <div v-if="!scriptMode && form.type === 'SSH'" class="flex flex-col items-start gap-1">
-        <div class="flex items-center gap-2">
-          <BaseButton data-testid="connection-test-button" type="button" size="sm" :loading="testing" @click="test">{{
-            t('connections.form.testConnection')
-          }}</BaseButton>
-          <span class="group relative"
-            ><i class="fas fa-info-circle cursor-help text-text-secondary" aria-hidden="true" /><span
-              class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-max max-w-xs -translate-x-1/2 rounded bg-gray-800 p-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
-              >{{ t('connections.test.latencyTooltip') }}</span
-            ></span
-          >
-        </div>
-        <p v-if="testMessage" class="min-h-[1.2em] pl-1 text-xs text-text-secondary">{{ testMessage }}</p>
+      <div v-if="!scriptMode && form.type === 'SSH'" class="flex min-w-0 items-center gap-2">
+        <BaseButton data-testid="connection-test-button" type="button" size="sm" :loading="testing" @click="test">{{
+          t('connections.form.testConnection')
+        }}</BaseButton>
+        <span
+          v-if="testResult"
+          data-testid="connection-test-result"
+          class="inline-flex min-w-0 items-center gap-1 text-xs font-medium"
+          :class="testResult.success ? 'text-success' : 'text-error'"
+          :title="testResult.message"
+        >
+          <i :class="['fas', testResult.success ? 'fa-check-circle' : 'fa-times-circle']" aria-hidden="true" />
+          <span>{{ testResult.success ? t('connections.test.successShort') : t('connections.test.failedShort') }}</span>
+          <span v-if="testResult.success && testResult.latency != null" class="font-normal opacity-80">
+            · {{ testResult.latency }} ms
+          </span>
+          <span v-else-if="!testResult.success" class="max-w-64 truncate font-normal opacity-90">
+            · {{ testResult.message }}
+          </span>
+        </span>
+        <span class="group relative"
+          ><i class="fas fa-info-circle cursor-help text-text-secondary" aria-hidden="true" /><span
+            class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-max max-w-xs -translate-x-1/2 rounded bg-gray-800 p-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+            >{{ t('connections.test.latencyTooltip') }}</span
+          ></span
+        >
       </div>
       <div v-else class="flex-1" />
       <div class="flex space-x-3">

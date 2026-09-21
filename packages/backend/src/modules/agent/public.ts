@@ -43,7 +43,13 @@ import type {
 import type { ContextPlan, ContextRequest } from './ai/context.types';
 import type { LanguageModelPort } from './ai/language-model.port';
 import type { IntegrationKind, IntegrationManagementView, IntegrationRefreshView } from './ai/integrations.types';
-import type { DiscoveredProviderModel, ProviderTestResult, ProviderView } from './ai/model.types';
+import type {
+  DiscoveredProviderModel,
+  ModelCapabilityDefaults,
+  ProviderTestResult,
+  ProviderView,
+} from './ai/model.types';
+import type { ModelCapabilityRegistryStatus } from './ai/model-capability-registry.service';
 import type { MemoryImportConfirmation, MemoryStatus, MemoryView } from './ai/memory.repository.port';
 import type { ApprovalView } from './runtime/approvals/approval.repository.port';
 import type { AgentExecutionPolicyView } from './host/agent-execution-policy.service';
@@ -183,6 +189,13 @@ export interface AgentProviderFacade {
   remove(userId: number, providerId: string, expectedVersion: number): Promise<void>;
   discoverModels(userId: number, providerId: string): Promise<DiscoveredProviderModel[]>;
   test(userId: number, providerId: string, modelId: string): Promise<ProviderTestResult>;
+}
+
+export interface AgentModelRegistryFacade {
+  resolve(modelId: string): ModelCapabilityDefaults | null;
+  status(): ModelCapabilityRegistryStatus;
+  refresh(): Promise<ModelCapabilityRegistryStatus>;
+  setAutoUpdate(enabled: boolean): Promise<ModelCapabilityRegistryStatus>;
 }
 
 export interface AgentArtifactFacade {
@@ -446,6 +459,7 @@ export interface AgentServices {
   plugins: AgentPluginFacade;
   ai: {
     providers: AgentProviderFacade;
+    modelRegistry: AgentModelRegistryFacade;
     integrations: AgentIntegrationFacade;
     artifacts: AgentArtifactFacade;
     conversations: AgentConversationFacade;

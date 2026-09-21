@@ -36,6 +36,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 3000,
   },
   server: {
+    // The development UI is intentionally exposed through the user's reverse proxy.
+    // Keep this explicit instead of disabling host checks globally.
+    allowedHosts: ['api.honus.top'],
     proxy: {
       '/plugins': {
         target: devBackendOrigin,

@@ -32,6 +32,31 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
+  await step('local model registry exposes broad built-in capabilities without a network refresh', async () => {
+    const status = await request.get('/api/v1/agent/ai/model-registry');
+    expect(status.ok(), await status.text()).toBeTruthy();
+    const statusBody = (await status.json()) as Envelope<{
+      sourceUrl: string;
+      activeSource: 'builtin' | 'updated';
+      entryCount: number;
+      autoUpdate: boolean;
+    }>;
+    expect(statusBody.data.sourceUrl).toBe('https://models.dev/api.json?type=all');
+    expect(statusBody.data.entryCount).toBeGreaterThan(100);
+
+    for (const [modelId, contextWindow, maxOutputTokens] of [
+      ['gpt-5.6-sol', 1_050_000, 128_000],
+      ['gemini-3.8-flash-high', 1_048_576, 65_536],
+      ['claude-fable-5-1', 1_000_000, 128_000],
+    ] as const) {
+      const resolved = await request.get('/api/v1/agent/ai/model-registry/resolve', { params: { modelId } });
+      expect(resolved.ok(), await resolved.text()).toBeTruthy();
+      await expect(resolved.json()).resolves.toMatchObject({
+        data: { modelId, defaults: { contextWindow, maxOutputTokens, supportsTools: true } },
+      });
+    }
+  });
+
   let provider!: ProviderView;
 
   await step('configured model endpoints can be saved without a private-network exception list', async () => {

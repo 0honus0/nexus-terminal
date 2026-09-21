@@ -11,6 +11,7 @@ import type {
   VerifiedPluginPackage,
 } from '../../../modules/agent/host/package-verifier.port';
 import type { ValidatedManifest } from '../../../modules/agent/host/app.types';
+import { validatePluginSkillDocument } from '../../../modules/agent/ai/skill-registry';
 
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 200 * 1024 * 1024;
@@ -346,6 +347,16 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
       }
       const skillFiles = skillResourcePaths.slice().sort();
       if (skillFiles.length > 64) throw new Error('PLUGIN_TOO_MANY_SKILLS');
+      for (const skillFile of skillFiles) {
+        const listedSkill = fileList.files.find((file) => file.path === skillFile);
+        if (!listedSkill) throw new Error('PLUGIN_LISTED_FILE_MISSING');
+        validatePluginSkillDocument(
+          fs.readFileSync(path.join(unpacked, ...skillFile.split('/')), 'utf8'),
+          skillFile,
+          listedSkill.sha256,
+          { appId: manifest.id, version: manifest.version },
+        );
+      }
       return {
         stageId: safeStageId,
         packageHash,

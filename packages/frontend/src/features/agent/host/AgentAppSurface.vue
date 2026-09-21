@@ -1564,7 +1564,7 @@
             <button
               v-if="currentThread"
               type="button"
-              class="flex h-7.5 w-7.5 items-center justify-center rounded-lg border transition-all disabled:cursor-not-allowed disabled:opacity-35"
+              class="agent-header-thread-delete hidden h-7.5 w-7.5 items-center justify-center rounded-lg border transition-all disabled:cursor-not-allowed disabled:opacity-35"
               :class="
                 threadDeleteArmedId === currentThread.id
                   ? 'border-error/30 bg-error/10 text-error'
@@ -2640,7 +2640,8 @@
       display: block;
     }
 
-    .agent-thread-toggle {
+    .agent-thread-toggle,
+    .agent-header-thread-delete {
       display: flex;
     }
 

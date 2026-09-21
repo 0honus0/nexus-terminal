@@ -171,6 +171,8 @@
     },
     "test": {
       "success": "Connection test successful!",
+      "successShort": "Success",
+      "failedShort": "Failed",
       "failed": "Connection test failed: {error}",
       "latencyTooltip": "This measures the time to establish a new SSH connection (TCP, Proxy, SSH Handshake, Auth). It's typically higher than interaction latency on an already established connection.",
       "errorMissingFields": "Please fill in Host, Port, Username, and select an Auth Method.",

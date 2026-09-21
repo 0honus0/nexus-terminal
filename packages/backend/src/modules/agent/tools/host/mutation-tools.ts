@@ -133,6 +133,9 @@ const readArtifact = async (
   return content;
 };
 
+const hasSelectedConnection = (context: { connectionIds?: readonly number[] }): boolean =>
+  context.connectionIds === undefined || context.connectionIds.length > 0;
+
 export const createWriteFileTool = (
   machine: MachineCapabilityPort,
   artifacts: ArtifactService,
@@ -156,6 +159,7 @@ export const createWriteFileTool = (
     riskClass: 'mutate',
     capability: 'machine.files.write',
   },
+  isAvailable: hasSelectedConnection,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, [
@@ -297,6 +301,7 @@ export const createShellTool = (machine: MachineCapabilityPort, cryptoHash: Cryp
     riskClass: 'mutate',
     capability: 'machine.shell.execute',
   },
+  isAvailable: hasSelectedConnection,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, ['connectionId', 'command', 'timeoutSeconds']);
@@ -384,6 +389,7 @@ export const createDockerMutationTool = (machine: MachineCapabilityPort, cryptoH
     riskClass: 'mutate',
     capability: 'machine.docker.manage',
   },
+  isAvailable: hasSelectedConnection,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, ['connectionId', 'containerId', 'action']);

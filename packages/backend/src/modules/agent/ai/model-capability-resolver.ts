@@ -9,6 +9,7 @@ import type {
   ProviderModelConfig,
   ReasoningEffort,
 } from './model.types';
+import { modelCapabilityRegistryDefaults } from './model-capability-registry-runtime';
 
 export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
   'none',
@@ -22,66 +23,6 @@ export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
 
 const OPENAI_GPT_56_EFFORTS: ReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
 const OPENAI_GPT_51_EFFORTS: ReasoningEffort[] = ['none', 'low', 'medium', 'high'];
-
-interface RegistryEntry {
-  matches(modelId: string): boolean;
-  defaults: ModelCapabilityDefaults;
-}
-
-const exact = (ids: readonly string[], defaults: ModelCapabilityDefaults): RegistryEntry => {
-  const normalized = new Set(ids.map((id) => id.toLowerCase()));
-  return { matches: (modelId) => normalized.has(modelId), defaults };
-};
-
-const pattern = (expression: RegExp, defaults: ModelCapabilityDefaults): RegistryEntry => ({
-  matches: (modelId) => expression.test(modelId),
-  defaults,
-});
-
-const REGISTRY: readonly RegistryEntry[] = [
-  pattern(/^gpt-5\.6-(?:sol|terra|luna)(?:-\d{4}-\d{2}-\d{2})?$/, {
-    contextWindow: 1_050_000,
-    maxOutputTokens: 128_000,
-    supportsTools: true,
-    supportsPromptCacheKey: true,
-    reasoning: {
-      supportedEfforts: OPENAI_GPT_56_EFFORTS,
-      defaultEffort: 'medium',
-    },
-  }),
-  exact(['gpt-5.6'], {
-    contextWindow: 1_050_000,
-    maxOutputTokens: 128_000,
-    supportsTools: true,
-    supportsPromptCacheKey: true,
-    reasoning: {
-      supportedEfforts: OPENAI_GPT_56_EFFORTS,
-      defaultEffort: 'medium',
-    },
-  }),
-  pattern(/^gpt-5\.1(?:-\d{4}-\d{2}-\d{2})?$/, {
-    supportsPromptCacheKey: true,
-    reasoning: {
-      supportedEfforts: OPENAI_GPT_51_EFFORTS,
-      defaultEffort: 'none',
-    },
-  }),
-  pattern(/^gpt-5-pro(?:-\d{4}-\d{2}-\d{2})?$/, {
-    supportsPromptCacheKey: true,
-    reasoning: {
-      supportedEfforts: ['high'],
-      defaultEffort: 'high',
-      mandatory: true,
-    },
-  }),
-  exact(['gpt-4o'], {
-    contextWindow: 128_000,
-    maxOutputTokens: 16_384,
-    supportsTools: true,
-    supportsImageInput: true,
-    supportsPromptCacheKey: true,
-  }),
-];
 
 const cloneReasoning = (value: ModelCapabilityDefaults['reasoning']): ModelCapabilityDefaults['reasoning'] =>
   value
@@ -102,10 +43,64 @@ const cloneDefaults = (value: ModelCapabilityDefaults): ModelCapabilityDefaults 
   ...(value.reasoning === undefined ? {} : { reasoning: cloneReasoning(value.reasoning)! }),
 });
 
+const registryAlias = (id: string): string => {
+  const gpt56 = id.match(/^(gpt-5\.6-(?:sol|terra|luna))(?:-\d{4}-\d{2}-\d{2})?$/);
+  if (gpt56) return gpt56[1]!;
+  if (/^gpt-5\.1-\d{4}-\d{2}-\d{2}$/.test(id)) return 'gpt-5.1';
+  if (/^gpt-5-pro-\d{4}-\d{2}-\d{2}$/.test(id)) return 'gpt-5-pro';
+  if (/^gemini-3\.8-flash-(?:low|medium|high)$/.test(id)) return 'gemini-3.8-flash';
+  return id;
+};
+
+const localRegistryOverrides = (id: string): ModelCapabilityDefaults | null => {
+  if (/^gpt-5\.6(?:-(?:sol|terra|luna)(?:-\d{4}-\d{2}-\d{2})?)?$/.test(id)) {
+    return {
+      supportsPromptCacheKey: true,
+      reasoning: { supportedEfforts: OPENAI_GPT_56_EFFORTS, defaultEffort: 'medium' },
+    };
+  }
+  if (/^gpt-5\.1(?:-\d{4}-\d{2}-\d{2})?$/.test(id)) {
+    return {
+      supportsPromptCacheKey: true,
+      reasoning: { supportedEfforts: OPENAI_GPT_51_EFFORTS, defaultEffort: 'none' },
+    };
+  }
+  if (/^gpt-5-pro(?:-\d{4}-\d{2}-\d{2})?$/.test(id)) {
+    return {
+      supportsPromptCacheKey: true,
+      reasoning: { supportedEfforts: ['high'], defaultEffort: 'high', mandatory: true },
+    };
+  }
+  if (id === 'gpt-4o') return { supportsPromptCacheKey: true };
+  const geminiEffort = id.match(/^gemini-3\.8-flash-(low|medium|high)$/)?.[1] as ReasoningEffort | undefined;
+  if (geminiEffort) {
+    return {
+      reasoning: { supportedEfforts: ['low', 'medium', 'high'], defaultEffort: geminiEffort },
+    };
+  }
+  return null;
+};
+
+const overlayDefaults = (
+  base: ModelCapabilityDefaults | null,
+  overlay: ModelCapabilityDefaults | null,
+): ModelCapabilityDefaults | null => {
+  if (!base && !overlay) return null;
+  return cloneDefaults({
+    ...(base ?? {}),
+    ...(overlay ?? {}),
+    ...(overlay?.reasoning === undefined
+      ? base?.reasoning === undefined
+        ? {}
+        : { reasoning: base.reasoning }
+      : { reasoning: overlay.reasoning }),
+  });
+};
+
 export const resolveModelCapabilityDefaults = (modelId: string): ModelCapabilityDefaults | null => {
   const id = modelId.trim().toLowerCase();
-  const entry = REGISTRY.find((candidate) => candidate.matches(id));
-  return entry ? cloneDefaults(entry.defaults) : null;
+  const base = modelCapabilityRegistryDefaults(registryAlias(id));
+  return overlayDefaults(base, localRegistryOverrides(id));
 };
 
 const sameEfforts = (

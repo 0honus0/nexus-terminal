@@ -171,6 +171,8 @@
     },
     "test": {
       "success": "连接测试成功！",
+      "successShort": "成功",
+      "failedShort": "失败",
       "failed": "连接测试失败: {error}",
       "latencyTooltip": "此延迟测量建立全新 SSH 连接所需的时间（包括 TCP 连接、代理协商、SSH 握手、认证等步骤），通常高于已建立连接上的交互延迟。",
       "errorMissingFields": "请填写主机、端口、用户名并选择认证方式。",

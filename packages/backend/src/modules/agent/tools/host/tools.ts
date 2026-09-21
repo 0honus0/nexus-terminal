@@ -56,6 +56,9 @@ const operation = (
     cryptoHash,
   );
 
+const hasSelectedConnection = (context: { connectionIds?: readonly number[] }): boolean =>
+  context.connectionIds === undefined || context.connectionIds.length > 0;
+
 const confirmedResult = (summary: string, data: JsonValue, truncated = false): ToolResult => ({
   ok: true,
   summary,
@@ -155,6 +158,7 @@ export const createDiagnosticsTool = (machine: MachineCapabilityPort, cryptoHash
     parallelSafe: true,
     capability: 'machine.inspect',
   },
+  isAvailable: hasSelectedConnection,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, ['connectionId', 'probeIds']);
@@ -227,6 +231,7 @@ export const createReadFileTool = (machine: MachineCapabilityPort, cryptoHash: C
     parallelSafe: true,
     capability: 'machine.files.read',
   },
+  isAvailable: hasSelectedConnection,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, ['connectionId', 'path', 'maxBytes', 'offset']);

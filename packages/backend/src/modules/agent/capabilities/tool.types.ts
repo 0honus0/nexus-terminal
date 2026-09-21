@@ -39,6 +39,7 @@ export interface ToolInspection {
 
 export interface ToolAvailabilityContext {
   environment: AgentRunEnvironmentSnapshot | null;
+  connectionIds?: readonly number[];
 }
 
 export interface ToolContext extends Scope {

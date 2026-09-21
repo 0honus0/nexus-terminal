@@ -206,7 +206,10 @@ export class RootToolExecutionCoordinator {
     const remainingToolSteps = Math.max(0, snapshot.budget.maxRunSteps - snapshot.usage.steps);
     const limit = Math.min(MAX_PARALLEL_READ_TOOLS, remainingToolSteps);
     if (limit <= 1 || first.inspection.risk !== 'read') return [first];
-    const availability = { environment: snapshot.definition.environment ?? null };
+    const availability = {
+      environment: snapshot.definition.environment ?? null,
+      connectionIds: snapshot.definition.connectionIds,
+    };
     if (
       !this.toolCalls.parallelSafe(
         { userId: snapshot.userId, appId: snapshot.appId },
@@ -416,7 +419,10 @@ export class RootToolExecutionCoordinator {
   ): AsyncGenerator<BackendSignal, void> {
     if (wave.length === 0) return;
     const scope = { userId: snapshot.userId, appId: snapshot.appId };
-    const availability = { environment: snapshot.definition.environment ?? null };
+    const availability = {
+      environment: snapshot.definition.environment ?? null,
+      connectionIds: snapshot.definition.connectionIds,
+    };
     let currentRun: RunView = snapshot;
     const prepared: Array<{ pending: PendingRootTool; inspection: ToolInspection }> = [];
     const resourceKeys = new Set<string>();

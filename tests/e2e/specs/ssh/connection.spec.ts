@@ -37,6 +37,10 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({ success: true });
+    const testResult = page.getByTestId('connection-test-result');
+    await expect(testResult).toBeVisible();
+    await expect(testResult).toHaveClass(/text-success/);
+    await expect(testResult).toContainText('Success');
   });
 
   await step('save SSH connection', async () => {

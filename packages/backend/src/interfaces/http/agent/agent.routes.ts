@@ -10,6 +10,7 @@ import type {
   AgentHostFacade,
   AgentPluginFacade,
   AgentProviderFacade,
+  AgentModelRegistryFacade,
   AppView,
 } from '../../../modules/agent/public';
 import { agentData, agentError, agentRoute } from './agent-http';
@@ -30,6 +31,7 @@ export interface AgentRouterDependencies {
   host: AgentHostFacade;
   plugins: AgentPluginFacade;
   providers: AgentProviderFacade;
+  modelRegistry: AgentModelRegistryFacade;
   artifacts: AgentArtifactFacade;
   events: AgentEventFacade;
   workspaceRuntime: AgentWorkspaceRuntimeFacade;
@@ -611,6 +613,50 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
             })),
           ),
       );
+    }),
+  );
+
+  router.get(
+    '/ai/model-registry/resolve',
+    agentRoute(async (request, response) => {
+      agentUserId(request);
+      const modelId = queryString(request.query.modelId);
+      if (!modelId || modelId.length > 256) throw new Error('VALIDATION_FAILED');
+      agentData(request, response, { modelId, defaults: dependencies.modelRegistry.resolve(modelId) });
+    }),
+  );
+
+  router.get(
+    '/ai/model-registry',
+    agentRoute(async (request, response) => {
+      agentUserId(request);
+      agentData(request, response, dependencies.modelRegistry.status());
+    }),
+  );
+
+  router.post(
+    '/ai/model-registry/refresh',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      agentUserId(request);
+      if (!isRecord(request.body) || !hasOnlyKeys(request.body, [])) throw new Error('VALIDATION_FAILED');
+      agentData(request, response, await dependencies.modelRegistry.refresh());
+    }),
+  );
+
+  router.patch(
+    '/ai/model-registry',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      agentUserId(request);
+      if (
+        !isRecord(request.body) ||
+        !hasOnlyKeys(request.body, ['autoUpdate']) ||
+        typeof request.body.autoUpdate !== 'boolean'
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      agentData(request, response, await dependencies.modelRegistry.setAutoUpdate(request.body.autoUpdate));
     }),
   );
 

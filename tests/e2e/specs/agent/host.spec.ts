@@ -165,7 +165,48 @@ test('Agent settings surface exposes the production control plane and captures f
   await providerField('Maximum output tokens').fill('128');
   await addProvider.getByRole('button', { name: 'Save & Add', exact: true }).click();
   await expect(addProvider).toHaveCount(0);
-  await expect(providersSection.getByText('Settings UI Provider', { exact: true })).toBeVisible();
+  const providerName = providersSection.getByText('Settings UI Provider', { exact: true });
+  await expect(providerName).toBeVisible();
+  const providerCard = providerName.locator('xpath=ancestor::article[1]');
+  const protocolSelect = providerCard.getByLabel('Protocol', { exact: true });
+  await expect(protocolSelect).toHaveValue('chat-completions');
+  await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
+    if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"responses"')) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    await route.continue();
+  });
+  const protocolSaved = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
+  );
+  await protocolSelect.selectOption('responses');
+  await expect(protocolSelect).toHaveValue('responses');
+  expect((await protocolSaved).ok()).toBeTruthy();
+  await page.unroute('**/api/v1/agent/ai/providers/*');
+
+  await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
+    if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"chat-completions"')) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'forced protocol failure' } }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+  const failedProtocolPatch = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
+  );
+  await protocolSelect.selectOption('chat-completions');
+  await expect(protocolSelect).toHaveValue('chat-completions');
+  expect((await failedProtocolPatch).status()).toBe(500);
+  await expect(protocolSelect).toHaveValue('responses');
+  const errorToast = page.locator('.bg-red-600').last();
+  await expect(errorToast).toBeVisible();
+  await expect(errorToast).toBeHidden({ timeout: 7_500 });
+  await page.unroute('**/api/v1/agent/ai/providers/*');
 
   const defaultModel = providersSection.getByRole('button', { name: 'Default model for new runs', exact: true });
   await expect(defaultModel).toBeEnabled();
@@ -197,6 +238,66 @@ test('Agent settings surface exposes the production control plane and captures f
   await modelRow.getByRole('button', { name: 'Test', exact: true }).click();
   await expect(modelRow).toContainText(/\d+ms/);
   await testModels.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await expect(providersSection.getByText('Model registry', { exact: true })).toBeVisible();
+  await expect(providersSection.getByText('Auto update', { exact: true })).toBeVisible();
+  await expect(providersSection.getByRole('button', { name: 'Update now', exact: true })).toBeVisible();
+
+  await providersSection.getByRole('button', { name: 'Update models', exact: true }).click();
+  const customModelInput = providersSection.getByPlaceholder('Add custom model ID manually', { exact: true });
+  await expect(customModelInput).toBeVisible();
+  await customModelInput.fill('e2e-custom-no-metadata');
+  await customModelInput.locator('xpath=..').getByRole('button', { name: 'Add model', exact: true }).click();
+
+  const capabilityDialog = page.getByRole('dialog', { name: 'Model capabilities', exact: true });
+  await expect(capabilityDialog).toBeVisible();
+  await expect(capabilityDialog.getByText('e2e-custom-no-metadata', { exact: true })).toBeVisible();
+  const capabilityField = (label: string) =>
+    capabilityDialog.locator('label').filter({ hasText: label }).locator('input').first();
+  await capabilityField('Context window').fill('32768');
+  await capabilityField('Maximum output tokens').fill('4096');
+  await capabilityDialog
+    .getByText('Reasoning levels', { exact: true })
+    .locator('xpath=ancestor::label[1]')
+    .locator('input')
+    .check();
+  await capabilityDialog.getByRole('button', { name: 'low', exact: true }).click();
+  await capabilityDialog.getByRole('button', { name: 'high', exact: true }).click();
+  await capabilityDialog.getByLabel('Default effort').selectOption('high');
+  const capabilitySaved = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
+  );
+  await capabilityDialog.getByRole('button', { name: 'Save', exact: true }).click();
+  expect((await capabilitySaved).ok()).toBeTruthy();
+  await expect(capabilityDialog).toHaveCount(0);
+
+  const configuredProviders = await context.request.get('/api/v1/agent/ai/providers');
+  expect(configuredProviders.ok(), await configuredProviders.text()).toBeTruthy();
+  await expect(configuredProviders.json()).resolves.toMatchObject({
+    data: [
+      expect.objectContaining({
+        displayName: 'Settings UI Provider',
+        models: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'e2e-custom-no-metadata',
+            contextWindow: 32768,
+            maxOutputTokens: 4096,
+            reasoningEfforts: ['low', 'high'],
+            defaultReasoningEffort: 'high',
+          }),
+        ]),
+      }),
+    ],
+  });
+
+  const fallbackSaved = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
+  );
+  await providersSection
+    .getByRole('button', { name: 'e2e-custom-no-metadata · Settings UI Provider', exact: true })
+    .click();
+  expect((await fallbackSaved).ok()).toBeTruthy();
+  await expect(page.getByText('Fallback chain updated and saved', { exact: true })).toBeVisible();
 
   await settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();

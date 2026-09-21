@@ -1,6 +1,8 @@
 import { logger } from '@/client/logging/logger';
 import { useFeedback } from './useFeedback';
 
+const OPERATION_ERROR_TIMEOUT_MS = 6_000;
+
 export interface OperationFailureOptions {
   operation: string;
   message: string;
@@ -29,7 +31,7 @@ export const useOperationFeedback = (scope: string) => {
 
   const notifyError = (failure: OperationFailureOptions): void => {
     logError(failure);
-    feedback.notifyError(failure.message, 0);
+    feedback.notifyError(failure.message, OPERATION_ERROR_TIMEOUT_MS);
   };
 
   const notifyWarning = (message: string): void => {

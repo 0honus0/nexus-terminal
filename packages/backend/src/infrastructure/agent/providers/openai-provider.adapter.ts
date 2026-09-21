@@ -11,6 +11,7 @@ import type {
 } from '../../../modules/agent/ai/model.types';
 import type { ProviderRuntimeConfigPort } from '../../../modules/agent/ai/provider.repository.port';
 import type { ProviderSecretPort } from '../../../modules/agent/ai/provider-secret.port';
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import {
   decodeOpenAiResponsesContinuation,
   OpenAiResponsesContinuationCollector,
@@ -216,6 +217,26 @@ const sdkFetch =
     return fetch(input, { ...init, headers });
   };
 
+const modelRequestToolDiagnostics = (request: ModelRequest) => {
+  const assistantCalls = request.messages.flatMap((message) =>
+    message.role === 'assistant' ? (message.toolCalls ?? []).map((call) => call.id) : [],
+  );
+  const toolResults = request.messages.flatMap((message) =>
+    message.role === 'tool' && message.toolCallId ? [message.toolCallId] : [],
+  );
+  return {
+    messageCount: request.messages.length,
+    roleTail: request.messages.slice(-12).map((message) => message.role),
+    assistantToolCallCount: assistantCalls.length,
+    toolResultCount: toolResults.length,
+    continuationAssistantCount: request.messages.filter(
+      (message) => message.role === 'assistant' && message.providerContinuation !== undefined,
+    ).length,
+    lastAssistantToolCallIds: assistantCalls.slice(-8),
+    lastToolResultIds: toolResults.slice(-8),
+  };
+};
+
 export class OpenAiProviderAdapter implements LanguageModelPort {
   constructor(
     private readonly providers: ProviderRuntimeConfigPort,
@@ -317,6 +338,17 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
             });
             const languageModel =
               provider.protocol === 'responses' ? openai.responses(request.modelId) : openai.chat(request.modelId);
+            logger.info(
+              {
+                userId: request.userId,
+                providerId: request.providerId,
+                modelId: request.modelId,
+                configurationVersion: request.configurationVersion,
+                protocol: provider.protocol,
+                ...modelRequestToolDiagnostics(request),
+              },
+              'Agent provider model request prepared',
+            );
             const promptCacheKey =
               request.capabilitySnapshot?.supportsPromptCacheKey === true && isOfficialOpenAiEndpoint(provider.baseUrl)
                 ? promptCacheKeyFor(request)
@@ -342,11 +374,26 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
           },
         );
       } catch (error) {
-        throw mapProviderError(error, signal);
+        const mapped = mapProviderError(error, signal);
+        const errorCode = logErrorCode(mapped, 'PROVIDER_UNAVAILABLE');
+        logger.warn(
+          {
+            userId: request.userId,
+            providerId: request.providerId,
+            modelId: request.modelId,
+            configurationVersion: request.configurationVersion,
+            protocol: provider.protocol,
+            errorCode,
+          },
+          'Agent provider stream start failed',
+        );
+        if (errorCode === 'PROVIDER_UNAVAILABLE') throw new Error(errorCode);
+        throw mapped;
       }
     })();
 
     const toolIndexes = new Map<string, number>();
+    const toolNames = new Map<string, string>();
     const toolBytes = new Map<string, number>();
     const sawToolDelta = new Set<string>();
     const continuationCollector = new OpenAiResponsesContinuationCollector();
@@ -372,6 +419,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
           continue;
         }
         if (part.type === 'tool-input-start') {
+          toolNames.set(part.id, part.toolName);
           yield { type: 'tool.delta', index: indexFor(part.id), id: part.id, name: part.toolName };
           continue;
         }
@@ -385,6 +433,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
         }
         if (part.type === 'tool-call') {
           const index = indexFor(part.toolCallId);
+          toolNames.set(part.toolCallId, part.toolName);
           if (provider.protocol === 'responses') {
             continuationCollector.recordToolCall(part.toolCallId, part.providerMetadata);
           }
@@ -410,6 +459,24 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
             configurationVersion: request.configurationVersion,
             protocol: provider.protocol,
           });
+          logger.info(
+            {
+              userId: request.userId,
+              providerId: request.providerId,
+              modelId: request.modelId,
+              configurationVersion: request.configurationVersion,
+              protocol: provider.protocol,
+              finishReason: finishReasonFrom(part.finishReason),
+              emittedToolCallCount: toolIndexes.size,
+              emittedToolCalls: [...toolIndexes.entries()].map(([id, index]) => ({
+                id,
+                index,
+                name: toolNames.get(id) ?? null,
+              })),
+              continuationFormat: continuation?.format ?? null,
+            },
+            'Agent provider model response completed',
+          );
           if (continuation) yield { type: 'continuation', continuation };
           yield { type: 'usage', usage: usageFrom(part.usage) };
           yield { type: 'completed', finishReason: finishReasonFrom(part.finishReason) };
@@ -419,7 +486,21 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
       }
       throw new Error('PROVIDER_STREAM_TRUNCATED');
     } catch (error) {
-      throw mapProviderError(error, signal);
+      const mapped = mapProviderError(error, signal);
+      const errorCode = logErrorCode(mapped, 'PROVIDER_UNAVAILABLE');
+      logger.warn(
+        {
+          userId: request.userId,
+          providerId: request.providerId,
+          modelId: request.modelId,
+          configurationVersion: request.configurationVersion,
+          protocol: provider.protocol,
+          errorCode,
+        },
+        'Agent provider stream failed',
+      );
+      if (errorCode === 'PROVIDER_UNAVAILABLE') throw new Error(errorCode);
+      throw mapped;
     }
   }
 }

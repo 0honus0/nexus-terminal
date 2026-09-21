@@ -238,6 +238,13 @@ export class ModelStepRunner {
               .join('\n'),
           }
         : {}),
+      runScopeContext: [
+        `Selected SSH connection IDs for this Run: ${
+          snapshot.definition.connectionIds.length > 0 ? snapshot.definition.connectionIds.join(', ') : 'none'
+        }.`,
+        'Only the selected SSH connection IDs above are valid Machine execution targets for this Run.',
+        'Historical Tool results from earlier Runs are evidence only; they do not grant or imply current target selection.',
+      ].join('\n'),
       collaborationContext,
       ...(projectInstructions?.length ? { projectInstructions } : {}),
       modelContextWindow: model.contextWindow,

@@ -144,6 +144,16 @@ import type {
   McpRuntimePort,
 } from '../../../packages/backend/src/modules/agent/ai/integrations.types';
 import { createAcpExecuteTool } from '../../../packages/backend/src/modules/agent/tools/host/acp-tools';
+import {
+  createConnectionListTool,
+  createDiagnosticsTool,
+  createReadFileTool,
+} from '../../../packages/backend/src/modules/agent/tools/host/tools';
+import {
+  createDockerMutationTool,
+  createShellTool,
+  createWriteFileTool,
+} from '../../../packages/backend/src/modules/agent/tools/host/mutation-tools';
 import { createMcpTools } from '../../../packages/backend/src/modules/agent/tools/host/mcp-tools';
 import {
   mcpInputRequestFromToolResult,
@@ -159,6 +169,15 @@ import {
   resolveProviderModelConfig,
   snapshotProviderModelCapabilities,
 } from '../../../packages/backend/src/modules/agent/ai/model-capability-resolver';
+import { ModelCapabilityRegistryService } from '../../../packages/backend/src/modules/agent/ai/model-capability-registry.service';
+import { parseModelsDevRegistry } from '../../../packages/backend/src/modules/agent/ai/model-capability-registry-source';
+import { installRuntimeModelCapabilityRegistry } from '../../../packages/backend/src/modules/agent/ai/model-capability-registry-runtime';
+import type {
+  ModelCapabilityRegistryFetchResult,
+  ModelCapabilityRegistryPersistedState,
+  ModelCapabilityRegistrySourcePort,
+  ModelCapabilityRegistryStorePort,
+} from '../../../packages/backend/src/modules/agent/ai/model-capability-registry.port';
 import {
   missingRequiredModelCapabilities,
   normalizeRequiredModelCapabilities,
@@ -197,7 +216,10 @@ import type {
   RecallCandidate,
   RecallRepositoryPort,
 } from '../../../packages/backend/src/modules/agent/ai/recall.repository.port';
-import { SkillRegistry } from '../../../packages/backend/src/modules/agent/ai/skill-registry';
+import {
+  SkillRegistry,
+  validatePluginSkillDocument,
+} from '../../../packages/backend/src/modules/agent/ai/skill-registry';
 import type {
   PluginSkillBundle,
   PluginSkillSourcePort,
@@ -5601,7 +5623,7 @@ const modelStreamRetryAttemptIdentityScenario: Scenario = async () => {
       reservedTokens,
       estimatedInputTokens: prepared.contextPlan.estimatedInputTokens,
       reservedOutputTokens: prepared.contextPlan.reservedOutputTokens,
-      contextWindowTokens: snapshot.budget.maxContextTokens,
+      contextWindowTokens: prepared.model.contextWindow,
       now,
     });
 
@@ -13360,11 +13382,95 @@ const progressAwareLoopGuardScenario: Scenario = async () => {
     assert.equal(afterResume.run.status, 'running');
     assert.equal(afterResume.committedEvents.length, 0, 'new progress epoch must clear the previous repetition streak');
 
+    const stableReadResult = {
+      ok: true,
+      summary: 'Found the same authorized connection.',
+      data: { connectionIds: [1] },
+      artifactRefs: [],
+      truncated: false,
+      outcome: 'confirmed' as const,
+      verification: {
+        status: 'verified' as const,
+        summary: 'Stable connection inventory confirmed.',
+        evidenceRefs: [],
+      },
+    };
+    let mixedVersion = afterResume.run.version;
+    let mixedWarnings = 0;
+    let mixedStatus = afterResume.run.status;
+    for (let index = 1; index <= 5; index += 1) {
+      const readGuard = await stateCommit.evaluateToolLoopGuard({
+        scope: scenarioScope,
+        runId,
+        runtimeId,
+        expectedRunVersion: mixedVersion,
+        observations: [
+          {
+            toolName: 'machine_list_connections',
+            risk: 'read',
+            operationHash: 'stable-connection-inventory',
+            result: stableReadResult,
+          },
+        ],
+        now: now + 20 + index * 2,
+      });
+      mixedWarnings += readGuard.committedEvents.filter((event) => event.type === 'run.loop_warning').length;
+      mixedVersion = readGuard.run.version;
+      mixedStatus = readGuard.run.status;
+      if (mixedStatus === 'awaiting_input') break;
+
+      const mutationGuard = await stateCommit.evaluateToolLoopGuard({
+        scope: scenarioScope,
+        runId,
+        runtimeId,
+        expectedRunVersion: mixedVersion,
+        observations: [
+          {
+            toolName: 'machine_execute_shell',
+            risk: 'mutate',
+            operationHash: `unique-shell-operation-${index}`,
+            result: {
+              ok: true,
+              summary: `Shell mutation ${index} completed.`,
+              data: { round: index },
+              artifactRefs: [],
+              truncated: false,
+              outcome: 'confirmed' as const,
+              verification: {
+                status: 'verified' as const,
+                summary: `Shell mutation ${index} verified.`,
+                evidenceRefs: [],
+              },
+            },
+          },
+        ],
+        now: now + 21 + index * 2,
+      });
+      mixedVersion = mutationGuard.run.version;
+      mixedStatus = mutationGuard.run.status;
+    }
+    assert.equal(
+      mixedStatus,
+      'awaiting_input',
+      'stable read observations interleaved with unique successful mutations must not evade loop protection',
+    );
+    assert.equal(mixedWarnings, 2, 'mixed read/mutation repetition must warn before pausing');
+    const mixedGuard = await db.queryOne<{ last_reason: string | null; paused_runtime_id: string | null }>(
+      'SELECT last_reason, paused_runtime_id FROM agent_loop_guards WHERE run_id = ?',
+      [runId],
+    );
+    assert.deepEqual(mixedGuard, {
+      last_reason: 'repeated_stable_observation',
+      paused_runtime_id: runtimeId,
+    });
+
     return [
       { name: 'warnings_before_pause', value: warningTransitions, unit: 'warnings' },
       { name: 'repeated_failures_before_pause', value: 4, unit: 'calls' },
       { name: 'progress_epoch_after_input', value: 2, unit: 'epoch' },
       { name: 'post_resume_repeated_calls_without_pause', value: 1, unit: 'calls' },
+      { name: 'mixed_batch_loop_warnings', value: mixedWarnings, unit: 'warnings' },
+      { name: 'mixed_batch_loop_pauses', value: mixedStatus === 'awaiting_input' ? 1 : 0, unit: 'pauses' },
     ];
   } finally {
     await db.close().catch(() => undefined);
@@ -16036,6 +16142,30 @@ const skillProgressiveDisclosureScenario: Scenario = async () => {
     /Invalid Skill metadata/,
     'removed Nexus-specific Skill frontmatter must fail closed instead of entering a compatibility branch',
   );
+  assert.throws(
+    () =>
+      validatePluginSkillDocument(
+        removedFormatContent,
+        'skills/removed-format/SKILL.md',
+        sha256(removedFormatContent),
+        { appId: skillScope.appId, version: '1.2.3' },
+      ),
+    /PLUGIN_SKILL_DOCUMENT_INVALID/,
+    'plugin package verification must reject removed Nexus-specific Skill frontmatter before installation',
+  );
+  const degradedPlan = await composeWithSkills(
+    removedFormatRegistry,
+    'Continue safely even when the optional signed Skill catalog is invalid.',
+  );
+  assert.ok(
+    degradedPlan.droppedSections.includes('skill-catalog:unavailable'),
+    'Context composition must record unavailable Skill metadata without aborting the root model step',
+  );
+  assert.equal(
+    degradedPlan.instructions.some((item) => item.startsWith('[Available signed plugin Skills;')),
+    false,
+    'an invalid Skill catalog must fail closed instead of entering the model prompt',
+  );
 
   return [
     { name: 'low_cardinality_metadata_exposed', value: lowMetadata.length, unit: 'skills' },
@@ -16242,6 +16372,102 @@ const indexedRecallScenario: Scenario = async () => {
     await db?.close();
     fs.rmSync(directory, { recursive: true, force: true });
   }
+};
+
+const modelCapabilityRegistrySyncScenario: Scenario = async () => {
+  const generatedAt = clock.nowUnixSeconds() - 60;
+  const models = Object.fromEntries(
+    Array.from({ length: 30 }, (_, index) => [
+      index === 0 ? 'sync-model' : `sync-model-${index}`,
+      {
+        limit: { context: 32_768 + index, output: 4_096 },
+        tool_call: true,
+        reasoning: index === 0,
+        reasoning_options: index === 0 ? [{ type: 'effort', values: ['low', 'high'] }] : [],
+        modalities: { input: index === 0 ? ['text', 'image', 'pdf'] : ['text'], output: ['text'] },
+      },
+    ]),
+  );
+  const snapshot = parseModelsDevRegistry(
+    { openai: { models } },
+    { generatedAt, sourceRevision: 'scenario-revision-1' },
+  );
+  assert.equal(snapshot.entries['sync-model']?.contextWindow, 32_768);
+  assert.equal(snapshot.entries['sync-model']?.maxOutputTokens, 4_096);
+  assert.equal(snapshot.entries['sync-model']?.supportsTools, true);
+  assert.equal(snapshot.entries['sync-model']?.supportsImageInput, true);
+  assert.equal(snapshot.entries['sync-model']?.supportsFileInput, true);
+  assert.deepEqual(snapshot.entries['sync-model']?.reasoning?.supportedEfforts, ['low', 'high']);
+  assert.equal(snapshot.entries['openai/sync-model']?.contextWindow, 32_768);
+
+  class MemoryRegistryStore implements ModelCapabilityRegistryStorePort {
+    state: ModelCapabilityRegistryPersistedState | null = {
+      schemaVersion: 1,
+      autoUpdate: false,
+      snapshot: null,
+      lastAttemptAt: null,
+      lastSuccessAt: null,
+      lastErrorCode: null,
+    };
+
+    async load(): Promise<ModelCapabilityRegistryPersistedState | null> {
+      return this.state ? structuredClone(this.state) : null;
+    }
+
+    async save(state: ModelCapabilityRegistryPersistedState): Promise<void> {
+      this.state = structuredClone(state);
+    }
+  }
+
+  class ScriptedRegistrySource implements ModelCapabilityRegistrySourcePort {
+    result: ModelCapabilityRegistryFetchResult = { state: 'updated', snapshot };
+    failure: Error | null = null;
+    calls = 0;
+
+    async fetch(): Promise<ModelCapabilityRegistryFetchResult> {
+      this.calls += 1;
+      if (this.failure) throw this.failure;
+      return structuredClone(this.result);
+    }
+  }
+
+  const store = new MemoryRegistryStore();
+  const source = new ScriptedRegistrySource();
+  const registry = new ModelCapabilityRegistryService(store, source, clock);
+
+  try {
+    await registry.initialize();
+    assert.equal(registry.status().activeSource, 'builtin');
+    assert.equal(registry.status().autoUpdate, false);
+
+    const updated = await registry.refresh();
+    assert.equal(updated.activeSource, 'updated');
+    assert.equal(updated.entryCount, Object.keys(snapshot.entries).length);
+    assert.equal(updated.sourceRevision, 'scenario-revision-1');
+    assert.equal(source.calls, 1);
+
+    const runtimeModel = resolveModelCapabilityDefaults('sync-model');
+    assert.equal(runtimeModel?.contextWindow, 32_768);
+    assert.deepEqual(runtimeModel?.reasoning?.supportedEfforts, ['low', 'high']);
+
+    const enabled = await registry.setAutoUpdate(true);
+    assert.equal(enabled.autoUpdate, true);
+    assert.equal(store.state?.autoUpdate, true);
+
+    source.failure = new Error('MODEL_REGISTRY_HTTP_503');
+    await assert.rejects(() => registry.refresh(), /MODEL_REGISTRY_HTTP_503/);
+    assert.equal(registry.status().lastErrorCode, 'MODEL_REGISTRY_HTTP_503');
+    assert.equal(resolveModelCapabilityDefaults('sync-model')?.contextWindow, 32_768);
+  } finally {
+    registry.dispose();
+    installRuntimeModelCapabilityRegistry(null);
+  }
+
+  return [
+    { name: 'synced_model_identifiers', value: Object.keys(snapshot.entries).length, unit: 'models' },
+    { name: 'manual_refresh_calls', value: source.calls, unit: 'calls' },
+    { name: 'update_failure_preserved_snapshot', value: 1, unit: 'boolean' },
+  ];
 };
 
 const providerLiveCapabilityAuthorityScenario: Scenario = async () => {
@@ -16617,6 +16843,7 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
   };
   const settingsView = {
     revision: 1,
+    requestedSettings: { model: { fallbackModels: [] as Array<{ providerId: string; modelId: string }> } },
     effectiveSettings: { feature: { enabled: true } },
     hardLimits: {
       maxRunSteps: 1_000,
@@ -16735,15 +16962,25 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
   assert.deepEqual(createdRun.definition.requiredModelCapabilities, ['tools', 'image_input']);
   assert.equal(createdRun.definition.modelCapabilities?.supportsImageInput, true);
   assert.equal(
-    createdRun.budget.maxContextTokens,
+    createdRun.definition.modelCapabilities?.contextWindow,
     compatibleModel.contextWindow,
     'Run context must come from the frozen model capability, not user settings',
   );
   assert.equal(
-    createdRun.budget.maxOutputTokens,
+    createdRun.definition.modelCapabilities?.maxOutputTokens,
     Math.min(compatibleModel.maxOutputTokens, compatibleModel.contextWindow - 1),
     'Run output ceiling must come from the frozen model capability, not user settings',
   );
+
+  settingsView.requestedSettings.model.fallbackModels = [{ providerId, modelId: 'removed-fallback-model' }];
+  const createdWithStaleFallback = await runService.create(scope, createCommand());
+  assert.equal(createCommits, 2, 'stale fallback must not block a valid primary Run');
+  assert.deepEqual(
+    createdWithStaleFallback.definition.rootModelRoutes,
+    [],
+    'stale fallback must be omitted from the frozen route chain',
+  );
+  settingsView.requestedSettings.model.fallbackModels = [];
 
   currentModel = resolveProviderModelConfig({
     id: 'private-run-model',
@@ -16764,7 +17001,7 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
     () => runService.create(scope, { ...createCommand(), reasoningEffort: 'none' }),
     /MODEL_REASONING_EFFORT_UNSUPPORTED/,
   );
-  assert.equal(createCommits, 1, 'mandatory reasoning rejection must happen before durable creation');
+  assert.equal(createCommits, 2, 'mandatory reasoning rejection must happen before durable creation');
 
   const checkpointId = randomUUID();
   const terminalSource: RunSnapshot = {
@@ -19318,6 +19555,96 @@ const browserScreenshotVisionScenario: Scenario = async () => {
 };
 
 const machineRouteDependencyApprovalScenario: Scenario = async () => {
+  const availabilityScope: Scope = { userId: 1, appId: 'machine-availability-app' };
+  const availabilityCatalog = new ToolCatalog();
+  const availabilityCryptoHash = {
+    sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+  };
+  availabilityCatalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.machine-availability',
+    tools: [
+      createConnectionListTool(null!, availabilityCryptoHash),
+      createDiagnosticsTool(null!, availabilityCryptoHash),
+      createReadFileTool(null!, availabilityCryptoHash),
+      createWriteFileTool(null!, null!, availabilityCryptoHash),
+      createShellTool(null!, availabilityCryptoHash),
+      createDockerMutationTool(null!, availabilityCryptoHash),
+    ],
+  });
+  const withoutTarget = new Set(
+    modelFacingToolSchemas(
+      availabilityCatalog,
+      availabilityScope,
+      { environment: null, connectionIds: [] },
+      'execute',
+    ).map((tool) => tool.name),
+  );
+  assert.ok(
+    withoutTarget.has('machine_list_connections'),
+    'connection discovery remains available without a frozen target',
+  );
+  for (const toolName of [
+    'machine_diagnostics',
+    'machine_read_file',
+    'machine_write_file',
+    'machine_execute_shell',
+    'machine_docker_action',
+  ]) {
+    assert.equal(
+      withoutTarget.has(toolName),
+      false,
+      `${toolName} must not be model-visible when the Run froze no selected connections`,
+    );
+  }
+  const withTarget = new Set(
+    modelFacingToolSchemas(
+      availabilityCatalog,
+      availabilityScope,
+      { environment: null, connectionIds: [1] },
+      'execute',
+    ).map((tool) => tool.name),
+  );
+  for (const toolName of [
+    'machine_diagnostics',
+    'machine_read_file',
+    'machine_write_file',
+    'machine_execute_shell',
+    'machine_docker_action',
+  ]) {
+    assert.ok(withTarget.has(toolName), `${toolName} must remain available when a connection is selected`);
+  }
+
+  const noTargetContext = await contextService([]).compose({
+    scope: availabilityScope,
+    threadId: 'machine-availability-thread',
+    runId: 'machine-availability-run',
+    currentInput: 'Can I read a host file in this Run?',
+    runScopeContext: [
+      'Selected SSH connection IDs for this Run: none.',
+      'Only the selected SSH connection IDs above are valid Machine execution targets for this Run.',
+      'Historical Tool results from earlier Runs are evidence only; they do not grant or imply current target selection.',
+    ].join('\n'),
+    modelContextWindow: 8_192,
+    maxContextTokens: 8_192,
+    reservedOutputTokens: 512,
+    maxRecallItems: 1,
+    maxRecallBytes: 1_024,
+    tools: [],
+  });
+  assert.ok(
+    noTargetContext.messages.some(
+      (message) =>
+        message.role === 'system' &&
+        message.content.includes('[Current Run execution scope; authoritative]') &&
+        message.content.includes('Selected SSH connection IDs for this Run: none.') &&
+        message.content.includes('Historical Tool results from earlier Runs are evidence only'),
+    ),
+    'the model context must carry authoritative current-Run target selection so historical Tool results cannot imply access',
+  );
+  assert.ok(noTargetContext.sourceRanges.some((source) => source.kind === 'run_scope'));
+  assert.ok(noTargetContext.tokenDiagnostics.runScopeTokens > 0);
+
   const baseConnection = (id: number, host: string): Connection => ({
     id,
     name: `machine-${id}`,
@@ -19595,6 +19922,8 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
   );
 
   return [
+    { name: 'machine_no_target_tools_exposed', value: 0, unit: 'tools' },
+    { name: 'machine_run_scope_contexts', value: 1, unit: 'contexts' },
     { name: 'machine_direct_credential_stale_rejections', value: 1, unit: 'cases' },
     { name: 'machine_proxy_host_stale_rejections', value: 1, unit: 'cases' },
     { name: 'machine_proxy_credential_stale_rejections', value: 1, unit: 'cases' },
@@ -19819,13 +20148,18 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
   );
   assert.match(
     operationFeedback,
-    /feedback\.notifyError\(failure\.message, 0\)/,
-    'operation failures must use persistent top-right error notifications that require explicit dismissal',
+    /OPERATION_ERROR_TIMEOUT_MS = 6_000[\s\S]*feedback\.notifyError\(failure\.message, OPERATION_ERROR_TIMEOUT_MS\)/,
+    'operation failures must auto-dismiss after a longer timeout than normal success notifications',
   );
   assert.match(
     operationFeedback,
     /logger\.error\(/,
     'operation failures must also emit a structured frontend diagnostic log',
+  );
+  assert.match(
+    operationFeedback,
+    /logError\(failure\);[\s\S]*feedback\.notifyError/,
+    'operation failures must retain structured logging before showing the auto-dismiss error toast',
   );
   assert.match(
     notificationStore,
@@ -19879,12 +20213,18 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     'modules/agent/runtime/events/event-hub.ts',
     'modules/agent/runtime/collaboration/subagent-scheduler.ts',
     'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+    'modules/agent/runtime/execution/native-agent-backend.ts',
+    'infrastructure/agent/providers/openai-provider.adapter.ts',
+    'modules/agent/ai/model-capability-registry.service.ts',
   ];
   const expectedMessages = [
     'Agent HTTP route failed unexpectedly',
     'Agent EventHub listener failed',
     'Agent Subagent scheduler work failed',
     'Agent Subagent completion mailbox projection failed',
+    'Agent backend execution failed at outer boundary',
+    'Agent provider stream failed',
+    'Agent model capability registry update failed',
   ];
 
   for (let index = 0; index < targets.length; index += 1) {
@@ -19901,6 +20241,24 @@ const agentStructuredLoggingScenario: Scenario = async () => {
       `${relative} must not serialize raw Error objects on this logging boundary`,
     );
   }
+
+  const runServiceLogging = fs.readFileSync(
+    path.join(backendSourceRoot, 'modules/agent/runtime/runs/run.service.ts'),
+    'utf8',
+  );
+  const fallbackLoggingStart = runServiceLogging.indexOf(
+    'for (const fallback of settings.requestedSettings?.model?.fallbackModels ?? [])',
+  );
+  const fallbackLoggingEnd = runServiceLogging.indexOf('\n    const budget = runBudgetFrom', fallbackLoggingStart);
+  const fallbackLogging = runServiceLogging.slice(fallbackLoggingStart, fallbackLoggingEnd);
+  assert.ok(fallbackLoggingStart >= 0 && fallbackLoggingEnd > fallbackLoggingStart);
+  assert.match(fallbackLogging, /logErrorCode\(/, 'fallback provider lookup failures must use a stable error code');
+  assert.match(
+    fallbackLogging,
+    /Agent fallback model route skipped/,
+    'invalid fallback routes must emit a stable structured diagnostic',
+  );
+  assert.doesNotMatch(fallbackLogging, /\berr\s*:/, 'fallback route diagnostics must not serialize raw Error objects');
 
   const diagnosticTargets = [
     ['modules/agent/host/app-capability-broker.ts', 'Agent capability authorization denied'],
@@ -20068,6 +20426,7 @@ const scenarios = new Map<string, Scenario>([
   ['benchmark/scripted-agent-trajectories', scriptedAgentBenchmarkScenario],
   ['boundary/durable-runtime-decode', durableBoundaryDecodeScenario],
   ['boundary/current-durable-schema', currentDurableSchemaScenario],
+  ['model/capability-registry-sync', modelCapabilityRegistrySyncScenario],
   ['model/provider-live-capability-authority', providerLiveCapabilityAuthorityScenario],
   ['model/stream-retry-attempt-identity', modelStreamRetryAttemptIdentityScenario],
   ['runtime/agent-lifecycle-notifications', agentLifecycleNotificationScenario],

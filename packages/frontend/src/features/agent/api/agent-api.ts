@@ -432,6 +432,20 @@ export interface AgentDiscoveredProviderModel {
   providerCapabilities?: ProviderModelCapabilityObservation;
 }
 
+export interface AgentModelRegistryStatus {
+  sourceUrl: string;
+  autoUpdate: boolean;
+  activeSource: 'builtin' | 'updated';
+  entryCount: number;
+  generatedAt: number;
+  sourceRevision: string | null;
+  builtinGeneratedAt: number;
+  lastAttemptAt: number | null;
+  lastSuccessAt: number | null;
+  lastErrorCode: string | null;
+  nextAutoUpdateAt: number | null;
+}
+
 export interface AgentProviderView {
   id: string;
   kind: 'openai-compatible';

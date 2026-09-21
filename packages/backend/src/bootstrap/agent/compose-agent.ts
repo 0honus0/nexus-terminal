@@ -19,6 +19,10 @@ import { SqliteMemoryProvenanceAdapter } from '../../infrastructure/agent/reposi
 import { SqliteModelContinuationRepository } from '../../infrastructure/agent/repositories/sqlite-model-continuation.repository';
 import { InstalledPluginSkillSourceAdapter } from '../../infrastructure/agent/plugins/installed-plugin-skill-source.adapter';
 import { OpenAiProviderAdapter } from '../../infrastructure/agent/providers/openai-provider.adapter';
+import {
+  LocalModelCapabilityRegistryStore,
+  ModelsDevCapabilityRegistrySource,
+} from '../../infrastructure/agent/providers/model-capability-registry.adapter';
 import { McpAdapter } from '../../infrastructure/agent/integrations/mcp.adapter';
 import { AcpAdapter } from '../../infrastructure/agent/integrations/acp.adapter';
 import { OutboundPolicyAdapter } from '../../infrastructure/agent/providers/outbound-policy.adapter';
@@ -43,6 +47,7 @@ import { ConversationService } from '../../modules/agent/ai/conversation.service
 import { ContextCheckpointService } from '../../modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../modules/agent/ai/context.service';
 import { ProviderService } from '../../modules/agent/ai/provider.service';
+import { ModelCapabilityRegistryService } from '../../modules/agent/ai/model-capability-registry.service';
 import { snapshotProviderModelCapabilities } from '../../modules/agent/ai/model-capability-resolver';
 import { missingRequiredModelCapabilities } from '../../modules/agent/ai/model-capability-requirements';
 import { RecallService } from '../../modules/agent/ai/recall.service';
@@ -187,6 +192,11 @@ export const composeAgent = ({
   const settings = new AgentSettingsService(settingsRepository, hardLimitConfirmations, hardLimitUsage, systemClock);
   const capabilityBroker = new AppCapabilityBroker(registry, appStates, appGrants, targetDenylist);
   const providerRepository = new SqliteProviderRepository(database, cipher);
+  const modelRegistry = new ModelCapabilityRegistryService(
+    new LocalModelCapabilityRegistryStore(dataDirectory),
+    new ModelsDevCapabilityRegistrySource(),
+    systemClock,
+  );
   const outboundPolicy = new OutboundPolicyAdapter(nodeEnv, e2eResetEnabled);
   const integrationRepository = new SqliteIntegrationRepository(database, cipher);
   const mcpRuntime = new McpAdapter(integrationRepository, outboundPolicy);
@@ -698,6 +708,7 @@ export const composeAgent = ({
     },
     ai: {
       providers,
+      modelRegistry,
       integrations: {
         list: (scope, kind) => integrations.list(scope, kind),
         get: (scope, integrationId) => integrations.get(scope, integrationId),
@@ -810,6 +821,7 @@ export const composeAgent = ({
       },
     },
     initialize: async () => {
+      await modelRegistry.initialize();
       await plugins.initializeInstalledVersions();
       const interrupted = await stateCommit.interruptNonTerminalRuns(systemClock.nowUnixSeconds());
       recoveringStartup = true;
@@ -839,6 +851,7 @@ export const composeAgent = ({
       for (const definition of registry.list()) await lifecycle.quiesce(definition.manifest.id, deadlineUnixSeconds);
     },
     dispose: async () => {
+      modelRegistry.dispose();
       await Promise.all([
         lifecycleSweeps.stop(),
         subagentScheduler?.dispose() ?? Promise.resolve(),

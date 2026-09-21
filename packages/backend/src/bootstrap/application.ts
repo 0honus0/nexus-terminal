@@ -35,6 +35,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     agent: services.agent.host,
     agentPlugins: services.agent.plugins,
     agentProviders: services.agent.ai.providers,
+    agentModelRegistry: services.agent.ai.modelRegistry,
     agentIntegrations: services.agent.ai.integrations,
     agentArtifacts: services.agent.ai.artifacts,
     agentApprovals: services.agent.runtime.approvals,

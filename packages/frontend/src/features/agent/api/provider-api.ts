@@ -1,8 +1,48 @@
 import type { AgentEnvelope } from './agent-api.types';
-import type { AgentDiscoveredProviderModel, AgentProviderView } from './agent-api';
+import type {
+  AgentDiscoveredProviderModel,
+  AgentModelRegistryStatus,
+  AgentProviderView,
+  ModelCapabilityDefaults,
+} from './agent-api';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 
 export const createProviderApi = () => ({
+  async resolveModelRegistry(modelId: string): Promise<{ modelId: string; defaults: ModelCapabilityDefaults | null }> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<{ modelId: string; defaults: ModelCapabilityDefaults | null }>>(
+          '/agent/ai/model-registry/resolve',
+          { params: { modelId } },
+        )
+      ).data,
+    );
+  },
+  async modelRegistryStatus(): Promise<AgentModelRegistryStatus> {
+    return unwrap((await httpClient.get<AgentEnvelope<AgentModelRegistryStatus>>('/agent/ai/model-registry')).data);
+  },
+  async refreshModelRegistry(): Promise<AgentModelRegistryStatus> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentModelRegistryStatus>>(
+          '/agent/ai/model-registry/refresh',
+          {},
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async setModelRegistryAutoUpdate(autoUpdate: boolean): Promise<AgentModelRegistryStatus> {
+    return unwrap(
+      (
+        await httpClient.patch<AgentEnvelope<AgentModelRegistryStatus>>(
+          '/agent/ai/model-registry',
+          { autoUpdate },
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
   async providers(): Promise<AgentProviderView[]> {
     return unwrap((await httpClient.get<AgentEnvelope<AgentProviderView[]>>('/agent/ai/providers')).data);
   },

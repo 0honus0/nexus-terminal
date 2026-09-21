@@ -64,13 +64,13 @@ export interface DeferredToolSearchResult {
 
 export const searchDeferredTools = (
   catalog: ToolCatalog,
-  context: Pick<ToolContext, 'userId' | 'appId' | 'environment' | 'maxOutputBytes'>,
+  context: Pick<ToolContext, 'userId' | 'appId' | 'environment' | 'connectionIds' | 'maxOutputBytes'>,
   query: string,
   limit: number,
 ): DeferredToolSearchResult => {
   const terms = searchTerms(query);
   const ranked = catalog
-    .list(context, { environment: context.environment })
+    .list(context, { environment: context.environment, connectionIds: context.connectionIds })
     .filter(isDeferredToolDescriptor)
     .map((descriptor) => ({ descriptor, score: descriptorScore(descriptor, query, terms) }))
     .filter((candidate) => candidate.score > 0)

@@ -177,19 +177,16 @@
         <span class="relative flex h-5 w-5 shrink-0 items-center justify-center">
           <span class="absolute h-2 w-2 rounded-full bg-primary ring-4 ring-primary/10"></span>
         </span>
-        <code class="min-w-0 truncate font-mono text-[10px] font-semibold text-foreground/90">{{
-          toolCalls[0]?.name
-        }}</code>
+        <span class="min-w-0 truncate text-[10px] font-semibold text-foreground/90">
+          {{ $t('agent.conversation.toolCall') }}
+        </span>
         <span
           v-if="toolCalls.length > 1"
-          class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary"
+          class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-primary"
         >
-          +{{ toolCalls.length - 1 }}
+          {{ toolCalls.length }}
         </span>
-        <span class="ml-auto shrink-0 text-[9px] font-medium text-text-secondary/55">{{
-          $t('agent.conversation.toolCall')
-        }}</span>
-        <span class="flex h-5 w-5 items-center justify-center text-text-secondary/55">
+        <span class="ml-auto flex h-5 w-5 items-center justify-center text-text-secondary/55">
           <i
             class="fa-solid fa-chevron-down text-[8px] transition-transform duration-150 group-open/tool-call:rotate-180"
             aria-hidden="true"
@@ -198,8 +195,10 @@
       </summary>
       <div class="ml-4 mt-1.5 space-y-2 border-l border-primary/20 pl-5">
         <div v-for="call in toolCalls" :key="call.id || call.name" class="min-w-0">
-          <div class="mb-1.5 flex items-center gap-2 text-[9px] text-text-secondary/60">
-            <span>{{ $t('agent.conversation.toolArguments') }}</span>
+          <div class="mb-1.5 flex min-w-0 items-center gap-1.5 text-[9px] text-text-secondary/60">
+            <code class="min-w-0 truncate font-mono font-semibold text-foreground/80">{{ call.name }}</code>
+            <span aria-hidden="true">·</span>
+            <span class="shrink-0">{{ $t('agent.conversation.toolArguments') }}</span>
           </div>
           <pre
             class="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-header/30 px-3 py-2.5 font-mono text-[10px] leading-5 text-foreground/80 ring-1 ring-inset ring-border/30"

@@ -1167,7 +1167,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 
     await step('the resize grip drives container-responsive Agent layout and persists bounds', async () => {
       const resizeHandle = hub.getByRole('button', { name: 'Resize Agent', exact: true });
+      const headerThreadDelete = hub.locator('.agent-header-thread-delete');
       await expect(resizeHandle).toBeVisible();
+      await expect(headerThreadDelete).toBeHidden();
       const initialBounds = await hub.boundingBox();
       expect(initialBounds).not.toBeNull();
       expect(initialBounds!.width).toBeGreaterThan(1040);
@@ -1220,6 +1222,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect(taskRail).toHaveCount(0);
       const openThreads = hub.getByRole('button', { name: 'Open conversations', exact: true });
       await expect(openThreads).toBeVisible();
+      await expect(headerThreadDelete).toBeVisible();
       await openThreads.click();
       await expect(hub.getByPlaceholder('Search conversations', { exact: true })).toBeVisible();
       await hub.getByRole('button', { name: 'Close conversations', exact: true }).click();
@@ -1230,12 +1233,14 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       expect(restoredBounds).not.toBeNull();
       expect(Math.abs(restoredBounds!.width - narrowBounds!.width)).toBeLessThan(2);
       await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeVisible();
+      await expect(headerThreadDelete).toBeVisible();
 
       await resizeToWidth(initialBounds!.width, 42);
       await expect.poll(async () => (await hub.boundingBox())?.width ?? 0).toBeGreaterThan(1040);
       await expect(taskPanelToggle).toBeVisible();
       await expect(taskPanelToggle).toHaveAttribute('aria-expanded', 'false');
       await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeHidden();
+      await expect(headerThreadDelete).toBeHidden();
     });
 
     await step('users can create a new conversation and return to the existing thread', async () => {

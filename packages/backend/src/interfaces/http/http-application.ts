@@ -42,6 +42,7 @@ import type {
   AgentHostFacade,
   AgentPluginFacade,
   AgentProviderFacade,
+  AgentModelRegistryFacade,
   AgentRunFacade,
   AgentCollaborationFacade,
   AgentMemoryFacade,
@@ -87,6 +88,7 @@ export interface HttpApplicationDependencies {
   agent: AgentHostFacade;
   agentPlugins: AgentPluginFacade;
   agentProviders: AgentProviderFacade;
+  agentModelRegistry: AgentModelRegistryFacade;
   agentIntegrations: AgentIntegrationFacade;
   agentArtifacts: AgentArtifactFacade;
   agentApprovals: AgentApprovalFacade;
@@ -277,6 +279,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       host: dependencies.agent,
       plugins: dependencies.agentPlugins,
       providers: dependencies.agentProviders,
+      modelRegistry: dependencies.agentModelRegistry,
       artifacts: dependencies.agentArtifacts,
       events: dependencies.agentEvents,
       workspaceRuntime: dependencies.agentWorkspaceRuntime,

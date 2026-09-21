@@ -312,28 +312,43 @@
 
   const changeProviderProtocol = (provider: AgentProviderView, protocol: AgentProviderView['protocol']) =>
     execute('change-provider-protocol', async () => {
-      const updated = await agentApi.updateProvider(provider, { protocol });
-      providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
+      const previous = provider;
+      providers.value = providers.value.map((candidate) =>
+        candidate.id === provider.id ? { ...candidate, protocol } : candidate,
+      );
+      try {
+        const updated = await agentApi.updateProvider(provider, { protocol });
+        providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
+      } catch (cause) {
+        providers.value = providers.value.map((candidate) => (candidate.id === previous.id ? previous : candidate));
+        throw cause;
+      }
     });
 
   const deleteProvider = (provider: AgentProviderView) =>
     execute('delete-provider', async () => {
       await agentApi.deleteProvider(provider.id, provider.version);
       providers.value = await agentApi.providers();
-      if (settings.value?.requestedSettings.model.defaultProviderId === provider.id) {
-        const fallbackProvider =
-          providers.value.find((candidate) => candidate.enabled && candidate.models.length > 0) ??
-          providers.value.find((candidate) => candidate.models.length > 0) ??
-          null;
-        settings.value = await agentApi.patchSettings(
-          {
-            model: {
-              defaultProviderId: fallbackProvider?.id ?? null,
-              defaultModelId: fallbackProvider?.models[0]?.id ?? null,
-            },
-          },
-          settings.value.revision,
+      if (settings.value) {
+        const currentModel = settings.value.requestedSettings.model;
+        const modelPatch: Record<string, unknown> = {};
+        const nextFallbackModels = currentModel.fallbackModels.filter(
+          (fallback) => fallback.providerId !== provider.id,
         );
+        if (nextFallbackModels.length !== currentModel.fallbackModels.length) {
+          modelPatch.fallbackModels = nextFallbackModels;
+        }
+        if (currentModel.defaultProviderId === provider.id) {
+          const fallbackProvider =
+            providers.value.find((candidate) => candidate.enabled && candidate.models.length > 0) ??
+            providers.value.find((candidate) => candidate.models.length > 0) ??
+            null;
+          modelPatch.defaultProviderId = fallbackProvider?.id ?? null;
+          modelPatch.defaultModelId = fallbackProvider?.models[0]?.id ?? null;
+        }
+        if (Object.keys(modelPatch).length > 0) {
+          settings.value = await agentApi.patchSettings({ model: modelPatch }, settings.value.revision);
+        }
       }
       apps.value = await agentApi.apps();
       return true;
@@ -347,7 +362,7 @@
     );
 
   const setFallbackModels = (fallbackModels: Array<{ providerId: string; modelId: string }>) =>
-    patchSection('model', { fallbackModels }, t('agent.settings.providers.saveNoticeDefault'));
+    patchSection('model', { fallbackModels }, t('agent.settings.providers.saveNoticeFallback'));
 
   const discoverProviderModels = (provider: AgentProviderView) =>
     execute(

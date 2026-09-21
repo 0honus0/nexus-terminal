@@ -80,6 +80,9 @@ const suffixCount = (trajectory: GuardObservation[], current: GuardObservation):
   return count;
 };
 
+const occurrenceCount = (trajectory: GuardObservation[], current: GuardObservation): number =>
+  trajectory.reduce((count, item) => count + (sameObservation(item, current) ? 1 : 0), 0);
+
 const alternatingSuffix = (trajectory: GuardObservation[]): number => {
   if (trajectory.length < 4) return 0;
   let count = 2;
@@ -203,7 +206,10 @@ export const evaluateLoopGuard = async (
       (previous?.actionHash === current.actionHash && previous.outcomeHash !== current.outcomeHash);
 
     if (positiveStateChange) {
-      trajectory = [current];
+      // Preserve bounded observation history even across successful mutations. Otherwise an
+      // alternating stable read + slightly different mutation sequence can erase the repeated
+      // read evidence on every cycle and evade the loop guard indefinitely.
+      trajectory = [...trajectory, current].slice(-24);
       noProgressCount = 0;
       warningLevel = 0;
       nextLevel = 0;
@@ -214,6 +220,7 @@ export const evaluateLoopGuard = async (
     trajectory = [...trajectory, current].slice(-24);
     noProgressCount += 1;
     const exact = suffixCount(trajectory, current);
+    const occurrences = occurrenceCount(trajectory, current);
     const alternating = alternatingSuffix(trajectory);
 
     let candidateLevel: 0 | 1 | 2 = 0;
@@ -227,6 +234,10 @@ export const evaluateLoopGuard = async (
       candidateLevel = exact >= 4 ? 2 : 1;
       candidatePause = exact >= 5;
       candidateReason = 'same_action_same_result';
+    } else if ((current.risk === 'read' || current.risk === 'control') && current.ok && occurrences >= 3) {
+      candidateLevel = occurrences >= 4 ? 2 : 1;
+      candidatePause = occurrences >= 5;
+      candidateReason = 'repeated_stable_observation';
     } else if (alternating >= 4) {
       candidateLevel = alternating >= 6 ? 2 : 1;
       candidatePause = alternating >= 8;

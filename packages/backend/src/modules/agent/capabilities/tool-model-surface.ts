@@ -104,7 +104,7 @@ export const resolveDeferredToolProposal = (
   const routed = routerArguments(proposal.argumentsJson);
   const decoded = decodeDeferredHandle(routed.handle);
   const descriptor = catalog
-    .list(context, { environment: context.environment })
+    .list(context, { environment: context.environment, connectionIds: context.connectionIds })
     .find((candidate) => candidate.name === decoded.name);
   if (!descriptor || !isDeferredToolDescriptor(descriptor) || descriptor.version !== decoded.version) {
     throw new Error('RESOURCE_CHANGED');
