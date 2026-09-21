@@ -492,7 +492,7 @@ export const composeAgent = ({
     stateCommit,
     subagentContext,
     toolExecutor,
-    leaseCoordinator,
+    toolCalls,
     mailbox,
     eventHub,
     {
@@ -506,7 +506,6 @@ export const composeAgent = ({
       },
     },
     systemClock,
-    toolCalls,
     (run, reason) => recordRecoverySafePoint(run, reason),
   );
   subagentScheduler = new SubagentScheduler(

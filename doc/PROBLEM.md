@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-截至 2026-09-20，本轮审计中已登记的问题（含最终 residual 审计新增的 P-121）当前均已闭环，本文件没有 open Problem。
+截至 2026-09-21，本轮审计中已登记的问题（含最终 residual 审计新增的 P-121）当前均已闭环，本文件没有 open Problem。
 
 这只表示本轮已登记、已验证的问题均已完成，不表示软件从此不存在任何缺陷。未来若出现新的代码证据、回归、产品行为缺口或用户明确提出新的审计目标，再新增可执行 Problem。
 
@@ -27,9 +27,9 @@
 
 ## 当前验证结论
 
-最近一次已提交代码的 isolated deterministic Agent baseline 为 **68/68 PASS**；P-121 Backend typecheck/build 与 Agent Runner build PASS，residual maintenance 中的 tighter Subagent context budget 与 Native recovery safe-point regression 也都在 68/68 baseline 下 PASS；最近涉及 Frontend 的 residual settings/format 提交已通过 `vue-tsc`。
+最近一次已提交代码的 isolated deterministic Agent baseline 为 **73/73 PASS**；Unified File/Shell/Target capability refactor 的 Backend/Runner/Frontend typecheck/build、request-only Agent E2E 与 architecture regression 均已通过。当前 governed execution consolidation 在提交前也保持 **73/73 PASS**，并通过三包 typecheck/build 与受影响 request-only Agent E2E。
 
-用户随后明确要求继续审核并提交 residual；其中 23 个文件的有效内容已按格式、i18n、bounded context、settings presentation 与 regression coverage 等逻辑边界分别提交。当前 worktree 只剩 **1 份 stale runner 工作副本**：它少当前 `architecture/public-contract-alignment` 与 tighter-budget regression，且没有 worktree-only 新断言或 metric，因此明确拒绝整文件提交。它不构成当前 open Problem，也不得覆盖当前 committed regression tree。
+此前 residual 审计中的 23 个有效文件已按格式、i18n、bounded context、settings presentation 与 regression coverage 等逻辑边界分别提交；当时那份缺少最新 architecture/tighter-budget regression 的 stale runner 工作副本已明确拒绝覆盖 committed regression tree。该历史处理不构成当前 open Problem。
 
 本机仍有两个环境层限制，不作为当前 open Problem 自动施工：
 

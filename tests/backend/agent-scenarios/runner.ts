@@ -9857,7 +9857,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     stateCommit as never,
     null!,
     null!,
-    null!,
+    toolRunner,
     null!,
     new AgentEventHub(),
     {
@@ -9866,7 +9866,6 @@ const subagentGovernedMutationScenario: Scenario = async () => {
       cancelChildRuntime: () => undefined,
     },
     { nowUnixSeconds: () => 1_800_570_000 } as ClockPort,
-    toolRunner,
     async (_run, reason) => {
       assert.equal(reason, 'mutation_confirmed');
       executionOrder.push('recovery.checkpoint');
@@ -20374,6 +20373,7 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
 
   const backendExtractions = [
     'modules/agent/runtime/execution/root-tool-execution-coordinator.ts',
+    'modules/agent/runtime/execution/governed-mutation-executor.ts',
     'infrastructure/agent/repositories/sqlite-subagent-codecs.ts',
     'modules/agent/capabilities/ssh-target-resolver.port.ts',
     'modules/agent/capabilities/ssh-file-target.port.ts',
@@ -20401,6 +20401,38 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
   for (const relative of frontendExtractions) {
     assert.ok(exists(frontendSourceRoot, relative), `P-059 must extract a real frontend owner: ${relative}`);
   }
+
+  const governedMutation = read(backendSourceRoot, 'modules/agent/runtime/execution/governed-mutation-executor.ts');
+  for (const operation of [
+    'refreshMutationInspection',
+    'acquireMutation',
+    'executeMutation',
+    'quarantineMutation',
+    'confirmMutation',
+    'cleanupMutation',
+  ]) {
+    assert.match(governedMutation, new RegExp(`\\b${operation}\\b`), `GovernedMutationExecutor must own ${operation}`);
+  }
+  for (const relative of [
+    'modules/agent/runtime/execution/root-tool-execution-coordinator.ts',
+    'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+  ]) {
+    const source = read(backendSourceRoot, relative);
+    assert.doesNotMatch(
+      source,
+      /\b(?:refreshMutationInspection|acquireMutation|executeMutation|quarantineMutation|confirmMutation|cleanupMutation|requestToolApproval|resolveToolApproval)\b/,
+      `${relative} must delegate governed mutation sequencing to GovernedMutationExecutor`,
+    );
+  }
+  const subagentExecutor = read(
+    backendSourceRoot,
+    'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+  );
+  assert.doesNotMatch(
+    subagentExecutor,
+    /LeaseCoordinator|acquireWithRetry|startRenewal/,
+    'SubagentParticipantExecutor must use ToolCallRunner for read/control lease execution instead of owning LeaseCoordinator',
+  );
 
   const nativeBackend = read(backendSourceRoot, 'modules/agent/runtime/execution/native-agent-backend.ts');
   assert.match(
@@ -21709,7 +21741,7 @@ const agentStructuredLoggingScenario: Scenario = async () => {
   const diagnosticTargets = [
     ['modules/agent/host/app-capability-broker.ts', 'Agent capability authorization denied'],
     ['modules/agent/runtime/execution/tool-call-runner.ts', 'Agent tool proposal inspection failed'],
-    ['modules/agent/runtime/execution/root-tool-execution-coordinator.ts', 'Agent mutation result state commit failed'],
+    ['modules/agent/runtime/execution/governed-mutation-executor.ts', 'Agent mutation result state commit failed'],
     ['modules/agent/host/plugin-install.service.ts', 'Agent plugin upgrade failed; rollback started'],
     ['modules/agent/ai/integration.service.ts', 'Agent MCP integration refresh failed'],
     ['modules/agent/ai/memory.service.ts', 'Agent Memory audit write failed'],
@@ -21718,8 +21750,8 @@ const agentStructuredLoggingScenario: Scenario = async () => {
       'Agent Subagent terminal completion notification failed',
     ],
     [
-      'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
-      'Agent Subagent mutation quarantine failed',
+      'modules/agent/runtime/execution/governed-mutation-executor.ts',
+      'Agent governed mutation quarantine failed after unknown outcome',
     ],
     ['modules/agent/tools/host/browser-tools.ts', 'Agent Browser stale session cleanup failed'],
     ['modules/agent/runtime/approvals/acp-permission-broker.ts', 'Agent ACP approval cleanup failed after abort'],

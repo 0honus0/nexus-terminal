@@ -4,14 +4,17 @@ import type { ToolContext, ToolInspection, ToolResult } from '../../capabilities
 import type { BackendSignal } from './agent-backend.port';
 import { executionErrorCode, executionErrorDetail } from './execution-errors';
 import { ToolCallRunner } from './tool-call-runner';
+import {
+  GovernedMutationExecutor,
+  type GovernedMutationFailure,
+  type GovernedMutationHooks,
+} from './governed-mutation-executor';
 import type { PendingRootTool, RunExecutionReaderPort } from '../runs/run.repository.port';
-import type { RootExecutionCommitPort } from '../runs/state-commit.port';
+import type { RootExecutionCommitPort, StateCommitResult } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
 import { normalizeUserInputQuestions } from '../runs/user-input-request';
 import { mcpInputRequestFromToolResult } from '../runs/mcp-input-required';
-import { TOOL_APPROVAL_TTL_SECONDS } from '../approvals/approval-policy';
 import { toolLeaseTtlSeconds } from './tool-lease-policy';
-import { requestHash } from '../runs/idempotency';
 import { logger } from '../../../../shared/logging/logger';
 
 const MAX_PARALLEL_READ_TOOLS = 4;
@@ -26,9 +29,6 @@ const rejectedToolResult = (errorCode: string, summary: string): ToolResult => (
   errorCode,
   verification: { status: 'failed', summary: 'The tool call was not executed.', evidenceRefs: [] },
 });
-
-const inspectionChanged = (left: ToolInspection, right: ToolInspection): boolean =>
-  JSON.stringify(left) !== JSON.stringify(right);
 
 const usageWithToolStep = (base: RunUsage): RunUsage => ({ ...base, steps: base.steps + 1 });
 
@@ -90,6 +90,8 @@ export const rootToolContext = (
 });
 
 export class RootToolExecutionCoordinator {
+  private readonly governedMutations: GovernedMutationExecutor;
+
   constructor(
     private readonly repository: RunExecutionReaderPort,
     private readonly stateCommit: RootExecutionCommitPort,
@@ -99,7 +101,11 @@ export class RootToolExecutionCoordinator {
       run: RunView,
       reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed',
     ) => Promise<void>,
-  ) {}
+  ) {
+    this.governedMutations = new GovernedMutationExecutor(repository, stateCommit, toolCalls, () =>
+      this.clock.nowUnixSeconds(),
+    );
+  }
 
   async *execute(
     snapshot: RunSnapshot,
@@ -310,105 +316,38 @@ export class RootToolExecutionCoordinator {
     signal: AbortSignal,
   ): AsyncGenerator<BackendSignal, boolean> {
     if (pending.status !== 'proposed' || !pending.inspection.mutation) throw new Error('TOOL_STATE_CONFLICT');
-    const scope = { userId: snapshot.userId, appId: snapshot.appId };
-    let currentRun: RunView = snapshot;
-    let inspection: ToolInspection;
-    let decision;
-    try {
-      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshMutationInspection(
-        rootToolContext(currentRun, pending.runtimeId, pending.stepId, signal, this.clock.nowUnixSeconds()),
-        pending.inspection,
-      ));
-    } catch (error) {
-      yield* this.rejectPendingTool(snapshot, pending, this.toolCalls.failedProposal(error));
-      return false;
-    }
-    if (decision.action !== 'requireApproval' || !inspection.mutation) {
-      yield* this.rejectPendingTool(
-        snapshot,
-        pending,
-        this.toolCalls.failedProposal(new Error(decision.action === 'deny' ? decision.reason : 'TOOL_POLICY_INVALID')),
-      );
-      return false;
-    }
-    if (inspectionChanged(pending.inspection, inspection)) {
-      const refreshed = await this.stateCommit.refreshProposedTool({
-        scope,
-        runId: snapshot.id,
-        toolStepId: pending.stepId,
-        toolCallId: pending.toolCallId,
-        expectedRunVersion: currentRun.version,
-        inspection,
-        now: this.clock.nowUnixSeconds(),
-      });
-      currentRun = refreshed.run;
-      yield { type: 'durable', runId: snapshot.id, cursor: refreshed.eventCursor };
-    }
-
-    const confirmedMutation = await this.repository.confirmedMutation(scope, snapshot.id, inspection.operationHash);
-    if (confirmedMutation && confirmedMutation.toolCallId !== pending.toolCallId) {
-      const duplicate = rejectedToolResult(
-        'MUTATION_ALREADY_CONFIRMED',
-        'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
-      );
-      yield* this.rejectPendingTool(currentRun, { ...pending, inspection }, duplicate);
-      return false;
-    }
-
-    const approvalId = randomUUID();
-    const now = this.clock.nowUnixSeconds();
-    const requested = await this.stateCommit.requestToolApproval({
-      scope,
-      runId: currentRun.id,
+    const commits: StateCommitResult[] = [];
+    const hooks = this.rootMutationHooks(snapshot, pending, commits, 'prepare');
+    const prepared = await this.governedMutations.prepare({
+      scope: { userId: snapshot.userId, appId: snapshot.appId },
+      runId: snapshot.id,
       runtimeId: pending.runtimeId,
       toolStepId: pending.stepId,
       toolCallId: pending.toolCallId,
-      approvalId,
-      expectedRunVersion: currentRun.version,
-      inspection,
-      expiresAt: now + TOOL_APPROVAL_TTL_SECONDS,
-      now,
+      run: snapshot,
+      inspection: pending.inspection,
+      signal,
+      autoApprove: snapshot.definition.approvalMode === 'full_access',
+      hooks,
     });
-    yield { type: 'durable', runId: snapshot.id, cursor: requested.eventCursor };
-    if (snapshot.definition.approvalMode !== 'full_access') {
-      yield { type: 'settled', run: requested.run };
+    for (const commit of commits) yield { type: 'durable', runId: snapshot.id, cursor: commit.eventCursor };
+    if (prepared.status === 'waiting_approval') {
+      yield { type: 'settled', run: prepared.run };
       return true;
     }
-
-    const expectedApprovalVersion = 1;
-    const idempotencyKey = randomUUID();
-    const resolved = await this.stateCommit.resolveToolApproval({
-      scope,
-      runId: requested.run.id,
-      approvalId,
-      decision: 'approved',
-      operationHash: inspection.operationHash,
-      expectedApprovalVersion,
-      expectedRunVersion: requested.run.version,
-      expectedPolicyRevision: inspection.policyRevision,
-      expectedInputRevision: inspection.inputRevision,
-      decidedByUserId: scope.userId,
-      resolutionSource: 'full_access',
-      idempotencyKey,
-      requestHash: requestHash(1, {
-        approvalId,
-        runId: requested.run.id,
-        decision: 'approved',
-        operationHash: inspection.operationHash,
-        expectedVersion: expectedApprovalVersion,
-      }),
-      now: this.clock.nowUnixSeconds(),
-    });
+    if (prepared.status === 'rejected') {
+      if (prepared.run.status === 'awaiting_input') yield { type: 'settled', run: prepared.run };
+      return false;
+    }
     logger.info(
       {
         runId: snapshot.id,
         toolCallId: pending.toolCallId,
-        toolName: inspection.toolName,
-        approvalId,
+        toolName: prepared.inspection.toolName,
+        approvalId: prepared.approvalId,
       },
       'Agent batch mutation auto-approved by full access mode',
     );
-    yield { type: 'durable', runId: snapshot.id, cursor: resolved.eventCursor };
     return false;
   }
 
@@ -689,278 +628,192 @@ export class RootToolExecutionCoordinator {
     if (pending.status !== 'ready' || !pending.approvalId || pending.approvalVersion === null) {
       throw new Error('APPROVAL_STATE_INVALID');
     }
-    const approvalId = pending.approvalId;
+    const commits: StateCommitResult[] = [];
+    const hooks = this.rootMutationHooks(snapshot, pending, commits, 'execute');
+    const executed = await this.governedMutations.execute({
+      scope: { userId: snapshot.userId, appId: snapshot.appId },
+      runId: snapshot.id,
+      runtimeId: pending.runtimeId,
+      toolStepId: pending.stepId,
+      toolCallId: pending.toolCallId,
+      run: snapshot,
+      inspection: pending.inspection,
+      approvalId: pending.approvalId,
+      signal,
+      hooks,
+    });
+    for (const commit of commits) yield { type: 'durable', runId: snapshot.id, cursor: commit.eventCursor };
+    if (executed.status === 'settled') {
+      yield { type: 'durable', runId: snapshot.id, cursor: executed.commit.eventCursor };
+      if (executed.run.status === 'interrupted' || executed.run.status === 'awaiting_input') {
+        yield { type: 'settled', run: executed.run };
+      }
+    }
+  }
+
+  private rootMutationHooks(
+    snapshot: RunSnapshot,
+    pending: PendingRootTool,
+    commits: StateCommitResult[],
+    mode: 'prepare' | 'execute',
+  ): GovernedMutationHooks {
     const scope = { userId: snapshot.userId, appId: snapshot.appId };
-    const context = rootToolContext(snapshot, pending.runtimeId, pending.stepId, signal, this.clock.nowUnixSeconds());
-    let inspection;
-    let decision;
-    try {
-      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshMutationInspection(
-        context,
-        pending.inspection,
-      ));
-    } catch (error) {
-      const code = errorCode(error);
-      const detail = executionErrorDetail(error, code);
-      const superseded = await this.stateCommit.supersedeMutationTool({
-        scope,
-        runId: snapshot.id,
-        toolStepId: pending.stepId,
-        toolCallId: pending.toolCallId,
-        approvalId,
-        expectedRunVersion: snapshot.version,
-        reason: `Approved operation could not be re-inspected safely: ${detail}${detail === code ? '' : ` [${code}]`}`,
-        errorCode: code,
-        details: { phase: 'reinspect', resourceKeys: pending.inspection.resourceKeys },
-        now: this.clock.nowUnixSeconds(),
-      });
-      yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
-      return;
-    }
-    if (
-      decision.action !== 'requireApproval' ||
-      inspection.operationHash !== pending.inspection.operationHash ||
-      inspection.inputRevision !== pending.inspection.inputRevision ||
-      inspection.policyRevision !== pending.inspection.policyRevision
-    ) {
-      const superseded = await this.stateCommit.supersedeMutationTool({
-        scope,
-        runId: snapshot.id,
-        toolStepId: pending.stepId,
-        toolCallId: pending.toolCallId,
-        approvalId,
-        expectedRunVersion: snapshot.version,
-        reason:
-          'The target, preconditions, input, or policy changed after approval; the approved mutation was not executed.',
-        errorCode: 'APPROVAL_STALE',
-        details: {
-          phase: 'approval_refresh',
-          resourceKeys: inspection.resourceKeys,
-          targetChanged: inspection.operationHash !== pending.inspection.operationHash,
-          inputChanged: inspection.inputRevision !== pending.inspection.inputRevision,
-          policyChanged: inspection.policyRevision !== pending.inspection.policyRevision,
-        },
-        now: this.clock.nowUnixSeconds(),
-      });
-      yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
-      return;
-    }
-
-    const confirmedMutation = await this.repository.confirmedMutation(scope, snapshot.id, inspection.operationHash);
-    if (confirmedMutation && confirmedMutation.toolCallId !== pending.toolCallId) {
-      const superseded = await this.stateCommit.supersedeMutationTool({
-        scope,
-        runId: snapshot.id,
-        toolStepId: pending.stepId,
-        toolCallId: pending.toolCallId,
-        approvalId,
-        expectedRunVersion: snapshot.version,
-        reason:
-          'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
-        errorCode: 'MUTATION_ALREADY_CONFIRMED',
-        details: {
-          phase: 'duplicate_guard',
-          operationHash: inspection.operationHash,
-          previousToolCallId: confirmedMutation.toolCallId,
-          previousProviderCallId: confirmedMutation.providerCallId,
-          resourceKeys: inspection.resourceKeys,
-        },
-        now: this.clock.nowUnixSeconds(),
-      });
-      yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
-      return;
-    }
-
-    const leaseTtlSeconds = toolLeaseTtlSeconds(snapshot.budget.toolTimeoutSeconds);
-    let mutationLease: Awaited<ReturnType<ToolCallRunner['acquireMutation']>>;
-    try {
-      mutationLease = await this.toolCalls.acquireMutation({
-        runtimeId: pending.runtimeId,
-        operationId: pending.toolCallId,
-        resourceKeys: inspection.resourceKeys,
-        ttlSeconds: leaseTtlSeconds,
-        signal,
-        deadlineAt: context.deadlineAt,
-      });
-    } catch (error) {
-      const code = errorCode(error);
-      const superseded = await this.stateCommit.supersedeMutationTool({
-        scope,
-        runId: snapshot.id,
-        toolStepId: pending.stepId,
-        toolCallId: pending.toolCallId,
-        approvalId,
-        expectedRunVersion: snapshot.version,
-        reason: mutationLeaseFailureReason(error, code, inspection.resourceKeys),
-        errorCode: code,
-        details: { phase: 'lease_acquire', resourceKeys: inspection.resourceKeys },
-        now: this.clock.nowUnixSeconds(),
-      });
-      yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
-      return;
-    }
-    try {
-      const begun = await this.stateCommit.beginMutationTool({
-        scope,
-        runId: snapshot.id,
-        runtimeId: pending.runtimeId,
-        toolStepId: pending.stepId,
-        toolCallId: pending.toolCallId,
-        approvalId,
-        expectedRunVersion: snapshot.version,
-        operationHash: inspection.operationHash,
-        expectedPolicyRevision: inspection.policyRevision,
-        expectedInputRevision: inspection.inputRevision,
-        now: this.clock.nowUnixSeconds(),
-      });
-      yield { type: 'durable', runId: snapshot.id, cursor: begun.eventCursor };
-      const toolResult = await this.toolCalls.executeMutation(
-        mutationLease,
+    return {
+      context: (run, signal, toolCallId) =>
         rootToolContext(
-          begun.run,
+          run,
           pending.runtimeId,
           pending.stepId,
-          mutationLease.signal,
+          signal,
           this.clock.nowUnixSeconds(),
           undefined,
-          pending.toolCallId,
+          toolCallId,
         ),
-        inspection,
-      );
-
-      if (toolResult.outcome !== 'confirmed') {
-        await this.toolCalls
-          .quarantineMutation(mutationLease, 'MUTATION_OUTCOME_UNKNOWN', {
-            toolCallId: pending.toolCallId,
-            errorCode: toolResult.errorCode ?? 'UNKNOWN',
-          })
-          .catch((error) =>
-            logger.error(
-              {
-                err: error,
-                errorCode: errorCode(error),
-                userId: snapshot.userId,
-                appId: snapshot.appId,
-                runId: snapshot.id,
-                toolCallId: pending.toolCallId,
-                toolName: inspection.toolName,
-              },
-              'Agent mutation quarantine failed after unknown tool outcome',
-            ),
-          );
-      }
-
-      let settled: Awaited<ReturnType<RootExecutionCommitPort['settleMutationTool']>>;
-      try {
-        settled = await this.stateCommit.settleMutationTool({
+      validateInspection: (inspection, decision) => {
+        if (decision.action === 'requireApproval' && inspection.mutation) return null;
+        return new Error(decision.action === 'deny' ? decision.reason : 'TOOL_POLICY_INVALID');
+      },
+      failedResult: (error) => this.toolCalls.failedProposal(error),
+      duplicateResult: () =>
+        rejectedToolResult(
+          'MUTATION_ALREADY_CONFIRMED',
+          'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
+        ),
+      rejectProposed: async (run, inspection, result) => {
+        const rejected = await this.stateCommit.rejectProposedTool({
           scope,
-          runId: begun.run.id,
-          runtimeId: pending.runtimeId,
+          runId: run.id,
           toolStepId: pending.stepId,
           toolCallId: pending.toolCallId,
-          expectedRunVersion: begun.run.version,
-          toolResultEntryId: randomUUID(),
+          expectedRunVersion: run.version,
           providerCallId: pending.providerCallId,
-          result: toolResult,
-          usage: usageWithToolStep(begun.run.usage),
-          needsReconciliation: toolResult.outcome === 'unknown',
+          result,
           now: this.clock.nowUnixSeconds(),
         });
-      } catch (error) {
-        await this.toolCalls
-          .quarantineMutation(mutationLease, 'STATE_COMMIT_FAILED_AFTER_MUTATION', {
-            toolCallId: pending.toolCallId,
-            errorCode: errorCode(error),
-          })
-          .catch((quarantineError) =>
-            logger.error(
-              {
-                err: quarantineError,
-                errorCode: errorCode(quarantineError),
-                userId: snapshot.userId,
-                appId: snapshot.appId,
-                runId: snapshot.id,
-                toolCallId: pending.toolCallId,
-                toolName: inspection.toolName,
-                originalErrorCode: errorCode(error),
-              },
-              'Agent mutation quarantine failed after state commit failure',
-            ),
-          );
-        logger.error(
-          {
-            err: error,
-            errorCode: errorCode(error),
-            userId: snapshot.userId,
-            appId: snapshot.appId,
-            runId: snapshot.id,
-            toolCallId: pending.toolCallId,
-            toolName: inspection.toolName,
-            mutationOutcome: toolResult.outcome,
-          },
-          'Agent mutation result state commit failed',
-        );
-        throw error;
-      }
-
-      let finalized = settled;
-      if (toolResult.outcome === 'confirmed') {
-        const leaseFinalization = await this.toolCalls.confirmMutation(mutationLease);
-        if (!leaseFinalization.ok) {
-          finalized = await this.stateCommit.commit({
-            scope,
-            runId: settled.run.id,
-            expectedRunVersion: settled.run.version,
-            events: [
-              {
-                type: 'run.reconciliation_required',
-                payload: {
-                  kind: 'lease_finalization',
-                  mutationOutcome: 'confirmed',
-                  toolCallId: leaseFinalization.toolCallId,
-                  resourceKeys: leaseFinalization.resourceKeys,
-                  reason: leaseFinalization.reason,
-                  errorCode: leaseFinalization.errorCode,
-                },
-              },
-            ],
-            runPatch: { needsReconciliation: true },
-            now: this.clock.nowUnixSeconds(),
-          });
-        }
-      }
-
-      if (finalized.run.status === 'running' && !finalized.run.needsReconciliation) {
-        finalized = await this.stateCommit.evaluateToolLoopGuard({
+        commits.push(rejected);
+        if (rejected.run.status !== 'running') return rejected;
+        const guarded = await this.stateCommit.evaluateToolLoopGuard({
           scope,
-          runId: finalized.run.id,
+          runId: rejected.run.id,
           runtimeId: pending.runtimeId,
-          expectedRunVersion: finalized.run.version,
+          expectedRunVersion: rejected.run.version,
           observations: [
             {
               toolName: inspection.toolName,
               risk: inspection.risk,
               operationHash: inspection.operationHash,
-              result: toolResult,
+              result,
             },
           ],
           now: this.clock.nowUnixSeconds(),
         });
-      }
+        if (guarded.run.version !== rejected.run.version) commits.push(guarded);
+        return guarded;
+      },
+      rejectReady: async (run, failure) => {
+        const rejection = this.rootReadyMutationFailure(failure);
+        const superseded = await this.stateCommit.supersedeMutationTool({
+          scope,
+          runId: run.id,
+          toolStepId: pending.stepId,
+          toolCallId: pending.toolCallId,
+          approvalId: pending.approvalId!,
+          expectedRunVersion: run.version,
+          reason: rejection.reason,
+          errorCode: rejection.errorCode,
+          details: rejection.details,
+          now: this.clock.nowUnixSeconds(),
+        });
+        commits.push(superseded);
+        return superseded;
+      },
+      begin: (run, approvalId, inspection) =>
+        this.stateCommit.beginMutationTool({
+          scope,
+          runId: run.id,
+          runtimeId: pending.runtimeId,
+          toolStepId: pending.stepId,
+          toolCallId: pending.toolCallId,
+          approvalId,
+          expectedRunVersion: run.version,
+          operationHash: inspection.operationHash,
+          expectedPolicyRevision: inspection.policyRevision,
+          expectedInputRevision: inspection.inputRevision,
+          now: this.clock.nowUnixSeconds(),
+        }),
+      settle: (run, result) =>
+        this.stateCommit.settleMutationTool({
+          scope,
+          runId: run.id,
+          runtimeId: pending.runtimeId,
+          toolStepId: pending.stepId,
+          toolCallId: pending.toolCallId,
+          expectedRunVersion: run.version,
+          toolResultEntryId: randomUUID(),
+          providerCallId: pending.providerCallId,
+          result,
+          usage: usageWithToolStep(run.usage),
+          needsReconciliation: result.outcome === 'unknown',
+          now: this.clock.nowUnixSeconds(),
+        }),
+      onCommit: (commit, phase) => {
+        if (mode === 'prepare' || phase === 'begun') commits.push(commit);
+      },
+      recoverySafePoint: (run) => this.recoverySafePoint(run, 'mutation_confirmed'),
+      unknownQuarantineReason: 'MUTATION_OUTCOME_UNKNOWN',
+      commitFailureQuarantineReason: 'STATE_COMMIT_FAILED_AFTER_MUTATION',
+      quarantineEvidence: (result, error) => ({
+        toolCallId: pending.toolCallId,
+        errorCode: error ? errorCode(error) : (result?.errorCode ?? 'UNKNOWN'),
+      }),
+    };
+  }
 
-      yield { type: 'durable', runId: snapshot.id, cursor: finalized.eventCursor };
-      if (
-        toolResult.outcome === 'confirmed' &&
-        finalized.run.status === 'running' &&
-        !finalized.run.needsReconciliation
-      ) {
-        await this.recoverySafePoint(finalized.run, 'mutation_confirmed');
-      }
-      if (finalized.run.status === 'interrupted' || finalized.run.status === 'awaiting_input') {
-        yield { type: 'settled', run: finalized.run };
-      }
-    } finally {
-      await this.toolCalls.cleanupMutation(mutationLease);
+  private rootReadyMutationFailure(failure: GovernedMutationFailure): {
+    reason: string;
+    errorCode: string;
+    details: JsonValue;
+  } {
+    if (failure.phase === 'reinspect') {
+      const detail = executionErrorDetail(failure.error, failure.errorCode);
+      return {
+        reason: `Approved operation could not be re-inspected safely: ${detail}${detail === failure.errorCode ? '' : ` [${failure.errorCode}]`}`,
+        errorCode: failure.errorCode,
+        details: { phase: 'reinspect', resourceKeys: failure.previousInspection.resourceKeys },
+      };
     }
+    if (failure.phase === 'approval_refresh') {
+      return {
+        reason:
+          'The target, preconditions, input, or policy changed after approval; the approved mutation was not executed.',
+        errorCode: 'APPROVAL_STALE',
+        details: {
+          phase: 'approval_refresh',
+          resourceKeys: failure.inspection.resourceKeys,
+          targetChanged: failure.inspection.operationHash !== failure.previousInspection.operationHash,
+          inputChanged: failure.inspection.inputRevision !== failure.previousInspection.inputRevision,
+          policyChanged: failure.inspection.policyRevision !== failure.previousInspection.policyRevision,
+        },
+      };
+    }
+    if (failure.phase === 'duplicate_guard') {
+      return {
+        reason:
+          'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
+        errorCode: 'MUTATION_ALREADY_CONFIRMED',
+        details: {
+          phase: 'duplicate_guard',
+          operationHash: failure.inspection.operationHash,
+          previousToolCallId: failure.duplicate?.toolCallId ?? null,
+          previousProviderCallId: failure.duplicate?.providerCallId ?? null,
+          resourceKeys: failure.inspection.resourceKeys,
+        },
+      };
+    }
+    return {
+      reason: mutationLeaseFailureReason(failure.error, failure.errorCode, failure.inspection.resourceKeys),
+      errorCode: failure.errorCode,
+      details: { phase: 'lease_acquire', resourceKeys: failure.inspection.resourceKeys },
+    };
   }
 }

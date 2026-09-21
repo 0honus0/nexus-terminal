@@ -6,23 +6,24 @@ import { applyModelCapabilitySnapshot } from '../../ai/model-capability-resolver
 import { modelCacheLineageKey } from '../../ai/model-cache-hint';
 import type { ModelFinishReason, ModelProviderContinuation, TokenUsage } from '../../ai/model.types';
 import type { ProviderService } from '../../ai/provider.service';
-import type { LeaseOwner, ResourceLease } from '../../capabilities/lease.port';
 import type { ToolExecutor } from '../../capabilities/tool-executor';
 import type { ToolContext, ToolInspection, ToolProposal, ToolResult } from '../../capabilities/tool.types';
-import { requestHash } from '../runs/idempotency';
-import { TOOL_APPROVAL_TTL_SECONDS } from '../approvals/approval-policy';
 import type { AgentEventHub } from '../events/event-hub';
 import { executionErrorCode, failedToolResult as buildFailedToolResult } from '../execution/execution-errors';
 import { modelFinishDisposition } from '../execution/model-finish-policy';
-import { LeaseCoordinator, type LeaseRenewal } from '../execution/lease-coordinator';
 import { toolLeaseTtlSeconds } from '../execution/tool-lease-policy';
+import {
+  GovernedMutationExecutor,
+  type GovernedMutationFailure,
+  type GovernedMutationHooks,
+} from '../execution/governed-mutation-executor';
 import type { ToolCallRunner } from '../execution/tool-call-runner';
 import type { ModelCallLimiter } from '../execution/model-call-limiter';
 import { estimateTokens } from '../execution/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
 import type { RunExecutionReaderPort, RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { RunView } from '../runs/run.types';
-import type { CollaborationCommitPort } from '../runs/state-commit.port';
+import type { CollaborationCommitPort, StateCommitResult } from '../runs/state-commit.port';
 import type { MailboxService } from './mailbox.service';
 import type { SubagentContextBuilder } from './subagent-context-builder';
 import { governedSubagentWorkspaceMutation } from './subagent-mutation-policy';
@@ -30,6 +31,7 @@ import type {
   DelegationCancellationPort,
   MailboxConsumerPort,
   RuntimeParticipantRepositoryPort,
+  RuntimeToolWorkView,
   SchedulerWorkExecutionPort,
 } from './subagent.repository.port';
 import type { DelegationView, SchedulerWorkView } from './subagent.types';
@@ -126,6 +128,8 @@ export interface SubagentExecutionHost {
 }
 
 export class SubagentParticipantExecutor {
+  private readonly governedMutations: GovernedMutationExecutor;
+
   constructor(
     private readonly work: SchedulerWorkExecutionPort,
     private readonly delegations: DelegationCancellationPort,
@@ -138,15 +142,18 @@ export class SubagentParticipantExecutor {
     private readonly stateCommit: CollaborationCommitPort,
     private readonly contextBuilder: SubagentContextBuilder,
     private readonly toolExecutor: ToolExecutor,
-    private readonly leaseCoordinator: LeaseCoordinator,
+    private readonly toolCalls: ToolCallRunner,
     private readonly mailbox: MailboxService,
     private readonly events: AgentEventHub,
     private readonly host: SubagentExecutionHost,
     private readonly clock: ClockPort,
-    private readonly toolCalls: ToolCallRunner | null = null,
     private readonly recoverySafePoint: (run: RunView, reason: 'mutation_confirmed') => Promise<void> = async () =>
       undefined,
-  ) {}
+  ) {
+    this.governedMutations = new GovernedMutationExecutor(runs, stateCommit, toolCalls, () =>
+      this.clock.nowUnixSeconds(),
+    );
+  }
 
   async handleTerminalCandidate(scope: Scope, claimed: SchedulerWorkView, ownerEpoch: number): Promise<void> {
     const payload = claimed.payload;
@@ -355,7 +362,6 @@ export class SubagentParticipantExecutor {
     if (toolWork.status === 'running') {
       toolResult = failedToolResult(new Error('SUBAGENT_TOOL_INTERRUPTED'));
     } else {
-      const owner: LeaseOwner = { type: 'agent', id: work.agentRuntimeId };
       const context = this.toolContext(
         activeRun,
         work.agentRuntimeId,
@@ -364,67 +370,14 @@ export class SubagentParticipantExecutor {
         Math.min(delegation.deadlineAt, work.deadlineAt),
       );
       const leaseTtlSeconds = toolLeaseTtlSeconds(activeRun.budget.toolTimeoutSeconds);
-      let leases: ResourceLease[] = [];
-      let renewal: LeaseRenewal | null = null;
+      let lease: Awaited<ReturnType<ToolCallRunner['acquireRead']>> | null = null;
       try {
-        leases = await this.leaseCoordinator.acquireWithRetry(
-          owner,
-          toolWork.inspection.resourceKeys,
-          'read',
-          leaseTtlSeconds,
-          signal,
-          context.deadlineAt,
-        );
-        renewal = this.leaseCoordinator.startRenewal(
-          leases.map((lease) => lease.id),
-          owner,
-          leaseTtlSeconds,
-          signal,
-        );
-        try {
-          toolResult = await this.toolExecutor.execute({ ...context, signal: renewal.signal }, toolWork.inspection);
-        } catch (error) {
-          toolResult = failedToolResult(error);
-        }
-        const renewalError = await renewal.stop();
-        if (renewalError) toolResult = failedToolResult(renewalError);
+        lease = await this.toolCalls.acquireRead(context, toolWork.inspection, leaseTtlSeconds);
+        toolResult = await this.toolCalls.executeRead(lease, context, toolWork.inspection);
       } catch (error) {
-        toolResult = failedToolResult(error);
+        toolResult = this.toolCalls.failedRead(error);
       } finally {
-        await renewal?.stop().catch((error) =>
-          logger.warn(
-            {
-              errorCode: logErrorCode(error, 'LEASE_LOST'),
-              userId: scope.userId,
-              appId: scope.appId,
-              runId: work.runId,
-              runtimeId: work.agentRuntimeId,
-              workId: work.id,
-              delegationId: delegation.id,
-            },
-            'Agent Subagent tool lease renewal cleanup failed',
-          ),
-        );
-        await this.leaseCoordinator
-          .release(
-            leases.map((lease) => lease.id),
-            owner,
-          )
-          .catch((error) =>
-            logger.warn(
-              {
-                errorCode: logErrorCode(error, 'LEASE_LOST'),
-                userId: scope.userId,
-                appId: scope.appId,
-                runId: work.runId,
-                runtimeId: work.agentRuntimeId,
-                workId: work.id,
-                delegationId: delegation.id,
-                leaseCount: leases.length,
-              },
-              'Agent Subagent tool lease release failed',
-            ),
-          );
+        if (lease) await this.toolCalls.releaseRead(lease);
       }
     }
 
@@ -499,11 +452,9 @@ export class SubagentParticipantExecutor {
     signal: AbortSignal,
     delegation: DelegationView,
     run: RunView,
-    toolWork: Awaited<ReturnType<RuntimeParticipantRepositoryPort['runtimeToolWork']>> & {},
+    toolWork: RuntimeToolWorkView,
   ): Promise<void> {
     if (
-      !toolWork ||
-      !this.toolCalls ||
       delegation.mutationMode !== 'governed' ||
       run.definition.approvalMode !== 'full_access' ||
       !toolWork.inspection.mutation ||
@@ -537,222 +488,103 @@ export class SubagentParticipantExecutor {
     }
 
     let activeRun = run;
-    let inspection = toolWork.inspection;
-    let decision;
-    try {
-      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshMutationInspection(
-        this.toolContext(
-          activeRun,
-          work.agentRuntimeId,
-          toolWork.toolStepId,
-          signal,
-          Math.min(delegation.deadlineAt, work.deadlineAt),
-        ),
-        toolWork.inspection,
-      ));
-    } catch (error) {
-      await this.settleChildMutationWithoutExecution(
-        scope,
-        work,
-        ownerEpoch,
-        delegation,
-        activeRun,
-        toolWork,
-        failedToolResult(error),
-      );
-      return;
-    }
-
-    const workspaceMutation = governedSubagentWorkspaceMutation(inspection, work.runId, work.agentRuntimeId);
-    if (decision.action !== 'requireApproval' || !workspaceMutation) {
-      await this.settleChildMutationWithoutExecution(
-        scope,
-        work,
-        ownerEpoch,
-        delegation,
-        activeRun,
-        toolWork,
-        failedToolResult(
-          new Error(
-            decision.action === 'deny'
-              ? decision.reason
-              : workspaceMutation
-                ? 'TOOL_POLICY_INVALID'
-                : 'SUBAGENT_MUTATION_TARGET_FORBIDDEN',
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (toolWork.status === 'ready' && inspectionChanged(toolWork.inspection, inspection)) {
-      await this.settleChildMutationWithoutExecution(
-        scope,
-        work,
-        ownerEpoch,
-        delegation,
-        activeRun,
-        toolWork,
-        failedToolResult(new Error('APPROVAL_STALE')),
-      );
-      return;
-    }
-    if (toolWork.status === 'proposed' && inspectionChanged(toolWork.inspection, inspection)) {
-      const refreshed = await this.stateCommit.refreshProposedTool({
-        scope,
-        runId: work.runId,
-        toolStepId: toolWork.toolStepId,
-        toolCallId: toolWork.toolCallId,
-        expectedRunVersion: activeRun.version,
-        inspection,
-        now: this.clock.nowUnixSeconds(),
-      });
-      activeRun = refreshed.run;
-      this.events.publishRunWake(work.runId, refreshed.eventCursor);
-    }
-
-    const duplicate = await this.runs.confirmedMutation(scope, work.runId, inspection.operationHash);
-    if (duplicate && duplicate.toolCallId !== toolWork.toolCallId) {
-      await this.settleChildMutationWithoutExecution(
-        scope,
-        work,
-        ownerEpoch,
-        delegation,
-        activeRun,
-        toolWork,
-        failedToolResult(new Error('MUTATION_ALREADY_CONFIRMED')),
-      );
-      return;
-    }
-
+    let approvedWork = toolWork;
     let approvalId = toolWork.approvalId;
     if (toolWork.status === 'proposed') {
-      approvalId = randomUUID();
-      const now = this.clock.nowUnixSeconds();
-      const requested = await this.stateCommit.requestToolApproval({
+      const prepared = await this.governedMutations.prepare({
         scope,
         runId: work.runId,
         runtimeId: work.agentRuntimeId,
         toolStepId: toolWork.toolStepId,
         toolCallId: toolWork.toolCallId,
-        approvalId,
-        expectedRunVersion: activeRun.version,
-        inspection,
-        expiresAt: now + TOOL_APPROVAL_TTL_SECONDS,
-        now,
+        run,
+        inspection: toolWork.inspection,
+        signal,
+        autoApprove: true,
+        hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, toolWork),
       });
-      this.events.publishRunWake(work.runId, requested.eventCursor);
-      const expectedApprovalVersion = 1;
-      const idempotencyKey = randomUUID();
-      const resolved = await this.stateCommit.resolveToolApproval({
-        scope,
-        runId: work.runId,
+      if (prepared.status !== 'ready') return;
+      activeRun = prepared.run;
+      approvalId = prepared.approvalId;
+      approvedWork = {
+        ...toolWork,
+        status: 'ready',
         approvalId,
-        decision: 'approved',
-        operationHash: inspection.operationHash,
-        expectedApprovalVersion,
-        expectedRunVersion: requested.run.version,
-        expectedPolicyRevision: inspection.policyRevision,
-        expectedInputRevision: inspection.inputRevision,
-        decidedByUserId: scope.userId,
-        resolutionSource: 'full_access',
-        idempotencyKey,
-        requestHash: requestHash(1, {
-          approvalId,
-          runId: work.runId,
-          decision: 'approved',
-          operationHash: inspection.operationHash,
-          expectedVersion: expectedApprovalVersion,
-        }),
-        now: this.clock.nowUnixSeconds(),
-      });
-      activeRun = resolved.run;
-      this.events.publishRunWake(work.runId, resolved.eventCursor);
+        inspection: prepared.inspection,
+      };
     }
     if (!approvalId) {
       await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return;
     }
 
-    const leaseTtlSeconds = toolLeaseTtlSeconds(activeRun.budget.toolTimeoutSeconds);
-    let mutationLease: Awaited<ReturnType<ToolCallRunner['acquireMutation']>>;
-    try {
-      mutationLease = await this.toolCalls.acquireMutation({
-        runtimeId: work.agentRuntimeId,
-        operationId: toolWork.toolCallId,
-        resourceKeys: inspection.resourceKeys,
-        ttlSeconds: leaseTtlSeconds,
-        signal,
-        deadlineAt: Math.min(delegation.deadlineAt, work.deadlineAt),
-      });
-    } catch (error) {
-      await this.settleChildMutationWithoutExecution(
-        scope,
-        work,
-        ownerEpoch,
-        delegation,
-        activeRun,
-        { ...toolWork, status: 'ready', approvalId },
-        failedToolResult(error),
-      );
-      return;
-    }
+    await this.governedMutations.execute({
+      scope,
+      runId: work.runId,
+      runtimeId: work.agentRuntimeId,
+      toolStepId: approvedWork.toolStepId,
+      toolCallId: approvedWork.toolCallId,
+      run: activeRun,
+      inspection: approvedWork.inspection,
+      approvalId,
+      signal,
+      hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, approvedWork),
+    });
+  }
 
-    try {
-      const begun = await this.stateCommit.beginSubagentMutationTool({
-        scope,
-        runId: work.runId,
-        runtimeId: work.agentRuntimeId,
-        delegationId: delegation.id,
-        workId: work.id,
-        ownerEpoch,
-        toolStepId: toolWork.toolStepId,
-        toolCallId: toolWork.toolCallId,
-        approvalId,
-        operationHash: inspection.operationHash,
-        expectedPolicyRevision: inspection.policyRevision,
-        expectedInputRevision: inspection.inputRevision,
-        now: this.clock.nowUnixSeconds(),
-      });
-      this.events.publishRunWake(work.runId, begun.eventCursor);
-
-      const toolResult = await this.toolCalls.executeMutation(
-        mutationLease,
+  private subagentMutationHooks(
+    scope: Scope,
+    work: SchedulerWorkView,
+    ownerEpoch: number,
+    delegation: DelegationView,
+    toolWork: RuntimeToolWorkView,
+  ): GovernedMutationHooks {
+    return {
+      context: (run, signal, toolCallId) =>
         this.toolContext(
-          begun.run,
+          run,
           work.agentRuntimeId,
           toolWork.toolStepId,
-          mutationLease.signal,
+          signal,
           Math.min(delegation.deadlineAt, work.deadlineAt),
-          toolWork.toolCallId,
+          toolCallId,
         ),
-        inspection,
-      );
-      if (toolResult.outcome !== 'confirmed') {
-        await this.toolCalls
-          .quarantineMutation(mutationLease, 'SUBAGENT_MUTATION_OUTCOME_UNKNOWN', {
-            toolCallId: toolWork.toolCallId,
-            runtimeId: work.agentRuntimeId,
-            errorCode: toolResult.errorCode ?? 'UNKNOWN',
-          })
-          .catch((error) =>
-            logger.error(
-              {
-                errorCode: errorCode(error),
-                runId: work.runId,
-                workId: work.id,
-                delegationId: delegation.id,
-                runtimeId: work.agentRuntimeId,
-                toolCallId: toolWork.toolCallId,
-              },
-              'Agent Subagent mutation quarantine failed',
-            ),
-          );
-      }
-
-      let settled;
-      try {
-        settled = await this.stateCommit.settleSubagentTool({
+      validateInspection: (inspection, decision) => {
+        const workspaceMutation = governedSubagentWorkspaceMutation(inspection, work.runId, work.agentRuntimeId);
+        if (decision.action === 'requireApproval' && workspaceMutation) return null;
+        return new Error(
+          decision.action === 'deny'
+            ? decision.reason
+            : workspaceMutation
+              ? 'TOOL_POLICY_INVALID'
+              : 'SUBAGENT_MUTATION_TARGET_FORBIDDEN',
+        );
+      },
+      failedResult: (error) => failedToolResult(error),
+      duplicateResult: () => failedToolResult(new Error('MUTATION_ALREADY_CONFIRMED')),
+      rejectProposed: (_run, inspection, result) =>
+        this.settleChildMutationWithoutExecution(
+          scope,
+          work,
+          ownerEpoch,
+          delegation,
+          { ...toolWork, inspection },
+          result,
+        ),
+      rejectReady: (_run, failure) => {
+        const changed = inspectionChanged(failure.previousInspection, failure.inspection);
+        const error = failure.phase === 'approval_refresh' && changed ? new Error('APPROVAL_STALE') : failure.error;
+        return this.settleChildMutationWithoutExecution(
+          scope,
+          work,
+          ownerEpoch,
+          delegation,
+          toolWork,
+          failedToolResult(error),
+        );
+      },
+      begin: (_run, approvalId, inspection) =>
+        this.stateCommit.beginSubagentMutationTool({
           scope,
           runId: work.runId,
           runtimeId: work.agentRuntimeId,
@@ -761,90 +593,41 @@ export class SubagentParticipantExecutor {
           ownerEpoch,
           toolStepId: toolWork.toolStepId,
           toolCallId: toolWork.toolCallId,
-          result: toolResult,
-          ...(toolResult.outcome === 'unknown' ? { needsReconciliation: true } : {}),
-          continuation: 'runnable',
+          approvalId,
+          operationHash: inspection.operationHash,
+          expectedPolicyRevision: inspection.policyRevision,
+          expectedInputRevision: inspection.inputRevision,
           now: this.clock.nowUnixSeconds(),
-        });
-      } catch (error) {
-        await this.toolCalls
-          .quarantineMutation(mutationLease, 'STATE_COMMIT_FAILED_AFTER_SUBAGENT_MUTATION', {
-            toolCallId: toolWork.toolCallId,
-            runtimeId: work.agentRuntimeId,
-            errorCode: errorCode(error),
-          })
-          .catch((quarantineError) =>
-            logger.error(
-              {
-                errorCode: errorCode(quarantineError),
-                runId: work.runId,
-                workId: work.id,
-                delegationId: delegation.id,
-                runtimeId: work.agentRuntimeId,
-                toolCallId: toolWork.toolCallId,
-                stateCommitErrorCode: errorCode(error),
-              },
-              'Agent Subagent mutation quarantine failed after state commit error',
-            ),
-          );
-        throw error;
-      }
-      this.events.publishRunWake(work.runId, settled.eventCursor);
-      if (toolResult.outcome !== 'confirmed') return;
-
-      let finalized = settled;
-      const leaseFinalization = await this.toolCalls.confirmMutation(mutationLease);
-      if (!leaseFinalization.ok) {
-        finalized = await this.stateCommit.commit({
-          scope,
-          runId: settled.run.id,
-          expectedRunVersion: settled.run.version,
-          events: [
-            {
-              type: 'run.reconciliation_required',
-              payload: {
-                kind: 'lease_finalization',
-                mutationOutcome: 'confirmed',
-                toolCallId: leaseFinalization.toolCallId,
-                resourceKeys: leaseFinalization.resourceKeys,
-                reason: leaseFinalization.reason,
-                errorCode: leaseFinalization.errorCode,
-                runtimeId: work.agentRuntimeId,
-              },
-            },
-          ],
-          runPatch: { needsReconciliation: true },
-          now: this.clock.nowUnixSeconds(),
-        });
-        this.events.publishRunWake(work.runId, finalized.eventCursor);
-      }
-
-      if (finalized.run.status === 'running' && !finalized.run.needsReconciliation) {
-        const guarded = await this.stateCommit.evaluateToolLoopGuard({
+        }),
+      settle: (_run, result) =>
+        this.stateCommit.settleSubagentTool({
           scope,
           runId: work.runId,
           runtimeId: work.agentRuntimeId,
           delegationId: delegation.id,
-          expectedRunVersion: finalized.run.version,
-          observations: [
-            {
-              toolName: inspection.toolName,
-              risk: inspection.risk,
-              operationHash: inspection.operationHash,
-              result: toolResult,
-            },
-          ],
+          workId: work.id,
+          ownerEpoch,
+          toolStepId: toolWork.toolStepId,
+          toolCallId: toolWork.toolCallId,
+          result,
+          ...(result.outcome === 'unknown' ? { needsReconciliation: true } : {}),
+          continuation: 'runnable',
           now: this.clock.nowUnixSeconds(),
-        });
-        if (guarded.run.version !== finalized.run.version) this.events.publishRunWake(work.runId, guarded.eventCursor);
-        finalized = guarded;
-      }
-      if (finalized.run.status === 'running' && !finalized.run.needsReconciliation) {
-        await this.recoverySafePoint(finalized.run, 'mutation_confirmed');
-      }
-    } finally {
-      await this.toolCalls.cleanupMutation(mutationLease);
-    }
+        }),
+      onCommit: (commit) => {
+        this.events.publishRunWake(work.runId, commit.eventCursor);
+      },
+      recoverySafePoint: (current) => this.recoverySafePoint(current, 'mutation_confirmed'),
+      delegationId: delegation.id,
+      leaseReconciliationExtra: { runtimeId: work.agentRuntimeId },
+      unknownQuarantineReason: 'SUBAGENT_MUTATION_OUTCOME_UNKNOWN',
+      commitFailureQuarantineReason: 'STATE_COMMIT_FAILED_AFTER_SUBAGENT_MUTATION',
+      quarantineEvidence: (result, error) => ({
+        toolCallId: toolWork.toolCallId,
+        runtimeId: work.agentRuntimeId,
+        errorCode: error ? errorCode(error) : (result?.errorCode ?? 'UNKNOWN'),
+      }),
+    };
   }
 
   private async settleChildMutationWithoutExecution(
@@ -852,16 +635,11 @@ export class SubagentParticipantExecutor {
     work: SchedulerWorkView,
     ownerEpoch: number,
     delegation: DelegationView,
-    run: RunView,
-    toolWork: NonNullable<Awaited<ReturnType<RuntimeParticipantRepositoryPort['runtimeToolWork']>>>,
+    toolWork: RuntimeToolWorkView,
     result: ToolResult,
-  ): Promise<void> {
-    let begunRun = run;
+  ): Promise<StateCommitResult> {
     if (toolWork.status === 'ready') {
-      if (!toolWork.approvalId) {
-        await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
-        return;
-      }
+      if (!toolWork.approvalId) throw new Error('APPROVAL_STATE_INVALID');
       const begun = await this.stateCommit.beginSubagentMutationTool({
         scope,
         runId: work.runId,
@@ -877,7 +655,6 @@ export class SubagentParticipantExecutor {
         expectedInputRevision: toolWork.inspection.inputRevision,
         now: this.clock.nowUnixSeconds(),
       });
-      begunRun = begun.run;
       this.events.publishRunWake(work.runId, begun.eventCursor);
     } else if (toolWork.status === 'proposed') {
       const begun = await this.stateCommit.beginSubagentTool({
@@ -891,11 +668,9 @@ export class SubagentParticipantExecutor {
         toolCallId: toolWork.toolCallId,
         now: this.clock.nowUnixSeconds(),
       });
-      begunRun = begun.run;
       this.events.publishRunWake(work.runId, begun.eventCursor);
     } else {
-      await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
-      return;
+      throw new Error('TOOL_STATE_CONFLICT');
     }
 
     const settled = await this.stateCommit.settleSubagentTool({
@@ -912,7 +687,7 @@ export class SubagentParticipantExecutor {
       now: this.clock.nowUnixSeconds(),
     });
     this.events.publishRunWake(work.runId, settled.eventCursor);
-    void begunRun;
+    return settled;
   }
 
   private async executeChild(

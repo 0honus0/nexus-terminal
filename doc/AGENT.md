@@ -463,6 +463,8 @@ inspect
 
 Read tool 也必须经过 scope/capability/network boundary，只是风险链更轻。
 
+Root 与 Subagent 不分别实现 mutation governance。`GovernedMutationExecutor` 是唯一的共享治理顺序 owner：负责 mutation reinspection、policy/target validation 后的 refresh、duplicate-operation guard、approval request/resolve、mutation lease、side effect、unknown-outcome quarantine、durable settle 后的 lease finalization/reconciliation、loop guard 与 recovery safe-point。它**不是**第二套 durable authority：所有 durable transition 仍提交到同一个 `StateCommit`；Root 只适配 Root 的 reject/begin/settle 与 `BackendSignal`，Subagent 只适配 delegation/work owner-epoch 下的 reject/begin/settle 与 scheduler wake。Subagent read/control 同样复用 `ToolCallRunner` 的 read lease/execution 生命周期，不在 participant executor 内维护第二套 `LeaseCoordinator` 流程。不得把这些序列重新复制回 Root/Subagent，也不得把 scheduler/mailbox/join 生命周期塞进共享 executor。
+
 ### 10.1 App capability 只表达跨资源安全边界
 
 App grant 不再表达 Agent 本体是否“能运行”。模型调用、Run 生命周期、Skill/Plan、用户输入、内部 Subagent/协作都属于已启用 Agent App 的核心行为，不设置 `ai.model.use`、`runs.execute` 一类总闸门。App 自己的隔离 App Storage 也属于 App 生命周期内的私有状态服务，只受 App enabled/disabled 状态门禁，不要求额外 grant；Host/Tool 为当前 App 生成 Artifact output 同样不是独立权限，敏感边界在后续读取。
@@ -983,10 +985,9 @@ Agent 改动仍必须遵守以下 review invariant：
 2. Suspended SSH session 的跨设备 takeover/owner lease 仍未形成正式状态机；现有 `prepareResume/commitResume/rollbackResume` 解决单次恢复事务，不等价于跨设备抢占。
 3. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
 4. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
-5. Root 与 Subagent 的 governed mutation/tool execution 仍有重复的 reinspection、policy、approval、duplicate-operation guard、lease、execution、settlement、quarantine 与 recovery-safe-point 流程；后续抽取一个共享 governed execution pipeline，但保留 Root/Subagent 各自 scheduler/lifecycle，并保持 StateCommit 为唯一 durable mutation authority。
-6. Run target UX 继续收紧 least-authority：新 Run 默认不隐式选择 SSH target，除非用户显式选择/持久化；Run/TaskRail 应展示 canonical target kind/name/id 与 Environment，而不是只暴露 raw connection IDs；Backend hard guardrail 值以只读 contract 投影给 UI，不在 i18n 文案复制数值。
-7. Host Tool 模块可抽取小型、显式的 input validation 与 canonical inspection/operation builder 以减少重复；不得自动推断 risk/resourceKeys/preconditions，也不得演化成隐藏安全语义的 Tool framework。
-8. 大 owner 只按已确认职责边界继续拆分：`SubagentParticipantExecutor` 在共享 governed execution 后拆 model/tool/completion collaborator；Browser Tool 按 tool family 共用一个 session/binding authority；`PluginInstallService` 拆 package/install transaction、runtime lifecycle、data-management collaborator；`RootToolExecutionCoordinator` 随共享 governed execution 自然缩小。StateCommit 不拆成多个 durable mutation authority。
+5. Run target UX 继续收紧 least-authority：新 Run 默认不隐式选择 SSH target，除非用户显式选择/持久化；Run/TaskRail 应展示 canonical target kind/name/id 与 Environment，而不是只暴露 raw connection IDs；Backend hard guardrail 值以只读 contract 投影给 UI，不在 i18n 文案复制数值。
+6. Host Tool 模块可抽取小型、显式的 input validation 与 canonical inspection/operation builder 以减少重复；不得自动推断 risk/resourceKeys/preconditions，也不得演化成隐藏安全语义的 Tool framework。
+7. 大 owner 只按已确认职责边界继续拆分：`SubagentParticipantExecutor` 在共享 governed execution 后拆 model/tool/completion collaborator；Browser Tool 按 tool family 共用一个 session/binding authority；`PluginInstallService` 拆 package/install transaction、runtime lifecycle、data-management collaborator；`RootToolExecutionCoordinator` 在 governed mutation 已共享后只继续按剩余 Root tool projection/continuation 职责自然缩小。StateCommit 不拆成多个 durable mutation authority。
 
 ## 24. 修改规则
 
