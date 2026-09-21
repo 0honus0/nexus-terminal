@@ -19841,6 +19841,9 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     'features/agent/settings/AcpRuntimeSettings.vue',
     'features/agent/settings/MemorySettings.vue',
     'features/agent/settings/WorkspaceRuntimeSettings.vue',
+    'features/agent/settings/AppExecutionPolicySettings.vue',
+    'features/agent/settings/SubagentSettings.vue',
+    'features/agent/settings/ModelCapabilityEditor.vue',
   ]) {
     const source = fs.readFileSync(path.join(frontendRoot, relative), 'utf8');
     assert.match(source, /useOperationFeedback/, `${relative} must use the shared operation feedback boundary`);
@@ -19909,6 +19912,24 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     [
       'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
       'Agent Subagent terminal completion notification failed',
+    ],
+    [
+      'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+      'Agent Subagent mutation quarantine failed',
+    ],
+    ['modules/agent/tools/host/browser-tools.ts', 'Agent Browser stale session cleanup failed'],
+    ['modules/agent/runtime/approvals/acp-permission-broker.ts', 'Agent ACP approval cleanup failed after abort'],
+    ['modules/agent/runtime/scheduling/scheduler.ts', 'Agent host wake cursor lookup failed'],
+    ['bootstrap/agent/compose-agent.ts', 'Agent Host wake publication failed'],
+    ['bootstrap/agent/agent-notification-bridge.ts', 'Agent notification thread lookup failed'],
+    ['modules/agent/host/app-intent.service.ts', 'Agent AppIntent expiry cleanup failed'],
+    [
+      'modules/agent/workspace-runtime/workspace-runtime-terminal.service.ts',
+      'Agent terminal backend session close failed',
+    ],
+    [
+      'modules/agent/workspace-runtime/workspace-runtime.service.ts',
+      'Agent Workspace failure status commit failed during reconfigure',
     ],
   ] as const;
   for (const [relative, message] of diagnosticTargets) {

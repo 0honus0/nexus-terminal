@@ -165,7 +165,7 @@ export const composeAgent = ({
     void runRepository
       .hostCursor(userId)
       .then((cursor) => eventHub.publishHostWake(userId, cursor))
-      .catch(() => undefined);
+      .catch((error) => logger.warn({ err: error, userId }, 'Agent Host wake publication failed'));
   };
   const appStates = new SqliteAppStateRepository(database);
   const appGrants = new SqliteAppGrantRepository(database);

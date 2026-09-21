@@ -735,7 +735,19 @@ export class SubagentParticipantExecutor {
             runtimeId: work.agentRuntimeId,
             errorCode: toolResult.errorCode ?? 'UNKNOWN',
           })
-          .catch(() => undefined);
+          .catch((error) =>
+            logger.error(
+              {
+                errorCode: errorCode(error),
+                runId: work.runId,
+                workId: work.id,
+                delegationId: delegation.id,
+                runtimeId: work.agentRuntimeId,
+                toolCallId: toolWork.toolCallId,
+              },
+              'Agent Subagent mutation quarantine failed',
+            ),
+          );
       }
 
       let settled;
@@ -761,7 +773,20 @@ export class SubagentParticipantExecutor {
             runtimeId: work.agentRuntimeId,
             errorCode: errorCode(error),
           })
-          .catch(() => undefined);
+          .catch((quarantineError) =>
+            logger.error(
+              {
+                errorCode: errorCode(quarantineError),
+                runId: work.runId,
+                workId: work.id,
+                delegationId: delegation.id,
+                runtimeId: work.agentRuntimeId,
+                toolCallId: toolWork.toolCallId,
+                stateCommitErrorCode: errorCode(error),
+              },
+              'Agent Subagent mutation quarantine failed after state commit error',
+            ),
+          );
         throw error;
       }
       this.events.publishRunWake(work.runId, settled.eventCursor);
@@ -1186,7 +1211,18 @@ export class SubagentParticipantExecutor {
                   runtime.consumedMailboxSequence,
                   this.clock.nowUnixSeconds(),
                 )
-                .catch(() => undefined);
+                .catch((error) =>
+                  logger.warn(
+                    {
+                      errorCode: errorCode(error),
+                      runId: work.runId,
+                      workId: work.id,
+                      runtimeId: work.agentRuntimeId,
+                      throughSequence: through,
+                    },
+                    'Agent Subagent mailbox consume after tool proposal failed',
+                  ),
+                );
             }
             return;
           } catch (error) {
@@ -1429,13 +1465,37 @@ export class SubagentParticipantExecutor {
         if (!terminalDelegation(descendant)) {
           const cancelled = await this.delegations
             .cancelDelegation(scope, failed.runId, descendant.id, descendant.version, this.clock.nowUnixSeconds())
-            .catch(() => null);
+            .catch((error) => {
+              logger.warn(
+                {
+                  errorCode: errorCode(error),
+                  runId: failed.runId,
+                  failedDelegationId: failed.id,
+                  delegationId: descendant.id,
+                  runtimeId: descendant.childRuntimeId,
+                },
+                'Agent Subagent descendant cancellation failed',
+              );
+              return null;
+            });
           if (cancelled) this.host.cancelChildRuntime(failed.runId, cancelled.childRuntimeId);
         }
       }
       const cancelled = await this.delegations
         .cancelDelegation(scope, failed.runId, sibling.id, sibling.version, this.clock.nowUnixSeconds())
-        .catch(() => null);
+        .catch((error) => {
+          logger.warn(
+            {
+              errorCode: errorCode(error),
+              runId: failed.runId,
+              failedDelegationId: failed.id,
+              delegationId: sibling.id,
+              runtimeId: sibling.childRuntimeId,
+            },
+            'Agent Subagent sibling cancellation failed',
+          );
+          return null;
+        });
       if (cancelled) this.host.cancelChildRuntime(failed.runId, cancelled.childRuntimeId);
     }
   }

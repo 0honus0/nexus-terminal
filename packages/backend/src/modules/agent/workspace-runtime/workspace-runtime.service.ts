@@ -551,7 +551,19 @@ export class WorkspaceRuntimeService {
       if (deleted.status === 'failed') {
         await this.repository
           .setWorkspaceStatus(scope, workspaceId, switching.version, workspace.status, this.now())
-          .catch(() => undefined);
+          .catch((error) =>
+            logger.warn(
+              {
+                err: error,
+                userId: scope.userId,
+                appId: scope.appId,
+                workspaceId,
+                generation: workspace.generation,
+                expectedVersion: switching.version,
+              },
+              'Agent Workspace status rollback after delete failure failed',
+            ),
+          );
       }
       const current = (await this.repository.getWorkspace(scope, workspaceId)) ?? switching;
       return { outcome: deleted.status === 'failed' ? 'failed' : 'unknown', workspace: current, commands };
@@ -575,7 +587,19 @@ export class WorkspaceRuntimeService {
     } catch (error) {
       await this.repository
         .setWorkspaceStatus(scope, workspaceId, switching.version, 'failed', this.now())
-        .catch(() => undefined);
+        .catch((statusError) =>
+          logger.error(
+            {
+              err: statusError,
+              userId: scope.userId,
+              appId: scope.appId,
+              workspaceId,
+              generation: workspace.generation,
+              expectedVersion: switching.version,
+            },
+            'Agent Workspace failure status commit failed during reconfigure',
+          ),
+        );
       throw error;
     }
     const provision = await this.dispatch(

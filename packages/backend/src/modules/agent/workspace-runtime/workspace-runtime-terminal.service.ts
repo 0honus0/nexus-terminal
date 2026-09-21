@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../shared/logging/logger';
 import type { Scope } from '../agent.types';
 import type { AppCapabilityBroker } from '../host/app-capability-broker';
 import type { AppLifecycleService } from '../host/app-lifecycle.service';
@@ -243,13 +244,27 @@ export class WorkspaceRuntimeTerminalService {
   closeWorkspace(workspaceId: string, generation?: number): void {
     for (const managed of [...this.managed.values()]) {
       if (managed.workspaceId === workspaceId && (generation === undefined || managed.generation === generation)) {
-        void this.closeManaged(managed).catch(() => undefined);
+        void this.closeManaged(managed).catch((error) =>
+          logger.warn(
+            { err: error, sessionId: managed.id, workspaceId: managed.workspaceId },
+            'Agent terminal close failed',
+          ),
+        );
       }
     }
   }
 
   async closeAll(): Promise<void> {
-    await Promise.all([...this.managed.values()].map((managed) => this.closeManaged(managed).catch(() => undefined)));
+    await Promise.all(
+      [...this.managed.values()].map((managed) =>
+        this.closeManaged(managed).catch((error) =>
+          logger.warn(
+            { err: error, sessionId: managed.id, workspaceId: managed.workspaceId },
+            'Agent terminal shutdown close failed',
+          ),
+        ),
+      ),
+    );
   }
 
   replay(managed: ManagedTerminalSession, attachment: TerminalAttachment): void {
@@ -267,7 +282,16 @@ export class WorkspaceRuntimeTerminalService {
     if (managed.closed || managed.attachment !== attachment) return;
     managed.attachment = null;
     if (managed.detachTimer) clearTimeout(managed.detachTimer);
-    managed.detachTimer = setTimeout(() => void this.closeManaged(managed).catch(() => undefined), DETACH_GRACE_MS);
+    managed.detachTimer = setTimeout(
+      () =>
+        void this.closeManaged(managed).catch((error) =>
+          logger.warn(
+            { err: error, sessionId: managed.id, workspaceId: managed.workspaceId },
+            'Agent detached terminal cleanup failed',
+          ),
+        ),
+      DETACH_GRACE_MS,
+    );
     managed.detachTimer.unref?.();
   }
 
@@ -277,7 +301,14 @@ export class WorkspaceRuntimeTerminalService {
     const currentAttachment = managed.attachment;
     this.finishManaged(managed);
     currentAttachment?.deliverClose();
-    await managed.session.close().catch(() => undefined);
+    await managed.session
+      .close()
+      .catch((error) =>
+        logger.warn(
+          { err: error, sessionId: managed.id, workspaceId: managed.workspaceId },
+          'Agent terminal backend session close failed',
+        ),
+      );
   }
 
   private output(managed: ManagedTerminalSession, kind: 'data' | 'stderr', data: Uint8Array): void {
@@ -285,7 +316,12 @@ export class WorkspaceRuntimeTerminalService {
     const copy = Uint8Array.from(data);
     if (managed.attachment?.deliver(kind, copy)) return;
     if (managed.replayBytes + copy.byteLength > MAX_REPLAY_BYTES) {
-      void this.closeManaged(managed).catch(() => undefined);
+      void this.closeManaged(managed).catch((error) =>
+        logger.warn(
+          { err: error, sessionId: managed.id, workspaceId: managed.workspaceId },
+          'Agent terminal replay overflow cleanup failed',
+        ),
+      );
       return;
     }
     managed.replay.push({ kind, data: copy });

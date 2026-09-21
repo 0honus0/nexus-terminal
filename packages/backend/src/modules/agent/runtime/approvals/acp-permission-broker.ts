@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../../shared/logging/logger';
 import type { ClockPort, Scope } from '../../agent.types';
 import type { AcpPermissionRequest } from '../../ai/integrations.types';
 import type { ToolContext, ToolInspection } from '../../capabilities/tool.types';
@@ -139,7 +140,9 @@ export class AcpPermissionBroker implements AcpPermissionRequestPort, AcpPermiss
       now,
     });
     if (context.signal.aborted) {
-      await this.close(context, approvalId, context.runId, 'superseded').catch(() => undefined);
+      await this.close(context, approvalId, context.runId, 'superseded').catch((error) =>
+        logger.warn({ err: error, runId: context.runId, approvalId }, 'Agent ACP approval cleanup failed after abort'),
+      );
       throw context.signal.reason ?? new Error('ABORTED');
     }
 
@@ -167,7 +170,12 @@ export class AcpPermissionBroker implements AcpPermissionRequestPort, AcpPermiss
       };
       const failClosed = async (): Promise<boolean> => {
         if (!settle()) return false;
-        await this.close(context, approvalId, context.runId, 'superseded').catch(() => undefined);
+        await this.close(context, approvalId, context.runId, 'superseded').catch((error) =>
+          logger.warn(
+            { err: error, runId: context.runId, approvalId },
+            'Agent ACP approval fail-closed cleanup failed',
+          ),
+        );
         this.notifyChanged(context.runId, approvalId);
         resolve('reject_once');
         return true;
@@ -175,7 +183,9 @@ export class AcpPermissionBroker implements AcpPermissionRequestPort, AcpPermiss
       const onAbort = (): void => {
         if (!settle()) return;
         void this.close(context, approvalId, context.runId, 'superseded')
-          .catch(() => undefined)
+          .catch((error) =>
+            logger.warn({ err: error, runId: context.runId, approvalId }, 'Agent ACP approval abort cleanup failed'),
+          )
           .finally(() => {
             this.notifyChanged(context.runId, approvalId);
             reject(context.signal.reason ?? new Error('ABORTED'));
@@ -192,7 +202,9 @@ export class AcpPermissionBroker implements AcpPermissionRequestPort, AcpPermiss
         () => {
           if (!settle()) return;
           void this.close(context, approvalId, context.runId, 'expired')
-            .catch(() => undefined)
+            .catch((error) =>
+              logger.warn({ err: error, runId: context.runId, approvalId }, 'Agent ACP approval expiry cleanup failed'),
+            )
             .finally(() => {
               this.notifyChanged(context.runId, approvalId);
               resolve('reject_once');

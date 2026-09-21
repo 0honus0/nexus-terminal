@@ -160,7 +160,13 @@ export class AgentNotificationBridge {
     if (pending.length === 0) return;
 
     const scope: Scope = { userId: run.userId, appId: run.appId };
-    const thread = await this.conversations.getThread(scope, run.threadId).catch(() => null);
+    const thread = await this.conversations.getThread(scope, run.threadId).catch((error) => {
+      logger.warn(
+        { err: error, userId: run.userId, appId: run.appId, runId: run.id, threadId: run.threadId },
+        'Agent notification thread lookup failed',
+      );
+      return null;
+    });
     const common: Record<string, unknown> = {
       appId: run.appId.slice(0, 256),
       runId: run.id.slice(0, 128),

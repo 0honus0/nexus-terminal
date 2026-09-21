@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import type { AppGrantRepositoryPort } from './app-grant.repository.port';
 import type { AgentCapability } from './app.types';
@@ -71,7 +72,11 @@ export class AppIntentService {
 
   async createConfirmed(scope: Scope, input: CreateAppIntentInput): Promise<AppIntentReceipt> {
     const now = this.clock.nowUnixSeconds();
-    await this.repository.purgeExpired(now, 100).catch(() => undefined);
+    await this.repository
+      .purgeExpired(now, 100)
+      .catch((error) =>
+        logger.warn({ err: error, userId: scope.userId, appId: scope.appId }, 'Agent AppIntent expiry cleanup failed'),
+      );
     if (input.confirmed !== true) throw new Error('APP_INTENT_CONFIRMATION_REQUIRED');
     if (scope.appId === input.receiverAppId) throw new Error('APP_INTENT_SELF_TRANSFER_DENIED');
     if (!input.receiverAppId || Buffer.byteLength(input.receiverAppId, 'utf8') > 256) {
@@ -140,7 +145,11 @@ export class AppIntentService {
     await this.requireGrant(scope, 'app.intents.exchange', 'APP_INTENT_RECEIVER_GRANT_DENIED');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RECEIPTS) throw new Error('APP_INTENT_INVALID');
     const now = this.clock.nowUnixSeconds();
-    await this.repository.purgeExpired(now, 100).catch(() => undefined);
+    await this.repository
+      .purgeExpired(now, 100)
+      .catch((error) =>
+        logger.warn({ err: error, userId: scope.userId, appId: scope.appId }, 'Agent AppIntent expiry cleanup failed'),
+      );
     return this.repository.listReceived(scope.userId, scope.appId, now, limit);
   }
 

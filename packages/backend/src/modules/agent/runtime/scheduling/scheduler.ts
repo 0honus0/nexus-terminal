@@ -218,7 +218,9 @@ export class AgentScheduler {
             this.events.publishRunWake(signal.runId, signal.cursor);
             void this.hostCursor(run.userId)
               .then((cursor) => this.events.publishHostWake(run.userId, cursor))
-              .catch(() => undefined);
+              .catch((error) =>
+                logger.warn({ err: error, userId: run.userId, runId: run.id }, 'Agent host wake cursor lookup failed'),
+              );
           } else if (signal.type === 'transient') {
             const occurredAt = this.clock.nowUnixSeconds();
             if (signal.eventType === 'message.delta') {

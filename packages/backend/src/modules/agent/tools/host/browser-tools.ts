@@ -1,3 +1,4 @@
+import { logger } from '../../../../shared/logging/logger';
 import type { JsonValue } from '../../agent.types';
 import type { ArtifactService } from '../../ai/artifact.service';
 import type { BrowserGatewayPort, BrowserSessionView, BrowserTargetSnapshot } from '../../ai/integrations.types';
@@ -230,7 +231,11 @@ const sessionBinding = async (
       binding.target.profileRevision !== session.targetRevision ||
       binding.target.configurationHash !== session.targetConfigurationHash
     ) {
-      await gateway.close(sessionId).catch(() => undefined);
+      await gateway
+        .close(sessionId)
+        .catch((error) =>
+          logger.warn({ err: error, sessionId, runId: context.runId }, 'Agent Browser stale session cleanup failed'),
+        );
       throw new Error('BROWSER_WORKSPACE_STALE');
     }
     return { session, binding };
@@ -241,13 +246,27 @@ const sessionBinding = async (
     binding = await standaloneBinding(settings, cryptoHash, context, session.targetId);
   } catch (error) {
     if (error instanceof Error && error.message === 'BROWSER_TARGET_NOT_FOUND') {
-      await gateway.close(sessionId).catch(() => undefined);
+      await gateway
+        .close(sessionId)
+        .catch((closeError) =>
+          logger.warn(
+            { err: closeError, sessionId, runId: context.runId },
+            'Agent Browser missing-target session cleanup failed',
+          ),
+        );
       throw new Error('BROWSER_TARGET_STALE');
     }
     throw error;
   }
   if (binding.target.configurationHash !== session.targetConfigurationHash) {
-    await gateway.close(sessionId).catch(() => undefined);
+    await gateway
+      .close(sessionId)
+      .catch((error) =>
+        logger.warn(
+          { err: error, sessionId, runId: context.runId },
+          'Agent Browser stale-target session cleanup failed',
+        ),
+      );
     throw new Error('BROWSER_TARGET_STALE');
   }
   return { session, binding };
