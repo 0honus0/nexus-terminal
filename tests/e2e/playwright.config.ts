@@ -111,7 +111,8 @@ export default defineConfig({
     {
       command: 'node fixtures/agent/openai-provider.mjs',
       cwd: e2eRoot,
-      url: 'http://127.0.0.1:29091/health',
+      env: inheritedEnv,
+      url: `${E2E_URLS.openAiProviderOrigin}/health`,
       reuseExistingServer: false,
       timeout: 30_000,
       stdout: 'pipe',

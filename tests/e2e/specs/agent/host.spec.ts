@@ -158,7 +158,7 @@ test('Agent settings surface exposes the production control plane and captures f
   const providerField = (label: string) =>
     addProvider.locator('label').filter({ hasText: label }).locator('input').first();
   await providerField('Display name').fill('Settings UI Provider');
-  await providerField('Base URL').fill('http://127.0.0.1:29091/v1');
+  await providerField('Base URL').fill(`${E2E_URLS.openAiProviderOrigin}/v1`);
   await providerField('Credential').fill('e2e-provider-secret');
   await providerField('Model ID').fill('e2e-model');
   await providerField('Context window').fill('8192');

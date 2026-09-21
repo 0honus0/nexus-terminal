@@ -40,7 +40,7 @@ type RunView = {
 
 const repositoryUrl = `${E2E_URLS.pluginRepositoryOrigin}/catalog.json`;
 const repositoryException = `127.0.0.1:${new URL(E2E_URLS.pluginRepositoryOrigin).port}`;
-const providerBase = 'http://127.0.0.1:29091/v1';
+const providerBase = `${E2E_URLS.openAiProviderOrigin}/v1`;
 const providerSecret = 'e2e-provider-secret';
 
 const csrfToken = async (request: APIRequestContext): Promise<string> => {

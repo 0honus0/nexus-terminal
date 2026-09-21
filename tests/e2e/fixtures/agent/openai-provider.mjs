@@ -1,7 +1,7 @@
 import http from 'node:http';
 
 const host = '127.0.0.1';
-const port = 29091;
+const port = Number(process.env.NEXUS_E2E_OPENAI_PROVIDER_PORT || 29091);
 const expectedCredential = 'e2e-provider-secret';
 
 const readJson = async (request) => {

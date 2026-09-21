@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
 
 type Envelope<T> = { data: T; requestId: string };
 type ProviderView = {
@@ -16,7 +17,7 @@ type ProviderView = {
   version: number;
 };
 
-const providerBase = 'http://127.0.0.1:29091/v1';
+const providerBase = `${E2E_URLS.openAiProviderOrigin}/v1`;
 const providerSecret = 'e2e-provider-secret';
 const model = { id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true };
 
@@ -158,7 +159,7 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
     async () => {
       const rejected = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
         headers,
-        data: { baseUrl: 'http://user:pass@127.0.0.1:29091/v1', expectedVersion: provider.version },
+        data: { baseUrl: providerBase.replace('http://', 'http://user:pass@'), expectedVersion: provider.version },
       });
       expect(rejected.status(), await rejected.text()).toBe(400);
       await expect(rejected.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
