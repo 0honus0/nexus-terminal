@@ -290,9 +290,12 @@ test('Agent settings surface exposes the production control plane and captures f
     ],
   });
 
-  await expect(providersSection.getByTestId('configured-models-remove-all')).toHaveCount(1);
-  await expect(providersSection.getByRole('checkbox', { name: 'Select all', exact: true })).toHaveCount(0);
-  await expect(providersSection.getByRole('button', { name: /Remove selected/ })).toHaveCount(0);
+  const configuredModelsPanel = providersSection
+    .getByText('Configured models', { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
+  await expect(configuredModelsPanel.getByTestId('configured-models-remove-all')).toHaveCount(1);
+  await expect(configuredModelsPanel.getByRole('checkbox', { name: 'Select all', exact: true })).toHaveCount(0);
+  await expect(configuredModelsPanel.getByRole('button', { name: /Remove selected/ })).toHaveCount(0);
 
   const fallbackSaved = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',

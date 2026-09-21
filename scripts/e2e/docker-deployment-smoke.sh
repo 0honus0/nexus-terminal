@@ -1449,10 +1449,14 @@ if (JSON.stringify(officialIds) !== JSON.stringify(['nexus.agent', 'nexus.fullst
 const compatibleAgent = pluginCatalog.packages.find(
   (candidate) => candidate.appId === 'nexus.agent' && candidate.version === '1.0.0',
 );
-const incompatibleAgent = pluginCatalog.packages.find(
-  (candidate) => candidate.appId === 'nexus.agent' && candidate.version === '1.0.1',
+const incompatibleAgents = pluginCatalog.packages.filter(
+  (candidate) => candidate.appId === 'nexus.agent' && candidate.version !== '1.0.0',
 );
-if (compatibleAgent?.compatible !== true || incompatibleAgent?.compatible !== false) {
+if (
+  compatibleAgent?.compatible !== true ||
+  incompatibleAgents.length !== 1 ||
+  incompatibleAgents[0]?.compatible !== false
+) {
   throw new Error(`Official catalog compatibility projection is invalid: ${JSON.stringify(pluginCatalog.packages)}`);
 }
 const fullStackPackage = pluginCatalog.packages.find((candidate) => candidate.appId === 'nexus.fullstack');
