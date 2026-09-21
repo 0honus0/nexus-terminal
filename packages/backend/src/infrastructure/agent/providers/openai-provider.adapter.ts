@@ -16,6 +16,7 @@ import {
   decodeOpenAiResponsesContinuation,
   OpenAiResponsesContinuationCollector,
 } from './openai-provider-continuation';
+import { parseOpenAiCompatibleCapabilityMetadata } from './openai-provider-capability-metadata';
 
 const MAX_MODELS_RESPONSE_BYTES = 1024 * 1024;
 const MAX_TOOL_ARGUMENT_BYTES = 32 * 1024;
@@ -284,15 +285,25 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
       const discovered = new Map<string, DiscoveredProviderModel>();
       for (const raw of data.slice(0, 1000)) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
-        const record = raw as { id?: unknown; owned_by?: unknown; created?: unknown };
+        const record = raw as {
+          id?: unknown;
+          owned_by?: unknown;
+          created?: unknown;
+          nexus_capabilities?: unknown;
+        };
         if (typeof record.id !== 'string' || !record.id.trim()) continue;
         const id = record.id.trim();
+        const liveCapabilityReport = parseOpenAiCompatibleCapabilityMetadata(
+          record.nexus_capabilities,
+          provider.baseUrl,
+        );
         discovered.set(id, {
           id,
           ...(typeof record.owned_by === 'string' && record.owned_by.trim() ? { ownedBy: record.owned_by.trim() } : {}),
           ...(Number.isSafeInteger(record.created) && (record.created as number) >= 0
             ? { createdAt: record.created as number }
             : {}),
+          ...(liveCapabilityReport ? { liveCapabilityReport } : {}),
         });
       }
       return [...discovered.values()].sort((left, right) => left.id.localeCompare(right.id));

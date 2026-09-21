@@ -44,7 +44,10 @@ import { SqliteContextCheckpointRepository } from '../../../packages/backend/src
 import { SqliteModelContinuationRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-model-continuation.repository';
 import { SqliteMemoryRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-memory.repository';
 import { SqliteRecallRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-recall.repository';
-import { decodePersistedProviderModels } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-provider.repository';
+import {
+  decodePersistedProviderModels,
+  SqliteProviderRepository,
+} from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-provider.repository';
 import { SqliteRunRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-run.repository';
 import { SqliteCheckpointRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-checkpoint.repository';
 import { SqliteSubagentRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-subagent.repository';
@@ -59,6 +62,7 @@ import {
 import { SqliteStateCommitAdapter } from '../../../packages/backend/src/infrastructure/agent/runtime/sqlite-state-commit.adapter';
 import { BrowserRuntimeAdapter } from '../../../packages/backend/src/infrastructure/agent/integrations/browser-runtime.adapter';
 import { OpenAiProviderAdapter } from '../../../packages/backend/src/infrastructure/agent/providers/openai-provider.adapter';
+import { parseOpenAiCompatibleCapabilityMetadata } from '../../../packages/backend/src/infrastructure/agent/providers/openai-provider-capability-metadata';
 import { RunnerHttpAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/runner-http.adapter';
 import { SshTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/capabilities/ssh-target.adapter';
 import { WorkspaceFileTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
@@ -205,6 +209,7 @@ import type {
   ModelRequest,
   PersistedProviderView,
   ProviderModelCapabilityObservation,
+  ProviderView,
   TokenUsage,
 } from '../../../packages/backend/src/modules/agent/ai/model.types';
 import type {
@@ -13928,6 +13933,12 @@ const publicAgentErrorTaxonomyScenario: Scenario = async () => {
       code: 'ACP_PROFILE_SELECTION_INVALID',
     },
     { producer: 'workspace ACP missing', raw: 'ACP_PROFILE_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
+    {
+      producer: 'provider explicit capability metadata',
+      raw: 'PROVIDER_CAPABILITY_METADATA_INVALID',
+      status: 502,
+      code: 'PROVIDER_CAPABILITY_METADATA_INVALID',
+    },
     { producer: 'workspace browser missing', raw: 'BROWSER_TARGET_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
     {
       producer: 'workspace browser incompatible',
@@ -17097,11 +17108,257 @@ const providerLiveCapabilityAuthorityScenario: Scenario = async () => {
     'Identifier-only /models discovery must not invent or erase capability observations',
   );
 
+  const explicitMetadata = {
+    schema_version: 1,
+    context_window: 72_000,
+    max_output_tokens: 9_000,
+    supports_tools: true,
+    supports_image_input: false,
+    supports_file_input: true,
+    supports_prompt_cache_key: true,
+    reasoning: {
+      supported_efforts: ['high', 'low'],
+      default_effort: 'high',
+      mandatory: false,
+    },
+  };
+  const parsedExplicit = parseOpenAiCompatibleCapabilityMetadata(explicitMetadata, 'https://capabilities.example/v1');
+  assert.deepEqual(parsedExplicit?.capabilities, {
+    contextWindow: 72_000,
+    maxOutputTokens: 9_000,
+    supportsTools: true,
+    supportsImageInput: false,
+    supportsFileInput: true,
+    supportsPromptCacheKey: true,
+    reasoning: {
+      supportedEfforts: ['low', 'high'],
+      defaultEffort: 'high',
+      mandatory: false,
+    },
+  });
+  assert.match(parsedExplicit?.source ?? '', /^openai-compatible:[A-Za-z0-9_-]{43}:\/models:nexus_capabilities$/);
+  assert.match(parsedExplicit?.sourceVersion ?? '', /^schema-1:sha256:[A-Za-z0-9_-]{43}$/);
+  const sameCapabilitiesOtherEndpoint = parseOpenAiCompatibleCapabilityMetadata(
+    { ...explicitMetadata },
+    'https://other-capabilities.example/v1',
+  );
+  assert.notEqual(
+    sameCapabilitiesOtherEndpoint?.source,
+    parsedExplicit?.source,
+    'Capability authority source must be bound to the configured Provider endpoint',
+  );
+  assert.equal(
+    sameCapabilitiesOtherEndpoint?.sourceVersion,
+    parsedExplicit?.sourceVersion,
+    'Capability revision must describe normalized capability content independently of endpoint identity',
+  );
+  assert.equal(
+    parseOpenAiCompatibleCapabilityMetadata({ ...explicitMetadata }, 'https://capabilities.example/v1')?.sourceVersion,
+    parsedExplicit?.sourceVersion,
+    'Capability source revision must be deterministic for equivalent normalized metadata',
+  );
+  assert.notEqual(
+    parseOpenAiCompatibleCapabilityMetadata(
+      { ...explicitMetadata, max_output_tokens: 9_001 },
+      'https://capabilities.example/v1',
+    )?.sourceVersion,
+    parsedExplicit?.sourceVersion,
+    'Capability source revision must change when normalized capability content changes',
+  );
+  assert.equal(parseOpenAiCompatibleCapabilityMetadata(undefined, 'https://capabilities.example/v1'), undefined);
+  for (const invalidMetadata of [
+    { schema_version: 2, supports_tools: true },
+    { schema_version: 1 },
+    { schema_version: 1, context_window: 4_096, max_output_tokens: 8_192 },
+    { schema_version: 1, supports_tools: 'yes' },
+    { schema_version: 1, supports_tools: true, inferred_from_name: true },
+    { schema_version: 1, reasoning: { supported_efforts: ['low', 'turbo'] } },
+  ]) {
+    assert.throws(
+      () => parseOpenAiCompatibleCapabilityMetadata(invalidMetadata, 'https://capabilities.example/v1'),
+      /PROVIDER_CAPABILITY_METADATA_INVALID/,
+    );
+  }
+
+  const adapterProvider: ProviderView = {
+    id: 'adapter-live-provider',
+    kind: 'openai-compatible',
+    displayName: 'Adapter live provider',
+    baseUrl: 'https://capabilities.example/v1',
+    protocol: 'chat-completions',
+    hasCredential: true,
+    credentialRevision: 3,
+    models: [],
+    enabled: true,
+    version: 11,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const adapter = new OpenAiProviderAdapter(
+    { get: async () => adapterProvider },
+    {
+      withCredential: async <T>(
+        _userId: number,
+        _providerId: string,
+        _credentialRevision: number,
+        use: (credential: string | null) => Promise<T>,
+      ) => use('scenario-key'),
+    },
+  );
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: 'explicit-live-model',
+              owned_by: 'explicit-provider',
+              nexus_capabilities: explicitMetadata,
+            },
+            {
+              id: 'heuristic-only-model',
+              owned_by: 'generic-compatible',
+              context_length: 128_000,
+              max_completion_tokens: 16_000,
+              supported_parameters: ['tools', 'vision'],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )) as typeof fetch;
+    const adapterDiscovery = await adapter.discoverModels(1, adapterProvider.id, new AbortController().signal);
+    assert.equal(adapterDiscovery[0]?.id, 'explicit-live-model');
+    assert.deepEqual(adapterDiscovery[0]?.liveCapabilityReport, parsedExplicit);
+    assert.equal(adapterDiscovery[1]?.id, 'heuristic-only-model');
+    assert.equal(
+      adapterDiscovery[1]?.liveCapabilityReport,
+      undefined,
+      'Generic context/parameter fields must remain non-authoritative without nexus_capabilities',
+    );
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          data: [{ id: 'broken-live-model', nexus_capabilities: { schema_version: 1, supports_tools: 'yes' } }],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )) as typeof fetch;
+    await assert.rejects(
+      () => adapter.discoverModels(1, adapterProvider.id, new AbortController().signal),
+      /PROVIDER_CAPABILITY_METADATA_INVALID/,
+      'Malformed explicit provider capability metadata must fail discovery closed',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const endpointDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-provider-live-endpoint-'));
+  const endpointDb = new DatabaseAdapter({
+    dataDirectory: endpointDirectory,
+    filename: 'provider-live-endpoint.sqlite',
+    nodeEnv: 'test',
+  });
+  try {
+    await endpointDb.initialize();
+    await endpointDb.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'provider-user', 'unused')");
+    const endpointRepository = new SqliteProviderRepository(endpointDb, {
+      encrypt: (value) => `opaque:${value}`,
+      decrypt: (value) => (value.startsWith('opaque:') ? value.slice('opaque:'.length) : value),
+    });
+    const knownProvider = await endpointRepository.create({
+      id: 'endpoint-known-provider',
+      userId: 1,
+      kind: 'openai-compatible',
+      displayName: 'Endpoint known provider',
+      baseUrl: 'https://old-provider.example/v1',
+      protocol: 'chat-completions',
+      models: [{ id: 'gpt-4o' }],
+      enabled: true,
+      createdAt: clock.nowUnixSeconds(),
+      updatedAt: clock.nowUnixSeconds(),
+    });
+    await endpointRepository.replaceLiveCapabilities(1, knownProvider.id, [
+      {
+        modelId: 'gpt-4o',
+        source: 'old-provider-live',
+        sourceVersion: 'old-live-v1',
+        capabilities: { maxOutputTokens: 8_192 },
+        updatedAt: clock.nowUnixSeconds(),
+      },
+    ]);
+    const endpointService = new ProviderService(endpointRepository, new ScriptedLanguageModel([]), clock);
+    const knownBefore = await endpointService.get(1, knownProvider.id);
+    assert.equal(knownBefore.models[0]?.maxOutputTokens, 8_192);
+    assert.equal(knownBefore.models[0]?.capabilitySources.maxOutputTokens, 'provider');
+    const knownAfter = await endpointService.update(1, knownProvider.id, knownProvider.version, {
+      kind: knownBefore.kind,
+      displayName: knownBefore.displayName,
+      baseUrl: 'https://new-provider.example/v1',
+      protocol: knownBefore.protocol,
+      models: knownBefore.models,
+      enabled: knownBefore.enabled,
+    });
+    assert.equal(knownAfter.version, knownProvider.version + 1);
+    assert.equal(knownAfter.models[0]?.maxOutputTokens, 16_384);
+    assert.equal(knownAfter.models[0]?.capabilitySources.maxOutputTokens, 'registry');
+    assert.equal(knownAfter.models[0]?.capabilityOverrides?.maxOutputTokens, undefined);
+    assert.deepEqual((await endpointRepository.get(1, knownProvider.id))?.liveCapabilities, []);
+
+    const privateProvider = await endpointRepository.create({
+      id: 'endpoint-private-provider',
+      userId: 1,
+      kind: 'openai-compatible',
+      displayName: 'Endpoint private provider',
+      baseUrl: 'https://old-private.example/v1',
+      protocol: 'chat-completions',
+      models: [{ id: 'private-endpoint-model' }],
+      enabled: true,
+      createdAt: clock.nowUnixSeconds(),
+      updatedAt: clock.nowUnixSeconds(),
+    });
+    await endpointRepository.replaceLiveCapabilities(1, privateProvider.id, [
+      {
+        modelId: 'private-endpoint-model',
+        source: 'old-private-live',
+        sourceVersion: 'old-private-v1',
+        capabilities: { contextWindow: 32_000, maxOutputTokens: 4_000, supportsTools: true },
+        updatedAt: clock.nowUnixSeconds(),
+      },
+    ]);
+    const privateBefore = await endpointService.get(1, privateProvider.id);
+    await assert.rejects(
+      () =>
+        endpointService.update(1, privateProvider.id, privateProvider.version, {
+          kind: privateBefore.kind,
+          displayName: privateBefore.displayName,
+          baseUrl: 'https://new-private.example/v1',
+          protocol: privateBefore.protocol,
+          models: privateBefore.models,
+          enabled: privateBefore.enabled,
+        }),
+      /MODEL_CAPABILITY_INCOMPLETE/,
+      'Changing Provider endpoint must fail closed when a private model is only complete because of old live metadata',
+    );
+    const privatePersisted = await endpointRepository.get(1, privateProvider.id);
+    assert.equal(privatePersisted?.baseUrl, privateProvider.baseUrl);
+    assert.equal(privatePersisted?.version, privateProvider.version);
+    assert.equal(privatePersisted?.liveCapabilities[0]?.sourceVersion, 'old-private-v1');
+  } finally {
+    await endpointDb.close().catch(() => undefined);
+    fs.rmSync(endpointDirectory, { recursive: true, force: true });
+  }
+
   return [
     { name: 'source_precedence_levels', value: 3, unit: 'sources' },
     { name: 'field_merge_cases', value: 5, unit: 'cases' },
     { name: 'provider_refreshes_without_config_version_bump', value: 2, unit: 'refreshes' },
     { name: 'durable_run_snapshots_survive_refresh', value: 1, unit: 'snapshots' },
+    { name: 'explicit_provider_metadata_ingestions', value: 1, unit: 'reports' },
+    { name: 'heuristic_provider_metadata_inferences', value: 0, unit: 'reports' },
+    { name: 'malformed_provider_metadata_fail_closed', value: 1, unit: 'cases' },
+    { name: 'endpoint_change_live_observation_resets', value: 1, unit: 'resets' },
+    { name: 'private_model_endpoint_change_fail_closed', value: 1, unit: 'cases' },
   ];
 };
 

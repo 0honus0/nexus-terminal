@@ -410,9 +410,9 @@ Frontend event stream 使用 reconnect/backoff/cursor replay；慢消费者有�
 
 ## 9. Context、Provider 与 Budget
 
-Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 不回填明文。`ProviderService` 是 Provider 配置应用服务：负责输入校验、CRUD/version、credential revision、模型 capability 解析、model discovery/test 编排，以及配置变化后的 Agent Host health 刷新；它不是模型 HTTP transport owner。当前 Provider endpoint 只做 URL/协议等基础配置校验，不提供 Nexus 内建的 Provider 私网例外、DNS pinning、redirect/SSRF policy。Provider discovery 请求读取上游 `GET <baseUrl>/models`，只把 model id（以及可选 owner/created metadata）当作候选事实，不把未定义语义的上游字段当成可信 capability。
+Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 不回填明文。`ProviderService` 是 Provider 配置应用服务：负责输入校验、CRUD/version、credential revision、模型 capability 解析、model discovery/test 编排，以及配置变化后的 Agent Host health 刷新；它不是模型 HTTP transport owner。当前 Provider endpoint 只做 URL/协议等基础配置校验，不提供 Nexus 内建的 Provider 私网例外、DNS pinning、redirect/SSRF policy。Provider discovery 请求读取上游 `GET <baseUrl>/models`。普通 model id、owner/created、model 名称以及第三方自定义的 `context_length` / `supported_parameters` 等未定义语义字段都只作为候选事实，不能成为 capability authority。OpenAI-compatible endpoint 若要声明 live capability，只能在对应 `data[]` entry 提供显式 namespaced `nexus_capabilities` object；第一版 schema 必须包含 `schema_version: 1`，其余只允许 `context_window`、`max_output_tokens`、`supports_tools`、`supports_image_input`、`supports_file_input`、`supports_prompt_cache_key` 与 `reasoning.{supported_efforts,default_effort,mandatory}`。未知 key、错误类型、非法 reasoning effort、非正整数或 `max_output_tokens > context_window` 都以 `PROVIDER_CAPABILITY_METADATA_INVALID` fail closed；缺少 `nexus_capabilities` 则保持 identifier-only，不推断 capability。
 
-Backend 的 `ModelCapabilityResolver` 统一解析模型物理能力。当前 Nexus Registry 可按已知/canonical model id 提供 `contextWindow`、`maxOutputTokens`、`supportsTools` 与 reasoning metadata；用户保存模型时只持久化相对 Registry 的 capability override。未知/私有模型如果没有完整的人工 capability，必须报 `MODEL_CAPABILITY_INCOMPLETE`，不能偷偷回退到固定 32K/4K。Provider live capability ingestion 仍是后续扩展，未交付前不得把普通 `/models` discovery 描述成 capability authority。
+Backend 的 `ModelCapabilityResolver` 统一解析模型物理能力。当前 Nexus Registry 可按已知/canonical model id 提供 `contextWindow`、`maxOutputTokens`、`supportsTools` 与 reasoning metadata；显式 Provider live observation 可逐字段覆盖/补充 Registry，人工配置再作为最高优先级 override，最终 precedence 固定为 `manual > provider > registry`。Provider observation 的 source 由规范化 Provider `baseUrl` 的 SHA-256 指纹绑定到 OpenAI-compatible `/models:nexus_capabilities` contract，source version 由规范化 capability 内容的 SHA-256 派生；refresh 只更新独立 live observation，不增加 Provider configuration version。Provider `baseUrl` 改变时，旧 endpoint 的 live observations 必须在同一个 Provider version CAS update 内原子清空，不能跨 endpoint 复用；更新前按移除旧 observation 后的 Registry + 真实 manual override 重新检查 capability completeness，private model 若因此不完整则在 durable update 前以 `MODEL_CAPABILITY_INCOMPLETE` fail closed，旧 provider-effective 值也不得被隐式固化成 manual override。未知/私有模型如果 Registry + Provider observation + 人工 override 仍不能形成完整 capability，必须报 `MODEL_CAPABILITY_INCOMPLETE`，不能偷偷回退到固定 32K/4K。每个 Run 继续冻结最终 capability snapshot，因此 live observation 后续变化只影响新 Run，不改写既有 Run。
 
 每个 Run 冻结 Provider configuration version、最终 model capability 与 reasoning effort。模型/Registry 能力在 Run 创建后发生变化，不得改写已有 Run 的 definition snapshot；下一次 Run 才使用新能力。模型物理 `contextWindow/maxOutputTokens` 只存在于冻结的 RunDefinition model capability / route snapshot，不再复制进 RunBudget。RunBudget 只保存 step/time/tool/recall/subagent 执行预算与冻结的 context policy；这些预算来自 User defaults + App-scoped execution policy，并受 System/User hard limit 约束。
 
@@ -987,13 +987,12 @@ Agent 改动仍必须遵守以下 review invariant：
 
 ### 已决定、待实现
 
-1. Provider live capability ingestion：只有语义明确且可验证的 Provider metadata 才能覆盖/补充 Registry；普通 `/models` discovery 仍不能猜 capability。
-2. Suspended SSH session 的跨设备 takeover/owner lease 仍未形成正式状态机；现有 `prepareResume/commitResume/rollbackResume` 解决单次恢复事务，不等价于跨设备抢占。
-3. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
-4. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
-5. Run target UX 继续收紧 least-authority：新 Run 默认不隐式选择 SSH target，除非用户显式选择/持久化；Run/TaskRail 应展示 canonical target kind/name/id 与 Environment，而不是只暴露 raw connection IDs；Backend hard guardrail 值以只读 contract 投影给 UI，不在 i18n 文案复制数值。
-6. Host Tool 模块可抽取小型、显式的 input validation 与 canonical inspection/operation builder 以减少重复；不得自动推断 risk/resourceKeys/preconditions，也不得演化成隐藏安全语义的 Tool framework。
-7. 大 owner 只按已确认职责边界继续拆分：`RootToolExecutionCoordinator` 的 read/control projection/continuation 与 Root governed-mutation adapter、`PluginInstallService` 的 package/install transaction/runtime lifecycle/data-management collaborator、Browser Tool family 的 shared `BrowserSessionBindingAuthority` 与 lifecycle/observation/interaction/transfer factory，以及 `SubagentParticipantExecutor` 的 model/tool/completion collaborator 拆分均已完成；后续不得重新合并。StateCommit 不拆成多个 durable mutation authority。
+1. Suspended SSH session 的跨设备 takeover/owner lease 仍未形成正式状态机；现有 `prepareResume/commitResume/rollbackResume` 解决单次恢复事务，不等价于跨设备抢占。
+2. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
+3. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
+4. Run target UX 继续收紧 least-authority：新 Run 默认不隐式选择 SSH target，除非用户显式选择/持久化；Run/TaskRail 应展示 canonical target kind/name/id 与 Environment，而不是只暴露 raw connection IDs；Backend hard guardrail 值以只读 contract 投影给 UI，不在 i18n 文案复制数值。
+5. Host Tool 模块可抽取小型、显式的 input validation 与 canonical inspection/operation builder 以减少重复；不得自动推断 risk/resourceKeys/preconditions，也不得演化成隐藏安全语义的 Tool framework。
+6. 大 owner 只按已确认职责边界继续拆分：`RootToolExecutionCoordinator` 的 read/control projection/continuation 与 Root governed-mutation adapter、`PluginInstallService` 的 package/install transaction/runtime lifecycle/data-management collaborator、Browser Tool family 的 shared `BrowserSessionBindingAuthority` 与 lifecycle/observation/interaction/transfer factory，以及 `SubagentParticipantExecutor` 的 model/tool/completion collaborator 拆分均已完成；后续不得重新合并。StateCommit 不拆成多个 durable mutation authority。
 
 ## 24. 修改规则
 

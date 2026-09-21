@@ -43,7 +43,7 @@ export const providerErrorRules: readonly AgentErrorRule[] = [
   onCodes(['PROVIDER_AUTH_FAILED'], rawCode(422, 'Provider credentials were rejected.')),
   onCodes(['PROVIDER_DISCOVERY_TIMEOUT', 'PROVIDER_TEST_TIMEOUT'], rawCode(503, 'Provider model discovery timed out.')),
   onCodes(
-    ['PROVIDER_MODELS_RESPONSE_INVALID', 'PROVIDER_MODELS_RESPONSE_TOO_LARGE'],
+    ['PROVIDER_MODELS_RESPONSE_INVALID', 'PROVIDER_MODELS_RESPONSE_TOO_LARGE', 'PROVIDER_CAPABILITY_METADATA_INVALID'],
     rawCode(502, 'Provider returned an invalid model catalog.'),
   ),
   onPrefixes(['PROVIDER_HTTP_'], rawCode(502, 'Provider returned an error response.')),

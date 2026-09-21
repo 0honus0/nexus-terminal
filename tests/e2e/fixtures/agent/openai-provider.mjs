@@ -43,7 +43,25 @@ const server = http.createServer(async (request, response) => {
         object: 'list',
         data: [
           { id: 'e2e-model', object: 'model', owned_by: 'nexus-e2e', created: 1700000000 },
-          { id: 'e2e-model-alt', object: 'model', owned_by: 'nexus-e2e', created: 1700000001 },
+          {
+            id: 'e2e-model-alt',
+            object: 'model',
+            owned_by: 'nexus-e2e',
+            created: 1700000001,
+            nexus_capabilities: {
+              schema_version: 1,
+              context_window: 16_384,
+              max_output_tokens: 512,
+              supports_tools: true,
+              supports_image_input: true,
+              supports_file_input: false,
+              reasoning: {
+                supported_efforts: ['low', 'high'],
+                default_effort: 'low',
+                mandatory: false,
+              },
+            },
+          },
         ],
       }),
     );

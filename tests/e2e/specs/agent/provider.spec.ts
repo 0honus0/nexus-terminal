@@ -90,19 +90,51 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
     expect(serialized).not.toContain('privateHostExceptions');
   });
 
-  await step('model discovery reads the upstream catalog without inventing capabilities', async () => {
+  await step('model discovery ingests only explicit provider capability metadata', async () => {
     const discovered = await request.post(`/api/v1/agent/ai/providers/${provider.id}/discover-models`, {
       headers,
       data: {},
     });
     expect(discovered.ok(), await discovered.text()).toBeTruthy();
-    await expect(discovered.json()).resolves.toMatchObject({
-      data: [
-        { id: 'e2e-model', ownedBy: 'nexus-e2e', createdAt: 1700000000 },
-        { id: 'e2e-model-alt', ownedBy: 'nexus-e2e', createdAt: 1700000001 },
-      ],
+    const discoveredBody = (await discovered.json()) as Envelope<
+      Array<{
+        id: string;
+        ownedBy?: string;
+        createdAt?: number;
+        providerCapabilities?: {
+          source: string;
+          sourceVersion: string;
+          capabilities: Record<string, unknown>;
+        };
+      }>
+    >;
+    expect(discoveredBody.data[0]).toMatchObject({
+      id: 'e2e-model',
+      ownedBy: 'nexus-e2e',
+      createdAt: 1700000000,
     });
-    expect(JSON.stringify(await discovered.json())).not.toContain('contextWindow');
+    expect(discoveredBody.data[0]?.providerCapabilities).toBeUndefined();
+    expect(discoveredBody.data[1]).toMatchObject({
+      id: 'e2e-model-alt',
+      ownedBy: 'nexus-e2e',
+      createdAt: 1700000001,
+      providerCapabilities: {
+        source: expect.stringMatching(/^openai-compatible:[A-Za-z0-9_-]{43}:\/models:nexus_capabilities$/),
+        sourceVersion: expect.stringMatching(/^schema-1:sha256:[A-Za-z0-9_-]{43}$/),
+        capabilities: {
+          contextWindow: 16_384,
+          maxOutputTokens: 512,
+          supportsTools: true,
+          supportsImageInput: true,
+          supportsFileInput: false,
+          reasoning: {
+            supportedEfforts: ['low', 'high'],
+            defaultEffort: 'low',
+            mandatory: false,
+          },
+        },
+      },
+    });
   });
 
   await step(

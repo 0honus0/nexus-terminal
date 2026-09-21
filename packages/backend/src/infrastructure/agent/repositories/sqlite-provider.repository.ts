@@ -284,6 +284,7 @@ export class SqliteProviderRepository implements ProviderRepositoryPort {
         : record.clearCredential
           ? ', protected_credential = NULL, credential_revision = credential_revision + 1'
           : '';
+    const liveCapabilitiesSql = record.resetLiveCapabilities ? ", live_capabilities_json = '[]'" : '';
     const parameters: unknown[] = [
       record.displayName,
       record.baseUrl,
@@ -298,7 +299,7 @@ export class SqliteProviderRepository implements ProviderRepositoryPort {
     const result = await this.db.execute(
       `UPDATE ai_providers SET
         display_name = ?, base_url = ?, models_json = ?, endpoint_policy_json = ?, enabled = ?,
-        updated_at = ?, version = version + 1${credentialSql}
+        updated_at = ?, version = version + 1${credentialSql}${liveCapabilitiesSql}
        WHERE user_id = ? AND id = ? AND version = ? AND deleted_at IS NULL`,
       parameters,
     );

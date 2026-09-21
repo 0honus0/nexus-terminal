@@ -37,4 +37,4 @@
 - 对话正文支持经过安全清洗的 Markdown；工具/系统结果先显示摘要，完整输出可展开。保留后端原始结果，不改写 Ledger。
 - 任务栏默认收起、按需展开；中窄窗口使用覆盖层，不挤压正文。审批/预算/对账状态和所有危险操作确认仍可达。
 - 输入区就地展示错误，中文 IME 确认不触发发送，允许返回最新消息。
-- Model capability 由 Backend `ModelCapabilityResolver` 统一解析：已知模型可从 Nexus Registry 获得 context/output/tool/reasoning 默认值，人工配置只作为字段级 override；未知/私有模型缺少必要 capability 时拒绝启用，不使用固定 32K/4K 猜测。Provider live capability ingestion 尚未交付，普通 `/models` discovery 只提供模型 ID 候选。
+- Model capability 由 Backend `ModelCapabilityResolver` 统一解析：已知模型可从 Nexus Registry 获得 context/output/tool/reasoning 默认值；OpenAI-compatible `/models` 只有显式 `nexus_capabilities` `schema_version: 1` metadata 才可形成 Provider live observation，普通 ID/owner/model-name 或未定义第三方字段不得推断 capability。字段级 precedence 固定为 `manual > provider > registry`，Provider live refresh 不增加 Provider configuration version；Provider `baseUrl` 改变时旧 live observation 必须在同一 version CAS 中原子清空，清空后 private model capability 不完整则更新 fail closed，且旧 provider-effective 值不得隐式转为 manual override。未知/私有模型在 Registry + Provider observation + 人工 override 后仍缺必要 capability 时拒绝启用，不使用固定 32K/4K 猜测。

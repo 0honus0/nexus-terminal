@@ -29,6 +29,7 @@ export interface ProviderUpdateRecord {
   enabled: boolean;
   credential?: string;
   clearCredential: boolean;
+  resetLiveCapabilities: boolean;
   updatedAt: number;
 }
 

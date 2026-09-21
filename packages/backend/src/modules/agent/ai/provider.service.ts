@@ -350,6 +350,10 @@ export class ProviderService {
     const current = await this.repository.get(userId, providerId);
     if (!current) throw new Error('PROVIDER_NOT_FOUND');
     const input = validateProviderInput(raw, current.liveCapabilities);
+    const resetLiveCapabilities = input.baseUrl !== current.baseUrl;
+    if (resetLiveCapabilities) {
+      for (const model of input.models) resolveProviderModelConfig(model);
+    }
     const updated = await this.repository.update(userId, providerId, expectedVersion, {
       displayName: input.displayName,
       baseUrl: input.baseUrl,
@@ -358,6 +362,7 @@ export class ProviderService {
       enabled: input.enabled,
       ...(input.credential === undefined ? {} : { credential: input.credential }),
       clearCredential: input.clearCredential === true,
+      resetLiveCapabilities,
       updatedAt: this.clock.nowUnixSeconds(),
     });
     try {
