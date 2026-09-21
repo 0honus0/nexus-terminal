@@ -19026,6 +19026,27 @@ const browserTargetScopedRevisionScenario: Scenario = async () => {
 const browserInteractionPrimitivesScenario: Scenario = async () => {
   const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
   const descriptorTools = createBrowserTools(null!, null!, null!, cryptoHash);
+  assert.deepEqual(
+    descriptorTools.map((tool) => tool.descriptor.name),
+    [
+      'browser_create_session',
+      'browser_snapshot',
+      'browser_screenshot',
+      'browser_navigate',
+      'browser_click',
+      'browser_type',
+      'browser_scroll',
+      'browser_press',
+      'browser_back',
+      'browser_select',
+      'browser_wait',
+      'browser_console',
+      'browser_upload',
+      'browser_download',
+      'browser_close',
+    ],
+    'Browser tool-family extraction must preserve the canonical model-visible Tool order',
+  );
   const names = new Set(descriptorTools.map((tool) => tool.descriptor.name));
   for (const expected of [
     'browser_scroll',
@@ -21523,11 +21544,69 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     'canonical Shell tools must not retain superseded Tool or capability names',
   );
   const browserTools = read('modules/agent/tools/host/browser-tools.ts');
-  assert.match(browserTools, /capability: 'browser\.read'/, 'Browser evidence/navigation must expose read authority');
+  const browserLifecycleTools = read('modules/agent/tools/host/browser/browser-lifecycle-tools.ts');
+  const browserObservationTools = read('modules/agent/tools/host/browser/browser-observation-tools.ts');
+  const browserInteractionTools = read('modules/agent/tools/host/browser/browser-interaction-tools.ts');
+  const browserTransferTools = read('modules/agent/tools/host/browser/browser-transfer-tools.ts');
+  const browserToolFamily = [
+    browserLifecycleTools,
+    browserObservationTools,
+    browserInteractionTools,
+    browserTransferTools,
+  ].join('\n');
   assert.match(
-    browserTools,
+    browserToolFamily,
+    /capability: 'browser\.read'/,
+    'Browser evidence/navigation must expose read authority',
+  );
+  assert.match(
+    browserToolFamily,
     /capability: 'browser\.interact'/,
     'Browser state-changing page interaction must expose separate interaction authority',
+  );
+  assert.match(
+    browserTools,
+    /new BrowserSessionBindingAuthority/,
+    'Browser Tool composition must create one shared session/binding authority for the entire family',
+  );
+  assert.doesNotMatch(
+    browserTools,
+    /getSession\(|getWorkspace\(|effectiveSettings\.browser|browserTargetConfigurationHash|standaloneTargetRevision/,
+    'Browser Tool facade must not retain session/binding resolution authority',
+  );
+  for (const [relative, source] of [
+    ['browser-lifecycle-tools.ts', browserLifecycleTools],
+    ['browser-observation-tools.ts', browserObservationTools],
+    ['browser-interaction-tools.ts', browserInteractionTools],
+    ['browser-transfer-tools.ts', browserTransferTools],
+  ] as const) {
+    assert.match(
+      source,
+      /BrowserSessionBindingAuthority/,
+      `${relative} must consume the shared Browser binding authority`,
+    );
+    assert.doesNotMatch(
+      source,
+      /AgentWorkspaceRepositoryPort|AgentSettingsService|CryptoHashPort|gateway\.getSession\(|getWorkspace\(/,
+      `${relative} must not reimplement Browser session/target binding resolution`,
+    );
+  }
+  const browserBindingAuthority = read('modules/agent/tools/host/browser/browser-session-binding-authority.ts');
+  assert.match(browserBindingAuthority, /gateway\.getSession\(/, 'Browser binding authority must own session lookup');
+  assert.match(
+    browserBindingAuthority,
+    /BROWSER_WORKSPACE_STALE/,
+    'Browser binding authority must fail closed on stale Workspace binding',
+  );
+  assert.match(
+    browserBindingAuthority,
+    /BROWSER_TARGET_STALE/,
+    'Browser binding authority must fail closed on stale standalone target',
+  );
+  assert.doesNotMatch(
+    browserBindingAuthority,
+    /\berr:\s*(?:error|closeError)\b/,
+    'Browser binding cleanup diagnostics must log stable errorCode values rather than raw Error objects',
   );
   const mcpTools = read('modules/agent/tools/host/mcp-tools.ts');
   assert.match(mcpTools, /integration\.mcp\.read/, 'MCP evidence access must expose read authority');
@@ -21799,7 +21878,10 @@ const agentStructuredLoggingScenario: Scenario = async () => {
       'modules/agent/runtime/execution/governed-mutation-executor.ts',
       'Agent governed mutation quarantine failed after unknown outcome',
     ],
-    ['modules/agent/tools/host/browser-tools.ts', 'Agent Browser stale session cleanup failed'],
+    [
+      'modules/agent/tools/host/browser/browser-session-binding-authority.ts',
+      'Agent Browser stale session cleanup failed',
+    ],
     ['modules/agent/runtime/approvals/acp-permission-broker.ts', 'Agent ACP approval cleanup failed after abort'],
     ['modules/agent/runtime/scheduling/scheduler.ts', 'Agent host wake cursor lookup failed'],
     ['bootstrap/agent/compose-agent.ts', 'Agent Host wake publication failed'],

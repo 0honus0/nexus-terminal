@@ -677,6 +677,10 @@ ACP profile 冻结在 Workspace profile 中。ACP process 在 Runner Workspace �
 
 Browser target 由 Workspace profile 冻结。Browser execution 通过受控 Browser gateway/tunnel，不把任意宿主 CDP endpoint 交给插件或页面。
 
+Browser Tool family 现在只使用一个 `BrowserSessionBindingAuthority` 处理 target/session binding。`createBrowserTools` 只组合 lifecycle / observation / interaction / transfer 四组 Tool，并为四组传入同一个 authority；各 Tool family 不直接读取 Workspace repository、Agent Settings，也不直接调用 `gateway.getSession` 重新判断 ownership。Authority 负责 Workspace frozen target 与 standalone configured target 的 canonical resolution、Browser target configuration hash/revision、session 的 `userId + appId + runId + agentRuntimeId` ownership、create-session execute-time revalidation、Workspace generation/target revision/configuration hash 的 stale 检查，以及统一的 Browser inspection target/resource/precondition/operation hash 构造。
+
+Browser live session 与浏览器进程生命周期仍由既有 BrowserGateway/BrowserService 持有；`BrowserSessionBindingAuthority` 不建立第二套 session store。已有 session 的 Workspace generation、frozen target 或 standalone target 配置变化时，authority 先通过 BrowserGateway 关闭 stale session，再以 `BROWSER_WORKSPACE_STALE` / `BROWSER_TARGET_STALE` fail closed；无关 Agent Settings revision 不改变 target identity，也不误关 session。stale cleanup 诊断只记录稳定 error code，不记录 raw Error。Browser read/interact capability、screenshot Artifact/vision、interaction primitives 与 upload/download 的原 runtime owner 不变。
+
 网页内容视为不可信输入；下载内容先落 Artifact，再进入其他 Agent/Workspace 能力。
 
 ### 13.3 Workspace local Terminal
@@ -987,7 +991,7 @@ Agent 改动仍必须遵守以下 review invariant：
 4. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
 5. Run target UX 继续收紧 least-authority：新 Run 默认不隐式选择 SSH target，除非用户显式选择/持久化；Run/TaskRail 应展示 canonical target kind/name/id 与 Environment，而不是只暴露 raw connection IDs；Backend hard guardrail 值以只读 contract 投影给 UI，不在 i18n 文案复制数值。
 6. Host Tool 模块可抽取小型、显式的 input validation 与 canonical inspection/operation builder 以减少重复；不得自动推断 risk/resourceKeys/preconditions，也不得演化成隐藏安全语义的 Tool framework。
-7. 大 owner 只按已确认职责边界继续拆分：Browser Tool 按 tool family 共用一个 session/binding authority；`PluginInstallService` 拆 package/install transaction、runtime lifecycle、data-management collaborator；`RootToolExecutionCoordinator` 在 governed mutation 已共享后只继续按剩余 Root tool projection/continuation 职责自然缩小。`SubagentParticipantExecutor` 的 model/tool/completion collaborator 拆分已完成；后续不得重新合并。StateCommit 不拆成多个 durable mutation authority。
+7. 大 owner 只按已确认职责边界继续拆分：`PluginInstallService` 拆 package/install transaction、runtime lifecycle、data-management collaborator；`RootToolExecutionCoordinator` 在 governed mutation 已共享后只继续按剩余 Root tool projection/continuation 职责自然缩小。Browser Tool family 的 shared `BrowserSessionBindingAuthority` 与 lifecycle/observation/interaction/transfer factory 拆分、以及 `SubagentParticipantExecutor` 的 model/tool/completion collaborator 拆分均已完成；后续不得重新合并。StateCommit 不拆成多个 durable mutation authority。
 
 ## 24. 修改规则
 
