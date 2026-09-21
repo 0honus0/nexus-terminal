@@ -3,19 +3,19 @@
   "group": 6,
   "workers": 8,
   "specs": [
-    "specs/agent/host.spec.ts",
-    "specs/agent/preset-plugin.spec.ts",
-    "specs/agent/provider.spec.ts",
+    "specs/auth/setup-login.spec.ts",
     "specs/ui/backup-ui.spec.ts",
     "specs/ui/connection-non-ssh-bulk.spec.ts",
     "specs/ui/custom-terminal-theme.spec.ts",
     "specs/ui/workspace-no-session.spec.ts",
-    "specs/websocket/authenticated-session.spec.ts",
-    "specs/ssh/command-history-management.spec.ts",
-    "specs/ssh/quick-command-collapsible-search.spec.ts",
-    "specs/ssh/quick-command-management.spec.ts",
-    "specs/ssh/quick-command-tags-variables.spec.ts",
-    "specs/ssh/progress-display-upload-copy.spec.ts",
-    "specs/ssh/suspend-resume.spec.ts"
+    "specs/ssh/connection-edit-delete.spec.ts",
+    "specs/ssh/connection-list-search.spec.ts",
+    "specs/ssh/connection.spec.ts",
+    "specs/ssh/reconnect-ui.spec.ts",
+    "specs/ssh/progress-display-archive-cancel.spec.ts",
+    "specs/ssh/panel-wheel-scaling.spec.ts",
+    "specs/ssh/terminal-protocol.spec.ts",
+    "specs/ssh/terminal-tools-ui.spec.ts",
+    "specs/ssh/terminal-ui.spec.ts"
   ]
 }

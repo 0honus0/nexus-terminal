@@ -3,17 +3,14 @@
   "group": 3,
   "workers": 8,
   "specs": [
+    "specs/agent/host.spec.ts",
+    "specs/agent/preset-plugin.spec.ts",
+    "specs/agent/provider.spec.ts",
     "specs/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "specs/ssh/connection-edit-delete.spec.ts",
-    "specs/ssh/connection-list-search.spec.ts",
-    "specs/ssh/connection.spec.ts",
-    "specs/ssh/reconnect-ui.spec.ts",
-    "specs/ssh/sftp-download.spec.ts",
-    "specs/ssh/status-history-time-axis.spec.ts",
-    "specs/ssh/progress-display-archive-cancel.spec.ts",
-    "specs/ssh/panel-wheel-scaling.spec.ts",
-    "specs/ssh/terminal-protocol.spec.ts",
-    "specs/ssh/terminal-tools-ui.spec.ts",
-    "specs/ssh/terminal-ui.spec.ts"
+    "specs/ssh/progress-display-archive.spec.ts",
+    "specs/ssh/docker-manager-ui.spec.ts",
+    "specs/ssh/protocol.spec.ts",
+    "specs/ssh/status-docker-protocol.spec.ts",
+    "specs/ssh/upload-protocol.spec.ts"
   ]
 }
