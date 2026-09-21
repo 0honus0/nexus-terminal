@@ -310,19 +310,33 @@ export class SkillRegistry {
   }
 
   async load(scope: Scope, id: string, version: string): Promise<SkillBody> {
-    const index = await this.pluginIndex(scope);
-    const skill = index.byId.get(id);
-    if (!skill || skill.version !== version) throw new Error('NOT_FOUND');
-    const actualHash = createHash('sha256').update(skill.content, 'utf8').digest('hex');
-    if (actualHash !== skill.hash) throw new Error('PLUGIN_SKILL_CHANGED');
-    const body = skill.content.slice(skill.bodyOffset);
-    const bodyBytes = Buffer.byteLength(body, 'utf8');
-    if (bodyBytes > MAX_SKILL_BODY_BYTES) throw new Error('SKILL_BODY_TOO_LARGE');
-    logger.debug(
-      { userId: scope.userId, appId: scope.appId, skillId: skill.id, skillVersion: skill.version, bodyBytes },
-      'Agent Skill body loaded',
-    );
-    return { ...metadataFrom(skill), body };
+    try {
+      const index = await this.pluginIndex(scope);
+      const skill = index.byId.get(id);
+      if (!skill || skill.version !== version) throw new Error('NOT_FOUND');
+      const actualHash = createHash('sha256').update(skill.content, 'utf8').digest('hex');
+      if (actualHash !== skill.hash) throw new Error('PLUGIN_SKILL_CHANGED');
+      const body = skill.content.slice(skill.bodyOffset);
+      const bodyBytes = Buffer.byteLength(body, 'utf8');
+      if (bodyBytes > MAX_SKILL_BODY_BYTES) throw new Error('SKILL_BODY_TOO_LARGE');
+      logger.debug(
+        { userId: scope.userId, appId: scope.appId, skillId: skill.id, skillVersion: skill.version, bodyBytes },
+        'Agent Skill body loaded',
+      );
+      return { ...metadataFrom(skill), body };
+    } catch (error) {
+      logger.warn(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          skillId: id,
+          skillVersion: version,
+          errorCode: logErrorCode(error, 'AGENT_SKILL_LOAD_FAILED'),
+        },
+        'Agent Skill body load failed',
+      );
+      throw error;
+    }
   }
 
   private async pluginIndex(scope: Scope): Promise<SkillIndex> {

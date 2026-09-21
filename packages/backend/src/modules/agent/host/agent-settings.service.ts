@@ -187,15 +187,28 @@ export class AgentSettingsService {
       },
       expiresAt: now + HARD_LIMIT_CONFIRMATION_TTL_SECONDS,
     };
-    await this.confirmations.deleteExpired(now);
-    await this.confirmations.save({
-      id: preview.confirmationId,
-      userId,
-      expectedRevision: current.revision,
-      proposed,
-      createdAt: now,
-      expiresAt: preview.expiresAt,
-    });
+    try {
+      await this.confirmations.deleteExpired(now);
+      await this.confirmations.save({
+        id: preview.confirmationId,
+        userId,
+        expectedRevision: current.revision,
+        proposed,
+        createdAt: now,
+        expiresAt: preview.expiresAt,
+      });
+    } catch (error) {
+      logger.error(
+        {
+          userId,
+          confirmationId: preview.confirmationId,
+          expectedRevision: current.revision,
+          errorCode: logErrorCode(error, 'AGENT_HARD_LIMIT_PREVIEW_PERSIST_FAILED'),
+        },
+        'Agent hard-limit preview persistence failed',
+      );
+      throw error;
+    }
     logger.info(
       {
         userId,
@@ -250,7 +263,21 @@ export class AgentSettingsService {
       );
       throw error;
     }
-    await this.confirmations.delete(userId, confirmationId);
+    try {
+      await this.confirmations.delete(userId, confirmationId);
+    } catch (error) {
+      logger.error(
+        {
+          userId,
+          confirmationId,
+          expectedRevision,
+          revision: record.revision,
+          errorCode: logErrorCode(error, 'AGENT_HARD_LIMIT_CONFIRMATION_CLEANUP_FAILED'),
+        },
+        'Agent hard-limit confirmation cleanup failed after commit',
+      );
+      throw error;
+    }
     logger.info(
       { userId, confirmationId, expectedRevision, revision: record.revision },
       'Agent hard-limit change committed',
