@@ -842,14 +842,17 @@ Frontend 记录：
 Backend 记录：
 
 - Run create/input/interrupt/cancel/delete 与 durable state transition；Conversation create/rename/delete、Plan durable update、Approval resolve/fail-closed；
+- Settings patch/default initialization、hard-limit preview/confirm 与 CAS commit failure；
 - App enable/disable/resume/health transition 与 App state CAS commit failure；
+- Skill signed index build/search/read；索引失败记录安全 `errorCode`，不得记录 search query 或 Skill 正文；
 - Tool proposal inspection、policy decision、lease acquire/renew/release、mutation quarantine/reconciliation；
 - capability allow/deny 及 deny reason；
 - Provider create/update/remove、model discovery/test/dispatch，以及 persisted change 后的 Host refresh failure；
 - MCP integration create/update/remove/refresh/retry；
 - Plugin stage/verify/install/upgrade/uninstall、drain、rollback、startup/runtime reconcile；
 - Subagent scheduler/participant dispatch、completion notification、mailbox/lease 异常；
-- Memory propose/review/import，以及 audit/hook 异常；
+- Memory propose/review/import，以及 audit/hook 异常；Skill index/search/load 与 signed Skill 解析异常；
+- Agent settings patch、hard-limit preview/confirm/default initialization 与 CAS commit failure；
 - Workspace commands、reconcile、cleanup；Workspace↔Artifact import/export/stream close 异常与其它 critical state transition failures。
 
 关键分发链的日志必须能用稳定 ID 串联一次失败：优先携带 `userId/appId/runId/runtimeId/workId/toolCallId/toolName/integrationId/stageId/delegationId` 中实际存在的字段，以及安全的 `errorCode/state/version/generation/count`。高频成功路径使用 `debug`，重要生命周期完成使用 `info`，可恢复/降级异常使用 `warn`，durable commit、rollback、quarantine 等完整性失败使用 `error`。不得为了“更详细”写入 prompt/message、credential、Tool command payload 或其它敏感正文。

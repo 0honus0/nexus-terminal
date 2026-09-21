@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import { lexicalIndexTokens, lexicalQueryTerms, normalizeLexicalSource } from '../../../platform/search/lexical-search';
 import type { Scope } from '../agent.types';
 import type { PluginSkillBundle, PluginSkillSourcePort } from '../host/plugin-skill-source.port';
@@ -300,7 +301,12 @@ export class SkillRegistry {
       throw new Error('VALIDATION_FAILED');
     }
     if (!query.trim() || Buffer.byteLength(query, 'utf8') > 2048) throw new Error('VALIDATION_FAILED');
-    return rankSearch(await this.pluginIndex(scope), query, limit);
+    const results = rankSearch(await this.pluginIndex(scope), query, limit);
+    logger.debug(
+      { userId: scope.userId, appId: scope.appId, limit, resultCount: results.length },
+      'Agent Skill search completed',
+    );
+    return results;
   }
 
   async load(scope: Scope, id: string, version: string): Promise<SkillBody> {
@@ -310,28 +316,58 @@ export class SkillRegistry {
     const actualHash = createHash('sha256').update(skill.content, 'utf8').digest('hex');
     if (actualHash !== skill.hash) throw new Error('PLUGIN_SKILL_CHANGED');
     const body = skill.content.slice(skill.bodyOffset);
-    if (Buffer.byteLength(body, 'utf8') > MAX_SKILL_BODY_BYTES) throw new Error('SKILL_BODY_TOO_LARGE');
+    const bodyBytes = Buffer.byteLength(body, 'utf8');
+    if (bodyBytes > MAX_SKILL_BODY_BYTES) throw new Error('SKILL_BODY_TOO_LARGE');
+    logger.debug(
+      { userId: scope.userId, appId: scope.appId, skillId: skill.id, skillVersion: skill.version, bodyBytes },
+      'Agent Skill body loaded',
+    );
     return { ...metadataFrom(skill), body };
   }
 
   private async pluginIndex(scope: Scope): Promise<SkillIndex> {
     const byId = new Map<string, IndexedSkill>();
     const postings = new Map<string, Set<string>>();
-    const bundle = await this.pluginSkills?.load(scope);
-    if (!bundle) return { byId, postings };
-    for (const document of bundle.documents) {
-      const skill = parseSkill(document.content, document.path, document.sha256, bundle);
-      if (byId.has(skill.id)) throw new Error(`Duplicate signed Skill id: ${skill.id}`);
-      byId.set(skill.id, skill);
-      for (const token of lexicalIndexTokens(`${skill.id} ${skill.name} ${skill.description}`)) {
-        let ids = postings.get(token);
-        if (!ids) {
-          ids = new Set<string>();
-          postings.set(token, ids);
+    let bundle: PluginSkillBundle | null | undefined;
+    try {
+      bundle = await this.pluginSkills?.load(scope);
+      if (!bundle) return { byId, postings };
+      for (const document of bundle.documents) {
+        const skill = parseSkill(document.content, document.path, document.sha256, bundle);
+        if (byId.has(skill.id)) throw new Error(`Duplicate signed Skill id: ${skill.id}`);
+        byId.set(skill.id, skill);
+        for (const token of lexicalIndexTokens(`${skill.id} ${skill.name} ${skill.description}`)) {
+          let ids = postings.get(token);
+          if (!ids) {
+            ids = new Set<string>();
+            postings.set(token, ids);
+          }
+          ids.add(skill.id);
         }
-        ids.add(skill.id);
       }
+      logger.debug(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          pluginVersion: bundle.version,
+          documentCount: bundle.documents.length,
+          skillCount: byId.size,
+        },
+        'Agent Skill index built',
+      );
+      return { byId, postings };
+    } catch (error) {
+      logger.warn(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          pluginVersion: bundle?.version ?? null,
+          documentCount: bundle?.documents.length ?? null,
+          errorCode: logErrorCode(error, 'AGENT_SKILL_INDEX_FAILED'),
+        },
+        'Agent Skill index build failed',
+      );
+      throw error;
     }
-    return { byId, postings };
   }
 }

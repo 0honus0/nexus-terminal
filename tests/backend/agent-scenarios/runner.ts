@@ -19942,6 +19942,8 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     ['modules/agent/runtime/collaboration/subagent.service.ts', 'Agent Subagent delegation created'],
     ['modules/agent/runtime/collaboration/mailbox.service.ts', 'Agent Subagent mailbox message sent'],
     ['modules/agent/runtime/recovery/workspace-checkpoint.service.ts', 'Agent Workspace checkpoint restored'],
+    ['modules/agent/host/agent-settings.service.ts', 'Agent settings patch commit failed'],
+    ['modules/agent/ai/skill-registry.ts', 'Agent Skill index build failed'],
   ] as const;
   for (const [relative, message] of diagnosticTargets) {
     const source = fs.readFileSync(path.join(backendSourceRoot, relative), 'utf8');

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import {
   createDefaultAgentSettings,
   normalizeRequestedSettings,
@@ -136,8 +137,28 @@ export class AgentSettingsService {
     if (current.revision !== expectedRevision) throw new Error('SETTINGS_VERSION_CONFLICT');
     const patch = settingsPatch(rawPatch, current.settings);
     const settings = normalizeRequestedSettings(patch);
-    const record = await this.repository.compareAndSet(userId, expectedRevision, settings, this.clock.nowUnixSeconds());
-    return this.toView(record);
+    const patchedSections = isRecord(rawPatch)
+      ? patchableSections.filter((section) => Object.prototype.hasOwnProperty.call(rawPatch, section))
+      : [];
+    try {
+      const record = await this.repository.compareAndSet(
+        userId,
+        expectedRevision,
+        settings,
+        this.clock.nowUnixSeconds(),
+      );
+      logger.info(
+        { userId, expectedRevision, revision: record.revision, patchedSections },
+        'Agent settings patch committed',
+      );
+      return this.toView(record);
+    } catch (error) {
+      logger.error(
+        { userId, expectedRevision, patchedSections, errorCode: logErrorCode(error, 'AGENT_SETTINGS_COMMIT_FAILED') },
+        'Agent settings patch commit failed',
+      );
+      throw error;
+    }
   }
 
   async previewHardLimits(userId: number, raw: unknown, expectedRevision: number): Promise<HardLimitPreview> {
@@ -175,6 +196,18 @@ export class AgentSettingsService {
       createdAt: now,
       expiresAt: preview.expiresAt,
     });
+    logger.info(
+      {
+        userId,
+        confirmationId: preview.confirmationId,
+        expectedRevision: current.revision,
+        changeCount: changes.length,
+        hasIncrease: preview.impact.hasIncrease,
+        hasDecrease: preview.impact.hasDecrease,
+        expiresAt: preview.expiresAt,
+      },
+      'Agent hard-limit change preview created',
+    );
     return preview;
   }
 
@@ -202,8 +235,26 @@ export class AgentSettingsService {
       throw new Error('HARD_LIMIT_BELOW_USAGE');
     }
     const requested = normalizeRequestedSettings({ ...current.settings, hardLimits: proposed });
-    const record = await this.repository.compareAndSet(userId, expectedRevision, requested, now);
+    let record: AgentSettingsRecord;
+    try {
+      record = await this.repository.compareAndSet(userId, expectedRevision, requested, now);
+    } catch (error) {
+      logger.error(
+        {
+          userId,
+          confirmationId,
+          expectedRevision,
+          errorCode: logErrorCode(error, 'AGENT_HARD_LIMIT_COMMIT_FAILED'),
+        },
+        'Agent hard-limit change commit failed',
+      );
+      throw error;
+    }
     await this.confirmations.delete(userId, confirmationId);
+    logger.info(
+      { userId, confirmationId, expectedRevision, revision: record.revision },
+      'Agent hard-limit change committed',
+    );
     return this.toView(record);
   }
 
@@ -220,6 +271,7 @@ export class AgentSettingsService {
     await this.repository.insertDefault(record);
     const inserted = await this.repository.get(userId);
     if (!inserted) throw new Error('Agent settings disappeared after initialization.');
+    logger.info({ userId, revision: inserted.revision }, 'Agent settings defaults initialized');
     return { ...inserted, settings: normalizeRequestedSettings(inserted.settings) };
   }
 
