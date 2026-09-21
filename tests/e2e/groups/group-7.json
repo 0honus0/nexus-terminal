@@ -18,7 +18,6 @@
     "specs/ui/ip-whitelist-settings.spec.ts",
     "specs/ui/protected-navigation.spec.ts",
     "specs/ui/ssh-key-management.spec.ts",
-    "specs/websocket/authenticated-session.spec.ts",
     "specs/ssh/progress-display-baseline.spec.ts",
     "specs/ssh/suspend-resume.spec.ts"
   ]
