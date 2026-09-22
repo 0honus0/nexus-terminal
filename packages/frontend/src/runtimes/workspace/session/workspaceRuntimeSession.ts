@@ -1,4 +1,5 @@
 import type {
+  WorkspaceConnectRequestDto,
   WorkspaceSuspendAutoTerminatedEventDto,
   WorkspaceSuspendResumeRequestDto,
 } from '@nexus-terminal/protocol/workspace';
@@ -89,7 +90,7 @@ export class WorkspaceRuntimeSession {
         );
         this.statusMessage.value = message;
       }),
-      this.socket.on<{ message: string }>('terminal.error', ({ message }) => {
+      this.socket.on('terminal.error', ({ message }) => {
         logger.debug(
           {
             workspaceId: this.id,
@@ -122,7 +123,7 @@ export class WorkspaceRuntimeSession {
         this.markCapabilitiesDisconnected();
         this.state.value = 'disconnected';
       }),
-      this.socket.on<{ operation: string; message: string }>('protocol.error', ({ operation, message }) => {
+      this.socket.on('protocol.error', ({ operation, message }) => {
         logger.debug(
           {
             workspaceId: this.id,
@@ -175,11 +176,12 @@ export class WorkspaceRuntimeSession {
       'Workspace connection attempt started',
     );
     try {
-      const result = await this.socket.request<WorkspaceConnectResult>('workspace.connect', {
+      const request: WorkspaceConnectRequestDto = {
         workspaceId: this.id,
         connectionId: this.connection.id,
         ...(this.lastViewport ? { viewport: this.lastViewport } : {}),
-      });
+      };
+      const result = await this.socket.request('workspace.connect', request);
       if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
         throw new Error('Workspace binary protocol version mismatch.');
       }

@@ -1,31 +1,12 @@
-export interface RemoteFileMetadata {
-  size: number;
-  uid: number;
-  gid: number;
-  mode: number;
-  accessedAt: number;
-  modifiedAt: number;
-  isFile: boolean;
-  isDirectory: boolean;
-  isSymbolicLink: boolean;
-}
-export interface RemoteFileEntry {
-  name: string;
-  path: string;
-  longName?: string;
-  metadata: RemoteFileMetadata;
-}
-export interface FileSearchEntry extends RemoteFileEntry {
-  relativePath: string;
-}
-export interface DirectoryListing {
-  path: string;
-  entries: RemoteFileEntry[];
-}
-export interface FileSearchResult {
-  entries: FileSearchEntry[];
-  truncated: boolean;
-}
+import type { WorkspaceRemoteFileEntryDto } from '@nexus-terminal/protocol/workspace';
+
+export type RemoteFileEntry = WorkspaceRemoteFileEntryDto;
+export type {
+  WorkspaceFileSearchEntryDto as FileSearchEntry,
+  WorkspaceFilesystemListResponseDto as DirectoryListing,
+  WorkspaceFilesystemSearchResponseDto as FileSearchResult,
+  WorkspaceRemoteFileMetadataDto as RemoteFileMetadata,
+} from '@nexus-terminal/protocol/workspace';
 
 export interface ResolvedRemotePath {
   requestedPath: string;

@@ -1,5 +1,6 @@
 import http from 'node:http';
 import type { Socket } from 'node:net';
+import type { WorkspaceUploadStreamQueryDto } from '@nexus-terminal/protocol/workspace';
 import express, { type Request, type RequestHandler, type Response } from 'express';
 import ipaddr from 'ipaddr.js';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
@@ -315,9 +316,10 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         rejectUpgrade(socket, 400, 'Bad Request');
         return;
       }
+      const uploadRequest: WorkspaceUploadStreamQueryDto = { workspaceId, uploadId, size };
       wss.handleUpgrade(request, socket, head, (ws) => {
         runtimePerformanceMetrics.webSocketUpgradeAccepted();
-        onUploadConnection(ws, userId, { workspaceId, uploadId, size });
+        onUploadConnection(ws, userId, uploadRequest);
       });
       return;
     }

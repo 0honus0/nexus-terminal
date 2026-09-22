@@ -1,3 +1,5 @@
+import type { WorkspaceArchiveErrorCodeDto } from '@nexus-terminal/protocol/workspace';
+
 export type TransferKind = 'upload' | 'copy' | 'move' | 'compress' | 'decompress' | 'transfer';
 export type TransferStatus =
   | 'queued'
@@ -11,13 +13,7 @@ export type TransferStatus =
   | 'partial'
   | 'error';
 
-export type ArchiveTransferErrorCode =
-  | 'PASSWORD_REQUIRED'
-  | 'INVALID_PASSWORD'
-  | 'PASSWORD_TOO_LONG'
-  | 'INVALID_PASSWORD_FORMAT'
-  | 'COMMAND_NOT_FOUND'
-  | 'UNSUPPORTED_FORMAT';
+export type ArchiveTransferErrorCode = WorkspaceArchiveErrorCodeDto;
 
 export interface TransferLocation {
   scopeId: string;

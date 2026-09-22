@@ -1,3 +1,4 @@
+import type { WorkspaceUploadStreamQueryDto } from '@nexus-terminal/protocol/workspace';
 import WebSocket, { type RawData } from 'ws';
 import { logger } from '../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
@@ -8,12 +9,6 @@ const MAX_UPLOAD_CHUNK_BYTES = 1024 * 1024;
 const SERVER_QUEUE_HIGH_WATER_BYTES = 8 * 1024 * 1024;
 const SERVER_QUEUE_LOW_WATER_BYTES = 2 * 1024 * 1024;
 
-export interface UploadStreamRequest {
-  workspaceId: string;
-  uploadId: string;
-  size: number;
-}
-
 /**
  * Clean upload transport. One socket carries one upload; every binary WebSocket message is one raw
  * file chunk. WebSocket message order defines chunk order and the declared total size determines the
@@ -22,7 +17,7 @@ export interface UploadStreamRequest {
 export const bindUploadStream = (
   socket: WebSocket,
   userId: number,
-  request: UploadStreamRequest,
+  request: WorkspaceUploadStreamQueryDto,
   dependencies: { workspace: WorkspaceService; operations: WorkspaceOperationsService },
 ): boolean => {
   const workspace = dependencies.workspace.getSession(request.workspaceId);

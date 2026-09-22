@@ -1,8 +1,7 @@
 import type {
-  WorkspaceSuspendHistoryPreviousResponseDto,
-  WorkspaceSuspendHistoryResetResponseDto,
   WorkspaceSuspendMarkRequestDto,
   WorkspaceSuspendUnmarkRequestDto,
+  WorkspaceUploadStreamQueryDto,
 } from '@nexus-terminal/protocol/workspace';
 import { apiErrorStatus, httpClient } from '@/client/http';
 import { logger } from '@/client/logging/logger';
@@ -29,73 +28,11 @@ import type {
   TransferChannel,
   TransferEvent,
   TransferTask,
-  ArchiveTransferErrorCode,
   UploadPrepareRequest,
   UploadRequest,
 } from '@/features/transfers/public';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
 
-interface TextReadResponse {
-  path: string;
-  content: string;
-  encoding: string;
-}
-interface BinaryReadResponse {
-  path: string;
-}
-interface RealpathResponse {
-  requestedPath: string;
-  absolutePath: string;
-  targetType: 'directory' | 'file' | 'other';
-}
-interface DirectoryChangeQueuedEvent {
-  requestId: string;
-  path: string;
-  waitingForPrompt: boolean;
-}
-interface DirectoryChangedEvent {
-  requestId: string;
-  path: string;
-}
-interface DirectoryChangeFailedEvent {
-  requestId: string;
-  message: string;
-}
-interface UploadEventWire {
-  type: 'ready' | 'conflict' | 'skipped' | 'progress' | 'completed' | 'cancelled' | 'failed';
-  uploadId?: string;
-  destinationPath?: string;
-  filename?: string;
-  chunkIndex?: number;
-  bytesWritten?: number;
-  totalSize?: number;
-  progress?: number;
-  message?: string;
-}
-interface CopyMoveEventWire {
-  type: 'progress' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
-  requestId: string;
-  transferredBytes?: number;
-  totalBytes?: number;
-  completedFiles?: number;
-  totalFiles?: number;
-  totalKnown?: boolean;
-  currentFile?: string;
-  mode?: 'copy' | 'move';
-  message?: string;
-}
-interface ArchiveEventWire {
-  type: 'progress' | 'completed' | 'failed' | 'cancelled';
-  operation: 'compress' | 'decompress';
-  requestId: string;
-  fileCount?: number;
-  totalFiles?: number;
-  percent?: number;
-  currentFile?: string;
-  message?: string;
-  code?: ArchiveTransferErrorCode;
-  warning?: string;
-}
 
 interface WorkspaceTerminalGate {
   canSend(): boolean;
@@ -153,7 +90,7 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
     },
     onError(handler) {
       const stopTransport = socket.onError(handler);
-      const stopTerminal = socket.on<{ message: string }>('terminal.error', (payload) => handler(payload.message));
+      const stopTerminal = socket.on('terminal.error', (payload) => handler(payload.message));
       return () => {
         stopTransport();
         stopTerminal();
@@ -169,7 +106,7 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       if (!previousOutputAvailable) return null;
       if (historyLoad) return historyLoad;
       const task = socket
-        .requestBinary<WorkspaceSuspendHistoryPreviousResponseDto>('suspend.history.previous', {})
+        .requestBinary('suspend.history.previous', {})
         .then(({ data: page, bytes }) => {
           previousOutputAvailable = page.hasMore;
           return {
@@ -197,7 +134,7 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
   search: (path, query): Promise<FileSearchResult> => socket.request('filesystem.search', { path, query }),
   stat: (path): Promise<RemoteFileEntry> => socket.request('filesystem.stat', { path }),
   async readText(path, encoding): Promise<RemoteTextFile> {
-    const { data: result, bytes } = await socket.requestBinary<TextReadResponse>('filesystem.readText', {
+    const { data: result, bytes } = await socket.requestBinary('filesystem.readText', {
       path,
       ...(encoding ? { encoding } : {}),
     });
@@ -230,7 +167,7 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
     await socket.request('filesystem.chmod', { path, mode });
   },
   async realpath(path): Promise<ResolvedRemotePath> {
-    const resolved = await socket.request<RealpathResponse>('filesystem.realpath', { path });
+    const resolved = await socket.request('filesystem.realpath', { path });
     return { requestedPath: resolved.requestedPath, path: resolved.absolutePath, targetType: resolved.targetType };
   },
 });
@@ -242,7 +179,7 @@ export const createTerminalDirectoryPort = (
   workspaceId?: string,
   connectionId?: number,
 ): TerminalDirectoryPort => ({
-  readCurrentDirectory: () => socket.request<string>('terminal.currentDirectory'),
+  readCurrentDirectory: () => socket.request('terminal.currentDirectory', {}),
   changeDirectory(path, options) {
     const requestId = crypto.randomUUID();
     return new Promise<{ path: string }>((resolve, reject) => {
@@ -272,14 +209,14 @@ export const createTerminalDirectoryPort = (
         reject(cause instanceof Error ? cause : new Error(String(cause)));
       };
 
-      stopQueued = socket.on<DirectoryChangeQueuedEvent>('terminal.directoryChangeQueued', (event) => {
+      stopQueued = socket.on('terminal.directoryChangeQueued', (event) => {
         if (event.requestId !== requestId) return;
         options?.onQueued?.({ path: event.path, waitingForPrompt: event.waitingForPrompt });
       });
-      stopChanged = socket.on<DirectoryChangedEvent>('terminal.directoryChanged', (event) => {
+      stopChanged = socket.on('terminal.directoryChanged', (event) => {
         if (event.requestId === requestId) succeed({ path: event.path });
       });
-      stopFailed = socket.on<DirectoryChangeFailedEvent>('terminal.directoryChangeFailed', (event) => {
+      stopFailed = socket.on('terminal.directoryChangeFailed', (event) => {
         if (event.requestId !== requestId) return;
         logger.debug(
           {
@@ -299,7 +236,7 @@ export const createTerminalDirectoryPort = (
         DIRECTORY_CHANGE_COMPLETION_TIMEOUT_MS,
       );
       void socket
-        .requestWithId<{ queued: true }>('terminal.changeDirectory', requestId, { path })
+        .requestWithId('terminal.changeDirectory', requestId, { path })
         .catch((cause) => fail(cause));
     });
   },
@@ -376,13 +313,13 @@ export const createFilePreviewSource = (socket: WorkspaceSocket): FilePreviewSou
   async read(path, options) {
     const signal = options?.signal;
     if (options?.maxBytes !== undefined) {
-      const entry = await racePreviewAbort(socket.request<RemoteFileEntry>('filesystem.stat', { path }), signal);
+      const entry = await racePreviewAbort(socket.request('filesystem.stat', { path }), signal);
       if (entry.metadata.size > options.maxBytes) {
         return { tooLarge: true, actualBytes: entry.metadata.size, maxBytes: options.maxBytes };
       }
     }
     const result = await racePreviewAbort(
-      socket.requestBinary<BinaryReadResponse>('filesystem.readBinary', { path }),
+      socket.requestBinary('filesystem.readBinary', { path }),
       signal,
     );
     const bytes = result.bytes;
@@ -480,7 +417,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     emit({ type: 'error', id: request.id, message });
     pumpUploadQueue();
     if (workspaceAvailable && socket.connected) {
-      void socket.request<boolean>('upload.abort', { uploadId: request.id, message }).catch(() => undefined);
+      void socket.request('upload.abort', { uploadId: request.id, message }).catch(() => undefined);
     }
   };
 
@@ -598,7 +535,16 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
   }
 
   const streamUpload = async (request: UploadRequest): Promise<void> => {
-    const params = new URLSearchParams({ workspaceId, uploadId: request.id, size: String(request.file.size) });
+    const streamRequest: WorkspaceUploadStreamQueryDto = {
+      workspaceId,
+      uploadId: request.id,
+      size: request.file.size,
+    };
+    const params = new URLSearchParams({
+      workspaceId: streamRequest.workspaceId,
+      uploadId: streamRequest.uploadId,
+      size: String(streamRequest.size),
+    });
     const uploadSocket = new WebSocket(createWebSocketUrl(`/ws/uploads?${params}`));
     logger.debug({ workspaceId, uploadId: request.id, size: request.file.size }, 'Workspace upload WebSocket opening');
     uploadSockets.set(request.id, uploadSocket);
@@ -662,7 +608,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     }
   };
 
-  const stopUpload = socket.on<UploadEventWire>('transfer.upload', (event) => {
+  const stopUpload = socket.on('transfer.upload', (event) => {
     const id = event.uploadId;
     if (!id) return;
     if (event.type === 'ready') {
@@ -717,7 +663,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     }
   });
 
-  const stopCopyMove = socket.on<CopyMoveEventWire>('transfer.copyMove', (event) => {
+  const stopCopyMove = socket.on('transfer.copyMove', (event) => {
     const id = event.requestId;
     if (event.type === 'progress') {
       const progress =
@@ -757,7 +703,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     }
   });
 
-  const stopArchive = socket.on<ArchiveEventWire>('transfer.archive', (event) => {
+  const stopArchive = socket.on('transfer.archive', (event) => {
     const id = event.requestId;
     if (event.type === 'progress') {
       const progress =
@@ -865,14 +811,14 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       pumpUploadQueue();
       if (!workspaceAvailable || !socket.connected) return hadUpload;
       if (hadUpload) {
-        const accepted = await socket.request<boolean>('upload.cancel', { uploadId: id }).catch(() => false);
+        const accepted = await socket.request('upload.cancel', { uploadId: id }).catch(() => false);
         return hadUpload || accepted;
       }
       if (remoteOperation === 'copy' || remoteOperation === 'move') {
-        return socket.request<boolean>('transfer.cancel', { taskId: id }).catch(() => false);
+        return socket.request('transfer.cancel', { taskId: id }).catch(() => false);
       }
       if (remoteOperation === 'compress' || remoteOperation === 'decompress') {
-        return socket.request<boolean>('transfer.cancelArchive', { taskId: id }).catch(() => false);
+        return socket.request('transfer.cancelArchive', { taskId: id }).catch(() => false);
       }
       return false;
     },
@@ -944,8 +890,8 @@ export const createStatusChannel = (
   connectionId?: number,
 ): StatusChannel => ({
   subscribe(handler, error) {
-    const stopSample = socket.on<ServerStatusSample>('status.sample', handler);
-    const stopError = socket.on<{ message: string }>('status.error', (payload) => {
+    const stopSample = socket.on('status.sample', handler);
+    const stopError = socket.on('status.error', (payload) => {
       logger.debug(
         { workspaceId, connectionId, reason: payload.message, failureKind: 'status_monitor_failed' },
         'Workspace status monitor error event',
@@ -957,12 +903,16 @@ export const createStatusChannel = (
       stopError();
     };
   },
-  start: () => socket.request('status.start'),
-  stop: () => socket.request('status.stop'),
+  async start() {
+    await socket.request('status.start', {});
+  },
+  async stop() {
+    await socket.request('status.stop', {});
+  },
 });
 
 export const createDockerChannel = (socket: WorkspaceSocket): DockerChannel => ({
-  getStatus: (): Promise<DockerStatus> => socket.request('docker.status'),
+  getStatus: (): Promise<DockerStatus> => socket.request('docker.status', {}),
   async command(containerId: string, command: DockerCommand) {
     await socket.request('docker.command', { containerId, command });
   },

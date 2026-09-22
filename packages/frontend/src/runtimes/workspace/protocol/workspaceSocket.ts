@@ -1,9 +1,9 @@
 import type {
+  WorkspaceEventMapDto,
   WorkspaceProtocolEventDto,
   WorkspaceProtocolResponseDto,
-  WorkspaceSuspendEventMapDto,
-  WorkspaceSuspendRequestMapDto,
-  WorkspaceSuspendResponseMapDto,
+  WorkspaceRequestMapDto,
+  WorkspaceResponseMapDto,
 } from '@nexus-terminal/protocol/workspace';
 import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
@@ -16,8 +16,10 @@ type ProtocolMessage = ProtocolResponse | ProtocolEvent;
 type EventHandler<T = unknown> = (payload: T) => void;
 type BinaryHandler = (data: Uint8Array) => void;
 
+const isProtocolRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
 const protocolRecord = (value: unknown): Record<string, unknown> | null =>
-  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  isProtocolRecord(value) ? value : null;
 
 const decodeProtocolMessage = (raw: string): ProtocolMessage => {
   const parsed = protocolRecord(JSON.parse(raw) as unknown);
@@ -253,19 +255,29 @@ export class WorkspaceSocket {
     }
   }
 
-  request<K extends keyof WorkspaceSuspendRequestMapDto>(
+  request<K extends keyof WorkspaceRequestMapDto>(
     type: K,
-    payload: WorkspaceSuspendRequestMapDto[K],
-  ): Promise<WorkspaceSuspendResponseMapDto[K]>;
+    payload: WorkspaceRequestMapDto[K],
+  ): Promise<WorkspaceResponseMapDto[K]>;
   request<T = unknown>(type: string, payload?: object): Promise<T>;
   request<T = unknown>(type: string, payload: object = {}): Promise<T> {
     return this.requestWithId<T>(type, crypto.randomUUID(), payload);
   }
 
+  requestWithId<K extends keyof WorkspaceRequestMapDto>(
+    type: K,
+    requestId: string,
+    payload: WorkspaceRequestMapDto[K],
+  ): Promise<WorkspaceResponseMapDto[K]>;
+  requestWithId<T = unknown>(type: string, requestId: string, payload?: object): Promise<T>;
   async requestWithId<T = unknown>(type: string, requestId: string, payload: object = {}): Promise<T> {
     return this.requestInternal<T>(type, requestId, payload, false) as Promise<T>;
   }
 
+  requestBinary<K extends keyof WorkspaceRequestMapDto>(
+    type: K,
+    payload: WorkspaceRequestMapDto[K],
+  ): Promise<{ data: WorkspaceResponseMapDto[K]; bytes: Uint8Array }>;
   requestBinary<T = unknown>(
     type: string,
     payload: object = {},
@@ -337,6 +349,8 @@ export class WorkspaceSocket {
     });
   }
 
+  send<K extends keyof WorkspaceRequestMapDto>(type: K, payload: WorkspaceRequestMapDto[K]): Promise<void>;
+  send(type: string, payload?: object): Promise<void>;
   async send(type: string, payload: object = {}): Promise<void> {
     await this.open();
     if (!HIGH_FREQUENCY_OPERATIONS.has(type))
@@ -345,6 +359,8 @@ export class WorkspaceSocket {
   }
 
   /** Send only through the currently open Workspace transport; never opens/reopens the socket. */
+  sendConnected<K extends keyof WorkspaceRequestMapDto>(type: K, payload: WorkspaceRequestMapDto[K]): boolean;
+  sendConnected(type: string, payload?: object): boolean;
   sendConnected(type: string, payload: object = {}): boolean {
     if (!this.connected) return false;
     try {
@@ -355,9 +371,9 @@ export class WorkspaceSocket {
     }
   }
 
-  on<K extends keyof WorkspaceSuspendEventMapDto>(
+  on<K extends keyof WorkspaceEventMapDto>(
     type: K,
-    handler: EventHandler<WorkspaceSuspendEventMapDto[K]>,
+    handler: EventHandler<WorkspaceEventMapDto[K]>,
   ): () => void;
   on<T = unknown>(type: string, handler: EventHandler<T>): () => void;
   on<T = unknown>(type: string, handler: EventHandler<T>): () => void {

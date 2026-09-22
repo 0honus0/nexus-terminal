@@ -1,3 +1,7 @@
+import type {
+  WorkspaceConnectResponseDto,
+  WorkspaceSuspendResumeResponseDto,
+} from '@nexus-terminal/protocol/workspace';
 import type { Connection } from '@/features/connections/public';
 
 export type WorkspaceLifecycleState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
@@ -13,14 +17,5 @@ export interface WorkspaceDescriptor {
   createdAt: number;
 }
 
-export interface WorkspaceConnectResult {
-  workspaceId: string;
-  connectionId: number;
-  connectionName: string;
-  binaryProtocolVersion: number;
-  lastConnectedAt?: number;
-  resumedFrom?: string;
-  historyAvailable?: boolean;
-  ownershipGeneration?: number;
-  ownershipLeaseExpiresAt?: number;
-}
+type WorkspaceResumeFields = Omit<WorkspaceSuspendResumeResponseDto, keyof WorkspaceConnectResponseDto>;
+export type WorkspaceConnectResult = WorkspaceConnectResponseDto & Partial<WorkspaceResumeFields>;

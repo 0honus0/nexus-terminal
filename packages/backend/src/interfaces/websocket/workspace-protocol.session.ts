@@ -1,9 +1,37 @@
 import { randomUUID } from 'node:crypto';
 import type { SuspendedSessionDto } from '@nexus-terminal/protocol/ssh-suspend';
 import type {
+  WorkspaceConnectRequestDto,
+  WorkspaceConnectResponseDto,
+  WorkspaceArchiveCompressRequestDto,
+  WorkspaceArchiveDecompressRequestDto,
+  WorkspaceArchiveEventDto,
+  WorkspaceCopyMoveEventDto,
+  WorkspaceCopyMoveRequestDto,
+  WorkspaceDockerCommandDto,
+  WorkspaceDockerCommandRequestDto,
+  WorkspaceDockerStatsDto,
+  WorkspaceDockerStatsRequestDto,
+  WorkspaceDockerStatusDto,
+  WorkspaceEventMapDto,
+  WorkspaceFileSearchEntryDto,
+  WorkspaceFilesystemChmodRequestDto,
+  WorkspaceFilesystemCreateFileRequestDto,
+  WorkspaceFilesystemListResponseDto,
+  WorkspaceFilesystemPathRequestDto,
+  WorkspaceFilesystemReadBinaryResponseDto,
+  WorkspaceFilesystemReadTextRequestDto,
+  WorkspaceFilesystemReadTextResponseDto,
+  WorkspaceFilesystemRealpathResponseDto,
+  WorkspaceFilesystemRemoveRequestDto,
+  WorkspaceFilesystemRenameRequestDto,
+  WorkspaceFilesystemSearchRequestDto,
+  WorkspaceFilesystemSearchResponseDto,
+  WorkspaceFilesystemWriteTextRequestDto,
   WorkspaceProtocolResponseDto,
+  WorkspaceRemoteFileEntryDto,
+  WorkspaceRemoteFileMetadataDto,
   WorkspaceSuspendAutoTerminatedEventDto,
-  WorkspaceSuspendEventMapDto,
   WorkspaceSuspendHistoryPreviousResponseDto,
   WorkspaceSuspendHistoryResetResponseDto,
   WorkspaceSuspendListResponseDto,
@@ -15,6 +43,20 @@ import type {
   WorkspaceSuspendResumeResponseDto,
   WorkspaceSuspendRevokedEventDto,
   WorkspaceSuspendSessionRequestDto,
+  WorkspaceTerminalChangeDirectoryRequestDto,
+  WorkspaceTerminalChangeDirectoryResponseDto,
+  WorkspaceTerminalCurrentDirectoryResponseDto,
+  WorkspaceTerminalInputRequestDto,
+  WorkspaceTerminalResizeRequestDto,
+  WorkspaceOperationStartedResponseDto,
+  WorkspaceTaskCancelRequestDto,
+  WorkspaceUploadAbortRequestDto,
+  WorkspaceUploadConflictPolicyDto,
+  WorkspaceUploadEventDto,
+  WorkspaceUploadPrepareRequestDto,
+  WorkspaceUploadPrepareResponseDto,
+  WorkspaceUploadSessionRequestDto,
+  WorkspaceUploadStartRequestDto,
 } from '@nexus-terminal/protocol/workspace';
 import WebSocket, { type RawData } from 'ws';
 import type { WorkspaceCommandService } from '../../modules/workspace/services/workspace-command.service';
@@ -31,11 +73,20 @@ import type { SshSuspendService } from '../../modules/ssh-suspend/ssh-suspend.se
 import { logger } from '../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import type {
-  DockerCommand,
   DockerStats as PlatformDockerStats,
   DockerStatus as PlatformDockerStatus,
 } from '../../platform/docker/docker.port';
-import type { ArchiveFormat } from '../../platform/operations/archive/archive-operation.port';
+import type {
+  RemoteFileEntry as PlatformRemoteFileEntry,
+  RemoteFileSearchEntry as PlatformRemoteFileSearchEntry,
+} from '../../platform/filesystem/file-entry';
+import type { RemoteFileMetadata as PlatformRemoteFileMetadata } from '../../platform/filesystem/remote-filesystem';
+import type {
+  ArchiveEvent as PlatformArchiveEvent,
+  ArchiveFormat,
+} from '../../platform/operations/archive/archive-operation.port';
+import type { TransferEvent as PlatformTransferEvent } from '../../platform/operations/transfer/transfer-operation.port';
+import type { UploadEvent as PlatformUploadEvent } from '../../platform/operations/upload/upload-operation.port';
 import { TerminalStreamTransport } from './terminal-stream.transport';
 import {
   encodeWorkspaceBinaryFrame,
@@ -73,7 +124,7 @@ const singleBinaryChunk = async function* (value: Uint8Array): AsyncIterable<Uin
   if (value.byteLength) yield value;
 };
 
-const dockerStatsWire = (stats: PlatformDockerStats) => ({
+const dockerStatsWire = (stats: PlatformDockerStats): WorkspaceDockerStatsDto => ({
   id: stats.ID,
   name: stats.Name,
   cpuPercent: stats.CPUPerc,
@@ -84,7 +135,7 @@ const dockerStatsWire = (stats: PlatformDockerStats) => ({
   pids: stats.PIDs,
 });
 
-const dockerStatusWire = (status: PlatformDockerStatus) => ({
+const dockerStatusWire = (status: PlatformDockerStatus): WorkspaceDockerStatusDto => ({
   available: status.available,
   containers: status.containers.map((container) => ({
     id: container.id,
@@ -105,6 +156,137 @@ const dockerStatusWire = (status: PlatformDockerStatus) => ({
     stats: container.stats ? dockerStatsWire(container.stats) : null,
   })),
 });
+
+const remoteFileMetadataDto = (metadata: PlatformRemoteFileMetadata): WorkspaceRemoteFileMetadataDto => ({
+  size: metadata.size,
+  uid: metadata.uid,
+  gid: metadata.gid,
+  mode: metadata.mode,
+  accessedAt: metadata.accessedAt,
+  modifiedAt: metadata.modifiedAt,
+  isFile: metadata.isFile,
+  isDirectory: metadata.isDirectory,
+  isSymbolicLink: metadata.isSymbolicLink,
+});
+
+const remoteFileEntryDto = (entry: PlatformRemoteFileEntry): WorkspaceRemoteFileEntryDto => ({
+  name: entry.name,
+  path: entry.path,
+  ...(entry.longName === undefined ? {} : { longName: entry.longName }),
+  metadata: remoteFileMetadataDto(entry.metadata),
+});
+
+const fileSearchEntryDto = (entry: PlatformRemoteFileSearchEntry): WorkspaceFileSearchEntryDto => ({
+  ...remoteFileEntryDto(entry),
+  relativePath: entry.relativePath,
+});
+
+const uploadEventDto = (event: PlatformUploadEvent): WorkspaceUploadEventDto => {
+  switch (event.type) {
+    case 'ready':
+      return { type: event.type, uploadId: event.uploadId };
+    case 'conflict':
+      return {
+        type: event.type,
+        uploadId: event.uploadId,
+        destinationPath: event.destinationPath,
+        filename: event.filename,
+      };
+    case 'skipped':
+      return { type: event.type, uploadId: event.uploadId, destinationPath: event.destinationPath };
+    case 'progress':
+      return {
+        type: event.type,
+        uploadId: event.uploadId,
+        chunkIndex: event.chunkIndex,
+        bytesWritten: event.bytesWritten,
+        totalSize: event.totalSize,
+        progress: event.progress,
+      };
+    case 'completed':
+      return {
+        type: event.type,
+        uploadId: event.uploadId,
+        destinationPath: event.destinationPath,
+        item: remoteFileEntryDto(event.item),
+      };
+    case 'cancelled':
+      return { type: event.type, uploadId: event.uploadId };
+    case 'failed':
+      return {
+        type: event.type,
+        ...(event.uploadId === undefined ? {} : { uploadId: event.uploadId }),
+        message: event.message,
+      };
+  }
+};
+
+const copyMoveEventDto = (event: PlatformTransferEvent): WorkspaceCopyMoveEventDto => {
+  switch (event.type) {
+    case 'progress':
+      return {
+        type: event.type,
+        requestId: event.requestId,
+        transferredBytes: event.transferredBytes,
+        totalBytes: event.totalBytes,
+        completedFiles: event.completedFiles,
+        totalFiles: event.totalFiles,
+        totalKnown: event.totalKnown,
+        ...(event.currentFile === undefined ? {} : { currentFile: event.currentFile }),
+      };
+    case 'completed':
+      return {
+        type: event.type,
+        requestId: event.requestId,
+        mode: event.mode,
+        sourcePaths: event.sourcePaths,
+        destinationPath: event.destinationPath,
+        items: event.items.map(remoteFileEntryDto),
+        crossSession: event.crossSession,
+        ...(event.sourceOwnerId === undefined ? {} : { sourceOwnerId: event.sourceOwnerId }),
+      };
+    case 'failed':
+      return { type: event.type, requestId: event.requestId, mode: event.mode, message: event.message };
+    case 'cancelling':
+    case 'cancelled':
+      return { type: event.type, requestId: event.requestId };
+  }
+};
+
+const archiveEventDto = (event: PlatformArchiveEvent): WorkspaceArchiveEventDto => {
+  switch (event.type) {
+    case 'progress':
+      return {
+        type: event.type,
+        operation: event.operation,
+        requestId: event.requestId,
+        fileCount: event.fileCount,
+        ...(event.totalFiles === undefined ? {} : { totalFiles: event.totalFiles }),
+        ...(event.percent === undefined ? {} : { percent: event.percent }),
+        ...(event.currentFile === undefined ? {} : { currentFile: event.currentFile }),
+      };
+    case 'completed':
+      return {
+        type: event.type,
+        operation: event.operation,
+        requestId: event.requestId,
+        path: event.path,
+        ...(event.warning === undefined ? {} : { warning: event.warning }),
+      };
+    case 'failed':
+      return {
+        type: event.type,
+        operation: event.operation,
+        requestId: event.requestId,
+        message: event.message,
+        ...(event.details === undefined ? {} : { details: event.details }),
+        ...(event.code === undefined ? {} : { code: event.code }),
+        ...(event.commandNotFound === undefined ? {} : { commandNotFound: event.commandNotFound }),
+      };
+    case 'cancelled':
+      return { type: event.type, operation: event.operation, requestId: event.requestId };
+  }
+};
 
 const suspendedSessionDto = (session: ReturnType<SshSuspendService['list']>[number]): SuspendedSessionDto => ({
   id: session.suspendSessionId,
@@ -327,8 +509,11 @@ export class WorkspaceProtocolSession {
         return this.terminalInput(payload);
       case 'terminal.resize':
         return this.terminalResize(payload);
-      case 'terminal.currentDirectory':
-        return this.dependencies.command.readCurrentDirectory(this.requireWorkspace(), this.identity.userId);
+      case 'terminal.currentDirectory': {
+        const response: WorkspaceTerminalCurrentDirectoryResponseDto =
+          await this.dependencies.command.readCurrentDirectory(this.requireWorkspace(), this.identity.userId);
+        return response;
+      }
       case 'terminal.changeDirectory':
         return this.changeDirectory(payload, requestId);
       case 'filesystem.list':
@@ -336,7 +521,7 @@ export class WorkspaceProtocolSession {
       case 'filesystem.search':
         return this.filesystemSearch(payload);
       case 'filesystem.stat':
-        return this.dependencies.filesystem.stat(this.requireWorkspace(), this.requirePath(payload.path));
+        return this.filesystemStat(payload);
       case 'filesystem.readText':
         return this.filesystemReadText(payload);
       case 'filesystem.readBinary':
@@ -344,29 +529,17 @@ export class WorkspaceProtocolSession {
       case 'filesystem.writeText':
         return this.filesystemWriteText(payload);
       case 'filesystem.createDirectory':
-        await this.dependencies.filesystem.createDirectory(this.requireWorkspace(), this.requirePath(payload.path));
-        return null;
+        return this.filesystemCreateDirectory(payload);
       case 'filesystem.createFile':
-        await this.dependencies.filesystem.createFile(
-          this.requireWorkspace(),
-          this.requirePath(payload.path),
-          stringValue(payload.content) ?? '',
-          stringValue(payload.encoding) ?? 'utf-8',
-        );
-        return null;
+        return this.filesystemCreateFile(payload);
       case 'filesystem.remove':
         return this.filesystemRemove(payload);
       case 'filesystem.rename':
-        await this.dependencies.filesystem.rename(
-          this.requireWorkspace(),
-          this.requirePath(payload.from),
-          this.requirePath(payload.to),
-        );
-        return null;
+        return this.filesystemRename(payload);
       case 'filesystem.chmod':
         return this.filesystemChmod(payload);
       case 'filesystem.realpath':
-        return this.dependencies.filesystem.realpath(this.requireWorkspace(), this.requirePath(payload.path));
+        return this.filesystemRealpath(payload);
       case 'transfer.copyMove':
         return this.copyMove(payload, requestId);
       case 'transfer.cancel':
@@ -426,7 +599,7 @@ export class WorkspaceProtocolSession {
     }
   }
 
-  private async connect(payload: JsonRecord) {
+  private async connect(payload: JsonRecord): Promise<WorkspaceConnectResponseDto> {
     if (this.workspaceId) throw new Error('Workspace socket is already bound.');
     const workspaceId = this.requireWorkspaceId(payload.workspaceId);
     const connectionId = numberValue(payload.connectionId);
@@ -434,30 +607,39 @@ export class WorkspaceProtocolSession {
       throw new Error('connectionId must be a positive integer.');
     if (!this.dependencies.workspace.canCreate(workspaceId))
       throw new Error(`Workspace ${workspaceId} already exists.`);
+    if (payload.viewport !== undefined && !isJsonRecord(payload.viewport)) throw new Error('Invalid Workspace viewport.');
     const viewport = record(payload.viewport);
     const columns = numberValue(viewport.columns);
     const rows = numberValue(viewport.rows);
+    const request: WorkspaceConnectRequestDto = {
+      workspaceId,
+      connectionId: connectionId!,
+      ...(columns !== undefined && rows !== undefined ? { viewport: { columns, rows } } : {}),
+    };
 
     this.bindWorkspace(workspaceId);
     try {
       const session = await this.dependencies.workspace.connect({
-        workspaceId,
+        workspaceId: request.workspaceId,
         userId: this.identity.userId,
-        connectionId: connectionId!,
-        ...(columns !== undefined ? { columns } : {}),
-        ...(rows !== undefined ? { rows } : {}),
+        connectionId: request.connectionId,
+        ...(request.viewport ? { columns: request.viewport.columns, rows: request.viewport.rows } : {}),
         actorUsername: this.identity.username,
         clientIp: this.identity.clientIp,
       });
-      this.dependencies.terminal.attach(workspaceId, { columns: columns ?? 80, rows: rows ?? 24 });
+      this.dependencies.terminal.attach(workspaceId, {
+        columns: request.viewport?.columns ?? 80,
+        rows: request.viewport?.rows ?? 24,
+      });
       void this.dependencies.filesystem.initialize(workspaceId).catch(() => undefined);
-      return {
+      const response: WorkspaceConnectResponseDto = {
         workspaceId,
         connectionId: session.connectionId,
         connectionName: session.connectionName,
         binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
         lastConnectedAt: session.lastConnectedAt,
       };
+      return response;
     } catch (error) {
       this.unbindWorkspace();
       throw error;
@@ -467,7 +649,8 @@ export class WorkspaceProtocolSession {
   private terminalInput(payload: JsonRecord): null {
     const data = stringValue(payload.data);
     if (data === undefined) throw new Error('Terminal input must include data.');
-    this.dependencies.terminal.writeInput(this.requireWorkspace(), data);
+    const request: WorkspaceTerminalInputRequestDto = { data };
+    this.dependencies.terminal.writeInput(this.requireWorkspace(), request.data);
     return null;
   }
 
@@ -475,57 +658,118 @@ export class WorkspaceProtocolSession {
     const columns = numberValue(payload.columns);
     const rows = numberValue(payload.rows);
     if (columns === undefined || rows === undefined) throw new Error('Terminal viewport is required.');
-    this.dependencies.terminal.resize(this.requireWorkspace(), columns, rows);
+    const request: WorkspaceTerminalResizeRequestDto = { columns, rows };
+    this.dependencies.terminal.resize(this.requireWorkspace(), request.columns, request.rows);
     return null;
   }
 
-  private async changeDirectory(payload: JsonRecord, requestId?: string): Promise<{ queued: true }> {
+  private async changeDirectory(
+    payload: JsonRecord,
+    requestId?: string,
+  ): Promise<WorkspaceTerminalChangeDirectoryResponseDto> {
     const id = this.requireRequestId(requestId);
-    await this.dependencies.shell.requestDirectoryChange(this.requireWorkspace(), id, this.requirePath(payload.path));
+    const request: WorkspaceTerminalChangeDirectoryRequestDto = { path: this.requirePath(payload.path) };
+    await this.dependencies.shell.requestDirectoryChange(this.requireWorkspace(), id, request.path);
     return { queued: true };
   }
 
-  private async filesystemList(payload: JsonRecord) {
-    const path = this.requirePath(payload.path);
-    return { path, entries: await this.dependencies.filesystem.readDirectory(this.requireWorkspace(), path) };
+  private async filesystemList(payload: JsonRecord): Promise<WorkspaceFilesystemListResponseDto> {
+    const request: WorkspaceFilesystemPathRequestDto = { path: this.requirePath(payload.path) };
+    return {
+      path: request.path,
+      entries: (await this.dependencies.filesystem.readDirectory(this.requireWorkspace(), request.path)).map(
+        remoteFileEntryDto,
+      ),
+    };
   }
 
-  private async filesystemSearch(payload: JsonRecord) {
+  private async filesystemSearch(payload: JsonRecord): Promise<WorkspaceFilesystemSearchResponseDto> {
     const path = this.requirePath(payload.path);
     const query = stringValue(payload.query);
     if (query === undefined) throw new Error('Filesystem search query is required.');
-    const result = await this.dependencies.filesystem.search(this.requireWorkspace(), path, query);
-    return { entries: result.items, truncated: result.truncated };
+    const request: WorkspaceFilesystemSearchRequestDto = { path, query };
+    const result = await this.dependencies.filesystem.search(this.requireWorkspace(), request.path, request.query);
+    return { entries: result.items.map(fileSearchEntryDto), truncated: result.truncated };
+  }
+
+  private async filesystemStat(payload: JsonRecord): Promise<WorkspaceRemoteFileEntryDto> {
+    const request: WorkspaceFilesystemPathRequestDto = { path: this.requirePath(payload.path) };
+    return remoteFileEntryDto(await this.dependencies.filesystem.stat(this.requireWorkspace(), request.path));
   }
 
   private async filesystemReadText(payload: JsonRecord) {
     const path = this.requirePath(payload.path);
+    const encoding = stringValue(payload.encoding);
+    if (payload.encoding !== undefined && encoding === undefined) throw new Error('Filesystem encoding must be a string.');
+    const request: WorkspaceFilesystemReadTextRequestDto = {
+      path,
+      ...(encoding === undefined ? {} : { encoding }),
+    };
     const result = await this.dependencies.filesystem.readFile(
       this.requireWorkspace(),
-      path,
-      stringValue(payload.encoding),
+      request.path,
+      request.encoding,
     );
+    const response: WorkspaceFilesystemReadTextResponseDto = {
+      path: request.path,
+      content: result.content,
+      encoding: result.encodingUsed,
+    };
     return new WorkspaceBinaryResponse(
-      { path, content: result.content, encoding: result.encodingUsed },
+      response,
       singleBinaryChunk(result.rawContent),
     );
   }
 
   private async filesystemReadBinary(payload: JsonRecord) {
-    const path = this.requirePath(payload.path);
-    const stream = await this.dependencies.filesystem.openBinaryRead(this.requireWorkspace(), path);
-    return new WorkspaceBinaryResponse({ path }, stream);
+    const request: WorkspaceFilesystemPathRequestDto = { path: this.requirePath(payload.path) };
+    const stream = await this.dependencies.filesystem.openBinaryRead(this.requireWorkspace(), request.path);
+    const response: WorkspaceFilesystemReadBinaryResponseDto = { path: request.path };
+    return new WorkspaceBinaryResponse(response, stream);
   }
 
   private async filesystemWriteText(payload: JsonRecord) {
     const path = this.requirePath(payload.path);
     const content = stringValue(payload.content);
     if (content === undefined) throw new Error('File content must be a string.');
-    await this.dependencies.filesystem.writeFile(
-      this.requireWorkspace(),
+    const encoding = stringValue(payload.encoding);
+    if (payload.encoding !== undefined && encoding === undefined) throw new Error('Filesystem encoding must be a string.');
+    const request: WorkspaceFilesystemWriteTextRequestDto = {
       path,
       content,
-      stringValue(payload.encoding) ?? 'utf-8',
+      ...(encoding === undefined ? {} : { encoding }),
+    };
+    await this.dependencies.filesystem.writeFile(
+      this.requireWorkspace(),
+      request.path,
+      request.content,
+      request.encoding ?? 'utf-8',
+    );
+    return null;
+  }
+
+  private async filesystemCreateDirectory(payload: JsonRecord) {
+    const request: WorkspaceFilesystemPathRequestDto = { path: this.requirePath(payload.path) };
+    await this.dependencies.filesystem.createDirectory(this.requireWorkspace(), request.path);
+    return null;
+  }
+
+  private async filesystemCreateFile(payload: JsonRecord) {
+    const path = this.requirePath(payload.path);
+    const content = stringValue(payload.content);
+    const encoding = stringValue(payload.encoding);
+    if (payload.content !== undefined && content === undefined) throw new Error('File content must be a string.');
+    if (payload.encoding !== undefined && encoding === undefined) throw new Error('Filesystem encoding must be a string.');
+    const request: WorkspaceFilesystemCreateFileRequestDto = {
+      path,
+      ...(content === undefined ? {} : { content }),
+      ...(encoding === undefined ? {} : { encoding }),
+    };
+    await this.dependencies.filesystem.createFile(
+      this.requireWorkspace(),
+      request.path,
+      request.content ?? '',
+      request.encoding ?? 'utf-8',
     );
     return null;
   }
@@ -536,85 +780,142 @@ export class WorkspaceProtocolSession {
     const forceDirectoryPaths =
       payload.forceDirectoryPaths === undefined ? [] : stringArray(payload.forceDirectoryPaths);
     if (!forceDirectoryPaths) throw new Error('Filesystem forced directory paths must be an array of strings.');
-    await this.dependencies.filesystem.removePaths(this.requireWorkspace(), paths, { forceDirectoryPaths });
+    const request: WorkspaceFilesystemRemoveRequestDto = {
+      paths,
+      ...(forceDirectoryPaths.length ? { forceDirectoryPaths } : {}),
+    };
+    await this.dependencies.filesystem.removePaths(this.requireWorkspace(), request.paths, {
+      forceDirectoryPaths: request.forceDirectoryPaths ?? [],
+    });
     return null;
   }
 
   private async filesystemChmod(payload: JsonRecord) {
     const mode = numberValue(payload.mode);
     if (mode === undefined) throw new Error('chmod mode is required.');
-    await this.dependencies.filesystem.chmod(this.requireWorkspace(), this.requirePath(payload.path), mode);
+    const request: WorkspaceFilesystemChmodRequestDto = { path: this.requirePath(payload.path), mode };
+    await this.dependencies.filesystem.chmod(this.requireWorkspace(), request.path, request.mode);
     return null;
   }
 
-  private copyMove(payload: JsonRecord, requestId?: string) {
+  private async filesystemRename(payload: JsonRecord) {
+    const request: WorkspaceFilesystemRenameRequestDto = {
+      from: this.requirePath(payload.from),
+      to: this.requirePath(payload.to),
+    };
+    await this.dependencies.filesystem.rename(this.requireWorkspace(), request.from, request.to);
+    return null;
+  }
+
+  private async filesystemRealpath(payload: JsonRecord): Promise<WorkspaceFilesystemRealpathResponseDto> {
+    const request: WorkspaceFilesystemPathRequestDto = { path: this.requirePath(payload.path) };
+    const result = await this.dependencies.filesystem.realpath(this.requireWorkspace(), request.path);
+    return {
+      requestedPath: result.requestedPath,
+      absolutePath: result.absolutePath,
+      targetType: result.targetType,
+    };
+  }
+
+  private copyMove(payload: JsonRecord, requestId?: string): WorkspaceOperationStartedResponseDto {
     const id = this.requireRequestId(requestId);
     const mode = stringValue(payload.mode);
     const sources = stringArray(payload.sources);
     const destination = stringValue(payload.destination);
-    const sourceWorkspaceId = stringValue(payload.sourceWorkspaceId) ?? this.requireWorkspace();
+    const sourceWorkspaceId = stringValue(payload.sourceWorkspaceId);
+    if (payload.sourceWorkspaceId !== undefined && sourceWorkspaceId === undefined)
+      throw new Error('Invalid source Workspace id.');
     if ((mode !== 'copy' && mode !== 'move') || !sources || !destination) throw new Error('Invalid transfer request.');
-    this.dependencies.operations.startTransfer(
-      this.requireWorkspace(),
-      sourceWorkspaceId,
+    const request: WorkspaceCopyMoveRequestDto = {
+      mode,
       sources,
       destination,
+      ...(sourceWorkspaceId === undefined ? {} : { sourceWorkspaceId }),
+    };
+    this.dependencies.operations.startTransfer(
+      this.requireWorkspace(),
+      request.sourceWorkspaceId ?? this.requireWorkspace(),
+      request.sources,
+      request.destination,
       id,
-      mode,
+      request.mode,
     );
     return { started: true };
   }
 
-  private cancelTransfer(payload: JsonRecord) {
+  private cancelTransfer(payload: JsonRecord): Promise<boolean> {
     const taskId = stringValue(payload.taskId);
     if (!taskId) throw new Error('taskId is required.');
-    return this.dependencies.operations.cancelTransfer(this.requireWorkspace(), taskId);
+    const request: WorkspaceTaskCancelRequestDto = { taskId };
+    return this.dependencies.operations.cancelTransfer(this.requireWorkspace(), request.taskId);
   }
 
-  private compress(payload: JsonRecord, requestId?: string) {
+  private compress(payload: JsonRecord, requestId?: string): WorkspaceOperationStartedResponseDto {
     const format = stringValue(payload.format);
     const sources = stringArray(payload.sources);
     const destination = stringValue(payload.destination);
     if (!sources || !destination || !format || !['zip', 'tar.gz', 'tar.bz2'].includes(format)) {
       throw new Error('Invalid archive compression request.');
     }
-    const archiveFormat: ArchiveFormat = format === 'tar.gz' ? 'targz' : format === 'tar.bz2' ? 'tarbz2' : 'zip';
+    if (payload.password !== undefined && typeof payload.password !== 'string')
+      throw new Error('Archive password must be a string.');
+    const request: WorkspaceArchiveCompressRequestDto = {
+      sources,
+      destination,
+      format: format as WorkspaceArchiveCompressRequestDto['format'],
+      ...(typeof payload.password === 'string' ? { password: payload.password } : {}),
+    };
+    const archiveFormat: ArchiveFormat =
+      request.format === 'tar.gz' ? 'targz' : request.format === 'tar.bz2' ? 'tarbz2' : 'zip';
     this.dependencies.operations.startCompress(this.requireWorkspace(), {
       requestId: this.requireRequestId(requestId),
-      sourcePaths: sources,
-      destinationPath: destination,
+      sourcePaths: request.sources,
+      destinationPath: request.destination,
       format: archiveFormat,
-      ...(typeof payload.password === 'string' ? { password: payload.password } : {}),
+      ...(request.password === undefined ? {} : { password: request.password }),
     });
     return { started: true };
   }
 
-  private decompress(payload: JsonRecord, requestId?: string) {
+  private decompress(payload: JsonRecord, requestId?: string): WorkspaceOperationStartedResponseDto {
     const source = stringValue(payload.source);
     if (!source) throw new Error('Archive source is required.');
+    if (payload.password !== undefined && typeof payload.password !== 'string')
+      throw new Error('Archive password must be a string.');
+    const request: WorkspaceArchiveDecompressRequestDto = {
+      source,
+      ...(typeof payload.password === 'string' ? { password: payload.password } : {}),
+    };
     this.dependencies.operations.startDecompress(this.requireWorkspace(), {
       requestId: this.requireRequestId(requestId),
-      archivePath: source,
-      ...(typeof payload.password === 'string' ? { password: payload.password } : {}),
+      archivePath: request.source,
+      ...(request.password === undefined ? {} : { password: request.password }),
     });
     return { started: true };
   }
 
-  private cancelArchive(payload: JsonRecord) {
+  private cancelArchive(payload: JsonRecord): Promise<boolean> {
     const taskId = stringValue(payload.taskId);
     if (!taskId) throw new Error('taskId is required.');
-    return this.dependencies.operations.cancelArchive(this.requireWorkspace(), taskId);
+    const request: WorkspaceTaskCancelRequestDto = { taskId };
+    return this.dependencies.operations.cancelArchive(this.requireWorkspace(), request.taskId);
   }
 
-  private uploadPrepare(payload: JsonRecord) {
+  private uploadPrepare(payload: JsonRecord): Promise<WorkspaceUploadPrepareResponseDto> {
     const prepareId = stringValue(payload.prepareId);
     const basePath = stringValue(payload.basePath);
     const directories = stringArray(payload.directories);
     if (!prepareId || !basePath || !directories) throw new Error('Invalid upload preparation request.');
-    return this.dependencies.operations.prepareUpload(this.requireWorkspace(), prepareId, basePath, directories);
+    const request: WorkspaceUploadPrepareRequestDto = { prepareId, basePath, directories };
+    return this.dependencies.operations.prepareUpload(
+      this.requireWorkspace(),
+      request.prepareId,
+      request.basePath,
+      request.directories,
+    );
   }
 
-  private async uploadStart(payload: JsonRecord) {
+  private async uploadStart(payload: JsonRecord): Promise<WorkspaceOperationStartedResponseDto> {
     const uploadId = stringValue(payload.uploadId);
     const destinationPath = stringValue(payload.destinationPath);
     const size = numberValue(payload.size);
@@ -622,41 +923,63 @@ export class WorkspaceProtocolSession {
     if (!uploadId || !destinationPath || size === undefined || !['ask', 'overwrite', 'skip'].includes(conflictPolicy)) {
       throw new Error('Invalid upload start request.');
     }
-    await this.dependencies.operations.startUpload(this.requireWorkspace(), uploadId, destinationPath, size, {
-      ...(typeof payload.relativePath === 'string' ? { relativePath: payload.relativePath } : {}),
-      ...(typeof payload.prepareId === 'string' ? { prepareId: payload.prepareId } : {}),
-      conflictPolicy: conflictPolicy as 'ask' | 'overwrite' | 'skip',
+    const relativePath = stringValue(payload.relativePath);
+    const prepareId = stringValue(payload.prepareId);
+    if (payload.relativePath !== undefined && relativePath === undefined) throw new Error('Invalid upload relative path.');
+    if (payload.prepareId !== undefined && prepareId === undefined) throw new Error('Invalid upload prepare id.');
+    const request: WorkspaceUploadStartRequestDto = {
+      uploadId,
+      destinationPath,
+      size,
+      ...(relativePath === undefined ? {} : { relativePath }),
+      ...(prepareId === undefined ? {} : { prepareId }),
+      conflictPolicy: conflictPolicy as WorkspaceUploadConflictPolicyDto,
+    };
+    await this.dependencies.operations.startUpload(
+      this.requireWorkspace(),
+      request.uploadId,
+      request.destinationPath,
+      request.size,
+      {
+      ...(request.relativePath === undefined ? {} : { relativePath: request.relativePath }),
+      ...(request.prepareId === undefined ? {} : { prepareId: request.prepareId }),
+      conflictPolicy: request.conflictPolicy,
     });
     return { started: true };
   }
 
-  private uploadCancel(payload: JsonRecord) {
+  private uploadCancel(payload: JsonRecord): Promise<boolean> {
     const uploadId = stringValue(payload.uploadId);
     if (!uploadId) throw new Error('uploadId is required.');
-    return this.dependencies.operations.cancelUpload(this.requireWorkspace(), uploadId);
+    const request: WorkspaceUploadSessionRequestDto = { uploadId };
+    return this.dependencies.operations.cancelUpload(this.requireWorkspace(), request.uploadId);
   }
 
-  private uploadAbort(payload: JsonRecord) {
+  private uploadAbort(payload: JsonRecord): Promise<boolean> {
     const uploadId = stringValue(payload.uploadId);
     const message = stringValue(payload.message);
     if (!uploadId || !message) throw new Error('uploadId and message are required.');
-    return this.dependencies.operations.abortUpload(this.requireWorkspace(), uploadId, message);
+    const request: WorkspaceUploadAbortRequestDto = { uploadId, message };
+    return this.dependencies.operations.abortUpload(this.requireWorkspace(), request.uploadId, request.message);
   }
 
   private async dockerCommand(payload: JsonRecord) {
     const containerId = stringValue(payload.containerId);
-    const command = stringValue(payload.command) as DockerCommand | undefined;
+    const command = stringValue(payload.command) as WorkspaceDockerCommandDto | undefined;
     if (!containerId || !command || !['start', 'stop', 'restart', 'remove'].includes(command)) {
       throw new Error('Invalid Docker command.');
     }
-    await this.dependencies.docker.command(this.requireWorkspace(), containerId, command);
+    const request: WorkspaceDockerCommandRequestDto = { containerId, command };
+    await this.dependencies.docker.command(this.requireWorkspace(), request.containerId, request.command);
     return null;
   }
 
-  private async dockerStats(payload: JsonRecord) {
+  private async dockerStats(payload: JsonRecord): Promise<WorkspaceDockerStatsDto | null> {
     const containerId = stringValue(payload.containerId);
     if (!containerId) throw new Error('containerId is required.');
-    return dockerStatsWire(await this.dependencies.docker.getStats(this.requireWorkspace(), containerId));
+    const request: WorkspaceDockerStatsRequestDto = { containerId };
+    const stats = await this.dependencies.docker.getStats(this.requireWorkspace(), request.containerId);
+    return stats ? dockerStatsWire(stats) : null;
   }
 
   private async suspendMark(payload: JsonRecord): Promise<WorkspaceSuspendMarkResponseDto> {
@@ -865,13 +1188,13 @@ export class WorkspaceProtocolSession {
         this.sendEvent('filesystem.error', { message: event.message });
         return;
       case 'upload-event':
-        this.sendEvent('transfer.upload', event.event);
+        this.sendEvent('transfer.upload', uploadEventDto(event.event));
         return;
       case 'transfer-event':
-        this.sendEvent('transfer.copyMove', event.event);
+        this.sendEvent('transfer.copyMove', copyMoveEventDto(event.event));
         return;
       case 'archive-event':
-        this.sendEvent('transfer.archive', event.event);
+        this.sendEvent('transfer.archive', archiveEventDto(event.event));
         return;
     }
   }
@@ -885,9 +1208,9 @@ export class WorkspaceProtocolSession {
     this.sendJson(response);
   }
 
-  private sendEvent<K extends keyof WorkspaceSuspendEventMapDto>(
+  private sendEvent<K extends keyof WorkspaceEventMapDto>(
     type: K,
-    payload: WorkspaceSuspendEventMapDto[K],
+    payload: WorkspaceEventMapDto[K],
   ): void;
   private sendEvent(type: string, payload: unknown): void;
   private sendEvent(type: string, payload: unknown): void {

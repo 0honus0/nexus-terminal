@@ -1,8 +1,7 @@
+import type { WorkspaceTerminalViewportDto } from '@nexus-terminal/protocol/workspace';
+
 export type TerminalConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
-export interface TerminalViewport {
-  columns: number;
-  rows: number;
-}
+export type TerminalViewport = WorkspaceTerminalViewportDto;
 export interface TerminalOutput {
   data: string | Uint8Array;
 }
