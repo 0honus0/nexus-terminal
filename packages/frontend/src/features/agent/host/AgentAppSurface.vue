@@ -130,7 +130,6 @@
     agentSurfaceSession.restoreExecutionMode(props.appId) ?? 'execute',
   );
   const selectedEnvironmentRecipeId = ref(agentSurfaceSession.restoreEnvironmentRecipeId(props.appId) ?? '');
-  let taskRailWideViewport = typeof window !== 'undefined' ? window.innerWidth > 1040 : false;
   const taskRailVisible = ref(false);
   const threadDeleteArmedId = ref<string | null>(null);
   const deleteAllThreadsArmed = ref(false);
@@ -1463,12 +1462,6 @@
     agentSurfaceSession.setDraft(props.appId, value);
   };
 
-  const syncTaskRailViewport = (): void => {
-    const wide = window.innerWidth > 1040;
-    if (wide === taskRailWideViewport) return;
-    taskRailWideViewport = wide;
-  };
-
   const refreshConnectionsAndAuthorization = async (): Promise<void> => {
     const [nextDenylist] = await Promise.all([agentApi.targetDenylist(), connectionsStore.revalidate(0)]);
     targetDenylist.value = nextDenylist;
@@ -1483,7 +1476,6 @@
   };
 
   onMounted(() => {
-    window.addEventListener('resize', syncTaskRailViewport);
     window.addEventListener('focus', refreshConnectionsOnFocus);
     window.addEventListener('nexus:agent:thread-changed', onThreadChanged);
     window.addEventListener('nexus:agent:authorization-changed', onAuthorizationChanged);
@@ -1494,7 +1486,6 @@
   onBeforeUnmount(() => {
     clearThreadDeleteArm();
     clearDeleteAllThreadsArm();
-    window.removeEventListener('resize', syncTaskRailViewport);
     window.removeEventListener('focus', refreshConnectionsOnFocus);
     window.removeEventListener('nexus:agent:thread-changed', onThreadChanged);
     window.removeEventListener('nexus:agent:authorization-changed', onAuthorizationChanged);
