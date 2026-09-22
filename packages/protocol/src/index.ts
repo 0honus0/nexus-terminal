@@ -23,3 +23,5 @@ export type * from './agent-approvals.js';
 export type * from './agent-artifacts.js';
 export type * from './agent-host.js';
 export type * from './agent-runs.js';
+export type * from './agent-collaboration.js';
+export type * from './agent-memories.js';

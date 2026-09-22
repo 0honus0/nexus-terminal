@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import { agentHostEvents } from '../host/agent-host-events';
@@ -19,15 +19,15 @@
 
   const selectedAppId = ref('');
   const status = ref<AgentMemoryStatus | 'all'>('all');
-  const memories = ref<AgentMemoryView[]>([]);
+  const memories = shallowRef<AgentMemoryView[]>([]);
   const drafts = ref<Record<string, string>>({});
   const loading = ref(false);
   const localBusy = ref(false);
 
   const sourceAppId = ref('');
-  const sourceMemories = ref<AgentMemoryView[]>([]);
+  const sourceMemories = shallowRef<AgentMemoryView[]>([]);
   const sourceMemoryId = ref('');
-  const importPreview = ref<AgentMemoryImportConfirmation | null>(null);
+  const importPreview = shallowRef<AgentMemoryImportConfirmation | null>(null);
   const importLoading = ref(false);
   let memoriesGeneration = 0;
   let sourceMemoriesGeneration = 0;

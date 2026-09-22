@@ -1,4 +1,27 @@
 import type {
+  AgentSubagentCancelRequestDto,
+  AgentSubagentListQueryDto,
+  AgentSubagentMessageDto,
+  AgentSubagentMessageListQueryDto,
+  AgentSubagentMessagePageDto,
+  AgentSubagentPageDto,
+  AgentSubagentProfileDto,
+  AgentSubagentProfileTemplateDto,
+  AgentSubagentSettingsReplaceRequestDto,
+  AgentSubagentSettingsViewDto,
+  AgentSubagentViewDto,
+} from '@nexus-terminal/protocol/agent-collaboration';
+import type {
+  AgentMemoryImportConfirmRequestDto,
+  AgentMemoryImportConfirmationDto,
+  AgentMemoryImportPreviewRequestDto,
+  AgentMemoryListQueryDto,
+  AgentMemoryReviewActionDto,
+  AgentMemoryReviewRequestDto,
+  AgentMemoryStatusDto,
+  AgentMemoryViewDto,
+} from '@nexus-terminal/protocol/agent-memories';
+import type {
   AgentAcpIntegrationConfigurationDto,
   AgentIntegrationCreateRequestDto,
   AgentIntegrationDeleteQueryDto,
@@ -206,37 +229,11 @@ export interface AgentAppIntentArtifactView {
   sha256: string;
 }
 
-export type AgentMemoryStatus = 'candidate' | 'published' | 'revoked';
-export type AgentMemoryReviewAction = 'publish' | 'reject' | 'revoke';
+export type AgentMemoryStatus = AgentMemoryStatusDto;
+export type AgentMemoryReviewAction = AgentMemoryReviewActionDto;
+export type AgentMemoryView = AgentMemoryViewDto;
+export type AgentMemoryImportConfirmation = AgentMemoryImportConfirmationDto;
 
-export interface AgentMemoryView {
-  id: string;
-  userId: number;
-  appId: string;
-  content: string;
-  sourceRefs: unknown;
-  confidence: number;
-  status: AgentMemoryStatus;
-  expiresAt: number | null;
-  proposedByRuntimeId: string | null;
-  reviewAction: AgentMemoryReviewAction | null;
-  reviewedAt: number | null;
-  version: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface AgentMemoryImportConfirmation {
-  id: string;
-  userId: number;
-  appId: string;
-  sourceAppId: string;
-  sourceMemoryId: string;
-  sourceVersion: number;
-  snapshot: unknown;
-  createdAt: number;
-  expiresAt: number;
-}
 
 export type {
   AgentWorkspaceView,
@@ -443,100 +440,14 @@ export type AgentCreateRunInput = Omit<AgentCreateRunFieldsDto, 'input' | 'conne
 };
 
 
-export interface AgentSubagentView {
-  id: string;
-  userId: number;
-  appId: string;
-  runId: string;
-  parentRuntimeId: string;
-  childRuntimeId: string;
-  profileId: string;
-  capabilities: string[];
-  peerMessaging: 'parent-child' | 'same-run';
-  mutationMode: 'read-only' | 'governed';
-  modelRef: { providerId: string; modelId: string; configurationVersion: number };
-  objective: string;
-  constraints: string[];
-  inputArtifactRefs: string[];
-  completionCriteria: string[];
-  dependencyMode: 'success' | 'settled';
-  status: 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
-  depth: number;
-  failureMode: 'isolate' | 'failFast';
-  budget: { maxSteps: number };
-  usage: { tokens: number; steps: number };
-  result: unknown;
-  evidenceRefs: string[];
-  deadlineAt: number;
-  version: number;
-  createdAt: number;
-  updatedAt: number;
-  completedAt: number | null;
-}
+export type AgentSubagentView = AgentSubagentViewDto;
+export type AgentSubagentMessage = AgentSubagentMessageDto;
+export type AgentSubagentProfile = AgentSubagentProfileDto;
+export type AgentSubagentProfileTemplate = AgentSubagentProfileTemplateDto;
+export type AgentSubagentSettingsView = AgentSubagentSettingsViewDto;
+export type AgentSubagentPage = AgentSubagentPageDto;
+export type AgentSubagentMessagePage = AgentSubagentMessagePageDto;
 
-export interface AgentSubagentMessage {
-  id: string;
-  runId: string;
-  senderRuntimeId: string;
-  recipientRuntimeId: string;
-  delegationId: string;
-  recipientSequence: number;
-  kind: 'request' | 'reply' | 'progress' | 'evidence' | 'completion';
-  correlationId: string;
-  replyTo: string | null;
-  causationId: string | null;
-  taskRevision: number;
-  body: unknown;
-  artifactRefs: string[];
-  status: 'accepted' | 'delivered' | 'consumed' | 'expired' | 'rejected';
-  createdAt: number;
-  expiresAt: number;
-  consumedAt: number | null;
-}
-
-export interface AgentSubagentProfile {
-  id: string;
-  role: string;
-  defaultModel: { providerId: string; modelId: string; configurationVersion: number } | null;
-  allowedModels: Array<{ providerId: string; modelId: string; configurationVersion: number }>;
-  capabilities: string[];
-  peerMessaging: 'parent-child' | 'same-run';
-  mutationMode: 'read-only' | 'governed';
-  maxSteps: number;
-  failureMode: 'isolate' | 'failFast';
-}
-
-export interface AgentSubagentProfileTemplate {
-  id: 'explore' | 'scout' | 'review' | 'general' | 'worker';
-  role: string;
-  delegationHint: string;
-  capabilities: string[];
-  peerMessaging: 'parent-child' | 'same-run';
-  mutationMode: 'read-only' | 'governed';
-  maxSteps: number;
-  failureMode: 'isolate' | 'failFast';
-}
-
-export interface AgentSubagentSettingsView {
-  policy: {
-    maxDelegationDepth: number;
-    maxMessagesPerRun: number;
-    maxMessageBytesPerRun: number;
-    profiles: AgentSubagentProfile[];
-  };
-  templates: AgentSubagentProfileTemplate[];
-  version: number;
-}
-
-export interface AgentSubagentPage {
-  items: AgentSubagentView[];
-  nextCursor: string | null;
-}
-
-export interface AgentSubagentMessagePage {
-  items: AgentSubagentMessage[];
-  nextCursor: string | null;
-}
 
 export type AgentToolInspection = AgentToolInspectionDto;
 
@@ -905,7 +816,7 @@ export const agentApi = {
   async subagentSettings(appId: string): Promise<AgentSubagentSettingsView> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentSubagentSettingsView>>(
+        await httpClient.get<AgentEnvelope<AgentSubagentSettingsViewDto>>(
           `/apps/${encodeURIComponent(appId)}/subagent-settings`,
         )
       ).data,
@@ -916,21 +827,23 @@ export const agentApi = {
     profiles: AgentSubagentProfile[],
     expectedVersion: number,
   ): Promise<AgentSubagentSettingsView> {
+    const input: AgentSubagentSettingsReplaceRequestDto = { profiles, expectedVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentSubagentSettingsView>>(
+        await httpClient.patch<AgentEnvelope<AgentSubagentSettingsViewDto>>(
           `/apps/${encodeURIComponent(appId)}/subagent-settings`,
-          { profiles, expectedVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async memories(appId: string, status: AgentMemoryStatus | 'all' = 'all', limit = 100): Promise<AgentMemoryView[]> {
+    const params: AgentMemoryListQueryDto = { status, limit };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentMemoryView[]>>(`/apps/${encodeURIComponent(appId)}/memories`, {
-          params: { status, limit },
+        await httpClient.get<AgentEnvelope<AgentMemoryViewDto[]>>(`/apps/${encodeURIComponent(appId)}/memories`, {
+          params,
         })
       ).data,
     );
@@ -941,15 +854,16 @@ export const agentApi = {
     decision: AgentMemoryReviewAction,
     content?: string,
   ): Promise<AgentMemoryView> {
+    const input: AgentMemoryReviewRequestDto = {
+      decision,
+      expectedVersion: memory.version,
+      ...(content === undefined ? {} : { content }),
+    };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentMemoryView>>(
+        await httpClient.post<AgentEnvelope<AgentMemoryViewDto>>(
           `/apps/${encodeURIComponent(appId)}/memories/${encodeURIComponent(memory.id)}/review`,
-          {
-            decision,
-            expectedVersion: memory.version,
-            ...(content === undefined ? {} : { content }),
-          },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -960,43 +874,47 @@ export const agentApi = {
     sourceAppId: string,
     sourceMemoryId: string,
   ): Promise<AgentMemoryImportConfirmation> {
+    const input: AgentMemoryImportPreviewRequestDto = { sourceAppId, sourceMemoryId };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentMemoryImportConfirmation>>(
+        await httpClient.post<AgentEnvelope<AgentMemoryImportConfirmationDto>>(
           `/apps/${encodeURIComponent(appId)}/memories/imports/preview`,
-          { sourceAppId, sourceMemoryId },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async confirmMemoryImport(appId: string, confirmationId: string): Promise<AgentMemoryView> {
+    const input: AgentMemoryImportConfirmRequestDto = {};
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentMemoryView>>(
+        await httpClient.post<AgentEnvelope<AgentMemoryViewDto>>(
           `/apps/${encodeURIComponent(appId)}/memories/imports/${encodeURIComponent(confirmationId)}/confirm`,
-          {},
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async subagents(appId: string, runId: string, before?: string): Promise<AgentSubagentPage> {
+    const params: AgentSubagentListQueryDto = { limit: 50, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentSubagentPage>>(
+        await httpClient.get<AgentEnvelope<AgentSubagentPageDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/subagents`,
-          { params: { limit: 50, ...(before ? { before } : {}) } },
+          { params },
         )
       ).data,
     );
   },
   async cancelSubagent(appId: string, runId: string, delegation: AgentSubagentView): Promise<AgentSubagentView> {
+    const input: AgentSubagentCancelRequestDto = { expectedVersion: delegation.version };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentSubagentView>>(
+        await httpClient.post<AgentEnvelope<AgentSubagentViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/subagents/${encodeURIComponent(delegation.id)}/cancel`,
-          { expectedVersion: delegation.version },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -1008,11 +926,12 @@ export const agentApi = {
     delegationId: string,
     before?: string,
   ): Promise<AgentSubagentMessagePage> {
+    const params: AgentSubagentMessageListQueryDto = { limit: 50, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentSubagentMessagePage>>(
+        await httpClient.get<AgentEnvelope<AgentSubagentMessagePageDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/subagents/${encodeURIComponent(delegationId)}/messages`,
-          { params: { limit: 50, ...(before ? { before } : {}) } },
+          { params },
         )
       ).data,
     );

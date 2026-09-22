@@ -29,7 +29,8 @@
   const profileBusy = ref(false);
   const selectedTemplateId = ref<AgentSubagentProfileTemplate['id']>('explore');
 
-  const capabilityOptions = ref<string[]>([]);
+  type CapabilityId = AgentSubagentProfile['capabilities'][number];
+  const capabilityOptions = ref<CapabilityId[]>([]);
 
   const modelOptions = computed(() =>
     props.providers
@@ -153,7 +154,7 @@
     profile.allowedModels = profile.allowedModels.filter((model) => modelKey(model) !== key);
   };
 
-  const toggleCapability = (profile: AgentSubagentProfile, capability: string, checked: boolean): void => {
+  const toggleCapability = (profile: AgentSubagentProfile, capability: CapabilityId, checked: boolean): void => {
     if (checked) {
       if (!profile.capabilities.includes(capability)) profile.capabilities.push(capability);
     } else {
