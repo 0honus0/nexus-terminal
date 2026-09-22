@@ -1,4 +1,10 @@
 import type {
+  AgentArtifactAttachRequestDto,
+  AgentArtifactCleanupConfirmRequestDto,
+  AgentArtifactFileKindDto,
+  AgentArtifactLibraryQueryDto,
+} from '@nexus-terminal/protocol/agent-artifacts';
+import type {
   AgentAvailableModelDto,
   AgentDiscoveredProviderModelDto,
   AgentModelRegistryResolveQueryDto,
@@ -35,6 +41,13 @@ import {
   type CapabilityGrantInput,
 } from '../../../modules/agent/public';
 import { agentData, agentError, agentRoute } from './agent-http';
+import {
+  artifactAttachResponseDto,
+  artifactCleanupPreviewDto,
+  artifactCleanupResultDto,
+  artifactPageDto,
+  artifactStorageSummaryDto,
+} from './artifact-dto';
 import {
   hasOnlyKeys,
   isJsonValue,
@@ -108,12 +121,18 @@ const appSummary = (app: AppView) => ({
   pendingBudgetRequests: app.budgetRequestCount,
 });
 
-const artifactFileKinds = ['image', 'document', 'code', 'archive', 'media', 'other'] as const;
-type ArtifactFileKind = (typeof artifactFileKinds)[number];
+const artifactFileKinds: readonly AgentArtifactFileKindDto[] = [
+  'image',
+  'document',
+  'code',
+  'archive',
+  'media',
+  'other',
+];
 
-const artifactFileKind = (value: string | undefined): ArtifactFileKind | undefined => {
+const artifactFileKind = (value: string | undefined): AgentArtifactFileKindDto | undefined => {
   if (value === undefined) return undefined;
-  if ((artifactFileKinds as readonly string[]).includes(value)) return value as ArtifactFileKind;
+  if ((artifactFileKinds as readonly string[]).includes(value)) return value as AgentArtifactFileKindDto;
   throw new Error('VALIDATION_FAILED');
 };
 
@@ -1009,22 +1028,30 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         throw new Error('VALIDATION_FAILED');
       }
       const kind = artifactFileKind(queryString(request.query.kind));
-      const page = await dependencies.artifacts.listLibrary(agentUserId(request), {
+      const before = queryString(request.query.before);
+      const q = queryString(request.query.q);
+      const appId = queryString(request.query.appId);
+      const query: AgentArtifactLibraryQueryDto = {
         limit,
-        ...(queryString(request.query.before) ? { before: queryString(request.query.before) } : {}),
-        ...(queryString(request.query.q) ? { q: queryString(request.query.q) } : {}),
-        ...(queryString(request.query.appId) ? { appId: queryString(request.query.appId) } : {}),
+        ...(before === undefined ? {} : { before }),
+        ...(q === undefined ? {} : { q }),
+        ...(appId === undefined ? {} : { appId }),
         ...(retainedRaw === undefined ? {} : { retained: retainedRaw === 'true' }),
         ...(kind === undefined ? {} : { kind }),
-      });
-      agentData(request, response, page);
+      };
+      const page = await dependencies.artifacts.listLibrary(agentUserId(request), query);
+      agentData(request, response, artifactPageDto(page));
     }),
   );
 
   router.get(
     '/files/storage',
     agentRoute(async (request, response) => {
-      agentData(request, response, await dependencies.artifacts.storageSummary(agentUserId(request)));
+      agentData(
+        request,
+        response,
+        artifactStorageSummaryDto(await dependencies.artifacts.storageSummary(agentUserId(request))),
+      );
     }),
   );
 
@@ -1039,7 +1066,11 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       ) {
         throw new Error('VALIDATION_FAILED');
       }
-      agentData(request, response, await dependencies.artifacts.cleanupPreview(agentUserId(request)));
+      agentData(
+        request,
+        response,
+        artifactCleanupPreviewDto(await dependencies.artifacts.cleanupPreview(agentUserId(request))),
+      );
     }),
   );
 
@@ -1054,10 +1085,11 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       ) {
         throw new Error('VALIDATION_FAILED');
       }
+      const input: AgentArtifactCleanupConfirmRequestDto = { confirmationId: request.body.confirmationId };
       agentData(
         request,
         response,
-        await dependencies.artifacts.cleanupConfirm(agentUserId(request), request.body.confirmationId),
+        artifactCleanupResultDto(await dependencies.artifacts.cleanupConfirm(agentUserId(request), input.confirmationId)),
       );
     }),
   );
@@ -1066,10 +1098,30 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/files/:artifactId/attach',
     mutationSecurity,
     agentRoute(async (request, response) => {
+      if (
+        !isRecord(request.body) ||
+        !hasOnlyKeys(request.body, ['targetAppId', 'threadId', 'runId', 'role', 'expectedVersion']) ||
+        !nonEmptyString(request.body.targetAppId) ||
+        !nonEmptyString(request.body.threadId) ||
+        (request.body.runId !== undefined && !nonEmptyString(request.body.runId)) ||
+        request.body.role !== 'input' ||
+        (request.body.expectedVersion !== undefined && !positiveInteger(request.body.expectedVersion))
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      const input: AgentArtifactAttachRequestDto = {
+        targetAppId: request.body.targetAppId,
+        threadId: request.body.threadId,
+        ...(request.body.runId === undefined ? {} : { runId: request.body.runId }),
+        role: 'input',
+        ...(request.body.expectedVersion === undefined ? {} : { expectedVersion: request.body.expectedVersion }),
+      };
       agentData(
         request,
         response,
-        await dependencies.artifacts.attach(agentUserId(request), pathParam(request.params.artifactId), request.body),
+        artifactAttachResponseDto(
+          await dependencies.artifacts.attach(agentUserId(request), pathParam(request.params.artifactId), input),
+        ),
       );
     }),
   );

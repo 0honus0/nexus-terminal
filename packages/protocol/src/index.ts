@@ -20,3 +20,4 @@ export type * from './agent-integrations.js';
 export type * from './agent-providers.js';
 export type * from './agent-threads.js';
 export type * from './agent-approvals.js';
+export type * from './agent-artifacts.js';

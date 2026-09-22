@@ -1,7 +1,15 @@
+import type {
+  AgentArtifactBeginRequestDto,
+  AgentArtifactDeleteQueryDto,
+  AgentArtifactDeleteResponseDto,
+  AgentArtifactRetainRequestDto,
+  AgentArtifactUploadReservationDto,
+} from '@nexus-terminal/protocol/agent-artifacts';
 import { Router, type Request } from 'express';
 import { create as createContentDisposition } from 'content-disposition';
 import parseRange from 'range-parser';
 import type { AgentArtifactFacade } from '../../../modules/agent/public';
+import { artifactDto } from './artifact-dto';
 import { agentData, agentError, agentRoute } from './agent-http';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
 
@@ -18,6 +26,34 @@ const pathParam = (value: string | string[] | undefined): string => {
 };
 
 const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
+
+const record = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('VALIDATION_FAILED');
+  return value as Record<string, unknown>;
+};
+
+const beginRequest = (value: unknown): AgentArtifactBeginRequestDto => {
+  const body = record(value);
+  if (Object.keys(body).some((key) => !['name', 'mediaType', 'declaredBytes'].includes(key)))
+    throw new Error('VALIDATION_FAILED');
+  if (
+    typeof body.name !== 'string' ||
+    typeof body.mediaType !== 'string' ||
+    !Number.isSafeInteger(body.declaredBytes) ||
+    Number(body.declaredBytes) < 0
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return { name: body.name, mediaType: body.mediaType, declaredBytes: Number(body.declaredBytes) };
+};
+
+const retainRequest = (value: unknown): AgentArtifactRetainRequestDto => {
+  const body = record(value);
+  if (Object.keys(body).some((key) => !['retained', 'expectedVersion'].includes(key)))
+    throw new Error('VALIDATION_FAILED');
+  if (typeof body.retained !== 'boolean' || !positiveInteger(body.expectedVersion)) throw new Error('VALIDATION_FAILED');
+  return { retained: body.retained, expectedVersion: body.expectedVersion };
+};
 
 const parseExpectedVersion = (request: Request): number => {
   const raw = Array.isArray(request.query.expectedVersion)
@@ -65,17 +101,14 @@ export const createAppArtifactsRouter = (dependencies: AppArtifactsRouterDepende
     mutationSecurity,
     agentRoute(async (request, response) => {
       const appId = pathParam(request.params.appId);
-      const reservation = await dependencies.artifacts.begin({ userId: agentUserId(request), appId }, request.body);
-      agentData(
-        request,
-        response,
-        {
-          artifactId: reservation.artifactId,
-          uploadUrl: `/api/v1/apps/${encodeURIComponent(appId)}/artifacts/${reservation.artifactId}/content`,
-          expiresAt: reservation.expiresAt,
-        },
-        201,
-      );
+      const input = beginRequest(request.body);
+      const reservation = await dependencies.artifacts.begin({ userId: agentUserId(request), appId }, input);
+      const payload: AgentArtifactUploadReservationDto = {
+        artifactId: reservation.artifactId,
+        uploadUrl: `/api/v1/apps/${encodeURIComponent(appId)}/artifacts/${reservation.artifactId}/content`,
+        expiresAt: reservation.expiresAt,
+      };
+      agentData(request, response, payload, 201);
     }),
   );
 
@@ -97,7 +130,7 @@ export const createAppArtifactsRouter = (dependencies: AppArtifactsRouterDepende
       if (!current) throw new Error('NOT_FOUND');
       if (current.status !== 'staging') throw new Error('STATE_CONFLICT');
       const result = await dependencies.artifacts.write(scope, artifactId, request, AbortSignal.timeout(120_000));
-      agentData(request, response, result);
+      agentData(request, response, artifactDto(result));
     }),
   );
 
@@ -108,7 +141,7 @@ export const createAppArtifactsRouter = (dependencies: AppArtifactsRouterDepende
       const artifact = await dependencies.artifacts.get(scope, pathParam(request.params.artifactId));
       if (!artifact) throw new Error('NOT_FOUND');
       if (artifact.status === 'unavailable') throw new Error('ARTIFACT_UNAVAILABLE');
-      agentData(request, response, artifact);
+      agentData(request, response, artifactDto(artifact));
     }),
   );
 
@@ -153,22 +186,18 @@ export const createAppArtifactsRouter = (dependencies: AppArtifactsRouterDepende
     '/:artifactId',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body))
-        throw new Error('VALIDATION_FAILED');
-      const body = request.body as Record<string, unknown>;
-      if (Object.keys(body).some((key) => !['retained', 'expectedVersion'].includes(key)))
-        throw new Error('VALIDATION_FAILED');
-      if (typeof body.retained !== 'boolean' || !positiveInteger(body.expectedVersion))
-        throw new Error('VALIDATION_FAILED');
+      const input = retainRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       agentData(
         request,
         response,
-        await dependencies.artifacts.retain(
-          scope,
-          pathParam(request.params.artifactId),
-          body.retained,
-          body.expectedVersion,
+        artifactDto(
+          await dependencies.artifacts.retain(
+            scope,
+            pathParam(request.params.artifactId),
+            input.retained,
+            input.expectedVersion,
+          ),
         ),
       );
     }),
@@ -179,8 +208,10 @@ export const createAppArtifactsRouter = (dependencies: AppArtifactsRouterDepende
     mutationSecurity,
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      await dependencies.artifacts.delete(scope, pathParam(request.params.artifactId), parseExpectedVersion(request));
-      agentData(request, response, { deleted: true }, 202);
+      const query: AgentArtifactDeleteQueryDto = { expectedVersion: parseExpectedVersion(request) };
+      await dependencies.artifacts.delete(scope, pathParam(request.params.artifactId), query.expectedVersion);
+      const payload: AgentArtifactDeleteResponseDto = { deleted: true };
+      agentData(request, response, payload, 202);
     }),
   );
 

@@ -1,3 +1,13 @@
+import type {
+  AgentArtifactAttachRequestDto,
+  AgentArtifactAttachResponseDto,
+  AgentArtifactBeginRequestDto,
+  AgentArtifactCleanupConfirmRequestDto,
+  AgentArtifactDeleteQueryDto,
+  AgentArtifactLibraryQueryDto,
+  AgentArtifactRetainRequestDto,
+  AgentArtifactUploadReservationDto,
+} from '@nexus-terminal/protocol/agent-artifacts';
 import type { AgentArtifactRef, AgentEnvelope } from './agent-api.types';
 import type {
   AgentArtifactPage,
@@ -11,29 +21,27 @@ export const createArtifactApi = () => ({
   async storage(): Promise<ArtifactStorageSummary> {
     return unwrap((await httpClient.get<AgentEnvelope<ArtifactStorageSummary>>('/agent/files/storage')).data);
   },
-  async files(
-    query: {
-      before?: string;
-      q?: string;
-      appId?: string;
-      retained?: boolean;
-      kind?: 'image' | 'document' | 'code' | 'archive' | 'media' | 'other';
-    } = {},
-  ): Promise<AgentArtifactPage> {
+  async files(query: Omit<AgentArtifactLibraryQueryDto, 'limit'> = {}): Promise<AgentArtifactPage> {
+    const params: AgentArtifactLibraryQueryDto = { limit: 100, ...query };
     return unwrap(
       (
         await httpClient.get<AgentEnvelope<AgentArtifactPage>>('/agent/files', {
-          params: { limit: 100, ...query },
+          params,
         })
       ).data,
     );
   },
   async uploadArtifact(appId: string, file: File): Promise<AgentArtifactRef> {
+    const input: AgentArtifactBeginRequestDto = {
+      name: file.name,
+      mediaType: file.type || 'application/octet-stream',
+      declaredBytes: file.size,
+    };
     const reservation = unwrap(
       (
-        await httpClient.post<AgentEnvelope<{ artifactId: string; uploadUrl: string; expiresAt: number }>>(
+        await httpClient.post<AgentEnvelope<AgentArtifactUploadReservationDto>>(
           `/apps/${encodeURIComponent(appId)}/artifacts`,
-          { name: file.name, mediaType: file.type || 'application/octet-stream', declaredBytes: file.size },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -52,21 +60,23 @@ export const createArtifactApi = () => ({
     );
   },
   async retainArtifact(artifact: AgentArtifactRef, retained: boolean): Promise<AgentArtifactRef> {
+    const input: AgentArtifactRetainRequestDto = { retained, expectedVersion: artifact.version };
     return unwrap(
       (
         await httpClient.patch<AgentEnvelope<AgentArtifactRef>>(
           `/apps/${encodeURIComponent(artifact.appId)}/artifacts/${encodeURIComponent(artifact.id)}`,
-          { retained, expectedVersion: artifact.version },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async deleteArtifact(artifact: AgentArtifactRef): Promise<void> {
+    const params: AgentArtifactDeleteQueryDto = { expectedVersion: artifact.version };
     await httpClient.delete(
       `/apps/${encodeURIComponent(artifact.appId)}/artifacts/${encodeURIComponent(artifact.id)}`,
       {
-        params: { expectedVersion: artifact.version },
+        params,
         headers: await mutationHeaders(),
       },
     );
@@ -83,11 +93,12 @@ export const createArtifactApi = () => ({
     );
   },
   async confirmArtifactCleanup(confirmationId: string): Promise<ArtifactCleanupResult> {
+    const input: AgentArtifactCleanupConfirmRequestDto = { confirmationId };
     return unwrap(
       (
         await httpClient.post<AgentEnvelope<ArtifactCleanupResult>>(
           '/agent/files/cleanup/confirm',
-          { confirmationId },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -96,18 +107,19 @@ export const createArtifactApi = () => ({
   async attachArtifact(
     artifact: AgentArtifactRef,
     input: { targetAppId: string; threadId: string; runId?: string },
-  ): Promise<{ artifact: AgentArtifactRef; crossApp: boolean }> {
+  ): Promise<AgentArtifactAttachResponseDto> {
+    const request: AgentArtifactAttachRequestDto = {
+      targetAppId: input.targetAppId,
+      threadId: input.threadId,
+      ...(input.runId ? { runId: input.runId } : {}),
+      role: 'input',
+      expectedVersion: artifact.version,
+    };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<{ artifact: AgentArtifactRef; crossApp: boolean }>>(
+        await httpClient.post<AgentEnvelope<AgentArtifactAttachResponseDto>>(
           `/agent/files/${encodeURIComponent(artifact.id)}/attach`,
-          {
-            targetAppId: input.targetAppId,
-            threadId: input.threadId,
-            ...(input.runId ? { runId: input.runId } : {}),
-            role: 'input',
-            expectedVersion: artifact.version,
-          },
+          request,
           { headers: await mutationHeaders() },
         )
       ).data,

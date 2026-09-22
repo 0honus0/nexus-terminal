@@ -10,6 +10,12 @@ import type {
   AgentMcpIntegrationConfigurationDto,
 } from '@nexus-terminal/protocol/agent-integrations';
 import type {
+  AgentArtifactCleanupPreviewDto,
+  AgentArtifactCleanupResultDto,
+  AgentArtifactPageDto,
+  AgentArtifactStorageSummaryDto,
+} from '@nexus-terminal/protocol/agent-artifacts';
+import type {
   AgentApprovalResolveFieldsDto,
   AgentApprovalResolveRequestDto,
   AgentApprovalViewDto,
@@ -395,38 +401,10 @@ export type AgentProviderView = AgentProviderViewDto;
 export type AgentProviderCreateInput = AgentProviderCreateRequestDto;
 export type AgentProviderPatchInput = AgentProviderPatchFieldsDto;
 
-export interface ArtifactStorageSummary {
-  totalBytes: number;
-  retainedBytes: number;
-  protectedBytes: number;
-  reclaimableBytes: number;
-  stagingBytes: number;
-  unavailableBytes: number;
-  reservedBytes: number;
-  limitBytes: number;
-}
-
-export interface AgentArtifactPage {
-  items: AgentArtifactRef[];
-  nextCursor: string | null;
-}
-
-export interface ArtifactCleanupPreview {
-  confirmationId: string;
-  expiresAt: number;
-  selectedCount: number;
-  selectedBytes: number;
-  protectedCount: number;
-  byApp: Array<{ appId: string; count: number; bytes: number }>;
-}
-
-export interface ArtifactCleanupResult {
-  deletedCount: number;
-  deletedBytes: number;
-  skippedCount: number;
-  failedCount: number;
-  partial: boolean;
-}
+export type ArtifactStorageSummary = AgentArtifactStorageSummaryDto;
+export type AgentArtifactPage = AgentArtifactPageDto;
+export type ArtifactCleanupPreview = AgentArtifactCleanupPreviewDto;
+export type ArtifactCleanupResult = AgentArtifactCleanupResultDto;
 
 export interface HardLimitPreview {
   confirmationId: string;

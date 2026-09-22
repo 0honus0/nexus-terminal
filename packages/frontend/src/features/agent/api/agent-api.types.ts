@@ -1,4 +1,5 @@
 export type { AgentEnvelopeDto as AgentEnvelope } from '@nexus-terminal/protocol/agent-common';
+export type { AgentArtifactRefDto as AgentArtifactRef } from '@nexus-terminal/protocol/agent-artifacts';
 
 export interface AgentHardLimits {
   maxRunSteps: number;
@@ -87,20 +88,4 @@ export interface AgentSettingsView {
   runtimeCapabilities: { workspaceRuntimeController: boolean };
   availability: AgentAvailabilityView;
   revision: number;
-}
-
-export interface AgentArtifactRef {
-  id: string;
-  appId: string;
-  originalName: string;
-  mediaType: string;
-  sha256: string | null;
-  sizeBytes: number;
-  status: 'staging' | 'ready' | 'deleting' | 'deleted' | 'unavailable';
-  retained: boolean;
-  version: number;
-  createdAt: number;
-  readyAt: number | null;
-  expiresAt: number | null;
-  deletedAt: number | null;
 }
