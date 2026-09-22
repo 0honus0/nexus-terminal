@@ -1,3 +1,4 @@
+import type { WorkspaceSuspendAutoTerminatedEventDto } from '@nexus-terminal/protocol/workspace';
 import { computed, ref } from 'vue';
 import { apiErrorMessage, apiErrorStatus } from '@/client/http';
 import { logger } from '@/client/logging/logger';
@@ -22,14 +23,11 @@ let pollConsumers = 0;
 let handoffRefreshSequence = 0;
 const handoffRefreshes = new Map<string, number>();
 
-export interface SuspendedAutoTerminationEvent {
-  suspendedSessionId: string;
-  reason: string;
-}
+export type SuspendedAutoTerminationEvent = WorkspaceSuspendAutoTerminatedEventDto;
 
-export interface SuspendedAutoTerminationNotice extends SuspendedAutoTerminationEvent {
+export type SuspendedAutoTerminationNotice = SuspendedAutoTerminationEvent & {
   name?: string;
-}
+};
 
 const handledAutoTerminations = new Set<string>();
 const handledAutoTerminationOrder: string[] = [];

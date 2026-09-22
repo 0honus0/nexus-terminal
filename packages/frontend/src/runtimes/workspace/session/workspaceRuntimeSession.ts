@@ -1,3 +1,7 @@
+import type {
+  WorkspaceSuspendAutoTerminatedEventDto,
+  WorkspaceSuspendResumeRequestDto,
+} from '@nexus-terminal/protocol/workspace';
 import { ref, type Ref } from 'vue';
 import { logger } from '@/client/logging/logger';
 import { markConnectionConnected, type Connection } from '@/features/connections/public';
@@ -17,9 +21,11 @@ import type { WorkspaceConnectResult, WorkspaceLifecycleState } from '../model/w
 import { WORKSPACE_BINARY_PROTOCOL_VERSION } from '../protocol/workspaceBinaryProtocol';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
 
+type WorkspaceSuspendResumeOptions = Pick<WorkspaceSuspendResumeRequestDto, 'takeover'>;
+
 export interface WorkspaceRuntimeSessionOptions {
   workspaceId?: string;
-  onSuspendedAutoTerminated?: (event: { suspendedSessionId: string; reason: string }) => void;
+  onSuspendedAutoTerminated?: (event: WorkspaceSuspendAutoTerminatedEventDto) => void;
 }
 
 const RECONNECT_MAX_DELAY_MS = 30_000;
@@ -129,15 +135,8 @@ export class WorkspaceRuntimeSession {
         );
         this.statusMessage.value = `${operation}: ${message}`;
       }),
-      this.socket.on<{ suspendedSessionId: string; reason: string }>('suspend.autoTerminated', (event) =>
-        options.onSuspendedAutoTerminated?.(event),
-      ),
-      this.socket.on<{
-        suspendedSessionId: string;
-        generation: number;
-        reason: 'takeover' | 'lease_expired';
-        message: string;
-      }>('suspend.revoked', (event) => {
+      this.socket.on('suspend.autoTerminated', (event) => options.onSuspendedAutoTerminated?.(event)),
+      this.socket.on('suspend.revoked', (event) => {
         this.clearSuspendOwnerHeartbeat();
         this.markCapabilitiesDisconnected();
         this.state.value = 'disconnected';
@@ -240,7 +239,7 @@ export class WorkspaceRuntimeSession {
   async resume(
     suspendedSessionId: string,
     markedAt?: string,
-    options: { takeover?: boolean } = {},
+    options: WorkspaceSuspendResumeOptions = {},
   ): Promise<WorkspaceConnectResult> {
     if (this.disposed) throw new Error('Workspace session has been disposed.');
     this.clearReconnectTimer();
@@ -254,12 +253,13 @@ export class WorkspaceRuntimeSession {
     );
     try {
       const viewport = this.adapters.terminalViewport();
-      const result = await this.socket.request<WorkspaceConnectResult>('suspend.resume', {
+      const request: WorkspaceSuspendResumeRequestDto = {
         suspendedSessionId,
         workspaceId: this.id,
         ...(viewport ? { viewport } : {}),
         ...(options.takeover ? { takeover: true } : {}),
-      });
+      };
+      const result = await this.socket.request('suspend.resume', request);
       if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
         throw new Error('Workspace binary protocol version mismatch.');
       }
@@ -485,7 +485,7 @@ export class WorkspaceRuntimeSession {
     const renew = async (): Promise<void> => {
       if (this.disposed || this.closing || !this.markedForSuspend.value || !this.socket.connected) return;
       try {
-        await this.socket.request('suspend.owner.renew');
+        await this.socket.request('suspend.owner.renew', {});
       } catch (cause) {
         const error = cause instanceof Error ? cause : new Error(String(cause));
         logger.warn(

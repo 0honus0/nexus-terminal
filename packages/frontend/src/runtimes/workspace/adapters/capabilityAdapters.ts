@@ -1,3 +1,9 @@
+import type {
+  WorkspaceSuspendHistoryPreviousResponseDto,
+  WorkspaceSuspendHistoryResetResponseDto,
+  WorkspaceSuspendMarkRequestDto,
+  WorkspaceSuspendUnmarkRequestDto,
+} from '@nexus-terminal/protocol/workspace';
 import { apiErrorStatus, httpClient } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { createWebSocketUrl } from '@/client/websocket';
@@ -96,14 +102,6 @@ interface WorkspaceTerminalGate {
   deferResize(viewport: TerminalViewport): void;
 }
 
-interface TerminalHistoryResponseWire {
-  hasMore: boolean;
-}
-
-interface TerminalHistoryResetResponseWire {
-  available: boolean;
-}
-
 export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceTerminalGate): TerminalChannel => {
   const outputHandlers = new Set<(output: TerminalOutput) => void>();
   const buffered: Uint8Array[] = [];
@@ -171,7 +169,7 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       if (!previousOutputAvailable) return null;
       if (historyLoad) return historyLoad;
       const task = socket
-        .requestBinary<TerminalHistoryResponseWire>('suspend.history.previous')
+        .requestBinary<WorkspaceSuspendHistoryPreviousResponseDto>('suspend.history.previous', {})
         .then(({ data: page, bytes }) => {
           previousOutputAvailable = page.hasMore;
           return {
@@ -187,7 +185,7 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
     },
     async resetPreviousOutput() {
       if (historyLoad) await historyLoad.catch(() => null);
-      const result = await socket.request<TerminalHistoryResetResponseWire>('suspend.history.reset');
+      const result = await socket.request('suspend.history.reset', {});
       previousOutputAvailable = result.available;
       return result.available;
     },
@@ -972,9 +970,14 @@ export const createDockerChannel = (socket: WorkspaceSocket): DockerChannel => (
 });
 
 export const createSshSuspendChannel = (socket: WorkspaceSocket): SshSuspendChannel => ({
-  mark: (workspaceId, terminalSnapshot) =>
-    socket.request('suspend.mark', { workspaceId, ...(terminalSnapshot ? { terminalSnapshot } : {}) }),
-  unmark: (workspaceId) => socket.request('suspend.unmark', { workspaceId }),
+  mark: (_workspaceId, terminalSnapshot) => {
+    const request: WorkspaceSuspendMarkRequestDto = terminalSnapshot ? { terminalSnapshot } : {};
+    return socket.request('suspend.mark', request);
+  },
+  async unmark(_workspaceId) {
+    const request: WorkspaceSuspendUnmarkRequestDto = {};
+    await socket.request('suspend.unmark', request);
+  },
 });
 
 export interface WorkspaceCapabilityAdapters {

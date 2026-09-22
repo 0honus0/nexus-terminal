@@ -1,15 +1,9 @@
-import type { WebSocketInboundMessage, WebSocketOutboundMessage } from './websocket-boundary';
+import type {
+  WorkspaceProtocolEventDto,
+  WorkspaceProtocolRequestDto,
+  WorkspaceProtocolResponseDto,
+} from '@nexus-terminal/protocol/workspace';
 
-export interface ProtocolResponsePayload<T = unknown> {
-  ok: boolean;
-  data?: T;
-  error?: string;
-}
-
-export type WorkspaceProtocolRequest = WebSocketInboundMessage<Record<string, unknown>>;
-export type WorkspaceProtocolResponse<T = unknown> = WebSocketOutboundMessage<ProtocolResponsePayload<T>> & {
-  type: 'response';
-  requestId: string;
-};
-
-export type WorkspaceProtocolEvent<T = unknown> = WebSocketOutboundMessage<T>;
+export type WorkspaceProtocolRequest = WorkspaceProtocolRequestDto<Record<string, unknown>>;
+export type WorkspaceProtocolResponse<T = unknown> = WorkspaceProtocolResponseDto<T>;
+export type WorkspaceProtocolEvent<T = unknown> = WorkspaceProtocolEventDto<T>;

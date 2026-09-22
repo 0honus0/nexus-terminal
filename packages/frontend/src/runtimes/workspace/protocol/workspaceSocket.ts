@@ -1,20 +1,45 @@
+import type {
+  WorkspaceProtocolEventDto,
+  WorkspaceProtocolResponseDto,
+  WorkspaceSuspendEventMapDto,
+  WorkspaceSuspendRequestMapDto,
+  WorkspaceSuspendResponseMapDto,
+} from '@nexus-terminal/protocol/workspace';
 import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
 import { decodeWorkspaceBinaryFrame } from './workspaceBinaryProtocol';
 
-interface ProtocolResponse<T = unknown> {
-  type: 'response';
-  requestId: string;
-  payload: { ok: boolean; data?: T; error?: string };
-}
-
-interface ProtocolEvent<T = unknown> {
-  type: string;
-  payload?: T;
-}
+type ProtocolResponse<T = unknown> = WorkspaceProtocolResponseDto<T>;
+type ProtocolEvent<T = unknown> = WorkspaceProtocolEventDto<T>;
+type ProtocolMessage = ProtocolResponse | ProtocolEvent;
 
 type EventHandler<T = unknown> = (payload: T) => void;
 type BinaryHandler = (data: Uint8Array) => void;
+
+const protocolRecord = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const decodeProtocolMessage = (raw: string): ProtocolMessage => {
+  const parsed = protocolRecord(JSON.parse(raw) as unknown);
+  if (!parsed || typeof parsed.type !== 'string' || !parsed.type) throw new Error('Workspace protocol message is invalid.');
+  if (parsed.type !== 'response') {
+    return parsed.payload === undefined ? { type: parsed.type } : { type: parsed.type, payload: parsed.payload };
+  }
+  if (typeof parsed.requestId !== 'string' || !parsed.requestId) throw new Error('Workspace response requestId is invalid.');
+  const payload = protocolRecord(parsed.payload);
+  if (!payload || typeof payload.ok !== 'boolean') throw new Error('Workspace response payload is invalid.');
+  if (payload.error !== undefined && typeof payload.error !== 'string')
+    throw new Error('Workspace response error is invalid.');
+  return {
+    type: 'response',
+    requestId: parsed.requestId,
+    payload: {
+      ok: payload.ok,
+      ...(payload.data === undefined ? {} : { data: payload.data }),
+      ...(payload.error === undefined ? {} : { error: payload.error }),
+    },
+  };
+};
 
 interface PendingRequest {
   operation: string;
@@ -228,17 +253,22 @@ export class WorkspaceSocket {
     }
   }
 
-  request<T = unknown>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
+  request<K extends keyof WorkspaceSuspendRequestMapDto>(
+    type: K,
+    payload: WorkspaceSuspendRequestMapDto[K],
+  ): Promise<WorkspaceSuspendResponseMapDto[K]>;
+  request<T = unknown>(type: string, payload?: object): Promise<T>;
+  request<T = unknown>(type: string, payload: object = {}): Promise<T> {
     return this.requestWithId<T>(type, crypto.randomUUID(), payload);
   }
 
-  async requestWithId<T = unknown>(type: string, requestId: string, payload: Record<string, unknown> = {}): Promise<T> {
+  async requestWithId<T = unknown>(type: string, requestId: string, payload: object = {}): Promise<T> {
     return this.requestInternal<T>(type, requestId, payload, false) as Promise<T>;
   }
 
   requestBinary<T = unknown>(
     type: string,
-    payload: Record<string, unknown> = {},
+    payload: object = {},
   ): Promise<{ data: T; bytes: Uint8Array }> {
     return this.requestInternal<T>(type, crypto.randomUUID(), payload, true) as Promise<{
       data: T;
@@ -249,7 +279,7 @@ export class WorkspaceSocket {
   private async requestInternal<T>(
     type: string,
     requestId: string,
-    payload: Record<string, unknown>,
+    payload: object,
     expectBinary: boolean,
   ): Promise<T | { data: T; bytes: Uint8Array }> {
     if (!requestId) throw new Error('Workspace requestId is required.');
@@ -307,7 +337,7 @@ export class WorkspaceSocket {
     });
   }
 
-  async send(type: string, payload: Record<string, unknown> = {}): Promise<void> {
+  async send(type: string, payload: object = {}): Promise<void> {
     await this.open();
     if (!HIGH_FREQUENCY_OPERATIONS.has(type))
       logger.trace(this.context({ operation: type }), 'Workspace message dispatch');
@@ -315,7 +345,7 @@ export class WorkspaceSocket {
   }
 
   /** Send only through the currently open Workspace transport; never opens/reopens the socket. */
-  sendConnected(type: string, payload: Record<string, unknown> = {}): boolean {
+  sendConnected(type: string, payload: object = {}): boolean {
     if (!this.connected) return false;
     try {
       this.sendJson({ type, payload });
@@ -325,6 +355,11 @@ export class WorkspaceSocket {
     }
   }
 
+  on<K extends keyof WorkspaceSuspendEventMapDto>(
+    type: K,
+    handler: EventHandler<WorkspaceSuspendEventMapDto[K]>,
+  ): () => void;
+  on<T = unknown>(type: string, handler: EventHandler<T>): () => void;
   on<T = unknown>(type: string, handler: EventHandler<T>): () => void {
     const listeners = this.handlers.get(type) ?? new Set<EventHandler>();
     listeners.add(handler as EventHandler);
@@ -367,9 +402,9 @@ export class WorkspaceSocket {
       return;
     }
     if (typeof raw !== 'string') return;
-    let message: ProtocolEvent;
+    let message: ProtocolMessage;
     try {
-      message = JSON.parse(raw) as ProtocolEvent;
+      message = decodeProtocolMessage(raw);
     } catch (error) {
       logger.warn(
         this.context({ err: error, failureKind: 'protocol_invalid_json' }),
@@ -378,8 +413,8 @@ export class WorkspaceSocket {
       for (const handler of this.errorHandlers) handler('Workspace protocol returned invalid JSON.');
       return;
     }
-    if (message.type === 'response') {
-      const response = message as ProtocolResponse;
+    if (message.type === 'response' && 'requestId' in message) {
+      const response = message;
       const pending = this.pending.get(response.requestId);
       if (!pending) {
         logger.debug(

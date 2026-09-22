@@ -1,3 +1,7 @@
+import type {
+  WorkspaceSuspendAutoTerminatedEventDto,
+  WorkspaceSuspendResumeRequestDto,
+} from '@nexus-terminal/protocol/workspace';
 import { computed, nextTick, ref, shallowReactive } from 'vue';
 import { logger } from '@/client/logging/logger';
 import type { Connection } from '@/features/connections/public';
@@ -20,8 +24,9 @@ const fileClipboard = createFileClipboardController();
 const sharedEditorSession = createFileEditorSession();
 const suspendAutoTerminationNotice = ref<SuspendedAutoTerminationNotice | null>(null);
 const resumeInFlight = new Map<string, Promise<WorkspaceRuntimeSession>>();
+type WorkspaceSuspendResumeOptions = Pick<WorkspaceSuspendResumeRequestDto, 'takeover'>;
 
-const handleSuspendedAutoTerminated = (event: { suspendedSessionId: string; reason: string }): void => {
+const handleSuspendedAutoTerminated = (event: WorkspaceSuspendAutoTerminatedEventDto): void => {
   const notice = applySuspendedAutoTermination(event);
   if (!notice) return;
   logger.warn(
@@ -84,7 +89,7 @@ const runResume = (
   suspended: SuspendedSession,
   connection: Connection,
   replaceWorkspaceId?: string,
-  options: { takeover?: boolean } = {},
+  options: WorkspaceSuspendResumeOptions = {},
 ): Promise<WorkspaceRuntimeSession> => {
   const existing = resumeInFlight.get(suspended.id);
   if (existing) {
@@ -199,7 +204,7 @@ export const workspaceRuntimeRegistry = {
   resume(
     suspended: SuspendedSession,
     connection: Connection,
-    options: { takeover?: boolean } = {},
+    options: WorkspaceSuspendResumeOptions = {},
   ): Promise<WorkspaceRuntimeSession> {
     return runResume(suspended, connection, undefined, options);
   },
@@ -208,7 +213,7 @@ export const workspaceRuntimeRegistry = {
     suspended: SuspendedSession,
     connection: Connection,
     replaceWorkspaceId: string,
-    options: { takeover?: boolean } = {},
+    options: WorkspaceSuspendResumeOptions = {},
   ): Promise<WorkspaceRuntimeSession> {
     return runResume(suspended, connection, replaceWorkspaceId, options);
   },

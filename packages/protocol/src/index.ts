@@ -14,3 +14,4 @@ export type * from './ssh-suspend.js';
 export type * from './system.js';
 export { SERVER_TRANSFER_METHODS } from './transfers.js';
 export type * from './transfers.js';
+export type * from './workspace.js';

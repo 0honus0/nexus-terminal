@@ -1,4 +1,21 @@
 import { randomUUID } from 'node:crypto';
+import type { SuspendedSessionDto } from '@nexus-terminal/protocol/ssh-suspend';
+import type {
+  WorkspaceProtocolResponseDto,
+  WorkspaceSuspendAutoTerminatedEventDto,
+  WorkspaceSuspendEventMapDto,
+  WorkspaceSuspendHistoryPreviousResponseDto,
+  WorkspaceSuspendHistoryResetResponseDto,
+  WorkspaceSuspendListResponseDto,
+  WorkspaceSuspendMarkRequestDto,
+  WorkspaceSuspendMarkResponseDto,
+  WorkspaceSuspendOwnerRenewResponseDto,
+  WorkspaceSuspendRenameRequestDto,
+  WorkspaceSuspendResumeRequestDto,
+  WorkspaceSuspendResumeResponseDto,
+  WorkspaceSuspendRevokedEventDto,
+  WorkspaceSuspendSessionRequestDto,
+} from '@nexus-terminal/protocol/workspace';
 import WebSocket, { type RawData } from 'ws';
 import type { WorkspaceCommandService } from '../../modules/workspace/services/workspace-command.service';
 import type { WorkspaceDockerService } from '../../modules/workspace/services/workspace-docker.service';
@@ -35,8 +52,10 @@ const BINARY_BACKPRESSURE_POLL_MS = 10;
 const HIGH_FREQUENCY_OPERATIONS = new Set(['terminal.input', 'terminal.resize', 'docker.stats', 'suspend.owner.renew']);
 
 type JsonRecord = Record<string, unknown>;
+const isJsonRecord = (value: unknown): value is JsonRecord =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
 const record = (value: unknown): JsonRecord =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : {};
+  isJsonRecord(value) ? value : {};
 const stringValue = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
 const numberValue = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -87,6 +106,23 @@ const dockerStatusWire = (status: PlatformDockerStatus) => ({
   })),
 });
 
+const suspendedSessionDto = (session: ReturnType<SshSuspendService['list']>[number]): SuspendedSessionDto => ({
+  id: session.suspendSessionId,
+  originalWorkspaceId: session.originalSessionId,
+  connectionId: Number(session.connectionId),
+  connectionName: session.connectionName,
+  suspendedAt: session.suspendStartTime,
+  ...(session.customSuspendName === undefined ? {} : { customName: session.customSuspendName }),
+  status: session.backendSshStatus === 'hanging' ? 'active' : 'disconnected',
+  ownershipState: session.ownershipState,
+  ownershipGeneration: session.ownershipGeneration,
+  ...(session.ownershipLeaseExpiresAt === undefined
+    ? {}
+    : { ownershipLeaseExpiresAt: session.ownershipLeaseExpiresAt }),
+  ...(session.attachedWorkspaceId === undefined ? {} : { attachedWorkspaceId: session.attachedWorkspaceId }),
+  ...(session.disconnectionTimestamp === undefined ? {} : { disconnectedAt: session.disconnectionTimestamp }),
+});
+
 export interface WorkspaceProtocolDependencies {
   workspace: WorkspaceService;
   events: WorkspaceEventHub;
@@ -133,10 +169,11 @@ export class WorkspaceProtocolSession {
     this.terminalTransport = new TerminalStreamTransport(socket, dependencies.terminal);
     this.autoTerminationUnsubscribe = dependencies.suspended.onAutoTerminated((event) => {
       if (event.userId !== identity.userId) return;
-      this.sendEvent('suspend.autoTerminated', {
+      const payload: WorkspaceSuspendAutoTerminatedEventDto = {
         suspendedSessionId: event.suspendSessionId,
         reason: event.reason,
-      });
+      };
+      this.sendEvent('suspend.autoTerminated', payload);
     });
     this.ownershipRevokedUnsubscribe = dependencies.suspended.onOwnershipRevoked((event) => {
       if (event.userId !== identity.userId || event.ownerId !== this.consumerId) return;
@@ -145,12 +182,13 @@ export class WorkspaceProtocolSession {
           ? 'Suspended session ownership was taken over by another device.'
           : 'Suspended session owner lease expired.';
       this.ownershipRevokedReason = reason;
-      this.sendEvent('suspend.revoked', {
+      const payload: WorkspaceSuspendRevokedEventDto = {
         suspendedSessionId: event.suspendSessionId,
         generation: event.generation,
         reason: event.reason,
         message: reason,
-      });
+      };
+      this.sendEvent('suspend.revoked', payload);
       if (this.socket.readyState === WebSocket.OPEN) this.socket.close(4009, reason);
     });
   }
@@ -189,14 +227,20 @@ export class WorkspaceProtocolSession {
             parseStartedAt,
           );
       }
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid request');
-      message = parsed as WorkspaceProtocolRequest;
-      if (typeof message.type !== 'string' || !message.type) throw new Error('Request type is required');
+      if (!isJsonRecord(parsed)) throw new Error('Invalid request');
+      const type = stringValue(parsed.type);
+      if (!type) throw new Error('Request type is required');
+      const requestId = stringValue(parsed.requestId);
+      if (parsed.requestId !== undefined && requestId === undefined) throw new Error('Invalid requestId');
+      if (parsed.payload !== undefined && !isJsonRecord(parsed.payload)) throw new Error('Invalid request payload');
+      message = {
+        type,
+        ...(requestId === undefined ? {} : { requestId }),
+        ...(parsed.payload === undefined ? {} : { payload: parsed.payload }),
+      };
       if (
         message.requestId !== undefined &&
-        (typeof message.requestId !== 'string' ||
-          !message.requestId ||
-          Buffer.byteLength(message.requestId, 'utf8') > MAX_WORKSPACE_BINARY_REQUEST_ID_BYTES)
+        (!message.requestId || Buffer.byteLength(message.requestId, 'utf8') > MAX_WORKSPACE_BINARY_REQUEST_ID_BYTES)
       ) {
         throw new Error('Invalid requestId');
       }
@@ -357,21 +401,12 @@ export class WorkspaceProtocolSession {
         return this.suspendMark(payload);
       case 'suspend.unmark':
         return this.suspendUnmark();
-      case 'suspend.list':
-        return this.dependencies.suspended.list(this.identity.userId).map((session) => ({
-          id: session.suspendSessionId,
-          originalWorkspaceId: session.originalSessionId,
-          connectionId: Number(session.connectionId),
-          connectionName: session.connectionName,
-          suspendedAt: session.suspendStartTime,
-          customName: session.customSuspendName,
-          status: session.backendSshStatus === 'hanging' ? 'active' : 'disconnected',
-          disconnectedAt: session.disconnectionTimestamp,
-          ownershipState: session.ownershipState,
-          ownershipGeneration: session.ownershipGeneration,
-          ownershipLeaseExpiresAt: session.ownershipLeaseExpiresAt,
-          attachedWorkspaceId: session.attachedWorkspaceId,
-        }));
+      case 'suspend.list': {
+        const result: WorkspaceSuspendListResponseDto = this.dependencies.suspended
+          .list(this.identity.userId)
+          .map(suspendedSessionDto);
+        return result;
+      }
       case 'suspend.resume':
         return this.resume(payload);
       case 'suspend.owner.renew':
@@ -624,15 +659,21 @@ export class WorkspaceProtocolSession {
     return dockerStatsWire(await this.dependencies.docker.getStats(this.requireWorkspace(), containerId));
   }
 
-  private async suspendMark(payload: JsonRecord) {
+  private async suspendMark(payload: JsonRecord): Promise<WorkspaceSuspendMarkResponseDto> {
     const workspaceId = this.requireWorkspace();
+    const terminalSnapshot = stringValue(payload.terminalSnapshot);
+    if (payload.terminalSnapshot !== undefined && terminalSnapshot === undefined) {
+      throw new Error('terminalSnapshot must be a string.');
+    }
+    const request: WorkspaceSuspendMarkRequestDto =
+      terminalSnapshot === undefined ? {} : { terminalSnapshot };
     const result = await this.dependencies.suspendCoordinator.suspendNow(
       workspaceId,
       this.identity.userId,
-      stringValue(payload.terminalSnapshot),
+      request.terminalSnapshot,
     );
     this.unbindWorkspace();
-    return result;
+    return { suspendedSessionId: result.suspendSessionId };
   }
 
   private async suspendUnmark() {
@@ -640,10 +681,11 @@ export class WorkspaceProtocolSession {
     return null;
   }
 
-  private async resume(payload: JsonRecord) {
+  private async resume(payload: JsonRecord): Promise<WorkspaceSuspendResumeResponseDto> {
     if (this.workspaceId) throw new Error('Workspace socket is already bound.');
     const suspendedSessionId = stringValue(payload.suspendedSessionId);
     const workspaceId = this.requireWorkspaceId(payload.workspaceId);
+    if (payload.viewport !== undefined && !isJsonRecord(payload.viewport)) throw new Error('Invalid resume viewport.');
     const requestedViewport = record(payload.viewport);
     const columns = numberValue(requestedViewport.columns);
     const rows = numberValue(requestedViewport.rows);
@@ -651,6 +693,9 @@ export class WorkspaceProtocolSession {
       columns !== undefined && rows !== undefined
         ? { columns: Math.floor(columns), rows: Math.floor(rows) }
         : undefined;
+    if (payload.takeover !== undefined && typeof payload.takeover !== 'boolean') {
+      throw new Error('Invalid resume takeover flag.');
+    }
     if (
       !suspendedSessionId ||
       !this.dependencies.workspace.canCreate(workspaceId) ||
@@ -658,15 +703,21 @@ export class WorkspaceProtocolSession {
     ) {
       throw new Error('Invalid resume request.');
     }
+    const request: WorkspaceSuspendResumeRequestDto = {
+      suspendedSessionId,
+      workspaceId,
+      ...(viewport ? { viewport } : {}),
+      ...(payload.takeover === true ? { takeover: true } : {}),
+    };
     this.bindWorkspace(workspaceId);
     let began = false;
     try {
       const result = await this.dependencies.suspendCoordinator.beginResume(
         this.identity.userId,
-        suspendedSessionId,
-        workspaceId,
-        viewport,
-        { ownerId: this.consumerId, takeover: payload.takeover === true },
+        request.suspendedSessionId,
+        request.workspaceId,
+        request.viewport,
+        { ownerId: this.consumerId, takeover: request.takeover === true },
       );
       began = true;
       if (this.closed) throw new Error('Workspace socket closed during suspended-session resume.');
@@ -675,7 +726,7 @@ export class WorkspaceProtocolSession {
       );
       if (this.closed) throw new Error('Workspace socket closed during suspended-session resume.');
       await this.dependencies.suspendCoordinator.commitResume(workspaceId);
-      return {
+      const response: WorkspaceSuspendResumeResponseDto = {
         workspaceId,
         connectionId: result.connectionId,
         connectionName: result.connectionName,
@@ -685,6 +736,7 @@ export class WorkspaceProtocolSession {
         ownershipLeaseExpiresAt: result.ownershipLeaseExpiresAt,
         binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
       };
+      return response;
     } catch (error) {
       if (began) await this.dependencies.suspendCoordinator.rollbackResume(workspaceId).catch(() => false);
       this.unbindWorkspace();
@@ -692,12 +744,13 @@ export class WorkspaceProtocolSession {
     }
   }
 
-  private suspendOwnerRenew() {
-    return this.dependencies.suspendCoordinator.renewOwnership(
+  private suspendOwnerRenew(): WorkspaceSuspendOwnerRenewResponseDto {
+    const response: WorkspaceSuspendOwnerRenewResponseDto = this.dependencies.suspendCoordinator.renewOwnership(
       this.requireWorkspace(),
       this.identity.userId,
       this.consumerId,
     );
+    return response;
   }
 
   private async suspendHistoryPrevious() {
@@ -705,21 +758,25 @@ export class WorkspaceProtocolSession {
       this.requireWorkspace(),
       this.identity.userId,
     );
-    return new WorkspaceBinaryResponse({ hasMore: history.hasMore }, singleBinaryChunk(history.data));
+    const response: WorkspaceSuspendHistoryPreviousResponseDto = { hasMore: history.hasMore };
+    return new WorkspaceBinaryResponse(response, singleBinaryChunk(history.data));
   }
 
-  private suspendHistoryReset() {
-    return {
+  private suspendHistoryReset(): WorkspaceSuspendHistoryResetResponseDto {
+    const response: WorkspaceSuspendHistoryResetResponseDto = {
       available: this.dependencies.suspendCoordinator.resetPreviousHistory(
         this.requireWorkspace(),
         this.identity.userId,
       ),
     };
+    return response;
   }
 
   private async suspendTerminate(payload: JsonRecord) {
     const id = stringValue(payload.suspendedSessionId);
-    if (!id || !(await this.dependencies.suspended.terminate(this.identity.userId, id))) {
+    if (!id) throw new Error('Suspended session was not found.');
+    const request: WorkspaceSuspendSessionRequestDto = { suspendedSessionId: id };
+    if (!(await this.dependencies.suspended.terminate(this.identity.userId, request.suspendedSessionId))) {
       throw new Error('Suspended session was not found.');
     }
     return null;
@@ -727,7 +784,9 @@ export class WorkspaceProtocolSession {
 
   private async suspendRemove(payload: JsonRecord) {
     const id = stringValue(payload.suspendedSessionId);
-    if (!id || !(await this.dependencies.suspended.removeDisconnected(this.identity.userId, id))) {
+    if (!id) throw new Error('Disconnected suspended session was not found.');
+    const request: WorkspaceSuspendSessionRequestDto = { suspendedSessionId: id };
+    if (!(await this.dependencies.suspended.removeDisconnected(this.identity.userId, request.suspendedSessionId))) {
       throw new Error('Disconnected suspended session was not found.');
     }
     return null;
@@ -736,7 +795,15 @@ export class WorkspaceProtocolSession {
   private suspendRename(payload: JsonRecord) {
     const id = stringValue(payload.suspendedSessionId);
     const name = stringValue(payload.name);
-    if (!id || name === undefined || !this.dependencies.suspended.rename(this.identity.userId, id, name)) {
+    if (!id || name === undefined) throw new Error('Suspended session was not found.');
+    const request: WorkspaceSuspendRenameRequestDto = { suspendedSessionId: id, name };
+    if (
+      !this.dependencies.suspended.rename(
+        this.identity.userId,
+        request.suspendedSessionId,
+        request.name,
+      )
+    ) {
       throw new Error('Suspended session was not found.');
     }
     return null;
@@ -810,13 +877,19 @@ export class WorkspaceProtocolSession {
   }
 
   private sendResponse(requestId: string, ok: boolean, data?: unknown, error?: string): void {
-    this.sendJson({
+    const response: WorkspaceProtocolResponseDto = {
       type: 'response',
       requestId,
       payload: { ok, ...(data !== undefined ? { data } : {}), ...(error ? { error } : {}) },
-    });
+    };
+    this.sendJson(response);
   }
 
+  private sendEvent<K extends keyof WorkspaceSuspendEventMapDto>(
+    type: K,
+    payload: WorkspaceSuspendEventMapDto[K],
+  ): void;
+  private sendEvent(type: string, payload: unknown): void;
   private sendEvent(type: string, payload: unknown): void {
     this.sendJson({ type, payload });
   }

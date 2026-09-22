@@ -11,8 +11,4 @@ export type {
   SuspendedSessionStatusDto as SuspendedSessionStatus,
 } from '@nexus-terminal/protocol/ssh-suspend';
 
-export interface ResumeSuspendedSessionRequest {
-  suspendedSessionId: string;
-  workspaceId: string;
-  takeover?: boolean;
-}
+export type { WorkspaceSuspendResumeRequestDto as ResumeSuspendedSessionRequest } from '@nexus-terminal/protocol/workspace';
