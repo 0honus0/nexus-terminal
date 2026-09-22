@@ -17921,6 +17921,7 @@ const memoryProductClosureScenario: Scenario = async () => {
   const memorySettingsPath = path.join(frontendSourceRoot, 'features/agent/settings/MemorySettings.vue');
   const memorySettings = fs.existsSync(memorySettingsPath) ? fs.readFileSync(memorySettingsPath, 'utf8') : '';
   const hostEvents = readSource(frontendSourceRoot, 'features/agent/api/agent-events.ts');
+  const hostEventBus = readSource(frontendSourceRoot, 'features/agent/host/agent-host-events.ts');
   const hostSurface = readSource(frontendSourceRoot, 'features/agent/host/AgentSurfaceHost.vue');
   const hostOutbox = readSource(backendSourceRoot, 'infrastructure/agent/events/host-event-outbox.ts');
   const notificationBridge = readSource(backendSourceRoot, 'bootstrap/agent/agent-notification-bridge.ts');
@@ -17940,8 +17941,8 @@ const memoryProductClosureScenario: Scenario = async () => {
   assert.match(settingsPanel, /MemorySettings/, 'Agent Settings must mount the Memory surface');
   assert.match(
     memorySettings,
-    /nexus:agent:memory-changed/,
-    'Memory Settings must refresh from the durable Host event fan-out rather than correctness polling',
+    /agentHostEvents\.on\('memory-changed'/,
+    'Memory Settings must refresh from the typed Host event fan-out rather than correctness polling',
   );
   assert.doesNotMatch(memorySettings, /setInterval\s*\(/, 'Memory Settings must not correctness-poll Memory state');
   assert.match(
@@ -17970,7 +17971,12 @@ const memoryProductClosureScenario: Scenario = async () => {
     'Memory mutations must publish through the existing durable Host outbox',
   );
   assert.match(hostEvents, /'memory\.changed'/, 'Frontend Host event projector must decode memory.changed');
-  assert.match(hostSurface, /nexus:agent:memory-changed/, 'Host surface must fan out Memory changes without polling');
+  assert.match(hostEventBus, /'memory-changed'/, 'Typed Host event bus must declare the Memory change channel');
+  assert.match(
+    hostSurface,
+    /agentHostEvents\.emit\('memory-changed'/,
+    'Host surface must fan out Memory changes through the typed event bus without polling',
+  );
   assert.match(
     notificationBridge,
     /projectMemoryCandidate/,
