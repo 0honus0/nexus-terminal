@@ -1,23 +1,31 @@
+import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
+import type {
+  SuspendedSessionDto,
+  SuspendedSessionRenameRequestDto,
+  SuspendedSessionRenameResponseDto,
+} from '@nexus-terminal/protocol/ssh-suspend';
 import { httpClient } from '@/client/http';
 import type { SuspendedSession } from '../model/sshSuspend';
 
 export const sshSuspendApi = {
   async list(): Promise<SuspendedSession[]> {
-    return (await httpClient.get<SuspendedSession[]>('/ssh-suspend/suspended-sessions')).data;
+    return (await httpClient.get<SuspendedSessionDto[]>('/ssh-suspend/suspended-sessions')).data;
   },
 
   async terminate(id: string): Promise<void> {
-    await httpClient.delete(`/ssh-suspend/terminate/${encodeURIComponent(id)}`);
+    await httpClient.delete<MessageResponseDto>(`/ssh-suspend/terminate/${encodeURIComponent(id)}`);
   },
 
   async removeDisconnected(id: string): Promise<void> {
-    await httpClient.delete(`/ssh-suspend/entry/${encodeURIComponent(id)}`);
+    await httpClient.delete<MessageResponseDto>(`/ssh-suspend/entry/${encodeURIComponent(id)}`);
   },
 
   async rename(id: string, customName: string): Promise<string> {
-    const { data } = await httpClient.put<{ customName: string }>(`/ssh-suspend/name/${encodeURIComponent(id)}`, {
-      customName,
-    });
+    const request: SuspendedSessionRenameRequestDto = { customName };
+    const { data } = await httpClient.put<SuspendedSessionRenameResponseDto>(
+      `/ssh-suspend/name/${encodeURIComponent(id)}`,
+      request,
+    );
     return data.customName;
   },
 

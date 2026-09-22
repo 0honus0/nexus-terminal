@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { AuditLogPageDto } from '@nexus-terminal/protocol/audit';
 import type { AuditLogService } from '../../../modules/audit/audit.service';
 import type { AuditLogActionType } from '../../../modules/audit/audit.types';
 import { requireAuthenticated } from '../auth/auth.middleware';
@@ -29,7 +30,7 @@ export const createAuditRouter = (audit: AuditLogService): Router => {
         end,
         typeof q.query.search === 'string' ? q.query.search : undefined,
       );
-      s.json({
+      const payload: AuditLogPageDto = {
         logs: result.logs.map((log) => {
           let details: unknown = null;
           if (log.details) {
@@ -44,7 +45,8 @@ export const createAuditRouter = (audit: AuditLogService): Router => {
         total: result.total,
         limit,
         offset,
-      });
+      };
+      s.json(payload);
     }),
   );
   return r;

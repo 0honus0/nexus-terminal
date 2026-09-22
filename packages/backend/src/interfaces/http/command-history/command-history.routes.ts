@@ -1,4 +1,10 @@
 import { Router } from 'express';
+import type {
+  CommandHistoryAddRequestDto,
+  CommandHistoryAddResponseDto,
+  CommandHistoryClearResponseDto,
+  CommandHistoryEntryDto,
+} from '@nexus-terminal/protocol/command-history';
 import type { CommandHistoryService } from '../../../modules/command-history/command-history.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { parsePositiveId } from '../shared/http-utils';
@@ -9,18 +15,21 @@ export const createCommandHistoryRouter = (service: CommandHistoryService): Rout
   r.get(
     '/',
     route(async (_q, s) => {
-      s.json(await service.list());
+      const payload: CommandHistoryEntryDto[] = await service.list();
+      s.json(payload);
     }),
   );
   r.post(
     '/',
     route(async (q, s) => {
-      const command = q.body?.command;
+      const body = (q.body ?? {}) as Partial<CommandHistoryAddRequestDto>;
+      const command = body.command;
       if (typeof command !== 'string' || !command.trim()) {
         s.status(400).json({ message: '命令不能为空' });
         return;
       }
-      s.status(201).json({ id: await service.add(command), message: '命令已添加到历史记录' });
+      const payload: CommandHistoryAddResponseDto = { id: await service.add(command), message: '命令已添加到历史记录' };
+      s.status(201).json(payload);
     }),
   );
   r.delete(
@@ -42,7 +51,8 @@ export const createCommandHistoryRouter = (service: CommandHistoryService): Rout
     '/',
     route(async (_q, s) => {
       const count = await service.clear();
-      s.json({ count, message: `已清空 ${count} 条命令历史记录` });
+      const payload: CommandHistoryClearResponseDto = { count, message: `已清空 ${count} 条命令历史记录` };
+      s.json(payload);
     }),
   );
   return r;

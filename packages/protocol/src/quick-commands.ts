@@ -19,10 +19,10 @@ export interface QuickCommandDto {
 }
 
 export interface QuickCommandMutationRequestDto {
-  name: string | null;
+  name?: string | null;
   command: string;
-  variables: Record<string, string>;
-  tagIds: number[];
+  variables?: Record<string, string>;
+  tagIds?: number[];
 }
 
 export interface QuickCommandMutationResponseDto extends MessageResponseDto {

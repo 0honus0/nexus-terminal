@@ -1,4 +1,12 @@
 import { Router } from 'express';
+import type {
+  NotificationConfigDto,
+  NotificationSettingCreateRequestDto,
+  NotificationSettingDto,
+  NotificationSettingUpdateRequestDto,
+  NotificationTestRequestDto,
+  NotificationTestResponseDto,
+} from '@nexus-terminal/protocol/notifications';
 import type { NotificationSettingsService } from '../../../modules/notifications/notification-settings.service';
 import type {
   CreateNotificationSetting,
@@ -32,36 +40,38 @@ const readEnabledEvents = (value: unknown): CreateNotificationSetting['enabledEv
 
 const createInput = (body: unknown): CreateNotificationSetting => {
   if (!isRecord(body)) throw new Error('请求体必须是对象。');
-  if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
-  if (typeof body.enabled !== 'boolean') throw new Error('enabled 必须是布尔值。');
+  const request = body as Partial<NotificationSettingCreateRequestDto>;
+  if (typeof request.name !== 'string') throw new Error('name 必须是字符串。');
+  if (typeof request.enabled !== 'boolean') throw new Error('enabled 必须是布尔值。');
   return {
-    channelType: readChannelType(body.channelType),
-    name: body.name,
-    enabled: body.enabled,
-    config: readConfig(body.config),
-    enabledEvents: readEnabledEvents(body.enabledEvents),
+    channelType: readChannelType(request.channelType),
+    name: request.name,
+    enabled: request.enabled,
+    config: readConfig(request.config),
+    enabledEvents: readEnabledEvents(request.enabledEvents),
   };
 };
 
 const updateInput = (body: unknown): UpdateNotificationSetting => {
   if (!isRecord(body)) throw new Error('请求体必须是对象。');
+  const request = body as NotificationSettingUpdateRequestDto;
   const input: UpdateNotificationSetting = {};
-  if (body.channelType !== undefined) input.channelType = readChannelType(body.channelType);
-  if (body.name !== undefined) {
-    if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
-    input.name = body.name;
+  if (request.channelType !== undefined) input.channelType = readChannelType(request.channelType);
+  if (request.name !== undefined) {
+    if (typeof request.name !== 'string') throw new Error('name 必须是字符串。');
+    input.name = request.name;
   }
-  if (body.enabled !== undefined) {
-    if (typeof body.enabled !== 'boolean') throw new Error('enabled 必须是布尔值。');
-    input.enabled = body.enabled;
+  if (request.enabled !== undefined) {
+    if (typeof request.enabled !== 'boolean') throw new Error('enabled 必须是布尔值。');
+    input.enabled = request.enabled;
   }
-  if (body.config !== undefined) input.config = readConfig(body.config);
-  if (body.enabledEvents !== undefined) input.enabledEvents = readEnabledEvents(body.enabledEvents);
+  if (request.config !== undefined) input.config = readConfig(request.config);
+  if (request.enabledEvents !== undefined) input.enabledEvents = readEnabledEvents(request.enabledEvents);
   return input;
 };
 
-const notificationDto = (setting: NotificationSetting) => {
-  const config = { ...setting.config } as Record<string, unknown>;
+const notificationDto = (setting: NotificationSetting): NotificationSettingDto => {
+  const config = { ...setting.config } as NotificationConfigDto;
   if (setting.channelType === 'email') delete config.smtpPass;
   if (setting.channelType === 'telegram') delete config.botToken;
   return { ...setting, config };
@@ -81,10 +91,11 @@ export const createNotificationsRouter = (settings: NotificationSettingsService)
     route(async (request, response) => {
       try {
         if (!isRecord(request.body)) throw new Error('请求体必须是对象。');
-        const channelType = readChannelType(request.body.channelType);
-        const config = readConfig(request.body.config);
-        const result = await settings.test(channelType, config);
-        response.status(result.success ? 200 : 400).json(result);
+        const body = request.body as Partial<NotificationTestRequestDto>;
+        const channelType = readChannelType(body.channelType);
+        const config = readConfig(body.config);
+        const payload: NotificationTestResponseDto = await settings.test(channelType, config);
+        response.status(payload.success ? 200 : 400).json(payload);
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });
       }
@@ -160,8 +171,8 @@ export const createNotificationsRouter = (settings: NotificationSettingsService)
         response.status(404).json({ message: `通知设置 ${id} 未找到。` });
         return;
       }
-      const result = await settings.test(setting.channelType, setting.config);
-      response.status(result.success ? 200 : 400).json(result);
+      const payload: NotificationTestResponseDto = await settings.test(setting.channelType, setting.config);
+      response.status(payload.success ? 200 : 400).json(payload);
     }),
   );
   return router;

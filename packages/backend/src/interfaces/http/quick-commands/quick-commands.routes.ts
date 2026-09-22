@@ -1,4 +1,12 @@
 import { Router } from 'express';
+import type {
+  QuickCommandBulkAssignTagRequestDto,
+  QuickCommandBulkAssignTagResponseDto,
+  QuickCommandDto,
+  QuickCommandIncrementResponseDto,
+  QuickCommandMutationRequestDto,
+  QuickCommandMutationResponseDto,
+} from '@nexus-terminal/protocol/quick-commands';
 import type { QuickCommandService } from '../../../modules/quick-commands/quick-command.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
@@ -36,21 +44,22 @@ const parseBody = (body: unknown): ParsedQuickCommandBody => {
     };
   }
 
-  const validName = body.name === undefined || body.name === null || typeof body.name === 'string';
+  const request = body as Partial<QuickCommandMutationRequestDto>;
+  const validName = request.name === undefined || request.name === null || typeof request.name === 'string';
   const validTagIds =
-    body.tagIds === undefined ||
-    (Array.isArray(body.tagIds) &&
-      body.tagIds.every((value): value is number => typeof value === 'number' && Number.isInteger(value)));
-  const decodedVariables = body.variables === undefined ? undefined : decodeVariables(body.variables);
-  const validVariables = body.variables === undefined || decodedVariables !== null;
+    request.tagIds === undefined ||
+    (Array.isArray(request.tagIds) &&
+      request.tagIds.every((value): value is number => typeof value === 'number' && Number.isInteger(value)));
+  const decodedVariables = request.variables === undefined ? undefined : decodeVariables(request.variables);
+  const validVariables = request.variables === undefined || decodedVariables !== null;
 
   return {
-    name: body.name === null ? null : typeof body.name === 'string' ? body.name : null,
-    command: typeof body.command === 'string' ? body.command : '',
+    name: request.name === null ? null : typeof request.name === 'string' ? request.name : null,
+    command: typeof request.command === 'string' ? request.command : '',
     tagIds:
-      Array.isArray(body.tagIds) &&
-      body.tagIds.every((value): value is number => typeof value === 'number' && Number.isInteger(value))
-        ? body.tagIds
+      Array.isArray(request.tagIds) &&
+      request.tagIds.every((value): value is number => typeof value === 'number' && Number.isInteger(value))
+        ? request.tagIds
         : [],
     ...(decodedVariables ? { variables: decodedVariables } : {}),
     validName,
@@ -72,22 +81,34 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
   router.get(
     '/',
     route(async (request, response) => {
-      response.json(await commands.list(request.query.sortBy === 'usageCount' ? 'usageCount' : 'name'));
+      const payload: QuickCommandDto[] = await commands.list(request.query.sortBy === 'usageCount' ? 'usageCount' : 'name');
+      response.json(payload);
     }),
   );
   router.post(
     '/bulk-assign-tag',
     route(async (request, response) => {
-      const ids = request.body?.commandIds;
-      const tagId = request.body?.tagId;
-      if (!Array.isArray(ids) || ids.length === 0 || !ids.every(Number.isInteger) || !Number.isInteger(tagId)) {
+      const body = (request.body ?? {}) as Partial<QuickCommandBulkAssignTagRequestDto>;
+      const ids = body.commandIds;
+      const tagId = body.tagId;
+      if (
+        !Array.isArray(ids) ||
+        ids.length === 0 ||
+        !ids.every(Number.isInteger) ||
+        typeof tagId !== 'number' ||
+        !Number.isInteger(tagId)
+      ) {
         response
           .status(400)
           .json({ success: false, message: '请求体必须包含 commandIds (非空数字数组) 和 tagId (数字)。' });
         return;
       }
       await commands.assignTag(ids, tagId);
-      response.json({ success: true, message: `标签 ${tagId} 已成功尝试关联到 ${ids.length} 个指令。` });
+      const payload: QuickCommandBulkAssignTagResponseDto = {
+        success: true,
+        message: `标签 ${tagId} 已成功尝试关联到 ${ids.length} 个指令。`,
+      };
+      response.json(payload);
     }),
   );
   router.post(
@@ -106,9 +127,10 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
       try {
         const id = await commands.add(input.name, input.command, input.tagIds, input.variables);
         const command = await commands.get(id);
-        response
-          .status(201)
-          .json(command ? { message: '快捷指令已添加', command } : { message: '快捷指令已添加，但无法检索新记录', id });
+        const payload: QuickCommandMutationResponseDto = command
+          ? { message: '快捷指令已添加', command }
+          : { message: '快捷指令已添加，但无法检索新记录', command: null, id };
+        response.status(201).json(payload);
       } catch (error) {
         response.status(500).json({ message: errorMessage(error) });
       }
@@ -137,7 +159,8 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
         return;
       }
       const command = await commands.get(id);
-      response.json({ message: '快捷指令已更新', command });
+      const payload: QuickCommandMutationResponseDto = { message: '快捷指令已更新', command };
+      response.json(payload);
     }),
   );
   router.post(
@@ -153,7 +176,8 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
         return;
       }
       const command = await commands.get(id);
-      response.json({ message: '使用次数已记录', command });
+      const payload: QuickCommandIncrementResponseDto = { message: '使用次数已记录', command };
+      response.json(payload);
     }),
   );
   router.delete(

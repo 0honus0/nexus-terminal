@@ -1,4 +1,10 @@
 import { Router } from 'express';
+import type {
+  PathHistoryAddRequestDto,
+  PathHistoryAddResponseDto,
+  PathHistoryClearResponseDto,
+  PathHistoryEntryDto,
+} from '@nexus-terminal/protocol/filesystem-catalog';
 import type { PathHistoryService } from '../../../modules/path-history/path-history.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { parsePositiveId } from '../shared/http-utils';
@@ -9,18 +15,21 @@ export const createPathHistoryRouter = (service: PathHistoryService): Router => 
   r.get(
     '/',
     route(async (_q, s) => {
-      s.json(await service.list());
+      const payload: PathHistoryEntryDto[] = await service.list();
+      s.json(payload);
     }),
   );
   r.post(
     '/',
     route(async (q, s) => {
-      const path = q.body?.path;
+      const body = (q.body ?? {}) as Partial<PathHistoryAddRequestDto>;
+      const path = body.path;
       if (typeof path !== 'string' || !path.trim()) {
         s.status(400).json({ message: '路径不能为空' });
         return;
       }
-      s.status(201).json({ id: await service.add(path), message: '路径已添加到历史记录' });
+      const payload: PathHistoryAddResponseDto = { id: await service.add(path), message: '路径已添加到历史记录' };
+      s.status(201).json(payload);
     }),
   );
   r.delete(
@@ -42,7 +51,8 @@ export const createPathHistoryRouter = (service: PathHistoryService): Router => 
     '/',
     route(async (_q, s) => {
       const count = await service.clear();
-      s.json({ count, message: `已清空 ${count} 条路径历史记录` });
+      const payload: PathHistoryClearResponseDto = { count, message: `已清空 ${count} 条路径历史记录` };
+      s.json(payload);
     }),
   );
   return r;

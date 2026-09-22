@@ -1,36 +1,67 @@
+import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
+import type {
+  QuickCommandBulkAssignTagRequestDto,
+  QuickCommandBulkAssignTagResponseDto,
+  QuickCommandDto,
+  QuickCommandIncrementResponseDto,
+  QuickCommandMutationRequestDto,
+  QuickCommandMutationResponseDto,
+  QuickCommandTagDto,
+  QuickCommandTagMutationResponseDto,
+  QuickCommandTagNameRequestDto,
+} from '@nexus-terminal/protocol/quick-commands';
 import { httpClient } from '@/client/http';
 import type { QuickCommand, QuickCommandInput, QuickCommandTag } from '../model/quickCommand';
 
+const requireCommand = (command: QuickCommandDto | null | undefined): QuickCommand => {
+  if (!command) throw new Error('Quick command response did not include a command.');
+  return command;
+};
+
+const requireTag = (tag: QuickCommandTagDto | null | undefined): QuickCommandTag => {
+  if (!tag) throw new Error('Quick command tag response did not include a tag.');
+  return tag;
+};
+
 export const quickCommandsApi = {
   async list(): Promise<QuickCommand[]> {
-    return (await httpClient.get<QuickCommand[]>('/quick-commands')).data;
+    return (await httpClient.get<QuickCommandDto[]>('/quick-commands')).data;
   },
   async create(input: QuickCommandInput): Promise<QuickCommand> {
-    return (await httpClient.post<{ command: QuickCommand }>('/quick-commands', input)).data.command;
+    const request: QuickCommandMutationRequestDto = input;
+    const response = await httpClient.post<QuickCommandMutationResponseDto>('/quick-commands', request);
+    return requireCommand(response.data.command);
   },
   async update(id: number, input: QuickCommandInput): Promise<QuickCommand> {
-    return (await httpClient.put<{ command: QuickCommand }>(`/quick-commands/${id}`, input)).data.command;
+    const request: QuickCommandMutationRequestDto = input;
+    const response = await httpClient.put<QuickCommandMutationResponseDto>(`/quick-commands/${id}`, request);
+    return requireCommand(response.data.command);
   },
-  async remove(id: number) {
-    await httpClient.delete(`/quick-commands/${id}`);
+  async remove(id: number): Promise<void> {
+    await httpClient.delete<MessageResponseDto>(`/quick-commands/${id}`);
   },
   async incrementUsage(id: number): Promise<QuickCommand | null> {
-    return (await httpClient.post<{ command: QuickCommand | null }>(`/quick-commands/${id}/increment-usage`)).data
+    return (await httpClient.post<QuickCommandIncrementResponseDto>(`/quick-commands/${id}/increment-usage`)).data
       .command;
   },
   async listTags(): Promise<QuickCommandTag[]> {
-    return (await httpClient.get<QuickCommandTag[]>('/quick-command-tags')).data;
+    return (await httpClient.get<QuickCommandTagDto[]>('/quick-command-tags')).data;
   },
   async createTag(name: string): Promise<QuickCommandTag> {
-    return (await httpClient.post<{ tag: QuickCommandTag }>('/quick-command-tags', { name })).data.tag;
+    const request: QuickCommandTagNameRequestDto = { name };
+    const response = await httpClient.post<QuickCommandTagMutationResponseDto>('/quick-command-tags', request);
+    return requireTag(response.data.tag);
   },
   async renameTag(id: number, name: string): Promise<QuickCommandTag> {
-    return (await httpClient.put<{ tag: QuickCommandTag }>(`/quick-command-tags/${id}`, { name })).data.tag;
+    const request: QuickCommandTagNameRequestDto = { name };
+    const response = await httpClient.put<QuickCommandTagMutationResponseDto>(`/quick-command-tags/${id}`, request);
+    return requireTag(response.data.tag);
   },
-  async removeTag(id: number) {
-    await httpClient.delete(`/quick-command-tags/${id}`);
+  async removeTag(id: number): Promise<void> {
+    await httpClient.delete<MessageResponseDto>(`/quick-command-tags/${id}`);
   },
-  async assignTag(commandIds: number[], tagId: number) {
-    await httpClient.post('/quick-commands/bulk-assign-tag', { commandIds, tagId });
+  async assignTag(commandIds: number[], tagId: number): Promise<void> {
+    const request: QuickCommandBulkAssignTagRequestDto = { commandIds, tagId };
+    await httpClient.post<QuickCommandBulkAssignTagResponseDto>('/quick-commands/bulk-assign-tag', request);
   },
 };

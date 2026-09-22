@@ -1,4 +1,9 @@
 import { Router } from 'express';
+import type {
+  FavoritePathDto,
+  FavoritePathMutationRequestDto,
+  FavoritePathMutationResponseDto,
+} from '@nexus-terminal/protocol/filesystem-catalog';
 import type { FavoritePathService } from '../../../modules/favorite-paths/favorite-path.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { parsePositiveId } from '../shared/http-utils';
@@ -10,13 +15,15 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
   r.get(
     '/',
     route(async (q, s) => {
-      s.json(await service.list(q.query.sortBy === 'lastUsedAt' ? 'lastUsedAt' : 'name'));
+      const payload: FavoritePathDto[] = await service.list(q.query.sortBy === 'lastUsedAt' ? 'lastUsedAt' : 'name');
+      s.json(payload);
     }),
   );
   r.post(
     '/',
     route(async (q, s) => {
-      const { name = null, path } = q.body ?? {};
+      const body = (q.body ?? {}) as Partial<FavoritePathMutationRequestDto>;
+      const { name = null, path } = body;
       if (typeof path !== 'string' || !path.trim()) {
         s.status(400).json({ message: '路径内容不能为空' });
         return;
@@ -27,7 +34,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
       }
       const id = await service.add(name, path);
       const favorite = await service.get(id);
-      s.status(201).json({ message: '收藏路径已添加', favoritePath: favorite });
+      const payload: FavoritePathMutationResponseDto = { message: '收藏路径已添加', favoritePath: favorite };
+      s.status(201).json(payload);
     }),
   );
   r.get(
@@ -43,7 +51,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
         s.status(404).json({ message: '未找到指定的收藏路径' });
         return;
       }
-      s.json(item);
+      const payload: FavoritePathDto = item;
+      s.json(payload);
     }),
   );
   r.put(
@@ -59,7 +68,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
         return;
       }
       const favorite = await service.get(id);
-      s.json({ message: '上次使用时间戳已更新', favoritePath: favorite });
+      const payload: FavoritePathMutationResponseDto = { message: '上次使用时间戳已更新', favoritePath: favorite };
+      s.json(payload);
     }),
   );
   r.put(
@@ -84,7 +94,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
         return;
       }
       const favorite = await service.get(id);
-      s.json({ message: '收藏路径已更新', favoritePath: favorite });
+      const payload: FavoritePathMutationResponseDto = { message: '收藏路径已更新', favoritePath: favorite };
+      s.json(payload);
     }),
   );
   r.delete(
