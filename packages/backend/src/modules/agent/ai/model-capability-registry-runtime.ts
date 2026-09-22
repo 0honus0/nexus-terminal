@@ -1,4 +1,4 @@
-import { BUILTIN_MODEL_CAPABILITY_REGISTRY } from './model-capability-registry.snapshot';
+import { BUILTIN_MODEL_CAPABILITY_REGISTRY } from '../data/model-capability-registry.snapshot';
 import type { ModelCapabilityDefaults } from './model.types';
 import type { ModelCapabilityRegistrySnapshot } from './model-capability-registry-source';
 
