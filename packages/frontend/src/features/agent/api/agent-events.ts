@@ -811,6 +811,20 @@ async function* connect(request: AgentSubscriptionRequest, signal: AbortSignal):
         retryAttempt = 0;
       })) {
         if (signal.aborted) return;
+        if (event.type === 'unknown' && event.id !== undefined) {
+          logger.warn(
+            {
+              ...subscriptionContext(request),
+              cursor,
+              eventId: event.id,
+              sourceType: event.sourceType,
+              schemaVersion: event.schemaVersion,
+              reason: event.reason,
+            },
+            'Agent durable event rejected by typed projector',
+          );
+          throw new Error('AGENT_WS_DURABLE_EVENT_UNSUPPORTED');
+        }
         const sequence = durableSequence(event);
         if (sequence !== null && sequence <= cursor) continue;
         sawEvent = true;
