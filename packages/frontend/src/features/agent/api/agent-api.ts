@@ -1,12 +1,10 @@
 import type {
   AgentSubagentCancelRequestDto,
   AgentSubagentListQueryDto,
-  AgentSubagentMessageDto,
   AgentSubagentMessageListQueryDto,
   AgentSubagentMessagePageDto,
   AgentSubagentPageDto,
   AgentSubagentProfileDto,
-  AgentSubagentProfileTemplateDto,
   AgentSubagentSettingsReplaceRequestDto,
   AgentSubagentSettingsViewDto,
   AgentSubagentViewDto,
@@ -22,24 +20,6 @@ import type {
   AgentMemoryViewDto,
 } from '@nexus-terminal/protocol/agent-memories';
 import type {
-  AgentAppIntentArtifactDto,
-  AgentAppIntentReceiptDto,
-  AgentPluginAppStateDto,
-  AgentPluginFrontendDescriptorDto,
-  AgentPluginInstallationDto,
-  AgentPluginManifestDto,
-  AgentPluginPublisherKeyDto,
-  AgentPluginStageDto,
-  AgentPluginUninstallResultDto,
-  AgentPluginUpgradeResultDto,
-  AgentPluginVerifyResultDto,
-  AgentPluginVersionDto,
-  AgentRemotePluginCatalogDto,
-  AgentRemotePluginPackageDto,
-  AgentRemotePluginPublisherDto,
-} from '@nexus-terminal/protocol/agent-plugins';
-import type {
-  AgentAcpIntegrationConfigurationDto,
   AgentIntegrationCreateRequestDto,
   AgentIntegrationDeleteQueryDto,
   AgentIntegrationKindDto,
@@ -47,34 +27,19 @@ import type {
   AgentIntegrationRefreshDto,
   AgentIntegrationUpdateFieldsDto,
   AgentIntegrationViewDto,
-  AgentMcpIntegrationConfigurationDto,
 } from '@nexus-terminal/protocol/agent-integrations';
-import type {
-  AgentArtifactCleanupPreviewDto,
-  AgentArtifactRefDto,
-  AgentArtifactCleanupResultDto,
-  AgentArtifactPageDto,
-  AgentArtifactStorageSummaryDto,
-} from '@nexus-terminal/protocol/agent-artifacts';
 import type {
   AgentApprovalResolveFieldsDto,
   AgentApprovalResolveRequestDto,
   AgentApprovalViewDto,
-  AgentToolInspectionDto,
 } from '@nexus-terminal/protocol/agent-approvals';
-import type { AgentEnvelopeDto, AgentToolRiskDto } from '@nexus-terminal/protocol/agent-common';
+import type { AgentEnvelopeDto } from '@nexus-terminal/protocol/agent-common';
 import type {
   AgentAppGrantReplaceRequestDto,
   AgentAppGrantViewDto,
   AgentAppStateUpdateRequestDto,
   AgentAppSummaryDto,
-  AgentApprovalModeDto,
-  AgentCapabilityDefinitionDto,
-  AgentCapabilityGrantDto,
   AgentCapabilityGrantInputDto,
-  AgentCapabilityScopeDto,
-  AgentContextCompactionModeDto,
-  AgentContextProfileDto,
   AgentExecutionPolicyOverridesDto,
   AgentExecutionPolicyReplaceRequestDto,
   AgentExecutionPolicyViewDto,
@@ -86,36 +51,14 @@ import type {
   AgentSettingsPatchDto,
   AgentSettingsPatchRequestDto,
   AgentSettingsViewDto,
-  AgentTargetGrantSelectionDto,
-  AgentTargetKindDto,
 } from '@nexus-terminal/protocol/agent-host';
-import type {
-  AgentDiscoveredProviderModelDto,
-  AgentModelCapabilityDefaultsDto,
-  AgentModelCapabilityDto,
-  AgentModelCapabilityOverridesDto,
-  AgentModelReasoningDefaultsDto,
-  AgentModelRegistryStatusDto,
-  AgentProviderCreateRequestDto,
-  AgentProviderModelCapabilityObservationDto,
-  AgentProviderModelDto,
-  AgentProviderPatchFieldsDto,
-  AgentProviderViewDto,
-  AgentReasoningEffortDto,
-} from '@nexus-terminal/protocol/agent-providers';
 import type {
   AgentCheckpointViewDto,
   AgentCreateRunFieldsDto,
   AgentCreateRunRequestDto,
-  AgentDefinitionModelCompatibilityDto,
   AgentDefinitionViewDto,
-  AgentExecutionModeDto,
   AgentExpectedVersionRequestDto,
-  AgentPendingRunInputDto,
   AgentPendingRunInputPageDto,
-  AgentPendingUserInputRequestDto,
-  AgentPlanItemDto,
-  AgentPlanItemStatusDto,
   AgentRunAppendInputFieldsDto,
   AgentRunAppendInputRequestDto,
   AgentRunAppendInputResponseDto,
@@ -123,30 +66,22 @@ import type {
   AgentRunBudgetIncreaseFieldsDto,
   AgentRunBudgetIncreaseRequestDto,
   AgentRunDeleteQueryDto,
-  AgentRunEnvironmentSelectionDto,
   AgentRunListQueryDto,
   AgentRunPageDto,
   AgentRunPendingInputMutationFieldsDto,
   AgentRunPendingInputMutationRequestDto,
-  AgentRunPlanDto,
   AgentRunReconciliationResolveFieldsDto,
   AgentRunReconciliationResolveRequestDto,
-  AgentRunReconciliationResourceDto,
   AgentRunReconciliationViewDto,
   AgentRunResumeFieldsDto,
   AgentRunResumeRequestDto,
   AgentRunSetGoalFieldsDto,
   AgentRunSetGoalRequestDto,
   AgentRunSnapshotDto,
-  AgentRunStatusDto,
-  AgentRunTerminalIssueDto,
   AgentRunViewDto,
-  AgentUserInputChoiceDto,
-  AgentUserInputQuestionDto,
 } from '@nexus-terminal/protocol/agent-runs';
 import type {
   AgentLedgerPageDto,
-  AgentLedgerEntryDto,
   AgentLedgerQueryDto,
   AgentThreadCreateRequestDto,
   AgentThreadDeleteAllRequestDto,
@@ -176,7 +111,6 @@ import { createPluginApi } from './plugin-api';
 import { createProviderApi } from './provider-api';
 import { createArtifactApi } from './artifact-api';
 import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
-import type { AgentRunEnvironmentSnapshotDto } from '@nexus-terminal/protocol/agent-runs';
 
 export { AgentApiError, formatAgentApiError, toAgentApiError } from './agent-api-error';
 
@@ -196,13 +130,6 @@ export interface RecommendedAgentPluginInstallResult {
   app: AgentAppSummaryDto;
   installedNow: boolean;
 }
-
-
-
-
-
-
-
 
 export type {
   AgentRunEnvironmentRunnerPluginDto,
@@ -225,20 +152,11 @@ export type {
   AgentWorkspaceToolchainSwitchDto,
 } from '@nexus-terminal/protocol/agent-workspace-runtime';
 
-
-
-
-
-
 export type AgentCreateRunInput = Omit<AgentCreateRunFieldsDto, 'input' | 'connectionIds'> & {
   text: string;
   artifactRefs?: string[];
   connectionIds?: number[];
 };
-
-
-
-
 
 export interface AgentServerClockAnchor {
   serverUnixMilliseconds: number;
@@ -249,8 +167,6 @@ export interface AgentApprovalBatch {
   items: AgentApprovalViewDto[];
   clock: AgentServerClockAnchor;
 }
-
-
 
 export interface TargetDenylistEntry {
   connectionId: number;
@@ -290,15 +206,16 @@ export const agentApi = {
     const input: AgentSettingsPatchRequestDto = { patch, expectedVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelopeDto<AgentSettingsViewDto>>(
-          '/agent/settings',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.patch<AgentEnvelopeDto<AgentSettingsViewDto>>('/agent/settings', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
-  async previewHardLimits(proposed: Partial<AgentHardLimitsDto>, expectedVersion: number): Promise<AgentHardLimitPreviewDto> {
+  async previewHardLimits(
+    proposed: Partial<AgentHardLimitsDto>,
+    expectedVersion: number,
+  ): Promise<AgentHardLimitPreviewDto> {
     const input: AgentHardLimitPreviewRequestDto = { proposed, expectedVersion };
     return unwrap(
       (
@@ -314,11 +231,9 @@ export const agentApi = {
     const input: AgentHardLimitConfirmRequestDto = { confirmationId, expectedVersion };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentSettingsViewDto>>(
-          '/agent/settings/hard-limits/confirm',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentSettingsViewDto>>('/agent/settings/hard-limits/confirm', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
@@ -364,7 +279,8 @@ export const agentApi = {
   },
   async appGrants(appId: string): Promise<AgentAppGrantViewDto> {
     return unwrap(
-      (await httpClient.get<AgentEnvelopeDto<AgentAppGrantViewDto>>(`/agent/apps/${encodeURIComponent(appId)}/grants`)).data,
+      (await httpClient.get<AgentEnvelopeDto<AgentAppGrantViewDto>>(`/agent/apps/${encodeURIComponent(appId)}/grants`))
+        .data,
     );
   },
   async replaceAppGrants(
@@ -391,9 +307,12 @@ export const agentApi = {
     const params: AgentIntegrationListQueryDto | undefined = kind ? { kind } : undefined;
     return unwrap(
       (
-        await httpClient.get<AgentEnvelopeDto<AgentIntegrationViewDto[]>>(`/apps/${encodeURIComponent(appId)}/integrations`, {
-          params,
-        })
+        await httpClient.get<AgentEnvelopeDto<AgentIntegrationViewDto[]>>(
+          `/apps/${encodeURIComponent(appId)}/integrations`,
+          {
+            params,
+          },
+        )
       ).data,
     );
   },
@@ -624,7 +543,11 @@ export const agentApi = {
       ).data,
     );
   },
-  async memories(appId: string, status: AgentMemoryStatusDto | 'all' = 'all', limit = 100): Promise<AgentMemoryViewDto[]> {
+  async memories(
+    appId: string,
+    status: AgentMemoryStatusDto | 'all' = 'all',
+    limit = 100,
+  ): Promise<AgentMemoryViewDto[]> {
     const params: AgentMemoryListQueryDto = { status, limit };
     return unwrap(
       (
@@ -775,11 +698,9 @@ export const agentApi = {
     const request: AgentCreateRunRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
-          `/apps/${encodeURIComponent(appId)}/runs`,
-          request,
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(`/apps/${encodeURIComponent(appId)}/runs`, request, {
+          headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() },
+        })
       ).data,
     );
   },
@@ -807,11 +728,9 @@ export const agentApi = {
     const input: AgentRunSetGoalRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
-          path,
-          input,
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(path, input, {
+          headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() },
+        })
       ).data,
     );
   },
@@ -836,11 +755,9 @@ export const agentApi = {
     const input: AgentRunPendingInputMutationRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelopeDto<AgentRunViewDto>>(
-          path,
-          input,
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
-        )
+        await httpClient.patch<AgentEnvelopeDto<AgentRunViewDto>>(path, input, {
+          headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() },
+        })
       ).data,
     );
   },

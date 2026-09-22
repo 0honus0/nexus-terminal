@@ -43,6 +43,7 @@ node_modules/
 jspm_packages/
 scripts/*
 !scripts/check-package-management.mjs
+!scripts/check-transport-contract-boundaries.mjs
 !scripts/e2e/
 !scripts/e2e/**
 !scripts/docker/

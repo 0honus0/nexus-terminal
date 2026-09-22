@@ -28,6 +28,7 @@ import type {
   WorkspaceFilesystemSearchRequestDto,
   WorkspaceFilesystemSearchResponseDto,
   WorkspaceFilesystemWriteTextRequestDto,
+  WorkspaceProtocolRequestDto,
   WorkspaceProtocolResponseDto,
   WorkspaceRemoteFileEntryDto,
   WorkspaceRemoteFileMetadataDto,
@@ -94,7 +95,6 @@ import {
   MAX_WORKSPACE_BINARY_REQUEST_ID_BYTES,
   WORKSPACE_BINARY_PROTOCOL_VERSION,
 } from './workspace-binary.protocol';
-import type { WorkspaceProtocolRequest } from './workspace-protocol.types';
 
 const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 const MAX_JSON_MESSAGE_BYTES = 1024 * 1024;
@@ -105,8 +105,7 @@ const HIGH_FREQUENCY_OPERATIONS = new Set(['terminal.input', 'terminal.resize', 
 type JsonRecord = Record<string, unknown>;
 const isJsonRecord = (value: unknown): value is JsonRecord =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-const record = (value: unknown): JsonRecord =>
-  isJsonRecord(value) ? value : {};
+const record = (value: unknown): JsonRecord => (isJsonRecord(value) ? value : {});
 const stringValue = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
 const numberValue = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -395,7 +394,7 @@ export class WorkspaceProtocolSession {
       return;
     }
 
-    let message: WorkspaceProtocolRequest;
+    let message: WorkspaceProtocolRequestDto<Record<string, unknown>>;
     try {
       const parseStartedAt = runtimePerformanceMetrics.operationStarted();
       let parsed: unknown;
@@ -607,7 +606,8 @@ export class WorkspaceProtocolSession {
       throw new Error('connectionId must be a positive integer.');
     if (!this.dependencies.workspace.canCreate(workspaceId))
       throw new Error(`Workspace ${workspaceId} already exists.`);
-    if (payload.viewport !== undefined && !isJsonRecord(payload.viewport)) throw new Error('Invalid Workspace viewport.');
+    if (payload.viewport !== undefined && !isJsonRecord(payload.viewport))
+      throw new Error('Invalid Workspace viewport.');
     const viewport = record(payload.viewport);
     const columns = numberValue(viewport.columns);
     const rows = numberValue(viewport.rows);
@@ -700,25 +700,19 @@ export class WorkspaceProtocolSession {
   private async filesystemReadText(payload: JsonRecord) {
     const path = this.requirePath(payload.path);
     const encoding = stringValue(payload.encoding);
-    if (payload.encoding !== undefined && encoding === undefined) throw new Error('Filesystem encoding must be a string.');
+    if (payload.encoding !== undefined && encoding === undefined)
+      throw new Error('Filesystem encoding must be a string.');
     const request: WorkspaceFilesystemReadTextRequestDto = {
       path,
       ...(encoding === undefined ? {} : { encoding }),
     };
-    const result = await this.dependencies.filesystem.readFile(
-      this.requireWorkspace(),
-      request.path,
-      request.encoding,
-    );
+    const result = await this.dependencies.filesystem.readFile(this.requireWorkspace(), request.path, request.encoding);
     const response: WorkspaceFilesystemReadTextResponseDto = {
       path: request.path,
       content: result.content,
       encoding: result.encodingUsed,
     };
-    return new WorkspaceBinaryResponse(
-      response,
-      singleBinaryChunk(result.rawContent),
-    );
+    return new WorkspaceBinaryResponse(response, singleBinaryChunk(result.rawContent));
   }
 
   private async filesystemReadBinary(payload: JsonRecord) {
@@ -733,7 +727,8 @@ export class WorkspaceProtocolSession {
     const content = stringValue(payload.content);
     if (content === undefined) throw new Error('File content must be a string.');
     const encoding = stringValue(payload.encoding);
-    if (payload.encoding !== undefined && encoding === undefined) throw new Error('Filesystem encoding must be a string.');
+    if (payload.encoding !== undefined && encoding === undefined)
+      throw new Error('Filesystem encoding must be a string.');
     const request: WorkspaceFilesystemWriteTextRequestDto = {
       path,
       content,
@@ -759,7 +754,8 @@ export class WorkspaceProtocolSession {
     const content = stringValue(payload.content);
     const encoding = stringValue(payload.encoding);
     if (payload.content !== undefined && content === undefined) throw new Error('File content must be a string.');
-    if (payload.encoding !== undefined && encoding === undefined) throw new Error('Filesystem encoding must be a string.');
+    if (payload.encoding !== undefined && encoding === undefined)
+      throw new Error('Filesystem encoding must be a string.');
     const request: WorkspaceFilesystemCreateFileRequestDto = {
       path,
       ...(content === undefined ? {} : { content }),
@@ -925,7 +921,8 @@ export class WorkspaceProtocolSession {
     }
     const relativePath = stringValue(payload.relativePath);
     const prepareId = stringValue(payload.prepareId);
-    if (payload.relativePath !== undefined && relativePath === undefined) throw new Error('Invalid upload relative path.');
+    if (payload.relativePath !== undefined && relativePath === undefined)
+      throw new Error('Invalid upload relative path.');
     if (payload.prepareId !== undefined && prepareId === undefined) throw new Error('Invalid upload prepare id.');
     const request: WorkspaceUploadStartRequestDto = {
       uploadId,
@@ -941,10 +938,11 @@ export class WorkspaceProtocolSession {
       request.destinationPath,
       request.size,
       {
-      ...(request.relativePath === undefined ? {} : { relativePath: request.relativePath }),
-      ...(request.prepareId === undefined ? {} : { prepareId: request.prepareId }),
-      conflictPolicy: request.conflictPolicy,
-    });
+        ...(request.relativePath === undefined ? {} : { relativePath: request.relativePath }),
+        ...(request.prepareId === undefined ? {} : { prepareId: request.prepareId }),
+        conflictPolicy: request.conflictPolicy,
+      },
+    );
     return { started: true };
   }
 
@@ -988,8 +986,7 @@ export class WorkspaceProtocolSession {
     if (payload.terminalSnapshot !== undefined && terminalSnapshot === undefined) {
       throw new Error('terminalSnapshot must be a string.');
     }
-    const request: WorkspaceSuspendMarkRequestDto =
-      terminalSnapshot === undefined ? {} : { terminalSnapshot };
+    const request: WorkspaceSuspendMarkRequestDto = terminalSnapshot === undefined ? {} : { terminalSnapshot };
     const result = await this.dependencies.suspendCoordinator.suspendNow(
       workspaceId,
       this.identity.userId,
@@ -1120,13 +1117,7 @@ export class WorkspaceProtocolSession {
     const name = stringValue(payload.name);
     if (!id || name === undefined) throw new Error('Suspended session was not found.');
     const request: WorkspaceSuspendRenameRequestDto = { suspendedSessionId: id, name };
-    if (
-      !this.dependencies.suspended.rename(
-        this.identity.userId,
-        request.suspendedSessionId,
-        request.name,
-      )
-    ) {
+    if (!this.dependencies.suspended.rename(this.identity.userId, request.suspendedSessionId, request.name)) {
       throw new Error('Suspended session was not found.');
     }
     return null;
@@ -1208,10 +1199,7 @@ export class WorkspaceProtocolSession {
     this.sendJson(response);
   }
 
-  private sendEvent<K extends keyof WorkspaceEventMapDto>(
-    type: K,
-    payload: WorkspaceEventMapDto[K],
-  ): void;
+  private sendEvent<K extends keyof WorkspaceEventMapDto>(type: K, payload: WorkspaceEventMapDto[K]): void;
   private sendEvent(type: string, payload: unknown): void;
   private sendEvent(type: string, payload: unknown): void {
     this.sendJson({ type, payload });

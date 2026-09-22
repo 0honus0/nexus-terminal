@@ -2,7 +2,6 @@ import type { AgentApprovalResolveFieldsDto } from '@nexus-terminal/protocol/age
 import type { AgentReasoningEffortDto } from '@nexus-terminal/protocol/agent-providers';
 import type {
   AgentCreateRunFieldsDto,
-  AgentRunAppendInputFieldsDto,
   AgentRunBudgetIncreaseDto,
   AgentRunBudgetIncreaseFieldsDto,
   AgentRunEnvironmentSelectionDto,
@@ -23,15 +22,7 @@ import type {
 import { hasOnlyKeys, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
-const reasoningEfforts = new Set<AgentReasoningEffortDto>([
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-]);
+const reasoningEfforts = new Set<AgentReasoningEffortDto>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 const isReasoningEffort = (value: unknown): value is AgentReasoningEffortDto =>
   typeof value === 'string' && reasoningEfforts.has(value as AgentReasoningEffortDto);
 
@@ -96,7 +87,9 @@ export const parseCreateRunRequest = (body: unknown): AgentCreateRunFieldsDto =>
       modelId: model.modelId,
       configurationVersion: model.configurationVersion,
     },
-    ...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort as AgentReasoningEffortDto }),
+    ...(value.reasoningEffort === undefined
+      ? {}
+      : { reasoningEffort: value.reasoningEffort as AgentReasoningEffortDto }),
     approvalMode: value.approvalMode as AgentCreateRunFieldsDto['approvalMode'],
     executionMode: value.executionMode as AgentCreateRunFieldsDto['executionMode'],
     ...(typeof value.plannedFromRunId === 'string' ? { plannedFromRunId: value.plannedFromRunId } : {}),
@@ -146,9 +139,7 @@ export const parseReconciliationResolveRequest = (body: unknown): AgentRunReconc
   return { expectedVersion: value.expectedVersion, note: value.note.trim(), resources };
 };
 
-export const parseAppendInputRequest = (
-  body: unknown,
-): { input: AgentUserInputDataDto; expectedVersion: number } => {
+export const parseAppendInputRequest = (body: unknown): { input: AgentUserInputDataDto; expectedVersion: number } => {
   const value = versionedRecord(body, ['text', 'artifactRefs', 'expectedVersion']);
   if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
   return {

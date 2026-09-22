@@ -17940,6 +17940,14 @@ const memoryProductClosureScenario: Scenario = async () => {
   const hostEventBus = readSource(frontendSourceRoot, 'features/agent/host/agent-host-events.ts');
   const hostSurface = readSource(frontendSourceRoot, 'features/agent/host/AgentSurfaceHost.vue');
   const hostOutbox = readSource(backendSourceRoot, 'infrastructure/agent/events/host-event-outbox.ts');
+  const memoryRepositorySource = readSource(
+    backendSourceRoot,
+    'infrastructure/agent/repositories/sqlite-memory.repository.ts',
+  );
+  const agentEventsProtocol = fs.readFileSync(
+    path.resolve(backendSourceRoot, '../../protocol/src/agent-events.ts'),
+    'utf8',
+  );
   const notificationBridge = readSource(backendSourceRoot, 'bootstrap/agent/agent-notification-bridge.ts');
   const recallRepository = readSource(
     backendSourceRoot,
@@ -17982,11 +17990,25 @@ const memoryProductClosureScenario: Scenario = async () => {
     'Cross-App import picker must only present live published Memory; Backend preview/confirm remains final authority',
   );
   assert.match(
-    hostOutbox,
-    /'memory\.changed'/,
-    'Memory mutations must publish through the existing durable Host outbox',
+    memoryRepositorySource,
+    /appendHostEvent[\s\S]*'memory\.changed'/,
+    'Memory mutations must publish memory.changed through the durable Host outbox',
   );
-  assert.match(hostEvents, /'memory\.changed'/, 'Frontend Host event projector must decode memory.changed');
+  assert.match(
+    hostOutbox,
+    /AgentHostEventTypeDto/,
+    'Host outbox event names must be constrained by the canonical protocol union',
+  );
+  assert.match(
+    agentEventsProtocol,
+    /'memory\.changed'/,
+    'Canonical Agent Host event protocol must retain memory.changed',
+  );
+  assert.match(
+    hostEvents,
+    /AGENT_HOST_EVENT_TYPES/,
+    'Frontend Host event projector must consume the canonical Host event type union',
+  );
   assert.match(hostEventBus, /'memory-changed'/, 'Typed Host event bus must declare the Memory change channel');
   assert.match(
     hostSurface,
@@ -22453,7 +22475,7 @@ const productTypeBoundaryScenario: Scenario = async () => {
   const budget = sources.get('features/agent/settings/BudgetContextSettings.vue')!;
   assert.match(
     budget,
-    /type BudgetKey = keyof AgentSettingsDocument\['budget'\]/,
+    /type BudgetKey = keyof AgentSettingsDocumentDto\['budget'\]/,
     'Budget settings must derive dynamic keys from the declared settings budget contract',
   );
   assert.match(budget, /keys: BudgetKey\[\]/, 'Budget field groups must use the typed budget key union');

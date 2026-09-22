@@ -430,7 +430,7 @@ Agent UI 中任意像素字号统计：
 `AgentAppSurface.vue` 单文件即同时承担：App 级会话状态、Run 流订阅、审批/对账交互、线程 CRUD、目标选择、Composer 配置渲染、TaskRail 编排。
 建议拆分（不实施）：`useAgentThreads` / `useAgentRunStream` / `useRunConfiguration` composable + 把 Run 详情（TaskRail 内容）拆成独立 feature 组件，把 Composer 配置拆成 `RunConfigBar.vue`。
 
-### 3.2 Nexus 前后端 transport DTO / event 协议尚未完全统一（P1，🚧 迁移中）
+### 3.2 Nexus 前后端 transport DTO / event 协议尚未完全统一（P1，✅ 当前问题已闭合 2026-09-22）
 
 > **2026-09-22 迁移检查点**：问题范围已从“仅 Agent protocol”修正为 **Nexus 全局前后端真实 transport contract**。canonical source 统一为 `packages/protocol`，不再计划建立单独的 `packages/agent-protocol`。依赖方向固定为 `protocol <- frontend/backend`；protocol 不依赖 frontend/backend，backend domain/service/repository 类型继续留在各自模块，frontend UI-only ViewModel 也继续本地维护。
 
@@ -457,7 +457,7 @@ Agent UI 中任意像素字号统计：
 - ✅ **Agent Workspace Runtime 已完成 canonical DTO 接线（2026-09-22）**：Host-side availability/catalog/storage/setup/tool-pack/runtime-cleanup/settings-reset/command/cache-cleanup 与 App-side workspace list/create/get/action/tool-version switch/artifact import-export 两组 HTTP surface 已统一迁入 `protocol/agent-workspace-runtime`；backend 共用 `workspace-runtime-dto.ts`，workspace profile 与 Run 共享同一 environment mapper。frontend 本地 Workspace Runtime wire interface、旧 `*View` 名称、`result/current/proposed: unknown` 与 backend 本地 workspace request interface 均清零。迁移同时修复 settings-reset confirm 旧 frontend 错把 domain `AgentSettingsView` 当完整 Host `AgentSettingsViewDto` 的漂移：confirm 改用专用 result DTO，随后显式重取完整 Host settings。
 - ✅ **Agent event WS / durable event union 已完成 canonical protocol 接线（2026-09-22）**：`protocol/agent-events` 现为 durable run event、host event、ephemeral run event 与 subscribe/unsubscribe/subscribed/event/error WS envelope 的单一来源；backend state-commit、RunEvent/HostEvent、host outbox、transient event pipeline 与 WS session 均直接消费该 contract，并在 SQLite decode 边界对持久化 event name 做 fail-closed validation。frontend `agent-events.ts` 删除本地 `AgentWireMessage/AgentWireEventPayload/AgentSubscriptionRequest`，subscribe/unsubscribe 直接构造 protocol DTO；同时移除旧 projector 中并非 durable event 的 `checkpoint.resume` 漂移项。backend build、frontend full build、legacy WS declaration / compatibility alias 扫描均通过。
 - ✅ **Agent terminal WS 已完成 canonical protocol 接线（2026-09-22）**：`protocol/agent-terminal` 现统一定义 attach query、`resize | signal | close` client control 与 `ready` server control；PTY stdin/stdout/stderr 继续保持 raw binary bytes。backend upgrade parser 与 terminal session、frontend terminal channel 均直接消费 protocol DTO，text frame 继续执行 runtime validation；frontend 额外校验 `ready.generation` 与当前 workspace generation 一致。backend build、frontend full build、local terminal wire/interface/compatibility alias 扫描均通过。
-- 🚧 **transport DTO 已无剩余迁移面**：当前只剩 architecture guard 接入与全量 build + Agent/Workspace 现有 regression/scenario 收尾。
+- ✅ **architecture guard 与最终回归已闭环（2026-09-22）**：新增 `scripts/check-transport-contract-boundaries.mjs` 并接入 root `lint`，覆盖 94 个 frontend/backend network adapter 文件与 2 个 Agent WS adapter；禁止 adapter 内重新声明本地 `*Dto`、DTO→旧名兼容 alias，以及 Agent WS 重新定义本地 Wire/Message/Request/Response/Envelope contract。guard 首次运行还抓出并删除了遗留 `workspace-protocol.types.ts` compatibility alias。最终 root `build` PASS、root `lint` PASS、transport architecture guard PASS，现有 Agent scenario suite 74/74 PASS；scenario 静态架构断言同步改为验证 canonical protocol 单一来源。
 - ✅ **durable 漂移静默消费已关闭 2026-09-22**：projector 遇到带 durable `id` 的 unknown event 会 fail-closed，不再推进 cursor；这一条是行为防线，不能替代 canonical protocol。
 - ⏸ **backend 单元测试保持冻结**：本轮只做现有 build / lint / scenario / architecture guard 验证，不新增、迁移或补 backend unit test，除非后续明确重新授权。
 
@@ -468,7 +468,7 @@ Agent UI 中任意像素字号统计：
 3. frontend network API 直接消费 protocol DTO；仅在字段完全一致时允许 app model 作为 type alias，带本地状态的 UI ViewModel 必须继续与 DTO 分离。
 4. 运行时边界继续执行 `unknown -> parser/validation -> RequestDto -> domain`，不能因为共享 TypeScript 类型而删掉输入校验。
 5. 增加 architecture guard，阻止在 `features/*/api`、`interfaces/http/*`、WS protocol adapter 中重新定义新的重复 wire DTO。
-6. backend/frontend 全量 build 通过；Agent/Workspace 迁移后再跑其现有 regression / scenario suite。**在这些条件满足前，§3.2 保持开放。**
+6. backend/frontend 全量 build 通过；Agent/Workspace 迁移后再跑其现有 regression / scenario suite。**以上条件已于 2026-09-22 全部满足，§3.2 关闭。**
 
 ### 3.3 前端状态与事件传递方式偏"隐式全局"（P1，✅ 当前问题已闭合 2026-09-22）
 
