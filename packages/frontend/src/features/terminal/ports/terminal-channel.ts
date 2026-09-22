@@ -1,4 +1,4 @@
-import type { TerminalOutput, TerminalViewport } from '../model/terminal';
+import type { TerminalOutput, WorkspaceTerminalViewportDto } from '../model/terminal';
 
 export interface TerminalHistoryPage {
   data: Uint8Array;
@@ -7,7 +7,7 @@ export interface TerminalHistoryPage {
 
 export interface TerminalChannel {
   sendInput(data: string): void | Promise<void>;
-  resize(viewport: TerminalViewport): void | Promise<void>;
+  resize(viewport: WorkspaceTerminalViewportDto): void | Promise<void>;
   onOutput(handler: (output: TerminalOutput) => void): () => void;
   onClose(handler: (reason?: string) => void): () => void;
   onError(handler: (message: string) => void): () => void;

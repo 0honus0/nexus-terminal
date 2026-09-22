@@ -5,12 +5,12 @@
   import { BaseButton, BaseFormField, BaseInput, BaseModal, BaseTable, BaseTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useSshKeys } from '../composables/useSshKeys';
-  import type { SshKeySummary } from '../model/sshKey';
+  import type { SshKeySummaryDto } from '../model/sshKey';
   const visible = defineModel<boolean>({ default: false });
   const { t } = useI18n();
   const keys = useSshKeys();
   const feedback = useFeedback();
-  const editing = ref<SshKeySummary | null>(null);
+  const editing = ref<SshKeySummaryDto | null>(null);
   const showForm = ref(false);
   const form = reactive({ name: '', privateKey: '', passphrase: '' });
   const error = ref('');
@@ -27,7 +27,7 @@
     reset();
     showForm.value = true;
   };
-  const edit = (key: SshKeySummary) => {
+  const edit = (key: SshKeySummaryDto) => {
     editing.value = key;
     showForm.value = true;
     Object.assign(form, { name: key.name, privateKey: '', passphrase: '' });
@@ -66,7 +66,7 @@
       input.value = '';
     }
   };
-  const remove = async (key: SshKeySummary) => {
+  const remove = async (key: SshKeySummaryDto) => {
     if (loading.value) return;
     if (!(await feedback.confirm({ message: `${t('common.delete')} ${key.name}?`, destructive: true }))) return;
     loading.value = true;

@@ -2,7 +2,11 @@ import { defineStore } from 'pinia';
 import { logger } from '@/client/logging/logger';
 import { appearanceApi } from '../api/appearanceApi';
 import { defaultWindowThemeColor, normalizeUiTheme } from '../config/default-theme';
-import type { AppearanceSettings, TerminalTheme } from '../model/appearance';
+import type {
+  AppearanceSettingsDto,
+  AppearanceUpdateRequestDto,
+  TerminalThemeDto,
+} from '@nexus-terminal/protocol/appearance';
 
 let appearanceCacheGeneration = 0;
 
@@ -44,7 +48,7 @@ const applyPageBackground = (path?: string): void => {
   body.style.backgroundAttachment = path ? 'fixed' : '';
 };
 
-const applySettings = (settings: AppearanceSettings): void => {
+const applySettings = (settings: AppearanceSettingsDto): void => {
   applyUiTheme(parseTheme(settings.customUiTheme));
   applyWindowColor(settings.windowThemeColor);
   applyPageBackground(settings.pageBackgroundImage);
@@ -52,8 +56,8 @@ const applySettings = (settings: AppearanceSettings): void => {
 
 export const useAppearanceStore = defineStore('appearance', {
   state: () => ({
-    settings: {} as AppearanceSettings,
-    themes: [] as TerminalTheme[],
+    settings: {} as AppearanceSettingsDto,
+    themes: [] as TerminalThemeDto[],
     loaded: false,
     settingsRevision: 0,
     customizerVisible: false,
@@ -62,7 +66,7 @@ export const useAppearanceStore = defineStore('appearance', {
     reset() {
       appearanceCacheGeneration += 1;
       this.settingsRevision += 1;
-      this.settings = {} as AppearanceSettings;
+      this.settings = {} as AppearanceSettingsDto;
       this.themes = [];
       this.loaded = false;
       this.customizerVisible = false;
@@ -96,7 +100,7 @@ export const useAppearanceStore = defineStore('appearance', {
       }
     },
 
-    async update(patch: Partial<AppearanceSettings>) {
+    async update(patch: AppearanceUpdateRequestDto) {
       const generation = appearanceCacheGeneration;
       const settings = await appearanceApi.update(patch);
       if (generation !== appearanceCacheGeneration) return;
@@ -115,8 +119,13 @@ export const useAppearanceStore = defineStore('appearance', {
       }
     },
 
-    previewSettings(patch: Partial<AppearanceSettings>) {
-      this.settings = { ...this.settings, ...patch };
+    previewSettings(patch: AppearanceUpdateRequestDto) {
+      const { terminalCustomHtml, ...previewPatch } = patch;
+      this.settings = {
+        ...this.settings,
+        ...previewPatch,
+        ...(terminalCustomHtml === undefined ? {} : { terminalCustomHtml: terminalCustomHtml ?? '' }),
+      };
     },
 
     async saveUiTheme(theme: Record<string, string>) {

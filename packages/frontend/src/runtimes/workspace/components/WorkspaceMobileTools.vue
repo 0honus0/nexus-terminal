@@ -5,8 +5,8 @@
   import { VirtualKeyboard, type TerminalChannel } from '@/features/terminal/public';
   import { loadQuickCommandsPanel, type ExecuteCommandIntent } from '@/features/quick-commands/public';
   import { loadStatusMonitor, type StatusMonitorSessionController } from '@/features/status-monitor/public';
-  import type { Preferences } from '@/features/preferences/public';
-  import type { WorkspacePaneName } from '../layout/workspaceLayout';
+  import type { PreferencesDto } from '@/features/preferences/public';
+  import type { WorkspacePaneNameDto } from '../layout/workspaceLayout';
   import WorkspaceCommandBar from './WorkspaceCommandBar.vue';
 
   const QuickCommandsPanel = defineAsyncComponent(loadQuickCommandsPanel);
@@ -23,7 +23,7 @@
   }
 
   const props = defineProps<{
-    pane: WorkspacePaneName;
+    pane: WorkspacePaneNameDto;
     terminalApi: MobileTerminalApi | null;
     terminalChannel: TerminalChannel;
     statusSession: StatusMonitorSessionController;
@@ -35,7 +35,7 @@
     showQuickCommandTags?: boolean;
     quickCommandRowScale?: number;
     commandDraft: string;
-    commandInputSyncTarget?: Preferences['commandInputSyncTarget'];
+    commandInputSyncTarget?: PreferencesDto['commandInputSyncTarget'];
     quickCommandsGrouped?: boolean;
     commandReady?: boolean;
     terminalSearchOpen?: boolean;
@@ -45,7 +45,7 @@
   }>();
 
   const emit = defineEmits<{
-    'update:pane': [pane: WorkspacePaneName];
+    'update:pane': [pane: WorkspacePaneNameDto];
     'update:commandDraft': [value: string];
     'update:terminalSearchOpen': [open: boolean];
     'update:terminalSearchTerm': [term: string];
@@ -77,7 +77,7 @@
     keyboardVisible.value = !keyboardVisible.value;
     if (!keyboardVisible.value) emit('clearModifiers');
   };
-  const selectPane = (pane: WorkspacePaneName) => {
+  const selectPane = (pane: WorkspacePaneNameDto) => {
     if (pane !== 'terminal' && keyboardVisible.value) {
       keyboardVisible.value = false;
       emit('clearModifiers');

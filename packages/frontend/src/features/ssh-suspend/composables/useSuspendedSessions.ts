@@ -3,7 +3,8 @@ import { computed, ref } from 'vue';
 import { apiErrorMessage, apiErrorStatus } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { sshSuspendApi } from '../api/sshSuspendApi';
-import type { SuspendedSession } from '../model/sshSuspend';
+import type { SuspendedSessionDto } from '../model/sshSuspend';
+export type { WorkspaceSuspendAutoTerminatedEventDto };
 
 const BASE_POLL_MS = 1_500;
 const IDLE_POLL_MS = 10_000;
@@ -11,7 +12,7 @@ const MAX_POLL_MS = 60_000;
 const ERROR_POLL_MS = 10_000;
 const HANDOFF_REFRESH_DELAYS_MS = [0, 120, 300, 650, 1_200] as const;
 
-const sessions = ref<SuspendedSession[]>([]);
+const sessions = ref<SuspendedSessionDto[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 let loaded = false;
@@ -23,9 +24,7 @@ let pollConsumers = 0;
 let handoffRefreshSequence = 0;
 const handoffRefreshes = new Map<string, number>();
 
-export type SuspendedAutoTerminationEvent = WorkspaceSuspendAutoTerminatedEventDto;
-
-export type SuspendedAutoTerminationNotice = SuspendedAutoTerminationEvent & {
+export type SuspendedAutoTerminationViewModel = WorkspaceSuspendAutoTerminatedEventDto & {
   name?: string;
 };
 
@@ -33,8 +32,8 @@ const handledAutoTerminations = new Set<string>();
 const handledAutoTerminationOrder: string[] = [];
 
 export function applySuspendedAutoTermination(
-  event: SuspendedAutoTerminationEvent,
-): SuspendedAutoTerminationNotice | null {
+  event: WorkspaceSuspendAutoTerminatedEventDto,
+): SuspendedAutoTerminationViewModel | null {
   const id = event.suspendedSessionId.trim();
   if (!id || handledAutoTerminations.has(id)) return null;
   handledAutoTerminations.add(id);
@@ -158,7 +157,7 @@ export const refreshSuspendedSessionsAfterHandoff = (workspaceId: string): void 
   })();
 };
 
-export const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): SuspendedSession | undefined =>
+export const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): SuspendedSessionDto | undefined =>
   sessions.value.find((session) => session.status === 'active' && session.originalWorkspaceId === workspaceId);
 
 const schedulePoll = (): void => {
@@ -202,7 +201,7 @@ export function useSuspendedSessions() {
     );
   });
 
-  async function rename(session: SuspendedSession, name: string): Promise<string> {
+  async function rename(session: SuspendedSessionDto, name: string): Promise<string> {
     try {
       const authoritativeName = await sshSuspendApi.rename(session.id, name);
       session.customName = authoritativeName.trim() || undefined;
@@ -222,7 +221,7 @@ export function useSuspendedSessions() {
     }
   }
 
-  async function remove(session: SuspendedSession): Promise<void> {
+  async function remove(session: SuspendedSessionDto): Promise<void> {
     try {
       if (session.status === 'active') await sshSuspendApi.terminate(session.id);
       else await sshSuspendApi.removeDisconnected(session.id);

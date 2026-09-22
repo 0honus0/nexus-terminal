@@ -11,7 +11,7 @@
   import { connectionsApi } from '../api/connectionsApi';
   import ConnectionEditorModal from '../components/ConnectionEditorModal.vue';
   import BatchEditConnectionModal from '../components/BatchEditConnectionModal.vue';
-  import type { Connection, ConnectionInput, ConnectionUpdate } from '../model/connection';
+  import type { ConnectionDto, ConnectionFormInput, ConnectionFormUpdate } from '../model/connection';
   const { t, locale } = useI18n();
   const router = useRouter();
   const feedback = useFeedback();
@@ -31,7 +31,7 @@
   const sortOrder = ref<SortOrder>(storedOrder === 'asc' ? 'asc' : 'desc');
   const tagId = ref<number | ''>(Number.isInteger(storedTag) && storedTag > 0 ? storedTag : '');
   const formVisible = ref(false);
-  const editing = ref<Connection | null>(null);
+  const editing = ref<ConnectionDto | null>(null);
   const batch = ref(false);
   const selected = ref(new Set<number>());
   const batchModal = ref(false);
@@ -79,11 +79,11 @@
     editing.value = null;
     formVisible.value = true;
   };
-  const openEdit = (c: Connection) => {
+  const openEdit = (c: ConnectionDto) => {
     editing.value = c;
     formVisible.value = true;
   };
-  const test = async (c: Connection) => {
+  const test = async (c: ConnectionDto) => {
     testing.value = new Set(testing.value).add(c.id);
     try {
       const result = await connectionsApi.test(c.id);
@@ -110,11 +110,11 @@
     if (!ids.length) return;
     void router.push({ name: 'Workspace', query: { connectionId: ids } });
   };
-  const tagNames = (connection: Connection) =>
+  const tagNames = (connection: ConnectionDto) =>
     connection.tagIds
       .map((id) => tags.tags.value.find((tag) => tag.id === id)?.name)
       .filter((name): name is string => Boolean(name));
-  const clone = async (c: Connection) => {
+  const clone = async (c: ConnectionDto) => {
     try {
       await data.clone(c.id, t('connections.cloneName', { name: c.name || c.host }));
     } catch (cause) {
@@ -165,7 +165,7 @@
     if (successCount > 0) feedback.notifyWarning(message);
     else feedback.notifyError(message);
   };
-  const batchSave = async (update: ConnectionUpdate) => {
+  const batchSave = async (update: ConnectionFormUpdate) => {
     const ids = [...selected.value];
     const results = await Promise.allSettled(ids.map((id) => data.update(id, update)));
     const failedIds = ids.filter((_, index) => results[index]?.status === 'rejected');
@@ -184,7 +184,7 @@
     if (successCount > 0) feedback.notifyWarning(message);
     else feedback.notifyError(message);
   };
-  const connect = (c: Connection) => {
+  const connect = (c: ConnectionDto) => {
     if (c.type === 'RDP' || c.type === 'VNC') {
       remoteDesktopLauncher.open({ id: c.id, name: c.name || c.host, type: c.type });
       return;

@@ -1,4 +1,4 @@
-export interface MarkedSuspendedSession {
+export interface MarkedSuspendedSessionState {
   workspaceId: string;
   connectionId: number;
   connectionName: string;
@@ -6,9 +6,9 @@ export interface MarkedSuspendedSession {
 }
 
 export type {
-  SuspendedSessionDto as SuspendedSession,
-  SuspendedSessionOwnershipStateDto as SuspendedSessionOwnershipState,
-  SuspendedSessionStatusDto as SuspendedSessionStatus,
+  SuspendedSessionDto,
+  SuspendedSessionOwnershipStateDto,
+  SuspendedSessionStatusDto,
 } from '@nexus-terminal/protocol/ssh-suspend';
 
-export type { WorkspaceSuspendResumeRequestDto as ResumeSuspendedSessionRequest } from '@nexus-terminal/protocol/workspace';
+export type { WorkspaceSuspendResumeRequestDto } from '@nexus-terminal/protocol/workspace';

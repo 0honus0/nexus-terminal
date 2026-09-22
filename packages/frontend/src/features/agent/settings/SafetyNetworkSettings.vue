@@ -1,9 +1,9 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
-  import { useConnections, type Connection } from '@/features/connections/public';
-  import type { TargetDenylistView } from '../api/agent-api';
+  import { useConnections, type ConnectionDto } from '@/features/connections/public';
+  import type { AgentTargetDenylistViewDto } from '../api/agent-api';
 
-  const props = defineProps<{ denylist: TargetDenylistView; busy: boolean }>();
+  const props = defineProps<{ denylist: AgentTargetDenylistViewDto; busy: boolean }>();
   const emit = defineEmits<{ save: [connectionIds: number[], reason: string] }>();
   const connectionsStore = useConnections();
   const loadingConnections = ref(false);
@@ -116,7 +116,7 @@
   });
 
   // 获取连接图标
-  const connectionIcon = (type: Connection['type']) => {
+  const connectionIcon = (type: ConnectionDto['type']) => {
     if (type === 'RDP') return 'fa-solid fa-desktop';
     return 'fa-solid fa-terminal';
   };

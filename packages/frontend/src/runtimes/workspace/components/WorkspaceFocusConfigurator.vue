@@ -1,21 +1,17 @@
 <script setup lang="ts">
   import { computed, ref, toRaw, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import type { WorkspaceFocusConfigDto } from '@nexus-terminal/protocol/settings';
   import { BaseButton, BaseInput, BaseModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
-  import {
-    normalizeWorkspaceFocusShortcut,
-    workspaceFocus,
-    workspaceFocusTargets,
-    type WorkspaceFocusConfig,
-  } from '../focus/workspaceFocus';
+  import { normalizeWorkspaceFocusShortcut, workspaceFocus, workspaceFocusTargets } from '../focus/workspaceFocus';
 
   const props = defineProps<{ visible: boolean }>();
   const emit = defineEmits<{ close: [] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
-  const draft = ref<WorkspaceFocusConfig>({ sequence: [], shortcuts: {} });
-  const original = ref<WorkspaceFocusConfig>({ sequence: [], shortcuts: {} });
+  const draft = ref<WorkspaceFocusConfigDto>({ sequence: [], shortcuts: {} });
+  const original = ref<WorkspaceFocusConfigDto>({ sequence: [], shortcuts: {} });
   const saving = ref(false);
   const draggingTarget = ref<string | null>(null);
   const hasChanges = computed(() => JSON.stringify(draft.value) !== JSON.stringify(original.value));

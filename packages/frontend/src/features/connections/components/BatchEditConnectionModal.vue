@@ -14,12 +14,12 @@
   import { ConnectionTagPicker } from '@/features/tags/public';
   import { useProxies } from '@/features/proxies/public';
   import { useSshKeys } from '@/features/ssh-keys/public';
-  import type { ConnectionUpdate } from '../model/connection';
+  import type { ConnectionFormUpdate } from '../model/connection';
 
   type BatchAuthChoice = '__nochange__' | 'password' | 'key';
 
   const props = defineProps<{ visible: boolean; count: number }>();
-  const emit = defineEmits<{ close: []; save: [update: ConnectionUpdate] }>();
+  const emit = defineEmits<{ close: []; save: [update: ConnectionFormUpdate] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
   const proxies = useProxies();
@@ -97,7 +97,7 @@
   );
   const save = () => {
     error.value = '';
-    const update: ConnectionUpdate = {};
+    const update: ConnectionFormUpdate = {};
 
     if (editPort.value) {
       const port = Number(form.port);

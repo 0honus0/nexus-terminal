@@ -22491,7 +22491,7 @@ const productTypeBoundaryScenario: Scenario = async () => {
   assert.doesNotMatch(settings, /\bas T\b/, 'generic Settings JSON decoding must not escape through as T');
   assert.match(
     settings,
-    /validFocus\(value: unknown\): value is FocusSwitcherFullConfig/,
+    /validFocus\(value: unknown\): value is WorkspaceFocusConfigDto/,
     'focus settings must narrow unknown at the persisted JSON boundary',
   );
 

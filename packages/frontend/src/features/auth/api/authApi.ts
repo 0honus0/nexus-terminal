@@ -10,14 +10,14 @@ import type {
 } from '@nexus-terminal/protocol/auth';
 import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import { httpClient } from '@/client/http';
-import type { AuthUser, LoginCredentials, LoginResult, SetupCredentials } from '../model/auth';
+import type { AuthUserDto, AuthLoginResultViewModel } from '../model/auth';
 
 export interface AuthApi {
   needsSetup(): Promise<boolean>;
-  readSession(): Promise<AuthUser | null>;
-  setup(credentials: SetupCredentials): Promise<void>;
-  login(credentials: LoginCredentials): Promise<LoginResult>;
-  verifyTwoFactor(token: string): Promise<AuthUser>;
+  readSession(): Promise<AuthUserDto | null>;
+  setup(credentials: AuthSetupRequestDto): Promise<void>;
+  login(credentials: AuthLoginRequestDto): Promise<AuthLoginResultViewModel>;
+  verifyTwoFactor(token: string): Promise<AuthUserDto>;
   logout(): Promise<void>;
 }
 

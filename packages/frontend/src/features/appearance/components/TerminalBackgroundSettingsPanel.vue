@@ -13,7 +13,7 @@
   } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { appearanceApi } from '../api/appearanceApi';
-  import type { LocalHtmlTheme, RemoteHtmlTheme } from '../model/appearance';
+  import type { LocalHtmlThemeDto, RemoteHtmlThemeDto } from '@nexus-terminal/protocol/appearance';
   import { useAppearanceStore } from '../store/appearance.store';
 
   type BackgroundSection = 'all' | 'background' | 'text-effects';
@@ -26,8 +26,8 @@
   const { t } = useI18n();
   const feedback = useFeedback();
   const store = useAppearanceStore();
-  const localThemes = ref<LocalHtmlTheme[]>([]);
-  const remoteThemes = ref<RemoteHtmlTheme[]>([]);
+  const localThemes = ref<LocalHtmlThemeDto[]>([]);
+  const remoteThemes = ref<RemoteHtmlThemeDto[]>([]);
   const loadingLocal = ref(false);
   const loadingRemote = ref(false);
   const remoteRepositoryUrl = ref('');
@@ -246,7 +246,7 @@
     presetEditorVisible.value = true;
   };
 
-  const openLocalPreset = async (theme: LocalHtmlTheme): Promise<void> => {
+  const openLocalPreset = async (theme: LocalHtmlThemeDto): Promise<void> => {
     try {
       const content = await appearanceApi.readLocalHtmlTheme(theme.name);
       editingLocalName.value = theme.type === 'custom' ? theme.name : null;
@@ -289,7 +289,7 @@
     }
   };
 
-  const applyLocalPreset = async (theme: LocalHtmlTheme): Promise<void> => {
+  const applyLocalPreset = async (theme: LocalHtmlThemeDto): Promise<void> => {
     try {
       const content = await appearanceApi.readLocalHtmlTheme(theme.name);
       await store.update({ terminalCustomHtml: content, terminalBackgroundEnabled: true });
@@ -299,7 +299,7 @@
     }
   };
 
-  const deleteLocalPreset = async (theme: LocalHtmlTheme): Promise<void> => {
+  const deleteLocalPreset = async (theme: LocalHtmlThemeDto): Promise<void> => {
     if (theme.type !== 'custom') return;
     if (
       !(await feedback.confirm({
@@ -330,7 +330,7 @@
     }
   };
 
-  const applyRemotePreset = async (theme: RemoteHtmlTheme): Promise<void> => {
+  const applyRemotePreset = async (theme: RemoteHtmlThemeDto): Promise<void> => {
     if (!theme.downloadUrl) {
       feedback.notifyWarning(t('styleCustomizer.errorMissingDownloadUrl'));
       return;

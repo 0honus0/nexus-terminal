@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import type {
   QuickCommandBulkAssignTagRequestDto,
   QuickCommandBulkAssignTagResponseDto,
@@ -13,7 +14,7 @@ import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
-interface ParsedQuickCommandBody {
+interface QuickCommandMutationValidationState {
   name: string | null;
   command: string;
   tagIds: number[];
@@ -33,7 +34,7 @@ const decodeVariables = (value: unknown): Record<string, string> | null => {
   return variables;
 };
 
-const parseBody = (body: unknown): ParsedQuickCommandBody => {
+const parseBody = (body: unknown): QuickCommandMutationValidationState => {
   if (!isRecord(body)) {
     return {
       name: null,
@@ -69,12 +70,14 @@ const parseBody = (body: unknown): ParsedQuickCommandBody => {
   };
 };
 
-const validateBody = (input: ParsedQuickCommandBody): string | null => {
+const validateBody = (input: QuickCommandMutationValidationState): string | null => {
   if (!input.validName) return '名称必须是字符串或 null';
   if (!input.validTagIds) return 'tagIds 必须是一个数字数组';
   if (!input.validVariables) return 'variables 必须是字符串映射';
   return null;
 };
+
+const messagePayload = (message: string): MessageResponseDto => ({ message });
 
 export const createQuickCommandsRouter = (commands: QuickCommandService): Router => {
   const router = Router();
@@ -102,9 +105,11 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
         typeof tagId !== 'number' ||
         !Number.isInteger(tagId)
       ) {
-        response
-          .status(400)
-          .json({ success: false, message: '请求体必须包含 commandIds (非空数字数组) 和 tagId (数字)。' });
+        const payload: QuickCommandBulkAssignTagResponseDto = {
+          success: false,
+          message: '请求体必须包含 commandIds (非空数字数组) 和 tagId (数字)。',
+        };
+        response.status(400).json(payload);
         return;
       }
       await commands.assignTag(ids, tagId);
@@ -120,12 +125,12 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
     route(async (request, response) => {
       const input = parseBody(request.body);
       if (!input.command.trim()) {
-        response.status(400).json({ message: '指令内容不能为空' });
+        response.status(400).json(messagePayload('指令内容不能为空'));
         return;
       }
       const validationError = validateBody(input);
       if (validationError) {
-        response.status(400).json({ message: validationError });
+        response.status(400).json(messagePayload(validationError));
         return;
       }
       try {
@@ -136,7 +141,7 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
           : { message: '快捷指令已添加，但无法检索新记录', command: null, id };
         response.status(201).json(payload);
       } catch (error) {
-        response.status(500).json({ message: errorMessage(error) });
+        response.status(500).json(messagePayload(errorMessage(error)));
       }
     }),
   );
@@ -145,21 +150,21 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
     route(async (request, response) => {
       const id = parsePositiveId(String(request.params.id));
       if (!id) {
-        response.status(400).json({ message: '无效的 ID' });
+        response.status(400).json(messagePayload('无效的 ID'));
         return;
       }
       const input = parseBody(request.body);
       if (!input.command.trim()) {
-        response.status(400).json({ message: '指令内容不能为空' });
+        response.status(400).json(messagePayload('指令内容不能为空'));
         return;
       }
       const validationError = validateBody(input);
       if (validationError) {
-        response.status(400).json({ message: validationError });
+        response.status(400).json(messagePayload(validationError));
         return;
       }
       if (!(await commands.update(id, input.name, input.command, input.tagIds, input.variables))) {
-        response.status(404).json({ message: '未找到要更新的快捷指令' });
+        response.status(404).json(messagePayload('未找到要更新的快捷指令'));
         return;
       }
       const command = await commands.get(id);
@@ -172,11 +177,11 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
     route(async (request, response) => {
       const id = parsePositiveId(String(request.params.id));
       if (!id) {
-        response.status(400).json({ message: '无效的 ID' });
+        response.status(400).json(messagePayload('无效的 ID'));
         return;
       }
       if (!(await commands.incrementUsage(id))) {
-        response.status(404).json({ message: '未找到快捷指令' });
+        response.status(404).json(messagePayload('未找到快捷指令'));
         return;
       }
       const command = await commands.get(id);
@@ -189,14 +194,14 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
     route(async (request, response) => {
       const id = parsePositiveId(String(request.params.id));
       if (!id) {
-        response.status(400).json({ message: '无效的 ID' });
+        response.status(400).json(messagePayload('无效的 ID'));
         return;
       }
       if (!(await commands.delete(id))) {
-        response.status(404).json({ message: '未找到要删除的快捷指令' });
+        response.status(404).json(messagePayload('未找到要删除的快捷指令'));
         return;
       }
-      response.json({ message: '快捷指令已删除' });
+      response.json(messagePayload('快捷指令已删除'));
     }),
   );
   return router;

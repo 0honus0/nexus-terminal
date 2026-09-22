@@ -1,11 +1,11 @@
 import type { WorkspaceRemoteFileEntryDto } from '@nexus-terminal/protocol/workspace';
+export type { WorkspaceRemoteFileEntryDto };
 
-export type RemoteFileEntry = WorkspaceRemoteFileEntryDto;
 export type {
-  WorkspaceFileSearchEntryDto as FileSearchEntry,
-  WorkspaceFilesystemListResponseDto as DirectoryListing,
-  WorkspaceFilesystemSearchResponseDto as FileSearchResult,
-  WorkspaceRemoteFileMetadataDto as RemoteFileMetadata,
+  WorkspaceFileSearchEntryDto,
+  WorkspaceFilesystemListResponseDto,
+  WorkspaceFilesystemSearchResponseDto,
+  WorkspaceRemoteFileMetadataDto,
 } from '@nexus-terminal/protocol/workspace';
 
 export interface ResolvedRemotePath {
@@ -40,7 +40,7 @@ export interface LocalUploadBatch {
 export type ArchiveCompressionFormat = 'zip' | 'tar.gz' | 'tar.bz2';
 
 export interface ArchiveCompressionIntent {
-  entries: RemoteFileEntry[];
+  entries: WorkspaceRemoteFileEntryDto[];
   format: ArchiveCompressionFormat;
   passwordProtected?: boolean;
 }

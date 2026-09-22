@@ -1,15 +1,17 @@
 import type {
+  WorkspaceConnectResponseDto,
   WorkspaceConnectRequestDto,
   WorkspaceSuspendAutoTerminatedEventDto,
+  WorkspaceSuspendResumeResponseDto,
   WorkspaceSuspendResumeRequestDto,
 } from '@nexus-terminal/protocol/workspace';
 import { ref, type Ref } from 'vue';
 import { logger } from '@/client/logging/logger';
-import { markConnectionConnected, type Connection } from '@/features/connections/public';
+import { markConnectionConnected, type ConnectionDto } from '@/features/connections/public';
 import {
   createTerminalSessionState,
   type TerminalSessionState,
-  type TerminalViewport,
+  type WorkspaceTerminalViewportDto,
 } from '@/features/terminal/public';
 import { createFileEditorSession, type FileEditorSessionController } from '@/features/file-editor/public';
 import { createFilePreviewSession, type FilePreviewSessionController } from '@/features/file-preview/public';
@@ -18,7 +20,7 @@ import { createTransferController, type TransferController } from '@/features/tr
 import { createStatusMonitorSession, type StatusMonitorSessionController } from '@/features/status-monitor/public';
 import { createDockerSession, type DockerSessionController } from '@/features/docker/public';
 import { createWorkspaceCapabilityAdapters, type WorkspaceCapabilityAdapters } from '../adapters/capabilityAdapters';
-import type { WorkspaceConnectResult, WorkspaceLifecycleState } from '../model/workspace';
+import type { WorkspaceLifecycleState } from '../model/workspace';
 import { WORKSPACE_BINARY_PROTOCOL_VERSION } from '../protocol/workspaceBinaryProtocol';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
 
@@ -57,11 +59,11 @@ export class WorkspaceRuntimeSession {
   private suspendOwnerHeartbeat?: number;
   private disposed = false;
   private closing = false;
-  private lastViewport?: TerminalViewport;
+  private lastViewport?: WorkspaceTerminalViewportDto;
   private readonly cleanup: Array<() => void> = [];
 
   constructor(
-    readonly connection: Connection,
+    readonly connection: ConnectionDto,
     options: WorkspaceRuntimeSessionOptions = {},
   ) {
     this.id = options.workspaceId ?? crypto.randomUUID();
@@ -155,7 +157,7 @@ export class WorkspaceRuntimeSession {
     );
   }
 
-  async connect(viewport?: TerminalViewport): Promise<WorkspaceConnectResult> {
+  async connect(viewport?: WorkspaceTerminalViewportDto): Promise<WorkspaceConnectResponseDto> {
     if (this.disposed) throw new Error('Workspace session has been disposed.');
     if (viewport) this.lastViewport = viewport;
     this.clearReconnectTimer();
@@ -242,7 +244,7 @@ export class WorkspaceRuntimeSession {
     suspendedSessionId: string,
     markedAt?: string,
     options: WorkspaceSuspendResumeOptions = {},
-  ): Promise<WorkspaceConnectResult> {
+  ): Promise<WorkspaceSuspendResumeResponseDto> {
     if (this.disposed) throw new Error('Workspace session has been disposed.');
     this.clearReconnectTimer();
     this.closing = false;

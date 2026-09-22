@@ -10,7 +10,7 @@
   import QuickCommandForm from './QuickCommandForm.vue';
   import { useQuickCommandsStore } from '../store/quickCommands.store';
   import { expandQuickCommand } from '../model/quickCommand';
-  import type { ExecuteCommandIntent, QuickCommand, QuickCommandInput } from '../model/quickCommand';
+  import type { ExecuteCommandIntent, QuickCommandDto, QuickCommandFormInput } from '../model/quickCommand';
 
   type DisplayMode = 'name' | 'command';
   const DISPLAY_MODE_KEY = 'quickCommandsDisplayMode';
@@ -29,12 +29,12 @@
   const { groups, flat, tags, search, sort, loading, error, tagLoadError, expanded, selectedId } = storeToRefs(store);
   const localScale = ref(props.rowScale);
   const visible = ref(false);
-  const editing = ref<QuickCommand | null>(null);
+  const editing = ref<QuickCommandDto | null>(null);
   const searchInput = ref<HTMLInputElement | null>(null);
   const searchExpanded = ref(!props.collapsibleSearch);
   const root = ref<HTMLElement | null>(null);
   const list = ref<HTMLElement | null>(null);
-  const context = ref<{ command: QuickCommand; x: number; y: number } | null>(null);
+  const context = ref<{ command: QuickCommandDto; x: number; y: number } | null>(null);
   const editingTagId = ref<number | 'untagged' | null>(null);
   const tagDraft = ref('');
   let unregisterFocus: (() => void) | undefined;
@@ -168,7 +168,7 @@
     editingTagId.value = null;
     tagDraft.value = '';
   };
-  const finishTagEdit = async (group: { id: number | null; name: string; commands: QuickCommand[] }) => {
+  const finishTagEdit = async (group: { id: number | null; name: string; commands: QuickCommandDto[] }) => {
     const editing = editingTagId.value;
     if (editing === null) return;
     const name = tagDraft.value.trim();
@@ -194,12 +194,12 @@
       );
     }
   };
-  const displayText = (command: QuickCommand) =>
+  const displayText = (command: QuickCommandDto) =>
     displayMode.value === 'name' ? command.name?.trim() || command.command : command.command;
-  const secondaryText = (command: QuickCommand) =>
+  const secondaryText = (command: QuickCommandDto) =>
     displayMode.value === 'name' ? command.command : command.name?.trim() || '';
 
-  const edit = (command: QuickCommand) => {
+  const edit = (command: QuickCommandDto) => {
     editing.value = command;
     visible.value = true;
   };
@@ -207,7 +207,7 @@
     editing.value = null;
     visible.value = true;
   };
-  const save = async (input: QuickCommandInput) => {
+  const save = async (input: QuickCommandFormInput) => {
     try {
       await store.save(input, editing.value?.id);
       visible.value = false;
@@ -230,18 +230,18 @@
     }
     return expansion.command;
   };
-  const processCommand = (commandDefinition: QuickCommand) =>
+  const processCommand = (commandDefinition: QuickCommandDto) =>
     processTemplate(commandDefinition.command, commandDefinition.variables);
-  const executeDraft = (input: QuickCommandInput) => {
+  const executeDraft = (input: QuickCommandFormInput) => {
     emit('execute', { command: processTemplate(input.command, input.variables) });
     visible.value = false;
   };
-  const run = (command: QuickCommand, all = false) => {
+  const run = (command: QuickCommandDto, all = false) => {
     context.value = null;
     emit('execute', { command: processCommand(command), sourceId: command.id, allSessions: all });
     void store.recordUsage(command.id);
   };
-  const copy = async (command: QuickCommand) => {
+  const copy = async (command: QuickCommandDto) => {
     context.value = null;
     try {
       await writeClipboardText(command.command);
@@ -250,7 +250,7 @@
       feedback.notifyError(t('quickCommands.notifications.copyFailed'));
     }
   };
-  const remove = async (command: QuickCommand) => {
+  const remove = async (command: QuickCommandDto) => {
     context.value = null;
     if (
       await feedback.confirm({
@@ -269,7 +269,7 @@
       }
     }
   };
-  const openContext = (event: MouseEvent, command: QuickCommand) => {
+  const openContext = (event: MouseEvent, command: QuickCommandDto) => {
     selectedId.value = command.id;
     context.value = { command, x: event.clientX, y: event.clientY };
   };

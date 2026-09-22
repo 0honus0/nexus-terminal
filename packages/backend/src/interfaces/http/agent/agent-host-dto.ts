@@ -7,18 +7,21 @@ import type {
   AgentExecutionPolicyViewDto,
   AgentHardLimitPreviewDto,
   AgentHostSummaryDto,
+  AgentRecommendedPluginDto,
+  AgentRecommendedPluginInstallResultDto,
   AgentSettingsViewDto,
+  AgentTargetDenylistViewDto,
 } from '@nexus-terminal/protocol/agent-host';
-import type {
-  AgentHostFacade,
-  AppView,
-} from '../../../modules/agent/public';
+import type { AgentHostFacade, AppView } from '../../../modules/agent/public';
 
 type SettingsView = Awaited<ReturnType<AgentHostFacade['getSettings']>>;
 type HardLimitPreview = Awaited<ReturnType<AgentHostFacade['previewHardLimits']>>;
 type ExecutionPolicyView = Awaited<ReturnType<AgentHostFacade['getAppExecutionPolicy']>>;
 type CapabilityDefinition = ReturnType<AgentHostFacade['listCapabilityDefinitions']>[number];
 type CapabilityGrant = Awaited<ReturnType<AgentHostFacade['listAppGrants']>>[number];
+type RecommendedPlugin = Awaited<ReturnType<AgentHostFacade['getRecommendedPlugin']>>;
+type RecommendedPluginInstall = Awaited<ReturnType<AgentHostFacade['installRecommendedPlugin']>>;
+type TargetDenylist = Awaited<ReturnType<AgentHostFacade['getTargetDenylist']>>;
 
 export const appSummaryDto = (app: AppView): AgentAppSummaryDto => ({
   id: app.appId,
@@ -100,6 +103,35 @@ export const executionPolicyDto = (view: ExecutionPolicyView): AgentExecutionPol
   overrides: { ...view.overrides },
   effective: { ...view.effective },
   version: view.version,
+});
+
+export const recommendedPluginDto = (value: RecommendedPlugin): AgentRecommendedPluginDto => ({
+  appId: value.appId,
+  installed: value.installed,
+  installedVersion: value.installedVersion,
+  enabled: value.enabled,
+  availableVersion: value.availableVersion,
+  displayName: value.displayName,
+  description: value.description,
+  catalogUrl: value.catalogUrl,
+  publisherKeyId: value.publisherKeyId,
+});
+
+export const recommendedPluginInstallResultDto = (
+  value: RecommendedPluginInstall,
+): AgentRecommendedPluginInstallResultDto => ({
+  app: appSummaryDto(value.app),
+  installedNow: value.installedNow,
+});
+
+export const targetDenylistDto = (value: TargetDenylist): AgentTargetDenylistViewDto => ({
+  revision: value.revision,
+  list: value.entries.map((entry) => ({
+    connectionId: entry.connectionId,
+    reason: entry.reason,
+    changedBy: entry.changedBy,
+    changedAt: entry.changedAt,
+  })),
 });
 
 export const hostSummaryDto = (

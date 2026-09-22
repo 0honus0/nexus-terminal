@@ -3,10 +3,10 @@ export { useQuickCommands } from './composables/useQuickCommands';
 export type {
   ExecuteCommandIntent,
   QuickCommandExpansion,
-  QuickCommand,
+  QuickCommandDto,
   QuickCommandGroup,
-  QuickCommandInput,
+  QuickCommandFormInput,
   QuickCommandSort,
-  QuickCommandTag,
+  QuickCommandTagDto,
 } from './model/quickCommand';
 export { expandQuickCommand } from './model/quickCommand';

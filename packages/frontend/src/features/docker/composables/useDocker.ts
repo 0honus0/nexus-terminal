@@ -11,11 +11,11 @@ import {
   type Ref,
 } from 'vue';
 import type { DockerChannel } from '../ports/docker-channel';
-import type { DockerCommand, DockerContainer } from '../model/docker';
+import type { WorkspaceDockerCommandDto, WorkspaceDockerContainerDto } from '../model/docker';
 
 export interface DockerSessionController {
   available: Readonly<Ref<boolean>>;
-  containers: Readonly<Ref<DockerContainer[]>>;
+  containers: Readonly<Ref<WorkspaceDockerContainerDto[]>>;
   loading: Readonly<Ref<boolean>>;
   error: Readonly<Ref<string | null>>;
   expandedContainerIds: ComputedRef<ReadonlySet<string>>;
@@ -26,14 +26,14 @@ export interface DockerSessionController {
   workspaceConnected(): void;
   workspaceDisconnected(): void;
   refresh(force?: boolean): Promise<void>;
-  command(containerId: string, action: DockerCommand): Promise<void>;
+  command(containerId: string, action: WorkspaceDockerCommandDto): Promise<void>;
   toggleExpand(containerId: string): void;
   dispose(): void;
 }
 
 export function createDockerSession(channel: DockerChannel): DockerSessionController {
   const available = ref(false);
-  const containers = ref<DockerContainer[]>([]);
+  const containers = ref<WorkspaceDockerContainerDto[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
   const expanded = ref(new Set<string>());
@@ -59,11 +59,11 @@ export function createDockerSession(channel: DockerChannel): DockerSessionContro
     if (!desiredPolling()) return;
     timer = window.setInterval(() => void refresh(), Math.max(1, intervalSeconds) * 1000);
   };
-  const pruneExpansion = (nextContainers: DockerContainer[]) => {
+  const pruneExpansion = (nextContainers: WorkspaceDockerContainerDto[]) => {
     const current = new Set(nextContainers.map((container) => container.id));
     expanded.value = new Set([...expanded.value].filter((id) => current.has(id)));
   };
-  const applyStatus = (nextContainers: DockerContainer[], nextAvailable: boolean) => {
+  const applyStatus = (nextContainers: WorkspaceDockerContainerDto[], nextAvailable: boolean) => {
     available.value = nextAvailable;
     containers.value = nextAvailable ? nextContainers : [];
     pruneExpansion(containers.value);
@@ -154,7 +154,7 @@ export function createDockerSession(channel: DockerChannel): DockerSessionContro
     workspaceAvailable = false;
     resetForDisconnect();
   };
-  const command = async (containerId: string, action: DockerCommand) => {
+  const command = async (containerId: string, action: WorkspaceDockerCommandDto) => {
     await channel.command(containerId, action);
     await refresh(true);
   };

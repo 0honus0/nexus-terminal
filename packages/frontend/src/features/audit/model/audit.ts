@@ -5,9 +5,6 @@ import {
   type AuditLogPageDto,
   type AuditLogQueryDto,
 } from '@nexus-terminal/protocol/audit';
+export type { AuditActionTypeDto, AuditLogEntryDto, AuditLogPageDto, AuditLogQueryDto };
 
 export const auditActionTypes = AUDIT_ACTION_TYPES;
-export type AuditActionType = AuditActionTypeDto;
-export type AuditLogEntry = AuditLogEntryDto;
-export type AuditLogPage = AuditLogPageDto;
-export type AuditLogQuery = AuditLogQueryDto;

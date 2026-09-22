@@ -6,16 +6,16 @@
   import { useConnections } from '@/features/connections/public';
   import type { ProgressSource, TransferTask } from '../model/transfer';
   import type {
-    ServerTransferSubTaskStatus,
-    ServerTransferTask,
-    ServerTransferTaskStatus,
+    ServerTransferSubTaskStatusDto,
+    ServerTransferTaskDto,
+    ServerTransferTaskStatusDto,
   } from '../model/serverTransfer';
 
   const props = withDefaults(
     defineProps<{
       visible: boolean;
       sources: readonly ProgressSource[];
-      serverTransfers?: readonly ServerTransferTask[];
+      serverTransfers?: readonly ServerTransferTaskDto[];
       serverTransfersLoading?: boolean;
       serverTransfersError?: string;
       mobile?: boolean;
@@ -131,9 +131,9 @@
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
       .slice(0, 5),
   );
-  const serverTaskFinal = (status: ServerTransferTaskStatus): boolean =>
+  const serverTaskFinal = (status: ServerTransferTaskStatusDto): boolean =>
     ['completed', 'failed', 'partially-completed', 'cancelled'].includes(status);
-  const serverTaskCancellable = (status: ServerTransferTaskStatus): boolean =>
+  const serverTaskCancellable = (status: ServerTransferTaskStatusDto): boolean =>
     ['queued', 'in-progress'].includes(status);
   const connectionName = (connectionId?: number): string => {
     if (!connectionId) return t('transferProgressModal.unknownSourceServer');
@@ -142,7 +142,7 @@
       connection?.name?.trim() || connection?.host || t('transferProgressModal.connectionIdFallback', { connectionId })
     );
   };
-  const serverTaskTitle = (task: ServerTransferTask): string => {
+  const serverTaskTitle = (task: ServerTransferTaskDto): string => {
     const sourceConnectionId = task.sourceConnectionId ?? task.payload.sourceConnectionId;
     const fileName =
       task.payload.sourceItems[0]?.name ||
@@ -152,8 +152,8 @@
       task.remoteTargetPath || task.payload.remoteTargetPath || t('transferProgressModal.unknownTargetPath');
     return `${connectionName(sourceConnectionId)} (${fileName} -> ${targetPath})`;
   };
-  const statusLabel = (status: ServerTransferTaskStatus | ServerTransferSubTaskStatus): string => {
-    const keys: Record<ServerTransferTaskStatus | ServerTransferSubTaskStatus, string> = {
+  const statusLabel = (status: ServerTransferTaskStatusDto | ServerTransferSubTaskStatusDto): string => {
+    const keys: Record<ServerTransferTaskStatusDto | ServerTransferSubTaskStatusDto, string> = {
       queued: 'transferProgressModal.status.queued',
       'in-progress': 'transferProgressModal.status.inProgress',
       completed: 'transferProgressModal.status.completed',
@@ -166,7 +166,7 @@
     };
     return t(keys[status]);
   };
-  const statusClasses = (status: ServerTransferTaskStatus | ServerTransferSubTaskStatus) => ({
+  const statusClasses = (status: ServerTransferTaskStatusDto | ServerTransferSubTaskStatusDto) => ({
     'bg-green-100 text-green-700': status === 'completed',
     'bg-red-100 text-red-700': status === 'failed',
     'bg-yellow-100 text-yellow-700': status === 'partially-completed' || status === 'queued' || status === 'cancelling',

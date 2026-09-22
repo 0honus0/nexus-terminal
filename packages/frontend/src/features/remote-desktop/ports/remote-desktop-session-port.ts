@@ -1,10 +1,14 @@
-import type { RemoteDesktopDisplay, RemoteDesktopProtocol, RemoteDesktopSession } from '../model/remoteDesktop';
+import type {
+  RemoteDesktopDisplayDto,
+  RemoteDesktopProtocolDto,
+  RemoteDesktopSessionDto,
+} from '../model/remoteDesktop';
 export interface RemoteDesktopSessionPort {
   create(
     connectionId: number,
-    protocol: RemoteDesktopProtocol,
-    display: RemoteDesktopDisplay,
-  ): Promise<RemoteDesktopSession>;
+    protocol: RemoteDesktopProtocolDto,
+    display: RemoteDesktopDisplayDto,
+  ): Promise<RemoteDesktopSessionDto>;
   tunnelUrl(): string;
-  tunnelData(session: RemoteDesktopSession, display: RemoteDesktopDisplay): string;
+  tunnelData(session: RemoteDesktopSessionDto, display: RemoteDesktopDisplayDto): string;
 }

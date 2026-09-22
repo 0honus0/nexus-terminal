@@ -1,11 +1,11 @@
 import { computed, ref } from 'vue';
 import type { TransferChannel } from '../ports/transfer-channel';
 import type {
-  ArchiveRequest,
-  CopyMoveRequest,
+  ArchiveCommand,
+  CopyMoveCommand,
   TransferLocation,
   TransferTask,
-  UploadRequest,
+  UploadCommand,
   UploadSourceFile,
 } from '../model/transfer';
 
@@ -263,7 +263,7 @@ export function createTransferController(channel: TransferChannel) {
     return uploads.map((upload) => upload.id);
   };
 
-  const copyMove = async (request: Omit<CopyMoveRequest, 'id'>) => {
+  const copyMove = async (request: Omit<CopyMoveCommand, 'id'>) => {
     const id = crypto.randomUUID();
     const task: TransferTask = {
       id,
@@ -288,7 +288,7 @@ export function createTransferController(channel: TransferChannel) {
     return id;
   };
 
-  const archive = async (request: Omit<ArchiveRequest, 'id'>) => {
+  const archive = async (request: Omit<ArchiveCommand, 'id'>) => {
     const id = crypto.randomUUID();
     upsert({
       id,

@@ -4,12 +4,12 @@
   import { apiErrorMessage } from '@/client/http';
   import { BaseButton, BaseFormField, BaseInput } from '@/foundation/ui';
   import { securityApi } from '../api/securityApi';
-  import type { TwoFactorSetup } from '../model/security';
+  import type { AuthTwoFactorSetupDto } from '../model/security';
 
   const props = defineProps<{ enabled: boolean }>();
   const emit = defineEmits<{ changed: [] }>();
   const { t } = useI18n();
-  const setup = ref<TwoFactorSetup | null>(null);
+  const setup = ref<AuthTwoFactorSetupDto | null>(null);
   const verificationCode = ref('');
   const disablePassword = ref('');
   const loading = ref(false);

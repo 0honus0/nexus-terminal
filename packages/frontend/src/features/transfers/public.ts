@@ -15,21 +15,21 @@ export type { TransferController } from './state/transferController';
 export type { TransferChannel } from './ports/transfer-channel';
 export type {
   ProgressSource,
-  ArchiveTransferErrorCode,
-  ArchiveRequest,
-  CopyMoveRequest,
+  WorkspaceArchiveErrorCodeDto,
+  ArchiveCommand,
+  CopyMoveCommand,
   TransferEvent,
   TransferKind,
   TransferLocation,
   TransferStatus,
   TransferTask,
-  UploadPrepareRequest,
-  UploadRequest,
+  UploadPrepareCommand,
+  UploadCommand,
   UploadSourceFile,
 } from './model/transfer';
 export type {
-  SendFileSourceItem,
-  SendFilesRequest,
-  ServerTransferMethod,
-  ServerTransferTask,
+  SendFileSourceItemDto,
+  SendFilesRequestDto,
+  ServerTransferMethodDto,
+  ServerTransferTaskDto,
 } from './model/serverTransfer';

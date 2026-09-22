@@ -6,17 +6,16 @@ import type {
 } from '@nexus-terminal/protocol/connections';
 import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import { httpClient } from '@/client/http';
-import type { ConnectionTag } from '../model/tag';
 
 export const tagsApi = {
-  async list(): Promise<ConnectionTag[]> {
+  async list(): Promise<ConnectionTagDto[]> {
     return (await httpClient.get<ConnectionTagDto[]>('/tags')).data;
   },
-  async create(name: string): Promise<ConnectionTag> {
+  async create(name: string): Promise<ConnectionTagDto> {
     const request: TagNameRequestDto = { name };
     return (await httpClient.post<TagMutationResponseDto>('/tags', request)).data.tag;
   },
-  async update(id: number, name: string): Promise<ConnectionTag> {
+  async update(id: number, name: string): Promise<ConnectionTagDto> {
     const request: TagNameRequestDto = { name };
     return (await httpClient.put<TagMutationResponseDto>(`/tags/${id}`, request)).data.tag;
   },
@@ -27,7 +26,7 @@ export const tagsApi = {
     const request: TagConnectionsRequestDto = { connectionIds };
     await httpClient.put<MessageResponseDto>(`/tags/${id}/connections`, request);
   },
-  async ensure(names: string[]): Promise<ConnectionTag[]> {
+  async ensure(names: string[]): Promise<ConnectionTagDto[]> {
     const existing = await this.list();
     const byName = new Map(existing.map((t) => [t.name, t]));
     for (const raw of names) {
@@ -36,6 +35,6 @@ export const tagsApi = {
       const tag = await this.create(name);
       byName.set(name, tag);
     }
-    return names.map((n) => byName.get(n.trim())).filter((v): v is ConnectionTag => Boolean(v));
+    return names.map((n) => byName.get(n.trim())).filter((v): v is ConnectionTagDto => Boolean(v));
   },
 };

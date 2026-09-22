@@ -4,7 +4,7 @@ import type {
   AgentTerminalReadyMessageDto,
 } from '@nexus-terminal/protocol/agent-terminal';
 import { openWebSocket } from '@/client/websocket';
-import type { TerminalChannel, TerminalOutput, TerminalViewport } from '@/features/terminal/public';
+import type { TerminalChannel, TerminalOutput, WorkspaceTerminalViewportDto } from '@/features/terminal/public';
 
 export interface AgentWorkspaceTerminalChannel extends TerminalChannel {
   close(): void;
@@ -46,7 +46,7 @@ export const createAgentWorkspaceTerminalChannel = (input: {
   let reconnectTimer: number | null = null;
   let reconnectStartedAt = 0;
   let reconnectAttempt = 0;
-  let viewport: TerminalViewport = { columns: 80, rows: 24 };
+  let viewport: WorkspaceTerminalViewportDto = { columns: 80, rows: 24 };
 
   const emitError = (message: string): void => {
     for (const handler of errorHandlers) handler(message);
@@ -169,7 +169,7 @@ export const createAgentWorkspaceTerminalChannel = (input: {
       pendingInput.push(data);
       pendingBytes += bytes;
     },
-    resize: (nextViewport: TerminalViewport) => {
+    resize: (nextViewport: WorkspaceTerminalViewportDto) => {
       viewport = { ...nextViewport };
       control({ type: 'resize', columns: viewport.columns, rows: viewport.rows });
     },

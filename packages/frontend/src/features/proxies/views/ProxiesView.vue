@@ -5,12 +5,12 @@
   import { useFeedback } from '@/shared/feedback/public';
   import ProxyForm from '../components/ProxyForm.vue';
   import { useProxies } from '../composables/useProxies';
-  import type { Proxy, ProxyInput } from '../model/proxy';
+  import type { ProxyDto, ProxyCreateRequestDto } from '../model/proxy';
   const { t } = useI18n();
   const data = useProxies();
   const feedback = useFeedback();
   const modal = ref(false);
-  const editing = ref<Proxy | null>(null);
+  const editing = ref<ProxyDto | null>(null);
   const loading = ref(false);
   const loadError = ref('');
   const initialLoading = ref(true);
@@ -29,11 +29,11 @@
     editing.value = null;
     modal.value = true;
   };
-  const save = async (input: Partial<ProxyInput>) => {
+  const save = async (input: Partial<ProxyCreateRequestDto>) => {
     loading.value = true;
     try {
       if (editing.value) await data.update(editing.value.id, input);
-      else await data.create(input as ProxyInput);
+      else await data.create(input as ProxyCreateRequestDto);
       modal.value = false;
     } catch (cause) {
       feedback.notifyError(
@@ -45,7 +45,7 @@
       loading.value = false;
     }
   };
-  const remove = async (p: Proxy) => {
+  const remove = async (p: ProxyDto) => {
     if (!(await feedback.confirm({ message: t('proxies.prompts.confirmDelete', { name: p.name }), destructive: true })))
       return;
     try {

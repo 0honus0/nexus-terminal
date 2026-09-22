@@ -5,17 +5,17 @@
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseTable, BaseTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { securityApi } from '../api/securityApi';
-  import type { IpAccessPolicy, IpBlacklistEntry } from '../model/security';
+  import type { IpAccessPolicyDto, IpBlacklistEntryDto } from '../model/security';
 
   const { t } = useI18n();
   const feedback = useFeedback();
-  const policy = reactive<IpAccessPolicy>({
+  const policy = reactive<IpAccessPolicyDto>({
     whitelist: '',
     blacklistEnabled: true,
     maxLoginAttempts: 5,
     loginBanDuration: 300,
   });
-  const entries = ref<IpBlacklistEntry[]>([]);
+  const entries = ref<IpBlacklistEntryDto[]>([]);
   const total = ref(0);
   const loading = ref(false);
   const message = ref('');

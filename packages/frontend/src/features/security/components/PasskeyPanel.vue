@@ -5,10 +5,10 @@
   import { apiErrorMessage } from '@/client/http';
   import { BaseButton, BaseInput, BaseTable } from '@/foundation/ui';
   import { securityApi } from '../api/securityApi';
-  import type { PasskeySummary } from '../model/security';
+  import type { PasskeySummaryDto } from '../model/security';
 
   const { t } = useI18n();
-  const passkeys = ref<PasskeySummary[]>([]);
+  const passkeys = ref<PasskeySummaryDto[]>([]);
   const loading = ref(false);
   const message = ref('');
   const success = ref(false);
@@ -43,7 +43,7 @@
       loading.value = false;
     }
   };
-  const saveName = async (key: PasskeySummary) => {
+  const saveName = async (key: PasskeySummaryDto) => {
     const name = names[key.credentialId]?.trim();
     if (!name) {
       message.value = t('settings.passkey.error.nameRequired');
@@ -63,7 +63,7 @@
       loading.value = false;
     }
   };
-  const remove = async (key: PasskeySummary) => {
+  const remove = async (key: PasskeySummaryDto) => {
     loading.value = true;
     message.value = '';
     success.value = false;

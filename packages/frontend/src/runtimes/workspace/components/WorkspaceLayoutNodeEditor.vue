@@ -5,27 +5,27 @@
   import {
     normalizeWorkspaceLayout,
     rebalanceWorkspaceLayoutChildren,
-    type WorkspaceLayoutNode,
-    type WorkspacePaneName,
+    type WorkspaceLayoutNodeState,
+    type WorkspacePaneNameDto,
   } from '../layout/workspaceLayout';
 
-  type DragItem = WorkspaceLayoutNode | WorkspacePaneName;
+  type DragItem = WorkspaceLayoutNodeState | WorkspacePaneNameDto;
 
   const props = withDefaults(
     defineProps<{
-      modelValue: WorkspaceLayoutNode;
+      modelValue: WorkspaceLayoutNodeState;
       root?: boolean;
-      usedMainPanes?: ReadonlySet<WorkspacePaneName>;
+      usedMainPanes?: ReadonlySet<WorkspacePaneNameDto>;
     }>(),
-    { root: false, usedMainPanes: () => new Set<WorkspacePaneName>() },
+    { root: false, usedMainPanes: () => new Set<WorkspacePaneNameDto>() },
   );
-  const emit = defineEmits<{ 'update:modelValue': [node: WorkspaceLayoutNode]; remove: [] }>();
+  const emit = defineEmits<{ 'update:modelValue': [node: WorkspaceLayoutNodeState]; remove: [] }>();
   const { t } = useI18n();
 
-  const patch = (value: Partial<WorkspaceLayoutNode>) =>
+  const patch = (value: Partial<WorkspaceLayoutNodeState>) =>
     emit('update:modelValue', normalizeWorkspaceLayout({ ...props.modelValue, ...value }));
 
-  const asLayoutNode = (item: DragItem): WorkspaceLayoutNode => {
+  const asLayoutNode = (item: DragItem): WorkspaceLayoutNodeState => {
     if (typeof item !== 'string') return item;
     return {
       id: crypto.randomUUID(),
@@ -43,7 +43,7 @@
     },
   });
 
-  const paneLabel = (pane: WorkspacePaneName | undefined): string =>
+  const paneLabel = (pane: WorkspacePaneNameDto | undefined): string =>
     pane ? t(`layout.pane.${pane}`) : t('layoutNodeEditor.pane');
 
   const addContainer = (direction: 'horizontal' | 'vertical') => {
@@ -69,7 +69,7 @@
     return Boolean(pane && !props.usedMainPanes.has(pane));
   };
 
-  const updateChild = (childId: string, updated: WorkspaceLayoutNode): void => {
+  const updateChild = (childId: string, updated: WorkspaceLayoutNodeState): void => {
     const children = [...(props.modelValue.children ?? [])];
     const index = children.findIndex((candidate) => candidate.id === childId);
     if (index < 0) return;

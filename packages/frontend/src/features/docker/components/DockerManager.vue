@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { useFeedback } from '@/shared/feedback/public';
   import { useDocker, type DockerSessionController } from '../composables/useDocker';
-  import type { DockerCommand, DockerContainer } from '../model/docker';
+  import type { WorkspaceDockerCommandDto, WorkspaceDockerContainerDto } from '../model/docker';
 
   type DockerConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
 
@@ -27,7 +27,7 @@
   );
   const connecting = computed(() => ['idle', 'connecting', 'reconnecting'].includes(props.connectionState));
 
-  const run = async (container: DockerContainer, action: DockerCommand) => {
+  const run = async (container: WorkspaceDockerContainerDto, action: WorkspaceDockerCommandDto) => {
     if (
       action === 'remove' &&
       !(await feedback.confirm({
@@ -43,7 +43,7 @@
     }
   };
 
-  const ports = (container: DockerContainer) =>
+  const ports = (container: WorkspaceDockerContainerDto) =>
     container.ports
       .map((port) => {
         const publicSide = port.publicPort
@@ -55,7 +55,7 @@
       })
       .join(', ');
 
-  const terminalCommand = (container: DockerContainer, kind: 'enter' | 'logs') => {
+  const terminalCommand = (container: WorkspaceDockerContainerDto, kind: 'enter' | 'logs') => {
     emit(
       'terminalCommand',
       kind === 'enter' ? `docker exec -it ${container.id} sh` : `docker logs --tail 1000 -f ${container.id}`,

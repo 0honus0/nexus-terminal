@@ -4,15 +4,15 @@
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { usePreferences } from '../composables/usePreferences';
-  import type { Preferences } from '../model/preferences';
+  import type { PreferencesDto } from '../model/preferences';
 
   type GroupId = 'files' | 'commands' | 'monitoring' | 'layout';
 
   const { t } = useI18n();
   const feedback = useFeedback();
-  const emit = defineEmits<{ saved: [preferences: Preferences] }>();
+  const emit = defineEmits<{ saved: [preferences: PreferencesDto] }>();
   const preferences = usePreferences();
-  const form = reactive<Preferences>({ ...preferences.values.value });
+  const form = reactive<PreferencesDto>({ ...preferences.values.value });
   const loading = ref(true);
   const loadError = ref('');
   const savingGroup = ref<GroupId | null>(null);
@@ -31,7 +31,7 @@
     'fileManagerShowDeleteConfirmation',
     'spreadsheetPreviewRowsPerPage',
     'spreadsheetPreviewMaxColumns',
-  ] as const satisfies readonly (keyof Preferences)[];
+  ] as const satisfies readonly (keyof PreferencesDto)[];
   const commandKeys = [
     'workspaceSidebarPersistent',
     'commandInputSyncTarget',
@@ -41,7 +41,7 @@
     'quickCommandsCompactMode',
     'terminalScrollbackLimit',
     'terminalRightClickCopyPaste',
-  ] as const satisfies readonly (keyof Preferences)[];
+  ] as const satisfies readonly (keyof PreferencesDto)[];
   const monitoringKeys = [
     'dashboardShowLocalResources',
     'dashboardShowRemoteResources',
@@ -50,8 +50,8 @@
     'statusMonitorIntervalSeconds',
     'dockerStatusIntervalSeconds',
     'dockerDefaultExpand',
-  ] as const satisfies readonly (keyof Preferences)[];
-  const layoutKeys = ['layoutLocked', 'navBarVisible'] as const satisfies readonly (keyof Preferences)[];
+  ] as const satisfies readonly (keyof PreferencesDto)[];
+  const layoutKeys = ['layoutLocked', 'navBarVisible'] as const satisfies readonly (keyof PreferencesDto)[];
 
   const sameValue = (left: unknown, right: unknown) => {
     if (left === right) return true;
@@ -61,7 +61,7 @@
     return false;
   };
 
-  const isDirty = (keys: readonly (keyof Preferences)[]) =>
+  const isDirty = (keys: readonly (keyof PreferencesDto)[]) =>
     keys.some((key) => !sameValue(form[key], preferences.values.value[key]));
   const filesDirty = computed(() => isDirty(fileKeys));
   const commandsDirty = computed(() => isDirty(commandKeys));
@@ -71,13 +71,13 @@
     () => [filesDirty.value, commandsDirty.value, monitoringDirty.value, layoutDirty.value].filter(Boolean).length,
   );
 
-  const patchFor = (keys: readonly (keyof Preferences)[]): Partial<Preferences> => {
-    const patch: Partial<Preferences> = {};
+  const patchFor = (keys: readonly (keyof PreferencesDto)[]): Partial<PreferencesDto> => {
+    const patch: Partial<PreferencesDto> = {};
     for (const key of keys) (patch as Record<string, unknown>)[key] = form[key];
     return patch;
   };
 
-  const validatePatch = (patch: Partial<Preferences>): string | null => {
+  const validatePatch = (patch: Partial<PreferencesDto>): string | null => {
     const integerInRange = (value: number, min: number, max: number) =>
       Number.isInteger(Number(value)) && Number(value) >= min && Number(value) <= max;
     if (
@@ -104,7 +104,7 @@
     return null;
   };
 
-  const saveGroup = async (group: GroupId, keys: readonly (keyof Preferences)[]) => {
+  const saveGroup = async (group: GroupId, keys: readonly (keyof PreferencesDto)[]) => {
     const patch = patchFor(keys);
     const validationError = validatePatch(patch);
     if (validationError) {

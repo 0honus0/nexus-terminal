@@ -14,6 +14,8 @@ import type {
   AgentHardLimitConfirmRequestDto,
   AgentHardLimitPreviewRequestDto,
   AgentHardLimitsDto,
+  AgentRecommendedPluginInstallRequestDto,
+  AgentTargetDenylistReplaceRequestDto,
   AgentSettingsPatchDto,
   AgentSettingsPatchRequestDto,
   AgentTargetGrantSelectionDto,
@@ -72,7 +74,10 @@ import {
   executionPolicyDto,
   hardLimitPreviewDto,
   hostSummaryDto,
+  recommendedPluginDto,
+  recommendedPluginInstallResultDto,
   settingsViewDto,
+  targetDenylistDto,
 } from './agent-host-dto';
 import {
   hasOnlyKeys,
@@ -195,7 +200,8 @@ const hardLimitConfirmRequest = (value: unknown): AgentHardLimitConfirmRequestDt
 
 const appStateUpdateRequest = (value: unknown): AgentAppStateUpdateRequestDto => {
   if (!isRecord(value) || !hasOnlyKeys(value, ['enabled', 'expectedVersion'])) throw new Error('VALIDATION_FAILED');
-  if (typeof value.enabled !== 'boolean' || !positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
+  if (typeof value.enabled !== 'boolean' || !positiveInteger(value.expectedVersion))
+    throw new Error('VALIDATION_FAILED');
   return { enabled: value.enabled, expectedVersion: value.expectedVersion };
 };
 
@@ -233,14 +239,21 @@ const grantInput = (value: unknown): AgentCapabilityGrantInputDto => {
   if (typeof value.capability !== 'string' || !AGENT_CAPABILITIES.includes(value.capability as AgentCapability)) {
     throw new Error('VALIDATION_FAILED');
   }
-  return { capability: value.capability as AgentCapabilityGrantInputDto['capability'], scope: capabilityScope(value.scope) };
+  return {
+    capability: value.capability as AgentCapabilityGrantInputDto['capability'],
+    scope: capabilityScope(value.scope),
+  };
 };
 
 const appGrantReplaceRequest = (value: unknown): AgentAppGrantReplaceRequestDto => {
   if (!isRecord(value) || !hasOnlyKeys(value, ['grants', 'expectedPolicyRevision'])) {
     throw new Error('VALIDATION_FAILED');
   }
-  if (!Array.isArray(value.grants) || value.grants.length > AGENT_CAPABILITIES.length || !positiveInteger(value.expectedPolicyRevision)) {
+  if (
+    !Array.isArray(value.grants) ||
+    value.grants.length > AGENT_CAPABILITIES.length ||
+    !positiveInteger(value.expectedPolicyRevision)
+  ) {
     throw new Error('VALIDATION_FAILED');
   }
   const grants = value.grants.map(grantInput);
@@ -252,7 +265,8 @@ const executionPolicyReplaceRequest = (value: unknown): AgentExecutionPolicyRepl
   if (!isRecord(value) || !hasOnlyKeys(value, ['overrides', 'expectedVersion']) || !isRecord(value.overrides)) {
     throw new Error('VALIDATION_FAILED');
   }
-  if (!Number.isSafeInteger(value.expectedVersion) || Number(value.expectedVersion) < 0) throw new Error('VALIDATION_FAILED');
+  if (!Number.isSafeInteger(value.expectedVersion) || Number(value.expectedVersion) < 0)
+    throw new Error('VALIDATION_FAILED');
   const overrides = { ...value.overrides } as AgentExecutionPolicyOverridesDto;
   return { overrides, expectedVersion: Number(value.expectedVersion) };
 };
@@ -282,15 +296,7 @@ const providerInputKeys = [
   'models',
   'enabled',
 ] as const;
-const reasoningEfforts = new Set<AgentReasoningEffortDto>([
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-]);
+const reasoningEfforts = new Set<AgentReasoningEffortDto>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 type ProviderView = Awaited<ReturnType<AgentProviderFacade['get']>>;
 type DiscoveredProviderModel = Awaited<ReturnType<AgentProviderFacade['discoverModels']>>[number];
@@ -327,7 +333,9 @@ const providerModelInput = (value: unknown): AgentProviderModelInputDto => {
   if (value.reasoningEfforts !== undefined) {
     if (
       !Array.isArray(value.reasoningEfforts) ||
-      value.reasoningEfforts.some((effort) => typeof effort !== 'string' || !reasoningEfforts.has(effort as AgentReasoningEffortDto))
+      value.reasoningEfforts.some(
+        (effort) => typeof effort !== 'string' || !reasoningEfforts.has(effort as AgentReasoningEffortDto),
+      )
     ) {
       throw new Error('VALIDATION_FAILED');
     }
@@ -497,7 +505,9 @@ const providerTestDto = (result: ProviderTestResult): AgentProviderTestResponseD
   ...(result.errorCode === undefined ? {} : { errorCode: result.errorCode }),
 });
 
-const modelRegistryStatusDto = (status: ReturnType<AgentModelRegistryFacade['status']>): AgentModelRegistryStatusDto => ({
+const modelRegistryStatusDto = (
+  status: ReturnType<AgentModelRegistryFacade['status']>,
+): AgentModelRegistryStatusDto => ({
   sourceUrl: status.sourceUrl,
   autoUpdate: status.autoUpdate,
   activeSource: status.activeSource,
@@ -774,7 +784,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/target-denylist',
     agentRoute(async (request, response) => {
       const snapshot = await dependencies.host.getTargetDenylist();
-      agentData(request, response, { revision: snapshot.revision, list: snapshot.entries });
+      agentData(request, response, targetDenylistDto(snapshot));
     }),
   );
 
@@ -796,14 +806,18 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       ) {
         throw new Error('VALIDATION_FAILED');
       }
-      const connectionIds = [...new Set(request.body.connectionIds as number[])].sort((left, right) => left - right);
+      const input: AgentTargetDenylistReplaceRequestDto = {
+        connectionIds: [...new Set(request.body.connectionIds as number[])].sort((left, right) => left - right),
+        reason: request.body.reason.trim(),
+        expectedRevision: request.body.expectedRevision,
+      };
       const updated = await dependencies.host.replaceTargetDenylist(
         agentUserId(request),
-        connectionIds,
-        request.body.reason.trim(),
-        request.body.expectedRevision,
+        input.connectionIds,
+        input.reason,
+        input.expectedRevision,
       );
-      agentData(request, response, { revision: updated.revision, list: updated.entries });
+      agentData(request, response, targetDenylistDto(updated));
     }),
   );
 
@@ -813,7 +827,9 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.host.getRecommendedPlugin(agentUserId(request), AbortSignal.timeout(30_000)),
+        recommendedPluginDto(
+          await dependencies.host.getRecommendedPlugin(agentUserId(request), AbortSignal.timeout(30_000)),
+        ),
       );
     }),
   );
@@ -822,11 +838,20 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/onboarding/recommended-plugin/install',
     mutationSecurity,
     agentRoute(async (request, response) => {
+      if (
+        request.body !== undefined &&
+        request.body !== null &&
+        (!isRecord(request.body) || Object.keys(request.body).length > 0)
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      const input: AgentRecommendedPluginInstallRequestDto = {};
+      void input;
       const installed = await dependencies.host.installRecommendedPlugin(
         agentUserId(request),
         AbortSignal.timeout(120_000),
       );
-      agentData(request, response, { ...installed, app: appSummaryDto(installed.app) }, 201);
+      agentData(request, response, recommendedPluginInstallResultDto(installed), 201);
     }),
   );
 
@@ -1051,11 +1076,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         request,
         response,
         providerTestDto(
-          await dependencies.providers.test(
-            agentUserId(request),
-            pathParam(request.params.providerId),
-            input.modelId,
-          ),
+          await dependencies.providers.test(agentUserId(request), pathParam(request.params.providerId), input.modelId),
         ),
       );
     }),
@@ -1133,7 +1154,9 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        artifactCleanupResultDto(await dependencies.artifacts.cleanupConfirm(agentUserId(request), input.confirmationId)),
+        artifactCleanupResultDto(
+          await dependencies.artifacts.cleanupConfirm(agentUserId(request), input.confirmationId),
+        ),
       );
     }),
   );

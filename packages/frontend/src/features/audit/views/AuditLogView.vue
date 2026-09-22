@@ -3,7 +3,7 @@
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
   import { BaseSpinner } from '@/foundation/ui';
-  import { auditActionTypes, type AuditLogQuery } from '../model/audit';
+  import { auditActionTypes, type AuditLogQueryDto } from '../model/audit';
   import { useAuditStore } from '../store/audit.store';
 
   const { t } = useI18n();
@@ -11,7 +11,7 @@
   const { logs, total, loading, error } = storeToRefs(store);
   const searchDraft = ref('');
   const actionTypeDraft = ref('');
-  const appliedFilters = ref<Pick<AuditLogQuery, 'search' | 'actionType'>>({});
+  const appliedFilters = ref<Pick<AuditLogQueryDto, 'search' | 'actionType'>>({});
   const page = ref(1);
   const limit = 50;
   const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit)));

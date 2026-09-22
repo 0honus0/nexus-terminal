@@ -24,14 +24,7 @@ import type {
 } from '@nexus-terminal/protocol/auth';
 import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import { httpClient } from '@/client/http';
-import type {
-  CaptchaConfig,
-  CaptchaConfigUpdate,
-  IpAccessPolicy,
-  IpBlacklistEntry,
-  PasskeySummary,
-  TwoFactorSetup,
-} from '../model/security';
+import type { IpAccessPolicyDto, IpBlacklistEntryDto } from '../model/security';
 
 export const securityApi = {
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
@@ -39,7 +32,7 @@ export const securityApi = {
     await httpClient.put<MessageResponseDto>('/auth/password', request);
   },
 
-  async beginTwoFactorSetup(): Promise<TwoFactorSetup> {
+  async beginTwoFactorSetup(): Promise<AuthTwoFactorSetupDto> {
     const response = await httpClient.post<AuthTwoFactorSetupDto>('/auth/2fa/setup');
     return response.data;
   },
@@ -54,12 +47,12 @@ export const securityApi = {
     await httpClient.delete<MessageResponseDto>('/auth/2fa', { data: request });
   },
 
-  async getCaptchaConfig(): Promise<CaptchaConfig> {
+  async getCaptchaConfig(): Promise<CaptchaConfigDto> {
     const response = await httpClient.get<CaptchaConfigDto>('/settings/captcha');
     return response.data;
   },
 
-  async updateCaptchaConfig(config: CaptchaConfigUpdate): Promise<void> {
+  async updateCaptchaConfig(config: CaptchaConfigUpdateDto): Promise<void> {
     const request: CaptchaConfigUpdateDto = config;
     await httpClient.put<MessageResponseDto>('/settings/captcha', request);
   },
@@ -103,7 +96,7 @@ export const securityApi = {
     await httpClient.post<PasskeyRegisterResponseDto>('/auth/passkey/register', request);
   },
 
-  async listPasskeys(): Promise<PasskeySummary[]> {
+  async listPasskeys(): Promise<PasskeySummaryDto[]> {
     return (await httpClient.get<PasskeySummaryDto[]>('/auth/user/passkeys')).data;
   },
 
@@ -116,7 +109,7 @@ export const securityApi = {
     await httpClient.put<MessageResponseDto>(`/auth/user/passkeys/${encodeURIComponent(credentialId)}/name`, request);
   },
 
-  async getIpAccessPolicy(): Promise<IpAccessPolicy> {
+  async getIpAccessPolicy(): Promise<IpAccessPolicyDto> {
     const settings = (await httpClient.get<IpAccessSettingsDto>('/settings')).data;
     return {
       whitelist: settings.ipWhitelist ?? '',
@@ -126,7 +119,7 @@ export const securityApi = {
     };
   },
 
-  async updateIpAccessPolicy(policy: Partial<IpAccessPolicy>): Promise<void> {
+  async updateIpAccessPolicy(policy: Partial<IpAccessPolicyDto>): Promise<void> {
     const body: IpAccessSettingsDto = {};
     if (policy.whitelist !== undefined) body.ipWhitelist = policy.whitelist;
     if (policy.blacklistEnabled !== undefined) body.ipBlacklistEnabled = policy.blacklistEnabled;
@@ -135,7 +128,7 @@ export const securityApi = {
     await httpClient.put<MessageResponseDto>('/settings', body);
   },
 
-  async listBlockedIps(limit: number, offset: number): Promise<{ entries: IpBlacklistEntry[]; total: number }> {
+  async listBlockedIps(limit: number, offset: number): Promise<{ entries: IpBlacklistEntryDto[]; total: number }> {
     const response = await httpClient.get<IpBlacklistPageDto>('/settings/ip-blacklist', {
       params: { limit, offset },
     });

@@ -1,7 +1,7 @@
 export type {
-  WorkspaceDockerCommandDto as DockerCommand,
-  WorkspaceDockerContainerDto as DockerContainer,
-  WorkspaceDockerPortBindingDto as DockerPortBinding,
-  WorkspaceDockerStatsDto as DockerStats,
-  WorkspaceDockerStatusDto as DockerStatus,
+  WorkspaceDockerCommandDto,
+  WorkspaceDockerContainerDto,
+  WorkspaceDockerPortBindingDto,
+  WorkspaceDockerStatsDto,
+  WorkspaceDockerStatusDto,
 } from '@nexus-terminal/protocol/workspace';

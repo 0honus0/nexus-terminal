@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue';
 import type { FilesystemChannel } from '../ports/filesystem-channel';
-import type { FileSearchEntry, RemoteFileEntry } from '../model/filesystem';
+import type { WorkspaceFileSearchEntryDto, WorkspaceRemoteFileEntryDto } from '../model/filesystem';
 
 export type FilesystemSortKey = 'name' | 'size' | 'permissions' | 'modified';
 export type FilesystemSortDirection = 'asc' | 'desc';
@@ -12,15 +12,19 @@ const parentPath = (path: string) => {
   return index <= 0 ? '/' : normalized.slice(0, index);
 };
 
-const entryName = (entry: RemoteFileEntry): string =>
-  'relativePath' in entry && typeof (entry as FileSearchEntry).relativePath === 'string'
-    ? (entry as FileSearchEntry).relativePath
+const entryName = (entry: WorkspaceRemoteFileEntryDto): string =>
+  'relativePath' in entry && typeof (entry as WorkspaceFileSearchEntryDto).relativePath === 'string'
+    ? (entry as WorkspaceFileSearchEntryDto).relativePath
     : entry.name;
 
-const compareEntryNames = (left: RemoteFileEntry, right: RemoteFileEntry): number =>
+const compareEntryNames = (left: WorkspaceRemoteFileEntryDto, right: WorkspaceRemoteFileEntryDto): number =>
   entryName(left).localeCompare(entryName(right), undefined, { numeric: true, sensitivity: 'base' });
 
-const compare = (left: RemoteFileEntry, right: RemoteFileEntry, key: FilesystemSortKey): number => {
+const compare = (
+  left: WorkspaceRemoteFileEntryDto,
+  right: WorkspaceRemoteFileEntryDto,
+  key: FilesystemSortKey,
+): number => {
   let result: number;
   if (key === 'size') result = left.metadata.size - right.metadata.size;
   else if (key === 'permissions') result = left.metadata.mode - right.metadata.mode;
@@ -31,8 +35,8 @@ const compare = (left: RemoteFileEntry, right: RemoteFileEntry, key: FilesystemS
 
 export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '/') {
   const path = ref(initialPath);
-  const entries = ref<RemoteFileEntry[]>([]);
-  const searchEntries = ref<FileSearchEntry[]>([]);
+  const entries = ref<WorkspaceRemoteFileEntryDto[]>([]);
+  const searchEntries = ref<WorkspaceFileSearchEntryDto[]>([]);
   const searchQuery = ref('');
   const searching = ref(false);
   const searchTruncated = ref(false);
@@ -136,7 +140,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
       candidate = parentPath(candidate);
     }
   };
-  const open = async (entry: RemoteFileEntry) => {
+  const open = async (entry: WorkspaceRemoteFileEntryDto) => {
     if (entry.metadata.isDirectory) await load(entry.path);
   };
   const goParent = () => load(parentPath(path.value));
@@ -162,7 +166,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
     searching.value = false;
     resetSearchResults();
   };
-  const select = (entry: RemoteFileEntry, mode: 'only' | 'toggle' | 'range' = 'only') => {
+  const select = (entry: WorkspaceRemoteFileEntryDto, mode: 'only' | 'toggle' | 'range' = 'only') => {
     if (mode === 'range' && selectionAnchor.value) {
       const anchorIndex = visible.value.findIndex((item) => item.path === selectionAnchor.value);
       const targetIndex = visible.value.findIndex((item) => item.path === entry.path);
@@ -184,7 +188,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
     selected.value = new Set([entry.path]);
     selectionAnchor.value = entry.path;
   };
-  const toggle = (entry: RemoteFileEntry) => select(entry, 'toggle');
+  const toggle = (entry: WorkspaceRemoteFileEntryDto) => select(entry, 'toggle');
   const selectAll = () => {
     selected.value = new Set(visible.value.map((entry) => entry.path));
     selectionAnchor.value = visible.value.at(-1)?.path ?? null;

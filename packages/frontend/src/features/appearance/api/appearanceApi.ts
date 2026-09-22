@@ -14,7 +14,6 @@ import type {
 } from '@nexus-terminal/protocol/appearance';
 import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import { httpClient } from '@/client/http';
-import type { AppearanceSettings, LocalHtmlTheme, RemoteHtmlTheme, TerminalTheme } from '../model/appearance';
 
 const triggerBlobDownload = (blob: Blob, fileName: string): void => {
   const url = URL.createObjectURL(blob);
@@ -29,16 +28,16 @@ const triggerBlobDownload = (blob: Blob, fileName: string): void => {
 };
 
 export const appearanceApi = {
-  async load(): Promise<AppearanceSettings> {
+  async load(): Promise<AppearanceSettingsDto> {
     return (await httpClient.get<AppearanceSettingsDto>('/appearance')).data;
   },
 
-  async update(patch: Partial<AppearanceSettings>): Promise<AppearanceSettings> {
+  async update(patch: AppearanceUpdateRequestDto): Promise<AppearanceSettingsDto> {
     const request: AppearanceUpdateRequestDto = patch;
     return (await httpClient.put<AppearanceSettingsDto>('/appearance', request)).data;
   },
 
-  async listThemes(): Promise<TerminalTheme[]> {
+  async listThemes(): Promise<TerminalThemeDto[]> {
     return (await httpClient.get<TerminalThemeDto[]>('/terminal-themes')).data;
   },
 
@@ -82,7 +81,7 @@ export const appearanceApi = {
     await httpClient.delete<MessageResponseDto>(`/appearance/background/${kind}`);
   },
 
-  async listLocalHtmlThemes(): Promise<LocalHtmlTheme[]> {
+  async listLocalHtmlThemes(): Promise<LocalHtmlThemeDto[]> {
     return (await httpClient.get<LocalHtmlThemeDto[]>('/appearance/html-presets/local')).data;
   },
 
@@ -109,9 +108,8 @@ export const appearanceApi = {
   },
 
   async getRemoteHtmlRepositoryUrl(): Promise<string | null> {
-    return (
-      await httpClient.get<RemoteHtmlRepositoryResponseDto>('/appearance/html-presets/remote/repository-url')
-    ).data.url;
+    return (await httpClient.get<RemoteHtmlRepositoryResponseDto>('/appearance/html-presets/remote/repository-url'))
+      .data.url;
   },
 
   async setRemoteHtmlRepositoryUrl(url: string | null): Promise<void> {
@@ -119,7 +117,7 @@ export const appearanceApi = {
     await httpClient.put<MessageResponseDto>('/appearance/html-presets/remote/repository-url', request);
   },
 
-  async listRemoteHtmlThemes(repoUrl?: string): Promise<RemoteHtmlTheme[]> {
+  async listRemoteHtmlThemes(repoUrl?: string): Promise<RemoteHtmlThemeDto[]> {
     return (
       await httpClient.get<RemoteHtmlThemeDto[]>('/appearance/html-presets/remote/list', {
         params: repoUrl ? { repoUrl } : undefined,

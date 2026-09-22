@@ -3,13 +3,13 @@
   import { useI18n } from 'vue-i18n';
   import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
   import VueRecaptcha from 'vue3-recaptcha2';
-  import type { CaptchaConfig } from '../model/security';
+  import type { CaptchaConfigDto } from '../model/security';
 
   type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
 
   const props = withDefaults(
     defineProps<{
-      config: CaptchaConfig;
+      config: CaptchaConfigDto;
       status?: CaptchaStatus;
       feedback?: string | null;
     }>(),

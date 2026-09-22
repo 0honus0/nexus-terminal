@@ -7,23 +7,23 @@
   import { apiErrorMessage } from '@/client/http';
   import NotificationSettingForm from '../components/NotificationSettingForm.vue';
   import { useNotificationsStore } from '../store/notifications.store';
-  import type { NotificationSetting, NotificationSettingInput } from '../model/notification';
+  import type { NotificationSettingDto, NotificationSettingCreateRequestDto } from '../model/notification';
   const { t } = useI18n();
   const feedback = useFeedback();
   const store = useNotificationsStore();
   const { items, loading, error } = storeToRefs(store);
-  const editing = ref<NotificationSetting | null>(null),
+  const editing = ref<NotificationSettingDto | null>(null),
     formVisible = ref(false);
   onMounted(() => store.load());
   const openAdd = () => {
     editing.value = null;
     formVisible.value = true;
   };
-  const openEdit = (item: NotificationSetting) => {
+  const openEdit = (item: NotificationSettingDto) => {
     editing.value = item;
     formVisible.value = true;
   };
-  const save = async (input: NotificationSettingInput) => {
+  const save = async (input: NotificationSettingCreateRequestDto) => {
     try {
       await store.save(input, editing.value?.id);
       formVisible.value = false;
@@ -37,7 +37,7 @@
       );
     }
   };
-  const remove = async (item: NotificationSetting) => {
+  const remove = async (item: NotificationSettingDto) => {
     if (
       !(await feedback.confirm({
         message: t('settings.notifications.confirmDelete', { name: item.name }),

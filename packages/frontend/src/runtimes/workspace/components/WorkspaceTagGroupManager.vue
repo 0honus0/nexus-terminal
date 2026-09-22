@@ -3,10 +3,14 @@
   import { useI18n } from 'vue-i18n';
   import { BaseInput, BaseModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
-  import { connectionTagsService, useConnectionTags, type ConnectionTag } from '@/features/tags/public';
-  import { useConnections, type Connection } from '@/features/connections/public';
+  import { connectionTagsService, useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
+  import { useConnections, type ConnectionDto } from '@/features/connections/public';
 
-  const props = defineProps<{ visible: boolean; tag: ConnectionTag | null; connections: readonly Connection[] }>();
+  const props = defineProps<{
+    visible: boolean;
+    tag: ConnectionTagDto | null;
+    connections: readonly ConnectionDto[];
+  }>();
   const emit = defineEmits<{ close: []; changed: [] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
@@ -32,7 +36,7 @@
       .slice()
       .sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host));
   });
-  const protocolIcon = (connection: Connection): string => {
+  const protocolIcon = (connection: ConnectionDto): string => {
     if (connection.type === 'RDP') return 'fas fa-desktop';
     if (connection.type === 'VNC') return 'fas fa-plug';
     return 'fas fa-server';

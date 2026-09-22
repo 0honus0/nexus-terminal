@@ -1,9 +1,6 @@
-import type { SshKeySummaryDto } from '@nexus-terminal/protocol/connections';
+import type { SshKeySummaryDto, SshKeyUpdateRequestDto } from '@nexus-terminal/protocol/connections';
+export type { SshKeySummaryDto };
 
-export type SshKeySummary = SshKeySummaryDto;
-
-export interface SshKeyInput {
+export type SshKeyFormInput = Omit<SshKeyUpdateRequestDto, 'name'> & {
   name: string;
-  privateKey?: string;
-  passphrase?: string | null;
-}
+};

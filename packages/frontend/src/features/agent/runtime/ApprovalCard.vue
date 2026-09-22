@@ -1,8 +1,12 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref } from 'vue';
-  import type { AgentApprovalViewDto, AgentServerClockAnchor } from '../api/agent-api';
+  import type { AgentApprovalViewDto, AgentServerClockAnchorViewModel } from '../api/agent-api';
 
-  const props = defineProps<{ approval: AgentApprovalViewDto; clock: AgentServerClockAnchor; busy?: boolean }>();
+  const props = defineProps<{
+    approval: AgentApprovalViewDto;
+    clock: AgentServerClockAnchorViewModel;
+    busy?: boolean;
+  }>();
   const emit = defineEmits<{
     resolve: [approval: AgentApprovalViewDto, decision: 'approved' | 'denied', feedback?: string];
   }>();

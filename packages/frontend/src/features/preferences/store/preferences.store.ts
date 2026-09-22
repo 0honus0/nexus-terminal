@@ -1,15 +1,20 @@
 import { defineStore } from 'pinia';
 import { setFrontendLogLevel } from '@/client/logging/logger';
 import { preferencesApi } from '../api/preferencesApi';
-import { defaultPreferences, type PreferenceKey, type PreferencePatch, type Preferences } from '../model/preferences';
+import {
+  defaultPreferences,
+  type PreferenceKey,
+  type PreferencesPatchDto,
+  type PreferencesDto,
+} from '../model/preferences';
 
 let preferenceUpdateRevision = 0;
 const preferenceKeyRevisions = new Map<PreferenceKey, number>();
-let preferenceLoadPromise: Promise<Preferences> | null = null;
+let preferenceLoadPromise: Promise<PreferencesDto> | null = null;
 let preferenceCacheGeneration = 0;
 
 export const usePreferencesStore = defineStore('preferences', {
-  state: () => ({ values: { ...defaultPreferences } as Preferences, loaded: false }),
+  state: () => ({ values: { ...defaultPreferences } as PreferencesDto, loaded: false }),
   actions: {
     reset() {
       preferenceCacheGeneration += 1;
@@ -38,10 +43,10 @@ export const usePreferencesStore = defineStore('preferences', {
         if (preferenceLoadPromise === load) preferenceLoadPromise = null;
       }
     },
-    async update(patch: PreferencePatch) {
+    async update(patch: PreferencesPatchDto) {
       const revision = ++preferenceUpdateRevision;
       const keys = Object.keys(patch) as PreferenceKey[];
-      const previous: Partial<Preferences> = {};
+      const previous: Partial<PreferencesDto> = {};
       for (const key of keys) {
         (previous as Record<string, unknown>)[key] = this.values[key];
         preferenceKeyRevisions.set(key, revision);
@@ -55,7 +60,7 @@ export const usePreferencesStore = defineStore('preferences', {
           if (preferenceKeyRevisions.get(key) === revision) preferenceKeyRevisions.delete(key);
         }
       } catch (cause) {
-        const rollback: Partial<Preferences> = {};
+        const rollback: Partial<PreferencesDto> = {};
         for (const key of keys) {
           if (preferenceKeyRevisions.get(key) !== revision) continue;
           (rollback as Record<string, unknown>)[key] = previous[key];

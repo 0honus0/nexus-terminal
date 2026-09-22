@@ -9,11 +9,14 @@ export {
   removeSuspendedSessionFromCatalog,
   findSuspendedSessionByOriginalWorkspace,
 } from './composables/useSuspendedSessions';
-export type { SuspendedAutoTerminationEvent, SuspendedAutoTerminationNotice } from './composables/useSuspendedSessions';
+export type {
+  WorkspaceSuspendAutoTerminatedEventDto,
+  SuspendedAutoTerminationViewModel,
+} from './composables/useSuspendedSessions';
 export type { SshSuspendChannel } from './ports/ssh-suspend-channel';
 export type {
-  MarkedSuspendedSession,
-  ResumeSuspendedSessionRequest,
-  SuspendedSession,
-  SuspendedSessionStatus,
+  MarkedSuspendedSessionState,
+  WorkspaceSuspendResumeRequestDto,
+  SuspendedSessionDto,
+  SuspendedSessionStatusDto,
 } from './model/sshSuspend';

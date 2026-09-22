@@ -4,8 +4,8 @@ export { remoteDesktopLauncher } from './state/remoteDesktopLauncher';
 export type { RemoteDesktopSessionPort } from './ports/remote-desktop-session-port';
 export type {
   RemoteDesktopConnection,
-  RemoteDesktopDisplay,
-  RemoteDesktopProtocol,
-  RemoteDesktopSession,
+  RemoteDesktopDisplayDto,
+  RemoteDesktopProtocolDto,
+  RemoteDesktopSessionDto,
   RemoteDesktopState,
 } from './model/remoteDesktop';

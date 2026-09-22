@@ -12,5 +12,5 @@ export type {
   AgentArtifactStorageSummaryDto,
   AgentWorkspaceRuntimeAvailabilityDto,
   AgentHardLimitPreviewDto,
-  TargetDenylistView,
+  AgentTargetDenylistViewDto,
 } from './api/agent-api';

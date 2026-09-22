@@ -1,13 +1,13 @@
 import { defineStore } from 'pinia';
 import { tagsApi } from '../api/tagsApi';
-import type { ConnectionTag } from '../model/tag';
+import type { ConnectionTagDto } from '../model/tag';
 
 const DEFAULT_STALE_MS = 60_000;
-let loadPromise: Promise<ConnectionTag[]> | null = null;
+let loadPromise: Promise<ConnectionTagDto[]> | null = null;
 let cacheGeneration = 0;
 
 export const useTagsStore = defineStore('connection-tags', {
-  state: () => ({ items: [] as ConnectionTag[], loaded: false, loadedAt: 0 }),
+  state: () => ({ items: [] as ConnectionTagDto[], loaded: false, loadedAt: 0 }),
   actions: {
     async load(force = false) {
       if (this.loaded && !force) return this.items;

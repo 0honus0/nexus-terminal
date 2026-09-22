@@ -16,8 +16,8 @@
     type AgentArtifactStorageSummaryDto,
     type AgentWorkspaceRuntimeAvailabilityDto,
     type AgentHardLimitPreviewDto,
-    type RecommendedAgentPluginView,
-    type TargetDenylistView,
+    type AgentRecommendedPluginDto,
+    type AgentTargetDenylistViewDto,
   } from '../api/agent-api';
   import AgentFeatureSettings from './AgentFeatureSettings.vue';
   import AcpRuntimeSettings from './AcpRuntimeSettings.vue';
@@ -45,12 +45,12 @@
   const discoveredModels = ref<Record<string, AgentDiscoveredProviderModelDto[]>>({});
   const storage = ref<AgentArtifactStorageSummaryDto | null>(null);
   const workspaceRuntime = ref<AgentWorkspaceRuntimeAvailabilityDto | null>(null);
-  const denylist = ref<TargetDenylistView | null>(null);
+  const denylist = ref<AgentTargetDenylistViewDto | null>(null);
   const hardLimitPreview = ref<AgentHardLimitPreviewDto | null>(null);
   const loading = ref(true);
   const busy = ref(false);
   const loadError = ref('');
-  const recommendedPlugin = ref<RecommendedAgentPluginView | null>(null);
+  const recommendedPlugin = ref<AgentRecommendedPluginDto | null>(null);
   const onboardingVisible = ref(false);
   const showKeyDetails = ref(false);
   const copiedKey = ref(false);

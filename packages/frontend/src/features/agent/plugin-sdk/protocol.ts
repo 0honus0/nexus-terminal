@@ -1,6 +1,6 @@
 import type { AgentJsonValueDto } from '@nexus-terminal/protocol/agent-common';
 import type {
-  AgentApprovalBatch,
+  AgentApprovalBatchViewModel,
   AgentApprovalViewDto,
   AgentAppIntentArtifactDto,
   AgentAppIntentReceiptDto,
@@ -154,7 +154,7 @@ export interface PluginFrontendSdkV1 {
       cancel(runId: string, delegationId: string): Promise<AgentSubagentViewDto>;
     };
     approvals: {
-      list(runId: string): Promise<AgentApprovalBatch>;
+      list(runId: string): Promise<AgentApprovalBatchViewModel>;
       resolve(approvalId: string, runId: string, decision: 'approved' | 'denied'): Promise<AgentApprovalViewDto>;
     };
   };

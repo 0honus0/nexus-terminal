@@ -8,7 +8,7 @@
   import { createLatestValueSaver } from '@/foundation/async';
   import { useFeedback } from '@/shared/feedback/public';
   import { focusRegistry, normalizeShortcut, shortcutFromKeyboardEvent } from '@/shared/focus/public';
-  import { connectionService, type Connection } from '@/features/connections/public';
+  import { connectionService, type ConnectionDto } from '@/features/connections/public';
   import { terminalScrollbackForRuntime, usePreferences } from '@/features/preferences/public';
   import { defaultTerminalTheme, useAppearance } from '@/features/appearance/public';
   import { useCommandHistory } from '@/features/command-history/public';
@@ -19,13 +19,13 @@
     type FileClipboardOperation,
     type ProgressSource,
   } from '@/features/transfers/public';
-  import type { RemoteFileEntry } from '@/features/filesystem/public';
+  import type { WorkspaceRemoteFileEntryDto } from '@/features/filesystem/public';
   import {
     loadSuspendedSessionsModal,
     loadSuspendedSessionsPanel,
     findSuspendedSessionByOriginalWorkspace,
     refreshSuspendedSessionsCatalog,
-    type SuspendedSession,
+    type SuspendedSessionDto,
   } from '@/features/ssh-suspend/public';
   import WorkspaceConnectionList from '../components/WorkspaceConnectionList.vue';
   import WorkspaceTabBar from '../components/WorkspaceTabBar.vue';
@@ -231,7 +231,7 @@
   const setFileClipboard = (
     source: WorkspaceRuntimeSession,
     operation: FileClipboardOperation,
-    entries: RemoteFileEntry[],
+    entries: WorkspaceRemoteFileEntryDto[],
   ) => {
     registry.fileClipboard.set(
       operation,
@@ -345,7 +345,7 @@
     else surfaces.delete(id);
   };
 
-  const openConnection = async (connection: Connection): Promise<void> => {
+  const openConnection = async (connection: ConnectionDto): Promise<void> => {
     if (connection.type === 'RDP' || connection.type === 'VNC') {
       remoteDesktopLauncher.open({
         id: connection.id,
@@ -364,14 +364,14 @@
     }
   };
 
-  const openConnections = async (connections: Connection[]) => {
+  const openConnections = async (connections: ConnectionDto[]) => {
     for (const connection of connections) await openConnection(connection);
   };
-  const openConnectionFromPicker = async (connection: Connection): Promise<void> => {
+  const openConnectionFromPicker = async (connection: ConnectionDto): Promise<void> => {
     connectionPickerVisible.value = false;
     await openConnection(connection);
   };
-  const openConnectionsFromPicker = async (connections: Connection[]): Promise<void> => {
+  const openConnectionsFromPicker = async (connections: ConnectionDto[]): Promise<void> => {
     connectionPickerVisible.value = false;
     await openConnections(connections);
   };
@@ -500,7 +500,10 @@
     }
   };
 
-  const resumeSuspended = async (suspended: SuspendedSession, options: { silent?: boolean } = {}): Promise<boolean> => {
+  const resumeSuspended = async (
+    suspended: SuspendedSessionDto,
+    options: { silent?: boolean } = {},
+  ): Promise<boolean> => {
     try {
       const takeover = suspended.ownershipState !== 'available';
       if (takeover) {
@@ -707,7 +710,7 @@
     if (!values.length && !shouldOpenSuspended) return;
 
     // Consume one-shot query actions before starting any potentially slow connection work.
-    // Connection success must never perform a later navigation: if the user returns to the
+    // ConnectionDto success must never perform a later navigation: if the user returns to the
     // dashboard while SSH is still connecting, the background completion should stay there.
     if (router.currentRoute.value.name === 'Workspace') {
       await router.replace({ name: 'Workspace', query: {} });

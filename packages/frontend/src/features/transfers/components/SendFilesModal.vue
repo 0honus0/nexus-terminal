@@ -4,18 +4,18 @@
   import { OverlayPanel } from '@/foundation/ui';
   import { apiErrorMessage } from '@/client/http';
   import { useFeedback } from '@/shared/feedback/public';
-  import { useConnections, type Connection } from '@/features/connections/public';
+  import { useConnections, type ConnectionDto } from '@/features/connections/public';
   import { useConnectionTags } from '@/features/tags/public';
   import { useServerTransfersStore } from '../store/serverTransfers.store';
-  import type { SendFileSourceItem, ServerTransferMethod, ServerTransferTask } from '../model/serverTransfer';
+  import type { SendFileSourceItemDto, ServerTransferMethodDto, ServerTransferTaskDto } from '../model/serverTransfer';
 
   const props = defineProps<{
     visible: boolean;
     sourceConnectionId: number;
-    items: readonly SendFileSourceItem[];
+    items: readonly SendFileSourceItemDto[];
     initialTargetPath?: string;
   }>();
-  const emit = defineEmits<{ close: []; sent: [task: ServerTransferTask] }>();
+  const emit = defineEmits<{ close: []; sent: [task: ServerTransferTaskDto] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
   const connections = useConnections();
@@ -24,7 +24,7 @@
   const search = ref('');
   const selected = ref(new Set<number>());
   const targetPath = ref('');
-  const method = ref<ServerTransferMethod>('auto');
+  const method = ref<ServerTransferMethodDto>('auto');
   const loadingOptions = ref(false);
   const submitting = ref(false);
   const error = ref('');
@@ -33,7 +33,7 @@
   interface ConnectionGroup {
     id: string;
     name: string;
-    connections: Connection[];
+    connections: ConnectionDto[];
   }
 
   const tagNames = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name])));
@@ -43,8 +43,8 @@
     ),
   );
   const groupedConnections = computed<ConnectionGroup[]>(() => {
-    const groups = new Map<number, Connection[]>();
-    const untagged: Connection[] = [];
+    const groups = new Map<number, ConnectionDto[]>();
+    const untagged: ConnectionDto[] = [];
 
     for (const connection of sshConnections.value) {
       if (!connection.tagIds.length) {

@@ -9,24 +9,25 @@ import type {
   ServerTransferTaskStatusDto,
 } from '@nexus-terminal/protocol/transfers';
 import type { TransferTask } from './transfer';
+export type {
+  SendFileSourceItemDto,
+  SendFilesRequestDto,
+  ServerTransferMethodDto,
+  ServerTransferMethodUsedDto,
+  ServerTransferSubTaskDto,
+  ServerTransferSubTaskStatusDto,
+  ServerTransferTaskDto,
+  ServerTransferTaskStatusDto,
+};
 
-export type ServerTransferMethod = ServerTransferMethodDto;
-export type ServerTransferMethodUsed = ServerTransferMethodUsedDto;
-export type ServerTransferTaskStatus = ServerTransferTaskStatusDto;
-export type ServerTransferSubTaskStatus = ServerTransferSubTaskStatusDto;
-export type SendFileSourceItem = SendFileSourceItemDto;
-export type SendFilesRequest = SendFilesRequestDto;
-export type ServerTransferSubTask = ServerTransferSubTaskDto;
-export type ServerTransferTask = ServerTransferTaskDto;
-
-const mappedStatus = (status: ServerTransferTaskStatus): TransferTask['status'] => {
+const mappedStatus = (status: ServerTransferTaskStatusDto): TransferTask['status'] => {
   if (status === 'in-progress') return 'running';
   if (status === 'partially-completed') return 'partial';
   if (status === 'failed') return 'error';
   return status;
 };
 
-export const toTransferTask = (task: ServerTransferTask): TransferTask => {
+export const toTransferTask = (task: ServerTransferTaskDto): TransferTask => {
   const completedFiles = task.subTasks.filter((subTask) => subTask.status === 'completed').length;
   const errors = task.subTasks
     .filter((subTask) => subTask.status === 'failed' && subTask.message)

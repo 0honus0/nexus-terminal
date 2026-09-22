@@ -2,12 +2,12 @@
   import { reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
-  import type { Proxy, ProxyInput, ProxyType } from '../model/proxy';
-  const props = defineProps<{ proxy?: Proxy | null; loading?: boolean }>();
-  const emit = defineEmits<{ submit: [input: Partial<ProxyInput>]; cancel: [] }>();
+  import type { ProxyDto, ProxyCreateRequestDto, ProxyTypeDto } from '../model/proxy';
+  const props = defineProps<{ proxy?: ProxyDto | null; loading?: boolean }>();
+  const emit = defineEmits<{ submit: [input: Partial<ProxyCreateRequestDto>]; cancel: [] }>();
   const form = reactive({
     name: '',
-    type: 'SOCKS5' as ProxyType,
+    type: 'SOCKS5' as ProxyTypeDto,
     host: '',
     port: 1080,
     username: '',
@@ -57,7 +57,7 @@
       error.value = t('proxies.form.errorPort');
       return;
     }
-    const input: Partial<ProxyInput> = {
+    const input: Partial<ProxyCreateRequestDto> = {
       name: form.name.trim(),
       type: form.type,
       host: form.host.trim(),

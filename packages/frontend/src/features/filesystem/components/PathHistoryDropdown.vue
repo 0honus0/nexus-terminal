@@ -2,12 +2,12 @@
   import { nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu } from '@/foundation/ui';
-  import type { PathHistoryEntry } from '../model/catalog';
+  import type { PathHistoryEntryDto } from '../model/catalog';
 
   const props = defineProps<{
     visible: boolean;
     loading: boolean;
-    items: PathHistoryEntry[];
+    items: PathHistoryEntryDto[];
     selectedIndex: number;
   }>();
 
@@ -19,9 +19,9 @@
 
   const { t } = useI18n();
   const itemRefs = ref<HTMLElement[]>([]);
-  const context = ref<{ item: PathHistoryEntry; x: number; y: number } | null>(null);
+  const context = ref<{ item: PathHistoryEntryDto; x: number; y: number } | null>(null);
 
-  const openContext = (event: MouseEvent, item: PathHistoryEntry) => {
+  const openContext = (event: MouseEvent, item: PathHistoryEntryDto) => {
     context.value = { item, x: event.clientX, y: event.clientY };
   };
   const copyContextPath = () => {

@@ -9,12 +9,17 @@
   import { useProxies } from '@/features/proxies/public';
   import { connectionsApi } from '../api/connectionsApi';
   import { useConnections } from '../composables/useConnections';
-  import type { Connection, ConnectionAuthMethod, ConnectionInput, ConnectionType } from '../model/connection';
+  import type {
+    ConnectionDto,
+    ConnectionAuthMethodDto,
+    ConnectionFormInput,
+    ConnectionTypeDto,
+  } from '../model/connection';
 
-  const props = defineProps<{ connection?: Connection | null; loading?: boolean }>();
+  const props = defineProps<{ connection?: ConnectionDto | null; loading?: boolean }>();
   const emit = defineEmits<{
-    submit: [input: ConnectionInput | Partial<ConnectionInput>];
-    submitMany: [inputs: ConnectionInput[]];
+    submit: [input: ConnectionFormInput | Partial<ConnectionFormInput>];
+    submitMany: [inputs: ConnectionFormInput[]];
     cancel: [];
     delete: [];
   }>();
@@ -31,11 +36,11 @@
   const remoteAppEnabled = ref(false);
   const form = reactive({
     name: '',
-    type: 'SSH' as ConnectionType,
+    type: 'SSH' as ConnectionTypeDto,
     host: '',
     port: 22,
     username: '',
-    authMethod: 'password' as ConnectionAuthMethod,
+    authMethod: 'password' as ConnectionAuthMethodDto,
     password: '',
     sshKeyId: null as number | null,
     proxyId: null as number | null,
@@ -47,7 +52,7 @@
     remoteAppDirectory: '',
     remoteAppArguments: '',
   });
-  const resetFrom = (c?: Connection | null) => {
+  const resetFrom = (c?: ConnectionDto | null) => {
     Object.assign(
       form,
       c
@@ -120,7 +125,7 @@
     }
     if (connectionResult.status === 'rejected') feedback.notifyError(t('connections.loadFailed'));
   });
-  const regularInput = (): ConnectionInput => ({
+  const regularInput = (): ConnectionFormInput => ({
     name: form.name || null,
     type: form.type,
     host: form.host.trim(),
@@ -222,7 +227,7 @@
       }
       const input = regularInput();
       if (props.connection) {
-        const update: Partial<ConnectionInput> = { ...input };
+        const update: Partial<ConnectionFormInput> = { ...input };
         if (!form.password) delete update.password;
         emit('submit', update);
       } else emit('submit', input);
@@ -251,7 +256,7 @@
   };
   const tokenize = (line: string) =>
     [...(line.match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\S+/g) ?? [])].map((x) => x.replace(/^("|')|("|')$/g, ''));
-  const parseLine = async (line: string): Promise<ConnectionInput> => {
+  const parseLine = async (line: string): Promise<ConnectionFormInput> => {
     const tokens = tokenize(line);
     const first = tokens.shift();
     if (!first || !first.includes('@')) throw new Error(t('connections.form.scriptErrorMissingHost', { line }));
@@ -265,7 +270,7 @@
       host = hostPort.slice(0, colon);
       port = Number(hostPort.slice(colon + 1));
     }
-    let type: ConnectionType = 'SSH',
+    let type: ConnectionTypeDto = 'SSH',
       name = `${username}@${host}`,
       password = '',
       keyName = '',
@@ -276,7 +281,7 @@
       const token = tokens[i];
       const value = tokens[i + 1];
       if (token === '-type') {
-        type = value?.toUpperCase() as ConnectionType;
+        type = value?.toUpperCase() as ConnectionTypeDto;
         i++;
       } else if (token === '-name') {
         name = value ?? name;
@@ -349,7 +354,7 @@
         .map((x) => x.trim())
         .filter(Boolean);
       if (!lines.length) throw new Error(t('connections.form.scriptModeEmpty'));
-      const inputs: ConnectionInput[] = [];
+      const inputs: ConnectionFormInput[] = [];
       for (const line of lines) inputs.push(await parseLine(line));
       emit('submitMany', inputs);
     } catch (cause) {

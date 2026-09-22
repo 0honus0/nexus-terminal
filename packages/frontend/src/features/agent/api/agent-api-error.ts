@@ -1,16 +1,10 @@
 import axios from 'axios';
 
-interface AgentErrorEnvelope {
-  error?: {
-    code?: unknown;
-    message?: unknown;
-    details?: unknown;
-  };
-  requestId?: unknown;
-}
-
 const nonEmptyString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 
 export class AgentApiError extends Error {
   readonly code: string;
@@ -31,16 +25,18 @@ export class AgentApiError extends Error {
 export const toAgentApiError = (cause: unknown): AgentApiError => {
   if (cause instanceof AgentApiError) return cause;
 
-  if (axios.isAxiosError<AgentErrorEnvelope>(cause)) {
-    const payload = cause.response?.data;
-    const code = nonEmptyString(payload?.error?.code) ?? 'AGENT_REQUEST_FAILED';
-    const message = nonEmptyString(payload?.error?.message) ?? code;
+  if (axios.isAxiosError<unknown>(cause)) {
+    const payload = record(cause.response?.data);
+    const error = record(payload?.error);
+    const code = nonEmptyString(error?.code) ?? 'AGENT_REQUEST_FAILED';
+    const message = nonEmptyString(error?.message) ?? code;
+    const requestId = nonEmptyString(payload?.requestId);
     return new AgentApiError({
       code,
       message,
       ...(cause.response?.status === undefined ? {} : { status: cause.response.status }),
-      ...(payload?.error?.details === undefined ? {} : { details: payload.error.details }),
-      ...(nonEmptyString(payload?.requestId) ? { requestId: nonEmptyString(payload?.requestId) } : {}),
+      ...(error?.details === undefined ? {} : { details: error.details }),
+      ...(requestId === undefined ? {} : { requestId }),
     });
   }
 

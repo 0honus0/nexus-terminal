@@ -5,25 +5,25 @@
   import { apiErrorMessage } from '@/client/http';
   import { notificationsApi } from '../api/notificationsApi';
   import type {
-    NotificationChannelType,
-    NotificationConfig,
-    NotificationEvent,
-    NotificationSetting,
-    NotificationSettingInput,
+    NotificationChannelTypeDto,
+    NotificationConfigDto,
+    NotificationEventDto,
+    NotificationSettingDto,
+    NotificationSettingCreateRequestDto,
   } from '../model/notification';
   import { NOTIFICATION_EVENTS } from '../model/notification';
-  const props = defineProps<{ visible: boolean; setting?: NotificationSetting | null }>();
-  const emit = defineEmits<{ close: []; save: [input: NotificationSettingInput] }>();
+  const props = defineProps<{ visible: boolean; setting?: NotificationSettingDto | null }>();
+  const emit = defineEmits<{ close: []; save: [input: NotificationSettingCreateRequestDto] }>();
   const { t } = useI18n();
-  const events: readonly NotificationEvent[] = NOTIFICATION_EVENTS;
-  type NotificationMethod = NonNullable<NotificationConfig['method']>;
+  const events: readonly NotificationEventDto[] = NOTIFICATION_EVENTS;
+  type NotificationMethod = NonNullable<NotificationConfigDto['method']>;
   const notificationMethod = (value: unknown): NotificationMethod =>
     value === 'GET' || value === 'PUT' ? value : 'POST';
   const form = reactive({
-    channelType: 'webhook' as NotificationChannelType,
+    channelType: 'webhook' as NotificationChannelTypeDto,
     name: '',
     enabled: true,
-    enabledEvents: [] as NotificationEvent[],
+    enabledEvents: [] as NotificationEventDto[],
     url: '',
     method: 'POST' as NotificationMethod,
     webhookHeaders: '{}',
@@ -92,7 +92,7 @@
       return Boolean(form.to.trim() && form.smtpHost.trim() && Number(form.smtpPort) > 0 && form.from.trim());
     return Boolean(form.botToken.trim() && form.chatId.trim());
   });
-  const buildConfig = (): NotificationConfig | null => {
+  const buildConfig = (): NotificationConfigDto | null => {
     if (form.channelType === 'webhook') {
       if (headerValidation.value.error) return null;
       return {
@@ -121,7 +121,7 @@
       customDomain: form.customDomain,
     };
   };
-  const payload = (): NotificationSettingInput | null => {
+  const payload = (): NotificationSettingCreateRequestDto | null => {
     const config = buildConfig();
     return config
       ? {
@@ -137,7 +137,7 @@
     const input = payload();
     if (input) emit('save', input);
   };
-  const toggleEvent = (event: NotificationEvent) => {
+  const toggleEvent = (event: NotificationEventDto) => {
     form.enabledEvents = form.enabledEvents.includes(event)
       ? form.enabledEvents.filter((x) => x !== event)
       : [...form.enabledEvents, event];

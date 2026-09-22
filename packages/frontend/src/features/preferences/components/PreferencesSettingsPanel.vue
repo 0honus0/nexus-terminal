@@ -4,7 +4,7 @@
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { usePreferences } from '../composables/usePreferences';
-  import { LOG_LEVELS, commonTimezones, preferenceLanguageNames, type Preferences } from '../model/preferences';
+  import { LOG_LEVELS, commonTimezones, preferenceLanguageNames, type PreferencesDto } from '../model/preferences';
 
   const { t } = useI18n();
   const feedback = useFeedback();
@@ -15,9 +15,9 @@
     locales: () => ['en-US', 'zh-CN', 'ja-JP'],
     section: 'all',
   });
-  const emit = defineEmits<{ saved: [preferences: Preferences] }>();
+  const emit = defineEmits<{ saved: [preferences: PreferencesDto] }>();
   const preferences = usePreferences();
-  const form = reactive<Preferences>({ ...preferences.values.value });
+  const form = reactive<PreferencesDto>({ ...preferences.values.value });
   const dirty = ref(false);
   const sectionMessages = reactive<Record<string, { text: string; success: boolean }>>({});
   let syncing = false;
@@ -66,12 +66,12 @@
   };
 
   const refreshDirtyState = () => {
-    dirty.value = (Object.keys(form) as (keyof Preferences)[]).some(
+    dirty.value = (Object.keys(form) as (keyof PreferencesDto)[]).some(
       (key) => !sameValue(form[key], preferences.values.value[key]),
     );
   };
 
-  const validatePatch = (patch: Partial<Preferences>): string | null => {
+  const validatePatch = (patch: Partial<PreferencesDto>): string | null => {
     const integerInRange = (value: number, min: number, max: number) =>
       Number.isInteger(Number(value)) && Number(value) >= min && Number(value) <= max;
     if (
@@ -110,7 +110,7 @@
     return null;
   };
 
-  const savePatch = async (sectionId: string, patch: Partial<Preferences>) => {
+  const savePatch = async (sectionId: string, patch: Partial<PreferencesDto>) => {
     const validationError = validatePatch(patch);
     if (validationError) {
       sectionMessages[sectionId] = { text: validationError, success: false };

@@ -7,7 +7,7 @@
   import {
     loadPreferencesSettingsPanel,
     loadWorkspacePreferencesPanel,
-    type Preferences,
+    type PreferencesDto,
   } from '@/features/preferences/public';
   import { SecuritySettingsPanel } from '@/features/security/public';
   import { useAuthSession } from '@/features/auth/public';
@@ -36,7 +36,7 @@
     { value: 'about', label: t('settings.tabs.about') },
   ]);
 
-  const handlePreferencesSaved = (preferences: Preferences) => {
+  const handlePreferencesSaved = (preferences: PreferencesDto) => {
     setLocale(preferences.language);
   };
 </script>

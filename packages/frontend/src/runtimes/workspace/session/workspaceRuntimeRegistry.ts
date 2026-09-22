@@ -4,15 +4,15 @@ import type {
 } from '@nexus-terminal/protocol/workspace';
 import { computed, nextTick, ref, shallowReactive } from 'vue';
 import { logger } from '@/client/logging/logger';
-import type { Connection } from '@/features/connections/public';
+import type { ConnectionDto } from '@/features/connections/public';
 import {
   applySuspendedAutoTermination,
   refreshSuspendedSessionsAfterHandoff,
   refreshSuspendedSessionsCatalog,
-  type SuspendedAutoTerminationNotice,
-  type SuspendedSession,
+  type SuspendedAutoTerminationViewModel,
+  type SuspendedSessionDto,
 } from '@/features/ssh-suspend/public';
-import type { TerminalViewport } from '@/features/terminal/public';
+import type { WorkspaceTerminalViewportDto } from '@/features/terminal/public';
 import { createFileEditorSession } from '@/features/file-editor/public';
 import { createFileClipboardController } from '@/features/transfers/public';
 import { WorkspaceRuntimeSession } from './workspaceRuntimeSession';
@@ -22,7 +22,7 @@ const activeId = ref<string | null>(null);
 const order = ref<string[]>([]);
 const fileClipboard = createFileClipboardController();
 const sharedEditorSession = createFileEditorSession();
-const suspendAutoTerminationNotice = ref<SuspendedAutoTerminationNotice | null>(null);
+const suspendAutoTerminationNotice = ref<SuspendedAutoTerminationViewModel | null>(null);
 const resumeInFlight = new Map<string, Promise<WorkspaceRuntimeSession>>();
 type WorkspaceSuspendResumeOptions = Pick<WorkspaceSuspendResumeRequestDto, 'takeover'>;
 
@@ -86,8 +86,8 @@ const restoreActive = (preferredId: string | null, fallbackId: string | null): v
 };
 
 const runResume = (
-  suspended: SuspendedSession,
-  connection: Connection,
+  suspended: SuspendedSessionDto,
+  connection: ConnectionDto,
   replaceWorkspaceId?: string,
   options: WorkspaceSuspendResumeOptions = {},
 ): Promise<WorkspaceRuntimeSession> => {
@@ -187,7 +187,7 @@ export const workspaceRuntimeRegistry = {
   sharedEditorSession,
   suspendAutoTerminationNotice,
 
-  async open(connection: Connection, viewport?: TerminalViewport): Promise<WorkspaceRuntimeSession> {
+  async open(connection: ConnectionDto, viewport?: WorkspaceTerminalViewportDto): Promise<WorkspaceRuntimeSession> {
     if (connection.type !== 'SSH') throw new Error('Only SSH connections can open a Workspace session.');
     const session = add(
       new WorkspaceRuntimeSession(connection, { onSuspendedAutoTerminated: handleSuspendedAutoTerminated }),
@@ -202,16 +202,16 @@ export const workspaceRuntimeRegistry = {
   },
 
   resume(
-    suspended: SuspendedSession,
-    connection: Connection,
+    suspended: SuspendedSessionDto,
+    connection: ConnectionDto,
     options: WorkspaceSuspendResumeOptions = {},
   ): Promise<WorkspaceRuntimeSession> {
     return runResume(suspended, connection, undefined, options);
   },
 
   resumeReplacing(
-    suspended: SuspendedSession,
-    connection: Connection,
+    suspended: SuspendedSessionDto,
+    connection: ConnectionDto,
     replaceWorkspaceId: string,
     options: WorkspaceSuspendResumeOptions = {},
   ): Promise<WorkspaceRuntimeSession> {

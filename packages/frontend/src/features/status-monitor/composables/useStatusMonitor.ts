@@ -11,10 +11,10 @@ import {
   type Ref,
 } from 'vue';
 import type { StatusChannel } from '../ports/status-channel';
-import type { ServerStatusSample, StatusHistory, StatusHistoryPoint } from '../model/status';
+import type { WorkspaceStatusSampleDto, StatusHistory, StatusHistoryPoint } from '../model/status';
 
 export interface StatusMonitorSessionController {
-  current: Readonly<Ref<ServerStatusSample | null>>;
+  current: Readonly<Ref<WorkspaceStatusSampleDto | null>>;
   error: Readonly<Ref<string | null>>;
   history: Readonly<Ref<StatusHistory>>;
   available: ComputedRef<boolean>;
@@ -30,7 +30,7 @@ const emptyHistory = (): StatusHistory => ({ cpu: [], memory: [], swap: [], disk
 const finiteValue = (value: number | undefined): number => (Number.isFinite(value) ? Number(value) : 0);
 
 export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 1800): StatusMonitorSessionController {
-  const current = ref<ServerStatusSample | null>(null);
+  const current = ref<WorkspaceStatusSampleDto | null>(null);
   const error = ref<string | null>(null);
   const history = ref<StatusHistory>(emptyHistory());
   let sequence = 0;

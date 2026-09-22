@@ -5,11 +5,11 @@
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { securityApi } from '../api/securityApi';
-  import type { CaptchaConfigUpdate } from '../model/security';
+  import type { CaptchaConfigUpdateDto } from '../model/security';
 
   const { t } = useI18n();
   const feedback = useFeedback();
-  const form = reactive<CaptchaConfigUpdate>({
+  const form = reactive<CaptchaConfigUpdateDto>({
     enabled: false,
     provider: 'none',
     hcaptchaSiteKey: '',

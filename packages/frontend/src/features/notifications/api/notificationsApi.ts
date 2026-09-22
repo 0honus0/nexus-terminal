@@ -6,22 +6,17 @@ import type {
   NotificationTestResponseDto,
 } from '@nexus-terminal/protocol/notifications';
 import { httpClient } from '@/client/http';
-import type {
-  NotificationSetting,
-  NotificationSettingInput,
-  NotificationChannelType,
-  NotificationConfig,
-} from '../model/notification';
+import type { NotificationChannelTypeDto, NotificationConfigDto } from '../model/notification';
 
 export const notificationsApi = {
-  async list(): Promise<NotificationSetting[]> {
+  async list(): Promise<NotificationSettingDto[]> {
     return (await httpClient.get<NotificationSettingDto[]>('/notifications')).data;
   },
-  async create(input: NotificationSettingInput): Promise<NotificationSetting> {
+  async create(input: NotificationSettingCreateRequestDto): Promise<NotificationSettingDto> {
     const request: NotificationSettingCreateRequestDto = input;
     return (await httpClient.post<NotificationSettingDto>('/notifications', request)).data;
   },
-  async update(id: number, input: Partial<NotificationSettingInput>): Promise<NotificationSetting> {
+  async update(id: number, input: Partial<NotificationSettingCreateRequestDto>): Promise<NotificationSettingDto> {
     const request: NotificationSettingUpdateRequestDto = input;
     return (await httpClient.put<NotificationSettingDto>(`/notifications/${id}`, request)).data;
   },
@@ -32,8 +27,8 @@ export const notificationsApi = {
     return (await httpClient.post<NotificationTestResponseDto>(`/notifications/${id}/test`)).data;
   },
   async testUnsaved(
-    channelType: NotificationChannelType,
-    config: NotificationConfig,
+    channelType: NotificationChannelTypeDto,
+    config: NotificationConfigDto,
   ): Promise<NotificationTestResponseDto> {
     const request: NotificationTestRequestDto = { channelType, config };
     return (await httpClient.post<NotificationTestResponseDto>('/notifications/test-unsaved', request)).data;

@@ -1,6 +1,6 @@
-import type { DockerCommand, DockerStats, DockerStatus } from '../model/docker';
+import type { WorkspaceDockerCommandDto, WorkspaceDockerStatsDto, WorkspaceDockerStatusDto } from '../model/docker';
 export interface DockerChannel {
-  getStatus(): Promise<DockerStatus>;
-  command(containerId: string, command: DockerCommand): Promise<void>;
-  getStats(containerId: string): Promise<DockerStats | null>;
+  getStatus(): Promise<WorkspaceDockerStatusDto>;
+  command(containerId: string, command: WorkspaceDockerCommandDto): Promise<void>;
+  getStats(containerId: string): Promise<WorkspaceDockerStatsDto | null>;
 }

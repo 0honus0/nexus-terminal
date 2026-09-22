@@ -4,7 +4,7 @@
   import { BaseButton, BaseFormField, BaseInput, BaseTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { appearanceApi } from '../api/appearanceApi';
-  import type { TerminalTheme } from '../model/appearance';
+  import type { TerminalThemeDto } from '@nexus-terminal/protocol/appearance';
   import { formatThemeObject, parseThemeObject } from '../model/themeEditor';
   import { useAppearanceStore } from '../store/appearance.store';
 
@@ -12,7 +12,7 @@
   const feedback = useFeedback();
   const store = useAppearanceStore();
   const editorVisible = ref(false);
-  const editingTheme = ref<TerminalTheme | null>(null);
+  const editingTheme = ref<TerminalThemeDto | null>(null);
   const themeName = ref('');
   const themeDraft = reactive<Record<string, string>>({});
   const themeJson = ref('{}');
@@ -67,7 +67,7 @@
     editorVisible.value = true;
   };
 
-  const openEdit = (theme: TerminalTheme): void => {
+  const openEdit = (theme: TerminalThemeDto): void => {
     editingTheme.value = theme.preset ? null : theme;
     themeName.value = theme.preset ? t('styleCustomizer.themeCopyName', { name: theme.name }) : theme.name;
     replaceThemeDraft(theme.themeData);
@@ -120,7 +120,7 @@
     }
   };
 
-  const removeTheme = async (theme: TerminalTheme): Promise<void> => {
+  const removeTheme = async (theme: TerminalThemeDto): Promise<void> => {
     if (theme.preset) {
       feedback.notifyWarning(t('styleCustomizer.cannotDeletePreset'));
       return;

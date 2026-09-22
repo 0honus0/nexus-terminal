@@ -8,21 +8,21 @@
   import {
     createDefaultWorkspaceLayout,
     workspaceLayout,
-    type WorkspaceLayoutNode,
-    type WorkspacePaneName,
-    type WorkspaceSidebarConfig,
+    type WorkspaceLayoutNodeState,
+    type WorkspacePaneNameDto,
+    type WorkspaceSidebarConfigDto,
   } from '../layout/workspaceLayout';
 
-  type DragItem = WorkspaceLayoutNode | WorkspacePaneName;
+  type DragItem = WorkspaceLayoutNodeState | WorkspacePaneNameDto;
 
   const props = defineProps<{ visible: boolean; layoutLocked?: boolean }>();
   const emit = defineEmits<{ close: []; layoutLocked: [locked: boolean] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
-  const draft = ref<WorkspaceLayoutNode>(createDefaultWorkspaceLayout());
-  const sidebar = ref<WorkspaceSidebarConfig>({ left: [], right: [] });
-  const originalDraft = ref<WorkspaceLayoutNode>(createDefaultWorkspaceLayout());
-  const originalSidebar = ref<WorkspaceSidebarConfig>({ left: [], right: [] });
+  const draft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
+  const sidebar = ref<WorkspaceSidebarConfigDto>({ left: [], right: [] });
+  const originalDraft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
+  const originalSidebar = ref<WorkspaceSidebarConfigDto>({ left: [], right: [] });
   const saving = ref(false);
 
   const clone = <T,>(value: T): T => {
@@ -49,8 +49,8 @@
   );
 
   const mainPanes = computed(() => {
-    const result = new Set<WorkspacePaneName>();
-    const visit = (node: WorkspaceLayoutNode): void => {
+    const result = new Set<WorkspacePaneNameDto>();
+    const visit = (node: WorkspaceLayoutNodeState): void => {
       if (node.type === 'pane' && node.component) result.add(node.component);
       else for (const child of node.children ?? []) visit(child);
     };
@@ -64,23 +64,23 @@
       JSON.stringify(sidebar.value) !== JSON.stringify(originalSidebar.value),
   );
   const allUsedPanes = computed(
-    () => new Set<WorkspacePaneName>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),
+    () => new Set<WorkspacePaneNameDto>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),
   );
   const availablePanes = computed(() =>
     workspaceLayout.paneNames.filter((pane) => pane !== 'terminal' || !allUsedPanes.value.has('terminal')),
   );
 
-  const paneLabel = (pane: WorkspacePaneName): string => t(`layout.pane.${pane}`);
-  const clonePane = (pane: WorkspacePaneName): WorkspaceLayoutNode => ({
+  const paneLabel = (pane: WorkspacePaneNameDto): string => t(`layout.pane.${pane}`);
+  const clonePane = (pane: WorkspacePaneNameDto): WorkspaceLayoutNodeState => ({
     id: crypto.randomUUID(),
     type: 'pane',
     component: pane,
     size: 25,
   });
 
-  const normalizeSidebar = (side: 'left' | 'right', items: DragItem[]): WorkspacePaneName[] => {
+  const normalizeSidebar = (side: 'left' | 'right', items: DragItem[]): WorkspacePaneNameDto[] => {
     const other = side === 'left' ? sidebar.value.right : sidebar.value.left;
-    const next: WorkspacePaneName[] = [];
+    const next: WorkspacePaneNameDto[] = [];
     for (const item of items) {
       const pane = typeof item === 'string' ? item : item.type === 'pane' ? item.component : undefined;
       if (!pane || next.includes(pane) || other.includes(pane)) continue;
@@ -177,7 +177,7 @@
             :list="availablePanes"
             tag="ul"
             class="layout-available-panes m-0 flex-grow list-none p-0"
-            :item-key="(pane: WorkspacePaneName) => pane"
+            :item-key="(pane: WorkspacePaneNameDto) => pane"
             :group="{ name: 'workspace-layout-items', pull: 'clone', put: false }"
             :sort="false"
             :clone="clonePane"

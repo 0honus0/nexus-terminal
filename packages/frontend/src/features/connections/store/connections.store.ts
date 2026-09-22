@@ -1,13 +1,13 @@
 import { defineStore } from 'pinia';
 import { connectionsApi } from '../api/connectionsApi';
-import type { Connection, ConnectionInput, ConnectionUpdate } from '../model/connection';
+import type { ConnectionDto, ConnectionFormInput, ConnectionFormUpdate } from '../model/connection';
 
 const DEFAULT_STALE_MS = 30_000;
-let loadPromise: Promise<Connection[]> | null = null;
+let loadPromise: Promise<ConnectionDto[]> | null = null;
 let cacheGeneration = 0;
 
 export const useConnectionsStore = defineStore('connections', {
-  state: () => ({ items: [] as Connection[], loaded: false, loadedAt: 0 }),
+  state: () => ({ items: [] as ConnectionDto[], loaded: false, loadedAt: 0 }),
   actions: {
     async load(force = false) {
       if (this.loaded && !force) return this.items;
@@ -48,7 +48,7 @@ export const useConnectionsStore = defineStore('connections', {
       this.loaded = false;
       this.loadedAt = 0;
     },
-    upsert(item: Connection) {
+    upsert(item: ConnectionDto) {
       const i = this.items.findIndex((x) => x.id === item.id);
       if (i >= 0) this.items[i] = item;
       else this.items.push(item);
@@ -71,10 +71,10 @@ export const useConnectionsStore = defineStore('connections', {
       this.loadedAt = Date.now();
       return next;
     },
-    async create(input: ConnectionInput) {
+    async create(input: ConnectionFormInput) {
       return this.upsert(await connectionsApi.create(input));
     },
-    async update(id: number, input: ConnectionUpdate) {
+    async update(id: number, input: ConnectionFormUpdate) {
       return this.upsert(await connectionsApi.update(id, input));
     },
     async remove(id: number) {

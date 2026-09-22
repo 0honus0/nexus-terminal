@@ -6,10 +6,9 @@ import type {
 } from '@nexus-terminal/protocol/command-history';
 import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import { httpClient } from '@/client/http';
-import type { CommandHistoryEntry } from '../model/commandHistory';
 
 export const commandHistoryApi = {
-  async list(): Promise<CommandHistoryEntry[]> {
+  async list(): Promise<CommandHistoryEntryDto[]> {
     return (await httpClient.get<CommandHistoryEntryDto[]>('/command-history')).data;
   },
   async add(command: string): Promise<number> {

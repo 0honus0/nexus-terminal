@@ -1,10 +1,6 @@
 import { computed, ref } from 'vue';
+import type { WorkspaceFocusConfigDto } from '@nexus-terminal/protocol/settings';
 import { httpClient } from '@/client/http';
-
-export interface WorkspaceFocusConfig {
-  sequence: string[];
-  shortcuts: Record<string, { shortcut?: string }>;
-}
 
 export const workspaceFocusTargets = [
   'quickCommandsSearch',
@@ -26,13 +22,13 @@ export const normalizeWorkspaceFocusShortcut = (value: string): string | null =>
   return match ? `Alt+${match[1]!.toUpperCase()}` : null;
 };
 
-const defaultConfig = (): WorkspaceFocusConfig => ({ sequence: [...workspaceFocusTargets], shortcuts: {} });
-const config = ref<WorkspaceFocusConfig>(defaultConfig());
+const defaultConfig = (): WorkspaceFocusConfigDto => ({ sequence: [...workspaceFocusTargets], shortcuts: {} });
+const config = ref<WorkspaceFocusConfigDto>(defaultConfig());
 const loaded = ref(false);
 
-const configShape = (value: unknown): value is WorkspaceFocusConfig => {
+const configShape = (value: unknown): value is WorkspaceFocusConfigDto => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const candidate = value as Partial<WorkspaceFocusConfig>;
+  const candidate = value as Partial<WorkspaceFocusConfigDto>;
   return (
     Array.isArray(candidate.sequence) &&
     candidate.sequence.every((id) => typeof id === 'string' && isFocusTarget(id)) &&
@@ -41,9 +37,9 @@ const configShape = (value: unknown): value is WorkspaceFocusConfig => {
   );
 };
 
-const normalizeLoadedConfig = (value: unknown): WorkspaceFocusConfig | null => {
+const normalizeLoadedConfig = (value: unknown): WorkspaceFocusConfigDto | null => {
   if (!configShape(value)) return null;
-  const shortcuts: WorkspaceFocusConfig['shortcuts'] = {};
+  const shortcuts: WorkspaceFocusConfigDto['shortcuts'] = {};
   for (const [id, item] of Object.entries(value.shortcuts)) {
     if (!isFocusTarget(id) || !item || typeof item !== 'object' || Array.isArray(item)) continue;
     const shortcut = (item as { shortcut?: unknown }).shortcut;
@@ -55,7 +51,7 @@ const normalizeLoadedConfig = (value: unknown): WorkspaceFocusConfig | null => {
   return { sequence: [...value.sequence], shortcuts };
 };
 
-const validConfigForSave = (value: WorkspaceFocusConfig): boolean => {
+const validConfigForSave = (value: WorkspaceFocusConfigDto): boolean => {
   if (!configShape(value)) return false;
   return Object.entries(value.shortcuts).every(([id, item]) => {
     if (!isFocusTarget(id) || !item || typeof item !== 'object' || Array.isArray(item)) return false;
@@ -68,13 +64,14 @@ export const workspaceFocus = {
   loaded: computed(() => loaded.value),
   async load(force = false): Promise<void> {
     if (loaded.value && !force) return;
-    const { data } = await httpClient.get<unknown>('/settings/focus-switcher-sequence');
+    const { data } = await httpClient.get<WorkspaceFocusConfigDto>('/settings/focus-switcher-sequence');
     config.value = normalizeLoadedConfig(data) ?? defaultConfig();
     loaded.value = true;
   },
-  async save(next: WorkspaceFocusConfig): Promise<void> {
+  async save(next: WorkspaceFocusConfigDto): Promise<void> {
     if (!validConfigForSave(next)) throw new Error('Invalid focus switcher configuration.');
-    await httpClient.put('/settings/focus-switcher-sequence', next);
+    const request: WorkspaceFocusConfigDto = next;
+    await httpClient.put('/settings/focus-switcher-sequence', request);
     config.value = structuredClone(next);
     loaded.value = true;
   },

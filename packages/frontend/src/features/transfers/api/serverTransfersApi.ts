@@ -1,13 +1,12 @@
 import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import type { SendFilesRequestDto, ServerTransferTaskDto } from '@nexus-terminal/protocol/transfers';
 import { httpClient } from '@/client/http';
-import type { SendFilesRequest, ServerTransferTask } from '../model/serverTransfer';
 
 export const serverTransfersApi = {
-  async list(): Promise<ServerTransferTask[]> {
+  async list(): Promise<ServerTransferTaskDto[]> {
     return (await httpClient.get<ServerTransferTaskDto[]>('/transfers/status')).data;
   },
-  async send(request: SendFilesRequest): Promise<ServerTransferTask> {
+  async send(request: SendFilesRequestDto): Promise<ServerTransferTaskDto> {
     const body: SendFilesRequestDto = request;
     return (await httpClient.post<ServerTransferTaskDto>('/transfers/send', body)).data;
   },

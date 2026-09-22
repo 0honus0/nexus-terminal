@@ -12,14 +12,14 @@
     TokenInput,
     type TokenOption,
   } from '@/foundation/ui';
-  import type { QuickCommand, QuickCommandInput, QuickCommandTag } from '../model/quickCommand';
+  import type { QuickCommandDto, QuickCommandFormInput, QuickCommandTagDto } from '../model/quickCommand';
   import { useQuickCommandsStore } from '../store/quickCommands.store';
 
-  const props = defineProps<{ visible: boolean; command?: QuickCommand | null; tags: QuickCommandTag[] }>();
+  const props = defineProps<{ visible: boolean; command?: QuickCommandDto | null; tags: QuickCommandTagDto[] }>();
   const emit = defineEmits<{
     close: [];
-    save: [input: QuickCommandInput];
-    execute: [input: QuickCommandInput];
+    save: [input: QuickCommandFormInput];
+    execute: [input: QuickCommandFormInput];
   }>();
   const { t } = useI18n();
   const feedback = useFeedback();
@@ -145,7 +145,7 @@
     }
   };
 
-  const toInput = (): QuickCommandInput => ({
+  const toInput = (): QuickCommandFormInput => ({
     name: form.name.trim() || null,
     command: form.command.trim(),
     tagIds: [...form.tagIds],

@@ -11,7 +11,7 @@
   import { remoteDesktopApi } from '../api/remoteDesktopApi';
   import { attachRemoteTouchInput, type RemoteTouchInput, type RemoteTouchMode } from '../composables/remoteTouchInput';
   import { attachRemoteClipboard, type RemoteClipboardBridge } from '../composables/remoteClipboard';
-  import type { RemoteDesktopConnection, RemoteDesktopDisplay, RemoteDesktopState } from '../model/remoteDesktop';
+  import type { RemoteDesktopConnection, RemoteDesktopDisplayDto, RemoteDesktopState } from '../model/remoteDesktop';
   import type { RemoteDesktopSessionPort } from '../ports/remote-desktop-session-port';
 
   const TOUCH_MODE_KEY = 'nexus.rdp.touch-mode';
@@ -97,7 +97,7 @@
       : { width: `${modalWidth.value}px`, height: `${modalHeight.value}px` },
   );
 
-  const currentDisplay = (): RemoteDesktopDisplay => {
+  const currentDisplay = (): RemoteDesktopDisplayDto => {
     const width = Math.max(100, Math.round(display.value?.clientWidth || modalWidth.value));
     return {
       width,

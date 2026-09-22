@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import type { AgentCsrfResponseDto } from '@nexus-terminal/protocol/agent-common';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { agentData, agentError, agentRequestId } from './agent-http';
 
@@ -74,5 +75,6 @@ export const createAgentMutationSecurity =
 
 export const issueAgentCsrf = (request: Request, response: Response, secret: string): void => {
   response.setHeader('Cache-Control', 'no-store');
-  agentData(request, response, { token: agentCsrfToken(request, secret) });
+  const payload: AgentCsrfResponseDto = { token: agentCsrfToken(request, secret) };
+  agentData(request, response, payload);
 };

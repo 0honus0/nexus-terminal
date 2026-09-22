@@ -45,3 +45,43 @@ export interface PreferencesDto {
 export type PreferencesPatchDto = Partial<PreferencesDto>;
 export type SettingsResponseDto = Partial<PreferencesDto> & IpAccessSettingsDto;
 export type SettingsUpdateRequestDto = PreferencesPatchDto & IpAccessSettingsDto;
+
+export interface WorkspaceFocusItemConfigDto {
+  shortcut?: string;
+}
+
+export interface WorkspaceFocusConfigDto {
+  sequence: string[];
+  shortcuts: Record<string, WorkspaceFocusItemConfigDto>;
+}
+
+export type WorkspacePaneNameDto =
+  | 'connections'
+  | 'terminal'
+  | 'commandBar'
+  | 'fileManager'
+  | 'editor'
+  | 'statusMonitor'
+  | 'commandHistory'
+  | 'quickCommands'
+  | 'dockerManager'
+  | 'suspendedSshSessions';
+
+export interface WorkspaceLayoutNodeDto {
+  id?: string;
+  type: 'pane' | 'container';
+  component?: WorkspacePaneNameDto;
+  direction?: 'horizontal' | 'vertical';
+  children?: WorkspaceLayoutNodeDto[];
+  size?: number;
+}
+
+export interface WorkspaceSidebarConfigDto {
+  left: WorkspacePaneNameDto[];
+  right: WorkspacePaneNameDto[];
+}
+
+export interface WorkspaceLayoutSettingsRequestDto {
+  layout: WorkspaceLayoutNodeDto;
+  sidebar: WorkspaceSidebarConfigDto;
+}

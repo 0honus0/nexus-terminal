@@ -5,7 +5,7 @@ export type {
   TerminalConnectionState,
   TerminalOutput,
   TerminalSnapshot,
-  TerminalViewport,
+  WorkspaceTerminalViewportDto,
   TerminalVisualOptions,
 } from './model/terminal';
 

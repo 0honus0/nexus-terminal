@@ -1,15 +1,15 @@
 import type {
-  ArchiveRequest,
-  CopyMoveRequest,
+  ArchiveCommand,
+  CopyMoveCommand,
   TransferEvent,
-  UploadPrepareRequest,
-  UploadRequest,
+  UploadPrepareCommand,
+  UploadCommand,
 } from '../model/transfer';
 export interface TransferChannel {
-  prepareUpload(request: UploadPrepareRequest): Promise<void>;
-  upload(request: UploadRequest): Promise<void>;
-  copyMove(request: CopyMoveRequest): Promise<void>;
-  archive(request: ArchiveRequest): Promise<void>;
+  prepareUpload(request: UploadPrepareCommand): Promise<void>;
+  upload(request: UploadCommand): Promise<void>;
+  copyMove(request: CopyMoveCommand): Promise<void>;
+  archive(request: ArchiveCommand): Promise<void>;
   cancel(id: string): Promise<boolean>;
   resolveConflict?(id: string, strategy: 'overwrite' | 'skip', applyToAll?: boolean): Promise<void>;
   onEvent(handler: (event: TransferEvent) => void): () => void;

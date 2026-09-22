@@ -2,15 +2,15 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiErrorMessage } from '@/client/http';
 import { auditApi } from '../api/auditApi';
-import type { AuditLogEntry, AuditLogQuery } from '../model/audit';
+import type { AuditLogEntryDto, AuditLogQueryDto } from '../model/audit';
 
 let loadGeneration = 0;
 export const useAuditStore = defineStore('audit', () => {
-  const logs = ref<AuditLogEntry[]>([]),
+  const logs = ref<AuditLogEntryDto[]>([]),
     total = ref(0),
     loading = ref(false),
     error = ref<string | null>(null);
-  async function load(query: AuditLogQuery = {}) {
+  async function load(query: AuditLogQueryDto = {}) {
     const generation = loadGeneration;
     loading.value = true;
     error.value = null;

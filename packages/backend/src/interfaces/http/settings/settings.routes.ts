@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import type { CaptchaConfigDto, CaptchaConfigUpdateDto, IpBlacklistPageDto } from '@nexus-terminal/protocol/auth';
-import type { SettingsResponseDto, SettingsUpdateRequestDto } from '@nexus-terminal/protocol/settings';
+import type {
+  SettingsResponseDto,
+  SettingsUpdateRequestDto,
+  WorkspaceFocusConfigDto,
+  WorkspaceLayoutNodeDto,
+  WorkspaceLayoutSettingsRequestDto,
+  WorkspacePaneNameDto,
+  WorkspaceSidebarConfigDto,
+} from '@nexus-terminal/protocol/settings';
 import multer from 'multer';
 import type { BackupService } from '../../../modules/backup/backup.service';
 import { BackupPasswordRequiredError, InvalidBackupPasswordError } from '../../../shared/errors/backup.errors';
@@ -261,6 +269,139 @@ const publicCaptcha = async (settings: SettingsService): Promise<CaptchaConfigDt
   };
 };
 
+const WORKSPACE_PANE_NAMES: ReadonlySet<WorkspacePaneNameDto> = new Set([
+  'connections',
+  'terminal',
+  'commandBar',
+  'fileManager',
+  'editor',
+  'statusMonitor',
+  'commandHistory',
+  'quickCommands',
+  'dockerManager',
+  'suspendedSshSessions',
+]);
+
+const onlyKeys = (value: Record<string, unknown>, allowed: readonly string[]): void => {
+  const allowedSet = new Set(allowed);
+  if (Object.keys(value).some((key) => !allowedSet.has(key))) throw new Error('VALIDATION_FAILED');
+};
+
+const workspacePaneName = (value: unknown): WorkspacePaneNameDto => {
+  if (typeof value !== 'string' || !WORKSPACE_PANE_NAMES.has(value as WorkspacePaneNameDto)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return value as WorkspacePaneNameDto;
+};
+
+const workspaceFocusConfigInput = (value: unknown): WorkspaceFocusConfigDto => {
+  if (!isRecord(value) || !Array.isArray(value.sequence) || !isRecord(value.shortcuts)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  onlyKeys(value, ['sequence', 'shortcuts']);
+  if (value.sequence.some((entry) => typeof entry !== 'string')) throw new Error('VALIDATION_FAILED');
+  const shortcuts: WorkspaceFocusConfigDto['shortcuts'] = {};
+  for (const [id, candidate] of Object.entries(value.shortcuts)) {
+    if (!isRecord(candidate)) throw new Error('VALIDATION_FAILED');
+    onlyKeys(candidate, ['shortcut']);
+    if (candidate.shortcut !== undefined && typeof candidate.shortcut !== 'string') {
+      throw new Error('VALIDATION_FAILED');
+    }
+    shortcuts[id] = candidate.shortcut === undefined ? {} : { shortcut: candidate.shortcut };
+  }
+  return { sequence: [...value.sequence] as string[], shortcuts };
+};
+
+const workspaceLayoutNodeInput = (value: unknown, depth = 0): WorkspaceLayoutNodeDto => {
+  if (!isRecord(value) || depth > 12) throw new Error('VALIDATION_FAILED');
+  onlyKeys(value, ['id', 'type', 'component', 'direction', 'children', 'size']);
+  if (value.id !== undefined && (typeof value.id !== 'string' || !value.id)) throw new Error('VALIDATION_FAILED');
+  if (value.size !== undefined && (typeof value.size !== 'number' || !Number.isFinite(value.size))) {
+    throw new Error('VALIDATION_FAILED');
+  }
+
+  if (value.type === 'pane') {
+    const component = workspacePaneName(value.component);
+    if (value.children !== undefined) throw new Error('VALIDATION_FAILED');
+    return {
+      ...(value.id === undefined ? {} : { id: value.id }),
+      type: 'pane',
+      component,
+      ...(value.size === undefined ? {} : { size: value.size }),
+    };
+  }
+
+  if (value.type !== 'container' || (value.direction !== 'horizontal' && value.direction !== 'vertical')) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (!Array.isArray(value.children)) throw new Error('VALIDATION_FAILED');
+  return {
+    ...(value.id === undefined ? {} : { id: value.id }),
+    type: 'container',
+    direction: value.direction,
+    children: value.children.map((child) => workspaceLayoutNodeInput(child, depth + 1)),
+    ...(value.size === undefined ? {} : { size: value.size }),
+  };
+};
+
+const workspaceSidebarConfigInput = (value: unknown): WorkspaceSidebarConfigDto => {
+  if (!isRecord(value) || !Array.isArray(value.left) || !Array.isArray(value.right)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  onlyKeys(value, ['left', 'right']);
+  const left = value.left.map(workspacePaneName);
+  const right = value.right.map(workspacePaneName);
+  if (new Set(left).size !== left.length || new Set(right).size !== right.length) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (new Set([...left, ...right]).size !== left.length + right.length) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return { left, right };
+};
+
+const workspaceLayoutSettingsInput = (value: unknown): WorkspaceLayoutSettingsRequestDto => {
+  if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
+  onlyKeys(value, ['layout', 'sidebar']);
+  return {
+    layout: workspaceLayoutNodeInput(value.layout),
+    sidebar: workspaceSidebarConfigInput(value.sidebar),
+  };
+};
+
+const captchaConfigUpdateInput = (value: unknown): CaptchaConfigUpdateDto => {
+  if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
+  onlyKeys(value, [
+    'enabled',
+    'provider',
+    'hcaptchaSiteKey',
+    'hcaptchaSecretKey',
+    'recaptchaSiteKey',
+    'recaptchaSecretKey',
+  ]);
+  if (
+    typeof value.enabled !== 'boolean' ||
+    (value.provider !== 'none' && value.provider !== 'hcaptcha' && value.provider !== 'recaptcha')
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const hcaptchaSiteKey = value.hcaptchaSiteKey;
+  const hcaptchaSecretKey = value.hcaptchaSecretKey;
+  const recaptchaSiteKey = value.recaptchaSiteKey;
+  const recaptchaSecretKey = value.recaptchaSecretKey;
+  for (const field of [hcaptchaSiteKey, hcaptchaSecretKey, recaptchaSiteKey, recaptchaSecretKey]) {
+    if (field !== undefined && typeof field !== 'string') throw new Error('VALIDATION_FAILED');
+  }
+  return {
+    enabled: value.enabled,
+    provider: value.provider,
+    ...(typeof hcaptchaSiteKey === 'string' ? { hcaptchaSiteKey } : {}),
+    ...(typeof hcaptchaSecretKey === 'string' ? { hcaptchaSecretKey } : {}),
+    ...(typeof recaptchaSiteKey === 'string' ? { recaptchaSiteKey } : {}),
+    ...(typeof recaptchaSecretKey === 'string' ? { recaptchaSecretKey } : {}),
+  };
+};
+
 export const createSettingsRouter = (dependencies: SettingsRouterDependencies): Router => {
   const router = Router();
 
@@ -338,7 +479,8 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
     '/focus-switcher-sequence',
     route(async (request, response) => {
       try {
-        await dependencies.settings.setFocusSwitcherSequence(request.body);
+        const input = workspaceFocusConfigInput(request.body);
+        await dependencies.settings.setFocusSwitcherSequence(input);
         response.json({ message: '焦点切换顺序已成功更新' });
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });
@@ -355,7 +497,7 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
         return;
       }
       try {
-        response.json(JSON.parse(raw));
+        response.json(workspaceLayoutNodeInput(JSON.parse(raw) as unknown));
       } catch {
         response.status(500).json({ message: '获取布局树失败：存储的数据格式无效' });
       }
@@ -364,11 +506,14 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
   router.put(
     '/layout',
     route(async (request, response) => {
-      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body)) {
-        response.status(400).json({ message: '无效的请求体，应为 JSON 对象格式的布局树' });
+      let input: WorkspaceLayoutNodeDto;
+      try {
+        input = workspaceLayoutNodeInput(request.body);
+      } catch {
+        response.status(400).json({ message: '无效的请求体，应为有效的布局树' });
         return;
       }
-      await dependencies.settings.setLayoutTree(JSON.stringify(request.body));
+      await dependencies.settings.setLayoutTree(JSON.stringify(input));
       response.json({ message: '布局树已成功更新' });
     }),
   );
@@ -376,12 +521,9 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
   router.put(
     '/workspace-layout',
     route(async (request, response) => {
-      if (!isRecord(request.body) || !isRecord(request.body.layout)) {
-        response.status(400).json({ message: '无效的 Workspace 布局配置。' });
-        return;
-      }
       try {
-        await dependencies.settings.setWorkspaceLayoutConfig(JSON.stringify(request.body.layout), request.body.sidebar);
+        const input = workspaceLayoutSettingsInput(request.body);
+        await dependencies.settings.setWorkspaceLayoutConfig(JSON.stringify(input.layout), input.sidebar);
         response.json({ message: 'Workspace 布局与侧栏配置已成功更新' });
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });
@@ -425,7 +567,8 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
     '/sidebar',
     route(async (request, response) => {
       try {
-        await dependencies.settings.setSidebarConfig(request.body);
+        const input = workspaceSidebarConfigInput(request.body);
+        await dependencies.settings.setSidebarConfig(input);
         response.json({ message: '侧栏配置已成功更新' });
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });
@@ -436,13 +579,10 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
   router.put(
     '/captcha',
     route(async (request, response) => {
-      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body)) {
-        response.status(400).json({ message: '无效的请求体，应为 JSON 对象' });
-        return;
-      }
       try {
-        await dependencies.settings.setCaptchaConfig(request.body as CaptchaConfigUpdateDto);
-        await dependencies.audit.logAction('CAPTCHA_SETTINGS_UPDATED', { updatedFields: Object.keys(request.body) });
+        const input = captchaConfigUpdateInput(request.body);
+        await dependencies.settings.setCaptchaConfig(input);
+        await dependencies.audit.logAction('CAPTCHA_SETTINGS_UPDATED', { updatedFields: Object.keys(input) });
         response.json({ message: 'CAPTCHA 配置已成功更新' });
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });

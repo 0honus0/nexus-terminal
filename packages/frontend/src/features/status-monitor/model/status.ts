@@ -1,4 +1,4 @@
-export type { WorkspaceStatusSampleDto as ServerStatusSample } from '@nexus-terminal/protocol/workspace';
+export type { WorkspaceStatusSampleDto } from '@nexus-terminal/protocol/workspace';
 
 export interface StatusHistoryPoint {
   time: number;

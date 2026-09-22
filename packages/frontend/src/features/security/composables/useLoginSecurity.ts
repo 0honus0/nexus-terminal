@@ -1,15 +1,15 @@
 import { computed, ref } from 'vue';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { securityApi } from '../api/securityApi';
-import type { CaptchaConfig } from '../model/security';
+import type { CaptchaConfigDto } from '../model/security';
 
 type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
 
-const DEFAULT_CAPTCHA_CONFIG: CaptchaConfig = { enabled: false, provider: 'none' };
+const DEFAULT_CAPTCHA_CONFIG: CaptchaConfigDto = { enabled: false, provider: 'none' };
 
 const hasValue = (value: unknown): boolean => typeof value === 'string' && value.trim().length > 0;
 
-const hasConfiguredCaptchaWidget = (config: CaptchaConfig): boolean => {
+const hasConfiguredCaptchaWidget = (config: CaptchaConfigDto): boolean => {
   if (!config.enabled) return true;
   if (config.provider === 'hcaptcha') return hasValue(config.hcaptchaSiteKey);
   if (config.provider === 'recaptcha') return hasValue(config.recaptchaSiteKey);
@@ -17,7 +17,7 @@ const hasConfiguredCaptchaWidget = (config: CaptchaConfig): boolean => {
 };
 
 export function useLoginSecurity() {
-  const captchaConfig = ref<CaptchaConfig>(DEFAULT_CAPTCHA_CONFIG);
+  const captchaConfig = ref<CaptchaConfigDto>(DEFAULT_CAPTCHA_CONFIG);
   const captchaLoading = ref(true);
   const captchaLoadError = ref(false);
   const hasPasskeys = ref(false);

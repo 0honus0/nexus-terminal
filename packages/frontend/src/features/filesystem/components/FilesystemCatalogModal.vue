@@ -6,7 +6,7 @@
   import { useLongPressGesture } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
   import { useFilesystemCatalog } from '../composables/useFilesystemCatalog';
-  import type { FavoritePath } from '../model/catalog';
+  import type { FavoritePathDto } from '../model/catalog';
 
   const PADDING = 8;
   const props = defineProps<{
@@ -21,8 +21,8 @@
   const catalog = useFilesystemCatalog();
   const panel = ref<HTMLElement | null>(null);
   const panelStyle = ref<Record<string, string>>({});
-  const editing = ref<FavoritePath | null>(null);
-  const context = ref<{ item: FavoritePath; x: number; y: number } | null>(null);
+  const editing = ref<FavoritePathDto | null>(null);
+  const context = ref<{ item: FavoritePathDto; x: number; y: number } | null>(null);
   const formVisible = ref(false);
   const saving = ref(false);
   const errorMessage = ref('');
@@ -94,7 +94,7 @@
     errorMessage.value = '';
     formVisible.value = true;
   };
-  const openEdit = (item: FavoritePath): void => {
+  const openEdit = (item: FavoritePathDto): void => {
     editing.value = item;
     form.name = item.name ?? '';
     form.path = item.path;
@@ -126,7 +126,7 @@
       saving.value = false;
     }
   };
-  const removeFavorite = async (item: FavoritePath): Promise<void> => {
+  const removeFavorite = async (item: FavoritePathDto): Promise<void> => {
     if (
       !(await feedback.confirm({
         message: t('favoritePaths.confirmDelete', { name: item.name || item.path }),
@@ -142,7 +142,7 @@
       feedback.notifyError(cause instanceof Error ? cause.message : t('favoritePaths.notifications.deleteError'));
     }
   };
-  const navigateFavorite = async (item: FavoritePath): Promise<void> => {
+  const navigateFavorite = async (item: FavoritePathDto): Promise<void> => {
     try {
       await catalog.useFavorite(item);
     } catch {
@@ -151,23 +151,23 @@
     emit('navigate', item.path);
     emit('close');
   };
-  const sendToTerminal = (item: FavoritePath): void => {
+  const sendToTerminal = (item: FavoritePathDto): void => {
     emit('terminal', item.path);
     emit('close');
   };
-  const openContextAt = (item: FavoritePath, x: number, y: number): void => {
+  const openContextAt = (item: FavoritePathDto, x: number, y: number): void => {
     context.value = { item, x, y };
   };
-  const openContext = (event: MouseEvent, item: FavoritePath): void => {
+  const openContext = (event: MouseEvent, item: FavoritePathDto): void => {
     event.preventDefault();
     openContextAt(item, event.clientX, event.clientY);
   };
-  const longPress = useLongPressGesture<FavoritePath>({
+  const longPress = useLongPressGesture<FavoritePathDto>({
     enabled: () => device.hasTouch.value,
     vibrateMs: 15,
     onTrigger: (item, point) => openContextAt(item, point.x, point.y),
   });
-  const navigateFromClick = (event: MouseEvent, item: FavoritePath): void => {
+  const navigateFromClick = (event: MouseEvent, item: FavoritePathDto): void => {
     if (longPress.consumeClick(event)) return;
     void navigateFavorite(item);
   };

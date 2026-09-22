@@ -1,7 +1,7 @@
 export const loadFileManager = () => import('./components/FileManager.vue');
 export { default as FilesystemCatalogModal } from './components/FilesystemCatalogModal.vue';
 export { useFilesystemCatalog } from './composables/useFilesystemCatalog';
-export type { FavoritePath, FavoritePathSort, PathHistoryEntry } from './model/catalog';
+export type { FavoritePathDto, FavoritePathSortDto, PathHistoryEntryDto } from './model/catalog';
 export { useFilesystemBrowser } from './composables/useFilesystemBrowser';
 export type { FilesystemBrowserController } from './composables/useFilesystemBrowser';
 export { createFilesystemSessionState } from './composables/createFilesystemSessionState';
@@ -15,14 +15,14 @@ export type {
 export type {
   ArchiveCompressionFormat,
   ArchiveCompressionIntent,
-  DirectoryListing,
-  FileSearchEntry,
-  FileSearchResult,
+  WorkspaceFilesystemListResponseDto,
+  WorkspaceFileSearchEntryDto,
+  WorkspaceFilesystemSearchResponseDto,
   LocalUploadBatch,
   LocalUploadFile,
   FilesystemMutation,
-  RemoteFileEntry,
-  RemoteFileMetadata,
+  WorkspaceRemoteFileEntryDto,
+  WorkspaceRemoteFileMetadataDto,
   ResolvedRemotePath,
   RemoteTextFile,
 } from './model/filesystem';

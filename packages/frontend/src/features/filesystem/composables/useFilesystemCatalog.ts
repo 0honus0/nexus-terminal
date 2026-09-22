@@ -1,10 +1,10 @@
 import { computed, ref } from 'vue';
 import { filesystemCatalogApi } from '../api/filesystemCatalogApi';
-import type { FavoritePath, FavoritePathSort, PathHistoryEntry } from '../model/catalog';
+import type { FavoritePathDto, FavoritePathSortDto, PathHistoryEntryDto } from '../model/catalog';
 
-const favorites = ref<FavoritePath[]>([]);
-const history = ref<PathHistoryEntry[]>([]);
-const favoriteSort = ref<FavoritePathSort>(
+const favorites = ref<FavoritePathDto[]>([]);
+const history = ref<PathHistoryEntryDto[]>([]);
+const favoriteSort = ref<FavoritePathSortDto>(
   localStorage.getItem('favoritePathSortBy') === 'lastUsedAt' ? 'lastUsedAt' : 'name',
 );
 const favoritesLoaded = ref(false);
@@ -61,13 +61,13 @@ export function useFilesystemCatalog() {
     return favoritesLoad;
   }
 
-  async function setFavoriteSort(sort: FavoritePathSort): Promise<void> {
+  async function setFavoriteSort(sort: FavoritePathSortDto): Promise<void> {
     favoriteSort.value = sort;
     localStorage.setItem('favoritePathSortBy', sort);
     sortFavorites();
   }
 
-  async function saveFavorite(input: { id?: number; path: string; name?: string | null }): Promise<FavoritePath> {
+  async function saveFavorite(input: { id?: number; path: string; name?: string | null }): Promise<FavoritePathDto> {
     const item = input.id
       ? await filesystemCatalogApi.updateFavorite(input.id, input.path, input.name?.trim() || null)
       : await filesystemCatalogApi.addFavorite(input.path, input.name?.trim() || null);
@@ -84,7 +84,7 @@ export function useFilesystemCatalog() {
     favorites.value = favorites.value.filter((item) => item.id !== id);
   }
 
-  async function useFavorite(item: FavoritePath): Promise<void> {
+  async function useFavorite(item: FavoritePathDto): Promise<void> {
     const updated = await filesystemCatalogApi.touchFavorite(item.id);
     const index = favorites.value.findIndex((value) => value.id === item.id);
     if (index >= 0) favorites.value[index] = updated;

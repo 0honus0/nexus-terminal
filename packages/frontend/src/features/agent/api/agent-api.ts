@@ -48,9 +48,14 @@ import type {
   AgentHostSummaryDto,
   AgentHardLimitPreviewDto,
   AgentHardLimitPreviewRequestDto,
+  AgentRecommendedPluginDto,
+  AgentRecommendedPluginInstallRequestDto,
+  AgentRecommendedPluginInstallResultDto,
   AgentSettingsPatchDto,
   AgentSettingsPatchRequestDto,
   AgentSettingsViewDto,
+  AgentTargetDenylistReplaceRequestDto,
+  AgentTargetDenylistViewDto,
 } from '@nexus-terminal/protocol/agent-host';
 import type {
   AgentCheckpointViewDto,
@@ -114,23 +119,6 @@ import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
 
 export { AgentApiError, formatAgentApiError, toAgentApiError } from './agent-api-error';
 
-export interface RecommendedAgentPluginView {
-  appId: string;
-  installed: boolean;
-  installedVersion: string | null;
-  enabled: boolean;
-  availableVersion: string;
-  displayName: string;
-  description: string;
-  catalogUrl: string;
-  publisherKeyId: string;
-}
-
-export interface RecommendedAgentPluginInstallResult {
-  app: AgentAppSummaryDto;
-  installedNow: boolean;
-}
-
 export type {
   AgentRunEnvironmentRunnerPluginDto,
   AgentRunEnvironmentSnapshotDto,
@@ -152,48 +140,31 @@ export type {
   AgentWorkspaceToolchainSwitchDto,
 } from '@nexus-terminal/protocol/agent-workspace-runtime';
 
-export type AgentCreateRunInput = Omit<AgentCreateRunFieldsDto, 'input' | 'connectionIds'> & {
-  text: string;
-  artifactRefs?: string[];
-  connectionIds?: number[];
-};
-
-export interface AgentServerClockAnchor {
+export interface AgentServerClockAnchorViewModel {
   serverUnixMilliseconds: number;
   clientMonotonicMilliseconds: number;
 }
 
-export interface AgentApprovalBatch {
+export interface AgentApprovalBatchViewModel {
   items: AgentApprovalViewDto[];
-  clock: AgentServerClockAnchor;
-}
-
-export interface TargetDenylistEntry {
-  connectionId: number;
-  reason: string;
-  changedBy: number;
-  changedAt: number;
-}
-
-export interface TargetDenylistView {
-  revision: number;
-  list: TargetDenylistEntry[];
+  clock: AgentServerClockAnchorViewModel;
 }
 
 export { resetAgentCsrf } from './agent-api-common';
 
 export const agentApi = {
-  async recommendedPlugin(): Promise<RecommendedAgentPluginView> {
+  async recommendedPlugin(): Promise<AgentRecommendedPluginDto> {
     return unwrap(
-      (await httpClient.get<AgentEnvelopeDto<RecommendedAgentPluginView>>('/agent/onboarding/recommended-plugin')).data,
+      (await httpClient.get<AgentEnvelopeDto<AgentRecommendedPluginDto>>('/agent/onboarding/recommended-plugin')).data,
     );
   },
-  async installRecommendedPlugin(): Promise<RecommendedAgentPluginInstallResult> {
+  async installRecommendedPlugin(): Promise<AgentRecommendedPluginInstallResultDto> {
+    const input: AgentRecommendedPluginInstallRequestDto = {};
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<RecommendedAgentPluginInstallResult>>(
+        await httpClient.post<AgentEnvelopeDto<AgentRecommendedPluginInstallResultDto>>(
           '/agent/onboarding/recommended-plugin/install',
-          {},
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -360,21 +331,20 @@ export const agentApi = {
       ).data,
     );
   },
-  async targetDenylist(): Promise<TargetDenylistView> {
-    return unwrap((await httpClient.get<AgentEnvelopeDto<TargetDenylistView>>('/agent/target-denylist')).data);
+  async targetDenylist(): Promise<AgentTargetDenylistViewDto> {
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentTargetDenylistViewDto>>('/agent/target-denylist')).data);
   },
   async replaceTargetDenylist(
     connectionIds: number[],
     reason: string,
     expectedRevision: number,
-  ): Promise<TargetDenylistView> {
+  ): Promise<AgentTargetDenylistViewDto> {
+    const input: AgentTargetDenylistReplaceRequestDto = { connectionIds, reason, expectedRevision };
     return unwrap(
       (
-        await httpClient.put<AgentEnvelopeDto<TargetDenylistView>>(
-          '/agent/target-denylist',
-          { connectionIds, reason, expectedRevision },
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.put<AgentEnvelopeDto<AgentTargetDenylistViewDto>>('/agent/target-denylist', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
@@ -645,7 +615,7 @@ export const agentApi = {
       ).data,
     );
   },
-  async approvals(appId: string, runId: string): Promise<AgentApprovalBatch> {
+  async approvals(appId: string, runId: string): Promise<AgentApprovalBatchViewModel> {
     const response = await httpClient.get<AgentEnvelopeDto<AgentApprovalViewDto[]>>(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/approvals`,
     );
@@ -681,20 +651,7 @@ export const agentApi = {
       ).data,
     );
   },
-  async createRun(appId: string, input: AgentCreateRunInput): Promise<AgentRunViewDto> {
-    const fields: AgentCreateRunFieldsDto = {
-      threadId: input.threadId,
-      input: { text: input.text, artifactRefs: input.artifactRefs ?? [] },
-      agentDefinitionId: input.agentDefinitionId,
-      model: input.model,
-      ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
-      approvalMode: input.approvalMode,
-      executionMode: input.executionMode,
-      ...(input.plannedFromRunId === undefined ? {} : { plannedFromRunId: input.plannedFromRunId }),
-      connectionIds: input.connectionIds ?? [],
-      ...(input.environment === undefined ? {} : { environment: input.environment }),
-      ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),
-    };
+  async createRun(appId: string, fields: AgentCreateRunFieldsDto): Promise<AgentRunViewDto> {
     const request: AgentCreateRunRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (

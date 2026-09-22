@@ -3,15 +3,18 @@
   import { useI18n } from 'vue-i18n';
   import { OverlayPanel } from '@/foundation/ui';
   const SuspendedSessionsPanel = defineAsyncComponent(() => import('./SuspendedSessionsPanel.vue'));
-  import type { MarkedSuspendedSession, SuspendedSession } from '../model/sshSuspend';
+  import type { MarkedSuspendedSessionState, SuspendedSessionDto } from '../model/sshSuspend';
 
-  withDefaults(defineProps<{ visible: boolean; canResume?: boolean; markedSessions?: MarkedSuspendedSession[] }>(), {
-    canResume: false,
-    markedSessions: () => [],
-  });
+  withDefaults(
+    defineProps<{ visible: boolean; canResume?: boolean; markedSessions?: MarkedSuspendedSessionState[] }>(),
+    {
+      canResume: false,
+      markedSessions: () => [],
+    },
+  );
   const emit = defineEmits<{
     close: [];
-    resume: [session: SuspendedSession];
+    resume: [session: SuspendedSessionDto];
     resumeMarked: [workspaceId: string];
     unmark: [workspaceId: string];
   }>();

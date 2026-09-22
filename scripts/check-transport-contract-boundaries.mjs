@@ -16,6 +16,8 @@ const walk = async (relative) => {
   return files;
 };
 
+const frontendFiles = await walk('packages/frontend/src');
+
 const scopedFiles = [
   ...(await walk('packages/frontend/src/features')).filter((file) => file.split(path.sep).includes('api')),
   ...(await walk('packages/backend/src/interfaces/http')),
@@ -30,7 +32,7 @@ const findings = [];
 
 const declarationPattern = /^(?:export\s+)?(?:interface|type)\s+([A-Za-z0-9_]*Dto)\b/gm;
 const dtoAliasPattern =
-  /\b(?:export\s+type\s+[A-Za-z0-9_]+\s*=\s*[A-Za-z0-9_]+Dto\b|[A-Za-z0-9_]+Dto\s+as\s+[A-Za-z0-9_]+)\b/gm;
+  /(?:^export\s+type\s+[A-Za-z0-9_]+\s*=\s*[A-Za-z0-9_]+Dto\s*;|\b[A-Za-z0-9_]+Dto\s+as\s+[A-Za-z0-9_]+\b)/gm;
 const wsProtocolDeclarationPattern =
   /^(?:export\s+)?(?:interface|type)\s+([A-Za-z0-9_]*(?:Wire|Inbound|Outbound)[A-Za-z0-9_]*|[A-Za-z0-9_]+(?:Message|Request|Response|Envelope))\b/gm;
 
@@ -52,7 +54,13 @@ for (const file of scopedFiles) {
       'network adapters must import canonical *Dto types from packages/protocol instead of declaring local DTOs',
       declarationPattern,
     ],
-    ['compatibility aliases that rename canonical *Dto types are forbidden', dtoAliasPattern],
+    ['compatibility aliases that rename canonical *Dto types are forbidden in network adapters', dtoAliasPattern],
+  ]);
+}
+
+for (const file of frontendFiles) {
+  await inspect(file, [
+    ['frontend code must use canonical *Dto names directly instead of DTO compatibility aliases', dtoAliasPattern],
   ]);
 }
 
@@ -74,5 +82,5 @@ if (findings.length) {
 }
 
 console.log(
-  `Transport contract architecture guard passed (${scopedFiles.length} network adapter files, ${agentWsFiles.length} Agent WS files).`,
+  `Transport contract architecture guard passed (${scopedFiles.length} network adapter files, ${frontendFiles.length} frontend files, ${agentWsFiles.length} Agent WS files).`,
 );

@@ -1,18 +1,19 @@
-import type { QuickCommandDto, QuickCommandTagDto } from '@nexus-terminal/protocol/quick-commands';
+import type {
+  QuickCommandDto,
+  QuickCommandMutationRequestDto,
+  QuickCommandTagDto,
+} from '@nexus-terminal/protocol/quick-commands';
+export type { QuickCommandDto, QuickCommandTagDto };
 
-export type QuickCommandTag = QuickCommandTagDto;
-export type QuickCommand = QuickCommandDto;
-
-export interface QuickCommandInput {
+export type QuickCommandFormInput = Omit<QuickCommandMutationRequestDto, 'name' | 'variables' | 'tagIds'> & {
   name: string | null;
-  command: string;
   variables: Record<string, string>;
   tagIds: number[];
-}
+};
 export interface QuickCommandGroup {
   id: number | null;
   name: string;
-  commands: QuickCommand[];
+  commands: QuickCommandDto[];
 }
 export type QuickCommandSort = 'name' | 'usageCount' | 'lastUsed';
 export interface QuickCommandExpansion {

@@ -136,8 +136,10 @@ export class PluginAgentSdkDispatcher {
         onlyKeys(model, ['providerId', 'modelId', 'configurationVersion']);
         return this.runFacade.createRun({
           threadId: string(params.threadId),
-          text: string(params.text, MAX_TEXT_BYTES),
-          ...(params.artifactRefs === undefined ? {} : { artifactRefs: stringArray(params.artifactRefs) }),
+          input: {
+            text: string(params.text, MAX_TEXT_BYTES),
+            artifactRefs: params.artifactRefs === undefined ? [] : stringArray(params.artifactRefs),
+          },
           agentDefinitionId: string(params.agentDefinitionId),
           model: {
             providerId: string(model.providerId),
@@ -147,7 +149,7 @@ export class PluginAgentSdkDispatcher {
           approvalMode: 'ask',
           executionMode: 'execute',
           ...(params.reasoningEffort === undefined ? {} : { reasoningEffort: reasoningEffort(params.reasoningEffort) }),
-          ...(params.connectionIds === undefined ? {} : { connectionIds: positiveIntegerArray(params.connectionIds) }),
+          connectionIds: params.connectionIds === undefined ? [] : positiveIntegerArray(params.connectionIds),
           ...(params.initialGoal === undefined ? {} : { initialGoal: string(params.initialGoal, MAX_TEXT_BYTES) }),
         });
       }

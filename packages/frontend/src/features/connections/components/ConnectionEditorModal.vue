@@ -5,22 +5,22 @@
   import { useFeedback } from '@/shared/feedback/public';
   import ConnectionForm from './ConnectionForm.vue';
   import { useConnections } from '../composables/useConnections';
-  import type { Connection, ConnectionInput, ConnectionUpdate } from '../model/connection';
+  import type { ConnectionDto, ConnectionFormInput, ConnectionFormUpdate } from '../model/connection';
 
-  const props = defineProps<{ visible: boolean; connection?: Connection | null }>();
-  const emit = defineEmits<{ close: []; saved: [connection: Connection]; deleted: [id: number] }>();
+  const props = defineProps<{ visible: boolean; connection?: ConnectionDto | null }>();
+  const emit = defineEmits<{ close: []; saved: [connection: ConnectionDto]; deleted: [id: number] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
   const data = useConnections();
   const loading = ref(false);
 
-  const save = async (input: ConnectionInput | Partial<ConnectionInput>) => {
+  const save = async (input: ConnectionFormInput | Partial<ConnectionFormInput>) => {
     if (loading.value) return;
     loading.value = true;
     try {
       const connection = props.connection
-        ? await data.update(props.connection.id, input as ConnectionUpdate)
-        : await data.create(input as ConnectionInput);
+        ? await data.update(props.connection.id, input as ConnectionFormUpdate)
+        : await data.create(input as ConnectionFormInput);
       emit('saved', connection);
       emit('close');
     } catch (cause) {
@@ -33,13 +33,13 @@
     }
   };
 
-  const saveMany = async (inputs: ConnectionInput[]) => {
+  const saveMany = async (inputs: ConnectionFormInput[]) => {
     if (loading.value || inputs.length === 0) return;
     loading.value = true;
     let successCount = 0;
     let errorCount = 0;
     let firstError = '';
-    let last: Connection | null = null;
+    let last: ConnectionDto | null = null;
     try {
       for (const input of inputs) {
         try {

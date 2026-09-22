@@ -2,8 +2,8 @@
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu, BaseSpinner } from '@/foundation/ui';
-  import { loadConnectionEditorModal, useConnections, type Connection } from '@/features/connections/public';
-  import { useConnectionTags, type ConnectionTag } from '@/features/tags/public';
+  import { loadConnectionEditorModal, useConnections, type ConnectionDto } from '@/features/connections/public';
+  import { useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
   import { useFeedback } from '@/shared/feedback/public';
   import WorkspaceTagGroupManager from './WorkspaceTagGroupManager.vue';
   import { focusRegistry } from '@/shared/focus/public';
@@ -13,7 +13,7 @@
     showTags: true,
     activeConnectionId: null,
   });
-  const emit = defineEmits<{ open: [connection: Connection]; openMany: [connections: Connection[]] }>();
+  const emit = defineEmits<{ open: [connection: ConnectionDto]; openMany: [connections: ConnectionDto[]] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
   const data = useConnections();
@@ -22,10 +22,10 @@
   const searchInput = ref<{ focus?: () => void } | null>(null);
   const search = ref('');
   const highlightedId = ref<number | null>(null);
-  const managerTag = ref<ConnectionTag | null>(null);
+  const managerTag = ref<ConnectionTagDto | null>(null);
   const editorVisible = ref(false);
-  const editorConnection = ref<Connection | null>(null);
-  const context = ref<{ connection: Connection; x: number; y: number } | null>(null);
+  const editorConnection = ref<ConnectionDto | null>(null);
+  const context = ref<{ connection: ConnectionDto; x: number; y: number } | null>(null);
   const GROUPS_KEY = 'nexus.workspace.connectionGroups';
   const expanded = ref<Record<string, boolean>>({});
   try {
@@ -86,14 +86,14 @@
     );
   });
   const groups = computed(() => {
-    const result = new Map<number, Connection[]>();
-    const untagged: Connection[] = [];
+    const result = new Map<number, ConnectionDto[]>();
+    const untagged: ConnectionDto[] = [];
     for (const connection of filtered.value) {
       const ids = connection.tagIds.filter((id) => tagMap.value.has(id));
       if (!ids.length) untagged.push(connection);
       else for (const id of ids) result.set(id, [...(result.get(id) ?? []), connection]);
     }
-    const tagged: Array<{ key: string; tagId: number | null; name: string; connections: Connection[] }> = [
+    const tagged: Array<{ key: string; tagId: number | null; name: string; connections: ConnectionDto[] }> = [
       ...result.entries(),
     ].map(([tagId, connections]) => ({
       key: String(tagId),
@@ -160,7 +160,7 @@
     expanded.value = { ...expanded.value, [key]: !isExpanded(key) };
     localStorage.setItem(GROUPS_KEY, JSON.stringify(expanded.value));
   };
-  const connectGroup = (connections: Connection[]) => {
+  const connectGroup = (connections: ConnectionDto[]) => {
     const ssh = connections.filter((connection) => connection.type === 'SSH');
     if (ssh.length) emit('openMany', ssh);
   };
@@ -172,12 +172,12 @@
     editorConnection.value = null;
     editorVisible.value = true;
   };
-  const editConnection = (connection: Connection) => {
+  const editConnection = (connection: ConnectionDto) => {
     context.value = null;
     editorConnection.value = connection;
     editorVisible.value = true;
   };
-  const cloneConnection = async (connection: Connection) => {
+  const cloneConnection = async (connection: ConnectionDto) => {
     context.value = null;
     try {
       await data.clone(connection.id, t('connections.cloneName', { name: connection.name || connection.host }));
@@ -187,7 +187,7 @@
       );
     }
   };
-  const deleteConnection = async (connection: Connection) => {
+  const deleteConnection = async (connection: ConnectionDto) => {
     context.value = null;
     if (
       !(await feedback.confirm({
@@ -204,10 +204,14 @@
       );
     }
   };
-  const openContext = (event: MouseEvent, connection: Connection) => {
+  const openContext = (event: MouseEvent, connection: ConnectionDto) => {
     context.value = { connection, x: event.clientX, y: event.clientY };
   };
-  const deleteGroupConnections = async (group: { tagId: number | null; name: string; connections: Connection[] }) => {
+  const deleteGroupConnections = async (group: {
+    tagId: number | null;
+    name: string;
+    connections: ConnectionDto[];
+  }) => {
     if (group.tagId === null || !group.connections.length) return;
     if (
       !(await feedback.confirm({

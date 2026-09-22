@@ -4,17 +4,17 @@
   import { apiErrorMessage } from '@/client/http';
   import { useFeedback } from '@/shared/feedback/public';
   import { useSuspendedSessions } from '../composables/useSuspendedSessions';
-  import type { MarkedSuspendedSession, SuspendedSession } from '../model/sshSuspend';
+  import type { MarkedSuspendedSessionState, SuspendedSessionDto } from '../model/sshSuspend';
 
-  const props = withDefaults(defineProps<{ canResume?: boolean; markedSessions?: MarkedSuspendedSession[] }>(), {
+  const props = withDefaults(defineProps<{ canResume?: boolean; markedSessions?: MarkedSuspendedSessionState[] }>(), {
     canResume: false,
     markedSessions: () => [],
   });
   const emit = defineEmits<{
-    resume: [session: SuspendedSession];
+    resume: [session: SuspendedSessionDto];
     resumeMarked: [workspaceId: string];
     unmark: [workspaceId: string];
-    removed: [session: SuspendedSession];
+    removed: [session: SuspendedSessionDto];
   }>();
   const { t } = useI18n();
   const feedback = useFeedback();
@@ -50,7 +50,7 @@
     pollingStarted = false;
   });
 
-  const startRename = (session: SuspendedSession) => {
+  const startRename = (session: SuspendedSessionDto) => {
     if (renamingId.value) return;
     editingId.value = session.id;
     editingName.value = session.customName ?? session.connectionName;
@@ -59,7 +59,7 @@
     editingId.value = null;
     editingName.value = '';
   };
-  const finishRename = async (session: SuspendedSession) => {
+  const finishRename = async (session: SuspendedSessionDto) => {
     if (editingId.value !== session.id || renamingId.value === session.id) return;
     const name = editingName.value.trim();
     const currentName = session.customName ?? session.connectionName;
@@ -84,7 +84,7 @@
     }
   };
 
-  const remove = async (session: SuspendedSession) => {
+  const remove = async (session: SuspendedSessionDto) => {
     if (removingId.value) return;
     const name = session.customName ?? session.connectionName;
     if (
@@ -118,7 +118,7 @@
     }
   };
 
-  const exportLog = async (session: SuspendedSession) => {
+  const exportLog = async (session: SuspendedSessionDto) => {
     if (exportingId.value) return;
     exportingId.value = session.id;
     try {

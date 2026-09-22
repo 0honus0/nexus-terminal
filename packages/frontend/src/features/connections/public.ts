@@ -7,12 +7,12 @@ export {
 } from './composables/useConnections';
 export { connectionsApi as connectionService } from './api/connectionsApi';
 export type {
-  Connection,
-  ConnectionAuthMethod,
-  ConnectionInput,
-  ConnectionRoute,
-  ConnectionTestResult,
-  ConnectionType,
-  ConnectionUpdate,
-  RdpOptions,
+  ConnectionDto,
+  ConnectionAuthMethodDto,
+  ConnectionFormInput,
+  ConnectionRouteDto,
+  ConnectionTestResponseDto,
+  ConnectionTypeDto,
+  ConnectionFormUpdate,
+  RdpConnectionOptionsDto,
 } from './model/connection';

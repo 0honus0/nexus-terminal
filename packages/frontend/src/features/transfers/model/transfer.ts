@@ -1,4 +1,5 @@
 import type { WorkspaceArchiveErrorCodeDto } from '@nexus-terminal/protocol/workspace';
+export type { WorkspaceArchiveErrorCodeDto };
 
 export type TransferKind = 'upload' | 'copy' | 'move' | 'compress' | 'decompress' | 'transfer';
 export type TransferStatus =
@@ -12,8 +13,6 @@ export type TransferStatus =
   | 'completed'
   | 'partial'
   | 'error';
-
-export type ArchiveTransferErrorCode = WorkspaceArchiveErrorCodeDto;
 
 export interface TransferLocation {
   scopeId: string;
@@ -39,7 +38,7 @@ export interface TransferTask {
   totalFiles: number | null;
   currentFile?: string;
   error?: string;
-  errorCode?: ArchiveTransferErrorCode;
+  errorCode?: WorkspaceArchiveErrorCodeDto;
   warning?: string;
   createdAt: number;
 }
@@ -49,13 +48,13 @@ export interface UploadSourceFile {
   relativeDirectory?: string;
 }
 
-export interface UploadPrepareRequest {
+export interface UploadPrepareCommand {
   id: string;
   destination: TransferLocation;
   directories: readonly string[];
 }
 
-export interface UploadRequest {
+export interface UploadCommand {
   id: string;
   file: File;
   destination: TransferLocation;
@@ -64,14 +63,14 @@ export interface UploadRequest {
   conflictStrategy?: 'ask' | 'overwrite' | 'skip';
 }
 
-export interface CopyMoveRequest {
+export interface CopyMoveCommand {
   id: string;
   kind: 'copy' | 'move';
   sources: TransferLocation[];
   destination: TransferLocation;
 }
 
-export interface ArchiveRequest {
+export interface ArchiveCommand {
   id: string;
   kind: 'compress' | 'decompress';
   sources: TransferLocation[];
@@ -97,5 +96,5 @@ export type TransferEvent =
   | { type: 'resumed'; id: string }
   | { type: 'skipped'; id: string }
   | { type: 'cancelled'; id: string }
-  | { type: 'error'; id: string; message: string; code?: ArchiveTransferErrorCode }
+  | { type: 'error'; id: string; message: string; code?: WorkspaceArchiveErrorCodeDto }
   | { type: 'conflict'; id: string; path: string };

@@ -8,7 +8,7 @@
     loadFileManager,
     type ArchiveCompressionIntent,
     type LocalUploadFile,
-    type RemoteFileEntry,
+    type WorkspaceRemoteFileEntryDto,
   } from '@/features/filesystem/public';
   import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
   import { loadFilePreview, type FilePreviewSessionController } from '@/features/file-preview/public';
@@ -18,13 +18,13 @@
   import { loadCommandHistoryPanel, type ExecuteHistoryIntent } from '@/features/command-history/public';
   import {
     loadSuspendedSessionsPanel,
-    type MarkedSuspendedSession,
-    type SuspendedSession,
+    type MarkedSuspendedSessionState,
+    type SuspendedSessionDto,
   } from '@/features/ssh-suspend/public';
-  import type { Connection } from '@/features/connections/public';
+  import type { ConnectionDto } from '@/features/connections/public';
   import WorkspaceCommandBar from './WorkspaceCommandBar.vue';
   import WorkspaceConnectionList from './WorkspaceConnectionList.vue';
-  import type { WorkspaceLayoutNode } from '../layout/workspaceLayout';
+  import type { WorkspaceLayoutNodeState } from '../layout/workspaceLayout';
   import type { WorkspaceRuntimeSession } from '../session';
 
   const TerminalView = defineAsyncComponent(loadTerminalView);
@@ -57,7 +57,7 @@
 
   const props = defineProps<{
     active?: boolean;
-    node: WorkspaceLayoutNode;
+    node: WorkspaceLayoutNodeState;
     session: WorkspaceRuntimeSession;
     documentMode: 'editor' | 'preview';
     terminalFontFamily?: string;
@@ -71,7 +71,7 @@
     mobileEditorFontSize?: number;
     editorScopeLabel?: string;
     showEditorScopeLabel?: boolean;
-    commandInputSyncTarget?: import('@/features/preferences/public').Preferences['commandInputSyncTarget'];
+    commandInputSyncTarget?: import('@/features/preferences/public').PreferencesDto['commandInputSyncTarget'];
     statusIntervalSeconds?: number;
     dockerIntervalSeconds?: number;
     dockerDefaultExpand?: boolean;
@@ -93,23 +93,23 @@
     spreadsheetMaxColumns?: number;
     quickCommandRowScale?: number;
     clipboardCount?: number;
-    markedSuspendedSessions?: MarkedSuspendedSession[];
+    markedSuspendedSessions?: MarkedSuspendedSessionState[];
     layoutLocked?: boolean;
     terminalChannel?: TerminalChannel;
   }>();
 
   const emit = defineEmits<{
-    openConnection: [connection: Connection];
+    openConnection: [connection: ConnectionDto];
     openFile: [path: string];
     openTextFile: [path: string];
     upload: [path: string];
-    clipboardSet: [operation: 'copy' | 'cut', entries: RemoteFileEntry[]];
-    moveTo: [entries: RemoteFileEntry[], destination: string];
+    clipboardSet: [operation: 'copy' | 'cut', entries: WorkspaceRemoteFileEntryDto[]];
+    moveTo: [entries: WorkspaceRemoteFileEntryDto[], destination: string];
     paste: [destination: string];
-    compress: [entries: RemoteFileEntry[]];
+    compress: [entries: WorkspaceRemoteFileEntryDto[]];
     compressPreset: [intent: ArchiveCompressionIntent];
-    decompress: [entry: RemoteFileEntry];
-    sendFiles: [entries: RemoteFileEntry[]];
+    decompress: [entry: WorkspaceRemoteFileEntryDto];
+    sendFiles: [entries: WorkspaceRemoteFileEntryDto[]];
     command: [command: string, allSessions: boolean];
     clearTerminal: [];
     findTerminalNext: [];
@@ -119,7 +119,7 @@
     editorApi: [api: EditorApi | null];
     previewApi: [api: PreviewApi | null];
     documentMode: [mode: 'editor' | 'preview'];
-    resumeSuspended: [session: SuspendedSession];
+    resumeSuspended: [session: SuspendedSessionDto];
     resumeMarkedSuspended: [workspaceId: string];
     unmarkSuspended: [workspaceId: string];
     openFileManager: [];

@@ -173,8 +173,7 @@ export interface AgentAppStateUpdateRequestDto {
 export type AgentTargetKindDto = 'workspace' | 'ssh';
 export type AgentTargetGrantSelectionDto = { mode: 'all' } | { mode: 'ids'; ids: string[] };
 export type AgentCapabilityScopeDto =
-  | { kind: 'global' }
-  | { kind: 'targets'; targets: Partial<Record<AgentTargetKindDto, AgentTargetGrantSelectionDto>> };
+  { kind: 'global' } | { kind: 'targets'; targets: Partial<Record<AgentTargetKindDto, AgentTargetGrantSelectionDto>> };
 
 export type AgentCapabilityDto =
   | 'file.read'
@@ -266,4 +265,41 @@ export interface AgentHostSummaryDto {
   totalPendingApprovals: number;
   totalPendingBudgetRequests: number;
   eventCursor: number;
+}
+
+export interface AgentRecommendedPluginDto {
+  appId: string;
+  installed: boolean;
+  installedVersion: string | null;
+  enabled: boolean;
+  availableVersion: string;
+  displayName: string;
+  description: string;
+  catalogUrl: string;
+  publisherKeyId: string;
+}
+
+export type AgentRecommendedPluginInstallRequestDto = Record<string, never>;
+
+export interface AgentRecommendedPluginInstallResultDto {
+  app: AgentAppSummaryDto;
+  installedNow: boolean;
+}
+
+export interface AgentTargetDenylistEntryDto {
+  connectionId: number;
+  reason: string;
+  changedBy: number;
+  changedAt: number;
+}
+
+export interface AgentTargetDenylistViewDto {
+  revision: number;
+  list: AgentTargetDenylistEntryDto[];
+}
+
+export interface AgentTargetDenylistReplaceRequestDto {
+  connectionIds: number[];
+  reason: string;
+  expectedRevision: number;
 }

@@ -1,4 +1,5 @@
 import type { LogLevelDto, PreferencesDto, PreferencesPatchDto } from '@nexus-terminal/protocol/settings';
+export type { LogLevelDto, PreferencesDto, PreferencesPatchDto };
 
 export const LOG_LEVELS = [
   'trace',
@@ -8,12 +9,8 @@ export const LOG_LEVELS = [
   'error',
   'silent',
 ] as const satisfies readonly LogLevelDto[];
-export type LogLevel = LogLevelDto;
-export type Preferences = PreferencesDto;
 export type PreferenceKey = keyof PreferencesDto;
-export type PreferencePatch = PreferencesPatchDto;
-
-export const defaultPreferences: Preferences = {
+export const defaultPreferences: PreferencesDto = {
   language: 'en-US',
   frontendLogLevel: 'info',
   backendLogLevel: 'info',

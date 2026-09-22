@@ -3,9 +3,9 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { BaseListboxSelect, BaseSpinner } from '@/foundation/ui';
-  import { useConnections, type Connection } from '@/features/connections/public';
+  import { useConnections, type ConnectionDto } from '@/features/connections/public';
   import { useConnectionTags } from '@/features/tags/public';
-  import { auditApi, type AuditLogEntry } from '@/features/audit/public';
+  import { auditApi, type AuditLogEntryDto } from '@/features/audit/public';
   import { useSystemOverview } from '@/features/system-overview/public';
   import { usePreferences } from '@/features/preferences/public';
   import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
@@ -18,7 +18,7 @@
   const resources = useSystemOverview();
   const preferences = usePreferences();
   const suspended = useSuspendedSessions();
-  const activity = ref<AuditLogEntry[]>([]);
+  const activity = ref<AuditLogEntryDto[]>([]);
   const search = ref('');
   const DASHBOARD_TAG_KEY = 'nexus.dashboard.tagId';
   const DASHBOARD_SORT_KEY = 'nexus.dashboard.sortField';
@@ -66,8 +66,8 @@
   const MAX_RECENT_LOGS = 5;
   const connectionSummary = computed(() => {
     let usedCount = 0;
-    const protocolCounts: Record<Connection['type'], number> = { SSH: 0, RDP: 0, VNC: 0 };
-    let latestConnection: Connection | null = null;
+    const protocolCounts: Record<ConnectionDto['type'], number> = { SSH: 0, RDP: 0, VNC: 0 };
+    let latestConnection: ConnectionDto | null = null;
     let latestTimestamp = -1;
     for (const item of connections.connections.value) {
       protocolCounts[item.type] += 1;
@@ -94,7 +94,7 @@
       .map((session) => session.customName || session.connectionName)
       .join(' · '),
   );
-  const connect = (item: Connection) => {
+  const connect = (item: ConnectionDto) => {
     if (item.type === 'RDP' || item.type === 'VNC') {
       remoteDesktopLauncher.open({ id: item.id, name: item.name || item.host, type: item.type });
       return;
@@ -128,7 +128,7 @@
     }
   };
   const tagNameById = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name] as const)));
-  const tagNames = (item: Connection): string[] =>
+  const tagNames = (item: ConnectionDto): string[] =>
     item.tagIds.map((id) => tagNameById.value.get(id)).filter((name): name is string => Boolean(name));
   const actionLabel = (actionType: string): string => t(`auditLog.actions.${actionType}`, actionType);
   const isFailedAction = (actionType: string): boolean => {

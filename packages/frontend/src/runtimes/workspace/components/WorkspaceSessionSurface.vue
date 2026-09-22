@@ -19,20 +19,24 @@
     loadProgressCenter,
     loadSendFilesModal,
     loadUploadConflictModal,
-    type ArchiveTransferErrorCode,
-    type SendFileSourceItem,
+    type WorkspaceArchiveErrorCodeDto,
+    type SendFileSourceItemDto,
   } from '@/features/transfers/public';
   import {
     loadFileManager,
     type ArchiveCompressionFormat,
     type ArchiveCompressionIntent,
     type LocalUploadFile,
-    type RemoteFileEntry,
+    type WorkspaceRemoteFileEntryDto,
   } from '@/features/filesystem/public';
-  import type { Connection } from '@/features/connections/public';
-  import type { MarkedSuspendedSession, SuspendedSession } from '@/features/ssh-suspend/public';
+  import type { ConnectionDto } from '@/features/connections/public';
+  import type { MarkedSuspendedSessionState, SuspendedSessionDto } from '@/features/ssh-suspend/public';
   import type { WorkspaceRuntimeSession } from '../session';
-  import type { WorkspaceLayoutNode, WorkspacePaneName, WorkspaceSidebarConfig } from '../layout/workspaceLayout';
+  import type {
+    WorkspaceLayoutNodeState,
+    WorkspacePaneNameDto,
+    WorkspaceSidebarConfigDto,
+  } from '../layout/workspaceLayout';
   import WorkspaceLayoutRenderer from './WorkspaceLayoutRenderer.vue';
   import WorkspaceMobileTools from './WorkspaceMobileTools.vue';
 
@@ -67,8 +71,8 @@
   const props = defineProps<{
     active?: boolean;
     session: WorkspaceRuntimeSession;
-    layout: WorkspaceLayoutNode;
-    sidebars: WorkspaceSidebarConfig;
+    layout: WorkspaceLayoutNodeState;
+    sidebars: WorkspaceSidebarConfigDto;
     terminalFontFamily?: string;
     terminalFontSize?: number;
     terminalTheme?: Record<string, string>;
@@ -78,7 +82,7 @@
     editorFontFamily?: string;
     editorFontSize?: number;
     mobileEditorFontSize?: number;
-    commandInputSyncTarget?: import('@/features/preferences/public').Preferences['commandInputSyncTarget'];
+    commandInputSyncTarget?: import('@/features/preferences/public').PreferencesDto['commandInputSyncTarget'];
     statusIntervalSeconds?: number;
     dockerIntervalSeconds?: number;
     dockerDefaultExpand?: boolean;
@@ -102,20 +106,20 @@
     spreadsheetMaxColumns?: number;
     quickCommandRowScale?: number;
     progressVisible?: boolean;
-    markedSuspendedSessions?: MarkedSuspendedSession[];
+    markedSuspendedSessions?: MarkedSuspendedSessionState[];
     layoutLocked?: boolean;
   }>();
   const emit = defineEmits<{
-    openConnection: [connection: Connection];
+    openConnection: [connection: ConnectionDto];
     command: [command: string, allSessions: boolean];
-    resumeSuspended: [session: SuspendedSession];
+    resumeSuspended: [session: SuspendedSessionDto];
     resumeMarkedSuspended: [workspaceId: string];
     unmarkSuspended: [workspaceId: string];
-    fileClipboardSet: [operation: 'copy' | 'cut', entries: RemoteFileEntry[]];
+    fileClipboardSet: [operation: 'copy' | 'cut', entries: WorkspaceRemoteFileEntryDto[]];
     fileClipboardPaste: [destination: string];
     serverTransferStarted: [];
     statusScale: [scale: number];
-    sidebarWidth: [pane: WorkspacePaneName, width: string];
+    sidebarWidth: [pane: WorkspacePaneNameDto, width: string];
     terminalFontSize: [size: number];
     editorFontSize: [size: number];
     mobileEditorFontSize: [size: number];
@@ -186,9 +190,9 @@
   });
   const popupEditorRef = ref<EditorApi | null>(null);
   const popupPreviewRef = ref<PreviewApi | null>(null);
-  const activeLeftSidebar = ref<WorkspacePaneName | null>(null);
-  const activeRightSidebar = ref<WorkspacePaneName | null>(null);
-  const mobilePane = ref<WorkspacePaneName>('terminal');
+  const activeLeftSidebar = ref<WorkspacePaneNameDto | null>(null);
+  const activeRightSidebar = ref<WorkspacePaneNameDto | null>(null);
+  const mobilePane = ref<WorkspacePaneNameDto>('terminal');
   const mobileCtrlActive = ref(false);
   const mobileAltActive = ref(false);
   const clearMobileModifiers = (): void => {
@@ -351,7 +355,7 @@
   const previewApi = ref<PreviewApi | null>(null);
   const uploadInput = ref<HTMLInputElement | null>(null);
   const uploadPath = ref('/');
-  const archiveDialog = ref<{ kind: 'compress' | 'decompress'; entries: RemoteFileEntry[] } | null>(null);
+  const archiveDialog = ref<{ kind: 'compress' | 'decompress'; entries: WorkspaceRemoteFileEntryDto[] } | null>(null);
   const archiveDestination = ref('/');
   const archiveFormat = ref<'zip' | 'tar.gz' | 'tar.bz2'>('zip');
   const archivePassword = ref('');
@@ -359,10 +363,10 @@
   const archiveShowPassword = ref(false);
   const archivePasswordRequired = ref(false);
   const archiveRemoteError = ref('');
-  const sendFilesItems = ref<SendFileSourceItem[]>([]);
+  const sendFilesItems = ref<SendFileSourceItemDto[]>([]);
   let archivePromptGeneration = 0;
 
-  const parseSidebarWidth = (name: WorkspacePaneName | null): number => {
+  const parseSidebarWidth = (name: WorkspacePaneNameDto | null): number => {
     const raw = name ? props.sidebarPaneWidths?.[name] : undefined;
     const parsed = raw ? Number.parseFloat(raw) : 350;
     return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 200), 800) : 350;
@@ -517,8 +521,8 @@
     activeRightSidebar.value = null;
   };
 
-  const paneLabel = (name: WorkspacePaneName) => t(`layout.pane.${name}`);
-  const paneIcon = (pane: WorkspacePaneName): string => {
+  const paneLabel = (name: WorkspacePaneNameDto) => t(`layout.pane.${name}`);
+  const paneIcon = (pane: WorkspacePaneNameDto): string => {
     if (pane === 'connections') return 'fas fa-network-wired';
     if (pane === 'fileManager') return 'fas fa-folder-open';
     if (pane === 'commandHistory') return 'fas fa-history';
@@ -529,13 +533,13 @@
     if (pane === 'suspendedSshSessions') return 'fas fa-pause-circle';
     return 'fas fa-terminal';
   };
-  const sidebarNode = (name: WorkspacePaneName, side: 'left' | 'right'): WorkspaceLayoutNode => ({
+  const sidebarNode = (name: WorkspacePaneNameDto, side: 'left' | 'right'): WorkspaceLayoutNodeState => ({
     id: `workspace-sidebar-${side}-${name}`,
     type: 'pane',
     component: name,
     size: 100,
   });
-  const toggleSidebar = (side: 'left' | 'right', name: WorkspacePaneName) => {
+  const toggleSidebar = (side: 'left' | 'right', name: WorkspacePaneNameDto) => {
     if (side === 'left') {
       activeLeftSidebar.value = activeLeftSidebar.value === name ? null : name;
       if (activeLeftSidebar.value) activeRightSidebar.value = null;
@@ -673,7 +677,7 @@
     await uploadFilesAt(uploadPath.value, files);
   };
 
-  const beginSendFiles = (entries: RemoteFileEntry[]) => {
+  const beginSendFiles = (entries: WorkspaceRemoteFileEntryDto[]) => {
     if (!entries.length) return;
     sendFilesItems.value = entries.map((entry) => ({
       name: entry.name,
@@ -682,7 +686,7 @@
     }));
   };
 
-  const moveWithinSession = async (entries: RemoteFileEntry[], destination: string) => {
+  const moveWithinSession = async (entries: WorkspaceRemoteFileEntryDto[], destination: string) => {
     if (!entries.length || !destination.startsWith('/')) return;
     try {
       const taskId = await transfers.copyMove({
@@ -707,7 +711,7 @@
   };
   type ArchiveRequestContext = {
     kind: 'compress' | 'decompress';
-    entries: RemoteFileEntry[];
+    entries: WorkspaceRemoteFileEntryDto[];
     destination: string;
     format: ArchiveCompressionFormat;
   };
@@ -757,7 +761,7 @@
     archiveDialog.value = null;
     resetArchivePassword();
   };
-  const compressionDestination = (entries: RemoteFileEntry[], format: ArchiveCompressionFormat): string => {
+  const compressionDestination = (entries: WorkspaceRemoteFileEntryDto[], format: ArchiveCompressionFormat): string => {
     const parent = parentPath(entries[0]!.path);
     let base = 'archive';
     if (entries.length === 1) {
@@ -769,24 +773,26 @@
     }
     return `${parent.replace(/\/$/, '')}/${base}.${format}`.replace(/^\/\//, '/');
   };
-  const archivePasswordFailureMessage = (code: ArchiveTransferErrorCode, fallback: string): string => {
+  const archivePasswordFailureMessage = (code: WorkspaceArchiveErrorCodeDto, fallback: string): string => {
     if (code === 'INVALID_PASSWORD') return t('fileManager.archivePassword.wrongPassword');
     if (code === 'PASSWORD_TOO_LONG') return t('fileManager.archivePassword.tooLong', { max: 128 });
     if (code === 'INVALID_PASSWORD_FORMAT') return t('fileManager.archivePassword.invalidCharacters');
     return code === 'PASSWORD_REQUIRED' ? '' : fallback;
   };
   type ArchivePasswordErrorCode = Extract<
-    ArchiveTransferErrorCode,
+    WorkspaceArchiveErrorCodeDto,
     'PASSWORD_REQUIRED' | 'INVALID_PASSWORD' | 'PASSWORD_TOO_LONG' | 'INVALID_PASSWORD_FORMAT'
   >;
-  const isArchivePasswordErrorCode = (code: ArchiveTransferErrorCode | undefined): code is ArchivePasswordErrorCode =>
+  const isArchivePasswordErrorCode = (
+    code: WorkspaceArchiveErrorCodeDto | undefined,
+  ): code is ArchivePasswordErrorCode =>
     code === 'PASSWORD_REQUIRED' ||
     code === 'INVALID_PASSWORD' ||
     code === 'PASSWORD_TOO_LONG' ||
     code === 'INVALID_PASSWORD_FORMAT';
   const openArchivePasswordPrompt = (
     requestContext: ArchiveRequestContext,
-    code: ArchiveTransferErrorCode = 'PASSWORD_REQUIRED',
+    code: WorkspaceArchiveErrorCodeDto = 'PASSWORD_REQUIRED',
     fallback = '',
   ) => {
     archiveDialog.value = { kind: requestContext.kind, entries: [...requestContext.entries] };
@@ -844,7 +850,7 @@
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
     });
   };
-  const beginCompress = (entries: RemoteFileEntry[]) => {
+  const beginCompress = (entries: WorkspaceRemoteFileEntryDto[]) => {
     if (!entries.length) return;
     archivePromptGeneration += 1;
     archiveDialog.value = { kind: 'compress', entries: [...entries] };
@@ -869,7 +875,7 @@
     closeArchiveDialog(false);
     launchArchiveTask(requestContext, generation);
   };
-  const beginDecompress = (entry: RemoteFileEntry) => {
+  const beginDecompress = (entry: WorkspaceRemoteFileEntryDto) => {
     archivePromptGeneration += 1;
     const generation = archivePromptGeneration;
     closeArchiveDialog(false);

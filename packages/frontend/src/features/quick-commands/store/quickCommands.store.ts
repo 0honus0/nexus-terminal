@@ -2,16 +2,16 @@ import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import { quickCommandsApi } from '../api/quickCommandsApi';
 import type {
-  QuickCommand,
+  QuickCommandDto,
   QuickCommandGroup,
-  QuickCommandInput,
+  QuickCommandFormInput,
   QuickCommandSort,
-  QuickCommandTag,
+  QuickCommandTagDto,
 } from '../model/quickCommand';
 const EXPANDED_KEY = 'quick-commands.expanded-groups';
 export const useQuickCommandsStore = defineStore('quick-commands', () => {
-  const items = ref<QuickCommand[]>([]),
-    tags = ref<QuickCommandTag[]>([]),
+  const items = ref<QuickCommandDto[]>([]),
+    tags = ref<QuickCommandTagDto[]>([]),
     search = ref(''),
     sort = ref<QuickCommandSort>('name'),
     loading = ref(false),
@@ -34,7 +34,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
           .includes(term),
     );
   });
-  const compare = (a: QuickCommand, b: QuickCommand) =>
+  const compare = (a: QuickCommandDto, b: QuickCommandDto) =>
     sort.value === 'usageCount'
       ? b.usageCount - a.usageCount
       : sort.value === 'lastUsed'
@@ -82,7 +82,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
       loading.value = false;
     }
   }
-  async function save(input: QuickCommandInput, id?: number) {
+  async function save(input: QuickCommandFormInput, id?: number) {
     const item = id ? await quickCommandsApi.update(id, input) : await quickCommandsApi.create(input);
     const i = items.value.findIndex((x) => x.id === item.id);
     if (i >= 0) items.value[i] = item;

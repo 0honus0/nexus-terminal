@@ -6,37 +6,41 @@ import type {
 import { apiErrorStatus, httpClient } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { createWebSocketUrl } from '@/client/websocket';
-import type { DockerChannel, DockerCommand, DockerStats, DockerStatus } from '@/features/docker/public';
 import type {
-  DirectoryListing,
-  FileSearchResult,
+  DockerChannel,
+  WorkspaceDockerCommandDto,
+  WorkspaceDockerStatsDto,
+  WorkspaceDockerStatusDto,
+} from '@/features/docker/public';
+import type {
+  WorkspaceFilesystemListResponseDto,
+  WorkspaceFilesystemSearchResponseDto,
   FilesystemChannel,
   FilesystemDownloadPort,
-  RemoteFileEntry,
+  WorkspaceRemoteFileEntryDto,
   RemoteTextFile,
   ResolvedRemotePath,
   TerminalDirectoryPort,
 } from '@/features/filesystem/public';
 import type { FileDocumentPort, LoadedEditorDocument } from '@/features/file-editor/public';
 import type { FilePreviewSource } from '@/features/file-preview/public';
-import type { ServerStatusSample, StatusChannel } from '@/features/status-monitor/public';
+import type { WorkspaceStatusSampleDto, StatusChannel } from '@/features/status-monitor/public';
 import type { SshSuspendChannel } from '@/features/ssh-suspend/public';
-import type { TerminalChannel, TerminalOutput, TerminalViewport } from '@/features/terminal/public';
+import type { TerminalChannel, TerminalOutput, WorkspaceTerminalViewportDto } from '@/features/terminal/public';
 import type {
-  ArchiveRequest,
-  CopyMoveRequest,
+  ArchiveCommand,
+  CopyMoveCommand,
   TransferChannel,
   TransferEvent,
   TransferTask,
-  UploadPrepareRequest,
-  UploadRequest,
+  UploadPrepareCommand,
+  UploadCommand,
 } from '@/features/transfers/public';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
 
-
 interface WorkspaceTerminalGate {
   canSend(): boolean;
-  deferResize(viewport: TerminalViewport): void;
+  deferResize(viewport: WorkspaceTerminalViewportDto): void;
 }
 
 export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceTerminalGate): TerminalChannel => {
@@ -65,7 +69,7 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       if (gate && !gate.canSend()) return;
       socket.sendConnected('terminal.input', { data });
     },
-    resize: (viewport: TerminalViewport) => {
+    resize: (viewport: WorkspaceTerminalViewportDto) => {
       if (gate && !gate.canSend()) {
         gate.deferResize(viewport);
         return;
@@ -130,9 +134,10 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
 };
 
 export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChannel => ({
-  listDirectory: (path): Promise<DirectoryListing> => socket.request('filesystem.list', { path }),
-  search: (path, query): Promise<FileSearchResult> => socket.request('filesystem.search', { path, query }),
-  stat: (path): Promise<RemoteFileEntry> => socket.request('filesystem.stat', { path }),
+  listDirectory: (path): Promise<WorkspaceFilesystemListResponseDto> => socket.request('filesystem.list', { path }),
+  search: (path, query): Promise<WorkspaceFilesystemSearchResponseDto> =>
+    socket.request('filesystem.search', { path, query }),
+  stat: (path): Promise<WorkspaceRemoteFileEntryDto> => socket.request('filesystem.stat', { path }),
   async readText(path, encoding): Promise<RemoteTextFile> {
     const { data: result, bytes } = await socket.requestBinary('filesystem.readText', {
       path,
@@ -235,9 +240,7 @@ export const createTerminalDirectoryPort = (
         () => fail(new Error('Terminal directory change timed out.')),
         DIRECTORY_CHANGE_COMPLETION_TIMEOUT_MS,
       );
-      void socket
-        .requestWithId('terminal.changeDirectory', requestId, { path })
-        .catch((cause) => fail(cause));
+      void socket.requestWithId('terminal.changeDirectory', requestId, { path }).catch((cause) => fail(cause));
     });
   },
 });
@@ -318,10 +321,7 @@ export const createFilePreviewSource = (socket: WorkspaceSocket): FilePreviewSou
         return { tooLarge: true, actualBytes: entry.metadata.size, maxBytes: options.maxBytes };
       }
     }
-    const result = await racePreviewAbort(
-      socket.requestBinary('filesystem.readBinary', { path }),
-      signal,
-    );
+    const result = await racePreviewAbort(socket.requestBinary('filesystem.readBinary', { path }), signal);
     const bytes = result.bytes;
     return { bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer };
   },
@@ -333,7 +333,7 @@ const transferProgress = (
   extras: Partial<Extract<TransferEvent, { type: 'progress' }>> = {},
 ): TransferEvent => ({ type: 'progress', id, progress, ...extras });
 
-const uploadDestinationPath = (request: UploadRequest): string => {
+const uploadDestinationPath = (request: UploadCommand): string => {
   const base = request.destination.path === '/' ? '' : request.destination.path.replace(/\/+$/, '');
   const relative = request.relativeDirectory ? `${request.relativeDirectory.replace(/^\/+|\/+$/g, '')}/` : '';
   return `${base}/${relative}${request.file.name}`.replace(/\/{2,}/g, '/');
@@ -359,11 +359,11 @@ const uploadSchedulerStreamLimit = (): number => {
 
 export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: string): TransferChannelAdapter => {
   const handlers = new Set<(event: TransferEvent) => void>();
-  const uploads = new Map<string, UploadRequest>();
+  const uploads = new Map<string, UploadCommand>();
   const uploadSockets = new Map<string, WebSocket>();
-  const queuedUploads: UploadRequest[] = [];
+  const queuedUploads: UploadCommand[] = [];
   const activeUploads = new Set<string>();
-  const prepareRequests = new Map<string, UploadPrepareRequest>();
+  const prepareRequests = new Map<string, UploadPrepareCommand>();
   const activeRemoteOperations = new Map<string, 'copy' | 'move' | 'compress' | 'decompress'>();
   let workspaceAvailable = false;
   let recoveryPending = false;
@@ -384,12 +384,12 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     }
   };
 
-  const enqueueUpload = (request: UploadRequest): void => {
+  const enqueueUpload = (request: UploadCommand): void => {
     removeQueuedUpload(request.id);
     queuedUploads.push(request);
   };
 
-  const forgetUpload = (id: string): UploadRequest | undefined => {
+  const forgetUpload = (id: string): UploadCommand | undefined => {
     const request = uploads.get(id);
     uploads.delete(id);
     removeQueuedUpload(id);
@@ -400,7 +400,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     return request;
   };
 
-  const failUploadStream = (request: UploadRequest, message: string): void => {
+  const failUploadStream = (request: UploadCommand, message: string): void => {
     if (uploads.get(request.id) !== request) return;
     logger.debug(
       {
@@ -421,7 +421,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     }
   };
 
-  const startUploadRequest = async (request: UploadRequest): Promise<void> => {
+  const startUploadRequest = async (request: UploadCommand): Promise<void> => {
     await socket.request('upload.start', {
       uploadId: request.id,
       destinationPath: uploadDestinationPath(request),
@@ -431,7 +431,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     });
   };
 
-  const sendPrepareRequest = async (request: UploadPrepareRequest): Promise<void> => {
+  const sendPrepareRequest = async (request: UploadPrepareCommand): Promise<void> => {
     await socket.request('upload.prepare', {
       prepareId: request.id,
       basePath: request.destination.path,
@@ -534,7 +534,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     }
   }
 
-  const streamUpload = async (request: UploadRequest): Promise<void> => {
+  const streamUpload = async (request: UploadCommand): Promise<void> => {
     const streamRequest: WorkspaceUploadStreamQueryDto = {
       workspaceId,
       uploadId: request.id,
@@ -763,7 +763,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       }
       pumpUploadQueue();
     },
-    async copyMove(request: CopyMoveRequest) {
+    async copyMove(request: CopyMoveCommand) {
       const sourceWorkspaceId = request.sources[0]?.scopeId;
       activeRemoteOperations.set(request.id, request.kind);
       try {
@@ -778,7 +778,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
         throw cause;
       }
     },
-    async archive(request: ArchiveRequest) {
+    async archive(request: ArchiveCommand) {
       activeRemoteOperations.set(request.id, request.kind);
       if (request.kind === 'compress') {
         try {
@@ -912,11 +912,12 @@ export const createStatusChannel = (
 });
 
 export const createDockerChannel = (socket: WorkspaceSocket): DockerChannel => ({
-  getStatus: (): Promise<DockerStatus> => socket.request('docker.status', {}),
-  async command(containerId: string, command: DockerCommand) {
+  getStatus: (): Promise<WorkspaceDockerStatusDto> => socket.request('docker.status', {}),
+  async command(containerId: string, command: WorkspaceDockerCommandDto) {
     await socket.request('docker.command', { containerId, command });
   },
-  getStats: (containerId: string): Promise<DockerStats | null> => socket.request('docker.stats', { containerId }),
+  getStats: (containerId: string): Promise<WorkspaceDockerStatsDto | null> =>
+    socket.request('docker.stats', { containerId }),
 });
 
 export const createSshSuspendChannel = (socket: WorkspaceSocket): SshSuspendChannel => ({
@@ -941,7 +942,7 @@ export interface WorkspaceCapabilityAdapters {
   status: StatusChannel;
   docker: DockerChannel;
   suspend: SshSuspendChannel;
-  terminalViewport(): TerminalViewport | undefined;
+  terminalViewport(): WorkspaceTerminalViewportDto | undefined;
   workspaceConnected(): Promise<void>;
   workspaceDisconnected(): void;
   dispose(): void;
@@ -953,7 +954,7 @@ export const createWorkspaceCapabilityAdapters = (
   connectionId: number,
 ): WorkspaceCapabilityAdapters => {
   let workspaceBound = false;
-  let deferredTerminalViewport: TerminalViewport | undefined;
+  let deferredTerminalViewport: WorkspaceTerminalViewportDto | undefined;
   const filesystem = createFilesystemChannel(socket);
   const transfers = createTransferChannel(socket, workspaceId);
   const terminal = createTerminalChannel(socket, {

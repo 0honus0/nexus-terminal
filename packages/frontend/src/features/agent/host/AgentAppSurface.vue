@@ -13,7 +13,7 @@
   import type {
     AgentApprovalModeDto,
     AgentExecutionModeDto,
-    AgentApprovalBatch,
+    AgentApprovalBatchViewModel,
     AgentApprovalViewDto,
     AgentCheckpointViewDto,
     AgentArtifactRefDto,
@@ -31,7 +31,7 @@
     AgentSubagentMessageDto,
     AgentSubagentViewDto,
     AgentThreadViewDto,
-    TargetDenylistView,
+    AgentTargetDenylistViewDto,
     AgentWorkspaceRuntimeAvailabilityDto,
     AgentWorkspaceRuntimeCatalogDto,
   } from '../api/agent-api';
@@ -70,7 +70,7 @@
   const threadRuns = ref<AgentRunViewDto[]>([]);
   const definitions = ref<AgentDefinitionViewDto[]>([]);
   const providers = ref<AgentProviderViewDto[]>([]);
-  const targetDenylist = ref<TargetDenylistView | null>(null);
+  const targetDenylist = ref<AgentTargetDenylistViewDto | null>(null);
   const deniedConnectionIds = computed(
     () => new Set(targetDenylist.value?.list.map((entry) => entry.connectionId) ?? []),
   );
@@ -84,7 +84,7 @@
   const selectedConnectionIds = ref<number[]>(restoredConnectionIds ?? []);
   const connectionSelectionExplicit = ref(restoredConnectionIds !== undefined);
   const attachments = ref<AgentArtifactRefDto[]>([]);
-  const approvalBatch = shallowRef<AgentApprovalBatch | null>(null);
+  const approvalBatch = shallowRef<AgentApprovalBatchViewModel | null>(null);
   const approvals = computed(() => approvalBatch.value?.items ?? []);
   const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'requested'));
   const hardLimits = ref<AgentHardLimitsDto | null>(null);
@@ -95,7 +95,7 @@
   const detailSnapshot = ref<AgentRunSnapshotDto | null>(null);
   const detailCheckpoints = ref<AgentCheckpointViewDto[]>([]);
   const currentRunCheckpoints = ref<AgentCheckpointViewDto[]>([]);
-  const detailApprovalBatch = shallowRef<AgentApprovalBatch | null>(null);
+  const detailApprovalBatch = shallowRef<AgentApprovalBatchViewModel | null>(null);
   const error = ref('');
   let currentRunCheckpointsGeneration = 0;
 
@@ -923,7 +923,10 @@
     busy.value = false;
   };
 
-  const resolveArtifactRefs = async (artifacts: AgentArtifactRefDto[], activeRun?: AgentRunViewDto): Promise<string[]> => {
+  const resolveArtifactRefs = async (
+    artifacts: AgentArtifactRefDto[],
+    activeRun?: AgentRunViewDto,
+  ): Promise<string[]> => {
     const thread = currentThread.value;
     if (!thread) throw new Error('NOT_FOUND');
     for (const artifact of artifacts) {
@@ -974,8 +977,7 @@
         : undefined;
     const created = await facade.createRun({
       threadId: thread.id,
-      text,
-      artifactRefs,
+      input: { text, artifactRefs },
       agentDefinitionId: definition.id,
       model: {
         providerId: selection.provider.id,

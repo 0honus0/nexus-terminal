@@ -2,7 +2,7 @@ import type { Pinia } from 'pinia';
 import { useAuthSession } from './composables/useAuthSession';
 import { useAuthStore } from './store/auth.store';
 
-export type { AuthUser, LoginCredentials, LoginResult, SetupCredentials } from './model/auth';
+export type { AuthUserDto, AuthLoginRequestDto, AuthLoginResultViewModel, AuthSetupRequestDto } from './model/auth';
 export { useAuthSession };
 
 /** Router/bootstrap-only facade. It exposes Auth navigation state without exporting the internal Pinia store. */

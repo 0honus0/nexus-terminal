@@ -7,7 +7,7 @@
     AgentHardLimitsDto,
     AgentRunSnapshotDto,
     AgentRunViewDto,
-    AgentServerClockAnchor,
+    AgentServerClockAnchorViewModel,
     AgentSubagentMessageDto,
     AgentSubagentViewDto,
   } from '../api/agent-api';
@@ -24,12 +24,12 @@
       threadTitles: Record<string, string>;
       hardLimits: AgentHardLimitsDto | null;
       approvals: AgentApprovalViewDto[];
-      approvalClock: AgentServerClockAnchor | null;
+      approvalClock: AgentServerClockAnchorViewModel | null;
       currentCheckpoints?: AgentCheckpointViewDto[];
       detailSnapshot?: AgentRunSnapshotDto | null;
       detailCheckpoints?: AgentCheckpointViewDto[];
       detailApprovals?: AgentApprovalViewDto[];
-      detailApprovalClock?: AgentServerClockAnchor | null;
+      detailApprovalClock?: AgentServerClockAnchorViewModel | null;
       detailSubagents?: AgentSubagentViewDto[];
       selectedSubagentId?: string | null;
       detailSubagentMessages?: AgentSubagentMessageDto[];

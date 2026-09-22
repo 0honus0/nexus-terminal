@@ -1,24 +1,14 @@
+import type { CaptchaConfigUpdateDto, CaptchaProviderDto } from '@nexus-terminal/protocol/auth';
 import type {
-  CaptchaProvider,
-  CaptchaSettings,
-  LayoutNode,
-  PaneName,
-  SidebarConfig,
-  UpdateCaptchaSettingsDto,
-  UpdateSidebarConfigDto,
-} from './settings.types';
+  WorkspaceFocusConfigDto,
+  WorkspaceLayoutNodeDto,
+  WorkspacePaneNameDto,
+  WorkspaceSidebarConfigDto,
+} from '@nexus-terminal/protocol/settings';
 import type { SettingsMigrationRepository } from './settings-migration.repository.port';
 import type { SettingsRepository } from './settings.repository.port';
 import { runSettingsMigrations } from './settings-migrations';
 import { setBackendLogLevel } from '../../shared/logging/logger';
-
-export interface FocusItemConfig {
-  shortcut?: string;
-}
-export interface FocusSwitcherFullConfig {
-  sequence: string[];
-  shortcuts: Record<string, FocusItemConfig>;
-}
 
 const KEYS = {
   sidebar: 'sidebarConfig',
@@ -36,7 +26,7 @@ const KEYS = {
   frontendLogLevel: 'frontendLogLevel',
   backendLogLevel: 'backendLogLevel',
 } as const;
-const VALID_PANES: ReadonlySet<PaneName> = new Set([
+const VALID_PANES: ReadonlySet<WorkspacePaneNameDto> = new Set([
   'connections',
   'terminal',
   'commandBar',
@@ -48,8 +38,8 @@ const VALID_PANES: ReadonlySet<PaneName> = new Set([
   'dockerManager',
   'suspendedSshSessions',
 ]);
-const DEFAULT_SIDEBAR: SidebarConfig = { left: ['connections', 'dockerManager'], right: [] };
-const DEFAULT_CAPTCHA: CaptchaSettings = {
+const DEFAULT_SIDEBAR: WorkspaceSidebarConfigDto = { left: ['connections', 'dockerManager'], right: [] };
+const DEFAULT_CAPTCHA: CaptchaConfigUpdateDto = {
   enabled: false,
   provider: 'none',
   hcaptchaSiteKey: '',
@@ -61,22 +51,22 @@ const DEFAULT_CAPTCHA: CaptchaSettings = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isPaneName = (value: unknown): value is PaneName =>
-  typeof value === 'string' && VALID_PANES.has(value as PaneName);
+const isPaneName = (value: unknown): value is WorkspacePaneNameDto =>
+  typeof value === 'string' && VALID_PANES.has(value as WorkspacePaneNameDto);
 
-const isSidebarConfig = (value: unknown): value is SidebarConfig =>
+const isSidebarConfig = (value: unknown): value is WorkspaceSidebarConfigDto =>
   isRecord(value) &&
   Array.isArray(value.left) &&
   value.left.every(isPaneName) &&
   Array.isArray(value.right) &&
   value.right.every(isPaneName);
 
-const isCaptchaProvider = (value: unknown): value is CaptchaProvider =>
+const isCaptchaProvider = (value: unknown): value is CaptchaProviderDto =>
   value === 'hcaptcha' || value === 'recaptcha' || value === 'none';
 
 const isOptionalString = (value: unknown): boolean => value === undefined || typeof value === 'string';
 
-const isCaptchaSettings = (value: unknown): value is CaptchaSettings =>
+const isCaptchaSettings = (value: unknown): value is CaptchaConfigUpdateDto =>
   isRecord(value) &&
   typeof value.enabled === 'boolean' &&
   isCaptchaProvider(value.provider) &&
@@ -84,7 +74,7 @@ const isCaptchaSettings = (value: unknown): value is CaptchaSettings =>
   isOptionalString(value.hcaptchaSecretKey) &&
   isOptionalString(value.recaptchaSiteKey) &&
   isOptionalString(value.recaptchaSecretKey);
-const DEFAULT_LAYOUT: Omit<LayoutNode, 'id'> = {
+const DEFAULT_LAYOUT: WorkspaceLayoutNodeDto = {
   type: 'container',
   direction: 'horizontal',
   children: [
@@ -193,7 +183,7 @@ export class SettingsService {
   async isIpBlacklistEnabled() {
     return (await this.repository.get(KEYS.blacklist)) !== 'false';
   }
-  async getFocusSwitcherSequence(): Promise<FocusSwitcherFullConfig> {
+  async getFocusSwitcherSequence(): Promise<WorkspaceFocusConfigDto> {
     const raw = await this.repository.get(KEYS.focus);
     if (!raw) return { sequence: [], shortcuts: {} };
     try {
@@ -203,7 +193,7 @@ export class SettingsService {
       return { sequence: [], shortcuts: {} };
     }
   }
-  async setFocusSwitcherSequence(value: FocusSwitcherFullConfig) {
+  async setFocusSwitcherSequence(value: WorkspaceFocusConfigDto) {
     if (!this.validFocus(value)) throw new Error('Invalid focus switcher configuration.');
     await this.repository.set(KEYS.focus, JSON.stringify(value));
   }
@@ -214,7 +204,7 @@ export class SettingsService {
     JSON.parse(value);
     await this.repository.set(KEYS.layout, value);
   }
-  async setWorkspaceLayoutConfig(layout: string, config: unknown) {
+  async setWorkspaceLayoutConfig(layout: string, config: WorkspaceSidebarConfigDto) {
     JSON.parse(layout);
     const sidebar = this.normalizeSidebarConfig(config);
     await this.repository.setMany({
@@ -236,16 +226,16 @@ export class SettingsService {
     this.assertInt(v, 1, 86400);
     await this.repository.set(KEYS.remoteRefresh, String(v));
   }
-  async getSidebarConfig(): Promise<SidebarConfig> {
+  async getSidebarConfig(): Promise<WorkspaceSidebarConfigDto> {
     return this.readJson(KEYS.sidebar, DEFAULT_SIDEBAR, isSidebarConfig);
   }
-  async setSidebarConfig(config: UpdateSidebarConfigDto) {
+  async setSidebarConfig(config: WorkspaceSidebarConfigDto) {
     await this.repository.set(KEYS.sidebar, JSON.stringify(this.normalizeSidebarConfig(config)));
   }
-  async getCaptchaConfig(): Promise<CaptchaSettings> {
+  async getCaptchaConfig(): Promise<CaptchaConfigUpdateDto> {
     return this.readJson(KEYS.captcha, DEFAULT_CAPTCHA, isCaptchaSettings);
   }
-  async setCaptchaConfig(dto: UpdateCaptchaSettingsDto) {
+  async setCaptchaConfig(dto: CaptchaConfigUpdateDto) {
     const current = await this.getCaptchaConfig();
     const next = { ...current, ...dto };
     if (typeof next.enabled !== 'boolean' || !isCaptchaProvider(next.provider))
@@ -272,21 +262,29 @@ export class SettingsService {
       return fallback;
     }
   }
-  private normalizeSidebarConfig(config: unknown): SidebarConfig {
+  private normalizeSidebarConfig(config: unknown): WorkspaceSidebarConfigDto {
     if (!config || typeof config !== 'object' || Array.isArray(config))
       throw new Error('Invalid sidebar configuration.');
     const candidate = config as { left?: unknown; right?: unknown };
     if (!Array.isArray(candidate.left) || !Array.isArray(candidate.right))
       throw new Error('Invalid sidebar configuration.');
     const panes = [...candidate.left, ...candidate.right];
-    if (!panes.every((pane): pane is PaneName => typeof pane === 'string' && VALID_PANES.has(pane as PaneName))) {
-      const invalid = panes.find((pane) => typeof pane !== 'string' || !VALID_PANES.has(pane as PaneName));
+    if (
+      !panes.every(
+        (pane): pane is WorkspacePaneNameDto =>
+          typeof pane === 'string' && VALID_PANES.has(pane as WorkspacePaneNameDto),
+      )
+    ) {
+      const invalid = panes.find((pane) => typeof pane !== 'string' || !VALID_PANES.has(pane as WorkspacePaneNameDto));
       throw new Error(`Invalid sidebar pane: ${String(invalid)}`);
     }
     if (new Set(panes).size !== panes.length) throw new Error('Duplicate sidebar panes are not allowed.');
-    return { left: [...candidate.left] as PaneName[], right: [...candidate.right] as PaneName[] };
+    return {
+      left: [...candidate.left] as WorkspacePaneNameDto[],
+      right: [...candidate.right] as WorkspacePaneNameDto[],
+    };
   }
-  private validFocus(value: unknown): value is FocusSwitcherFullConfig {
+  private validFocus(value: unknown): value is WorkspaceFocusConfigDto {
     if (
       !isRecord(value) ||
       !Array.isArray(value.sequence) ||

@@ -3,10 +3,10 @@ import { defineStore } from 'pinia';
 import { apiErrorMessage } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { serverTransfersApi } from '../api/serverTransfersApi';
-import { toTransferTask, type SendFilesRequest, type ServerTransferTask } from '../model/serverTransfer';
+import { toTransferTask, type SendFilesRequestDto, type ServerTransferTaskDto } from '../model/serverTransfer';
 
 export const useServerTransfersStore = defineStore('serverTransfers', () => {
-  const items = ref<ServerTransferTask[]>([]);
+  const items = ref<ServerTransferTaskDto[]>([]);
   const loading = ref(false);
   const error = ref('');
   let timer: number | undefined;
@@ -75,7 +75,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
     return refreshInFlight;
   };
 
-  const send = async (request: SendFilesRequest): Promise<ServerTransferTask> => {
+  const send = async (request: SendFilesRequestDto): Promise<ServerTransferTaskDto> => {
     const task = await serverTransfersApi.send(request);
     invalidateInFlightRefresh();
     items.value = [task, ...items.value.filter((item) => item.taskId !== task.taskId)];

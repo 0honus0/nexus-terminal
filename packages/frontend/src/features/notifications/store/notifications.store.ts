@@ -2,11 +2,11 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiErrorMessage } from '@/client/http';
 import { notificationsApi } from '../api/notificationsApi';
-import type { NotificationSetting, NotificationSettingInput } from '../model/notification';
+import type { NotificationSettingDto, NotificationSettingCreateRequestDto } from '../model/notification';
 
 let loadGeneration = 0;
 export const useNotificationsStore = defineStore('notifications', () => {
-  const items = ref<NotificationSetting[]>([]),
+  const items = ref<NotificationSettingDto[]>([]),
     loading = ref(false),
     error = ref<string | null>(null);
   async function load() {
@@ -28,7 +28,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     loading.value = false;
     error.value = null;
   }
-  async function save(input: NotificationSettingInput, id?: number) {
+  async function save(input: NotificationSettingCreateRequestDto, id?: number) {
     const saved = id ? await notificationsApi.update(id, input) : await notificationsApi.create(input);
     const index = items.value.findIndex((x) => x.id === saved.id);
     if (index >= 0) items.value[index] = saved;

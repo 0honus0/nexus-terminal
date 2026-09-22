@@ -2,14 +2,14 @@ import type { RemoteDesktopSessionDto } from '@nexus-terminal/protocol/connectio
 import { httpClient } from '@/client/http';
 import { createWebSocketUrl } from '@/client/websocket';
 import type { RemoteDesktopSessionPort } from '../ports/remote-desktop-session-port';
-import type { RemoteDesktopDisplay, RemoteDesktopProtocol, RemoteDesktopSession } from '../model/remoteDesktop';
+import type { RemoteDesktopDisplayDto, RemoteDesktopProtocolDto } from '../model/remoteDesktop';
 
 export const remoteDesktopApi: RemoteDesktopSessionPort = {
   async create(
     connectionId: number,
-    protocol: RemoteDesktopProtocol,
-    display: RemoteDesktopDisplay,
-  ): Promise<RemoteDesktopSession> {
+    protocol: RemoteDesktopProtocolDto,
+    display: RemoteDesktopDisplayDto,
+  ): Promise<RemoteDesktopSessionDto> {
     const path = protocol === 'RDP' ? 'rdp-session' : 'vnc-session';
     return (
       await httpClient.post<RemoteDesktopSessionDto>(`/connections/${connectionId}/${path}`, undefined, {

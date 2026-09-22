@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia';
 import { proxiesApi } from '../api/proxiesApi';
-import type { Proxy, ProxyInput } from '../model/proxy';
+import type { ProxyDto, ProxyCreateRequestDto } from '../model/proxy';
 
-let loadPromise: Promise<Proxy[]> | null = null;
+let loadPromise: Promise<ProxyDto[]> | null = null;
 let cacheGeneration = 0;
 
 export const useProxiesStore = defineStore('proxies', {
-  state: () => ({ items: [] as Proxy[], loaded: false }),
+  state: () => ({ items: [] as ProxyDto[], loaded: false }),
   actions: {
     reset() {
       cacheGeneration += 1;
@@ -31,12 +31,12 @@ export const useProxiesStore = defineStore('proxies', {
         if (loadPromise === request) loadPromise = null;
       }
     },
-    async create(input: ProxyInput) {
+    async create(input: ProxyCreateRequestDto) {
       const item = await proxiesApi.create(input);
       this.items.push(item);
       return item;
     },
-    async update(id: number, input: Partial<ProxyInput>) {
+    async update(id: number, input: Partial<ProxyCreateRequestDto>) {
       const item = await proxiesApi.update(id, input);
       const i = this.items.findIndex((x) => x.id === id);
       if (i >= 0) this.items[i] = item;

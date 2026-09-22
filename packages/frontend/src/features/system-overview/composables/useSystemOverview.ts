@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { apiErrorMessage } from '@/client/http';
 import { systemOverviewApi } from '../api/systemOverviewApi';
-import type { ResourceStatus, SshResourceStatus } from '../model/systemOverview';
+import type { ResourceStatusDto, SshResourceStatusDto } from '../model/systemOverview';
 
 export interface SystemOverviewLoadOptions {
   local?: boolean;
@@ -9,8 +9,8 @@ export interface SystemOverviewLoadOptions {
 }
 
 export const useSystemOverview = () => {
-  const local = ref<ResourceStatus | null>(null);
-  const remote = ref<SshResourceStatus[]>([]);
+  const local = ref<ResourceStatusDto | null>(null);
+  const remote = ref<SshResourceStatusDto[]>([]);
   const localLoading = ref(false);
   const remoteLoading = ref(false);
   const localError = ref<string | null>(null);

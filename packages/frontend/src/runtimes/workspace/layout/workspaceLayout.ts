@@ -1,38 +1,25 @@
 import { computed, ref, toRaw } from 'vue';
+import type {
+  WorkspaceLayoutNodeDto,
+  WorkspaceLayoutSettingsRequestDto,
+  WorkspacePaneNameDto,
+  WorkspaceSidebarConfigDto,
+} from '@nexus-terminal/protocol/settings';
 import { httpClient } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { createLatestValueSaver } from '@/foundation/async';
 
-export type WorkspacePaneName =
-  | 'connections'
-  | 'terminal'
-  | 'commandBar'
-  | 'fileManager'
-  | 'editor'
-  | 'statusMonitor'
-  | 'commandHistory'
-  | 'quickCommands'
-  | 'dockerManager'
-  | 'suspendedSshSessions';
+export type { WorkspacePaneNameDto, WorkspaceSidebarConfigDto } from '@nexus-terminal/protocol/settings';
 
-export interface WorkspaceLayoutNode {
+export interface WorkspaceLayoutNodeState extends Omit<WorkspaceLayoutNodeDto, 'id' | 'children'> {
   id: string;
-  type: 'pane' | 'container';
-  component?: WorkspacePaneName;
-  direction?: 'horizontal' | 'vertical';
-  children?: WorkspaceLayoutNode[];
-  size?: number;
-}
-
-export interface WorkspaceSidebarConfig {
-  left: WorkspacePaneName[];
-  right: WorkspacePaneName[];
+  children?: WorkspaceLayoutNodeState[];
 }
 
 export const WORKSPACE_LAYOUT_MIN_SIZE = 5;
 const WORKSPACE_LAYOUT_MAX_CHILDREN = Math.floor(100 / WORKSPACE_LAYOUT_MIN_SIZE);
 
-const paneNames = new Set<WorkspacePaneName>([
+const paneNames = new Set<WorkspacePaneNameDto>([
   'connections',
   'terminal',
   'commandBar',
@@ -45,7 +32,7 @@ const paneNames = new Set<WorkspacePaneName>([
   'suspendedSshSessions',
 ]);
 
-export const createDefaultWorkspaceLayout = (): WorkspaceLayoutNode => ({
+export const createDefaultWorkspaceLayout = (): WorkspaceLayoutNodeState => ({
   id: 'workspace-root',
   type: 'container',
   direction: 'horizontal',
@@ -104,9 +91,9 @@ const sameSize = (left: number | undefined, right: number): boolean =>
   typeof left === 'number' && Math.abs(left - right) < 0.0001;
 
 export const rebalanceWorkspaceLayoutChildren = (
-  children: readonly WorkspaceLayoutNode[],
+  children: readonly WorkspaceLayoutNodeState[],
   changedIndex?: number,
-): WorkspaceLayoutNode[] => {
+): WorkspaceLayoutNodeState[] => {
   if (!children.length) return [];
   const currentSizes = normalizeSizes(children.map((child) => child.size));
   if (changedIndex === undefined || changedIndex < 0 || changedIndex >= children.length) {
@@ -136,10 +123,10 @@ export const rebalanceWorkspaceLayoutChildren = (
 };
 
 export const appendWorkspaceLayoutChild = (
-  children: readonly WorkspaceLayoutNode[],
-  child: WorkspaceLayoutNode,
+  children: readonly WorkspaceLayoutNodeState[],
+  child: WorkspaceLayoutNodeState,
   preferredSize = 25,
-): WorkspaceLayoutNode[] => {
+): WorkspaceLayoutNodeState[] => {
   if (children.length >= WORKSPACE_LAYOUT_MAX_CHILDREN) return [...children];
   const nextSize = children.length
     ? Math.min(Math.max(preferredSize, WORKSPACE_LAYOUT_MIN_SIZE), 100 - WORKSPACE_LAYOUT_MIN_SIZE * children.length)
@@ -158,7 +145,7 @@ export const appendWorkspaceLayoutChild = (
   ];
 };
 
-export const normalizeWorkspaceLayout = (node: WorkspaceLayoutNode): WorkspaceLayoutNode => {
+export const normalizeWorkspaceLayout = (node: WorkspaceLayoutNodeState): WorkspaceLayoutNodeState => {
   if (node.type !== 'container') return node;
   const children = (node.children ?? []).map(normalizeWorkspaceLayout);
   const nextChildren = rebalanceWorkspaceLayoutChildren(children);
@@ -167,7 +154,7 @@ export const normalizeWorkspaceLayout = (node: WorkspaceLayoutNode): WorkspaceLa
   return { ...node, children: nextChildren };
 };
 
-const cloneWorkspaceLayout = (node: WorkspaceLayoutNode): WorkspaceLayoutNode => {
+const cloneWorkspaceLayout = (node: WorkspaceLayoutNodeState): WorkspaceLayoutNodeState => {
   const rawNode = toRaw(node);
   if (rawNode.type !== 'container') return { ...rawNode };
   return { ...rawNode, children: (rawNode.children ?? []).map(cloneWorkspaceLayout) };
@@ -184,14 +171,14 @@ const stableWorkspaceLayoutNodeId = (path: string, usedIds: Set<string>): string
 
 const LAYOUT_STORAGE_KEY = 'nexus_terminal_layout_config';
 const SIDEBAR_STORAGE_KEY = 'nexus_terminal_sidebar_config';
-const defaultSidebars = (): WorkspaceSidebarConfig => ({ left: ['connections', 'dockerManager'], right: [] });
+const defaultSidebars = (): WorkspaceSidebarConfigDto => ({ left: ['connections', 'dockerManager'], right: [] });
 
-const validateLayout = (value: unknown, allowMissingIds = false): value is WorkspaceLayoutNode => {
+const validateLayout = (value: unknown, allowMissingIds = false): value is WorkspaceLayoutNodeState => {
   const nodeIds = new Set<string>();
-  const components = new Set<WorkspacePaneName>();
-  const visit = (candidate: unknown, depth = 0): candidate is WorkspaceLayoutNode => {
+  const components = new Set<WorkspacePaneNameDto>();
+  const visit = (candidate: unknown, depth = 0): candidate is WorkspaceLayoutNodeState => {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) || depth > 12) return false;
-    const node = candidate as Partial<WorkspaceLayoutNode>;
+    const node = candidate as Partial<WorkspaceLayoutNodeState>;
     const missingId = node.id === undefined || node.id === '';
     if (missingId) {
       if (!allowMissingIds) return false;
@@ -200,9 +187,9 @@ const validateLayout = (value: unknown, allowMissingIds = false): value is Works
       nodeIds.add(node.id);
     }
     if (node.type === 'pane') {
-      if (typeof node.component !== 'string' || !paneNames.has(node.component as WorkspacePaneName)) return false;
-      if (components.has(node.component as WorkspacePaneName)) return false;
-      components.add(node.component as WorkspacePaneName);
+      if (typeof node.component !== 'string' || !paneNames.has(node.component as WorkspacePaneNameDto)) return false;
+      if (components.has(node.component as WorkspacePaneNameDto)) return false;
+      components.add(node.component as WorkspacePaneNameDto);
       return true;
     }
     if (node.type !== 'container' || (node.direction !== 'horizontal' && node.direction !== 'vertical')) return false;
@@ -211,9 +198,9 @@ const validateLayout = (value: unknown, allowMissingIds = false): value is Works
   return visit(value);
 };
 
-const assignStableWorkspaceLayoutNodeIds = (node: WorkspaceLayoutNode): WorkspaceLayoutNode => {
+const assignStableWorkspaceLayoutNodeIds = (node: WorkspaceLayoutNodeState): WorkspaceLayoutNodeState => {
   const explicitIds = new Set<string>();
-  const collectExplicitIds = (candidate: WorkspaceLayoutNode): void => {
+  const collectExplicitIds = (candidate: WorkspaceLayoutNodeState): void => {
     if (typeof candidate.id === 'string' && candidate.id) explicitIds.add(candidate.id);
     if (candidate.type === 'container') {
       for (const child of candidate.children ?? []) collectExplicitIds(child);
@@ -222,7 +209,7 @@ const assignStableWorkspaceLayoutNodeIds = (node: WorkspaceLayoutNode): Workspac
   collectExplicitIds(node);
 
   const usedIds = new Set(explicitIds);
-  const visit = (candidate: WorkspaceLayoutNode, path: string): WorkspaceLayoutNode => {
+  const visit = (candidate: WorkspaceLayoutNodeState, path: string): WorkspaceLayoutNodeState => {
     const id =
       typeof candidate.id === 'string' && candidate.id ? candidate.id : stableWorkspaceLayoutNodeId(path, usedIds);
     if (candidate.type !== 'container') return { ...candidate, id };
@@ -235,15 +222,15 @@ const assignStableWorkspaceLayoutNodeIds = (node: WorkspaceLayoutNode): Workspac
   return visit(node, 'root');
 };
 
-const normalizeWorkspaceLayoutCandidate = (value: unknown): WorkspaceLayoutNode | null => {
+const normalizeWorkspaceLayoutCandidate = (value: unknown): WorkspaceLayoutNodeState | null => {
   if (!validateLayout(value, true)) return null;
   const withIds = assignStableWorkspaceLayoutNodeIds(value);
   return validateLayout(withIds) ? normalizeWorkspaceLayout(withIds) : null;
 };
 
-const layoutPaneNames = (layout: WorkspaceLayoutNode): Set<WorkspacePaneName> => {
-  const result = new Set<WorkspacePaneName>();
-  const visit = (node: WorkspaceLayoutNode): void => {
+const layoutPaneNames = (layout: WorkspaceLayoutNodeState): Set<WorkspacePaneNameDto> => {
+  const result = new Set<WorkspacePaneNameDto>();
+  const visit = (node: WorkspaceLayoutNodeState): void => {
     if (node.type === 'pane' && node.component) result.add(node.component);
     else for (const child of node.children ?? []) visit(child);
   };
@@ -251,9 +238,9 @@ const layoutPaneNames = (layout: WorkspaceLayoutNode): Set<WorkspacePaneName> =>
   return result;
 };
 
-const validSidebar = (value: unknown, layout: WorkspaceLayoutNode): value is WorkspaceSidebarConfig => {
+const validSidebar = (value: unknown, layout: WorkspaceLayoutNodeState): value is WorkspaceSidebarConfigDto => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const config = value as Partial<WorkspaceSidebarConfig>;
+  const config = value as Partial<WorkspaceSidebarConfigDto>;
   if (!Array.isArray(config.left) || !Array.isArray(config.right)) return false;
   const all = [...config.left, ...config.right];
   if (!all.every((name) => paneNames.has(name))) return false;
@@ -266,7 +253,7 @@ const validSidebar = (value: unknown, layout: WorkspaceLayoutNode): value is Wor
   );
 };
 
-const defaultSidebarsFor = (layout: WorkspaceLayoutNode): WorkspaceSidebarConfig => {
+const defaultSidebarsFor = (layout: WorkspaceLayoutNodeState): WorkspaceSidebarConfigDto => {
   const mainPanes = layoutPaneNames(layout);
   const defaults = defaultSidebars();
   return {
@@ -294,16 +281,16 @@ const writeStored = (key: string, value: unknown): void => {
   }
 };
 
-const tree = ref<WorkspaceLayoutNode>(createDefaultWorkspaceLayout());
-const sidebars = ref<WorkspaceSidebarConfig>(defaultSidebars());
+const tree = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
+const sidebars = ref<WorkspaceSidebarConfigDto>(defaultSidebars());
 const loaded = ref(false);
 const loading = ref(false);
 
 const updateContainerSizes = (
-  node: WorkspaceLayoutNode,
+  node: WorkspaceLayoutNodeState,
   containerId: string,
   sizes: readonly number[],
-): WorkspaceLayoutNode => {
+): WorkspaceLayoutNodeState => {
   if (node.id === containerId && node.type === 'container') {
     const children = node.children ?? [];
     if (children.length !== sizes.length) return node;
@@ -326,10 +313,11 @@ const updateContainerSizes = (
   return changed ? { ...node, children } : node;
 };
 
-const resizeSaver = createLatestValueSaver<WorkspaceLayoutNode>({
+const resizeSaver = createLatestValueSaver<WorkspaceLayoutNodeState>({
   delayMs: 1000,
   async save(nextTree) {
-    await httpClient.put('/settings/layout', nextTree);
+    const request: WorkspaceLayoutNodeDto = nextTree;
+    await httpClient.put('/settings/layout', request);
     writeStored(LAYOUT_STORAGE_KEY, nextTree);
   },
   onError: (error) => logger.error({ err: error }, 'Failed to persist resized workspace layout'),
@@ -340,21 +328,21 @@ export const workspaceLayout = {
   sidebars,
   loaded: computed(() => loaded.value),
   loading: computed(() => loading.value),
-  paneNames: [...paneNames] as readonly WorkspacePaneName[],
+  paneNames: [...paneNames] as readonly WorkspacePaneNameDto[],
   async load(force = false): Promise<void> {
     if (loaded.value && !force) return;
     loading.value = true;
     try {
       const [layoutResult, sidebarResult] = await Promise.allSettled([
-        httpClient.get<unknown>('/settings/layout'),
-        httpClient.get<unknown>('/settings/sidebar'),
+        httpClient.get<WorkspaceLayoutNodeDto | null>('/settings/layout'),
+        httpClient.get<WorkspaceSidebarConfigDto>('/settings/sidebar'),
       ]);
 
       const backendLayout =
         layoutResult.status === 'fulfilled' ? normalizeWorkspaceLayoutCandidate(layoutResult.value.data) : null;
       const storedLayoutData = backendLayout
         ? null
-        : readStored<WorkspaceLayoutNode>(LAYOUT_STORAGE_KEY, (value) => validateLayout(value, true));
+        : readStored<WorkspaceLayoutNodeState>(LAYOUT_STORAGE_KEY, (value) => validateLayout(value, true));
       const storedLayout = storedLayoutData ? normalizeWorkspaceLayoutCandidate(storedLayoutData) : null;
       const nextTree = normalizeWorkspaceLayout(backendLayout ?? storedLayout ?? createDefaultWorkspaceLayout());
 
@@ -364,7 +352,7 @@ export const workspaceLayout = {
           : null;
       const storedSidebar = backendSidebar
         ? null
-        : readStored<WorkspaceSidebarConfig>(SIDEBAR_STORAGE_KEY, (value): value is WorkspaceSidebarConfig =>
+        : readStored<WorkspaceSidebarConfigDto>(SIDEBAR_STORAGE_KEY, (value): value is WorkspaceSidebarConfigDto =>
             validSidebar(value, nextTree),
           );
       const nextSidebars = backendSidebar ?? storedSidebar ?? defaultSidebarsFor(nextTree);
@@ -378,12 +366,13 @@ export const workspaceLayout = {
       loading.value = false;
     }
   },
-  async save(nextTree: WorkspaceLayoutNode, nextSidebars = sidebars.value): Promise<void> {
+  async save(nextTree: WorkspaceLayoutNodeState, nextSidebars = sidebars.value): Promise<void> {
     const candidate = normalizeWorkspaceLayoutCandidate(nextTree);
     const normalizedTree = candidate ? cloneWorkspaceLayout(candidate) : null;
     if (!normalizedTree || !validSidebar(nextSidebars, normalizedTree)) throw new Error('Invalid Workspace layout.');
     await resizeSaver.flush();
-    await httpClient.put('/settings/workspace-layout', { layout: normalizedTree, sidebar: nextSidebars });
+    const request: WorkspaceLayoutSettingsRequestDto = { layout: normalizedTree, sidebar: nextSidebars };
+    await httpClient.put('/settings/workspace-layout', request);
     tree.value = normalizedTree;
     sidebars.value = nextSidebars;
     loaded.value = true;

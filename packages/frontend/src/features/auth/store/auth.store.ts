@@ -4,17 +4,17 @@ import { logger } from '@/client/logging/logger';
 import { authApi } from '../api/authApi';
 import type {
   AuthSessionState,
-  AuthUser,
-  LoginCredentials,
-  LoginResult,
-  SetupCredentials,
+  AuthUserDto,
+  AuthLoginRequestDto,
+  AuthLoginResultViewModel,
+  AuthSetupRequestDto,
   SetupState,
 } from '../model/auth';
 
 interface AuthStoreState {
   setupState: SetupState;
   sessionState: AuthSessionState;
-  user: AuthUser | null;
+  user: AuthUserDto | null;
   pendingSecondFactor: boolean;
 }
 
@@ -61,7 +61,7 @@ export const useAuthStore = defineStore('auth', {
       return this.sessionState;
     },
 
-    async setup(credentials: SetupCredentials): Promise<void> {
+    async setup(credentials: AuthSetupRequestDto): Promise<void> {
       await authApi.setup(credentials);
       this.setupState = 'complete';
       this.sessionState = 'anonymous';
@@ -69,7 +69,7 @@ export const useAuthStore = defineStore('auth', {
       this.pendingSecondFactor = false;
     },
 
-    async login(credentials: LoginCredentials): Promise<LoginResult> {
+    async login(credentials: AuthLoginRequestDto): Promise<AuthLoginResultViewModel> {
       const result = await authApi.login(credentials);
       if (result.status === 'two-factor-required') {
         this.sessionState = 'anonymous';
@@ -85,7 +85,7 @@ export const useAuthStore = defineStore('auth', {
       return result;
     },
 
-    async verifyTwoFactor(token: string): Promise<AuthUser> {
+    async verifyTwoFactor(token: string): Promise<AuthUserDto> {
       if (!this.pendingSecondFactor) throw new Error('No two-factor login challenge is active.');
       try {
         const user = await authApi.verifyTwoFactor(token);

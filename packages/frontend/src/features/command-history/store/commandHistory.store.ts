@@ -1,9 +1,9 @@
 import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import { commandHistoryApi } from '../api/commandHistoryApi';
-import type { CommandHistoryEntry } from '../model/commandHistory';
+import type { CommandHistoryEntryDto } from '../model/commandHistory';
 export const useCommandHistoryStore = defineStore('command-history', () => {
-  const items = ref<CommandHistoryEntry[]>([]),
+  const items = ref<CommandHistoryEntryDto[]>([]),
     search = ref(''),
     loading = ref(false),
     error = ref<string | null>(null),

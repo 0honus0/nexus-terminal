@@ -5,10 +5,9 @@ import type {
   SuspendedSessionRenameResponseDto,
 } from '@nexus-terminal/protocol/ssh-suspend';
 import { httpClient } from '@/client/http';
-import type { SuspendedSession } from '../model/sshSuspend';
 
 export const sshSuspendApi = {
-  async list(): Promise<SuspendedSession[]> {
+  async list(): Promise<SuspendedSessionDto[]> {
     return (await httpClient.get<SuspendedSessionDto[]>('/ssh-suspend/suspended-sessions')).data;
   },
 

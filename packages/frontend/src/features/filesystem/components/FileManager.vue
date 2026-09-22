@@ -21,7 +21,7 @@
     ArchiveCompressionFormat,
     ArchiveCompressionIntent,
     LocalUploadFile,
-    RemoteFileEntry,
+    WorkspaceRemoteFileEntryDto,
   } from '../model/filesystem';
 
   const props = withDefaults(
@@ -40,19 +40,19 @@
     { confirmDelete: true, rowScale: 1, showEditorButton: false },
   );
   const emit = defineEmits<{
-    openFile: [entry: RemoteFileEntry];
-    openAsText: [entry: RemoteFileEntry];
+    openFile: [entry: WorkspaceRemoteFileEntryDto];
+    openAsText: [entry: WorkspaceRemoteFileEntryDto];
     openEditor: [];
     upload: [path: string];
     uploadFiles: [path: string, files: LocalUploadFile[], directories: string[]];
-    copyToClipboard: [entries: RemoteFileEntry[]];
-    cutToClipboard: [entries: RemoteFileEntry[]];
-    moveTo: [entries: RemoteFileEntry[], destination: string];
+    copyToClipboard: [entries: WorkspaceRemoteFileEntryDto[]];
+    cutToClipboard: [entries: WorkspaceRemoteFileEntryDto[]];
+    moveTo: [entries: WorkspaceRemoteFileEntryDto[], destination: string];
     paste: [destination: string];
-    compress: [entries: RemoteFileEntry[]];
+    compress: [entries: WorkspaceRemoteFileEntryDto[]];
     compressPreset: [intent: ArchiveCompressionIntent];
-    decompress: [entry: RemoteFileEntry];
-    sendFiles: [entries: RemoteFileEntry[]];
+    decompress: [entry: WorkspaceRemoteFileEntryDto];
+    sendFiles: [entries: WorkspaceRemoteFileEntryDto[]];
     rowScale: [scale: number];
     columnWidths: [widths: Record<string, number>];
   }>();
@@ -64,7 +64,7 @@
   const browser = filesystemState.browser;
   const catalog = useFilesystemCatalog();
   const action = ref<'mkdir' | 'file' | 'rename' | 'chmod' | null>(null);
-  const target = ref<RemoteFileEntry | null>(null);
+  const target = ref<WorkspaceRemoteFileEntryDto | null>(null);
   const value = ref('');
   const catalogVisible = ref(false);
   const searchExpanded = ref(false);
@@ -83,12 +83,12 @@
   const keyboardCursor = ref<string | null>(null);
   const multiSelect = ref(false);
   const dragging = ref(false);
-  const draggedRemoteEntries = ref<RemoteFileEntry[]>([]);
+  const draggedRemoteEntries = ref<WorkspaceRemoteFileEntryDto[]>([]);
   const remoteDragTarget = ref<string | null>(null);
   let remoteDragScrollTimer: number | undefined;
   let remoteDragScrollDirection = 0;
   type FileManagerContext =
-    | { scope: 'entry'; entry: RemoteFileEntry; x: number; y: number }
+    | { scope: 'entry'; entry: WorkspaceRemoteFileEntryDto; x: number; y: number }
     | { scope: 'current-directory' | 'parent-directory'; destination: string; x: number; y: number };
   const context = ref<FileManagerContext | null>(null);
   const contextDownloadLabel = computed(() => {
@@ -396,9 +396,10 @@
     const index = normalized.lastIndexOf('/');
     return index <= 0 ? '/' : normalized.slice(0, index);
   };
-  const isArchive = (entry: RemoteFileEntry) => /\.(zip|tar\.gz|tgz|tar\.bz2|tbz2)$/i.test(entry.name);
-  const canOpenAsText = (entry: RemoteFileEntry) => !entry.metadata.isDirectory && /\.(md|markdown)$/i.test(entry.name);
-  const displayEntryName = (entry: RemoteFileEntry) =>
+  const isArchive = (entry: WorkspaceRemoteFileEntryDto) => /\.(zip|tar\.gz|tgz|tar\.bz2|tbz2)$/i.test(entry.name);
+  const canOpenAsText = (entry: WorkspaceRemoteFileEntryDto) =>
+    !entry.metadata.isDirectory && /\.(md|markdown)$/i.test(entry.name);
+  const displayEntryName = (entry: WorkspaceRemoteFileEntryDto) =>
     browser.searchActive.value && 'relativePath' in entry && typeof entry.relativePath === 'string'
       ? entry.relativePath
       : entry.name;
@@ -541,7 +542,7 @@
     },
   );
 
-  const activate = async (entry: RemoteFileEntry): Promise<void> => {
+  const activate = async (entry: WorkspaceRemoteFileEntryDto): Promise<void> => {
     try {
       if (entry.metadata.isSymbolicLink) {
         const resolved = await props.channel.realpath(entry.path);
@@ -575,23 +576,23 @@
       );
     }
   };
-  const openContextAt = (clientX: number, clientY: number, entry: RemoteFileEntry): void => {
+  const openContextAt = (clientX: number, clientY: number, entry: WorkspaceRemoteFileEntryDto): void => {
     if (!browser.selected.value.has(entry.path)) browser.select(entry, 'only');
     context.value = { scope: 'entry', entry, x: clientX, y: clientY };
   };
-  const contextEntries = (): RemoteFileEntry[] => {
+  const contextEntries = (): WorkspaceRemoteFileEntryDto[] => {
     const entry = context.value?.scope === 'entry' ? context.value.entry : undefined;
     if (!entry) return [];
     if (!browser.selected.value.has(entry.path)) return [entry];
     const selected = selectedEntries();
     return selected.length ? selected : [entry];
   };
-  const longPress = useLongPressGesture<RemoteFileEntry>({
+  const longPress = useLongPressGesture<WorkspaceRemoteFileEntryDto>({
     enabled: () => device.isMobile.value,
     vibrateMs: 15,
     onTrigger: (entry, point) => openContextAt(point.x, point.y, entry),
   });
-  const clickEntry = (event: MouseEvent, entry: RemoteFileEntry) => {
+  const clickEntry = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
     if (longPress.consumeClick(event)) return;
     keyboardCursor.value = entry.path;
     if (device.isMobile.value || device.hasTouch.value) {
@@ -610,7 +611,7 @@
     browser.select(entry, 'only');
     if (entry.metadata.isDirectory) void activate(entry);
   };
-  const doubleClickEntry = (event: MouseEvent, entry: RemoteFileEntry) => {
+  const doubleClickEntry = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
     if (device.isMobile.value || device.hasTouch.value || multiSelect.value) return;
     if (event.ctrlKey || event.metaKey || event.shiftKey || entry.metadata.isDirectory) return;
     event.preventDefault();
@@ -650,7 +651,7 @@
     row?.focus({ preventScroll: true });
     row?.closest('tr')?.scrollIntoView({ block: 'nearest' });
   };
-  const ensureKeyboardSelection = (): RemoteFileEntry[] => {
+  const ensureKeyboardSelection = (): WorkspaceRemoteFileEntryDto[] => {
     const selected = selectedEntries();
     if (selected.length) return selected;
     const cursor = keyboardCursor.value;
@@ -788,7 +789,7 @@
       if (entry.path === destination || parentOf(entry.path) === destination) return false;
       return !(entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`));
     });
-  const startRemoteDrag = (event: DragEvent, entry: RemoteFileEntry) => {
+  const startRemoteDrag = (event: DragEvent, entry: WorkspaceRemoteFileEntryDto) => {
     if (device.isMobile.value || !event.dataTransfer) return;
     const selection = selectedEntries();
     draggedRemoteEntries.value = browser.selected.value.has(entry.path) && selection.length ? selection : [entry];
@@ -854,7 +855,7 @@
     multiSelect.value = !multiSelect.value;
     browser.clearSelection();
   };
-  const begin = (type: typeof action.value, entry?: RemoteFileEntry) => {
+  const begin = (type: typeof action.value, entry?: WorkspaceRemoteFileEntryDto) => {
     action.value = type;
     target.value = entry ?? null;
     value.value =
@@ -886,7 +887,7 @@
       feedback.notifyError(action.value === 'chmod' ? `${t('fileManager.errors.chmodFailed')}: ${detail}` : detail);
     }
   };
-  const remove = async (entries: RemoteFileEntry[]) => {
+  const remove = async (entries: WorkspaceRemoteFileEntryDto[]) => {
     if (!entries.length) return;
     context.value = null;
     const key =
@@ -1043,7 +1044,7 @@
       changingTerminalPath.value = false;
     }
   };
-  const download = async (entries: RemoteFileEntry[]) => {
+  const download = async (entries: WorkspaceRemoteFileEntryDto[]) => {
     context.value = null;
     const downloadPort = props.download;
     if (!downloadPort || !entries.length) return;
@@ -1071,7 +1072,7 @@
       }),
     );
   };
-  const copyPath = async (entry: RemoteFileEntry) => {
+  const copyPath = async (entry: WorkspaceRemoteFileEntryDto) => {
     context.value = null;
     try {
       await writeClipboardText(entry.path);
@@ -1080,7 +1081,7 @@
       feedback.notifyError(t('fileManager.errors.copyPathFailed'));
     }
   };
-  const openContext = (event: MouseEvent, entry: RemoteFileEntry) => {
+  const openContext = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
     event.preventDefault();
     if (!browser.selected.value.has(entry.path) && !event.ctrlKey && !event.metaKey && !event.shiftKey)
       browser.select(entry, 'only');

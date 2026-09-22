@@ -7,7 +7,7 @@
   import { useFeedback } from '@/shared/feedback/public';
   import { focusRegistry } from '@/shared/focus/public';
   import { useCommandHistoryStore } from '../store/commandHistory.store';
-  import type { CommandHistoryEntry, ExecuteHistoryIntent } from '../model/commandHistory';
+  import type { CommandHistoryEntryDto, ExecuteHistoryIntent } from '../model/commandHistory';
 
   const emit = defineEmits<{ execute: [intent: ExecuteHistoryIntent] }>();
   const { t } = useI18n();
@@ -17,7 +17,7 @@
   const searchInput = ref<HTMLInputElement | null>(null);
   const root = ref<HTMLElement | null>(null);
   const list = ref<HTMLElement | null>(null);
-  const context = ref<{ entry: CommandHistoryEntry; x: number; y: number } | null>(null);
+  const context = ref<{ entry: CommandHistoryEntryDto; x: number; y: number } | null>(null);
   let unregisterFocus: (() => void) | undefined;
 
   onMounted(() => {
@@ -62,11 +62,11 @@
       feedback.notifyError(t('commandHistory.copyFailed'));
     }
   };
-  const execute = (entry: CommandHistoryEntry, allSessions = false) => {
+  const execute = (entry: CommandHistoryEntryDto, allSessions = false) => {
     context.value = null;
     emit('execute', { command: entry.command, allSessions: allSessions || undefined });
   };
-  const openContext = (event: MouseEvent, entry: CommandHistoryEntry) => {
+  const openContext = (event: MouseEvent, entry: CommandHistoryEntryDto) => {
     context.value = { entry, x: event.clientX, y: event.clientY };
   };
   const revealSelected = () => {
