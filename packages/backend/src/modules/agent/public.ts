@@ -21,6 +21,7 @@ import type {
   WorkspaceArtifactImportResult,
 } from './exchange/workspace-artifact.types';
 import type { JsonValue, Scope } from './agent.types';
+export type { JsonValue } from './agent.types';
 import type {
   ArtifactAttachResult,
   ArtifactCleanupPreview,

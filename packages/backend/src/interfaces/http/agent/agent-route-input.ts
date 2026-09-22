@@ -1,4 +1,4 @@
-import type { JsonValue } from '../../../modules/agent/agent.types';
+import type { JsonValue } from '../../../modules/agent/public';
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
