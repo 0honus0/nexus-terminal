@@ -17,7 +17,7 @@
 | Backend `interfaces/http/agent` | 3,348 行 / 约 128 处路由声明 |
 | Frontend `features/agent` | ~28,600 行 / 70 个文件 |
 | `packages/agent-runner` | ~7,900 行 / 27 个文件 |
-| 后端测试 `tests/backend/agent-scenarios/runner.ts` | 22,503 行（单文件） |
+| 后端 Agent scenarios | `runner.ts` 258 行编排器 + 71 个独立 `*.scenario.ts` 文件（2026-09-22 收尾复核） |
 
 ---
 
@@ -43,12 +43,12 @@
 | P2 | 不存在的间距类 `py-0.2 / py-1.8 / py-0.8`（36 处）不产出任何 CSS → 按钮/徽章实际没有上下内边距 | `settings/ModelProviderSettings.vue:1596` 等（见 §7.8） |
 | P1 | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、空态卡片 9s 自动轮播 | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`、`ai/AgentConversation.vue:163-166` |
 | P1 | Composer 底部一个问题一个按钮承担 Send / Cancel Run 两种语义，形态随状态变形 | `ai/AgentConversation.vue:767-778` |
-| P1 | 切换 App 标签会卸载整个 Agent surface 并 `facade.dispose()`，流式文本丢失、全量重载 | `host/AgentAppSurface.vue:1494-1503`、`host/AgentHubWindow.vue:561` |
-| **P1 · 🚧 迁移中 2026-09-22** | **Nexus 前后端真实 transport DTO 尚未完全统一**：已建立 `packages/protocol` canonical 包并完成 Auth / Settings / Connections；Appearance 与 Audit / Command History / Filesystem Catalog / Notifications / Quick Commands / SSH Suspend / System / Transfers 已有 DTO 草稿但尚未全部完成 frontend API + backend route 双端接线；Agent HTTP/WS/Workspace 协议仍待迁移。Agent durable event 已开始收敛 canonical union，但尚未完成跨 frontend/backend 共享 | `packages/protocol/**`、各 `features/*/api`、`interfaces/http/*`、Agent WS/HTTP 边界（见 §3.2） |
-| P1 | 测试全部落在一个 22.5k 行的场景脚本里，并包含「读源码正则断言」的架构测试 | `tests/backend/agent-scenarios/runner.ts` |
+| **P1 · ✅ 已关闭 2026-09-22** | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7） |
+| **P1 · ✅ 已关闭 2026-09-22** | **Nexus 前后端真实 transport contract 已统一到 `packages/protocol`**：HTTP / Workspace WS / Agent HTTP / Agent event WS / Agent terminal WS 均由 canonical DTO/event contract 单一来源约束，并已接入 transport architecture guard；当前 HEAD 收尾复核再次通过 guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build` 与 Agent scenario suite **71/71** | `packages/protocol/**`、`scripts/check-transport-contract-boundaries.mjs`（见 §3.2） |
+| **P1 · ✅ 已关闭 2026-09-22** | **Agent scenario runner 已模块化并支持受控并发**：`runner.ts` 从 22k+ 行降至 258 行，当前 71 个独立 scenario 文件；默认按批次并发、仅显式 `SERIAL_SCENARIOS` 保持串行；当前扫描未发现通过 `readFileSync` 读取 `packages/*/src` 做 source-shape 架构断言 | `tests/backend/agent-scenarios/**`（见 §3.6） |
 | P2 | 274/1148（约 24%）i18n key 已无引用，且三种语言各存一份 | `features/agent/i18n/*.json` |
 | **P2 · ✅ 基础门禁已关闭 2026-09-22** | **Agent review 范围已接入 ESLint flat config**：`no-unused-vars` + Vue `v-if/v-for` 规则成为 error；首跑发现并清理 47 个真实 unused 符号。自定义 i18n / 设计 token 规则仍开放 | `eslint.config.mjs`、`package.json` scripts |
-| P2 | 巨型文件：`AgentAppSurface.vue` 2716 行、`ModelProviderSettings.vue` 2071 行、`agent-api.ts` 1622 行 | 见 §3.1 |
+| P2 | 巨型文件问题**仍主要集中在 UI**；非 UI owner 已完成一轮拆分：`agent-api.ts` 791 行、`runner-http.adapter.ts` 770 行、`native-agent-backend.ts` 722 行，原 1k+ 行 state-commit 聚合文件已拆为细分 transition owners | 见 §3.1 |
 | P2 | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里 | `modules/agent/tools/host/*.ts` |
 | **P1 · ✅ 已关闭 2026-09-22** | **历史 Run 的 `GET /runs/:id/approvals` 稳定 500（`AGENT_DURABLE_STATE_INVALID`）**：已由 migration #45 将 legacy `inspection_json.target.kind = "machine"` 规范化为 canonical SSH target；真实数据库副本验证 26 条 legacy tool call → 0、25 条受影响 approval 全部可解码 | `sqlite-migrations.ts` migration #45、`tests/backend/agent-scenarios/runner.ts`（见 §1.9） |
 | **P0** | **全局 `button { font: inherit }`（unlayered，压过 `@layer utilities`）→ 设置区所有写在按钮上的字号类失效（实测 16px），这也是"设置区又大又糙"的机械原因** | `packages/frontend/src/app/styles/global.css:26-31`（见 §7.10） |
@@ -415,22 +415,25 @@ Agent UI 中任意像素字号统计：
 
 | 文件 | 行数 | 说明 |
 | --- | --- | --- |
-| `frontend/src/features/agent/host/AgentAppSurface.vue` | 2,716 | 会话、线程列表、Run 配置、审批、对账、Checkpoint、Subagent、Workspace、Composer 配置全在一个组件 |
-| `frontend/src/features/agent/settings/ModelProviderSettings.vue` | 2,071 | Provider CRUD + 模型发现 + capability 编辑 + 测试连接 |
-| `frontend/src/features/agent/api/agent-api.ts` | 1,622 | 96 个导出类型 + 全部 HTTP 调用 |
-| `frontend/src/features/agent/ai/AgentConversation.vue` | 939 | 空态 + 消息列表 + 命令面板 + 对账 + Composer |
-| `frontend/src/features/agent/settings/AgentSettingsPanel.vue` | 928 | 分区导航 + onboarding + provider + storage + denylist |
-| `frontend/src/features/agent/host/AgentHubWindow.vue` | 749 | 窗口 chrome + 拖拽/缩放 + App tab + 视图切换 |
-| `backend/.../infrastructure/agent/workspace-runtime/runner-http.adapter.ts` | 1,503 | Runner HTTP 全协议 |
-| `backend/.../infrastructure/agent/runtime/state-commit/subagent-transitions.ts` | 1,373 | Subagent 全部状态迁移 |
-| `backend/.../infrastructure/agent/runtime/state-commit/tool-transitions.ts` | 1,107 | Tool 全部状态迁移 |
-| `backend/.../agent/runtime/execution/native-agent-backend.ts` | 891 | Root 执行主循环 |
-| `backend/.../agent/runtime/runs/state-commit.port.ts` | 859 | 状态提交端口 |
+| `frontend/src/features/agent/host/AgentAppSurface.vue` | 2,719 | 会话、线程列表、Run 配置、审批、对账、Checkpoint、Subagent、Workspace、Composer 配置全在一个组件；**UI 侧仍开放** |
+| `frontend/src/features/agent/settings/ModelProviderSettings.vue` | 2,067 | Provider CRUD + 模型发现 + capability 编辑 + 测试连接；**UI 侧仍开放** |
+| `frontend/src/features/agent/api/agent-api.ts` | 791 | transport DTO canonical 化后已明显缩小；仍可继续按 API domain 拆分，但不再是 1.6k 行单体 |
+| `frontend/src/features/agent/ai/AgentConversation.vue` | 944 | 空态 + 消息列表 + 命令面板 + 对账 + Composer；**UI 侧仍开放** |
+| `frontend/src/features/agent/settings/AgentSettingsPanel.vue` | 961 | 分区导航 + onboarding + provider + storage + denylist；**UI 侧仍开放** |
+| `frontend/src/features/agent/host/AgentHubWindow.vue` | 754 | 窗口 chrome + 拖拽/缩放 + App tab + 视图切换；**UI 侧仍开放** |
+| `backend/.../infrastructure/agent/workspace-runtime/runner-http.adapter.ts` | 770 | HTTP protocol decoding / websocket transport 等职责已拆出独立 owner |
+| `backend/.../infrastructure/agent/runtime/state-commit/subagent-transitions.ts` | 14 | 已降为聚合/转发入口，具体状态迁移拆入 subagent model/tool owners |
+| `backend/.../infrastructure/agent/runtime/state-commit/tool-transitions.ts` | 18 | 已降为聚合/转发入口，具体 proposal/mutation/interactive 等迁移拆分 |
+| `backend/.../agent/runtime/execution/native-agent-backend.ts` | 722 | Root execution lifecycle 已抽出独立职责，主循环进一步收窄 |
+| `backend/.../agent/runtime/runs/state-commit.port.ts` | 5 | 状态提交 contract 已拆分为细粒度 contracts |
 
-`AgentAppSurface.vue` 单文件即同时承担：App 级会话状态、Run 流订阅、审批/对账交互、线程 CRUD、目标选择、Composer 配置渲染、TaskRail 编排。
-建议拆分（不实施）：`useAgentThreads` / `useAgentRunStream` / `useRunConfiguration` composable + 把 Run 详情（TaskRail 内容）拆成独立 feature 组件，把 Composer 配置拆成 `RunConfigBar.vue`。
+`AgentAppSurface.vue` 单文件仍同时承担：App 级会话状态、Run 流订阅、审批/对账交互、线程 CRUD、目标选择、Composer 配置渲染、TaskRail 编排。
 
-### 3.2 Nexus 前后端 transport DTO / event 协议尚未完全统一（P1，✅ 当前问题已闭合 2026-09-22）
+> **2026-09-22 非 UI 收尾复核**：本节原列出的 Backend / transport 大 owner 已完成一轮实质拆分：`runner-http.adapter.ts` 1503→770、`subagent-transitions.ts` 1373→14、`tool-transitions.ts` 1107→18、`native-agent-backend.ts` 891→722、`state-commit.port.ts` 859→5；`agent-api.ts` 1622→791。当前“巨型文件”问题剩余主体已经转为 UI 组件职责过载，因此非 UI 阶段不再继续为追求行数而机械拆文件。
+
+UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConfiguration` composable + 把 Run 详情（TaskRail 内容）拆成独立 feature 组件，把 Composer 配置拆成 `RunConfigBar.vue`。
+
+### 3.2 Nexus 前后端 transport DTO / event 协议统一（P1，✅ 当前问题已闭合 2026-09-22）
 
 > **2026-09-22 迁移检查点**：问题范围已从“仅 Agent protocol”修正为 **Nexus 全局前后端真实 transport contract**。canonical source 统一为 `packages/protocol`，不再计划建立单独的 `packages/agent-protocol`。依赖方向固定为 `protocol <- frontend/backend`；protocol 不依赖 frontend/backend，backend domain/service/repository 类型继续留在各自模块，frontend UI-only ViewModel 也继续本地维护。
 
@@ -457,7 +460,7 @@ Agent UI 中任意像素字号统计：
 - ✅ **Agent Workspace Runtime 已完成 canonical DTO 接线（2026-09-22）**：Host-side availability/catalog/storage/setup/tool-pack/runtime-cleanup/settings-reset/command/cache-cleanup 与 App-side workspace list/create/get/action/tool-version switch/artifact import-export 两组 HTTP surface 已统一迁入 `protocol/agent-workspace-runtime`；backend 共用 `workspace-runtime-dto.ts`，workspace profile 与 Run 共享同一 environment mapper。frontend 本地 Workspace Runtime wire interface、旧 `*View` 名称、`result/current/proposed: unknown` 与 backend 本地 workspace request interface 均清零。迁移同时修复 settings-reset confirm 旧 frontend 错把 domain `AgentSettingsView` 当完整 Host `AgentSettingsViewDto` 的漂移：confirm 改用专用 result DTO，随后显式重取完整 Host settings。
 - ✅ **Agent event WS / durable event union 已完成 canonical protocol 接线（2026-09-22）**：`protocol/agent-events` 现为 durable run event、host event、ephemeral run event 与 subscribe/unsubscribe/subscribed/event/error WS envelope 的单一来源；backend state-commit、RunEvent/HostEvent、host outbox、transient event pipeline 与 WS session 均直接消费该 contract，并在 SQLite decode 边界对持久化 event name 做 fail-closed validation。frontend `agent-events.ts` 删除本地 `AgentWireMessage/AgentWireEventPayload/AgentSubscriptionRequest`，subscribe/unsubscribe 直接构造 protocol DTO；同时移除旧 projector 中并非 durable event 的 `checkpoint.resume` 漂移项。backend build、frontend full build、legacy WS declaration / compatibility alias 扫描均通过。
 - ✅ **Agent terminal WS 已完成 canonical protocol 接线（2026-09-22）**：`protocol/agent-terminal` 现统一定义 attach query、`resize | signal | close` client control 与 `ready` server control；PTY stdin/stdout/stderr 继续保持 raw binary bytes。backend upgrade parser 与 terminal session、frontend terminal channel 均直接消费 protocol DTO，text frame 继续执行 runtime validation；frontend 额外校验 `ready.generation` 与当前 workspace generation 一致。backend build、frontend full build、local terminal wire/interface/compatibility alias 扫描均通过。
-- ✅ **architecture guard 与最终回归已闭环（2026-09-22）**：新增 `scripts/check-transport-contract-boundaries.mjs` 并接入 root `lint`，覆盖 94 个 frontend/backend network adapter 文件与 2 个 Agent WS adapter；禁止 adapter 内重新声明本地 `*Dto`、DTO→旧名兼容 alias，以及 Agent WS 重新定义本地 Wire/Message/Request/Response/Envelope contract。guard 首次运行还抓出并删除了遗留 `workspace-protocol.types.ts` compatibility alias。最终 root `build` PASS、root `lint` PASS、transport architecture guard PASS，现有 Agent scenario suite 74/74 PASS；scenario 静态架构断言同步改为验证 canonical protocol 单一来源。
+- ✅ **architecture guard 与最终回归已闭环（2026-09-22）**：新增 `scripts/check-transport-contract-boundaries.mjs` 并接入 root `lint`；当前 guard 覆盖 **93 个 frontend/backend network adapter 文件 + 335 个 frontend 文件 + 2 个 Agent WS adapter**，禁止 adapter 内重新声明本地 `*Dto`、DTO→旧名兼容 alias，以及 Agent WS 重新定义本地 Wire/Message/Request/Response/Envelope contract。guard 首次运行还抓出并删除了遗留 `workspace-protocol.types.ts` compatibility alias。历史 closure 的 root `build/lint` 已通过；本次当前 HEAD 收尾复核再次通过 architecture guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build`，Agent scenario suite **71/71 PASS**。
 - ✅ **durable 漂移静默消费已关闭 2026-09-22**：projector 遇到带 durable `id` 的 unknown event 会 fail-closed，不再推进 cursor；这一条是行为防线，不能替代 canonical protocol。
 - ⏸ **backend 单元测试保持冻结**：本轮只做现有 build / lint / scenario / architecture guard 验证，不新增、迁移或补 backend unit test，除非后续明确重新授权。
 
@@ -498,15 +501,14 @@ Agent UI 中任意像素字号统计：
 - **无效样式类**：§1.1 的 158 处。
 - 以上三类问题都能被规则检查拦住（§3.6）。
 
-### 3.6 工程保障与测试策略（P1）
+### 3.6 工程保障与测试策略（P1，✅ 非 UI 核心项已闭合 2026-09-22）
 
-- ✅ **基础 lint 门禁已关闭 2026-09-22**：新增 ESLint flat config 与根级 `lint / lint:agent` 脚本，覆盖 Backend Agent、HTTP/WebSocket Agent interface、Agent Runner、Frontend Agent、Agent scenario runner；启用 `@typescript-eslint/no-unused-vars` 与 `vue/no-use-v-if-with-v-for` 为 error。首跑实际发现 **47** 个 unused import/type/helper/局部变量，逐项确认后清理，`pnpm lint` 现为 0 error；backend / frontend / agent-runner build 均通过。**未定义 utility 类、未使用 i18n key、设计 token 等需要自定义规则，仍开放，不计入本条完成范围。**
-- **后端 agent 测试仍集中在单文件**：`tests/backend/agent-scenarios/runner.ts` 仍是 22k+ 行的手写场景集合，且仍按顺序串行执行。✅ **“第一个失败即中断”已关闭 2026-09-22**：`main()` 现在收集失败并继续执行剩余场景，最后统一输出全部 failure 并用 `AggregateError` 非零退出，保留 CI 失败语义同时避免后续问题被首个失败遮蔽；完整 `test:agent-scenarios` 通过。**单文件过大与串行执行本身仍开放。**
-- **仍包含"读源码做正则断言"的架构测试**：当前复核确认 `productTypeBoundaryScenario` 以及若干 architecture 场景仍使用 `fs.readFileSync` + `assert.match/doesNotMatch` 检查源码形态（例如显式 `any`、类型谓词、owner 边界与日志写法），问题真实且仍开放。⚪ **原记录中的 `budgetSettingsDeadFieldScenario` 示例已失效，无需修改**：当前该场景已经是行为测试，会实际构造 legacy settings、调用 normalize/service patch、临时 SQLite repository 与 durable decoder 验证已删除字段 fail-closed，不再依赖源码正则。
-  剩余源码形态断言仍与代码格式/命名耦合，更适合迁到 lint/AST 架构检查；在替代保障落地前不应直接删除。
-- **缺模块级单测**：`packages/backend` 内 `*.spec.ts` 数量为 0；e2e 里 agent 只有 3 个 spec（`tests/e2e/specs/agent/*.spec.ts`，共约 3,100 行）。⏸ **冻结 / 不实施**：按当前明确要求，本轮及后续接手者**不要新增、迁移或补 backend 单元测试**；除非后续再次得到明确授权，否则保持现状。此项仅保留为审计记录，不计入本轮待改总数。
+- ✅ **基础 lint 门禁已关闭 2026-09-22**：新增 ESLint flat config 与根级 `lint / lint:agent` 脚本，覆盖 Backend Agent、HTTP/WebSocket Agent interface、Agent Runner、Frontend Agent、Agent scenario runner；启用 `@typescript-eslint/no-unused-vars` 与 `vue/no-use-v-if-with-v-for` 为 error。首跑实际发现 **47** 个 unused import/type/helper/局部变量，逐项确认后清理；backend / frontend / agent-runner build 均已有通过记录。**未定义 utility 类、未使用 i18n key、设计 token 等需要自定义规则，仍开放，但属于后续 UI / i18n / design-system 门禁，不阻塞本轮非 UI 收尾。**
+- ✅ **scenario 单文件与串行问题已关闭 2026-09-22**：`tests/backend/agent-scenarios/runner.ts` 当前为 **258 行编排器**，场景已拆为 **71 个独立 `*.scenario.ts` 文件**；runner 以 `SCENARIO_CONCURRENCY` 分批 `Promise.all` 执行可并发场景，仅 `SERIAL_SCENARIOS` 中显式列出的共享资源场景保持串行。失败仍会聚合并最终非零退出，不会因首个失败遮蔽后续结果。
+- ✅ **源码形态正则架构测试已关闭 2026-09-22**：当前扫描未发现 scenario 通过 `readFileSync` 读取 `packages/backend/src` / `packages/frontend/src` 源文件做 source-shape 断言。现存 `readFileSync` 与 `assert.match/doesNotMatch` 用于 Workspace 文件内容、checkpoint、projection、fingerprint 等**运行行为/数据结果**断言，不再以源码排版、命名或字符串形态充当架构门禁；transport 等架构约束已迁入独立 guard/lint。
+- ⏸ **缺模块级 backend 单测保持冻结 / 不实施**：按当前明确要求，本轮及后续接手者**不要新增、迁移或补 backend unit test**；除非后续再次得到明确授权，否则保持现状。此项仅保留为审计记录，不计入本轮待改总数。
 
-建议：ESLint（Vue + TS）基础门禁已接入；后续补自定义 i18n/设计 token 规则，把"源码正则断言"迁移为 lint/AST 架构规则，并把 22.5k 行 runner 按场景域拆成多个可独立运行的测试文件。
+**本轮非 UI 工程保障收尾结论**：scenario runner 模块化、受控并发、source-shape 架构断言迁出、transport architecture guard 与基础 ESLint 门禁均已落地。后续工程规则新增项主要是 i18n / design token / utility class 等 UI-facing 静态检查，不再继续扩张本轮非 UI 改造范围。
 
 ### 3.7 后端结构观察（多数是优点，附两点提醒）
 
