@@ -1,30 +1,53 @@
-import type { AgentEnvelope } from './agent-api.types';
 import type {
-  AgentDiscoveredProviderModel,
-  AgentModelRegistryStatus,
-  AgentProviderView,
-  ModelCapabilityDefaults,
-} from './agent-api';
+  AgentDiscoveredProviderModelDto,
+  AgentModelRegistryResolveQueryDto,
+  AgentModelRegistryResolveResponseDto,
+  AgentModelRegistryStatusDto,
+  AgentModelRegistryUpdateRequestDto,
+  AgentProviderCreateRequestDto,
+  AgentProviderDeleteQueryDto,
+  AgentProviderDeleteResponseDto,
+  AgentProviderModelInputDto,
+  AgentProviderPatchRequestDto,
+  AgentProviderPatchFieldsDto,
+  AgentProviderTestRequestDto,
+  AgentProviderTestResponseDto,
+  AgentProviderViewDto,
+} from '@nexus-terminal/protocol/agent-providers';
+import type { AgentEnvelope } from './agent-api.types';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 
+const providerModelInput = (model: AgentProviderModelInputDto): AgentProviderModelInputDto => ({
+  id: model.id,
+  contextWindow: model.contextWindow,
+  maxOutputTokens: model.maxOutputTokens,
+  supportsTools: model.supportsTools,
+  ...(model.supportsImageInput === undefined ? {} : { supportsImageInput: model.supportsImageInput }),
+  ...(model.supportsFileInput === undefined ? {} : { supportsFileInput: model.supportsFileInput }),
+  ...(model.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: model.supportsPromptCacheKey }),
+  ...(model.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...model.reasoningEfforts] }),
+  ...(model.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: model.defaultReasoningEffort }),
+  ...(model.reasoningMandatory === undefined ? {} : { reasoningMandatory: model.reasoningMandatory }),
+});
+
 export const createProviderApi = () => ({
-  async resolveModelRegistry(modelId: string): Promise<{ modelId: string; defaults: ModelCapabilityDefaults | null }> {
+  async resolveModelRegistry(modelId: string): Promise<AgentModelRegistryResolveResponseDto> {
+    const params: AgentModelRegistryResolveQueryDto = { modelId };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<{ modelId: string; defaults: ModelCapabilityDefaults | null }>>(
-          '/agent/ai/model-registry/resolve',
-          { params: { modelId } },
-        )
+        await httpClient.get<AgentEnvelope<AgentModelRegistryResolveResponseDto>>('/agent/ai/model-registry/resolve', {
+          params,
+        })
       ).data,
     );
   },
-  async modelRegistryStatus(): Promise<AgentModelRegistryStatus> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentModelRegistryStatus>>('/agent/ai/model-registry')).data);
+  async modelRegistryStatus(): Promise<AgentModelRegistryStatusDto> {
+    return unwrap((await httpClient.get<AgentEnvelope<AgentModelRegistryStatusDto>>('/agent/ai/model-registry')).data);
   },
-  async refreshModelRegistry(): Promise<AgentModelRegistryStatus> {
+  async refreshModelRegistry(): Promise<AgentModelRegistryStatusDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentModelRegistryStatus>>(
+        await httpClient.post<AgentEnvelope<AgentModelRegistryStatusDto>>(
           '/agent/ai/model-registry/refresh',
           {},
           { headers: await mutationHeaders() },
@@ -32,44 +55,54 @@ export const createProviderApi = () => ({
       ).data,
     );
   },
-  async setModelRegistryAutoUpdate(autoUpdate: boolean): Promise<AgentModelRegistryStatus> {
+  async setModelRegistryAutoUpdate(autoUpdate: boolean): Promise<AgentModelRegistryStatusDto> {
+    const input: AgentModelRegistryUpdateRequestDto = { autoUpdate };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentModelRegistryStatus>>(
+        await httpClient.patch<AgentEnvelope<AgentModelRegistryStatusDto>>(
           '/agent/ai/model-registry',
-          { autoUpdate },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
-  async providers(): Promise<AgentProviderView[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentProviderView[]>>('/agent/ai/providers')).data);
+  async providers(): Promise<AgentProviderViewDto[]> {
+    return unwrap((await httpClient.get<AgentEnvelope<AgentProviderViewDto[]>>('/agent/ai/providers')).data);
   },
-  async createProvider(input: Record<string, unknown>): Promise<AgentProviderView> {
+  async createProvider(input: AgentProviderCreateRequestDto): Promise<AgentProviderViewDto> {
+    const request: AgentProviderCreateRequestDto = { ...input, models: input.models.map(providerModelInput) };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentProviderView>>('/agent/ai/providers', input, {
+        await httpClient.post<AgentEnvelope<AgentProviderViewDto>>('/agent/ai/providers', request, {
           headers: await mutationHeaders(),
         })
       ).data,
     );
   },
-  async updateProvider(provider: AgentProviderView, input: Record<string, unknown>): Promise<AgentProviderView> {
+  async updateProvider(
+    provider: AgentProviderViewDto,
+    input: AgentProviderPatchFieldsDto,
+  ): Promise<AgentProviderViewDto> {
+    const request: AgentProviderPatchRequestDto = {
+      ...input,
+      ...(input.models === undefined ? {} : { models: input.models.map(providerModelInput) }),
+      expectedVersion: provider.version,
+    };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentProviderView>>(
+        await httpClient.patch<AgentEnvelope<AgentProviderViewDto>>(
           `/agent/ai/providers/${encodeURIComponent(provider.id)}`,
-          { ...input, expectedVersion: provider.version },
+          request,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
-  async discoverProviderModels(providerId: string): Promise<AgentDiscoveredProviderModel[]> {
+  async discoverProviderModels(providerId: string): Promise<AgentDiscoveredProviderModelDto[]> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentDiscoveredProviderModel[]>>(
+        await httpClient.post<AgentEnvelope<AgentDiscoveredProviderModelDto[]>>(
           `/agent/ai/providers/${encodeURIComponent(providerId)}/discover-models`,
           {},
           { headers: await mutationHeaders() },
@@ -77,22 +110,24 @@ export const createProviderApi = () => ({
       ).data,
     );
   },
-  async deleteProvider(providerId: string, expectedVersion: number): Promise<{ deleted: boolean }> {
+  async deleteProvider(providerId: string, expectedVersion: number): Promise<AgentProviderDeleteResponseDto> {
+    const params: AgentProviderDeleteQueryDto = { expectedVersion };
     return unwrap(
       (
-        await httpClient.delete<AgentEnvelope<{ deleted: boolean }>>(
-          `/agent/ai/providers/${encodeURIComponent(providerId)}?expectedVersion=${encodeURIComponent(expectedVersion)}`,
-          { headers: await mutationHeaders() },
+        await httpClient.delete<AgentEnvelope<AgentProviderDeleteResponseDto>>(
+          `/agent/ai/providers/${encodeURIComponent(providerId)}`,
+          { params, headers: await mutationHeaders() },
         )
       ).data,
     );
   },
-  async testProvider(providerId: string, modelId: string): Promise<{ ok: boolean; latencyMs: number }> {
+  async testProvider(providerId: string, modelId: string): Promise<AgentProviderTestResponseDto> {
+    const input: AgentProviderTestRequestDto = { modelId };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<{ ok: boolean; latencyMs: number }>>(
+        await httpClient.post<AgentEnvelope<AgentProviderTestResponseDto>>(
           `/agent/ai/providers/${encodeURIComponent(providerId)}/test`,
-          { modelId },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,

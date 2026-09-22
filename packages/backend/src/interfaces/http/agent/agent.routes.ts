@@ -1,3 +1,22 @@
+import type {
+  AgentAvailableModelDto,
+  AgentDiscoveredProviderModelDto,
+  AgentModelRegistryResolveQueryDto,
+  AgentModelRegistryResolveResponseDto,
+  AgentModelRegistryStatusDto,
+  AgentModelRegistryUpdateRequestDto,
+  AgentProviderCreateRequestDto,
+  AgentProviderDeleteQueryDto,
+  AgentProviderDeleteResponseDto,
+  AgentProviderModelDto,
+  AgentProviderModelInputDto,
+  AgentProviderPatchFieldsDto,
+  AgentProviderPatchRequestDto,
+  AgentProviderTestRequestDto,
+  AgentProviderTestResponseDto,
+  AgentProviderViewDto,
+  AgentReasoningEffortDto,
+} from '@nexus-terminal/protocol/agent-providers';
 import { Router } from 'express';
 import { create as createContentDisposition } from 'content-disposition';
 import parseRange from 'range-parser';
@@ -108,28 +127,234 @@ const providerInputKeys = [
   'models',
   'enabled',
 ] as const;
+const reasoningEfforts = new Set<AgentReasoningEffortDto>([
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+
+type ProviderView = Awaited<ReturnType<AgentProviderFacade['get']>>;
+type DiscoveredProviderModel = Awaited<ReturnType<AgentProviderFacade['discoverModels']>>[number];
+type ProviderTestResult = Awaited<ReturnType<AgentProviderFacade['test']>>;
+
+const providerModelInput = (value: unknown): AgentProviderModelInputDto => {
+  if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
+  const allowed = [
+    'id',
+    'contextWindow',
+    'maxOutputTokens',
+    'supportsTools',
+    'supportsImageInput',
+    'supportsFileInput',
+    'supportsPromptCacheKey',
+    'reasoningEfforts',
+    'defaultReasoningEffort',
+    'reasoningMandatory',
+  ] as const;
+  if (!hasOnlyKeys(value, allowed)) throw new Error('VALIDATION_FAILED');
+  if (
+    !nonEmptyString(value.id) ||
+    !positiveInteger(value.contextWindow) ||
+    !positiveInteger(value.maxOutputTokens) ||
+    typeof value.supportsTools !== 'boolean' ||
+    (value.supportsImageInput !== undefined && typeof value.supportsImageInput !== 'boolean') ||
+    (value.supportsFileInput !== undefined && typeof value.supportsFileInput !== 'boolean') ||
+    (value.supportsPromptCacheKey !== undefined && typeof value.supportsPromptCacheKey !== 'boolean') ||
+    (value.reasoningMandatory !== undefined && typeof value.reasoningMandatory !== 'boolean')
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  let parsedEfforts: AgentReasoningEffortDto[] | undefined;
+  if (value.reasoningEfforts !== undefined) {
+    if (
+      !Array.isArray(value.reasoningEfforts) ||
+      value.reasoningEfforts.some((effort) => typeof effort !== 'string' || !reasoningEfforts.has(effort as AgentReasoningEffortDto))
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    parsedEfforts = [...value.reasoningEfforts] as AgentReasoningEffortDto[];
+  }
+  if (
+    value.defaultReasoningEffort !== undefined &&
+    (typeof value.defaultReasoningEffort !== 'string' ||
+      !reasoningEfforts.has(value.defaultReasoningEffort as AgentReasoningEffortDto))
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return {
+    id: value.id,
+    contextWindow: value.contextWindow,
+    maxOutputTokens: value.maxOutputTokens,
+    supportsTools: value.supportsTools,
+    ...(value.supportsImageInput === undefined ? {} : { supportsImageInput: value.supportsImageInput }),
+    ...(value.supportsFileInput === undefined ? {} : { supportsFileInput: value.supportsFileInput }),
+    ...(value.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: value.supportsPromptCacheKey }),
+    ...(parsedEfforts === undefined ? {} : { reasoningEfforts: parsedEfforts }),
+    ...(value.defaultReasoningEffort === undefined
+      ? {}
+      : { defaultReasoningEffort: value.defaultReasoningEffort as AgentReasoningEffortDto }),
+    ...(value.reasoningMandatory === undefined ? {} : { reasoningMandatory: value.reasoningMandatory }),
+  };
+};
+
+const providerModelsInput = (value: unknown): AgentProviderModelInputDto[] => {
+  if (!Array.isArray(value)) throw new Error('VALIDATION_FAILED');
+  return value.map(providerModelInput);
+};
+
+const providerCreateInput = (value: unknown): AgentProviderCreateRequestDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, providerInputKeys)) throw new Error('VALIDATION_FAILED');
+  if (
+    value.kind !== 'openai-compatible' ||
+    typeof value.displayName !== 'string' ||
+    typeof value.baseUrl !== 'string' ||
+    (value.protocol !== 'chat-completions' && value.protocol !== 'responses') ||
+    typeof value.enabled !== 'boolean' ||
+    (value.credential !== undefined && typeof value.credential !== 'string') ||
+    (value.clearCredential !== undefined && typeof value.clearCredential !== 'boolean')
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return {
+    kind: 'openai-compatible',
+    displayName: value.displayName,
+    baseUrl: value.baseUrl,
+    protocol: value.protocol,
+    ...(value.credential === undefined ? {} : { credential: value.credential }),
+    ...(value.clearCredential === undefined ? {} : { clearCredential: value.clearCredential }),
+    models: providerModelsInput(value.models),
+    enabled: value.enabled,
+  };
+};
+
+const providerPatchRequest = (value: unknown): AgentProviderPatchRequestDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, [...providerInputKeys, 'expectedVersion'])) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
+  const fields: AgentProviderPatchFieldsDto = {};
+  if (value.kind !== undefined) {
+    if (value.kind !== 'openai-compatible') throw new Error('VALIDATION_FAILED');
+    fields.kind = value.kind;
+  }
+  if (value.displayName !== undefined) {
+    if (typeof value.displayName !== 'string') throw new Error('VALIDATION_FAILED');
+    fields.displayName = value.displayName;
+  }
+  if (value.baseUrl !== undefined) {
+    if (typeof value.baseUrl !== 'string') throw new Error('VALIDATION_FAILED');
+    fields.baseUrl = value.baseUrl;
+  }
+  if (value.protocol !== undefined) {
+    if (value.protocol !== 'chat-completions' && value.protocol !== 'responses') throw new Error('VALIDATION_FAILED');
+    fields.protocol = value.protocol;
+  }
+  if (value.credential !== undefined) {
+    if (typeof value.credential !== 'string') throw new Error('VALIDATION_FAILED');
+    fields.credential = value.credential;
+  }
+  if (value.clearCredential !== undefined) {
+    if (typeof value.clearCredential !== 'boolean') throw new Error('VALIDATION_FAILED');
+    fields.clearCredential = value.clearCredential;
+  }
+  if (value.models !== undefined) fields.models = providerModelsInput(value.models);
+  if (value.enabled !== undefined) {
+    if (typeof value.enabled !== 'boolean') throw new Error('VALIDATION_FAILED');
+    fields.enabled = value.enabled;
+  }
+  return { ...fields, expectedVersion: value.expectedVersion };
+};
 
 const providerPatchInput = async (
   providers: AgentProviderFacade,
   currentUserId: number,
   providerId: string,
-  body: Record<string, unknown>,
-): Promise<{ expectedVersion: number; input: Record<string, unknown> }> => {
-  if (!positiveInteger(body.expectedVersion)) throw new Error('VALIDATION_FAILED');
-  if (!hasOnlyKeys(body, [...providerInputKeys, 'expectedVersion'])) throw new Error('VALIDATION_FAILED');
+  value: unknown,
+): Promise<{ expectedVersion: number; input: AgentProviderCreateRequestDto }> => {
+  const patch = providerPatchRequest(value);
   const current = await providers.get(currentUserId, providerId);
-  const input: Record<string, unknown> = {
-    kind: body.kind ?? current.kind,
-    displayName: body.displayName ?? current.displayName,
-    baseUrl: body.baseUrl ?? current.baseUrl,
-    protocol: body.protocol ?? current.protocol,
-    models: body.models ?? current.models,
-    enabled: body.enabled ?? current.enabled,
+  return {
+    expectedVersion: patch.expectedVersion,
+    input: {
+      kind: patch.kind ?? current.kind,
+      displayName: patch.displayName ?? current.displayName,
+      baseUrl: patch.baseUrl ?? current.baseUrl,
+      protocol: patch.protocol ?? current.protocol,
+      models: patch.models ?? current.models,
+      enabled: patch.enabled ?? current.enabled,
+      ...(patch.credential === undefined ? {} : { credential: patch.credential }),
+      ...(patch.clearCredential === undefined ? {} : { clearCredential: patch.clearCredential }),
+    },
   };
-  if ('credential' in body) input.credential = body.credential;
-  if ('clearCredential' in body) input.clearCredential = body.clearCredential;
-  return { expectedVersion: body.expectedVersion, input };
 };
+
+const providerModelDto = (model: ProviderView['models'][number]): AgentProviderModelDto => ({
+  id: model.id,
+  contextWindow: model.contextWindow,
+  maxOutputTokens: model.maxOutputTokens,
+  supportsTools: model.supportsTools,
+  supportsImageInput: model.supportsImageInput,
+  supportsFileInput: model.supportsFileInput,
+  ...(model.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: model.supportsPromptCacheKey }),
+  capabilitySources: { ...model.capabilitySources },
+  ...(model.registryDefaults === undefined ? {} : { registryDefaults: model.registryDefaults }),
+  ...(model.providerCapabilities === undefined ? {} : { providerCapabilities: model.providerCapabilities }),
+  ...(model.capabilityConflicts === undefined ? {} : { capabilityConflicts: [...model.capabilityConflicts] }),
+  ...(model.capabilityOverrides === undefined ? {} : { capabilityOverrides: model.capabilityOverrides }),
+  ...(model.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...model.reasoningEfforts] }),
+  ...(model.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: model.defaultReasoningEffort }),
+  ...(model.reasoningSource === undefined ? {} : { reasoningSource: model.reasoningSource }),
+  ...(model.reasoningMandatory === undefined ? {} : { reasoningMandatory: model.reasoningMandatory }),
+});
+
+const providerDto = (provider: ProviderView): AgentProviderViewDto => ({
+  id: provider.id,
+  kind: provider.kind,
+  displayName: provider.displayName,
+  baseUrl: provider.baseUrl,
+  protocol: provider.protocol,
+  hasCredential: provider.hasCredential,
+  credentialRevision: provider.credentialRevision,
+  models: provider.models.map(providerModelDto),
+  enabled: provider.enabled,
+  version: provider.version,
+  createdAt: provider.createdAt,
+  updatedAt: provider.updatedAt,
+});
+
+const discoveredProviderModelDto = (model: DiscoveredProviderModel): AgentDiscoveredProviderModelDto => ({
+  id: model.id,
+  ...(model.ownedBy === undefined ? {} : { ownedBy: model.ownedBy }),
+  ...(model.createdAt === undefined ? {} : { createdAt: model.createdAt }),
+  ...(model.registryDefaults === undefined ? {} : { registryDefaults: model.registryDefaults }),
+  ...(model.providerCapabilities === undefined ? {} : { providerCapabilities: model.providerCapabilities }),
+  ...(model.liveCapabilityReport === undefined ? {} : { liveCapabilityReport: model.liveCapabilityReport }),
+});
+
+const providerTestDto = (result: ProviderTestResult): AgentProviderTestResponseDto => ({
+  ok: result.ok,
+  latencyMs: result.latencyMs,
+  ...(result.usage === undefined ? {} : { usage: result.usage }),
+  ...(result.errorCode === undefined ? {} : { errorCode: result.errorCode }),
+});
+
+const modelRegistryStatusDto = (status: ReturnType<AgentModelRegistryFacade['status']>): AgentModelRegistryStatusDto => ({
+  sourceUrl: status.sourceUrl,
+  autoUpdate: status.autoUpdate,
+  activeSource: status.activeSource,
+  entryCount: status.entryCount,
+  generatedAt: status.generatedAt,
+  sourceRevision: status.sourceRevision,
+  builtinGeneratedAt: status.builtinGeneratedAt,
+  lastAttemptAt: status.lastAttemptAt,
+  lastSuccessAt: status.lastSuccessAt,
+  lastErrorCode: status.lastErrorCode,
+  nextAutoUpdateAt: status.nextAutoUpdateAt,
+});
 
 export const createAgentRouter = (dependencies: AgentRouterDependencies): Router => {
   const router = Router();
@@ -602,29 +827,26 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/ai/models',
     agentRoute(async (request, response) => {
       const providers = await dependencies.providers.list(agentUserId(request));
-      agentData(
-        request,
-        response,
-        providers
-          .filter((provider) => provider.enabled)
-          .flatMap((provider) =>
-            provider.models.map((model) => ({
-              providerId: provider.id,
-              providerDisplayName: provider.displayName,
-              configurationVersion: provider.version,
-              modelId: model.id,
-              contextWindow: model.contextWindow,
-              maxOutputTokens: model.maxOutputTokens,
-              supportsTools: model.supportsTools,
-              reasoning: {
-                supportedEfforts: model.reasoningEfforts ?? [],
-                defaultEffort: model.defaultReasoningEffort ?? null,
-                source: model.reasoningSource ?? null,
-                mandatory: model.reasoningMandatory ?? false,
-              },
-            })),
-          ),
-      );
+      const payload: AgentAvailableModelDto[] = providers
+        .filter((provider) => provider.enabled)
+        .flatMap((provider) =>
+          provider.models.map((model) => ({
+            providerId: provider.id,
+            providerDisplayName: provider.displayName,
+            configurationVersion: provider.version,
+            modelId: model.id,
+            contextWindow: model.contextWindow,
+            maxOutputTokens: model.maxOutputTokens,
+            supportsTools: model.supportsTools,
+            reasoning: {
+              supportedEfforts: model.reasoningEfforts ?? [],
+              defaultEffort: model.defaultReasoningEffort ?? null,
+              source: model.reasoningSource ?? null,
+              mandatory: model.reasoningMandatory ?? false,
+            },
+          })),
+        );
+      agentData(request, response, payload);
     }),
   );
 
@@ -634,7 +856,12 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentUserId(request);
       const modelId = queryString(request.query.modelId);
       if (!modelId || modelId.length > 256) throw new Error('VALIDATION_FAILED');
-      agentData(request, response, { modelId, defaults: dependencies.modelRegistry.resolve(modelId) });
+      const query: AgentModelRegistryResolveQueryDto = { modelId };
+      const payload: AgentModelRegistryResolveResponseDto = {
+        modelId: query.modelId,
+        defaults: dependencies.modelRegistry.resolve(query.modelId),
+      };
+      agentData(request, response, payload);
     }),
   );
 
@@ -642,7 +869,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/ai/model-registry',
     agentRoute(async (request, response) => {
       agentUserId(request);
-      agentData(request, response, dependencies.modelRegistry.status());
+      agentData(request, response, modelRegistryStatusDto(dependencies.modelRegistry.status()));
     }),
   );
 
@@ -652,7 +879,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     agentRoute(async (request, response) => {
       agentUserId(request);
       if (!isRecord(request.body) || !hasOnlyKeys(request.body, [])) throw new Error('VALIDATION_FAILED');
-      agentData(request, response, await dependencies.modelRegistry.refresh());
+      agentData(request, response, modelRegistryStatusDto(await dependencies.modelRegistry.refresh()));
     }),
   );
 
@@ -668,14 +895,22 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       ) {
         throw new Error('VALIDATION_FAILED');
       }
-      agentData(request, response, await dependencies.modelRegistry.setAutoUpdate(request.body.autoUpdate));
+      const input: AgentModelRegistryUpdateRequestDto = { autoUpdate: request.body.autoUpdate };
+      agentData(
+        request,
+        response,
+        modelRegistryStatusDto(await dependencies.modelRegistry.setAutoUpdate(input.autoUpdate)),
+      );
     }),
   );
 
   router.get(
     '/ai/providers',
     agentRoute(async (request, response) => {
-      agentData(request, response, await dependencies.providers.list(agentUserId(request)));
+      const payload: AgentProviderViewDto[] = (await dependencies.providers.list(agentUserId(request))).map(
+        providerDto,
+      );
+      agentData(request, response, payload);
     }),
   );
 
@@ -683,8 +918,9 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/ai/providers',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      const provider = await dependencies.providers.create(agentUserId(request), request.body);
-      agentData(request, response, provider, 201);
+      const input = providerCreateInput(request.body);
+      const provider = await dependencies.providers.create(agentUserId(request), input);
+      agentData(request, response, providerDto(provider), 201);
     }),
   );
 
@@ -692,7 +928,6 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/ai/providers/:providerId',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body)) throw new Error('VALIDATION_FAILED');
       const currentUserId = agentUserId(request);
       const providerId = pathParam(request.params.providerId);
       const { expectedVersion, input } = await providerPatchInput(
@@ -704,7 +939,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.providers.update(currentUserId, providerId, expectedVersion, input),
+        providerDto(await dependencies.providers.update(currentUserId, providerId, expectedVersion, input)),
       );
     }),
   );
@@ -718,8 +953,14 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         : request.query.expectedVersion;
       const expectedVersion = typeof rawVersion === 'string' ? Number(rawVersion) : Number.NaN;
       if (!positiveInteger(expectedVersion)) throw new Error('VALIDATION_FAILED');
-      await dependencies.providers.remove(agentUserId(request), pathParam(request.params.providerId), expectedVersion);
-      agentData(request, response, { deleted: true });
+      const query: AgentProviderDeleteQueryDto = { expectedVersion };
+      await dependencies.providers.remove(
+        agentUserId(request),
+        pathParam(request.params.providerId),
+        query.expectedVersion,
+      );
+      const payload: AgentProviderDeleteResponseDto = { deleted: true };
+      agentData(request, response, payload);
     }),
   );
 
@@ -727,11 +968,11 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/ai/providers/:providerId/discover-models',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      agentData(
-        request,
-        response,
-        await dependencies.providers.discoverModels(agentUserId(request), pathParam(request.params.providerId)),
-      );
+      if (!isRecord(request.body) || !hasOnlyKeys(request.body, [])) throw new Error('VALIDATION_FAILED');
+      const payload: AgentDiscoveredProviderModelDto[] = (
+        await dependencies.providers.discoverModels(agentUserId(request), pathParam(request.params.providerId))
+      ).map(discoveredProviderModelDto);
+      agentData(request, response, payload);
     }),
   );
 
@@ -742,13 +983,16 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['modelId']) || !nonEmptyString(request.body.modelId)) {
         throw new Error('VALIDATION_FAILED');
       }
+      const input: AgentProviderTestRequestDto = { modelId: request.body.modelId };
       agentData(
         request,
         response,
-        await dependencies.providers.test(
-          agentUserId(request),
-          pathParam(request.params.providerId),
-          request.body.modelId,
+        providerTestDto(
+          await dependencies.providers.test(
+            agentUserId(request),
+            pathParam(request.params.providerId),
+            input.modelId,
+          ),
         ),
       );
     }),

@@ -9,6 +9,7 @@
     formatAgentApiError,
     type AgentDiscoveredProviderModel,
     type AgentModelRegistryStatus,
+    type AgentProviderCreateInput,
     type AgentProviderView,
     type ModelCapabilityDefaults,
   } from '../api/agent-api';
@@ -24,7 +25,7 @@
       models: AgentProviderView['models'],
       successMsg?: string,
     ) => Promise<boolean | undefined>;
-    createProvider: (input: Record<string, unknown>, successMsg?: string) => Promise<AgentProviderView | undefined>;
+    createProvider: (input: AgentProviderCreateInput, successMsg?: string) => Promise<AgentProviderView | undefined>;
     providers: AgentProviderView[];
     busy: boolean;
     discoveries: Record<string, AgentDiscoveredProviderModel[]>;
@@ -237,7 +238,7 @@
 
       // 如果尚未保存，先通过 createProvider 建立服务商记录
       if (!targetProviderId) {
-        const payload = {
+        const payload: AgentProviderCreateInput = {
           kind: 'openai-compatible',
           displayName: form.displayName.trim(),
           baseUrl: form.baseUrl.trim(),
@@ -314,7 +315,7 @@
 
     modalTesting.value = true;
     try {
-      const payload = {
+      const payload: AgentProviderCreateInput = {
         kind: 'openai-compatible',
         displayName: form.displayName.trim(),
         baseUrl: form.baseUrl.trim(),

@@ -9,6 +9,20 @@ import type {
   AgentIntegrationViewDto,
   AgentMcpIntegrationConfigurationDto,
 } from '@nexus-terminal/protocol/agent-integrations';
+import type {
+  AgentDiscoveredProviderModelDto,
+  AgentModelCapabilityDefaultsDto,
+  AgentModelCapabilityDto,
+  AgentModelCapabilityOverridesDto,
+  AgentModelReasoningDefaultsDto,
+  AgentModelRegistryStatusDto,
+  AgentProviderCreateRequestDto,
+  AgentProviderModelCapabilityObservationDto,
+  AgentProviderModelDto,
+  AgentProviderPatchFieldsDto,
+  AgentProviderViewDto,
+  AgentReasoningEffortDto,
+} from '@nexus-terminal/protocol/agent-providers';
 import { agentRuntimeRequest } from './agent-http-client';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 import { createPluginApi } from './plugin-api';
@@ -347,113 +361,18 @@ export interface PluginUninstallResult {
   app: PluginAppStateView;
 }
 
-export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-
-export type AgentModelCapability = 'tools' | 'image_input' | 'file_input' | 'reasoning';
-
-export interface ModelReasoningDefaults {
-  supportedEfforts: AgentReasoningEffort[];
-  defaultEffort?: AgentReasoningEffort;
-  mandatory?: boolean;
-}
-
-export interface ModelCapabilityDefaults {
-  contextWindow?: number;
-  maxOutputTokens?: number;
-  supportsTools?: boolean;
-  supportsImageInput?: boolean;
-  supportsFileInput?: boolean;
-  supportsPromptCacheKey?: boolean;
-  reasoning?: ModelReasoningDefaults;
-}
-
-export interface ModelCapabilityOverrides {
-  contextWindow?: number;
-  maxOutputTokens?: number;
-  supportsTools?: boolean;
-  supportsImageInput?: boolean;
-  supportsFileInput?: boolean;
-  supportsPromptCacheKey?: boolean;
-  reasoning?: ModelReasoningDefaults;
-}
-
-export interface ProviderModelCapabilityObservation {
-  modelId: string;
-  source: string;
-  sourceVersion: string;
-  capabilities: ModelCapabilityDefaults;
-  updatedAt: number;
-}
-
-export interface ProviderModel {
-  id: string;
-  contextWindow: number;
-  maxOutputTokens: number;
-  supportsTools: boolean;
-  supportsImageInput: boolean;
-  supportsFileInput: boolean;
-  supportsPromptCacheKey?: boolean;
-  capabilitySources: {
-    contextWindow: 'registry' | 'provider' | 'manual';
-    maxOutputTokens: 'registry' | 'provider' | 'manual';
-    supportsTools: 'registry' | 'provider' | 'manual';
-    supportsImageInput?: 'registry' | 'provider' | 'manual';
-    supportsFileInput?: 'registry' | 'provider' | 'manual';
-    supportsPromptCacheKey?: 'registry' | 'provider' | 'manual';
-    reasoning?: 'registry' | 'provider' | 'manual';
-  };
-  registryDefaults?: ModelCapabilityDefaults;
-  providerCapabilities?: ProviderModelCapabilityObservation;
-  capabilityConflicts?: Array<
-    | 'contextWindow'
-    | 'maxOutputTokens'
-    | 'supportsTools'
-    | 'supportsImageInput'
-    | 'supportsFileInput'
-    | 'supportsPromptCacheKey'
-    | 'reasoning'
-  >;
-  capabilityOverrides?: ModelCapabilityOverrides;
-  reasoningEfforts?: AgentReasoningEffort[];
-  defaultReasoningEffort?: AgentReasoningEffort;
-  reasoningSource?: 'provider' | 'registry' | 'manual';
-  reasoningMandatory?: boolean;
-}
-
-export interface AgentDiscoveredProviderModel {
-  id: string;
-  ownedBy?: string;
-  createdAt?: number;
-  registryDefaults?: ModelCapabilityDefaults;
-  providerCapabilities?: ProviderModelCapabilityObservation;
-}
-
-export interface AgentModelRegistryStatus {
-  sourceUrl: string;
-  autoUpdate: boolean;
-  activeSource: 'builtin' | 'updated';
-  entryCount: number;
-  generatedAt: number;
-  sourceRevision: string | null;
-  builtinGeneratedAt: number;
-  lastAttemptAt: number | null;
-  lastSuccessAt: number | null;
-  lastErrorCode: string | null;
-  nextAutoUpdateAt: number | null;
-}
-
-export interface AgentProviderView {
-  id: string;
-  kind: 'openai-compatible';
-  displayName: string;
-  baseUrl: string;
-  protocol: 'chat-completions' | 'responses';
-  hasCredential: boolean;
-  credentialRevision: number;
-  models: ProviderModel[];
-  enabled: boolean;
-  version: number;
-}
+export type AgentReasoningEffort = AgentReasoningEffortDto;
+export type AgentModelCapability = AgentModelCapabilityDto;
+export type ModelReasoningDefaults = AgentModelReasoningDefaultsDto;
+export type ModelCapabilityDefaults = AgentModelCapabilityDefaultsDto;
+export type ModelCapabilityOverrides = AgentModelCapabilityOverridesDto;
+export type ProviderModelCapabilityObservation = AgentProviderModelCapabilityObservationDto;
+export type ProviderModel = AgentProviderModelDto;
+export type AgentDiscoveredProviderModel = AgentDiscoveredProviderModelDto;
+export type AgentModelRegistryStatus = AgentModelRegistryStatusDto;
+export type AgentProviderView = AgentProviderViewDto;
+export type AgentProviderCreateInput = AgentProviderCreateRequestDto;
+export type AgentProviderPatchInput = AgentProviderPatchFieldsDto;
 
 export interface ArtifactStorageSummary {
   totalBytes: number;

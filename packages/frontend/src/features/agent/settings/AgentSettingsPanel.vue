@@ -10,6 +10,7 @@
     type AgentAppSummary,
     type AgentDiscoveredProviderModel,
     type AgentHardLimits,
+    type AgentProviderCreateInput,
     type AgentProviderView,
     type AgentSettingsView,
     type ArtifactStorageSummary,
@@ -300,7 +301,7 @@
       storage.value = await agentApi.storage();
     });
 
-  const createProvider = (input: Record<string, unknown>, successMsg?: string) =>
+  const createProvider = (input: AgentProviderCreateInput, successMsg?: string) =>
     execute(
       'create-provider',
       async () => {

@@ -17,3 +17,4 @@ export type * from './transfers.js';
 export type * from './workspace.js';
 export type * from './agent-common.js';
 export type * from './agent-integrations.js';
+export type * from './agent-providers.js';
