@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import type { AgentIntegrationFacade } from '../../../modules/agent/public';
-import type { IntegrationKind } from '../../../modules/agent/ai/integrations.types';
+import type { AgentIntegrationFacade, IntegrationKind } from '../../../modules/agent/public';
 import { agentData, agentRoute } from './agent-http';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
 

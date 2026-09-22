@@ -46,6 +46,7 @@ import type {
 import type { ContextPlan, ContextRequest } from './ai/context.types';
 import type { LanguageModelPort } from './ai/language-model.port';
 import type { IntegrationKind, IntegrationManagementView, IntegrationRefreshView } from './ai/integrations.types';
+export type { IntegrationKind } from './ai/integrations.types';
 import type {
   DiscoveredProviderModel,
   ModelCapabilityDefaults,
