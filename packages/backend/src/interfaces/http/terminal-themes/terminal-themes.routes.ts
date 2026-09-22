@@ -1,19 +1,44 @@
+import type {
+  TerminalThemeCreateRequestDto,
+  TerminalThemeDataDto,
+  TerminalThemeDto,
+  TerminalThemeUpdateRequestDto,
+} from '@nexus-terminal/protocol/appearance';
 import { Router } from 'express';
 import multer from 'multer';
 import type { TerminalThemeService } from '../../../modules/terminal-themes/terminal-theme.service';
-import type { TerminalTheme, TerminalThemeData } from '../../../modules/terminal-themes/terminal-theme.types';
+import type { TerminalTheme } from '../../../modules/terminal-themes/terminal-theme.types';
 import { requireAuthenticated } from '../auth/auth.middleware';
-import { errorMessage, parsePositiveId } from '../shared/http-utils';
+import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 } });
 
-const terminalThemeDto = (theme: TerminalTheme) => ({
+const terminalThemeDto = (theme: TerminalTheme): TerminalThemeDto => ({
   id: theme.id,
   name: theme.name,
-  themeData: theme.themeData,
+  themeData: Object.fromEntries(
+    Object.entries(theme.themeData).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  ),
   preset: theme.isPreset,
 });
+
+const terminalThemeDataDto = (value: unknown): TerminalThemeDataDto => {
+  if (!isRecord(value)) throw new Error('终端主题 JSON 必须是对象。');
+  const entries = Object.entries(value);
+  if (entries.some(([, entry]) => typeof entry !== 'string')) {
+    throw new Error('终端主题 JSON 的颜色值必须是字符串。');
+  }
+  return Object.fromEntries(entries) as TerminalThemeDataDto;
+};
+
+const terminalThemeCreateRequest = (body: unknown): TerminalThemeCreateRequestDto => {
+  if (!isRecord(body) || typeof body.name !== 'string') throw new Error('终端主题名称无效。');
+  return { name: body.name, themeData: terminalThemeDataDto(body.themeData) };
+};
+
+const terminalThemeUpdateRequest = (body: unknown): TerminalThemeUpdateRequestDto =>
+  terminalThemeCreateRequest(body);
 
 export const createTerminalThemesRouter = (themes: TerminalThemeService): Router => {
   const router = Router();
@@ -37,7 +62,7 @@ export const createTerminalThemesRouter = (themes: TerminalThemeService): Router
         return;
       }
       try {
-        const data = JSON.parse(request.file.buffer.toString('utf8')) as TerminalThemeData;
+        const data = terminalThemeDataDto(JSON.parse(request.file.buffer.toString('utf8')) as unknown);
         const fallbackName = request.file.originalname.replace(/\.json$/i, '');
         response
           .status(201)
@@ -63,7 +88,7 @@ export const createTerminalThemesRouter = (themes: TerminalThemeService): Router
     '/',
     route(async (request, response) => {
       try {
-        response.status(201).json(terminalThemeDto(await themes.create(request.body)));
+        response.status(201).json(terminalThemeDto(await themes.create(terminalThemeCreateRequest(request.body))));
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('已存在') ? 409 : 400).json({ message: '创建终端主题失败', error: message });
@@ -112,7 +137,7 @@ export const createTerminalThemesRouter = (themes: TerminalThemeService): Router
         return;
       }
       try {
-        if (!(await themes.update(id, request.body))) {
+        if (!(await themes.update(id, terminalThemeUpdateRequest(request.body)))) {
           response.status(404).json({ message: '未找到可更新的主题或该主题为预设主题' });
           return;
         }

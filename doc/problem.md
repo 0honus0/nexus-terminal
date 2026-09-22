@@ -440,7 +440,8 @@ Agent UI 中任意像素字号统计：
 - ✅ **Auth / Security 已完成双端接线**（commit `69b48be`）：登录、2FA、Passkey、CAPTCHA、IP access 等真实 HTTP request/response 使用同一 DTO；同时补出了 Passkey rename 的运行时输入校验缺口。
 - ✅ **Settings / Preferences 已完成双端接线**（commit `8f939cb`）：`/settings` request/response 改由 `protocol/settings` 定义，backend mapper 从 `Record<string, unknown>` 收紧为 `SettingsResponseDto`。
 - ✅ **Connections / Proxy / SSH Keys / Tags / Remote Desktop 已完成一批 canonical DTO 接线**（commit `0ba2caf`）。
-- 🚧 **当前工作树中的未完成 DTO 批次**：`appearance`、`audit`、`command-history`、`filesystem-catalog`、`notifications`、`quick-commands`、`ssh-suspend`、`system`、`transfers` 已建立或开始建立 protocol DTO / frontend model alias，但尚未全部完成 frontend API 与 backend route 两端迁移；这些文件是**迁移检查点，不代表对应域已关闭**。
+- ✅ **Appearance / HTML Themes / Terminal Themes 已完成双端 canonical DTO 接线（2026-09-22）**：frontend API 已消费 `protocol/appearance`，backend `appearance.routes.ts` 与 `terminal-themes.routes.ts` 现显式完成 domain↔DTO mapping；terminal theme 导入/create/update 的 JSON theme data 也从裸类型断言收紧为字符串 map 边界校验。
+- 🚧 **当前工作树中的未完成 DTO 批次**：`audit`、`command-history`、`filesystem-catalog`、`notifications`、`quick-commands`、`ssh-suspend`、`system`、`transfers` 已建立或开始建立 protocol DTO / frontend model alias，但尚未全部完成 frontend API 与 backend route 两端迁移；这些文件是**迁移检查点，不代表对应域已关闭**。
 - 🚧 **Agent / Workspace 仍是最大剩余面**：frontend `agent-api.ts` / `agent-events.ts`、backend Agent HTTP route request DTO、Workspace WebSocket JSON envelope / event，以及 Agent terminal / event WS contract 仍有手写重复。raw binary chunk 本身不作为 DTO，但其 JSON metadata / opcode / envelope 仍应收敛到 protocol。
 - 🚧 **Agent durable event canonical union 已开始落地**：backend `state-commit.port.ts` 正将 event type 从裸 `string` 收紧为 `AgentDurableEventType`，并改造 state-commit call sites 让编译器约束 event name；但该 union 尚未迁入 `packages/protocol` 并被 frontend/backend 共同消费，因此仍属于未完成状态。
 - ✅ **durable 漂移静默消费已关闭 2026-09-22**：projector 遇到带 durable `id` 的 unknown event 会 fail-closed，不再推进 cursor；这一条是行为防线，不能替代 canonical protocol。

@@ -1,8 +1,24 @@
 import { pipeline } from 'node:stream/promises';
+import type {
+  AppearanceBackgroundUploadResponseDto,
+  AppearanceSettingsDto,
+  AppearanceUpdateRequestDto,
+  HtmlThemeCreateRequestDto,
+  HtmlThemeUpdateRequestDto,
+  LocalHtmlThemeDto,
+  RemoteHtmlRepositoryResponseDto,
+  RemoteHtmlRepositoryUpdateRequestDto,
+  RemoteHtmlThemeDto,
+} from '@nexus-terminal/protocol/appearance';
 import { Router } from 'express';
 import multer from 'multer';
 import type { AppearanceSettingsService } from '../../../modules/appearance/appearance-settings.service';
-import type { UpdateAppearanceInput } from '../../../modules/appearance/appearance.types';
+import type {
+  AppearanceSettings,
+  HtmlThemeSummary,
+  RemoteHtmlThemeSummary,
+  UpdateAppearanceInput,
+} from '../../../modules/appearance/appearance.types';
 import type { BackgroundAssetService } from '../../../modules/appearance/background-asset.service';
 import type { HtmlThemeService } from '../../../modules/appearance/html-theme.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
@@ -10,6 +26,10 @@ import { errorMessage, isRecord } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
 const backgroundUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+const appearanceSettingsDto = (settings: AppearanceSettings): AppearanceSettingsDto => ({ ...settings });
+const localHtmlThemeDto = (theme: HtmlThemeSummary): LocalHtmlThemeDto => ({ ...theme });
+const remoteHtmlThemeDto = (theme: RemoteHtmlThemeSummary): RemoteHtmlThemeDto => ({ ...theme });
 
 const appearanceKeys = new Set<keyof UpdateAppearanceInput>([
   'customUiTheme',
@@ -39,9 +59,10 @@ const appearanceKeys = new Set<keyof UpdateAppearanceInput>([
 
 const appearanceUpdateInput = (body: unknown): UpdateAppearanceInput => {
   if (!isRecord(body)) throw new Error('请求体必须是对象。');
-  const input = Object.fromEntries(
+  const dto = Object.fromEntries(
     Object.entries(body).filter(([key]) => appearanceKeys.has(key as keyof UpdateAppearanceInput)),
-  ) as UpdateAppearanceInput;
+  ) as AppearanceUpdateRequestDto;
+  const input: UpdateAppearanceInput = { ...dto };
   if (body.terminalCustomHtml !== undefined) {
     if (body.terminalCustomHtml !== null && typeof body.terminalCustomHtml !== 'string')
       throw new Error('terminalCustomHtml 必须是字符串或 null。');
@@ -60,14 +81,14 @@ export const createAppearanceRouter = (dependencies: {
   router.get(
     '/',
     route(async (_request, response) => {
-      response.json(await dependencies.appearance.get());
+      response.json(appearanceSettingsDto(await dependencies.appearance.get()));
     }),
   );
   router.put(
     '/',
     route(async (request, response) => {
       try {
-        response.json(await dependencies.appearance.update(appearanceUpdateInput(request.body)));
+        response.json(appearanceSettingsDto(await dependencies.appearance.update(appearanceUpdateInput(request.body))));
       } catch (error) {
         response.status(400).json({ message: '更新外观设置失败', error: errorMessage(error) });
       }
@@ -83,7 +104,11 @@ export const createAppearanceRouter = (dependencies: {
         }
         try {
           const result = await dependencies.backgrounds.upload(kind, request.file.buffer, request.file.mimetype);
-          response.json({ message: kind === 'page' ? '页面背景上传成功' : '终端背景上传成功', ...result });
+          const payload: AppearanceBackgroundUploadResponseDto = {
+            message: kind === 'page' ? '页面背景上传成功' : '终端背景上传成功',
+            ...result,
+          };
+          response.json(payload);
         } catch (error) {
           response.status(400).json({ message: errorMessage(error) });
         }
@@ -135,7 +160,7 @@ export const createAppearanceRouter = (dependencies: {
   router.get(
     '/html-presets/local',
     route(async (_request, response) => {
-      response.json(await dependencies.htmlThemes.listLocal());
+      response.json((await dependencies.htmlThemes.listLocal()).map(localHtmlThemeDto));
     }),
   );
   router.get(
@@ -152,7 +177,7 @@ export const createAppearanceRouter = (dependencies: {
   router.post(
     '/html-presets/local',
     route(async (request, response) => {
-      const { name, content } = request.body ?? {};
+      const { name, content } = (request.body ?? {}) as Partial<HtmlThemeCreateRequestDto>;
       if (typeof name !== 'string' || typeof content !== 'string' || !name || !content) {
         response.status(400).json({ message: '主题名称和内容不能为空' });
         return;
@@ -168,12 +193,13 @@ export const createAppearanceRouter = (dependencies: {
   router.put(
     '/html-presets/local/:themeName',
     route(async (request, response) => {
-      if (typeof request.body?.content !== 'string') {
+      const body = (request.body ?? {}) as Partial<HtmlThemeUpdateRequestDto>;
+      if (typeof body.content !== 'string') {
         response.status(400).json({ message: '主题内容不能为空' });
         return;
       }
       try {
-        await dependencies.htmlThemes.updateCustom(String(request.params.themeName), request.body.content);
+        await dependencies.htmlThemes.updateCustom(String(request.params.themeName), body.content);
         response.json({ message: '用户自定义 HTML 主题更新成功' });
       } catch (error) {
         const message = errorMessage(error);
@@ -196,18 +222,22 @@ export const createAppearanceRouter = (dependencies: {
   router.get(
     '/html-presets/remote/repository-url',
     route(async (_request, response) => {
-      response.json({ url: await dependencies.htmlThemes.getRemoteRepositoryUrl() });
+      const payload: RemoteHtmlRepositoryResponseDto = {
+        url: await dependencies.htmlThemes.getRemoteRepositoryUrl(),
+      };
+      response.json(payload);
     }),
   );
   router.put(
     '/html-presets/remote/repository-url',
     route(async (request, response) => {
-      if (request.body?.url === undefined) {
+      const body = (request.body ?? {}) as Partial<RemoteHtmlRepositoryUpdateRequestDto>;
+      if (body.url === undefined) {
         response.status(400).json({ message: 'URL 不能为空或 undefined' });
         return;
       }
       try {
-        await dependencies.htmlThemes.setRemoteRepositoryUrl(request.body.url || null);
+        await dependencies.htmlThemes.setRemoteRepositoryUrl(body.url || null);
         response.json({ message: '远程 HTML 主题仓库链接更新成功' });
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });
@@ -219,9 +249,11 @@ export const createAppearanceRouter = (dependencies: {
     route(async (request, response) => {
       try {
         response.json(
-          await dependencies.htmlThemes.listRemote(
-            typeof request.query.repoUrl === 'string' ? request.query.repoUrl : undefined,
-          ),
+          (
+            await dependencies.htmlThemes.listRemote(
+              typeof request.query.repoUrl === 'string' ? request.query.repoUrl : undefined,
+            )
+          ).map(remoteHtmlThemeDto),
         );
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });
