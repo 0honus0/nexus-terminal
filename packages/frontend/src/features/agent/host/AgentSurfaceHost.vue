@@ -17,6 +17,7 @@
 
   let hostAbort: AbortController | null = null;
   let generation = 0;
+  let refreshGeneration = 0;
   let activeUserId: number | null = null;
 
   const dispatchThreadChanged = (payload: Record<string, unknown>): void => {
@@ -44,9 +45,13 @@
   };
 
   const refresh = async (reason: 'initial' | 'host-event'): Promise<HostSummaryView | null> => {
-    if (!auth.isAuthenticated.value) return null;
+    if (!auth.isAuthenticated.value || activeUserId === null) return null;
+    const requestGeneration = ++refreshGeneration;
+    const requestUserId = activeUserId;
     try {
       const next = await agentApi.summary();
+      if (!auth.isAuthenticated.value || activeUserId !== requestUserId) return null;
+      if (requestGeneration !== refreshGeneration) return next;
       const previousFeatureEnabled = summary.value?.featureEnabled ?? null;
       summary.value = next;
       chooseDefaultApp(next);
@@ -63,6 +68,7 @@
           reason,
           userId: activeUserId,
           generation,
+          refreshGeneration: requestGeneration,
           featureEnabled: next.featureEnabled,
           eventCursor: next.eventCursor,
           appCount: next.apps.length,
@@ -74,7 +80,12 @@
       );
       return next;
     } catch (cause) {
-      logger.warn({ err: cause, reason, userId: activeUserId, generation }, 'Failed to refresh Agent global surface');
+      if (!auth.isAuthenticated.value || activeUserId !== requestUserId) return null;
+      if (requestGeneration !== refreshGeneration) return summary.value;
+      logger.warn(
+        { err: cause, reason, userId: activeUserId, generation, refreshGeneration: requestGeneration },
+        'Failed to refresh Agent global surface',
+      );
       return null;
     }
   };
@@ -249,6 +260,7 @@
   document.addEventListener('visibilitychange', onVisibility);
 
   onBeforeUnmount(() => {
+    refreshGeneration += 1;
     persistLayout('host-unmount');
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('nexus:agent:host-changed', onLocalHostChanged);
