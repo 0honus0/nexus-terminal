@@ -1,106 +1,37 @@
 import { randomUUID } from 'node:crypto';
 import type { ModelFinishReason, ModelProviderContinuation, TokenUsage } from '../../ai/model.types';
-import type { ClockPort, JsonValue } from '../../agent.types';
-import type { ToolInspection, ToolProposal } from '../../capabilities/tool.types';
+import type { ClockPort } from '../../agent.types';
+import type { ToolProposal } from '../../capabilities/tool.types';
 import type { AgentBackendPort, BackendSignal } from './agent-backend.port';
 import { completionGateDecision } from './completion-gate';
-import { executionErrorCode } from './execution-errors';
 import { modelFinishDisposition } from './model-finish-policy';
 import { ModelStepRunner, type ModelToolCall } from './model-step-runner';
 import { estimateTokens } from './model-accounting';
 import { ToolCallRunner } from './tool-call-runner';
 import { RootToolExecutionCoordinator } from './root-tool-execution-coordinator';
+import { RootRunLifecycleCoordinator } from './root-run-lifecycle-coordinator';
+import {
+  MAX_TOOL_CALLS_PER_MODEL_STEP,
+  errorCode,
+  latestRunInputText,
+  rejectedToolInspection,
+  signalReason,
+  usageWithAttempt,
+  usageWithModel,
+} from './root-model-execution-common';
 import { rootToolContext } from './root-tool-execution-common';
 import type { RunExecutionReaderPort } from '../runs/run.repository.port';
 import type { DelegationReaderPort } from '../collaboration/subagent.repository.port';
 import type { SubagentPolicyService } from '../collaboration/subagent-policy';
 import { projectSubagentCollaborationContext } from '../collaboration/subagent-context-projection';
 import type { RootExecutionCommitPort } from '../runs/state-commit.port';
-import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
+import type { RunView } from '../runs/run.types';
 import { runModelRoutes } from '../runs/model-routes';
-import { requestHash } from '../runs/idempotency';
 import { logErrorCode, logger } from '../../../../shared/logging/logger';
-
-const MAX_TOOL_CALLS_PER_MODEL_STEP = 64;
-
-const latestRunInputText = (run: RunSnapshot): string => {
-  for (let index = run.recentEntries.length - 1; index >= 0; index -= 1) {
-    const entry = run.recentEntries[index]!;
-    if (
-      entry.kind !== 'user_input' ||
-      !entry.payload ||
-      Array.isArray(entry.payload) ||
-      typeof entry.payload !== 'object'
-    ) {
-      continue;
-    }
-    const text = (entry.payload as Record<string, JsonValue>).text;
-    if (typeof text === 'string') return text;
-  }
-  return '';
-};
-
-const rejectedToolInspection = (run: RunView, proposal: ToolProposal, failureCode: string): ToolInspection => {
-  const operationHash = requestHash(1, {
-    kind: 'rejected_tool_call',
-    runId: run.id,
-    providerCallId: proposal.providerCallId,
-    toolName: proposal.name,
-    argumentsJson: proposal.argumentsJson,
-    inputRevision: run.inputRevision,
-    failureCode,
-  });
-  return {
-    toolName: proposal.name,
-    toolVersion: 'unavailable',
-    normalizedArguments: {},
-    target: {
-      kind: 'run',
-      targetIdentity: `run:${run.id}:rejected-tool:${proposal.providerCallId}`,
-      endpoint: `run:${run.id}`,
-      loginUser: `agent-runtime:${run.id}`,
-      configurationHash: operationHash,
-    },
-    resourceKeys: [],
-    risk: 'forbidden',
-    mutation: false,
-    operationHash,
-    operationHashVersion: 1,
-    preconditions: [],
-    policyRevision: run.definition.policyRevision,
-    inputRevision: run.inputRevision,
-  };
-};
-
-const usageWithModel = (base: RunUsage, delta: TokenUsage): RunUsage => ({
-  inputTokens: base.inputTokens + delta.inputTokens,
-  outputTokens: base.outputTokens + delta.outputTokens,
-  cachedInputTokens: base.cachedInputTokens + delta.cachedInputTokens,
-  steps: base.steps + 1,
-  subagentMessages: base.subagentMessages,
-  subagentMessageBytes: base.subagentMessageBytes,
-});
-
-const usageWithAttempt = (base: RunUsage, delta: TokenUsage): RunUsage => ({
-  inputTokens: base.inputTokens + delta.inputTokens,
-  outputTokens: base.outputTokens + delta.outputTokens,
-  cachedInputTokens: base.cachedInputTokens + delta.cachedInputTokens,
-  steps: base.steps,
-  subagentMessages: base.subagentMessages,
-  subagentMessageBytes: base.subagentMessageBytes,
-});
-
-const errorCode = (error: unknown): string => executionErrorCode(error, 'MODEL_EXECUTION_FAILED');
-
-const signalReason = (signal: AbortSignal): string | null => {
-  if (!signal.aborted) return null;
-  const reason = signal.reason;
-  if (reason instanceof Error) return reason.message;
-  return typeof reason === 'string' ? reason : 'ABORTED';
-};
 
 export class NativeAgentBackend implements AgentBackendPort {
   private readonly rootTools: RootToolExecutionCoordinator;
+  private readonly lifecycle: RootRunLifecycleCoordinator;
 
   constructor(
     private readonly repository: RunExecutionReaderPort,
@@ -116,6 +47,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     private readonly subagentPolicy: Pick<SubagentPolicyService, 'get'> | null = null,
   ) {
     this.rootTools = new RootToolExecutionCoordinator(repository, stateCommit, toolCalls, clock, recoverySafePoint);
+    this.lifecycle = new RootRunLifecycleCoordinator(stateCommit, clock);
   }
 
   async *execute(initial: RunView, signal: AbortSignal): AsyncIterable<BackendSignal> {
@@ -148,7 +80,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           return;
         }
         if (latest.status === 'running' || latest.status === 'cancelling') {
-          const cancelled = await this.cancelAtSafeBoundary(latest);
+          const cancelled = await this.lifecycle.cancelAtSafeBoundary(latest);
           yield { type: 'durable', runId: latest.id, cursor: cancelled.eventCursor };
           yield { type: 'settled', run: cancelled.run };
         }
@@ -193,7 +125,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       if (!['created', 'running'].includes(snapshot.status)) return;
 
       if (signal.aborted) {
-        const cancelled = await this.cancelAtSafeBoundary(snapshot);
+        const cancelled = await this.lifecycle.cancelAtSafeBoundary(snapshot);
         yield { type: 'durable', runId: snapshot.id, cursor: cancelled.eventCursor };
         yield { type: 'settled', run: cancelled.run };
         return;
@@ -256,7 +188,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       } catch (error) {
         const code = errorCode(error);
         if (code !== 'PROVIDER_CONFIGURATION_STALE' && code !== 'MODEL_NOT_FOUND') throw error;
-        const failed = await this.failAtSafeBoundary(snapshot, code);
+        const failed = await this.lifecycle.failAtSafeBoundary(snapshot, code);
         yield { type: 'durable', runId: snapshot.id, cursor: failed.eventCursor };
         yield { type: 'settled', run: failed.run };
         return;
@@ -281,7 +213,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         'Agent model step prepared',
       );
 
-      const budgetWait = await this.reserveModelBudget(snapshot);
+      const budgetWait = await this.lifecycle.reserveModelBudget(snapshot);
       if (budgetWait) {
         yield { type: 'durable', runId: snapshot.id, cursor: budgetWait.eventCursor };
         yield { type: 'settled', run: budgetWait.run };
@@ -372,7 +304,7 @@ export class NativeAgentBackend implements AgentBackendPort {
               cachedInputTokens: 0,
             } satisfies TokenUsage);
           const usageAfterFailed = usageWithAttempt(currentRun.usage, failedUsage);
-          const budgetReason = this.retryBudgetReason(currentRun, usageAfterFailed);
+          const budgetReason = this.lifecycle.retryBudgetReason(currentRun, usageAfterFailed);
           if (budgetReason) {
             const paused = await this.stateCommit.pauseModelStepForBudget({
               scope,
@@ -745,8 +677,8 @@ export class NativeAgentBackend implements AgentBackendPort {
             return;
           }
           const terminal = cancelled
-            ? await this.cancelAtSafeBoundary(latest)
-            : await this.failAtSafeBoundary(latest, errorCode(error));
+            ? await this.lifecycle.cancelAtSafeBoundary(latest)
+            : await this.lifecycle.failAtSafeBoundary(latest, errorCode(error));
           yield { type: 'durable', runId: snapshot.id, cursor: terminal.eventCursor };
           yield { type: 'settled', run: terminal.run };
           return;
@@ -786,102 +718,5 @@ export class NativeAgentBackend implements AgentBackendPort {
         return;
       }
     }
-  }
-
-  private retryBudgetReason(run: RunView, usage: RunUsage): JsonValue | null {
-    const activeExecutionSeconds =
-      run.activeExecutionSeconds +
-      (run.executingRuntimeCount > 0 && run.activeExecutionStartedAt !== null
-        ? Math.max(0, this.clock.nowUnixSeconds() - run.activeExecutionStartedAt)
-        : 0);
-    const reason = activeExecutionSeconds >= run.budget.maxActiveExecutionSeconds ? 'active_time_limit' : null;
-    if (!reason) return null;
-    return {
-      reason,
-      retry: true,
-      currentSteps: usage.steps,
-      requestedSteps: usage.steps + 1,
-      activeExecutionSeconds,
-      maxActiveExecutionSeconds: run.budget.maxActiveExecutionSeconds,
-    };
-  }
-
-  private async reserveModelBudget(
-    snapshot: RunSnapshot,
-  ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>> | null> {
-    const activeSeconds =
-      snapshot.activeExecutionSeconds +
-      (snapshot.executingRuntimeCount > 0 && snapshot.activeExecutionStartedAt !== null
-        ? Math.max(0, this.clock.nowUnixSeconds() - snapshot.activeExecutionStartedAt)
-        : 0);
-    const reason =
-      snapshot.usage.steps >= snapshot.budget.maxRunSteps
-        ? 'step_limit'
-        : activeSeconds >= snapshot.budget.maxActiveExecutionSeconds
-          ? 'active_time_limit'
-          : null;
-    if (!reason) return null;
-
-    const now = this.clock.nowUnixSeconds();
-    return this.stateCommit.commit({
-      scope: { userId: snapshot.userId, appId: snapshot.appId },
-      runId: snapshot.id,
-      expectedRunVersion: snapshot.version,
-      events: [
-        {
-          type: 'budget.increase_requested',
-          payload: {
-            reason,
-            currentSteps: snapshot.usage.steps,
-            requestedSteps: snapshot.usage.steps + 1,
-            activeExecutionSeconds: activeSeconds,
-            maxActiveExecutionSeconds: snapshot.budget.maxActiveExecutionSeconds,
-          },
-        },
-        { type: 'run.status_changed', payload: { from: snapshot.status, to: 'awaiting_budget' } },
-      ],
-      runPatch: { status: 'awaiting_budget' },
-      now,
-    });
-  }
-
-  private async failAtSafeBoundary(
-    snapshot: RunSnapshot | RunView,
-    code: string,
-  ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>>> {
-    const now = this.clock.nowUnixSeconds();
-    return this.stateCommit.commit({
-      scope: { userId: snapshot.userId, appId: snapshot.appId },
-      runId: snapshot.id,
-      expectedRunVersion: snapshot.version,
-      events: [
-        { type: 'run.error', payload: { code } },
-        { type: 'run.status_changed', payload: { from: snapshot.status, to: 'failed' } },
-      ],
-      runPatch: {
-        status: 'failed',
-        goalStatus: 'not_satisfied',
-        verificationStatus: 'failed',
-        completedAt: now,
-      },
-      now,
-    });
-  }
-
-  private async cancelAtSafeBoundary(
-    snapshot: RunSnapshot | RunView,
-  ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>>> {
-    const now = this.clock.nowUnixSeconds();
-    return this.stateCommit.commit({
-      scope: { userId: snapshot.userId, appId: snapshot.appId },
-      runId: snapshot.id,
-      expectedRunVersion: snapshot.version,
-      events: [
-        { type: 'run.cancelled', payload: { reason: 'abort_signal' } },
-        { type: 'run.status_changed', payload: { from: snapshot.status, to: 'cancelled' } },
-      ],
-      runPatch: { status: 'cancelled', completedAt: now },
-      now,
-    });
   }
 }
