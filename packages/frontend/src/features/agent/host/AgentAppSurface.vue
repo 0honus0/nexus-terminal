@@ -95,16 +95,25 @@
   const detailCheckpoints = ref<AgentCheckpointView[]>([]);
   const currentRunCheckpoints = ref<AgentCheckpointView[]>([]);
   const detailApprovalBatch = ref<AgentApprovalBatch | null>(null);
+  const error = ref('');
+  let currentRunCheckpointsGeneration = 0;
 
   const refreshCurrentCheckpoints = async (): Promise<void> => {
-    if (!run.value) {
+    const requestGeneration = ++currentRunCheckpointsGeneration;
+    const runId = run.value?.id ?? null;
+    if (!runId) {
       currentRunCheckpoints.value = [];
       return;
     }
     try {
-      currentRunCheckpoints.value = await facade.listCheckpoints(run.value.id);
-    } catch {
+      const checkpoints = await facade.listCheckpoints(runId);
+      if (requestGeneration !== currentRunCheckpointsGeneration || run.value?.id !== runId) return;
+      currentRunCheckpoints.value = checkpoints;
+    } catch (cause) {
+      if (requestGeneration !== currentRunCheckpointsGeneration || run.value?.id !== runId) return;
       currentRunCheckpoints.value = [];
+      logger.warn({ err: cause, appId: props.appId, runId }, 'Agent UI failed to refresh current Run checkpoints');
+      error.value = explain(cause);
     }
   };
 
@@ -151,7 +160,6 @@
   const busy = ref(false);
   const loading = ref(true);
   const selectingThread = ref(false);
-  const error = ref('');
   const draft = ref(agentSurfaceSession.state(props.appId).draft);
   const commandResult = ref<ConversationCommandResult | null>(null);
   let threadSelectionGeneration = 0;
