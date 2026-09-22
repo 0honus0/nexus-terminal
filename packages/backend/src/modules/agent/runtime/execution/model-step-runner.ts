@@ -1,3 +1,4 @@
+import type { AgentModelAttemptIdentityDto } from '@nexus-terminal/protocol/agent-events';
 import path from 'node:path';
 import type { ContextPlan } from '../../ai/context.types';
 import { ContextService } from '../../ai/context.service';
@@ -20,7 +21,6 @@ import { ProviderService } from '../../ai/provider.service';
 import { AGENT_DEFAULTS } from '../../agent-defaults';
 import type { Scope } from '../../agent.types';
 import type { CatalogToolSchema } from '../../capabilities/tool-catalog';
-import type { ModelAttemptIdentity } from '../events/event.types';
 import type { BackendSignal } from './agent-backend.port';
 import { ModelCallLimiter } from './model-call-limiter';
 import { waitForRetry } from './execution-errors';
@@ -279,7 +279,7 @@ export class ModelStepRunner {
   async *runAttempt(
     snapshot: RunSnapshot,
     contextPlan: ContextPlan,
-    attemptIdentity: ModelAttemptIdentity,
+    attemptIdentity: AgentModelAttemptIdentityDto,
     signal: AbortSignal,
     toolMode: 'auto' | 'none' = 'auto',
     route?: { model: ModelRef; capabilities?: ModelCapabilitySnapshot },

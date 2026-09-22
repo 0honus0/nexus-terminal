@@ -1,3 +1,9 @@
+import type {
+  AgentWsClientMessageDto,
+  AgentWsServerMessageDto,
+  AgentWsSubscribeMessageDto,
+  AgentWsUnsubscribeMessageDto,
+} from '@nexus-terminal/protocol/agent-events';
 import WebSocket, { type RawData } from 'ws';
 import type { AgentEventFacade, AgentRunFacade } from '../../modules/agent/public';
 import { logger } from '../../shared/logging/logger';
@@ -44,12 +50,6 @@ interface AgentSubscription {
   unsubscribeTransient?: () => void;
 }
 
-interface AgentInboundMessage {
-  type: 'subscribe' | 'unsubscribe';
-  requestId?: string;
-  payload: Record<string, unknown>;
-}
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -63,6 +63,45 @@ const nonNegativeInteger = (value: unknown): value is number => Number.isSafeInt
 
 const boundedIdentifier = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= MAX_IDENTIFIER_LENGTH;
+
+const parseClientMessage = (value: unknown): AgentWsClientMessageDto => {
+  if (!isRecord(value) || (value.type !== 'subscribe' && value.type !== 'unsubscribe')) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (value.requestId !== undefined && !boundedIdentifier(value.requestId)) throw new Error('VALIDATION_FAILED');
+  if (!isRecord(value.payload)) throw new Error('VALIDATION_FAILED');
+  const subscriptionId = value.payload.subscriptionId;
+  if (typeof subscriptionId !== 'string' || !SAFE_SUBSCRIPTION_ID.test(subscriptionId)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (value.type === 'unsubscribe') {
+    return {
+      type: 'unsubscribe',
+      ...(value.requestId === undefined ? {} : { requestId: value.requestId }),
+      payload: { subscriptionId },
+    };
+  }
+  const channel = value.payload.channel;
+  const cursor = value.payload.cursor;
+  if ((channel !== 'host' && channel !== 'run') || !nonNegativeInteger(cursor)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (channel === 'host') {
+    return {
+      type: 'subscribe',
+      ...(value.requestId === undefined ? {} : { requestId: value.requestId }),
+      payload: { subscriptionId, channel: 'host', cursor },
+    };
+  }
+  const appId = value.payload.appId;
+  const runId = value.payload.runId;
+  if (!boundedIdentifier(appId) || !boundedIdentifier(runId)) throw new Error('VALIDATION_FAILED');
+  return {
+    type: 'subscribe',
+    ...(value.requestId === undefined ? {} : { requestId: value.requestId }),
+    payload: { subscriptionId, channel: 'run', appId, runId, cursor },
+  };
+};
 
 const protocolErrorCode = (cause: unknown): string => {
   if (!(cause instanceof Error)) return 'AGENT_STREAM_FAILED';
@@ -92,15 +131,9 @@ export class AgentProtocolSession {
       return;
     }
 
-    let message: AgentInboundMessage;
+    let message: AgentWsClientMessageDto;
     try {
-      const parsed = JSON.parse(bytes.toString('utf8')) as unknown;
-      if (!isRecord(parsed) || (parsed.type !== 'subscribe' && parsed.type !== 'unsubscribe')) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      if (parsed.requestId !== undefined && !boundedIdentifier(parsed.requestId)) throw new Error('VALIDATION_FAILED');
-      if (!isRecord(parsed.payload)) throw new Error('VALIDATION_FAILED');
-      message = parsed as unknown as AgentInboundMessage;
+      message = parseClientMessage(JSON.parse(bytes.toString('utf8')) as unknown);
     } catch (cause) {
       this.sendError(undefined, protocolErrorCode(cause));
       return;
@@ -127,18 +160,11 @@ export class AgentProtocolSession {
     this.subscriptions.clear();
   }
 
-  private async subscribe(requestId: string | undefined, payload: Record<string, unknown>): Promise<void> {
-    const subscriptionId = payload.subscriptionId;
-    const channel = payload.channel;
-    const cursor = payload.cursor;
-    if (
-      typeof subscriptionId !== 'string' ||
-      !SAFE_SUBSCRIPTION_ID.test(subscriptionId) ||
-      !nonNegativeInteger(cursor)
-    ) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    if (channel !== 'host' && channel !== 'run') throw new Error('VALIDATION_FAILED');
+  private async subscribe(
+    requestId: string | undefined,
+    payload: AgentWsSubscribeMessageDto['payload'],
+  ): Promise<void> {
+    const { subscriptionId, channel, cursor } = payload;
     if (this.subscriptions.has(subscriptionId)) throw new Error('SUBSCRIPTION_EXISTS');
     if (this.subscriptions.size >= MAX_SUBSCRIPTIONS) throw new Error('SUBSCRIPTION_LIMIT');
 
@@ -148,9 +174,7 @@ export class AgentProtocolSession {
       target = { kind: 'host' };
       highWater = await this.dependencies.events.hostCursor(this.context.userId);
     } else {
-      const appId = payload.appId;
-      const runId = payload.runId;
-      if (!boundedIdentifier(appId) || !boundedIdentifier(runId)) throw new Error('VALIDATION_FAILED');
+      const { appId, runId } = payload;
       const snapshot = await this.dependencies.runs.get({ userId: this.context.userId, appId }, runId);
       target = { kind: 'run', appId, runId };
       highWater = snapshot.eventCursor;
@@ -177,12 +201,38 @@ export class AgentProtocolSession {
       );
       subscription.unsubscribeTransient = this.dependencies.events.onTransient(target.runId, (event) => {
         if (subscription.closed || this.closed) return;
+        if (event.type === 'message.delta') {
+          this.send({
+            type: 'event',
+            payload: {
+              subscriptionId: subscription.id,
+              durability: 'ephemeral',
+              eventType: 'message.delta',
+              payload: event.payload,
+              occurredAt: event.occurredAt,
+            },
+          });
+          return;
+        }
+        if (event.type === 'tool.delta') {
+          this.send({
+            type: 'event',
+            payload: {
+              subscriptionId: subscription.id,
+              durability: 'ephemeral',
+              eventType: 'tool.delta',
+              payload: event.payload,
+              occurredAt: event.occurredAt,
+            },
+          });
+          return;
+        }
         this.send({
           type: 'event',
           payload: {
             subscriptionId: subscription.id,
             durability: 'ephemeral',
-            eventType: event.type,
+            eventType: 'approval.changed',
             payload: event.payload,
             occurredAt: event.occurredAt,
           },
@@ -198,11 +248,11 @@ export class AgentProtocolSession {
     this.scheduleDrain(subscription);
   }
 
-  private unsubscribe(requestId: string | undefined, payload: Record<string, unknown>): void {
-    const subscriptionId = payload.subscriptionId;
-    if (typeof subscriptionId !== 'string' || !SAFE_SUBSCRIPTION_ID.test(subscriptionId)) {
-      throw new Error('VALIDATION_FAILED');
-    }
+  private unsubscribe(
+    requestId: string | undefined,
+    payload: AgentWsUnsubscribeMessageDto['payload'],
+  ): void {
+    const { subscriptionId } = payload;
     const subscription = this.subscriptions.get(subscriptionId);
     if (subscription) {
       this.disposeSubscription(subscription);
@@ -288,7 +338,7 @@ export class AgentProtocolSession {
     });
   }
 
-  private send(message: Record<string, unknown>): boolean {
+  private send(message: AgentWsServerMessageDto): boolean {
     if (this.closed || this.socket.readyState !== WebSocket.OPEN) return false;
     let encoded: string;
     try {

@@ -1,39 +1,25 @@
-export interface ModelAttemptIdentity {
-  attemptId: string;
-  attemptIndex: number;
-}
-
-export interface TransientMessageDeltaPayload extends ModelAttemptIdentity {
-  text: string;
-  runtimeId?: string;
-  delegationId?: string;
-}
-
-export interface TransientToolDeltaPayload extends ModelAttemptIdentity {
-  index: number;
-  id: string | null;
-  name: string | null;
-  argumentsDelta: string;
-  runtimeId?: string;
-  delegationId?: string;
-}
+import type {
+  AgentTransientApprovalChangedPayloadDto,
+  AgentTransientMessageDeltaPayloadDto,
+  AgentTransientToolDeltaPayloadDto,
+} from '@nexus-terminal/protocol/agent-events';
 
 export type TransientRunEvent =
   | {
       runId: string;
       type: 'message.delta';
-      payload: TransientMessageDeltaPayload;
+      payload: AgentTransientMessageDeltaPayloadDto;
       occurredAt: number;
     }
   | {
       runId: string;
       type: 'tool.delta';
-      payload: TransientToolDeltaPayload;
+      payload: AgentTransientToolDeltaPayloadDto;
       occurredAt: number;
     }
   | {
       runId: string;
       type: 'approval.changed';
-      payload: { approvalId: string };
+      payload: AgentTransientApprovalChangedPayloadDto;
       occurredAt: number;
     };

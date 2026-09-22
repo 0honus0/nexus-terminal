@@ -1,3 +1,4 @@
+import type { AgentDurableEventTypeDto, AgentHostEventTypeDto } from '@nexus-terminal/protocol/agent-events';
 import type { AgentContextProfile } from '../../agent-defaults';
 import type { AgentRunEnvironmentSelection, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../../agent.types';
 import type { AgentModelCapability, ModelCapabilitySnapshot, ModelRef, ReasoningEffort } from '../../ai/model.types';
@@ -215,7 +216,7 @@ export interface RunEvent {
   runId: string;
   sequence: number;
   schemaVersion: 1;
-  type: string;
+  type: AgentDurableEventTypeDto;
   payload: JsonValue;
   occurredAt: number;
 }
@@ -223,7 +224,7 @@ export interface RunEvent {
 export interface HostEvent {
   userId: number;
   sequence: number;
-  type: string;
+  type: AgentHostEventTypeDto;
   payload: JsonValue;
   occurredAt: number;
 }

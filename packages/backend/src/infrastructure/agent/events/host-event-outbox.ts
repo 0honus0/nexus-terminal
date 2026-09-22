@@ -1,3 +1,4 @@
+import type { AgentHostEventTypeDto } from '@nexus-terminal/protocol/agent-events';
 import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { AppRecord } from '../../../modules/agent/host/app.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
@@ -20,13 +21,7 @@ export const appChangedPayload = (app: AppRecord): JsonValue => ({
 export const appendHostEvent = async (
   tx: RelationalDatabase,
   userId: number,
-  type:
-    | 'summary.changed'
-    | 'feature.changed'
-    | 'app.changed'
-    | 'authorization.changed'
-    | 'thread.changed'
-    | 'memory.changed',
+  type: AgentHostEventTypeDto,
   payload: JsonValue,
   occurredAt: number,
 ): Promise<number> => {

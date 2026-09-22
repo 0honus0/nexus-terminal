@@ -1,3 +1,13 @@
+import {
+  AGENT_HOST_EVENT_TYPES,
+  type AgentDurableEventTypeDto,
+  type AgentTransientApprovalChangedPayloadDto,
+  type AgentTransientMessageDeltaPayloadDto,
+  type AgentTransientToolDeltaPayloadDto,
+  type AgentWsSubscribeMessageDto,
+  type AgentWsSubscriptionRequestDto,
+  type AgentWsUnsubscribeMessageDto,
+} from '@nexus-terminal/protocol/agent-events';
 import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
 import type { AgentRunStatusDto } from './agent-api';
@@ -15,32 +25,17 @@ interface AgentVersionedEventMetadata extends AgentEventMetadata {
 
 interface AgentMessageDeltaEvent extends AgentEventMetadata {
   type: 'message.delta';
-  payload: {
-    attemptId: string;
-    attemptIndex: number;
-    text: string;
-    runtimeId?: string;
-    delegationId?: string;
-  };
+  payload: AgentTransientMessageDeltaPayloadDto;
 }
 
 interface AgentToolDeltaEvent extends AgentEventMetadata {
   type: 'tool.delta';
-  payload: {
-    attemptId: string;
-    attemptIndex: number;
-    index: number;
-    id: string | null;
-    name: string | null;
-    argumentsDelta: string;
-    runtimeId?: string;
-    delegationId?: string;
-  };
+  payload: AgentTransientToolDeltaPayloadDto;
 }
 
 interface AgentApprovalChangedEvent extends AgentEventMetadata {
   type: 'approval.changed';
-  payload: { approvalId: string };
+  payload: AgentTransientApprovalChangedPayloadDto;
 }
 
 interface AgentModelRetryingEvent extends AgentVersionedEventMetadata {
@@ -119,7 +114,6 @@ const SNAPSHOT_EVENT_TYPES = [
   'approval.superseded',
   'budget.increase_requested',
   'budget.increased',
-  'checkpoint.resume',
   'input.appended',
   'model.aborted',
   'model.completed',
@@ -132,9 +126,8 @@ const SNAPSHOT_EVENT_TYPES = [
   'tool.proposed',
   'tool.started',
   'verification.completed',
-] as const;
+] as const satisfies readonly AgentDurableEventTypeDto[];
 type AgentSnapshotEventType = (typeof SNAPSHOT_EVENT_TYPES)[number];
-const snapshotEventTypes = new Set<string>(SNAPSHOT_EVENT_TYPES);
 
 interface AgentSnapshotChangedEvent extends AgentVersionedEventMetadata {
   type: 'snapshot.changed';
@@ -142,16 +135,7 @@ interface AgentSnapshotChangedEvent extends AgentVersionedEventMetadata {
   payload: null;
 }
 
-const HOST_EVENT_TYPES = [
-  'summary.changed',
-  'feature.changed',
-  'app.changed',
-  'authorization.changed',
-  'thread.changed',
-  'memory.changed',
-] as const;
-type AgentHostEventType = (typeof HOST_EVENT_TYPES)[number];
-const hostEventTypes = new Set<string>(HOST_EVENT_TYPES);
+type AgentHostEventType = (typeof AGENT_HOST_EVENT_TYPES)[number];
 
 interface AgentHostChangedEvent extends AgentEventMetadata {
   type: 'host.changed';
@@ -193,29 +177,10 @@ export type AgentStreamEvent =
   | AgentUnknownEvent
   | AgentTransportDisconnectedEvent;
 
-type AgentSubscriptionRequest =
-  { channel: 'host'; cursor: number } | { channel: 'run'; appId: string; runId: string; cursor: number };
-
-const subscriptionContext = (request: AgentSubscriptionRequest) =>
+const subscriptionContext = (request: AgentWsSubscriptionRequestDto) =>
   request.channel === 'host'
     ? { channel: 'host' as const, cursor: request.cursor }
     : { channel: 'run' as const, appId: request.appId, runId: request.runId, cursor: request.cursor };
-
-interface AgentWireMessage {
-  type: string;
-  requestId?: string;
-  payload?: unknown;
-}
-
-interface AgentWireEventPayload {
-  subscriptionId: string;
-  durability: 'durable' | 'ephemeral';
-  sequence?: number;
-  schemaVersion?: number;
-  eventType: string;
-  payload: unknown;
-  occurredAt?: number;
-}
 
 const RUN_STATUSES = new Set<AgentRunStatusDto>([
   'created',
@@ -242,23 +207,24 @@ const protocolError = (value: unknown): Error => {
   return new Error(value.code);
 };
 
-const parseWireMessage = (data: unknown): AgentWireMessage => {
+const parseWireMessage = (data: unknown): Record<string, unknown> => {
   if (typeof data !== 'string') throw new Error('AGENT_WS_BINARY_MESSAGE');
   const parsed = JSON.parse(data) as unknown;
   if (!isRecord(parsed) || typeof parsed.type !== 'string') throw new Error('AGENT_WS_PROTOCOL_ERROR');
-  if (parsed.requestId !== undefined && typeof parsed.requestId !== 'string')
+  if (parsed.requestId !== undefined && typeof parsed.requestId !== 'string') {
     throw new Error('AGENT_WS_PROTOCOL_ERROR');
-  return parsed as unknown as AgentWireMessage;
+  }
+  return parsed;
 };
 
-const eventMetadata = (event: AgentWireEventPayload): AgentEventMetadata => ({
-  ...(event.durability === 'durable' ? { id: String(event.sequence) } : {}),
-  ...(event.occurredAt === undefined ? {} : { occurredAt: event.occurredAt }),
+const eventMetadata = (event: Record<string, unknown>): AgentEventMetadata => ({
+  ...(event.durability === 'durable' && Number.isSafeInteger(event.sequence) ? { id: String(event.sequence) } : {}),
+  ...(Number.isSafeInteger(event.occurredAt) ? { occurredAt: Number(event.occurredAt) } : {}),
 });
 
 const unknownEvent = (
-  event: AgentWireEventPayload,
-  channel: AgentSubscriptionRequest['channel'],
+  event: Record<string, unknown>,
+  channel: AgentWsSubscriptionRequestDto['channel'],
   reason: AgentUnknownReason,
 ): AgentUnknownEvent => {
   logger.debug(
@@ -268,8 +234,8 @@ const unknownEvent = (
   return {
     ...eventMetadata(event),
     type: 'unknown',
-    sourceType: event.eventType,
-    ...(event.schemaVersion === undefined ? {} : { schemaVersion: event.schemaVersion }),
+    sourceType: typeof event.eventType === 'string' ? event.eventType : 'unknown',
+    ...(Number.isSafeInteger(event.schemaVersion) ? { schemaVersion: Number(event.schemaVersion) } : {}),
     reason,
     payload: null,
   };
@@ -296,7 +262,7 @@ const parseRuntimeIdentity = (
   return { runtimeId, delegationId };
 };
 
-const parseMessageDelta = (event: AgentWireEventPayload): AgentMessageDeltaEvent | null => {
+const parseMessageDelta = (event: Record<string, unknown>): AgentMessageDeltaEvent | null => {
   if (!isRecord(event.payload) || typeof event.payload.text !== 'string') return null;
   const attempt = parseAttemptIdentity(event.payload);
   const runtime = parseRuntimeIdentity(event.payload);
@@ -314,7 +280,7 @@ const parseMessageDelta = (event: AgentWireEventPayload): AgentMessageDeltaEvent
 
 const nullableString = (value: unknown): value is string | null => value === null || typeof value === 'string';
 
-const parseToolDelta = (event: AgentWireEventPayload): AgentToolDeltaEvent | null => {
+const parseToolDelta = (event: Record<string, unknown>): AgentToolDeltaEvent | null => {
   if (
     !isRecord(event.payload) ||
     !Number.isSafeInteger(event.payload.index) ||
@@ -343,8 +309,8 @@ const parseToolDelta = (event: AgentWireEventPayload): AgentToolDeltaEvent | nul
 };
 
 const parseRunEventV1 = (
-  event: AgentWireEventPayload,
-  channel: AgentSubscriptionRequest['channel'],
+  event: Record<string, unknown>,
+  channel: AgentWsSubscriptionRequestDto['channel'],
 ): AgentStreamEvent => {
   const metadata = { ...eventMetadata(event), schemaVersion: 1 as const };
   if (event.eventType === 'message.final') {
@@ -476,12 +442,16 @@ const parseRunEventV1 = (
       },
     };
   }
-  if (snapshotEventTypes.has(event.eventType)) {
+  const snapshotEventType =
+    typeof event.eventType === 'string'
+      ? SNAPSHOT_EVENT_TYPES.find((candidate) => candidate === event.eventType)
+      : undefined;
+  if (snapshotEventType) {
     if (!isRecord(event.payload)) return unknownEvent(event, channel, 'invalid_payload');
     return {
       ...metadata,
       type: 'snapshot.changed',
-      sourceType: event.eventType as AgentSnapshotEventType,
+      sourceType: snapshotEventType,
       payload: null,
     };
   }
@@ -491,20 +461,24 @@ const parseRunEventV1 = (
 const parseWireEvent = (
   payload: unknown,
   subscriptionId: string,
-  channel: AgentSubscriptionRequest['channel'],
+  channel: AgentWsSubscriptionRequestDto['channel'],
 ): AgentStreamEvent | null => {
   if (!isRecord(payload) || payload.subscriptionId !== subscriptionId) return null;
+  const eventType = payload.eventType;
   if (
     (payload.durability !== 'durable' && payload.durability !== 'ephemeral') ||
-    typeof payload.eventType !== 'string'
+    typeof eventType !== 'string'
   ) {
     throw new Error('AGENT_WS_PROTOCOL_ERROR');
   }
-  const event = payload as unknown as AgentWireEventPayload;
+  const event = payload;
   if (event.durability === 'durable' && (!Number.isSafeInteger(event.sequence) || Number(event.sequence) < 0)) {
     throw new Error('AGENT_WS_PROTOCOL_ERROR');
   }
-  if (event.schemaVersion !== undefined && (!Number.isSafeInteger(event.schemaVersion) || event.schemaVersion < 1)) {
+  if (
+    event.schemaVersion !== undefined &&
+    (!Number.isSafeInteger(event.schemaVersion) || Number(event.schemaVersion) < 1)
+  ) {
     throw new Error('AGENT_WS_PROTOCOL_ERROR');
   }
   if (event.occurredAt !== undefined && (!Number.isSafeInteger(event.occurredAt) || Number(event.occurredAt) < 0)) {
@@ -513,17 +487,14 @@ const parseWireEvent = (
 
   if (channel === 'host') {
     if (event.durability !== 'durable') return unknownEvent(event, channel, 'unsupported_event');
-    if (!hostEventTypes.has(event.eventType) || !isRecord(event.payload)) {
-      return unknownEvent(
-        event,
-        channel,
-        hostEventTypes.has(event.eventType) ? 'invalid_payload' : 'unsupported_event',
-      );
+    const hostEventType = AGENT_HOST_EVENT_TYPES.find((candidate) => candidate === eventType);
+    if (!hostEventType || !isRecord(event.payload)) {
+      return unknownEvent(event, channel, hostEventType ? 'invalid_payload' : 'unsupported_event');
     }
     return {
       ...eventMetadata(event),
       type: 'host.changed',
-      sourceType: event.eventType as AgentHostEventType,
+      sourceType: hostEventType,
       payload: event.payload,
     };
   }
@@ -634,7 +605,7 @@ const acquireSharedAgentSocket = async (signal: AbortSignal): Promise<SharedAgen
 };
 
 async function* connectOnce(
-  request: AgentSubscriptionRequest,
+  request: AgentWsSubscriptionRequestDto,
   signal: AbortSignal,
   onSubscribed: () => void,
 ): AsyncIterable<AgentStreamEvent> {
@@ -716,13 +687,12 @@ async function* connectOnce(
       resolveSubscribed = resolve;
       rejectSubscribed = reject;
     });
-    socket.send(
-      JSON.stringify({
-        type: 'subscribe',
-        requestId,
-        payload: { subscriptionId, ...request },
-      }),
-    );
+    const subscribeMessage: AgentWsSubscribeMessageDto = {
+      type: 'subscribe',
+      requestId,
+      payload: { subscriptionId, ...request },
+    };
+    socket.send(JSON.stringify(subscribeMessage));
     await subscribedAck;
     resolveSubscribed = undefined;
     rejectSubscribed = undefined;
@@ -741,7 +711,11 @@ async function* connectOnce(
     socket.removeEventListener('message', onMessage);
     socket.removeEventListener('close', onClose);
     if (subscribed && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'unsubscribe', payload: { subscriptionId } }));
+      const unsubscribeMessage: AgentWsUnsubscribeMessageDto = {
+        type: 'unsubscribe',
+        payload: { subscriptionId },
+      };
+      socket.send(JSON.stringify(unsubscribeMessage));
     }
     lease.release();
   }
@@ -750,7 +724,10 @@ async function* connectOnce(
 const RETRY_BASE_MS = 400;
 const RETRY_MAX_MS = 8_000;
 
-const requestWithCursor = (request: AgentSubscriptionRequest, cursor: number): AgentSubscriptionRequest =>
+const requestWithCursor = (
+  request: AgentWsSubscriptionRequestDto,
+  cursor: number,
+): AgentWsSubscriptionRequestDto =>
   request.channel === 'host'
     ? { channel: 'host', cursor }
     : { channel: 'run', appId: request.appId, runId: request.runId, cursor };
@@ -800,7 +777,7 @@ const waitForReconnect = (attempt: number, signal: AbortSignal): Promise<void> =
     signal.addEventListener('abort', onAbort, { once: true });
   });
 
-async function* connect(request: AgentSubscriptionRequest, signal: AbortSignal): AsyncIterable<AgentStreamEvent> {
+async function* connect(request: AgentWsSubscriptionRequestDto, signal: AbortSignal): AsyncIterable<AgentStreamEvent> {
   let cursor = request.cursor;
   let retryAttempt = 0;
 

@@ -1,3 +1,9 @@
+import {
+  AGENT_DURABLE_EVENT_TYPES,
+  AGENT_HOST_EVENT_TYPES,
+  type AgentDurableEventTypeDto,
+  type AgentHostEventTypeDto,
+} from '@nexus-terminal/protocol/agent-events';
 import type {
   PendingRunInputPage,
   HostEvent,
@@ -58,6 +64,18 @@ interface HostEventRow {
   payload_json: string;
   occurred_at: number;
 }
+
+const durableEventType = (value: string): AgentDurableEventTypeDto => {
+  const match = AGENT_DURABLE_EVENT_TYPES.find((candidate) => candidate === value);
+  if (!match) throw new Error('DURABLE_EVENT_TYPE_INVALID');
+  return match;
+};
+
+const hostEventType = (value: string): AgentHostEventTypeDto => {
+  const match = AGENT_HOST_EVENT_TYPES.find((candidate) => candidate === value);
+  if (!match) throw new Error('HOST_EVENT_TYPE_INVALID');
+  return match;
+};
 
 interface PendingRootToolRow {
   tool_call_id: string;
@@ -122,7 +140,7 @@ const mapEvent = (row: EventRow): RunEvent => ({
   runId: row.run_id,
   sequence: row.sequence,
   schemaVersion: 1,
-  type: row.type,
+  type: durableEventType(row.type),
   payload: parseDurableJsonValue(row.payload_json),
   occurredAt: row.occurred_at,
 });
@@ -315,7 +333,7 @@ export class SqliteRunRepository
     return rows.map((row) => ({
       userId: row.user_id,
       sequence: row.sequence,
-      type: row.type,
+      type: hostEventType(row.type),
       payload: parseDurableJsonValue(row.payload_json),
       occurredAt: row.occurred_at,
     }));

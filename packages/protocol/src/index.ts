@@ -27,3 +27,5 @@ export type * from './agent-collaboration.js';
 export type * from './agent-memories.js';
 export type * from './agent-plugins.js';
 export type * from './agent-workspace-runtime.js';
+export { AGENT_DURABLE_EVENT_TYPES, AGENT_EPHEMERAL_RUN_EVENT_TYPES, AGENT_HOST_EVENT_TYPES } from './agent-events.js';
+export type * from './agent-events.js';
