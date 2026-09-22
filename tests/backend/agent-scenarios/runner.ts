@@ -11568,20 +11568,71 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/artifact-single-delete-product', artifactSingleDeleteProductScenario],
 ]);
 
+const SERIAL_SCENARIOS = new Set([
+  'workspace/coding-tool-surface',
+  'provider/prompt-cache-hint',
+  'model/capability-registry-sync',
+  'model/provider-live-capability-authority',
+]);
+
+const SCENARIO_CONCURRENCY = 4;
+
+interface ScenarioOutcome {
+  result: ScenarioResult | null;
+  failure: { name: string; error: unknown } | null;
+}
+
+const executeScenario = async ([name, run]: [string, Scenario]): Promise<ScenarioOutcome> => {
+  const started = performance.now();
+  try {
+    const metrics = await run();
+    return {
+      result: { name, durationMs: performance.now() - started, metrics },
+      failure: null,
+    };
+  } catch (error) {
+    return {
+      result: null,
+      failure: { name, error },
+    };
+  }
+};
+
 const main = async (): Promise<void> => {
   const results: ScenarioResult[] = [];
   const failures: Array<{ name: string; error: unknown }> = [];
-  for (const [name, run] of scenarios) {
-    const started = performance.now();
-    try {
-      const metrics = await run();
-      results.push({ name, durationMs: performance.now() - started, metrics });
-      console.log(`PASS ${name}`);
-    } catch (error) {
-      console.error(`FAIL ${name}`);
-      failures.push({ name, error });
+
+  const recordOutcome = (outcome: ScenarioOutcome): void => {
+    if (outcome.result) {
+      results.push(outcome.result);
+      console.log(`PASS ${outcome.result.name}`);
+      return;
     }
+    if (outcome.failure) {
+      failures.push(outcome.failure);
+      console.error(`FAIL ${outcome.failure.name}`);
+    }
+  };
+
+  const runConcurrentBatch = async (entries: Array<[string, Scenario]>): Promise<void> => {
+    for (let index = 0; index < entries.length; index += SCENARIO_CONCURRENCY) {
+      const outcomes = await Promise.all(entries.slice(index, index + SCENARIO_CONCURRENCY).map(executeScenario));
+      for (const outcome of outcomes) recordOutcome(outcome);
+    }
+  };
+
+  let concurrentBatch: Array<[string, Scenario]> = [];
+  for (const entry of scenarios.entries()) {
+    if (!SERIAL_SCENARIOS.has(entry[0])) {
+      concurrentBatch.push(entry);
+      continue;
+    }
+
+    await runConcurrentBatch(concurrentBatch);
+    concurrentBatch = [];
+    recordOutcome(await executeScenario(entry));
   }
+  await runConcurrentBatch(concurrentBatch);
 
   console.log(
     JSON.stringify(
