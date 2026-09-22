@@ -62,6 +62,47 @@ import type {
   AgentReasoningEffortDto,
 } from '@nexus-terminal/protocol/agent-providers';
 import type {
+  AgentCheckpointViewDto,
+  AgentCreateRunFieldsDto,
+  AgentCreateRunRequestDto,
+  AgentDefinitionModelCompatibilityDto,
+  AgentDefinitionViewDto,
+  AgentExecutionModeDto,
+  AgentExpectedVersionRequestDto,
+  AgentPendingRunInputDto,
+  AgentPendingRunInputPageDto,
+  AgentPendingUserInputRequestDto,
+  AgentPlanItemDto,
+  AgentPlanItemStatusDto,
+  AgentRunAppendInputFieldsDto,
+  AgentRunAppendInputRequestDto,
+  AgentRunAppendInputResponseDto,
+  AgentRunBudgetIncreaseDto,
+  AgentRunBudgetIncreaseFieldsDto,
+  AgentRunBudgetIncreaseRequestDto,
+  AgentRunDeleteQueryDto,
+  AgentRunEnvironmentSelectionDto,
+  AgentRunListQueryDto,
+  AgentRunPageDto,
+  AgentRunPendingInputMutationFieldsDto,
+  AgentRunPendingInputMutationRequestDto,
+  AgentRunPlanDto,
+  AgentRunReconciliationResolveFieldsDto,
+  AgentRunReconciliationResolveRequestDto,
+  AgentRunReconciliationResourceDto,
+  AgentRunReconciliationViewDto,
+  AgentRunResumeFieldsDto,
+  AgentRunResumeRequestDto,
+  AgentRunSetGoalFieldsDto,
+  AgentRunSetGoalRequestDto,
+  AgentRunSnapshotDto,
+  AgentRunStatusDto,
+  AgentRunTerminalIssueDto,
+  AgentRunViewDto,
+  AgentUserInputChoiceDto,
+  AgentUserInputQuestionDto,
+} from '@nexus-terminal/protocol/agent-runs';
+import type {
   AgentLedgerPageDto,
   AgentLedgerEntryDto,
   AgentLedgerQueryDto,
@@ -116,14 +157,7 @@ export type AgentExecutionPolicyOverrides = AgentExecutionPolicyOverridesDto;
 export type AgentExecutionPolicyView = AgentExecutionPolicyViewDto;
 export type AgentAppSummary = AgentAppSummaryDto;
 
-export interface AgentRunEnvironmentSelection {
-  recipeId: string;
-  versions?: Record<string, string>;
-  runnerPluginIds?: string[];
-  acpProfileIds?: string[];
-  browserTargetId?: string;
-  catalogRevision?: string;
-}
+export type AgentRunEnvironmentSelection = AgentRunEnvironmentSelectionDto;
 
 export type AgentIntegrationKind = AgentIntegrationKindDto;
 export type AgentMcpIntegrationConfiguration = AgentMcpIntegrationConfigurationDto;
@@ -383,236 +417,31 @@ export type AgentThreadDeleteAllResult = AgentThreadDeleteAllResultDto;
 export type AgentLedgerEntry = AgentLedgerEntryDto;
 export type AgentLedgerPage = AgentLedgerPageDto;
 
-export type AgentRunStatus =
-  | 'created'
-  | 'running'
-  | 'awaiting_approval'
-  | 'awaiting_budget'
-  | 'awaiting_input'
-  | 'cancelling'
-  | 'completed'
-  | 'completed_unverified'
-  | 'failed'
-  | 'cancelled'
-  | 'interrupted';
-
+export type AgentRunStatus = AgentRunStatusDto;
 export type AgentApprovalMode = AgentApprovalModeDto;
-export type AgentExecutionMode = 'execute' | 'plan';
+export type AgentExecutionMode = AgentExecutionModeDto;
 export type AgentToolRisk = AgentToolRiskDto;
-
-export type AgentPlanItemStatus = 'pending' | 'in_progress' | 'blocked' | 'completed' | 'cancelled';
-
-export interface AgentPlanItem {
-  id: string;
-  title: string;
-  detail: string | null;
-  status: AgentPlanItemStatus;
-  dependsOn: string[];
-  evidenceRefs: string[];
-}
-
-export interface AgentRunPlan {
-  schemaVersion: 1;
-  revision: number;
-  items: AgentPlanItem[];
-}
-
-export interface AgentRunTerminalIssue {
-  eventType: string;
-  errorCode: string | null;
-  reason: string | null;
-  occurredAt: number;
-}
-
-export interface AgentUserInputChoice {
-  value: string;
-  label: string;
-  description?: string;
-}
-
-export interface AgentUserInputQuestion {
-  id: string;
-  prompt: string;
-  kind: 'text' | 'choice';
-  choices?: AgentUserInputChoice[];
-  recommendedChoice?: string;
-  context?: string;
-}
-
-export interface AgentPendingUserInputRequest {
-  id: string;
-  runtimeId: string;
-  questions: AgentUserInputQuestion[];
-  requestedAt: number;
-}
-
-export interface AgentRunView {
-  id: string;
-  userId: number;
-  appId: string;
-  threadId: string;
-  parentRunId: string | null;
-  status: AgentRunStatus;
-  terminalIssue?: AgentRunTerminalIssue | null;
-  goalStatus: string;
-  goal: { text: string | null; revision: number; updatedAt: number | null };
-  verificationStatus: string;
-  needsReconciliation: boolean;
-  budget: {
-    contextPolicy: {
-      profile: AgentContextProfile;
-      effectiveWindowPercent: number;
-      softPressurePercent: number;
-      toolOutputFloorPercent: number;
-    };
-    maxRunSteps: number;
-    maxActiveExecutionSeconds: number;
-    toolTimeoutSeconds: number;
-    maxToolOutputBytes: number;
-    maxRecallItems: number;
-    maxRecallBytes: number;
-    maxSubagentMessages: number;
-    maxSubagentMessageBytes: number;
-    contextCompactionMode: AgentContextCompactionMode;
-    revision: number;
-  };
-  definition: {
-    schemaVersion: 1;
-    agentDefinitionId: string;
-    model: { providerId: string; modelId: string; configurationVersion: number };
-    reasoningEffort?: AgentReasoningEffort;
-    approvalMode: AgentApprovalMode;
-    executionMode: AgentExecutionMode;
-    connectionIds: number[];
-    environment: WorkspaceProfileView | null;
-    policyRevision: number;
-    settingsRevision: number;
-    contextBoundary?: { baseThrough: number; runThrough: Record<string, number> };
-  };
-  plan: AgentRunPlan;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-    cachedInputTokens: number;
-    steps: number;
-    subagentMessages: number;
-    subagentMessageBytes: number;
-    context?: {
-      inputTokens: number;
-      heuristicInputTokens?: number;
-      reservedOutputTokens: number;
-      contextWindowTokens: number;
-      source: 'estimated' | 'anchored_estimate' | 'provider';
-      model?: { providerId: string; modelId: string; configurationVersion: number };
-      contextEpoch?: string;
-      updatedAt: number;
-    };
-  };
-  activeExecutionSeconds: number;
-  consumedInputSequence: number;
-  inputRevision: number;
-  eventCursor: number;
-  version: number;
-  createdAt: number;
-  startedAt: number | null;
-  completedAt: number | null;
-  updatedAt: number;
-}
-
-export interface AgentRunReconciliationResource {
-  resourceKey: string;
-  toolCallId: string | null;
-  reason: string;
-  version: number;
-  createdAt: number;
-}
-
-export interface AgentRunReconciliationView {
-  runId: string;
-  required: boolean;
-  resources: AgentRunReconciliationResource[];
-}
-
-export interface AgentPendingRunInput {
-  id: string;
-  sequence: number;
+export type AgentPlanItemStatus = AgentPlanItemStatusDto;
+export type AgentPlanItem = AgentPlanItemDto;
+export type AgentRunPlan = AgentRunPlanDto;
+export type AgentRunTerminalIssue = AgentRunTerminalIssueDto;
+export type AgentUserInputChoice = AgentUserInputChoiceDto;
+export type AgentUserInputQuestion = AgentUserInputQuestionDto;
+export type AgentPendingUserInputRequest = AgentPendingUserInputRequestDto;
+export type AgentRunView = AgentRunViewDto;
+export type AgentRunReconciliationResource = AgentRunReconciliationResourceDto;
+export type AgentRunReconciliationView = AgentRunReconciliationViewDto;
+export type AgentPendingRunInput = AgentPendingRunInputDto;
+export type AgentPendingRunInputPage = AgentPendingRunInputPageDto;
+export type AgentCheckpointView = AgentCheckpointViewDto;
+export type AgentRunSnapshot = AgentRunSnapshotDto;
+export type AgentRunPage = AgentRunPageDto;
+export type AgentCreateRunInput = Omit<AgentCreateRunFieldsDto, 'input' | 'connectionIds'> & {
   text: string;
-  artifactRefs: string[];
-  createdAt: number;
-}
+  artifactRefs?: string[];
+  connectionIds?: number[];
+};
 
-export interface AgentPendingRunInputPage {
-  items: AgentPendingRunInput[];
-  total: number;
-  hasMore: boolean;
-}
-
-export interface AgentCheckpointView {
-  id: string;
-  runId: string;
-  kind: 'user' | 'recovery';
-  schemaVersion: 1;
-  ledgerThrough: number;
-  eventThrough: number;
-  snapshot: {
-    schemaVersion: 1;
-    runId: string;
-    ledgerThrough: number;
-    planVersion: number;
-    inputRevision: number;
-    settingsRevision: number;
-    plan: AgentRunPlan;
-    goal: { text: string | null; revision: number; updatedAt: number | null };
-    completedStepIds: string[];
-    evidenceRefs: string[];
-    checkpointArtifactRefs: string[];
-    modelConfigurationVersion: number;
-    activeModel: { providerId: string; modelId: string; configurationVersion: number };
-    definitionVersion: string;
-    policyRevision: number;
-    workspaceArtifactManifestRefs: string[];
-    workspaceArtifactRefs: string[];
-    recoveryManifest: {
-      schemaVersion: 1;
-      eventThrough: number;
-      contextBoundary: { baseThrough: number; runThrough: Record<string, number> };
-      tools: Array<{
-        toolCallId: string;
-        operationHash: string;
-        risk: AgentToolRisk;
-        status: string;
-        sideEffectStatus: 'not_started' | 'confirmed' | 'unknown';
-        verificationStatus: 'not_started' | 'verified' | 'unverified' | 'failed';
-        quarantinedResourceKeys: string[];
-      }>;
-      delegations: Array<{ delegationId: string; status: string }>;
-      backgroundJobs: Array<{
-        jobId: string;
-        workspaceId: string;
-        generation: number;
-        status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
-      }>;
-      quarantinedResourceKeys: string[];
-    };
-  };
-  createdAt: number;
-}
-
-export interface AgentRunSnapshot extends AgentRunView {
-  pendingInputRequest: AgentPendingUserInputRequest | null;
-  recentEntries: Array<{
-    id: string;
-    sequence: number;
-    kind: string;
-    payload: unknown;
-    createdAt: number;
-  }>;
-}
-
-export interface AgentRunPage {
-  items: AgentRunView[];
-  nextCursor: string | null;
-}
 
 export interface AgentSubagentView {
   id: string;
@@ -723,22 +552,8 @@ export interface AgentApprovalBatch {
 
 export type AgentApprovalView = AgentApprovalViewDto;
 
-export interface AgentDefinitionModelCompatibility {
-  providerId: string;
-  modelId: string;
-  configurationVersion: number;
-  compatible: boolean;
-  missingCapabilities: AgentModelCapability[];
-}
-
-export interface AgentDefinitionView {
-  id: string;
-  version: string;
-  displayName: string;
-  description: string;
-  requiredModelCapabilities: AgentModelCapability[];
-  modelCompatibility: AgentDefinitionModelCompatibility[];
-}
+export type AgentDefinitionModelCompatibility = AgentDefinitionModelCompatibilityDto;
+export type AgentDefinitionView = AgentDefinitionViewDto;
 
 export interface TargetDenylistEntry {
   connectionId: number;
@@ -1031,17 +846,18 @@ export const agentApi = {
   async definitions(appId: string): Promise<AgentDefinitionView[]> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentDefinitionView[]>>(
+        await httpClient.get<AgentEnvelope<AgentDefinitionViewDto[]>>(
           `/apps/${encodeURIComponent(appId)}/agent-definitions`,
         )
       ).data,
     );
   },
   async runs(appId: string, threadId?: string): Promise<AgentRunPage> {
+    const params: AgentRunListQueryDto = { limit: 50, ...(threadId ? { threadId } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentRunPage>>(`/apps/${encodeURIComponent(appId)}/runs`, {
-          params: { limit: 50, ...(threadId ? { threadId } : {}) },
+        await httpClient.get<AgentEnvelope<AgentRunPageDto>>(`/apps/${encodeURIComponent(appId)}/runs`, {
+          params,
         })
       ).data,
     );
@@ -1049,7 +865,7 @@ export const agentApi = {
   async run(appId: string, runId: string): Promise<AgentRunSnapshot> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentRunSnapshot>>(
+        await httpClient.get<AgentEnvelope<AgentRunSnapshotDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}`,
         )
       ).data,
@@ -1058,7 +874,7 @@ export const agentApi = {
   async runReconciliation(appId: string, runId: string): Promise<AgentRunReconciliationView> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentRunReconciliationView>>(
+        await httpClient.get<AgentEnvelope<AgentRunReconciliationViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/reconciliation`,
         )
       ).data,
@@ -1070,15 +886,17 @@ export const agentApi = {
     reconciliation: AgentRunReconciliationView,
     note: string,
   ): Promise<AgentRunView> {
+    const fields: AgentRunReconciliationResolveFieldsDto = {
+      expectedVersion: run.version,
+      note,
+      resources: reconciliation.resources.map(({ resourceKey, version }) => ({ resourceKey, version })),
+    };
+    const input: AgentRunReconciliationResolveRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunView>>(
+        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/reconciliation/resolve`,
-          agentRuntimeRequest({
-            expectedVersion: run.version,
-            note,
-            resources: reconciliation.resources.map(({ resourceKey, version }) => ({ resourceKey, version })),
-          }),
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -1235,66 +1053,58 @@ export const agentApi = {
       ).data,
     );
   },
-  async createRun(
-    appId: string,
-    input: {
-      threadId: string;
-      text: string;
-      artifactRefs?: string[];
-      agentDefinitionId: string;
-      model: { providerId: string; modelId: string; configurationVersion: number };
-      reasoningEffort?: AgentReasoningEffort;
-      approvalMode: AgentApprovalMode;
-      executionMode: AgentExecutionMode;
-      plannedFromRunId?: string;
-      connectionIds?: number[];
-      environment?: AgentRunEnvironmentSelection | null;
-      initialGoal?: string;
-    },
-  ): Promise<AgentRunView> {
+  async createRun(appId: string, input: AgentCreateRunInput): Promise<AgentRunView> {
+    const fields: AgentCreateRunFieldsDto = {
+      threadId: input.threadId,
+      input: { text: input.text, artifactRefs: input.artifactRefs ?? [] },
+      agentDefinitionId: input.agentDefinitionId,
+      model: input.model,
+      ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
+      approvalMode: input.approvalMode,
+      executionMode: input.executionMode,
+      ...(input.plannedFromRunId === undefined ? {} : { plannedFromRunId: input.plannedFromRunId }),
+      connectionIds: input.connectionIds ?? [],
+      ...(input.environment === undefined ? {} : { environment: input.environment }),
+      ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),
+    };
+    const request: AgentCreateRunRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunView>>(
+        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs`,
-          agentRuntimeRequest({
-            threadId: input.threadId,
-            input: { text: input.text, artifactRefs: input.artifactRefs ?? [] },
-            agentDefinitionId: input.agentDefinitionId,
-            model: input.model,
-            ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
-            approvalMode: input.approvalMode,
-            executionMode: input.executionMode,
-            ...(input.plannedFromRunId === undefined ? {} : { plannedFromRunId: input.plannedFromRunId }),
-            connectionIds: input.connectionIds ?? [],
-            ...(input.environment === undefined ? {} : { environment: input.environment }),
-            ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),
-          }),
+          request,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
   },
   async appendRunInput(appId: string, run: AgentRunView, text: string, artifactRefs: string[] = []): Promise<void> {
-    await httpClient.post(
+    const fields: AgentRunAppendInputFieldsDto = { text, artifactRefs, expectedVersion: run.version };
+    const request: AgentRunAppendInputRequestDto = agentRuntimeRequest(fields);
+    await httpClient.post<AgentEnvelope<AgentRunAppendInputResponseDto>>(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/inputs`,
-      agentRuntimeRequest({ text, artifactRefs, expectedVersion: run.version }),
+      request,
       { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
     );
   },
   async interruptRun(appId: string, run: AgentRunView, text: string): Promise<void> {
-    await httpClient.post(
+    const fields: AgentRunAppendInputFieldsDto = { text, artifactRefs: [], expectedVersion: run.version };
+    const request: AgentRunAppendInputRequestDto = agentRuntimeRequest(fields);
+    await httpClient.post<AgentEnvelope<AgentRunAppendInputResponseDto>>(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/interrupt`,
-      agentRuntimeRequest({ text, artifactRefs: [], expectedVersion: run.version }),
+      request,
       { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
     );
   },
   async setRunGoal(appId: string, run: AgentRunView, text: string): Promise<AgentRunView> {
     const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(run.id) + '/goal';
+    const fields: AgentRunSetGoalFieldsDto = { text, expectedVersion: run.version };
+    const input: AgentRunSetGoalRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunView>>(
+        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
           path,
-          agentRuntimeRequest({ text, expectedVersion: run.version }),
+          input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -1302,7 +1112,7 @@ export const agentApi = {
   },
   async pendingRunInputs(appId: string, runId: string): Promise<AgentPendingRunInputPage> {
     const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(runId) + '/pending-inputs';
-    return unwrap((await httpClient.get<AgentEnvelope<AgentPendingRunInputPage>>(path)).data);
+    return unwrap((await httpClient.get<AgentEnvelope<AgentPendingRunInputPageDto>>(path)).data);
   },
   async mutatePendingRunInput(
     appId: string,
@@ -1312,11 +1122,18 @@ export const agentApi = {
     beforeInputId: string | null,
   ): Promise<AgentRunView> {
     const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(run.id) + '/pending-inputs';
+    const fields: AgentRunPendingInputMutationFieldsDto = {
+      action,
+      inputId,
+      beforeInputId,
+      expectedVersion: run.version,
+    };
+    const input: AgentRunPendingInputMutationRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentRunView>>(
+        await httpClient.patch<AgentEnvelope<AgentRunViewDto>>(
           path,
-          agentRuntimeRequest({ action, inputId, beforeInputId, expectedVersion: run.version }),
+          input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -1325,18 +1142,15 @@ export const agentApi = {
   async increaseRunBudget(
     appId: string,
     run: AgentRunView,
-    increase: Partial<{
-      maxRunSteps: number;
-      maxActiveExecutionSeconds: number;
-      maxSubagentMessages: number;
-      maxSubagentMessageBytes: number;
-    }>,
+    increase: AgentRunBudgetIncreaseDto,
   ): Promise<AgentRunView> {
+    const fields: AgentRunBudgetIncreaseFieldsDto = { increase, expectedVersion: run.version };
+    const input: AgentRunBudgetIncreaseRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunView>>(
+        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/budget`,
-          agentRuntimeRequest({ increase, expectedVersion: run.version }),
+          input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -1345,48 +1159,53 @@ export const agentApi = {
   async checkpoints(appId: string, runId: string): Promise<AgentCheckpointView[]> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentCheckpointView[]>>(
+        await httpClient.get<AgentEnvelope<AgentCheckpointViewDto[]>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/checkpoints`,
         )
       ).data,
     );
   },
   async saveCheckpoint(appId: string, run: AgentRunView): Promise<AgentCheckpointView> {
+    const input: AgentExpectedVersionRequestDto = agentRuntimeRequest({ expectedVersion: run.version });
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentCheckpointView>>(
+        await httpClient.post<AgentEnvelope<AgentCheckpointViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/checkpoints`,
-          agentRuntimeRequest({ expectedVersion: run.version }),
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async resumeRun(appId: string, run: AgentRunView, checkpointId: string): Promise<AgentRunView> {
+    const fields: AgentRunResumeFieldsDto = { checkpointId, expectedVersion: run.version };
+    const input: AgentRunResumeRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunView>>(
+        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/resume`,
-          agentRuntimeRequest({ checkpointId, expectedVersion: run.version }),
+          input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
   },
   async cancelRun(appId: string, run: AgentRunView): Promise<AgentRunView> {
+    const input: AgentExpectedVersionRequestDto = agentRuntimeRequest({ expectedVersion: run.version });
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunView>>(
+        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/cancel`,
-          agentRuntimeRequest({ expectedVersion: run.version }),
+          input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
   },
   async deleteRun(appId: string, run: AgentRunView): Promise<void> {
+    const params: AgentRunDeleteQueryDto = { expectedVersion: run.version };
     await httpClient.delete(`/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}`, {
-      params: { expectedVersion: run.version },
+      params,
       headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() },
     });
   },

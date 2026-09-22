@@ -1,6 +1,21 @@
+import type {
+  AgentRunAppendInputResponseDto,
+  AgentRunDeleteQueryDto,
+  AgentRunDeleteResponseDto,
+  AgentRunListQueryDto,
+} from '@nexus-terminal/protocol/agent-runs';
 import { Router, type Request } from 'express';
 import type { AgentApprovalFacade, AgentWorkspaceRuntimeFacade, AgentRunFacade } from '../../../modules/agent/public';
 import { approvalDto } from './approval-dto';
+import {
+  checkpointDto,
+  definitionDto,
+  pendingInputsDto,
+  reconciliationDto,
+  runDto,
+  runPageDto,
+  runSnapshotDto,
+} from './run-dto';
 import { agentData, agentError, agentRequestId, agentRoute } from './agent-http';
 import { pathParam, positiveInteger, withVersionConflictDetails } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
@@ -55,7 +70,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/agent-definitions',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.runs.definitions(scope));
+      agentData(request, response, (await dependencies.runs.definitions(scope)).map(definitionDto));
     }),
   );
 
@@ -65,17 +80,15 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       const rawLimit = queryString(request.query.limit);
       const limit = rawLimit === undefined ? 50 : Number(rawLimit);
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('VALIDATION_FAILED');
+      const threadId = queryString(request.query.threadId);
+      const before = queryString(request.query.before);
+      const query: AgentRunListQueryDto = {
+        limit,
+        ...(threadId === undefined ? {} : { threadId }),
+        ...(before === undefined ? {} : { before }),
+      };
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        await dependencies.runs.list(
-          scope,
-          queryString(request.query.threadId),
-          limit,
-          queryString(request.query.before),
-        ),
-      );
+      agentData(request, response, runPageDto(await dependencies.runs.list(scope, query.threadId, query.limit, query.before)));
     }),
   );
 
@@ -90,7 +103,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         command: { key: idempotencyKey(request), requestId: agentRequestId(request, response) },
       });
       response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${run.id}`);
-      agentData(request, response, run, 201);
+      agentData(request, response, runDto(run), 201);
     }),
   );
 
@@ -98,7 +111,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.runs.get(scope, pathParam(request.params.runId)));
+      agentData(request, response, runSnapshotDto(await dependencies.runs.get(scope, pathParam(request.params.runId))));
     }),
   );
 
@@ -106,7 +119,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/reconciliation',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.runs.reconciliation(scope, pathParam(request.params.runId)));
+      agentData(request, response, reconciliationDto(await dependencies.runs.reconciliation(scope, pathParam(request.params.runId))));
     }),
   );
 
@@ -119,12 +132,14 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       agentData(
         request,
         response,
-        await dependencies.runs.resolveReconciliation(
-          scope,
-          pathParam(request.params.runId),
-          input.expectedVersion,
-          input.note,
-          input.resources,
+        runDto(
+          await dependencies.runs.resolveReconciliation(
+            scope,
+            pathParam(request.params.runId),
+            input.expectedVersion,
+            input.note,
+            input.resources,
+          ),
         ),
       );
     }),
@@ -146,7 +161,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/checkpoints',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.runs.listCheckpoints(scope, pathParam(request.params.runId)));
+      agentData(request, response, (await dependencies.runs.listCheckpoints(scope, pathParam(request.params.runId))).map(checkpointDto));
     }),
   );
 
@@ -176,7 +191,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         'Location',
         `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${encodeURIComponent(checkpoint.runId)}`,
       );
-      agentData(request, response, checkpoint, 201);
+      agentData(request, response, checkpointDto(checkpoint), 201);
     }),
   );
 
@@ -197,7 +212,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         'Location',
         `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${encodeURIComponent(run.id)}`,
       );
-      agentData(request, response, run, 201);
+      agentData(request, response, runDto(run), 201);
     }),
   );
 
@@ -213,7 +228,12 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         async () => (await dependencies.runs.get(scope, runId)).version,
         () => dependencies.runs.appendInput(scope, runId, input.input, input.expectedVersion, idempotencyKey(request)),
       );
-      agentData(request, response, result, 202);
+      const payload: AgentRunAppendInputResponseDto = {
+        inputId: result.inputId,
+        sequence: result.sequence,
+        runVersion: result.runVersion,
+      };
+      agentData(request, response, payload, 202);
     }),
   );
 
@@ -230,7 +250,12 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         async () => (await dependencies.runs.get(scope, runId)).version,
         () => dependencies.runs.interrupt(scope, runId, input.input, input.expectedVersion, idempotencyKey(request)),
       );
-      agentData(request, response, result, 202);
+      const payload: AgentRunAppendInputResponseDto = {
+        inputId: result.inputId,
+        sequence: result.sequence,
+        runVersion: result.runVersion,
+      };
+      agentData(request, response, payload, 202);
     }),
   );
 
@@ -238,7 +263,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/pending-inputs',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.runs.pendingInputs(scope, pathParam(request.params.runId)));
+      agentData(request, response, pendingInputsDto(await dependencies.runs.pendingInputs(scope, pathParam(request.params.runId))));
     }),
   );
 
@@ -263,7 +288,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
             idempotencyKey(request),
           ),
       );
-      agentData(request, response, run);
+      agentData(request, response, runDto(run));
     }),
   );
 
@@ -279,7 +304,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         async () => (await dependencies.runs.get(scope, runId)).version,
         () => dependencies.runs.setGoal(scope, runId, input.text, input.expectedVersion, idempotencyKey(request)),
       );
-      agentData(request, response, run);
+      agentData(request, response, runDto(run));
     }),
   );
 
@@ -295,7 +320,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         async () => (await dependencies.runs.get(scope, runId)).version,
         () => dependencies.runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey(request)),
       );
-      agentData(request, response, run);
+      agentData(request, response, runDto(run));
     }),
   );
 
@@ -311,7 +336,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         async () => (await dependencies.runs.get(scope, runId)).version,
         () => dependencies.runs.cancel(scope, runId, expectedVersion, idempotencyKey(request)),
       );
-      agentData(request, response, run, run.status === 'cancelled' ? 200 : 202);
+      agentData(request, response, runDto(run), run.status === 'cancelled' ? 200 : 202);
     }),
   );
 
@@ -322,14 +347,16 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       const rawVersion = queryString(request.query.expectedVersion);
       const expectedVersion = rawVersion === undefined ? Number.NaN : Number(rawVersion);
       if (!positiveInteger(expectedVersion)) throw new Error('VALIDATION_FAILED');
+      const query: AgentRunDeleteQueryDto = { expectedVersion };
       const runId = pathParam(request.params.runId);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       await withVersionConflictDetails(
-        expectedVersion,
+        query.expectedVersion,
         async () => (await dependencies.runs.get(scope, runId)).version,
-        () => dependencies.runs.delete(scope, runId, expectedVersion, idempotencyKey(request)),
+        () => dependencies.runs.delete(scope, runId, query.expectedVersion, idempotencyKey(request)),
       );
-      agentData(request, response, { runId, deleted: true }, 202);
+      const payload: AgentRunDeleteResponseDto = { runId, deleted: true };
+      agentData(request, response, payload, 202);
     }),
   );
 

@@ -1,33 +1,32 @@
 import type { AgentApprovalResolveFieldsDto } from '@nexus-terminal/protocol/agent-approvals';
+import type { AgentReasoningEffortDto } from '@nexus-terminal/protocol/agent-providers';
 import type {
-  AgentRunEnvironmentSelection,
-  AgentWorkspaceCreateSpec,
-  ReasoningEffort,
-  RunApprovalMode,
-  RunBudgetIncrease,
-  RunExecutionMode,
-  UserInputData,
-} from '../../../modules/agent/public';
+  AgentCreateRunFieldsDto,
+  AgentRunAppendInputFieldsDto,
+  AgentRunBudgetIncreaseDto,
+  AgentRunBudgetIncreaseFieldsDto,
+  AgentRunEnvironmentSelectionDto,
+  AgentRunPendingInputMutationFieldsDto,
+  AgentRunReconciliationResolveFieldsDto,
+  AgentRunResumeFieldsDto,
+  AgentRunSetGoalFieldsDto,
+  AgentUserInputDataDto,
+} from '@nexus-terminal/protocol/agent-runs';
+import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/public';
 import { hasOnlyKeys, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
-const reasoningEfforts = new Set<ReasoningEffort>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
-const isReasoningEffort = (value: unknown): value is ReasoningEffort =>
-  typeof value === 'string' && reasoningEfforts.has(value as ReasoningEffort);
-
-export interface CreateRunRequestDto {
-  threadId: string;
-  input: UserInputData;
-  agentDefinitionId: string;
-  model: { providerId: string; modelId: string; configurationVersion: number };
-  reasoningEffort?: ReasoningEffort;
-  approvalMode: RunApprovalMode;
-  executionMode: RunExecutionMode;
-  plannedFromRunId?: string;
-  connectionIds: number[];
-  environment?: AgentRunEnvironmentSelection | null;
-  initialGoal?: string;
-}
+const reasoningEfforts = new Set<AgentReasoningEffortDto>([
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+const isReasoningEffort = (value: unknown): value is AgentReasoningEffortDto =>
+  typeof value === 'string' && reasoningEfforts.has(value as AgentReasoningEffortDto);
 
 export interface WorkspaceCreateRequestDto {
   workspace: AgentWorkspaceCreateSpec;
@@ -57,13 +56,7 @@ export interface WorkspaceArtifactImportRequestDto {
   path: string;
 }
 
-export interface ReconciliationResolveRequestDto {
-  expectedVersion: number;
-  note: string;
-  resources: Array<{ resourceKey: string; version: number }>;
-}
-
-const parseUserInput = (value: unknown): UserInputData => {
+const parseUserInput = (value: unknown): AgentUserInputDataDto => {
   if (!isRecord(value) || !hasOnlyKeys(value, ['text', 'artifactRefs'])) throw new Error('VALIDATION_FAILED');
   if (
     typeof value.text !== 'string' ||
@@ -77,7 +70,7 @@ const parseUserInput = (value: unknown): UserInputData => {
   return { text: value.text, artifactRefs: value.artifactRefs as string[] };
 };
 
-export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
+export const parseCreateRunRequest = (body: unknown): AgentCreateRunFieldsDto => {
   const value = versionedRecord(body, [
     'threadId',
     'input',
@@ -124,9 +117,9 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
       modelId: model.modelId,
       configurationVersion: model.configurationVersion,
     },
-    ...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort as ReasoningEffort }),
-    approvalMode: value.approvalMode as RunApprovalMode,
-    executionMode: value.executionMode as RunExecutionMode,
+    ...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort as AgentReasoningEffortDto }),
+    approvalMode: value.approvalMode as AgentCreateRunFieldsDto['approvalMode'],
+    executionMode: value.executionMode as AgentCreateRunFieldsDto['executionMode'],
     ...(typeof value.plannedFromRunId === 'string' ? { plannedFromRunId: value.plannedFromRunId } : {}),
     connectionIds: value.connectionIds as number[],
     ...(value.environment === undefined ? {} : { environment: parseRunEnvironmentSelection(value.environment) }),
@@ -142,7 +135,7 @@ export const parseExpectedVersionRequest = (body: unknown): number => {
   return value.expectedVersion;
 };
 
-export const parseReconciliationResolveRequest = (body: unknown): ReconciliationResolveRequestDto => {
+export const parseReconciliationResolveRequest = (body: unknown): AgentRunReconciliationResolveFieldsDto => {
   const value = versionedRecord(body, ['expectedVersion', 'note', 'resources']);
   if (
     !positiveInteger(value.expectedVersion) ||
@@ -174,7 +167,9 @@ export const parseReconciliationResolveRequest = (body: unknown): Reconciliation
   return { expectedVersion: value.expectedVersion, note: value.note.trim(), resources };
 };
 
-export const parseAppendInputRequest = (body: unknown): { input: UserInputData; expectedVersion: number } => {
+export const parseAppendInputRequest = (
+  body: unknown,
+): { input: AgentUserInputDataDto; expectedVersion: number } => {
   const value = versionedRecord(body, ['text', 'artifactRefs', 'expectedVersion']);
   if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
   return {
@@ -183,9 +178,7 @@ export const parseAppendInputRequest = (body: unknown): { input: UserInputData; 
   };
 };
 
-export const parsePendingInputMutationRequest = (
-  body: unknown,
-): { action: 'remove' | 'move'; inputId: string; beforeInputId: string | null; expectedVersion: number } => {
+export const parsePendingInputMutationRequest = (body: unknown): AgentRunPendingInputMutationFieldsDto => {
   const value = versionedRecord(body, ['action', 'inputId', 'beforeInputId', 'expectedVersion']);
   if (
     !['remove', 'move'].includes(String(value.action)) ||
@@ -205,7 +198,7 @@ export const parsePendingInputMutationRequest = (
   return { action, inputId: value.inputId, beforeInputId, expectedVersion: value.expectedVersion };
 };
 
-export const parseSetGoalRequest = (body: unknown): { text: string; expectedVersion: number } => {
+export const parseSetGoalRequest = (body: unknown): AgentRunSetGoalFieldsDto => {
   const value = versionedRecord(body, ['text', 'expectedVersion']);
   if (
     typeof value.text !== 'string' ||
@@ -218,7 +211,7 @@ export const parseSetGoalRequest = (body: unknown): { text: string; expectedVers
   return { text: value.text.trim(), expectedVersion: value.expectedVersion };
 };
 
-export const parseResumeRunRequest = (body: unknown): { checkpointId: string; expectedVersion: number } => {
+export const parseResumeRunRequest = (body: unknown): AgentRunResumeFieldsDto => {
   const value = versionedRecord(body, ['checkpointId', 'expectedVersion']);
   if (
     typeof value.checkpointId !== 'string' ||
@@ -231,7 +224,7 @@ export const parseResumeRunRequest = (body: unknown): { checkpointId: string; ex
   return { checkpointId: value.checkpointId, expectedVersion: value.expectedVersion };
 };
 
-const parseBudgetIncrease = (value: unknown): RunBudgetIncrease => {
+const parseBudgetIncrease = (value: unknown): AgentRunBudgetIncreaseDto => {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, ['maxRunSteps', 'maxActiveExecutionSeconds', 'maxSubagentMessages', 'maxSubagentMessageBytes'])
@@ -242,10 +235,10 @@ const parseBudgetIncrease = (value: unknown): RunBudgetIncrease => {
     if (!positiveInteger(entry)) throw new Error('VALIDATION_FAILED');
   }
   if (Object.keys(value).length === 0) throw new Error('VALIDATION_FAILED');
-  return value as RunBudgetIncrease;
+  return value as AgentRunBudgetIncreaseDto;
 };
 
-export const parseBudgetIncreaseRequest = (body: unknown): { increase: RunBudgetIncrease; expectedVersion: number } => {
+export const parseBudgetIncreaseRequest = (body: unknown): AgentRunBudgetIncreaseFieldsDto => {
   const value = versionedRecord(body, ['increase', 'expectedVersion']);
   if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
   return { increase: parseBudgetIncrease(value.increase), expectedVersion: value.expectedVersion };
@@ -298,7 +291,7 @@ const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
   return value as unknown as AgentWorkspaceCreateSpec;
 };
 
-const parseRunEnvironmentSelection = (value: unknown): AgentRunEnvironmentSelection | null => {
+const parseRunEnvironmentSelection = (value: unknown): AgentRunEnvironmentSelectionDto | null => {
   if (value === null) return null;
   if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
   const { catalogRevision, ...workspace } = value;

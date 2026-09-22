@@ -61,7 +61,7 @@ import type { ApprovalView } from './runtime/approvals/approval.repository.port'
 import type { AgentExecutionPolicyView } from './host/agent-execution-policy.service';
 export { resolveAgentAvailability } from './host/agent-availability';
 import type { CheckpointView } from './runtime/recovery/checkpoint.repository.port';
-import type { AgentDefinitionView } from './runtime/definitions/agent-definition.port';
+import type { AgentDefinitionSelectionView } from './runtime/definitions/agent-definition.port';
 import type { TransientRunEvent } from './runtime/events/event.types';
 import type { RunPage } from './runtime/runs/run.repository.port';
 import type {
@@ -320,7 +320,7 @@ export interface AgentCollaborationFacade {
 }
 
 export interface AgentRunFacade {
-  definitions(scope: Scope): Promise<readonly AgentDefinitionView[]>;
+  definitions(scope: Scope): Promise<readonly AgentDefinitionSelectionView[]>;
   create(scope: Scope, command: CreateRunCommand): Promise<RunView>;
   get(scope: Scope, runId: string): Promise<RunSnapshot>;
   rootRuntimeId(scope: Scope, runId: string): Promise<string>;

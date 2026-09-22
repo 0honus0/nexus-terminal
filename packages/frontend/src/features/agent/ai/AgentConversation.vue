@@ -6,6 +6,7 @@
     AgentLedgerEntry,
     AgentPendingUserInputRequest,
     AgentRunReconciliationView,
+    AgentRunSnapshot,
     AgentRunView,
   } from '../api/agent-api';
   import type { ConversationCommandResult } from './conversation-command-executor';
@@ -318,8 +319,12 @@
     return num.toLocaleString();
   };
 
+  const isRunSnapshot = (run: AgentRunView): run is AgentRunSnapshot => 'terminalIssue' in run;
+
   const terminalIssueDetail = computed(() => {
-    const issue = props.run?.terminalIssue;
+    const run = props.run;
+    if (!run || !isRunSnapshot(run)) return '';
+    const issue = run.terminalIssue;
     if (!issue) return '';
     const code = issue.errorCode?.trim() ?? '';
     const knownIssueKeys: Readonly<Record<string, string>> = {
