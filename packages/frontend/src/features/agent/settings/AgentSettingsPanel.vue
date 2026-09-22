@@ -48,7 +48,16 @@
   const denylist = ref<AgentTargetDenylistViewDto | null>(null);
   const hardLimitPreview = ref<AgentHardLimitPreviewDto | null>(null);
   const loading = ref(true);
-  const busy = ref(false);
+  type SettingsOperationLock = 'settings-write' | 'feature' | 'providers' | 'apps' | 'denylist';
+  const activeOperationLocks = reactive(new Set<SettingsOperationLock>());
+  const settingsMutationBusy = computed(() => activeOperationLocks.has('settings-write'));
+  const featureOperationBusy = computed(() => activeOperationLocks.has('feature'));
+  const featureControlBusy = computed(() => settingsMutationBusy.value || featureOperationBusy.value);
+  const providerBusy = computed(() => activeOperationLocks.has('providers'));
+  const appBusy = computed(() => activeOperationLocks.has('apps'));
+  const appContextBusy = computed(() => appBusy.value || featureOperationBusy.value);
+  const denylistBusy = computed(() => activeOperationLocks.has('denylist'));
+  const runtimeIntegrationBusy = computed(() => settingsMutationBusy.value || appContextBusy.value);
   const loadError = ref('');
   const recommendedPlugin = ref<AgentRecommendedPluginDto | null>(null);
   const onboardingVisible = ref(false);
@@ -138,10 +147,11 @@
 
   const execute = async <T = void,>(
     operation: string,
+    locks: readonly SettingsOperationLock[],
     action: () => Promise<T>,
     success?: string | null,
   ): Promise<T | undefined> => {
-    if (busy.value) {
+    if (locks.some((lock) => activeOperationLocks.has(lock))) {
       const cause = new Error('AGENT_SETTINGS_OPERATION_BUSY');
       operationFeedback.notifyError({
         operation,
@@ -150,7 +160,7 @@
       });
       return undefined;
     }
-    busy.value = true;
+    for (const lock of locks) activeOperationLocks.add(lock);
     try {
       const result = await action();
       if (success !== null) operationFeedback.notifySuccess(success ?? t('agent.ui.saved'));
@@ -159,13 +169,14 @@
       operationFeedback.notifyError({ operation, message: message(cause), cause });
       return undefined;
     } finally {
-      busy.value = false;
+      for (const lock of locks) activeOperationLocks.delete(lock);
     }
   };
 
   const patchSection = (section: string, patch: Record<string, unknown>, success?: string) =>
     execute(
       `patch-${section}`,
+      ['settings-write'],
       async () => {
         if (!settings.value) return;
         settings.value = await agentApi.patchSettings({ [section]: patch }, settings.value.revision);
@@ -192,6 +203,7 @@
     if (!enabled) {
       void execute(
         'disable-feature',
+        ['feature', 'settings-write'],
         async () => {
           if (!settings.value) return;
           const updated = await agentApi.patchSettings({ feature: { enabled: false } }, settings.value.revision);
@@ -206,6 +218,7 @@
     }
     void execute(
       'enable-feature',
+      ['feature', 'settings-write', 'apps'],
       async () => {
         if (!settings.value) return;
         const recommendation = await agentApi.recommendedPlugin();
@@ -244,7 +257,7 @@
       }
     }, 450);
 
-    void execute('install-recommended-plugin', async () => {
+    void execute('install-recommended-plugin', ['feature', 'settings-write', 'apps'], async () => {
       if (!settings.value) return;
       try {
         const installed = await agentApi.installRecommendedPlugin();
@@ -271,7 +284,7 @@
   };
 
   const closeOnboarding = (): void => {
-    if (busy.value) return;
+    if (featureOperationBusy.value) return;
     if (installTimer) clearInterval(installTimer);
     onboardingVisible.value = false;
     recommendedPlugin.value = null;
@@ -279,7 +292,7 @@
   };
 
   const toggleApp = (app: AgentAppSummaryDto, enabled: boolean) =>
-    execute('toggle-app', async () => {
+    execute('toggle-app', ['apps'], async () => {
       const updated = await agentApi.setAppEnabled(app, enabled);
       apps.value = apps.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
     });
@@ -287,6 +300,7 @@
   const previewHardLimits = (proposed: Partial<AgentHardLimitsDto>) =>
     execute(
       'preview-hard-limits',
+      ['settings-write'],
       async () => {
         if (!settings.value) return;
         hardLimitPreview.value = await agentApi.previewHardLimits(proposed, settings.value.revision);
@@ -295,7 +309,7 @@
     );
 
   const confirmHardLimits = (confirmationId: string, expectedVersion: number) =>
-    execute('confirm-hard-limits', async () => {
+    execute('confirm-hard-limits', ['settings-write'], async () => {
       settings.value = await agentApi.confirmHardLimits(confirmationId, expectedVersion);
       hardLimitPreview.value = null;
       storage.value = await agentApi.storage();
@@ -304,6 +318,7 @@
   const createProvider = (input: AgentProviderCreateRequestDto, successMsg?: string) =>
     execute(
       'create-provider',
+      ['providers'],
       async () => {
         const created = await agentApi.createProvider(input);
         providers.value = await agentApi.providers();
@@ -314,14 +329,14 @@
     );
 
   const toggleProvider = (provider: AgentProviderViewDto, enabled: boolean) =>
-    execute('toggle-provider', async () => {
+    execute('toggle-provider', ['providers'], async () => {
       const updated = await agentApi.updateProvider(provider, { enabled });
       providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
       apps.value = await agentApi.apps();
     });
 
   const changeProviderProtocol = (provider: AgentProviderViewDto, protocol: AgentProviderViewDto['protocol']) =>
-    execute('change-provider-protocol', async () => {
+    execute('change-provider-protocol', ['providers'], async () => {
       const previous = provider;
       providers.value = providers.value.map((candidate) =>
         candidate.id === provider.id ? { ...candidate, protocol } : candidate,
@@ -336,7 +351,7 @@
     });
 
   const deleteProvider = (provider: AgentProviderViewDto) =>
-    execute('delete-provider', async () => {
+    execute('delete-provider', ['providers', 'settings-write'], async () => {
       await agentApi.deleteProvider(provider.id, provider.version);
       providers.value = await agentApi.providers();
       if (settings.value) {
@@ -377,6 +392,7 @@
   const discoverProviderModels = (provider: AgentProviderViewDto) =>
     execute(
       'discover-provider-models',
+      ['providers'],
       async () => {
         discoveredModels.value = {
           ...discoveredModels.value,
@@ -394,6 +410,7 @@
   ) =>
     execute(
       'add-provider-model',
+      ['providers'],
       async () => {
         if (provider.models.some((candidate) => candidate.id === model.id)) return;
         const updated = await agentApi.updateProvider(provider, { models: [...provider.models, model] });
@@ -410,6 +427,7 @@
   ) =>
     execute(
       'update-provider-models',
+      ['providers'],
       async () => {
         if (!models.length) return false;
         const updated = await agentApi.updateProvider(provider, { models });
@@ -420,7 +438,7 @@
     );
 
   const saveDenylist = (connectionIds: number[], reason: string) =>
-    execute('save-target-denylist', async () => {
+    execute('save-target-denylist', ['denylist'], async () => {
       if (!denylist.value) return;
       denylist.value = await agentApi.replaceTargetDenylist(connectionIds, reason, denylist.value.revision);
       agentHostEvents.emit('authorization-changed', { revision: denylist.value.revision, connectionIds });
@@ -541,12 +559,12 @@
             class="space-y-6"
           >
             <!-- Agent 功能开关 -->
-            <AgentFeatureSettings :settings="settings" :busy="busy" @change="changeFeature" />
+            <AgentFeatureSettings :settings="settings" :busy="featureControlBusy" @change="changeFeature" />
 
             <!-- 模型服务商与默认模型 -->
             <ModelProviderSettings
               :providers="providers"
-              :busy="busy"
+              :busy="providerBusy"
               :discoveries="discoveredModels"
               :default-provider-id="settings.requestedSettings.model.defaultProviderId"
               :default-model-id="settings.requestedSettings.model.defaultModelId"
@@ -563,7 +581,11 @@
             />
 
             <!-- 预算预设与参数控制 -->
-            <BudgetContextSettings :settings="settings" :busy="busy" @save="(patch) => patchSection('budget', patch)" />
+            <BudgetContextSettings
+              :settings="settings"
+              :busy="settingsMutationBusy"
+              @save="(patch) => patchSection('budget', patch)"
+            />
 
             <!-- 高级实例硬限制策略：收拢为优雅的可折叠高级面板，避免喧宾夺主 -->
             <details class="group overflow-hidden rounded-xl border border-border/70 bg-card/25 transition-all">
@@ -590,7 +612,7 @@
                 <HardLimitsSettings
                   :settings="settings"
                   :preview="hardLimitPreview"
-                  :busy="busy"
+                  :busy="settingsMutationBusy"
                   @preview="previewHardLimits"
                   @confirm="confirmHardLimits"
                   @dismiss="hardLimitPreview = null"
@@ -609,33 +631,36 @@
             <!-- 并发与性能 -->
             <PerformanceSettings
               :settings="settings"
-              :busy="busy"
+              :busy="settingsMutationBusy"
               @save="(patch) => patchSection('performance', patch)"
             />
 
             <!-- 每个 Agent Plugin/App 独立执行预算；未覆盖字段继承全局默认 -->
-            <AppExecutionPolicySettings :apps="apps" :busy="busy" />
+            <AppExecutionPolicySettings :apps="apps" :busy="appContextBusy" />
 
             <!-- Workspace 开发环境运行时 -->
             <WorkspaceRuntimeSettings
               :availability="workspaceRuntime"
               :settings="settings"
-              :busy="busy"
+              :busy="settingsMutationBusy"
               @settings-updated="(updated) => (settings = updated)"
             />
 
             <!-- 浏览器 CDP 运行时与 ACP 协议 -->
             <BrowserRuntimeSettings
               :settings="settings"
-              :busy="busy"
+              :busy="settingsMutationBusy"
               @save="(patch) => patchSection('browser', patch)"
             />
 
-            <McpIntegrationSettings :busy="busy" :agent-available="apps.some((app) => app.id === 'nexus.agent')" />
+            <McpIntegrationSettings
+              :busy="appContextBusy"
+              :agent-available="apps.some((app) => app.id === 'nexus.agent')"
+            />
 
             <AcpRuntimeSettings
               :settings="settings"
-              :busy="busy"
+              :busy="runtimeIntegrationBusy"
               :agent-available="apps.some((app) => app.id === 'nexus.agent')"
               @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
             />
@@ -645,7 +670,7 @@
               :settings="settings"
               :apps="apps"
               :providers="providers"
-              :busy="busy"
+              :busy="settingsMutationBusy"
               @save="(patch) => patchSection('subagents', patch)"
             />
 
@@ -653,7 +678,7 @@
             <StorageArtifactSettings
               :settings="settings"
               :storage="storage"
-              :busy="busy"
+              :busy="settingsMutationBusy"
               @save="(patch) => patchSection('storage', patch)"
             />
           </section>
@@ -666,22 +691,22 @@
             class="space-y-6"
           >
             <!-- Agent App 与能力授权 -->
-            <AppManagementSettings :apps="apps" :busy="busy" @toggle="toggleApp" @refresh="load" />
+            <AppManagementSettings :apps="apps" :busy="appContextBusy" @toggle="toggleApp" @refresh="load" />
 
             <!-- Durable Memory 审核、发布、撤销与跨 App 导入 -->
-            <MemorySettings :apps="apps" :busy="busy" />
+            <MemorySettings :apps="apps" :busy="appContextBusy" />
 
             <!-- 插件市场与签名包管理 -->
             <PluginManagementSettings
               :apps="apps"
               :settings="settings"
-              :busy="busy"
+              :busy="runtimeIntegrationBusy"
               @refresh="load"
               @settings-updated="(updated) => (settings = updated)"
             />
 
             <!-- 安全黑名单与系统护栏 -->
-            <SafetyNetworkSettings :denylist="denylist" :busy="busy" @save="saveDenylist" />
+            <SafetyNetworkSettings :denylist="denylist" :busy="denylistBusy" @save="saveDenylist" />
             <SystemGuardrails />
           </section>
         </div>
@@ -693,8 +718,8 @@
     :visible="onboardingVisible && Boolean(recommendedPlugin)"
     :title="$t('agent.settings.onboarding.title')"
     :aria-label="$t('agent.settings.onboarding.title')"
-    :close-on-backdrop="!busy"
-    :close-on-escape="!busy"
+    :close-on-backdrop="!featureOperationBusy"
+    :close-on-escape="!featureOperationBusy"
     :focus-on-open="true"
     :restore-focus="true"
     panel-class="max-w-xl p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
@@ -872,7 +897,7 @@
         </div>
 
         <!-- 安装中进度状态（如果 busy 为 true） -->
-        <div v-if="busy" class="rounded-xl border border-primary/25 bg-primary/5 p-4 transition-all">
+        <div v-if="featureOperationBusy" class="rounded-xl border border-primary/25 bg-primary/5 p-4 transition-all">
           <div class="flex items-center gap-3">
             <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
               <i class="fa-solid fa-circle-notch fa-spin text-sm"></i>
@@ -906,7 +931,7 @@
           <button
             type="button"
             class="inline-flex h-9 items-center justify-center rounded-lg border border-border/80 bg-card px-4 text-xs font-medium text-text-secondary shadow-2xs transition-all hover:bg-header hover:text-foreground disabled:opacity-50 cursor-pointer whitespace-nowrap"
-            :disabled="busy"
+            :disabled="featureOperationBusy"
             @click="closeOnboarding"
           >
             {{ $t('agent.settings.onboarding.cancel') }}
@@ -914,17 +939,19 @@
           <button
             type="button"
             class="group inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 disabled:active:scale-100 cursor-pointer whitespace-nowrap"
-            :disabled="busy"
+            :disabled="featureOperationBusy"
             @click="confirmRecommendedInstall"
           >
             <i
-              v-if="!busy"
+              v-if="!featureOperationBusy"
               class="fa-solid fa-download text-xs transition-transform group-hover:-translate-y-0.5"
               aria-hidden="true"
             ></i>
             <i v-else class="fa-solid fa-circle-notch fa-spin text-xs" aria-hidden="true"></i>
             <span>{{
-              busy ? $t('agent.settings.onboarding.installing') : $t('agent.settings.onboarding.installAndEnable')
+              featureOperationBusy
+                ? $t('agent.settings.onboarding.installing')
+                : $t('agent.settings.onboarding.installAndEnable')
             }}</span>
           </button>
         </div>
