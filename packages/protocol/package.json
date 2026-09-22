@@ -19,6 +19,10 @@
     "./settings": {
       "types": "./src/settings.ts",
       "default": "./src/settings.ts"
+    },
+    "./connections": {
+      "types": "./src/connections.ts",
+      "default": "./src/connections.ts"
     }
   }
 }

@@ -1,30 +1,16 @@
-export type ConnectionType = 'SSH' | 'RDP' | 'VNC';
-export type ConnectionAuthMethod = 'password' | 'key';
-export type ConnectionRoute = 'proxy' | 'jump' | null;
-export interface RdpOptions {
-  remoteApp?: string | null;
-  remoteAppDirectory?: string | null;
-  remoteAppArguments?: string | null;
-}
-export interface Connection {
-  id: number;
-  name: string | null;
-  type: ConnectionType;
-  host: string;
-  port: number;
-  username: string;
-  authMethod: ConnectionAuthMethod;
-  sshKeyId: number | null;
-  proxyId: number | null;
-  route: ConnectionRoute;
-  tagIds: number[];
-  notes: string | null;
-  jumpChain: number[] | null;
-  rdpOptions: RdpOptions | null;
-  createdAt: number;
-  updatedAt: number;
-  lastConnectedAt: number | null;
-}
+import type {
+  ConnectionAuthMethodDto,
+  ConnectionDto,
+  ConnectionRouteDto,
+  ConnectionTypeDto,
+  RdpConnectionOptionsDto,
+} from '@nexus-terminal/protocol/connections';
+
+export type ConnectionType = ConnectionTypeDto;
+export type ConnectionAuthMethod = ConnectionAuthMethodDto;
+export type ConnectionRoute = ConnectionRouteDto;
+export type RdpOptions = RdpConnectionOptionsDto;
+export type Connection = ConnectionDto;
 export interface ConnectionInput {
   name?: string | null;
   type: ConnectionType;

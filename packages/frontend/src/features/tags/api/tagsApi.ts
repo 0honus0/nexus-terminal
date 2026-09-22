@@ -1,20 +1,31 @@
+import type {
+  ConnectionTagDto,
+  TagConnectionsRequestDto,
+  TagMutationResponseDto,
+  TagNameRequestDto,
+} from '@nexus-terminal/protocol/connections';
+import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import { httpClient } from '@/client/http';
 import type { ConnectionTag } from '../model/tag';
+
 export const tagsApi = {
   async list(): Promise<ConnectionTag[]> {
-    return (await httpClient.get<ConnectionTag[]>('/tags')).data;
+    return (await httpClient.get<ConnectionTagDto[]>('/tags')).data;
   },
   async create(name: string): Promise<ConnectionTag> {
-    return (await httpClient.post<{ tag: ConnectionTag }>('/tags', { name })).data.tag;
+    const request: TagNameRequestDto = { name };
+    return (await httpClient.post<TagMutationResponseDto>('/tags', request)).data.tag;
   },
   async update(id: number, name: string): Promise<ConnectionTag> {
-    return (await httpClient.put<{ tag: ConnectionTag }>(`/tags/${id}`, { name })).data.tag;
+    const request: TagNameRequestDto = { name };
+    return (await httpClient.put<TagMutationResponseDto>(`/tags/${id}`, request)).data.tag;
   },
   async remove(id: number): Promise<void> {
-    await httpClient.delete(`/tags/${id}`);
+    await httpClient.delete<MessageResponseDto>(`/tags/${id}`);
   },
   async setConnections(id: number, connectionIds: number[]): Promise<void> {
-    await httpClient.put(`/tags/${id}/connections`, { connectionIds });
+    const request: TagConnectionsRequestDto = { connectionIds };
+    await httpClient.put<MessageResponseDto>(`/tags/${id}/connections`, request);
   },
   async ensure(names: string[]): Promise<ConnectionTag[]> {
     const existing = await this.list();

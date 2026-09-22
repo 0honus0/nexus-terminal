@@ -1,4 +1,10 @@
 import { Router } from 'express';
+import type {
+  ConnectionTagDto,
+  TagConnectionsRequestDto,
+  TagMutationResponseDto,
+  TagNameRequestDto,
+} from '@nexus-terminal/protocol/connections';
 import type { AuditLogService } from '../../../modules/audit/audit.service';
 import type { TagService } from '../../../modules/tags/tag.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
@@ -11,13 +17,15 @@ export const createTagsRouter = (dependencies: { tags: TagService; audit: AuditL
   router.get(
     '/',
     route(async (_request, response) => {
-      response.json(await dependencies.tags.list());
+      const payload: ConnectionTagDto[] = await dependencies.tags.list();
+      response.json(payload);
     }),
   );
   router.post(
     '/',
     route(async (request, response) => {
-      const name = request.body?.name;
+      const body = (request.body ?? {}) as Partial<TagNameRequestDto>;
+      const name = body.name;
       if (typeof name !== 'string' || !name.trim()) {
         response.status(400).json({ message: '标签名称不能为空。' });
         return;
@@ -25,7 +33,8 @@ export const createTagsRouter = (dependencies: { tags: TagService; audit: AuditL
       try {
         const tag = await dependencies.tags.create(name);
         await dependencies.audit.logAction('TAG_CREATED', { tagId: tag.id, name: tag.name });
-        response.status(201).json({ message: '标签创建成功。', tag });
+        const payload: TagMutationResponseDto = { message: '标签创建成功。', tag };
+        response.status(201).json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('已存在') || message.includes('UNIQUE') ? 409 : 500).json({ message });
@@ -45,14 +54,16 @@ export const createTagsRouter = (dependencies: { tags: TagService; audit: AuditL
         response.status(404).json({ message: '标签未找到。' });
         return;
       }
-      response.json(tag);
+      const payload: ConnectionTagDto = tag;
+      response.json(payload);
     }),
   );
   router.put(
     '/:id/connections',
     route(async (request, response) => {
       const id = parsePositiveId(String(request.params.id));
-      const ids = request.body?.connectionIds;
+      const body = (request.body ?? {}) as Partial<TagConnectionsRequestDto>;
+      const ids = body.connectionIds;
       if (!id) {
         response.status(400).json({ message: '无效的标签 ID。' });
         return;
@@ -89,7 +100,8 @@ export const createTagsRouter = (dependencies: { tags: TagService; audit: AuditL
           return;
         }
         await dependencies.audit.logAction('TAG_UPDATED', { tagId: id, newName: tag.name });
-        response.json({ message: '标签更新成功。', tag });
+        const payload: TagMutationResponseDto = { message: '标签更新成功。', tag };
+        response.json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('已存在') || message.includes('UNIQUE') ? 409 : 500).json({ message });

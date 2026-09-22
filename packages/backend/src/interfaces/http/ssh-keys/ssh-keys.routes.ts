@@ -1,11 +1,17 @@
 import { Router } from 'express';
+import type {
+  SshKeyCreateRequestDto,
+  SshKeyMutationResponseDto,
+  SshKeySummaryDto,
+  SshKeyUpdateRequestDto,
+} from '@nexus-terminal/protocol/connections';
 import type { SshKeyService } from '../../../modules/ssh-keys/ssh-key.service';
-import type { SshKeyInput, SshKeySummary } from '../../../modules/ssh-keys/ssh-key.types';
+import type { SshKeySummary } from '../../../modules/ssh-keys/ssh-key.types';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
-const sshKeySummaryDto = (key: SshKeySummary) => ({ id: key.id, name: key.name });
+const sshKeySummaryDto = (key: SshKeySummary): SshKeySummaryDto => ({ id: key.id, name: key.name });
 
 const readOptionalSecret = (value: unknown, field: string): string | null | undefined => {
   if (value === undefined || value === null) return value;
@@ -13,7 +19,7 @@ const readOptionalSecret = (value: unknown, field: string): string | null | unde
   return value;
 };
 
-const sshKeyCreateInput = (body: unknown): SshKeyInput => {
+const sshKeyCreateInput = (body: unknown): SshKeyCreateRequestDto => {
   if (!isRecord(body)) throw new Error('请求体必须是对象。');
   if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
   if (typeof body.privateKey !== 'string') throw new Error('privateKey 必须是字符串。');
@@ -24,9 +30,9 @@ const sshKeyCreateInput = (body: unknown): SshKeyInput => {
   };
 };
 
-const sshKeyUpdateInput = (body: unknown): Partial<SshKeyInput> => {
+const sshKeyUpdateInput = (body: unknown): SshKeyUpdateRequestDto => {
   if (!isRecord(body)) throw new Error('请求体必须是对象。');
-  const input: Partial<SshKeyInput> = {};
+  const input: SshKeyUpdateRequestDto = {};
   if (body.name !== undefined) {
     if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
     input.name = body.name;
@@ -54,7 +60,8 @@ export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
     route(async (request, response) => {
       try {
         const key = await sshKeys.create(sshKeyCreateInput(request.body));
-        response.status(201).json({ message: 'SSH 密钥创建成功。', key: sshKeySummaryDto(key) });
+        const payload: SshKeyMutationResponseDto = { message: 'SSH 密钥创建成功。', key: sshKeySummaryDto(key) };
+        response.status(201).json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('已存在') || message.includes('必须提供') ? 400 : 500).json({ message });
@@ -79,7 +86,8 @@ export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
           response.status(404).json({ message: 'SSH 密钥未找到。' });
           return;
         }
-        response.json({ message: 'SSH 密钥更新成功。', key: sshKeySummaryDto(key) });
+        const payload: SshKeyMutationResponseDto = { message: 'SSH 密钥更新成功。', key: sshKeySummaryDto(key) };
+        response.json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('已存在') || message.includes('不能为空') ? 400 : 500).json({ message });

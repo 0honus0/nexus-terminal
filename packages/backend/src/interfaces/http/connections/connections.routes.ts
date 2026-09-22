@@ -1,7 +1,18 @@
 import { Router } from 'express';
+import type {
+  ConnectionAddTagRequestDto,
+  ConnectionCloneRequestDto,
+  ConnectionCreateRequestDto,
+  ConnectionDto,
+  ConnectionMutationResponseDto,
+  ConnectionTestResponseDto,
+  ConnectionUpdateRequestDto,
+  RemoteDesktopSessionDto,
+} from '@nexus-terminal/protocol/connections';
 import multer from 'multer';
 import type { ConnectionImportService } from '../../../modules/connections/connection-import.service';
 import type {
+  Connection,
   CreateConnectionInput,
   UnsavedSshConnectionInput,
   UpdateConnectionInput,
@@ -45,6 +56,8 @@ const statusForConnectionError = (message: string): number => {
   return 500;
 };
 
+const connectionDto = (connection: Connection): ConnectionDto => connection;
+
 const displayOptions = (query: Record<string, unknown>) => ({
   width: typeof query.width === 'string' ? Number(query.width) : undefined,
   height: typeof query.height === 'string' ? Number(query.height) : undefined,
@@ -83,19 +96,29 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
   router.post(
     '/test-unsaved',
     route(async (request, response) => {
-      const body = request.body as Partial<CreateConnectionInput>;
+      const body = request.body as Partial<ConnectionCreateRequestDto>;
       if (!body?.host || !Number.isInteger(body.port) || !body.username || !body.authMethod) {
-        response
-          .status(400)
-          .json({ success: false, message: '缺少必要的连接信息 (host, port, username, authMethod)。' });
+        const payload: ConnectionTestResponseDto = {
+          success: false,
+          message: '缺少必要的连接信息 (host, port, username, authMethod)。',
+        };
+        response.status(400).json(payload);
         return;
       }
       if (body.authMethod === 'password' && body.password === undefined) {
-        response.status(400).json({ success: false, message: '密码认证方式需要提供 password 字段 (可以为空字符串)。' });
+        const payload: ConnectionTestResponseDto = {
+          success: false,
+          message: '密码认证方式需要提供 password 字段 (可以为空字符串)。',
+        };
+        response.status(400).json(payload);
         return;
       }
       if (body.authMethod === 'key' && !body.sshKeyId && !body.privateKey) {
-        response.status(400).json({ success: false, message: '密钥认证方式需要提供 sshKeyId 或 privateKey。' });
+        const payload: ConnectionTestResponseDto = {
+          success: false,
+          message: '密钥认证方式需要提供 sshKeyId 或 privateKey。',
+        };
+        response.status(400).json(payload);
         return;
       }
       const port = body.port as number;
@@ -111,22 +134,27 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         proxyId: body.proxyId ?? null,
       };
       if (input.port <= 0 || input.port > 65535) {
-        response.status(400).json({ success: false, message: '端口号必须是 1-65535。' });
+        const payload: ConnectionTestResponseDto = { success: false, message: '端口号必须是 1-65535。' };
+        response.status(400).json(payload);
         return;
       }
       if (input.proxyId !== null && input.proxyId !== undefined && !Number.isInteger(input.proxyId)) {
-        response.status(400).json({ success: false, message: '代理 ID 必须是有效的数字。' });
+        const payload: ConnectionTestResponseDto = { success: false, message: '代理 ID 必须是有效的数字。' };
+        response.status(400).json(payload);
         return;
       }
       if (input.sshKeyId !== null && input.sshKeyId !== undefined && !Number.isInteger(input.sshKeyId)) {
-        response.status(400).json({ success: false, message: 'SSH 密钥 ID 必须是有效的数字。' });
+        const payload: ConnectionTestResponseDto = { success: false, message: 'SSH 密钥 ID 必须是有效的数字。' };
+        response.status(400).json(payload);
         return;
       }
       try {
         const { latency } = await dependencies.sshConnectionTest.testUnsaved(input);
-        response.json({ success: true, message: '连接测试成功', latency });
+        const payload: ConnectionTestResponseDto = { success: true, message: '连接测试成功', latency };
+        response.json(payload);
       } catch (error) {
-        response.status(500).json({ success: false, message: errorMessage(error) });
+        const payload: ConnectionTestResponseDto = { success: false, message: errorMessage(error) };
+        response.status(500).json(payload);
       }
     }),
   );
@@ -134,13 +162,14 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
   router.post(
     '/add-tag',
     route(async (request, response) => {
-      const connectionIds = request.body?.connectionIds;
-      const tagId = request.body?.tagId;
+      const body = (request.body ?? {}) as Partial<ConnectionAddTagRequestDto>;
+      const connectionIds = body.connectionIds;
+      const tagId = body.tagId;
       if (!Array.isArray(connectionIds) || connectionIds.length === 0 || !connectionIds.every(Number.isInteger)) {
         response.status(400).json({ message: 'connectionIds 必须是一个非空数字数组。' });
         return;
       }
-      if (!Number.isInteger(tagId) || tagId <= 0) {
+      if (typeof tagId !== 'number' || !Number.isInteger(tagId) || tagId <= 0) {
         response.status(400).json({ message: 'tagId 必须是一个有效的正整数。' });
         return;
       }
@@ -157,21 +186,26 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
   router.get(
     '/',
     route(async (_request, response) => {
-      response.json(await dependencies.connections.list());
+      response.json((await dependencies.connections.list()).map(connectionDto));
     }),
   );
 
   router.post(
     '/',
     route(async (request, response) => {
-      const body = request.body as CreateConnectionInput;
+      const body = request.body as ConnectionCreateRequestDto;
       if (!body || typeof body !== 'object' || !body.type || !body.host || !body.username) {
         response.status(400).json({ message: '缺少必要的连接信息 (type, host, username)。' });
         return;
       }
       try {
-        const created = await dependencies.connections.create(body);
-        response.status(201).json({ message: '连接创建成功。', connection: created });
+        const input: CreateConnectionInput = body;
+        const created = await dependencies.connections.create(input);
+        const payload: ConnectionMutationResponseDto = {
+          message: '连接创建成功。',
+          connection: connectionDto(created),
+        };
+        response.status(201).json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response.status(statusForConnectionError(message)).json({ message });
@@ -188,14 +222,13 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         return;
       }
       try {
-        response.json(
-          await dependencies.remoteDesktop.create(
-            request.session.userId!,
-            id,
-            'RDP',
-            displayOptions(request.query as Record<string, unknown>),
-          ),
+        const payload: RemoteDesktopSessionDto = await dependencies.remoteDesktop.create(
+          request.session.userId!,
+          id,
+          'RDP',
+          displayOptions(request.query as Record<string, unknown>),
         );
+        response.json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response
@@ -222,14 +255,13 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         return;
       }
       try {
-        response.json(
-          await dependencies.remoteDesktop.create(
-            request.session.userId!,
-            id,
-            'VNC',
-            displayOptions(request.query as Record<string, unknown>),
-          ),
+        const payload: RemoteDesktopSessionDto = await dependencies.remoteDesktop.create(
+          request.session.userId!,
+          id,
+          'VNC',
+          displayOptions(request.query as Record<string, unknown>),
         );
+        response.json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response
@@ -252,14 +284,17 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
     route(async (request, response) => {
       const id = parsePositiveId(String(request.params.id));
       if (!id) {
-        response.status(400).json({ success: false, message: '无效的连接 ID。' });
+        const payload: ConnectionTestResponseDto = { success: false, message: '无效的连接 ID。' };
+        response.status(400).json(payload);
         return;
       }
       try {
         const { latency } = await dependencies.sshConnectionTest.testStored(id);
-        response.json({ success: true, message: '连接测试成功', latency });
+        const payload: ConnectionTestResponseDto = { success: true, message: '连接测试成功', latency };
+        response.json(payload);
       } catch (error) {
-        response.status(500).json({ success: false, message: errorMessage(error) });
+        const payload: ConnectionTestResponseDto = { success: false, message: errorMessage(error) };
+        response.status(500).json(payload);
       }
     }),
   );
@@ -268,7 +303,8 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
     '/:id/clone',
     route(async (request, response) => {
       const id = parsePositiveId(String(request.params.id));
-      const name = request.body?.name;
+      const body = (request.body ?? {}) as Partial<ConnectionCloneRequestDto>;
+      const name = body.name;
       if (!id) {
         response.status(400).json({ message: '无效的原始连接 ID。' });
         return;
@@ -279,7 +315,11 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
       }
       try {
         const cloned = await dependencies.connections.clone(id, name);
-        response.status(201).json({ message: '连接克隆成功。', connection: cloned });
+        const payload: ConnectionMutationResponseDto = {
+          message: '连接克隆成功。',
+          connection: connectionDto(cloned),
+        };
+        response.status(201).json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response.status(statusForConnectionError(message)).json({ message });
@@ -300,7 +340,7 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         response.status(404).json({ message: '连接未找到。' });
         return;
       }
-      response.json(connection);
+      response.json(connectionDto(connection));
     }),
   );
 
@@ -313,12 +353,18 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         return;
       }
       try {
-        const updated = await dependencies.connections.update(id, (request.body ?? {}) as UpdateConnectionInput);
+        const body = (request.body ?? {}) as ConnectionUpdateRequestDto;
+        const input: UpdateConnectionInput = body;
+        const updated = await dependencies.connections.update(id, input);
         if (!updated) {
           response.status(404).json({ message: '连接未找到。' });
           return;
         }
-        response.json({ message: '连接更新成功。', connection: updated });
+        const payload: ConnectionMutationResponseDto = {
+          message: '连接更新成功。',
+          connection: connectionDto(updated),
+        };
+        response.json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response.status(statusForConnectionError(message)).json({ message });

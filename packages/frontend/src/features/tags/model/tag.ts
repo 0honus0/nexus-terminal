@@ -1,6 +1,3 @@
-export interface ConnectionTag {
-  id: number;
-  name: string;
-  createdAt?: number;
-  updatedAt?: number;
-}
+import type { ConnectionTagDto } from '@nexus-terminal/protocol/connections';
+
+export type ConnectionTag = ConnectionTagDto;

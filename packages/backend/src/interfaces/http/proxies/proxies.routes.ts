@@ -1,14 +1,20 @@
 import { Router } from 'express';
+import type {
+  ProxyCreateRequestDto,
+  ProxyDto,
+  ProxyMutationResponseDto,
+  ProxyUpdateRequestDto,
+} from '@nexus-terminal/protocol/connections';
 import type { AuditLogService } from '../../../modules/audit/audit.service';
 import type { ProxyService } from '../../../modules/proxies/proxy.service';
-import type { Proxy, ProxyAuthMethod, ProxyInput, ProxyType } from '../../../modules/proxies/proxy.types';
+import type { Proxy, ProxyAuthMethod, ProxyType } from '../../../modules/proxies/proxy.types';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
 const proxyTypes = new Set<ProxyType>(['SOCKS5', 'HTTP']);
 const authMethods = new Set<ProxyAuthMethod>(['none', 'password', 'key']);
-const proxyDto = (proxy: Proxy) => ({
+const proxyDto = (proxy: Proxy): ProxyDto => ({
   id: proxy.id,
   name: proxy.name,
   type: proxy.type,
@@ -24,7 +30,7 @@ const optionalNullableString = (value: unknown, field: string): string | null | 
   if (typeof value !== 'string') throw new Error(`${field} 必须是字符串或 null。`);
   return value;
 };
-const proxyCreateInput = (body: unknown): ProxyInput => {
+const proxyCreateInput = (body: unknown): ProxyCreateRequestDto => {
   if (!isRecord(body)) throw new Error('请求体必须是对象。');
   if (typeof body.name !== 'string' || typeof body.host !== 'string') throw new Error('name 和 host 必须是字符串。');
   if (typeof body.type !== 'string' || !proxyTypes.has(body.type as ProxyType)) throw new Error('无效的代理 type。');
@@ -46,9 +52,9 @@ const proxyCreateInput = (body: unknown): ProxyInput => {
     passphrase: optionalNullableString(body.passphrase, 'passphrase'),
   };
 };
-const proxyUpdateInput = (body: unknown): Partial<ProxyInput> => {
+const proxyUpdateInput = (body: unknown): ProxyUpdateRequestDto => {
   if (!isRecord(body)) throw new Error('请求体必须是对象。');
-  const input: Partial<ProxyInput> = {};
+  const input: ProxyUpdateRequestDto = {};
   if (body.name !== undefined) {
     if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
     input.name = body.name;
@@ -112,7 +118,8 @@ export const createProxiesRouter = (dependencies: { proxies: ProxyService; audit
         const input = proxyCreateInput(request.body);
         const proxy = await dependencies.proxies.create(input);
         await dependencies.audit.logAction('PROXY_CREATED', { proxyId: proxy.id, name: proxy.name, type: proxy.type });
-        response.status(201).json({ message: '代理创建成功', proxy: proxyDto(proxy) });
+        const payload: ProxyMutationResponseDto = { message: '代理创建成功', proxy: proxyDto(proxy) };
+        response.status(201).json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response
@@ -147,7 +154,8 @@ export const createProxiesRouter = (dependencies: { proxies: ProxyService; audit
           return;
         }
         await dependencies.audit.logAction('PROXY_UPDATED', { proxyId: id, updatedFields: Object.keys(request.body) });
-        response.json({ message: '代理更新成功', proxy: proxyDto(updated) });
+        const payload: ProxyMutationResponseDto = { message: '代理更新成功', proxy: proxyDto(updated) };
+        response.json(payload);
       } catch (error) {
         const message = errorMessage(error);
         response
