@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import BaseModal from '@/foundation/ui/BaseModal.vue';
   import { useOperationFeedback } from '@/shared/feedback/public';
+  import { agentHostEvents } from '../host/agent-host-events';
   import {
     agentApi,
     formatAgentApiError,
@@ -168,7 +169,7 @@
         if (!settings.value) return;
         settings.value = await agentApi.patchSettings({ [section]: patch }, settings.value.revision);
         storage.value = await agentApi.storage();
-        window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+        agentHostEvents.emit('host-changed', undefined);
       },
       success,
     );
@@ -196,7 +197,7 @@
           if (updated.availability.state !== 'disabled') throw new Error(t('agent.settings.feature.disableFailed'));
           settings.value = updated;
           storage.value = await agentApi.storage();
-          window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+          agentHostEvents.emit('host-changed', undefined);
         },
         t('agent.settings.feature.disabledSuccess'),
       );
@@ -217,7 +218,7 @@
           settings.value = updated;
           assertFeatureReady(updated);
           storage.value = await agentApi.storage();
-          window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+          agentHostEvents.emit('host-changed', undefined);
           operationFeedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
           return;
         }
@@ -253,7 +254,7 @@
         assertFeatureReady(updated);
         storage.value = await agentApi.storage();
         apps.value = await agentApi.apps();
-        window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+        agentHostEvents.emit('host-changed', undefined);
         operationFeedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
         setTimeout(() => {
           onboardingVisible.value = false;
@@ -421,12 +422,8 @@
     execute('save-target-denylist', async () => {
       if (!denylist.value) return;
       denylist.value = await agentApi.replaceTargetDenylist(connectionIds, reason, denylist.value.revision);
-      window.dispatchEvent(
-        new CustomEvent('nexus:agent:authorization-changed', {
-          detail: { revision: denylist.value.revision, connectionIds },
-        }),
-      );
-      window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+      agentHostEvents.emit('authorization-changed', { revision: denylist.value.revision, connectionIds });
+      agentHostEvents.emit('host-changed', undefined);
     });
 
   const selectGroup = (id: AgentSettingsGroupId): void => {

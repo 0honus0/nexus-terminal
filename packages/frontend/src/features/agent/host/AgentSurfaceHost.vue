@@ -6,6 +6,7 @@
   import { agentEvents } from '../api/agent-events';
   import AgentHubWindow from './AgentHubWindow.vue';
   import AgentLauncher from './AgentLauncher.vue';
+  import { agentHostEvents } from './agent-host-events';
   import { agentSurfaceSession } from './surface-session';
   import { agentWindowManager } from './window-manager';
 
@@ -21,15 +22,15 @@
   let activeUserId: number | null = null;
 
   const dispatchThreadChanged = (payload: Record<string, unknown>): void => {
-    window.dispatchEvent(new CustomEvent('nexus:agent:thread-changed', { detail: payload }));
+    agentHostEvents.emit('thread-changed', payload);
   };
 
   const dispatchAuthorizationChanged = (payload: Record<string, unknown> = {}): void => {
-    window.dispatchEvent(new CustomEvent('nexus:agent:authorization-changed', { detail: payload }));
+    agentHostEvents.emit('authorization-changed', payload);
   };
 
   const dispatchMemoryChanged = (payload: Record<string, unknown>): void => {
-    window.dispatchEvent(new CustomEvent('nexus:agent:memory-changed', { detail: payload }));
+    agentHostEvents.emit('memory-changed', payload);
   };
 
   const chooseDefaultApp = (next: HostSummaryView): void => {
@@ -252,7 +253,7 @@
     void refresh('host-event');
     if (activeUserId !== null) hostChannel?.postMessage({ type: 'host.changed', userId: activeUserId });
   };
-  window.addEventListener('nexus:agent:host-changed', onLocalHostChanged);
+  const stopLocalHostChanged = agentHostEvents.on('host-changed', onLocalHostChanged);
 
   const onVisibility = (): void => {
     if (document.visibilityState === 'hidden') persistLayout('document-hidden');
@@ -263,7 +264,7 @@
     refreshGeneration += 1;
     persistLayout('host-unmount');
     document.removeEventListener('visibilitychange', onVisibility);
-    window.removeEventListener('nexus:agent:host-changed', onLocalHostChanged);
+    stopLocalHostChanged();
     hostChannel?.removeEventListener('message', onHostBroadcast);
     hostChannel?.close();
     stop('host-unmount');

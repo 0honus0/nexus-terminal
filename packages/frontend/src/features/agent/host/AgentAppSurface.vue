@@ -35,6 +35,7 @@
     WorkspaceRuntimeAvailability,
     WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
+  import { agentHostEvents } from './agent-host-events';
   import { agentSurfaceSession } from './surface-session';
   import AgentThreadSidebar from './AgentThreadSidebar.vue';
   import AgentConfigPopover from '../files/AgentConfigPopover.vue';
@@ -816,10 +817,7 @@
     }
   };
 
-  const onThreadChanged = (event: Event): void => {
-    const detail = (event as CustomEvent<unknown>).detail;
-    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return;
-    const payload = detail as Record<string, unknown>;
+  const onThreadChanged = (payload: Record<string, unknown>): void => {
     if (payload.appId !== props.appId) return;
     void refreshThreadListFromHost();
   };
@@ -1506,10 +1504,12 @@
     void refreshConnectionsAndAuthorization().catch(() => undefined);
   };
 
+  let stopThreadChanged = (): void => {};
+  let stopAuthorizationChanged = (): void => {};
   onMounted(() => {
     window.addEventListener('focus', refreshConnectionsOnFocus);
-    window.addEventListener('nexus:agent:thread-changed', onThreadChanged);
-    window.addEventListener('nexus:agent:authorization-changed', onAuthorizationChanged);
+    stopThreadChanged = agentHostEvents.on('thread-changed', onThreadChanged);
+    stopAuthorizationChanged = agentHostEvents.on('authorization-changed', onAuthorizationChanged);
     void nextTick(() => {
       void load();
     });
@@ -1518,8 +1518,8 @@
     clearThreadDeleteArm();
     clearDeleteAllThreadsArm();
     window.removeEventListener('focus', refreshConnectionsOnFocus);
-    window.removeEventListener('nexus:agent:thread-changed', onThreadChanged);
-    window.removeEventListener('nexus:agent:authorization-changed', onAuthorizationChanged);
+    stopThreadChanged();
+    stopAuthorizationChanged();
     facade.dispose();
     resetStreamingPresentation();
   });

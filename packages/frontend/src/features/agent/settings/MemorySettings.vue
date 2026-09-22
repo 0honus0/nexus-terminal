@@ -2,6 +2,7 @@
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
+  import { agentHostEvents } from '../host/agent-host-events';
   import {
     agentApi,
     formatAgentApiError,
@@ -239,13 +240,13 @@
   watch(status, () => void loadMemories());
   watch(sourceAppId, () => void loadSourceMemories());
 
-  const onMemoryChanged = (event: Event): void => {
-    if (!(event instanceof CustomEvent) || !isRecord(event.detail) || typeof event.detail.appId !== 'string') return;
-    if (event.detail.appId === selectedAppId.value) void loadMemories();
-    if (event.detail.appId === sourceAppId.value) void loadSourceMemories();
+  const onMemoryChanged = (payload: Record<string, unknown>): void => {
+    if (typeof payload.appId !== 'string') return;
+    if (payload.appId === selectedAppId.value) void loadMemories();
+    if (payload.appId === sourceAppId.value) void loadSourceMemories();
   };
-  window.addEventListener('nexus:agent:memory-changed', onMemoryChanged);
-  onBeforeUnmount(() => window.removeEventListener('nexus:agent:memory-changed', onMemoryChanged));
+  const stopMemoryChanged = agentHostEvents.on('memory-changed', onMemoryChanged);
+  onBeforeUnmount(stopMemoryChanged);
 </script>
 
 <template>
