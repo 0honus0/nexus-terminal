@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { logger } from '@/client/logging/logger';
-  import type { AgentAppSummary, HostSummaryView } from '../api/agent-api';
+  import type { AgentAppSummaryDto, AgentHostSummaryDto } from '../api/agent-api';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
   import { agentSurfaceSession } from './surface-session';
@@ -11,7 +11,7 @@
   const AgentAppSurface = defineAsyncComponent(loadAgentAppSurface);
   const ArtifactLibraryView = defineAsyncComponent(() => import('../files/ArtifactLibraryView.vue'));
 
-  const props = defineProps<{ summary: HostSummaryView }>();
+  const props = defineProps<{ summary: AgentHostSummaryDto }>();
   const emit = defineEmits<{ layoutChange: [] }>();
   const state = agentWindowManager.state;
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
@@ -248,7 +248,7 @@
     const apps = props.summary.apps;
     const list = openAppIds.value
       .map((id) => apps.find((app) => app.id === id))
-      .filter((app): app is AgentAppSummary => !!app);
+      .filter((app): app is AgentAppSummaryDto => !!app);
     return list.length > 0 ? list : enabledApps.value;
   });
 

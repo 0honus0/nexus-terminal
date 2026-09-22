@@ -1,9 +1,9 @@
 <script setup lang="ts">
   import { ref, watch } from 'vue';
-  import type { AgentArtifactRef } from '../api/agent-api';
+  import type { AgentArtifactRefDto } from '../api/agent-api';
 
   const props = defineProps<{
-    artifacts: AgentArtifactRef[];
+    artifacts: AgentArtifactRefDto[];
     locked: boolean;
   }>();
 

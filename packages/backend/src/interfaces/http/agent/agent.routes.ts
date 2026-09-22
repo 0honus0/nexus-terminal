@@ -19,6 +19,11 @@ import type {
   AgentTargetGrantSelectionDto,
 } from '@nexus-terminal/protocol/agent-host';
 import type {
+  AgentAppIntentCreateRequestDto,
+  AgentAppIntentListQueryDto,
+  AgentAppIntentRevokeResponseDto,
+} from '@nexus-terminal/protocol/agent-plugins';
+import type {
   AgentAvailableModelDto,
   AgentDiscoveredProviderModelDto,
   AgentModelRegistryResolveQueryDto,
@@ -60,6 +65,7 @@ import {
   artifactPageDto,
   artifactStorageSummaryDto,
 } from './artifact-dto';
+import { appIntentArtifactDto, appIntentReceiptDto } from './plugin-dto';
 import {
   appGrantViewDto,
   appSummaryDto,
@@ -581,7 +587,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       ) {
         throw new Error('VALIDATION_FAILED');
       }
-      const artifactRefs: Array<{ appId: string; id: string }> = [];
+      const artifactRefs: AgentAppIntentCreateRequestDto['artifactRefs'] = [];
       for (const candidate of request.body.artifactRefs) {
         if (
           !isRecord(candidate) ||
@@ -593,17 +599,18 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         }
         artifactRefs.push({ appId: candidate.appId, id: candidate.id });
       }
+      const input: AgentAppIntentCreateRequestDto = {
+        receiverAppId: request.body.receiverAppId,
+        intentId: request.body.intentId,
+        input: request.body.input,
+        artifactRefs,
+        confirmed: true,
+      };
       const receipt = await dependencies.host.createAppIntent(
         { userId: agentUserId(request), appId: pathParam(request.params.appId) },
-        {
-          receiverAppId: request.body.receiverAppId,
-          intentId: request.body.intentId,
-          input: request.body.input,
-          artifactRefs,
-          confirmed: true,
-        },
+        input,
       );
-      agentData(request, response, receipt, 201);
+      agentData(request, response, appIntentReceiptDto(receipt), 201);
     }),
   );
 
@@ -639,13 +646,16 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)) {
         throw new Error('VALIDATION_FAILED');
       }
+      const query: AgentAppIntentListQueryDto = limit === undefined ? {} : { limit };
       agentData(
         request,
         response,
-        await dependencies.host.listReceivedAppIntents(
-          { userId: agentUserId(request), appId: pathParam(request.params.appId) },
-          limit,
-        ),
+        (
+          await dependencies.host.listReceivedAppIntents(
+            { userId: agentUserId(request), appId: pathParam(request.params.appId) },
+            query.limit,
+          )
+        ).map(appIntentReceiptDto),
       );
     }),
   );
@@ -657,10 +667,12 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.host.getReceivedAppIntentArtifact(
-          scope,
-          pathParam(request.params.receiptId),
-          pathParam(request.params.artifactId),
+        appIntentArtifactDto(
+          await dependencies.host.getReceivedAppIntentArtifact(
+            scope,
+            pathParam(request.params.receiptId),
+            pathParam(request.params.artifactId),
+          ),
         ),
       );
     }),
@@ -708,7 +720,8 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         { userId: agentUserId(request), appId: pathParam(request.params.appId) },
         pathParam(request.params.receiptId),
       );
-      agentData(request, response, { revoked: true });
+      const payload: AgentAppIntentRevokeResponseDto = { revoked: true };
+      agentData(request, response, payload);
     }),
   );
 

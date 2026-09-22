@@ -1,9 +1,9 @@
-export type { AgentEnvelopeDto as AgentEnvelope } from '@nexus-terminal/protocol/agent-common';
-export type { AgentArtifactRefDto as AgentArtifactRef } from '@nexus-terminal/protocol/agent-artifacts';
+export type { AgentEnvelopeDto } from '@nexus-terminal/protocol/agent-common';
+export type { AgentArtifactRefDto } from '@nexus-terminal/protocol/agent-artifacts';
 export type {
-  AgentAvailabilityStateDto as AgentAvailabilityState,
-  AgentAvailabilityViewDto as AgentAvailabilityView,
-  AgentHardLimitsDto as AgentHardLimits,
-  AgentSettingsDocumentDto as AgentSettingsDocument,
-  AgentSettingsViewDto as AgentSettingsView,
+  AgentAvailabilityStateDto,
+  AgentAvailabilityViewDto,
+  AgentHardLimitsDto,
+  AgentSettingsDocumentDto,
+  AgentSettingsViewDto,
 } from '@nexus-terminal/protocol/agent-host';

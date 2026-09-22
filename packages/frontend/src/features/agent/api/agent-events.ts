@@ -1,6 +1,6 @@
 import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
-import type { AgentRunStatus } from './agent-api';
+import type { AgentRunStatusDto } from './agent-api';
 import { AgentApiError } from './agent-api-error';
 import { agentHttpClient } from './agent-http-client';
 
@@ -61,7 +61,7 @@ interface AgentMessageFinalEvent extends AgentVersionedEventMetadata {
 
 interface AgentRunStatusChangedEvent extends AgentVersionedEventMetadata {
   type: 'run.status_changed';
-  payload: { from: AgentRunStatus; to: AgentRunStatus };
+  payload: { from: AgentRunStatusDto; to: AgentRunStatusDto };
 }
 
 interface AgentRunErrorEvent extends AgentVersionedEventMetadata {
@@ -81,7 +81,7 @@ interface AgentRunInterruptedEvent extends AgentVersionedEventMetadata {
 
 interface AgentRunCancelRequestedEvent extends AgentVersionedEventMetadata {
   type: 'run.cancel_requested';
-  payload: { previousStatus: AgentRunStatus };
+  payload: { previousStatus: AgentRunStatusDto };
 }
 
 interface AgentRunRecoveryContinuedEvent extends AgentVersionedEventMetadata {
@@ -217,7 +217,7 @@ interface AgentWireEventPayload {
   occurredAt?: number;
 }
 
-const RUN_STATUSES = new Set<AgentRunStatus>([
+const RUN_STATUSES = new Set<AgentRunStatusDto>([
   'created',
   'running',
   'awaiting_approval',
@@ -234,8 +234,8 @@ const RUN_STATUSES = new Set<AgentRunStatus>([
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-const isRunStatus = (value: unknown): value is AgentRunStatus =>
-  typeof value === 'string' && RUN_STATUSES.has(value as AgentRunStatus);
+const isRunStatus = (value: unknown): value is AgentRunStatusDto =>
+  typeof value === 'string' && RUN_STATUSES.has(value as AgentRunStatusDto);
 
 const protocolError = (value: unknown): Error => {
   if (!isRecord(value) || typeof value.code !== 'string') return new Error('AGENT_WS_PROTOCOL_ERROR');

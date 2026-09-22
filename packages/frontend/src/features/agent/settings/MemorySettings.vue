@@ -7,27 +7,27 @@
     agentApi,
     formatAgentApiError,
     toAgentApiError,
-    type AgentAppSummary,
-    type AgentMemoryImportConfirmation,
-    type AgentMemoryStatus,
-    type AgentMemoryView,
+    type AgentAppSummaryDto,
+    type AgentMemoryImportConfirmationDto,
+    type AgentMemoryStatusDto,
+    type AgentMemoryViewDto,
   } from '../api/agent-api';
 
-  const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
+  const props = defineProps<{ apps: AgentAppSummaryDto[]; busy: boolean }>();
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.memory');
 
   const selectedAppId = ref('');
-  const status = ref<AgentMemoryStatus | 'all'>('all');
-  const memories = shallowRef<AgentMemoryView[]>([]);
+  const status = ref<AgentMemoryStatusDto | 'all'>('all');
+  const memories = shallowRef<AgentMemoryViewDto[]>([]);
   const drafts = ref<Record<string, string>>({});
   const loading = ref(false);
   const localBusy = ref(false);
 
   const sourceAppId = ref('');
-  const sourceMemories = shallowRef<AgentMemoryView[]>([]);
+  const sourceMemories = shallowRef<AgentMemoryViewDto[]>([]);
   const sourceMemoryId = ref('');
-  const importPreview = shallowRef<AgentMemoryImportConfirmation | null>(null);
+  const importPreview = shallowRef<AgentMemoryImportConfirmationDto | null>(null);
   const importLoading = ref(false);
   let memoriesGeneration = 0;
   let sourceMemoriesGeneration = 0;
@@ -45,7 +45,7 @@
   const confidence = (value: number): string => `${Math.round(value * 100)}%`;
   const appName = (appId: string): string => props.apps.find((app) => app.id === appId)?.displayName ?? appId;
 
-  const provenanceProjection = (memory: AgentMemoryView): string[] => {
+  const provenanceProjection = (memory: AgentMemoryViewDto): string[] => {
     const projection: string[] = [];
     if (memory.proposedByRuntimeId) projection.push(`runtime · ${memory.proposedByRuntimeId.slice(0, 32)}`);
     if (!isRecord(memory.sourceRefs)) return projection.slice(0, 4);
@@ -156,7 +156,7 @@
     }
   };
 
-  const publish = (memory: AgentMemoryView): void => {
+  const publish = (memory: AgentMemoryViewDto): void => {
     const content = (drafts.value[memory.id] ?? memory.content).trim();
     if (!content) return;
     void mutate(
@@ -170,7 +170,7 @@
     );
   };
 
-  const reject = (memory: AgentMemoryView): void => {
+  const reject = (memory: AgentMemoryViewDto): void => {
     void mutate(
       'reject-memory',
       async () => {
@@ -181,7 +181,7 @@
     );
   };
 
-  const revoke = (memory: AgentMemoryView): void => {
+  const revoke = (memory: AgentMemoryViewDto): void => {
     void mutate(
       'revoke-memory',
       async () => {

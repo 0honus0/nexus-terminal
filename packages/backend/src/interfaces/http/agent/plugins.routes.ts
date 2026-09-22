@@ -1,6 +1,34 @@
+import type {
+  AgentPluginArtifactStageRequestDto,
+  AgentPluginDeleteDataRequestDto,
+  AgentPluginDeleteDataResponseDto,
+  AgentPluginFrontendRpcRequestDto,
+  AgentPluginFrontendRpcResponseDto,
+  AgentPluginOfficialStageRequestDto,
+  AgentPluginRemoteCatalogQueryDto,
+  AgentPluginRemoteStageRequestDto,
+  AgentPluginRevokePublisherResponseDto,
+  AgentPluginStageIdRequestDto,
+  AgentPluginTrustPublisherRequestDto,
+  AgentPluginUninstallRequestDto,
+  AgentPluginUpgradeRequestDto,
+  AgentPluginVersionsQueryDto,
+} from '@nexus-terminal/protocol/agent-plugins';
 import { Router, type RequestHandler } from 'express';
 import type { AgentPluginFacade } from '../../../modules/agent/public';
 import { agentData, agentError, agentRoute } from './agent-http';
+import {
+  pluginFrontendDescriptorDto,
+  pluginInstallResultDto,
+  pluginInstallationDto,
+  pluginPublisherDto,
+  pluginStageDto,
+  pluginUninstallResultDto,
+  pluginUpgradeResultDto,
+  pluginVerifyResultDto,
+  pluginVersionDto,
+  remotePluginCatalogDto,
+} from './plugin-dto';
 import {
   hasOnlyKeys,
   isJsonValue,
@@ -22,7 +50,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       agentData(
         request,
         response,
-        keys.map(({ publicKeyPem: _publicKeyPem, ...key }) => key),
+        keys.map(pluginPublisherDto),
       );
     }),
   );
@@ -35,9 +63,12 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
         throw new Error('VALIDATION_FAILED');
       if (!nonEmptyString(request.body.publicKeyPem) || !nonEmptyString(request.body.label))
         throw new Error('VALIDATION_FAILED');
-      const key = await plugins.trustPublisherKey(agentUserId(request), request.body.publicKeyPem, request.body.label);
-      const { publicKeyPem: _publicKeyPem, ...view } = key;
-      agentData(request, response, view, 201);
+      const input: AgentPluginTrustPublisherRequestDto = {
+        publicKeyPem: request.body.publicKeyPem,
+        label: request.body.label,
+      };
+      const key = await plugins.trustPublisherKey(agentUserId(request), input.publicKeyPem, input.label);
+      agentData(request, response, pluginPublisherDto(key), 201);
     }),
   );
 
@@ -46,14 +77,15 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     mutationSecurity,
     agentRoute(async (request, response) => {
       await plugins.revokePublisherKey(agentUserId(request), pathParam(request.params.keyId));
-      agentData(request, response, { revoked: true });
+      const payload: AgentPluginRevokePublisherResponseDto = { revoked: true };
+      agentData(request, response, payload);
     }),
   );
 
   router.get(
     '/installations',
     agentRoute(async (request, response) => {
-      agentData(request, response, await plugins.listInstallations(agentUserId(request)));
+      agentData(request, response, (await plugins.listInstallations(agentUserId(request))).map(pluginInstallationDto));
     }),
   );
 
@@ -61,14 +93,15 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     '/versions',
     agentRoute(async (request, response) => {
       const appId = queryString(request.query.appId);
-      agentData(request, response, await plugins.listVersions(agentUserId(request), appId));
+      const query: AgentPluginVersionsQueryDto = appId === undefined ? {} : { appId };
+      agentData(request, response, (await plugins.listVersions(agentUserId(request), query.appId)).map(pluginVersionDto));
     }),
   );
 
   router.get(
     '/official/catalog',
     agentRoute(async (request, response) => {
-      agentData(request, response, await plugins.officialCatalog(AbortSignal.timeout(30_000)));
+      agentData(request, response, remotePluginCatalogDto(await plugins.officialCatalog(AbortSignal.timeout(30_000))));
     }),
   );
 
@@ -82,14 +115,17 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       if (!nonEmptyString(request.body.appId) || !nonEmptyString(request.body.version)) {
         throw new Error('VALIDATION_FAILED');
       }
+      const input: AgentPluginOfficialStageRequestDto = { appId: request.body.appId, version: request.body.version };
       agentData(
         request,
         response,
-        await plugins.stageOfficial(
-          agentUserId(request),
-          request.body.appId,
-          request.body.version,
-          AbortSignal.timeout(120_000),
+        pluginStageDto(
+          await plugins.stageOfficial(
+            agentUserId(request),
+            input.appId,
+            input.version,
+            AbortSignal.timeout(120_000),
+          ),
         ),
         201,
       );
@@ -101,10 +137,13 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     agentRoute(async (request, response) => {
       const repositoryUrl = queryString(request.query.repositoryUrl);
       if (!repositoryUrl) throw new Error('VALIDATION_FAILED');
+      const query: AgentPluginRemoteCatalogQueryDto = { repositoryUrl };
       agentData(
         request,
         response,
-        await plugins.remoteCatalog(agentUserId(request), repositoryUrl, AbortSignal.timeout(30_000)),
+        remotePluginCatalogDto(
+          await plugins.remoteCatalog(agentUserId(request), query.repositoryUrl, AbortSignal.timeout(30_000)),
+        ),
       );
     }),
   );
@@ -123,14 +162,15 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       ) {
         throw new Error('VALIDATION_FAILED');
       }
+      const input: AgentPluginRemoteStageRequestDto = {
+        repositoryUrl: request.body.repositoryUrl,
+        appId: request.body.appId,
+        version: request.body.version,
+      };
       agentData(
         request,
         response,
-        await plugins.stageRemote(
-          agentUserId(request),
-          { repositoryUrl: request.body.repositoryUrl, appId: request.body.appId, version: request.body.version },
-          AbortSignal.timeout(120_000),
-        ),
+        pluginStageDto(await plugins.stageRemote(agentUserId(request), input, AbortSignal.timeout(120_000))),
         201,
       );
     }),
@@ -155,13 +195,18 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       ) {
         throw new Error('VALIDATION_FAILED');
       }
+      const input: AgentPluginArtifactStageRequestDto = {
+        artifactRef: { appId: artifactRef.appId, id: artifactRef.id },
+      };
       agentData(
         request,
         response,
-        await plugins.stage(agentUserId(request), {
-          artifactAppId: artifactRef.appId,
-          artifactId: artifactRef.id,
-        }),
+        pluginStageDto(
+          await plugins.stage(agentUserId(request), {
+            artifactAppId: input.artifactRef.appId,
+            artifactId: input.artifactRef.id,
+          }),
+        ),
         201,
       );
     }),
@@ -174,7 +219,8 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['stageId']) || !nonEmptyString(request.body.stageId)) {
         throw new Error('VALIDATION_FAILED');
       }
-      agentData(request, response, await plugins.verify(agentUserId(request), request.body.stageId));
+      const input: AgentPluginStageIdRequestDto = { stageId: request.body.stageId };
+      agentData(request, response, pluginVerifyResultDto(await plugins.verify(agentUserId(request), input.stageId)));
     }),
   );
 
@@ -185,7 +231,8 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['stageId']) || !nonEmptyString(request.body.stageId)) {
         throw new Error('VALIDATION_FAILED');
       }
-      agentData(request, response, await plugins.install(agentUserId(request), request.body.stageId), 201);
+      const input: AgentPluginStageIdRequestDto = { stageId: request.body.stageId };
+      agentData(request, response, pluginInstallResultDto(await plugins.install(agentUserId(request), input.stageId)), 201);
     }),
   );
 
@@ -197,7 +244,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
         agentError(request, response, 404, 'NOT_FOUND', 'Plugin UI is not available.');
         return;
       }
-      agentData(request, response, descriptor);
+      agentData(request, response, pluginFrontendDescriptorDto(descriptor));
     }),
   );
 
@@ -223,22 +270,16 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       ) {
         throw new Error('VALIDATION_FAILED');
       }
-      agentData(
-        request,
-        response,
-        await plugins.frontendRpc(agentUserId(request), pathParam(request.params.appId), {
-          method: request.body.method as
-            | 'host.appInfo'
-            | 'storage.get'
-            | 'storage.put'
-            | 'storage.delete'
-            | 'intents.create'
-            | 'intents.listReceived'
-            | 'intents.revoke'
-            | 'intents.artifacts.get',
-          params: request.body.params,
-        }),
+      const input: AgentPluginFrontendRpcRequestDto = {
+        method: request.body.method as AgentPluginFrontendRpcRequestDto['method'],
+        params: request.body.params,
+      };
+      const payload: AgentPluginFrontendRpcResponseDto = await plugins.frontendRpc(
+        agentUserId(request),
+        pathParam(request.params.appId),
+        input,
       );
+      agentData(request, response, payload);
     }),
   );
 
@@ -254,13 +295,17 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       ) {
         throw new Error('VALIDATION_FAILED');
       }
+      const input: AgentPluginUpgradeRequestDto = {
+        stageId: request.body.stageId,
+        expectedVersion: request.body.expectedVersion,
+      };
       const result = await plugins.upgrade(
         agentUserId(request),
         pathParam(request.params.appId),
-        request.body.stageId,
-        request.body.expectedVersion,
+        input.stageId,
+        input.expectedVersion,
       );
-      agentData(request, response, result, result.state === 'draining' ? 202 : 200);
+      agentData(request, response, pluginUpgradeResultDto(result), result.state === 'draining' ? 202 : 200);
     }),
   );
 
@@ -276,12 +321,16 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       ) {
         throw new Error('VALIDATION_FAILED');
       }
+      const input: AgentPluginUninstallRequestDto = {
+        deleteData: false,
+        expectedVersion: request.body.expectedVersion,
+      };
       const result = await plugins.uninstall(
         agentUserId(request),
         pathParam(request.params.appId),
-        request.body.expectedVersion,
+        input.expectedVersion,
       );
-      agentData(request, response, result, result.state === 'draining' ? 202 : 200);
+      agentData(request, response, pluginUninstallResultDto(result), result.state === 'draining' ? 202 : 200);
     }),
   );
 
@@ -292,8 +341,11 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['confirmed']) || request.body.confirmed !== true) {
         throw new Error('VALIDATION_FAILED');
       }
+      const input: AgentPluginDeleteDataRequestDto = { confirmed: true };
+      void input;
       await plugins.deleteData(agentUserId(request), pathParam(request.params.appId));
-      agentData(request, response, { deleted: true });
+      const payload: AgentPluginDeleteDataResponseDto = { deleted: true };
+      agentData(request, response, payload);
     }),
   );
 

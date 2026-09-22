@@ -1,8 +1,8 @@
 <script setup lang="ts">
   import { computed } from 'vue';
-  import type { AgentSettingsView } from '../api/agent-api';
+  import type { AgentSettingsViewDto } from '../api/agent-api';
 
-  const props = defineProps<{ settings: AgentSettingsView; busy: boolean }>();
+  const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
   const emit = defineEmits<{ change: [enabled: boolean] }>();
   const runtimeEnabled = computed(() => ['enabled', 'degraded'].includes(props.settings.availability.state));
 </script>

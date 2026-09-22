@@ -8,30 +8,30 @@ import type {
   AgentArtifactRetainRequestDto,
   AgentArtifactUploadReservationDto,
 } from '@nexus-terminal/protocol/agent-artifacts';
-import type { AgentArtifactRef, AgentEnvelope } from './agent-api.types';
+import type { AgentArtifactRefDto, AgentEnvelopeDto } from './agent-api.types';
 import type {
-  AgentArtifactPage,
-  ArtifactCleanupPreview,
-  ArtifactCleanupResult,
-  ArtifactStorageSummary,
+  AgentArtifactPageDto,
+  AgentArtifactCleanupPreviewDto,
+  AgentArtifactCleanupResultDto,
+  AgentArtifactStorageSummaryDto,
 } from './agent-api';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 
 export const createArtifactApi = () => ({
-  async storage(): Promise<ArtifactStorageSummary> {
-    return unwrap((await httpClient.get<AgentEnvelope<ArtifactStorageSummary>>('/agent/files/storage')).data);
+  async storage(): Promise<AgentArtifactStorageSummaryDto> {
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentArtifactStorageSummaryDto>>('/agent/files/storage')).data);
   },
-  async files(query: Omit<AgentArtifactLibraryQueryDto, 'limit'> = {}): Promise<AgentArtifactPage> {
+  async files(query: Omit<AgentArtifactLibraryQueryDto, 'limit'> = {}): Promise<AgentArtifactPageDto> {
     const params: AgentArtifactLibraryQueryDto = { limit: 100, ...query };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentArtifactPage>>('/agent/files', {
+        await httpClient.get<AgentEnvelopeDto<AgentArtifactPageDto>>('/agent/files', {
           params,
         })
       ).data,
     );
   },
-  async uploadArtifact(appId: string, file: File): Promise<AgentArtifactRef> {
+  async uploadArtifact(appId: string, file: File): Promise<AgentArtifactRefDto> {
     const input: AgentArtifactBeginRequestDto = {
       name: file.name,
       mediaType: file.type || 'application/octet-stream',
@@ -39,7 +39,7 @@ export const createArtifactApi = () => ({
     };
     const reservation = unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentArtifactUploadReservationDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentArtifactUploadReservationDto>>(
           `/apps/${encodeURIComponent(appId)}/artifacts`,
           input,
           { headers: await mutationHeaders() },
@@ -53,17 +53,17 @@ export const createArtifactApi = () => ({
     });
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentArtifactRef>>(
+        await httpClient.get<AgentEnvelopeDto<AgentArtifactRefDto>>(
           `/apps/${encodeURIComponent(appId)}/artifacts/${encodeURIComponent(reservation.artifactId)}`,
         )
       ).data,
     );
   },
-  async retainArtifact(artifact: AgentArtifactRef, retained: boolean): Promise<AgentArtifactRef> {
+  async retainArtifact(artifact: AgentArtifactRefDto, retained: boolean): Promise<AgentArtifactRefDto> {
     const input: AgentArtifactRetainRequestDto = { retained, expectedVersion: artifact.version };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentArtifactRef>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentArtifactRefDto>>(
           `/apps/${encodeURIComponent(artifact.appId)}/artifacts/${encodeURIComponent(artifact.id)}`,
           input,
           { headers: await mutationHeaders() },
@@ -71,7 +71,7 @@ export const createArtifactApi = () => ({
       ).data,
     );
   },
-  async deleteArtifact(artifact: AgentArtifactRef): Promise<void> {
+  async deleteArtifact(artifact: AgentArtifactRefDto): Promise<void> {
     const params: AgentArtifactDeleteQueryDto = { expectedVersion: artifact.version };
     await httpClient.delete(
       `/apps/${encodeURIComponent(artifact.appId)}/artifacts/${encodeURIComponent(artifact.id)}`,
@@ -81,10 +81,10 @@ export const createArtifactApi = () => ({
       },
     );
   },
-  async previewArtifactCleanup(): Promise<ArtifactCleanupPreview> {
+  async previewArtifactCleanup(): Promise<AgentArtifactCleanupPreviewDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<ArtifactCleanupPreview>>(
+        await httpClient.post<AgentEnvelopeDto<AgentArtifactCleanupPreviewDto>>(
           '/agent/files/cleanup/preview',
           {},
           { headers: await mutationHeaders() },
@@ -92,11 +92,11 @@ export const createArtifactApi = () => ({
       ).data,
     );
   },
-  async confirmArtifactCleanup(confirmationId: string): Promise<ArtifactCleanupResult> {
+  async confirmArtifactCleanup(confirmationId: string): Promise<AgentArtifactCleanupResultDto> {
     const input: AgentArtifactCleanupConfirmRequestDto = { confirmationId };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<ArtifactCleanupResult>>(
+        await httpClient.post<AgentEnvelopeDto<AgentArtifactCleanupResultDto>>(
           '/agent/files/cleanup/confirm',
           input,
           { headers: await mutationHeaders() },
@@ -105,7 +105,7 @@ export const createArtifactApi = () => ({
     );
   },
   async attachArtifact(
-    artifact: AgentArtifactRef,
+    artifact: AgentArtifactRefDto,
     input: { targetAppId: string; threadId: string; runId?: string },
   ): Promise<AgentArtifactAttachResponseDto> {
     const request: AgentArtifactAttachRequestDto = {
@@ -117,7 +117,7 @@ export const createArtifactApi = () => ({
     };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentArtifactAttachResponseDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentArtifactAttachResponseDto>>(
           `/agent/files/${encodeURIComponent(artifact.id)}/attach`,
           request,
           { headers: await mutationHeaders() },

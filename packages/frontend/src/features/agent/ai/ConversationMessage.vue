@@ -1,8 +1,8 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-  import type { AgentLedgerEntry } from '../api/agent-api';
+  import type { AgentLedgerEntryDto } from '../api/agent-api';
   import AgentMessageBody from './AgentMessageBody.vue';
-  const props = defineProps<{ entry: AgentLedgerEntry; relatedToolName?: string }>();
+  const props = defineProps<{ entry: AgentLedgerEntryDto; relatedToolName?: string }>();
   const emit = defineEmits<{ layoutChange: [] }>();
   const root = ref<HTMLElement | null>(null);
   let resizeObserver: ResizeObserver | null = null;

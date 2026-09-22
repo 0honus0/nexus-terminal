@@ -14,7 +14,7 @@ import type {
   AgentProviderTestResponseDto,
   AgentProviderViewDto,
 } from '@nexus-terminal/protocol/agent-providers';
-import type { AgentEnvelope } from './agent-api.types';
+import type { AgentEnvelopeDto } from './agent-api.types';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 
 const providerModelInput = (model: AgentProviderModelInputDto): AgentProviderModelInputDto => ({
@@ -35,19 +35,19 @@ export const createProviderApi = () => ({
     const params: AgentModelRegistryResolveQueryDto = { modelId };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentModelRegistryResolveResponseDto>>('/agent/ai/model-registry/resolve', {
+        await httpClient.get<AgentEnvelopeDto<AgentModelRegistryResolveResponseDto>>('/agent/ai/model-registry/resolve', {
           params,
         })
       ).data,
     );
   },
   async modelRegistryStatus(): Promise<AgentModelRegistryStatusDto> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentModelRegistryStatusDto>>('/agent/ai/model-registry')).data);
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentModelRegistryStatusDto>>('/agent/ai/model-registry')).data);
   },
   async refreshModelRegistry(): Promise<AgentModelRegistryStatusDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentModelRegistryStatusDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentModelRegistryStatusDto>>(
           '/agent/ai/model-registry/refresh',
           {},
           { headers: await mutationHeaders() },
@@ -59,7 +59,7 @@ export const createProviderApi = () => ({
     const input: AgentModelRegistryUpdateRequestDto = { autoUpdate };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentModelRegistryStatusDto>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentModelRegistryStatusDto>>(
           '/agent/ai/model-registry',
           input,
           { headers: await mutationHeaders() },
@@ -68,13 +68,13 @@ export const createProviderApi = () => ({
     );
   },
   async providers(): Promise<AgentProviderViewDto[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentProviderViewDto[]>>('/agent/ai/providers')).data);
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentProviderViewDto[]>>('/agent/ai/providers')).data);
   },
   async createProvider(input: AgentProviderCreateRequestDto): Promise<AgentProviderViewDto> {
     const request: AgentProviderCreateRequestDto = { ...input, models: input.models.map(providerModelInput) };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentProviderViewDto>>('/agent/ai/providers', request, {
+        await httpClient.post<AgentEnvelopeDto<AgentProviderViewDto>>('/agent/ai/providers', request, {
           headers: await mutationHeaders(),
         })
       ).data,
@@ -91,7 +91,7 @@ export const createProviderApi = () => ({
     };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentProviderViewDto>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentProviderViewDto>>(
           `/agent/ai/providers/${encodeURIComponent(provider.id)}`,
           request,
           { headers: await mutationHeaders() },
@@ -102,7 +102,7 @@ export const createProviderApi = () => ({
   async discoverProviderModels(providerId: string): Promise<AgentDiscoveredProviderModelDto[]> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentDiscoveredProviderModelDto[]>>(
+        await httpClient.post<AgentEnvelopeDto<AgentDiscoveredProviderModelDto[]>>(
           `/agent/ai/providers/${encodeURIComponent(providerId)}/discover-models`,
           {},
           { headers: await mutationHeaders() },
@@ -114,7 +114,7 @@ export const createProviderApi = () => ({
     const params: AgentProviderDeleteQueryDto = { expectedVersion };
     return unwrap(
       (
-        await httpClient.delete<AgentEnvelope<AgentProviderDeleteResponseDto>>(
+        await httpClient.delete<AgentEnvelopeDto<AgentProviderDeleteResponseDto>>(
           `/agent/ai/providers/${encodeURIComponent(providerId)}`,
           { params, headers: await mutationHeaders() },
         )
@@ -125,7 +125,7 @@ export const createProviderApi = () => ({
     const input: AgentProviderTestRequestDto = { modelId };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentProviderTestResponseDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentProviderTestResponseDto>>(
           `/agent/ai/providers/${encodeURIComponent(providerId)}/test`,
           input,
           { headers: await mutationHeaders() },

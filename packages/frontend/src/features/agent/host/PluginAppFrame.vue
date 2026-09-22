@@ -1,12 +1,12 @@
 <script setup lang="ts">
   import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
-  import { agentApi, type PluginFrontendDescriptor } from '../api/agent-api';
+  import { agentApi, type AgentPluginFrontendDescriptorDto } from '../api/agent-api';
   import { PluginFrontendHostBridge } from '../plugin-sdk/host-bridge';
   import { PLUGIN_FRONTEND_PROTOCOL_VERSION } from '../plugin-sdk/protocol';
 
   const props = defineProps<{ appId: string }>();
   const iframe = ref<HTMLIFrameElement | null>(null);
-  const descriptor = ref<PluginFrontendDescriptor | null>(null);
+  const descriptor = ref<AgentPluginFrontendDescriptorDto | null>(null);
   const status = ref<'loading' | 'connecting' | 'ready' | 'unavailable'>('loading');
   let bridge: PluginFrontendHostBridge | null = null;
   let generation = 0;

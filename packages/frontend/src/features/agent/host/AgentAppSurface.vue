@@ -11,26 +11,26 @@
   import { parseConversationSubmission } from '../ai/conversation-commands';
   import { agentApi, formatAgentApiError } from '../api/agent-api';
   import type {
-    AgentApprovalMode,
-    AgentExecutionMode,
+    AgentApprovalModeDto,
+    AgentExecutionModeDto,
     AgentApprovalBatch,
-    AgentApprovalView,
-    AgentCheckpointView,
-    AgentArtifactRef,
-    AgentDefinitionView,
-    AgentHardLimits,
-    AgentLedgerEntry,
-    AgentModelCapability,
-    AgentProviderView,
-    AgentReasoningEffort,
-    AgentPendingUserInputRequest,
-    AgentRunReconciliationView,
-    AgentRunSnapshot,
-    AgentRunView,
-    AgentSettingsView,
-    AgentSubagentMessage,
-    AgentSubagentView,
-    AgentThreadView,
+    AgentApprovalViewDto,
+    AgentCheckpointViewDto,
+    AgentArtifactRefDto,
+    AgentDefinitionViewDto,
+    AgentHardLimitsDto,
+    AgentLedgerEntryDto,
+    AgentModelCapabilityDto,
+    AgentProviderViewDto,
+    AgentReasoningEffortDto,
+    AgentPendingUserInputRequestDto,
+    AgentRunReconciliationViewDto,
+    AgentRunSnapshotDto,
+    AgentRunViewDto,
+    AgentSettingsViewDto,
+    AgentSubagentMessageDto,
+    AgentSubagentViewDto,
+    AgentThreadViewDto,
     TargetDenylistView,
     WorkspaceRuntimeAvailability,
     WorkspaceRuntimeCatalog,
@@ -45,31 +45,31 @@
 
   const TaskRail = defineAsyncComponent(() => import('../runtime/TaskRail.vue'));
 
-  const props = defineProps<{ appId: string; defaultApprovalMode: AgentApprovalMode }>();
+  const props = defineProps<{ appId: string; defaultApprovalMode: AgentApprovalModeDto }>();
   const { t } = useI18n();
   const facade = createAgentRunFacade(props.appId);
   const connectionsStore = useConnections();
   facade.start();
   const runtimeOperation = createRuntimeOperationState();
-  const threads = ref<AgentThreadView[]>([]);
+  const threads = ref<AgentThreadViewDto[]>([]);
   const threadNextCursor = ref<string | null>(null);
   const threadListLoadingMore = ref(false);
   const THREAD_PAGE_MAX = 100;
-  const currentThread = ref<AgentThreadView | null>(null);
-  const entries = ref<AgentLedgerEntry[]>([]);
+  const currentThread = ref<AgentThreadViewDto | null>(null);
+  const entries = ref<AgentLedgerEntryDto[]>([]);
   const nextCursor = ref<string | null>(null);
-  const run = ref<AgentRunView | null>(null);
-  const pendingInputRequest = computed<AgentPendingUserInputRequest | null>(() => {
+  const run = ref<AgentRunViewDto | null>(null);
+  const pendingInputRequest = computed<AgentPendingUserInputRequestDto | null>(() => {
     const current = run.value;
     return current && 'pendingInputRequest' in current
-      ? ((current as AgentRunSnapshot).pendingInputRequest ?? null)
+      ? ((current as AgentRunSnapshotDto).pendingInputRequest ?? null)
       : null;
   });
-  const reconciliationDetails = ref<AgentRunReconciliationView | null>(null);
+  const reconciliationDetails = ref<AgentRunReconciliationViewDto | null>(null);
   const reconciliationBusy = ref(false);
-  const threadRuns = ref<AgentRunView[]>([]);
-  const definitions = ref<AgentDefinitionView[]>([]);
-  const providers = ref<AgentProviderView[]>([]);
+  const threadRuns = ref<AgentRunViewDto[]>([]);
+  const definitions = ref<AgentDefinitionViewDto[]>([]);
+  const providers = ref<AgentProviderViewDto[]>([]);
   const targetDenylist = ref<TargetDenylistView | null>(null);
   const deniedConnectionIds = computed(
     () => new Set(targetDenylist.value?.list.map((entry) => entry.connectionId) ?? []),
@@ -83,18 +83,18 @@
   const restoredConnectionIds = agentSurfaceSession.restoreConnectionIds(props.appId);
   const selectedConnectionIds = ref<number[]>(restoredConnectionIds ?? []);
   const connectionSelectionExplicit = ref(restoredConnectionIds !== undefined);
-  const attachments = ref<AgentArtifactRef[]>([]);
+  const attachments = ref<AgentArtifactRefDto[]>([]);
   const approvalBatch = shallowRef<AgentApprovalBatch | null>(null);
   const approvals = computed(() => approvalBatch.value?.items ?? []);
   const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'requested'));
-  const hardLimits = ref<AgentHardLimits | null>(null);
-  const settingsView = ref<AgentSettingsView | null>(null);
+  const hardLimits = ref<AgentHardLimitsDto | null>(null);
+  const settingsView = ref<AgentSettingsViewDto | null>(null);
   const workspaceRuntimeAvailability = ref<WorkspaceRuntimeAvailability | null>(null);
   const workspaceRuntimeCatalog = ref<WorkspaceRuntimeCatalog | null>(null);
-  const backgroundRuns = ref<AgentRunView[]>([]);
-  const detailSnapshot = ref<AgentRunSnapshot | null>(null);
-  const detailCheckpoints = ref<AgentCheckpointView[]>([]);
-  const currentRunCheckpoints = ref<AgentCheckpointView[]>([]);
+  const backgroundRuns = ref<AgentRunViewDto[]>([]);
+  const detailSnapshot = ref<AgentRunSnapshotDto | null>(null);
+  const detailCheckpoints = ref<AgentCheckpointViewDto[]>([]);
+  const currentRunCheckpoints = ref<AgentCheckpointViewDto[]>([]);
   const detailApprovalBatch = shallowRef<AgentApprovalBatch | null>(null);
   const error = ref('');
   let currentRunCheckpointsGeneration = 0;
@@ -125,18 +125,18 @@
     },
     { immediate: true },
   );
-  const detailSubagents = ref<AgentSubagentView[]>([]);
+  const detailSubagents = ref<AgentSubagentViewDto[]>([]);
   const selectedSubagentId = ref<string | null>(null);
-  const detailSubagentMessages = ref<AgentSubagentMessage[]>([]);
+  const detailSubagentMessages = ref<AgentSubagentMessageDto[]>([]);
   const detailVisible = ref(false);
   const selectedModelKey = ref('');
-  const selectedReasoningEffort = ref<AgentReasoningEffort | null>(
+  const selectedReasoningEffort = ref<AgentReasoningEffortDto | null>(
     agentSurfaceSession.restoreReasoningEffort(props.appId) ?? null,
   );
-  const selectedApprovalMode = ref<AgentApprovalMode>(
+  const selectedApprovalMode = ref<AgentApprovalModeDto>(
     agentSurfaceSession.restoreApprovalMode(props.appId) ?? props.defaultApprovalMode,
   );
-  const selectedExecutionMode = ref<AgentExecutionMode>(
+  const selectedExecutionMode = ref<AgentExecutionModeDto>(
     agentSurfaceSession.restoreExecutionMode(props.appId) ?? 'execute',
   );
   const selectedEnvironmentRecipeId = ref(agentSurfaceSession.restoreEnvironmentRecipeId(props.appId) ?? '');
@@ -184,13 +184,13 @@
     'cancelling',
   ]);
   const backgroundThreadStatuses = computed(() => {
-    const statuses = new Map<string, AgentRunView['status']>();
+    const statuses = new Map<string, AgentRunViewDto['status']>();
     for (const candidate of backgroundRuns.value) {
       if (!statuses.has(candidate.threadId)) statuses.set(candidate.threadId, candidate.status);
     }
     return statuses;
   });
-  const threadStatus = (threadId: string): AgentRunView['status'] | null => {
+  const threadStatus = (threadId: string): AgentRunViewDto['status'] | null => {
     if (currentThread.value?.id === threadId && run.value) return run.value.status;
     return backgroundThreadStatuses.value.get(threadId) ?? null;
   };
@@ -201,7 +201,7 @@
         return status !== null && nonTerminal.has(status);
       }).length,
   );
-  const threadStatuses = computed<Record<string, AgentRunView['status'] | null>>(() =>
+  const threadStatuses = computed<Record<string, AgentRunViewDto['status'] | null>>(() =>
     Object.fromEntries(threads.value.map((thread) => [thread.id, threadStatus(thread.id)])),
   );
   const threadTitles = computed<Record<string, string>>(() =>
@@ -211,10 +211,10 @@
   );
   type ModelOption = {
     key: string;
-    provider: AgentProviderView;
-    model: AgentProviderView['models'][number];
+    provider: AgentProviderViewDto;
+    model: AgentProviderViewDto['models'][number];
     compatible: boolean;
-    missingCapabilities: AgentModelCapability[];
+    missingCapabilities: AgentModelCapabilityDto[];
   };
   const modelOptions = computed<ModelOption[]>(() => {
     const definition = definitions.value[0];
@@ -244,7 +244,7 @@
       modelOptions.value.find((candidate) => candidate.compatible) ??
       null,
   );
-  const modelCapabilityLabel = (capability: AgentModelCapability): string =>
+  const modelCapabilityLabel = (capability: AgentModelCapabilityDto): string =>
     t(`agent.operations.modelCapability.${capability}`);
   const modelOptionHint = (option: ModelOption): string =>
     option.compatible
@@ -253,18 +253,18 @@
           capabilities: option.missingCapabilities.map(modelCapabilityLabel).join(', '),
         });
   const modelSelectionLocked = computed(() => Boolean(run.value && nonTerminal.has(run.value.status)));
-  const executionModeValue = computed<AgentExecutionMode>(() =>
+  const executionModeValue = computed<AgentExecutionModeDto>(() =>
     modelSelectionLocked.value && run.value ? run.value.definition.executionMode : selectedExecutionMode.value,
   );
-  const setExecutionMode = (mode: AgentExecutionMode): void => {
+  const setExecutionMode = (mode: AgentExecutionModeDto): void => {
     if (modelSelectionLocked.value) return;
     selectedExecutionMode.value = mode;
     agentSurfaceSession.setExecutionMode(props.appId, mode);
   };
-  const approvalModeValue = computed<AgentApprovalMode>(() =>
+  const approvalModeValue = computed<AgentApprovalModeDto>(() =>
     modelSelectionLocked.value && run.value ? run.value.definition.approvalMode : selectedApprovalMode.value,
   );
-  const setApprovalMode = (mode: AgentApprovalMode): void => {
+  const setApprovalMode = (mode: AgentApprovalModeDto): void => {
     if (modelSelectionLocked.value) return;
     selectedApprovalMode.value = mode;
     agentSurfaceSession.setApprovalMode(props.appId, mode);
@@ -278,9 +278,9 @@
   const reasoningModel = computed(() =>
     modelSelectionLocked.value ? activeRunModel.value : (providerSelection.value?.model ?? null),
   );
-  const reasoningLevels = computed<AgentReasoningEffort[]>(() => reasoningModel.value?.reasoningEfforts ?? []);
+  const reasoningLevels = computed<AgentReasoningEffortDto[]>(() => reasoningModel.value?.reasoningEfforts ?? []);
   const reasoningCapabilityAvailable = computed(() => reasoningLevels.value.length > 0);
-  const reasoningValue = computed<AgentReasoningEffort | null>(() =>
+  const reasoningValue = computed<AgentReasoningEffortDto | null>(() =>
     modelSelectionLocked.value ? (run.value?.definition.reasoningEffort ?? null) : selectedReasoningEffort.value,
   );
   const activeReasoningIndex = computed(() => {
@@ -312,7 +312,7 @@
     return t(`agent.ui.reasoningDescriptions.${level}`);
   });
   const reasoningTrackRef = ref<HTMLElement | null>(null);
-  const reasoningLevelLabel = (level: AgentReasoningEffort): string => t(`agent.ui.reasoningLevels.${level}`);
+  const reasoningLevelLabel = (level: AgentReasoningEffortDto): string => t(`agent.ui.reasoningLevels.${level}`);
   const reasoningDisplayLabel = computed(() =>
     reasoningValue.value ? reasoningLevelLabel(reasoningValue.value) : t('agent.ui.reasoningDefaultShort'),
   );
@@ -445,7 +445,7 @@
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
-  const rememberThreadRun = (candidate: AgentRunView): void => {
+  const rememberThreadRun = (candidate: AgentRunViewDto): void => {
     if (currentThread.value?.id !== candidate.threadId) return;
     threadRuns.value = [candidate, ...threadRuns.value.filter((item) => item.id !== candidate.id)].sort(
       (left, right) => right.updatedAt - left.updatedAt,
@@ -463,7 +463,7 @@
     agentSurfaceSession.setReasoningEffort(props.appId, nextEffort ?? undefined);
   };
 
-  const setReasoningEffort = (effort: AgentReasoningEffort): void => {
+  const setReasoningEffort = (effort: AgentReasoningEffortDto): void => {
     if (modelSelectionLocked.value || !reasoningLevels.value.includes(effort)) return;
     selectedReasoningEffort.value = effort;
     agentSurfaceSession.setReasoningEffort(props.appId, effort);
@@ -538,7 +538,7 @@
     runId: string,
     minimumEventCursor = 0,
     reportFailure = true,
-  ): Promise<AgentRunSnapshot | null> => {
+  ): Promise<AgentRunSnapshotDto | null> => {
     try {
       const snapshot = await facade.getRun(runId, minimumEventCursor);
       if (currentThread.value?.id !== snapshot.threadId || (run.value !== null && run.value.id !== runId)) return null;
@@ -631,7 +631,7 @@
     resetStreamingPresentation();
   };
 
-  const startRunStream = (initial: AgentRunView): void => {
+  const startRunStream = (initial: AgentRunViewDto): void => {
     resetStreamingPresentation();
     logger.debug(
       {
@@ -734,7 +734,7 @@
     });
   };
 
-  const selectThread = async (thread: AgentThreadView): Promise<void> => {
+  const selectThread = async (thread: AgentThreadViewDto): Promise<void> => {
     threadSidebarVisible.value = false;
     if (currentThread.value?.id === thread.id) return;
     const selectionGeneration = ++threadSelectionGeneration;
@@ -923,7 +923,7 @@
     busy.value = false;
   };
 
-  const resolveArtifactRefs = async (artifacts: AgentArtifactRef[], activeRun?: AgentRunView): Promise<string[]> => {
+  const resolveArtifactRefs = async (artifacts: AgentArtifactRefDto[], activeRun?: AgentRunViewDto): Promise<string[]> => {
     const thread = currentThread.value;
     if (!thread) throw new Error('NOT_FOUND');
     for (const artifact of artifacts) {
@@ -939,9 +939,9 @@
 
   const createNewRun = async (
     text: string,
-    selectedArtifacts: AgentArtifactRef[] = [],
+    selectedArtifacts: AgentArtifactRefDto[] = [],
     initialGoal?: string,
-  ): Promise<AgentRunView> => {
+  ): Promise<AgentRunViewDto> => {
     const thread = currentThread.value;
     const selection = providerSelection.value;
     const definition = definitions.value[0];
@@ -1029,7 +1029,7 @@
     commandResult.value = { title, lines: [message], tone: 'error' };
   };
 
-  const adoptCommandRun = (candidate: AgentRunView): void => {
+  const adoptCommandRun = (candidate: AgentRunViewDto): void => {
     if (currentThread.value?.id !== candidate.threadId || run.value?.id !== candidate.id) return;
     run.value = candidate;
     rememberThreadRun(candidate);
@@ -1069,7 +1069,7 @@
     },
   });
 
-  const send = async (text: string, selectedArtifacts: AgentArtifactRef[]): Promise<void> => {
+  const send = async (text: string, selectedArtifacts: AgentArtifactRefDto[]): Promise<void> => {
     const submission = parseConversationSubmission(text);
     if (submission.kind === 'invalid_command') {
       const reasonKey =
@@ -1144,7 +1144,7 @@
   };
 
   const resolveApproval = async (
-    approval: AgentApprovalView,
+    approval: AgentApprovalViewDto,
     decision: 'approved' | 'denied',
     feedback?: string,
   ): Promise<void> => {
@@ -1193,7 +1193,7 @@
     }
   };
 
-  const selectSubagent = async (delegation: AgentSubagentView): Promise<void> => {
+  const selectSubagent = async (delegation: AgentSubagentViewDto): Promise<void> => {
     const requestGeneration = ++subagentMessagesGeneration;
     selectedSubagentId.value = delegation.id;
     const page = await facade.listSubagentMessages(delegation.runId, delegation.id);
@@ -1206,7 +1206,7 @@
     detailSubagentMessages.value = page.items;
   };
 
-  const cancelSubagent = async (delegation: AgentSubagentView): Promise<void> => {
+  const cancelSubagent = async (delegation: AgentSubagentViewDto): Promise<void> => {
     if (!beginRuntimeMutation()) return;
     try {
       await facade.cancelSubagent(delegation.runId, delegation);
@@ -1229,7 +1229,7 @@
     }
   };
 
-  const openRunDetail = async (candidate: AgentRunView): Promise<void> => {
+  const openRunDetail = async (candidate: AgentRunViewDto): Promise<void> => {
     const requestGeneration = ++detailOpenGeneration;
     detailSubagentsGeneration += 1;
     subagentMessagesGeneration += 1;
@@ -1272,10 +1272,10 @@
     detailApprovalBatch.value = null;
   };
 
-  const saveCheckpoint = async (snapshot: AgentRunSnapshot | AgentRunView): Promise<void> => {
+  const saveCheckpoint = async (snapshot: AgentRunSnapshotDto | AgentRunViewDto): Promise<void> => {
     if (!beginRuntimeMutation()) return;
     try {
-      await facade.saveCheckpoint(snapshot as AgentRunSnapshot);
+      await facade.saveCheckpoint(snapshot as AgentRunSnapshotDto);
       const cps = await facade.listCheckpoints(snapshot.id);
       detailCheckpoints.value = cps;
       if (run.value?.id === snapshot.id) {
@@ -1290,8 +1290,8 @@
   };
 
   const resumeCheckpoint = async (
-    snapshot: AgentRunSnapshot | AgentRunView,
-    checkpoint: AgentCheckpointView,
+    snapshot: AgentRunSnapshotDto | AgentRunViewDto,
+    checkpoint: AgentCheckpointViewDto,
   ): Promise<void> => {
     if (!beginRuntimeMutation()) return;
     try {
@@ -1311,7 +1311,7 @@
     }
   };
 
-  const deleteRun = async (snapshot: AgentRunSnapshot): Promise<void> => {
+  const deleteRun = async (snapshot: AgentRunSnapshotDto): Promise<void> => {
     if (!beginRuntimeMutation()) return;
     try {
       await facade.deleteRun(snapshot);
@@ -1377,7 +1377,7 @@
     await selectThread(created);
   };
 
-  const deleteThreadConversation = async (thread: AgentThreadView): Promise<void> => {
+  const deleteThreadConversation = async (thread: AgentThreadViewDto): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
     error.value = '';
@@ -1402,7 +1402,7 @@
     }
   };
 
-  const requestDeleteThread = (thread: AgentThreadView): void => {
+  const requestDeleteThread = (thread: AgentThreadViewDto): void => {
     const status = threadStatus(thread.id);
     if (status && nonTerminal.has(status)) return;
     if (threadDeleteArmedId.value === thread.id) {

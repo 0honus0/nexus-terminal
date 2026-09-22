@@ -5,8 +5,8 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentIntegrationView,
-    type AgentMcpIntegrationConfiguration,
+    type AgentIntegrationViewDto,
+    type AgentMcpIntegrationConfigurationDto,
   } from '../api/agent-api';
 
   const DEFAULT_AGENT_APP_ID = 'nexus.agent';
@@ -15,7 +15,7 @@
   const feedback = useFeedback();
   const operationFeedback = useOperationFeedback('agent.settings.mcp');
 
-  const integrations = ref<AgentIntegrationView[]>([]);
+  const integrations = ref<AgentIntegrationViewDto[]>([]);
   const displayName = ref('');
   const endpoint = ref('');
   const credential = ref('');
@@ -26,11 +26,11 @@
   const loading = ref(false);
   const disabled = computed(() => props.busy || localBusy.value);
 
-  const mcpConfiguration = (integration: AgentIntegrationView): AgentMcpIntegrationConfiguration => {
+  const mcpConfiguration = (integration: AgentIntegrationViewDto): AgentMcpIntegrationConfigurationDto => {
     if (integration.kind !== 'mcp' || integration.configuration.transport !== 'streamable-http') {
       throw new Error('MCP_INTEGRATION_INVALID');
     }
-    return integration.configuration as AgentMcpIntegrationConfiguration;
+    return integration.configuration as AgentMcpIntegrationConfigurationDto;
   };
 
   const explain = (cause: unknown): string =>
@@ -97,8 +97,8 @@
   };
 
   const updateConfiguration = (
-    integration: AgentIntegrationView,
-    configuration: AgentMcpIntegrationConfiguration,
+    integration: AgentIntegrationViewDto,
+    configuration: AgentMcpIntegrationConfigurationDto,
     success: string,
   ): void => {
     void run(
@@ -115,7 +115,7 @@
     );
   };
 
-  const changeEndpoint = (integration: AgentIntegrationView, nextEndpoint: string): void => {
+  const changeEndpoint = (integration: AgentIntegrationViewDto, nextEndpoint: string): void => {
     const normalized = nextEndpoint.trim();
     const configuration = mcpConfiguration(integration);
     if (!normalized || normalized === configuration.endpoint) return;
@@ -126,7 +126,7 @@
     );
   };
 
-  const toggleTrustAnnotations = (integration: AgentIntegrationView, trusted: boolean): void => {
+  const toggleTrustAnnotations = (integration: AgentIntegrationViewDto, trusted: boolean): void => {
     const configuration = mcpConfiguration(integration);
     if (configuration.trustToolAnnotations === trusted) return;
     updateConfiguration(
@@ -136,7 +136,7 @@
     );
   };
 
-  const toggleIntegration = (integration: AgentIntegrationView, nextEnabled: boolean): void => {
+  const toggleIntegration = (integration: AgentIntegrationViewDto, nextEnabled: boolean): void => {
     const configuration = mcpConfiguration(integration);
     void run(
       'toggle-integration',
@@ -152,7 +152,7 @@
     );
   };
 
-  const replaceCredential = (integration: AgentIntegrationView): void => {
+  const replaceCredential = (integration: AgentIntegrationViewDto): void => {
     const nextCredential = (credentialDrafts[integration.id] ?? '').trim();
     if (!nextCredential) return;
     const configuration = mcpConfiguration(integration);
@@ -172,7 +172,7 @@
     );
   };
 
-  const clearCredential = (integration: AgentIntegrationView): void => {
+  const clearCredential = (integration: AgentIntegrationViewDto): void => {
     const configuration = mcpConfiguration(integration);
     void run(
       'clear-credential',
@@ -190,7 +190,7 @@
     );
   };
 
-  const refreshIntegration = (integration: AgentIntegrationView): void => {
+  const refreshIntegration = (integration: AgentIntegrationViewDto): void => {
     void run(
       'refresh-integration',
       async () => {
@@ -204,7 +204,7 @@
     );
   };
 
-  const removeIntegration = async (integration: AgentIntegrationView): Promise<void> => {
+  const removeIntegration = async (integration: AgentIntegrationViewDto): Promise<void> => {
     if (
       !(await feedback.confirm({
         message: t('agent.settings.mcpIntegrations.confirmDelete', {
@@ -226,10 +226,10 @@
     );
   };
 
-  const statusLabel = (integration: AgentIntegrationView): string =>
+  const statusLabel = (integration: AgentIntegrationViewDto): string =>
     t(`agent.settings.mcpIntegrations.status.${integration.refreshState}`);
 
-  const statusClass = (integration: AgentIntegrationView): string => {
+  const statusClass = (integration: AgentIntegrationViewDto): string => {
     if (integration.refreshState === 'ready') return 'border-success/40 bg-success/10 text-success';
     if (integration.refreshState === 'error') return 'border-error/40 bg-error/10 text-error';
     if (integration.refreshState === 'refreshing') return 'border-primary/40 bg-primary/10 text-primary';

@@ -2,12 +2,12 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type {
-    AgentArtifactRef,
-    AgentLedgerEntry,
-    AgentPendingUserInputRequest,
-    AgentRunReconciliationView,
-    AgentRunSnapshot,
-    AgentRunView,
+    AgentArtifactRefDto,
+    AgentLedgerEntryDto,
+    AgentPendingUserInputRequestDto,
+    AgentRunReconciliationViewDto,
+    AgentRunSnapshotDto,
+    AgentRunViewDto,
   } from '../api/agent-api';
   import type { ConversationCommandResult } from './conversation-command-executor';
   import ArtifactPicker from '../files/ArtifactPicker.vue';
@@ -19,26 +19,26 @@
     appId: string;
     error?: string;
     reconciliation?: boolean;
-    reconciliationDetails?: AgentRunReconciliationView | null;
+    reconciliationDetails?: AgentRunReconciliationViewDto | null;
     reconciliationBusy?: boolean;
-    entries: AgentLedgerEntry[];
+    entries: AgentLedgerEntryDto[];
     nextCursor: string | null;
-    run: AgentRunView | null;
-    inputRequest: AgentPendingUserInputRequest | null;
+    run: AgentRunViewDto | null;
+    inputRequest: AgentPendingUserInputRequestDto | null;
     streamingText: string;
     draft: string;
     busy: boolean;
     canSend: boolean;
-    attachments: AgentArtifactRef[];
+    attachments: AgentArtifactRefDto[];
     commandResult: ConversationCommandResult | null;
   }>();
   const emit = defineEmits<{
     dismissError: [];
     loadOlder: [];
-    send: [text: string, attachments: AgentArtifactRef[]];
+    send: [text: string, attachments: AgentArtifactRefDto[]];
     cancel: [];
     updateDraft: [value: string];
-    updateAttachments: [value: AgentArtifactRef[]];
+    updateAttachments: [value: AgentArtifactRefDto[]];
     dismissCommandResult: [];
     resolveReconciliation: [note: string];
   }>();
@@ -172,7 +172,7 @@
 
   const asRecord = (value: unknown): Record<string, unknown> | null =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-  const toolCallsFromEntry = (entry: AgentLedgerEntry): Array<Record<string, unknown>> => {
+  const toolCallsFromEntry = (entry: AgentLedgerEntryDto): Array<Record<string, unknown>> => {
     const payload = asRecord(entry.payload);
     return Array.isArray(payload?.toolCalls)
       ? payload.toolCalls.filter((item): item is Record<string, unknown> => Boolean(asRecord(item)))
@@ -187,13 +187,13 @@
     }
     return names;
   });
-  const relatedToolName = (entry: AgentLedgerEntry): string => {
+  const relatedToolName = (entry: AgentLedgerEntryDto): string => {
     if (entry.kind !== 'tool_result') return '';
     const payload = asRecord(entry.payload);
     const callId = typeof payload?.toolCallId === 'string' ? payload.toolCallId : '';
     return callId ? (toolNameByCallId.value.get(callId) ?? '') : '';
   };
-  const entrySpacingClass = (entry: AgentLedgerEntry): string => {
+  const entrySpacingClass = (entry: AgentLedgerEntryDto): string => {
     if (entry.kind === 'user_input') return 'mb-7';
     if (entry.kind === 'tool_result' || entry.kind === 'system_notice') return 'mb-5';
     if (entry.kind === 'assistant_message' && toolCallsFromEntry(entry).length > 0) return 'mb-0.5';
@@ -319,7 +319,7 @@
     return num.toLocaleString();
   };
 
-  const isRunSnapshot = (run: AgentRunView): run is AgentRunSnapshot => 'terminalIssue' in run;
+  const isRunSnapshot = (run: AgentRunViewDto): run is AgentRunSnapshotDto => 'terminalIssue' in run;
 
   const terminalIssueDetail = computed(() => {
     const run = props.run;

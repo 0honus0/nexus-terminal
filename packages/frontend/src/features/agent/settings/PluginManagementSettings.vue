@@ -5,33 +5,33 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentAppSummary,
-    type AgentSettingsView,
-    type PluginInstallation,
-    type PluginPublisherKey,
-    type PluginVerifyResult,
-    type PluginVersionView,
-    type RemotePluginCatalog,
-    type RemotePluginPackageEntry,
-    type RemotePluginPublisher,
+    type AgentAppSummaryDto,
+    type AgentSettingsViewDto,
+    type AgentPluginInstallationDto,
+    type AgentPluginPublisherKeyDto,
+    type AgentPluginVerifyResultDto,
+    type AgentPluginVersionDto,
+    type AgentRemotePluginCatalogDto,
+    type AgentRemotePluginPackageDto,
+    type AgentRemotePluginPublisherDto,
   } from '../api/agent-api';
 
   const PLUGIN_STAGING_ARTIFACT_SCOPE = 'nexus.plugin-installer';
 
-  const props = defineProps<{ apps: AgentAppSummary[]; settings: AgentSettingsView; busy: boolean }>();
-  const emit = defineEmits<{ refresh: []; settingsUpdated: [AgentSettingsView] }>();
+  const props = defineProps<{ apps: AgentAppSummaryDto[]; settings: AgentSettingsViewDto; busy: boolean }>();
+  const emit = defineEmits<{ refresh: []; settingsUpdated: [AgentSettingsViewDto] }>();
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.plugins');
 
   const repositoryUrl = ref('');
-  const officialCatalog = ref<RemotePluginCatalog | null>(null);
-  const remoteCatalogs = ref<RemotePluginCatalog[]>([]);
+  const officialCatalog = ref<AgentRemotePluginCatalogDto | null>(null);
+  const remoteCatalogs = ref<AgentRemotePluginCatalogDto[]>([]);
   const publisherLabel = ref('');
   const publisherPem = ref('');
-  const publishers = ref<PluginPublisherKey[]>([]);
-  const installations = ref<PluginInstallation[]>([]);
-  const versions = ref<PluginVersionView[]>([]);
-  const candidate = ref<PluginVerifyResult | null>(null);
+  const publishers = ref<AgentPluginPublisherKeyDto[]>([]);
+  const installations = ref<AgentPluginInstallationDto[]>([]);
+  const versions = ref<AgentPluginVersionDto[]>([]);
+  const candidate = ref<AgentPluginVerifyResultDto | null>(null);
   const candidateArtifactName = ref('');
   const localBusy = ref(false);
   const packageInput = ref<HTMLInputElement | null>(null);
@@ -74,7 +74,7 @@
   const removedInstallations = computed(() =>
     installations.value.filter((item) => item.status === 'removed' && item.retainedDataEntries > 0),
   );
-  const appSummary = (appId: string): AgentAppSummary | undefined => props.apps.find((item) => item.id === appId);
+  const appSummary = (appId: string): AgentAppSummaryDto | undefined => props.apps.find((item) => item.id === appId);
 
   const isInstalled = (appId: string): boolean => activeInstallations.value.some((item) => item.appId === appId);
 
@@ -172,7 +172,7 @@
   const publisherTrusted = (keyId: string): boolean =>
     publishers.value.some((publisher) => publisher.keyId === keyId && publisher.revokedAt === null);
 
-  const trustRemotePublisher = (publisher: RemotePluginPublisher): void => {
+  const trustRemotePublisher = (publisher: AgentRemotePluginPublisherDto): void => {
     void run('trust-remote-publisher', async () => {
       await agentApi.trustPluginPublisher(publisher.publicKeyPem, publisher.label);
       await refresh();
@@ -181,8 +181,8 @@
   };
 
   const prepareRemotePackage = (
-    catalog: RemotePluginCatalog,
-    entry: RemotePluginPackageEntry,
+    catalog: AgentRemotePluginCatalogDto,
+    entry: AgentRemotePluginPackageDto,
     official: boolean,
   ): void => {
     if (entry.compatible !== true || (!official && !publisherTrusted(entry.publisherKeyId))) return;
@@ -269,7 +269,7 @@
     });
   };
 
-  const requestDeleteData = (installation: PluginInstallation): void => {
+  const requestDeleteData = (installation: AgentPluginInstallationDto): void => {
     if (locked.value) return;
     pendingDataDeletionAppId.value = installation.appId;
   };
@@ -279,7 +279,7 @@
     pendingDataDeletionAppId.value = null;
   };
 
-  const deleteData = (installation: PluginInstallation): void => {
+  const deleteData = (installation: AgentPluginInstallationDto): void => {
     if (pendingDataDeletionAppId.value !== installation.appId) return;
     void run('delete-plugin-data', async () => {
       await agentApi.deletePluginData(installation.appId, true);

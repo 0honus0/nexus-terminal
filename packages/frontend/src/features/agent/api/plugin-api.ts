@@ -1,30 +1,46 @@
-import type { AgentArtifactRef, AgentEnvelope } from './agent-api.types';
+import type { AgentArtifactRefDto, AgentEnvelopeDto } from './agent-api.types';
 import type {
-  AgentAppIntentArtifactView,
-  AgentAppIntentReceipt,
-  PluginAppStateView,
-  PluginFrontendDescriptor,
-  PluginInstallation,
-  PluginPublisherKey,
-  PluginStageView,
-  PluginUninstallResult,
-  PluginUpgradeResult,
-  PluginVerifyResult,
-  PluginVersionView,
-  RemotePluginCatalog,
-} from './agent-api';
+  AgentAppIntentArtifactDto,
+  AgentAppIntentCreateRequestDto,
+  AgentAppIntentListQueryDto,
+  AgentAppIntentReceiptDto,
+  AgentPluginArtifactStageRequestDto,
+  AgentPluginDeleteDataRequestDto,
+  AgentPluginFrontendDescriptorDto,
+  AgentPluginFrontendRpcMethodDto,
+  AgentPluginFrontendRpcRequestDto,
+  AgentPluginFrontendRpcResponseDto,
+  AgentPluginInstallationDto,
+  AgentPluginInstallResultDto,
+  AgentPluginOfficialStageRequestDto,
+  AgentPluginPublisherKeyDto,
+  AgentPluginRemoteCatalogQueryDto,
+  AgentPluginRemoteStageRequestDto,
+  AgentPluginStageDto,
+  AgentPluginStageIdRequestDto,
+  AgentPluginTrustPublisherRequestDto,
+  AgentPluginUninstallRequestDto,
+  AgentPluginUninstallResultDto,
+  AgentPluginUpgradeRequestDto,
+  AgentPluginUpgradeResultDto,
+  AgentPluginVerifyResultDto,
+  AgentPluginVersionDto,
+  AgentPluginVersionsQueryDto,
+  AgentRemotePluginCatalogDto,
+} from '@nexus-terminal/protocol/agent-plugins';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 
 export const createPluginApi = () => ({
-  async pluginPublishers(): Promise<PluginPublisherKey[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<PluginPublisherKey[]>>('/agent/plugins/publishers')).data);
+  async pluginPublishers(): Promise<AgentPluginPublisherKeyDto[]> {
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentPluginPublisherKeyDto[]>>('/agent/plugins/publishers')).data);
   },
-  async trustPluginPublisher(publicKeyPem: string, label: string): Promise<PluginPublisherKey> {
+  async trustPluginPublisher(publicKeyPem: string, label: string): Promise<AgentPluginPublisherKeyDto> {
+    const input: AgentPluginTrustPublisherRequestDto = { publicKeyPem, label };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<PluginPublisherKey>>(
+        await httpClient.post<AgentEnvelopeDto<AgentPluginPublisherKeyDto>>(
           '/agent/plugins/publishers',
-          { publicKeyPem, label },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -35,136 +51,135 @@ export const createPluginApi = () => ({
       headers: await mutationHeaders(),
     });
   },
-  async pluginInstallations(): Promise<PluginInstallation[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<PluginInstallation[]>>('/agent/plugins/installations')).data);
+  async pluginInstallations(): Promise<AgentPluginInstallationDto[]> {
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentPluginInstallationDto[]>>('/agent/plugins/installations')).data);
   },
-  async pluginVersions(appId?: string): Promise<PluginVersionView[]> {
+  async pluginVersions(appId?: string): Promise<AgentPluginVersionDto[]> {
+    const params: AgentPluginVersionsQueryDto | undefined = appId ? { appId } : undefined;
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<PluginVersionView[]>>('/agent/plugins/versions', {
-          params: appId ? { appId } : undefined,
+        await httpClient.get<AgentEnvelopeDto<AgentPluginVersionDto[]>>('/agent/plugins/versions', {
+          params,
         })
       ).data,
     );
   },
-  async officialPluginCatalog(): Promise<RemotePluginCatalog> {
-    return unwrap((await httpClient.get<AgentEnvelope<RemotePluginCatalog>>('/agent/plugins/official/catalog')).data);
+  async officialPluginCatalog(): Promise<AgentRemotePluginCatalogDto> {
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentRemotePluginCatalogDto>>('/agent/plugins/official/catalog')).data);
   },
-  async stageOfficialPlugin(appId: string, version: string): Promise<PluginStageView> {
+  async stageOfficialPlugin(appId: string, version: string): Promise<AgentPluginStageDto> {
+    const input: AgentPluginOfficialStageRequestDto = { appId, version };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<PluginStageView>>(
+        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>(
           '/agent/plugins/official/stage',
-          { appId, version },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
-  async remotePluginCatalog(repositoryUrl: string): Promise<RemotePluginCatalog> {
+  async remotePluginCatalog(repositoryUrl: string): Promise<AgentRemotePluginCatalogDto> {
+    const params: AgentPluginRemoteCatalogQueryDto = { repositoryUrl };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<RemotePluginCatalog>>('/agent/plugins/remote/catalog', {
-          params: { repositoryUrl },
+        await httpClient.get<AgentEnvelopeDto<AgentRemotePluginCatalogDto>>('/agent/plugins/remote/catalog', {
+          params,
         })
       ).data,
     );
   },
-  async stageRemotePlugin(repositoryUrl: string, appId: string, version: string): Promise<PluginStageView> {
+  async stageRemotePlugin(repositoryUrl: string, appId: string, version: string): Promise<AgentPluginStageDto> {
+    const input: AgentPluginRemoteStageRequestDto = { repositoryUrl, appId, version };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<PluginStageView>>(
+        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>(
           '/agent/plugins/remote/stage',
-          { repositoryUrl, appId, version },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
-  async stagePlugin(artifact: AgentArtifactRef): Promise<PluginStageView> {
+  async stagePlugin(artifact: AgentArtifactRefDto): Promise<AgentPluginStageDto> {
+    const input: AgentPluginArtifactStageRequestDto = { artifactRef: { appId: artifact.appId, id: artifact.id } };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<PluginStageView>>(
+        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>(
           '/agent/plugins/stage',
-          { artifactRef: { appId: artifact.appId, id: artifact.id } },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
-  async verifyPlugin(stageId: string): Promise<PluginVerifyResult> {
+  async verifyPlugin(stageId: string): Promise<AgentPluginVerifyResultDto> {
+    const input: AgentPluginStageIdRequestDto = { stageId };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<PluginVerifyResult>>(
+        await httpClient.post<AgentEnvelopeDto<AgentPluginVerifyResultDto>>(
           '/agent/plugins/verify',
-          { stageId },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
-  async installPlugin(
-    stageId: string,
-  ): Promise<{ stage: PluginStageView; plugin: PluginVersionView; app: PluginAppStateView }> {
+  async installPlugin(stageId: string): Promise<AgentPluginInstallResultDto> {
+    const input: AgentPluginStageIdRequestDto = { stageId };
     return unwrap(
       (
-        await httpClient.post<
-          AgentEnvelope<{ stage: PluginStageView; plugin: PluginVersionView; app: PluginAppStateView }>
-        >('/agent/plugins/install', { stageId }, { headers: await mutationHeaders() })
+        await httpClient.post<AgentEnvelopeDto<AgentPluginInstallResultDto>>('/agent/plugins/install', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
-  async upgradePlugin(appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult> {
+  async upgradePlugin(appId: string, stageId: string, expectedVersion: number): Promise<AgentPluginUpgradeResultDto> {
+    const input: AgentPluginUpgradeRequestDto = { stageId, expectedVersion };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<PluginUpgradeResult>>(
+        await httpClient.post<AgentEnvelopeDto<AgentPluginUpgradeResultDto>>(
           `/agent/plugins/${encodeURIComponent(appId)}/upgrade`,
-          { stageId, expectedVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
-  async uninstallPlugin(appId: string, expectedVersion: number): Promise<PluginUninstallResult> {
+  async uninstallPlugin(appId: string, expectedVersion: number): Promise<AgentPluginUninstallResultDto> {
+    const input: AgentPluginUninstallRequestDto = { deleteData: false, expectedVersion };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<PluginUninstallResult>>(
+        await httpClient.post<AgentEnvelopeDto<AgentPluginUninstallResultDto>>(
           `/agent/plugins/${encodeURIComponent(appId)}/uninstall`,
-          { deleteData: false, expectedVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async deletePluginData(appId: string, confirmed: true): Promise<void> {
+    const input: AgentPluginDeleteDataRequestDto = { confirmed };
     await httpClient.post(
       `/agent/plugins/${encodeURIComponent(appId)}/delete-data`,
-      { confirmed },
+      input,
       { headers: await mutationHeaders() },
     );
   },
-  async pluginFrontend(appId: string): Promise<PluginFrontendDescriptor> {
+  async pluginFrontend(appId: string): Promise<AgentPluginFrontendDescriptorDto> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<PluginFrontendDescriptor>>(
+        await httpClient.get<AgentEnvelopeDto<AgentPluginFrontendDescriptorDto>>(
           `/agent/plugins/${encodeURIComponent(appId)}/frontend`,
         )
       ).data,
     );
   },
-  async createAppIntent(
-    appId: string,
-    input: {
-      receiverAppId: string;
-      intentId: string;
-      input: unknown;
-      artifactRefs: Array<{ appId: string; id: string }>;
-      confirmed: true;
-    },
-  ): Promise<AgentAppIntentReceipt> {
+  async createAppIntent(appId: string, input: AgentAppIntentCreateRequestDto): Promise<AgentAppIntentReceiptDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentAppIntentReceipt>>(
+        await httpClient.post<AgentEnvelopeDto<AgentAppIntentReceiptDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/plugin-intents`,
           input,
           { headers: await mutationHeaders() },
@@ -172,12 +187,13 @@ export const createPluginApi = () => ({
       ).data,
     );
   },
-  async listReceivedAppIntents(appId: string, limit?: number): Promise<AgentAppIntentReceipt[]> {
+  async listReceivedAppIntents(appId: string, limit?: number): Promise<AgentAppIntentReceiptDto[]> {
+    const params: AgentAppIntentListQueryDto | undefined = limit === undefined ? undefined : { limit };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentAppIntentReceipt[]>>(
+        await httpClient.get<AgentEnvelopeDto<AgentAppIntentReceiptDto[]>>(
           `/agent/apps/${encodeURIComponent(appId)}/plugin-intents`,
-          limit === undefined ? undefined : { params: { limit } },
+          params === undefined ? undefined : { params },
         )
       ).data,
     );
@@ -192,10 +208,10 @@ export const createPluginApi = () => ({
     appId: string,
     receiptId: string,
     artifactId: string,
-  ): Promise<AgentAppIntentArtifactView> {
+  ): Promise<AgentAppIntentArtifactDto> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentAppIntentArtifactView>>(
+        await httpClient.get<AgentEnvelopeDto<AgentAppIntentArtifactDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/plugin-intents/${encodeURIComponent(receiptId)}/artifacts/${encodeURIComponent(artifactId)}`,
         )
       ).data,
@@ -221,23 +237,16 @@ export const createPluginApi = () => ({
   },
   async pluginFrontendRpc(
     appId: string,
-    method:
-      | 'host.appInfo'
-      | 'storage.get'
-      | 'storage.put'
-      | 'storage.delete'
-      | 'intents.create'
-      | 'intents.listReceived'
-      | 'intents.revoke'
-      | 'intents.artifacts.get',
-    params: unknown,
+    method: AgentPluginFrontendRpcMethodDto,
+    params: AgentPluginFrontendRpcRequestDto['params'],
     signal?: AbortSignal,
-  ): Promise<unknown> {
+  ): Promise<AgentPluginFrontendRpcResponseDto> {
+    const input: AgentPluginFrontendRpcRequestDto = { method, params };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<unknown>>(
+        await httpClient.post<AgentEnvelopeDto<AgentPluginFrontendRpcResponseDto>>(
           `/agent/plugins/${encodeURIComponent(appId)}/frontend/rpc`,
-          { method, params },
+          input,
           { headers: await mutationHeaders(), signal },
         )
       ).data,

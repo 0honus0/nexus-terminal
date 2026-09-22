@@ -5,7 +5,7 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentSettingsView,
+    type AgentSettingsViewDto,
     type WorkspaceRuntimeAvailability,
     type WorkspaceRuntimeCatalog,
     type ToolchainCatalogPack,
@@ -19,10 +19,10 @@
 
   const props = defineProps<{
     availability: WorkspaceRuntimeAvailability;
-    settings: AgentSettingsView;
+    settings: AgentSettingsViewDto;
     busy: boolean;
   }>();
-  const emit = defineEmits<{ settingsUpdated: [settings: AgentSettingsView] }>();
+  const emit = defineEmits<{ settingsUpdated: [settings: AgentSettingsViewDto] }>();
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.workspace-runtime');
 

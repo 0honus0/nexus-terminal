@@ -1,18 +1,18 @@
-import type { AgentRunSnapshot, AgentRunView } from '../api/agent-api';
+import type { AgentRunSnapshotDto, AgentRunViewDto } from '../api/agent-api';
 
 interface StoredRun {
-  latest: AgentRunView;
-  snapshot: AgentRunSnapshot | null;
+  latest: AgentRunViewDto;
+  snapshot: AgentRunSnapshotDto | null;
 }
 
-const isSnapshot = (run: AgentRunView): run is AgentRunSnapshot => 'recentEntries' in run;
+const isSnapshot = (run: AgentRunViewDto): run is AgentRunSnapshotDto => 'recentEntries' in run;
 
-const isMonotonicSuccessor = (current: AgentRunView, candidate: AgentRunView): boolean =>
+const isMonotonicSuccessor = (current: AgentRunViewDto, candidate: AgentRunViewDto): boolean =>
   candidate.version >= current.version &&
   candidate.eventCursor >= current.eventCursor &&
   candidate.inputRevision >= current.inputRevision;
 
-const sameProjection = (left: AgentRunView, right: AgentRunView): boolean =>
+const sameProjection = (left: AgentRunViewDto, right: AgentRunViewDto): boolean =>
   left.version === right.version &&
   left.eventCursor === right.eventCursor &&
   left.inputRevision === right.inputRevision;
@@ -20,7 +20,7 @@ const sameProjection = (left: AgentRunView, right: AgentRunView): boolean =>
 export const createAgentRunStore = () => {
   const runs = new Map<string, StoredRun>();
 
-  const accept = (candidate: AgentRunView): AgentRunView => {
+  const accept = (candidate: AgentRunViewDto): AgentRunViewDto => {
     const current = runs.get(candidate.id);
     if (current && !isMonotonicSuccessor(current.latest, candidate)) return current.latest;
 
@@ -33,7 +33,7 @@ export const createAgentRunStore = () => {
     return candidate;
   };
 
-  const acceptSnapshot = (candidate: AgentRunSnapshot): AgentRunSnapshot | null => {
+  const acceptSnapshot = (candidate: AgentRunSnapshotDto): AgentRunSnapshotDto | null => {
     const accepted = accept(candidate);
     const current = runs.get(candidate.id);
     if (!current || !sameProjection(accepted, candidate)) return current?.snapshot ?? null;
@@ -41,9 +41,9 @@ export const createAgentRunStore = () => {
     return candidate;
   };
 
-  const latest = (runId: string): AgentRunView | null => runs.get(runId)?.latest ?? null;
+  const latest = (runId: string): AgentRunViewDto | null => runs.get(runId)?.latest ?? null;
 
-  const currentSnapshot = (runId: string): AgentRunSnapshot | null => {
+  const currentSnapshot = (runId: string): AgentRunSnapshotDto | null => {
     const current = runs.get(runId);
     if (!current?.snapshot || !sameProjection(current.latest, current.snapshot)) return null;
     return current.snapshot;

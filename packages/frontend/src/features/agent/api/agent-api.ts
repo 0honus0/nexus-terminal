@@ -22,6 +22,23 @@ import type {
   AgentMemoryViewDto,
 } from '@nexus-terminal/protocol/agent-memories';
 import type {
+  AgentAppIntentArtifactDto,
+  AgentAppIntentReceiptDto,
+  AgentPluginAppStateDto,
+  AgentPluginFrontendDescriptorDto,
+  AgentPluginInstallationDto,
+  AgentPluginManifestDto,
+  AgentPluginPublisherKeyDto,
+  AgentPluginStageDto,
+  AgentPluginUninstallResultDto,
+  AgentPluginUpgradeResultDto,
+  AgentPluginVerifyResultDto,
+  AgentPluginVersionDto,
+  AgentRemotePluginCatalogDto,
+  AgentRemotePluginPackageDto,
+  AgentRemotePluginPublisherDto,
+} from '@nexus-terminal/protocol/agent-plugins';
+import type {
   AgentAcpIntegrationConfigurationDto,
   AgentIntegrationCreateRequestDto,
   AgentIntegrationDeleteQueryDto,
@@ -34,6 +51,7 @@ import type {
 } from '@nexus-terminal/protocol/agent-integrations';
 import type {
   AgentArtifactCleanupPreviewDto,
+  AgentArtifactRefDto,
   AgentArtifactCleanupResultDto,
   AgentArtifactPageDto,
   AgentArtifactStorageSummaryDto,
@@ -44,7 +62,7 @@ import type {
   AgentApprovalViewDto,
   AgentToolInspectionDto,
 } from '@nexus-terminal/protocol/agent-approvals';
-import type { AgentToolRiskDto } from '@nexus-terminal/protocol/agent-common';
+import type { AgentEnvelopeDto, AgentToolRiskDto } from '@nexus-terminal/protocol/agent-common';
 import type {
   AgentAppGrantReplaceRequestDto,
   AgentAppGrantViewDto,
@@ -61,6 +79,7 @@ import type {
   AgentExecutionPolicyReplaceRequestDto,
   AgentExecutionPolicyViewDto,
   AgentHardLimitConfirmRequestDto,
+  AgentHardLimitsDto,
   AgentHostSummaryDto,
   AgentHardLimitPreviewDto,
   AgentHardLimitPreviewRequestDto,
@@ -139,22 +158,26 @@ import type {
   AgentThreadRenameRequestDto,
   AgentThreadViewDto,
 } from '@nexus-terminal/protocol/agent-threads';
+export type * from '@nexus-terminal/protocol/agent-approvals';
+export type * from '@nexus-terminal/protocol/agent-artifacts';
+export type * from '@nexus-terminal/protocol/agent-collaboration';
+export type * from '@nexus-terminal/protocol/agent-common';
+export type * from '@nexus-terminal/protocol/agent-host';
+export type * from '@nexus-terminal/protocol/agent-integrations';
+export type * from '@nexus-terminal/protocol/agent-memories';
+export type * from '@nexus-terminal/protocol/agent-plugins';
+export type * from '@nexus-terminal/protocol/agent-providers';
+export type * from '@nexus-terminal/protocol/agent-runs';
+export type * from '@nexus-terminal/protocol/agent-threads';
+
 import { agentRuntimeRequest } from './agent-http-client';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 import { createPluginApi } from './plugin-api';
 import { createProviderApi } from './provider-api';
 import { createArtifactApi } from './artifact-api';
-import type { AgentArtifactRef, AgentEnvelope, AgentHardLimits, AgentSettingsView } from './agent-api.types';
 import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
 import type { WorkspaceProfileView } from './workspace-runtime-api';
 
-export type {
-  AgentArtifactRef,
-  AgentEnvelope,
-  AgentHardLimits,
-  AgentSettingsDocument,
-  AgentSettingsView,
-} from './agent-api.types';
 export { AgentApiError, formatAgentApiError, toAgentApiError } from './agent-api-error';
 
 export interface RecommendedAgentPluginView {
@@ -170,69 +193,15 @@ export interface RecommendedAgentPluginView {
 }
 
 export interface RecommendedAgentPluginInstallResult {
-  app: AgentAppSummary;
+  app: AgentAppSummaryDto;
   installedNow: boolean;
 }
 
-export type AgentContextCompactionMode = AgentContextCompactionModeDto;
-export type AgentContextProfile = AgentContextProfileDto;
-export type AgentExecutionPolicyOverrides = AgentExecutionPolicyOverridesDto;
-export type AgentExecutionPolicyView = AgentExecutionPolicyViewDto;
-export type AgentAppSummary = AgentAppSummaryDto;
 
-export type AgentRunEnvironmentSelection = AgentRunEnvironmentSelectionDto;
 
-export type AgentIntegrationKind = AgentIntegrationKindDto;
-export type AgentMcpIntegrationConfiguration = AgentMcpIntegrationConfigurationDto;
-export type AgentAcpIntegrationConfiguration = AgentAcpIntegrationConfigurationDto;
-export type AgentIntegrationView = AgentIntegrationViewDto;
 
-export type AgentTargetKind = AgentTargetKindDto;
-export type AgentTargetGrantSelection = AgentTargetGrantSelectionDto;
-export type AgentCapabilityScope = AgentCapabilityScopeDto;
-export type AgentCapabilityDefinition = AgentCapabilityDefinitionDto;
-export type AgentCapabilityGrantInput = AgentCapabilityGrantInputDto;
-export type AgentCapabilityGrant = AgentCapabilityGrantDto;
-export type AgentAppGrantView = AgentAppGrantViewDto;
 
-export interface PluginFrontendDescriptor {
-  appId: string;
-  version: string;
-  sdkVersion: string;
-  protocolVersion: 1;
-  url: string;
-  sandbox: 'allow-scripts';
-  maxMessageBytes: 256_000;
-  requestTimeoutMs: 15_000;
-}
 
-export interface AgentAppIntentReceipt {
-  id: string;
-  userId: number;
-  senderAppId: string;
-  receiverAppId: string;
-  intentId: string;
-  schemaVersion: number;
-  input: unknown;
-  artifactIds: string[];
-  createdAt: number;
-  expiresAt: number;
-  revokedAt: number | null;
-}
-
-export interface AgentAppIntentArtifactView {
-  id: string;
-  appId: string;
-  originalName: string;
-  mediaType: string;
-  sizeBytes: number;
-  sha256: string;
-}
-
-export type AgentMemoryStatus = AgentMemoryStatusDto;
-export type AgentMemoryReviewAction = AgentMemoryReviewActionDto;
-export type AgentMemoryView = AgentMemoryViewDto;
-export type AgentMemoryImportConfirmation = AgentMemoryImportConfirmationDto;
 
 
 export type {
@@ -254,185 +223,11 @@ export type {
   WorkspaceToolchainSwitchView,
 } from './workspace-runtime-api';
 
-export interface PluginPublisherKey {
-  userId: number;
-  keyId: string;
-  label: string;
-  createdAt: number;
-  revokedAt: number | null;
-}
 
-export interface PluginInstallation {
-  userId: number;
-  appId: string;
-  version: string;
-  status: 'installed' | 'removed';
-  retainedDataEntries: number;
-  retainedDataBytes: number;
-  createdAt: number;
-  updatedAt: number;
-}
 
-export interface PluginManifestView {
-  schemaVersion: 1;
-  id: string;
-  version: string;
-  displayName: string;
-  sdkVersion: string;
-  capabilities: string[];
-  intents: Array<{ id: string; schemaVersion: number }>;
-  agents?: Array<{
-    id: string;
-    version: string;
-    displayName: string;
-    description: string;
-    requiredModelCapabilities: AgentModelCapability[];
-  }>;
-  targets?: {
-    frontend?: { entry: string };
-    backend?: { entry: string };
-    runner?: { entry: string };
-  };
-}
 
-export interface PluginVersionView {
-  appId: string;
-  version: string;
-  packageHash: string;
-  publisherKeyId: string;
-  manifest: PluginManifestView;
-  frontendEntry: string | null;
-  backendEntry: string | null;
-  runnerEntry: string | null;
-  skillFiles: string[];
-  status: 'verified' | 'installed' | 'failed' | 'removed';
-  installedAt: number | null;
-  updatedAt: number;
-}
 
-export interface RemotePluginPublisher {
-  keyId: string;
-  label: string;
-  publicKeyPem: string;
-}
 
-export interface RemotePluginPackageEntry {
-  appId: string;
-  version: string;
-  sdkVersion: string;
-  nexus: { minVersion: string; maxVersion: string };
-  compatible: boolean;
-  displayName: string;
-  description: string;
-  packageUrl: string;
-  sha256: string;
-  sizeBytes: number;
-  publisherKeyId: string;
-}
-
-export interface RemotePluginCatalog {
-  schemaVersion: 1;
-  repositoryUrl: string;
-  publishers: RemotePluginPublisher[];
-  packages: RemotePluginPackageEntry[];
-}
-
-export interface PluginStageView {
-  id: string;
-  packageHash: string;
-  sizeBytes: number;
-  publisherKeyId: string | null;
-  appId: string | null;
-  version: string | null;
-  manifest: PluginManifestView | null;
-  status: 'staged' | 'verified' | 'failed' | 'installed';
-  errorCode: string | null;
-  versionNumber: number;
-}
-
-export interface PluginVerifyResult {
-  stage: PluginStageView;
-  plugin: PluginVersionView;
-}
-
-export interface PluginAppStateView {
-  userId: number;
-  appId: string;
-  activeVersion: string;
-  desiredState: 'enabled' | 'disabled';
-  observedState: string;
-  healthReason: string | null;
-  policyRevision: number;
-  runningCount: number;
-  approvalCount: number;
-  budgetRequestCount: number;
-  acceptNewRuns: boolean;
-  version: number;
-  createdAt: number;
-  updatedAt: number;
-  displayName: string;
-  capabilities: string[];
-}
-
-export interface PluginUpgradeResult {
-  state: 'draining' | 'completed';
-  targetVersion: string;
-  app: PluginAppStateView;
-  plugin: PluginVersionView;
-}
-
-export interface PluginUninstallResult {
-  state: 'draining' | 'removed';
-  app: PluginAppStateView;
-}
-
-export type AgentReasoningEffort = AgentReasoningEffortDto;
-export type AgentModelCapability = AgentModelCapabilityDto;
-export type ModelReasoningDefaults = AgentModelReasoningDefaultsDto;
-export type ModelCapabilityDefaults = AgentModelCapabilityDefaultsDto;
-export type ModelCapabilityOverrides = AgentModelCapabilityOverridesDto;
-export type ProviderModelCapabilityObservation = AgentProviderModelCapabilityObservationDto;
-export type ProviderModel = AgentProviderModelDto;
-export type AgentDiscoveredProviderModel = AgentDiscoveredProviderModelDto;
-export type AgentModelRegistryStatus = AgentModelRegistryStatusDto;
-export type AgentProviderView = AgentProviderViewDto;
-export type AgentProviderCreateInput = AgentProviderCreateRequestDto;
-export type AgentProviderPatchInput = AgentProviderPatchFieldsDto;
-
-export type ArtifactStorageSummary = AgentArtifactStorageSummaryDto;
-export type AgentArtifactPage = AgentArtifactPageDto;
-export type ArtifactCleanupPreview = AgentArtifactCleanupPreviewDto;
-export type ArtifactCleanupResult = AgentArtifactCleanupResultDto;
-
-export type HardLimitPreview = AgentHardLimitPreviewDto;
-export type HostSummaryView = AgentHostSummaryDto;
-
-export type AgentThreadView = AgentThreadViewDto;
-export type AgentThreadPage = AgentThreadPageDto;
-export type AgentThreadDeleteResult = AgentThreadDeleteResultDto;
-export type AgentThreadDeleteAllResult = AgentThreadDeleteAllResultDto;
-export type AgentLedgerEntry = AgentLedgerEntryDto;
-export type AgentLedgerPage = AgentLedgerPageDto;
-
-export type AgentRunStatus = AgentRunStatusDto;
-export type AgentApprovalMode = AgentApprovalModeDto;
-export type AgentExecutionMode = AgentExecutionModeDto;
-export type AgentToolRisk = AgentToolRiskDto;
-export type AgentPlanItemStatus = AgentPlanItemStatusDto;
-export type AgentPlanItem = AgentPlanItemDto;
-export type AgentRunPlan = AgentRunPlanDto;
-export type AgentRunTerminalIssue = AgentRunTerminalIssueDto;
-export type AgentUserInputChoice = AgentUserInputChoiceDto;
-export type AgentUserInputQuestion = AgentUserInputQuestionDto;
-export type AgentPendingUserInputRequest = AgentPendingUserInputRequestDto;
-export type AgentRunView = AgentRunViewDto;
-export type AgentRunReconciliationResource = AgentRunReconciliationResourceDto;
-export type AgentRunReconciliationView = AgentRunReconciliationViewDto;
-export type AgentPendingRunInput = AgentPendingRunInputDto;
-export type AgentPendingRunInputPage = AgentPendingRunInputPageDto;
-export type AgentCheckpointView = AgentCheckpointViewDto;
-export type AgentRunSnapshot = AgentRunSnapshotDto;
-export type AgentRunPage = AgentRunPageDto;
 export type AgentCreateRunInput = Omit<AgentCreateRunFieldsDto, 'input' | 'connectionIds'> & {
   text: string;
   artifactRefs?: string[];
@@ -440,16 +235,8 @@ export type AgentCreateRunInput = Omit<AgentCreateRunFieldsDto, 'input' | 'conne
 };
 
 
-export type AgentSubagentView = AgentSubagentViewDto;
-export type AgentSubagentMessage = AgentSubagentMessageDto;
-export type AgentSubagentProfile = AgentSubagentProfileDto;
-export type AgentSubagentProfileTemplate = AgentSubagentProfileTemplateDto;
-export type AgentSubagentSettingsView = AgentSubagentSettingsViewDto;
-export type AgentSubagentPage = AgentSubagentPageDto;
-export type AgentSubagentMessagePage = AgentSubagentMessagePageDto;
 
 
-export type AgentToolInspection = AgentToolInspectionDto;
 
 export interface AgentServerClockAnchor {
   serverUnixMilliseconds: number;
@@ -457,14 +244,11 @@ export interface AgentServerClockAnchor {
 }
 
 export interface AgentApprovalBatch {
-  items: AgentApprovalView[];
+  items: AgentApprovalViewDto[];
   clock: AgentServerClockAnchor;
 }
 
-export type AgentApprovalView = AgentApprovalViewDto;
 
-export type AgentDefinitionModelCompatibility = AgentDefinitionModelCompatibilityDto;
-export type AgentDefinitionView = AgentDefinitionViewDto;
 
 export interface TargetDenylistEntry {
   connectionId: number;
@@ -483,13 +267,13 @@ export { resetAgentCsrf } from './agent-api-common';
 export const agentApi = {
   async recommendedPlugin(): Promise<RecommendedAgentPluginView> {
     return unwrap(
-      (await httpClient.get<AgentEnvelope<RecommendedAgentPluginView>>('/agent/onboarding/recommended-plugin')).data,
+      (await httpClient.get<AgentEnvelopeDto<RecommendedAgentPluginView>>('/agent/onboarding/recommended-plugin')).data,
     );
   },
   async installRecommendedPlugin(): Promise<RecommendedAgentPluginInstallResult> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<RecommendedAgentPluginInstallResult>>(
+        await httpClient.post<AgentEnvelopeDto<RecommendedAgentPluginInstallResult>>(
           '/agent/onboarding/recommended-plugin/install',
           {},
           { headers: await mutationHeaders() },
@@ -497,14 +281,14 @@ export const agentApi = {
       ).data,
     );
   },
-  async settings(): Promise<AgentSettingsView> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentSettingsViewDto>>('/agent/settings')).data);
+  async settings(): Promise<AgentSettingsViewDto> {
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentSettingsViewDto>>('/agent/settings')).data);
   },
-  async patchSettings(patch: AgentSettingsPatchDto, expectedVersion: number): Promise<AgentSettingsView> {
+  async patchSettings(patch: AgentSettingsPatchDto, expectedVersion: number): Promise<AgentSettingsViewDto> {
     const input: AgentSettingsPatchRequestDto = { patch, expectedVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentSettingsViewDto>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentSettingsViewDto>>(
           '/agent/settings',
           input,
           { headers: await mutationHeaders() },
@@ -512,11 +296,11 @@ export const agentApi = {
       ).data,
     );
   },
-  async previewHardLimits(proposed: Partial<AgentHardLimits>, expectedVersion: number): Promise<HardLimitPreview> {
+  async previewHardLimits(proposed: Partial<AgentHardLimitsDto>, expectedVersion: number): Promise<AgentHardLimitPreviewDto> {
     const input: AgentHardLimitPreviewRequestDto = { proposed, expectedVersion };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentHardLimitPreviewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentHardLimitPreviewDto>>(
           '/agent/settings/hard-limits/preview',
           input,
           { headers: await mutationHeaders() },
@@ -524,11 +308,11 @@ export const agentApi = {
       ).data,
     );
   },
-  async confirmHardLimits(confirmationId: string, expectedVersion: number): Promise<AgentSettingsView> {
+  async confirmHardLimits(confirmationId: string, expectedVersion: number): Promise<AgentSettingsViewDto> {
     const input: AgentHardLimitConfirmRequestDto = { confirmationId, expectedVersion };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentSettingsViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentSettingsViewDto>>(
           '/agent/settings/hard-limits/confirm',
           input,
           { headers: await mutationHeaders() },
@@ -536,14 +320,14 @@ export const agentApi = {
       ).data,
     );
   },
-  async apps(): Promise<AgentAppSummary[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentAppSummaryDto[]>>('/agent/apps')).data);
+  async apps(): Promise<AgentAppSummaryDto[]> {
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentAppSummaryDto[]>>('/agent/apps')).data);
   },
-  async setAppEnabled(app: AgentAppSummary, enabled: boolean): Promise<AgentAppSummary> {
+  async setAppEnabled(app: AgentAppSummaryDto, enabled: boolean): Promise<AgentAppSummaryDto> {
     const input: AgentAppStateUpdateRequestDto = { enabled, expectedVersion: app.stateVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentAppSummaryDto>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentAppSummaryDto>>(
           `/agent/apps/${encodeURIComponent(app.id)}`,
           input,
           { headers: await mutationHeaders() },
@@ -551,10 +335,10 @@ export const agentApi = {
       ).data,
     );
   },
-  async appExecutionPolicy(appId: string): Promise<AgentExecutionPolicyView> {
+  async appExecutionPolicy(appId: string): Promise<AgentExecutionPolicyViewDto> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentExecutionPolicyViewDto>>(
+        await httpClient.get<AgentEnvelopeDto<AgentExecutionPolicyViewDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/execution-policy`,
         )
       ).data,
@@ -562,13 +346,13 @@ export const agentApi = {
   },
   async replaceAppExecutionPolicy(
     appId: string,
-    overrides: AgentExecutionPolicyOverrides,
+    overrides: AgentExecutionPolicyOverridesDto,
     expectedVersion: number,
-  ): Promise<AgentExecutionPolicyView> {
+  ): Promise<AgentExecutionPolicyViewDto> {
     const input: AgentExecutionPolicyReplaceRequestDto = { overrides, expectedVersion };
     return unwrap(
       (
-        await httpClient.put<AgentEnvelope<AgentExecutionPolicyViewDto>>(
+        await httpClient.put<AgentEnvelopeDto<AgentExecutionPolicyViewDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/execution-policy`,
           input,
           { headers: await mutationHeaders() },
@@ -576,20 +360,20 @@ export const agentApi = {
       ).data,
     );
   },
-  async appGrants(appId: string): Promise<AgentAppGrantView> {
+  async appGrants(appId: string): Promise<AgentAppGrantViewDto> {
     return unwrap(
-      (await httpClient.get<AgentEnvelope<AgentAppGrantViewDto>>(`/agent/apps/${encodeURIComponent(appId)}/grants`)).data,
+      (await httpClient.get<AgentEnvelopeDto<AgentAppGrantViewDto>>(`/agent/apps/${encodeURIComponent(appId)}/grants`)).data,
     );
   },
   async replaceAppGrants(
     appId: string,
-    grants: AgentCapabilityGrantInput[],
+    grants: AgentCapabilityGrantInputDto[],
     expectedPolicyRevision: number,
-  ): Promise<AgentAppGrantView> {
+  ): Promise<AgentAppGrantViewDto> {
     const input: AgentAppGrantReplaceRequestDto = { grants, expectedPolicyRevision };
     return unwrap(
       (
-        await httpClient.put<AgentEnvelope<AgentAppGrantViewDto>>(
+        await httpClient.put<AgentEnvelopeDto<AgentAppGrantViewDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/grants`,
           input,
           { headers: await mutationHeaders() },
@@ -601,20 +385,20 @@ export const agentApi = {
   ...createProviderApi(),
   ...createArtifactApi(),
   ...createWorkspaceRuntimeApi(mutationHeaders),
-  async integrations(appId: string, kind?: AgentIntegrationKind): Promise<AgentIntegrationView[]> {
+  async integrations(appId: string, kind?: AgentIntegrationKindDto): Promise<AgentIntegrationViewDto[]> {
     const params: AgentIntegrationListQueryDto | undefined = kind ? { kind } : undefined;
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentIntegrationView[]>>(`/apps/${encodeURIComponent(appId)}/integrations`, {
+        await httpClient.get<AgentEnvelopeDto<AgentIntegrationViewDto[]>>(`/apps/${encodeURIComponent(appId)}/integrations`, {
           params,
         })
       ).data,
     );
   },
-  async createIntegration(appId: string, input: AgentIntegrationCreateRequestDto): Promise<AgentIntegrationView> {
+  async createIntegration(appId: string, input: AgentIntegrationCreateRequestDto): Promise<AgentIntegrationViewDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentIntegrationView>>(
+        await httpClient.post<AgentEnvelopeDto<AgentIntegrationViewDto>>(
           `/apps/${encodeURIComponent(appId)}/integrations`,
           input,
           { headers: await mutationHeaders() },
@@ -624,12 +408,12 @@ export const agentApi = {
   },
   async updateIntegration(
     appId: string,
-    integration: AgentIntegrationView,
+    integration: AgentIntegrationViewDto,
     input: AgentIntegrationUpdateFieldsDto,
-  ): Promise<AgentIntegrationView> {
+  ): Promise<AgentIntegrationViewDto> {
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentIntegrationView>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentIntegrationViewDto>>(
           `/apps/${encodeURIComponent(appId)}/integrations/${encodeURIComponent(integration.id)}`,
           { ...input, expectedVersion: integration.version },
           { headers: await mutationHeaders() },
@@ -637,7 +421,7 @@ export const agentApi = {
       ).data,
     );
   },
-  async deleteIntegration(appId: string, integration: AgentIntegrationView): Promise<void> {
+  async deleteIntegration(appId: string, integration: AgentIntegrationViewDto): Promise<void> {
     const params: AgentIntegrationDeleteQueryDto = { expectedVersion: integration.version };
     await httpClient.delete(`/apps/${encodeURIComponent(appId)}/integrations/${encodeURIComponent(integration.id)}`, {
       params,
@@ -647,7 +431,7 @@ export const agentApi = {
   async refreshIntegration(appId: string, integrationId: string): Promise<AgentIntegrationRefreshDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentIntegrationRefreshDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentIntegrationRefreshDto>>(
           `/apps/${encodeURIComponent(appId)}/integrations/${encodeURIComponent(integrationId)}/refresh`,
           {},
           { headers: await mutationHeaders() },
@@ -656,7 +440,7 @@ export const agentApi = {
     );
   },
   async targetDenylist(): Promise<TargetDenylistView> {
-    return unwrap((await httpClient.get<AgentEnvelope<TargetDenylistView>>('/agent/target-denylist')).data);
+    return unwrap((await httpClient.get<AgentEnvelopeDto<TargetDenylistView>>('/agent/target-denylist')).data);
   },
   async replaceTargetDenylist(
     connectionIds: number[],
@@ -665,7 +449,7 @@ export const agentApi = {
   ): Promise<TargetDenylistView> {
     return unwrap(
       (
-        await httpClient.put<AgentEnvelope<TargetDenylistView>>(
+        await httpClient.put<AgentEnvelopeDto<TargetDenylistView>>(
           '/agent/target-denylist',
           { connectionIds, reason, expectedRevision },
           { headers: await mutationHeaders() },
@@ -673,24 +457,24 @@ export const agentApi = {
       ).data,
     );
   },
-  async summary(): Promise<HostSummaryView> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentHostSummaryDto>>('/agent/summary')).data);
+  async summary(): Promise<AgentHostSummaryDto> {
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentHostSummaryDto>>('/agent/summary')).data);
   },
-  async threads(appId: string, before?: string, limit = 50): Promise<AgentThreadPage> {
+  async threads(appId: string, before?: string, limit = 50): Promise<AgentThreadPageDto> {
     const params: AgentThreadListQueryDto = { limit, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentThreadPageDto>>(`/apps/${encodeURIComponent(appId)}/threads`, {
+        await httpClient.get<AgentEnvelopeDto<AgentThreadPageDto>>(`/apps/${encodeURIComponent(appId)}/threads`, {
           params,
         })
       ).data,
     );
   },
-  async createThread(appId: string, title?: string): Promise<AgentThreadView> {
+  async createThread(appId: string, title?: string): Promise<AgentThreadViewDto> {
     const input: AgentThreadCreateRequestDto = title ? { title } : {};
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentThreadViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentThreadViewDto>>(
           `/apps/${encodeURIComponent(appId)}/threads`,
           input,
           { headers: await mutationHeaders() },
@@ -703,11 +487,11 @@ export const agentApi = {
     threadId: string,
     title: string,
     expectedVersion: number,
-  ): Promise<AgentThreadView> {
+  ): Promise<AgentThreadViewDto> {
     const input: AgentThreadRenameRequestDto = { title, expectedVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentThreadViewDto>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentThreadViewDto>>(
           `/apps/${encodeURIComponent(appId)}/threads/${encodeURIComponent(threadId)}`,
           input,
           { headers: await mutationHeaders() },
@@ -715,11 +499,11 @@ export const agentApi = {
       ).data,
     );
   },
-  async deleteThread(appId: string, thread: AgentThreadView): Promise<AgentThreadDeleteResult> {
+  async deleteThread(appId: string, thread: AgentThreadViewDto): Promise<AgentThreadDeleteResultDto> {
     const data: AgentThreadDeleteRequestDto = { expectedVersion: thread.version };
     return unwrap(
       (
-        await httpClient.delete<AgentEnvelope<AgentThreadDeleteResultDto>>(
+        await httpClient.delete<AgentEnvelopeDto<AgentThreadDeleteResultDto>>(
           `/apps/${encodeURIComponent(appId)}/threads/${encodeURIComponent(thread.id)}`,
           {
             headers: await mutationHeaders(),
@@ -729,11 +513,11 @@ export const agentApi = {
       ).data,
     );
   },
-  async deleteAllThreads(appId: string): Promise<AgentThreadDeleteAllResult> {
+  async deleteAllThreads(appId: string): Promise<AgentThreadDeleteAllResultDto> {
     const data: AgentThreadDeleteAllRequestDto = { confirmation: 'delete_all_threads' };
     return unwrap(
       (
-        await httpClient.delete<AgentEnvelope<AgentThreadDeleteAllResultDto>>(
+        await httpClient.delete<AgentEnvelopeDto<AgentThreadDeleteAllResultDto>>(
           `/apps/${encodeURIComponent(appId)}/threads`,
           {
             headers: await mutationHeaders(),
@@ -743,49 +527,49 @@ export const agentApi = {
       ).data,
     );
   },
-  async ledger(appId: string, threadId: string, before?: string): Promise<AgentLedgerPage> {
+  async ledger(appId: string, threadId: string, before?: string): Promise<AgentLedgerPageDto> {
     const params: AgentLedgerQueryDto = { limit: 50, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentLedgerPageDto>>(
+        await httpClient.get<AgentEnvelopeDto<AgentLedgerPageDto>>(
           `/apps/${encodeURIComponent(appId)}/threads/${encodeURIComponent(threadId)}/entries`,
           { params },
         )
       ).data,
     );
   },
-  async definitions(appId: string): Promise<AgentDefinitionView[]> {
+  async definitions(appId: string): Promise<AgentDefinitionViewDto[]> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentDefinitionViewDto[]>>(
+        await httpClient.get<AgentEnvelopeDto<AgentDefinitionViewDto[]>>(
           `/apps/${encodeURIComponent(appId)}/agent-definitions`,
         )
       ).data,
     );
   },
-  async runs(appId: string, threadId?: string): Promise<AgentRunPage> {
+  async runs(appId: string, threadId?: string): Promise<AgentRunPageDto> {
     const params: AgentRunListQueryDto = { limit: 50, ...(threadId ? { threadId } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentRunPageDto>>(`/apps/${encodeURIComponent(appId)}/runs`, {
+        await httpClient.get<AgentEnvelopeDto<AgentRunPageDto>>(`/apps/${encodeURIComponent(appId)}/runs`, {
           params,
         })
       ).data,
     );
   },
-  async run(appId: string, runId: string): Promise<AgentRunSnapshot> {
+  async run(appId: string, runId: string): Promise<AgentRunSnapshotDto> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentRunSnapshotDto>>(
+        await httpClient.get<AgentEnvelopeDto<AgentRunSnapshotDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}`,
         )
       ).data,
     );
   },
-  async runReconciliation(appId: string, runId: string): Promise<AgentRunReconciliationView> {
+  async runReconciliation(appId: string, runId: string): Promise<AgentRunReconciliationViewDto> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentRunReconciliationViewDto>>(
+        await httpClient.get<AgentEnvelopeDto<AgentRunReconciliationViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/reconciliation`,
         )
       ).data,
@@ -793,10 +577,10 @@ export const agentApi = {
   },
   async resolveRunReconciliation(
     appId: string,
-    run: AgentRunView,
-    reconciliation: AgentRunReconciliationView,
+    run: AgentRunViewDto,
+    reconciliation: AgentRunReconciliationViewDto,
     note: string,
-  ): Promise<AgentRunView> {
+  ): Promise<AgentRunViewDto> {
     const fields: AgentRunReconciliationResolveFieldsDto = {
       expectedVersion: run.version,
       note,
@@ -805,7 +589,7 @@ export const agentApi = {
     const input: AgentRunReconciliationResolveRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/reconciliation/resolve`,
           input,
           { headers: await mutationHeaders() },
@@ -813,10 +597,10 @@ export const agentApi = {
       ).data,
     );
   },
-  async subagentSettings(appId: string): Promise<AgentSubagentSettingsView> {
+  async subagentSettings(appId: string): Promise<AgentSubagentSettingsViewDto> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentSubagentSettingsViewDto>>(
+        await httpClient.get<AgentEnvelopeDto<AgentSubagentSettingsViewDto>>(
           `/apps/${encodeURIComponent(appId)}/subagent-settings`,
         )
       ).data,
@@ -824,13 +608,13 @@ export const agentApi = {
   },
   async replaceSubagentProfiles(
     appId: string,
-    profiles: AgentSubagentProfile[],
+    profiles: AgentSubagentProfileDto[],
     expectedVersion: number,
-  ): Promise<AgentSubagentSettingsView> {
+  ): Promise<AgentSubagentSettingsViewDto> {
     const input: AgentSubagentSettingsReplaceRequestDto = { profiles, expectedVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentSubagentSettingsViewDto>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentSubagentSettingsViewDto>>(
           `/apps/${encodeURIComponent(appId)}/subagent-settings`,
           input,
           { headers: await mutationHeaders() },
@@ -838,11 +622,11 @@ export const agentApi = {
       ).data,
     );
   },
-  async memories(appId: string, status: AgentMemoryStatus | 'all' = 'all', limit = 100): Promise<AgentMemoryView[]> {
+  async memories(appId: string, status: AgentMemoryStatusDto | 'all' = 'all', limit = 100): Promise<AgentMemoryViewDto[]> {
     const params: AgentMemoryListQueryDto = { status, limit };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentMemoryViewDto[]>>(`/apps/${encodeURIComponent(appId)}/memories`, {
+        await httpClient.get<AgentEnvelopeDto<AgentMemoryViewDto[]>>(`/apps/${encodeURIComponent(appId)}/memories`, {
           params,
         })
       ).data,
@@ -850,10 +634,10 @@ export const agentApi = {
   },
   async reviewMemory(
     appId: string,
-    memory: AgentMemoryView,
-    decision: AgentMemoryReviewAction,
+    memory: AgentMemoryViewDto,
+    decision: AgentMemoryReviewActionDto,
     content?: string,
-  ): Promise<AgentMemoryView> {
+  ): Promise<AgentMemoryViewDto> {
     const input: AgentMemoryReviewRequestDto = {
       decision,
       expectedVersion: memory.version,
@@ -861,7 +645,7 @@ export const agentApi = {
     };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentMemoryViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentMemoryViewDto>>(
           `/apps/${encodeURIComponent(appId)}/memories/${encodeURIComponent(memory.id)}/review`,
           input,
           { headers: await mutationHeaders() },
@@ -873,11 +657,11 @@ export const agentApi = {
     appId: string,
     sourceAppId: string,
     sourceMemoryId: string,
-  ): Promise<AgentMemoryImportConfirmation> {
+  ): Promise<AgentMemoryImportConfirmationDto> {
     const input: AgentMemoryImportPreviewRequestDto = { sourceAppId, sourceMemoryId };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentMemoryImportConfirmationDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentMemoryImportConfirmationDto>>(
           `/apps/${encodeURIComponent(appId)}/memories/imports/preview`,
           input,
           { headers: await mutationHeaders() },
@@ -885,11 +669,11 @@ export const agentApi = {
       ).data,
     );
   },
-  async confirmMemoryImport(appId: string, confirmationId: string): Promise<AgentMemoryView> {
+  async confirmMemoryImport(appId: string, confirmationId: string): Promise<AgentMemoryViewDto> {
     const input: AgentMemoryImportConfirmRequestDto = {};
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentMemoryViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentMemoryViewDto>>(
           `/apps/${encodeURIComponent(appId)}/memories/imports/${encodeURIComponent(confirmationId)}/confirm`,
           input,
           { headers: await mutationHeaders() },
@@ -897,22 +681,22 @@ export const agentApi = {
       ).data,
     );
   },
-  async subagents(appId: string, runId: string, before?: string): Promise<AgentSubagentPage> {
+  async subagents(appId: string, runId: string, before?: string): Promise<AgentSubagentPageDto> {
     const params: AgentSubagentListQueryDto = { limit: 50, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentSubagentPageDto>>(
+        await httpClient.get<AgentEnvelopeDto<AgentSubagentPageDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/subagents`,
           { params },
         )
       ).data,
     );
   },
-  async cancelSubagent(appId: string, runId: string, delegation: AgentSubagentView): Promise<AgentSubagentView> {
+  async cancelSubagent(appId: string, runId: string, delegation: AgentSubagentViewDto): Promise<AgentSubagentViewDto> {
     const input: AgentSubagentCancelRequestDto = { expectedVersion: delegation.version };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentSubagentViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentSubagentViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/subagents/${encodeURIComponent(delegation.id)}/cancel`,
           input,
           { headers: await mutationHeaders() },
@@ -925,11 +709,11 @@ export const agentApi = {
     runId: string,
     delegationId: string,
     before?: string,
-  ): Promise<AgentSubagentMessagePage> {
+  ): Promise<AgentSubagentMessagePageDto> {
     const params: AgentSubagentMessageListQueryDto = { limit: 50, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentSubagentMessagePageDto>>(
+        await httpClient.get<AgentEnvelopeDto<AgentSubagentMessagePageDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/subagents/${encodeURIComponent(delegationId)}/messages`,
           { params },
         )
@@ -937,7 +721,7 @@ export const agentApi = {
     );
   },
   async approvals(appId: string, runId: string): Promise<AgentApprovalBatch> {
-    const response = await httpClient.get<AgentEnvelope<AgentApprovalViewDto[]>>(
+    const response = await httpClient.get<AgentEnvelopeDto<AgentApprovalViewDto[]>>(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/approvals`,
     );
     const serverUnixMilliseconds = Number(response.headers['x-agent-server-time-ms']);
@@ -951,10 +735,10 @@ export const agentApi = {
   },
   async resolveApproval(
     appId: string,
-    approval: AgentApprovalView,
+    approval: AgentApprovalViewDto,
     decision: 'approved' | 'denied',
     feedback?: string,
-  ): Promise<AgentApprovalView> {
+  ): Promise<AgentApprovalViewDto> {
     const fields: AgentApprovalResolveFieldsDto = {
       decision,
       operationHash: approval.operationHash,
@@ -964,7 +748,7 @@ export const agentApi = {
     const input: AgentApprovalResolveRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentApprovalViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentApprovalViewDto>>(
           `/apps/${encodeURIComponent(appId)}/approvals/${encodeURIComponent(approval.id)}/resolve`,
           input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -972,7 +756,7 @@ export const agentApi = {
       ).data,
     );
   },
-  async createRun(appId: string, input: AgentCreateRunInput): Promise<AgentRunView> {
+  async createRun(appId: string, input: AgentCreateRunInput): Promise<AgentRunViewDto> {
     const fields: AgentCreateRunFieldsDto = {
       threadId: input.threadId,
       input: { text: input.text, artifactRefs: input.artifactRefs ?? [] },
@@ -989,7 +773,7 @@ export const agentApi = {
     const request: AgentCreateRunRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs`,
           request,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -997,31 +781,31 @@ export const agentApi = {
       ).data,
     );
   },
-  async appendRunInput(appId: string, run: AgentRunView, text: string, artifactRefs: string[] = []): Promise<void> {
+  async appendRunInput(appId: string, run: AgentRunViewDto, text: string, artifactRefs: string[] = []): Promise<void> {
     const fields: AgentRunAppendInputFieldsDto = { text, artifactRefs, expectedVersion: run.version };
     const request: AgentRunAppendInputRequestDto = agentRuntimeRequest(fields);
-    await httpClient.post<AgentEnvelope<AgentRunAppendInputResponseDto>>(
+    await httpClient.post<AgentEnvelopeDto<AgentRunAppendInputResponseDto>>(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/inputs`,
       request,
       { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
     );
   },
-  async interruptRun(appId: string, run: AgentRunView, text: string): Promise<void> {
+  async interruptRun(appId: string, run: AgentRunViewDto, text: string): Promise<void> {
     const fields: AgentRunAppendInputFieldsDto = { text, artifactRefs: [], expectedVersion: run.version };
     const request: AgentRunAppendInputRequestDto = agentRuntimeRequest(fields);
-    await httpClient.post<AgentEnvelope<AgentRunAppendInputResponseDto>>(
+    await httpClient.post<AgentEnvelopeDto<AgentRunAppendInputResponseDto>>(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/interrupt`,
       request,
       { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
     );
   },
-  async setRunGoal(appId: string, run: AgentRunView, text: string): Promise<AgentRunView> {
+  async setRunGoal(appId: string, run: AgentRunViewDto, text: string): Promise<AgentRunViewDto> {
     const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(run.id) + '/goal';
     const fields: AgentRunSetGoalFieldsDto = { text, expectedVersion: run.version };
     const input: AgentRunSetGoalRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
           path,
           input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -1029,17 +813,17 @@ export const agentApi = {
       ).data,
     );
   },
-  async pendingRunInputs(appId: string, runId: string): Promise<AgentPendingRunInputPage> {
+  async pendingRunInputs(appId: string, runId: string): Promise<AgentPendingRunInputPageDto> {
     const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(runId) + '/pending-inputs';
-    return unwrap((await httpClient.get<AgentEnvelope<AgentPendingRunInputPageDto>>(path)).data);
+    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentPendingRunInputPageDto>>(path)).data);
   },
   async mutatePendingRunInput(
     appId: string,
-    run: AgentRunView,
+    run: AgentRunViewDto,
     action: 'remove' | 'move',
     inputId: string,
     beforeInputId: string | null,
-  ): Promise<AgentRunView> {
+  ): Promise<AgentRunViewDto> {
     const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(run.id) + '/pending-inputs';
     const fields: AgentRunPendingInputMutationFieldsDto = {
       action,
@@ -1050,7 +834,7 @@ export const agentApi = {
     const input: AgentRunPendingInputMutationRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentRunViewDto>>(
+        await httpClient.patch<AgentEnvelopeDto<AgentRunViewDto>>(
           path,
           input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -1060,14 +844,14 @@ export const agentApi = {
   },
   async increaseRunBudget(
     appId: string,
-    run: AgentRunView,
+    run: AgentRunViewDto,
     increase: AgentRunBudgetIncreaseDto,
-  ): Promise<AgentRunView> {
+  ): Promise<AgentRunViewDto> {
     const fields: AgentRunBudgetIncreaseFieldsDto = { increase, expectedVersion: run.version };
     const input: AgentRunBudgetIncreaseRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/budget`,
           input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -1075,20 +859,20 @@ export const agentApi = {
       ).data,
     );
   },
-  async checkpoints(appId: string, runId: string): Promise<AgentCheckpointView[]> {
+  async checkpoints(appId: string, runId: string): Promise<AgentCheckpointViewDto[]> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentCheckpointViewDto[]>>(
+        await httpClient.get<AgentEnvelopeDto<AgentCheckpointViewDto[]>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/checkpoints`,
         )
       ).data,
     );
   },
-  async saveCheckpoint(appId: string, run: AgentRunView): Promise<AgentCheckpointView> {
+  async saveCheckpoint(appId: string, run: AgentRunViewDto): Promise<AgentCheckpointViewDto> {
     const input: AgentExpectedVersionRequestDto = agentRuntimeRequest({ expectedVersion: run.version });
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentCheckpointViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentCheckpointViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/checkpoints`,
           input,
           { headers: await mutationHeaders() },
@@ -1096,12 +880,12 @@ export const agentApi = {
       ).data,
     );
   },
-  async resumeRun(appId: string, run: AgentRunView, checkpointId: string): Promise<AgentRunView> {
+  async resumeRun(appId: string, run: AgentRunViewDto, checkpointId: string): Promise<AgentRunViewDto> {
     const fields: AgentRunResumeFieldsDto = { checkpointId, expectedVersion: run.version };
     const input: AgentRunResumeRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/resume`,
           input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -1109,11 +893,11 @@ export const agentApi = {
       ).data,
     );
   },
-  async cancelRun(appId: string, run: AgentRunView): Promise<AgentRunView> {
+  async cancelRun(appId: string, run: AgentRunViewDto): Promise<AgentRunViewDto> {
     const input: AgentExpectedVersionRequestDto = agentRuntimeRequest({ expectedVersion: run.version });
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentRunViewDto>>(
+        await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/cancel`,
           input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -1121,7 +905,7 @@ export const agentApi = {
       ).data,
     );
   },
-  async deleteRun(appId: string, run: AgentRunView): Promise<void> {
+  async deleteRun(appId: string, run: AgentRunViewDto): Promise<void> {
     const params: AgentRunDeleteQueryDto = { expectedVersion: run.version };
     await httpClient.delete(`/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}`, {
       params,

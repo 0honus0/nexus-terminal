@@ -7,40 +7,40 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentDiscoveredProviderModel,
-    type AgentModelRegistryStatus,
-    type AgentProviderCreateInput,
-    type AgentProviderView,
-    type ModelCapabilityDefaults,
+    type AgentDiscoveredProviderModelDto,
+    type AgentModelRegistryStatusDto,
+    type AgentProviderCreateRequestDto,
+    type AgentProviderViewDto,
+    type AgentModelCapabilityDefaultsDto,
   } from '../api/agent-api';
 
   const props = defineProps<{
     addProviderModel: (
-      provider: AgentProviderView,
-      model: AgentProviderView['models'][number],
+      provider: AgentProviderViewDto,
+      model: AgentProviderViewDto['models'][number],
       successMsg?: string,
     ) => Promise<boolean | undefined>;
     updateProviderModels?: (
-      provider: AgentProviderView,
-      models: AgentProviderView['models'],
+      provider: AgentProviderViewDto,
+      models: AgentProviderViewDto['models'],
       successMsg?: string,
     ) => Promise<boolean | undefined>;
-    createProvider: (input: AgentProviderCreateInput, successMsg?: string) => Promise<AgentProviderView | undefined>;
-    providers: AgentProviderView[];
+    createProvider: (input: AgentProviderCreateRequestDto, successMsg?: string) => Promise<AgentProviderViewDto | undefined>;
+    providers: AgentProviderViewDto[];
     busy: boolean;
-    discoveries: Record<string, AgentDiscoveredProviderModel[]>;
+    discoveries: Record<string, AgentDiscoveredProviderModelDto[]>;
     defaultProviderId: string | null;
     defaultModelId: string | null;
     fallbackModels: Array<{ providerId: string; modelId: string }>;
   }>();
 
   const emit = defineEmits<{
-    toggle: [provider: AgentProviderView, enabled: boolean];
-    protocol: [provider: AgentProviderView, protocol: AgentProviderView['protocol']];
-    discover: [provider: AgentProviderView];
+    toggle: [provider: AgentProviderViewDto, enabled: boolean];
+    protocol: [provider: AgentProviderViewDto, protocol: AgentProviderViewDto['protocol']];
+    discover: [provider: AgentProviderViewDto];
     defaultModel: [providerId: string, modelId: string];
     fallbackModels: [models: Array<{ providerId: string; modelId: string }>];
-    delete: [provider: AgentProviderView];
+    delete: [provider: AgentProviderViewDto];
   }>();
 
   const { t } = useI18n();
@@ -54,7 +54,7 @@
   const createdProviderId = ref<string | null>(null);
   const showApiKey = ref(false);
   const copiedUrl = ref<string | null>(null);
-  const modelRegistryStatus = ref<AgentModelRegistryStatus | null>(null);
+  const modelRegistryStatus = ref<AgentModelRegistryStatusDto | null>(null);
   const modelRegistryBusy = ref(false);
 
   const loadModelRegistryStatus = async (): Promise<void> => {
@@ -112,14 +112,14 @@
   const isSavingModels = reactive<Record<string, boolean>>({});
 
   // 删除确认
-  const deletingProvider = ref<AgentProviderView | null>(null);
+  const deletingProvider = ref<AgentProviderViewDto | null>(null);
 
   // 已配置模型与连通测试模态弹窗状态
   const testModalOpen = ref(false);
-  const testModalTargetProvider = ref<AgentProviderView | null>(null);
+  const testModalTargetProvider = ref<AgentProviderViewDto | null>(null);
   const testModalSearch = ref('');
 
-  const openTestModal = (provider: AgentProviderView) => {
+  const openTestModal = (provider: AgentProviderViewDto) => {
     testModalTargetProvider.value = provider;
     testModalSearch.value = '';
     testModalOpen.value = true;
@@ -138,13 +138,13 @@
     return provider.models.filter((m) => m.id.toLowerCase().includes(q));
   });
 
-  const protocolFromEvent = (event: Event): AgentProviderView['protocol'] =>
+  const protocolFromEvent = (event: Event): AgentProviderViewDto['protocol'] =>
     (event.target as HTMLSelectElement | null)?.value === 'responses' ? 'responses' : 'chat-completions';
 
   const form = reactive({
     displayName: '',
     baseUrl: '',
-    protocol: 'chat-completions' as AgentProviderView['protocol'],
+    protocol: 'chat-completions' as AgentProviderViewDto['protocol'],
     credential: '',
     modelId: '',
     contextWindow: 128000,
@@ -179,10 +179,10 @@
 
   // 测试结果缓存
   const testResults = reactive<Record<string, { state: 'loading' | 'success' | 'error'; message: string }>>({});
-  const testKey = (provider: AgentProviderView, modelId: string) =>
+  const testKey = (provider: AgentProviderViewDto, modelId: string) =>
     JSON.stringify([provider.id, provider.version, modelId]);
 
-  const testModel = async (provider: AgentProviderView, modelId: string) => {
+  const testModel = async (provider: AgentProviderViewDto, modelId: string) => {
     const key = testKey(provider, modelId);
     if (testResults[key]?.state === 'loading') return;
     testResults[key] = { state: 'loading', message: t('agent.ui.testing') };
@@ -238,7 +238,7 @@
 
       // 如果尚未保存，先通过 createProvider 建立服务商记录
       if (!targetProviderId) {
-        const payload: AgentProviderCreateInput = {
+        const payload: AgentProviderCreateRequestDto = {
           kind: 'openai-compatible',
           displayName: form.displayName.trim(),
           baseUrl: form.baseUrl.trim(),
@@ -315,7 +315,7 @@
 
     modalTesting.value = true;
     try {
-      const payload: AgentProviderCreateInput = {
+      const payload: AgentProviderCreateRequestDto = {
         kind: 'openai-compatible',
         displayName: form.displayName.trim(),
         baseUrl: form.baseUrl.trim(),
@@ -350,7 +350,7 @@
   };
 
   // 触发更新模型并打开抽屉
-  const triggerDiscover = (provider: AgentProviderView) => {
+  const triggerDiscover = (provider: AgentProviderViewDto) => {
     drawerOpen[provider.id] = true;
     drawerLoading[provider.id] = true;
     emit('discover', provider);
@@ -359,7 +359,7 @@
     }, 1500);
   };
 
-  const toggleDrawer = (provider: AgentProviderView) => {
+  const toggleDrawer = (provider: AgentProviderViewDto) => {
     if (drawerOpen[provider.id]) {
       drawerOpen[provider.id] = false;
     } else {
@@ -368,13 +368,13 @@
   };
 
   // 可添加（未配置）的发现模型列表
-  const availableDiscoveries = (provider: AgentProviderView): AgentDiscoveredProviderModel[] => {
+  const availableDiscoveries = (provider: AgentProviderViewDto): AgentDiscoveredProviderModelDto[] => {
     const configured = new Set(provider.models.map((m) => m.id));
     return (props.discoveries[provider.id] ?? []).filter((m) => !configured.has(m.id));
   };
 
   // 过滤后的可添加列表
-  const filteredAvailable = (provider: AgentProviderView): AgentDiscoveredProviderModel[] => {
+  const filteredAvailable = (provider: AgentProviderViewDto): AgentDiscoveredProviderModelDto[] => {
     const query = (filterQueries[provider.id] || '').trim().toLowerCase();
     const all = availableDiscoveries(provider);
     if (!query) return all;
@@ -384,20 +384,20 @@
   };
 
   // 选中的可添加模型数量
-  const selectedDiscoveredCount = (provider: AgentProviderView): number => {
+  const selectedDiscoveredCount = (provider: AgentProviderViewDto): number => {
     const map = selectedDiscovered[provider.id] || {};
     return filteredAvailable(provider).filter((m) => map[m.id]).length;
   };
 
   // 全选/取消全选可添加模型
-  const isAllDiscoveredSelected = (provider: AgentProviderView): boolean => {
+  const isAllDiscoveredSelected = (provider: AgentProviderViewDto): boolean => {
     const list = filteredAvailable(provider);
     if (!list.length) return false;
     const map = selectedDiscovered[provider.id] || {};
     return list.every((m) => map[m.id]);
   };
 
-  const toggleSelectAllDiscovered = (provider: AgentProviderView) => {
+  const toggleSelectAllDiscovered = (provider: AgentProviderViewDto) => {
     const list = filteredAvailable(provider);
     if (!list.length) return;
     const allSelected = isAllDiscoveredSelected(provider);
@@ -407,15 +407,15 @@
     }
   };
 
-  const toggleDiscoveredItem = (provider: AgentProviderView, modelId: string) => {
+  const toggleDiscoveredItem = (provider: AgentProviderViewDto, modelId: string) => {
     if (!selectedDiscovered[provider.id]) selectedDiscovered[provider.id] = {};
     selectedDiscovered[provider.id][modelId] = !selectedDiscovered[provider.id][modelId];
   };
 
   // 统一更新方法
   const updateModels = async (
-    provider: AgentProviderView,
-    models: AgentProviderView['models'],
+    provider: AgentProviderViewDto,
+    models: AgentProviderViewDto['models'],
     successMsg?: string,
   ): Promise<boolean> => {
     if (props.updateProviderModels) {
@@ -439,11 +439,11 @@
   };
 
   const discoveredModelConfig = (
-    provider: AgentProviderView,
+    provider: AgentProviderViewDto,
     modelId: string,
-    registryFallback?: ModelCapabilityDefaults | null,
+    registryFallback?: AgentModelCapabilityDefaultsDto | null,
     allowIncomplete = false,
-  ): AgentProviderView['models'][number] | null => {
+  ): AgentProviderViewDto['models'][number] | null => {
     const discovered = (props.discoveries[provider.id] ?? []).find((model) => model.id === modelId);
     const registry = discovered?.registryDefaults ?? registryFallback ?? undefined;
     const providerObservation = discovered?.providerCapabilities;
@@ -497,7 +497,7 @@
     };
   };
 
-  const resolveRegistryDefaults = async (modelId: string): Promise<ModelCapabilityDefaults | null> => {
+  const resolveRegistryDefaults = async (modelId: string): Promise<AgentModelCapabilityDefaultsDto | null> => {
     try {
       return (await agentApi.resolveModelRegistry(modelId)).defaults;
     } catch {
@@ -509,7 +509,7 @@
     providerId: string;
     modelId: string;
     mode: 'edit' | 'add';
-    draft?: AgentProviderView['models'][number];
+    draft?: AgentProviderViewDto['models'][number];
   } | null>(null);
   const capabilityEditorProvider = computed(() =>
     capabilityEditor.value
@@ -522,11 +522,11 @@
     return capabilityEditorProvider.value.models.find((model) => model.id === capabilityEditor.value?.modelId) ?? null;
   });
 
-  const openCapabilityEditor = (provider: AgentProviderView, model: AgentProviderView['models'][number]): void => {
+  const openCapabilityEditor = (provider: AgentProviderViewDto, model: AgentProviderViewDto['models'][number]): void => {
     capabilityEditor.value = { providerId: provider.id, modelId: model.id, mode: 'edit' };
   };
 
-  const openCapabilityEditorForAdd = async (provider: AgentProviderView, modelId: string): Promise<void> => {
+  const openCapabilityEditorForAdd = async (provider: AgentProviderViewDto, modelId: string): Promise<void> => {
     const registry = await resolveRegistryDefaults(modelId);
     const draft = discoveredModelConfig(provider, modelId, registry, true);
     if (!draft) return;
@@ -538,7 +538,7 @@
     capabilityEditor.value = null;
   };
 
-  const saveCapabilities = async (model: AgentProviderView['models'][number]): Promise<void> => {
+  const saveCapabilities = async (model: AgentProviderViewDto['models'][number]): Promise<void> => {
     const provider = capabilityEditorProvider.value;
     const editor = capabilityEditor.value;
     if (!provider || !editor) return;
@@ -562,13 +562,13 @@
   };
 
   // 一键添加所有支持模型
-  const addAllDiscovered = async (provider: AgentProviderView): Promise<void> => {
+  const addAllDiscovered = async (provider: AgentProviderViewDto): Promise<void> => {
     const available = availableDiscoveries(provider);
     if (!available.length) return;
     isSavingModels[provider.id] = true;
     try {
       const resolvedModels = available.map((model) => discoveredModelConfig(provider, model.id));
-      const newModels = resolvedModels.filter((model): model is AgentProviderView['models'][number] => model !== null);
+      const newModels = resolvedModels.filter((model): model is AgentProviderViewDto['models'][number] => model !== null);
       if (newModels.length > 0) {
         const noticeAdded = t('agent.settings.providers.saveNoticeAdded', { count: newModels.length });
         const saved = await updateModels(provider, [...provider.models, ...newModels], noticeAdded);
@@ -589,14 +589,14 @@
   };
 
   // 多选添加所选模型
-  const addSelectedDiscovered = async (provider: AgentProviderView): Promise<void> => {
+  const addSelectedDiscovered = async (provider: AgentProviderViewDto): Promise<void> => {
     const map = selectedDiscovered[provider.id] || {};
     const selectedIds = Object.keys(map).filter((id) => map[id]);
     if (!selectedIds.length) return;
     isSavingModels[provider.id] = true;
     try {
       const resolvedModels = selectedIds.map((id) => discoveredModelConfig(provider, id));
-      const newModels = resolvedModels.filter((model): model is AgentProviderView['models'][number] => model !== null);
+      const newModels = resolvedModels.filter((model): model is AgentProviderViewDto['models'][number] => model !== null);
       if (newModels.length > 0) {
         const noticeSelected = t('agent.settings.providers.saveNoticeAdded', { count: newModels.length });
         const saved = await updateModels(provider, [...provider.models, ...newModels], noticeSelected);
@@ -617,7 +617,7 @@
   };
 
   // 单项快捷添加
-  const addSingleDiscovered = async (provider: AgentProviderView, modelId: string): Promise<void> => {
+  const addSingleDiscovered = async (provider: AgentProviderViewDto, modelId: string): Promise<void> => {
     isSavingModels[provider.id] = true;
     try {
       let newModel = discoveredModelConfig(provider, modelId);
@@ -648,7 +648,7 @@
     if (next.length !== props.fallbackModels.length) emit('fallbackModels', next);
   };
 
-  const removeConfiguredModel = async (provider: AgentProviderView, modelId: string): Promise<void> => {
+  const removeConfiguredModel = async (provider: AgentProviderViewDto, modelId: string): Promise<void> => {
     if (provider.models.length <= 1) return;
     isSavingModels[provider.id] = true;
     try {
@@ -666,7 +666,7 @@
   };
 
   // 获取服务商中所有可安全移除的模型（必须保留至少一个核心模型：优先保留系统默认模型，否则保留首个模型）
-  const removableConfiguredModels = (provider: AgentProviderView): AgentProviderView['models'] => {
+  const removableConfiguredModels = (provider: AgentProviderViewDto): AgentProviderViewDto['models'] => {
     if (provider.models.length <= 1) return [];
     const isDefaultProvider = props.defaultProviderId === provider.id;
     const hasDefaultModel = provider.models.some((m) => m.id === props.defaultModelId);
@@ -675,7 +675,7 @@
   };
 
   // 一键移除所有可删除模型（保留默认主力模型或首个基础模型）
-  const removeAllConfigured = async (provider: AgentProviderView): Promise<void> => {
+  const removeAllConfigured = async (provider: AgentProviderViewDto): Promise<void> => {
     const removable = removableConfiguredModels(provider);
     if (!removable.length) return;
     const removeCount = removable.length;
@@ -696,7 +696,7 @@
   };
 
   // 手动输入添加
-  const addManualModel = async (provider: AgentProviderView): Promise<void> => {
+  const addManualModel = async (provider: AgentProviderViewDto): Promise<void> => {
     const id = (manualModelId[provider.id] || '').trim();
     if (!id) return;
     if (provider.models.some((m) => m.id === id)) {
@@ -832,7 +832,7 @@
     }
   };
 
-  const providerIcon = (provider: AgentProviderView): string => {
+  const providerIcon = (provider: AgentProviderViewDto): string => {
     const name = provider.displayName.toLowerCase();
     const url = provider.baseUrl.toLowerCase();
     if (name.includes('openai') || url.includes('openai')) return 'fa-solid fa-bolt text-emerald-500';

@@ -1,20 +1,21 @@
+import type { AgentJsonValueDto } from '@nexus-terminal/protocol/agent-common';
 import type {
   AgentApprovalBatch,
-  AgentApprovalView,
-  AgentAppIntentArtifactView,
-  AgentAppIntentReceipt,
-  AgentDefinitionView,
-  AgentLedgerPage,
-  AgentProviderView,
-  AgentReasoningEffort,
-  AgentRunPage,
-  AgentRunSnapshot,
-  AgentRunView,
-  AgentSubagentMessagePage,
-  AgentSubagentPage,
-  AgentSubagentView,
-  AgentThreadPage,
-  AgentThreadView,
+  AgentApprovalViewDto,
+  AgentAppIntentArtifactDto,
+  AgentAppIntentReceiptDto,
+  AgentDefinitionViewDto,
+  AgentLedgerPageDto,
+  AgentProviderViewDto,
+  AgentReasoningEffortDto,
+  AgentRunPageDto,
+  AgentRunSnapshotDto,
+  AgentRunViewDto,
+  AgentSubagentMessagePageDto,
+  AgentSubagentPageDto,
+  AgentSubagentViewDto,
+  AgentThreadPageDto,
+  AgentThreadViewDto,
 } from '../api/agent-api';
 import type { AgentStreamEvent } from '../api/agent-events';
 
@@ -78,7 +79,7 @@ export interface PluginFrontendAppInfo {
 
 export interface PluginFrontendStorageRecord {
   key: string;
-  value: unknown;
+  value: AgentJsonValueDto;
   version: number;
   updatedAt: number;
 }
@@ -98,63 +99,63 @@ export interface PluginFrontendSdkV1 {
   };
   storage: {
     get(key: string): Promise<PluginFrontendStorageRecord | null>;
-    put(key: string, value: unknown, expectedVersion: number | null): Promise<PluginFrontendStorageRecord>;
+    put(key: string, value: AgentJsonValueDto, expectedVersion: number | null): Promise<PluginFrontendStorageRecord>;
     delete(key: string, expectedVersion: number): Promise<boolean>;
   };
   intents: {
     create(input: {
       receiverAppId: string;
       intentId: string;
-      input: unknown;
+      input: AgentJsonValueDto;
       artifactRefs?: Array<{ appId: string; id: string }>;
       confirmed: true;
-    }): Promise<AgentAppIntentReceipt>;
-    listReceived(limit?: number): Promise<AgentAppIntentReceipt[]>;
+    }): Promise<AgentAppIntentReceiptDto>;
+    listReceived(limit?: number): Promise<AgentAppIntentReceiptDto[]>;
     revoke(receiptId: string): Promise<void>;
     artifacts: {
-      get(receiptId: string, artifactId: string): Promise<AgentAppIntentArtifactView>;
+      get(receiptId: string, artifactId: string): Promise<AgentAppIntentArtifactDto>;
       readRange(receiptId: string, artifactId: string, start: number, endInclusive: number): Promise<ArrayBuffer>;
     };
   };
   agent: {
     definitions: {
-      list(): Promise<AgentDefinitionView[]>;
+      list(): Promise<AgentDefinitionViewDto[]>;
     };
     providers: {
-      list(): Promise<AgentProviderView[]>;
+      list(): Promise<AgentProviderViewDto[]>;
     };
     threads: {
-      list(before?: string): Promise<AgentThreadPage>;
-      create(title?: string): Promise<AgentThreadView>;
-      rename(threadId: string, title: string, expectedVersion: number): Promise<AgentThreadView>;
-      entries(threadId: string, before?: string): Promise<AgentLedgerPage>;
+      list(before?: string): Promise<AgentThreadPageDto>;
+      create(title?: string): Promise<AgentThreadViewDto>;
+      rename(threadId: string, title: string, expectedVersion: number): Promise<AgentThreadViewDto>;
+      entries(threadId: string, before?: string): Promise<AgentLedgerPageDto>;
     };
     runs: {
-      list(threadId?: string): Promise<AgentRunPage>;
-      get(runId: string): Promise<AgentRunSnapshot>;
+      list(threadId?: string): Promise<AgentRunPageDto>;
+      get(runId: string): Promise<AgentRunSnapshotDto>;
       create(input: {
         threadId: string;
         text: string;
         artifactRefs?: string[];
         agentDefinitionId: string;
         model: { providerId: string; modelId: string; configurationVersion: number };
-        reasoningEffort?: AgentReasoningEffort;
+        reasoningEffort?: AgentReasoningEffortDto;
         connectionIds?: number[];
         initialGoal?: string;
-      }): Promise<AgentRunView>;
+      }): Promise<AgentRunViewDto>;
       appendInput(runId: string, text: string, artifactRefs?: string[]): Promise<void>;
-      cancel(runId: string): Promise<AgentRunView>;
+      cancel(runId: string): Promise<AgentRunViewDto>;
       subscribe(runId: string, cursor?: number): Promise<PluginFrontendRunSubscription>;
       unsubscribe(subscriptionId: string): Promise<void>;
     };
     subagents: {
-      list(runId: string, before?: string): Promise<AgentSubagentPage>;
-      messages(runId: string, delegationId: string, before?: string): Promise<AgentSubagentMessagePage>;
-      cancel(runId: string, delegationId: string): Promise<AgentSubagentView>;
+      list(runId: string, before?: string): Promise<AgentSubagentPageDto>;
+      messages(runId: string, delegationId: string, before?: string): Promise<AgentSubagentMessagePageDto>;
+      cancel(runId: string, delegationId: string): Promise<AgentSubagentViewDto>;
     };
     approvals: {
       list(runId: string): Promise<AgentApprovalBatch>;
-      resolve(approvalId: string, runId: string, decision: 'approved' | 'denied'): Promise<AgentApprovalView>;
+      resolve(approvalId: string, runId: string, decision: 'approved' | 'denied'): Promise<AgentApprovalViewDto>;
     };
   };
 }

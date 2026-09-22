@@ -1,10 +1,10 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
-  import type { AgentSettingsView, ArtifactStorageSummary } from '../api/agent-api';
+  import type { AgentSettingsViewDto, AgentArtifactStorageSummaryDto } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
   import { formatQuantity, type QuantityType } from './quantity-format';
 
-  const props = defineProps<{ settings: AgentSettingsView; storage: ArtifactStorageSummary; busy: boolean }>();
+  const props = defineProps<{ settings: AgentSettingsViewDto; storage: AgentArtifactStorageSummaryDto; busy: boolean }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
   const draft = ref<Record<string, number | null>>({});
 

@@ -6,59 +6,59 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentAppGrantView,
-    type AgentAppSummary,
-    type AgentCapabilityDefinition,
-    type AgentCapabilityGrantInput,
-    type AgentCapabilityScope,
-    type AgentTargetGrantSelection,
-    type AgentTargetKind,
+    type AgentAppGrantViewDto,
+    type AgentAppSummaryDto,
+    type AgentCapabilityDefinitionDto,
+    type AgentCapabilityGrantInputDto,
+    type AgentCapabilityScopeDto,
+    type AgentTargetGrantSelectionDto,
+    type AgentTargetKindDto,
   } from '../api/agent-api';
 
-  const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
+  const props = defineProps<{ apps: AgentAppSummaryDto[]; busy: boolean }>();
   const emit = defineEmits<{
-    toggle: [app: AgentAppSummary, enabled: boolean];
-    grantsUpdated: [app: AgentAppSummary];
+    toggle: [app: AgentAppSummaryDto, enabled: boolean];
+    grantsUpdated: [app: AgentAppSummaryDto];
     refresh: [];
   }>();
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.apps');
 
-  const grantViews = ref<Record<string, AgentAppGrantView>>({});
-  const drafts = ref<Record<string, AgentCapabilityGrantInput[]>>({});
+  const grantViews = ref<Record<string, AgentAppGrantViewDto>>({});
+  const drafts = ref<Record<string, AgentCapabilityGrantInputDto[]>>({});
   const grantBusy = ref<Record<string, boolean>>({});
   const grantErrors = ref<Record<string, string>>({});
   const expandedGrants = ref<Record<string, boolean>>({});
   const grantLoadGeneration = new Map<string, number>();
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
-  type CapabilityId = AgentCapabilityGrantInput['capability'];
+  type CapabilityId = AgentCapabilityGrantInputDto['capability'];
 
-  const cloneSelection = (selection: AgentTargetGrantSelection): AgentTargetGrantSelection =>
+  const cloneSelection = (selection: AgentTargetGrantSelectionDto): AgentTargetGrantSelectionDto =>
     selection.mode === 'all' ? { mode: 'all' } : { mode: 'ids', ids: [...selection.ids] };
 
-  const cloneScope = (scope: AgentCapabilityScope): AgentCapabilityScope => {
+  const cloneScope = (scope: AgentCapabilityScopeDto): AgentCapabilityScopeDto => {
     if (scope.kind === 'global') return { kind: 'global' };
     return {
       kind: 'targets',
       targets: Object.fromEntries(
         Object.entries(scope.targets).map(([target, selection]) => [
           target,
-          cloneSelection(selection as AgentTargetGrantSelection),
+          cloneSelection(selection as AgentTargetGrantSelectionDto),
         ]),
-      ) as Partial<Record<AgentTargetKind, AgentTargetGrantSelection>>,
+      ) as Partial<Record<AgentTargetKindDto, AgentTargetGrantSelectionDto>>,
     };
   };
 
-  const cloneGrant = (grant: AgentCapabilityGrantInput): AgentCapabilityGrantInput => ({
+  const cloneGrant = (grant: AgentCapabilityGrantInputDto): AgentCapabilityGrantInputDto => ({
     capability: grant.capability,
     scope: cloneScope(grant.scope),
   });
 
-  const definitionFor = (appId: string, capability: CapabilityId): AgentCapabilityDefinition | undefined =>
+  const definitionFor = (appId: string, capability: CapabilityId): AgentCapabilityDefinitionDto | undefined =>
     grantViews.value[appId]?.capabilityDefinitions.find((definition) => definition.id === capability);
 
-  const grantFor = (appId: string, capability: CapabilityId): AgentCapabilityGrantInput | undefined =>
+  const grantFor = (appId: string, capability: CapabilityId): AgentCapabilityGrantInputDto | undefined =>
     (drafts.value[appId] ?? []).find((grant) => grant.capability === capability);
 
   const loadGrant = async (appId: string): Promise<void> => {
@@ -93,7 +93,7 @@
 
   const checked = (appId: string, capability: CapabilityId): boolean => grantFor(appId, capability) !== undefined;
 
-  const canonicalGrants = (grants: readonly AgentCapabilityGrantInput[]): string =>
+  const canonicalGrants = (grants: readonly AgentCapabilityGrantInputDto[]): string =>
     JSON.stringify(
       [...grants]
         .map((grant) => cloneGrant(grant))
@@ -125,7 +125,7 @@
   const updateGrantScope = (
     appId: string,
     capability: CapabilityId,
-    update: (scope: AgentCapabilityScope) => AgentCapabilityScope,
+    update: (scope: AgentCapabilityScopeDto) => AgentCapabilityScopeDto,
   ): void => {
     drafts.value = {
       ...drafts.value,
@@ -138,18 +138,18 @@
   const targetScopeSelection = (
     appId: string,
     capability: CapabilityId,
-    target: AgentTargetKind,
-  ): AgentTargetGrantSelection | undefined => {
+    target: AgentTargetKindDto,
+  ): AgentTargetGrantSelectionDto | undefined => {
     const scope = grantFor(appId, capability)?.scope;
     return scope?.kind === 'targets' ? scope.targets[target] : undefined;
   };
 
-  const targetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKind): boolean =>
+  const targetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKindDto): boolean =>
     targetScopeSelection(appId, capability, target) !== undefined;
 
-  const targetLabel = (target: AgentTargetKind): string => (target === 'workspace' ? 'Workspace' : 'SSH');
+  const targetLabel = (target: AgentTargetKindDto): string => (target === 'workspace' ? 'Workspace' : 'SSH');
 
-  const setTargetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKind, enabled: boolean): void => {
+  const setTargetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKindDto, enabled: boolean): void => {
     updateGrantScope(appId, capability, (scope) => {
       if (scope.kind !== 'targets') return scope;
       const targets = { ...scope.targets };
@@ -159,7 +159,7 @@
     });
   };
 
-  const onTargetEnabledChange = (appId: string, capability: CapabilityId, target: AgentTargetKind, event: Event): void => {
+  const onTargetEnabledChange = (appId: string, capability: CapabilityId, target: AgentTargetKindDto, event: Event): void => {
     const input = event.target;
     if (input instanceof HTMLInputElement) setTargetEnabled(appId, capability, target, input.checked);
   };
@@ -167,8 +167,8 @@
   const setTargetMode = (
     appId: string,
     capability: CapabilityId,
-    target: AgentTargetKind,
-    mode: AgentTargetGrantSelection['mode'],
+    target: AgentTargetKindDto,
+    mode: AgentTargetGrantSelectionDto['mode'],
   ): void => {
     updateGrantScope(appId, capability, (scope) => {
       if (scope.kind !== 'targets') return scope;
@@ -184,19 +184,19 @@
     });
   };
 
-  const onTargetModeChange = (appId: string, capability: CapabilityId, target: AgentTargetKind, event: Event): void => {
+  const onTargetModeChange = (appId: string, capability: CapabilityId, target: AgentTargetKindDto, event: Event): void => {
     const input = event.target;
     if (input instanceof HTMLSelectElement && (input.value === 'all' || input.value === 'ids')) {
       setTargetMode(appId, capability, target, input.value);
     }
   };
 
-  const targetIdsValue = (appId: string, capability: CapabilityId, target: AgentTargetKind): string => {
+  const targetIdsValue = (appId: string, capability: CapabilityId, target: AgentTargetKindDto): string => {
     const selection = targetScopeSelection(appId, capability, target);
     return selection?.mode === 'ids' ? selection.ids.join(', ') : '';
   };
 
-  const onTargetIdsInput = (appId: string, capability: CapabilityId, target: AgentTargetKind, event: Event): void => {
+  const onTargetIdsInput = (appId: string, capability: CapabilityId, target: AgentTargetKindDto, event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
     const ids = [
@@ -277,11 +277,11 @@
 
   // 卸载应用状态与模态弹窗
   const uninstallModalOpen = ref(false);
-  const targetUninstallApp = ref<AgentAppSummary | null>(null);
+  const targetUninstallApp = ref<AgentAppSummaryDto | null>(null);
   const uninstallBusy = ref(false);
   const deleteDataOnUninstall = ref(false);
 
-  const requestUninstall = (app: AgentAppSummary) => {
+  const requestUninstall = (app: AgentAppSummaryDto) => {
     if (app.enabled || app.surface === 'builtin') return;
     targetUninstallApp.value = app;
     deleteDataOnUninstall.value = false;

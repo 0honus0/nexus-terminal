@@ -5,31 +5,31 @@
   import QuantityInput from './QuantityInput.vue';
   import {
     agentApi,
-    type AgentAppSummary,
-    type AgentProviderView,
-    type AgentSettingsView,
-    type AgentSubagentProfile,
-    type AgentSubagentProfileTemplate,
-    type AgentSubagentSettingsView,
+    type AgentAppSummaryDto,
+    type AgentProviderViewDto,
+    type AgentSettingsViewDto,
+    type AgentSubagentProfileDto,
+    type AgentSubagentProfileTemplateDto,
+    type AgentSubagentSettingsViewDto,
   } from '../api/agent-api';
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.subagents');
 
   const props = defineProps<{
-    settings: AgentSettingsView;
-    apps: AgentAppSummary[];
-    providers: AgentProviderView[];
+    settings: AgentSettingsViewDto;
+    apps: AgentAppSummaryDto[];
+    providers: AgentProviderViewDto[];
     busy: boolean;
   }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
   const draft = ref<Record<string, number | null>>({});
   const selectedAppId = ref('');
-  const profileSettings = ref<AgentSubagentSettingsView | null>(null);
+  const profileSettings = ref<AgentSubagentSettingsViewDto | null>(null);
   const profileBusy = ref(false);
-  const selectedTemplateId = ref<AgentSubagentProfileTemplate['id']>('explore');
+  const selectedTemplateId = ref<AgentSubagentProfileTemplateDto['id']>('explore');
 
-  type CapabilityId = AgentSubagentProfile['capabilities'][number];
+  type CapabilityId = AgentSubagentProfileDto['capabilities'][number];
   const capabilityOptions = ref<CapabilityId[]>([]);
 
   const modelOptions = computed(() =>
@@ -44,7 +44,7 @@
       ),
   );
 
-  const modelKey = (model: AgentSubagentProfile['defaultModel']): string =>
+  const modelKey = (model: AgentSubagentProfileDto['defaultModel']): string =>
     model ? `${model.providerId}\u0000${model.modelId}\u0000${model.configurationVersion}` : '';
   const preferredModel = computed(() => {
     const requested = props.settings.requestedSettings.model;
@@ -57,8 +57,8 @@
     );
   });
 
-  const cloneProfiles = (profiles: AgentSubagentProfile[]): AgentSubagentProfile[] =>
-    JSON.parse(JSON.stringify(profiles)) as AgentSubagentProfile[];
+  const cloneProfiles = (profiles: AgentSubagentProfileDto[]): AgentSubagentProfileDto[] =>
+    JSON.parse(JSON.stringify(profiles)) as AgentSubagentProfileDto[];
 
   const loadProfiles = async (): Promise<void> => {
     if (!selectedAppId.value) {
@@ -133,7 +133,7 @@
     profileSettings.value?.policy.profiles.splice(index, 1);
   };
 
-  const setDefaultModel = (profile: AgentSubagentProfile, key: string): void => {
+  const setDefaultModel = (profile: AgentSubagentProfileDto, key: string): void => {
     const selected = modelOptions.value.find((candidate) => candidate.key === key);
     if (!selected) return;
     profile.defaultModel = { ...selected.ref };
@@ -141,7 +141,7 @@
       profile.allowedModels.push({ ...selected.ref });
   };
 
-  const toggleAllowedModel = (profile: AgentSubagentProfile, key: string, checked: boolean): void => {
+  const toggleAllowedModel = (profile: AgentSubagentProfileDto, key: string, checked: boolean): void => {
     const selected = modelOptions.value.find((candidate) => candidate.key === key);
     if (!selected) return;
     if (checked) {
@@ -154,7 +154,7 @@
     profile.allowedModels = profile.allowedModels.filter((model) => modelKey(model) !== key);
   };
 
-  const toggleCapability = (profile: AgentSubagentProfile, capability: CapabilityId, checked: boolean): void => {
+  const toggleCapability = (profile: AgentSubagentProfileDto, capability: CapabilityId, checked: boolean): void => {
     if (checked) {
       if (!profile.capabilities.includes(capability)) profile.capabilities.push(capability);
     } else {

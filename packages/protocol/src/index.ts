@@ -25,3 +25,4 @@ export type * from './agent-host.js';
 export type * from './agent-runs.js';
 export type * from './agent-collaboration.js';
 export type * from './agent-memories.js';
+export type * from './agent-plugins.js';

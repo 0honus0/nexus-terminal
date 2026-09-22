@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
-  import type { AgentHardLimits, AgentSettingsView, HardLimitPreview } from '../api/agent-api';
+  import type { AgentHardLimitsDto, AgentSettingsViewDto, AgentHardLimitPreviewDto } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
   import {
     areQuantitiesEquivalent,
@@ -11,17 +11,17 @@
   } from './quantity-format';
 
   const props = defineProps<{
-    settings: AgentSettingsView;
-    preview: HardLimitPreview | null;
+    settings: AgentSettingsViewDto;
+    preview: AgentHardLimitPreviewDto | null;
     busy: boolean;
   }>();
   const emit = defineEmits<{
-    preview: [proposed: Partial<AgentHardLimits>];
+    preview: [proposed: Partial<AgentHardLimitsDto>];
     confirm: [confirmationId: string, expectedVersion: number];
     dismiss: [];
   }>();
 
-  type HardLimitKey = keyof AgentHardLimits;
+  type HardLimitKey = keyof AgentHardLimitsDto;
 
   const getFieldType = (key: HardLimitKey): QuantityType => {
     if (
@@ -98,9 +98,9 @@
     ),
   );
 
-  const proposedChanges = computed<Partial<AgentHardLimits>>(() => {
+  const proposedChanges = computed<Partial<AgentHardLimitsDto>>(() => {
     if (hasInvalidDraft.value) return {};
-    const result: Partial<AgentHardLimits> = {};
+    const result: Partial<AgentHardLimitsDto> = {};
     for (const group of fieldGroups) {
       for (const key of group.keys) {
         const current = props.settings.hardLimits[key];

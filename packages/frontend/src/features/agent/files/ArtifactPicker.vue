@@ -2,16 +2,16 @@
   import { computed, ref } from 'vue';
   import AgentConfigPopover from './AgentConfigPopover.vue';
   import { RecycleScroller } from 'vue-virtual-scroller';
-  import { agentApi, formatAgentApiError, type AgentArtifactRef } from '../api/agent-api';
+  import { agentApi, formatAgentApiError, type AgentArtifactRefDto } from '../api/agent-api';
 
   const props = defineProps<{
     appId: string;
-    modelValue: AgentArtifactRef[];
+    modelValue: AgentArtifactRefDto[];
     disabled?: boolean;
   }>();
-  const emit = defineEmits<{ 'update:modelValue': [value: AgentArtifactRef[]] }>();
+  const emit = defineEmits<{ 'update:modelValue': [value: AgentArtifactRefDto[]] }>();
 
-  const items = ref<AgentArtifactRef[]>([]);
+  const items = ref<AgentArtifactRefDto[]>([]);
   const nextCursor = ref<string | null>(null);
   const query = ref('');
   const busy = ref(false);
@@ -60,7 +60,7 @@
     void load();
   };
 
-  const toggle = (artifact: AgentArtifactRef): void => {
+  const toggle = (artifact: AgentArtifactRefDto): void => {
     if (props.disabled) return;
     const existing = props.modelValue.find((item) => item.id === artifact.id);
     if (existing) {
@@ -86,7 +86,7 @@
     error.value = '';
     try {
       const available = Math.max(0, 10 - props.modelValue.length);
-      const uploaded: AgentArtifactRef[] = [];
+      const uploaded: AgentArtifactRefDto[] = [];
       for (const file of files.slice(0, available)) uploaded.push(await agentApi.uploadArtifact(props.appId, file));
       if (uploaded.length) {
         items.value = [...uploaded, ...items.value.filter((item) => !uploaded.some((next) => next.id === item.id))];

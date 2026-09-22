@@ -1,4 +1,5 @@
-import { agentApi, toAgentApiError, type PluginFrontendDescriptor } from '../api/agent-api';
+import type { AgentJsonValueDto } from '@nexus-terminal/protocol/agent-common';
+import { agentApi, toAgentApiError, type AgentPluginFrontendDescriptorDto } from '../api/agent-api';
 import { PluginAgentSdkDispatcher } from './agent-dispatcher';
 import {
   PLUGIN_FRONTEND_AGENT_RPC_METHODS,
@@ -41,7 +42,7 @@ interface PluginRequestMessage {
   seq: number;
   id: string;
   method: PluginFrontendRpcMethod;
-  params: unknown;
+  params: AgentJsonValueDto;
 }
 
 type PluginPortMessage = PluginAckMessage | PluginRequestMessage;
@@ -94,7 +95,7 @@ export class PluginFrontendHostBridge {
   constructor(
     private readonly iframe: HTMLIFrameElement,
     private readonly appId: string,
-    private readonly descriptor: PluginFrontendDescriptor,
+    private readonly descriptor: AgentPluginFrontendDescriptorDto,
   ) {
     this.agent = new PluginAgentSdkDispatcher(appId, (event) => this.postRunEvent(event));
   }
@@ -267,7 +268,7 @@ export class PluginFrontendHostBridge {
 
   private async dispatchBinary(
     method: PluginFrontendBinaryRpcMethod,
-    params: unknown,
+    params: AgentJsonValueDto,
     signal: AbortSignal,
   ): Promise<{ result: ArrayBuffer; transfer: Transferable[] }> {
     if (method !== 'intents.artifacts.readRange' || !isRecord(params)) {

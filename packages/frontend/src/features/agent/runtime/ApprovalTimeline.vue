@@ -1,10 +1,10 @@
 <script setup lang="ts">
-  import type { AgentApprovalView, AgentServerClockAnchor } from '../api/agent-api';
+  import type { AgentApprovalViewDto, AgentServerClockAnchor } from '../api/agent-api';
   import ApprovalCard from './ApprovalCard.vue';
 
-  defineProps<{ approvals: AgentApprovalView[]; clock: AgentServerClockAnchor | null; busy?: boolean }>();
+  defineProps<{ approvals: AgentApprovalViewDto[]; clock: AgentServerClockAnchor | null; busy?: boolean }>();
   const emit = defineEmits<{
-    resolve: [approval: AgentApprovalView, decision: 'approved' | 'denied', feedback?: string];
+    resolve: [approval: AgentApprovalViewDto, decision: 'approved' | 'denied', feedback?: string];
   }>();
 </script>
 

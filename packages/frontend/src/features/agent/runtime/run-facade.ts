@@ -1,9 +1,9 @@
 import {
   agentApi,
-  type AgentApprovalView,
-  type AgentRunReconciliationView,
-  type AgentRunSnapshot,
-  type AgentRunView,
+  type AgentApprovalViewDto,
+  type AgentRunReconciliationViewDto,
+  type AgentRunSnapshotDto,
+  type AgentRunViewDto,
 } from '../api/agent-api';
 import { agentEvents, type AgentStreamEvent } from '../api/agent-events';
 import { createAgentRunStore } from './run-store';
@@ -23,9 +23,9 @@ export const createAgentRunFacade = (appId: string) => {
   let subscriptionAbort: AbortController | null = null;
   let subscriptionGeneration = 0;
 
-  const currentRun = (run: AgentRunView): AgentRunView => runStore.latest(run.id) ?? run;
+  const currentRun = (run: AgentRunViewDto): AgentRunViewDto => runStore.latest(run.id) ?? run;
 
-  const refreshSnapshot = (runId: string, minimumEventCursor = 0): Promise<AgentRunSnapshot> => {
+  const refreshSnapshot = (runId: string, minimumEventCursor = 0): Promise<AgentRunSnapshotDto> => {
     const previous = refreshTails.get(runId) ?? Promise.resolve();
     const task = previous
       .catch(() => undefined)
@@ -68,7 +68,7 @@ export const createAgentRunFacade = (appId: string) => {
     started = true;
   };
 
-  const selectRun = (run: AgentRunView | null, handlers?: AgentRunSubscriptionHandlers): void => {
+  const selectRun = (run: AgentRunViewDto | null, handlers?: AgentRunSubscriptionHandlers): void => {
     stopSubscription();
     if (!run) return;
     if (!started || disposed) throw new Error('AGENT_RUN_FACADE_NOT_STARTED');
@@ -121,7 +121,7 @@ export const createAgentRunFacade = (appId: string) => {
     },
     getRun: (runId: string, minimumEventCursor = 0) => refreshSnapshot(runId, minimumEventCursor),
     getReconciliation: (runId: string) => agentApi.runReconciliation(appId, runId),
-    resolveReconciliation: async (run: AgentRunView, reconciliation: AgentRunReconciliationView, note: string) =>
+    resolveReconciliation: async (run: AgentRunViewDto, reconciliation: AgentRunReconciliationViewDto, note: string) =>
       runStore.accept(await agentApi.resolveRunReconciliation(appId, currentRun(run), reconciliation, note)),
     listCheckpoints: (runId: string) => agentApi.checkpoints(appId, runId),
     listApprovals: (runId: string) => agentApi.approvals(appId, runId),
@@ -130,29 +130,29 @@ export const createAgentRunFacade = (appId: string) => {
       agentApi.subagentMessages(appId, runId, delegationId, before),
     cancelSubagent: (runId: string, delegation: Parameters<typeof agentApi.cancelSubagent>[2]) =>
       agentApi.cancelSubagent(appId, runId, delegation),
-    resolveApproval: (approval: AgentApprovalView, decision: 'approved' | 'denied', feedback?: string) =>
+    resolveApproval: (approval: AgentApprovalViewDto, decision: 'approved' | 'denied', feedback?: string) =>
       agentApi.resolveApproval(appId, approval, decision, feedback),
     createRun: async (input: Parameters<typeof agentApi.createRun>[1]) =>
       runStore.accept(await agentApi.createRun(appId, input)),
-    appendInput: (run: AgentRunView, text: string, artifactRefs: string[] = []) =>
+    appendInput: (run: AgentRunViewDto, text: string, artifactRefs: string[] = []) =>
       agentApi.appendRunInput(appId, currentRun(run), text, artifactRefs),
-    interrupt: (run: AgentRunView, text: string) => agentApi.interruptRun(appId, currentRun(run), text),
-    setGoal: async (run: AgentRunView, text: string) =>
+    interrupt: (run: AgentRunViewDto, text: string) => agentApi.interruptRun(appId, currentRun(run), text),
+    setGoal: async (run: AgentRunViewDto, text: string) =>
       runStore.accept(await agentApi.setRunGoal(appId, currentRun(run), text)),
     pendingInputs: (runId: string) => agentApi.pendingRunInputs(appId, runId),
     mutatePendingInput: async (
-      run: AgentRunView,
+      run: AgentRunViewDto,
       action: 'remove' | 'move',
       inputId: string,
       beforeInputId: string | null,
     ) => runStore.accept(await agentApi.mutatePendingRunInput(appId, currentRun(run), action, inputId, beforeInputId)),
-    increaseBudget: async (run: AgentRunView, increase: Parameters<typeof agentApi.increaseRunBudget>[2]) =>
+    increaseBudget: async (run: AgentRunViewDto, increase: Parameters<typeof agentApi.increaseRunBudget>[2]) =>
       runStore.accept(await agentApi.increaseRunBudget(appId, currentRun(run), increase)),
-    saveCheckpoint: (run: AgentRunView) => agentApi.saveCheckpoint(appId, currentRun(run)),
-    resumeRun: async (run: AgentRunView, checkpointId: string) =>
+    saveCheckpoint: (run: AgentRunViewDto) => agentApi.saveCheckpoint(appId, currentRun(run)),
+    resumeRun: async (run: AgentRunViewDto, checkpointId: string) =>
       runStore.accept(await agentApi.resumeRun(appId, currentRun(run), checkpointId)),
-    cancelRun: async (run: AgentRunView) => runStore.accept(await agentApi.cancelRun(appId, currentRun(run))),
-    deleteRun: (run: AgentRunView) => agentApi.deleteRun(appId, currentRun(run)),
+    cancelRun: async (run: AgentRunViewDto) => runStore.accept(await agentApi.cancelRun(appId, currentRun(run))),
+    deleteRun: (run: AgentRunViewDto) => agentApi.deleteRun(appId, currentRun(run)),
   };
 };
 

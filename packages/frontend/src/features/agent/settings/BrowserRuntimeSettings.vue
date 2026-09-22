@@ -1,12 +1,12 @@
 <script setup lang="ts">
   import { ref, watch } from 'vue';
-  import type { AgentSettingsView } from '../api/agent-api';
+  import type { AgentSettingsViewDto } from '../api/agent-api';
 
-  type BrowserTarget = AgentSettingsView['requestedSettings']['browser']['targets'][number];
+  type BrowserTarget = AgentSettingsViewDto['requestedSettings']['browser']['targets'][number];
   type BrowserEndpoint = BrowserTarget['endpoints'][number];
 
-  const props = defineProps<{ settings: AgentSettingsView; busy: boolean }>();
-  const emit = defineEmits<{ save: [patch: AgentSettingsView['requestedSettings']['browser']] }>();
+  const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
+  const emit = defineEmits<{ save: [patch: AgentSettingsViewDto['requestedSettings']['browser']] }>();
 
   const targets = ref<BrowserTarget[]>([]);
 

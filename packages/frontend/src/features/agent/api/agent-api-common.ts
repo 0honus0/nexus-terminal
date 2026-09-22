@@ -1,16 +1,16 @@
 import type { AgentCsrfResponseDto } from '@nexus-terminal/protocol/agent-common';
-import type { AgentEnvelope } from './agent-api.types';
+import type { AgentEnvelopeDto } from './agent-api.types';
 import { agentHttpClient as httpClient } from './agent-http-client';
 
 let csrfToken: string | null = null;
 
 export { httpClient };
 
-export const unwrap = <T>(envelope: AgentEnvelope<T>): T => envelope.data;
+export const unwrap = <T>(envelope: AgentEnvelopeDto<T>): T => envelope.data;
 
 const csrf = async (): Promise<string> => {
   if (csrfToken) return csrfToken;
-  const response = await httpClient.get<AgentEnvelope<AgentCsrfResponseDto>>('/agent/security/csrf');
+  const response = await httpClient.get<AgentEnvelopeDto<AgentCsrfResponseDto>>('/agent/security/csrf');
   csrfToken = response.data.data.token;
   return csrfToken;
 };

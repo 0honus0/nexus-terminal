@@ -4,17 +4,17 @@
   import { RecycleScroller } from 'vue-virtual-scroller';
   import { BaseListboxSelect, type BaseListboxOption } from '@/foundation/ui';
   import type {
-    AgentAppSummary,
-    AgentArtifactRef,
-    ArtifactCleanupPreview,
-    ArtifactStorageSummary,
+    AgentAppSummaryDto,
+    AgentArtifactRefDto,
+    AgentArtifactCleanupPreviewDto,
+    AgentArtifactStorageSummaryDto,
   } from '../api/agent-api';
   import { agentApi, formatAgentApiError, toAgentApiError } from '../api/agent-api';
 
   type ArtifactFileKind = 'image' | 'document' | 'code' | 'archive' | 'media' | 'other';
   type ArtifactFileKindFilter = 'all' | ArtifactFileKind;
 
-  const props = defineProps<{ apps: AgentAppSummary[] }>();
+  const props = defineProps<{ apps: AgentAppSummaryDto[] }>();
   const { t } = useI18n();
 
   const appOptions = computed<BaseListboxOption[]>(() => [
@@ -67,11 +67,11 @@
     },
   };
 
-  const items = ref<AgentArtifactRef[]>([]);
+  const items = ref<AgentArtifactRefDto[]>([]);
   const nextCursor = ref<string | null>(null);
-  const storage = ref<ArtifactStorageSummary | null>(null);
-  const cleanupPreview = ref<ArtifactCleanupPreview | null>(null);
-  const deleteTarget = ref<AgentArtifactRef | null>(null);
+  const storage = ref<AgentArtifactStorageSummaryDto | null>(null);
+  const cleanupPreview = ref<AgentArtifactCleanupPreviewDto | null>(null);
+  const deleteTarget = ref<AgentArtifactRefDto | null>(null);
   const query = ref('');
   const appId = ref('');
   const retained = ref<'all' | 'retained' | 'unretained'>('all');
@@ -149,7 +149,7 @@
     void load();
   };
 
-  const toggleRetain = async (artifact: AgentArtifactRef): Promise<void> => {
+  const toggleRetain = async (artifact: AgentArtifactRefDto): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
     error.value = '';
@@ -164,7 +164,7 @@
     }
   };
 
-  const requestDelete = (artifact: AgentArtifactRef): void => {
+  const requestDelete = (artifact: AgentArtifactRefDto): void => {
     deleteTarget.value = artifact;
     error.value = '';
     deleteNotice.value = '';
@@ -228,7 +228,7 @@
     }
   };
 
-  const downloadUrl = (artifact: AgentArtifactRef): string =>
+  const downloadUrl = (artifact: AgentArtifactRefDto): string =>
     `/api/v1/apps/${encodeURIComponent(artifact.appId)}/artifacts/${encodeURIComponent(artifact.id)}/content`;
 
   const extensionOf = (name: string): string => {
@@ -241,7 +241,7 @@
       .toUpperCase();
   };
 
-  const kindForArtifact = (artifact: AgentArtifactRef): ArtifactFileKind => {
+  const kindForArtifact = (artifact: AgentArtifactRefDto): ArtifactFileKind => {
     const mediaType = artifact.mediaType.toLowerCase();
     const extension = extensionOf(artifact.originalName).toLowerCase();
     if (mediaType.startsWith('image/')) return 'image';
@@ -343,11 +343,11 @@
     return 'fa-file';
   };
 
-  const appName = (artifact: AgentArtifactRef): string => appNames.value.get(artifact.appId) ?? artifact.appId;
+  const appName = (artifact: AgentArtifactRefDto): string => appNames.value.get(artifact.appId) ?? artifact.appId;
 
   const formatDate = (value: number): string => new Date(value * 1000).toLocaleDateString();
 
-  const statusTone = (status: AgentArtifactRef['status']): string => {
+  const statusTone = (status: AgentArtifactRefDto['status']): string => {
     if (status === 'ready') return 'bg-success/10 text-success';
     if (status === 'staging') return 'bg-warning/10 text-warning';
     if (status === 'unavailable') return 'bg-error/10 text-error';

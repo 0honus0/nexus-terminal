@@ -2,7 +2,7 @@
   import { onBeforeUnmount, ref, watch } from 'vue';
   import { logger } from '@/client/logging/logger';
   import { useAuthSession } from '@/features/auth/public';
-  import { agentApi, resetAgentCsrf, type HostSummaryView } from '../api/agent-api';
+  import { agentApi, resetAgentCsrf, type AgentHostSummaryDto } from '../api/agent-api';
   import { agentEvents } from '../api/agent-events';
   import AgentHubWindow from './AgentHubWindow.vue';
   import AgentLauncher from './AgentLauncher.vue';
@@ -11,7 +11,7 @@
   import { agentWindowManager } from './window-manager';
 
   const auth = useAuthSession();
-  const summary = ref<HostSummaryView | null>(null);
+  const summary = ref<AgentHostSummaryDto | null>(null);
   const HOST_STREAM_LOCK_NAME = 'nexus.agent.host-stream.v1';
   const HOST_EVENT_CHANNEL_NAME = 'nexus.agent.host-events.v1';
   const hostChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(HOST_EVENT_CHANNEL_NAME);
@@ -33,7 +33,7 @@
     agentHostEvents.emit('memory-changed', payload);
   };
 
-  const chooseDefaultApp = (next: HostSummaryView): void => {
+  const chooseDefaultApp = (next: AgentHostSummaryDto): void => {
     const enabled = next.apps.filter((app) => app.enabled);
     if (enabled.length === 0) {
       agentWindowManager.closeHub();
@@ -45,7 +45,7 @@
     agentWindowManager.switchApp({ appId: preferred.id });
   };
 
-  const refresh = async (reason: 'initial' | 'host-event'): Promise<HostSummaryView | null> => {
+  const refresh = async (reason: 'initial' | 'host-event'): Promise<AgentHostSummaryDto | null> => {
     if (!auth.isAuthenticated.value || activeUserId === null) return null;
     const requestGeneration = ++refreshGeneration;
     const requestUserId = activeUserId;

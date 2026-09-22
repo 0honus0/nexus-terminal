@@ -2,14 +2,14 @@
   import { computed, ref, watch } from 'vue';
   import draggable from 'vuedraggable';
   import type {
-    AgentApprovalView,
-    AgentCheckpointView,
-    AgentHardLimits,
-    AgentRunSnapshot,
-    AgentRunView,
+    AgentApprovalViewDto,
+    AgentCheckpointViewDto,
+    AgentHardLimitsDto,
+    AgentRunSnapshotDto,
+    AgentRunViewDto,
     AgentServerClockAnchor,
-    AgentSubagentMessage,
-    AgentSubagentView,
+    AgentSubagentMessageDto,
+    AgentSubagentViewDto,
   } from '../api/agent-api';
   import ApprovalCard from './ApprovalCard.vue';
   import WorkspaceRuntimePanel from './WorkspaceRuntimePanel.vue';
@@ -18,21 +18,21 @@
 
   const props = withDefaults(
     defineProps<{
-      current: AgentRunView | null;
-      backgroundRuns: AgentRunView[];
-      threadRuns: AgentRunView[];
+      current: AgentRunViewDto | null;
+      backgroundRuns: AgentRunViewDto[];
+      threadRuns: AgentRunViewDto[];
       threadTitles: Record<string, string>;
-      hardLimits: AgentHardLimits | null;
-      approvals: AgentApprovalView[];
+      hardLimits: AgentHardLimitsDto | null;
+      approvals: AgentApprovalViewDto[];
       approvalClock: AgentServerClockAnchor | null;
-      currentCheckpoints?: AgentCheckpointView[];
-      detailSnapshot?: AgentRunSnapshot | null;
-      detailCheckpoints?: AgentCheckpointView[];
-      detailApprovals?: AgentApprovalView[];
+      currentCheckpoints?: AgentCheckpointViewDto[];
+      detailSnapshot?: AgentRunSnapshotDto | null;
+      detailCheckpoints?: AgentCheckpointViewDto[];
+      detailApprovals?: AgentApprovalViewDto[];
       detailApprovalClock?: AgentServerClockAnchor | null;
-      detailSubagents?: AgentSubagentView[];
+      detailSubagents?: AgentSubagentViewDto[];
       selectedSubagentId?: string | null;
-      detailSubagentMessages?: AgentSubagentMessage[];
+      detailSubagentMessages?: AgentSubagentMessageDto[];
       busy?: boolean;
     }>(),
     {
@@ -50,13 +50,13 @@
   const emit = defineEmits<{
     close: [];
     back: [];
-    openRun: [run: AgentRunView];
-    selectSubagent: [delegation: AgentSubagentView];
-    cancelSubagent: [delegation: AgentSubagentView];
-    deleteRun: [snapshot: AgentRunSnapshot];
-    resolveApproval: [approval: AgentApprovalView, decision: 'approved' | 'denied', feedback?: string];
-    saveCheckpoint: [snapshot: AgentRunView | AgentRunSnapshot];
-    resumeCheckpoint: [snapshot: AgentRunView | AgentRunSnapshot, checkpoint: AgentCheckpointView];
+    openRun: [run: AgentRunViewDto];
+    selectSubagent: [delegation: AgentSubagentViewDto];
+    cancelSubagent: [delegation: AgentSubagentViewDto];
+    deleteRun: [snapshot: AgentRunSnapshotDto];
+    resolveApproval: [approval: AgentApprovalViewDto, decision: 'approved' | 'denied', feedback?: string];
+    saveCheckpoint: [snapshot: AgentRunViewDto | AgentRunSnapshotDto];
+    resumeCheckpoint: [snapshot: AgentRunViewDto | AgentRunSnapshotDto, checkpoint: AgentCheckpointViewDto];
     increaseBudget: [
       increase: Partial<{
         maxRunSteps: number;

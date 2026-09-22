@@ -1,4 +1,4 @@
-import type { AgentReasoningEffort } from '../api/agent-api';
+import type { AgentReasoningEffortDto } from '../api/agent-api';
 import { agentEvents, type AgentStreamEvent } from '../api/agent-events';
 import { createAgentRunFacade, type AgentRunFacade } from '../runtime/run-facade';
 import type { PluginFrontendAgentRpcMethod, PluginFrontendRunEvent } from './protocol';
@@ -6,7 +6,7 @@ import type { PluginFrontendAgentRpcMethod, PluginFrontendRunEvent } from './pro
 const MAX_TEXT_BYTES = 64_000;
 const MAX_LIST_ITEMS = 128;
 const encoder = new TextEncoder();
-const reasoningEfforts = new Set<AgentReasoningEffort>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const reasoningEfforts = new Set<AgentReasoningEffortDto>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 const record = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('PLUGIN_AGENT_RPC_INVALID');
@@ -33,8 +33,8 @@ const string = (value: unknown, maxBytes = 512): string => {
 const optionalString = (value: unknown, maxBytes = 512): string | undefined =>
   value === undefined ? undefined : string(value, maxBytes);
 
-const reasoningEffort = (value: unknown): AgentReasoningEffort => {
-  const parsed = string(value, 16) as AgentReasoningEffort;
+const reasoningEffort = (value: unknown): AgentReasoningEffortDto => {
+  const parsed = string(value, 16) as AgentReasoningEffortDto;
   if (!reasoningEfforts.has(parsed)) throw new Error('PLUGIN_AGENT_RPC_INVALID');
   return parsed;
 };

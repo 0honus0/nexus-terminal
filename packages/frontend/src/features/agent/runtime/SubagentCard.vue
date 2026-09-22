@@ -1,15 +1,15 @@
 <script setup lang="ts">
-  import type { AgentSubagentView } from '../api/agent-api';
+  import type { AgentSubagentViewDto } from '../api/agent-api';
 
   const props = defineProps<{
-    delegation: AgentSubagentView;
+    delegation: AgentSubagentViewDto;
     selected: boolean;
     busy: boolean;
   }>();
 
   defineEmits<{
-    select: [delegation: AgentSubagentView];
-    cancel: [delegation: AgentSubagentView];
+    select: [delegation: AgentSubagentViewDto];
+    cancel: [delegation: AgentSubagentViewDto];
   }>();
 
   const terminal = new Set(['completed', 'failed', 'cancelled']);

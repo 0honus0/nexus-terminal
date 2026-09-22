@@ -1,9 +1,9 @@
 <script setup lang="ts">
   import { computed } from 'vue';
-  import type { HostSummaryView } from '../api/agent-api';
+  import type { AgentHostSummaryDto } from '../api/agent-api';
   import { agentWindowManager } from './window-manager';
 
-  const props = defineProps<{ summary: HostSummaryView | null; paused?: boolean }>();
+  const props = defineProps<{ summary: AgentHostSummaryDto | null; paused?: boolean }>();
   const emit = defineEmits<{ layoutChange: [] }>();
 
   const position = computed(() => agentWindowManager.state.launcherPosition);

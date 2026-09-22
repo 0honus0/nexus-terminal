@@ -4,12 +4,12 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentAppSummary,
-    type AgentArtifactRef,
+    type AgentAppSummaryDto,
+    type AgentArtifactRefDto,
     type AgentWorkspaceView,
-    type AgentSettingsView,
-    type PluginInstallation,
-    type PluginVersionView,
+    type AgentSettingsViewDto,
+    type AgentPluginInstallationDto,
+    type AgentPluginVersionDto,
     type WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
   import WorkspaceArtifactTransfer from './WorkspaceArtifactTransfer.vue';
@@ -23,11 +23,11 @@
 
   const catalog = ref<WorkspaceRuntimeCatalog | null>(null);
   const workspaceList = ref<AgentWorkspaceView[]>([]);
-  const apps = ref<AgentAppSummary[]>([]);
-  const installations = ref<PluginInstallation[]>([]);
-  const versions = ref<PluginVersionView[]>([]);
-  const artifacts = ref<AgentArtifactRef[]>([]);
-  const agentSettings = ref<AgentSettingsView | null>(null);
+  const apps = ref<AgentAppSummaryDto[]>([]);
+  const installations = ref<AgentPluginInstallationDto[]>([]);
+  const versions = ref<AgentPluginVersionDto[]>([]);
+  const artifacts = ref<AgentArtifactRefDto[]>([]);
+  const agentSettings = ref<AgentSettingsViewDto | null>(null);
   const workspaceKey = ref('');
   const notice = ref('');
   const error = ref('');

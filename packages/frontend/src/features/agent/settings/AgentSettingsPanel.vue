@@ -7,15 +7,15 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentAppSummary,
-    type AgentDiscoveredProviderModel,
-    type AgentHardLimits,
-    type AgentProviderCreateInput,
-    type AgentProviderView,
-    type AgentSettingsView,
-    type ArtifactStorageSummary,
+    type AgentAppSummaryDto,
+    type AgentDiscoveredProviderModelDto,
+    type AgentHardLimitsDto,
+    type AgentProviderCreateRequestDto,
+    type AgentProviderViewDto,
+    type AgentSettingsViewDto,
+    type AgentArtifactStorageSummaryDto,
     type WorkspaceRuntimeAvailability,
-    type HardLimitPreview,
+    type AgentHardLimitPreviewDto,
     type RecommendedAgentPluginView,
     type TargetDenylistView,
   } from '../api/agent-api';
@@ -39,14 +39,14 @@
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings');
-  const settings = ref<AgentSettingsView | null>(null);
-  const apps = ref<AgentAppSummary[]>([]);
-  const providers = ref<AgentProviderView[]>([]);
-  const discoveredModels = ref<Record<string, AgentDiscoveredProviderModel[]>>({});
-  const storage = ref<ArtifactStorageSummary | null>(null);
+  const settings = ref<AgentSettingsViewDto | null>(null);
+  const apps = ref<AgentAppSummaryDto[]>([]);
+  const providers = ref<AgentProviderViewDto[]>([]);
+  const discoveredModels = ref<Record<string, AgentDiscoveredProviderModelDto[]>>({});
+  const storage = ref<AgentArtifactStorageSummaryDto | null>(null);
   const workspaceRuntime = ref<WorkspaceRuntimeAvailability | null>(null);
   const denylist = ref<TargetDenylistView | null>(null);
-  const hardLimitPreview = ref<HardLimitPreview | null>(null);
+  const hardLimitPreview = ref<AgentHardLimitPreviewDto | null>(null);
   const loading = ref(true);
   const busy = ref(false);
   const loadError = ref('');
@@ -175,15 +175,15 @@
       success,
     );
 
-  const runtimeReady = (state: AgentSettingsView['availability']['state']): boolean =>
+  const runtimeReady = (state: AgentSettingsViewDto['availability']['state']): boolean =>
     state === 'enabled' || state === 'degraded';
 
-  const assertAppReady = (app: AgentAppSummary): void => {
+  const assertAppReady = (app: AgentAppSummaryDto): void => {
     if (app.enabled && (app.health === 'healthy' || app.health === 'degraded')) return;
     throw new Error(app.healthReason || t('agent.settings.feature.enableFailed'));
   };
 
-  const assertFeatureReady = (view: AgentSettingsView): void => {
+  const assertFeatureReady = (view: AgentSettingsViewDto): void => {
     if (runtimeReady(view.availability.state)) return;
     throw new Error(view.availability.reason || t('agent.settings.feature.enableFailed'));
   };
@@ -278,13 +278,13 @@
     showKeyDetails.value = false;
   };
 
-  const toggleApp = (app: AgentAppSummary, enabled: boolean) =>
+  const toggleApp = (app: AgentAppSummaryDto, enabled: boolean) =>
     execute('toggle-app', async () => {
       const updated = await agentApi.setAppEnabled(app, enabled);
       apps.value = apps.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
     });
 
-  const previewHardLimits = (proposed: Partial<AgentHardLimits>) =>
+  const previewHardLimits = (proposed: Partial<AgentHardLimitsDto>) =>
     execute(
       'preview-hard-limits',
       async () => {
@@ -301,7 +301,7 @@
       storage.value = await agentApi.storage();
     });
 
-  const createProvider = (input: AgentProviderCreateInput, successMsg?: string) =>
+  const createProvider = (input: AgentProviderCreateRequestDto, successMsg?: string) =>
     execute(
       'create-provider',
       async () => {
@@ -313,14 +313,14 @@
       successMsg,
     );
 
-  const toggleProvider = (provider: AgentProviderView, enabled: boolean) =>
+  const toggleProvider = (provider: AgentProviderViewDto, enabled: boolean) =>
     execute('toggle-provider', async () => {
       const updated = await agentApi.updateProvider(provider, { enabled });
       providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
       apps.value = await agentApi.apps();
     });
 
-  const changeProviderProtocol = (provider: AgentProviderView, protocol: AgentProviderView['protocol']) =>
+  const changeProviderProtocol = (provider: AgentProviderViewDto, protocol: AgentProviderViewDto['protocol']) =>
     execute('change-provider-protocol', async () => {
       const previous = provider;
       providers.value = providers.value.map((candidate) =>
@@ -335,7 +335,7 @@
       }
     });
 
-  const deleteProvider = (provider: AgentProviderView) =>
+  const deleteProvider = (provider: AgentProviderViewDto) =>
     execute('delete-provider', async () => {
       await agentApi.deleteProvider(provider.id, provider.version);
       providers.value = await agentApi.providers();
@@ -374,7 +374,7 @@
   const setFallbackModels = (fallbackModels: Array<{ providerId: string; modelId: string }>) =>
     patchSection('model', { fallbackModels }, t('agent.settings.providers.saveNoticeFallback'));
 
-  const discoverProviderModels = (provider: AgentProviderView) =>
+  const discoverProviderModels = (provider: AgentProviderViewDto) =>
     execute(
       'discover-provider-models',
       async () => {
@@ -388,8 +388,8 @@
     );
 
   const addProviderModel = (
-    provider: AgentProviderView,
-    model: AgentProviderView['models'][number],
+    provider: AgentProviderViewDto,
+    model: AgentProviderViewDto['models'][number],
     successMsg?: string,
   ) =>
     execute(
@@ -404,8 +404,8 @@
     );
 
   const updateProviderModels = (
-    provider: AgentProviderView,
-    models: AgentProviderView['models'],
+    provider: AgentProviderViewDto,
+    models: AgentProviderViewDto['models'],
     successMsg?: string,
   ) =>
     execute(

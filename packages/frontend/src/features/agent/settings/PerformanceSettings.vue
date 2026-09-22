@@ -1,8 +1,8 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
-  import type { AgentSettingsView } from '../api/agent-api';
+  import type { AgentSettingsViewDto } from '../api/agent-api';
 
-  const props = defineProps<{ settings: AgentSettingsView; busy: boolean }>();
+  const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
   const runtimes = ref(1);
   const modelCalls = ref<string>('auto');

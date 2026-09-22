@@ -1,8 +1,8 @@
 <script setup lang="ts">
-  import type { AgentSubagentMessage } from '../api/agent-api';
+  import type { AgentSubagentMessageDto } from '../api/agent-api';
 
   defineProps<{
-    messages: AgentSubagentMessage[];
+    messages: AgentSubagentMessageDto[];
   }>();
 </script>
 

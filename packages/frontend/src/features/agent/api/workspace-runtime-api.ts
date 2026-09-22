@@ -1,7 +1,7 @@
 import { agentHttpClient as httpClient, agentRuntimeRequest } from './agent-http-client';
-import type { AgentArtifactRef, AgentEnvelope, AgentSettingsView } from './agent-api.types';
+import type { AgentArtifactRefDto, AgentEnvelopeDto, AgentSettingsViewDto } from './agent-api.types';
 
-const unwrap = <T>(envelope: AgentEnvelope<T>): T => envelope.data;
+const unwrap = <T>(envelope: AgentEnvelopeDto<T>): T => envelope.data;
 
 export interface WorkspaceRuntimeAvailability {
   available: boolean;
@@ -136,7 +136,7 @@ export interface WorkspaceToolchainSwitchView {
 }
 
 export interface WorkspaceArtifactImportResult {
-  artifact: AgentArtifactRef;
+  artifact: AgentArtifactRefDto;
   workspaceId: string;
   targetPluginId: string;
   path: string;
@@ -191,17 +191,17 @@ export interface WorkspaceRuntimeSettingsResetPreview {
 export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<string, string>>) => ({
   async workspaceRuntimeAvailability(): Promise<WorkspaceRuntimeAvailability> {
     return unwrap(
-      (await httpClient.get<AgentEnvelope<WorkspaceRuntimeAvailability>>('/agent/workspace-runtime/availability')).data,
+      (await httpClient.get<AgentEnvelopeDto<WorkspaceRuntimeAvailability>>('/agent/workspace-runtime/availability')).data,
     );
   },
   async workspaceRuntimeCatalog(): Promise<WorkspaceRuntimeCatalog> {
     return unwrap(
-      (await httpClient.get<AgentEnvelope<WorkspaceRuntimeCatalog>>('/agent/workspace-runtime/catalog')).data,
+      (await httpClient.get<AgentEnvelopeDto<WorkspaceRuntimeCatalog>>('/agent/workspace-runtime/catalog')).data,
     );
   },
   async workspaceRuntimeStorage(): Promise<WorkspaceRuntimeStorageView> {
     return unwrap(
-      (await httpClient.get<AgentEnvelope<WorkspaceRuntimeStorageView>>('/agent/workspace-runtime/storage')).data,
+      (await httpClient.get<AgentEnvelopeDto<WorkspaceRuntimeStorageView>>('/agent/workspace-runtime/storage')).data,
     );
   },
   async previewWorkspaceRuntimeSetup(
@@ -210,7 +210,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<WorkspaceRuntimeSetupPreview> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeSetupPreview>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeSetupPreview>>(
           '/agent/workspace-runtime/setup/preview',
           { recipes, expectedVersion },
           { headers: await mutationHeaders() },
@@ -224,7 +224,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeCommandView>>(
           '/agent/workspace-runtime/setup/confirm',
           { confirmationId, expectedVersion },
           { headers: await mutationHeaders() },
@@ -235,7 +235,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async installToolchainPack(familyId: string, versionId: string): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeCommandView>>(
           `/agent/workspace-runtime/tool-packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/install`,
           {},
           { headers: await mutationHeaders() },
@@ -250,7 +250,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<ToolchainPackUninstallPreview> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<ToolchainPackUninstallPreview>>(
+        await httpClient.post<AgentEnvelopeDto<ToolchainPackUninstallPreview>>(
           `/agent/workspace-runtime/tool-packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/uninstall/preview`,
           { expectedVersion },
           { headers: await mutationHeaders() },
@@ -266,7 +266,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeCommandView>>(
           `/agent/workspace-runtime/tool-packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/uninstall/confirm`,
           { confirmationId, expectedVersion },
           { headers: await mutationHeaders() },
@@ -277,7 +277,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async previewWorkspaceRuntimeCleanup(expectedVersion: number): Promise<WorkspaceRuntimeCleanupPreview> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeCleanupPreview>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeCleanupPreview>>(
           '/agent/workspace-runtime/runtime-cleanup/preview',
           { expectedVersion },
           { headers: await mutationHeaders() },
@@ -291,7 +291,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeCommandView>>(
           '/agent/workspace-runtime/runtime-cleanup/confirm',
           { confirmationId, expectedVersion },
           { headers: await mutationHeaders() },
@@ -302,7 +302,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async cleanupWorkspaceRuntimeCache(): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeCommandView>>(
           '/agent/workspace-runtime/cache-cleanup',
           {},
           { headers: await mutationHeaders() },
@@ -313,7 +313,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async previewWorkspaceRuntimeSettingsReset(expectedVersion: number): Promise<WorkspaceRuntimeSettingsResetPreview> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeSettingsResetPreview>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeSettingsResetPreview>>(
           '/agent/workspace-runtime/settings/reset/preview',
           { expectedVersion },
           { headers: await mutationHeaders() },
@@ -324,10 +324,10 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async confirmWorkspaceRuntimeSettingsReset(
     confirmationId: string,
     expectedVersion: number,
-  ): Promise<AgentSettingsView> {
+  ): Promise<AgentSettingsViewDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentSettingsView>>(
+        await httpClient.post<AgentEnvelopeDto<AgentSettingsViewDto>>(
           '/agent/workspace-runtime/settings/reset/confirm',
           { confirmationId, expectedVersion },
           { headers: await mutationHeaders() },
@@ -338,7 +338,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async workspaceCommand(appId: string, commandId: string): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+        await httpClient.get<AgentEnvelopeDto<WorkspaceRuntimeCommandView>>(
           `/apps/${encodeURIComponent(appId)}/workspace-runtime/commands/${encodeURIComponent(commandId)}`,
         )
       ).data,
@@ -347,7 +347,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async workspaceRuntimeCommand(commandId: string): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+        await httpClient.get<AgentEnvelopeDto<WorkspaceRuntimeCommandView>>(
           `/agent/workspace-runtime/commands/${encodeURIComponent(commandId)}`,
         )
       ).data,
@@ -356,7 +356,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async workspaces(appId: string, runId: string, rootOnly = false): Promise<AgentWorkspaceView[]> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentWorkspaceView[]>>(
+        await httpClient.get<AgentEnvelopeDto<AgentWorkspaceView[]>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/workspaces`,
           { params: rootOnly ? { runtime: 'root' } : undefined },
         )
@@ -366,7 +366,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   async workspace(appId: string, workspaceId: string): Promise<AgentWorkspaceView> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentWorkspaceView>>(
+        await httpClient.get<AgentEnvelopeDto<AgentWorkspaceView>>(
           `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}`,
         )
       ).data,
@@ -387,7 +387,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<AgentWorkspaceView> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentWorkspaceView>>(
+        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/workspaces`,
           agentRuntimeRequest({ workspace, retained, ...(catalogRevision ? { catalogRevision } : {}) }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -402,7 +402,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceRuntimeCommandView>>(
           `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspace.id)}/actions`,
           agentRuntimeRequest({ action, expectedVersion: workspace.version }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -418,7 +418,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<WorkspaceToolchainSwitchView> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceToolchainSwitchView>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceToolchainSwitchView>>(
           `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspace.id)}/tool-versions`,
           agentRuntimeRequest({ versions, expectedVersion: workspace.version, catalogRevision }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -431,10 +431,10 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
     workspaceId: string,
     targetPluginId: string,
     input: { path: string; name: string; mediaType: string },
-  ): Promise<AgentArtifactRef> {
+  ): Promise<AgentArtifactRefDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentArtifactRef>>(
+        await httpClient.post<AgentEnvelopeDto<AgentArtifactRefDto>>(
           `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/artifacts/export`,
           input,
           { headers: await mutationHeaders() },
@@ -450,7 +450,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
   ): Promise<WorkspaceArtifactImportResult> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<WorkspaceArtifactImportResult>>(
+        await httpClient.post<AgentEnvelopeDto<WorkspaceArtifactImportResult>>(
           `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/artifacts/import`,
           input,
           { headers: await mutationHeaders() },

@@ -4,13 +4,13 @@ export const AgentSettingsPanel = defineAsyncComponent(() => import('./settings/
 export const AgentSurfaceHost = defineAsyncComponent(() => import('./host/AgentSurfaceHost.vue'));
 export { agentApi, resetAgentCsrf } from './api/agent-api';
 export type {
-  AgentAppSummary,
-  AgentHardLimits,
-  AgentProviderView,
-  AgentSettingsDocument,
-  AgentSettingsView,
-  ArtifactStorageSummary,
+  AgentAppSummaryDto,
+  AgentHardLimitsDto,
+  AgentProviderViewDto,
+  AgentSettingsDocumentDto,
+  AgentSettingsViewDto,
+  AgentArtifactStorageSummaryDto,
   WorkspaceRuntimeAvailability,
-  HardLimitPreview,
+  AgentHardLimitPreviewDto,
   TargetDenylistView,
 } from './api/agent-api';

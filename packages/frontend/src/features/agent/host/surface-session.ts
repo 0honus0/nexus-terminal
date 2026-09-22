@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { AgentApprovalMode, AgentExecutionMode, AgentReasoningEffort } from '../api/agent-api';
+import type { AgentApprovalModeDto, AgentExecutionModeDto, AgentReasoningEffortDto } from '../api/agent-api';
 
 export interface AgentAppViewState {
   threadId?: string;
@@ -7,9 +7,9 @@ export interface AgentAppViewState {
   scrollAnchor?: string;
   selectedTaskId?: string;
   modelKey?: string;
-  reasoningEffort?: AgentReasoningEffort;
-  approvalMode?: AgentApprovalMode;
-  executionMode?: AgentExecutionMode;
+  reasoningEffort?: AgentReasoningEffortDto;
+  approvalMode?: AgentApprovalModeDto;
+  executionMode?: AgentExecutionModeDto;
   connectionIds?: number[];
   environmentRecipeId?: string;
   hubView: 'conversation' | 'files';
@@ -58,26 +58,26 @@ export const agentSurfaceSession = {
     if (modelKey) state.modelKey = modelKey;
     else delete state.modelKey;
   },
-  restoreReasoningEffort(appId: string): AgentReasoningEffort | undefined {
+  restoreReasoningEffort(appId: string): AgentReasoningEffortDto | undefined {
     return ensure(appId).reasoningEffort;
   },
-  setReasoningEffort(appId: string, effort?: AgentReasoningEffort): void {
+  setReasoningEffort(appId: string, effort?: AgentReasoningEffortDto): void {
     const state = ensure(appId);
     if (effort) state.reasoningEffort = effort;
     else delete state.reasoningEffort;
   },
-  restoreApprovalMode(appId: string): AgentApprovalMode | undefined {
+  restoreApprovalMode(appId: string): AgentApprovalModeDto | undefined {
     return ensure(appId).approvalMode;
   },
-  setApprovalMode(appId: string, approvalMode?: AgentApprovalMode): void {
+  setApprovalMode(appId: string, approvalMode?: AgentApprovalModeDto): void {
     const state = ensure(appId);
     if (approvalMode) state.approvalMode = approvalMode;
     else delete state.approvalMode;
   },
-  restoreExecutionMode(appId: string): AgentExecutionMode | undefined {
+  restoreExecutionMode(appId: string): AgentExecutionModeDto | undefined {
     return ensure(appId).executionMode;
   },
-  setExecutionMode(appId: string, executionMode?: AgentExecutionMode): void {
+  setExecutionMode(appId: string, executionMode?: AgentExecutionModeDto): void {
     const state = ensure(appId);
     if (executionMode) state.executionMode = executionMode;
     else delete state.executionMode;

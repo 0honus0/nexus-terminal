@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { AgentSettingsDocument, AgentSettingsView } from '../api/agent-api';
+  import type { AgentSettingsDocumentDto, AgentSettingsViewDto } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
   import {
     parseQuantity,
@@ -11,13 +11,13 @@
     type QuantityType,
   } from './quantity-format';
 
-  const props = defineProps<{ settings: AgentSettingsView; busy: boolean }>();
+  const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
   const { t } = useI18n();
 
   type PresetId = 'light' | 'balanced' | 'deep' | 'custom';
-  type BudgetSettings = AgentSettingsDocument['budget'];
-  type BudgetKey = keyof AgentSettingsDocument['budget'];
+  type BudgetSettings = AgentSettingsDocumentDto['budget'];
+  type BudgetKey = keyof AgentSettingsDocumentDto['budget'];
   type BudgetDraft = Record<BudgetKey, string | number | null>;
 
   const budgetKeys: readonly BudgetKey[] = [

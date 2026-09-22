@@ -1,18 +1,18 @@
 <script setup lang="ts">
-  import type { AgentSubagentMessage, AgentSubagentView } from '../api/agent-api';
+  import type { AgentSubagentMessageDto, AgentSubagentViewDto } from '../api/agent-api';
   import MessageExchangePanel from './MessageExchangePanel.vue';
   import SubagentCard from './SubagentCard.vue';
 
   defineProps<{
-    items: AgentSubagentView[];
+    items: AgentSubagentViewDto[];
     selectedId: string | null;
-    messages: AgentSubagentMessage[];
+    messages: AgentSubagentMessageDto[];
     busy: boolean;
   }>();
 
   defineEmits<{
-    select: [delegation: AgentSubagentView];
-    cancel: [delegation: AgentSubagentView];
+    select: [delegation: AgentSubagentViewDto];
+    cancel: [delegation: AgentSubagentViewDto];
   }>();
 </script>
 

@@ -4,23 +4,23 @@
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
-    type AgentAppSummary,
-    type AgentExecutionPolicyOverrides,
-    type AgentExecutionPolicyView,
+    type AgentAppSummaryDto,
+    type AgentExecutionPolicyOverridesDto,
+    type AgentExecutionPolicyViewDto,
   } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
   import { formatQuantity, type QuantityType } from './quantity-format';
 
-  const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
+  const props = defineProps<{ apps: AgentAppSummaryDto[]; busy: boolean }>();
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.execution-policy');
   const selectedAppId = ref('');
-  const view = ref<AgentExecutionPolicyView | null>(null);
-  const draft = ref<AgentExecutionPolicyOverrides>({});
+  const view = ref<AgentExecutionPolicyViewDto | null>(null);
+  const draft = ref<AgentExecutionPolicyOverridesDto>({});
   const loading = ref(false);
   const saving = ref(false);
 
-  type NumericKey = Exclude<keyof AgentExecutionPolicyOverrides, 'contextCompactionMode' | 'contextProfile'>;
+  type NumericKey = Exclude<keyof AgentExecutionPolicyOverridesDto, 'contextCompactionMode' | 'contextProfile'>;
   interface FieldMeta {
     key: NumericKey;
     type: QuantityType;
@@ -36,8 +36,8 @@
     { key: 'maxSubagentMessageBytes', type: 'bytes' },
   ];
 
-  const clone = (value: AgentExecutionPolicyOverrides): AgentExecutionPolicyOverrides =>
-    JSON.parse(JSON.stringify(value)) as AgentExecutionPolicyOverrides;
+  const clone = (value: AgentExecutionPolicyOverridesDto): AgentExecutionPolicyOverridesDto =>
+    JSON.parse(JSON.stringify(value)) as AgentExecutionPolicyOverridesDto;
 
   const load = async (): Promise<void> => {
     if (!selectedAppId.value) {
@@ -67,10 +67,10 @@
   );
   watch(selectedAppId, load, { immediate: true });
 
-  const hasOverride = (key: keyof AgentExecutionPolicyOverrides): boolean =>
+  const hasOverride = (key: keyof AgentExecutionPolicyOverridesDto): boolean =>
     Object.prototype.hasOwnProperty.call(draft.value, key);
 
-  const toggleOverride = (key: keyof AgentExecutionPolicyOverrides, enabled: boolean): void => {
+  const toggleOverride = (key: keyof AgentExecutionPolicyOverridesDto, enabled: boolean): void => {
     if (!view.value) return;
     if (!enabled) {
       const next = { ...draft.value };

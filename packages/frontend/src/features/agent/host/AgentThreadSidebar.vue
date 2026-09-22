@@ -1,17 +1,17 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { AgentRunStatus, AgentThreadView } from '../api/agent-api';
+  import type { AgentRunStatusDto, AgentThreadViewDto } from '../api/agent-api';
 
   const props = defineProps<{
     open: boolean;
-    threads: AgentThreadView[];
+    threads: AgentThreadViewDto[];
     nextCursor: string | null;
     loadingMore: boolean;
     activeThreadCount: number;
     busy: boolean;
     currentThreadId: string | null;
-    threadStatuses: Record<string, AgentRunStatus | null>;
+    threadStatuses: Record<string, AgentRunStatusDto | null>;
     threadDeleteArmedId: string | null;
     deleteAllThreadsArmed: boolean;
   }>();
@@ -19,8 +19,8 @@
   const emit = defineEmits<{
     close: [];
     newThread: [];
-    select: [thread: AgentThreadView];
-    deleteThread: [thread: AgentThreadView];
+    select: [thread: AgentThreadViewDto];
+    deleteThread: [thread: AgentThreadViewDto];
     deleteAll: [];
     loadMore: [];
     pageSize: [value: number];
@@ -39,7 +39,7 @@
   const SCALE_MAX = 1.3;
   const SCALE_STEP = 0.1;
   const SCALE_STORAGE_KEY = 'nexus.agent.thread-list-scale.v1';
-  const nonTerminal = new Set<AgentRunStatus>([
+  const nonTerminal = new Set<AgentRunStatusDto>([
     'created',
     'running',
     'awaiting_approval',
@@ -67,7 +67,7 @@
     const visibleRows = viewportHeight.value > 0 ? Math.ceil(viewportHeight.value / rowHeight.value) : THREAD_PAGE_MIN;
     return Math.min(THREAD_PAGE_MAX, Math.max(THREAD_PAGE_MIN, visibleRows + THREAD_OVERSCAN * 2));
   });
-  const statusFor = (threadId: string): AgentRunStatus | null => props.threadStatuses[threadId] ?? null;
+  const statusFor = (threadId: string): AgentRunStatusDto | null => props.threadStatuses[threadId] ?? null;
   const visibleThreads = computed(() => {
     const needle = query.value.trim().toLowerCase();
     return props.threads
@@ -84,7 +84,7 @@
   });
   const windowedThreads = computed(() => {
     const total = visibleThreads.value.length;
-    if (total === 0) return { start: 0, end: 0, topSpacer: 0, bottomSpacer: 0, items: [] as AgentThreadView[] };
+    if (total === 0) return { start: 0, end: 0, topSpacer: 0, bottomSpacer: 0, items: [] as AgentThreadViewDto[] };
     const viewportRows = Math.max(1, Math.ceil(viewportHeight.value / rowHeight.value));
     const windowSize = Math.min(total, viewportRows + THREAD_OVERSCAN * 2);
     const rawStart = Math.floor(scrollTop.value / rowHeight.value) - THREAD_OVERSCAN;

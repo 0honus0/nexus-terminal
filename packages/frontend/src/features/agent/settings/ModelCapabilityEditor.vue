@@ -3,29 +3,29 @@
   import { useI18n } from 'vue-i18n';
   import { BaseModal } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
-  import type { AgentProviderView, AgentReasoningEffort } from '../api/agent-api';
+  import type { AgentProviderViewDto, AgentReasoningEffortDto } from '../api/agent-api';
 
-  type ProviderModel = AgentProviderView['models'][number];
+  type AgentProviderModelDto = AgentProviderViewDto['models'][number];
   type CapabilityField =
     'contextWindow' | 'maxOutputTokens' | 'supportsTools' | 'supportsImageInput' | 'supportsFileInput';
 
   const props = defineProps<{
     visible: boolean;
-    provider: AgentProviderView | null;
-    model: ProviderModel | null;
+    provider: AgentProviderViewDto | null;
+    model: AgentProviderModelDto | null;
     busy: boolean;
   }>();
 
   const emit = defineEmits<{
     close: [];
-    save: [model: ProviderModel];
+    save: [model: AgentProviderModelDto];
   }>();
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.model-capabilities');
   const capabilityEditorProvider = computed(() => props.provider);
   const capabilityEditorModel = computed(() => props.model);
-  const reasoningEffortOptions: AgentReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+  const reasoningEffortOptions: AgentReasoningEffortDto[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
   const capabilityForm = reactive({
     contextWindow: 0,
     maxOutputTokens: 0,
@@ -33,12 +33,12 @@
     supportsImageInput: false,
     supportsFileInput: false,
     reasoningEnabled: false,
-    reasoningEfforts: [] as AgentReasoningEffort[],
-    defaultReasoningEffort: '' as AgentReasoningEffort | '',
+    reasoningEfforts: [] as AgentReasoningEffortDto[],
+    defaultReasoningEffort: '' as AgentReasoningEffortDto | '',
     reasoningMandatory: false,
   });
 
-  const syncForm = (model: ProviderModel | null): void => {
+  const syncForm = (model: AgentProviderModelDto | null): void => {
     if (!model) return;
     capabilityForm.contextWindow = model.contextWindow;
     capabilityForm.maxOutputTokens = model.maxOutputTokens;
@@ -106,7 +106,7 @@
       capabilityEditorModel.value?.registryDefaults?.reasoning,
   );
 
-  const toggleReasoningEffort = (effort: AgentReasoningEffort): void => {
+  const toggleReasoningEffort = (effort: AgentReasoningEffortDto): void => {
     const next = new Set(capabilityForm.reasoningEfforts);
     if (next.has(effort)) next.delete(effort);
     else next.add(effort);

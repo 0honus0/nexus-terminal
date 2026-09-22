@@ -1,8 +1,8 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
-  import type { AgentAppSummary } from '../api/agent-api';
+  import type { AgentAppSummaryDto } from '../api/agent-api';
 
-  const props = defineProps<{ apps: AgentAppSummary[]; activeAppId: string | null }>();
+  const props = defineProps<{ apps: AgentAppSummaryDto[]; activeAppId: string | null }>();
   const emit = defineEmits<{ switch: [appId: string] }>();
 
   const open = ref(false);

@@ -1,4 +1,4 @@
-import type { AgentArtifactRef, AgentPendingRunInputPage, AgentRunSnapshot, AgentRunView } from '../api/agent-api';
+import type { AgentArtifactRefDto, AgentPendingRunInputPageDto, AgentRunSnapshotDto, AgentRunViewDto } from '../api/agent-api';
 import { toAgentApiError } from '../api/agent-api';
 import { CONVERSATION_COMMAND_SUGGESTIONS, type ConversationSlashCommand } from './conversation-commands';
 
@@ -12,28 +12,28 @@ type Translate = (key: string, values?: Record<string, unknown>) => string;
 
 export interface ConversationCommandExecutorDependencies {
   t: Translate;
-  getRun: () => AgentRunView | null;
-  isActiveRun: (run: AgentRunView) => boolean;
+  getRun: () => AgentRunViewDto | null;
+  isActiveRun: (run: AgentRunViewDto) => boolean;
   beginMutation: () => boolean;
   finishMutation: () => void;
   succeedMutation: () => void;
   recoverFailure: (cause: unknown, runId?: string) => Promise<void>;
   setResult: (result: ConversationCommandResult | null) => void;
   clearComposer: () => void;
-  createGoalRun: (text: string) => Promise<AgentRunView>;
-  getRunSnapshot: (runId: string) => Promise<AgentRunSnapshot>;
-  setGoal: (run: AgentRunView, text: string) => Promise<AgentRunView>;
-  pendingInputs: (runId: string) => Promise<AgentPendingRunInputPage>;
+  createGoalRun: (text: string) => Promise<AgentRunViewDto>;
+  getRunSnapshot: (runId: string) => Promise<AgentRunSnapshotDto>;
+  setGoal: (run: AgentRunViewDto, text: string) => Promise<AgentRunViewDto>;
+  pendingInputs: (runId: string) => Promise<AgentPendingRunInputPageDto>;
   mutatePendingInput: (
-    run: AgentRunView,
+    run: AgentRunViewDto,
     action: 'remove' | 'move',
     inputId: string,
     beforeInputId: string | null,
-  ) => Promise<AgentRunView>;
-  adoptRun: (run: AgentRunView) => void;
+  ) => Promise<AgentRunViewDto>;
+  adoptRun: (run: AgentRunViewDto) => void;
   refreshBackgroundRuns: () => Promise<void>;
-  interruptAndRefresh: (run: AgentRunView, text: string) => Promise<void>;
-  cancelAndRefresh: (run: AgentRunView) => Promise<void>;
+  interruptAndRefresh: (run: AgentRunViewDto, text: string) => Promise<void>;
+  cancelAndRefresh: (run: AgentRunViewDto) => Promise<void>;
 }
 
 const failureMessage = (t: Translate, cause: unknown): string => {
@@ -54,7 +54,7 @@ const errorResult = (t: Translate, message: string): ConversationCommandResult =
 export const createConversationCommandExecutor = (dependencies: ConversationCommandExecutorDependencies) => {
   const setError = (message: string): void => dependencies.setResult(errorResult(dependencies.t, message));
 
-  return async (command: ConversationSlashCommand, selectedArtifacts: AgentArtifactRef[]): Promise<void> => {
+  return async (command: ConversationSlashCommand, selectedArtifacts: AgentArtifactRefDto[]): Promise<void> => {
     const { t } = dependencies;
     if (selectedArtifacts.length > 0) {
       setError(t('agent.conversation.commands.attachmentsUnsupported'));

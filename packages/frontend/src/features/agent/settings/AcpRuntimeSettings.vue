@@ -4,12 +4,12 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentAcpIntegrationConfiguration,
-    type AgentIntegrationView,
-    type AgentSettingsView,
+    type AgentAcpIntegrationConfigurationDto,
+    type AgentIntegrationViewDto,
+    type AgentSettingsViewDto,
   } from '../api/agent-api';
 
-  type Profile = AgentSettingsView['requestedSettings']['workspaceRuntime']['acpProfiles'][number];
+  type Profile = AgentSettingsViewDto['requestedSettings']['workspaceRuntime']['acpProfiles'][number];
   interface ProfileDraft {
     id: string;
     argvText: string;
@@ -17,12 +17,12 @@
   }
 
   const DEFAULT_AGENT_APP_ID = 'nexus.agent';
-  const props = defineProps<{ settings: AgentSettingsView; busy: boolean; agentAvailable: boolean }>();
+  const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean; agentAvailable: boolean }>();
   const emit = defineEmits<{ saveProfiles: [profiles: Profile[]] }>();
   const operationFeedback = useOperationFeedback('agent.settings.acp-runtime');
 
   const profiles = ref<ProfileDraft[]>([]);
-  const integrations = ref<AgentIntegrationView[]>([]);
+  const integrations = ref<AgentIntegrationViewDto[]>([]);
   const displayName = ref('');
   const profileId = ref('');
   const enabled = ref(true);
@@ -31,11 +31,11 @@
   const disabled = computed(() => props.busy || localBusy.value);
   const configuredProfiles = computed(() => props.settings.effectiveSettings.workspaceRuntime.acpProfiles);
 
-  const acpConfiguration = (integration: AgentIntegrationView): AgentAcpIntegrationConfiguration => {
+  const acpConfiguration = (integration: AgentIntegrationViewDto): AgentAcpIntegrationConfigurationDto => {
     if (integration.kind !== 'acp' || integration.configuration.transport !== 'workspace-profile') {
       throw new Error('ACP_INTEGRATION_INVALID');
     }
-    return integration.configuration as AgentAcpIntegrationConfiguration;
+    return integration.configuration as AgentAcpIntegrationConfigurationDto;
   };
 
   const syncProfiles = (): void => {
@@ -148,7 +148,7 @@
     );
   };
 
-  const toggleIntegration = (integration: AgentIntegrationView, nextEnabled: boolean): void => {
+  const toggleIntegration = (integration: AgentIntegrationViewDto, nextEnabled: boolean): void => {
     const configuration = acpConfiguration(integration);
     void run(
       'toggle-integration',
@@ -164,7 +164,7 @@
     );
   };
 
-  const changeIntegrationProfile = (integration: AgentIntegrationView, nextProfileId: string): void => {
+  const changeIntegrationProfile = (integration: AgentIntegrationViewDto, nextProfileId: string): void => {
     const configuration = acpConfiguration(integration);
     if (!configuredProfiles.value.some((profile) => profile.id === nextProfileId)) return;
     void run(
@@ -181,7 +181,7 @@
     );
   };
 
-  const removeIntegration = (integration: AgentIntegrationView): void => {
+  const removeIntegration = (integration: AgentIntegrationViewDto): void => {
     void run(
       'remove-integration',
       async () => {
