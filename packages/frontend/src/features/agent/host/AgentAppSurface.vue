@@ -546,7 +546,11 @@
     }
   };
 
-  const refreshRun = async (runId: string, minimumEventCursor = 0): Promise<AgentRunSnapshot | null> => {
+  const refreshRun = async (
+    runId: string,
+    minimumEventCursor = 0,
+    reportFailure = true,
+  ): Promise<AgentRunSnapshot | null> => {
     try {
       const snapshot = await facade.getRun(runId, minimumEventCursor);
       if (currentThread.value?.id !== snapshot.threadId || (run.value !== null && run.value.id !== runId)) return null;
@@ -560,7 +564,12 @@
         if (runtimeOperation.phase.value === 'reconciling') runtimeOperation.succeed();
       }
       return snapshot;
-    } catch {
+    } catch (cause) {
+      logger.warn(
+        { err: cause, appId: props.appId, runId, minimumEventCursor },
+        'Agent UI failed to refresh authoritative Run state',
+      );
+      if (reportFailure) error.value = explain(cause);
       return null;
     }
   };
@@ -597,7 +606,7 @@
 
     const targetRunId = runId ?? run.value?.id;
     if (!targetRunId || run.value?.id !== targetRunId) return;
-    const next = await refreshRun(targetRunId);
+    const next = await refreshRun(targetRunId, 0, false);
     await Promise.all([refreshApprovals(targetRunId), refreshLedger(), refreshBackgroundRuns()]);
     if (next?.needsReconciliation || decision.phase === 'reconciling') {
       runtimeOperation.markReconciling('RECONCILIATION_REQUIRED', t('agent.operations.reconciliationRequired'));
