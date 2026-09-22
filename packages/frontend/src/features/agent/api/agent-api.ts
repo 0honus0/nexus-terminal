@@ -23,6 +23,31 @@ import type {
 } from '@nexus-terminal/protocol/agent-approvals';
 import type { AgentToolRiskDto } from '@nexus-terminal/protocol/agent-common';
 import type {
+  AgentAppGrantReplaceRequestDto,
+  AgentAppGrantViewDto,
+  AgentAppStateUpdateRequestDto,
+  AgentAppSummaryDto,
+  AgentApprovalModeDto,
+  AgentCapabilityDefinitionDto,
+  AgentCapabilityGrantDto,
+  AgentCapabilityGrantInputDto,
+  AgentCapabilityScopeDto,
+  AgentContextCompactionModeDto,
+  AgentContextProfileDto,
+  AgentExecutionPolicyOverridesDto,
+  AgentExecutionPolicyReplaceRequestDto,
+  AgentExecutionPolicyViewDto,
+  AgentHardLimitConfirmRequestDto,
+  AgentHostSummaryDto,
+  AgentHardLimitPreviewDto,
+  AgentHardLimitPreviewRequestDto,
+  AgentSettingsPatchDto,
+  AgentSettingsPatchRequestDto,
+  AgentSettingsViewDto,
+  AgentTargetGrantSelectionDto,
+  AgentTargetKindDto,
+} from '@nexus-terminal/protocol/agent-host';
+import type {
   AgentDiscoveredProviderModelDto,
   AgentModelCapabilityDefaultsDto,
   AgentModelCapabilityDto,
@@ -85,42 +110,11 @@ export interface RecommendedAgentPluginInstallResult {
   installedNow: boolean;
 }
 
-export type AgentContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
-export type AgentContextProfile = 'normal' | 'extended';
-
-export interface AgentExecutionPolicyOverrides {
-  maxRunSteps?: number;
-  maxActiveExecutionSeconds?: number;
-  toolTimeoutSeconds?: number;
-  maxToolOutputBytes?: number;
-  maxRecallItems?: number;
-  maxRecallBytes?: number;
-  maxSubagentMessages?: number;
-  maxSubagentMessageBytes?: number;
-  contextCompactionMode?: AgentContextCompactionMode;
-  contextProfile?: AgentContextProfile;
-}
-
-export interface AgentExecutionPolicyView {
-  overrides: AgentExecutionPolicyOverrides;
-  effective: Required<AgentExecutionPolicyOverrides>;
-  version: number;
-}
-
-export interface AgentAppSummary {
-  id: string;
-  displayName: string;
-  version: string;
-  surface: 'builtin' | 'agent' | 'custom' | 'none';
-  defaultApprovalMode: AgentApprovalMode;
-  stateVersion: number;
-  enabled: boolean;
-  health: string;
-  healthReason: string | null;
-  runningRuns: number;
-  pendingApprovals: number;
-  pendingBudgetRequests: number;
-}
+export type AgentContextCompactionMode = AgentContextCompactionModeDto;
+export type AgentContextProfile = AgentContextProfileDto;
+export type AgentExecutionPolicyOverrides = AgentExecutionPolicyOverridesDto;
+export type AgentExecutionPolicyView = AgentExecutionPolicyViewDto;
+export type AgentAppSummary = AgentAppSummaryDto;
 
 export interface AgentRunEnvironmentSelection {
   recipeId: string;
@@ -136,40 +130,13 @@ export type AgentMcpIntegrationConfiguration = AgentMcpIntegrationConfigurationD
 export type AgentAcpIntegrationConfiguration = AgentAcpIntegrationConfigurationDto;
 export type AgentIntegrationView = AgentIntegrationViewDto;
 
-export type AgentTargetKind = 'workspace' | 'ssh';
-
-export type AgentTargetGrantSelection = { mode: 'all' } | { mode: 'ids'; ids: string[] };
-
-export type AgentCapabilityScope =
-  | { kind: 'global' }
-  | {
-      kind: 'targets';
-      targets: Partial<Record<AgentTargetKind, AgentTargetGrantSelection>>;
-    };
-
-export interface AgentCapabilityDefinition {
-  id: string;
-  scopeKind: AgentCapabilityScope['kind'];
-  supportedTargets: AgentTargetKind[];
-  defaultScope: AgentCapabilityScope;
-}
-
-export interface AgentCapabilityGrantInput {
-  capability: string;
-  scope: AgentCapabilityScope;
-}
-
-export interface AgentCapabilityGrant extends AgentCapabilityGrantInput {
-  schemaVersion: 2;
-  grantedAt: number;
-}
-
-export interface AgentAppGrantView {
-  app: AgentAppSummary;
-  policyRevision: number;
-  capabilityDefinitions: AgentCapabilityDefinition[];
-  grants: AgentCapabilityGrant[];
-}
+export type AgentTargetKind = AgentTargetKindDto;
+export type AgentTargetGrantSelection = AgentTargetGrantSelectionDto;
+export type AgentCapabilityScope = AgentCapabilityScopeDto;
+export type AgentCapabilityDefinition = AgentCapabilityDefinitionDto;
+export type AgentCapabilityGrantInput = AgentCapabilityGrantInputDto;
+export type AgentCapabilityGrant = AgentCapabilityGrantDto;
+export type AgentAppGrantView = AgentAppGrantViewDto;
 
 export interface PluginFrontendDescriptor {
   appId: string;
@@ -406,40 +373,8 @@ export type AgentArtifactPage = AgentArtifactPageDto;
 export type ArtifactCleanupPreview = AgentArtifactCleanupPreviewDto;
 export type ArtifactCleanupResult = AgentArtifactCleanupResultDto;
 
-export interface HardLimitPreview {
-  confirmationId: string;
-  expectedVersion: number;
-  current: AgentHardLimits;
-  proposed: AgentHardLimits;
-  impact: {
-    changes: Array<{
-      key: keyof AgentHardLimits;
-      current: number | null;
-      proposed: number | null;
-      direction: 'increase' | 'decrease';
-    }>;
-    hasIncrease: boolean;
-    hasDecrease: boolean;
-    usage: {
-      artifactUsedBytes: number;
-      artifactReservedBytes: number;
-      executingRuntimes: number;
-      activeWorkspaces: number;
-    };
-  };
-  runtimeCapabilities: { workspaceRuntimeController: boolean };
-  expiresAt: number;
-}
-
-export interface HostSummaryView {
-  featureEnabled: boolean;
-  hostState: 'enabled' | 'disabling' | 'disabled' | string;
-  apps: AgentAppSummary[];
-  totalRunningRuns: number;
-  totalPendingApprovals: number;
-  totalPendingBudgetRequests: number;
-  eventCursor: number;
-}
+export type HardLimitPreview = AgentHardLimitPreviewDto;
+export type HostSummaryView = AgentHostSummaryDto;
 
 export type AgentThreadView = AgentThreadViewDto;
 export type AgentThreadPage = AgentThreadPageDto;
@@ -461,7 +396,7 @@ export type AgentRunStatus =
   | 'cancelled'
   | 'interrupted';
 
-export type AgentApprovalMode = 'ask' | 'full_access';
+export type AgentApprovalMode = AgentApprovalModeDto;
 export type AgentExecutionMode = 'execute' | 'plan';
 export type AgentToolRisk = AgentToolRiskDto;
 
@@ -837,50 +772,54 @@ export const agentApi = {
     );
   },
   async settings(): Promise<AgentSettingsView> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentSettingsView>>('/agent/settings')).data);
+    return unwrap((await httpClient.get<AgentEnvelope<AgentSettingsViewDto>>('/agent/settings')).data);
   },
-  async patchSettings(patch: Record<string, unknown>, expectedVersion: number): Promise<AgentSettingsView> {
+  async patchSettings(patch: AgentSettingsPatchDto, expectedVersion: number): Promise<AgentSettingsView> {
+    const input: AgentSettingsPatchRequestDto = { patch, expectedVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentSettingsView>>(
+        await httpClient.patch<AgentEnvelope<AgentSettingsViewDto>>(
           '/agent/settings',
-          { patch, expectedVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async previewHardLimits(proposed: Partial<AgentHardLimits>, expectedVersion: number): Promise<HardLimitPreview> {
+    const input: AgentHardLimitPreviewRequestDto = { proposed, expectedVersion };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<HardLimitPreview>>(
+        await httpClient.post<AgentEnvelope<AgentHardLimitPreviewDto>>(
           '/agent/settings/hard-limits/preview',
-          { proposed, expectedVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async confirmHardLimits(confirmationId: string, expectedVersion: number): Promise<AgentSettingsView> {
+    const input: AgentHardLimitConfirmRequestDto = { confirmationId, expectedVersion };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentSettingsView>>(
+        await httpClient.post<AgentEnvelope<AgentSettingsViewDto>>(
           '/agent/settings/hard-limits/confirm',
-          { confirmationId, expectedVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async apps(): Promise<AgentAppSummary[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentAppSummary[]>>('/agent/apps')).data);
+    return unwrap((await httpClient.get<AgentEnvelope<AgentAppSummaryDto[]>>('/agent/apps')).data);
   },
   async setAppEnabled(app: AgentAppSummary, enabled: boolean): Promise<AgentAppSummary> {
+    const input: AgentAppStateUpdateRequestDto = { enabled, expectedVersion: app.stateVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentAppSummary>>(
+        await httpClient.patch<AgentEnvelope<AgentAppSummaryDto>>(
           `/agent/apps/${encodeURIComponent(app.id)}`,
-          { enabled, expectedVersion: app.stateVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -889,7 +828,7 @@ export const agentApi = {
   async appExecutionPolicy(appId: string): Promise<AgentExecutionPolicyView> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentExecutionPolicyView>>(
+        await httpClient.get<AgentEnvelope<AgentExecutionPolicyViewDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/execution-policy`,
         )
       ).data,
@@ -900,11 +839,12 @@ export const agentApi = {
     overrides: AgentExecutionPolicyOverrides,
     expectedVersion: number,
   ): Promise<AgentExecutionPolicyView> {
+    const input: AgentExecutionPolicyReplaceRequestDto = { overrides, expectedVersion };
     return unwrap(
       (
-        await httpClient.put<AgentEnvelope<AgentExecutionPolicyView>>(
+        await httpClient.put<AgentEnvelope<AgentExecutionPolicyViewDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/execution-policy`,
-          { overrides, expectedVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -912,7 +852,7 @@ export const agentApi = {
   },
   async appGrants(appId: string): Promise<AgentAppGrantView> {
     return unwrap(
-      (await httpClient.get<AgentEnvelope<AgentAppGrantView>>(`/agent/apps/${encodeURIComponent(appId)}/grants`)).data,
+      (await httpClient.get<AgentEnvelope<AgentAppGrantViewDto>>(`/agent/apps/${encodeURIComponent(appId)}/grants`)).data,
     );
   },
   async replaceAppGrants(
@@ -920,11 +860,12 @@ export const agentApi = {
     grants: AgentCapabilityGrantInput[],
     expectedPolicyRevision: number,
   ): Promise<AgentAppGrantView> {
+    const input: AgentAppGrantReplaceRequestDto = { grants, expectedPolicyRevision };
     return unwrap(
       (
-        await httpClient.put<AgentEnvelope<AgentAppGrantView>>(
+        await httpClient.put<AgentEnvelope<AgentAppGrantViewDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/grants`,
-          { grants, expectedPolicyRevision },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -1007,7 +948,7 @@ export const agentApi = {
     );
   },
   async summary(): Promise<HostSummaryView> {
-    return unwrap((await httpClient.get<AgentEnvelope<HostSummaryView>>('/agent/summary')).data);
+    return unwrap((await httpClient.get<AgentEnvelope<AgentHostSummaryDto>>('/agent/summary')).data);
   },
   async threads(appId: string, before?: string, limit = 50): Promise<AgentThreadPage> {
     const params: AgentThreadListQueryDto = { limit, ...(before ? { before } : {}) };

@@ -32,6 +32,7 @@
   const grantLoadGeneration = new Map<string, number>();
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
+  type CapabilityId = AgentCapabilityGrantInput['capability'];
 
   const cloneSelection = (selection: AgentTargetGrantSelection): AgentTargetGrantSelection =>
     selection.mode === 'all' ? { mode: 'all' } : { mode: 'ids', ids: [...selection.ids] };
@@ -54,10 +55,10 @@
     scope: cloneScope(grant.scope),
   });
 
-  const definitionFor = (appId: string, capability: string): AgentCapabilityDefinition | undefined =>
+  const definitionFor = (appId: string, capability: CapabilityId): AgentCapabilityDefinition | undefined =>
     grantViews.value[appId]?.capabilityDefinitions.find((definition) => definition.id === capability);
 
-  const grantFor = (appId: string, capability: string): AgentCapabilityGrantInput | undefined =>
+  const grantFor = (appId: string, capability: CapabilityId): AgentCapabilityGrantInput | undefined =>
     (drafts.value[appId] ?? []).find((grant) => grant.capability === capability);
 
   const loadGrant = async (appId: string): Promise<void> => {
@@ -90,7 +91,7 @@
     { immediate: true },
   );
 
-  const checked = (appId: string, capability: string): boolean => grantFor(appId, capability) !== undefined;
+  const checked = (appId: string, capability: CapabilityId): boolean => grantFor(appId, capability) !== undefined;
 
   const canonicalGrants = (grants: readonly AgentCapabilityGrantInput[]): string =>
     JSON.stringify(
@@ -105,7 +106,7 @@
     return canonicalGrants(view.grants) !== canonicalGrants(drafts.value[appId] ?? []);
   };
 
-  const toggleCapability = (appId: string, capability: string, enabled: boolean): void => {
+  const toggleCapability = (appId: string, capability: CapabilityId, enabled: boolean): void => {
     const current = (drafts.value[appId] ?? []).filter((grant) => grant.capability !== capability).map(cloneGrant);
     if (enabled) {
       const definition = definitionFor(appId, capability);
@@ -115,7 +116,7 @@
     drafts.value = { ...drafts.value, [appId]: current };
   };
 
-  const onCapabilityChange = (appId: string, capability: string, event: Event): void => {
+  const onCapabilityChange = (appId: string, capability: CapabilityId, event: Event): void => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
     toggleCapability(appId, capability, target.checked);
@@ -123,7 +124,7 @@
 
   const updateGrantScope = (
     appId: string,
-    capability: string,
+    capability: CapabilityId,
     update: (scope: AgentCapabilityScope) => AgentCapabilityScope,
   ): void => {
     drafts.value = {
@@ -136,19 +137,19 @@
 
   const targetScopeSelection = (
     appId: string,
-    capability: string,
+    capability: CapabilityId,
     target: AgentTargetKind,
   ): AgentTargetGrantSelection | undefined => {
     const scope = grantFor(appId, capability)?.scope;
     return scope?.kind === 'targets' ? scope.targets[target] : undefined;
   };
 
-  const targetEnabled = (appId: string, capability: string, target: AgentTargetKind): boolean =>
+  const targetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKind): boolean =>
     targetScopeSelection(appId, capability, target) !== undefined;
 
   const targetLabel = (target: AgentTargetKind): string => (target === 'workspace' ? 'Workspace' : 'SSH');
 
-  const setTargetEnabled = (appId: string, capability: string, target: AgentTargetKind, enabled: boolean): void => {
+  const setTargetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKind, enabled: boolean): void => {
     updateGrantScope(appId, capability, (scope) => {
       if (scope.kind !== 'targets') return scope;
       const targets = { ...scope.targets };
@@ -158,14 +159,14 @@
     });
   };
 
-  const onTargetEnabledChange = (appId: string, capability: string, target: AgentTargetKind, event: Event): void => {
+  const onTargetEnabledChange = (appId: string, capability: CapabilityId, target: AgentTargetKind, event: Event): void => {
     const input = event.target;
     if (input instanceof HTMLInputElement) setTargetEnabled(appId, capability, target, input.checked);
   };
 
   const setTargetMode = (
     appId: string,
-    capability: string,
+    capability: CapabilityId,
     target: AgentTargetKind,
     mode: AgentTargetGrantSelection['mode'],
   ): void => {
@@ -183,19 +184,19 @@
     });
   };
 
-  const onTargetModeChange = (appId: string, capability: string, target: AgentTargetKind, event: Event): void => {
+  const onTargetModeChange = (appId: string, capability: CapabilityId, target: AgentTargetKind, event: Event): void => {
     const input = event.target;
     if (input instanceof HTMLSelectElement && (input.value === 'all' || input.value === 'ids')) {
       setTargetMode(appId, capability, target, input.value);
     }
   };
 
-  const targetIdsValue = (appId: string, capability: string, target: AgentTargetKind): string => {
+  const targetIdsValue = (appId: string, capability: CapabilityId, target: AgentTargetKind): string => {
     const selection = targetScopeSelection(appId, capability, target);
     return selection?.mode === 'ids' ? selection.ids.join(', ') : '';
   };
 
-  const onTargetIdsInput = (appId: string, capability: string, target: AgentTargetKind, event: Event): void => {
+  const onTargetIdsInput = (appId: string, capability: CapabilityId, target: AgentTargetKind, event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
     const ids = [

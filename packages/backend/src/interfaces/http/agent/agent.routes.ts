@@ -5,6 +5,20 @@ import type {
   AgentArtifactLibraryQueryDto,
 } from '@nexus-terminal/protocol/agent-artifacts';
 import type {
+  AgentAppGrantReplaceRequestDto,
+  AgentAppStateUpdateRequestDto,
+  AgentCapabilityGrantInputDto,
+  AgentCapabilityScopeDto,
+  AgentExecutionPolicyOverridesDto,
+  AgentExecutionPolicyReplaceRequestDto,
+  AgentHardLimitConfirmRequestDto,
+  AgentHardLimitPreviewRequestDto,
+  AgentHardLimitsDto,
+  AgentSettingsPatchDto,
+  AgentSettingsPatchRequestDto,
+  AgentTargetGrantSelectionDto,
+} from '@nexus-terminal/protocol/agent-host';
+import type {
   AgentAvailableModelDto,
   AgentDiscoveredProviderModelDto,
   AgentModelRegistryResolveQueryDto,
@@ -37,8 +51,6 @@ import {
   type AgentPluginFacade,
   type AgentProviderFacade,
   type AgentModelRegistryFacade,
-  type AppView,
-  type CapabilityGrantInput,
 } from '../../../modules/agent/public';
 import { agentData, agentError, agentRoute } from './agent-http';
 import {
@@ -48,6 +60,14 @@ import {
   artifactPageDto,
   artifactStorageSummaryDto,
 } from './artifact-dto';
+import {
+  appGrantViewDto,
+  appSummaryDto,
+  executionPolicyDto,
+  hardLimitPreviewDto,
+  hostSummaryDto,
+  settingsViewDto,
+} from './agent-host-dto';
 import {
   hasOnlyKeys,
   isJsonValue,
@@ -97,29 +117,139 @@ const appIntentRangeFor = (
 const appIntentContentDisposition = (name: string): string =>
   createContentDisposition(name.slice(0, 180) || 'artifact', { type: 'attachment' });
 
-const appSummary = (app: AppView) => ({
-  id: app.appId,
-  displayName: app.displayName,
-  version: app.activeVersion,
-  surface: app.surface,
-  defaultApprovalMode: app.defaultApprovalMode,
-  stateVersion: app.version,
-  enabled: app.desiredState === 'enabled',
-  health:
-    app.observedState === 'running'
-      ? 'healthy'
-      : app.observedState === 'degraded'
-        ? 'degraded'
-        : app.observedState === 'disabled'
-          ? 'disabled'
-          : app.observedState === 'failed'
-            ? 'failed'
-            : app.observedState,
-  healthReason: app.healthReason,
-  runningRuns: app.runningCount,
-  pendingApprovals: app.approvalCount,
-  pendingBudgetRequests: app.budgetRequestCount,
-});
+const settingsPatchRequest = (value: unknown): AgentSettingsPatchRequestDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['patch', 'expectedVersion'])) throw new Error('VALIDATION_FAILED');
+  if (!isRecord(value.patch) || !positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
+  const allowedSections = new Set([
+    'feature',
+    'model',
+    'performance',
+    'budget',
+    'subagents',
+    'storage',
+    'workspaceRuntime',
+    'browser',
+    'plugins',
+  ]);
+  if (Object.keys(value.patch).some((key) => !allowedSections.has(key))) throw new Error('VALIDATION_FAILED');
+  const patch: AgentSettingsPatchDto = {};
+  for (const section of allowedSections) {
+    if (!(section in value.patch)) continue;
+    const candidate = value.patch[section];
+    if (!isRecord(candidate)) throw new Error('VALIDATION_FAILED');
+    (patch as Record<string, unknown>)[section] = { ...candidate };
+  }
+  return { patch, expectedVersion: value.expectedVersion };
+};
+
+const hardLimitKeys = [
+  'maxRunSteps',
+  'maxActiveExecutionSeconds',
+  'toolTimeoutSeconds',
+  'maxToolOutputBytes',
+  'maxArtifactBytes',
+  'maxSingleArtifactBytes',
+  'maxGlobalArtifactBytes',
+  'maxRecallItems',
+  'maxRecallBytes',
+  'maxConcurrentRuntimes',
+  'maxConcurrentModelCalls',
+  'maxDelegationDepth',
+  'maxSubagentMessagesPerRun',
+  'maxSubagentMessageBytesPerRun',
+  'maxActiveWorkspaces',
+  'unretainedArtifactTtlSeconds',
+] as const satisfies readonly (keyof AgentHardLimitsDto)[];
+
+const hardLimitPreviewRequest = (value: unknown): AgentHardLimitPreviewRequestDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['proposed', 'expectedVersion'])) throw new Error('VALIDATION_FAILED');
+  if (!isRecord(value.proposed) || !positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
+  if (Object.keys(value.proposed).some((key) => !hardLimitKeys.includes(key as keyof AgentHardLimitsDto))) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const proposed: Partial<AgentHardLimitsDto> = {};
+  for (const key of hardLimitKeys) {
+    const candidate = value.proposed[key];
+    if (candidate === undefined) continue;
+    if (!positiveInteger(candidate)) throw new Error('VALIDATION_FAILED');
+    proposed[key] = candidate;
+  }
+  return { proposed, expectedVersion: value.expectedVersion };
+};
+
+const hardLimitConfirmRequest = (value: unknown): AgentHardLimitConfirmRequestDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['confirmationId', 'expectedVersion'])) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (!nonEmptyString(value.confirmationId) || !positiveInteger(value.expectedVersion)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return { confirmationId: value.confirmationId, expectedVersion: value.expectedVersion };
+};
+
+const appStateUpdateRequest = (value: unknown): AgentAppStateUpdateRequestDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['enabled', 'expectedVersion'])) throw new Error('VALIDATION_FAILED');
+  if (typeof value.enabled !== 'boolean' || !positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
+  return { enabled: value.enabled, expectedVersion: value.expectedVersion };
+};
+
+const grantSelection = (value: unknown): AgentTargetGrantSelectionDto => {
+  if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
+  if (value.mode === 'all' && hasOnlyKeys(value, ['mode'])) return { mode: 'all' };
+  if (
+    value.mode === 'ids' &&
+    hasOnlyKeys(value, ['mode', 'ids']) &&
+    Array.isArray(value.ids) &&
+    value.ids.every((id) => typeof id === 'string' && id.length > 0)
+  ) {
+    return { mode: 'ids', ids: [...value.ids] };
+  }
+  throw new Error('VALIDATION_FAILED');
+};
+
+const capabilityScope = (value: unknown): AgentCapabilityScopeDto => {
+  if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
+  if (value.kind === 'global' && hasOnlyKeys(value, ['kind'])) return { kind: 'global' };
+  if (value.kind !== 'targets' || !hasOnlyKeys(value, ['kind', 'targets']) || !isRecord(value.targets)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (Object.keys(value.targets).some((key) => key !== 'workspace' && key !== 'ssh')) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const targets: AgentCapabilityScopeDto & { kind: 'targets' } = { kind: 'targets', targets: {} };
+  if (value.targets.workspace !== undefined) targets.targets.workspace = grantSelection(value.targets.workspace);
+  if (value.targets.ssh !== undefined) targets.targets.ssh = grantSelection(value.targets.ssh);
+  return targets;
+};
+
+const grantInput = (value: unknown): AgentCapabilityGrantInputDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['capability', 'scope'])) throw new Error('VALIDATION_FAILED');
+  if (typeof value.capability !== 'string' || !AGENT_CAPABILITIES.includes(value.capability as AgentCapability)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return { capability: value.capability as AgentCapabilityGrantInputDto['capability'], scope: capabilityScope(value.scope) };
+};
+
+const appGrantReplaceRequest = (value: unknown): AgentAppGrantReplaceRequestDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['grants', 'expectedPolicyRevision'])) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (!Array.isArray(value.grants) || value.grants.length > AGENT_CAPABILITIES.length || !positiveInteger(value.expectedPolicyRevision)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const grants = value.grants.map(grantInput);
+  if (new Set(grants.map((grant) => grant.capability)).size !== grants.length) throw new Error('VALIDATION_FAILED');
+  return { grants, expectedPolicyRevision: value.expectedPolicyRevision };
+};
+
+const executionPolicyReplaceRequest = (value: unknown): AgentExecutionPolicyReplaceRequestDto => {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['overrides', 'expectedVersion']) || !isRecord(value.overrides)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (!Number.isSafeInteger(value.expectedVersion) || Number(value.expectedVersion) < 0) throw new Error('VALIDATION_FAILED');
+  const overrides = { ...value.overrides } as AgentExecutionPolicyOverridesDto;
+  return { overrides, expectedVersion: Number(value.expectedVersion) };
+};
 
 const artifactFileKinds: readonly AgentArtifactFileKindDto[] = [
   'image',
@@ -396,7 +526,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/apps',
     agentRoute(async (request, response) => {
       const apps = await dependencies.host.listApps(agentUserId(request));
-      agentData(request, response, apps.map(appSummary));
+      agentData(request, response, apps.map(appSummaryDto));
     }),
   );
 
@@ -410,14 +540,10 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         dependencies.host.listAppGrants(userId, appId),
       ]);
       const declared = new Set(app.capabilities);
-      agentData(request, response, {
-        app: appSummary(app),
-        policyRevision: app.policyRevision,
-        capabilityDefinitions: dependencies.host
-          .listCapabilityDefinitions()
-          .filter((definition) => declared.has(definition.id)),
-        grants,
-      });
+      const definitions = dependencies.host
+        .listCapabilityDefinitions()
+        .filter((definition) => declared.has(definition.id));
+      agentData(request, response, appGrantViewDto(app, definitions, grants));
     }),
   );
 
@@ -425,40 +551,17 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/apps/:appId/grants',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['grants', 'expectedPolicyRevision'])) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      const grants = request.body.grants;
-      if (
-        !Array.isArray(grants) ||
-        grants.length > AGENT_CAPABILITIES.length ||
-        grants.some(
-          (value) =>
-            !isRecord(value) ||
-            !hasOnlyKeys(value, ['capability', 'scope']) ||
-            typeof value.capability !== 'string' ||
-            !AGENT_CAPABILITIES.includes(value.capability as AgentCapability) ||
-            !isJsonValue(value.scope),
-        ) ||
-        new Set(grants.map((value) => (value as Record<string, unknown>).capability)).size !== grants.length ||
-        !positiveInteger(request.body.expectedPolicyRevision)
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+      const input = appGrantReplaceRequest(request.body);
       const updated = await dependencies.host.replaceAppGrants(
         agentUserId(request),
         pathParam(request.params.appId),
-        grants as CapabilityGrantInput[],
-        request.body.expectedPolicyRevision,
+        input.grants,
+        input.expectedPolicyRevision,
       );
-      agentData(request, response, {
-        app: appSummary(updated.app),
-        policyRevision: updated.app.policyRevision,
-        capabilityDefinitions: dependencies.host
-          .listCapabilityDefinitions()
-          .filter((definition) => updated.app.capabilities.includes(definition.id)),
-        grants: updated.grants,
-      });
+      const definitions = dependencies.host
+        .listCapabilityDefinitions()
+        .filter((definition) => updated.app.capabilities.includes(definition.id));
+      agentData(request, response, appGrantViewDto(updated.app, definitions, updated.grants));
     }),
   );
 
@@ -508,7 +611,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/apps/:appId/execution-policy',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.host.getAppExecutionPolicy(scope));
+      agentData(request, response, executionPolicyDto(await dependencies.host.getAppExecutionPolicy(scope)));
     }),
   );
 
@@ -516,24 +619,13 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/apps/:appId/execution-policy',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['overrides', 'expectedVersion'])) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      if (
-        !isRecord(request.body.overrides) ||
-        !Number.isSafeInteger(request.body.expectedVersion) ||
-        (request.body.expectedVersion as number) < 0
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+      const input = executionPolicyReplaceRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       agentData(
         request,
         response,
-        await dependencies.host.replaceAppExecutionPolicy(
-          scope,
-          request.body.overrides,
-          request.body.expectedVersion as number,
+        executionPolicyDto(
+          await dependencies.host.replaceAppExecutionPolicy(scope, input.overrides, input.expectedVersion),
         ),
       );
     }),
@@ -639,26 +731,8 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         dependencies.host.getSettings(userId),
         dependencies.events.hostCursor(userId),
       ]);
-      const summaries = apps.map(appSummary);
-      const totalRunningRuns = summaries.reduce((total, app) => total + app.runningRuns, 0);
-      const totalPendingApprovals = summaries.reduce((total, app) => total + app.pendingApprovals, 0);
-      const totalPendingBudgetRequests = summaries.reduce((total, app) => total + app.pendingBudgetRequests, 0);
       const availability = resolveAgentAvailability(settings, apps);
-      const featureEnabled = availability.state === 'enabled' || availability.state === 'degraded';
-      agentData(request, response, {
-        featureEnabled,
-        hostState:
-          availability.state === 'disabled' && totalRunningRuns > 0
-            ? 'disabling'
-            : availability.state === 'unavailable'
-              ? 'disabled'
-              : availability.state,
-        apps: summaries,
-        totalRunningRuns,
-        totalPendingApprovals,
-        totalPendingBudgetRequests,
-        eventCursor,
-      });
+      agentData(request, response, hostSummaryDto(apps, availability, eventCursor));
     }),
   );
 
@@ -666,21 +740,20 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/apps/:appId',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['enabled', 'expectedVersion'])) {
-        agentError(request, response, 400, 'VALIDATION_FAILED', 'Invalid Agent App update.');
-        return;
-      }
-      if (typeof request.body.enabled !== 'boolean' || !positiveInteger(request.body.expectedVersion)) {
+      let input: AgentAppStateUpdateRequestDto;
+      try {
+        input = appStateUpdateRequest(request.body);
+      } catch {
         agentError(request, response, 400, 'VALIDATION_FAILED', 'Invalid Agent App update.');
         return;
       }
       const app = await dependencies.host.setAppEnabled(
         agentUserId(request),
         pathParam(request.params.appId),
-        request.body.enabled,
-        request.body.expectedVersion,
+        input.enabled,
+        input.expectedVersion,
       );
-      agentData(request, response, appSummary(app), app.observedState === 'disabling' ? 202 : 200);
+      agentData(request, response, appSummaryDto(app), app.observedState === 'disabling' ? 202 : 200);
     }),
   );
 
@@ -740,7 +813,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         agentUserId(request),
         AbortSignal.timeout(120_000),
       );
-      agentData(request, response, { ...installed, app: appSummary(installed.app) }, 201);
+      agentData(request, response, { ...installed, app: appSummaryDto(installed.app) }, 201);
     }),
   );
 
@@ -752,13 +825,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         dependencies.host.getSettings(userId),
         dependencies.host.listApps(userId),
       ]);
-      agentData(request, response, {
-        ...settings,
-        availability: resolveAgentAvailability(settings, apps),
-        runtimeCapabilities: {
-          workspaceRuntimeController: false,
-        },
-      });
+      agentData(request, response, settingsViewDto(settings, resolveAgentAvailability(settings, apps)));
     }),
   );
 
@@ -766,24 +833,17 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/settings',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['patch', 'expectedVersion'])) {
-        agentError(request, response, 400, 'VALIDATION_FAILED', 'Invalid Agent settings update.');
-        return;
-      }
-      if (!isRecord(request.body.patch) || !positiveInteger(request.body.expectedVersion)) {
+      let input: AgentSettingsPatchRequestDto;
+      try {
+        input = settingsPatchRequest(request.body);
+      } catch {
         agentError(request, response, 400, 'VALIDATION_FAILED', 'Invalid Agent settings update.');
         return;
       }
       const userId = agentUserId(request);
-      const settings = await dependencies.host.patchSettings(userId, request.body.patch, request.body.expectedVersion);
+      const settings = await dependencies.host.patchSettings(userId, input.patch, input.expectedVersion);
       const apps = await dependencies.host.listApps(userId);
-      agentData(request, response, {
-        ...settings,
-        availability: resolveAgentAvailability(settings, apps),
-        runtimeCapabilities: {
-          workspaceRuntimeController: false,
-        },
-      });
+      agentData(request, response, settingsViewDto(settings, resolveAgentAvailability(settings, apps)));
     }),
   );
 
@@ -791,25 +851,13 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/settings/hard-limits/preview',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['proposed', 'expectedVersion']) ||
-        !isRecord(request.body.proposed) ||
-        !positiveInteger(request.body.expectedVersion)
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+      const input = hardLimitPreviewRequest(request.body);
       const preview = await dependencies.host.previewHardLimits(
         agentUserId(request),
-        request.body.proposed,
-        request.body.expectedVersion,
+        input.proposed,
+        input.expectedVersion,
       );
-      agentData(request, response, {
-        ...preview,
-        runtimeCapabilities: {
-          workspaceRuntimeController: false,
-        },
-      });
+      agentData(request, response, hardLimitPreviewDto(preview));
     }),
   );
 
@@ -817,28 +865,11 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/settings/hard-limits/confirm',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['confirmationId', 'expectedVersion']) ||
-        !nonEmptyString(request.body.confirmationId) ||
-        !positiveInteger(request.body.expectedVersion)
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      const settings = await dependencies.host.confirmHardLimits(
-        agentUserId(request),
-        request.body.confirmationId,
-        request.body.expectedVersion,
-      );
-      agentData(request, response, {
-        ...settings,
-        availability: {
-          state: settings.effectiveSettings.feature.enabled ? 'enabled' : 'disabled',
-        },
-        runtimeCapabilities: {
-          workspaceRuntimeController: false,
-        },
-      });
+      const input = hardLimitConfirmRequest(request.body);
+      const userId = agentUserId(request);
+      const settings = await dependencies.host.confirmHardLimits(userId, input.confirmationId, input.expectedVersion);
+      const apps = await dependencies.host.listApps(userId);
+      agentData(request, response, settingsViewDto(settings, resolveAgentAvailability(settings, apps)));
     }),
   );
 
