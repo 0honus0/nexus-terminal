@@ -1,45 +1,22 @@
-export type CaptchaProvider = 'none' | 'hcaptcha' | 'recaptcha';
+import type {
+  AuthTwoFactorSetupDto,
+  CaptchaConfigDto,
+  CaptchaConfigUpdateDto,
+  CaptchaProviderDto,
+  IpAccessPolicyDto,
+  IpBlacklistEntryDto,
+  PasskeySummaryDto,
+  PasskeyTransportDto,
+} from '@nexus-terminal/protocol/auth';
 
-export interface CaptchaConfig {
-  enabled: boolean;
-  provider: CaptchaProvider;
-  hcaptchaSiteKey?: string;
-  recaptchaSiteKey?: string;
-}
-
-export interface CaptchaConfigUpdate extends CaptchaConfig {
-  hcaptchaSecretKey?: string;
-  recaptchaSecretKey?: string;
-}
-
-export interface TwoFactorSetup {
-  secret: string;
-  qrCodeUrl: string;
-}
-
-export type PasskeyTransport = 'ble' | 'cable' | 'hybrid' | 'internal' | 'nfc' | 'smart-card' | 'usb';
-
-export interface PasskeySummary {
-  credentialId: string;
-  name: string | null;
-  transports: PasskeyTransport[];
-  createdAt: number;
-  lastUsedAt: number | null;
-}
-
-export interface IpBlacklistEntry {
-  ip: string;
-  attempts: number;
-  lastAttemptAt: number;
-  blockedUntil: number | null;
-}
-
-export interface IpAccessPolicy {
-  whitelist: string;
-  blacklistEnabled: boolean;
-  maxLoginAttempts: number;
-  loginBanDuration: number;
-}
+export type CaptchaProvider = CaptchaProviderDto;
+export type CaptchaConfig = CaptchaConfigDto;
+export type CaptchaConfigUpdate = CaptchaConfigUpdateDto;
+export type TwoFactorSetup = AuthTwoFactorSetupDto;
+export type PasskeyTransport = PasskeyTransportDto;
+export type PasskeySummary = PasskeySummaryDto;
+export type IpBlacklistEntry = IpBlacklistEntryDto;
+export type IpAccessPolicy = IpAccessPolicyDto;
 
 export interface PasskeyLoginResult {
   verified: boolean;

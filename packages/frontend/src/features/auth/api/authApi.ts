@@ -1,11 +1,16 @@
 import axios from 'axios';
+import type {
+  AuthLoginRequestDto,
+  AuthLoginResponseDto,
+  AuthNeedsSetupResponseDto,
+  AuthSetupRequestDto,
+  AuthStatusResponseDto,
+  AuthTwoFactorLoginRequestDto,
+  AuthTwoFactorLoginResponseDto,
+} from '@nexus-terminal/protocol/auth';
+import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import { httpClient } from '@/client/http';
 import type { AuthUser, LoginCredentials, LoginResult, SetupCredentials } from '../model/auth';
-
-type NeedsSetupResponse = { needsSetup: boolean };
-type AuthStatusResponse = { isAuthenticated: boolean; user?: AuthUser };
-type LoginResponse = { user?: AuthUser; requiresTwoFactor?: boolean };
-type TwoFactorLoginResponse = { user: AuthUser };
 
 export interface AuthApi {
   needsSetup(): Promise<boolean>;
@@ -18,14 +23,14 @@ export interface AuthApi {
 
 export const authApi: AuthApi = {
   async needsSetup() {
-    const response = await httpClient.get<NeedsSetupResponse>('/auth/needs-setup');
+    const response = await httpClient.get<AuthNeedsSetupResponseDto>('/auth/needs-setup');
     return response.data.needsSetup;
   },
 
   async readSession() {
     try {
-      const response = await httpClient.get<AuthStatusResponse>('/auth/status');
-      return response.data.isAuthenticated ? (response.data.user ?? null) : null;
+      const response = await httpClient.get<AuthStatusResponseDto>('/auth/status');
+      return response.data.isAuthenticated ? response.data.user : null;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) return null;
       throw error;
@@ -33,22 +38,25 @@ export const authApi: AuthApi = {
   },
 
   async setup(credentials) {
-    await httpClient.post('/auth/setup', credentials);
+    const request: AuthSetupRequestDto = credentials;
+    await httpClient.post<MessageResponseDto>('/auth/setup', request);
   },
 
   async login(credentials) {
-    const response = await httpClient.post<LoginResponse>('/auth/login', credentials);
+    const request: AuthLoginRequestDto = credentials;
+    const response = await httpClient.post<AuthLoginResponseDto>('/auth/login', request);
     if (response.data.requiresTwoFactor) return { status: 'two-factor-required' };
     if (!response.data.user) throw new Error('Authentication response did not include a user.');
     return { status: 'authenticated', user: response.data.user };
   },
 
   async verifyTwoFactor(token) {
-    const response = await httpClient.post<TwoFactorLoginResponse>('/auth/login/2fa', { token });
+    const request: AuthTwoFactorLoginRequestDto = { token };
+    const response = await httpClient.post<AuthTwoFactorLoginResponseDto>('/auth/login/2fa', request);
     return response.data.user;
   },
 
   async logout() {
-    await httpClient.post('/auth/logout');
+    await httpClient.post<MessageResponseDto>('/auth/logout');
   },
 };

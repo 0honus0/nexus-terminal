@@ -1,4 +1,25 @@
 import { Router, type Request } from 'express';
+import type {
+  AuthLoginRequestDto,
+  AuthLoginResponseDto,
+  AuthNeedsSetupResponseDto,
+  AuthPasswordChangeRequestDto,
+  AuthSetupRequestDto,
+  AuthStatusResponseDto,
+  AuthTwoFactorDisableRequestDto,
+  AuthTwoFactorLoginRequestDto,
+  AuthTwoFactorLoginResponseDto,
+  AuthTwoFactorSetupDto,
+  AuthTwoFactorTokenRequestDto,
+  PasskeyAuthenticateRequestDto,
+  PasskeyAuthenticationOptionsRequestDto,
+  PasskeyAuthenticationResponseDto,
+  PasskeyHasConfiguredResponseDto,
+  PasskeyRegisterRequestDto,
+  PasskeyRegisterResponseDto,
+  PasskeyRenameRequestDto,
+  PasskeySummaryDto,
+} from '@nexus-terminal/protocol/auth';
 import type { AuthService } from '../../../modules/auth/auth.service';
 import type { CaptchaService } from '../../../modules/auth/captcha.service';
 import type { IpBlacklistService } from '../../../modules/auth/ip-blacklist.service';
@@ -13,7 +34,7 @@ import { route } from '../shared/route-handler';
 
 const REMEMBER_ME_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
-const passkeySummaryDto = (passkey: PasskeySummary) => ({
+const passkeySummaryDto = (passkey: PasskeySummary): PasskeySummaryDto => ({
   credentialId: passkey.credentialId,
   name: passkey.name,
   transports: passkey.transports,
@@ -76,14 +97,16 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
   router.get(
     '/needs-setup',
     route(async (_request, response) => {
-      response.json({ needsSetup: await dependencies.auth.needsSetup() });
+      const payload: AuthNeedsSetupResponseDto = { needsSetup: await dependencies.auth.needsSetup() };
+      response.json(payload);
     }),
   );
 
   router.post(
     '/setup',
     route(async (request, response) => {
-      const { username, password, confirmPassword } = request.body ?? {};
+      const body = (request.body ?? {}) as Partial<AuthSetupRequestDto>;
+      const { username, password, confirmPassword } = body;
       if (!username || !password || !confirmPassword) {
         response.status(400).json({ message: '用户名、密码和确认密码不能为空。' });
         return;
@@ -114,7 +137,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/login',
     blacklistCheck,
     route(async (request, response) => {
-      const { username, password, rememberMe, captchaToken } = request.body ?? {};
+      const body = (request.body ?? {}) as Partial<AuthLoginRequestDto>;
+      const { username, password, rememberMe, captchaToken } = body;
       if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
         response.status(400).json({ message: '用户名和密码不能为空。' });
         return;
@@ -154,7 +178,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
         request.session.userId = result.userId;
         request.session.requiresTwoFactor = true;
         request.session.rememberMe = Boolean(rememberMe);
-        response.json({ message: '需要进行两步验证。', requiresTwoFactor: true });
+        const payload: AuthLoginResponseDto = { message: '需要进行两步验证。', requiresTwoFactor: true };
+        response.json(payload);
         return;
       }
 
@@ -164,7 +189,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       request.session.username = result.user.username;
       request.session.requiresTwoFactor = false;
       configureSessionLifetime(request, Boolean(rememberMe));
-      response.json({ message: '登录成功。', user: result.user });
+      const payload: AuthLoginResponseDto = { message: '登录成功。', user: result.user };
+      response.json(payload);
     }),
   );
 
@@ -173,7 +199,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     blacklistCheck,
     route(async (request, response) => {
       const userId = request.session.userId;
-      const token = request.body?.token;
+      const body = (request.body ?? {}) as Partial<AuthTwoFactorLoginRequestDto>;
+      const token = body.token;
       if (!userId || request.session.requiresTwoFactor !== true) {
         response.status(400).json({ message: '无效的请求或会话状态。' });
         return;
@@ -196,7 +223,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       request.session.username = result.user.username;
       request.session.requiresTwoFactor = false;
       configureSessionLifetime(request, rememberMe);
-      response.json({ message: '登录成功。', user: result.user });
+      const payload: AuthTwoFactorLoginResponseDto = { message: '登录成功。', user: result.user };
+      response.json(payload);
     }),
   );
 
@@ -206,13 +234,15 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     route(async (request, response) => {
       const user = await dependencies.users.get(request.session.userId!);
       if (!user) {
-        response.status(401).json({ isAuthenticated: false });
+        const payload: AuthStatusResponseDto = { isAuthenticated: false };
+        response.status(401).json(payload);
         return;
       }
-      response.json({
+      const payload: AuthStatusResponseDto = {
         isAuthenticated: true,
         user: { id: user.id, username: request.session.username!, twoFactorEnabled: user.hasTwoFactor },
-      });
+      };
+      response.json(payload);
     }),
   );
 
@@ -220,7 +250,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/password',
     requireAuthenticated,
     route(async (request, response) => {
-      const { currentPassword, newPassword } = request.body ?? {};
+      const body = (request.body ?? {}) as Partial<AuthPasswordChangeRequestDto>;
+      const { currentPassword, newPassword } = body;
       if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || !currentPassword || !newPassword) {
         response.status(400).json({ message: '当前密码和新密码不能为空。' });
         return;
@@ -242,7 +273,10 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     requireAuthenticated,
     route(async (request, response) => {
       try {
-        const setup = await dependencies.twoFactor.beginSetup(request.session.userId!, request.session.username!);
+        const setup: AuthTwoFactorSetupDto = await dependencies.twoFactor.beginSetup(
+          request.session.userId!,
+          request.session.username!,
+        );
         request.session.tempTwoFactorSecret = setup.secret;
         response.json(setup);
       } catch (error) {
@@ -255,7 +289,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/2fa/verify',
     requireAuthenticated,
     route(async (request, response) => {
-      const token = request.body?.token;
+      const body = (request.body ?? {}) as Partial<AuthTwoFactorTokenRequestDto>;
+      const token = body.token;
       const secret = request.session.tempTwoFactorSecret;
       if (!secret) {
         response.status(400).json({ message: '未找到临时密钥，请重新开始设置流程。' });
@@ -281,7 +316,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/2fa',
     requireAuthenticated,
     route(async (request, response) => {
-      const password = request.body?.password;
+      const body = (request.body ?? {}) as Partial<AuthTwoFactorDisableRequestDto>;
+      const password = body.password;
       if (typeof password !== 'string' || !password) {
         response.status(400).json({ message: '当前密码不能为空。' });
         return;
@@ -319,7 +355,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/passkey/register',
     requireAuthenticated,
     route(async (request, response) => {
-      const registrationResponse = request.body?.registrationResponse;
+      const body = (request.body ?? {}) as Partial<PasskeyRegisterRequestDto>;
+      const registrationResponse = body.registrationResponse;
       if (!registrationResponse) {
         response.status(400).json({ message: '注册响应不能为空。' });
         return;
@@ -338,18 +375,21 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       delete request.session.currentChallenge;
       delete request.session.passkeyOrigin;
       delete request.session.passkeyRegistrationUserId;
-      response
-        .status(verified ? 201 : 400)
-        .json({ verified, message: verified ? 'Passkey 注册成功。' : 'Passkey 注册验证失败。' });
+      const payload: PasskeyRegisterResponseDto = {
+        verified,
+        message: verified ? 'Passkey 注册成功。' : 'Passkey 注册验证失败。',
+      };
+      response.status(verified ? 201 : 400).json(payload);
     }),
   );
 
   router.post(
     '/passkey/authentication-options',
     route(async (request, response) => {
+      const body = (request.body ?? {}) as Partial<PasskeyAuthenticationOptionsRequestDto>;
       const origin = requestOrigin(request);
       const options = await dependencies.passkeys.beginAuthentication({
-        username: typeof request.body?.username === 'string' ? request.body.username : undefined,
+        username: typeof body.username === 'string' ? body.username : undefined,
         origin,
       });
       request.session.currentChallenge = options.challenge;
@@ -362,7 +402,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/passkey/authenticate',
     blacklistCheck,
     route(async (request, response) => {
-      const assertionResponse = request.body?.assertionResponse;
+      const body = (request.body ?? {}) as Partial<PasskeyAuthenticateRequestDto>;
+      const assertionResponse = body.assertionResponse;
       const challenge = request.session.currentChallenge;
       if (!assertionResponse) {
         response.status(400).json({ message: '认证响应 (assertionResponse) 不能为空。' });
@@ -381,7 +422,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       });
       if (!result.verified) {
         await dependencies.ipBlacklist.recordFailedAttempt(ip);
-        response.status(401).json({ verified: false, message: 'Passkey 认证失败。' });
+        const payload: PasskeyAuthenticationResponseDto = { verified: false, message: 'Passkey 认证失败。' };
+        response.status(401).json(payload);
         return;
       }
       await dependencies.ipBlacklist.resetAttempts(ip);
@@ -389,8 +431,13 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       request.session.userId = result.user.id;
       request.session.username = result.user.username;
       request.session.requiresTwoFactor = false;
-      configureSessionLifetime(request, Boolean(request.body?.rememberMe));
-      response.json({ verified: true, message: 'Passkey 认证成功。', user: result.user });
+      configureSessionLifetime(request, Boolean(body.rememberMe));
+      const payload: PasskeyAuthenticationResponseDto = {
+        verified: true,
+        message: 'Passkey 认证成功。',
+        user: result.user,
+      };
+      response.json(payload);
     }),
   );
 
@@ -399,9 +446,16 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     route(async (request, response) => {
       try {
         const username = typeof request.query.username === 'string' ? request.query.username : undefined;
-        response.json({ hasPasskeys: await dependencies.passkeys.hasConfigured(username) });
+        const payload: PasskeyHasConfiguredResponseDto = {
+          hasPasskeys: await dependencies.passkeys.hasConfigured(username),
+        };
+        response.json(payload);
       } catch {
-        response.json({ hasPasskeys: false, error: '检查 Passkey 配置时出错。' });
+        const payload: PasskeyHasConfiguredResponseDto = {
+          hasPasskeys: false,
+          error: '检查 Passkey 配置时出错。',
+        };
+        response.json(payload);
       }
     }),
   );
@@ -440,11 +494,16 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/user/passkeys/:credentialID/name',
     requireAuthenticated,
     route(async (request, response) => {
+      const body = (request.body ?? {}) as Partial<PasskeyRenameRequestDto>;
+      if (typeof body.name !== 'string') {
+        response.status(400).json({ message: 'Passkey 名称必须是字符串。' });
+        return;
+      }
       try {
         await dependencies.passkeys.rename(
           request.session.userId!,
           String(request.params.credentialID),
-          request.body?.name,
+          body.name,
           request.session.username,
         );
         response.json({ message: 'Passkey 名称更新成功。' });

@@ -1,21 +1,8 @@
-export interface AuthUser {
-  id: number;
-  username: string;
-  twoFactorEnabled?: boolean;
-}
+import type { AuthLoginRequestDto, AuthSetupRequestDto, AuthUserDto } from '@nexus-terminal/protocol/auth';
 
-export interface LoginCredentials {
-  username: string;
-  password: string;
-  rememberMe?: boolean;
-  captchaToken?: string;
-}
-
-export interface SetupCredentials {
-  username: string;
-  password: string;
-  confirmPassword: string;
-}
+export type AuthUser = AuthUserDto;
+export type LoginCredentials = AuthLoginRequestDto;
+export type SetupCredentials = AuthSetupRequestDto;
 
 export type LoginResult = { status: 'authenticated'; user: AuthUser } | { status: 'two-factor-required' };
 

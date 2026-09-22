@@ -4,6 +4,25 @@ import type {
   PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
 } from '@simplewebauthn/browser';
+import type {
+  AuthPasswordChangeRequestDto,
+  AuthTwoFactorDisableRequestDto,
+  AuthTwoFactorSetupDto,
+  AuthTwoFactorTokenRequestDto,
+  CaptchaConfigDto,
+  CaptchaConfigUpdateDto,
+  IpAccessSettingsDto,
+  IpBlacklistPageDto,
+  PasskeyAuthenticateRequestDto,
+  PasskeyAuthenticationOptionsRequestDto,
+  PasskeyAuthenticationResponseDto,
+  PasskeyHasConfiguredResponseDto,
+  PasskeyRegisterRequestDto,
+  PasskeyRegisterResponseDto,
+  PasskeyRenameRequestDto,
+  PasskeySummaryDto,
+} from '@nexus-terminal/protocol/auth';
+import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
 import { httpClient } from '@/client/http';
 import type {
   CaptchaConfig,
@@ -14,51 +33,49 @@ import type {
   TwoFactorSetup,
 } from '../model/security';
 
-interface IpAccessSettingsResponse {
-  ipWhitelist?: string;
-  ipBlacklistEnabled?: boolean;
-  maxLoginAttempts?: number;
-  loginBanDuration?: number;
-}
-
 export const securityApi = {
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    await httpClient.put('/auth/password', { currentPassword, newPassword });
+    const request: AuthPasswordChangeRequestDto = { currentPassword, newPassword };
+    await httpClient.put<MessageResponseDto>('/auth/password', request);
   },
 
   async beginTwoFactorSetup(): Promise<TwoFactorSetup> {
-    const response = await httpClient.post<TwoFactorSetup>('/auth/2fa/setup');
+    const response = await httpClient.post<AuthTwoFactorSetupDto>('/auth/2fa/setup');
     return response.data;
   },
 
   async activateTwoFactor(token: string): Promise<void> {
-    await httpClient.post('/auth/2fa/verify', { token });
+    const request: AuthTwoFactorTokenRequestDto = { token };
+    await httpClient.post<MessageResponseDto>('/auth/2fa/verify', request);
   },
 
   async disableTwoFactor(password: string): Promise<void> {
-    await httpClient.delete('/auth/2fa', { data: { password } });
+    const request: AuthTwoFactorDisableRequestDto = { password };
+    await httpClient.delete<MessageResponseDto>('/auth/2fa', { data: request });
   },
 
   async getCaptchaConfig(): Promise<CaptchaConfig> {
-    const response = await httpClient.get<CaptchaConfig>('/settings/captcha');
+    const response = await httpClient.get<CaptchaConfigDto>('/settings/captcha');
     return response.data;
   },
 
   async updateCaptchaConfig(config: CaptchaConfigUpdate): Promise<void> {
-    await httpClient.put('/settings/captcha', config);
+    const request: CaptchaConfigUpdateDto = config;
+    await httpClient.put<MessageResponseDto>('/settings/captcha', request);
   },
 
   async hasPasskeys(username?: string): Promise<boolean> {
-    const response = await httpClient.get<{ hasPasskeys: boolean }>('/auth/passkey/has-configured', {
+    const response = await httpClient.get<PasskeyHasConfiguredResponseDto>('/auth/passkey/has-configured', {
       params: username ? { username } : undefined,
     });
     return response.data.hasPasskeys;
   },
 
   async getPasskeyAuthenticationOptions(username?: string): Promise<PublicKeyCredentialRequestOptionsJSON> {
+    const request: PasskeyAuthenticationOptionsRequestDto = username ? { username } : {};
     const response = await httpClient.post<PublicKeyCredentialRequestOptionsJSON>(
       '/auth/passkey/authentication-options',
-      username ? { username } : {},
+      request,
     );
     return response.data;
   },
@@ -67,10 +84,11 @@ export const securityApi = {
     username: string | undefined,
     assertionResponse: AuthenticationResponseJSON,
   ): Promise<void> {
-    await httpClient.post('/auth/passkey/authenticate', {
+    const request: PasskeyAuthenticateRequestDto<AuthenticationResponseJSON> = {
       ...(username ? { username } : {}),
       assertionResponse,
-    });
+    };
+    await httpClient.post<PasskeyAuthenticationResponseDto>('/auth/passkey/authenticate', request);
   },
 
   async getPasskeyRegistrationOptions(): Promise<PublicKeyCredentialCreationOptionsJSON> {
@@ -81,23 +99,25 @@ export const securityApi = {
   },
 
   async registerPasskey(registrationResponse: RegistrationResponseJSON): Promise<void> {
-    await httpClient.post('/auth/passkey/register', { registrationResponse });
+    const request: PasskeyRegisterRequestDto<RegistrationResponseJSON> = { registrationResponse };
+    await httpClient.post<PasskeyRegisterResponseDto>('/auth/passkey/register', request);
   },
 
   async listPasskeys(): Promise<PasskeySummary[]> {
-    return (await httpClient.get<PasskeySummary[]>('/auth/user/passkeys')).data;
+    return (await httpClient.get<PasskeySummaryDto[]>('/auth/user/passkeys')).data;
   },
 
   async deletePasskey(credentialId: string): Promise<void> {
-    await httpClient.delete(`/auth/user/passkeys/${encodeURIComponent(credentialId)}`);
+    await httpClient.delete<MessageResponseDto>(`/auth/user/passkeys/${encodeURIComponent(credentialId)}`);
   },
 
   async renamePasskey(credentialId: string, name: string): Promise<void> {
-    await httpClient.put(`/auth/user/passkeys/${encodeURIComponent(credentialId)}/name`, { name });
+    const request: PasskeyRenameRequestDto = { name };
+    await httpClient.put<MessageResponseDto>(`/auth/user/passkeys/${encodeURIComponent(credentialId)}/name`, request);
   },
 
   async getIpAccessPolicy(): Promise<IpAccessPolicy> {
-    const settings = (await httpClient.get<IpAccessSettingsResponse>('/settings')).data;
+    const settings = (await httpClient.get<IpAccessSettingsDto>('/settings')).data;
     return {
       whitelist: settings.ipWhitelist ?? '',
       blacklistEnabled: settings.ipBlacklistEnabled ?? true,
@@ -107,22 +127,22 @@ export const securityApi = {
   },
 
   async updateIpAccessPolicy(policy: Partial<IpAccessPolicy>): Promise<void> {
-    const body: Record<string, string | boolean | number> = {};
+    const body: IpAccessSettingsDto = {};
     if (policy.whitelist !== undefined) body.ipWhitelist = policy.whitelist;
     if (policy.blacklistEnabled !== undefined) body.ipBlacklistEnabled = policy.blacklistEnabled;
     if (policy.maxLoginAttempts !== undefined) body.maxLoginAttempts = policy.maxLoginAttempts;
     if (policy.loginBanDuration !== undefined) body.loginBanDuration = policy.loginBanDuration;
-    await httpClient.put('/settings', body);
+    await httpClient.put<MessageResponseDto>('/settings', body);
   },
 
   async listBlockedIps(limit: number, offset: number): Promise<{ entries: IpBlacklistEntry[]; total: number }> {
-    const response = await httpClient.get<{ entries: IpBlacklistEntry[]; total: number }>('/settings/ip-blacklist', {
+    const response = await httpClient.get<IpBlacklistPageDto>('/settings/ip-blacklist', {
       params: { limit, offset },
     });
     return response.data;
   },
 
   async removeBlockedIp(ip: string): Promise<void> {
-    await httpClient.delete(`/settings/ip-blacklist/${encodeURIComponent(ip)}`);
+    await httpClient.delete<MessageResponseDto>(`/settings/ip-blacklist/${encodeURIComponent(ip)}`);
   },
 };

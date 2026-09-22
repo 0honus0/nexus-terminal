@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { CaptchaConfigDto, CaptchaConfigUpdateDto, IpBlacklistPageDto } from '@nexus-terminal/protocol/auth';
 import multer from 'multer';
 import type { BackupService } from '../../../modules/backup/backup.service';
 import { BackupPasswordRequiredError, InvalidBackupPasswordError } from '../../../shared/errors/backup.errors';
@@ -174,7 +175,7 @@ const storedSettingValue = (key: string, value: unknown): string => {
   return value;
 };
 
-const publicCaptcha = async (settings: SettingsService) => {
+const publicCaptcha = async (settings: SettingsService): Promise<CaptchaConfigDto> => {
   const value = await settings.getCaptchaConfig();
   return {
     enabled: value.enabled,
@@ -320,7 +321,8 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
         response.status(400).json({ message: '无效的分页参数' });
         return;
       }
-      response.json(await dependencies.ipBlacklist.getBlacklist(limit, offset));
+      const payload: IpBlacklistPageDto = await dependencies.ipBlacklist.getBlacklist(limit, offset);
+      response.json(payload);
     }),
   );
   router.delete(
@@ -362,7 +364,7 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
         return;
       }
       try {
-        await dependencies.settings.setCaptchaConfig(request.body);
+        await dependencies.settings.setCaptchaConfig(request.body as CaptchaConfigUpdateDto);
         await dependencies.audit.logAction('CAPTCHA_SETTINGS_UPDATED', { updatedFields: Object.keys(request.body) });
         response.json({ message: 'CAPTCHA 配置已成功更新' });
       } catch (error) {
