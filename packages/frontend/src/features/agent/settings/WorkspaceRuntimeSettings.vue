@@ -6,19 +6,19 @@
     agentApi,
     formatAgentApiError,
     type AgentSettingsViewDto,
-    type WorkspaceRuntimeAvailability,
-    type WorkspaceRuntimeCatalog,
-    type ToolchainCatalogPack,
-    type WorkspaceRuntimeCommandView,
-    type ToolchainPackUninstallPreview,
-    type WorkspaceRuntimeCleanupPreview,
-    type WorkspaceRuntimeSettingsResetPreview,
-    type WorkspaceRuntimeSetupPreview,
-    type WorkspaceRuntimeStorageView,
+    type AgentWorkspaceRuntimeAvailabilityDto,
+    type AgentWorkspaceRuntimeCatalogDto,
+    type AgentToolchainCatalogPackDto,
+    type AgentWorkspaceRuntimeCommandDto,
+    type AgentToolchainPackUninstallPreviewDto,
+    type AgentWorkspaceRuntimeCleanupPreviewDto,
+    type AgentWorkspaceRuntimeSettingsResetPreviewDto,
+    type AgentWorkspaceRuntimeSetupPreviewDto,
+    type AgentWorkspaceRuntimeStorageDto,
   } from '../api/agent-api';
 
   const props = defineProps<{
-    availability: WorkspaceRuntimeAvailability;
+    availability: AgentWorkspaceRuntimeAvailabilityDto;
     settings: AgentSettingsViewDto;
     busy: boolean;
   }>();
@@ -26,16 +26,16 @@
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.workspace-runtime');
 
-  const catalog = ref<WorkspaceRuntimeCatalog | null>(null);
-  const storage = ref<WorkspaceRuntimeStorageView | null>(null);
+  const catalog = ref<AgentWorkspaceRuntimeCatalogDto | null>(null);
+  const storage = ref<AgentWorkspaceRuntimeStorageDto | null>(null);
   const loading = ref(false);
   const localBusy = ref(false);
   const selectedRecipeIds = ref<string[]>([]);
-  const setupPreview = ref<WorkspaceRuntimeSetupPreview | null>(null);
-  const uninstallPreview = ref<ToolchainPackUninstallPreview | null>(null);
-  const cleanupPreview = ref<WorkspaceRuntimeCleanupPreview | null>(null);
-  const resetPreview = ref<WorkspaceRuntimeSettingsResetPreview | null>(null);
-  const lastCommand = ref<WorkspaceRuntimeCommandView | null>(null);
+  const setupPreview = ref<AgentWorkspaceRuntimeSetupPreviewDto | null>(null);
+  const uninstallPreview = ref<AgentToolchainPackUninstallPreviewDto | null>(null);
+  const cleanupPreview = ref<AgentWorkspaceRuntimeCleanupPreviewDto | null>(null);
+  const resetPreview = ref<AgentWorkspaceRuntimeSettingsResetPreviewDto | null>(null);
+  const lastCommand = ref<AgentWorkspaceRuntimeCommandDto | null>(null);
 
   const disabled = computed(() => props.busy || localBusy.value);
   const requested = computed(() => props.settings.requestedSettings.workspaceRuntime);
@@ -126,13 +126,13 @@
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.setupSubmitted'));
     });
 
-  const familyConfig = (pack: ToolchainCatalogPack) =>
+  const familyConfig = (pack: AgentToolchainCatalogPackDto) =>
     requested.value.toolVersions[pack.familyId] ?? { enabledVersionIds: [], defaultVersionId: null };
-  const isDesiredEnabled = (pack: ToolchainCatalogPack) =>
+  const isDesiredEnabled = (pack: AgentToolchainCatalogPackDto) =>
     familyConfig(pack).enabledVersionIds.includes(pack.versionId);
-  const isDesiredDefault = (pack: ToolchainCatalogPack) => familyConfig(pack).defaultVersionId === pack.versionId;
+  const isDesiredDefault = (pack: AgentToolchainCatalogPackDto) => familyConfig(pack).defaultVersionId === pack.versionId;
 
-  const savePackPreference = (pack: ToolchainCatalogPack, mode: 'toggle' | 'default') =>
+  const savePackPreference = (pack: AgentToolchainCatalogPackDto, mode: 'toggle' | 'default') =>
     run('save-pack-preference', async () => {
       const next = structuredClone(requested.value);
       const current = next.toolVersions[pack.familyId] ?? { enabledVersionIds: [], defaultVersionId: null };
@@ -155,14 +155,14 @@
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.preferencesSaved'));
     });
 
-  const installPack = (pack: ToolchainCatalogPack) =>
+  const installPack = (pack: AgentToolchainCatalogPackDto) =>
     run('install-pack', async () => {
       lastCommand.value = await agentApi.installToolchainPack(pack.familyId, pack.versionId);
       await loadDetails();
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.installSubmitted'));
     });
 
-  const previewUninstall = (pack: ToolchainCatalogPack) =>
+  const previewUninstall = (pack: AgentToolchainCatalogPackDto) =>
     run('preview-uninstall', async () => {
       uninstallPreview.value = await agentApi.previewToolchainPackUninstall(
         pack.familyId,
@@ -219,12 +219,12 @@
   const confirmReset = () =>
     run('confirm-reset', async () => {
       if (!resetPreview.value) return;
-      const updated = await agentApi.confirmWorkspaceRuntimeSettingsReset(
+      await agentApi.confirmWorkspaceRuntimeSettingsReset(
         resetPreview.value.confirmationId,
         resetPreview.value.expectedVersion,
       );
       resetPreview.value = null;
-      emit('settingsUpdated', updated);
+      emit('settingsUpdated', await agentApi.settings());
       syncSelection();
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.resetComplete'));
     });

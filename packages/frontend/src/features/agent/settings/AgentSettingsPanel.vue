@@ -14,7 +14,7 @@
     type AgentProviderViewDto,
     type AgentSettingsViewDto,
     type AgentArtifactStorageSummaryDto,
-    type WorkspaceRuntimeAvailability,
+    type AgentWorkspaceRuntimeAvailabilityDto,
     type AgentHardLimitPreviewDto,
     type RecommendedAgentPluginView,
     type TargetDenylistView,
@@ -44,7 +44,7 @@
   const providers = ref<AgentProviderViewDto[]>([]);
   const discoveredModels = ref<Record<string, AgentDiscoveredProviderModelDto[]>>({});
   const storage = ref<AgentArtifactStorageSummaryDto | null>(null);
-  const workspaceRuntime = ref<WorkspaceRuntimeAvailability | null>(null);
+  const workspaceRuntime = ref<AgentWorkspaceRuntimeAvailabilityDto | null>(null);
   const denylist = ref<TargetDenylistView | null>(null);
   const hardLimitPreview = ref<AgentHardLimitPreviewDto | null>(null);
   const loading = ref(true);

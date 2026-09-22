@@ -6,11 +6,11 @@
     formatAgentApiError,
     type AgentAppSummaryDto,
     type AgentArtifactRefDto,
-    type AgentWorkspaceView,
+    type AgentWorkspaceDto,
     type AgentSettingsViewDto,
     type AgentPluginInstallationDto,
     type AgentPluginVersionDto,
-    type WorkspaceRuntimeCatalog,
+    type AgentWorkspaceRuntimeCatalogDto,
   } from '../api/agent-api';
   import WorkspaceArtifactTransfer from './WorkspaceArtifactTransfer.vue';
   import AgentWorkspaceTerminal from './AgentWorkspaceTerminal.vue';
@@ -21,8 +21,8 @@
   const props = defineProps<{ appId: string; runId: string; busy?: boolean }>();
   const { t } = useI18n();
 
-  const catalog = ref<WorkspaceRuntimeCatalog | null>(null);
-  const workspaceList = ref<AgentWorkspaceView[]>([]);
+  const catalog = ref<AgentWorkspaceRuntimeCatalogDto | null>(null);
+  const workspaceList = ref<AgentWorkspaceDto[]>([]);
   const apps = ref<AgentAppSummaryDto[]>([]);
   const installations = ref<AgentPluginInstallationDto[]>([]);
   const versions = ref<AgentPluginVersionDto[]>([]);
@@ -164,14 +164,14 @@
     }, t('agent.workspaceRuntime.created'));
   };
 
-  const workspaceAction = (workspace: AgentWorkspaceView, action: 'start' | 'stop' | 'restart' | 'delete'): void => {
+  const workspaceAction = (workspace: AgentWorkspaceDto, action: 'start' | 'stop' | 'restart' | 'delete'): void => {
     void run(async () => {
       await agentApi.workspaceAction(props.appId, workspace, action);
       await refresh();
     }, t('agent.workspaceRuntime.actionSubmitted'));
   };
 
-  const switchToolVersions = (workspace: AgentWorkspaceView, changes: Record<string, string>): void => {
+  const switchToolVersions = (workspace: AgentWorkspaceDto, changes: Record<string, string>): void => {
     if (!catalog.value || Object.keys(changes).length === 0) return;
     void run(async () => {
       const result = await agentApi.switchWorkspaceToolVersions(

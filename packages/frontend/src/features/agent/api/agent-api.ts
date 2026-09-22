@@ -176,7 +176,7 @@ import { createPluginApi } from './plugin-api';
 import { createProviderApi } from './provider-api';
 import { createArtifactApi } from './artifact-api';
 import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
-import type { WorkspaceProfileView } from './workspace-runtime-api';
+import type { AgentRunEnvironmentSnapshotDto } from '@nexus-terminal/protocol/agent-runs';
 
 export { AgentApiError, formatAgentApiError, toAgentApiError } from './agent-api-error';
 
@@ -205,23 +205,25 @@ export interface RecommendedAgentPluginInstallResult {
 
 
 export type {
-  AgentWorkspaceView,
-  PluginRunnerTargetView,
-  ToolchainCatalogPack,
-  ToolchainPackRef,
-  ToolchainPackUninstallPreview,
-  WorkspaceArtifactImportResult,
-  WorkspaceProfileView,
-  WorkspaceRecipe,
-  WorkspaceRuntimeAvailability,
-  WorkspaceRuntimeCatalog,
-  WorkspaceRuntimeCleanupPreview,
-  WorkspaceRuntimeCommandView,
-  WorkspaceRuntimeSettingsResetPreview,
-  WorkspaceRuntimeSetupPreview,
-  WorkspaceRuntimeStorageView,
-  WorkspaceToolchainSwitchView,
-} from './workspace-runtime-api';
+  AgentRunEnvironmentRunnerPluginDto,
+  AgentRunEnvironmentSnapshotDto,
+} from '@nexus-terminal/protocol/agent-runs';
+export type {
+  AgentToolchainCatalogPackDto,
+  AgentToolchainPackRefDto,
+  AgentToolchainPackUninstallPreviewDto,
+  AgentWorkspaceArtifactImportResultDto,
+  AgentWorkspaceDto,
+  AgentWorkspaceRecipeDto,
+  AgentWorkspaceRuntimeAvailabilityDto,
+  AgentWorkspaceRuntimeCatalogDto,
+  AgentWorkspaceRuntimeCleanupPreviewDto,
+  AgentWorkspaceRuntimeCommandDto,
+  AgentWorkspaceRuntimeSettingsResetPreviewDto,
+  AgentWorkspaceRuntimeSetupPreviewDto,
+  AgentWorkspaceRuntimeStorageDto,
+  AgentWorkspaceToolchainSwitchDto,
+} from '@nexus-terminal/protocol/agent-workspace-runtime';
 
 
 

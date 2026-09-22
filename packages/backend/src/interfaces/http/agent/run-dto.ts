@@ -44,7 +44,7 @@ const modelCapabilitySnapshotDto = (
   ...(snapshot.reasoningMandatory === undefined ? {} : { reasoningMandatory: snapshot.reasoningMandatory }),
 });
 
-const environmentDto = (
+export const runEnvironmentDto = (
   environment: RunView['definition']['environment'],
 ): AgentRunEnvironmentSnapshotDto | null => {
   if (!environment) return null;
@@ -157,7 +157,7 @@ export const runDto = (run: RunView): AgentRunViewDto => ({
     approvalMode: run.definition.approvalMode,
     executionMode: run.definition.executionMode,
     connectionIds: [...run.definition.connectionIds],
-    environment: environmentDto(run.definition.environment),
+    environment: runEnvironmentDto(run.definition.environment),
     policyRevision: run.definition.policyRevision,
     settingsRevision: run.definition.settingsRevision,
     ...(run.definition.contextBoundary === undefined

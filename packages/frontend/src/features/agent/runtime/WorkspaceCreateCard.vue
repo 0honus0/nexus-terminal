@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
-  import type { AgentSettingsViewDto, WorkspaceRuntimeCatalog } from '../api/agent-api';
+  import type { AgentSettingsViewDto, AgentWorkspaceRuntimeCatalogDto } from '../api/agent-api';
 
   interface RunnerCandidate {
     pluginId: string;
@@ -12,7 +12,7 @@
   type BrowserTarget = AgentSettingsViewDto['effectiveSettings']['browser']['targets'][number];
 
   const props = defineProps<{
-    catalog: WorkspaceRuntimeCatalog;
+    catalog: AgentWorkspaceRuntimeCatalogDto;
     runnerCandidates: RunnerCandidate[];
     acpProfiles: AcpProfile[];
     browserTargets: BrowserTarget[];

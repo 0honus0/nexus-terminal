@@ -32,8 +32,8 @@
     AgentSubagentViewDto,
     AgentThreadViewDto,
     TargetDenylistView,
-    WorkspaceRuntimeAvailability,
-    WorkspaceRuntimeCatalog,
+    AgentWorkspaceRuntimeAvailabilityDto,
+    AgentWorkspaceRuntimeCatalogDto,
   } from '../api/agent-api';
   import { agentHostEvents } from './agent-host-events';
   import { agentSurfaceSession } from './surface-session';
@@ -89,8 +89,8 @@
   const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'requested'));
   const hardLimits = ref<AgentHardLimitsDto | null>(null);
   const settingsView = ref<AgentSettingsViewDto | null>(null);
-  const workspaceRuntimeAvailability = ref<WorkspaceRuntimeAvailability | null>(null);
-  const workspaceRuntimeCatalog = ref<WorkspaceRuntimeCatalog | null>(null);
+  const workspaceRuntimeAvailability = ref<AgentWorkspaceRuntimeAvailabilityDto | null>(null);
+  const workspaceRuntimeCatalog = ref<AgentWorkspaceRuntimeCatalogDto | null>(null);
   const backgroundRuns = ref<AgentRunViewDto[]>([]);
   const detailSnapshot = ref<AgentRunSnapshotDto | null>(null);
   const detailCheckpoints = ref<AgentCheckpointViewDto[]>([]);

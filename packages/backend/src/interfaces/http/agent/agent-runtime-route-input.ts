@@ -12,7 +12,14 @@ import type {
   AgentRunSetGoalFieldsDto,
   AgentUserInputDataDto,
 } from '@nexus-terminal/protocol/agent-runs';
-import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/public';
+import type {
+  AgentWorkspaceActionFieldsDto,
+  AgentWorkspaceArtifactExportRequestDto,
+  AgentWorkspaceArtifactImportRequestDto,
+  AgentWorkspaceCreateFieldsDto,
+  AgentWorkspaceEnvironmentSpecDto,
+  AgentWorkspaceToolVersionsFieldsDto,
+} from '@nexus-terminal/protocol/agent-workspace-runtime';
 import { hasOnlyKeys, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
@@ -27,34 +34,6 @@ const reasoningEfforts = new Set<AgentReasoningEffortDto>([
 ]);
 const isReasoningEffort = (value: unknown): value is AgentReasoningEffortDto =>
   typeof value === 'string' && reasoningEfforts.has(value as AgentReasoningEffortDto);
-
-export interface WorkspaceCreateRequestDto {
-  workspace: AgentWorkspaceCreateSpec;
-  retained: boolean;
-  catalogRevision?: string;
-}
-
-export interface WorkspaceActionRequestDto {
-  action: 'start' | 'stop' | 'restart' | 'delete';
-  expectedVersion: number;
-}
-
-export interface WorkspaceToolVersionsRequestDto {
-  versions: Record<string, string>;
-  expectedVersion: number;
-  catalogRevision?: string;
-}
-
-export interface WorkspaceArtifactExportRequestDto {
-  path: string;
-  name: string;
-  mediaType: string;
-}
-
-export interface WorkspaceArtifactImportRequestDto {
-  artifactId: string;
-  path: string;
-}
 
 const parseUserInput = (value: unknown): AgentUserInputDataDto => {
   if (!isRecord(value) || !hasOnlyKeys(value, ['text', 'artifactRefs'])) throw new Error('VALIDATION_FAILED');
@@ -244,7 +223,7 @@ export const parseBudgetIncreaseRequest = (body: unknown): AgentRunBudgetIncreas
   return { increase: parseBudgetIncrease(value.increase), expectedVersion: value.expectedVersion };
 };
 
-const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
+const parseWorkspaceSpec = (value: unknown): AgentWorkspaceEnvironmentSpecDto => {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, ['recipeId', 'versions', 'runnerPluginIds', 'acpProfileIds', 'browserTargetId'])
@@ -288,7 +267,7 @@ const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
   ) {
     throw new Error('VALIDATION_FAILED');
   }
-  return value as unknown as AgentWorkspaceCreateSpec;
+  return value as AgentWorkspaceEnvironmentSpecDto;
 };
 
 const parseRunEnvironmentSelection = (value: unknown): AgentRunEnvironmentSelectionDto | null => {
@@ -308,7 +287,7 @@ const parseRunEnvironmentSelection = (value: unknown): AgentRunEnvironmentSelect
   };
 };
 
-export const parseWorkspaceCreateRequest = (body: unknown): WorkspaceCreateRequestDto => {
+export const parseWorkspaceCreateRequest = (body: unknown): AgentWorkspaceCreateFieldsDto => {
   const value = versionedRecord(body, ['workspace', 'retained', 'catalogRevision']);
   if (
     (value.retained !== undefined && typeof value.retained !== 'boolean') ||
@@ -324,7 +303,7 @@ export const parseWorkspaceCreateRequest = (body: unknown): WorkspaceCreateReque
   };
 };
 
-export const parseWorkspaceActionRequest = (body: unknown): WorkspaceActionRequestDto => {
+export const parseWorkspaceActionRequest = (body: unknown): AgentWorkspaceActionFieldsDto => {
   const value = versionedRecord(body, ['action', 'expectedVersion']);
   if (
     !['start', 'stop', 'restart', 'delete'].includes(String(value.action)) ||
@@ -333,12 +312,12 @@ export const parseWorkspaceActionRequest = (body: unknown): WorkspaceActionReque
     throw new Error('VALIDATION_FAILED');
   }
   return {
-    action: value.action as WorkspaceActionRequestDto['action'],
+    action: value.action as AgentWorkspaceActionFieldsDto['action'],
     expectedVersion: value.expectedVersion,
   };
 };
 
-export const parseWorkspaceArtifactExportRequest = (body: unknown): WorkspaceArtifactExportRequestDto => {
+export const parseWorkspaceArtifactExportRequest = (body: unknown): AgentWorkspaceArtifactExportRequestDto => {
   if (!isRecord(body) || !hasOnlyKeys(body, ['path', 'name', 'mediaType'])) throw new Error('VALIDATION_FAILED');
   if (
     typeof body.path !== 'string' ||
@@ -360,7 +339,7 @@ export const parseWorkspaceArtifactExportRequest = (body: unknown): WorkspaceArt
   };
 };
 
-export const parseWorkspaceArtifactImportRequest = (body: unknown): WorkspaceArtifactImportRequestDto => {
+export const parseWorkspaceArtifactImportRequest = (body: unknown): AgentWorkspaceArtifactImportRequestDto => {
   if (!isRecord(body) || !hasOnlyKeys(body, ['artifactId', 'path'])) throw new Error('VALIDATION_FAILED');
   if (
     typeof body.artifactId !== 'string' ||
@@ -375,7 +354,7 @@ export const parseWorkspaceArtifactImportRequest = (body: unknown): WorkspaceArt
   return { artifactId: body.artifactId, path: body.path };
 };
 
-export const parseWorkspaceToolVersionsRequest = (body: unknown): WorkspaceToolVersionsRequestDto => {
+export const parseWorkspaceToolVersionsRequest = (body: unknown): AgentWorkspaceToolVersionsFieldsDto => {
   const value = versionedRecord(body, ['versions', 'expectedVersion', 'catalogRevision']);
   if (
     !isRecord(value.versions) ||

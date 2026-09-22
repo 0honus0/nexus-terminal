@@ -26,3 +26,4 @@ export type * from './agent-runs.js';
 export type * from './agent-collaboration.js';
 export type * from './agent-memories.js';
 export type * from './agent-plugins.js';
+export type * from './agent-workspace-runtime.js';

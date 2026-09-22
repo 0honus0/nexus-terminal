@@ -1,10 +1,10 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
-  import type { AgentWorkspaceView, WorkspaceRuntimeCatalog } from '../api/agent-api';
+  import type { AgentWorkspaceDto, AgentWorkspaceRuntimeCatalogDto } from '../api/agent-api';
 
   const props = defineProps<{
-    workspace: AgentWorkspaceView;
-    catalog: WorkspaceRuntimeCatalog;
+    workspace: AgentWorkspaceDto;
+    catalog: AgentWorkspaceRuntimeCatalogDto;
     locked: boolean;
   }>();
 
