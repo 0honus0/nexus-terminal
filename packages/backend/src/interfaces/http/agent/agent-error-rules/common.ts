@@ -12,6 +12,10 @@ export const commonErrorRules: readonly AgentErrorRule[] = [
     code: 'SCHEMA_VERSION_UNSUPPORTED',
     message: 'Unsupported Agent request schema version.',
   }),
+  onCodes(
+    ['AGENT_DURABLE_STATE_INVALID', 'SUBAGENT_DURABLE_STATE_INVALID'],
+    rawCode(500, 'Stored Agent state could not be decoded.'),
+  ),
   onCodesOrPrefixes(['AGENT_APP_NOT_FOUND'], ['Agent App not registered:'], {
     status: 404,
     code: 'NOT_FOUND',

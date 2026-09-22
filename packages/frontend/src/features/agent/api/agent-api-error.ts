@@ -53,6 +53,7 @@ export const toAgentApiError = (cause: unknown): AgentApiError => {
 
 export const formatAgentApiError = (cause: unknown, fallback: string): string => {
   const error = toAgentApiError(cause);
+  if (error.status !== undefined && error.status >= 500) return fallback;
   if (error.message && error.message !== 'AGENT_REQUEST_FAILED') return error.message;
   if (error.code && error.code !== 'AGENT_REQUEST_FAILED') return error.code;
   return fallback;

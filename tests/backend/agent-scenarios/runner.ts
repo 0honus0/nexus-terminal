@@ -14091,9 +14091,25 @@ const publicAgentErrorTaxonomyScenario: Scenario = async () => {
     assert.notEqual(actual.status, 500, `${expected.producer} must not degrade to INTERNAL_ERROR`);
   }
 
+  const durableStateFaults = ['AGENT_DURABLE_STATE_INVALID', 'SUBAGENT_DURABLE_STATE_INVALID'] as const;
+  for (const code of durableStateFaults) {
+    assert.deepEqual(
+      await routeError(code),
+      { status: 500, code },
+      `${code} must preserve a stable public diagnostic code while remaining a server fault`,
+    );
+  }
+  assert.deepEqual(
+    await routeError('UNMAPPED_INTERNAL_SECRET'),
+    { status: 500, code: 'INTERNAL_ERROR' },
+    'unknown internal errors must remain masked',
+  );
+
   return [
     { name: 'public_error_contract_cases', value: cases.length, unit: 'cases' },
     { name: 'public_errors_degraded_to_500', value: 0, unit: 'cases' },
+    { name: 'public_durable_state_fault_codes', value: durableStateFaults.length, unit: 'cases' },
+    { name: 'masked_unknown_internal_errors', value: 1, unit: 'cases' },
     { name: 'public_error_status_classes', value: new Set(cases.map((item) => item.status)).size, unit: 'statuses' },
   ];
 };
