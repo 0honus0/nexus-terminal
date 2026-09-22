@@ -55,6 +55,7 @@ import type {
 export type { ReasoningEffort } from './ai/model.types';
 import type { ModelCapabilityRegistryStatus } from './ai/model-capability-registry.service';
 import type { MemoryImportConfirmation, MemoryStatus, MemoryView } from './ai/memory.repository.port';
+export type { MemoryStatus } from './ai/memory.repository.port';
 import type { ApprovalView } from './runtime/approvals/approval.repository.port';
 import type { AgentExecutionPolicyView } from './host/agent-execution-policy.service';
 import type { CheckpointView } from './runtime/recovery/checkpoint.repository.port';

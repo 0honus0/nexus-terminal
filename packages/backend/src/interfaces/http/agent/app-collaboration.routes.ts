@@ -1,7 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { Router, type Request } from 'express';
-import type { AgentCollaborationFacade, AgentMemoryFacade } from '../../../modules/agent/public';
-import type { MemoryStatus } from '../../../modules/agent/ai/memory.repository.port';
+import type { AgentCollaborationFacade, AgentMemoryFacade, MemoryStatus } from '../../../modules/agent/public';
 import { agentData, agentRoute } from './agent-http';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
 
