@@ -59,6 +59,7 @@ import type { MemoryImportConfirmation, MemoryStatus, MemoryView } from './ai/me
 export type { MemoryStatus } from './ai/memory.repository.port';
 import type { ApprovalView } from './runtime/approvals/approval.repository.port';
 import type { AgentExecutionPolicyView } from './host/agent-execution-policy.service';
+export { resolveAgentAvailability } from './host/agent-availability';
 import type { CheckpointView } from './runtime/recovery/checkpoint.repository.port';
 import type { AgentDefinitionView } from './runtime/definitions/agent-definition.port';
 import type { TransientRunEvent } from './runtime/events/event.types';
@@ -84,6 +85,8 @@ import type {
   CapabilityGrantInput,
   CapabilityResource,
 } from './host/capability.types';
+export { AGENT_CAPABILITIES } from './host/capability.types';
+
 import type { AppIntentReceipt } from './host/app-intent.repository.port';
 import type { AppIntentArtifactReadRange, AppIntentArtifactView } from './host/app-intent-artifact.port';
 import type { CreateAppIntentInput } from './host/app-intent.service';
@@ -496,6 +499,7 @@ export interface AgentServices {
 }
 
 export type {
+  AgentCapability,
   AgentSettingsDocument,
   AgentSettingsView,
   AppView,

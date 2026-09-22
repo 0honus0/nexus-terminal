@@ -1,18 +1,19 @@
 import { Router, type Request } from 'express';
 import { create as createContentDisposition } from 'content-disposition';
 import parseRange from 'range-parser';
-import { resolveAgentAvailability } from '../../../modules/agent/host/agent-availability';
-import { AGENT_CAPABILITIES } from '../../../modules/agent/host/app.types';
-import type { AgentCapability, CapabilityGrantInput } from '../../../modules/agent/host/capability.types';
-import type {
-  AgentArtifactFacade,
-  AgentEventFacade,
-  AgentWorkspaceRuntimeFacade,
-  AgentHostFacade,
-  AgentPluginFacade,
-  AgentProviderFacade,
-  AgentModelRegistryFacade,
-  AppView,
+import {
+  AGENT_CAPABILITIES,
+  resolveAgentAvailability,
+  type AgentArtifactFacade,
+  type AgentCapability,
+  type AgentEventFacade,
+  type AgentWorkspaceRuntimeFacade,
+  type AgentHostFacade,
+  type AgentPluginFacade,
+  type AgentProviderFacade,
+  type AgentModelRegistryFacade,
+  type AppView,
+  type CapabilityGrantInput,
 } from '../../../modules/agent/public';
 import { agentData, agentError, agentRoute } from './agent-http';
 import {
