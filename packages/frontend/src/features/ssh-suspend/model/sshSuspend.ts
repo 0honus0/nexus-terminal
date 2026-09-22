@@ -5,23 +5,11 @@ export interface MarkedSuspendedSession {
   markedAt: string;
 }
 
-export type SuspendedSessionStatus = 'active' | 'disconnected';
-export type SuspendedSessionOwnershipState = 'available' | 'resuming' | 'attached';
-
-export interface SuspendedSession {
-  id: string;
-  originalWorkspaceId: string;
-  connectionId: number;
-  connectionName: string;
-  suspendedAt: string;
-  customName?: string;
-  status: SuspendedSessionStatus;
-  ownershipState: SuspendedSessionOwnershipState;
-  ownershipGeneration: number;
-  ownershipLeaseExpiresAt?: number;
-  attachedWorkspaceId?: string;
-  disconnectedAt?: string;
-}
+export type {
+  SuspendedSessionDto as SuspendedSession,
+  SuspendedSessionOwnershipStateDto as SuspendedSessionOwnershipState,
+  SuspendedSessionStatusDto as SuspendedSessionStatus,
+} from '@nexus-terminal/protocol/ssh-suspend';
 
 export interface ResumeSuspendedSessionRequest {
   suspendedSessionId: string;

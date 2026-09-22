@@ -1,0 +1,1371 @@
+# Nexus Agent 复查记录（代码 / 设计 / 模块关系 / UI）
+
+> 状态：Review 记录，仅供参考。**本次只记录问题、不改动任何代码。**
+> 复查对象：当前工作区里新增的 Agent 功能（Backend `modules/agent` + `infrastructure/agent`、Frontend `features/agent`、`packages/agent-runner`）。
+> 基准文档：`doc/AGENT.md`、`doc/architecture/FRONTEND.md`、`doc/software-requirements/requirements/agent.md`。
+> 复核方式：静态阅读 + 计数 + 构建产物核对 + **第二轮起在真实环境用 CDP 浏览器截图 / 读计算样式实测**（方法见文末「附录 A」）。
+> 实测环境（2026-09-21）：后端 `tsx src/index.ts`（:3001，dev）+ 前端 vite（:9998）+ 反代 `https://api.honus.top`，账号 `honus`。
+> 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
+> 仓库没有可用 git 元数据，未做历史比对。
+
+复查规模（行数统计）：
+
+| 区域 | 规模 |
+| --- | --- |
+| Backend `modules/agent` | ~39,900 行 / 187 个文件 |
+| Backend `infrastructure/agent` | ~23,800 行 / 77 个文件 |
+| Backend `interfaces/http/agent` | 3,348 行 / 约 128 处路由声明 |
+| Frontend `features/agent` | ~28,600 行 / 70 个文件 |
+| `packages/agent-runner` | ~7,900 行 / 27 个文件 |
+| 后端测试 `tests/backend/agent-scenarios/runner.ts` | 22,503 行（单文件） |
+
+---
+
+## 0. 结论速览
+
+按「影响正确性/可直接复现」→「设计明显不合理」→「优化项」排序：
+
+| 级别 | 问题 | 关键位置 |
+| --- | --- | --- |
+| P0 | 设计 token 未定义，158 处 utility 类**静默失效**（`bg-card` 等），卡片/输入区/弹层实际是透明的 | `packages/frontend/src/features/agent/**`（见 §1.1） |
+| P0 | 缺失 i18n key `agent.ui.saveFailed`，保存失败时界面直接显示键名 | `settings/ModelProviderSettings.vue:94` |
+| P0 | Agent Hub 声明 `aria-modal` 但没有 Escape / 焦点进入 / 焦点限制 / 焦点恢复，背景也未 `inert` | `host/AgentHubWindow.vue:341-353` |
+| P0 | 「模型弹层的透明质感」其实是 `bg-card/95` 死 token 的副产物（无填充 + 只有 blur）；直接补 `--color-card` 会让整体观感变样，需先固化成 `.glass-surface` 再修 | `files/AgentConfigPopover.vue:154`（见 §7.1） |
+| P1 | 「模态遮罩 + 浮动窗口」定位自相矛盾：Hub 打开时整个应用不可操作，无法一边看 SSH 终端一边让 Agent 干活 | `host/AgentHubWindow.vue:341-344` |
+| P1 | 字号普遍在 8–11px（563 处），CJK 环境下可读性差；大量点击目标仅 20–28px | `features/agent/**`（见 §2.3、§2.4） |
+| P1 | 硬编码调色板（emerald/sky/amber/blue/purple/pink/indigo + 硬编码 rgba 阴影）绕开主题 token，切主题后视觉不可控 | `ai/AgentConversation.vue:127-152`、`host/AgentAppSurface.vue` |
+| P1 | 设置区控件风格分裂：同一个「主操作按钮」有 6 套写法、5 档圆角，添加/移除模型用原生 checkbox 与 11px 纯文字按钮 | `features/agent/settings/**`（见 §6.2、§6.3） |
+| P1 | 设置区模板内约 38 行硬编码中文（能力名称、存储、插件、预算等），另有英文选项混入中文界面 | 见 §6.5 |
+| P1 | 助手气泡 / 空态卡片 / 任务栏面板的 `bg-card` 全族失效 → 只剩描边没有填充，主界面看起来「平、糙」 | `ai/ConversationMessage.vue:342`、`ai/AgentConversation.vue:434`、`runtime/TaskRail.vue:182` |
+| P1 | Composer 工具条一行塞 7 个配置控件 + 右侧 3 个动作，容器变窄时用 `overflow-x-hidden` 静默裁掉「运行环境 / SSH 目标 / 思考强度」，用户无从察觉 | `ai/AgentConversation.vue:737、835-838`（见 §7.3） |
+| P1 | 「回到最新」按钮与发送/取消同排紧邻：语义错位、易误点、出现时整行跳动，应移到输入框上方独立一行右对齐 | `ai/AgentConversation.vue:747-756`（见 §7.4） |
+| P1 | 主界面三层 chrome（44 + 36 + 160~256px）在最小窗口（560×380）下把消息区压到约 140px | `host/AgentHubWindow.vue:355`、`host/AgentAppSurface.vue:1530`、`ai/AgentConversation.vue:722-788`（见 §7.2） |
+| P2 | 不存在的间距类 `py-0.2 / py-1.8 / py-0.8`（36 处）不产出任何 CSS → 按钮/徽章实际没有上下内边距 | `settings/ModelProviderSettings.vue:1596` 等（见 §7.8） |
+| P1 | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、空态卡片 9s 自动轮播 | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`、`ai/AgentConversation.vue:163-166` |
+| P1 | Composer 底部一个问题一个按钮承担 Send / Cancel Run 两种语义，形态随状态变形 | `ai/AgentConversation.vue:767-778` |
+| P1 | 切换 App 标签会卸载整个 Agent surface 并 `facade.dispose()`，流式文本丢失、全量重载 | `host/AgentAppSurface.vue:1494-1503`、`host/AgentHubWindow.vue:561` |
+| **P1 · 🚧 迁移中 2026-09-22** | **Nexus 前后端真实 transport DTO 尚未完全统一**：已建立 `packages/protocol` canonical 包并完成 Auth / Settings / Connections；Appearance 与 Audit / Command History / Filesystem Catalog / Notifications / Quick Commands / SSH Suspend / System / Transfers 已有 DTO 草稿但尚未全部完成 frontend API + backend route 双端接线；Agent HTTP/WS/Workspace 协议仍待迁移。Agent durable event 已开始收敛 canonical union，但尚未完成跨 frontend/backend 共享 | `packages/protocol/**`、各 `features/*/api`、`interfaces/http/*`、Agent WS/HTTP 边界（见 §3.2） |
+| P1 | 测试全部落在一个 22.5k 行的场景脚本里，并包含「读源码正则断言」的架构测试 | `tests/backend/agent-scenarios/runner.ts` |
+| P2 | 274/1148（约 24%）i18n key 已无引用，且三种语言各存一份 | `features/agent/i18n/*.json` |
+| **P2 · ✅ 基础门禁已关闭 2026-09-22** | **Agent review 范围已接入 ESLint flat config**：`no-unused-vars` + Vue `v-if/v-for` 规则成为 error；首跑发现并清理 47 个真实 unused 符号。自定义 i18n / 设计 token 规则仍开放 | `eslint.config.mjs`、`package.json` scripts |
+| P2 | 巨型文件：`AgentAppSurface.vue` 2716 行、`ModelProviderSettings.vue` 2071 行、`agent-api.ts` 1622 行 | 见 §3.1 |
+| P2 | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里 | `modules/agent/tools/host/*.ts` |
+| **P1 · ✅ 已关闭 2026-09-22** | **历史 Run 的 `GET /runs/:id/approvals` 稳定 500（`AGENT_DURABLE_STATE_INVALID`）**：已由 migration #45 将 legacy `inspection_json.target.kind = "machine"` 规范化为 canonical SSH target；真实数据库副本验证 26 条 legacy tool call → 0、25 条受影响 approval 全部可解码 | `sqlite-migrations.ts` migration #45、`tests/backend/agent-scenarios/runner.ts`（见 §1.9） |
+| **P0** | **全局 `button { font: inherit }`（unlayered，压过 `@layer utilities`）→ 设置区所有写在按钮上的字号类失效（实测 16px），这也是"设置区又大又糙"的机械原因** | `packages/frontend/src/app/styles/global.css:26-31`（见 §7.10） |
+| P1 | 设置区「Agent」页在**英文界面下仍有 29 处硬编码中文**（实测："6 个模型""已配密钥""执行步数保险丝""≈ 1 小时""(3,600 秒)"…） | `features/agent/settings/**`（见 §6.5、§7.11） |
+| P1 | 「备用模型链」把该 Provider 的**全部模型**平铺成按钮云：无顺序编号、无拖拽/移除、无搜索；"勾选顺序即生效顺序"却完全不可见 | `settings/ModelProviderSettings.vue:1062-1083`（见 §7.11） |
+| P1 | 设置区按钮规格失控（实测）：`添加 Provider` 144×38 fs16 / `关闭 Agent` 109×40 fs16 / `立即更新` 77×28 fs11；同一服务商行 `模型与测试(6)` 144px、`更新模型` 107px、`停用` 54px、删除 28×28 | 见 §7.11 |
+| P2 | 空态 pager 可点区域仅 **12×16px**（点 6×6），远低于 32px 触控标准 | `ai/AgentConversation.vue:472-486`（实测见 §7.12） |
+| P1 | 弹层按**视口**而非 Hub 窗口 clamp：最小窗口（560×380）下附件选择器跑到窗口外（`[12,28,520,366]`）、模型弹层盖住顶栏与输入框 | `files/AgentConfigPopover.vue`、`ai/AgentConversation.vue`（见 §7.13-a） |
+| P1 | Hub 声明 `aria-modal="true"` 但实测：焦点不进弹窗（`activeElement=<body>`）、**按 1 次 Tab 焦点就回到背后的应用导航**、背景无 `inert` | `host/AgentHubWindow.vue`（实测见 §7.13-c） |
+| P2 | 会话列表缩放（Ctrl+滚轮）**持久化在 localStorage 且无重置入口**，行标题用内联 `fontSize: 10.75×scale`、行高 JS 计算 → 绕过 token，实测 `1.3` 时字号 13.975px | `host/AgentThreadSidebar.vue:64/127/310`（见 §7.13-d） |
+| **P0 · ✅ 核心缺陷已关闭 2026-09-22** | **Run 详情不再被单个辅助接口失败整体阻断**：`getRun` 成功即打开详情；checkpoints / approvals / subagents 独立 settled 回填，失败项仍走现有错误横幅。分区重试与错误本地化仍作为 UI 子项开放 | `host/AgentAppSurface.vue`（见 §1.10） |
+| **P0** | **composer 工具条裁切的根因**：composer 外层 `max-w-3xl`（768px）封顶 + 容器查询却监听整个会话面板（实测 1342px）→ 折叠断点永不触发；默认窗口下「思考强度」被裁 42px，只剩一枚无文字的闪电图标 | `ai/AgentConversation.vue:590`、`host/AgentAppSurface.vue:2553-2592`（见 §7.14-a） |
+| P1 | 任务栏 6 个「拖动排序」把手是 `<button>` 但**没有任何键盘行为**（无 click/keydown，也无上移/下移替代） | `runtime/TaskRail.vue:516/710/742/783/807/850`（见 §7.14-b） |
+| P2 | 任务栏「目标」卡片直接渲染内部连接 ID（`#1`）、Run 历史 `slice(0, 8)` 硬上限（第 9 条无入口）、卡片顺序持久化无重置 | `runtime/TaskRail.vue:794/109/125`（见 §7.14-b） |
+| P2 | 审批卡：`risk` 枚举原样输出（`mutate`/`destructive`…，i18n 无对应 key）、`审批状态：approved` 拼英文枚举、`剩余 300s` 单位硬编码、"批准"按钮用 `bg-warning` | `runtime/ApprovalCard.vue:45/53/73/127`（见 §7.14-b） |
+| P1 | 前端 agent 区仍有 **118 行**非注释硬编码中文（不止 38 行）：`AppManagementSettings` 37、`StorageArtifactSettings` 16、`ModelProviderSettings` 14、`ConversationMessage` 13、`PluginManagementSettings` 13、`quantity-format.ts` 8… | `features/agent/**`（见 §7.14-c） |
+| P1 | `zh-CN` 词典里 34 个 key 与 en-US 完全相同、**14 条是整句英文**（ja 18 条）→ 中文界面实测显示 `Denylist revision 1`；另有把枚举直接插进本地化句子的 3 处（`审批状态：approved`、`当前状态：enabled`） | `i18n/zh-CN.json`、`ApprovalCard.vue:73`、`AgentFeatureSettings.vue:49`（见 §7.15-a） |
+| P2 | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态，无粘性分区导航 | `settings/**`（见 §7.15-c） |
+| P2 | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`），与主界面"图标+居中+引导按钮"的空态卡不是同一套语言 | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d） |
+| P1 | 设置区把后端原始原因码当"不可用原因"渲染（实测灰色的 `runtime_not_configured`），且这是唯一解释 | `settings/WorkspaceRuntimeSettings.vue:270`（见 §7.15-b） |
+| P2 | 禁用态主按钮 = 品牌色 + `opacity .5`，与可用态难以区分（保存/预览导入/卸载/立即更新长期如此），且不解释原因 | `features/agent/settings/**`（实测见 §7.13-e） |
+
+---
+
+## 1. 可直接复现的缺陷
+
+### 1.1 设计 token 未定义 → 158 处样式静默失效（P0）
+
+`tokens.css` 通过 `@theme inline` 只暴露了 `background / foreground / border / header / footer / button / primary / success / warning / error / text-secondary ...`，
+**没有 `--color-card`、`--color-border-hover`、`--color-primary-hover`、`--color-warning-foreground`**。
+
+Agent UI 却大量使用 `bg-card`、`hover:border-border-hover`、`hover:bg-primary-hover`、`text-warning-foreground`：
+
+| 类名 | Agent 内出现次数 | 编译产物中是否存在规则 |
+| --- | --- | --- |
+| `bg-card`（含 `/70`、`/88` 等） | 158（全仓库 164） | **0（不存在）** |
+| `border-hover` | 33 | **0** |
+| `primary-hover` | 1 | **0** |
+| `warning-foreground` | 1 | **0** |
+
+核对方式：`packages/frontend/dist/assets/index-*.css` 中 `bg-header` 出现 58 次、`bg-background` 27 次、`border-border` 32 次，
+而 `bg-card` / `border-hover` / `primary-hover` 出现次数为 **0**；`tokens.css` 中也没有这些变量定义。
+
+影响（都是"看得见的错"，不是理论问题）：
+
+- `.agent-composer-shell`（`ai/AgentConversation.vue:722`）的 `bg-card/88` 失效 → 输入框外壳没有卡片底色，只靠 `backdrop-blur` 撑场面，与其他页面卡片不一致。
+- 大量卡片/下拉面板/按钮缺少背景：`host/AgentAppSurface.vue:1535`、`1571`、`1595`；`runtime/TaskRail.vue`（11 处）；`runtime/WorkspaceCreateCard.vue:108`、`124`；`runtime/SubagentCard.vue:25`。
+- `hover:border-border-hover` 失效 → 输入框 hover 无边框反馈（`ai/AgentConversation.vue:722`、`settings/PluginManagementSettings.vue:517/832/839`）。
+- `hover:bg-primary-hover` 失效 → 发送按钮 hover 无反馈（`ai/AgentConversation.vue:767`）。
+- `text-warning-foreground` 失效 → 对账确认按钮文字落到默认色，警告底上的对比度不可控（`ai/AgentConversation.vue:640`）。
+
+**重要补充（第二轮，见 §7.1）**：用户认为"很高级"的主界面模型弹层（`files/AgentConfigPopover.vue:154` 的 `bg-card/95 backdrop-blur-md`）正是这个 bug 的**副产物**——填充色没了，只剩模糊，于是呈现"通透玻璃"观感；而助手气泡（`ai/ConversationMessage.vue:342`）、空态卡片（`ai/AgentConversation.vue:434`）、任务栏面板（`runtime/TaskRail.vue:182`）因为同样失效却**没有** blur，就变成"只有描边的空框"。也就是说：这一条不是纯样式债，而是"用户喜欢的观感"和"看起来糙的地方"共用的同一个根因；修复时必须先决定玻璃层配方，再补 token，否则会一次性改掉所有弹层的观感。
+
+建议方向（不实施）：二选一即可，不要继续扩散——
+1) 在 `tokens.css` 里补齐 `--color-card`（例如映射到 `--input-bg-color` 或新增 `--card-bg-color`）并同步 `--color-border-hover`、`--color-primary-hover`、`--color-warning-foreground`；或
+2) 全量替换为已存在的 token 类（`bg-background` / `bg-header` / `border-border` / `hover:bg-button-hover`）。
+
+### 1.2 缺失 i18n key：`agent.ui.saveFailed`（P0）
+
+`settings/ModelProviderSettings.vue:94` 使用 `t('agent.ui.saveFailed')`，但 `features/agent/i18n/{zh-CN,en-US,ja-JP}.json` 三份文件都没有该 key（脚本核对：static refs 811 个，仅此 1 个缺失）。
+用户看到的会是原始键名 `agent.ui.saveFailed`。三份语言文件叶子 key 数一致（1148），说明不是漏同步语言，而是"用了不存在的 key"。
+
+### 1.3 面向用户的硬编码文案（P0/P2）
+
+- `settings/AgentSettingsPanel.vue:106-108`：`if (!settings.value?.requestedSettings.model.defaultModelId) return '未设置';` —— 中文写死，en-US / ja-JP 用户看到中文。
+- 同文件 `:108`：`formatAgentApiError(cause, 'Agent request failed.')` —— 英文写死，中/日用户看到英文。
+- `settings/SubagentSettings.vue:92`：新建 profile 的 `role: 'Bounded child agent'` 直接成为用户可见字段值。
+- 后端工具摘要（见 §1.8）也是英文写死。
+
+### 1.4 未本地化的枚举/内部标识直接进 UI（P1）
+
+- `runtime/SubagentCard.vue:35` 直接渲染 `{{ delegation.status }}`（`queued/claimed/waiting/completed/cancelled` 英文原值）。
+  对比：Run 状态是有 i18n 的（`agent.tasks.runStatus.*`），Subagent 状态没有（`agent.subagents` 下只有 title/description/empty/depth/steps/tokens/cancel/messages/noMessages/artifacts）。
+- `runtime/SubagentCard.vue:50`：`{{ delegation.profileId }} · {{ delegation.failureMode }}` —— 内部 id 与策略枚举直接给用户看。
+- `runtime/TaskRail.vue`：Run 详情用 `#{{ detailSnapshot.id.slice(-6) }}`、`#{{ checkpoint.id.slice(-8) }}`、`checkpoint.ledgerThrough / eventThrough` 等内部标识。
+- `runtime/ApprovalCard.vue`：`approval.inspection.risk`、`precondition.kind/key`、`operationHash` 原样展示。
+- **把枚举直接插进本地化句子**（比单纯"没翻译"更隐蔽）：i18n 里共 4 个含 `{state}/{status}` 的模板，其中 3 处传入的是**原始枚举值**：
+  - `runtime/ApprovalCard.vue:73` → `agent.approvals.resolved`（`审批状态：{state}`）→ 实测显示「审批状态：approved」；
+  - `settings/AgentFeatureSettings.vue:49` → `agent.settings.feature.state`（`当前状态：{state}`）→ 实测显示「当前状态：enabled」；
+  - `settings/WorkspaceRuntimeSettings.vue:529` → `agent.settings.workspaceRuntime.commandStatus`（`最近命令：{action} · {status}`，`action`/`status` 均为内部值）。
+  （第 4 个 `agent.conversation.runState` 目前无人引用，属死 key。）
+- **原始机器码当说明文案**：`settings/WorkspaceRuntimeSettings.vue:270` 把 `availability.reason` 原样渲染 → 实测界面显示 `runtime_not_configured`（见 §7.15-b）。
+- **中文词典里存着英文**：`i18n/zh-CN.json` 有 34 个 key 与 en-US 完全相同、14 条是整句英文 → 实测中文界面出现 `Denylist revision 1`（见 §7.15-a）。
+
+### 1.5 `v-for` 与 `v-if` 同元素（P1，✅ 指令缺陷已关闭 2026-09-22）
+
+`runtime/ToolTimeline.vue:13-23` 原为：`<ApprovalCard v-for="approval in approvals" :key="approval.id" v-if="clock" ... />`。
+
+> **关闭记录（2026-09-22）**：已把 `v-if="clock"` 提升到外层 `<template>`，`ApprovalCard` 只保留 `v-for`，消除 Vue 3 指令优先级隐患并保持原有渲染语义。同元素 `v-for/v-if` 扫描为 0，frontend `vue-tsc --noEmit && vite build` 通过。下面关于 `clock === null` 缺少显式空态、以及组件命名与内容不完全一致的两条维护备注仍开放，不计入本次关闭范围。
+Vue 3 中 `v-if` 优先级高于 `v-for`，当前只是"恰好能用"（条件是外部 prop `clock`），但：
+- 会被 `vue/no-use-v-if-with-v-for` 判为错误写法（仓库当前无 lint，所以没暴露）；
+- `clock === null` 时整个列表**静默不渲染**，而不是给出占位或错误提示；
+- ✅ **已关闭 2026-09-22**：组件已从 `ToolTimeline.vue` 重命名为 `ApprovalTimeline.vue`，`TaskRail.vue` 的 import 与两处使用同步更新；当前源码已无 `ToolTimeline` 残留，frontend `vue-tsc --noEmit && vite build` 通过。
+
+### 1.6 死代码 / 死监听（P2，✅ 已关闭 2026-09-22）
+
+`host/AgentAppSurface.vue:133`、`1467-1469`：
+
+```ts
+let taskRailWideViewport = typeof window !== 'undefined' ? window.innerWidth > 1040 : false;
+...
+const syncTaskRailViewport = (): void => {
+  const wide = window.innerWidth > 1040;
+  if (wide === taskRailWideViewport) return;
+  taskRailWideViewport = wide;
+};
+```
+
+`taskRailWideViewport` 只被赋值，**从未被读取**；`resize` 监听（`:1487`）因此毫无作用。顺带这条 `window.innerWidth` 判断也违反 `doc/architecture/FRONTEND.md:519`「响应式必须以 named container `agent-hub-window` 为准，而不是浏览器 viewport」。
+
+> **关闭记录（2026-09-22）**：已删除 `taskRailWideViewport`、`syncTaskRailViewport` 以及对应的 `resize` 注册/清理逻辑；未改模板与样式，不改变 Task Rail 的可见行为。`AgentAppSurface.vue` 中已无上述标识和 `window.innerWidth`，前端 `vue-tsc --noEmit && vite build` 通过。
+
+### 1.7 流式文本容易丢（P1，✅ 已关闭 2026-09-22）
+
+`streamingText` 是 `AgentAppSurface` 的组件内 `ref`（`host/AgentAppSurface.vue:140`），而：
+
+- `message.delta` 是 transient 事件、不是 durable（`api/agent-events.ts:20-29`），重连只补 durable 事件；
+- 切 App 标签会卸载 surface（`host/AgentHubWindow.vue:561` 只有 `v-if` 分支，没有 `<KeepAlive>`），`onBeforeUnmount` 里 `facade.dispose()` + `resetStreamingPresentation()`（`:1494-1503`）；
+- `transport.disconnected` 时也会 `resetStreamingPresentation()`（`host/AgentAppSurface.vue:667`）。
+
+结果：模型正在输出时切换 App / 触发一次断线，**已经流出的文字会整段消失**，直到该 model step 结束（`message.final` → 刷新 ledger）才重新出现。用户观感是"卡住/丢字"。
+
+> **关闭记录（2026-09-22）**：Hub 主内容区现在由持续存在的 `<KeepAlive>` 缓存 `AgentAppSurface` / Plugin surface / Files surface，切 App 或 Files 只 deactivate，不再触发 Agent surface 的 `onBeforeUnmount → facade.dispose() → resetStreamingPresentation()`；`transport.disconnected` 与 stream `onError` 也不再主动清空已经显示的 partial text，断线重连期间保留用户已经看到的内容。Run 真正结束、切线程/停止订阅时仍按原逻辑清理。前端 `vue-tsc --noEmit && vite build` 通过。
+
+### 1.8 后端工具摘要英文硬编码，直接进对话 UI（P1）
+
+`modules/agent/tools/host/**` 中 `summary` 是面向模型与用户的同一条字符串，例如：
+
+```ts
+// modules/agent/tools/host/file-tools.ts:220
+return confirmed(`Read ${data.contentBytes} byte(s) from ${data.path}.`, ...);
+```
+
+同类字符串在该目录至少 34 处（`Found ${n} ... matches`、`Waiting for the user to answer ...` 等），会被 `ai/ConversationMessage.vue` 作为工具结果摘要渲染。
+即：中文/日文界面里混入英文短句。**一个字符串同时服务模型与用户**本身也是设计问题（建议分离"模型可见证据"与"用户可见摘要"）。
+
+### 1.9 历史 Run 的审批接口稳定 500，且前端完全静默（P1，✅ 已关闭 2026-09-22）
+
+> **关闭记录（2026-09-22）**：新增数据库 migration #45，将历史 inspection 的 `target.kind = "machine"` 迁移为 canonical `ssh`，同时补齐 `target.target = "ssh"` 与稳定 `target.id`；tool call 与 approval 自带 inspection 均覆盖。新增 `migration/legacy-machine-inspection-targets` 回归场景，后端 build 与完整 Agent scenario suite 通过。对真实数据库副本执行迁移后，legacy tool call 从 **26 → 0**、受影响 approval 从 **25 → 0**，且 25 条 approval inspection 全部通过当前严格解码器。保留严格 decoder，不接受旧别名作为长期协议。
+
+**复现路径**：打开 Agent Hub → 点开会话「只进行只读检查，不执行任何修改…」（`thread 5017b33b-3b87-41e8-944f-293afb5f053d`）
+→ 前端请求 `GET /api/v1/apps/nexus.agent/runs/e4abdda0-6924-4f7e-a7c0-5a1810a72899/approvals` → **500**。
+
+```
+HTTP 500  {"error":{"code":"INTERNAL_ERROR","message":"Agent request failed."},"requestId":"8d2526d0-..."}
+backend log: {"level":50, "method":"GET", "status":500, "errorCode":"AGENT_DURABLE_STATE_INVALID"}
+```
+
+- **可稳定复现**：连续两次调用同一 URL 都是 500（`requestId` e42bb7dc… / e685a59f…）；本轮实测在 20 分钟内共出现 8 次同码 500（全部 `GET`，16:00:28Z 起）。
+- **作用范围（实测）**：只有 `/runs/:runId/approvals` 受影响；同一个 Run 的 `/runs/:runId`、`/checkpoints`、`/reconciliation` 都是 **200**（说明不是数据整体损坏，而是这条读取路径的解码器更严格）。
+
+**根因（数据库 + 解码器对照）**：
+
+1. `sqlite-approval.repository.ts:34` 取审批的 inspection 用的是 `COALESCE(a.inspection_json, t.inspection_json)` —— 该审批行 `inspection_json` 为 `NULL`，于是回退到 tool call 的 inspection。
+2. 该 tool call（`machine_execute_shell`）里存的是**旧命名**：`inspection_json.target.kind = "machine"`。
+3. `runtime/durable-state-decoders.ts:396-427` 的 `parseToolInspection` 只接受 `['ssh', 'workspace', 'integration', 'browser', 'run']` → 直接 `invalid()` → 抛 `AGENT_DURABLE_STATE_INVALID` → 路由 500。
+
+**影响面（当前真实数据库）**：`agent_tool_calls` 共 43 条，其中 **26 条是 legacy `target.kind = "machine"`**（另 17 条为 `run`）；
+与之关联的 **8 个 Run**、共 **25 条审批记录** 的 `/approvals` 都会 500：
+
+```
+079c25fa…(10) 1b179f42…(4) 6aa40c62…(3) 57568d9b…(2) 7aefe2fb…(2) be931827…(2) de745348…(1) e4abdda0…(1)
+```
+
+**为什么以前的迁移没兜住**：`sqlite-migrations.ts` 的迁移 **#44**（"Project legacy SSH shell results into typed execution semantics"）已经把 `machine_execute_shell` 的 **result** 归一成 `semantic.target.target = 'ssh'`，
+但**没有同步改写 `inspection_json.target.kind`**，而读取路径校验的恰恰是 inspection —— 迁移改了一半，留下一批"写进去时合法、现在读不出来"的行。
+
+**前端表现（这条更值得重视）**：切到会话视图时，界面上**没有任何错误提示**——没有 toast、没有空态、没有降级文案，审批区块直接不出现（截图 `doc/imgs/review-2026-09-21/agent-hub-run-approvals-500-silent-zh.png`，同一屏会话照常渲染）。
+代码上也对得上：`host/AgentAppSurface.vue:571-584` 的 `refreshApprovals` 里 **`catch {}` 是空的**，失败被直接吞掉；只有用户主动打开 Run 详情抽屉（`openRunDetail`，`:1246-1258`，用 `Promise.all` + `error.value = explain(cause)`）才会看到错误。
+用户会以为"这个 Run 本来就没有审批记录"，属于 §3.4「静默失败」的典型：**后端 500 + 前端静默 = 数据看起来消失了**。
+
+**建议**：① 补一条迁移把 `inspection_json.target.kind` 的 `machine` 归一为 `ssh`（或在 `parseToolInspection` 里兼容旧别名并记录 deprecation）；
+② 审批读取失败时给出可见降级（"审批记录加载失败，点击重试"），而不是静默为空；
+③ 这条 500 也说明 §1.1 之外还有一类"老数据 + 严格解码器"的风险面，建议给所有 `AGENT_DURABLE_STATE_INVALID` 抛出点补一次全库自检脚本。
+
+---
+
+### 1.10 打开 Run 详情会因审批接口 500 而**整体失败**（P0，✅ 核心缺陷已关闭 2026-09-22）
+
+§1.9 记录的是"审批读取 500 + 前端静默"；本轮把**用户可见后果**补全：**点历史 Run 根本打不开详情**。
+
+**复现路径**：Hub → 会话「只进行只读检查，不执行任何修改…」→ 右侧任务栏 → 在「Run 历史」里点任意一条。
+
+实测（CDP 抓响应 + 读 DOM）：
+
+```
+GET /runs/e4abdda0-…            200
+GET /runs/e4abdda0-…/approvals  500   ← 唯一失败项
+GET /runs/e4abdda0-…/checkpoints 200
+GET /runs/7aefe2fb-…/subagents?limit=50  200
+GET /runs/7aefe2fb-…/approvals  500
+
+结果：详情抽屉没有打开（没有「返回任务」按钮、没有 #hash 头部、没有检查点区块），
+      界面上只多出一条红色横幅 —— 内容是英文："Agent request failed."
+```
+
+**根因（代码）**：`host/AgentAppSurface.vue:1235-1258` 的 `openRunDetail` 用
+`Promise.all([facade.getRun, facade.listCheckpoints, facade.listApprovals, facade.listSubagents])` **一次性并发**，
+任意一个 reject 就直接落到 `catch`，而 catch 只做 `error.value = explain(cause)`；
+打开详情的 `detailVisible.value = true` 写在 try 内、且在 4 个请求之后 ⇒ **详情永远打不开**。
+
+> **关闭记录（2026-09-22）**：`openRunDetail` 已把核心 snapshot 与辅助数据拆成不同失败域：`facade.getRun()` 成功后立即清空旧详情并打开详情；checkpoints / approvals / subagents 通过 `Promise.allSettled` 独立回填，任一辅助请求失败不再阻断其它成功区块，失败仍使用现有错误横幅反馈。保留 generation 守卫，关闭/切换详情后旧响应不会回填。前端 `vue-tsc --noEmit && vite build` 通过。
+
+**影响面（实测）**：`GET /runs` 返回 22 个 Run，逐个回放 `/approvals` → **8 个 500**（与 §1.9 的 8 个 Run 一致）。
+也就是说这些 Run 的**详情、检查点、子代理、审批全部看不了**，用户端唯一反馈是一句英文报错。
+
+**两个次生问题（错误协议已关闭，UI 重试仍开放）**：
+
+1. ✅ **错误协议 / 5xx 本地化阻断已关闭 2026-09-22**：此前 `AGENT_DURABLE_STATE_INVALID` / `SUBAGENT_DURABLE_STATE_INVALID` 会对外退化成 `INTERNAL_ERROR + "Agent request failed."`，前端又优先回显该英文 message。现在 backend 只对白名单中的 durable-state 解码故障保留稳定机器码（HTTP 仍为 500，message 使用安全泛化文案），未知内部异常继续掩码为 `INTERNAL_ERROR`；frontend 的 `formatAgentApiError` 对所有 5xx 统一使用调用方传入的本地化 fallback，不再把 backend 英文兜底直接显示给用户，稳定 `AgentApiError.code` 仍保留供日志/诊断。lint、backend build、frontend build、5xx 本地化探针与完整 Agent scenario suite 均通过。
+2. **仍开放（UI）— 没有重试入口**：横幅只有关闭按钮，用户无法"再试一次"，也不会知道是审批这一路失败。
+
+---
+
+## 2. UI / 交互 / 视觉（第一轮重点）
+
+> 第二轮（主界面布局/细节、设置区与主界面的落差、用户实测反馈）见 §6 与 §7。
+
+### 2.1 「模态遮罩 + 浮动窗口」定位矛盾（P1，产品级）
+
+`host/AgentHubWindow.vue:341-353`：
+
+```html
+<div class="agent-hub-backdrop fixed inset-0 z-40" @pointerdown.stop="handleBackdropPointerDown" @wheel.prevent @touchmove.prevent />
+...
+<section role="dialog" aria-modal="true" ...>
+```
+
+- 全屏遮罩 (`fixed inset-0`) + `aria-modal="true"` ⇒ **这是模态对话框**，不是 Windows 风格浮窗；
+- 遮罩本身拦截 `wheel` / `touchmove`，且滚轮/触摸被 `prevent`；
+- 但文档与实现又都按"浮窗"描述（可移动、可缩放、可最小化、geometry 持久化）。
+
+对用户的直接后果：Agent 正在跑、正在等审批时，用户**无法同时查看 SSH 终端 / 文件管理器 / Dashboard** 来核对 Agent 的说法，只能关掉 Hub（关掉会保留 Run，但会失去当前界面）。这与"终端工具里的智能执行层"产品定位冲突最大。
+
+建议方向（择一，需产品决策）：
+1) 改为**非模态**（去掉全屏 backdrop，浮窗与主界面并存，点击外部只失焦不遮挡交互）；
+2) 或保留模态，但增加 **docking / 半屏 / 侧栏** 形态，至少让用户能把 Hub 靠边并保留一部分主界面可见；
+3) 若坚持模态，就不要同时暴露"移动/缩放"的窗口隐喻，统一成"全屏工作台"。
+
+### 2.2 遮罩点击行为反直觉（P2）
+
+`host/AgentHubWindow.vue:72-80`、`:355`：点击遮罩不关闭、不最小化，而是给窗口加 400ms 的 `ring + scale(1.002)` 「闪烁」反馈。
+用户预期是「点击外部 = 关闭/最小化」或「完全无反应」；"闪一下"既没有说明也没有后续动作，属于需要解释的隐藏交互。
+
+### 2.3 字号与可读性（P1）
+
+Agent UI 中任意像素字号统计：
+
+| 字号 | 出现次数 |
+| --- | --- |
+| `text-[6px]` / `[7px]` / `[8px]` | 5 / 20 / 41 |
+| `text-[9px]` | 113 |
+| `text-[10px]` | 274 |
+| `text-[11px]` | 135 |
+| 合计 ≤ 11px | **563 处** |
+
+典型位置：`host/AgentThreadSidebar.vue:309`（10.75px 会话标题）、`:316`（9px 元信息）、`runtime/TaskRail.vue`（8–10px 的 checkpoint / 事实区）、`host/AgentAppSurface.vue:2515-2665`（窄容器下降到 10–10.5px）。
+同时大量使用 `text-text-secondary/50`、`/45`、`/40` 之类的低对比度（例：`host/AgentThreadSidebar.vue:316`、`files/ArtifactLibraryView.vue:526`）。
+
+影响：拉丁字母 9px 已偏小，**中文/日文汉字在 9–10px 下几乎不可读**；配合低对比度，等于把关键状态（Run 状态、目标主机、审批风险）做成"看不清的次要信息"。
+
+建议方向：正文/元信息下限 12px，辅助文字不低于 11px，取消 6–9px 档位；对比度不低于 4.5:1（`/50` 这类需要重新取值）。
+
+### 2.4 点击目标偏小（P1）
+
+- 工具栏/窗口按钮普遍 `h-7` / `h-7.5`（28–30px）：`runtime/TaskRail.vue:204`、`host/AgentHubWindow.vue:528/536/548`、`host/AgentAppSurface.vue:1535`、`:1567`；
+- `runtime/ApprovalCard.vue:107-134` 的"批准/拒绝"按钮 `py-2 text-xs` 且三列并排，在浮窗里每个按钮宽度很小；
+- 窄容器下 Run 配置压缩成 `25px` 高的纯图标按钮（`host/AgentAppSurface.vue:2577+`）；
+- `host/AgentHubWindow.vue:444-455` 关闭 App 标签的按钮是 `h-4 w-4`（16px）且默认 `opacity-0`，只在 hover 时出现 —— 触屏几乎不可能命中。
+
+建议方向：交互元素最小 32px（触屏 40px+），危险操作（拒绝/删除/关闭标签）避免"hover 才出现"，改成常显或长按/菜单。
+
+### 2.5 Composer 的信息架构与按钮语义（P1）
+
+`ai/AgentConversation.vue:722-782` 的输入区底部一行同时容纳：
+`ArtifactPicker` + 模型选择 + 执行模式 + 批准策略 + 运行环境 + SSH 目标 + token 统计 + 跳转最新 + 发送/取消。
+其中 5 个都是 popover，触发面只有 `icon + 11px 文本`（窄容器下退化为纯图标）。
+
+具体问题：
+- **一个按钮两种语义**：`ai/AgentConversation.vue:769-776`，当存在活动 Run 且草稿为空时，同一个按钮从"发送"变成"取消 Run"（含图标变化）。用户容易在"想发送"时误触取消，或反之。
+- `sendHint`（"Enter 发送"）已存在于 i18n，但**没有任何地方渲染**（属于 §3.5 的未使用 key 之一），用户不知道 Enter 会直接发送、Shift+Enter 换行。
+- 批准策略（`ask` / `full_access`）属于**安全决策**，目前与"模型/环境"同权重地塞在输入框工具栏里，安全语义被弱化。
+- token 统计（`ai/AgentConversation.vue:759`）放在发送按钮旁边，属于调试信息占据主操作区。
+
+建议方向：输入区只保留"发送/停止"与附件；模型/环境/目标移到 Run header 或"下一个 Run 设置"面板；批准策略单独成组并带风险说明；取消 Run 用独立按钮或明确二次确认。
+
+### 2.6 空态自动轮播（P1）
+
+`ai/AgentConversation.vue:66`、`:163-166`：8 张 bento 卡片（`HOME_PROMPT_ROTATE_MS = 9000`）每 9 秒自动翻页，且只要没有内容就一直轮播。
+问题：内容会在用户指针下方自动移动（点击到错误卡片的风险）；整个 Agent 前端只有两处 `prefers-reduced-motion`（`host/AgentAppSurface.vue:2697` 侧栏 drawer、`runtime/TaskRail.vue:914` 卡片），轮播、`animate-pulse`、hover 位移都不受影响；8 张装饰卡对"第一次怎么用"的引导价值很低。
+
+建议方向：静态展示 3–4 个真实高频入口；确需轮播则只在 hover 时暂停 + 手动分页 + 尊重 reduced-motion。
+
+### 2.7 硬编码调色板绕过主题体系（P1）
+
+仓库有完整主题定制（`tokens.css` + appearance 设置 + 主题截图 `doc/imgs/e2e/theme-customization.png`），但 Agent UI 大量使用 Tailwind 调色板与硬编码色：
+
+- `ai/AgentConversation.vue:127-152`：`emerald/sky/amber` 卡片 + 硬编码阴影 `shadow-[0_8px_24px_rgba(16,185,129,0.12)]`；
+- `host/AgentAppSurface.vue`：推理强度滑杆用 `from-blue-500 via-purple-500 to-pink-500`、`bg-indigo-600`；
+- `settings/ModelProviderSettings.vue`（emerald 系 37 处）、`settings/PluginManagementSettings.vue`、`settings/SafetyNetworkSettings.vue`、`files/ArtifactLibraryView.vue` 等。
+
+影响：用户切到深色/自定义主题后，这些颜色不跟随，形成"补丁感"；同时 `white/black` 文本与 `text-white` 在浅色主题下的对比度也不受控（`runtime/ApprovalCard.vue:127` 用 `text-black` 压 `bg-warning`）。
+
+建议方向：新增少量语义 token（如 `--color-accent-*`、`--color-danger-foreground`），或统一收敛到 `success/warning/error/primary`。
+
+### 2.8 不可发现 / 与整体不一致的交互（P1）
+
+| 交互 | 位置 | 问题 |
+| --- | --- | --- |
+| 会话列表 **Ctrl/⌘ + 滚轮缩放** | `host/AgentThreadSidebar.vue:132-146` | 劫持浏览器缩放；只对会话列表生效；靠 `title` 提示；比例写进 localStorage |
+| 任务栏卡片**拖拽排序** | `runtime/TaskRail.vue:107-160`、`:475-490`（`vuedraggable`） | 侧边任务栏里的卡片可以拖动重排并持久化，产品上无人会预期；拖拽排序与"点击/滚动"在同一区域 |
+| Launcher **6px 阈值拖拽** | `host/AgentLauncher.vue:39-61` | 圆形按钮可按住拖动改位置；拖动/点击共用 pointer 流程；移出视野后只能清 localStorage |
+| 遮罩**闪烁反馈** | `host/AgentHubWindow.vue:72-80` | 见 §2.2 |
+| **虚拟滚动 + 固定行高** | `host/AgentThreadSidebar.vue:34`、`:269-272` | 列表每页最多 100 条，却按 `45px × scale` 手算 spacer；一旦字号/行高变化，滚动位置与可视项会错位 |
+
+建议：删掉列表缩放与任务栏拖拽排序（收益低、成本高、与产品其余部分不一致）；Launcher 位置改为"长按拖动"并提供"重置位置"。
+
+### 2.9 详情与任务栏的信息架构（P1）
+
+- TaskRail 默认收起（`host/AgentAppSurface.vue:134`、`:1598-1602`）；窄窗口它变成覆盖层，宽窗口才并排。运行概览、检查点、运行时面板、子智能体、最近事实、Workspace 都塞在这一个 320px 列里。
+- **"最近事实"直接 dump JSON**：`runtime/TaskRail.vue:469` `JSON.stringify(entry.payload, null, 2)` 以 9px 字体展示 ledger 原始 payload。对用户没有语义，属于调试视图（应仅开发者模式可见）。
+- 审批/预算/对账的状态出现在至少三处（顶部 badge `host/AgentHubWindow.vue:466-472`、TaskRail、Conversation 内 notice `ai/AgentConversation.vue:566-580`），信息重复但**没有统一的"待处理"入口**。
+- Agent 概念总数偏多且直接暴露给用户：Goal / Plan / Step / Verification / Checkpoint / Subagent / Mailbox / Shared Facts / Reconciliation / Lease。文档里明确 Plan≠Step，但 UI 上两者并列出现（Plan 卡片 + "最近事实"）。
+
+建议方向：把 Run 详情变成"概览 + 折叠的高级信息"；调试类数据（JSON payload、hash、lease、watermark）统一收进开发者/诊断面板；待处理事项收敛成一个可跳转的收件箱。
+
+### 2.10 无障碍与键盘（P1）
+
+- Hub：`role="dialog" aria-modal="true"`（`host/AgentHubWindow.vue:352-353`）但**全文没有 `keydown` 处理**（无 Escape、无 Tab 限制、无初始焦点、无关闭后焦点恢复），背景内容也没有 `inert`。
+- 窗口移动/缩放**只能 pointer**（`handleDragPointerDown` / `handleResizePointerDown`），没有键盘替代；缩放热区是右下角 `h-4 w-4`（`host/AgentHubWindow.vue:585`）。
+- 已有的共享能力没被复用：`foundation/ui/BaseModal.vue` + `OverlayPanel.vue` 已提供 `closeOnEscape` / `focusOnOpen` / `restoreFocus` / `keepMounted`，Agent Hub 全部自己实现且缺失这些行为。
+- `prefers-reduced-motion` 只覆盖了两处（`host/AgentAppSurface.vue:2697`、`runtime/TaskRail.vue:914`），其余动画（`animate-pulse`、自动轮播、卡片 hover 位移、`active:scale-95`）未处理。
+
+建议：Hub 复用 `OverlayPanel` 的焦点/ESCAPE 能力；至少支持 `Esc = minimize`、打开时聚焦输入框、关闭后焦点回到 Launcher。
+
+### 2.11 视觉语言不统一（P2）
+
+- **圆角混用**：同一层级里出现 `rounded`（`runtime/SubagentCard.vue:24`、`runtime/AgentWorkspaceTerminal.vue:48`）、`rounded-lg`、`rounded-xl`、`rounded-2xl`（Hub 窗口）。SubagentCard 明显偏离其他卡片语言。
+- **边框透明度随手取**：`border-border/40 /45 /50 /55 /60 /65 /70 /75 /80` 全都在用。
+- **魔法尺寸**：`h-[37px]`（`runtime/TaskRail.vue:185`、`:212`）、`h-[26px]`、`w-[54px]`、`text-[10.75px]`、`h-7.5 w-7.5`。
+- **阴影多套**：`shadow-2xs/xs/sm/xl/2xl` 与硬编码 `shadow-[0_8px_24px_rgba(...)]` 并存。
+- 结果：整个 Agent 区域看起来像"在一套设计系统里手绘的第三方应用"。
+
+### 2.12 反馈真实性（P2）
+
+`settings/AgentSettingsPanel.vue:243-260`：安装推荐插件时用 `setInterval(450ms)` 依次把进度从 25% → 65% → 90% 推上去（`installProgress`），与真实安装进度无关；成功后 `setTimeout(350ms)` 关闭弹窗。
+用户看到的是**模拟进度动画**。建议改为不确定态（indeterminate）或绑定真实阶段事件。
+
+### 2.13 UI 建议清单（若要重做交互，按此优先级）
+
+1. **定位**：Hub 改非模态或可 docking；先解决"能一边用终端一边跑 Agent"。
+2. **输入区减法**：发送/停止 + 附件 + 一个"运行设置"入口；Shift+Enter 提示；取消 Run 独立化。
+3. **排版基线**：正文 ≥12px、辅助 ≥11px、禁用 6–9px；统一 4/8pt 间距；统一圆角与边框等级。
+4. **主题合规**：清除硬编码调色板，补 `--color-card` 等 token。
+5. **可读状态**：Run/Subagent/审批状态统一走 i18n + 图标 + 颜色三态，不暴露内部枚举与 id。
+6. **可发现交互**：删除列表缩放/卡片拖拽排序；空态卡片静态化。
+7. **无障碍**：Esc、焦点管理、`inert`、reduced-motion 全覆盖。
+8. **反馈**：真实进度、静默失败改为显式提示（见 §3.4）。
+
+---
+
+## 3. 代码与模块结构问题
+
+### 3.1 巨型文件与"文件级职责过载"（P2，但影响长期维护）
+
+| 文件 | 行数 | 说明 |
+| --- | --- | --- |
+| `frontend/src/features/agent/host/AgentAppSurface.vue` | 2,716 | 会话、线程列表、Run 配置、审批、对账、Checkpoint、Subagent、Workspace、Composer 配置全在一个组件 |
+| `frontend/src/features/agent/settings/ModelProviderSettings.vue` | 2,071 | Provider CRUD + 模型发现 + capability 编辑 + 测试连接 |
+| `frontend/src/features/agent/api/agent-api.ts` | 1,622 | 96 个导出类型 + 全部 HTTP 调用 |
+| `frontend/src/features/agent/ai/AgentConversation.vue` | 939 | 空态 + 消息列表 + 命令面板 + 对账 + Composer |
+| `frontend/src/features/agent/settings/AgentSettingsPanel.vue` | 928 | 分区导航 + onboarding + provider + storage + denylist |
+| `frontend/src/features/agent/host/AgentHubWindow.vue` | 749 | 窗口 chrome + 拖拽/缩放 + App tab + 视图切换 |
+| `backend/.../infrastructure/agent/workspace-runtime/runner-http.adapter.ts` | 1,503 | Runner HTTP 全协议 |
+| `backend/.../infrastructure/agent/runtime/state-commit/subagent-transitions.ts` | 1,373 | Subagent 全部状态迁移 |
+| `backend/.../infrastructure/agent/runtime/state-commit/tool-transitions.ts` | 1,107 | Tool 全部状态迁移 |
+| `backend/.../agent/runtime/execution/native-agent-backend.ts` | 891 | Root 执行主循环 |
+| `backend/.../agent/runtime/runs/state-commit.port.ts` | 859 | 状态提交端口 |
+
+`AgentAppSurface.vue` 单文件即同时承担：App 级会话状态、Run 流订阅、审批/对账交互、线程 CRUD、目标选择、Composer 配置渲染、TaskRail 编排。
+建议拆分（不实施）：`useAgentThreads` / `useAgentRunStream` / `useRunConfiguration` composable + 把 Run 详情（TaskRail 内容）拆成独立 feature 组件，把 Composer 配置拆成 `RunConfigBar.vue`。
+
+### 3.2 Nexus 前后端 transport DTO / event 协议尚未完全统一（P1，🚧 迁移中）
+
+> **2026-09-22 迁移检查点**：问题范围已从“仅 Agent protocol”修正为 **Nexus 全局前后端真实 transport contract**。canonical source 统一为 `packages/protocol`，不再计划建立单独的 `packages/agent-protocol`。依赖方向固定为 `protocol <- frontend/backend`；protocol 不依赖 frontend/backend，backend domain/service/repository 类型继续留在各自模块，frontend UI-only ViewModel 也继续本地维护。
+
+当前状态：
+
+- ✅ **基础协议包已建立**：`@nexus-terminal/protocol` 已作为 workspace package 接入 frontend/backend；公共 envelope 与按 domain 的 DTO 从此集中维护。
+- ✅ **Auth / Security 已完成双端接线**（commit `69b48be`）：登录、2FA、Passkey、CAPTCHA、IP access 等真实 HTTP request/response 使用同一 DTO；同时补出了 Passkey rename 的运行时输入校验缺口。
+- ✅ **Settings / Preferences 已完成双端接线**（commit `8f939cb`）：`/settings` request/response 改由 `protocol/settings` 定义，backend mapper 从 `Record<string, unknown>` 收紧为 `SettingsResponseDto`。
+- ✅ **Connections / Proxy / SSH Keys / Tags / Remote Desktop 已完成一批 canonical DTO 接线**（commit `0ba2caf`）。
+- 🚧 **当前工作树中的未完成 DTO 批次**：`appearance`、`audit`、`command-history`、`filesystem-catalog`、`notifications`、`quick-commands`、`ssh-suspend`、`system`、`transfers` 已建立或开始建立 protocol DTO / frontend model alias，但尚未全部完成 frontend API 与 backend route 两端迁移；这些文件是**迁移检查点，不代表对应域已关闭**。
+- 🚧 **Agent / Workspace 仍是最大剩余面**：frontend `agent-api.ts` / `agent-events.ts`、backend Agent HTTP route request DTO、Workspace WebSocket JSON envelope / event，以及 Agent terminal / event WS contract 仍有手写重复。raw binary chunk 本身不作为 DTO，但其 JSON metadata / opcode / envelope 仍应收敛到 protocol。
+- 🚧 **Agent durable event canonical union 已开始落地**：backend `state-commit.port.ts` 正将 event type 从裸 `string` 收紧为 `AgentDurableEventType`，并改造 state-commit call sites 让编译器约束 event name；但该 union 尚未迁入 `packages/protocol` 并被 frontend/backend 共同消费，因此仍属于未完成状态。
+- ✅ **durable 漂移静默消费已关闭 2026-09-22**：projector 遇到带 durable `id` 的 unknown event 会 fail-closed，不再推进 cursor；这一条是行为防线，不能替代 canonical protocol。
+- ⏸ **backend 单元测试保持冻结**：本轮只做现有 build / lint / scenario / architecture guard 验证，不新增、迁移或补 backend unit test，除非后续明确重新授权。
+
+完成标准（此项全部满足后才可标记关闭）：
+
+1. 所有真实 frontend↔backend JSON HTTP / WebSocket request、response、event contract 均由 `packages/protocol` 单一来源定义；文本/Blob/二进制 payload 仅对其结构化 metadata 建 DTO。
+2. backend route/WS adapter 显式完成 domain↔DTO mapping；不得把 service/repository domain model 当作“碰巧长得一样的 wire type”直接当协议来源。
+3. frontend network API 直接消费 protocol DTO；仅在字段完全一致时允许 app model 作为 type alias，带本地状态的 UI ViewModel 必须继续与 DTO 分离。
+4. 运行时边界继续执行 `unknown -> parser/validation -> RequestDto -> domain`，不能因为共享 TypeScript 类型而删掉输入校验。
+5. 增加 architecture guard，阻止在 `features/*/api`、`interfaces/http/*`、WS protocol adapter 中重新定义新的重复 wire DTO。
+6. backend/frontend 全量 build 通过；Agent/Workspace 迁移后再跑其现有 regression / scenario suite。**在这些条件满足前，§3.2 保持开放。**
+
+### 3.3 前端状态与事件传递方式偏"隐式全局"（P1，✅ 当前问题已闭合 2026-09-22）
+
+同一个 host 事实要跨组件传播，目前用了三套机制叠加：
+
+1. ✅ **window CustomEvent 全局总线已关闭 2026-09-22**：`nexus:agent:thread-changed` / `authorization-changed` / `memory-changed` / `host-changed` 已迁移到 `host/agent-host-events.ts` 的类型化模块事件总线；发布与订阅都受 `AgentHostEventMap` 约束，组件卸载时显式取消订阅。`features/agent` 内上述 4 个 `nexus:agent:*` CustomEvent 扫描为 0，frontend `vue-tsc --noEmit && vite build` 通过。
+2. **跨标签 BroadcastChannel + navigator.locks 选主**：`host/AgentSurfaceHost.vue`（leader 订阅 + 广播）。
+3. **组件内 ref + `agentSurfaceSession` 的 Map 视图状态**（`host/surface-session.ts`，109 行）。
+
+风险：谁在什么时候改了 `summary` 难以追踪；✅ **2026-09-22 已补 `refresh()` generation 守卫**，同一用户的并发 summary 请求只允许最新请求提交到 `summary`，旧响应仍可作为调用方游标参考但不会覆盖新状态；用户切换/卸载后的旧响应也会丢弃。✅ 同日已移除 window CustomEvent 这一套隐式通道。
+
+> **复核结论（2026-09-22）**：剩余的 `BroadcastChannel + navigator.locks` 与 `agentSurfaceSession` **无需继续合并**。前者仅负责跨标签 Host stream leader 选举/广播；后者仅保存当前标签页、按 App 隔离的草稿与视图选择；权威 Host summary 只有 `AgentSurfaceHost.summary` 一个写入点。两者作用域与生命周期不同，不构成重复权威状态源。保留当前分层，后续除非职责重新重叠，不再推进“统一成一个 store”的重构。
+
+### 3.4 静默失败与状态吞错（P1）
+
+- ✅ **静默丢操作已关闭 2026-09-22**：`execute()` 在全局 `busy` 时不再直接 `return undefined`；现在会通过统一 `useOperationFeedback` 明确提示“已有设置操作正在进行”，并记录稳定错误 cause。全局 busy 锁本身仍保留，后续若要改为 per-operation 互斥应单独设计，避免同时改动多个子面板的禁用/关闭语义。前端 `vue-tsc --noEmit && vite build` 通过。
+- ✅ **已关闭 2026-09-22**：`host/AgentAppSurface.vue` 的 `refreshRun()` 不再 `catch { return null; }` 静默吞错；失败会写结构化 `logger.warn`，默认同步到现有错误横幅。仅 `recoverRuntimeFailure()` 这条已经持有原始 mutation 错误的恢复链会显式关闭二次错误覆盖，避免把主错误替换成后续 refresh 错误。前端 `vue-tsc --noEmit && vite build` 通过。
+- ✅ **已关闭 2026-09-22**：`refreshCurrentCheckpoints()` 不再把请求失败伪装成空 checkpoint 列表；现在失败会记录结构化日志并走现有错误横幅，同时增加 generation + run-id 守卫，避免切换 Run 后旧响应覆盖新 Run 的 checkpoint 状态。前端 `vue-tsc --noEmit && vite build` 通过。
+- ✅ **已关闭 2026-09-22**：`copyKeyId` 不再吞掉 Clipboard API 失败；失败现在通过设置区已有的 `useOperationFeedback` 统一错误链反馈，并保留 cause 进入结构化日志。前端 `vue-tsc --noEmit && vite build` 通过。
+
+建议：统一 "操作失败必须可见"（toast + inline error），并把 `busy` 从"全局锁"改为 per-operation 互斥。
+
+### 3.5 死代码与 i18n 冗余（P2）
+
+- **i18n**：`features/agent/i18n/*.json` 每种语言 1,148 个叶子 key，其中 **274 个（约 24%）** 在 `features/agent` 源码中已无引用（脚本核对）；三种语言各存一份 ⇒ 约 822 条死文案。典型：`agent.conversation.sendHint`（"Enter 发送"）已定义但未渲染、`agent.operations.environmentRecipes`、`agent.files.status.*`、`agent.hub.appActivity` 等。
+- **死变量（✅ 已清理 2026-09-22）**：`taskRailWideViewport` 与无效 `resize` 监听已删除（§1.6）。
+- **无效样式类**：§1.1 的 158 处。
+- 以上三类问题都能被规则检查拦住（§3.6）。
+
+### 3.6 工程保障与测试策略（P1）
+
+- ✅ **基础 lint 门禁已关闭 2026-09-22**：新增 ESLint flat config 与根级 `lint / lint:agent` 脚本，覆盖 Backend Agent、HTTP/WebSocket Agent interface、Agent Runner、Frontend Agent、Agent scenario runner；启用 `@typescript-eslint/no-unused-vars` 与 `vue/no-use-v-if-with-v-for` 为 error。首跑实际发现 **47** 个 unused import/type/helper/局部变量，逐项确认后清理，`pnpm lint` 现为 0 error；backend / frontend / agent-runner build 均通过。**未定义 utility 类、未使用 i18n key、设计 token 等需要自定义规则，仍开放，不计入本条完成范围。**
+- **后端 agent 测试仍集中在单文件**：`tests/backend/agent-scenarios/runner.ts` 仍是 22k+ 行的手写场景集合，且仍按顺序串行执行。✅ **“第一个失败即中断”已关闭 2026-09-22**：`main()` 现在收集失败并继续执行剩余场景，最后统一输出全部 failure 并用 `AggregateError` 非零退出，保留 CI 失败语义同时避免后续问题被首个失败遮蔽；完整 `test:agent-scenarios` 通过。**单文件过大与串行执行本身仍开放。**
+- **仍包含"读源码做正则断言"的架构测试**：当前复核确认 `productTypeBoundaryScenario` 以及若干 architecture 场景仍使用 `fs.readFileSync` + `assert.match/doesNotMatch` 检查源码形态（例如显式 `any`、类型谓词、owner 边界与日志写法），问题真实且仍开放。⚪ **原记录中的 `budgetSettingsDeadFieldScenario` 示例已失效，无需修改**：当前该场景已经是行为测试，会实际构造 legacy settings、调用 normalize/service patch、临时 SQLite repository 与 durable decoder 验证已删除字段 fail-closed，不再依赖源码正则。
+  剩余源码形态断言仍与代码格式/命名耦合，更适合迁到 lint/AST 架构检查；在替代保障落地前不应直接删除。
+- **缺模块级单测**：`packages/backend` 内 `*.spec.ts` 数量为 0；e2e 里 agent 只有 3 个 spec（`tests/e2e/specs/agent/*.spec.ts`，共约 3,100 行）。⏸ **冻结 / 不实施**：按当前明确要求，本轮及后续接手者**不要新增、迁移或补 backend 单元测试**；除非后续再次得到明确授权，否则保持现状。此项仅保留为审计记录，不计入本轮待改总数。
+
+建议：ESLint（Vue + TS）基础门禁已接入；后续补自定义 i18n/设计 token 规则，把"源码正则断言"迁移为 lint/AST 架构规则，并把 22.5k 行 runner 按场景域拆成多个可独立运行的测试文件。
+
+### 3.7 后端结构观察（多数是优点，附两点提醒）
+
+正面：
+
+- `src/modules` 下**没有**其他模块直接 import agent 的实现（唯一入口是 `modules/agent/public.ts`、`bootstrap/agent/*`、`interfaces/*`），模块隔离做得干净。
+- 前端只有 `app/App.vue`、`app/pages/settings/SettingsPage.vue` 通过 `features/agent/public` 引入 agent，符合 `FRONTEND.md` 的依赖规则。
+- 工具执行治理集中在 `GovernedMutationExecutor`，与文档描述一致；`event-hub`、`scheduler` 这类横切组件都很小、职责单一。
+
+提醒：
+
+1. ✅ **已关闭 2026-09-22**：`interfaces/websocket/agent-terminal-protocol.session.ts` 不再 deep-import `modules/agent/workspace-runtime/workspace-runtime-interactive-session.port`；`modules/agent/public.ts` 已 re-export `WorkspaceRuntimeTerminalAttachment`，WebSocket interface 只从 Agent public surface 取该类型。后端 TypeScript build 通过。HTTP Agent interface 的同类私有 deep-import 后续也已全部收口，见提醒 4。
+2. `modules/agent` 187 个文件中有 **53 个 `.port.ts`**。端口化方向是对的，但接近 1:1 的单实现端口会增加阅读与变更成本，建议定期抽查"是否所有 port 都真的提供了可替换性"。
+3. ✅ **已关闭 2026-09-22**：5,112 行生成的 model capability registry 已从 `modules/agent/ai/` 移到 `modules/agent/data/model-capability-registry.snapshot.ts`，运行时引用与 `agent:model-registry:sync` 输出路径同步更新。执行干净 backend build 后，`dist` 中只生成 `modules/agent/data/model-capability-registry.snapshot.js`，不再把生成数据混在 AI 逻辑目录。
+4. ✅ **HTTP interface 私有 deep-import 已全部关闭 2026-09-22**：先后将 `JsonValue`、runtime request DTO 所需类型、`MemoryStatus`、`IntegrationKind`、`AGENT_CAPABILITIES`、`AgentCapability` 与 `resolveAgentAvailability` 收口到 `modules/agent/public.ts`；`agent-route-input.ts`、`agent-runtime-route-input.ts`、`app-collaboration.routes.ts`、`app-integrations.routes.ts`、`agent.routes.ts` 均只通过 Agent public surface 访问这些边界符号。backend TypeScript build 通过，`interfaces/http/agent` 对 `modules/agent/(?!public)` 的扫描结果为 **0**。
+
+---
+
+## 4. 需要产品/设计决策的开放问题
+
+这些问题不是"改 bug"，而是需要先定方向：
+
+1. **Agent Hub 是模态还是常驻？** 如果目标是"终端运维助手"，用户必然需要边看终端边用 Agent；当前模态遮罩把两者对立起来。
+2. **多 App 标签的真实价值？** 现在同时安装多个 App 时切换标签会卸载整个 surface（无 keep-alive）。若主要场景是"同一个 App 多会话"，多 App 标签的复杂度（tab 管理 + 每 App 独立视图状态 + 全量重载）收益存疑。
+3. **用户可见概念要收敛到几层？** 当前一处 Run 详情里同时出现 Goal / Plan / Step / Verification / Checkpoint / Lease / Reconciliation / Subagent / Mailbox / Shared Facts。建议定义"默认可见 3 个概念（目标、计划、动作与结果）+ 高级信息折叠"。
+4. **工具输出是给模型看的还是给人看的？** 现在一条 `summary` 同时承担两种职责（§1.8）。
+5. **个性化能力的边界**：列表缩放、任务栏卡片拖拽排序、窗口几何持久化，哪些是真实需求？
+6. **危险操作的确认强度**：`full_access` 批准模式在 Composer 里一键切换（`host/AgentAppSurface.vue` approval popover），是否需要更强提示或与设置页绑定？
+
+---
+
+## 5. 建议的修复顺序
+
+0. **P0 先修两处"会让人以为功能没做"的崩溃点**：① `openRunDetail` 的 `Promise.all` 无隔离 → 8/22 个 Run 打不开详情（§1.10）；② composer 工具条裁切根因（`max-w-3xl` 封顶 + 容器查询监听错容器）→ 默认窗口下"思考强度"已不可见（§7.14-a）。这两条都不需要设计决策，且修完立刻可见。
+1. **P0 样式与文案**：**先定"玻璃层"配方**（§7.1：`--color-card` 是否半透明 + 统一 `.glass-surface`），再补 token（或替换 158 处类名）——否则会一次性改掉所有弹层观感；补 `agent.ui.saveFailed`；清掉硬编码 `'未设置'` / 英文 fallback；顺手清掉无效间距类（§7.8）。
+2. **P0 无障碍底线**：Hub 支持 `Esc`、打开聚焦、关闭恢复焦点、背景 `inert`。
+3. **P1 定位决策**：模态 ↔ 非模态 / docking（需要产品拍板，决定后续所有布局工作）。
+4. **P1 交互减法**：Composer 拆分（发送/停止独立、配置外移）、删除列表缩放与卡片拖拽排序、空态静态化。
+5. **P1 排版基线**：字号下限、对比度、点击目标尺寸、统一圆角/边框/阴影。
+6. **P1 主题合规**：清理硬编码调色板。
+7. **P1 主界面（第二轮，详见 §7.9）**：先把"玻璃层"固化成 `.glass-surface` 并把 `--color-card` 定为半透明，再修 composer 工具条静默裁切（§7.3）、"回到最新"位置（§7.4）、助手气泡/空态卡片/任务栏的表面（§7.5）。
+8. **P1 设置区精致度**：先定 §6.6 的三档按钮/行结构/圆角规范，再按 §6.7 的 Top-10 逐项替换（移除模型、SubagentSettings、ACP/Browser/MCP 三面板优先）；设置区自绘下拉统一换成主界面弹层组件（§7.6）。
+9. **P2 协议与工程**：抽共享协议包、接入 ESLint、拆巨型文件与测试、清理死 i18n。
+10. **P2 状态与错误**：类型化 host store、失败必可见、streaming 文本不丢（keep-alive 或把 streaming 状态提到 App 级）。
+
+---
+---
+
+## 6. 设置区 UI 精致度复查（补充）
+
+> 目标：让设置区达到「Agent 浮窗里选择模型」那种精致度。本节先固化基准，再逐文件列出差距。
+> **注意**：用户明确参考的就是"选择模型弹层的透明质感 + 模糊"。这套观感的成因（`bg-card` 死 token 导致的无填充 + backdrop blur）已在 §7.1 拆解，本节只讲"结构与节奏"，视觉配方请以 §7.1 为准。
+
+### 6.1 基准：浮窗模型选择为什么"精致"（把它固化成规范）
+
+参考实现：`host/AgentAppSurface.vue:1703-1762`（模型）、`:1818-1900`（执行模式/批准策略）、`:2240-2290`（SSH 目标）。
+它的"精致"来自 6 条可复制的要素：
+
+1. **固定面板节奏**：`panel-class="w-72"` + `max-h-64 overflow-y-auto` + `space-y-1`，弹层由 `AgentConfigPopover` 统一负责定位/视口 clamp/Escape/焦点返回/全局单开互斥。
+2. **行级三段式结构**：前导图标方块（`h-6 w-6 rounded-lg border`，随状态换底色）→ 两行文本（`text-xs font-medium` 主 + `text-[10px] text-text-secondary` 辅）→ 尾部 `fa-check` 选中标记。
+3. **三态定义清晰**：选中 `border border-border/80 bg-card font-medium text-foreground shadow-xs`；未选中 `border border-transparent text-text-secondary`；hover `hover:bg-card/70`。（注意这里的 `bg-card` / `hover:bg-card/70` 现在都是死 token，选中态实际只靠 `border` 表达——见 §7.1。）
+4. **不可用仍可见**：`opacity-55 cursor-not-allowed`，并保留在列表里，用副标题解释原因（不是直接隐藏）。
+5. **交互闭环**：点击后 `close(true)` 关闭并把焦点还给触发按钮；外部点击/离开会把弹出层收回。
+6. **图标语言一致**：一律 Font Awesome 实心小图标 + 语义色（`text-success` / `text-primary` / `text-warning`），不用浏览器原生控件。
+
+**结论**：设置区要"精致"，本质是把上面 6 条搬过去，而不是继续堆 `rounded border px-2 py-1 text-xs`。
+**补充（第二轮）**：6 条里真正决定"高级感"的其实是第 1 条背后的面板质感——`rounded-2xl + border-border/70 + ring-1 ring-border/20 + shadow-2xl + backdrop-blur-md`。请连读 §7.1，避免只抄节奏、抄不到质感。
+
+### 6.2 设置区现状：同一个"主按钮"有 6 套写法
+
+| 写法 | 位置 | 特征 |
+| --- | --- | --- |
+| `rounded bg-primary px-3 py-1.5 text-xs text-white` | `AcpRuntimeSettings.vue:262/319`、`BrowserRuntimeSettings.vue:203`、`McpIntegrationSettings.vue:310` | 圆角 4px、无 hover、无阴影、无按下反馈 |
+| `rounded-md bg-primary px-4 py-2 text-sm` | `SubagentSettings.vue:263`、`AppExecutionPolicySettings.vue:246` | 圆角 6px、`text-sm`（比别处大一号）、无 hover |
+| `rounded-lg bg-primary px-4 py-2 text-xs font-medium shadow-sm hover:bg-primary/90` | `BudgetContextSettings.vue:343`、`PerformanceSettings.vue:125` | 圆角 8px、有阴影 |
+| `inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs shadow-sm` | `HardLimitsSettings.vue:142` | 固定高度 32px |
+| `inline-flex h-9 ... rounded-xl px-4 text-xs font-semibold shadow-2xs active:scale-95` | `SafetyNetworkSettings.vue:451` | 圆角 12px、高 36px、有按下反馈 |
+| `rounded-lg bg-primary px-4 py-2 text-xs font-semibold shadow-sm active:scale-95` | `ModelProviderSettings.vue:1570`、`StorageArtifactSettings.vue:152` | 圆角 8px + 按下反馈 |
+
+同一屏内还并存 5 档圆角（settings 目录统计：`rounded` 152 次、`rounded-md` 55 次、`rounded-lg` 123 次、`rounded-xl` 80 次、`rounded-2xl` 15 次），以及 3 套"裸按钮"：`rounded border border-border px-2 py-1 text-xs`（`AcpRuntimeSettings.vue:278`、`BrowserRuntimeSettings.vue:127`、`McpIntegrationSettings.vue:255/378/387/418`）、`rounded-lg border bg-background px-3 py-1.5 text-xs`（`MemorySettings.vue`）、`rounded-lg border bg-card px-2.5 py-1.5 shadow-2xs active:scale-95`（`SafetyNetworkSettings.vue`，最接近浮窗风格）。
+
+**这就是"添加模型 / 移除模型按钮粗糙"的根因**：设置区没有统一的按钮/控件规格，每个面板作者各写一套。
+
+> **第二轮补充（重要）**：上表里所有 `text-xs` / `text-[11px]` 写法在浏览器里**全都不生效**，实测按钮字号一律是 16px —— 根因是 `app/styles/global.css:26-33` 的 `button { font: inherit }` 未分层，压过了 `@layer utilities` 里的字号类。**这一条必须先修**，否则把 6 套写法统一成 1 套之后，字号仍然是错的（详见 §7.10）。
+
+### 6.3 添加/移除模型的逐处问题（ModelProviderSettings.vue）
+
+| 位置 | 现状 | 问题 |
+| --- | --- | --- |
+| 服务商工具条 `:1178-1238` | 「测试」`rounded-lg border px-2.5 py-1 text-xs`、「更新模型」同款、「启用/停用」`rounded-lg px-2.5 py-1`、删除 `h-7 w-7` 图标按钮 | 同一行 3 种高度/内边距；删除按钮没有二次确认（浏览器 `title` 之外无提示），而线程删除要两次点击、服务商删除有弹窗 |
+| 协议切换 `:1143-1152` | 原生 `<select class="h-6 rounded-md ... text-[10px]">` | 原生下拉外观 + 10px 字号，与浮窗里的 `AgentConfigPopover` 完全不是一套语言 |
+| 可添加模型列表 `:1384-1421` | 原生 `<input type="checkbox" class="rounded border-border/80 accent-primary">` + 行内 `rounded-md px-2 py-0.5 text-[11px]` 的「添加」文本按钮 | 无 icon tile、无两行文本、无选中态；勾选框是浏览器原生样式（`accent-primary` 只能改颜色）；行内按钮 11px、无 icon |
+| 一键添加/多选添加 `:1323-1348` | 「多选添加」实心 primary 与「添加所有」描边 primary 并排 | 两个语义相近的批量动作视觉权重相近，用户容易点错 |
+| 已生效模型列表 `:1509-1536` | 单项「移除」是 `text-[11px] text-error` 纯文字（无图标、无底色、无确认） | 最典型的"粗糙"：危险操作看起来像普通文字；不可移除时只降透明度 |
+| 批量「移除全部」`:1479-1488` | `border border-error/40 bg-error/10` 按钮，点击**立即**执行 | 与产品其他危险操作（会话删除两段式、服务商删除弹窗）确认强度不一致；没有撤销 |
+| 抽屉底部 `:1540-1560` | 「已自动保存」绿胶囊（顶部还在显示「正在保存/已自动保存」）+ 底部 `autoSaveHint` 文案 + 「关闭」按钮 | 同一条"自动保存"信息出现 3 次，抽屉视觉噪音大 |
+| 能力编辑弹窗 `ModelCapabilityEditor.vue:179-402` | 原生 number / checkbox / select；「恢复默认」是 `text-primary hover:underline` 文本按钮；来源标签 `text-[10px]` | 弹窗外壳用了 `BaseModal`（好），但内部仍是朴素表单；文本链接式按钮与浮窗按钮语言不一致 |
+| **备用模型链 `:1062-1083`（第二轮新增）** | `v-for` 渲染**该 Provider 除默认模型外的全部模型**（实测 6 个模型 → 5 枚按钮），无搜索/无折叠/无序号 | 不是"已选列表"而是"全部模型按钮墙"；"按顺序勾选"的顺序**在界面上完全不可见**（无序号、无拖拽、无上移下移、无单项移除）；模型一多就会撑爆卡片（详见 §7.11-c） |
+
+**第二轮实测（把"粗糙"量化）**：同一屏内 `添加 Provider` 144×38/16px、`关闭 Agent` 109×40/16px、`立即更新` 77×28/11px、服务商行 `模型与测试(6)` 144×36、`更新模型` 107×36、`停用` 54×36、删除 28×28 —— **3 档高度、2 档字号、4 档圆角**；其中"停用 / 删除"这两个危险操作的视觉权重低于"模型与测试"，删除还只有 28×28 且点击即执行（详见 §7.11-b）。
+
+### 6.4 其他设置面板的粗糙点
+
+- **SubagentSettings.vue（差距最大）**：
+  - `:217-221` `subagentLabels` 三条中文硬编码（`最大委派深度` 等），未走 i18n；
+  - `:334-390` 原生 `input/select class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"`（4px 圆角 + `text-sm`）；
+  - `:339` `profile.role` 是自由文本框，新建时被填入英文 `'Bounded child agent'`（`SubagentSettings.vue:92`）；
+  - `:400-425` 允许模型/能力用裸 `checkbox + text-xs`；
+  - `:437` 「移除 profile」= `class="text-xs text-error"` 纯文字按钮，无图标、无确认；
+  - `:263`/`:449-456` 保存按钮 `rounded-md px-4 py-2 text-sm`，与设置区其他主按钮不一致。
+- **AppManagementSettings.vue**：权限勾选用原生 checkbox（`:765-800`）；目标范围下拉的选项是硬编码英文 `All targets` / `Specific IDs`（`:812-813`）；能力名称/描述整块中文硬编码（`:335-425`，含兜底 `系统底层能力声明`）；`appVisuals` 的 `summary` 为中文，`badge` 字段一半是 i18n key（`agent.settings.apps.coreOfficial`）一半是中文原文（`:446-470`）——同一个字段两种语义，`en/ja` 下必然露中文。
+- **MemorySettings.vue**：顶部「重载」（`:268-276`）与底部动作按钮（`:371-475`）规格不一；原生 `<select>` 没有 `label for/id` 关联（`:283/293/410/423`）。
+- **PluginManagementSettings.vue**：多处文案硬编码（`:336` `扩展生态与仓库`、`:391` `签名验真通过`、`:584` `第三方扩展仓库`、`:655` `已启用/已安装`、`:658` `未安装`、`:816` `个密钥`），安装/校验流程按钮与 `SafetyNetwork` 风格不一致。
+- **AcpRuntimeSettings / BrowserRuntimeSettings / McpIntegrationSettings**：三处的"添加 / 移除"都是 `rounded border border-border px-2 py-1 text-xs`（无图标、无 hover、无阴影），且主按钮 `rounded bg-primary ... text-white` 无 hover/active 反馈——这三个面板基本是"功能能用、观感最糙"的一组。
+- **PerformanceSettings / StorageArtifactSettings / BudgetContextSettings / SystemGuardrails / AgentFeatureSettings**：模板内硬编码中文（见 §6.5）。
+- **AgentSettingsPanel.vue**：3 组胶囊导航（`:508-526`）在窄屏是 `flex-wrap` 折行，而 `doc/software-requirements/requirements/agent.md` 要求"手机使用选择器"；loading 是 `p-10 text-center`（`:497`）没有骨架屏；外壳 `rounded-xl` 里嵌 `rounded-2xl` 子卡（Memory/Safety/AppManagement），圆角层级反了。
+- **SafetyNetworkSettings.vue**：反而是全设置区最接近浮窗基准的一个（`rounded-2xl` 卡片 + 头部横栏 + 状态胶囊 + 折叠 chevron + `h-8` 带 icon 的次要按钮 + `active:scale-95`）。**建议直接以它为设置区风格样本**，把其他面板对齐到它 + `AgentConfigPopover` 这两套现成实现。
+
+### 6.5 文案层：设置区约 38 行硬编码中文 + 硬编码英文选项
+
+模板内硬编码中文（脚本扫描 `<template>` 段落，settings 目录 38 行 / 9 个文件；另有 `ai/ConversationMessage.vue` 4 行）：
+
+| 文件 | 行号示例 | 文案 |
+| --- | --- | --- |
+| `ModelProviderSettings.vue` | 1053 / 1063 / 1130 / 1137 / 1158 / 1796 / 1913 / 1916 / 1941 / 2041 | `未匹配到模型`、`个模型`、`已配密钥`、`复制接口地址`、`响应延迟:`、`上下文`、`输出`、`思考` |
+| `PluginManagementSettings.vue` | 336 / 391 / 422 / 584 / 655 / 658 / 671-686 / 740 / 816 | `扩展生态与仓库`、`签名验真通过`、`已启用/已安装`、`未安装`、兼容要求说明 |
+| `AppManagementSettings.vue` | 335-430 / 516 / 748 / 888 | 14 个能力名称与描述、`已启用 N/M`、`N/M 项已授权` |
+| `BudgetContextSettings.vue` | 280 / 283 / 315 / 335 | `步`、`自定义微调`、`有效:`、`有尚未保存的预算变更` |
+| `StorageArtifactSettings.vue` | 75 / 115 / 144 / 147 | `当前占用`、`产物存储上限与保留策略`、`有尚未保存的存储配额变更` |
+| `PerformanceSettings.vue` | 121 | `并发设置已更改，请点击保存` |
+| `SafetyNetworkSettings.vue` | 398 | `title="点击移出黑名单"` |
+| `SystemGuardrails.vue` | 21 | `系统硬边界` |
+| `AgentFeatureSettings.vue` | 52 | `调度器支持多应用委派与动态预算管控` |
+| `ai/ConversationMessage.vue` | 311-334 | `总消耗: ... (输入: ..., 输出: ...)`、`命中缓存:`、`预估 Token:` |
+
+硬编码英文（在中文界面里同样突兀）：`AppManagementSettings.vue:812-813` `All targets` / `Specific IDs`；`SubagentSettings.vue:92` `Bounded child agent`。
+`AgentSettingsPanel.vue:104` 的 `'未设置'`、`:108` 的 `'Agent request failed.'` 已在 §1.3 记录。
+
+**第二轮实测（把上面这张表变成可复现的界面缺陷）**：把界面切到英文（`localStorage['user-locale'] = 'en-US'`）后，**Agent Hub 主界面 100% 英文**（`Conversation / Files / Agent Workspace / What would you like to work on? / Environment Insights / Send / High`，唯一的中文是用户自己建的会话标题），
+但 **Settings > Agent 仍然剩下 29 个可见的中文文本节点**，且超出上表范围的新增项集中在"数值 + 单位"这类拼接文案上：
+
+`执行步数保险丝`、`执行与超时控制`、`工具截断与上下文记忆`、`25 步 · 10 min`、`80 步 · 30 min`、`150 步 · 60 min`、`自定义微调`、
+`≈ 1 小时 (3,600 秒)`、`≈ 2 分钟 (120 秒)`、`≈ 2 小时 (7,200 秒)`、`≈ 30 天 (2,592,000 秒)`、`(131,072 字节)`、`(262,144 字节)`、`(1,073,741,824 字节)`、`(10,737,418,240 字节)`、`(32,768 字节)`、`(8,388,608 字节)`、`6 个模型`、`已配密钥`。
+
+> 结论：i18n 缺口**只在设置区**（`features/agent/settings/**`），Hub 是干净的——这让修复范围很明确。
+> 另外注意"数字 + 单位"这类文案**不适合逐个 `$t`**：应为 `Intl.NumberFormat`（字节/步数）与 `Intl.RelativeTimeFormat`/`Intl.NumberFormat`（时长）配一个 `unit` 参数的 i18n 方案，否则日文界面同样会露馅。
+> 截图：`doc/imgs/review-2026-09-21/agent-settings-agent-en-mixed-language.png`（英文界面里的中文）。
+
+### 6.6 对齐基准的最小规范（可直接当实现清单）
+
+1. **按钮只保留三档 + 明确尺寸**：主操作 `inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-white shadow-xs transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50`；次操作 `rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium hover:bg-header`；危险操作 `rounded-lg border border-error/40 bg-error/5 px-2.5 py-1.5 text-xs text-error hover:bg-error/15`（禁止无边框纯文字的危险按钮）。
+2. **图标按钮统一** `h-7 w-7 rounded-lg hover:bg-header`（危险用 `hover:bg-error/10 hover:text-error`），并提供 `aria-label` + `title`。
+3. **列表项统一走浮窗行结构**：`icon tile（h-6/h-7 rounded-lg）+ 两行文本 + 尾部动作/勾选`，选中态 = `border bg-card shadow-xs`；把「可添加模型」「已生效模型」「审批目标」「记忆条目」都改成这一种行。
+4. **停用原生表单控件**：`select` → `AgentConfigPopover` 风格的 listbox；`checkbox` → 自绘圆形/方形勾选块（参考 SSH 目标行的 `h-5 w-5 rounded-full` 选中圆形）；`number` → 已有 `QuantityInput`（它已经是带单位药丸的精致控件，应在全设置区铺开，而不是只在预算/上限里用）。
+5. **危险操作确认强度统一**：移除模型/移除全部/删除 profile/删除数据 都改成与「删除会话」一致的两段式（先变红再确认）或弹窗确认，并提供批量移除前的计数预览。
+6. **消除重复提示**：自动保存状态只在抽屉顶部保留一处（`正在保存 → 已保存` 原位切换），删掉底部第三份 hint。
+7. **文案全部走 i18n**：把 §6.5 的 38 行中文与 3 处英文迁移到 `features/agent/i18n/*.json`；`appVisuals` 的 `badge/summary` 统一成 i18n key。
+8. **加载与异步**：列表用骨架屏替代 `p-10 text-center`；按钮内联 spinner 且保持宽度不跳动（现有 `fa-circle-notch fa-spin` 已足够）。
+9. **圆角与边框收敛**：卡片只用 `rounded-xl`（或统一 `rounded-2xl`）+ 控件 `rounded-lg` + 胶囊 `rounded-full`；边框透明度只用 `border-border/60` 与 `border-border/80` 两档。
+10. **导航与布局**：窄屏把 3 段导航换成 `select`/分段控件（符合 SRS 的"手机使用选择器"），并保证切换不滚动外层页面。
+
+### 6.7 设置区优先修 Top-10
+
+| # | 位置 | 问题 | 改法 |
+| --- | --- | --- | --- |
+| 1 | `SubagentSettings.vue:334-437` | 原生表单 + 纯文字"移除 profile" + 中文硬编码 | 改用 §6.6 规范，移除按钮改图标按钮 + 确认 |
+| 2 | `ModelProviderSettings.vue:1509-1536` | 单项"移除模型"是 11px 纯文字 | 行尾图标按钮 + hover 底色 + tooltip；保留不可移除态说明 |
+| 3 | `ModelProviderSettings.vue:1479-1488` | "移除全部"无确认 | 两段式确认 + 显示将移除数量 |
+| 4 | `ModelProviderSettings.vue:1388-1430` | 原生 checkbox 的"可添加模型"列表 | 换成浮窗式行 + 选中态 + 单一"添加"图标按钮 |
+| 5 | `AcpRuntimeSettings / BrowserRuntimeSettings / McpIntegrationSettings` | 裸按钮、裸主按钮 | 统一到三档按钮规范 |
+| 6 | `AppManagementSettings.vue:335-430/812-813` | 能力文案中文硬编码 + 英文选项混排 | 迁 i18n |
+| 7 | `AgentSettingsPanel.vue:508-526` | 窄屏导航折行、不满足 SRS | 窄屏改选择器/分段控件 |
+| 8 | `ModelCapabilityEditor.vue:179-402` | 文本链接式按钮 + 原生控件 | 用浮窗行结构与三档按钮重排 |
+| 9 | 全设置区 | 6 套主按钮 / 5 档圆角 / 3 套裸按钮 | 收敛到 §6.6 的三档 + 3 档圆角 |
+| 10 | 全设置区 | 约 38 行硬编码中文 | 全部迁 i18n（可与 §3.5 的死 key 清理一起做） |
+
+
+## 7. 主界面布局与细节复查（第二轮）
+
+> 本轮的参考基准由用户明确：**Agent 主界面里"选择模型"那个弹层的透明 / 模糊 / 高级感**。
+> 因此本节先把这套观感拆成可复制的配方（§7.1），再逐层看主界面骨架（§7.2）、Composer（§7.3–7.4）、其它细节（§7.5）、以及设置区与主界面的落差（§7.6）。
+
+### 7.1 先把"高级感"讲清楚：它是 `--color-card` 缺失的副产物（P0，需要先决策）
+
+模型弹层的实际组成（`files/AgentConfigPopover.vue:154`）：
+
+```
+fixed z-[60] max-w-[calc(100vw-24px)] overflow-y-auto
+rounded-2xl border border-border/70 bg-card/95 backdrop-blur-md p-3
+shadow-2xl ring-1 ring-border/20 outline-none
+```
+
+面板内部节奏由调用方给：`panel-class="w-72"` + `max-h-64` + `space-y-1`（`host/AgentAppSurface.vue:1705、1721`）。
+
+关键点：`bg-card/95` 属于 §1.1 的死 token —— 编译产物里**没有 `.bg-card\/95`**（已核对 `dist/assets/index-*.css`）。
+所以这个面板的真实渲染是 **"没有任何填充色 + backdrop-blur-md"**：背景完全透明，只有背后的内容被模糊，看起来就是"通透、有玻璃感、很高级"。
+
+**实测确认（CDP 读计算样式，2026-09-21）**：弹出模型面板后实测 `background-color: rgba(0, 0, 0, 0)`（**完全透明**）、`backdrop-filter: blur(12px)`、`border: 1px oklab(...) / 0.7`、`border-radius: 16px`，而 `box-shadow` 在浅色底上**几乎渲染不出可见投影**。
+也就是说这套"高级感"= **纯透明 + 12px 模糊 + 16px 圆角 + 一条 70% 描边**，半分填充色都没有；任何"顺手把 `--color-card` 补成不透明色"的修法都会当场改变它的观感（见下方建议 1/4）。
+
+- 这个观感**不是设计出来的，是 bug 的副产物**：面板里没有任何"玻璃色"，全靠模糊 + `border-border/70` + `ring-1 ring-border/20` + `shadow-2xl` 撑着。
+- 同一根因在主界面/设置区是**反向**结果：助手气泡 `bg-card/45`、任务栏面板 `bg-card/70`、插件/记忆卡片 `bg-card`、设置抽屉左右两栏 `bg-card`（`settings/ModelProviderSettings.vue:1308`）统统没有填充 → 只剩"描边盒子"，看起来又平又糙（截图佐证见 §7.7）。
+- 直接修 token 有回归风险：把 `--color-card` 补成不透明色，弹层会立刻变成实心白（用户喜欢的观感消失）；而 `bg-card` 与其他底色类同串出现的地方（`runtime/SubagentCard.vue:25`；`foundation/ui/OverlayPanel.vue:157` 加 agent 内 6 处 `panel-class="... bg-card"`），胜者由 CSS 输出顺序决定，不可控。
+
+建议（一次明确决策，而不是顺手补 token）：
+
+1. 定义"玻璃层"语义：新增 `--color-card`（半透明基色）与可选的 `--color-glass-tint`，并把 `rounded-2xl + border-border/70 + ring-1 ring-border/20 + shadow-2xl + backdrop-blur-xl + bg-card/70` 固化成**唯一入口**（`.glass-surface` 或 `AgentPopoverPanel` 变体）。
+2. 弹层不再逐处写 utility；设置区自绘下拉（§7.6）也换成同一个组件。
+3. 同步补 `--color-border-hover` / `--color-primary-hover` / `--color-warning-foreground`，或统一改写成已有 token。
+4. 改完必须做一次视觉回归（`doc/imgs/e2e/agent-*.png` 可作基线位），否则"观感变化"没法评审。
+5. 深色主题要单独验证：`ring-border/20`、`shadow-2xl`、`inset 0 1px 0 rgba(255,255,255,.2)`（`host/AgentHubWindow.vue:606-611`）都是浅色假设。
+
+### 7.2 主界面骨架：三层 chrome 把消息区压得很窄
+
+默认窗口 `1180×740`，最小 `560×380`（`host/window-manager.ts:22-24`）：
+
+| 层次 | 位置 | 高度 |
+| --- | --- | --- |
+| Hub 顶栏（品牌 + App 标签 + 会话/文件切换 + 窗口按钮） | `host/AgentHubWindow.vue:355` `h-11` | 44px |
+| Surface 顶栏（会话标题 + 运行状态 + 删除 + 任务栏开关） | `host/AgentAppSurface.vue:1530` `h-9` | 36px |
+| Composer（textarea 96–192 + toolbar 40 + footer padding 24） | `ai/AgentConversation.vue:722-788` | 160–256px |
+
+- 窗口高度 380px 时，上面两层 + composer 已经占掉 **240px**，消息区只剩约 **140px**（2–3 行）。用户把窗口拖到接近最小高度后基本没法读会话。建议：提高 `MIN_HEIGHT`（如 480），或把 Surface 顶栏信息并入 Hub 顶栏，或在矮窗口下把输入框收成 `rows=2 + min-h-16`。
+- 列宽：`.agent-surface-layout` 是 `256px minmax(0,1fr)`（`host/AgentAppSurface.vue:2438`），任务栏打开再 `+320px`（`:2447`）。容器 560px 时会话列只剩 **304px**，而配置弹层固定 `w-72`（288px）→ 弹层几乎铺满会话列，视觉上"压过来一大片"，这也是窄窗口下弹层观感变差的原因之一。
+- 侧栏在容器 >760px 时**不能折叠**：`agent-thread-toggle` 默认 `hidden`，只有 `@container agent-hub-window (max-width:760px)` 才 `display:flex`（模板 `:1543` vs 样式 `:2643`）。桌面用户想让消息区更宽没有任何办法，建议支持折叠成 48px 图标栏并记忆状态。
+- 断点基准不统一：CSS 用容器查询（1040/880/760/700/560），JS 却用 `window.innerWidth > 1040`（`:133`），而且这个 `taskRailWideViewport` 只写不读（`:1466-1469`）——既违反 `doc/architecture/FRONTEND.md:519` 的容器查询约束，也是一段死代码。
+- 状态持久化不一致：窗口 bounds / maximized / launcher 有 localStorage（`host/window-manager.ts:47`），任务栏卡片顺序有（`runtime/TaskRail.vue:125`），但侧栏开合（`threadSidebarVisible`）、任务栏开合（`taskRailVisible`）完全不持久化；`hubView`（会话/文件视图）也既不入 payload 也不恢复。用户每次重开窗口都要重新调一遍。
+- 窗口体感：最大化时 `borderRadius: 0`（`host/AgentHubWindow.vue:296`）圆角突变；只有按钮能最大化/还原，顶栏双击无响应；拖拽无贴边/吸附，多屏下只按当前视口 clamp。
+
+### 7.3 Composer 工具条：控件太多被静默裁掉（P1，用户实测）
+
+> **根因补充（第四轮实测）**：本轮定位到"右组变宽"只是触发器，真正的结构性原因是 composer 外层 `max-w-3xl`（768px）封顶、而折叠断点挂在会话面板容器（1342px）上永不触发。**默认窗口下「思考强度」就已经被裁 42px、只剩一枚闪电图标**，实测数据与探针见 §7.14-a。
+
+**用户反馈**：底部条目太多，导致"思考等级"有时候看不到。
+
+代码事实：
+
+- 容器：`agent-toolbar-controls flex min-w-0 flex-1 items-center gap-1 overflow-x-hidden`（`ai/AgentConversation.vue:737`），窄容器下再次强制 `overflow-x: hidden`（`:835-838`）。
+- 这一行塞了 **7 个配置触发**：附件（`files/ArtifactPicker.vue`）/ 模型 / 执行模式 / 批准策略 / 运行环境 / SSH 目标 / 思考强度（`host/AgentAppSurface.vue:1701、1769、1889、2005、2122、2294`）。
+- 右侧组还有 **3 个**：回到最新（条件出现）、token 胶囊、发送/取消（`ai/AgentConversation.vue:747-783`）。
+
+所以容器一窄，**靠后的"运行环境 / SSH 目标 / 思考强度"会被直接裁掉**：没有省略号、没有横向滚动、没有"更多"入口——用户既看不到，也无从知道被裁了。思考强度恰好排在最后一位，因而是最先消失的那个。
+
+**实测确认（2026-09-21）**：
+
+- 空会话：`.agent-toolbar-controls` 的 `clientWidth 617 / scrollWidth 659`，最后一枚 `高` 位于 `x=1156 w=66` → `right` 超出容器右边 → 判定为**被裁切**（`getBoundingClientRect` 越界，`visible:false`），而它前面的 `SSHSSH1`（x=1068）完整可见；容器的 `overflow-x` 计算值是 `hidden`，所以**连滚动条都没有**。
+- 有内容的会话（`doc/imgs/review-2026-09-21/agent-hub-jump-to-latest-clipped-chip-zh.png`）：工具条上只剩 `文件(0) / 模型 / 执行 / 全授权 / 原生环境 / SSH 1` 六枚，`高` **整枚消失**，右侧同时多出「跳到底部」+ token 胶囊。
+- 也就是说：**同一产品里，"能不能看到思考强度"取决于当前会话内容多寡**（右侧控件随 `run` 状态增减），用户完全无法预测——这正是"有时候不可见"的机制。
+
+加重因素：
+
+- 每个触发表面带 `agent-config-verbose` 文案（模型 id、`Full access`、`Native Host`、`SSH 1` …），仅在容器 ≤1040/760/560 才隐藏（`host/AgentAppSurface.vue:2531、2571、2583`）。
+- 思考强度还有 `v-if="reasoningCapabilityAvailable || (modelSelectionLocked && reasoningValue)"`（`:2295`）→ 模型不支持时整条消失，用户**无法区分"模型不支持"和"被裁掉"**。
+
+建议（按收益排序）：
+
+1. 分层：把"运行环境 / SSH 目标"这类低频项收进一个 `⋯ 更多` 弹层（复用 `AgentConfigPopover`，内部仍是同一套行结构），主行只留 附件 / 模型 / 思考强度 / 批准策略。
+2. 排序：思考强度不要排最后，至少保证"模型 + 思考强度 + 发送"永远可见。
+3. 兜底：改用 `overflow-x-auto` + 两侧渐隐遮罩，或 `flex-wrap` 成两行自适应高度，**不要用 `overflow-x-hidden` 静默截断**。
+4. 复用已有的 `.agent-config-compact` 机制：阈值下退化成图标-only，而不是把控件丢掉。
+
+### 7.4 "回到最新"按钮的位置需要挪（P2，用户提出）
+
+**用户反馈**：滚动后出现的"一键跳到底部"按钮现在挤在输入框这一行，应该放到聊天输入框上方那一排的右侧。
+
+代码事实：按钮在 composer 工具条右侧组内（`ai/AgentConversation.vue:747-756`，`h-7 w-7`），左边是 token 胶囊，右边紧挨着发送/取消按钮。
+
+```html
+<div class="flex shrink-0 items-center gap-1.5">
+  <button v-if="showJumpToLatest" class="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background/60 ...">↓</button>
+  <span v-if="run && ..." class="agent-token-status ...">67.0k</span>
+  <button ...>发送 / 取消</button>
+</div>
+```
+
+**实测确认（2026-09-21）**：滚动到会话顶部后，这一行右组实测依次是 `↓`（h-7 w-7 = 28×28，`rounded-lg` 描边方块）→ `67.0k` 胶囊 → 发送位；
+而且此时原本在左组的 `高`（思考强度）已被裁掉（§7.3 实测）——**同一块屏幕位置上"有时是思考强度、有时是跳到底部"**，这既是语义混乱，也是用户"它怎么在这个地方"的直接来源。
+
+问题：
+
+1. 语义错位：它控制的是**消息区滚动位置**，却和"输入配置 / 提交"挤在同一行。
+2. 误点风险：与发送按钮只隔 6px，且运行中那个位置是"取消运行"——两个都会改变状态的按钮贴在一起。
+3. 布局跳动：`v-if="showJumpToLatest"` 出现/消失时整行内容左右位移。
+
+建议：移到 composer 上方独立一行、右对齐，做成一枚悬浮胶囊（`h-6~h-7`、`rounded-full`、`bg-card/70 backdrop-blur-md border border-border/60 shadow-lg`，即 §7.1 的玻璃配方），只在 `showJumpToLatest` 时出现；可用绝对定位贴在消息区底部右侧（不占滚动内容高度），并在 composer 顶部留 8–10px 间距。若坚持留在工具条内，则固定占位 + 移到最左（与配置控件同组），避免跳动。
+
+### 7.5 主界面其它布局 / 细节问题
+
+1. **助手气泡没有填充**：`ai/ConversationMessage.vue:342` 是 `rounded-xl bg-card/45 ring-1 ring-inset ring-border/30`，`bg-card/45` 死类 → 助手回复变成"只有描边的白框"；而用户气泡 `bg-primary/[0.07]`（`:299`）有色。一强一弱，观感割裂，这是"主界面看起来很糙"最直接的原因之一。
+2. **空态 bento 卡片同样没填充**：`ai/AgentConversation.vue:434` 的卡片 + tone 类（`:127-152`）里 `via-card to-card` 全是死类，卡片只剩 `border-border/75` + hover 阴影；空态容器 `min-h-[460px]`（`:401`）在矮窗口会被裁。
+3. **空态自动轮播**：9s 自动翻页（`:66、163-166`）、4 页，pager 点击区实测 **12×16px**（`:472-486`，`h-4 w-3/w-5` + `px-0`，点本身只有 6×6）——既不可发现又远低于触控标准（详见 §7.12-3 实测截图）。建议改 1 页 4 卡或静态 + 显式翻页按钮（≥32px）。
+4. **发送 / 取消二合一**：同一个按钮承担两种语义（`ai/AgentConversation.vue:765-783`），`hover:bg-primary-hover` 是死类 → 连 hover 反馈都没有；`disabled:opacity-20` 几乎看不见。
+5. **token 胶囊太小**：`text-[9.5px]`、`h-7`（`:757-764`），`title` 里塞的是英文 `input / output / cache / steps`，未 i18n。
+6. **消息列宽**：`max-w-3xl`（768px）在窄窗口下被会话列压缩，气泡贴边；同时弹层 `w-72` 几乎占满（见 §7.2）。
+7. **任务栏（TaskRail）**：面板 `bg-card/70`（`runtime/TaskRail.vue:182`）死类 → 整栏无底色；卡片可拖拽排序且顺序入 localStorage（`:125、157`），但**没有"恢复默认顺序"入口**，也没有键盘排序路径（`vuedraggable`/Sortable 仅支持指针拖拽）；卡片内大量 `text-[8px]/[9px]`。
+   实测补充（§7.12-4）：栏宽 320px、`background-color: rgba(0,0,0,0)`，空态是 295×176 的虚线框（`border-dashed` + 70% 透明度）里只放一行 12px 文案，且与左右两栏之间**没有分隔线/投影** → 三个面板的层次完全靠"底色差异"区分，而这一栏恰好没有底色。
+8. **Hub 顶栏的毛玻璃没生效**：`bg-header/45 backdrop-blur-md`（`host/AgentHubWindow.vue:362`）被同文件 scoped 的 `.agent-hub-header { background: linear-gradient(...) }`（`:673-680`）覆盖成不透明渐变 → 顶栏其实是实心的，与弹层的玻璃语言不一致。
+9. **App 标签条**：一次展开全部启用的 App（`host/AgentHubWindow.vue:217-240`），窄窗口靠 `max-w-56/64` 截断；关闭按钮 16px 且 hover-only（`:466-474`）；标签没有 `role="tablist"/"tab"` 语义，键盘只能 Tab 遍历。
+10. **窗口阴影写死浅色**：`0 20px 48px -12px rgba(0,0,0,.22)` + `inset 0 1px 0 rgba(255,255,255,.2)`（`host/AgentHubWindow.vue:606-611`），深色主题下会发脏。
+11. **硬编码色仍在主界面里**：`text-emerald-500 / text-amber-500 / text-indigo-500`，思考强度滑条用 `from-blue-500 via-purple-500 to-pink-500`（`host/AgentAppSurface.vue:2348`）。
+12. **滚动体验**：`isNearBottom` 阈值 96px（`ai/AgentConversation.vue:273`），只有"回到最新"按钮、没有"有新消息"横幅；`loadOlder` 按钮固定在列表顶部（`:388-397`），必须滚到顶才出现。
+13. **死 CSS**：`.agent-config-label`、`.agent-run-history`（还带 `display:none`）、`.agent-detail-label`（`host/AgentAppSurface.vue:2612、2648、2692`）、`.agent-budget-meter`、`.agent-budget-bar`（`ai/AgentConversation.vue:820、825`）都已无对应元素。
+
+### 7.6 设置区 vs 主界面：两套弹层实现（P1）
+
+| | 主界面 | 设置区 |
+| --- | --- | --- |
+| 实现 | `files/AgentConfigPopover.vue`（Teleport 到 body） | `settings/ModelProviderSettings.vue:989` 自绘 `absolute` 下拉 |
+| 定位 | 视口 clamp + 12px 边距，随窗口 resize 重算 | `absolute right-0 top-full`，可能被父级 `overflow-hidden` 裁切 |
+| 键盘 | Escape 关闭 + 焦点归还触发按钮 | 仅外部 `pointerdown` 关闭（`:762-764`），**无 Escape、无焦点管理** |
+| 互斥 | 全局单开（模块级 `activePopoverCloser`） | 无 |
+| 面板样式 | `rounded-2xl border-border/70 ring-1 ring-border/20 shadow-2xl backdrop-blur-md bg-card/95` | `rounded-xl border-border/80 bg-card/98 shadow-xl backdrop-blur-md` |
+| 行结构 | 图标方块 + 两行文本 + 尾部勾选 | 单行 + 渠道徽章 |
+| 空态 | — | 硬编码 `未匹配到模型`（`:1053`） |
+
+结论：设置区**已经想要这套玻璃语言**，但缺"组件化、定位、键盘、行结构"四件事，只剩下"更小的圆角 + 不一样的间距"，于是看起来就是"粗版"。把设置区的下拉统一换成 `AgentConfigPopover`（或 §7.1 的 `glass-surface`）是性价比最高的一步。
+
+### 7.7 视觉佐证（`doc/imgs/e2e/agent-*.png`，2026-09-17 生成）
+
+> 截图可能早于最近改动，仅作观感对照，不做像素级结论。
+> **第二轮的实测截图另存在 `doc/imgs/review-2026-09-21/`（2026-09-21 现场抓取，含中文/英文两套界面），逐条结论见 §7.10–§7.12。**
+
+- `agent-nexus-agent.png`：助手气泡是"细描边白框"（`bg-card/45` 缺失），用户气泡有淡紫底（`bg-primary/[0.07]` 正常）——两者对比即 §7.5 第 1 条；会话列上方可见 `agent-conversation-ambient` 的柔和主色光晕（`ai/AgentConversation.vue:793-800`，这个效果是好的，可保留）。
+- `agent-settings-models.png`：同一屏出现**两个 "Add provider" CTA**（区块右上 `:882` 与空态内 `:1571`）；「Default model: 未设置」与「调度器支持多应用委派与动态预算管控」是硬编码中文夹在英文界面里。
+- `agent-settings-plugins-security.png`：三条绿色 toast 叠在右上，**压住了 Settings 的 Tab 导航**（无上限、无合并）；「已启用 1/1」「扩展生态与仓库」「官方通用智能体核心，内置自动化运维诊断与全栈工程协同技能」均为硬编码中文。
+- `agent-settings-runtime.png`：存储配额区整段中文（"单 Run 产物配额 / 单文件产物上限 / 全局产物存储配额 / 临时产物生命周期 (TTL)" 及其说明），数值后缀 `≈ 7 天(604,800 秒)` 也是拼出来的中文；同屏 3 个成功 toast。
+
+### 7.8 顺带发现：不存在的间距类（P2）
+
+`py-0.2`（25 处）、`py-1.8`（9 处）、`py-0.8`（2 处）在编译产物里**没有任何规则**（同文件中的 `py-0.5 / py-1.5 / py-2.5` 都能正常生成）：Tailwind 的 spacing 只接受 0.25 的倍数，`.2 / .8 / .18` 这类值会被静默丢弃。
+
+后果是按钮/徽章实际没有上下内边距，例如删除服务商确认弹窗的"取消"按钮 `px-3.5 py-1.8`（`settings/ModelProviderSettings.vue:1596`）、徽章 `px-1 py-0.2`（`:945、1315、1402`）。修的时候顺手换成 `py-0.5 / py-1` 即可。
+
+（这条同时解释了一部分"按钮看起来扁扁的"——不是审美问题，是类名无效。）
+
+### 7.9 第二轮优先修（含用户提出的两条）
+
+| # | 问题 | 位置 | 级别 |
+| --- | --- | --- | --- |
+| 1 | 把"玻璃层"固化成 `.glass-surface`（含 `--color-card` 透明度取值这一决策），再动手补 token | §7.1 | P0 |
+| 2 | Composer 工具条不再 `overflow-x-hidden` 静默裁切；低频项收进 `⋯ 更多`，思考强度前移 | `ai/AgentConversation.vue:737、835-838` | P1 |
+| 3 | 助手气泡 / 空态卡片 / 任务栏面板补上真实表面（`bg-card` 家族或改用 `bg-header/xx`） | `ai/ConversationMessage.vue:342`、`ai/AgentConversation.vue:434`、`runtime/TaskRail.vue:182` | P1 |
+| 4 | 「回到最新」移到输入框上方独立一行、右对齐 | `ai/AgentConversation.vue:747-756` | P1 |
+| 5 | 减少 chrome：矮窗口压缩顶栏/composer，提高 `MIN_HEIGHT` | §7.2 | P1 |
+| 6 | 设置区自绘下拉统一换成主界面弹层组件（Escape/焦点/定位/行结构） | `settings/ModelProviderSettings.vue:989` | P1 |
+| 7 | 窄窗口侧栏支持折叠；侧栏/任务栏/Hub 视图状态统一持久化 | `host/AgentAppSurface.vue:1543`、`host/window-manager.ts` | P2 |
+| 8 | 空态轮播改静态或显式翻页，pager 命中区 ≥32px | `ai/AgentConversation.vue:429-486` | P2 |
+| 9 | Hub 顶栏毛玻璃被覆盖、窗口阴影写死浅色 | `host/AgentHubWindow.vue:362、606-611、673-680` | P2 |
+| 10 | 无效间距类 `py-0.2 / py-0.8 / py-1.8` 与死 CSS 清理 | settings/**、`host/AgentAppSurface.vue:2612/2648/2692` | P2 |
+| 11 | **先修全局 `button { font: inherit }`（unlayered，压过 `@layer utilities`），否则设置区字号永远错、按钮总比浮窗大一号** | `app/styles/global.css:26-33`（见 §7.10） | **P0** |
+| 12 | 备用模型链改成"已选有序列表 + 可搜索的添加弹层"（复用 `AgentConfigPopover` 行结构），并把顺序显式画出来 | `settings/ModelProviderSettings.vue:1062-1083`（见 §7.11） | P1 |
+| 13 | 设置区把「状态」画成按钮（默认模型 / 活跃 App / 沙箱）与「自动保存」绿胶囊，需要收敛成只读 badge 规格 | §7.11 | P2 |
+| 14 | 空态 pager 命中区 12×16 → ≥32px；空态建议卡去掉自动轮播 | `ai/AgentConversation.vue:429-486`（实测见 §7.12） | P2 |
+
+---
+
+### 7.10 实测根因（P0）：全局 `button { font: inherit }` 让按钮上的字号类集体失效
+
+`packages/frontend/src/app/styles/global.css:26-33`：
+
+```css
+button,
+input,
+textarea,
+select {
+  font: inherit;   /* ← 没有 @layer 包裹 */
+  font-family: inherit;
+  font-feature-settings: inherit;
+}
+```
+
+**这条规则是 unlayered 的。** Tailwind v4 把所有 utility 放进 `@layer utilities`，而层叠顺序里"未分层"的普通规则**永远压过任何 `@layer` 内的规则**（与选择器权重无关）。
+于是：**只要按钮/输入框自己没有带 `font-size` 的 scoped 规则，`text-xs` / `text-[11px]` / `text-[10px]` 全部作废**，字号回退成继承来的 16px（body）。
+
+实测（CDP 连真实页面读 `getComputedStyle`，窗口 1620×953）：
+
+| 元素 | 源码里声明的字号 | 实测 | 结论 |
+| --- | --- | --- | --- |
+| 设置区分段导航「工作区 / 系统 / … / Agent」按钮 | `text-sm` | **16px** | 失效 |
+| 设置区内层 Tab「模型与预算 / 运行与环境 / 插件与安全」 | `text-xs` | **16px** | 失效 |
+| 「添加 Provider」 | `text-xs` | **16px** | 失效 |
+| 「关闭 Agent」 | `text-xs` | **16px** | 失效 |
+| 服务商行「模型与测试 (6) / 更新模型 / 停用」 | `text-xs` | **16px** | 失效 |
+| 「6 个模型」徽章 | `text-[10px]` | **16px** | 失效（90×28 的胶囊，比正文还大） |
+| 备用模型链按钮 | `text-[11px] px-2.5 py-1.5` | **16px → 高 40px** | 失效（"朴素大方框"的直接原因，见 §7.11） |
+| 「立即更新」 | `text-xs` | **11px** | 正常（父容器是 11px，被继承下来） |
+| 主界面「搜索会话」`<input>` | `text-[10.5px]` | **16px** | 失效 |
+| Hub 输入框 textarea | `text-[13px]` | **13px** | 正常（scoped 规则里写了 `font-size`） |
+| Hub 工具条触发表面 `.agent-config-summary` | — | **11px** | 正常（同上，`<style scoped>` 里写死） |
+| Hub 发送按钮 | — | **11px** | 正常（同上） |
+
+**受控实验（同一页面里注入探针元素后读计算值，2026-09-21）**——同一次注入里，只有"命中那条 unlayered 选择器"的标签才会失效：
+
+| 注入的元素 | 声明 | 实测 |
+| --- | --- | --- |
+| `<button class="text-xs">` | 12px | **16px** ❌ |
+| `<button class="text-[11px]">` | 11px | **16px** ❌ |
+| `<input class="text-xs">` | 12px | **16px** ❌ |
+| `<select class="text-xs">` | 12px | **16px** ❌ |
+| `<textarea class="text-xs">` | 12px | **16px** ❌ |
+| `<div class="text-xs">` / `<span>` / `<a>` | 12px | **12px** ✔ |
+| `<button class="text-xs" style="font-size:12px">`（或 `!important`） | 12px | **12px** ✔ |
+
+`button / input / select / textarea` 全中、`div / span / a` 全不中，且内联/`!important` 能救回来 —— **完全是层叠层（unlayered vs `@layer utilities`）的问题，与选择器权重无关**，与 `global.css:26-33` 的选择器清单一一对应。
+
+结论（这条会改写 §6 的整体判断）：
+
+1. **"主界面小字号生效、设置区小字号不生效"的机械原因就是 scoped 规则 vs. 全局 unlayered 规则**（另一类"计算字号与代码不一致"的现象来自浏览器自动放大，性质不同，甄别方法见 §7.12-6）。用户反馈的"设置区又大又糙、跟浮窗不是一个档次"，机械原因就在这里——字号全部大一号 + 高度随之膨胀（`py-1.5` + 16px ≈ 40px 的行高），再叠加 §7.8 的无效 padding 类，按钮既大又不紧凑。
+2. 所以 §6.2「6 套主按钮写法」和 §6.6「对齐基准规范」**要先把这一条修掉再执行**，否则改完颜色/圆角，字号还是错的、观感还是不像浮窗。
+3. 修法很小：把 `button/input/textarea/select` 那段放进 `@layer base`（保留 `font: inherit` 的意图，但让 utility 能覆盖）；但**预期会有大面积视觉变化**，必须做一次视觉回归（`doc/imgs/e2e/*` + 本轮 `doc/imgs/review-2026-09-21/*` 作基线）。
+
+### 7.11 设置区实测（Agent 页）
+
+截图：`doc/imgs/review-2026-09-21/agent-settings-agent-top-zh.png`、`agent-settings-agent-en-mixed-language.png`。
+
+**a) 中英混排：英文界面下 29 处硬编码中文（实测复现）**
+
+把 `localStorage['user-locale']` 切成 `en-US` 并刷新后，Hub 主界面**完全英文**（含"Conversation / Files / Agent Workspace / What would you like to work on? / Environment Insights / Send / High"，只有会话标题是用户数据），
+但 **Settings > Agent 仍留下 29 个含中文的可见文本节点**，例如：
+
+- `调度器支持多应用委派与动态预算管控`（挂在 `Current state: enabled` 这一行的右端，与英文标签同排）
+- `按顺序勾选备用模型；新 Run 会冻结兼容 route，运行中设置变更不会改写既有 Run。`
+- `6 个模型`、`已配密钥`（服务商卡徽章）
+- `25 步 · 10 min`、`80 步 · 30 min`、`150 步 · 60 min`、`自定义微调`（执行步数保险丝预设）
+- 区块标题 `执行步数保险丝`、`执行与超时控制`、`工具截断与上下文记忆`
+- 单位后缀 **全部是拼出来的中文**：`≈ 1 小时` `(3,600 秒)`、`≈ 2 分钟` `(120 秒)`、`≈ 2 小时` `(7,200 秒)`、`≈ 30 天` `(2,592,000 秒)`、`(131,072 字节)`、`(1,073,741,824 字节)`…
+
+> 这条把 §6.5 从"代码里数出 38 行"升级为**可复现的界面缺陷**：Hub 是干净的，问题集中在 `features/agent/settings/**`；数字+单位这类"拼接式文案"最难被 `$t` 覆盖，建议改成 `Intl.NumberFormat` + `Intl.RelativeTimeFormat`（单位走 i18n）。
+
+**b) 按钮规格矩阵（同屏实测，全部在 1620×953 首屏内）**
+
+| 按钮 | 实测尺寸 | 字号 | 圆角 | 视觉 |
+| --- | --- | --- | --- | --- |
+| `添加 Provider` | 144×38 | 16px | 8px | **实心 primary**（视觉最重） |
+| `关闭 Agent` | 109×40 | 16px | 8px | destructive 10% 底 + 描边 |
+| `立即更新` | 77×28 | 11px | 6px | 白底描边 |
+| 默认模型选择器 | 298×36 | 16px | 12px | 白底描边（含 82×16 的 10px 渠道徽章） |
+| 备用模型链（每项） | 270/246/269/191/228 × **40** | 16px | 8px | 无填充纯描边 |
+| `模型与测试 (6)` | 144×36 | 16px | 8px | 描边 |
+| `更新模型` | 107×36 | 16px | 8px | 描边 |
+| `停用` | **54×36** | 16px | 8px | 描边（危险操作被压到最窄） |
+| 删除服务商 | **28×28** | — | 8px | 纯图标、无二次确认 |
+
+问题：同一屏里 **3 档高度（28/36/38-40）、3 档字号（11/16）、4 档圆角（6/8/12）**；更关键的是**"停用 + 删除"这种危险操作的视觉权重低于"模型与测试"**，而删除按钮只有 28×28、点击即执行（对比：会话删除要二次确认、服务商删除有弹窗——同一产品三种确认强度）。
+
+**c) 备用模型链（`ModelProviderSettings.vue:1062-1083`）——设计上明显不合理**
+
+```html
+<button v-for="option in modelOptions.filter((item) => item.key !== defaultModelKey)" ...>
+  {{ option.model.id }} · {{ option.provider.displayName }}
+</button>
+```
+
+- 它渲染的是**该 Provider 除默认模型外的全部模型**（实测 6 个模型 → 5 个按钮），不是"已选列表"。模型多起来这里会变成一面**按钮墙**（无搜索、无"已选 N 项"摘要、无折叠）。
+- 说明文字写着"按顺序勾选备用模型"，但：**没有序号、没有拖拽、没有"上移/下移"、也没有单项移除**；选中态只靠 `border-primary/40 bg-primary/10 text-primary` 表达，实测当前**全部未选中**——用户看不出当前 fallback 链是什么、顺序如何。
+- 只在 Provider 卡里能改，且改完只能靠顶部一行提示确认；顺序即生效顺序，却无任何可视化。
+- 建议：改成"已选有序列表（1/2/3 + ✕ + 拖拽）"+「添加备用模型」按钮打开 `AgentConfigPopover`（复用 §6.1 的两行行结构 + 搜索）。
+
+**d) 顶部状态区把"状态"画成了按钮**
+
+`Default model: gemini-3.8-flash-high`、`Active apps: 1/1`、`Sandbox: Not ready` 三枚胶囊是**纯展示**，但外形（圆角描边 + 与按钮同高）与可点击控件完全一致 → 用户会去点 `Sandbox: Not ready`。
+同一屏还有：`Agent feature` 卡里既是 `● Enabled` 徽章、又在框内重复一行 `Current state: enabled`（信息重复），旁边还挂着硬编码中文说明；
+`Default model for new runs` 标题旁贴了一个绿色 `Changes saved automatically` 胶囊（**状态写成 CTA 的样子**，且与页面底部 `autoSaveHint` 重复 2 次）。
+
+**e) 页面级滚动 & 其他**
+
+- 设置页 `scrollHeight = 2008px`（视口 953px）→ 整页滚动，内层 Tab（y≈240）一滚就消失；同时页面右下角悬浮着 Agent 启动球（40×40，`rgb(160,108,213)`），在窄一点的分栏上会盖住内容。
+- 顶部 chrome 共 4 层（应用导航 → 设置分段 Tab → Agent 卡头 + 状态胶囊 → 内层 Tab）才到第一块内容；建议把「Agent 卡头」的状态合并进内层 Tab 行的右侧。
+
+### 7.12 主界面实测（逐条对照用户反馈）
+
+截图：`doc/imgs/review-2026-09-21/`（`agent-hub-empty-state-zh.png`、`agent-hub-jump-to-latest-clipped-chip-zh.png`、`agent-hub-task-rail-zh.png`、`agent-hub-files-view-zh.png`、`agent-hub-model-popover-zh.png`、`agent-hub-empty-state-en.png`）。
+
+**1) 用户反馈①「思考等级有时候不可见」——实测确认，且会被静默裁掉**
+
+- 空会话：`.agent-toolbar-controls` `clientWidth 617 / scrollWidth 659`，最后一个 `高`（思考强度）在 `x=1156 w=66` 处 `right > 容器 right` → **被裁掉**，而它前面的 `SSHSSH1` 仍完整可见（即"从右边开始消失"）。
+- 有内容的会话（截图 `agent-hub-jump-to-latest-clipped-chip-zh.png`）：`文件(0) / 模型 / 执行 / 全授权 / 原生环境 / SSH 1` 六枚之后**直接是「跳到底部」+ token 胶囊**，`高` 整枚消失。同一时刻工具条右侧又多了两枚控件 → 越"忙"的会话越看不到思考强度。
+- 容器是 `overflow-x: hidden`（没有滚动条、没有省略号、没有渐隐），所以用户**没有任何线索知道被裁了**。
+- 建议优先级：`模型 + 思考强度 + 发送` 常驻；`运行环境 / SSH 目标` 收进 `⋯ 更多`；兜底改 `flex-wrap` 或 `overflow-x-auto` + 渐隐（详见 §7.3）。
+
+**2) 用户反馈②「一键跳到底部」的位置——实测它在 composer 工具条右组内**
+
+- 代码：`ai/AgentConversation.vue:747-756`，`h-7 w-7 rounded-lg border border-border/60 bg-background/60`，与 token 胶囊（`:757-764`）和发送/取消（`:765-783`）同一个 `flex shrink-0 gap-1.5` 容器，**整体位于输入框壳体的底栏内**。
+- 实测截图：滚动到顶部后它出现在底栏右组，紧挨 token 胶囊；而这个位置正好是"配置控件被裁掉"后空出来的地方 → 用户会在同一处看到"有时是思考强度、有时是跳到底部"，语义混乱。
+- 建议：移到**输入框整体上方一行、右对齐**的一枚独立玻璃胶囊（`rounded-full border-border/60 bg-card/70 backdrop-blur-md shadow-lg`），只在 `showJumpToLatest` 时出现；这样既不与配置项抢宽度，也不会在出现/消失时让整行位移（§7.4）。
+
+**3) 空态（截图 `agent-hub-empty-state-zh.png`）**
+
+- 徽章 `智能协作工作台` 10px / 主标题 20px / 副标题 12px（`text-secondary/80`）+ 建议卡标题 13px、描述 12px（`text-secondary/75`）→ **对比度不足**（12px + 75% 灰）是最影响"精致度"的一条，浮窗弹层里同样的灰色只用在副标题且更短。
+- 建议卡：361×94、`rounded-2xl`、`border-border/75`、**无填充**（`bg-card` 死类 → §1.1/§7.1），右上角装饰箭头 `↗` 只有 40% 透明度；两卡描述换行不一致（一张 1 行、一张 2 行留孤儿"改"字）→ 卡片高度靠 `min-h` 撑，视觉不齐。
+- pager：4 个点，**可点区域 12×16（点本身 6×6）**，且 4 页会 9s 自动轮播（§2.6）——不可发现 + 低于触控标准 + 抢注意力，建议改静态或显式翻页按钮。
+- 位置本身**基本居中**（内容 y≈258-565，可视区 144-709：上留白 114px / 下留白 144px），上下略不对称但不是主要问题；真正拖观感的是上面的对比度不足与卡片无填充。
+
+**4) 任务栏（截图 `agent-hub-task-rail-zh.png`）**
+
+- 面板 320px 宽、**整栏无底色**（`bg-card/70` 死类，§7.1），只有 header 一行 `任务` + 关闭按钮（28×28，`h-7 w-7`）。
+- 空态是一个 295×176 的虚线框（`border-dashed` + 70% 透明度、`rounded-2xl`）+ 一枚图标 + 12px `当前没有 Run。`——一个 176px 高的虚线框只放一行字，**留白比例失衡**；且虚线 + 低透明度在浅色背景上几乎看不见边界。
+- 与左侧会话列表、中间消息区之间**没有分隔线/投影**，三个面板靠背景差异区分（但任务栏没有背景）→ 层次全靠"猜"。
+
+**5) 文件视图（截图 `agent-hub-files-view-zh.png`）**
+
+- 面板头 `文件` + 副标题 `管理 Agent Run 使用的持久文件、证据与产物。` 与窗口标签 `文件` 重复；右上角 `清理可回收文件` 是一枚与窗口级操作同重的描边胶囊（放在面板头而不是窗口头，语义层级错位）。
+- 搜索行右侧有**一枚约 37×27 的小方形按钮，里面只有一个 `→`**（过滤面板的展开/收起，截图目测）——无法从图标判断用途，与主界面的玻璃弹层语言也不一致。
+- 存储概览：一条通栏进度条 + 右侧 3 个带竖分隔的 KPI 单元（受保护/可回收/可用），进度条与 KPI 的左右边界**没有对齐**（KPI 区从左 816px 才开始，进度条到 800px 结束），观感是"两条不同系统的组件拼在一起"。
+- 空态：图标 + `没有找到文件` + 12px 说明（**这是 `未匹配到模型` 之外第二处硬编码中文**，§6.5），垂直位置在剩余空间的中间，但整块没有任何"下一步"动作（比如"清除筛选"）。
+
+**6) 一个容易误判的观察：侧栏字号和代码对不上（P2；结论已在 §7.13-d 更正）**
+
+> **⚠️ 更正**：本节最初的结论（Chrome 文本自动放大）**是错的**。第三轮用 `localStorage` 对照实验定位到真实原因是应用自己的 `nexus.agent.thread-list-scale.v1` 持久化缩放（当时存的是 `1.3`，`10.75 × 1.3 = 13.975`）。下面这段保留作为"如何排除 CSS 原因"的排查过程，**最终结论见 §7.13-d**。
+
+实测中发现侧栏会话行标题（`AgentThreadSidebar.vue:309`，声明 `text-[10.75px]`）的计算字号是 **13.975px**（≈ ×1.3），而同一容器里另一处 `text-[9px]` 是 9px。
+用 CDP 做对照后确认这**不是** CSS 层叠问题，而是 **Chrome 的文本自动放大（Text Autosizing / font boosting）** 命中了这个文本块：
+
+- 给该 span 写内联 `font-size: 10.75px` → 立刻变 10.75px（说明代码里没有别的规则覆盖它）；
+- 把同一个 span 克隆到 `body` 下 → 也是 10.75px（说明只有它所在的那个"文本块"被放大）；
+- 该元素的祖先链上 `zoom` 都是 1、`transform: none`，也没有任何 `font-size` 规则命中它。
+
+（当时的错误推断：这是 Chrome 的文本自动放大。**实际是应用自己的持久化缩放**，见 §7.13-d。）
+
+**这条排查真正有价值的产出**：区分"CSS 失效（§7.10）"与"内联 style / 运行时缩放（§7.13-d）"——两者的现象都是"实测字号与代码里的类不一致"，但修法完全不同：前者改层叠，后者要去掉内联 `font-size`。
+
+
+### 7.13 第三轮实测：窄窗口 / 深色主题 / 键盘可达性 / 缩放持久化
+
+本轮全部在真实环境用 CDP 操作（拖动 hub 窗口自身的缩放手柄、注入 `darkUiTheme` 的变量做深色对照、按 Tab 走键盘），窗口仍是 1620×953 / dpr 1。
+
+**a) 弹层不受 Hub 窗口约束 → 窄窗口下"跑出窗口"（P1，新发现）**
+
+弹层是 `fixed z-[60]` + **按视口 clamp**（`AgentConfigPopover`），而不是按 Hub 窗口 clamp。实测同一枚模型弹层：
+
+| 场景 | Hub 窗口 | 弹层面板 | 是否在窗口内 | 覆盖 |
+| --- | --- | --- | --- | --- |
+| 附件/文件选择器（宽窗口） | 1620×840 | `[346,478,520,366]` | 是 | 盖住 composer（向上展开，正常） |
+| 附件/文件选择器（**最小窗口 560×380**） | 560×380 | `[12,28,520,366]` | **否**（`y=28` 在窗口顶栏之上，宽 520 几乎等于整个窗口） | 盖住顶栏 + composer + 消息区 |
+| 模型弹层（最小窗口） | 560×380 | `[12,88,288,306]` | 是 | **盖住顶栏与 composer**（窗口只有 380 高，面板就占 306） |
+
+后果：窗口拖到接近最小尺寸时，弹层与窗口"脱开"，视觉上像另一个浮层压在页面上（截图 `agent-hub-attach-popover-escapes-window.png`、`agent-hub-min-window.png`）。
+建议：① clamp 边界优先取 **Hub 窗口矩形**，其次才是视口；② 窗口宽度 < 720 或高度 < 520 时，把弹层降级为**贴窗口底部的 sheet**（`rounded-t-2xl`、`max-h-[60%]`），既不出窗口也不盖输入框。
+
+**b) 纯透明弹层在深色底/长内容下"透字"（P1，对 §7.1 的补充证据）**
+
+深色主题下把模型弹层打开，面板背景仍是 `rgba(0,0,0,0)` + `blur(12px)`，实测**能直接看到弹层背后卡片上的文字**（截图 `agent-hub-dark-popover.png` 中弹层左侧透出"规则"二字、下方透出"让"）。
+也就是说 §7.1 的"纯透明 + 模糊"不只是风格问题：**当背后是高对比文本时（深色底、或长中文段落），弹层内容与背后文字会互相干扰**，可读性下降。
+这给 §7.1 的建议 1（固化成 `.glass-surface` 并给出真正的玻璃基色 alpha）提供了可复现的证据——建议 alpha 取 `0.72~0.85` + `blur(16~20px)`，并在深色主题下单独验证。
+
+**c) Hub 的键盘可达性：实测确认"Tab 会跑回背后的应用"（P0，对 §0 中已有条目的实测证据）**
+
+```
+打开 Hub 后：document.activeElement = <body>            // 焦点没有进入弹窗
+Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
+背景元素：main/… 的 inert 属性全为 false                // 背景没有 inert
+按 1 次 Tab：焦点落到 <a.router-link-active>（背后的应用导航"仪表盘"）
+连按 14 次 Tab：14 次全在 Hub 之外（nav-link ×9、icon-link ×2、主题按钮、搜索框、标签按钮…），
+                 焦点从没进过这个 role="dialog"
+按 Escape：Hub 仍然可见（没有关闭）
+```
+
+即：**声明了 `aria-modal="true"`，但用户按一次 Tab 焦点就跑到背后的 Dashboard/终端导航上**；键盘用户完全可能在不经意间操作到被"模态"遮住的应用。
+复现成本极低（打开 Hub → 按 Tab），建议按 §0 里那条 P0 修（焦点进入 + 焦点限制 + `inert` + 关闭后焦点归还）。
+
+**d) 会话列表"Ctrl+滚轮缩放"被持久化，且会悄悄改变字号（P2，新发现；同时修正 §7.12-6）**
+
+`AgentThreadSidebar.vue:64/127/136-142` 把缩放系数存进 `localStorage['nexus.agent.thread-list-scale.v1']`；
+行标题/副标题是用 **内联 `fontSize: ${10.75 * scale}`** 渲染的（`:310`、`:317`），行高也是 JS 算的（`rowHeight = Math.round(BASE * scale)`，`:65`）。
+实测（同一个页面，只改这个 key）：
+
+| `thread-list-scale` | 行标题计算字号 |
+| --- | --- |
+| `1` | **10.75px** |
+| `1.3` | **13.975px** |
+
+本环境的 localStorage 里此前就存着 **`1.3`**（说明有人滚过一次，之后一直生效）。
+两个问题：① 该交互**没有任何可见入口/提示/重置项**（§2.8 已记），缩放状态还会跨会话保留；② 因为走的是内联 style + JS 计算，**字号/行高绕过了设计 token**，同一份代码在不同用户机器上侧栏字号可以相差 30%。
+建议：给缩放一个可见的入口与"重置为 100%"，并把缩放改为 CSS 变量（`--agent-thread-scale`）驱动，避免内联 font-size。
+
+> **更正（第二轮结论）**：§7.12-6 之前把 `10.75px → 13.975px` 判为"Chrome 文本自动放大"。本轮用 `localStorage` 对照实验证明，真实原因是**上面这枚持久化的 1.3 倍缩放**（`10.75 × 1.3 = 13.975`）。特此更正，§7.12-6 保留作为"排查思路"，但结论以本条为准。
+
+**e) 设置区"禁用态主按钮"难以识别（P2，新发现）**
+
+实测「运行与环境」页的 `保存`：`disabled=true`、`opacity: 0.5`、`cursor: not-allowed`、背景 `rgb(160,108,213)`（同一个 primary 色）。
+于是同一个设置区里出现两种"主按钮"外观：**全量紫**（可用，如「添加 Provider」）与 **50% 紫**（禁用，如「保存」「预览导入」「卸载」「立即更新」长期处于此态）。
+在浅色底上两者差异很小（看起来都像"淡紫的按钮"），用户无法判断"是按钮坏了、还是没改动所以不可点"。
+建议：禁用态改为**中性灰底 + 中性文字**（而不是降低品牌色透明度），并在按钮旁给出原因（"无改动可保存"），这也是 §6.6 规范里应该补的一条。
+
+**f) 同页控件字号/尺寸仍不统一（实测补充）**
+
+- `<select>`：同一个「Agent」设置页里，运行与环境 tab 的 select 计算字号 **16px**（552×36），插件与安全 tab 的 3 个 select 是 **12px**（588×36 / 537×36）→ 同一组件两种字号。
+- `<input type="number">`：552×36 / fs 16px（受 §7.10 的 cascade 问题影响）。
+- 原生 `checkbox`：**13×13px**（`accent-primary`），远低于 24px 触控标准，且是浏览器原生外观（与浮窗的图标方块语言不一致）。
+
+**g) 窄窗口下工具栏其实会退化成"图标态"（对 §7.3 的精确化，避免误读）**
+
+把 Hub 窗口拖到 1200 / 740 / 560 宽实测：
+
+| 窗口宽 | `.agent-toolbar-controls` | 7 个配置控件 |
+| --- | --- | --- |
+| 1620（默认） | 683 / 683 | 全显示，带文字标签 |
+| 1200 | 683 / 683 | 全显示，带文字标签 |
+| 740（≤1040 断点） | 660 / 660 | 退化成**图标态**，7 个全部可见 |
+| 560（最小） | 496 / 496 | 图标态，7 个全部可见 |
+
+也就是说：**容器变窄时 `agent-config-compact` 会兜住**（不会裁切）；§7.3 观测到的裁切发生在**宽窗口 + 右侧组变长**时（有内容的会话会多出「跳到底部」+ token 胶囊两枚控件，把 `高` 挤出去，实测截图 `agent-hub-jump-to-latest-clipped-chip-zh.png`）。
+修的时候要同时管住"右侧组会随运行状态变长"这件事，而不是只怪左侧控件太多。
+
+**h) Agent 回复里的外链会在当前窗口跳走（P2，代码级结论，未做点击实测）**
+
+`ai/AgentMessageBody.vue` 用 `DOMPurify.sanitize(marked.parse(text))` 渲染助手消息（**这点是好的**：sanitize + 明确的 `ALLOWED_TAGS/ALLOWED_ATTR` 白名单，`v-html` 有防护），但白名单是 `['href', 'title', 'start']` —— **不含 `target`/`rel`**，而应用里没有任何全局链接拦截（`grep 'closest("a")' / addEventListener('click')` 在 agent 目录无命中）。
+对照：应用其它位置的外链都显式写了 `target="_blank" rel="noopener noreferrer"`（`app/shell/AppHeader.vue:100`、`pages/settings/AboutPanel.vue:67`）。
+后果：**点击 Agent 回复里的链接会让整个 SPA 在当前标签页跳走**，用户会离开正在进行的会话（虽然窗口 bounds/线程都在 localStorage，可以后退回来，但体验上是"点一下就丢了界面"）。
+建议：在 `ALLOWED_ATTR` 外对 `.agent-message-body a` 统一补 `target="_blank" rel="noopener noreferrer"`（或点击时 `window.open`），与产品其它位置保持一致。
+
+### 7.14 第四轮实测：composer 裁切根因 / 任务栏与审批卡 / i18n 精确计数
+
+> 本轮浏览器窗口实测为 **1600×773 / dpr 1**（与前三轮的 1620×953 不同：本轮开始时浏览器的真实窗口尺寸就已经是 1600×773，**未做任何改动**，Hub 窗口沿用持久化的 1600×711）。下面所有数字都是该尺寸下的实测值。
+
+**a) composer 工具条裁切的根因：`max-w-3xl` 封顶 + 容器查询监听错了容器（P0，§7.3 的根因补充）**
+
+实测（窗口 1600 宽、会话已加载、右侧任务栏关闭）：
+
+```
+.agent-toolbar-controls   clientWidth 617 / scrollWidth 659   overflow-x: hidden
+容器右边界 x = 1170
+最后一个控件「思考强度」（类名 agent-config-reasoning）位于 1146 … 1212  →  被裁掉 42px
+可见部分只剩那枚靛蓝闪电图标（fa-bolt），标签「高」与箭头完全在裁切之外
+```
+
+即：**在默认窗口尺寸下「思考强度」就已经不可见**（不是"项目多的时候偶尔看不到"），
+而且它不是被挤到第二行，而是被 `overflow-x: hidden` 静默切掉 —— 界面上留下一个没有任何文字的闪电图标（截图：`doc/imgs/review-2026-09-21/agent-hub-composer-clip-reasoning-zh.png`）。
+
+**为什么响应式折叠没有兜住？** 两件事叠加：
+
+1. `ai/AgentConversation.vue:590` — composer 外层是 `mx-auto max-w-3xl`（**768px 上限**）；窗口再宽，工具条也只有约 752px 可用。
+2. 折叠规则（隐藏 `.agent-config-verbose`、显示 `.agent-config-compact`）挂在
+   `@container agent-conversation-pane (max-width: 700px / 560px)`（`host/AgentAppSurface.vue:2553-2592`），
+   而这个容器是**整个会话面板**（实测 1342px）——1342 远大于 700，**断点永远不会触发**，
+   与真正的约束（768px 的 composer）差了 574px。
+
+**对照探针**（只改 composer 上限，不动产品代码，测完还原）：
+
+| 场景 | composer 宽 | 工具条 clientWidth / scrollWidth | 是否裁切 |
+| --- | --- | --- | --- |
+| 现状 | 768 | 617 / 659 | **是（-42px）** |
+| 去掉 `max-w-3xl` | 1310 | 1159 / 1159 | 否（0 溢出） |
+
+补充：右侧动作组确实会挤压左组（空态时 683/683 不裁；出现 token 徽标后 617/659 裁），
+但**让这 42px 无处可去的，是上面的 768px 上限 + 断点挂在错误的容器上**。
+修 §7.3 时如果只把 `overflow-x-hidden` 换成 `flex-wrap`/`⋯更多`，问题会变成"换一种形式出现"——
+**必须同时把容器查询的容器换成 composer 自身**（在 `.agent-composer-shell` 或 `max-w-3xl` 那层加 `container-type: inline-size` + `container-name`），或把断点提高到 ~800px。
+
+**b) 任务栏（TaskRail）/ 审批卡的新发现（本轮补审：这是此前唯一没逐屏看过的区域）**
+
+| 位置 | 现状 | 问题 |
+| --- | --- | --- |
+| `runtime/TaskRail.vue:782-800`「目标」卡片 | 直接渲染 `#{{ connectionId }}`（实测界面上就是孤零零一个 `#1`） | 内部连接 ID 直接进 UI，用户看不出"这是哪台机器"；没有名称/角色/状态，这张卡几乎是空的 |
+| `runtime/TaskRail.vue:516/710/742/783/807/850` | 6 个拖拽把手都是 `<button>`，只作为 `vuedraggable` 的 `handle` 选择器，自身没有 `click`/`keydown` | 键盘用户能 Tab 到这 6 个按钮，但回车/空格**毫无反应**（读屏会念"拖动卡片排序"，然后什么都没发生）；排序也没有键盘替代（无上移/下移按钮） |
+| `runtime/TaskRail.vue:125` | 卡片顺序存 `localStorage['nexus.agent.task-rail-order.v1']` | 与 §7.13-d 同类：本地状态无重置入口，且不区分用户/线程（换账号共用同一顺序） |
+| `runtime/TaskRail.vue:109` | `historyRuns` = `…slice(0, 8)` | 第 9 条之后的 Run 在任务栏里**没有任何入口**（无"查看全部"、无分页）；实测该会话正好 8 条，卡片标题就写着「Run 历史 8」 |
+| `runtime/ApprovalCard.vue:45` | `{{ approval.inspection.risk }}` 原样输出 | 渲染 `read / control / mutate / destructive / forbidden`；i18n 里**确实没有** `agent.approvals.risk` 这个 key（需新增，例如 `agent.approvals.risk.{value}`） |
+| `runtime/ApprovalCard.vue:73` | `$t('agent.approvals.resolved', { state: approval.status })` → 中文串「审批状态：{state}」 | 渲染成「审批状态：approved / denied / superseded」——中文句子里嵌英文枚举 |
+| `runtime/ApprovalCard.vue:53` | `{{ remaining }}s` | 单位 `s` 硬编码（中文界面显示「剩余 300s」） |
+| `runtime/ApprovalCard.vue:110/127` | 「批准」= `bg-warning text-black`，「拒绝」= `border-error/40 text-error` | 用**警告色**表示肯定动作；同一产品里 primary（紫）/ success（绿）都没被用上，品牌色、成功色、警告色、危险色四层语义被压缩成两层，用户难以形成"颜色=后果"的直觉 |
+| `host/AgentHubWindow.vue:583-590` | 右下角缩放手柄是 `h-4 w-4`（**16×16**）的 `<button>`，只有 `@pointerdown` | 命中区仅 16px（§2.4 同类），且**键盘不可用**：能聚焦、回车无反应（缺 `role="separator"` + 方向键） |
+
+**c) 硬编码文案的精确计数（补 §6.5 的"约 38 行"）**
+
+统计口径：`packages/frontend/src/features/agent/**`（排除 `i18n/`，排除纯注释行），含 CJK 的行数：
+
+| 文件 | 行数 |
+| --- | --- |
+| `settings/AppManagementSettings.vue` | 37 |
+| `settings/StorageArtifactSettings.vue` | 16 |
+| `settings/ModelProviderSettings.vue` | 14 |
+| `ai/ConversationMessage.vue` | 13 |
+| `settings/PluginManagementSettings.vue` | 13 |
+| `settings/quantity-format.ts` | 8 |
+| `settings/BudgetContextSettings.vue` | 7 |
+| `settings/SubagentSettings.vue` / `settings/SafetyNetworkSettings.vue` | 3 / 3 |
+| 其余 4 个文件各 1 | 4 |
+| **合计** | **118** |
+
+会直接显示给用户的代表：`ai/ConversationMessage.vue:99-107`（9 条中文错误解释）、`:311-334`（`总消耗: N (输入: …, 输出: …)`）、`settings/quantity-format.ts`（`≈ 1 小时 (3,600 秒)` 这类"数值+单位"）、`settings/AppManagementSettings.vue:335-425`（能力名称/描述）、`settings/SubagentSettings.vue:217-221`（字段名）、`settings/AgentSettingsPanel.vue:104`（`'未设置'`）。
+→ 与 §6.5 实测的"英文界面下 29 个可见中文文本节点"互相印证；**修复范围应按这 118 行评估**，而不是 38 行。
+
+**d) 一致性观察：作者知道要"模态"，但只做了一半（支撑 §7.13-c）**
+
+`host/AgentHubWindow.vue:22-56` 在 Hub 可见时会锁死 `documentElement/body` 的 `overflow` 与 `overscroll-behavior`（`lockBackgroundScroll`），
+说明"打开 Hub 时不该操作背后的页面"是被明确认知的；但**焦点/键盘层面完全没有对应处理**（没有 `inert`、没有焦点陷阱、没有 Escape、没有 `aria-hidden`），
+实测按 12 次 Tab 全部落在背后应用（§7.13-c）。建议把"滚动锁 + 焦点锁 + Escape + 焦点归还"合并成同一套「模态边界」处理。
+
+---
+
+### 7.15 第五轮实测：设置区逐页扫描（运行与环境 / 插件与安全 / 模型与预算）
+
+> 本轮把设置区三个分组逐页截图核对（全页截图：`/tmp/shots/66-full-{models,runtime,plugins}.png`），补上此前"只看了 Agent 首屏"的缺口。窗口仍是 1600×773。
+
+**a) `zh-CN` 词典里有 14 条"整句英文"（34 个 key 与 en-US 完全相同）→ 中文界面直接显示英文（P1，新）**
+
+实测位置：设置 > Agent > **插件与安全** → 「全局禁用目标」卡片右上角写着 **`Denylist revision 1`**（截图 66-full-plugins）。
+来源不是组件代码，而是**翻译文件本身没翻译**：`features/agent/i18n/zh-CN.json` → `agent.settings.safety.revision = "Denylist revision {revision}"`（与 en-US 一模一样）。
+
+键值对比统计：
+
+| 指标 | 数量 |
+| --- | --- |
+| `zh-CN` 与 `en-US` 取值**完全相同**的 key | **34 / 1148** |
+| `zh-CN` 中"不含中文、含 ≥2 个英文单词、长度 > 12"的值（=整句英文） | **14** |
+| `ja-JP` 中同类值 | **18** |
+
+代表条目（都是用户可见文案）：`agent.settings.safety.revision`（`Denylist revision {revision}`）、
+`agent.conversation.commands.goalRevision` / `planRevision`（`Goal revision {revision}` / `Plan revision {revision}`，由 `ai/conversation-command-executor.ts:115/137` 输出到对话里）、
+`agent.settings.summary.runtime`（`Workspace Runtime`）、`agent.settings.acpRuntime.profiles`（`Workspace ACP Profiles`）、`agent.settings.acpRuntime.integrations`（`ACP Integrations`）…
+→ 建议加一条 i18n 校验规则：`zh/ja` 中若某 value 与 `en` 完全相同且含多个英文单词则报错（品牌词 `MCP Integrations` / `Chat Completions` 之类进白名单），然后把这 14+18 条补上译文。
+
+**b) 把原始机器码当"不可用原因"给用户看（P1，新）**
+
+`settings/WorkspaceRuntimeSettings.vue:270` 的 `<p v-if="availability.reason">{{ availability.reason }}</p>` 直接渲染后端原因码；
+实测「Workspace 开发环境」卡片里显示的是灰色的 **`runtime_not_configured`**。
+这是"为什么这个功能用不了"的**唯一解释**（同一行只有「不可用」三个字），用户既看不懂也没法搜索。
+建议：`reason` 走 code → 文案映射（i18n），原始码放进 `title` 或调试区。
+
+**c) 超长页面 + 8 个各自独立的「保存」按钮（P2，新）**
+
+「运行与环境」分组实测全页高 **3825px**（`documentElement.scrollHeight`），内部至少有 8 处独立保存动作：
+执行与性能 / Plugin·App 独立执行预算 / 浏览器运行时 / MCP Integrations / ACP 运行时（Profiles）/ Subagent / 配置档 / Artifact 与存储。
+它们用的是同一个浅紫主按钮样式、且**大多数时候处于 `disabled`**（没改动时），页面又没有粘性分区导航 ——
+滚到页面中段时用户既不知道自己在上/下哪一段，也不知道刚才改的那一项有没有生效（§7.13-e 已记"禁用态难识别"，这里是它的放大版）。
+
+**d) 空态风格与主界面不一致（P2，新）**
+
+设置区的空态基本是**左对齐一行纯文本**：`尚未配置 MCP Integration。`、`当前 App 与状态下没有 Memory。`（外面套一层虚线框）；
+而主界面（Hub / 会话）的空态是"图标 + 居中 + 标题 + 引导按钮"的卡片。
+同一产品两套空态语言，设置区显得没做完。
+
+**e) 状态胶囊被当成按钮用（P2，§7.11 同类的补充）**
+
+同一屏实测出现：`已启用`（绿）、`运行正常`（绿）、`官方核心`（紫）、`扩展生态与仓库`（绿）、`可安装 App 与 Skill`（绿）、`已禁用 0/1 个连接`（橙）、`系统硬边界`（绿）、`变更实时保存`（蓝）……
+其中「已禁用 0/1 个连接」用**警示橙**表示"禁用"这一**状态**，而同一行的「管理禁用目标」才是操作按钮 ——
+颜色语义（橙=警告/需要注意）与可点击性（哪些能点）都没统一。
+
+**f) 设置区控件规格的实测计数（配合 §7.10 / §6.2）**
+
+在 `#agent-settings-models` 面板内实测：
+
+| 指标 | 实测值 |
+| --- | --- |
+| `<button>` 总数 / 其中计算字号 = **16px** 的 | 55 / **53** |
+| 出现的「高度×字号」组合 | ≥10 种：`40x16`、`38x16`、`36x16`、`28x16`、`20x16`、`16x12`、`97x16`、`42x16`、`32x16`、`28x11` |
+| 原生 `<input type="checkbox">` 尺寸 | **13×13** |
+| 同页 `input` 与 `select` 的字号 | input **16px** / select **12px** |
+
+→ "设置区又大又糙"的机械原因就是 §7.10 的级联：**字号类根本生不效**，所以按钮只能跟着全局 16px 走。
+
+---
+
+### 7.16 组件级补充（模型弹层 / 启动器）
+
+**a) 弹层的 clamp 用的是**视口**而不是 Hub 窗口（§7.13-a 的代码定位）**
+
+`files/AgentConfigPopover.vue:38-57` 的 `positionPanel()` 里，水平/垂直边界都取 `window.innerWidth / window.innerHeight`（`minLeft = 12`、`maxLeft = window.innerWidth - width - 12`），
+`AgentAppSwitcher.vue:31-46` 的 `positionPanel()` 同样只用 `window.innerWidth/innerHeight`。
+这解释了 §7.13-a 的实测现象（最小窗口 560×380 时弹层跑到 Hub 窗口之外）——**它们根本不知道 Hub 窗口的矩形**。
+建议：把 Hub 窗口矩形（`agentWindowManager.state.bounds`）作为第一优先 clamp 边界，视口只作为兜底。
+
+**b) 同一个「活动数」在两处用了两种颜色（P2，代码核对；测试时为 0 未截图）**
+
+- 启动器悬浮球徽标：`host/AgentLauncher.vue:85-89` → `bg-error`（**红色**）；
+- Hub 顶栏徽标：`host/AgentHubWindow.vue:381-384` → `bg-primary/15 text-primary`（**紫色**）。
+
+两处显示的是同一个 `totalRunningRuns + totalPendingApprovals + totalPendingBudgetRequests`。
+"有 Run 在跑/有待审批"是**中性或需要关注**的信息，用错误红表示会把"正常运行中"渲染成"出错了"；
+而且同一数字在两处不同色，用户无法形成稳定预期。建议统一为 primary（待审批可单独用 warning）。
+
+---
+
+### 7.17 第五轮补充：可复用的"正面样本"与一处主操作禁用态
+
+本轮顺带把几个"做对了的地方"记录下来——它们是修 §7.13-c（Hub 键盘可达性）与设置区精致度时**现成的模板**。
+
+**a) 正面样本 1：`AgentConfigPopover` 是唯一交互完整的弹层（实测通过）**
+
+| 能力 | 实测结果 | 代码 |
+| --- | --- | --- |
+| Escape 关闭 | ✅ 关闭并**把焦点归还触发按钮** | `files/AgentConfigPopover.vue:98-102` |
+| `aria-expanded` 同步 | ✅ 关闭后回到 `false` | `:137-139` |
+| `aria-haspopup="dialog"` + `panelId` 关联 | ✅ | `:138-140` |
+| 打开时 `panel.focus()`、点击外部关闭、`ResizeObserver` 跟随重定位 | ✅ | `:85-90` |
+| 同一时刻只有一个弹层（`activePopoverCloser` 单例） | ✅ | `:2`、`:76-81` |
+
+对比 §7.13-c：**Hub 缺的正是这一套**。所以修 Hub 的键盘可达性不需要新造轮子——把 `AgentConfigPopover` 里已经验证过的"Escape / 焦点归还 / 唯一打开"模式套到 `AgentHubWindow` 上即可。
+（用户提出的"把设置区做成模型弹层那种质感"，除了视觉，也应包含**这套交互契约**。）
+
+**b) 正面样本 2：主界面「文件」视图的空态做对了，设置区没跟上（呼应 §7.15-d）**
+
+`files/ArtifactLibraryView.vue` 的空态 = 「图标底托 + 居中标题『没有找到文件』+ 一行说明 + 筛选器就在上方」，
+配套的筛选是自绘下拉（`类型 / App / 状态`），搜索框、存储进度条、`清理可回收文件` 主按钮都很整齐（截图 `73-files-view`）。
+→ 建议：把这一套空态/筛选器/主按钮规格**反向移植到设置区**，而不是反过来。
+
+**c) 发送按钮的禁用态几乎不可见（P2，实测）**
+
+实测（composer 无草稿、无 active Run 时）：
+
+```
+.agent-send-button  disabled=true
+  background: color-mix(foreground 15%, transparent)   （oklab … /0.15）
+  color: rgb(102,102,102)
+  opacity: 0.2
+  cursor: not-allowed
+```
+
+即"整个产品的主操作"在禁用时只剩 **20% 不透明度**，旁边的 token 徽标却是正常对比度 —— 视觉上像按钮消失了。
+而设置区的禁用主按钮又是 `opacity: 0.5`（§7.13-e），两处对"禁用"给出两种强度。
+建议：主操作禁用态统一为"填色降级 + 描边保留 + `title` 说明为什么不能点"（例如"请先输入内容"），而不是靠调透明度；并把 0.2 / 0.5 收敛成一个值（建议 ≥0.45 并保留边框）。
+
+---
+
+## 附录 A：核查方法与证据
+
+- **构建产物核对**（§1.1）：`packages/frontend/dist/assets/index-*.css` 中 `bg-header` 58 次、`bg-background` 27 次、`border-border` 32 次，而 `bg-card` / `border-hover` / `primary-hover` 为 **0** 次；`src/app/styles/tokens.css` 的 `@theme inline` 未定义 `--color-card`。
+- **源码计数**：`grep -roF 'text-[9px]' ...`、`grep -roF 'bg-card' ...` 等（字号 563 处 ≤11px；`bg-card` 164 处，其中 agent 158 处）。
+- **i18n 校验脚本**：展开三份 locale 得到 1,148 个叶子 key；从 `features/agent/**/*.{vue,ts}` 提取 `$t('agent.*')` 静态引用 811 个；差集仅 `agent.ui.saveFailed` 缺失；反向差集 274 个未使用。
+- **事件名统计**：`grep -rho "type: '[a-z_.]*'" modules/agent infrastructure/agent | sort -u` ⇒ 75 个（含无关 JSON schema 类型），涉及 55 个文件。
+- **依赖方向**：`grep -rn "modules/agent" --include=*.ts src` 确认无其他 backend module 越权 import；前端 `grep -rn "@/features/agent" src` 只有 `app/App.vue` 与 `SettingsPage.vue`。
+- **设置区扫描**（§6）：脚本提取 `features/agent/**/*.vue` 的 `<template>` 段落，统计含 CJK 的非注释行（settings 目录 38 行 / 9 个文件，`ai/ConversationMessage.vue` 另有 4 行）；`grep` 统计 settings 目录按钮 class 与 `rounded*` 分布（152/55/123/80/15）；`<select>` 22 处、`type="checkbox"` 27 处、`type="number"` 7 处。
+- **类名有效性全量比对**（§7.1、§7.8）：用脚本抽取 `features/agent/**/*.vue` 中 `class= / :class=` 里的 token（去掉 `hover:`/`md:` 等变体前缀），逐个在 `dist/assets/index-*.css` 里查找转义后的选择器。确认**真正无规则的只有** `bg-card` 全族、`border-border-hover`、`bg-primary-hover`、`text-warning-foreground`、`from-card/to-card/via-card`，以及非 0.25 倍数的间距类（`py-0.2 / py-0.8 / py-1.8`，共 36 处；同文件的 `py-0.5 / py-1.5 / py-2.5` 均正常生成，可排除构建陈旧）。
+- **构建产物新鲜度**：`find src -newer dist/assets/index-*.css` 结果为空，说明 dist 是最后一次改动的产物，可用作有效证据；`doc/imgs/e2e/agent-*.png` 生成于 2026-09-17，可能早于最近改动，仅作观感对照。
+- **截图核对**（§7.7）：用 `ffmpeg` 裁剪/放大 `doc/imgs/e2e/agent-*.png` 局部，并对关键坐标做像素采样（例如 `(600,215) = #faf7fd`：浅紫 = 消息气泡/环境光晕，而非背后的深色页面透过来），用于区分"真透明"与"缺失填充"。
+
+**第二轮新增：真机实测（2026-09-21）**
+
+- **环境**：后端 `packages/backend` → `tsx src/index.ts`（`NODE_ENV=development`、`:3001`、使用真实数据目录）；前端 `packages/frontend` → vite `--port 9998`；反向代理 `https://api.honus.top` → 本地 9998；账号 `honus / honustest`。
+- **浏览器**：AgentDock 里已登录的 Chrome，通过 **CDP**（`chromium.connectOverCDP('http://172.30.31.11:9223')`）接管**已有窗口**，用 `browser.contexts()[0]` + 复用同一个标签页。
+  **窗口保持 1620×953、`devicePixelRatio 1` 未做任何改动**（遵循"不要改浏览器分辨率"的要求），因此所有尺寸数字都是该窗口下的真实布局值。
+- **脚本**：`tests/e2e/.tmp/cdp-review/*.mjs`（纯 node ESM + `@playwright/test`；`cdp-lib.mjs` 负责复用同一标签页 + 重复登录）。截图输出目录 `/tmp/shots/`，其中关键 9 张已归档到 **`doc/imgs/review-2026-09-21/`**（含 §1.9 的"500 静默"证据）。
+- **计算样式实测**（§7.10/§7.11/§7.12 的所有数字）：`page.evaluate` 里对目标元素取 `getBoundingClientRect()` + `getComputedStyle()`，逐条打印 `font-size / background-color / backdrop-filter / border / border-radius / overflow-x / scrollWidth vs clientWidth`。关键取证：
+  - `.agent-toolbar-controls` → `clientWidth 617 / scrollWidth 659`，末枚 `高` 的 `getBoundingClientRect().right >` 容器 `right`（**被裁切**）；
+  - 模型弹层面板 → `background-color: rgba(0,0,0,0)` + `backdrop-filter: blur(12px)` + `border-radius: 16px`（确认 §7.1 的"透明质感 = 死 token 副产物"）；
+  - 设置区按钮矩阵 → `添加 Provider 144×38/16px`、`关闭 Agent 109×40/16px`、`立即更新 77×28/11px`、备用模型链 5 枚 × 40px/16px（确认 §7.10）；
+  - 空态 pager → 可点元素 12×16、内部点 6×6；任务栏空态框 295×176；Hub 右下缩放手柄 16×16。
+- **受控探针实验**（§7.10 的决定性证据）：在同一页面里 `document.createElement` 注入 `<button|input|select|textarea|div|span|a class="text-xs">`，逐个读计算字号 → 前四者 **16px**、后三者 **12px**；再给 button 加内联 `font-size:12px` 或 `!important` → **12px**。这一次实验把"字号失效"精确定位到 `global.css:26-33` 的那条 unlayered 选择器，而不是任意其它规则。
+- **后端 500 的复现与归因**（§1.9）：① 在后端日志里按 `errorCode=AGENT_DURABLE_STATE_INVALID` 找到 8 次 `GET` 500；② 在已登录的 CDP 上下文里用 `ctx.request.get()` 逐个回放候选接口，锁定只有 `/runs/:runId/approvals` 返回 500（同 Run 的其它接口 200）；③ 用 `node:sqlite` 只读打开 `packages/backend/data/nexus-terminal.db`，对比 `agent_approvals` 与 `agent_tool_calls` 的行值，发现 `inspection_json.target.kind = "machine"`，再与 `durable-state-decoders.ts` 的白名单对照，定位到解码器拒绝旧别名。
+- **浏览器自动放大的甄别**（§7.12-6）：发现侧栏某 span 声明 `text-[10.75px]` 却计算成 `13.975px` 时，用三组对照排除 CSS 原因——① 遍历所有样式表递归匹配（含 `@layer`/`@media`/`@container`）只有 `.text-[10.75px]` 一条命中；② 写内联同名值立刻回到 10.75px；③ 克隆到 `body` 下也是 10.75px ⇒ 判定为 Chrome Text Autosizing，而非产品样式缺陷。
+- **i18n 实测**：`localStorage['user-locale'] = 'en-US'` → 刷新 → 遍历所有"叶子文本节点"筛 CJK（排除 `display:none/visibility:hidden/opacity:0`），Hub 主界面 0 处、**Settings > Agent 29 处**（清单见 §6.5/§7.11）。测完已把 locale 还原为 `zh-CN`。
+- **第六轮（收尾复核，寻找"两遍无新问题"）**：
+  - 回到 Hub 重新打开模型弹层，验证 Escape 后 `document.activeElement` 是否回到触发按钮（结果：是，且 `aria-expanded=false`）；
+  - 用「可访问名」判据复查全部可交互元素：在 Hub（空态 + 有会话）与设置区面板内枚举 `button/a[href]/[role=button]`，要求 `aria-label` 或 `title` 或 `textContent` 至少一项非空 → **未命名控件 0 个**；同时筛选 `opacity:0 / visibility:hidden / pointer-events:none` 的按钮 → **0 个**；
+  - 逐一核对"尺寸为 0 的按钮"：实测 3 个（`关闭会话列表`、`打开会话列表`、`删除当前会话`）全部是 `display:none` 的窄屏专用控件，**不是缺陷**（避免误报）；
+  - 复核遮罩色值 `agent-hub-backdrop` = `rgba(15,23,42,0.4)` + `blur(10px)`（硬编码 slate-900/40，印证 §2.7）；
+  - 复核「文件」视图空态与筛选器、发送按钮禁用态计算值（见 §7.17）。
+  - 本轮**未发现新问题**（唯一"疑似新问题"是 3 个 0 尺寸按钮，核对后被排除）。
+- **第五轮（设置区逐页扫描）**：进入 `/settings` → Agent，依次点三个分组胶囊（`button[aria-controls="agent-settings-{models,runtime,plugins}"]`），每个分组等渲染稳定后取 `fullPage` 截图（`documentElement.scrollHeight` 依次 2008 / 3825 / 1883），并在可见面板内批量读取按钮/输入控件的 `fontSize`、`getBoundingClientRect()`、原生 checkbox 尺寸与中文文本节点。**期间有一次误判被自己推翻**：全页缩略图上看似「MCP Integrations」标题重复出现两次，回到真实 DOM 用 `textContent === "MCP Integrations"` 精确匹配后确认**只有一个 `<h3>`**，属于缩略图阅读误差，故未记入问题。
+  - 词典体检：把 `i18n/{zh-CN,en-US,ja-JP}.json` 拍平成 `key→value`，逐 key 比较三语取值（`zh==en` 34 个；`zh` 中"不含 CJK 且含 ≥2 个英文单词且长度 >12"的 14 条）；
+  - i18n 插值体检：在 `zh-CN.json` 里用正则找出所有含 `{state}/{status}/{kind}/{phase}/{mode}` 的文案，再回到 `.vue` 里核对传入的是不是原始枚举。
+- **第四轮（2026-09-21，窗口 1600×773）**：
+  - **Run 详情整体失败**：在任务栏「Run 历史」里点击一条 Run，同时用 CDP 监听 `page.on("response")` 记录该次点击触发的全部 `/api/v1/` 请求与状态码（得到"只有 `/approvals` 是 500"），再读 DOM 判断详情头部（返回按钮/`#hash`/检查点区块）是否出现、错误横幅的文本；最后用 `ctx.request.get()` 遍历 22 个 Run 逐个回放 `/approvals`，量化受影响面（8/22）。
+  - **composer 裁切根因**：读 `.agent-toolbar-controls` 的 `clientWidth/scrollWidth` 与容器右边界，再遍历其内部每个叶子控件（button/input/select/`.agent-config-*`）的 `getBoundingClientRect()`，用"叶子右边界 > 容器右边界"判定被裁控件；随后用 `addStyleTag` 把 composer 外层的 `max-width` 临时改成 `none` 做 A/B 对照（现状 617/659 裁 42px vs. 解封后 1159/1159 不裁），测完还原。
+  - **任务栏 / 审批卡**：逐屏截图（`doc/imgs/review-2026-09-21/agent-hub-task-rail-cards-zh.png`）＋代码对照；同时把 6 个拖拽把手的可聚焦性与键盘行为在 DOM 里核对（`<button>` 无 click/keydown）。
+  - **硬编码文案计数**：用 Python 遍历 `features/agent/**`（排除 `i18n/`），剔除 `//`·`*`·`/*`·`<!--` 开头的注释行后，统计含 CJK 的行数（118 行，分布见 §7.14-c）。
+  - **a11y / 级联 / token 复核**：与第三轮同法重跑（Tab 12 次全部落在 Hub 之外；`button.text-xs` 仍为 16px、`div.text-xs` 为 12px；`--color-card` 仍为空、12 个 `[class*=bg-card]` 里 11 个计算为 `rgba(0,0,0,0)`）。
+- **第三轮（窄窗口 / 深色 / 键盘）**：
+  - 窄窗口：用 Playwright 的 `mouse.down/move/up` 拖 Hub 窗口右下角的缩放手柄（`.agent-hub-window button.group.absolute`）到 1200 / 740 / 560 宽，每次读取窗口、侧栏、消息区、composer、`.agent-toolbar-controls` 的 `getBoundingClientRect` 与 `clientWidth/scrollWidth`；弹层是否"跑出窗口"用「面板 rect 是否落在窗口 rect 内」判定。**测完把窗口拖回原尺寸**（localStorage 里 `nexus.agent.surface.v1.user.N`）。
+  - 深色主题：不点界面里的"深色模式"（它会 `saveUiTheme` 持久化到服务端），改为把 `features/appearance/config/default-theme.ts` 的 `darkUiTheme` 变量**注入 `documentElement.style`** 做对照截图/取色，测完 `removeProperty` 还原（已确认 `--app-bg-color` 恢复 `#ffffff`）。同时用相对亮度公式现算对比度（如顶栏 `rgb(173,181,189)` on `rgb(52,58,64)` = **5.55:1**，深色下这一处是合格的）。
+  - 键盘：打开 Hub 后读 `document.activeElement`、检查背景 `inert`、连按 Tab 观察焦点是否留在 `role="dialog"` 内。
+  - 缩放对照：只改 `localStorage['nexus.agent.thread-list-scale.v1']`（1 与 1.3）后重新加载，读同一枚 span 的计算字号，用于区分"CSS 失效"与"运行时内联样式"。
+- **未做（第二轮仍然）**：未跑单测/E2E 套件；未做深色主题与窄窗口（<1040px 容器断点）的实测截图；未在真实 Run 执行中观察流式/取消/审批路径的后端行为；`.agent-config-verbose` 在 ≤1040/760/560 断点下的表现只做了代码阅读。
+
+## 附录 B：本次未覆盖 / 需要进一步确认
+
+- 后端运行期行为（真实 Provider/ACP/MCP/Browser 交互、并发与恢复路径）只做了静态阅读，未做动态验证。
+- `packages/agent-runner`（7,875 行）只做了结构扫读，未逐文件复查。
+- Plugin 签名/校验链路（`plugin-package-install-coordinator.ts` 等）未深入。
+- 数据迁移与历史数据兼容（`sqlite-migrations.ts`）**只复查到 §1.9 这一条**（迁移 #44 改了 result 语义、没改 inspection 的 `target.kind`）；其余 38 条迁移的正确性、以及"老库升级到当前版本"的完整路径未验证。
+- 视觉结论已升级为实测（§7.10–§7.13），覆盖浅色 + 深色对照、1620×953 与 1200/740/560 三档窗口宽度；但**未测"最大化/最小化"、未在真实触屏设备上验证触控目标、也未做日文界面的 i18n 实测**（只做了中/英）。§7.1 的玻璃配方仍是建议值，需设计确认。
+- 未逐帧核对全部 agent 截图（只看了解析出的关键几张）；**第四轮已补审任务栏（TaskRail）与 Run 详情入口**（§7.14-b），但 Artifact library / 插件多实例 / checkpoint 恢复的**成功路径界面**、以及审批卡的**真实渲染态**（当前库里没有 `requested` 状态的审批可点，只能代码侧复查）仍未截图核对。
+- 设置区除「Agent」首屏之外的页面（运行与环境 / 插件与安全 / 子代理 / 记忆 / 存储 / 护栏…）本轮仍未逐页截图；只有 §7.14-c 的"硬编码文案行数"做了全目录统计。
+- 未在真实 Run 执行过程中（流式输出、取消、审批、多 Run 并发）做界面观察，因此 §1.7（流式文本丢失）、`§4` 的产品问题、以及任务栏/Run 列表的"动态状态"观感属于静态推断。
+- 深色主题只做了"变量注入 + 取色/对比度"的静态对照，**没有逐屏截图核对**（快照：`agent-hub-dark-popover.png`）；顶栏对比度 5.55:1 合格，但 hub 顶栏渐变、窗口阴影里的白色 inset、以及深色下的 `ring/shadow` 仍未逐条验证。
+- 设置区其余页面（运行与环境 / 插件与安全 / 子代理 / 记忆 / 存储 / 护栏 …）本轮只实测了「Agent」首屏与英文界面的 i18n 缺口，未逐页截图核对控件尺寸。

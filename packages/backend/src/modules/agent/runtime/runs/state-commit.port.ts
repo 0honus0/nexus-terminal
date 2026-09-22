@@ -47,8 +47,67 @@ export interface CreateRunCommitResult {
   replayed: boolean;
 }
 
+export const AGENT_DURABLE_EVENT_TYPES = [
+  'approval.approved',
+  'approval.consumed',
+  'approval.denied',
+  'approval.expired',
+  'approval.requested',
+  'approval.superseded',
+  'budget.increase_requested',
+  'budget.increased',
+  'completion.gate_blocked',
+  'goal.updated',
+  'input.appended',
+  'input.pending_moved',
+  'input.pending_removed',
+  'input.request_answered',
+  'input.request_cancelled',
+  'input.requested',
+  'message.final',
+  'model.aborted',
+  'model.completed',
+  'model.failed',
+  'model.retrying',
+  'model.route_changed',
+  'model.started',
+  'plan.updated',
+  'run.cancel_requested',
+  'run.cancelled',
+  'run.created',
+  'run.error',
+  'run.interrupted',
+  'run.loop_detected',
+  'run.loop_resumed',
+  'run.loop_warning',
+  'run.reconciliation_required',
+  'run.reconciliation_resolved',
+  'run.recovery_continued',
+  'run.recovery_deferred',
+  'run.recovery_failed',
+  'run.status_changed',
+  'subagent.cancelled',
+  'subagent.completed',
+  'subagent.created',
+  'subagent.failed',
+  'subagent.join_waiting',
+  'subagent.message_accepted',
+  'subagent.message_waiting',
+  'subagent.started',
+  'tool.cancelled',
+  'tool.completed',
+  'tool.failed',
+  'tool.proposed',
+  'tool.reconciliation_required',
+  'tool.reinspected',
+  'tool.started',
+  'verification.completed',
+] as const;
+
+export type AgentDurableEventType = (typeof AGENT_DURABLE_EVENT_TYPES)[number];
+
 export interface DurableEventInput {
-  type: string;
+  type: AgentDurableEventType;
   payload: JsonValue;
 }
 

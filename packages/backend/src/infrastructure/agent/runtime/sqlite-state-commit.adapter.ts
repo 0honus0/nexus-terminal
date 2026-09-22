@@ -655,21 +655,20 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
           row.status === 'running' || row.status === 'cancelling' ? 'interrupted' : 'cancelled';
         const { needsReconciliation } = await settleInterruptedRunChildren(tx, row, now, 'app_disabled');
         const pendingInputRequestId = await cancelPendingUserInputRequest(tx, row, now);
-        const events: DurableEventInput[] = [
-          ...(pendingInputRequestId
-            ? [
-                {
-                  type: 'input.request_cancelled',
-                  payload: { requestId: pendingInputRequestId, reason: 'app_disabled' },
-                },
-              ]
-            : []),
+        const events: DurableEventInput[] = [];
+        if (pendingInputRequestId) {
+          events.push({
+            type: 'input.request_cancelled',
+            payload: { requestId: pendingInputRequestId, reason: 'app_disabled' },
+          });
+        }
+        events.push(
           {
             type: nextStatus === 'interrupted' ? 'run.interrupted' : 'run.cancelled',
             payload: { reason: 'app_disabled', needsReconciliation },
           },
           { type: 'run.status_changed', payload: { from: row.status, to: nextStatus } },
-        ];
+        );
         const committedEvents = await appendEvents(tx, row, events, now);
         const changed = await tx.execute(
           `UPDATE agent_runs SET status = ?, needs_reconciliation = ?, completed_at = ?, updated_at = ?,
@@ -720,18 +719,17 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
       for (const row of rows) {
         const { needsReconciliation } = await settleInterruptedRunChildren(tx, row, now, 'backend_restart');
         const pendingInputRequestId = await cancelPendingUserInputRequest(tx, row, now);
-        const events: DurableEventInput[] = [
-          ...(pendingInputRequestId
-            ? [
-                {
-                  type: 'input.request_cancelled',
-                  payload: { requestId: pendingInputRequestId, reason: 'backend_restart' },
-                },
-              ]
-            : []),
+        const events: DurableEventInput[] = [];
+        if (pendingInputRequestId) {
+          events.push({
+            type: 'input.request_cancelled',
+            payload: { requestId: pendingInputRequestId, reason: 'backend_restart' },
+          });
+        }
+        events.push(
           { type: 'run.interrupted', payload: { reason: 'backend_restart', needsReconciliation } },
           { type: 'run.status_changed', payload: { from: row.status, to: 'interrupted' } },
-        ];
+        );
         const committedEvents = await appendEvents(tx, row, events, now);
         const changed = await tx.execute(
           `UPDATE agent_runs SET status = 'interrupted', needs_reconciliation = ?, completed_at = ?, updated_at = ?,

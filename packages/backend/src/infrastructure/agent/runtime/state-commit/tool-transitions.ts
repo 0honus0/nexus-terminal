@@ -273,15 +273,18 @@ export const settleMutationToolTransition = async (
       type: unknown ? 'tool.reconciliation_required' : command.result.ok ? 'tool.completed' : 'tool.failed',
       payload: { toolCallId: command.toolCallId, toolStepId: command.toolStepId, outcome: command.result.outcome },
     },
-    ...(unknown
-      ? [{ type: 'run.interrupted', payload: { reason: 'mutation_outcome_unknown', needsReconciliation: true } }]
-      : row.status === 'cancelling'
-        ? [
-            { type: 'run.cancelled', payload: { reason: 'cancel_requested_during_tool' } },
-            { type: 'run.status_changed', payload: { from: 'cancelling', to: 'cancelled' } },
-          ]
-        : []),
   ];
+  if (unknown) {
+    events.push({
+      type: 'run.interrupted',
+      payload: { reason: 'mutation_outcome_unknown', needsReconciliation: true },
+    });
+  } else if (row.status === 'cancelling') {
+    events.push(
+      { type: 'run.cancelled', payload: { reason: 'cancel_requested_during_tool' } },
+      { type: 'run.status_changed', payload: { from: 'cancelling', to: 'cancelled' } },
+    );
+  }
   const committedEvents = await appendEvents(tx, row, events, command.now);
   const mergedUsage = usageWithDelta(row, { steps: 1 });
   const updatedRow = await patchRun(
@@ -522,8 +525,10 @@ export const settleUserInputRequestToolTransition = async (
         questionCount: questions.length,
       },
     },
-    ...(guard.paused ? [] : [{ type: 'run.status_changed', payload: { from: 'running', to: 'awaiting_input' } }]),
   ];
+  if (!guard.paused) {
+    events.push({ type: 'run.status_changed', payload: { from: 'running', to: 'awaiting_input' } });
+  }
   const committedEvents = await appendEvents(tx, currentRow, events, command.now);
   const nextExecuting = guard.paused
     ? currentRow.executing_runtime_count

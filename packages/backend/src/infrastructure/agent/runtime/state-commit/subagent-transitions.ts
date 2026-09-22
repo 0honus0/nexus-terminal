@@ -482,7 +482,7 @@ export const commitSubagentToolProposalBatchTransition = async (
                 errorCode: item.rejectedResult.errorCode ?? 'SUBAGENT_TOOL_NOT_ALLOWED',
                 summary: item.rejectedResult.summary,
               },
-            },
+            } satisfies DurableEventInput,
           ]
         : []),
     ]),
@@ -1024,27 +1024,25 @@ export const settleSubagentToolTransition = async (
         verification: command.result.verification.status,
       },
     },
-    ...(waitingBudget
-      ? [
-          { type: 'budget.increase_requested', payload: batchBudgetReason ?? { scope: 'subagent_tool' } },
-          { type: 'run.status_changed', payload: { from: 'running', to: 'awaiting_budget' } },
-        ]
-      : []),
-    ...(cancelling
-      ? [
-          {
-            type: 'subagent.cancelled',
-            payload: { delegationId: command.delegationId, runtimeId: command.runtimeId, reason: 'run_cancelling' },
-          } as const,
-        ]
-      : []),
-    ...(finalCancellation
-      ? [
-          { type: 'run.cancelled', payload: { reason: 'participants_settled' } } as const,
-          { type: 'run.status_changed', payload: { from: 'cancelling', to: 'cancelled' } } as const,
-        ]
-      : []),
   ];
+  if (waitingBudget) {
+    events.push(
+      { type: 'budget.increase_requested', payload: batchBudgetReason ?? { scope: 'subagent_tool' } },
+      { type: 'run.status_changed', payload: { from: 'running', to: 'awaiting_budget' } },
+    );
+  }
+  if (cancelling) {
+    events.push({
+      type: 'subagent.cancelled',
+      payload: { delegationId: command.delegationId, runtimeId: command.runtimeId, reason: 'run_cancelling' },
+    });
+  }
+  if (finalCancellation) {
+    events.push(
+      { type: 'run.cancelled', payload: { reason: 'participants_settled' } },
+      { type: 'run.status_changed', payload: { from: 'cancelling', to: 'cancelled' } },
+    );
+  }
   const committedEvents = await appendEvents(tx, row, events, command.now);
   const activeDelta =
     nextExecuting === 0 && row.active_execution_started_at !== null

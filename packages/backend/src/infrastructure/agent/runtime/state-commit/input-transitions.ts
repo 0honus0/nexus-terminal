@@ -299,32 +299,30 @@ export const appendInputTransition = async (
       type: 'input.appended',
       payload: { inputId: command.inputEntryId, sequence, inputRevision: row.input_revision + 1 },
     },
-    ...(waitingApproval
-      ? [
-          {
-            type: 'approval.superseded',
-            payload: {
-              approvalId: waitingApproval.approval_id,
-              toolCallId: waitingApproval.tool_call_id,
-              reason: 'new_input',
-            },
-          },
-          { type: 'run.status_changed', payload: { from: 'awaiting_approval', to: 'running' } },
-        ]
-      : []),
-    ...(waitingClarification
-      ? [
-          {
-            type: 'input.request_answered',
-            payload: { requestId: waitingClarification.id, inputId: command.inputEntryId },
-          },
-        ]
-      : []),
-    ...(waitingLoopRuntimeId ? [{ type: 'run.loop_resumed', payload: { reason: 'new_input' } }] : []),
-    ...(resumesAwaitingInput
-      ? [{ type: 'run.status_changed', payload: { from: 'awaiting_input', to: 'running' } }]
-      : []),
   ];
+  if (waitingApproval) {
+    events.push(
+      {
+        type: 'approval.superseded',
+        payload: {
+          approvalId: waitingApproval.approval_id,
+          toolCallId: waitingApproval.tool_call_id,
+          reason: 'new_input',
+        },
+      },
+      { type: 'run.status_changed', payload: { from: 'awaiting_approval', to: 'running' } },
+    );
+  }
+  if (waitingClarification) {
+    events.push({
+      type: 'input.request_answered',
+      payload: { requestId: waitingClarification.id, inputId: command.inputEntryId },
+    });
+  }
+  if (waitingLoopRuntimeId) events.push({ type: 'run.loop_resumed', payload: { reason: 'new_input' } });
+  if (resumesAwaitingInput) {
+    events.push({ type: 'run.status_changed', payload: { from: 'awaiting_input', to: 'running' } });
+  }
   await appendEvents(tx, row, events, command.now);
   const runChanged = await tx.execute(
     `UPDATE agent_runs SET status = ?, input_revision = input_revision + 1,

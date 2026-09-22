@@ -20,9 +20,17 @@
       "types": "./src/settings.ts",
       "default": "./src/settings.ts"
     },
+    "./appearance": {
+      "types": "./src/appearance.ts",
+      "default": "./src/appearance.ts"
+    },
     "./connections": {
       "types": "./src/connections.ts",
       "default": "./src/connections.ts"
+    },
+    "./*": {
+      "types": "./src/*.ts",
+      "default": "./src/*.ts"
     }
   }
 }

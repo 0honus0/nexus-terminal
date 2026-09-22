@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
 import type { ToolResult } from '../../../../modules/agent/capabilities/tool.types';
+import type { DurableEventInput } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import type { RunRow } from '../../repositories/sqlite-run.mapper';
 import { allocateHostEvent, appendEvents, appendLedger, summaryPayload } from './transaction-primitives';
@@ -270,7 +271,7 @@ export const evaluateLoopGuard = async (
 
   const newWarning = !pause && nextLevel > warningLevel ? nextLevel : 0;
   const ledgerAppends = [];
-  const events = [];
+  const events: DurableEventInput[] = [];
   if (newWarning > 0 && reason) {
     ledgerAppends.push({
       id: randomUUID(),

@@ -1,49 +1,23 @@
+import type {
+  SendFileSourceItemDto,
+  SendFilesRequestDto,
+  ServerTransferMethodDto,
+  ServerTransferMethodUsedDto,
+  ServerTransferSubTaskDto,
+  ServerTransferSubTaskStatusDto,
+  ServerTransferTaskDto,
+  ServerTransferTaskStatusDto,
+} from '@nexus-terminal/protocol/transfers';
 import type { TransferTask } from './transfer';
 
-export type ServerTransferMethod = 'auto' | 'rsync' | 'scp';
-export type ServerTransferMethodUsed = 'rsync' | 'scp';
-export type ServerTransferTaskStatus =
-  'queued' | 'in-progress' | 'completed' | 'failed' | 'partially-completed' | 'cancelling' | 'cancelled';
-export type ServerTransferSubTaskStatus =
-  'queued' | 'connecting' | 'transferring' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
-
-export interface SendFileSourceItem {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-}
-
-export interface SendFilesRequest {
-  sourceConnectionId: number;
-  connectionIds: number[];
-  sourceItems: SendFileSourceItem[];
-  remoteTargetPath: string;
-  transferMethod: ServerTransferMethod;
-}
-
-export interface ServerTransferSubTask {
-  subTaskId: string;
-  connectionId: number;
-  sourceItemName: string;
-  status: ServerTransferSubTaskStatus;
-  progress?: number;
-  message?: string;
-  transferMethodUsed?: ServerTransferMethodUsed;
-  startTime?: string;
-  endTime?: string;
-}
-
-export interface ServerTransferTask {
-  taskId: string;
-  status: ServerTransferTaskStatus;
-  createdAt: string;
-  updatedAt: string;
-  subTasks: ServerTransferSubTask[];
-  overallProgress?: number;
-  payload: SendFilesRequest;
-  sourceConnectionId?: number;
-  remoteTargetPath?: string;
-}
+export type ServerTransferMethod = ServerTransferMethodDto;
+export type ServerTransferMethodUsed = ServerTransferMethodUsedDto;
+export type ServerTransferTaskStatus = ServerTransferTaskStatusDto;
+export type ServerTransferSubTaskStatus = ServerTransferSubTaskStatusDto;
+export type SendFileSourceItem = SendFileSourceItemDto;
+export type SendFilesRequest = SendFilesRequestDto;
+export type ServerTransferSubTask = ServerTransferSubTaskDto;
+export type ServerTransferTask = ServerTransferTaskDto;
 
 const mappedStatus = (status: ServerTransferTaskStatus): TransferTask['status'] => {
   if (status === 'in-progress') return 'running';
