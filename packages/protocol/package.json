@@ -15,6 +15,10 @@
     "./auth": {
       "types": "./src/auth.ts",
       "default": "./src/auth.ts"
+    },
+    "./settings": {
+      "types": "./src/settings.ts",
+      "default": "./src/settings.ts"
     }
   }
 }

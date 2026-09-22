@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { CaptchaConfigDto, CaptchaConfigUpdateDto, IpBlacklistPageDto } from '@nexus-terminal/protocol/auth';
+import type { SettingsResponseDto, SettingsUpdateRequestDto } from '@nexus-terminal/protocol/settings';
 import multer from 'multer';
 import type { BackupService } from '../../../modules/backup/backup.service';
 import { BackupPasswordRequiredError, InvalidBackupPasswordError } from '../../../shared/errors/backup.errors';
@@ -20,7 +21,7 @@ export interface SettingsRouterDependencies {
   notifications: NotificationService;
 }
 
-const ALLOWED_SETTING_KEYS = new Set([
+const ALLOWED_SETTING_KEYS = new Set<keyof SettingsUpdateRequestDto>([
   'language',
   'frontendLogLevel',
   'backendLogLevel',
@@ -80,7 +81,7 @@ const BOUNDED_NUMBER_SETTINGS: Record<string, { min: number; max: number }> = {
   quickCommandRowSizeMultiplier: { min: 0.5, max: 2.5 },
 };
 
-const BOOLEAN_SETTING_KEYS = new Set([
+const BOOLEAN_SETTING_KEYS = new Set<keyof SettingsUpdateRequestDto>([
   'showPopupFileEditor',
   'shareFileEditorTabs',
   'showPopupFileManager',
@@ -100,7 +101,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
   'showQuickCommandTags',
 ]);
 
-const NUMBER_SETTING_KEYS = new Set([
+const NUMBER_SETTING_KEYS = new Set<keyof SettingsUpdateRequestDto>([
   'maxLoginAttempts',
   'loginBanDuration',
   'dockerStatusIntervalSeconds',
@@ -118,36 +119,111 @@ const NUMBER_SETTING_KEYS = new Set([
   'vncModalHeight',
 ]);
 
-const JSON_OBJECT_SETTING_KEYS = new Set(['sidebarPaneWidths', 'fileManagerColWidths']);
+const JSON_OBJECT_SETTING_KEYS = new Set<keyof SettingsUpdateRequestDto>(['sidebarPaneWidths', 'fileManagerColWidths']);
 
-const parseStoredSetting = (key: string, value: string): unknown => {
-  if (BOOLEAN_SETTING_KEYS.has(key)) return value === 'true';
-  if (NUMBER_SETTING_KEYS.has(key)) {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : undefined;
-  }
-  if (JSON_OBJECT_SETTING_KEYS.has(key)) {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return isRecord(parsed) ? parsed : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return value;
+const isAllowedSettingKey = (key: string): key is keyof SettingsUpdateRequestDto =>
+  ALLOWED_SETTING_KEYS.has(key as keyof SettingsUpdateRequestDto);
+
+const optionalSetting = <K extends keyof SettingsResponseDto>(
+  key: K,
+  value: SettingsResponseDto[K] | undefined,
+): Partial<Pick<SettingsResponseDto, K>> =>
+  value === undefined ? {} : ({ [key]: value } as Partial<Pick<SettingsResponseDto, K>>);
+
+const storedBoolean = (settings: Record<string, string>, key: string): boolean | undefined =>
+  settings[key] === undefined ? undefined : settings[key] === 'true';
+
+const storedNumber = (settings: Record<string, string>, key: string): number | undefined => {
+  if (settings[key] === undefined) return undefined;
+  const value = Number(settings[key]);
+  return Number.isFinite(value) ? value : undefined;
 };
 
-const settingsDto = (settings: Record<string, string>): Record<string, unknown> => {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(settings)) {
-    if (!ALLOWED_SETTING_KEYS.has(key)) continue;
-    const parsed = parseStoredSetting(key, value);
-    if (parsed !== undefined) result[key] = parsed;
+const storedRecord = <T extends string | number>(
+  settings: Record<string, string>,
+  key: string,
+  isValue: (value: unknown) => value is T,
+): Record<string, T> | undefined => {
+  const raw = settings[key];
+  if (raw === undefined) return undefined;
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!isRecord(value) || !Object.values(value).every(isValue)) return undefined;
+    return value as Record<string, T>;
+  } catch {
+    return undefined;
   }
-  return result;
 };
 
-const storedSettingValue = (key: string, value: unknown): string => {
+const settingsDto = (settings: Record<string, string>): SettingsResponseDto => {
+  const frontendLogLevel = settings.frontendLogLevel;
+  const backendLogLevel = settings.backendLogLevel;
+  const commandInputSyncTarget = settings.commandInputSyncTarget;
+  return {
+    ...optionalSetting('language', settings.language),
+    ...optionalSetting('frontendLogLevel', isLogLevel(frontendLogLevel) ? frontendLogLevel : undefined),
+    ...optionalSetting('backendLogLevel', isLogLevel(backendLogLevel) ? backendLogLevel : undefined),
+    ...optionalSetting('ipWhitelist', settings.ipWhitelist),
+    ...optionalSetting('maxLoginAttempts', storedNumber(settings, 'maxLoginAttempts')),
+    ...optionalSetting('loginBanDuration', storedNumber(settings, 'loginBanDuration')),
+    ...optionalSetting('showPopupFileEditor', storedBoolean(settings, 'showPopupFileEditor')),
+    ...optionalSetting('shareFileEditorTabs', storedBoolean(settings, 'shareFileEditorTabs')),
+    ...optionalSetting('dockerStatusIntervalSeconds', storedNumber(settings, 'dockerStatusIntervalSeconds')),
+    ...optionalSetting('dockerDefaultExpand', storedBoolean(settings, 'dockerDefaultExpand')),
+    ...optionalSetting('statusMonitorIntervalSeconds', storedNumber(settings, 'statusMonitorIntervalSeconds')),
+    ...optionalSetting('remoteHostRefreshIntervalSeconds', storedNumber(settings, 'remoteHostRefreshIntervalSeconds')),
+    ...optionalSetting('statusMonitorScale', storedNumber(settings, 'statusMonitorScale')),
+    ...optionalSetting('dashboardShowLocalResources', storedBoolean(settings, 'dashboardShowLocalResources')),
+    ...optionalSetting('dashboardShowRemoteResources', storedBoolean(settings, 'dashboardShowRemoteResources')),
+    ...optionalSetting('workspaceSidebarPersistent', storedBoolean(settings, 'workspaceSidebarPersistent')),
+    ...optionalSetting('showPopupFileManager', storedBoolean(settings, 'showPopupFileManager')),
+    ...optionalSetting(
+      'sidebarPaneWidths',
+      storedRecord(settings, 'sidebarPaneWidths', (value): value is string => typeof value === 'string'),
+    ),
+    ...optionalSetting('fileManagerRowSizeMultiplier', storedNumber(settings, 'fileManagerRowSizeMultiplier')),
+    ...optionalSetting(
+      'fileManagerColWidths',
+      storedRecord(
+        settings,
+        'fileManagerColWidths',
+        (value): value is number => typeof value === 'number' && Number.isFinite(value),
+      ),
+    ),
+    ...optionalSetting(
+      'commandInputSyncTarget',
+      commandInputSyncTarget === 'none' ||
+        commandInputSyncTarget === 'quickCommands' ||
+        commandInputSyncTarget === 'commandHistory'
+        ? commandInputSyncTarget
+        : undefined,
+    ),
+    ...optionalSetting('timezone', settings.timezone),
+    ...optionalSetting('rdpModalWidth', storedNumber(settings, 'rdpModalWidth')),
+    ...optionalSetting('rdpModalHeight', storedNumber(settings, 'rdpModalHeight')),
+    ...optionalSetting('vncModalWidth', storedNumber(settings, 'vncModalWidth')),
+    ...optionalSetting('vncModalHeight', storedNumber(settings, 'vncModalHeight')),
+    ...optionalSetting('ipBlacklistEnabled', storedBoolean(settings, 'ipBlacklistEnabled')),
+    ...optionalSetting('layoutLocked', storedBoolean(settings, 'layoutLocked')),
+    ...optionalSetting('terminalScrollbackLimit', storedNumber(settings, 'terminalScrollbackLimit')),
+    ...optionalSetting('spreadsheetPreviewRowsPerPage', storedNumber(settings, 'spreadsheetPreviewRowsPerPage')),
+    ...optionalSetting('spreadsheetPreviewMaxColumns', storedNumber(settings, 'spreadsheetPreviewMaxColumns')),
+    ...optionalSetting(
+      'fileManagerShowDeleteConfirmation',
+      storedBoolean(settings, 'fileManagerShowDeleteConfirmation'),
+    ),
+    ...optionalSetting('terminalRightClickCopyPaste', storedBoolean(settings, 'terminalRightClickCopyPaste')),
+    ...optionalSetting('showStatusMonitorIpAddress', storedBoolean(settings, 'showStatusMonitorIpAddress')),
+    ...optionalSetting('quickCommandsCollapsibleSearch', storedBoolean(settings, 'quickCommandsCollapsibleSearch')),
+    ...optionalSetting('quickCommandsCompactMode', storedBoolean(settings, 'quickCommandsCompactMode')),
+    ...optionalSetting('quickCommandRowSizeMultiplier', storedNumber(settings, 'quickCommandRowSizeMultiplier')),
+    ...optionalSetting('navBarVisible', storedBoolean(settings, 'navBarVisible')),
+    ...optionalSetting('showConnectionTags', storedBoolean(settings, 'showConnectionTags')),
+    ...optionalSetting('showQuickCommandTags', storedBoolean(settings, 'showQuickCommandTags')),
+  };
+};
+
+const storedSettingValue = (key: keyof SettingsUpdateRequestDto, value: unknown): string => {
   if (BOOLEAN_SETTING_KEYS.has(key)) {
     if (typeof value !== 'boolean') throw new Error(`设置 ${key} 必须是布尔值`);
     return String(value);
@@ -213,8 +289,9 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
       }
       const filtered: Record<string, string> = {};
       try {
-        for (const [key, value] of Object.entries(request.body as Record<string, unknown>)) {
-          if (!ALLOWED_SETTING_KEYS.has(key)) continue;
+        const body = request.body as SettingsUpdateRequestDto;
+        for (const [key, value] of Object.entries(body)) {
+          if (!isAllowedSettingKey(key)) continue;
           filtered[key] = storedSettingValue(key, value);
         }
       } catch (error) {

@@ -1,47 +1,17 @@
-export const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'silent'] as const;
-export type LogLevel = (typeof LOG_LEVELS)[number];
+import type { LogLevelDto, PreferencesDto, PreferencesPatchDto } from '@nexus-terminal/protocol/settings';
 
-export interface Preferences {
-  language: string;
-  frontendLogLevel: LogLevel;
-  backendLogLevel: LogLevel;
-  timezone: string;
-  showPopupFileEditor: boolean;
-  shareFileEditorTabs: boolean;
-  showPopupFileManager: boolean;
-  dockerStatusIntervalSeconds: number;
-  dockerDefaultExpand: boolean;
-  statusMonitorIntervalSeconds: number;
-  remoteHostRefreshIntervalSeconds: number;
-  statusMonitorScale: number;
-  dashboardShowLocalResources: boolean;
-  dashboardShowRemoteResources: boolean;
-  workspaceSidebarPersistent: boolean;
-  terminalScrollbackLimit: number;
-  showStatusMonitorIpAddress: boolean;
-  commandInputSyncTarget: 'none' | 'quickCommands' | 'commandHistory';
-  quickCommandsCollapsibleSearch: boolean;
-  quickCommandsCompactMode: boolean;
-  quickCommandRowSizeMultiplier: number;
-  terminalRightClickCopyPaste: boolean;
-  layoutLocked: boolean;
-  navBarVisible: boolean;
-  fileManagerShowDeleteConfirmation: boolean;
-  sidebarPaneWidths: Record<string, string>;
-  fileManagerRowSizeMultiplier: number;
-  fileManagerColWidths: Record<string, number>;
-  spreadsheetPreviewRowsPerPage: number;
-  spreadsheetPreviewMaxColumns: number;
-  rdpModalWidth: number;
-  rdpModalHeight: number;
-  vncModalWidth: number;
-  vncModalHeight: number;
-  showConnectionTags: boolean;
-  showQuickCommandTags: boolean;
-}
-
-export type PreferenceKey = keyof Preferences;
-export type PreferencePatch = Partial<Preferences>;
+export const LOG_LEVELS = [
+  'trace',
+  'debug',
+  'info',
+  'warn',
+  'error',
+  'silent',
+] as const satisfies readonly LogLevelDto[];
+export type LogLevel = LogLevelDto;
+export type Preferences = PreferencesDto;
+export type PreferenceKey = keyof PreferencesDto;
+export type PreferencePatch = PreferencesPatchDto;
 
 export const defaultPreferences: Preferences = {
   language: 'en-US',
