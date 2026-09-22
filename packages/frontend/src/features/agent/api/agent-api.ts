@@ -1,3 +1,14 @@
+import type {
+  AgentAcpIntegrationConfigurationDto,
+  AgentIntegrationCreateRequestDto,
+  AgentIntegrationDeleteQueryDto,
+  AgentIntegrationKindDto,
+  AgentIntegrationListQueryDto,
+  AgentIntegrationRefreshDto,
+  AgentIntegrationUpdateFieldsDto,
+  AgentIntegrationViewDto,
+  AgentMcpIntegrationConfigurationDto,
+} from '@nexus-terminal/protocol/agent-integrations';
 import { agentRuntimeRequest } from './agent-http-client';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 import { createPluginApi } from './plugin-api';
@@ -79,40 +90,10 @@ export interface AgentRunEnvironmentSelection {
   catalogRevision?: string;
 }
 
-export type AgentIntegrationKind = 'mcp' | 'acp';
-export interface AgentMcpIntegrationConfiguration {
-  displayName: string;
-  transport: 'streamable-http';
-  endpoint: string;
-  privateHostExceptions: string[];
-  protocolVersion: '2026-07-28';
-  trustToolAnnotations?: boolean;
-}
-export interface AgentAcpIntegrationConfiguration {
-  displayName: string;
-  transport: 'workspace-profile';
-  profileId: string;
-  protocolVersion: '1';
-}
-export interface AgentIntegrationView {
-  id: string;
-  userId: number;
-  appId: string;
-  kind: AgentIntegrationKind;
-  configuration: AgentMcpIntegrationConfiguration | AgentAcpIntegrationConfiguration;
-  hasCredential: boolean;
-  credentialRevision: number;
-  schemaHash: string | null;
-  enabled: boolean;
-  refreshState: 'idle' | 'refreshing' | 'ready' | 'error';
-  lastErrorCode: string | null;
-  lastAttemptAt: number | null;
-  lastSuccessAt: number | null;
-  nextRetryAt: number | null;
-  version: number;
-  createdAt: number;
-  updatedAt: number;
-}
+export type AgentIntegrationKind = AgentIntegrationKindDto;
+export type AgentMcpIntegrationConfiguration = AgentMcpIntegrationConfigurationDto;
+export type AgentAcpIntegrationConfiguration = AgentAcpIntegrationConfigurationDto;
+export type AgentIntegrationView = AgentIntegrationViewDto;
 
 export type AgentTargetKind = 'workspace' | 'ssh';
 
@@ -1109,15 +1090,16 @@ export const agentApi = {
   ...createArtifactApi(),
   ...createWorkspaceRuntimeApi(mutationHeaders),
   async integrations(appId: string, kind?: AgentIntegrationKind): Promise<AgentIntegrationView[]> {
+    const params: AgentIntegrationListQueryDto | undefined = kind ? { kind } : undefined;
     return unwrap(
       (
         await httpClient.get<AgentEnvelope<AgentIntegrationView[]>>(`/apps/${encodeURIComponent(appId)}/integrations`, {
-          params: kind ? { kind } : undefined,
+          params,
         })
       ).data,
     );
   },
-  async createIntegration(appId: string, input: Record<string, unknown>): Promise<AgentIntegrationView> {
+  async createIntegration(appId: string, input: AgentIntegrationCreateRequestDto): Promise<AgentIntegrationView> {
     return unwrap(
       (
         await httpClient.post<AgentEnvelope<AgentIntegrationView>>(
@@ -1131,7 +1113,7 @@ export const agentApi = {
   async updateIntegration(
     appId: string,
     integration: AgentIntegrationView,
-    input: Record<string, unknown>,
+    input: AgentIntegrationUpdateFieldsDto,
   ): Promise<AgentIntegrationView> {
     return unwrap(
       (
@@ -1144,15 +1126,16 @@ export const agentApi = {
     );
   },
   async deleteIntegration(appId: string, integration: AgentIntegrationView): Promise<void> {
+    const params: AgentIntegrationDeleteQueryDto = { expectedVersion: integration.version };
     await httpClient.delete(`/apps/${encodeURIComponent(appId)}/integrations/${encodeURIComponent(integration.id)}`, {
-      params: { expectedVersion: integration.version },
+      params,
       headers: await mutationHeaders(),
     });
   },
-  async refreshIntegration(appId: string, integrationId: string): Promise<unknown> {
+  async refreshIntegration(appId: string, integrationId: string): Promise<AgentIntegrationRefreshDto> {
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<unknown>>(
+        await httpClient.post<AgentEnvelope<AgentIntegrationRefreshDto>>(
           `/apps/${encodeURIComponent(appId)}/integrations/${encodeURIComponent(integrationId)}/refresh`,
           {},
           { headers: await mutationHeaders() },

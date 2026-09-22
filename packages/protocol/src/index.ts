@@ -15,3 +15,5 @@ export type * from './system.js';
 export { SERVER_TRANSFER_METHODS } from './transfers.js';
 export type * from './transfers.js';
 export type * from './workspace.js';
+export type * from './agent-common.js';
+export type * from './agent-integrations.js';

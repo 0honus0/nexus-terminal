@@ -1,7 +1,4 @@
-export interface AgentEnvelope<T> {
-  data: T;
-  requestId: string;
-}
+export type { AgentEnvelopeDto as AgentEnvelope } from '@nexus-terminal/protocol/agent-common';
 
 export interface AgentHardLimits {
   maxRunSteps: number;

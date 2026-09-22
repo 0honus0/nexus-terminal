@@ -1,3 +1,4 @@
+import type { AgentEnvelopeDto, AgentErrorEnvelopeDto } from '@nexus-terminal/protocol/agent-common';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { logErrorCode, logger } from '../../../shared/logging/logger';
@@ -21,9 +22,10 @@ const stampAgentServerTime = (response: Response): void => {
   response.setHeader('X-Agent-Server-Time-Ms', String(Date.now()));
 };
 
-export const agentData = (request: Request, response: Response, data: unknown, status = 200): void => {
+export const agentData = <T>(request: Request, response: Response, data: T, status = 200): void => {
   stampAgentServerTime(response);
-  response.status(status).json({ data, requestId: agentRequestId(request, response) });
+  const payload: AgentEnvelopeDto<T> = { data, requestId: agentRequestId(request, response) };
+  response.status(status).json(payload);
 };
 
 export const agentError = (
@@ -35,10 +37,11 @@ export const agentError = (
   details?: unknown,
 ): void => {
   stampAgentServerTime(response);
-  response.status(status).json({
+  const payload: AgentErrorEnvelopeDto = {
     error: { code, message, ...(details === undefined ? {} : { details }) },
     requestId: agentRequestId(request, response),
-  });
+  };
+  response.status(status).json(payload);
 };
 
 export const agentRoute =
