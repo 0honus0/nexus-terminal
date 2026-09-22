@@ -15,13 +15,14 @@ import type {
 } from './workspace-runtime/workspace-runtime.types';
 import type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
 export type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
+export type { AgentWorkspaceCreateSpec } from './workspace-runtime/workspace-runtime.types';
 import type {
   WorkspaceArtifactExportInput,
   WorkspaceArtifactImportInput,
   WorkspaceArtifactImportResult,
 } from './exchange/workspace-artifact.types';
 import type { JsonValue, Scope } from './agent.types';
-export type { JsonValue } from './agent.types';
+export type { AgentRunEnvironmentSelection, JsonValue } from './agent.types';
 import type {
   ArtifactAttachResult,
   ArtifactCleanupPreview,
@@ -51,6 +52,7 @@ import type {
   ProviderTestResult,
   ProviderView,
 } from './ai/model.types';
+export type { ReasoningEffort } from './ai/model.types';
 import type { ModelCapabilityRegistryStatus } from './ai/model-capability-registry.service';
 import type { MemoryImportConfirmation, MemoryStatus, MemoryView } from './ai/memory.repository.port';
 import type { ApprovalView } from './runtime/approvals/approval.repository.port';
@@ -70,6 +72,7 @@ import type {
   RunView,
   UserInputData,
 } from './runtime/runs/run.types';
+export type { RunApprovalMode, RunBudgetIncrease, RunExecutionMode, UserInputData } from './runtime/runs/run.types';
 import type { GrantDecision } from './host/app-capability-broker';
 import type { AppView } from './host/app.types';
 import type {

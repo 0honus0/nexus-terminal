@@ -1,12 +1,13 @@
-import type { AgentRunEnvironmentSelection, JsonValue } from '../../../modules/agent/agent.types';
-import type { ReasoningEffort } from '../../../modules/agent/ai/model.types';
-import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 import type {
+  AgentRunEnvironmentSelection,
+  AgentWorkspaceCreateSpec,
+  JsonValue,
+  ReasoningEffort,
   RunApprovalMode,
   RunBudgetIncrease,
   RunExecutionMode,
   UserInputData,
-} from '../../../modules/agent/runtime/runs/run.types';
+} from '../../../modules/agent/public';
 import { hasOnlyKeys, isJsonValue, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
