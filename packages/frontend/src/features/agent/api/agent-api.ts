@@ -23,6 +23,20 @@ import type {
   AgentProviderViewDto,
   AgentReasoningEffortDto,
 } from '@nexus-terminal/protocol/agent-providers';
+import type {
+  AgentLedgerPageDto,
+  AgentLedgerEntryDto,
+  AgentLedgerQueryDto,
+  AgentThreadCreateRequestDto,
+  AgentThreadDeleteAllRequestDto,
+  AgentThreadDeleteAllResultDto,
+  AgentThreadDeleteRequestDto,
+  AgentThreadDeleteResultDto,
+  AgentThreadListQueryDto,
+  AgentThreadPageDto,
+  AgentThreadRenameRequestDto,
+  AgentThreadViewDto,
+} from '@nexus-terminal/protocol/agent-threads';
 import { agentRuntimeRequest } from './agent-http-client';
 import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 import { createPluginApi } from './plugin-api';
@@ -442,45 +456,12 @@ export interface HostSummaryView {
   eventCursor: number;
 }
 
-export interface AgentThreadView {
-  id: string;
-  appId: string;
-  title: string;
-  titleSource: 'placeholder' | 'auto' | 'manual';
-  version: number;
-  createdAt: number;
-  updatedAt: number;
-  latestRunId: string | null;
-}
-
-export interface AgentThreadPage {
-  items: AgentThreadView[];
-  nextCursor: string | null;
-}
-
-export interface AgentThreadDeleteResult {
-  threadId: string;
-  deleted: true;
-}
-
-export interface AgentThreadDeleteAllResult {
-  deletedCount: number;
-}
-
-export interface AgentLedgerEntry {
-  id: string;
-  threadId: string;
-  runId: string | null;
-  sequence: number;
-  kind: 'user_input' | 'assistant_message' | 'tool_result' | 'system_notice';
-  payload: unknown;
-  createdAt: number;
-}
-
-export interface AgentLedgerPage {
-  items: AgentLedgerEntry[];
-  nextCursor: string | null;
-}
+export type AgentThreadView = AgentThreadViewDto;
+export type AgentThreadPage = AgentThreadPageDto;
+export type AgentThreadDeleteResult = AgentThreadDeleteResultDto;
+export type AgentThreadDeleteAllResult = AgentThreadDeleteAllResultDto;
+export type AgentLedgerEntry = AgentLedgerEntryDto;
+export type AgentLedgerPage = AgentLedgerPageDto;
 
 export type AgentRunStatus =
   | 'created'
@@ -1084,20 +1065,22 @@ export const agentApi = {
     return unwrap((await httpClient.get<AgentEnvelope<HostSummaryView>>('/agent/summary')).data);
   },
   async threads(appId: string, before?: string, limit = 50): Promise<AgentThreadPage> {
+    const params: AgentThreadListQueryDto = { limit, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentThreadPage>>(`/apps/${encodeURIComponent(appId)}/threads`, {
-          params: { limit, ...(before ? { before } : {}) },
+        await httpClient.get<AgentEnvelope<AgentThreadPageDto>>(`/apps/${encodeURIComponent(appId)}/threads`, {
+          params,
         })
       ).data,
     );
   },
   async createThread(appId: string, title?: string): Promise<AgentThreadView> {
+    const input: AgentThreadCreateRequestDto = title ? { title } : {};
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentThreadView>>(
+        await httpClient.post<AgentEnvelope<AgentThreadViewDto>>(
           `/apps/${encodeURIComponent(appId)}/threads`,
-          title ? { title } : {},
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -1109,48 +1092,52 @@ export const agentApi = {
     title: string,
     expectedVersion: number,
   ): Promise<AgentThreadView> {
+    const input: AgentThreadRenameRequestDto = { title, expectedVersion };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelope<AgentThreadView>>(
+        await httpClient.patch<AgentEnvelope<AgentThreadViewDto>>(
           `/apps/${encodeURIComponent(appId)}/threads/${encodeURIComponent(threadId)}`,
-          { title, expectedVersion },
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,
     );
   },
   async deleteThread(appId: string, thread: AgentThreadView): Promise<AgentThreadDeleteResult> {
+    const data: AgentThreadDeleteRequestDto = { expectedVersion: thread.version };
     return unwrap(
       (
-        await httpClient.delete<AgentEnvelope<AgentThreadDeleteResult>>(
+        await httpClient.delete<AgentEnvelope<AgentThreadDeleteResultDto>>(
           `/apps/${encodeURIComponent(appId)}/threads/${encodeURIComponent(thread.id)}`,
           {
             headers: await mutationHeaders(),
-            data: { expectedVersion: thread.version },
+            data,
           },
         )
       ).data,
     );
   },
   async deleteAllThreads(appId: string): Promise<AgentThreadDeleteAllResult> {
+    const data: AgentThreadDeleteAllRequestDto = { confirmation: 'delete_all_threads' };
     return unwrap(
       (
-        await httpClient.delete<AgentEnvelope<AgentThreadDeleteAllResult>>(
+        await httpClient.delete<AgentEnvelope<AgentThreadDeleteAllResultDto>>(
           `/apps/${encodeURIComponent(appId)}/threads`,
           {
             headers: await mutationHeaders(),
-            data: { confirmation: 'delete_all_threads' },
+            data,
           },
         )
       ).data,
     );
   },
   async ledger(appId: string, threadId: string, before?: string): Promise<AgentLedgerPage> {
+    const params: AgentLedgerQueryDto = { limit: 50, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<AgentLedgerPage>>(
+        await httpClient.get<AgentEnvelope<AgentLedgerPageDto>>(
           `/apps/${encodeURIComponent(appId)}/threads/${encodeURIComponent(threadId)}/entries`,
-          { params: { limit: 50, ...(before ? { before } : {}) } },
+          { params },
         )
       ).data,
     );

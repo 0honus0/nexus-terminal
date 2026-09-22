@@ -1,3 +1,11 @@
+export type AgentJsonValueDto =
+  | null
+  | boolean
+  | number
+  | string
+  | AgentJsonValueDto[]
+  | { [key: string]: AgentJsonValueDto };
+
 export interface AgentEnvelopeDto<T> {
   data: T;
   requestId: string;

@@ -1,3 +1,17 @@
+import type {
+  AgentLedgerEntryDto,
+  AgentLedgerPageDto,
+  AgentLedgerQueryDto,
+  AgentThreadCreateRequestDto,
+  AgentThreadDeleteAllRequestDto,
+  AgentThreadDeleteAllResultDto,
+  AgentThreadDeleteRequestDto,
+  AgentThreadDeleteResultDto,
+  AgentThreadListQueryDto,
+  AgentThreadPageDto,
+  AgentThreadRenameRequestDto,
+  AgentThreadViewDto,
+} from '@nexus-terminal/protocol/agent-threads';
 import { Router, type Request } from 'express';
 import type { AgentConversationFacade } from '../../../modules/agent/public';
 import { agentData, agentRoute } from './agent-http';
@@ -27,6 +41,79 @@ const parseLimit = (request: Request, fallback: number): number => {
   return value;
 };
 
+const record = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('VALIDATION_FAILED');
+  return value as Record<string, unknown>;
+};
+const positiveVersion = (value: unknown): number => {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error('VALIDATION_FAILED');
+  return Number(value);
+};
+const onlyKeys = (body: Record<string, unknown>, allowed: readonly string[]): void => {
+  if (Object.keys(body).some((key) => !allowed.includes(key))) throw new Error('VALIDATION_FAILED');
+};
+
+type Thread = Awaited<ReturnType<AgentConversationFacade['getThread']>>;
+type LedgerPage = Awaited<ReturnType<AgentConversationFacade['readPage']>>;
+
+const threadDto = (thread: Thread): AgentThreadViewDto => ({
+  id: thread.id,
+  appId: thread.appId,
+  title: thread.title,
+  titleSource: thread.titleSource,
+  version: thread.version,
+  createdAt: thread.createdAt,
+  updatedAt: thread.updatedAt,
+  latestRunId: thread.latestRunId,
+});
+
+const threadPageDto = (page: Awaited<ReturnType<AgentConversationFacade['listThreads']>>): AgentThreadPageDto => ({
+  items: page.items.map(threadDto),
+  nextCursor: page.nextCursor,
+});
+
+const ledgerEntryDto = (entry: LedgerPage['items'][number]): AgentLedgerEntryDto => ({
+  id: entry.id,
+  threadId: entry.threadId,
+  runId: entry.runId,
+  sequence: entry.sequence,
+  kind: entry.kind,
+  payload: entry.payload,
+  createdAt: entry.createdAt,
+});
+
+const ledgerPageDto = (page: LedgerPage): AgentLedgerPageDto => ({
+  items: page.items.map(ledgerEntryDto),
+  nextCursor: page.nextCursor,
+});
+
+const createRequest = (value: unknown): AgentThreadCreateRequestDto => {
+  const body = record(value);
+  onlyKeys(body, ['title']);
+  if (body.title !== undefined && body.title !== null && typeof body.title !== 'string') throw new Error('VALIDATION_FAILED');
+  return body.title === undefined ? {} : { title: body.title as string | null };
+};
+
+const renameRequest = (value: unknown): AgentThreadRenameRequestDto => {
+  const body = record(value);
+  onlyKeys(body, ['title', 'expectedVersion']);
+  if (typeof body.title !== 'string') throw new Error('VALIDATION_FAILED');
+  return { title: body.title, expectedVersion: positiveVersion(body.expectedVersion) };
+};
+
+const deleteRequest = (value: unknown): AgentThreadDeleteRequestDto => {
+  const body = record(value);
+  onlyKeys(body, ['expectedVersion']);
+  return { expectedVersion: positiveVersion(body.expectedVersion) };
+};
+
+const deleteAllRequest = (value: unknown): AgentThreadDeleteAllRequestDto => {
+  const body = record(value);
+  onlyKeys(body, ['confirmation']);
+  if (body.confirmation !== 'delete_all_threads') throw new Error('VALIDATION_FAILED');
+  return { confirmation: 'delete_all_threads' };
+};
+
 export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencies): Router => {
   const router = Router({ mergeParams: true });
   const mutationSecurity = createAgentMutationSecurity({
@@ -41,10 +128,14 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     '/',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      const limit = parseLimit(request, 50);
+      if (limit > 100) throw new Error('VALIDATION_FAILED');
+      const before = queryString(request.query.before);
+      const query: AgentThreadListQueryDto = { limit, ...(before === undefined ? {} : { before }) };
       agentData(
         request,
         response,
-        await dependencies.conversations.listThreads(scope, parseLimit(request, 50), queryString(request.query.before)),
+        threadPageDto(await dependencies.conversations.listThreads(scope, query.limit, query.before)),
       );
     }),
   );
@@ -53,13 +144,10 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     '/',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body))
-        throw new Error('VALIDATION_FAILED');
-      const body = request.body as Record<string, unknown>;
-      if (Object.keys(body).some((key) => key !== 'title')) throw new Error('VALIDATION_FAILED');
+      const input = createRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const thread = await dependencies.conversations.createThread(scope, body.title);
-      agentData(request, response, thread, 201);
+      const thread = await dependencies.conversations.createThread(scope, input.title);
+      agentData(request, response, threadDto(thread), 201);
     }),
   );
 
@@ -67,12 +155,11 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     '/',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body))
-        throw new Error('VALIDATION_FAILED');
-      const body = request.body as Record<string, unknown>;
-      if (Object.keys(body).some((key) => key !== 'confirmation')) throw new Error('VALIDATION_FAILED');
+      const input = deleteAllRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.conversations.deleteAllThreads(scope, body.confirmation), 202);
+      const result = await dependencies.conversations.deleteAllThreads(scope, input.confirmation);
+      const payload: AgentThreadDeleteAllResultDto = { deletedCount: result.deletedCount };
+      agentData(request, response, payload, 202);
     }),
   );
 
@@ -80,20 +167,18 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     '/:threadId',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body))
-        throw new Error('VALIDATION_FAILED');
-      const body = request.body as Record<string, unknown>;
-      if (Object.keys(body).some((key) => !['title', 'expectedVersion'].includes(key)))
-        throw new Error('VALIDATION_FAILED');
+      const input = renameRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       agentData(
         request,
         response,
-        await dependencies.conversations.renameThread(
-          scope,
-          pathParam(request.params.threadId),
-          body.title,
-          body.expectedVersion,
+        threadDto(
+          await dependencies.conversations.renameThread(
+            scope,
+            pathParam(request.params.threadId),
+            input.title,
+            input.expectedVersion,
+          ),
         ),
       );
     }),
@@ -103,17 +188,15 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     '/:threadId',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body))
-        throw new Error('VALIDATION_FAILED');
-      const body = request.body as Record<string, unknown>;
-      if (Object.keys(body).some((key) => key !== 'expectedVersion')) throw new Error('VALIDATION_FAILED');
+      const input = deleteRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        await dependencies.conversations.deleteThread(scope, pathParam(request.params.threadId), body.expectedVersion),
-        202,
+      const result = await dependencies.conversations.deleteThread(
+        scope,
+        pathParam(request.params.threadId),
+        input.expectedVersion,
       );
+      const payload: AgentThreadDeleteResultDto = { threadId: result.threadId, deleted: true };
+      agentData(request, response, payload, 202);
     }),
   );
 
@@ -124,7 +207,7 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
       agentData(
         request,
         response,
-        await dependencies.conversations.getThread(scope, pathParam(request.params.threadId)),
+        threadDto(await dependencies.conversations.getThread(scope, pathParam(request.params.threadId))),
       );
     }),
   );
@@ -133,14 +216,21 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     '/:threadId/entries',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      const before = queryString(request.query.before);
+      const query: AgentLedgerQueryDto = {
+        limit: parseLimit(request, 50),
+        ...(before === undefined ? {} : { before }),
+      };
       agentData(
         request,
         response,
-        await dependencies.conversations.readPage(
-          scope,
-          pathParam(request.params.threadId),
-          parseLimit(request, 50),
-          queryString(request.query.before),
+        ledgerPageDto(
+          await dependencies.conversations.readPage(
+            scope,
+            pathParam(request.params.threadId),
+            query.limit,
+            query.before,
+          ),
         ),
       );
     }),
