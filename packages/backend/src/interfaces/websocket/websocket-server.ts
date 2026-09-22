@@ -1,5 +1,6 @@
 import http from 'node:http';
 import type { Socket } from 'node:net';
+import type { AgentTerminalAttachQueryDto } from '@nexus-terminal/protocol/agent-terminal';
 import type { WorkspaceUploadStreamQueryDto } from '@nexus-terminal/protocol/workspace';
 import express, { type Request, type RequestHandler, type Response } from 'express';
 import ipaddr from 'ipaddr.js';
@@ -268,14 +269,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
   const onAgentTerminalConnection = (
     socket: WebSocket,
     userId: number,
-    request: {
-      appId: string;
-      workspaceId: string;
-      generation: number;
-      columns: number;
-      rows: number;
-      sessionId?: string;
-    },
+    request: AgentTerminalAttachQueryDto,
   ): void => {
     const protocol = new AgentTerminalProtocolSession(
       socket,
@@ -362,16 +356,17 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         rejectUpgrade(socket, 400, 'Bad Request');
         return;
       }
+      const terminalRequest: AgentTerminalAttachQueryDto = {
+        appId,
+        workspaceId,
+        generation,
+        columns,
+        rows,
+        ...(sessionId ? { sessionId } : {}),
+      };
       wss.handleUpgrade(request, socket, head, (ws) => {
         runtimePerformanceMetrics.webSocketUpgradeAccepted();
-        onAgentTerminalConnection(ws, userId, {
-          appId,
-          workspaceId,
-          generation,
-          columns,
-          rows,
-          ...(sessionId ? { sessionId } : {}),
-        });
+        onAgentTerminalConnection(ws, userId, terminalRequest);
       });
       return;
     }

@@ -1,3 +1,8 @@
+import type {
+  AgentTerminalAttachQueryDto,
+  AgentTerminalClientControlMessageDto,
+  AgentTerminalReadyMessageDto,
+} from '@nexus-terminal/protocol/agent-terminal';
 import { openWebSocket } from '@/client/websocket';
 import type { TerminalChannel, TerminalOutput, TerminalViewport } from '@/features/terminal/public';
 
@@ -8,6 +13,21 @@ export interface AgentWorkspaceTerminalChannel extends TerminalChannel {
 const MAX_PENDING_BYTES = 256 * 1024;
 const MAX_RECONNECT_MS = 25_000;
 const MAX_RECONNECT_DELAY_MS = 3_000;
+
+const parseReadyMessage = (value: unknown): AgentTerminalReadyMessageDto | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const message = value as Record<string, unknown>;
+  if (
+    message.type !== 'ready' ||
+    !Number.isSafeInteger(message.generation) ||
+    Number(message.generation) < 1 ||
+    typeof message.sessionId !== 'string' ||
+    !message.sessionId
+  ) {
+    return null;
+  }
+  return { type: 'ready', generation: Number(message.generation), sessionId: message.sessionId };
+};
 
 export const createAgentWorkspaceTerminalChannel = (input: {
   appId: string;
@@ -34,12 +54,17 @@ export const createAgentWorkspaceTerminalChannel = (input: {
   const emitClose = (reason?: string): void => {
     for (const handler of closeHandlers) handler(reason);
   };
-  const control = (value: unknown): void => {
+  const control = (value: AgentTerminalClientControlMessageDto): void => {
     if (ready && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
   };
   const flush = (): void => {
     if (!ready || socket?.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify({ type: 'resize', columns: viewport.columns, rows: viewport.rows }));
+    const resizeMessage: AgentTerminalClientControlMessageDto = {
+      type: 'resize',
+      columns: viewport.columns,
+      rows: viewport.rows,
+    };
+    socket.send(JSON.stringify(resizeMessage));
     for (const data of pendingInput.splice(0)) socket.send(new TextEncoder().encode(data));
     pendingBytes = 0;
   };
@@ -55,13 +80,21 @@ export const createAgentWorkspaceTerminalChannel = (input: {
 
   const connect = (): void => {
     if (closed) return;
-    const query = new URLSearchParams({
+    const attach: AgentTerminalAttachQueryDto = {
       appId: input.appId,
       workspaceId: input.workspaceId,
-      generation: String(input.generation),
-      columns: String(viewport.columns),
-      rows: String(viewport.rows),
+      generation: input.generation,
+      columns: viewport.columns,
+      rows: viewport.rows,
       ...(sessionId ? { sessionId } : {}),
+    };
+    const query = new URLSearchParams({
+      appId: attach.appId,
+      workspaceId: attach.workspaceId,
+      generation: String(attach.generation),
+      columns: String(attach.columns),
+      rows: String(attach.rows),
+      ...(attach.sessionId ? { sessionId: attach.sessionId } : {}),
     });
     const next = openWebSocket(`/ws/agent-terminal?${query.toString()}`);
     next.binaryType = 'arraybuffer';
@@ -71,8 +104,12 @@ export const createAgentWorkspaceTerminalChannel = (input: {
       if (socket !== next || closed) return;
       if (typeof event.data === 'string') {
         try {
-          const message = JSON.parse(event.data) as { type?: unknown; sessionId?: unknown };
-          if (message.type !== 'ready' || typeof message.sessionId !== 'string' || !message.sessionId) return;
+          const message = parseReadyMessage(JSON.parse(event.data) as unknown);
+          if (!message || message.generation !== input.generation) {
+            finish('WORKSPACE_TERMINAL_PROTOCOL_INVALID', 'WORKSPACE_TERMINAL_PROTOCOL_INVALID');
+            next.close(1008, 'Workspace terminal protocol invalid');
+            return;
+          }
           if (sessionId && sessionId !== message.sessionId) {
             finish('WORKSPACE_TERMINAL_SESSION_CHANGED', 'WORKSPACE_TERMINAL_PROTOCOL_INVALID');
             next.close(1008, 'Workspace terminal session changed');
@@ -159,7 +196,8 @@ export const createAgentWorkspaceTerminalChannel = (input: {
       const current = socket;
       socket = null;
       if (current?.readyState === WebSocket.OPEN) {
-        current.send(JSON.stringify({ type: 'close' }));
+        const closeMessage: AgentTerminalClientControlMessageDto = { type: 'close' };
+        current.send(JSON.stringify(closeMessage));
         current.close(1000, 'Workspace terminal closed by client');
       } else if (current?.readyState === WebSocket.CONNECTING) {
         current.close();

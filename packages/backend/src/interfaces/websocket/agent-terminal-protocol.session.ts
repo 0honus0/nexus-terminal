@@ -1,3 +1,8 @@
+import type {
+  AgentTerminalAttachQueryDto,
+  AgentTerminalClientControlMessageDto,
+  AgentTerminalReadyMessageDto,
+} from '@nexus-terminal/protocol/agent-terminal';
 import WebSocket, { type RawData } from 'ws';
 import type { AgentWorkspaceRuntimeFacade, WorkspaceRuntimeTerminalAttachment } from '../../modules/agent/public';
 import { logger } from '../../shared/logging/logger';
@@ -8,15 +13,7 @@ const HIGH_WATER_BYTES = 1024 * 1024;
 const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 const BACKPRESSURE_POLL_MS = 10;
 
-interface AgentTerminalContext {
-  userId: number;
-  appId: string;
-  workspaceId: string;
-  generation: number;
-  columns: number;
-  rows: number;
-  sessionId?: string;
-}
+type AgentTerminalContext = AgentTerminalAttachQueryDto & { userId: number };
 
 const buffer = (data: RawData): Buffer => {
   if (Buffer.isBuffer(data)) return data;
@@ -36,6 +33,29 @@ const validViewport = (columns: number, rows: number): boolean =>
   rows >= 1 &&
   columns <= 1000 &&
   rows <= 500;
+
+const parseControlMessage = (value: unknown): AgentTerminalClientControlMessageDto => {
+  const input = record(value);
+  if (input.type === 'resize') {
+    if (Object.keys(input).some((key) => !['type', 'columns', 'rows'].includes(key))) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const columns = Number(input.columns);
+    const rows = Number(input.rows);
+    if (!validViewport(columns, rows)) throw new Error('VALIDATION_FAILED');
+    return { type: 'resize', columns, rows };
+  }
+  if (input.type === 'signal') {
+    if (Object.keys(input).some((key) => !['type', 'signal'].includes(key))) throw new Error('VALIDATION_FAILED');
+    if (typeof input.signal !== 'string' || input.signal.length > 16) throw new Error('VALIDATION_FAILED');
+    return { type: 'signal', signal: input.signal };
+  }
+  if (input.type === 'close') {
+    if (Object.keys(input).some((key) => key !== 'type')) throw new Error('VALIDATION_FAILED');
+    return { type: 'close' };
+  }
+  throw new Error('VALIDATION_FAILED');
+};
 
 /** Browser-facing terminal protocol. Binary frames are terminal bytes; text frames are bounded control messages only. */
 export class AgentTerminalProtocolSession {
@@ -87,9 +107,12 @@ export class AgentTerminalProtocolSession {
     }
     session.replayBuffered();
     if (this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(
-        JSON.stringify({ type: 'ready', generation: this.context.generation, sessionId: session.sessionId }),
-      );
+      const ready: AgentTerminalReadyMessageDto = {
+        type: 'ready',
+        generation: this.context.generation,
+        sessionId: session.sessionId,
+      };
+      this.socket.send(JSON.stringify(ready));
     }
   }
 
@@ -115,20 +138,13 @@ export class AgentTerminalProtocolSession {
       return;
     }
     try {
-      const input = record(JSON.parse(bytes.toString('utf8')));
+      const input = parseControlMessage(JSON.parse(bytes.toString('utf8')) as unknown);
       if (input.type === 'resize') {
-        const columns = Number(input.columns);
-        const rows = Number(input.rows);
-        if (!validViewport(columns, rows)) throw new Error('VALIDATION_FAILED');
-        session.resize(columns, rows);
+        session.resize(input.columns, input.rows);
       } else if (input.type === 'signal') {
-        if (typeof input.signal !== 'string' || input.signal.length > 16) throw new Error('VALIDATION_FAILED');
         session.signal(input.signal);
-      } else if (input.type === 'close') {
-        if (Object.keys(input).some((key) => key !== 'type')) throw new Error('VALIDATION_FAILED');
-        void this.terminate();
       } else {
-        throw new Error('VALIDATION_FAILED');
+        void this.terminate();
       }
     } catch {
       this.socket.close(1008, 'Workspace terminal control message invalid');
