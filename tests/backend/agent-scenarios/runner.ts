@@ -22561,6 +22561,7 @@ const scenarios = new Map<string, Scenario>([
 
 const main = async (): Promise<void> => {
   const results: ScenarioResult[] = [];
+  const failures: Array<{ name: string; error: unknown }> = [];
   for (const [name, run] of scenarios) {
     const started = performance.now();
     try {
@@ -22569,7 +22570,7 @@ const main = async (): Promise<void> => {
       console.log(`PASS ${name}`);
     } catch (error) {
       console.error(`FAIL ${name}`);
-      throw error;
+      failures.push({ name, error });
     }
   }
 
@@ -22586,6 +22587,14 @@ const main = async (): Promise<void> => {
       2,
     ),
   );
+
+  if (failures.length > 0) {
+    for (const failure of failures) console.error(`FAILURE ${failure.name}`, failure.error);
+    throw new AggregateError(
+      failures.map((failure) => failure.error),
+      `${failures.length} Agent scenario(s) failed`,
+    );
+  }
 };
 
 void main().catch((error) => {
