@@ -5,6 +5,7 @@ import type {
   NotificationSettingCreateRequestDto,
   NotificationSettingDto,
 } from '@nexus-terminal/protocol/notifications';
+export { NOTIFICATION_EVENTS } from '@nexus-terminal/protocol/notifications';
 
 export type NotificationChannelType = NotificationChannelTypeDto;
 export type NotificationEvent = NotificationEventDto;

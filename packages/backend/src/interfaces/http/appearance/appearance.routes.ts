@@ -62,7 +62,7 @@ const appearanceUpdateInput = (body: unknown): UpdateAppearanceInput => {
   const dto = Object.fromEntries(
     Object.entries(body).filter(([key]) => appearanceKeys.has(key as keyof UpdateAppearanceInput)),
   ) as AppearanceUpdateRequestDto;
-  const input: UpdateAppearanceInput = { ...dto };
+  const input: UpdateAppearanceInput = { ...dto, terminalCustomHtml: undefined };
   if (body.terminalCustomHtml !== undefined) {
     if (body.terminalCustomHtml !== null && typeof body.terminalCustomHtml !== 'string')
       throw new Error('terminalCustomHtml 必须是字符串或 null。');

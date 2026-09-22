@@ -18,6 +18,12 @@ export interface QuickCommandDto {
   updatedAt: number;
 }
 
+export type QuickCommandSortDto = 'name' | 'usageCount';
+
+export interface QuickCommandListQueryDto {
+  sortBy?: QuickCommandSortDto;
+}
+
 export interface QuickCommandMutationRequestDto {
   name?: string | null;
   command: string;

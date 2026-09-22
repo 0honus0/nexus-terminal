@@ -1,4 +1,5 @@
-export type ServerTransferMethodDto = 'auto' | 'rsync' | 'scp';
+export const SERVER_TRANSFER_METHODS = ['auto', 'rsync', 'scp'] as const;
+export type ServerTransferMethodDto = (typeof SERVER_TRANSFER_METHODS)[number];
 export type ServerTransferMethodUsedDto = 'rsync' | 'scp';
 export type ServerTransferTaskStatusDto =
   | 'queued'

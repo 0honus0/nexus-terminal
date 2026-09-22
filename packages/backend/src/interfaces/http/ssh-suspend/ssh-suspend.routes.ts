@@ -1,11 +1,17 @@
 import { pipeline } from 'node:stream/promises';
+import type { MessageResponseDto } from '@nexus-terminal/protocol/common';
+import type {
+  SuspendedSessionDto,
+  SuspendedSessionRenameRequestDto,
+  SuspendedSessionRenameResponseDto,
+} from '@nexus-terminal/protocol/ssh-suspend';
 import { Router } from 'express';
 import type { SshSuspendService } from '../../../modules/ssh-suspend/ssh-suspend.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
-const suspendedSessionDto = (session: ReturnType<SshSuspendService['list']>[number]) => ({
+const suspendedSessionDto = (session: ReturnType<SshSuspendService['list']>[number]): SuspendedSessionDto => ({
   id: session.suspendSessionId,
   originalWorkspaceId: session.originalSessionId,
   connectionId: Number(session.connectionId),
@@ -39,7 +45,8 @@ export const createSshSuspendRouter = (service: SshSuspendService): Router => {
         s.status(404).json({ message: `Failed to terminate and remove session ${id}.` });
         return;
       }
-      s.json({ message: `Suspended session ${id} terminated and removed successfully.` });
+      const payload: MessageResponseDto = { message: `Suspended session ${id} terminated and removed successfully.` };
+      s.json(payload);
     }),
   );
   r.delete(
@@ -50,14 +57,16 @@ export const createSshSuspendRouter = (service: SshSuspendService): Router => {
         s.status(404).json({ message: `Failed to remove session entry ${id}.` });
         return;
       }
-      s.json({ message: `Suspended session entry ${id} removed successfully.` });
+      const payload: MessageResponseDto = { message: `Suspended session entry ${id} removed successfully.` };
+      s.json(payload);
     }),
   );
   r.put(
     '/name/:suspendSessionId',
     route(async (q, s) => {
       const id = String(q.params.suspendSessionId),
-        name = q.body?.customName;
+        body = (q.body ?? {}) as Partial<SuspendedSessionRenameRequestDto>,
+        name = body.customName;
       if (typeof name !== 'string') {
         s.status(400).json({ message: 'Bad Request. customName must be a string and is missing or invalid.' });
         return;
@@ -68,7 +77,11 @@ export const createSshSuspendRouter = (service: SshSuspendService): Router => {
           s.status(404).json({ message: `Failed to update name for session ${id}.` });
           return;
         }
-        s.json({ message: `Suspended session ${id} name updated to "${customName}".`, customName });
+        const payload: SuspendedSessionRenameResponseDto = {
+          message: `Suspended session ${id} name updated to "${customName}".`,
+          customName,
+        };
+        s.json(payload);
       } catch (error) {
         s.status(400).json({ message: errorMessage(error) });
       }

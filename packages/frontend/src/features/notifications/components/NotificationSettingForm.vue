@@ -11,54 +11,21 @@
     NotificationSetting,
     NotificationSettingInput,
   } from '../model/notification';
+  import { NOTIFICATION_EVENTS } from '../model/notification';
   const props = defineProps<{ visible: boolean; setting?: NotificationSetting | null }>();
   const emit = defineEmits<{ close: []; save: [input: NotificationSettingInput] }>();
   const { t } = useI18n();
-  const events: NotificationEvent[] = [
-    'LOGIN_SUCCESS',
-    'LOGIN_FAILURE',
-    'LOGOUT',
-    'PASSWORD_CHANGED',
-    '2FA_ENABLED',
-    '2FA_DISABLED',
-    'PASSKEY_REGISTERED',
-    'PASSKEY_AUTH_SUCCESS',
-    'PASSKEY_AUTH_FAILURE',
-    'PASSKEY_DELETED',
-    'CONNECTION_CREATED',
-    'CONNECTION_UPDATED',
-    'CONNECTION_DELETED',
-    'PROXY_CREATED',
-    'PROXY_UPDATED',
-    'PROXY_DELETED',
-    'TAG_CREATED',
-    'TAG_UPDATED',
-    'TAG_DELETED',
-    'SETTINGS_UPDATED',
-    'IP_WHITELIST_UPDATED',
-    'IP_BLOCKED',
-    'NOTIFICATION_SETTING_CREATED',
-    'NOTIFICATION_SETTING_UPDATED',
-    'NOTIFICATION_SETTING_DELETED',
-    'SSH_CONNECT_SUCCESS',
-    'SSH_CONNECT_FAILURE',
-    'SSH_SHELL_FAILURE',
-    'DATABASE_MIGRATION',
-    'ADMIN_SETUP_COMPLETE',
-    'AGENT_RUN_COMPLETED',
-    'AGENT_RUN_FAILED',
-    'AGENT_RUN_INTERRUPTED',
-    'AGENT_APPROVAL_REQUIRED',
-    'AGENT_INPUT_REQUIRED',
-    'AGENT_ATTENTION_REQUIRED',
-  ];
+  const events: readonly NotificationEvent[] = NOTIFICATION_EVENTS;
+  type NotificationMethod = NonNullable<NotificationConfig['method']>;
+  const notificationMethod = (value: unknown): NotificationMethod =>
+    value === 'GET' || value === 'PUT' ? value : 'POST';
   const form = reactive({
     channelType: 'webhook' as NotificationChannelType,
     name: '',
     enabled: true,
     enabledEvents: [] as NotificationEvent[],
     url: '',
-    method: 'POST',
+    method: 'POST' as NotificationMethod,
     webhookHeaders: '{}',
     webhookBodyTemplate: '',
     to: '',
@@ -85,7 +52,7 @@
         enabled: item?.enabled ?? true,
         enabledEvents: item ? [...item.enabledEvents] : [],
         url: String(item?.config.url ?? ''),
-        method: String(item?.config.method ?? 'POST'),
+        method: notificationMethod(item?.config.method),
         webhookHeaders: JSON.stringify(item?.config.headers ?? {}, null, 2),
         webhookBodyTemplate: String(item?.config.bodyTemplate ?? ''),
         to: String(item?.config.to ?? ''),

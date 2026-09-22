@@ -4,6 +4,7 @@ import type {
   QuickCommandBulkAssignTagResponseDto,
   QuickCommandDto,
   QuickCommandIncrementResponseDto,
+  QuickCommandListQueryDto,
   QuickCommandMutationRequestDto,
   QuickCommandMutationResponseDto,
   QuickCommandTagDto,
@@ -24,8 +25,9 @@ const requireTag = (tag: QuickCommandTagDto | null | undefined): QuickCommandTag
 };
 
 export const quickCommandsApi = {
-  async list(): Promise<QuickCommand[]> {
-    return (await httpClient.get<QuickCommandDto[]>('/quick-commands')).data;
+  async list(sortBy: QuickCommandListQueryDto['sortBy'] = 'name'): Promise<QuickCommand[]> {
+    const params: QuickCommandListQueryDto = { sortBy };
+    return (await httpClient.get<QuickCommandDto[]>('/quick-commands', { params })).data;
   },
   async create(input: QuickCommandInput): Promise<QuickCommand> {
     const request: QuickCommandMutationRequestDto = input;

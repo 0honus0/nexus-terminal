@@ -4,6 +4,7 @@ import type {
   QuickCommandBulkAssignTagResponseDto,
   QuickCommandDto,
   QuickCommandIncrementResponseDto,
+  QuickCommandListQueryDto,
   QuickCommandMutationRequestDto,
   QuickCommandMutationResponseDto,
 } from '@nexus-terminal/protocol/quick-commands';
@@ -81,7 +82,10 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
   router.get(
     '/',
     route(async (request, response) => {
-      const payload: QuickCommandDto[] = await commands.list(request.query.sortBy === 'usageCount' ? 'usageCount' : 'name');
+      const query: QuickCommandListQueryDto = {
+        sortBy: request.query.sortBy === 'usageCount' ? 'usageCount' : 'name',
+      };
+      const payload: QuickCommandDto[] = await commands.list(query.sortBy ?? 'name');
       response.json(payload);
     }),
   );

@@ -3,6 +3,7 @@ import type {
   FavoritePathDto,
   FavoritePathMutationRequestDto,
   FavoritePathMutationResponseDto,
+  FavoritePathSortDto,
 } from '@nexus-terminal/protocol/filesystem-catalog';
 import type { FavoritePathService } from '../../../modules/favorite-paths/favorite-path.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
@@ -15,7 +16,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
   r.get(
     '/',
     route(async (q, s) => {
-      const payload: FavoritePathDto[] = await service.list(q.query.sortBy === 'lastUsedAt' ? 'lastUsedAt' : 'name');
+      const sortBy: FavoritePathSortDto = q.query.sortBy === 'lastUsedAt' ? 'lastUsedAt' : 'name';
+      const payload: FavoritePathDto[] = await service.list(sortBy);
       s.json(payload);
     }),
   );
@@ -76,7 +78,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
     '/:id',
     route(async (q, s) => {
       const id = parsePositiveId(String(q.params.id));
-      const { name = null, path } = q.body ?? {};
+      const body = (q.body ?? {}) as Partial<FavoritePathMutationRequestDto>;
+      const { name = null, path } = body;
       if (!id) {
         s.status(400).json({ message: '无效的 ID' });
         return;
