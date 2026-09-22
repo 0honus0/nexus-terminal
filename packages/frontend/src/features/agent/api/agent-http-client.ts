@@ -1,8 +1,9 @@
+import type { AgentVersionedRequestDto } from '@nexus-terminal/protocol/agent-common';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { httpClient } from '@/client/http';
 import { toAgentApiError } from './agent-api-error';
 
-export const agentRuntimeRequest = <T extends Record<string, unknown>>(body: T): T & { schemaVersion: 1 } => ({
+export const agentRuntimeRequest = <T extends object>(body: T): AgentVersionedRequestDto<T> => ({
   schemaVersion: 1,
   ...body,
 });

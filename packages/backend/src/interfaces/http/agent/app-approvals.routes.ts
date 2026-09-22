@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { AgentApprovalFacade } from '../../../modules/agent/public';
+import { approvalDto } from './approval-dto';
 import { agentData, agentRoute } from './agent-http';
 import { withVersionConflictDetails } from './agent-route-input';
 import { parseApprovalResolveRequest } from './agent-runtime-route-input';
@@ -36,7 +37,11 @@ export const createAppApprovalsRouter = (dependencies: AppApprovalsRouterDepende
     '/:approvalId',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.approvals.get(scope, pathParam(request.params.approvalId)));
+      agentData(
+        request,
+        response,
+        approvalDto(await dependencies.approvals.get(scope, pathParam(request.params.approvalId))),
+      );
     }),
   );
 
@@ -64,7 +69,7 @@ export const createAppApprovalsRouter = (dependencies: AppApprovalsRouterDepende
           ),
         ['STATE_CONFLICT', 'APPROVAL_STALE'],
       );
-      agentData(request, response, approval);
+      agentData(request, response, approvalDto(approval));
     }),
   );
 

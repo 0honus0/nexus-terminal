@@ -6,6 +6,10 @@ export type AgentJsonValueDto =
   | AgentJsonValueDto[]
   | { [key: string]: AgentJsonValueDto };
 
+export type AgentVersionedRequestDto<T extends object> = T & { schemaVersion: 1 };
+
+export type AgentToolRiskDto = 'read' | 'control' | 'mutate' | 'destructive' | 'forbidden';
+
 export interface AgentEnvelopeDto<T> {
   data: T;
   requestId: string;

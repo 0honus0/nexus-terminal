@@ -10,6 +10,13 @@ import type {
   AgentMcpIntegrationConfigurationDto,
 } from '@nexus-terminal/protocol/agent-integrations';
 import type {
+  AgentApprovalResolveFieldsDto,
+  AgentApprovalResolveRequestDto,
+  AgentApprovalViewDto,
+  AgentToolInspectionDto,
+} from '@nexus-terminal/protocol/agent-approvals';
+import type { AgentToolRiskDto } from '@nexus-terminal/protocol/agent-common';
+import type {
   AgentDiscoveredProviderModelDto,
   AgentModelCapabilityDefaultsDto,
   AgentModelCapabilityDto,
@@ -478,7 +485,7 @@ export type AgentRunStatus =
 
 export type AgentApprovalMode = 'ask' | 'full_access';
 export type AgentExecutionMode = 'execute' | 'plan';
-export type AgentToolRisk = 'read' | 'control' | 'mutate' | 'destructive' | 'forbidden';
+export type AgentToolRisk = AgentToolRiskDto;
 
 export type AgentPlanItemStatus = 'pending' | 'in_progress' | 'blocked' | 'completed' | 'cancelled';
 
@@ -789,27 +796,7 @@ export interface AgentSubagentMessagePage {
   nextCursor: string | null;
 }
 
-export interface AgentToolInspection {
-  toolName: string;
-  toolVersion: string;
-  normalizedArguments: unknown;
-  target: {
-    connectionId: number;
-    targetIdentity: string;
-    endpoint: string;
-    loginUser: string;
-    configurationHash: string;
-    hostKeyTrust: string;
-  };
-  resourceKeys: string[];
-  risk: AgentToolRisk;
-  mutation: boolean;
-  operationHash: string;
-  operationHashVersion: 1;
-  preconditions: Array<{ kind: string; key: string; observedValue: unknown }>;
-  policyRevision: number;
-  inputRevision: number;
-}
+export type AgentToolInspection = AgentToolInspectionDto;
 
 export interface AgentServerClockAnchor {
   serverUnixMilliseconds: number;
@@ -821,27 +808,7 @@ export interface AgentApprovalBatch {
   clock: AgentServerClockAnchor;
 }
 
-export interface AgentApprovalView {
-  id: string;
-  userId: number;
-  appId: string;
-  runId: string;
-  toolCallId: string;
-  requestedByRuntimeId: string;
-  operationHash: string;
-  operationHashVersion: 1;
-  kind: 'tool' | 'acp_permission';
-  status: 'requested' | 'approved' | 'denied' | 'expired' | 'superseded';
-  policyRevision: number;
-  inputRevision: number;
-  decidedByUserId: number | null;
-  decidedAt: number | null;
-  consumedAt: number | null;
-  requestedAt: number;
-  expiresAt: number;
-  version: number;
-  inspection: AgentToolInspection;
-}
+export type AgentApprovalView = AgentApprovalViewDto;
 
 export interface AgentDefinitionModelCompatibility {
   providerId: string;
@@ -1314,7 +1281,7 @@ export const agentApi = {
     );
   },
   async approvals(appId: string, runId: string): Promise<AgentApprovalBatch> {
-    const response = await httpClient.get<AgentEnvelope<AgentApprovalView[]>>(
+    const response = await httpClient.get<AgentEnvelope<AgentApprovalViewDto[]>>(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/approvals`,
     );
     const serverUnixMilliseconds = Number(response.headers['x-agent-server-time-ms']);
@@ -1332,16 +1299,18 @@ export const agentApi = {
     decision: 'approved' | 'denied',
     feedback?: string,
   ): Promise<AgentApprovalView> {
+    const fields: AgentApprovalResolveFieldsDto = {
+      decision,
+      operationHash: approval.operationHash,
+      expectedVersion: approval.version,
+      ...(feedback ? { feedback } : {}),
+    };
+    const input: AgentApprovalResolveRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
-        await httpClient.post<AgentEnvelope<AgentApprovalView>>(
+        await httpClient.post<AgentEnvelope<AgentApprovalViewDto>>(
           `/apps/${encodeURIComponent(appId)}/approvals/${encodeURIComponent(approval.id)}/resolve`,
-          agentRuntimeRequest({
-            decision,
-            operationHash: approval.operationHash,
-            expectedVersion: approval.version,
-            ...(feedback ? { feedback } : {}),
-          }),
+          input,
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,

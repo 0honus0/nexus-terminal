@@ -1,5 +1,6 @@
 import { Router, type Request } from 'express';
 import type { AgentApprovalFacade, AgentWorkspaceRuntimeFacade, AgentRunFacade } from '../../../modules/agent/public';
+import { approvalDto } from './approval-dto';
 import { agentData, agentError, agentRequestId, agentRoute } from './agent-http';
 import { pathParam, positiveInteger, withVersionConflictDetails } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
@@ -133,7 +134,11 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/approvals',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.approvals.list(scope, pathParam(request.params.runId)));
+      agentData(
+        request,
+        response,
+        (await dependencies.approvals.list(scope, pathParam(request.params.runId))).map(approvalDto),
+      );
     }),
   );
 

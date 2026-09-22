@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, nextTick, watch } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
   import { useConnections } from '@/features/connections/public';
@@ -84,7 +84,7 @@
   const selectedConnectionIds = ref<number[]>(restoredConnectionIds ?? []);
   const connectionSelectionExplicit = ref(restoredConnectionIds !== undefined);
   const attachments = ref<AgentArtifactRef[]>([]);
-  const approvalBatch = ref<AgentApprovalBatch | null>(null);
+  const approvalBatch = shallowRef<AgentApprovalBatch | null>(null);
   const approvals = computed(() => approvalBatch.value?.items ?? []);
   const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'requested'));
   const hardLimits = ref<AgentHardLimits | null>(null);
@@ -95,7 +95,7 @@
   const detailSnapshot = ref<AgentRunSnapshot | null>(null);
   const detailCheckpoints = ref<AgentCheckpointView[]>([]);
   const currentRunCheckpoints = ref<AgentCheckpointView[]>([]);
-  const detailApprovalBatch = ref<AgentApprovalBatch | null>(null);
+  const detailApprovalBatch = shallowRef<AgentApprovalBatch | null>(null);
   const error = ref('');
   let currentRunCheckpointsGeneration = 0;
 

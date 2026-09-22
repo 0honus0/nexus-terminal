@@ -1,3 +1,4 @@
+import type { AgentApprovalResolveFieldsDto } from '@nexus-terminal/protocol/agent-approvals';
 import type {
   AgentRunEnvironmentSelection,
   AgentWorkspaceCreateSpec,
@@ -26,13 +27,6 @@ export interface CreateRunRequestDto {
   connectionIds: number[];
   environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
-}
-
-export interface ApprovalResolveRequestDto {
-  decision: 'approved' | 'denied';
-  operationHash: string;
-  expectedVersion: number;
-  feedback?: string;
 }
 
 export interface WorkspaceCreateRequestDto {
@@ -411,7 +405,7 @@ export const parseWorkspaceToolVersionsRequest = (body: unknown): WorkspaceToolV
   };
 };
 
-export const parseApprovalResolveRequest = (body: unknown): ApprovalResolveRequestDto => {
+export const parseApprovalResolveRequest = (body: unknown): AgentApprovalResolveFieldsDto => {
   const value = versionedRecord(body, ['decision', 'operationHash', 'expectedVersion', 'feedback']);
   const feedback = typeof value.feedback === 'string' ? value.feedback.trim() : undefined;
   if (
