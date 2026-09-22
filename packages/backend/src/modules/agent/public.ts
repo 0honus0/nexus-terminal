@@ -14,6 +14,7 @@ import type {
   WorkspaceToolchainSwitchView,
 } from './workspace-runtime/workspace-runtime.types';
 import type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
+export type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
 import type {
   WorkspaceArtifactExportInput,
   WorkspaceArtifactImportInput,

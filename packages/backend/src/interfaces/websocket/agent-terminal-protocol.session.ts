@@ -1,6 +1,5 @@
 import WebSocket, { type RawData } from 'ws';
-import type { AgentWorkspaceRuntimeFacade } from '../../modules/agent/public';
-import type { WorkspaceRuntimeTerminalAttachment } from '../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
+import type { AgentWorkspaceRuntimeFacade, WorkspaceRuntimeTerminalAttachment } from '../../modules/agent/public';
 import { logger } from '../../shared/logging/logger';
 
 const MAX_CONTROL_BYTES = 16 * 1024;
