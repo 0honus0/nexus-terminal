@@ -139,7 +139,15 @@
     action: () => Promise<T>,
     success?: string | null,
   ): Promise<T | undefined> => {
-    if (busy.value) return undefined;
+    if (busy.value) {
+      const cause = new Error('AGENT_SETTINGS_OPERATION_BUSY');
+      operationFeedback.notifyError({
+        operation,
+        message: t('agent.ui.operationInProgress'),
+        cause,
+      });
+      return undefined;
+    }
     busy.value = true;
     try {
       const result = await action();

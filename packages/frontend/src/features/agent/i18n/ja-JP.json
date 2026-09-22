@@ -1247,6 +1247,7 @@
     "ui": {
       "saved": "保存しました",
       "working": "保存中…",
+      "operationInProgress": "別の設定操作が進行中です。完了してからもう一度お試しください。",
       "testing": "テスト中…",
       "testSuccess": "接続成功 · {ms} ms",
       "testFailed": "接続できません。モデル、接続先、認証情報を確認してください。",
