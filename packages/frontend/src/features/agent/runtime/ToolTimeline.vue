@@ -11,14 +11,15 @@
 <template>
   <section v-if="approvals.length" class="space-y-2">
     <strong class="text-xs">{{ $t('agent.approvals.timeline') }}</strong>
-    <ApprovalCard
-      v-for="approval in approvals"
-      :key="approval.id"
-      v-if="clock"
-      :approval="approval"
-      :clock="clock"
-      :busy="busy"
-      @resolve="(item, decision, feedback) => emit('resolve', item, decision, feedback)"
-    />
+    <template v-if="clock">
+      <ApprovalCard
+        v-for="approval in approvals"
+        :key="approval.id"
+        :approval="approval"
+        :clock="clock"
+        :busy="busy"
+        @resolve="(item, decision, feedback) => emit('resolve', item, decision, feedback)"
+      />
+    </template>
   </section>
 </template>
