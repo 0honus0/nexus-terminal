@@ -819,11 +819,6 @@
     return String(value);
   };
 
-  const setDefaultModel = (value: string): void => {
-    const option = modelOptions.value.find((c) => c.key === value);
-    if (option) emit('defaultModel', option.provider.id, option.model.id);
-  };
-
   const copyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);

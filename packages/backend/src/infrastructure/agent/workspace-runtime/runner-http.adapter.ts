@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
-import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
+import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { ProjectInstructionProjection } from '../../../modules/agent/ai/project-instruction-source.port';
 import type {
   AcpByteTransport,

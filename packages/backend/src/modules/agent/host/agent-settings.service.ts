@@ -51,8 +51,6 @@ const patchableSections = [
   'plugins',
 ] as const;
 
-type PatchableSection = (typeof patchableSections)[number];
-
 const HARD_LIMIT_CONFIRMATION_TTL_SECONDS = 10 * 60;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

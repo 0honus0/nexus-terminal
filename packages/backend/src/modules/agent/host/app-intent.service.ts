@@ -97,7 +97,7 @@ export class AppIntentService {
       this.requireGrant(scope, 'app.intents.exchange', 'APP_INTENT_SENDER_GRANT_DENIED'),
       this.requireGrant(receiverScope, 'app.intents.exchange', 'APP_INTENT_RECEIVER_GRANT_DENIED'),
     ]);
-    const senderDefinition = this.registry.get(scope.appId, sender.activeVersion);
+    this.registry.get(scope.appId, sender.activeVersion);
     const receiverDefinition = this.registry.get(input.receiverAppId, receiver.activeVersion);
     const receiverIntent = receiverDefinition.manifest.intents.find((intent) => intent.id === input.intentId);
     if (!receiverIntent) throw new Error('APP_INTENT_UNDECLARED');

@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express';
+import { Router } from 'express';
 import { create as createContentDisposition } from 'content-disposition';
 import parseRange from 'range-parser';
 import {

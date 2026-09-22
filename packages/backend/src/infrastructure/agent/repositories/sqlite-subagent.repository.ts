@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
-import type { ModelRef } from '../../../modules/agent/ai/model.types';
-import type { RunBudget, RunUsage } from '../../../modules/agent/runtime/runs/run.types';
+import type { RunUsage } from '../../../modules/agent/runtime/runs/run.types';
 import type {
   CreateDelegationRecord,
   CreateDelegationResult,
@@ -29,7 +28,7 @@ import type {
   SchedulerWorkView,
 } from '../../../modules/agent/runtime/collaboration/subagent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
-import { decodeModelCapabilitySnapshot, parseToolResult } from '../runtime/durable-state-decoders';
+import { parseToolResult } from '../runtime/durable-state-decoders';
 import { enqueueParentJoinResume } from '../runtime/subagent-join-wake';
 import {
   type DelegationRow,

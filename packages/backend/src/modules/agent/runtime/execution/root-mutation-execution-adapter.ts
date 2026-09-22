@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue } from '../../agent.types';
-import type { ToolResult } from '../../capabilities/tool.types';
 import type { BackendSignal } from './agent-backend.port';
 import { executionErrorCode, executionErrorDetail } from './execution-errors';
 import {

@@ -36,7 +36,6 @@
   const localBusy = ref(false);
   const packageInput = ref<HTMLInputElement | null>(null);
   const drainingUpgradeVersion = ref<number | null>(null);
-  const drainingUninstallVersions = ref<Record<string, number>>({});
   const pendingDataDeletionAppId = ref<string | null>(null);
   const copiedSourceUrl = ref<string | null>(null);
   // showAdvancedMaintenance removed
@@ -75,8 +74,6 @@
   const removedInstallations = computed(() =>
     installations.value.filter((item) => item.status === 'removed' && item.retainedDataEntries > 0),
   );
-  const installedVersion = (appId: string): PluginVersionView | undefined =>
-    versions.value.find((item) => item.appId === appId);
   const appSummary = (appId: string): AgentAppSummary | undefined => props.apps.find((item) => item.id === appId);
 
   const isInstalled = (appId: string): boolean => activeInstallations.value.some((item) => item.appId === appId);
@@ -269,30 +266,6 @@
       await refresh();
       emit('refresh');
       notifyNotice('PLUGIN_UPGRADED');
-    });
-  };
-
-  const uninstall = (installation: PluginInstallation): void => {
-    void run('uninstall-plugin', async () => {
-      const app = appSummary(installation.appId);
-      const expectedVersion = drainingUninstallVersions.value[installation.appId] ?? app?.stateVersion;
-      if (!expectedVersion) throw new Error('PLUGIN_APP_STATE_UNAVAILABLE');
-      const result = await agentApi.uninstallPlugin(installation.appId, expectedVersion);
-      if (result.state === 'draining') {
-        drainingUninstallVersions.value = {
-          ...drainingUninstallVersions.value,
-          [installation.appId]: result.app.version,
-        };
-        emit('refresh');
-        notifyNotice('PLUGIN_DRAINING');
-        return;
-      }
-      const next = { ...drainingUninstallVersions.value };
-      delete next[installation.appId];
-      drainingUninstallVersions.value = next;
-      await refresh();
-      emit('refresh');
-      notifyNotice('PLUGIN_UNINSTALLED_DATA_RETAINED');
     });
   };
 

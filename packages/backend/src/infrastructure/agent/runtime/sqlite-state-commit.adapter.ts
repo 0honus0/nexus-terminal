@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type {
   AppendInputCommitResult,
@@ -272,7 +271,7 @@ const settleInterruptedRunChildren = async (
 const cancelPendingUserInputRequest = async (
   tx: RelationalDatabase,
   row: RunRow,
-  now: number,
+  _now: number,
 ): Promise<string | null> => {
   const pending = await tx.queryOne<{ id: string; version: number }>(
     `SELECT id, version FROM agent_input_requests

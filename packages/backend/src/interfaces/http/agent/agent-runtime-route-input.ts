@@ -1,14 +1,13 @@
 import type {
   AgentRunEnvironmentSelection,
   AgentWorkspaceCreateSpec,
-  JsonValue,
   ReasoningEffort,
   RunApprovalMode,
   RunBudgetIncrease,
   RunExecutionMode,
   UserInputData,
 } from '../../../modules/agent/public';
-import { hasOnlyKeys, isJsonValue, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
+import { hasOnlyKeys, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
 const reasoningEfforts = new Set<ReasoningEffort>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);

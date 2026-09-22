@@ -1,4 +1,4 @@
-import type { JsonValue, Scope } from '../../agent.types';
+import type { Scope } from '../../agent.types';
 import type { ModelRef } from '../../ai/model.types';
 import type { ToolRisk } from '../../capabilities/tool.types';
 import type { RunPlan } from '../planning/plan.types';

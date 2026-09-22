@@ -105,7 +105,6 @@ import {
   normalizeRequestedSettings,
 } from '../../../packages/backend/src/modules/agent/agent-defaults';
 import { FileCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/file-capability.service';
-import type { MachineCapabilityPort } from '../../../packages/backend/src/modules/agent/capabilities/machine.port';
 import { ShellCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/shell-capability.service';
 import type { LeasePort } from '../../../packages/backend/src/modules/agent/capabilities/lease.port';
 import { LEASE_RENEW_INTERVAL_MS } from '../../../packages/backend/src/modules/agent/capabilities/lease-policy';
@@ -15119,7 +15118,6 @@ const providerContinuationRoundTripScenario: Scenario = async () => {
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'continuation.sqlite', nodeEnv: 'test' });
   const stateCommit = new SqliteStateCommitAdapter(db);
   const repository = new SqliteRunRepository(db);
-  const continuations = new SqliteModelContinuationRepository(db);
   const now = 1_800_200_000;
   const runId = 'continuation-run';
   const runtimeId = 'continuation-runtime';

@@ -3,7 +3,7 @@ import { readArtifactByteRangeForAgent, readArtifactTextLinesForAgent } from '..
 import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
-import type { AgentTool, ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
+import type { AgentTool, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 
 const record = (value: JsonValue): Record<string, JsonValue> => {
   if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');

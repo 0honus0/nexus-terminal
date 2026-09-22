@@ -1,10 +1,8 @@
-import { logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import { executionErrorCode, failedToolResult as buildFailedToolResult } from '../execution/execution-errors';
 import {
   GovernedMutationExecutor,
-  type GovernedMutationFailure,
   type GovernedMutationHooks,
 } from '../execution/governed-mutation-executor';
 import { toolLeaseTtlSeconds } from '../execution/tool-lease-policy';

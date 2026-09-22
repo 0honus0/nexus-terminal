@@ -92,7 +92,6 @@
   const hasInvalidDraft = computed(() =>
     fieldGroups.some((group) =>
       group.keys.some((key) => {
-        const raw = draft.value[key] ?? '';
         const parsed = parsedDraftValue(key);
         return parsed === null || parsed < 1;
       }),

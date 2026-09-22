@@ -3,13 +3,7 @@ import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 import { createPluginApi } from './plugin-api';
 import { createProviderApi } from './provider-api';
 import { createArtifactApi } from './artifact-api';
-import type {
-  AgentArtifactRef,
-  AgentEnvelope,
-  AgentHardLimits,
-  AgentSettingsDocument,
-  AgentSettingsView,
-} from './agent-api.types';
+import type { AgentArtifactRef, AgentEnvelope, AgentHardLimits, AgentSettingsView } from './agent-api.types';
 import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
 import type { WorkspaceProfileView } from './workspace-runtime-api';
 

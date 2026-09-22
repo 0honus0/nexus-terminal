@@ -46,23 +46,6 @@ const versionsValue = (value: JsonValue | undefined): Record<string, string> => 
   }
   return result;
 };
-const runnerPluginIdsValue = (value: JsonValue | undefined): string[] => {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 32) throw new Error('TOOL_ARGUMENTS_INVALID');
-  const ids = value.map((pluginId) => {
-    if (
-      typeof pluginId !== 'string' ||
-      !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/.test(pluginId) ||
-      Buffer.byteLength(pluginId, 'utf8') > 128
-    ) {
-      throw new Error('TOOL_ARGUMENTS_INVALID');
-    }
-    return pluginId;
-  });
-  if (new Set(ids).size !== ids.length) throw new Error('TOOL_ARGUMENTS_INVALID');
-  return ids;
-};
-
 const workspaceTarget = (
   cryptoHash: CryptoHashPort,
   input: {

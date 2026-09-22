@@ -1,4 +1,4 @@
-import { agentApi, type AgentReasoningEffort } from '../api/agent-api';
+import type { AgentReasoningEffort } from '../api/agent-api';
 import { agentEvents, type AgentStreamEvent } from '../api/agent-events';
 import { createAgentRunFacade, type AgentRunFacade } from '../runtime/run-facade';
 import type { PluginFrontendAgentRpcMethod, PluginFrontendRunEvent } from './protocol';

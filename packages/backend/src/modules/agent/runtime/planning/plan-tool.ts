@@ -1,7 +1,7 @@
 import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
-import type { AgentTool, ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
+import type { AgentTool, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import { normalizePlanItems, type PlanItem } from './plan.types';
 import type { PlanService } from './plan.service';

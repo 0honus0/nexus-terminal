@@ -365,10 +365,6 @@
   const onTrackPointerCancel = (event: PointerEvent): void => {
     onTrackPointerUp(event);
   };
-  const activeRunProviderName = computed(() => {
-    const providerId = run.value?.definition.model.providerId;
-    return providers.value.find((provider) => provider.id === providerId)?.displayName ?? providerId ?? '';
-  });
   const displayedConnectionIds = computed(() =>
     modelSelectionLocked.value && run.value ? run.value.definition.connectionIds : selectedConnectionIds.value,
   );
@@ -403,13 +399,6 @@
   const activeEnvironment = computed(() =>
     modelSelectionLocked.value ? (run.value?.definition.environment ?? null) : null,
   );
-  const environmentToolDefaults = computed(() => {
-    const versions = settingsView.value?.effectiveSettings.workspaceRuntime.toolVersions ?? {};
-    return Object.entries(versions)
-      .filter(([, config]) => Boolean(config.defaultVersionId))
-      .map(([familyId, config]) => `${familyId}@${config.defaultVersionId}`)
-      .sort();
-  });
   const environmentLabel = computed(() => {
     if (modelSelectionLocked.value) {
       const frozen = activeEnvironment.value;
@@ -480,11 +469,6 @@
     agentSurfaceSession.setReasoningEffort(props.appId, effort);
   };
 
-  const setReasoningIndex = (value: string): void => {
-    const effort = reasoningLevels.value[Number(value)];
-    if (effort) setReasoningEffort(effort);
-  };
-
   const setEnvironmentSelection = (recipeId: string): void => {
     if (modelSelectionLocked.value) return;
     if (recipeId && !enabledEnvironmentRecipes.value.some((recipe) => recipe.id === recipeId)) return;
@@ -520,11 +504,6 @@
 
   const toggleAllConnectionSelections = (): void => {
     setAllConnectionSelections(connectionSelectionState.value !== 'on');
-  };
-
-  const openRunFromHistory = (runId: string): void => {
-    const candidate = threadRuns.value.find((item) => item.id === runId);
-    if (candidate) void openRunDetail(candidate);
   };
 
   const refreshLedger = async (): Promise<void> => {

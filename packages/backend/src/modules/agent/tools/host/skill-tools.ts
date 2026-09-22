@@ -1,6 +1,6 @@
 import type { JsonValue } from '../../agent.types';
 import { MAX_SKILL_SEARCH_RESULTS, type SkillRegistry } from '../../ai/skill-registry';
-import type { AgentTool, ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
+import type { AgentTool, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 

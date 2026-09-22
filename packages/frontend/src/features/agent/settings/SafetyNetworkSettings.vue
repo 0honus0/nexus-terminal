@@ -1,13 +1,10 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
   import { useConnections, type Connection } from '@/features/connections/public';
   import type { TargetDenylistView } from '../api/agent-api';
 
   const props = defineProps<{ denylist: TargetDenylistView; busy: boolean }>();
   const emit = defineEmits<{ save: [connectionIds: number[], reason: string] }>();
-  const { t } = useI18n();
-
   const connectionsStore = useConnections();
   const loadingConnections = ref(false);
   const connectionsResolved = ref(connectionsStore.connections.value.length > 0);

@@ -5,7 +5,6 @@ import type { BrowserSessionBindingAuthority } from './browser-session-binding-a
 import {
   MAX_ID_BYTES,
   TOOL_VERSION,
-  browserToolInteger as integer,
   browserToolObject as object,
   browserToolResult as result,
   browserToolString as string,

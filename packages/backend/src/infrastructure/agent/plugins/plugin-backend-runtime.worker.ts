@@ -29,11 +29,6 @@ type HostSdkResponse =
 
 type HostMessage = HostLifecycleRequest | HostSdkResponse;
 
-type WorkerStorageRequest =
-  | { kind: 'storage.get'; requestId: number; key: string }
-  | { kind: 'storage.put'; requestId: number; key: string; value: JsonValue; expectedVersion: number | null }
-  | { kind: 'storage.delete'; requestId: number; key: string; expectedVersion: number };
-
 type WorkerStorageRequestInput =
   | { kind: 'storage.get'; key: string }
   | { kind: 'storage.put'; key: string; value: JsonValue; expectedVersion: number | null }

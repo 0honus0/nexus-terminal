@@ -13,7 +13,7 @@ import type {
   ResolveRunReconciliationCommand,
   StateCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
-import type { RunBudget, RunStatus } from '../../../../modules/agent/runtime/runs/run.types';
+import type { RunStatus } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';

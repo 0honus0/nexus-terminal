@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { logger } from '../../../shared/logging/logger';
-import type { ClockPort, JsonValue, Scope } from '../agent.types';
+import type { ClockPort, Scope } from '../agent.types';
 import type { CryptoHashPort } from '../crypto-hash.port';
 import { hashOperation } from '../operation-hash';
 import type { AppLifecycleService } from '../host/app-lifecycle.service';

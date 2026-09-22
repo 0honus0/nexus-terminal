@@ -3,7 +3,6 @@ import type {
   PersistedProviderModelConfig,
   PersistedProviderView,
   ProviderModelCapabilityObservation,
-  ProviderModelConfig,
   ProviderView,
 } from './model.types';
 
