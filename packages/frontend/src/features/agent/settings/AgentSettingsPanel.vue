@@ -76,8 +76,8 @@
       setTimeout(() => {
         copiedKey.value = false;
       }, 1800);
-    } catch {
-      // ignore
+    } catch (cause) {
+      operationFeedback.notifyError({ operation: 'copy-publisher-key', message: message(cause), cause });
     }
   };
 
