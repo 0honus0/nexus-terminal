@@ -1077,6 +1077,46 @@ const definedMigrations: Migration[] = [
               AND json_extract(result_json, '$.semantic') IS NULL;
         `,
   },
+  {
+    id: 45,
+    name: 'Canonicalize legacy machine inspection targets as SSH',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_tool_calls')) && (await tableExists(db, 'agent_approvals')),
+    sql: `
+            UPDATE agent_tool_calls
+            SET inspection_json = json_set(
+              inspection_json,
+              '$.target.kind', 'ssh',
+              '$.target.target', 'ssh',
+              '$.target.id', COALESCE(
+                json_extract(inspection_json, '$.target.id'),
+                CAST(json_extract(inspection_json, '$.normalizedArguments.connectionId') AS TEXT)
+              )
+            )
+            WHERE json_extract(inspection_json, '$.target.kind') = 'machine'
+              AND COALESCE(
+                json_extract(inspection_json, '$.target.id'),
+                CAST(json_extract(inspection_json, '$.normalizedArguments.connectionId') AS TEXT)
+              ) IS NOT NULL;
+
+            UPDATE agent_approvals
+            SET inspection_json = json_set(
+              inspection_json,
+              '$.target.kind', 'ssh',
+              '$.target.target', 'ssh',
+              '$.target.id', COALESCE(
+                json_extract(inspection_json, '$.target.id'),
+                CAST(json_extract(inspection_json, '$.normalizedArguments.connectionId') AS TEXT)
+              )
+            )
+            WHERE inspection_json IS NOT NULL
+              AND json_extract(inspection_json, '$.target.kind') = 'machine'
+              AND COALESCE(
+                json_extract(inspection_json, '$.target.id'),
+                CAST(json_extract(inspection_json, '$.normalizedArguments.connectionId') AS TEXT)
+              ) IS NOT NULL;
+        `,
+  },
 ];
 
 /**
