@@ -14,7 +14,7 @@
   import ApprovalCard from './ApprovalCard.vue';
   import WorkspaceRuntimePanel from './WorkspaceRuntimePanel.vue';
   import SubagentTree from './SubagentTree.vue';
-  import ToolTimeline from './ToolTimeline.vue';
+  import ApprovalTimeline from './ApprovalTimeline.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -343,7 +343,7 @@
         </section>
 
         <!-- 审批时间线 -->
-        <ToolTimeline
+        <ApprovalTimeline
           v-if="detailApprovals.some((item) => item.status === 'requested')"
           class="rounded-xl border border-border/70 bg-card p-3"
           :approvals="detailApprovals.filter((item) => item.status === 'requested')"
@@ -359,7 +359,7 @@
           <summary class="cursor-pointer text-[11px] font-medium text-text-secondary hover:text-foreground">
             {{ $t('agent.ui.approvalHistory') }}
           </summary>
-          <ToolTimeline
+          <ApprovalTimeline
             class="mt-2"
             :approvals="detailApprovals.filter((item) => item.status !== 'requested')"
             :clock="detailApprovalClock"
