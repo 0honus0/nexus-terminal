@@ -1235,21 +1235,31 @@
     const requestGeneration = ++detailOpenGeneration;
     detailSubagentsGeneration += 1;
     subagentMessagesGeneration += 1;
+    const auxiliary = Promise.allSettled([
+      facade.listCheckpoints(candidate.id),
+      facade.listApprovals(candidate.id),
+      facade.listSubagents(candidate.id),
+    ]);
     try {
-      const [snapshot, checkpoints, detailApprovals, subagents] = await Promise.all([
-        facade.getRun(candidate.id),
-        facade.listCheckpoints(candidate.id),
-        facade.listApprovals(candidate.id),
-        facade.listSubagents(candidate.id),
-      ]);
+      const snapshot = await facade.getRun(candidate.id);
       if (requestGeneration !== detailOpenGeneration) return;
       detailSnapshot.value = snapshot;
-      detailCheckpoints.value = checkpoints;
-      detailApprovalBatch.value = detailApprovals;
-      detailSubagents.value = subagents.items;
+      detailCheckpoints.value = [];
+      detailApprovalBatch.value = null;
+      detailSubagents.value = [];
       selectedSubagentId.value = null;
       detailSubagentMessages.value = [];
       detailVisible.value = true;
+
+      const [checkpoints, detailApprovals, subagents] = await auxiliary;
+      if (requestGeneration !== detailOpenGeneration || detailSnapshot.value?.id !== candidate.id) return;
+      if (checkpoints.status === 'fulfilled') detailCheckpoints.value = checkpoints.value;
+      if (detailApprovals.status === 'fulfilled') detailApprovalBatch.value = detailApprovals.value;
+      if (subagents.status === 'fulfilled') detailSubagents.value = subagents.value.items;
+      const failure = [checkpoints, detailApprovals, subagents].find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      if (failure) error.value = explain(failure.reason);
     } catch (cause) {
       if (requestGeneration !== detailOpenGeneration) return;
       error.value = explain(cause);
