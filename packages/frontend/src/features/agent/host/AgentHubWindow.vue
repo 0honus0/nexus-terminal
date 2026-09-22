@@ -556,25 +556,30 @@
     </header>
 
     <div class="min-h-0 flex-1 bg-background">
-      <ArtifactLibraryView v-if="state.hubView === 'files'" :apps="summary.apps" />
-      <AgentAppSurface
-        v-else-if="activeApp?.surface === 'agent'"
-        :key="`${activeApp.id}@${activeApp.version}`"
-        :app-id="activeApp.id"
-        :default-approval-mode="activeApp.defaultApprovalMode"
-      />
-      <PluginAppFrame
-        v-else-if="activeApp?.surface === 'custom'"
-        :key="`${activeApp.id}@${activeApp.version}`"
-        :app-id="activeApp.id"
-      />
+      <KeepAlive>
+        <ArtifactLibraryView v-if="state.hubView === 'files'" :apps="summary.apps" />
+        <AgentAppSurface
+          v-else-if="activeApp?.surface === 'agent'"
+          :key="`${activeApp.id}@${activeApp.version}`"
+          :app-id="activeApp.id"
+          :default-approval-mode="activeApp.defaultApprovalMode"
+        />
+        <PluginAppFrame
+          v-else-if="activeApp?.surface === 'custom'"
+          :key="`${activeApp.id}@${activeApp.version}`"
+          :app-id="activeApp.id"
+        />
+      </KeepAlive>
       <div
-        v-else-if="activeApp"
+        v-if="state.hubView !== 'files' && activeApp && !['agent', 'custom'].includes(activeApp.surface)"
         class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary"
       >
         {{ $t('agent.hub.noSurface') }}
       </div>
-      <div v-else class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary">
+      <div
+        v-else-if="state.hubView !== 'files' && !activeApp"
+        class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary"
+      >
         {{ $t('agent.hub.chooseApp') }}
       </div>
     </div>

@@ -680,7 +680,12 @@
             'Agent UI run event received',
           );
         }
-        if (event.type === 'transport.disconnected') resetStreamingPresentation();
+        if (event.type === 'transport.disconnected') {
+          logger.debug(
+            { appId: props.appId, runId: initial.id, threadId: initial.threadId },
+            'Agent UI retaining partial stream presentation across transport reconnect',
+          );
+        }
         if (event.type === 'model.retrying') {
           if (streamingAttempt.value?.attemptId === event.payload.previousAttemptId) {
             activateStreamingAttempt(event.payload.attemptId, event.payload.attemptIndex);
@@ -740,7 +745,6 @@
         }
       },
       onError: (cause) => {
-        resetStreamingPresentation();
         logger.warn(
           { appId: props.appId, runId: initial.id, threadId: initial.threadId, err: cause },
           'Agent UI run stream failed',
