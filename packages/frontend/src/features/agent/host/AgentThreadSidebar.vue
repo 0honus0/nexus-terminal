@@ -33,6 +33,7 @@
   const scrollTop = ref(0);
   const viewportHeight = ref(0);
   const THREAD_ROW_BASE_HEIGHT = 45;
+  const THREAD_ROW_GAP = 2; // the wrapper's `mb-0.5`
   const THREAD_PAGE_MIN = 12;
   const THREAD_PAGE_MAX = 100;
   const THREAD_OVERSCAN = 6;
@@ -69,9 +70,23 @@
   const canZoomIn = computed(() => scale.value < SCALE_MAX);
   const canZoomOut = computed(() => scale.value > SCALE_MIN);
   const canResetZoom = computed(() => scale.value !== SCALE_DEFAULT);
-  // §7.13-d：字号 / 内边距全部由 `--agent-thread-scale` 驱动（见 scoped 样式），
-  // 只有虚拟列表需要的行高仍在 JS 里算。
-  const rowHeight = computed(() => Math.round(THREAD_ROW_BASE_HEIGHT * scale.value));
+  /*
+   * §7.13-d：字号 / 内边距全部由 `--agent-thread-scale` 驱动（见 scoped 样式）；
+   * §2.8：虚拟列表的行高以前是 `45 × scale` 的手算常量 —— CSS 改了字号/内边距、或用户停在
+   * 非默认缩放档时，占位高度与实际行高就会各说各话，滚动位置随之漂移。
+   * 现在改量一个复用同一组 class 的**隐藏探针行**：CSS 写什么就跟着走，占位与窗口都自洽。
+   */
+  const rowProbe = ref<HTMLElement | null>(null);
+  const measuredRowHeight = ref<number | null>(null);
+  const rowHeight = computed(() => measuredRowHeight.value ?? Math.round(THREAD_ROW_BASE_HEIGHT * scale.value));
+  const measureRowHeight = (): void => {
+    const probe = rowProbe.value;
+    if (!probe) return;
+    const measured = probe.getBoundingClientRect().height + THREAD_ROW_GAP;
+    if (!Number.isFinite(measured) || measured < 24 || measured > 160) return;
+    if (measuredRowHeight.value !== null && Math.abs(measuredRowHeight.value - measured) < 0.05) return;
+    measuredRowHeight.value = measured;
+  };
   const pageSize = computed(() => {
     const visibleRows = viewportHeight.value > 0 ? Math.ceil(viewportHeight.value / rowHeight.value) : THREAD_PAGE_MIN;
     return Math.min(THREAD_PAGE_MAX, Math.max(THREAD_PAGE_MIN, visibleRows + THREAD_OVERSCAN * 2));
@@ -148,6 +163,7 @@
     scale.value = clamped;
     persistScale();
     void nextTick(() => {
+      measureRowHeight();
       if (element) element.scrollTop = anchorRow * rowHeight.value;
       syncMetrics();
       maybeLoadMore();
@@ -177,8 +193,23 @@
     if (scroller.value) scroller.value.scrollTop = 0;
   });
   watch(pageSize, (value) => emit('pageSize', value), { immediate: true });
+  let rowProbeObserver: ResizeObserver | null = null;
+  const observeRowProbe = (element: HTMLElement | null): void => {
+    rowProbeObserver?.disconnect();
+    rowProbeObserver = null;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    // `box: 'border-box'` matters: padding-only changes (the `6px * scale` padding above) leave the content
+    // box untouched, so the default content-box observation would silently miss them.
+    rowProbeObserver = new ResizeObserver(() => measureRowHeight());
+    rowProbeObserver.observe(element, { box: 'border-box' });
+    measureRowHeight();
+  };
+  // The probe only exists once the first page of threads arrives, so bind the observer to the ref itself.
+  watch(rowProbe, (element) => observeRowProbe(element), { flush: 'post' });
+
   onMounted(() => {
     syncMetrics();
+    measureRowHeight();
     if (scroller.value && typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => {
         syncMetrics();
@@ -187,7 +218,10 @@
       resizeObserver.observe(scroller.value);
     }
   });
-  onBeforeUnmount(() => resizeObserver?.disconnect());
+  onBeforeUnmount(() => {
+    resizeObserver?.disconnect();
+    rowProbeObserver?.disconnect();
+  });
   defineExpose({ resetScroll });
 </script>
 
@@ -330,6 +364,20 @@
       @scroll.passive="onScroll"
       @wheel="onWheel"
     >
+      <div v-if="threads.length" class="h-0 overflow-hidden" aria-hidden="true">
+        <div ref="rowProbe" class="agent-thread-row flex w-full items-center gap-2 rounded-lg px-2 pr-8 text-left">
+          <span class="relative mt-px flex h-4 w-3 shrink-0 items-center justify-center">
+            <span class="h-1.5 w-1.5 rounded-full"></span>
+          </span>
+          <div class="min-w-0 flex-1">
+            <span class="agent-thread-title block truncate leading-[1.35] tracking-[-0.012em]">Ag</span>
+            <div class="agent-thread-meta mt-0.5 flex items-center justify-between gap-1.5">
+              <span class="truncate font-mono">#000000</span>
+              <span class="shrink-0 tabular-nums">00:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div
         v-if="windowedThreads.topSpacer > 0"
         :style="{ height: `${windowedThreads.topSpacer}px` }"

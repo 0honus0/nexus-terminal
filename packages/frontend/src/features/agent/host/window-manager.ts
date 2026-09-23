@@ -31,6 +31,9 @@ const MIN_WIDTH = 560;
  * readable rows even before the short-window composer compaction kicks in.
  */
 const MIN_HEIGHT = 480;
+// §2.8: the launcher's home position. Dragging it away is now an explicit long press, and this
+// constant is what the "reset position" entry restores to (see AgentLauncher.vue).
+const DEFAULT_LAUNCHER_POSITION = { right: 22, bottom: 24 } as const;
 
 const state = reactive<AgentHubState>({
   status: 'closed',
@@ -39,7 +42,7 @@ const state = reactive<AgentHubState>({
   activeAppId: null,
   recentAppIds: [],
   hubView: 'conversation',
-  launcherPosition: { right: 22, bottom: 24 },
+  launcherPosition: { ...DEFAULT_LAUNCHER_POSITION },
   threadSidebarVisible: true,
   taskRailVisible: false,
 });
@@ -142,12 +145,18 @@ export const agentWindowManager = {
     state.taskRailVisible = visible;
     logger.debug({ visible, ...logContext() }, 'Agent floating window task rail toggled');
   },
+  // §2.8: the home position that the launcher's "reset position" entry (and right-click)
+  // restores — dragging is an explicit long press now, see AgentLauncher.vue.
+  defaultLauncherPosition: { right: DEFAULT_LAUNCHER_POSITION.right, bottom: DEFAULT_LAUNCHER_POSITION.bottom },
   setLauncherPosition(position: { right: number; bottom: number }): void {
     const screen = viewport();
     state.launcherPosition = {
       right: Math.max(12, Math.min(position.right, Math.max(12, screen.width - 72))),
       bottom: Math.max(12, Math.min(position.bottom, Math.max(12, screen.height - 72))),
     };
+  },
+  resetLauncherPosition(): void {
+    agentWindowManager.setLauncherPosition({ ...DEFAULT_LAUNCHER_POSITION });
   },
   restoreForUser(userId: number): void {
     try {

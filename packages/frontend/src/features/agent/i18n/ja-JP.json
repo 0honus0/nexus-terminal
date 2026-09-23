@@ -983,7 +983,10 @@
       "modelNotSet": "未設定"
     },
     "launcher": {
-      "open": "Agent を開く"
+      "open": "Agent を開く",
+      "dragHint": "長押しで移動・右クリックで位置をリセット",
+      "reset": "位置をリセット",
+      "resetHint": "右下の既定位置に戻します"
     },
     "hub": {
       "title": "Agent",

@@ -983,7 +983,10 @@
       "modelNotSet": "Not set"
     },
     "launcher": {
-      "open": "Open Agent"
+      "open": "Open Agent",
+      "dragHint": "Press and hold to move · right-click to reset",
+      "reset": "Reset position",
+      "resetHint": "Restore the default bottom-right position"
     },
     "hub": {
       "title": "Agent",

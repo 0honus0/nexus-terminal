@@ -983,7 +983,10 @@
       "modelNotSet": "未设置"
     },
     "launcher": {
-      "open": "打开 Agent"
+      "open": "打开 Agent",
+      "dragHint": "长按可拖动，右键还原位置",
+      "reset": "重置位置",
+      "resetHint": "还原到右下角默认位置"
     },
     "hub": {
       "title": "Agent",
