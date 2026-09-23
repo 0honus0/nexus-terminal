@@ -244,18 +244,13 @@
       props.summary.totalRunningRuns + props.summary.totalPendingApprovals + props.summary.totalPendingBudgetRequests,
   );
 
-  const flashWindow = ref(false);
-  let flashTimer: ReturnType<typeof setTimeout> | null = null;
   let surfacePreloadHandle: number | ReturnType<typeof setTimeout> | null = null;
   let surfacePreloadUsesIdleCallback = false;
 
-  const handleBackdropPointerDown = () => {
-    flashWindow.value = true;
-    if (flashTimer) clearTimeout(flashTimer);
-    flashTimer = setTimeout(() => {
-      flashWindow.value = false;
-    }, 400);
-  };
+  // The Hub is modal by design: while it is open the background app is inert,
+  // so the backdrop must keep absorbing pointer/wheel/touch. Clicking outside
+  // the window intentionally does nothing (no close, no minimize, no flash).
+  const absorbBackdropPointer = () => {};
 
   // 全局交互单例清理，确保没有残留监听器导致拖拽死锁或互踩
   let activeInteractionCleanup: (() => void) | null = null;
@@ -505,7 +500,6 @@
     window.removeEventListener('resize', handleResize);
     document.removeEventListener('focusin', handleDocumentFocusIn, true);
     document.removeEventListener('keydown', handleDocumentKeydown, true);
-    if (flashTimer) clearTimeout(flashTimer);
     if (surfacePreloadHandle !== null) {
       if (surfacePreloadUsesIdleCallback && 'cancelIdleCallback' in window) {
         window.cancelIdleCallback(surfacePreloadHandle as number);
@@ -529,7 +523,7 @@
       v-if="visible"
       class="agent-hub-backdrop fixed inset-0 z-40"
       aria-hidden="true"
-      @pointerdown.stop="handleBackdropPointerDown"
+      @pointerdown.stop="absorbBackdropPointer"
       @wheel.prevent
       @touchmove.prevent
     />
@@ -543,7 +537,6 @@
     aria-modal="true"
     tabindex="-1"
     class="agent-hub-window fixed z-50 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl transition-[box-shadow,transform] duration-150"
-    :class="flashWindow ? 'ring-2 ring-primary/60 scale-[1.002]' : ''"
     :style="style"
     :aria-label="$t('agent.hub.title')"
     @keydown="handleHubKeydown"

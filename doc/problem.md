@@ -34,7 +34,7 @@
 | **P0 · ✅ 已关闭 2026-09-23**         | Agent Hub 模态边界已闭环：打开聚焦 Hub、背景 `#app.inert=true`、Tab/Shift+Tab 限制在 Hub 与 Hub-owned portal、Escape 关闭、关闭后焦点回 Launcher                                                                                                                                                                                                                                     | `host/AgentHubWindow.vue`（CDP 复验见 §7.13-c）                                                               |
 | **P0 · ✅ 已关闭 2026-09-23**         | 玻璃层已固化为唯一 `.glass-surface`：token-based 半透明 fill + blur(16px) + 弱边框/阴影；Gallery CDP 实测 alpha≈0.7544                                                                                                                                                                                                                                                               | `app/styles/global.css`、`foundation/ui/UiPopover.vue`（见 §7.1）                                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | **默认模型选择框「文字背景 ≠ 框背景」已关闭**：`UiCombobox` 输入框不再被全局未分层表单规则涂成纯白，trigger / panel / 输入区共用同一 glass fill                                                                                                                                                                                                                                      | `foundation/ui/uiGen2.css`（见 §7.18）                                                                        |
-| P1                                    | 「模态遮罩 + 浮动窗口」定位自相矛盾：Hub 打开时整个应用不可操作，无法一边看 SSH 终端一边让 Agent 干活                                                                                                                                                                                                                                                                                | `host/AgentHubWindow.vue:341-344`                                                                             |
+| **✅ 已确认保留模态 2026-09-23**      | 「模态遮罩 + 浮动窗口」经产品确认是**有意设计**（背景不可交互，避免两边操作冲突；使用 Hub 时不需要同时看终端）；遮罩点击已收敛为真正 no-op，不再有 400ms「闪烁」                                                                                                                                                                                                                     | `host/AgentHubWindow.vue`（见 §2.1、§2.2）                                                                    |
 | P1                                    | 字号普遍在 8–11px（563 处），CJK 环境下可读性差；大量点击目标仅 20–28px                                                                                                                                                                                                                                                                                                              | `features/agent/**`（见 §2.3、§2.4）                                                                          |
 | P1                                    | 硬编码调色板（emerald/sky/amber/blue/purple/pink/indigo + 硬编码 rgba 阴影）绕开主题 token，切主题后视觉不可控                                                                                                                                                                                                                                                                       | `ai/AgentConversation.vue:127-152`、`host/AgentAppSurface.vue`                                                |
 | P1                                    | 设置区控件风格分裂：同一个「主操作按钮」有 6 套写法、5 档圆角，添加/移除模型用原生 checkbox 与 11px 纯文字按钮                                                                                                                                                                                                                                                                       | `features/agent/settings/**`（见 §6.2、§6.3）                                                                 |
@@ -275,7 +275,11 @@ GET /runs/7aefe2fb-…/approvals  500
 
 > 第二轮（主界面布局/细节、设置区与主界面的落差、用户实测反馈）见 §6 与 §7。
 
-### 2.1 「模态遮罩 + 浮动窗口」定位矛盾（P1，产品级）
+### 2.1 「模态遮罩 + 浮动窗口」定位矛盾（✅ 已确认保留模态 2026-09-23，非缺陷）
+
+> **产品决策（2026-09-23，用户确认）**：Agent Hub **保持模态**，背景必须不可交互。理由是"两边同时可交互会互相冲突"，且该场景下用户不需要同时看终端。
+> 因此本条从"P1 缺陷"改判为**有意设计**；`aria-modal="true"` + 背景 `inert` + 遮罩吸收指针/滚轮/触摸都是预期行为，不改为非模态、也不做 docking。
+> 三段式"浮窗外部形态（可移动/缩放/最小化）"作为窗口隐喻继续保留；本轮不引入"全屏工作台"改造。
 
 `host/AgentHubWindow.vue:341-353`：
 
@@ -294,18 +298,22 @@ GET /runs/7aefe2fb-…/approvals  500
 - 遮罩本身拦截 `wheel` / `touchmove`，且滚轮/触摸被 `prevent`；
 - 但文档与实现又都按"浮窗"描述（可移动、可缩放、可最小化、geometry 持久化）。
 
-对用户的直接后果：Agent 正在跑、正在等审批时，用户**无法同时查看 SSH 终端 / 文件管理器 / Dashboard** 来核对 Agent 的说法，只能关掉 Hub（关掉会保留 Run，但会失去当前界面）。这与"终端工具里的智能执行层"产品定位冲突最大。
+~~对用户的直接后果：Agent 正在跑、正在等审批时，用户无法同时查看 SSH 终端 / 文件管理器 / Dashboard……~~
+→ **已按上述决策接受**：使用 Hub 期间不并行操作主界面；关闭 Hub 不丢 Run，回来即可继续。
 
-建议方向（择一，需产品决策）：
+（以下为当时的候选方向，现已按"保留模态"收敛，仅作记录：）
 
 1. 改为**非模态**（去掉全屏 backdrop，浮窗与主界面并存，点击外部只失焦不遮挡交互）；
 2. 或保留模态，但增加 **docking / 半屏 / 侧栏** 形态，至少让用户能把 Hub 靠边并保留一部分主界面可见；
 3. 若坚持模态，就不要同时暴露"移动/缩放"的窗口隐喻，统一成"全屏工作台"。
 
-### 2.2 遮罩点击行为反直觉（P2）
+### 2.2 遮罩点击行为反直觉（P2 · ✅ 已关闭 2026-09-23）
 
 `host/AgentHubWindow.vue:72-80`、`:355`：点击遮罩不关闭、不最小化，而是给窗口加 400ms 的 `ring + scale(1.002)` 「闪烁」反馈。
 用户预期是「点击外部 = 关闭/最小化」或「完全无反应」；"闪一下"既没有说明也没有后续动作，属于需要解释的隐藏交互。
+
+> ✅ **2026-09-23 闭环**：结合 §2.1 的"保留模态"决策，遮罩点击收敛为**真正的 no-op**——移除了 `flashWindow` / `flashTimer` 与窗口上的 `ring-2 ring-primary/60 scale-[1.002]`，遮罩只保留 `@pointerdown.stop` + `@wheel.prevent` + `@touchmove.prevent`（继续吸收背景事件，保证"不要交互"）。
+> CDP 复验：在 Hub 打开时点击导航栏处遮罩 `(150,25)`，`#app.inert` 仍为 `true`、Hub 仍打开、URL 不变、窗口 `class`/几何均无变化（不再出现 400ms 闪烁）。
 
 ### 2.3 字号与可读性（P1）
 
