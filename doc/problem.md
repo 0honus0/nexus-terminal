@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -1913,6 +1913,37 @@ Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
 - 门禁：`all templates compile` + `vue-tsc --noEmit` exit 0 + `prettier --check` 通过；
 - 截图：`/tmp/shots/refresh-after-disable.png`、`/tmp/shots/refresh-after-enable.png`；
 - **未覆盖**：跨标签页（在另一个浏览器 tab 改 provider）仍不推送 —— `host-changed` 的 BroadcastChannel 只同步 host summary。
+
+### 7.23 玻璃配方上收到 Gen2 通用层（P1 残留 · ✅ 已关闭 2026-09-23）
+
+**背景**：§7.21 把 Hub 模型弹层的观感改回来了，但那份配方当时写在 `files/AgentConfigPopover.vue` 的 class 串里；
+同一份配方在仓库里存在**三处**：`global.css` 的 `.glass-surface`（Gen2 popover / combobox / select / dialog / gallery 都用它）、
+`uiGen2.css` 里 combobox 展开态 anchor 的复制品、以及 Agent 弹层自己手写的 utilities。用户要求"做成通用组件"。
+
+**改法**
+
+- 配方收敛到 `app/styles/global.css` 的 `@layer components`，并拆成可覆写的自定义属性（`:root`）：
+  `--glass-fill` / `--glass-backdrop-filter` / `--glass-border-color` / `--glass-inset-highlight` / `--glass-shadow`；
+  `.glass-surface` 只引用这些 token，取值就是 §7.21 的结论（无底色 + `blur(6px)` + 细边框 + 柔和投影）；
+- `files/AgentConfigPopover.vue` 面板不再手写 `border` / `backdrop-blur-*` / `shadow-*` / `ring-*`，改为 `glass-surface` + 布局类；
+- `uiGen2.css` 里 combobox 展开态的 anchor 删掉配方复制品，改为引用同一组 token（只保留圆角拼接与焦点环）；
+- 组件形态的入口是既有的 `UiSurface surface="glass"`（渲染 `.glass-surface`），自定义面板直接挂 class。
+
+**影响面（全仓 glass 消费者）**：`UiPopover` / `UiCombobox`（面板 + 展开态 anchor）/ `UiSelect` / `UiDialog(surface=glass)` /
+`UiButton(appearance=glass)` / `UiSurface(surface=glass)`。实际页面用到的是设置区「添加备用模型」菜单、会话侧栏的 `UiPopover`、
+设置区默认模型的 `UiCombobox`，其余只在 UI Gallery 出现。
+
+**CDP 复验**
+
+- Hub 模型弹层：`class="glass-surface …"`，`background rgba(0,0,0,0)`、`backdrop-filter blur(6px)`、
+  `border 1px color(srgb .8 .8 .8 / .6)`、`radius 16px`（与 §7.21 手写版逐项一致）；
+- 设置区默认模型 combobox 展开态：anchor 与 panel 计算值**逐项相同**（都是 `rgba(0,0,0,0)` + `blur(6px)` + 同一边框色），
+  §7.6 记录的"trigger / panel 背景断层"从此在结构上不会再出现；
+- 门禁：`all templates compile` + `vue-tsc --noEmit` exit 0 + `prettier --check`；
+- 截图：`/tmp/shots/glass-shared-hub.png`、`/tmp/shots/combobox-panel.png`。
+
+**提醒（未覆盖）**：`.glass-surface` 现在没有底色，浮在深色 / 复杂内容之上的 glass 表面（例如将来把 `UiDialog` 设成 `glass`）
+会牺牲可读性；`UiGalleryPage` 的 glass 样例与 `UiButton appearance="glass"` 未逐个目视，只在 gallery 出现。
 
 ---
 

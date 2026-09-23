@@ -1087,16 +1087,19 @@
   --input-disabled-border-color: transparent;
 }
 
+/*
+ * The open trigger borrows the canonical glass recipe (app/styles/global.css)
+ * so the control and the panel that it opens read as one surface. Only the
+ * geometry and the focus ring stay local.
+ */
 .ui-combobox[data-state='open'] .ui-combobox__anchor {
   border-bottom-right-radius: 0;
   border-bottom-left-radius: 0;
-  border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
-  background-color: color-mix(in srgb, var(--color-card) 82%, transparent);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  box-shadow:
-    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 7%, transparent),
-    var(--ui-focus-ring);
+  border-color: var(--glass-border-color);
+  background-color: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-backdrop-filter);
+  backdrop-filter: var(--glass-backdrop-filter);
+  box-shadow: var(--glass-inset-highlight), var(--ui-focus-ring);
 }
 
 .ui-combobox__search-icon {

@@ -186,18 +186,27 @@ button.bg-error .fab {
 
 @layer components {
   /*
-   * Single entry point for the translucent "glass" surfaces used by Agent
-   * popovers and cards. Keeps the recipe (fill + blur + ring + shadow) in one
-   * place instead of repeating utilities per component.
+   * Canonical glass recipe — the single source of truth for every translucent
+   * surface: Agent popovers (files/AgentConfigPopover.vue), Gen2 popover /
+   * combobox / select / dialog and the UI gallery samples. Components opt in
+   * with the class; nothing repeats fill / blur / border / shadow by hand.
+   * See doc/problem.md 7.21 and 7.23.
    */
-  .glass-surface {
-    background-color: color-mix(in srgb, var(--color-card) 82%, transparent);
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-    border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-    box-shadow:
-      inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 7%, transparent),
-      0 0 0 1px color-mix(in srgb, var(--border-color) 35%, transparent),
+  :root {
+    --glass-fill: transparent;
+    --glass-backdrop-filter: blur(6px);
+    --glass-border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
+    --glass-inset-highlight: inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 7%, transparent);
+    --glass-shadow:
+      var(--glass-inset-highlight), 0 0 0 1px color-mix(in srgb, var(--border-color) 35%, transparent),
       0 24px 48px -24px color-mix(in srgb, var(--text-color) 32%, transparent);
+  }
+
+  .glass-surface {
+    background-color: var(--glass-fill);
+    -webkit-backdrop-filter: var(--glass-backdrop-filter);
+    backdrop-filter: var(--glass-backdrop-filter);
+    border: 1px solid var(--glass-border-color);
+    box-shadow: var(--glass-shadow);
   }
 }
