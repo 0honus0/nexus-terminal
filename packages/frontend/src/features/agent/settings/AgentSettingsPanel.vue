@@ -654,29 +654,37 @@
           </div>
 
           <!-- 关键指标快照：无需额外概览 Tab，直接在此处呈现关键摘要 -->
-          <div v-if="settings" class="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-            <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
-              <span class="opacity-70">{{ $t('agent.settings.summary.defaultModel') }}:</span>
-              <span class="ml-1 font-medium text-foreground">{{ defaultModelName }}</span>
-            </span>
-            <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
-              <span class="opacity-70">{{ $t('agent.settings.summary.activeApps') }}:</span>
-              <span class="ml-1 font-medium text-foreground">{{ enabledApps }}/{{ apps.length }}</span>
-            </span>
-            <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
-              <span class="opacity-70">{{ $t('agent.settings.summary.sandbox') }}:</span>
-              <span
-                class="ml-1 font-medium"
-                :class="workspaceRuntime?.available ? 'text-success' : 'text-text-secondary'"
-              >
-                {{
-                  workspaceRuntime?.available
-                    ? $t('agent.settings.summary.ready')
-                    : $t('agent.settings.summary.notReady')
-                }}
-              </span>
-            </span>
-          </div>
+          <dl v-if="settings" class="agent-settings-summary">
+            <div class="agent-settings-summary__item">
+              <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+              <div>
+                <dt>{{ $t('agent.settings.summary.defaultModel') }}</dt>
+                <dd class="agent-settings-summary__value" :title="defaultModelName">
+                  {{ defaultModelName }}
+                </dd>
+              </div>
+            </div>
+            <div class="agent-settings-summary__item">
+              <i class="fa-solid fa-puzzle-piece" aria-hidden="true"></i>
+              <div>
+                <dt>{{ $t('agent.settings.summary.activeApps') }}</dt>
+                <dd class="agent-settings-summary__value">{{ enabledApps }}/{{ apps.length }}</dd>
+              </div>
+            </div>
+            <div class="agent-settings-summary__item">
+              <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+              <div>
+                <dt>{{ $t('agent.settings.summary.sandbox') }}</dt>
+                <dd class="agent-settings-summary__value" :class="workspaceRuntime?.available ? 'is-ready' : undefined">
+                  {{
+                    workspaceRuntime?.available
+                      ? $t('agent.settings.summary.ready')
+                      : $t('agent.settings.summary.notReady')
+                  }}
+                </dd>
+              </div>
+            </div>
+          </dl>
         </div>
       </header>
 
@@ -1224,6 +1232,61 @@
 
   .agent-settings-item {
     scroll-margin-top: 4.5rem;
+  }
+
+  /*
+   * 头部指标快照。原来是三个「标签: 数值」小方块，标签带冒号、数值跟着跑，
+   * 读起来像调试输出；改成通用统计形态：图标 + 标签/数值两行，整组无框。
+   */
+  .agent-settings-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 18px;
+    margin: 0;
+  }
+
+  .agent-settings-summary__item {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .agent-settings-summary__item > i {
+    display: inline-flex;
+    width: 26px;
+    height: 26px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--text-color) 6%, transparent);
+    color: var(--text-color-secondary);
+    font-size: 11px;
+  }
+
+  .agent-settings-summary dt {
+    font-size: 11px;
+    line-height: 1.2;
+    color: var(--text-color-secondary);
+  }
+
+  /* 模型 id 可以很长（gemini-3.8-flash-high）：让它自己截断，不要把「未就绪」挤到第二行。 */
+  .agent-settings-summary__value {
+    overflow: hidden;
+    max-width: 13rem;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text-color);
+    text-overflow: ellipsis;
+  }
+
+  .agent-settings-summary__value.is-ready {
+    color: var(--status-success-color);
   }
 
   /*
