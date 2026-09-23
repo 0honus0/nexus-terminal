@@ -812,7 +812,7 @@ shadow-2xl ring-1 ring-border/20 outline-none
 12. **滚动体验**：`isNearBottom` 阈值 96px（`ai/AgentConversation.vue:273`），只有"回到最新"按钮、没有"有新消息"横幅；`loadOlder` 按钮固定在列表顶部（`:388-397`），必须滚到顶才出现。
 13. **死 CSS**：`.agent-config-label`、`.agent-run-history`（还带 `display:none`）、`.agent-detail-label`（`host/AgentAppSurface.vue:2612、2648、2692`）、`.agent-budget-meter`、`.agent-budget-bar`（`ai/AgentConversation.vue:820、825`）都已无对应元素。
 
-### 7.6 设置区 vs 主界面：两套弹层实现（P1）
+### 7.6 设置区 vs 主界面：两套弹层实现（P1 · ✅ 已关闭 2026-09-23）
 
 | | 主界面 | 设置区 |
 | --- | --- | --- |
@@ -825,6 +825,8 @@ shadow-2xl ring-1 ring-border/20 outline-none
 | 空态 | — | 硬编码 `未匹配到模型`（`:1053`） |
 
 结论：设置区**已经想要这套玻璃语言**，但缺"组件化、定位、键盘、行结构"四件事，只剩下"更小的圆角 + 不一样的间距"，于是看起来就是"粗版"。把设置区的下拉统一换成 `AgentConfigPopover`（或 §7.1 的 `glass-surface`）是性价比最高的一步。
+
+> ✅ **2026-09-23 闭环**：`ModelProviderSettings` 的默认模型选择器已删除手写 `absolute top-full` / document click 下拉，迁到 Gen2 `UiPopover`（Reka Popover primitive + canonical `.glass-surface`）；Escape / outside dismiss / focus restore / collision 由 Foundation 统一负责。空结果已改为三语 `agent.settings.providers.noMatchingModels`。真实设置页当前无已配置模型，trigger 按设计为 disabled，CDP 实测 `384×36`；同一 `UiPopover` 在 DEV Gallery 实测玻璃 panel `322×202`、alpha≈0.7544、`blur(16px)`、Escape 后焦点归还 trigger。
 
 ### 7.7 视觉佐证（`doc/imgs/e2e/agent-*.png`，2026-09-17 生成）
 
@@ -853,7 +855,7 @@ shadow-2xl ring-1 ring-border/20 outline-none
 | 3 | 助手气泡 / 空态卡片 / 任务栏面板补上真实表面（`bg-card` 家族或改用 `bg-header/xx`） | `ai/ConversationMessage.vue:342`、`ai/AgentConversation.vue:434`、`runtime/TaskRail.vue:182` | P1 |
 | 4 | 「回到最新」移到输入框上方独立一行、右对齐 | `ai/AgentConversation.vue:747-756` | P1 |
 | 5 | 减少 chrome：矮窗口压缩顶栏/composer，提高 `MIN_HEIGHT` | §7.2 | P1 |
-| 6 | 设置区自绘下拉统一换成主界面弹层组件（Escape/焦点/定位/行结构） | `settings/ModelProviderSettings.vue:989` | P1 |
+| 6 | ✅ **已关闭 2026-09-23**：设置区默认模型自绘下拉已迁到 Gen2 `UiPopover`，统一 Escape / 焦点归还 / Portal collision / glass surface | `settings/ModelProviderSettings.vue`、`foundation/ui/UiPopover.vue` | P1 |
 | 7 | 窄窗口侧栏支持折叠；侧栏/任务栏/Hub 视图状态统一持久化 | `host/AgentAppSurface.vue:1543`、`host/window-manager.ts` | P2 |
 | 8 | 空态轮播改静态或显式翻页，pager 命中区 ≥32px | `ai/AgentConversation.vue:429-486` | P2 |
 | 9 | Hub 顶栏毛玻璃被覆盖、窗口阴影写死浅色 | `host/AgentHubWindow.vue:362、606-611、673-680` | P2 |

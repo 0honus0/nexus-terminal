@@ -7,6 +7,22 @@
 
 ---
 
+## ✅ 已解决：设置区默认模型下拉统一到 Gen2 Popover
+
+| 项       | 内容                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------- |
+| 状态     | **已闭环 2026-09-23；静态/构建 + CDP 验收通过**                                          |
+| 对应问题 | `doc/problem.md` §7.6 / §7.9-6（设置区自绘下拉缺 Escape / 焦点 / Portal / 统一玻璃表面） |
+
+- `ModelProviderSettings` 删除手写 `document.click` + `absolute top-full` 下拉，默认模型选择改为 Gen2 `UiPopover`。
+- `UiPopover` 增加 `wrapperClass / triggerClass` 透传，设置页可保持 `w-full` trigger 与现有内容布局；若 Popover 已打开后 `disabled` 变为 true，会通过 guarded `applyOpen(false)` 自动收起并保持 `open-change` 一致。
+- 搜索与模型列表继续保留；空结果从硬编码中文改为 `agent.settings.providers.noMatchingModels`，en-US / ja-JP / zh-CN 已补齐。
+- 真实设置页当前无已配置模型，因此 trigger 按设计为 disabled；CDP 实测 `384×36`、13px、8px radius、`cursor:not-allowed`。
+- 同一 `UiPopover` 在 DEV Gallery CDP 实测：trigger 高 32px；玻璃 panel `322×202`，背景 alpha ≈ `0.7544`、`blur(16px)`、16px radius；Escape 关闭后焦点回 trigger。
+- 最终门禁：`git diff --check`、Prettier、Agent ESLint、frontend `vue-tsc --noEmit`、Vite production build 全部通过。Foundation 目录当前未接 Vue+TS ESLint parser，因此 `UiPopover.vue` 由 Prettier + `vue-tsc` + build 覆盖。
+
+---
+
 ## ✅ 已解决：无效间距 utility + 助手气泡填充 + saveFailed i18n
 
 | 项       | 内容                                                                                                |
@@ -58,7 +74,7 @@
 - `.glass-surface` 成为浮层玻璃表面的单一配方；普通 raised / inset surface 不使用 blur。
 - 旧自定义主题兼容：缺少 `--card-bg-color` 的旧暗色主题会按背景亮度补暗色 card；显式自定义 card 值保持不变。
 - 最终门禁：`git diff --check`、Prettier、frontend `vue-tsc --noEmit`、Vite production build 全部通过。
-- 本轮无法从 Runner / 当前隔离执行环境访问既有 CDP `172.30.31.11:9223`，因此 **Gallery 浏览器实测未执行**；不把该项记为通过。之前 Composer/Agent 的既有 CDP 证据仍保留在下方记录。
+- Foundation 封版当时的隔离执行环境无法直连 CDP；后续已从 Runner 的 `tests/e2e` 环境成功复用 `172.30.31.11:9223`。Gallery `UiPopover` 已补做真实浏览器验收：32px trigger、玻璃 panel alpha≈0.7544 / blur(16px) / 16px radius，Escape 后焦点回 trigger。
 
 ---
 

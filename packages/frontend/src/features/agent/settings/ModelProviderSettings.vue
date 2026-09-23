@@ -1,7 +1,7 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+  import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal } from '@/foundation/ui';
+  import { BaseModal, UiPopover } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import {
@@ -736,7 +736,6 @@
   // 默认模型下拉选择浮层状态
   const defaultDropdownOpen = ref(false);
   const defaultModelSearch = ref('');
-  const defaultDropdownRef = ref<HTMLElement | null>(null);
 
   const selectedDefaultOption = computed(() => {
     if (!props.defaultProviderId || !props.defaultModelId) return null;
@@ -755,12 +754,8 @@
     );
   });
 
-  const toggleDefaultDropdown = () => {
-    if (props.busy || modelOptions.value.length === 0) return;
-    defaultDropdownOpen.value = !defaultDropdownOpen.value;
-    if (defaultDropdownOpen.value) {
-      defaultModelSearch.value = '';
-    }
+  const handleDefaultPopoverChange = (_open: boolean) => {
+    defaultModelSearch.value = '';
   };
 
   const selectDefaultOption = (opt: (typeof modelOptions.value)[number]) => {
@@ -769,21 +764,8 @@
     defaultModelSearch.value = '';
   };
 
-  const handleDocumentClick = (e: MouseEvent) => {
-    if (defaultDropdownOpen.value && defaultDropdownRef.value) {
-      if (!defaultDropdownRef.value.contains(e.target as Node)) {
-        defaultDropdownOpen.value = false;
-      }
-    }
-  };
-
   onMounted(() => {
-    document.addEventListener('click', handleDocumentClick);
     void loadModelRegistryStatus();
-  });
-
-  onBeforeUnmount(() => {
-    document.removeEventListener('click', handleDocumentClick);
   });
 
   // 辅助计算
@@ -958,108 +940,116 @@
           </div>
         </div>
 
-        <div ref="defaultDropdownRef" class="relative min-w-64 max-w-sm">
+        <div class="min-w-64 max-w-sm">
           <!-- 默认模型现代触发器：优先显示模型 ID，渠道作为精致小微徽标排在后面 -->
-          <button
-            type="button"
-            class="flex h-9 w-full items-center justify-between gap-2 rounded-xl border border-border/80 bg-background/95 px-3 text-xs font-medium text-foreground shadow-2xs outline-none transition-all hover:border-border-hover cursor-pointer disabled:opacity-50"
-            :class="{ 'border-primary/60 ring-2 ring-primary/15': defaultDropdownOpen }"
+          <UiPopover
+            v-model:open="defaultDropdownOpen"
             :disabled="busy || modelOptions.length === 0"
-            :aria-label="$t('agent.settings.providers.defaultModel')"
-            @click="toggleDefaultDropdown"
+            :ariaLabel="$t('agent.settings.providers.defaultModel')"
+            align="end"
+            placement="bottom"
+            :offset="6"
+            wrapper-class="w-full"
+            trigger-class="w-full justify-between overflow-hidden px-3 font-medium"
+            density="comfortable"
+            trigger-appearance="soft"
+            trigger-tone="neutral"
+            panel-class="w-[min(360px,calc(100vw-24px))] p-1.5"
+            @open-change="handleDefaultPopoverChange"
           >
-            <div v-if="selectedDefaultOption" class="flex items-center gap-2 min-w-0 overflow-hidden">
-              <i :class="providerIcon(selectedDefaultOption.provider)" class="text-xs shrink-0"></i>
-              <!-- 优先大字显示模型 ID -->
-              <span class="font-mono text-xs font-semibold text-foreground truncate">
-                {{ selectedDefaultOption.model.id }}
-              </span>
-              <!-- 渠道小巧精致徽标，视觉轻量优雅 -->
-              <span
-                class="shrink-0 rounded-md border border-border/60 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium text-text-secondary leading-none"
-              >
-                {{ selectedDefaultOption.provider.displayName }}
-              </span>
-            </div>
-            <div v-else class="text-xs text-text-secondary truncate">
-              {{ $t('agent.settings.providers.chooseDefault') }}
-            </div>
-            <i
-              class="fa-solid fa-chevron-down text-[10px] text-text-secondary transition-transform duration-200 shrink-0"
-              :class="{ 'rotate-180 text-foreground': defaultDropdownOpen }"
-            ></i>
-          </button>
-
-          <!-- 展开后的模型选择面板 -->
-          <div
-            v-if="defaultDropdownOpen"
-            class="absolute right-0 top-full mt-1.5 z-50 w-full min-w-72 max-w-sm rounded-xl border border-border/80 bg-card/98 p-1.5 shadow-xl backdrop-blur-md transition-all"
-          >
-            <!-- 搜索框（当选项多于 3 个时显示） -->
-            <div v-if="modelOptions.length > 3" class="relative mb-1.5 px-1 pt-1">
-              <i
-                class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary/70 pointer-events-none"
-              ></i>
-              <input
-                v-model="defaultModelSearch"
-                type="text"
-                data-no-highlight
-                class="h-7.5 w-full rounded-lg border border-border/70 bg-header/30 pl-7 pr-2.5 text-xs text-foreground placeholder:text-text-secondary/60 outline-none focus:border-border-hover"
-                :placeholder="$t('agent.settings.providers.searchConfiguredModels')"
-                @click.stop
-              />
-            </div>
-
-            <!-- 选项滚动列表 -->
-            <div class="max-h-60 overflow-y-auto space-y-1 pr-0.5">
-              <button
-                v-for="option in filteredDefaultModelOptions"
-                :key="option.key"
-                type="button"
-                class="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-all cursor-pointer"
-                :class="
-                  defaultProviderId === option.provider.id && defaultModelId === option.model.id
-                    ? 'bg-primary/10 text-primary font-semibold border border-primary/20'
-                    : 'text-foreground hover:bg-header/60 border border-transparent'
-                "
-                @click="selectDefaultOption(option)"
-              >
-                <div class="flex items-center gap-2 min-w-0 flex-1">
-                  <i :class="providerIcon(option.provider)" class="text-xs shrink-0"></i>
-                  <!-- 优先突出模型 ID -->
-                  <span
-                    class="font-mono text-xs font-medium truncate"
-                    :class="{
-                      'font-bold': defaultProviderId === option.provider.id && defaultModelId === option.model.id,
-                    }"
-                  >
-                    {{ option.model.id }}
-                  </span>
-                </div>
-
-                <div class="flex items-center gap-1.5 shrink-0">
-                  <!-- 渠道小一点、好看一点 -->
-                  <span
-                    class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
-                    :class="{
-                      'border-primary/30 text-primary/80':
-                        defaultProviderId === option.provider.id && defaultModelId === option.model.id,
-                    }"
-                  >
-                    {{ option.provider.displayName }}
-                  </span>
-                  <i
-                    v-if="defaultProviderId === option.provider.id && defaultModelId === option.model.id"
-                    class="fa-solid fa-check text-xs text-primary ml-0.5"
-                  ></i>
-                </div>
-              </button>
-
-              <div v-if="filteredDefaultModelOptions.length === 0" class="py-4 text-center text-xs text-text-secondary">
-                未匹配到模型
+            <template #trigger="{ open }">
+              <div v-if="selectedDefaultOption" class="flex items-center gap-2 min-w-0 overflow-hidden">
+                <i :class="providerIcon(selectedDefaultOption.provider)" class="text-xs shrink-0"></i>
+                <!-- 优先大字显示模型 ID -->
+                <span class="font-mono text-xs font-semibold text-foreground truncate">
+                  {{ selectedDefaultOption.model.id }}
+                </span>
+                <!-- 渠道小巧精致徽标，视觉轻量优雅 -->
+                <span
+                  class="shrink-0 rounded-md border border-border/60 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium text-text-secondary leading-none"
+                >
+                  {{ selectedDefaultOption.provider.displayName }}
+                </span>
               </div>
-            </div>
-          </div>
+              <div v-else class="text-xs text-text-secondary truncate">
+                {{ $t('agent.settings.providers.chooseDefault') }}
+              </div>
+              <i
+                class="fa-solid fa-chevron-down text-[10px] text-text-secondary transition-transform duration-200 shrink-0"
+                :class="{ 'rotate-180 text-foreground': open }"
+              ></i>
+            </template>
+
+            <template #panel>
+              <!-- 搜索框（当选项多于 3 个时显示） -->
+              <div v-if="modelOptions.length > 3" class="relative mb-1.5 px-1 pt-1">
+                <i
+                  class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary/70 pointer-events-none"
+                ></i>
+                <input
+                  v-model="defaultModelSearch"
+                  type="text"
+                  data-no-highlight
+                  class="h-7.5 w-full rounded-lg border border-border/70 bg-header/30 pl-7 pr-2.5 text-xs text-foreground placeholder:text-text-secondary/60 outline-none focus:border-border-hover"
+                  :placeholder="$t('agent.settings.providers.searchConfiguredModels')"
+                  @click.stop
+                />
+              </div>
+
+              <!-- 选项滚动列表 -->
+              <div class="max-h-60 overflow-y-auto space-y-1 pr-0.5">
+                <button
+                  v-for="option in filteredDefaultModelOptions"
+                  :key="option.key"
+                  type="button"
+                  class="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-all cursor-pointer"
+                  :class="
+                    defaultProviderId === option.provider.id && defaultModelId === option.model.id
+                      ? 'bg-primary/10 text-primary font-semibold border border-primary/20'
+                      : 'text-foreground hover:bg-header/60 border border-transparent'
+                  "
+                  @click="selectDefaultOption(option)"
+                >
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <i :class="providerIcon(option.provider)" class="text-xs shrink-0"></i>
+                    <!-- 优先突出模型 ID -->
+                    <span
+                      class="font-mono text-xs font-medium truncate"
+                      :class="{
+                        'font-bold': defaultProviderId === option.provider.id && defaultModelId === option.model.id,
+                      }"
+                    >
+                      {{ option.model.id }}
+                    </span>
+                  </div>
+
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <!-- 渠道小一点、好看一点 -->
+                    <span
+                      class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
+                      :class="{
+                        'border-primary/30 text-primary/80':
+                          defaultProviderId === option.provider.id && defaultModelId === option.model.id,
+                      }"
+                    >
+                      {{ option.provider.displayName }}
+                    </span>
+                    <i
+                      v-if="defaultProviderId === option.provider.id && defaultModelId === option.model.id"
+                      class="fa-solid fa-check text-xs text-primary ml-0.5"
+                    ></i>
+                  </div>
+                </button>
+
+                <div
+                  v-if="filteredDefaultModelOptions.length === 0"
+                  class="py-4 text-center text-xs text-text-secondary"
+                >
+                  {{ $t('agent.settings.providers.noMatchingModels') }}
+                </div>
+              </div>
+            </template>
+          </UiPopover>
         </div>
       </div>
 

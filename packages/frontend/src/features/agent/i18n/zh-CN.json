@@ -464,6 +464,7 @@
         "testModalBtn": "模型与测试 ({count})",
         "testModalDesc": "测试连接或调整模型能力。",
         "searchConfiguredModels": "搜索已配模型...",
+        "noMatchingModels": "未匹配到模型",
         "testSingle": "测试连通性",
         "autoSaved": "变更已实时保存",
         "saving": "正在保存到服务端...",

@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import UiButton from './UiButton.vue';
   import type { UiAppearance, UiDensity, UiTone } from './uiTypes';
 
@@ -21,6 +21,8 @@
       triggerTone?: UiTone;
       density?: UiDensity;
       iconOnly?: boolean;
+      wrapperClass?: string;
+      triggerClass?: string;
     }>(),
     {
       title: '',
@@ -34,6 +36,8 @@
       triggerTone: 'neutral',
       density: 'default',
       iconOnly: false,
+      wrapperClass: '',
+      triggerClass: '',
     },
   );
 
@@ -62,10 +66,20 @@
   const close = (): void => {
     applyOpen(false);
   };
+
+  // `disabled` must also resolve an already-open popover. Funnelling the
+  // transition through `applyOpen(false)` keeps the model and `open-change`
+  // in sync and preserves the duplicate-emit guard. Enabling never reopens.
+  watch(
+    () => props.disabled,
+    (disabled) => {
+      if (disabled) close();
+    },
+  );
 </script>
 
 <template>
-  <span ref="wrapper" data-ui="popover" data-ui-gen="2" class="ui-popover">
+  <span ref="wrapper" data-ui="popover" data-ui-gen="2" class="ui-popover" :class="props.wrapperClass">
     <PopoverRoot :open="model" :modal="false" @update:open="applyOpen">
       <PopoverTrigger as-child>
         <UiButton
@@ -76,6 +90,7 @@
           :disabled="props.disabled"
           :aria-label="props.ariaLabel"
           :title="props.title || undefined"
+          :class="props.triggerClass"
         >
           <slot name="trigger" :open="model" />
         </UiButton>

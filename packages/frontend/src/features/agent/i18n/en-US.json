@@ -464,6 +464,7 @@
         "testModalBtn": "Models & test ({count})",
         "testModalDesc": "Test connections or adjust model capabilities.",
         "searchConfiguredModels": "Filter configured models...",
+        "noMatchingModels": "No matching models",
         "testSingle": "Test connection",
         "autoSaved": "Changes saved automatically",
         "saving": "Saving to server...",
