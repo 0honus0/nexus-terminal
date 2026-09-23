@@ -82,6 +82,7 @@
     if (!element.isConnected || element.hasAttribute('disabled') || element.getAttribute('aria-hidden') === 'true') {
       return false;
     }
+    if (!element.matches(FOCUSABLE_SELECTOR)) return false;
     if (element.closest('[inert]')) return false;
     const style = window.getComputedStyle(element);
     if (style.display === 'none' || style.visibility === 'hidden') return false;
