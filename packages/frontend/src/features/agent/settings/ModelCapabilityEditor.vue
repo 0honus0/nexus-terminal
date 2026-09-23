@@ -1,9 +1,10 @@
 <script setup lang="ts">
   import { computed, reactive, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton, UiCheckbox } from '@/foundation/ui';
+  import { BaseModal, UiButton, UiCheckbox, UiSelect } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import type { AgentProviderViewDto, AgentReasoningEffortDto } from '../api/agent-api';
+  import { NONE_OPTION } from './pick-option';
 
   type AgentProviderModelDto = AgentProviderViewDto['models'][number];
   type CapabilityField =
@@ -34,6 +35,19 @@
     'xhigh',
     'max',
   ];
+  const defaultReasoningEffortOptions = computed(() => [
+    { value: NONE_OPTION, label: t('agent.settings.providers.reasoningNoDefault') },
+    ...capabilityForm.reasoningEfforts.map((effort) => ({ value: effort, label: effort })),
+  ]);
+  const setDefaultReasoningEffort = (value: unknown): void => {
+    if (value === NONE_OPTION) {
+      capabilityForm.defaultReasoningEffort = '';
+      return;
+    }
+    const matched = capabilityForm.reasoningEfforts.find((effort) => effort === value);
+    if (matched) capabilityForm.defaultReasoningEffort = matched;
+  };
+
   const capabilityForm = reactive({
     contextWindow: 0,
     maxOutputTokens: 0,
@@ -351,15 +365,13 @@
                 <span class="mb-1 block text-[11px] text-text-secondary">{{
                   $t('agent.settings.providers.reasoningDefault')
                 }}</span>
-                <select
-                  v-model="capabilityForm.defaultReasoningEffort"
-                  class="h-8 w-full rounded-lg border border-border/80 bg-background px-2 text-xs text-foreground outline-none"
-                >
-                  <option value="">{{ $t('agent.settings.providers.reasoningNoDefault') }}</option>
-                  <option v-for="effort in capabilityForm.reasoningEfforts" :key="effort" :value="effort">
-                    {{ effort }}
-                  </option>
-                </select>
+                <UiSelect
+                  class="w-full"
+                  :aria-label="$t('agent.settings.providers.reasoningDefault')"
+                  :model-value="capabilityForm.defaultReasoningEffort || NONE_OPTION"
+                  :options="defaultReasoningEffortOptions"
+                  @update:model-value="(value: unknown) => setDefaultReasoningEffort(value)"
+                />
               </label>
               <label class="flex items-end gap-2 pb-1 text-[11px] text-foreground">
                 <UiCheckbox v-model="capabilityForm.reasoningMandatory" />

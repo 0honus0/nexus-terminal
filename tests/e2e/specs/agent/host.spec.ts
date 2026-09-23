@@ -3,7 +3,20 @@ import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { E2E_URLS } from '../../support/test-env';
-import type { APIRequestContext, Page, WebSocket as PlaywrightWebSocket, WebSocketRoute } from '@playwright/test';
+import type {
+  APIRequestContext,
+  Locator,
+  Page,
+  WebSocket as PlaywrightWebSocket,
+  WebSocketRoute,
+} from '@playwright/test';
+
+// Gen2 selects render a listbox trigger instead of a native <select>, so the
+// value is driven by picking an option rather than by selectOption().
+const pickGen2Option = async (trigger: Locator, option: string): Promise<void> => {
+  await trigger.click();
+  await trigger.page().getByRole('option', { name: option, exact: true }).click();
+};
 
 type AgentEnvelope<T> = { data: T; requestId: string };
 type AgentErrorEnvelope = { error: { code: string; message: string }; requestId: string };
@@ -169,7 +182,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(providerName).toBeVisible();
   const providerCard = providerName.locator('xpath=ancestor::article[1]');
   const protocolSelect = providerCard.getByLabel('Protocol', { exact: true });
-  await expect(protocolSelect).toHaveValue('chat-completions');
+  await expect(protocolSelect).toContainText('Chat Completions');
   await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
     if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"responses"')) {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -179,8 +192,8 @@ test('Agent settings surface exposes the production control plane and captures f
   const protocolSaved = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
   );
-  await protocolSelect.selectOption('responses');
-  await expect(protocolSelect).toHaveValue('responses');
+  await pickGen2Option(protocolSelect, 'Responses API');
+  await expect(protocolSelect).toContainText('Responses API');
   expect((await protocolSaved).ok()).toBeTruthy();
   await page.unroute('**/api/v1/agent/ai/providers/*');
 
@@ -199,10 +212,9 @@ test('Agent settings surface exposes the production control plane and captures f
   const failedProtocolPatch = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
   );
-  await protocolSelect.selectOption('chat-completions');
-  await expect(protocolSelect).toHaveValue('chat-completions');
+  await pickGen2Option(protocolSelect, 'Chat Completions');
   expect((await failedProtocolPatch).status()).toBe(500);
-  await expect(protocolSelect).toHaveValue('responses');
+  await expect(protocolSelect).toContainText('Responses API');
   const errorToast = page.locator('.bg-red-600').last();
   await expect(errorToast).toBeVisible();
   await expect(errorToast).toBeHidden({ timeout: 7_500 });
@@ -263,7 +275,7 @@ test('Agent settings surface exposes the production control plane and captures f
     .check();
   await capabilityDialog.getByRole('button', { name: 'low', exact: true }).click();
   await capabilityDialog.getByRole('button', { name: 'high', exact: true }).click();
-  await capabilityDialog.getByLabel('Default effort').selectOption('high');
+  await pickGen2Option(capabilityDialog.getByLabel('Default effort'), 'high');
   const capabilitySaved = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
   );

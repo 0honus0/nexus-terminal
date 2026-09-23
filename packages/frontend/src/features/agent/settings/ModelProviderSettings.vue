@@ -9,6 +9,7 @@
     UiEmptyState,
     UiInfoHint,
     UiPopover,
+    UiSelect,
     type UiComboboxOption,
   } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -149,8 +150,8 @@
     return provider.models.filter((m) => m.id.toLowerCase().includes(q));
   });
 
-  const protocolFromEvent = (event: Event): AgentProviderViewDto['protocol'] =>
-    (event.target as HTMLSelectElement | null)?.value === 'responses' ? 'responses' : 'chat-completions';
+  const protocolFromValue = (value: unknown): AgentProviderViewDto['protocol'] =>
+    value === 'responses' ? 'responses' : 'chat-completions';
 
   const form = reactive({
     displayName: '',
@@ -1246,16 +1247,18 @@
 
                 <!-- 次级行：紧凑 URL 与快捷复制 -->
                 <div class="flex items-center gap-1.5 text-xs text-text-secondary/70 mt-1">
-                  <select
-                    :value="provider.protocol"
-                    class="h-6 rounded-md border border-border/70 bg-background px-1.5 text-[11px] text-text-secondary outline-none"
+                  <UiSelect
+                    density="compact"
+                    class="shrink-0"
                     :aria-label="$t('agent.settings.providers.protocol')"
                     :disabled="busy"
-                    @change="emit('protocol', provider, protocolFromEvent($event))"
-                  >
-                    <option value="chat-completions">{{ $t('agent.settings.providers.protocolChat') }}</option>
-                    <option value="responses">{{ $t('agent.settings.providers.protocolResponses') }}</option>
-                  </select>
+                    :model-value="provider.protocol"
+                    :options="[
+                      { value: 'chat-completions', label: $t('agent.settings.providers.protocolChat') },
+                      { value: 'responses', label: $t('agent.settings.providers.protocolResponses') },
+                    ]"
+                    @update:model-value="(value: unknown) => emit('protocol', provider, protocolFromValue(value))"
+                  />
                   <span class="font-mono text-[11px] truncate max-w-xs sm:max-w-md">{{ provider.baseUrl }}</span>
                   <button
                     type="button"
@@ -1738,13 +1741,15 @@
             <span class="mb-1 block text-xs font-medium text-foreground">{{
               $t('agent.settings.providers.protocol')
             }}</span>
-            <select
-              v-model="form.protocol"
-              class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 text-xs text-foreground outline-none focus:border-border-hover"
-            >
-              <option value="chat-completions">{{ $t('agent.settings.providers.protocolChat') }}</option>
-              <option value="responses">{{ $t('agent.settings.providers.protocolResponses') }}</option>
-            </select>
+            <UiSelect
+              class="w-full"
+              :model-value="form.protocol"
+              :options="[
+                { value: 'chat-completions', label: $t('agent.settings.providers.protocolChat') },
+                { value: 'responses', label: $t('agent.settings.providers.protocolResponses') },
+              ]"
+              @update:model-value="(value: unknown) => (form.protocol = protocolFromValue(value))"
+            />
           </label>
         </div>
 

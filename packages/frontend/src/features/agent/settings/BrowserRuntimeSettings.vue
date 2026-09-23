@@ -1,6 +1,7 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
+  import { pickOption } from './pick-option';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
   type BrowserTarget = AgentSettingsViewDto['requestedSettings']['browser']['targets'][number];
@@ -54,6 +55,24 @@
       .split('\n')
       .map((item) => item.trim())
       .filter(Boolean);
+  };
+
+  const scopeOptions = [
+    { value: 'docker-network', label: 'agent.settings.browserRuntime.scopeDocker' },
+    { value: 'external-network', label: 'agent.settings.browserRuntime.scopeExternal' },
+  ];
+  const viaOptions = [
+    { value: 'backend', label: 'agent.settings.browserRuntime.viaBackend' },
+    { value: 'runner', label: 'agent.settings.browserRuntime.viaRunner' },
+  ];
+
+  const setEndpointScope = (endpoint: BrowserEndpoint, value: unknown): void => {
+    const next = pickOption(value, ['docker-network', 'external-network'] as const);
+    if (next) endpoint.scope = next;
+  };
+  const setEndpointVia = (endpoint: BrowserEndpoint, value: unknown): void => {
+    const next = pickOption(value, ['backend', 'runner'] as const);
+    if (next) endpoint.via = next;
   };
 
   const save = (): void => emit('save', { targets: cloneTargets(targets.value) });
@@ -131,20 +150,23 @@
           <div class="grid gap-2 md:grid-cols-4">
             <label class="text-[11px] text-text-secondary">
               {{ $t('agent.settings.browserRuntime.scope') }}
-              <select
-                v-model="endpoint.scope"
-                class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
-              >
-                <option value="docker-network">{{ $t('agent.settings.browserRuntime.scopeDocker') }}</option>
-                <option value="external-network">{{ $t('agent.settings.browserRuntime.scopeExternal') }}</option>
-              </select>
+              <UiSelect
+                class="mt-1 w-full"
+                density="compact"
+                :model-value="endpoint.scope"
+                :options="scopeOptions.map((option) => ({ value: option.value, label: $t(option.label) }))"
+                @update:model-value="(value: unknown) => setEndpointScope(endpoint, value)"
+              />
             </label>
             <label class="text-[11px] text-text-secondary">
               {{ $t('agent.settings.browserRuntime.via') }}
-              <select v-model="endpoint.via" class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs">
-                <option value="backend">{{ $t('agent.settings.browserRuntime.viaBackend') }}</option>
-                <option value="runner">{{ $t('agent.settings.browserRuntime.viaRunner') }}</option>
-              </select>
+              <UiSelect
+                class="mt-1 w-full"
+                density="compact"
+                :model-value="endpoint.via"
+                :options="viaOptions.map((option) => ({ value: option.value, label: $t(option.label) }))"
+                @update:model-value="(value: unknown) => setEndpointVia(endpoint, value)"
+              />
             </label>
             <label class="text-[11px] text-text-secondary">
               {{ $t('agent.settings.browserRuntime.priority') }}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
@@ -7,6 +7,13 @@
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
   const runtimes = ref(1);
   const modelCalls = ref<string>('auto');
+
+  const modelCallOptions = computed(() =>
+    Array.from({ length: props.settings.hardLimits.maxConcurrentModelCalls }, (_, index) => ({
+      value: String(index + 1),
+      label: String(index + 1),
+    })),
+  );
 
   watch(
     () => props.settings.revision,
@@ -94,15 +101,12 @@
           <p class="mt-0.5 mb-2 text-[11px] text-text-secondary">
             {{ $t('agent.settings.performance.modelCallsHint') }}
           </p>
-          <select
+          <UiSelect
             v-model="modelCalls"
-            class="h-9 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-          >
-            <option value="auto">{{ $t('agent.settings.performance.auto') }}</option>
-            <option v-for="value in settings.hardLimits.maxConcurrentModelCalls" :key="value" :value="String(value)">
-              {{ value }}
-            </option>
-          </select>
+            class="w-full"
+            :aria-label="$t('agent.settings.performance.modelCalls')"
+            :options="[{ value: 'auto', label: $t('agent.settings.performance.auto') }, ...modelCallOptions]"
+          />
           <span class="mt-1.5 block text-[11px] text-text-secondary">
             {{
               $t('agent.settings.performance.limit', {

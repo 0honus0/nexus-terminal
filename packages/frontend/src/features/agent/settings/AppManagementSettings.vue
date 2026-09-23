@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
+  import { BaseModal, UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
@@ -191,16 +191,18 @@
     });
   };
 
+  const targetModeOptions = computed(() => [
+    { value: 'all', label: t('agent.settings.apps.targetScopeAll') },
+    { value: 'ids', label: t('agent.settings.apps.targetScopeIds') },
+  ]);
+
   const onTargetModeChange = (
     appId: string,
     capability: CapabilityId,
     target: AgentTargetKindDto,
-    event: Event,
+    value: unknown,
   ): void => {
-    const input = event.target;
-    if (input instanceof HTMLSelectElement && (input.value === 'all' || input.value === 'ids')) {
-      setTargetMode(appId, capability, target, input.value);
-    }
+    if (value === 'all' || value === 'ids') setTargetMode(appId, capability, target, value);
   };
 
   const targetIdsValue = (appId: string, capability: CapabilityId, target: AgentTargetKindDto): string => {
@@ -787,16 +789,18 @@
                             "
                           />
                           <span class="text-[11px] font-semibold text-foreground">{{ targetLabel(target) }}</span>
-                          <select
+                          <UiSelect
                             v-if="targetEnabled(app.id, capability, target)"
-                            class="ml-auto rounded border border-border bg-card px-1.5 py-0.5 text-[11px] text-foreground"
-                            :value="targetScopeSelection(app.id, capability, target)?.mode"
+                            class="ml-auto"
+                            density="compact"
                             :disabled="busy || grantBusy[app.id]"
-                            @change="onTargetModeChange(app.id, capability, target, $event)"
-                          >
-                            <option value="all">All targets</option>
-                            <option value="ids">Specific IDs</option>
-                          </select>
+                            :model-value="targetScopeSelection(app.id, capability, target)?.mode ?? null"
+                            :options="targetModeOptions"
+                            :aria-label="$t('agent.settings.apps.targetScope')"
+                            @update:model-value="
+                              (value: unknown) => onTargetModeChange(app.id, capability, target, value)
+                            "
+                          />
                         </div>
                         <input
                           v-if="targetScopeSelection(app.id, capability, target)?.mode === 'ids'"

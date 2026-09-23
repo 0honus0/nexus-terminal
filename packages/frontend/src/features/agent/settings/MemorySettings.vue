@@ -1,9 +1,10 @@
 <script setup lang="ts">
-  import { UiButton, UiEmptyState, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import { agentHostEvents } from '../host/agent-host-events';
+  import { NONE_OPTION, pickOption } from './pick-option';
   import {
     agentApi,
     formatAgentApiError,
@@ -36,6 +37,38 @@
   const disabled = computed(() => props.busy || localBusy.value);
   const selectedApp = computed(() => props.apps.find((app) => app.id === selectedAppId.value) ?? null);
   const sourceApps = computed(() => props.apps.filter((app) => app.id !== selectedAppId.value));
+
+  const appOptions = computed(() =>
+    props.apps.map((app) => ({ value: app.id, label: `${app.displayName} · ${app.id}` })),
+  );
+  const statusOptions = computed(() => [
+    { value: 'all', label: t('agent.settings.memory.statusAll') },
+    { value: 'candidate', label: t('agent.settings.memory.statusCandidate') },
+    { value: 'published', label: t('agent.settings.memory.statusPublished') },
+    { value: 'revoked', label: t('agent.settings.memory.statusRevoked') },
+  ]);
+  const sourceAppOptions = computed(() => [
+    { value: NONE_OPTION, label: t('agent.settings.memory.selectSourceApp') },
+    ...sourceApps.value.map((app) => ({ value: app.id, label: `${app.displayName} · ${app.id}` })),
+  ]);
+  const sourceMemoryOptions = computed(() => [
+    { value: NONE_OPTION, label: t('agent.settings.memory.selectSourceMemory') },
+    ...sourceMemories.value.map((memory) => ({ value: memory.id, label: memory.content.slice(0, 80) })),
+  ]);
+
+  const setStatus = (value: unknown): void => {
+    const next = pickOption(value, ['all', 'candidate', 'published', 'revoked'] as const);
+    if (next) status.value = next;
+  };
+  const setSourceAppId = (value: unknown): void => {
+    if (value === NONE_OPTION) sourceAppId.value = '';
+    else if (typeof value === 'string') sourceAppId.value = value;
+  };
+  const setSourceMemoryId = (value: unknown): void => {
+    importPreview.value = null;
+    if (value === NONE_OPTION) sourceMemoryId.value = '';
+    else if (typeof value === 'string') sourceMemoryId.value = value;
+  };
 
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -277,26 +310,24 @@
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="text-xs text-text-secondary">
           {{ $t('agent.settings.memory.app') }}
-          <select
+          <UiSelect
             v-model="selectedAppId"
-            class="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-foreground"
+            class="mt-1 w-full"
             :disabled="disabled || apps.length === 0"
-          >
-            <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.displayName }} · {{ app.id }}</option>
-          </select>
+            :options="appOptions"
+            :aria-label="$t('agent.settings.memory.app')"
+          />
         </label>
         <label class="text-xs text-text-secondary">
           {{ $t('agent.settings.memory.status') }}
-          <select
-            v-model="status"
-            class="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-foreground"
+          <UiSelect
+            class="mt-1 w-full"
             :disabled="disabled"
-          >
-            <option value="all">{{ $t('agent.settings.memory.statusAll') }}</option>
-            <option value="candidate">{{ $t('agent.settings.memory.statusCandidate') }}</option>
-            <option value="published">{{ $t('agent.settings.memory.statusPublished') }}</option>
-            <option value="revoked">{{ $t('agent.settings.memory.statusRevoked') }}</option>
-          </select>
+            :model-value="status"
+            :options="statusOptions"
+            :aria-label="$t('agent.settings.memory.status')"
+            @update:model-value="(value: unknown) => setStatus(value)"
+          />
         </label>
       </div>
 
@@ -391,30 +422,25 @@
         <div class="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
           <label class="text-xs text-text-secondary">
             {{ $t('agent.settings.memory.sourceApp') }}
-            <select
-              v-model="sourceAppId"
-              class="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-foreground"
+            <UiSelect
+              class="mt-1 w-full"
               :disabled="disabled || sourceApps.length === 0"
-            >
-              <option value="">{{ $t('agent.settings.memory.selectSourceApp') }}</option>
-              <option v-for="app in sourceApps" :key="app.id" :value="app.id">
-                {{ app.displayName }} · {{ app.id }}
-              </option>
-            </select>
+              :model-value="sourceAppId || NONE_OPTION"
+              :options="sourceAppOptions"
+              :aria-label="$t('agent.settings.memory.sourceApp')"
+              @update:model-value="(value: unknown) => setSourceAppId(value)"
+            />
           </label>
           <label class="text-xs text-text-secondary">
             {{ $t('agent.settings.memory.sourceMemory') }}
-            <select
-              v-model="sourceMemoryId"
-              class="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-foreground"
+            <UiSelect
+              class="mt-1 w-full"
               :disabled="disabled || importLoading || !sourceAppId"
-              @change="importPreview = null"
-            >
-              <option value="">{{ $t('agent.settings.memory.selectSourceMemory') }}</option>
-              <option v-for="memory in sourceMemories" :key="memory.id" :value="memory.id">
-                {{ memory.content.slice(0, 80) }}
-              </option>
-            </select>
+              :model-value="sourceMemoryId || NONE_OPTION"
+              :options="sourceMemoryOptions"
+              :aria-label="$t('agent.settings.memory.sourceMemory')"
+              @update:model-value="(value: unknown) => setSourceMemoryId(value)"
+            />
           </label>
           <div class="flex items-end">
             <UiButton

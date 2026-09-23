@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -10,6 +10,7 @@
     type AgentExecutionPolicyViewDto,
   } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
+  import { pickOption } from './pick-option';
   import { formatQuantity, type QuantityType } from './quantity-format';
   import { useQuantityLabels } from './use-quantity-labels';
 
@@ -22,6 +23,17 @@
   const draft = ref<AgentExecutionPolicyOverridesDto>({});
   const loading = ref(false);
   const saving = ref(false);
+
+  const appOptions = computed(() => props.apps.map((app) => ({ value: app.id, label: app.displayName })));
+
+  const setContextProfile = (value: unknown): void => {
+    const next = pickOption(value, ['normal', 'extended'] as const);
+    if (next) draft.value.contextProfile = next;
+  };
+  const setContextCompactionMode = (value: unknown): void => {
+    const next = pickOption(value, ['aggressive', 'balanced', 'conservative'] as const);
+    if (next) draft.value.contextCompactionMode = next;
+  };
 
   type NumericKey = Exclude<keyof AgentExecutionPolicyOverridesDto, 'contextCompactionMode' | 'contextProfile'>;
   interface FieldMeta {
@@ -130,9 +142,12 @@
       </div>
       <label class="min-w-52">
         <span class="sr-only">{{ $t('agent.settings.executionPolicy.app') }}</span>
-        <select v-model="selectedAppId" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
-          <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.displayName }}</option>
-        </select>
+        <UiSelect
+          v-model="selectedAppId"
+          class="w-full"
+          :options="appOptions"
+          :aria-label="$t('agent.settings.executionPolicy.app')"
+        />
       </label>
     </div>
 
@@ -189,15 +204,17 @@
               {{ $t('agent.settings.executionPolicy.override') }}
             </label>
           </div>
-          <select
+          <UiSelect
             v-if="hasOverride('contextProfile')"
-            v-model="draft.contextProfile"
-            class="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+            class="mt-2 w-full"
             :disabled="busy || saving"
-          >
-            <option value="normal">{{ $t('agent.settings.executionPolicy.profile.normal') }}</option>
-            <option value="extended">{{ $t('agent.settings.executionPolicy.profile.extended') }}</option>
-          </select>
+            :model-value="draft.contextProfile ?? null"
+            :options="[
+              { value: 'normal', label: $t('agent.settings.executionPolicy.profile.normal') },
+              { value: 'extended', label: $t('agent.settings.executionPolicy.profile.extended') },
+            ]"
+            @update:model-value="(value: unknown) => setContextProfile(value)"
+          />
           <div v-else class="mt-2 text-[11px] text-text-secondary">
             {{ $t('agent.settings.executionPolicy.profileInherited', { value: view.effective.contextProfile }) }}
           </div>
@@ -222,16 +239,18 @@
               {{ $t('agent.settings.executionPolicy.override') }}
             </label>
           </div>
-          <select
+          <UiSelect
             v-if="hasOverride('contextCompactionMode')"
-            v-model="draft.contextCompactionMode"
-            class="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+            class="mt-2 w-full"
             :disabled="busy || saving"
-          >
-            <option value="aggressive">{{ $t('agent.settings.executionPolicy.compaction.aggressive') }}</option>
-            <option value="balanced">{{ $t('agent.settings.executionPolicy.compaction.balanced') }}</option>
-            <option value="conservative">{{ $t('agent.settings.executionPolicy.compaction.conservative') }}</option>
-          </select>
+            :model-value="draft.contextCompactionMode ?? null"
+            :options="[
+              { value: 'aggressive', label: $t('agent.settings.executionPolicy.compaction.aggressive') },
+              { value: 'balanced', label: $t('agent.settings.executionPolicy.compaction.balanced') },
+              { value: 'conservative', label: $t('agent.settings.executionPolicy.compaction.conservative') },
+            ]"
+            @update:model-value="(value: unknown) => setContextCompactionMode(value)"
+          />
           <div v-else class="mt-2 text-[11px] text-text-secondary">
             {{
               $t('agent.settings.executionPolicy.compactionInherited', { value: view.effective.contextCompactionMode })

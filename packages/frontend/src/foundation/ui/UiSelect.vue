@@ -25,9 +25,11 @@
     return rest;
   });
 
-  const model = defineModel<UiSelectValue | null>({ default: null });
   const props = withDefaults(
     defineProps<{
+      // Accepts a nullable value so a caller can start empty and let the trigger
+      // show its placeholder, but every update hands back a real option value.
+      modelValue?: UiSelectValue | null;
       options: UiSelectOption[];
       placeholder?: string;
       density?: UiDensity;
@@ -38,6 +40,7 @@
       name?: string;
     }>(),
     {
+      modelValue: null,
       placeholder: '',
       density: 'default',
       disabled: false,
@@ -47,15 +50,13 @@
     },
   );
 
+  const emit = defineEmits<{ 'update:modelValue': [value: UiSelectValue] }>();
+
   // Reka types the model as `AcceptableValue | AcceptableValue[]`; this wrapper
-  // narrows both directions to a single string | number | null value.
+  // narrows it to a single string | number value.
   const onUpdateModelValue = (value: unknown): void => {
     const resolved = Array.isArray(value) ? value[0] : value;
-    if (typeof resolved === 'string' || typeof resolved === 'number') {
-      model.value = resolved;
-      return;
-    }
-    model.value = null;
+    if (typeof resolved === 'string' || typeof resolved === 'number') emit('update:modelValue', resolved);
   };
 </script>
 
@@ -70,7 +71,7 @@
     class="ui-select"
   >
     <SelectRoot
-      :model-value="model"
+      :model-value="props.modelValue"
       :disabled="props.disabled"
       :name="props.name"
       @update:model-value="onUpdateModelValue"

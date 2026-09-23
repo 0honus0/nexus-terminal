@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -31,6 +31,9 @@
   const loading = ref(false);
   const disabled = computed(() => props.busy || localBusy.value);
   const configuredProfiles = computed(() => props.settings.effectiveSettings.workspaceRuntime.acpProfiles);
+  const profileOptions = computed(() =>
+    configuredProfiles.value.map((profile) => ({ value: profile.id, label: profile.id })),
+  );
 
   const acpConfiguration = (integration: AgentIntegrationViewDto): AgentAcpIntegrationConfigurationDto => {
     if (integration.kind !== 'acp' || integration.configuration.transport !== 'workspace-profile') {
@@ -320,15 +323,13 @@
           </label>
           <label class="text-[11px] text-text-secondary">
             {{ $t('agent.settings.acpRuntime.integrationProfile') }}
-            <select
+            <UiSelect
               v-model="profileId"
-              class="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-xs"
-            >
-              <option value="">{{ $t('agent.settings.acpRuntime.selectProfile') }}</option>
-              <option v-for="profile in configuredProfiles" :key="profile.id" :value="profile.id">
-                {{ profile.id }}
-              </option>
-            </select>
+              class="mt-1 w-full"
+              density="compact"
+              :placeholder="$t('agent.settings.acpRuntime.selectProfile')"
+              :options="profileOptions"
+            />
           </label>
           <label class="flex items-end gap-2 pb-1 text-xs">
             <UiCheckbox v-model="enabled" />
@@ -369,16 +370,13 @@
               <div class="mt-0.5 break-all font-mono text-[11px] text-text-secondary">{{ integration.id }}</div>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <select
-                :value="acpConfiguration(integration).profileId"
-                class="rounded border border-border bg-card px-2 py-1 text-xs"
+              <UiSelect
+                density="compact"
                 :disabled="disabled"
-                @change="changeIntegrationProfile(integration, ($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="profile in configuredProfiles" :key="profile.id" :value="profile.id">
-                  {{ profile.id }}
-                </option>
-              </select>
+                :model-value="acpConfiguration(integration).profileId"
+                :options="profileOptions"
+                @update:model-value="(value: unknown) => changeIntegrationProfile(integration, String(value))"
+              />
               <label class="flex items-center gap-1 text-xs">
                 <UiCheckbox
                   :model-value="integration.enabled"

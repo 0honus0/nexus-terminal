@@ -1,9 +1,10 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import QuantityInput from './QuantityInput.vue';
+  import { pickOption } from './pick-option';
   import {
     agentApi,
     type AgentAppSummaryDto,
@@ -215,6 +216,34 @@
     ),
   );
 
+  const appOptions = computed(() => props.apps.map((app) => ({ value: app.id, label: app.displayName })));
+  const templateOptions = computed(() =>
+    (profileSettings.value?.templates ?? []).map((template) => ({
+      value: template.id,
+      label: t(`agent.settings.subagents.template${template.id[0]!.toUpperCase()}${template.id.slice(1)}`),
+    })),
+  );
+  const modelSelectOptions = computed(() =>
+    modelOptions.value.map((model) => ({ value: model.key, label: model.label })),
+  );
+
+  const setSelectedTemplateId = (value: unknown): void => {
+    const matched = templateOptions.value.find((option) => option.value === value);
+    if (matched) selectedTemplateId.value = matched.value;
+  };
+  const setPeerMessaging = (profile: AgentSubagentProfileDto, value: unknown): void => {
+    const next = pickOption(value, ['parent-child', 'same-run'] as const);
+    if (next) profile.peerMessaging = next;
+  };
+  const setMutationMode = (profile: AgentSubagentProfileDto, value: unknown): void => {
+    const next = pickOption(value, ['read-only', 'governed'] as const);
+    if (next) profile.mutationMode = next;
+  };
+  const setFailureMode = (profile: AgentSubagentProfileDto, value: unknown): void => {
+    const next = pickOption(value, ['isolate', 'failFast'] as const);
+    if (next) profile.failureMode = next;
+  };
+
   const saveGlobalLimits = (): void => {
     if (invalidGlobalLimits.value) return;
     emit('save', draft.value);
@@ -291,27 +320,26 @@
             <span class="mb-1 block text-xs font-medium text-text-secondary">{{
               $t('agent.settings.subagents.appProfiles')
             }}</span>
-            <select
+            <UiSelect
               v-model="selectedAppId"
-              class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.displayName }}</option>
-            </select>
+              class="w-full"
+              :options="appOptions"
+              :aria-label="$t('agent.settings.subagents.appProfiles')"
+            />
           </label>
           <div class="flex flex-wrap items-end gap-2">
             <label v-if="profileSettings?.templates.length" class="min-w-40">
               <span class="mb-1 block text-xs font-medium text-text-secondary">{{
                 $t('agent.settings.subagents.templatePreset')
               }}</span>
-              <select
-                v-model="selectedTemplateId"
-                class="w-full rounded-md border border-border bg-background px-3 py-2 text-xs"
+              <UiSelect
+                class="w-full"
                 :disabled="profileBusy"
-              >
-                <option v-for="template in profileSettings.templates" :key="template.id" :value="template.id">
-                  {{ $t(`agent.settings.subagents.template${template.id[0]!.toUpperCase()}${template.id.slice(1)}`) }}
-                </option>
-              </select>
+                :model-value="selectedTemplateId"
+                :options="templateOptions"
+                :aria-label="$t('agent.settings.subagents.templatePreset')"
+                @update:model-value="(value: unknown) => setSelectedTemplateId(value)"
+              />
             </label>
             <UiButton
               appearance="soft"
@@ -360,13 +388,13 @@
                 <span class="mb-1 block text-xs text-text-secondary">{{
                   $t('agent.settings.subagents.defaultModel')
                 }}</span>
-                <select
-                  :value="modelKey(profile.defaultModel)"
-                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-                  @change="setDefaultModel(profile, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option v-for="model in modelOptions" :key="model.key" :value="model.key">{{ model.label }}</option>
-                </select>
+                <UiSelect
+                  class="w-full"
+                  density="compact"
+                  :model-value="modelKey(profile.defaultModel)"
+                  :options="modelSelectOptions"
+                  @update:model-value="(value: unknown) => setDefaultModel(profile, String(value))"
+                />
               </label>
               <label>
                 <span class="mb-1 block text-xs text-text-secondary">{{
@@ -383,37 +411,46 @@
                 <span class="mb-1 block text-xs text-text-secondary">{{
                   $t('agent.settings.subagents.peerMessaging')
                 }}</span>
-                <select
-                  v-model="profile.peerMessaging"
-                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-                >
-                  <option value="parent-child">{{ $t('agent.settings.subagents.peerParentChild') }}</option>
-                  <option value="same-run">{{ $t('agent.settings.subagents.peerSameRun') }}</option>
-                </select>
+                <UiSelect
+                  class="w-full"
+                  density="compact"
+                  :model-value="profile.peerMessaging"
+                  :options="[
+                    { value: 'parent-child', label: $t('agent.settings.subagents.peerParentChild') },
+                    { value: 'same-run', label: $t('agent.settings.subagents.peerSameRun') },
+                  ]"
+                  @update:model-value="(value: unknown) => setPeerMessaging(profile, value)"
+                />
               </label>
               <label>
                 <span class="mb-1 block text-xs text-text-secondary">{{
                   $t('agent.settings.subagents.mutationMode')
                 }}</span>
-                <select
-                  v-model="profile.mutationMode"
-                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-                >
-                  <option value="read-only">{{ $t('agent.settings.subagents.mutationReadOnly') }}</option>
-                  <option value="governed">{{ $t('agent.settings.subagents.mutationGoverned') }}</option>
-                </select>
+                <UiSelect
+                  class="w-full"
+                  density="compact"
+                  :model-value="profile.mutationMode"
+                  :options="[
+                    { value: 'read-only', label: $t('agent.settings.subagents.mutationReadOnly') },
+                    { value: 'governed', label: $t('agent.settings.subagents.mutationGoverned') },
+                  ]"
+                  @update:model-value="(value: unknown) => setMutationMode(profile, value)"
+                />
               </label>
               <label>
                 <span class="mb-1 block text-xs text-text-secondary">{{
                   $t('agent.settings.subagents.failureMode')
                 }}</span>
-                <select
-                  v-model="profile.failureMode"
-                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-                >
-                  <option value="isolate">{{ $t('agent.settings.subagents.failureIsolate') }}</option>
-                  <option value="failFast">{{ $t('agent.settings.subagents.failureFailFast') }}</option>
-                </select>
+                <UiSelect
+                  class="w-full"
+                  density="compact"
+                  :model-value="profile.failureMode"
+                  :options="[
+                    { value: 'isolate', label: $t('agent.settings.subagents.failureIsolate') },
+                    { value: 'failFast', label: $t('agent.settings.subagents.failureFailFast') },
+                  ]"
+                  @update:model-value="(value: unknown) => setFailureMode(profile, value)"
+                />
               </label>
             </div>
             <p v-if="profile.mutationMode === 'governed'" class="mt-2 text-[11px] leading-relaxed text-text-secondary">
