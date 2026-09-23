@@ -92,33 +92,48 @@
     profiles.value.splice(index, 1);
   };
 
+  const normalizeProfiles = (): Profile[] => {
+    const normalized: Profile[] = profiles.value.map((profile) => {
+      const id = profile.id.trim();
+      if (!/^[a-z][a-z0-9_.-]{0,127}$/.test(id)) throw new Error('ACP_PROFILE_ID_INVALID');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(profile.argvText);
+      } catch {
+        throw new Error('ACP_PROFILE_ARGV_INVALID');
+      }
+      if (
+        !Array.isArray(parsed) ||
+        parsed.length < 1 ||
+        parsed.length > 64 ||
+        parsed.some((item) => typeof item !== 'string' || item.includes('\0'))
+      ) {
+        throw new Error('ACP_PROFILE_ARGV_INVALID');
+      }
+      const cwd = profile.cwd.trim();
+      if (cwd !== '/workspace' && !cwd.startsWith('/workspace/')) throw new Error('ACP_PROFILE_CWD_INVALID');
+      return { id, argv: parsed as string[], cwd };
+    });
+    if (new Set(normalized.map((profile) => profile.id)).size !== normalized.length) {
+      throw new Error('ACP_PROFILE_ID_DUPLICATE');
+    }
+    return normalized;
+  };
+
+  const isDirty = computed(() => {
+    try {
+      return (
+        JSON.stringify(normalizeProfiles()) !==
+        JSON.stringify(props.settings.requestedSettings.workspaceRuntime.acpProfiles)
+      );
+    } catch {
+      return true;
+    }
+  });
+
   const saveProfiles = (): void => {
     try {
-      const normalized: Profile[] = profiles.value.map((profile) => {
-        const id = profile.id.trim();
-        if (!/^[a-z][a-z0-9_.-]{0,127}$/.test(id)) throw new Error('ACP_PROFILE_ID_INVALID');
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(profile.argvText);
-        } catch {
-          throw new Error('ACP_PROFILE_ARGV_INVALID');
-        }
-        if (
-          !Array.isArray(parsed) ||
-          parsed.length < 1 ||
-          parsed.length > 64 ||
-          parsed.some((item) => typeof item !== 'string' || item.includes('\0'))
-        ) {
-          throw new Error('ACP_PROFILE_ARGV_INVALID');
-        }
-        const cwd = profile.cwd.trim();
-        if (cwd !== '/workspace' && !cwd.startsWith('/workspace/')) throw new Error('ACP_PROFILE_CWD_INVALID');
-        return { id, argv: parsed as string[], cwd };
-      });
-      if (new Set(normalized.map((profile) => profile.id)).size !== normalized.length) {
-        throw new Error('ACP_PROFILE_ID_DUPLICATE');
-      }
-      emit('saveProfiles', normalized);
+      emit('saveProfiles', normalizeProfiles());
     } catch (cause) {
       operationFeedback.notifyError({ operation: 'validate-profiles', message: explain(cause), cause });
     }
@@ -259,10 +274,11 @@
           </div>
         </article>
         <UiButton
-          appearance="solid"
-          tone="primary"
+          :appearance="isDirty ? 'solid' : 'soft'"
+          :tone="isDirty ? 'primary' : 'neutral'"
           type="button"
-          :disabled="disabled"
+          :disabled="disabled || !isDirty"
+          :title="!isDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
           @click="saveProfiles"
           class="mt-3"
         >

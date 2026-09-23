@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px（跨页 chrome，按约定不动）/ `QuantityInput` 单位切换命中区 18×20 / 22 处原生 `<select>`；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。、§7.31（**设置区 8 处独立「保存」按钮语义分级**：无未保存变更时由浅紫实心主按钮降为 `soft`/`neutral` + 禁用 + 原因 `title`，并给 Browser / ACP / Subagent 三处补上 dirty 快照比对，§7.15-c 整条关闭）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px（跨页 chrome，按约定不动）/ `QuantityInput` 单位切换命中区 18×20 / 22 处原生 `<select>`；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -85,6 +85,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | **Agent 设置区「17 个模块一条长流」的布局**：宽屏新增常驻左栏分区导航（3 分组 + 17 锚点，粘在全局顶栏下），点击跳转 + 滚动联动高亮；窄屏保留顶部胶囊。跨分组跳转落点误差 0px（修复前实停 1766 / 目标 2352）                                                                                                                                                                                                         | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                              |
 | **P2 · ✅ 已关闭 2026-09-23**         | **设置区空态与主界面两套语言**：新增 Gen2 `UiEmptyState`（`dense` / 卡片两档），设置区 10 处空态统一（7 处行内 `950×38` + 3 处卡片 `950×143`）；`foundation/ui` 里首次有可复用的空态原语                                                                                                                                                                                                                            | `foundation/ui/UiEmptyState.vue`、`features/agent/settings/**`（见 §7.28）                                 |
 | **P2 · ✅ 已关闭 2026-09-23**         | 设置区面板头部三块摘要（默认模型 / 活跃 App / 沙箱）是「标签: 数值」小方块，读起来像调试输出：改为图标 + 标签/数值两行的无框统计（实测 3 项同行 `337×29`，414px 下折成两行仍 `337×29` 单行不换行溢出）                                                                                                                                                                                                              | `settings/AgentSettingsPanel.vue`（见 §7.29）                                                              |
+| **P2 · ✅ 已关闭 2026-09-23**         | **设置区 8 处独立「保存」按钮语义分级**（§7.15-c 收口）：原本 8 处全写死浅紫实心主按钮、无变更时只是 disabled， 现统一为「有未保存变更 → `solid`+`primary`；无变更 → `soft`+`neutral`+`disabled`+原因 `title`」， 并给 Browser / ACP / Subagent 三处**原本没有 dirty 概念**的按钮补上快照比对（实测 8 处全 `rgb(243,244,246)`， 改一个值后仅该模块转 `rgb(160,108,213)` 可用）                                      | `features/agent/settings/**`（见 §7.31）                                                                   |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区模块标题带的斑马纹与动作簇拥挤**：16 条 `bg-header/40` 灰底标题带统一去底色（`990×64` 实测）， 标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`；414px 下动作簇由右对齐改为整行下移左对齐 （末位控件距右缘 20 → 248px），同轮修掉插件仓库输入框 `min-w` 硬撑导致的窄屏横向溢出                                                                                                             | `settings/AgentSettingsPanel.vue`、`ModelProviderSettings.vue`、`PluginManagementSettings.vue`（见 §7.30） |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区粘性分组导航此前形同失效**：`sticky top-0` 恰好落在 56px 全局顶栏之下（z-30 盖住 z-20），滚起来就被吞掉；现已对齐 `top-14`，并让导航条压在自带 `z-20` 的模块之上（`z-index: 29`），移动端不再被内容穿透                                                                                                                                                                                                     | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                              |
 | **P1 · ✅ 已关闭 2026-09-23**         | **`v-show` 在 Agent 设置面板上完全失效**：SFC 是 `section + BaseModal` 双根，父级 `v-show` 落到「非元素根」被 Vue 忽略——切到「工作区」等其它 Tab 后，整块 Agent 设置仍留在页面下方（实测 top 1852 / 高 1584）；已包一层无样式 div 收成单根                                                                                                                                                                          | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                              |
@@ -2411,6 +2412,42 @@ CDP 实测确实如此：三块是 `rounded-lg border border-border/70 bg-card/6
   末位控件距右边缘 248 / 213 / 244px（左对齐生效）；插件仓库行在 414px 下输入框与按钮各占一行、无横向溢出；
   控制台噪声 0 条。
 - **门禁**：模板编译、`vue-tsc --noEmit`、`eslint`（`features/agent/settings`）、`prettier --check`、i18n 校验全绿。
+
+### 7.31 设置区 8 处独立「保存」按钮的语义分级（§7.15-c 收口，P2 · ✅ 已关闭 2026-09-23）
+
+**现象**：§7.15-c 原文实测「运行与环境」全页高 3825px、内部 8 处各自独立的保存动作
+（执行与性能 / Plugin·App 独立执行预算 / 浏览器运行时 / MCP Integrations / ACP 运行时 Profiles / Subagent / 配置档 / Artifact 与存储），
+**用的是同一个浅紫主按钮样式、且大多数时候处于 disabled**（没改动时），滚动中段既看不出「哪里能存」也看不出「刚才改的生效没有」。
+源码枚举与原文一致：这 8 处都写死 `appearance="solid" tone="primary"`
+（`BudgetContextSettings` / `PerformanceSettings` / `StorageArtifactSettings` / `AppExecutionPolicySettings` /
+`SafetyNetworkSettings` / `BrowserRuntimeSettings` / `AcpRuntimeSettings` / `SubagentSettings`×2）。
+
+**根因**：保存按钮的视觉档位是**静态写死的**，没有跟「是否存在未保存变更」绑定。
+全目录只有 `SafetyNetworkSettings` 一处按 `isDirty` 分级（局部的偶然正确），其余把「待命」和「有待保存的动作」
+画成了同一个主按钮；另有 4 处（Browser / ACP / Subagent ×2）**根本没有 dirty 概念**，永远可点、点了也只是重发一遍同样的 payload。
+
+**改法**：统一成一条规则 —— **有未保存变更 → `solid` + `primary`；无变更 → `soft` + `neutral` + `disabled` + `title`（复用已有的 `agent.settings.disabledReason.noChanges`）**：
+
+- 已有 dirty 计算的 4 处（Budget / Performance / Storage / AppExecutionPolicy）改成绑定 `dirty ? … : …`，不新增状态；
+- `BrowserRuntimeSettings`：新增 `isDirty`，把 `targets` 草稿与 `settings.requestedSettings.browser.targets` 的克隆快照做 JSON 比对；
+- `AcpRuntimeSettings`：把 `saveProfiles` 里的校验/归一化抽成 `normalizeProfiles()`，`saveProfiles` 与 `isDirty`
+  共用同一份归一化（解析失败时 `isDirty` 返回 `true`，即回退成「保持主按钮」，不会误判成干净）；
+- `SubagentSettings`：全局上限用 `draft` 与 `settings.requestedSettings.subagents` 快照比对；
+  配置档用 `loadProfiles` / 保存成功后写入的 `profileBaseline` 基线比对（`profileSettings` 尚未加载时视为干净）。
+
+**CDP 复验（`probe-731f.mjs` / `probe-731h.mjs`，1920px）**：
+
+- 「运行与环境」8 处保存按钮**全部** `data-appearance="soft" data-tone="neutral" disabled`，
+  实测底色 `rgb(243, 244, 246)`（原为浅紫 `rgb(160, 108, 213)`），尺寸维持 `48×32 / 70×32 / 84×32 / 92×32 / 108×32`；
+- 反向验证（dirty 路径）：把「执行与性能」的执行并发 `2 → 3`，其保存按钮**立刻**变成
+  `solid / primary / 可用 / rgb(160, 108, 213)`，同一屏未改动的「浏览器运行时」保存按钮**保持** `soft / neutral / disabled`
+  —— 说明每条是各自独立判定，不是一刀切；
+- 刷新页面后回到 `soft / neutral / disabled`（草稿丢弃，无残留脏态）；控制台噪声 0 条；
+- `title` 实测为「没有未保存的修改」（`agent.settings.disabledReason.noChanges`），禁用态仍有原因可查（延续 §7.13-e）。
+- **门禁**：模板编译、`vue-tsc --noEmit`、`eslint`（`features/agent/settings`）、`prettier --check`、i18n 校验全绿。
+
+**同条剩余部分**：本条原文另两点「没有粘性分区导航」已由 §7.27 关闭（宽屏左栏 + 滚动联动），
+「页面过长」随 §7.25（嵌套收敛）与 §7.27（左栏跳转）一并缓解，故 §7.15-c 整条关闭。
 
 ---
 

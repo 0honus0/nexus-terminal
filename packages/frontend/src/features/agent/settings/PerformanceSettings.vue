@@ -122,8 +122,8 @@
         {{ isDirty ? $t('agent.settings.performance.unsavedChanges') : $t('agent.settings.performance.activeNotice') }}
       </span>
       <UiButton
-        appearance="solid"
-        tone="primary"
+        :appearance="isDirty ? 'solid' : 'soft'"
+        :tone="isDirty ? 'primary' : 'neutral'"
         type="button"
         :disabled="busy || !isDirty || invalid"
         :title="!isDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"

@@ -242,8 +242,8 @@
 
       <div class="flex justify-end">
         <UiButton
-          appearance="solid"
-          tone="primary"
+          :appearance="dirty ? 'solid' : 'soft'"
+          :tone="dirty ? 'primary' : 'neutral'"
           type="button"
           :disabled="busy || saving || loading || invalid || !dirty"
           :title="!dirty ? $t('agent.settings.disabledReason.noChanges') : undefined"

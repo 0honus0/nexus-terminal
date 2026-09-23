@@ -149,8 +149,8 @@
         </span>
 
         <UiButton
-          appearance="solid"
-          tone="primary"
+          :appearance="isDirty ? 'solid' : 'soft'"
+          :tone="isDirty ? 'primary' : 'neutral'"
           type="button"
           :disabled="busy || !isDirty || hasInvalidDraft"
           :title="!isDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"

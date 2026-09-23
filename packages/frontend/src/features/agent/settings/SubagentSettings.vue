@@ -27,6 +27,7 @@
   const draft = ref<Record<string, number | null>>({});
   const selectedAppId = ref('');
   const profileSettings = ref<AgentSubagentSettingsViewDto | null>(null);
+  const profileBaseline = ref('');
   const profileBusy = ref(false);
   const selectedTemplateId = ref<AgentSubagentProfileTemplateDto['id']>('explore');
 
@@ -64,6 +65,7 @@
   const loadProfiles = async (): Promise<void> => {
     if (!selectedAppId.value) {
       profileSettings.value = null;
+      profileBaseline.value = '';
       return;
     }
     profileBusy.value = true;
@@ -77,6 +79,7 @@
         ...loaded,
         policy: { ...loaded.policy, profiles: cloneProfiles(loaded.policy.profiles) },
       };
+      profileBaseline.value = JSON.stringify(profileSettings.value.policy.profiles);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
       operationFeedback.notifyError({ operation: 'load-profiles', message, cause });
@@ -176,6 +179,7 @@
         ...updated,
         policy: { ...updated.policy, profiles: cloneProfiles(updated.policy.profiles) },
       };
+      profileBaseline.value = JSON.stringify(profileSettings.value.policy.profiles);
       operationFeedback.notifySuccess(t('agent.ui.saved'));
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
@@ -215,6 +219,15 @@
     if (invalidGlobalLimits.value) return;
     emit('save', draft.value);
   };
+
+  const isGlobalLimitsDirty = computed(
+    () => JSON.stringify(draft.value) !== JSON.stringify(props.settings.requestedSettings.subagents),
+  );
+  const isProfilesDirty = computed(
+    () =>
+      Boolean(profileSettings.value) &&
+      JSON.stringify(profileSettings.value?.policy.profiles ?? []) !== profileBaseline.value,
+  );
 
   const subagentLabels = computed<Record<string, string>>(() => ({
     maxDelegationDepth: t('agent.settings.subagents.labels.maxDelegationDepth'),
@@ -261,10 +274,11 @@
       </div>
       <div class="mt-4 flex justify-end">
         <UiButton
-          appearance="solid"
-          tone="primary"
+          :appearance="isGlobalLimitsDirty ? 'solid' : 'soft'"
+          :tone="isGlobalLimitsDirty ? 'primary' : 'neutral'"
           type="button"
-          :disabled="busy || invalidGlobalLimits"
+          :disabled="busy || invalidGlobalLimits || !isGlobalLimitsDirty"
+          :title="!isGlobalLimitsDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
           @click="saveGlobalLimits"
         >
           {{ $t('common.save') }}
@@ -452,10 +466,11 @@
 
         <div class="mt-4 flex justify-end">
           <UiButton
-            appearance="solid"
-            tone="primary"
+            :appearance="isProfilesDirty ? 'solid' : 'soft'"
+            :tone="isProfilesDirty ? 'primary' : 'neutral'"
             type="button"
-            :disabled="profileBusy || !profileSettings || invalidProfileLimits"
+            :disabled="profileBusy || !profileSettings || invalidProfileLimits || !isProfilesDirty"
+            :title="!isProfilesDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
             @click="saveProfiles"
           >
             {{ $t('agent.settings.subagents.saveProfiles') }}

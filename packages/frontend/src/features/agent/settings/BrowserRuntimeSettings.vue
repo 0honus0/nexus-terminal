@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
   type BrowserTarget = AgentSettingsViewDto['requestedSettings']['browser']['targets'][number];
@@ -57,6 +57,11 @@
   };
 
   const save = (): void => emit('save', { targets: cloneTargets(targets.value) });
+
+  const isDirty = computed(
+    () =>
+      JSON.stringify(targets.value) !== JSON.stringify(cloneTargets(props.settings.requestedSettings.browser.targets)),
+  );
 
   watch(() => props.settings.revision, sync, { immediate: true });
 </script>
@@ -183,7 +188,15 @@
         </div>
       </article>
 
-      <UiButton appearance="solid" tone="primary" type="button" :disabled="busy" @click="save" class="mt-4">
+      <UiButton
+        :appearance="isDirty ? 'solid' : 'soft'"
+        :tone="isDirty ? 'primary' : 'neutral'"
+        type="button"
+        :disabled="busy || !isDirty"
+        :title="!isDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
+        class="mt-4"
+        @click="save"
+      >
         {{ $t('agent.settings.browserRuntime.save') }}
       </UiButton>
     </div>
