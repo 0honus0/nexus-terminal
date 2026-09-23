@@ -1314,7 +1314,8 @@
         "mutate": "Mutate",
         "destructive": "Destructive",
         "forbidden": "Forbidden"
-      }
+      },
+      "expiresIn": "{seconds}s"
     },
     "ui": {
       "saved": "Saved",

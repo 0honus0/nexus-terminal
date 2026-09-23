@@ -68,7 +68,7 @@
       <dt class="text-text-secondary">{{ $t('agent.approvals.target') }}</dt>
       <dd class="break-words">{{ target.endpoint }} · {{ target.loginUser }}</dd>
       <dt class="text-text-secondary">{{ $t('agent.approvals.expires') }}</dt>
-      <dd>{{ remaining }}s</dd>
+      <dd>{{ $t('agent.approvals.expiresIn', { seconds: remaining }) }}</dd>
     </dl>
 
     <details class="mt-3 rounded border border-border bg-background p-2">
@@ -142,7 +142,7 @@
         </button>
         <button
           type="button"
-          class="min-h-8 rounded-md bg-warning px-2 py-2 font-semibold text-black disabled:opacity-50"
+          class="min-h-8 rounded-md bg-primary px-2 py-2 font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
           :disabled="!actionable"
           @click="emit('resolve', approval, 'approved')"
         >

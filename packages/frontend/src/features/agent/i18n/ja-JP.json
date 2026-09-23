@@ -1314,7 +1314,8 @@
         "mutate": "変更",
         "destructive": "破壊的",
         "forbidden": "禁止"
-      }
+      },
+      "expiresIn": "{seconds} 秒"
     },
     "ui": {
       "saved": "保存しました",

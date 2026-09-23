@@ -1314,7 +1314,8 @@
         "mutate": "写入",
         "destructive": "破坏性",
         "forbidden": "禁止"
-      }
+      },
+      "expiresIn": "{seconds} 秒"
     },
     "ui": {
       "saved": "已保存",
