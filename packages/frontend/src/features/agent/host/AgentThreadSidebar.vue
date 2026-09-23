@@ -318,7 +318,7 @@
             >
               <span
                 v-if="statusFor(thread.id) && nonTerminal.has(statusFor(thread.id)!)"
-                class="rounded-sm px-1 py-0.2 font-medium"
+                class="rounded-sm px-1 py-0.5 font-medium"
                 :class="
                   statusFor(thread.id) === 'awaiting_approval' || statusFor(thread.id) === 'awaiting_budget'
                     ? 'bg-warning/15 text-warning'

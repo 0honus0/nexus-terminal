@@ -266,7 +266,7 @@
                 </div>
                 <span
                   v-if="preset.badge"
-                  class="rounded-full bg-primary/20 px-1.5 py-0.2 text-[10px] font-medium text-primary"
+                  class="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary"
                 >
                   {{ preset.badge }}
                 </span>

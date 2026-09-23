@@ -25,7 +25,10 @@
       models: AgentProviderViewDto['models'],
       successMsg?: string,
     ) => Promise<boolean | undefined>;
-    createProvider: (input: AgentProviderCreateRequestDto, successMsg?: string) => Promise<AgentProviderViewDto | undefined>;
+    createProvider: (
+      input: AgentProviderCreateRequestDto,
+      successMsg?: string,
+    ) => Promise<AgentProviderViewDto | undefined>;
     providers: AgentProviderViewDto[];
     busy: boolean;
     discoveries: Record<string, AgentDiscoveredProviderModelDto[]>;
@@ -522,7 +525,10 @@
     return capabilityEditorProvider.value.models.find((model) => model.id === capabilityEditor.value?.modelId) ?? null;
   });
 
-  const openCapabilityEditor = (provider: AgentProviderViewDto, model: AgentProviderViewDto['models'][number]): void => {
+  const openCapabilityEditor = (
+    provider: AgentProviderViewDto,
+    model: AgentProviderViewDto['models'][number],
+  ): void => {
     capabilityEditor.value = { providerId: provider.id, modelId: model.id, mode: 'edit' };
   };
 
@@ -568,7 +574,9 @@
     isSavingModels[provider.id] = true;
     try {
       const resolvedModels = available.map((model) => discoveredModelConfig(provider, model.id));
-      const newModels = resolvedModels.filter((model): model is AgentProviderViewDto['models'][number] => model !== null);
+      const newModels = resolvedModels.filter(
+        (model): model is AgentProviderViewDto['models'][number] => model !== null,
+      );
       if (newModels.length > 0) {
         const noticeAdded = t('agent.settings.providers.saveNoticeAdded', { count: newModels.length });
         const saved = await updateModels(provider, [...provider.models, ...newModels], noticeAdded);
@@ -596,7 +604,9 @@
     isSavingModels[provider.id] = true;
     try {
       const resolvedModels = selectedIds.map((id) => discoveredModelConfig(provider, id));
-      const newModels = resolvedModels.filter((model): model is AgentProviderViewDto['models'][number] => model !== null);
+      const newModels = resolvedModels.filter(
+        (model): model is AgentProviderViewDto['models'][number] => model !== null,
+      );
       if (newModels.length > 0) {
         const noticeSelected = t('agent.settings.providers.saveNoticeAdded', { count: newModels.length });
         const saved = await updateModels(provider, [...provider.models, ...newModels], noticeSelected);
@@ -938,7 +948,7 @@
             <div class="flex items-center gap-2">
               <div class="text-xs font-semibold text-foreground">{{ $t('agent.settings.providers.defaultModel') }}</div>
               <span
-                class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.2 text-[9px] font-medium text-emerald-600 dark:text-emerald-400"
+                class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[9px] font-medium text-emerald-600 dark:text-emerald-400"
               >
                 <i class="fa-solid fa-cloud-arrow-up text-[8px]"></i>
                 <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
@@ -1099,7 +1109,7 @@
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-semibold text-sm text-foreground truncate">{{ provider.displayName }}</span>
                   <span
-                    class="inline-flex items-center gap-1 rounded-full px-2 py-0.2 text-[10px] font-medium"
+                    class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
                     :class="
                       provider.enabled
                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
@@ -1118,7 +1128,7 @@
                   </span>
                   <button
                     type="button"
-                    class="rounded-md bg-header/60 border border-border/60 px-1.5 py-0.2 font-mono text-[10px] text-text-secondary hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
+                    class="rounded-md bg-header/60 border border-border/60 px-1.5 py-0.5 font-mono text-[10px] text-text-secondary hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
                     :title="$t('agent.settings.providers.testModalTitle')"
                     @click="openTestModal(provider)"
                   >
@@ -1308,7 +1318,7 @@
                       $t('agent.settings.providers.discoveredModels')
                     }}</span>
                     <span
-                      class="rounded-full bg-primary/10 px-1.5 py-0.2 text-[10px] font-mono text-primary font-medium"
+                      class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-mono text-primary font-medium"
                     >
                       {{ filteredAvailable(provider).length }}
                     </span>
@@ -1395,7 +1405,7 @@
                       <span class="font-mono text-xs text-foreground truncate">{{ model.id }}</span>
                       <span
                         v-if="model.ownedBy"
-                        class="rounded bg-header/60 px-1 py-0.2 font-mono text-[9px] text-text-secondary truncate"
+                        class="rounded bg-header/60 px-1 py-0.5 font-mono text-[9px] text-text-secondary truncate"
                       >
                         {{ model.ownedBy }}
                       </span>
@@ -1461,7 +1471,7 @@
                       $t('agent.settings.providers.configuredModels')
                     }}</span>
                     <span
-                      class="rounded-full bg-header px-1.5 py-0.2 text-[10px] font-mono text-text-secondary font-medium"
+                      class="rounded-full bg-header px-1.5 py-0.5 text-[10px] font-mono text-text-secondary font-medium"
                     >
                       {{ provider.models.length }}
                     </span>
@@ -1495,7 +1505,7 @@
                       <span class="font-mono text-xs text-foreground truncate">{{ model.id }}</span>
                       <span
                         v-if="provider.id === defaultProviderId && model.id === defaultModelId"
-                        class="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/20 px-1.5 py-0.2 text-[9px] font-semibold text-primary"
+                        class="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary"
                       >
                         <i class="fa-solid fa-star text-[7px]"></i>
                         <span>{{ $t('agent.settings.providers.defaultBadge') }}</span>
@@ -1542,7 +1552,7 @@
               </div>
               <button
                 type="button"
-                class="rounded-lg border border-border/80 bg-background px-4 py-1.8 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground shadow-2xs transition-all active:scale-95 cursor-pointer"
+                class="rounded-lg border border-border/80 bg-background px-4 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground shadow-2xs transition-all active:scale-95 cursor-pointer"
                 @click="drawerOpen[provider.id] = false"
               >
                 {{ $t('common.close') }}
@@ -1589,7 +1599,7 @@
       <div class="flex w-full justify-end gap-2">
         <button
           type="button"
-          class="rounded-lg border border-border/80 bg-background px-3.5 py-1.8 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
+          class="rounded-lg border border-border/80 bg-background px-3.5 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
           :disabled="busy"
           @click="deletingProvider = null"
         >
@@ -1597,7 +1607,7 @@
         </button>
         <button
           type="button"
-          class="rounded-lg bg-error px-3.5 py-1.8 text-xs font-semibold text-white shadow-sm transition-all hover:bg-error/90 active:scale-95 disabled:opacity-50 cursor-pointer"
+          class="rounded-lg bg-error px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-error/90 active:scale-95 disabled:opacity-50 cursor-pointer"
           :disabled="busy"
           @click="confirmDelete"
         >
@@ -1801,7 +1811,7 @@
         <div>
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3.5 py-1.8 text-xs font-semibold text-foreground shadow-2xs transition-all hover:bg-header hover:border-border active:scale-95 disabled:opacity-50 cursor-pointer"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3.5 py-2 text-xs font-semibold text-foreground shadow-2xs transition-all hover:bg-header hover:border-border active:scale-95 disabled:opacity-50 cursor-pointer"
             :disabled="modalTesting || busy || !form.displayName.trim() || !form.baseUrl.trim() || !form.modelId.trim()"
             @click="testInModal"
           >
@@ -1819,7 +1829,7 @@
         <div class="flex items-center gap-2">
           <button
             type="button"
-            class="rounded-lg border border-border/80 bg-background px-3.5 py-1.8 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
+            class="rounded-lg border border-border/80 bg-background px-3.5 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
             :disabled="modalTesting"
             @click="closeModal"
           >
@@ -1827,7 +1837,7 @@
           </button>
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.8 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer"
             :disabled="modalTesting || busy || !form.displayName.trim() || !form.baseUrl.trim() || !form.modelId.trim()"
             @click="submitModal"
           >
@@ -1898,40 +1908,40 @@
                 <span class="font-mono text-xs font-bold text-foreground truncate">{{ model.id }}</span>
                 <span
                   v-if="currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId"
-                  class="inline-flex items-center gap-1 rounded-md bg-primary/10 border border-primary/20 px-1.5 py-0.2 text-[10px] font-semibold text-primary"
+                  class="inline-flex items-center gap-1 rounded-md bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
                 >
                   <i class="fa-solid fa-star text-[8px]"></i>
                   <span>{{ $t('agent.settings.providers.defaultBadge') }}</span>
                 </span>
               </div>
               <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-text-secondary">
-                <span class="rounded bg-card border border-border/50 px-1.5 py-0.2 font-mono">
+                <span class="rounded bg-card border border-border/50 px-1.5 py-0.5 font-mono">
                   {{ compactTokens(model.contextWindow) }} 上下文
                 </span>
-                <span class="rounded bg-card border border-border/50 px-1.5 py-0.2 font-mono">
+                <span class="rounded bg-card border border-border/50 px-1.5 py-0.5 font-mono">
                   {{ compactTokens(model.maxOutputTokens) }} 输出
                 </span>
                 <span
                   v-if="model.supportsTools"
-                  class="rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 font-medium"
+                  class="rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 font-medium"
                 >
                   Tools
                 </span>
                 <span
                   v-if="model.supportsImageInput"
-                  class="rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 px-1.5 py-0.2 font-medium"
+                  class="rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 px-1.5 py-0.5 font-medium"
                 >
                   {{ $t('agent.settings.providers.imageInput') }}
                 </span>
                 <span
                   v-if="model.supportsFileInput"
-                  class="rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 px-1.5 py-0.2 font-medium"
+                  class="rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 px-1.5 py-0.5 font-medium"
                 >
                   {{ $t('agent.settings.providers.fileInput') }}
                 </span>
                 <span
                   v-if="model.reasoningEfforts?.length"
-                  class="inline-flex items-center gap-1 rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.2 font-medium"
+                  class="inline-flex items-center gap-1 rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
                 >
                   <i class="fa-solid fa-brain text-[8px]"></i>
                   <span>思考</span>
@@ -2047,7 +2057,7 @@
         </div>
         <button
           type="button"
-          class="rounded-lg border border-border/80 bg-background px-4 py-1.8 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground shadow-2xs transition-all active:scale-95 cursor-pointer"
+          class="rounded-lg border border-border/80 bg-background px-4 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground shadow-2xs transition-all active:scale-95 cursor-pointer"
           @click="testModalOpen = false"
         >
           {{ $t('common.close') }}

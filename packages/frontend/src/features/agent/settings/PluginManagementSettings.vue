@@ -610,24 +610,24 @@
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="text-xs sm:text-sm font-bold text-foreground truncate">{{ entry.displayName }}</span>
                     <span
-                      class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.2 font-mono text-[10px] text-text-secondary"
+                      class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
                     >
                       v{{ entry.version }}
                     </span>
                     <span
                       v-if="!entry.compatible"
-                      class="rounded-full bg-warning/10 px-2 py-0.2 text-[10px] font-medium text-warning"
+                      class="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning"
                     >
                       {{ $t('agent.settings.plugins.incompatible') }}
                     </span>
                     <span
                       v-else-if="isInstalled(entry.appId)"
-                      class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                      class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
                     >
                       <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                       <span>{{ isInstalledAndEnabled(entry.appId) ? '已启用' : '已安装' }}</span>
                     </span>
-                    <span v-else class="rounded-full bg-header px-2 py-0.2 text-[10px] font-medium text-text-secondary">
+                    <span v-else class="rounded-full bg-header px-2 py-0.5 text-[10px] font-medium text-text-secondary">
                       未安装
                     </span>
                     <span class="hidden md:inline font-mono text-[10px] text-text-secondary/60">

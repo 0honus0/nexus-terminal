@@ -1247,6 +1247,7 @@
     "ui": {
       "saved": "已保存",
       "working": "正在保存…",
+      "saveFailed": "保存失败，请重试。",
       "operationInProgress": "已有设置操作正在进行，请完成后再试。",
       "testing": "测试中…",
       "testSuccess": "连接成功 · {ms} ms",

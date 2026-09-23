@@ -7,6 +7,22 @@
 
 ---
 
+## ✅ 已解决：无效间距 utility + 助手气泡填充 + saveFailed i18n
+
+| 项       | 内容                                                                                                |
+| -------- | --------------------------------------------------------------------------------------------------- |
+| 级别     | P0/P2                                                                                               |
+| 状态     | **已解决 2026-09-23；静态/构建验收通过**                                                            |
+| 对应问题 | `doc/problem.md` §7.1 / §7.5-1（card 表面）、§7.8（无效 spacing utility）、§5 第 1 条（saveFailed） |
+
+- 助手消息气泡从失效的 `bg-card/45` 改为有效 `bg-card`；Gen2 前置已让 `--color-card` 真正接到主题 token，浅/深主题都使用对应 card 色。
+- 全 `features/agent` 清理 Tailwind 不生成规则的 `py-0.2 / py-0.8 / py-1.8`：徽章统一到 `py-0.5`，较大按钮/状态块分别收敛到 `py-1 / py-2`。最终源码扫描三类残留 **0**。
+- 涉及会话侧栏、TaskRail、Provider/App/Plugin/Safety/Budget 设置区；修复此前“类名写了但实际垂直 padding=0”的机械问题，不改变业务逻辑。
+- `agent.ui.saveFailed` 已补齐 en-US / ja-JP / zh-CN；`ModelProviderSettings` 的保存失败路径已有真实引用，不再出现缺 key fallback。
+- 验证：相关 Vue 文件 ESLint 通过、三份 i18n JSON parse 通过、Prettier 通过；本轮之前完整 frontend `vue-tsc --noEmit` 与 Vite production build 已在同一 worktree 上通过。
+
+---
+
 ## ✅ 代码闭环：Agent Hub 模态键盘边界
 
 | 项       | 内容                                                                                                     |

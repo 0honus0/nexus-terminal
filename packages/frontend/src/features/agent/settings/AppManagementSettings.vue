@@ -149,7 +149,12 @@
 
   const targetLabel = (target: AgentTargetKindDto): string => (target === 'workspace' ? 'Workspace' : 'SSH');
 
-  const setTargetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKindDto, enabled: boolean): void => {
+  const setTargetEnabled = (
+    appId: string,
+    capability: CapabilityId,
+    target: AgentTargetKindDto,
+    enabled: boolean,
+  ): void => {
     updateGrantScope(appId, capability, (scope) => {
       if (scope.kind !== 'targets') return scope;
       const targets = { ...scope.targets };
@@ -159,7 +164,12 @@
     });
   };
 
-  const onTargetEnabledChange = (appId: string, capability: CapabilityId, target: AgentTargetKindDto, event: Event): void => {
+  const onTargetEnabledChange = (
+    appId: string,
+    capability: CapabilityId,
+    target: AgentTargetKindDto,
+    event: Event,
+  ): void => {
     const input = event.target;
     if (input instanceof HTMLInputElement) setTargetEnabled(appId, capability, target, input.checked);
   };
@@ -184,7 +194,12 @@
     });
   };
 
-  const onTargetModeChange = (appId: string, capability: CapabilityId, target: AgentTargetKindDto, event: Event): void => {
+  const onTargetModeChange = (
+    appId: string,
+    capability: CapabilityId,
+    target: AgentTargetKindDto,
+    event: Event,
+  ): void => {
     const input = event.target;
     if (input instanceof HTMLSelectElement && (input.value === 'all' || input.value === 'ids')) {
       setTargetMode(appId, capability, target, input.value);
@@ -196,7 +211,12 @@
     return selection?.mode === 'ids' ? selection.ids.join(', ') : '';
   };
 
-  const onTargetIdsInput = (appId: string, capability: CapabilityId, target: AgentTargetKindDto, event: Event): void => {
+  const onTargetIdsInput = (
+    appId: string,
+    capability: CapabilityId,
+    target: AgentTargetKindDto,
+    event: Event,
+  ): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
     const ids = [
@@ -894,7 +914,7 @@
       <div class="flex justify-end gap-2">
         <button
           type="button"
-          class="rounded-lg border border-border/80 bg-background px-3.5 py-1.8 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
+          class="rounded-lg border border-border/80 bg-background px-3.5 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
           :disabled="uninstallBusy"
           @click="uninstallModalOpen = false"
         >
@@ -902,7 +922,7 @@
         </button>
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg bg-error px-4 py-1.8 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-error/90 active:scale-95 disabled:opacity-50 cursor-pointer"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-error px-4 py-2 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-error/90 active:scale-95 disabled:opacity-50 cursor-pointer"
           :disabled="uninstallBusy"
           @click="confirmUninstall"
         >

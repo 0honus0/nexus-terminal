@@ -1247,6 +1247,7 @@
     "ui": {
       "saved": "Saved",
       "working": "Saving…",
+      "saveFailed": "Save failed. Please try again.",
       "operationInProgress": "Another settings operation is still in progress. Try again when it finishes.",
       "testing": "Testing…",
       "testSuccess": "Connected · {ms} ms",

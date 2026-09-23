@@ -339,7 +339,7 @@
       </p>
       <div
         v-else
-        class="rounded-xl bg-card/45 px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+        class="rounded-xl bg-card px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
       >
         <AgentMessageBody :text="text" />
       </div>

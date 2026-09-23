@@ -1247,6 +1247,7 @@
     "ui": {
       "saved": "保存しました",
       "working": "保存中…",
+      "saveFailed": "保存に失敗しました。もう一度お試しください。",
       "operationInProgress": "別の設定操作が進行中です。完了してからもう一度お試しください。",
       "testing": "テスト中…",
       "testSuccess": "接続成功 · {ms} ms",

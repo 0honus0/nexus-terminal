@@ -342,7 +342,7 @@
                   {{ connection.name || connection.host }}
                 </span>
                 <!-- ID 微标 -->
-                <span class="rounded bg-header px-1.5 py-0.2 text-[10px] font-mono text-text-secondary font-medium">
+                <span class="rounded bg-header px-1.5 py-0.5 text-[10px] font-mono text-text-secondary font-medium">
                   ID: #{{ connection.id }}
                 </span>
               </div>
@@ -350,7 +350,7 @@
                 <span v-if="connection.username" class="text-text-secondary">{{ connection.username }}@</span>
                 <span>{{ connection.host }}:{{ connection.port }}</span>
                 <span
-                  class="rounded bg-card/80 border border-border/70 px-1.5 py-0.2 text-[9px] uppercase font-semibold text-text-secondary"
+                  class="rounded bg-card/80 border border-border/70 px-1.5 py-0.5 text-[9px] uppercase font-semibold text-text-secondary"
                 >
                   {{ connection.type }}
                 </span>
@@ -362,14 +362,14 @@
           <div class="shrink-0">
             <span
               v-if="selectedIds.has(connection.id)"
-              class="inline-flex items-center gap-1 rounded-md bg-error/15 border border-error/30 px-2 py-0.8 text-[10px] font-semibold text-error shadow-2xs"
+              class="inline-flex items-center gap-1 rounded-md bg-error/15 border border-error/30 px-2 py-1 text-[10px] font-semibold text-error shadow-2xs"
             >
               <i class="fa-solid fa-ban text-[9px]"></i>
               <span>{{ $t('agent.settings.safety.blockedBadge') }}</span>
             </span>
             <span
               v-else
-              class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.8 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+              class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 px-2 py-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
             >
               <i class="fa-solid fa-check text-[9px]"></i>
               <span>{{ $t('agent.settings.safety.allowedBadge') }}</span>
@@ -391,7 +391,7 @@
               v-for="id in orphanIds"
               :key="id"
               type="button"
-              class="inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.2 font-mono text-[10px] hover:bg-amber-500/25 cursor-pointer"
+              class="inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 font-mono text-[10px] hover:bg-amber-500/25 cursor-pointer"
               title="点击移出黑名单"
               @click="removeOrphanId(id)"
             >

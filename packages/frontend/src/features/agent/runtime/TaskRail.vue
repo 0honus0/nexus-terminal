@@ -605,7 +605,7 @@
                         <span>{{ $t('agent.tasks.advancedDetails') }}</span>
                         <span
                           v-if="currentCheckpoints.length"
-                          class="rounded-full bg-header px-1.5 py-0.2 text-[9px] text-text-secondary font-mono"
+                          class="rounded-full bg-header px-1.5 py-0.5 text-[9px] text-text-secondary font-mono"
                         >
                           {{ currentCheckpoints.length }}
                         </span>
