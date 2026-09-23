@@ -160,15 +160,34 @@
   });
 
   let homePromptTimer: number | null = null;
+  // 便当卡自动轮播必须"让位"给用户：指针悬停 / 键盘焦点在卡片区、用户自己点过分页、
+  // 或系统声明 prefers-reduced-motion 时都不再自动翻页。
+  const homePromptPaused = ref(false);
+  const homePromptPinned = ref(false);
+  const reducedMotionQuery =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+  const homePromptReducedMotion = ref(reducedMotionQuery?.matches ?? false);
+  const onReducedMotionChange = (event: MediaQueryListEvent): void => {
+    homePromptReducedMotion.value = event.matches;
+  };
   onMounted(() => {
+    reducedMotionQuery?.addEventListener('change', onReducedMotionChange);
     homePromptTimer = window.setInterval(() => {
       if (props.entries.length > 0 || props.streamingText || props.draft.trim()) return;
+      if (homePromptPaused.value || homePromptPinned.value || homePromptReducedMotion.value) return;
       homePromptPage.value = (homePromptPage.value + 1) % homePromptPageCount;
     }, HOME_PROMPT_ROTATE_MS);
   });
   onBeforeUnmount(() => {
     if (homePromptTimer !== null) window.clearInterval(homePromptTimer);
+    reducedMotionQuery?.removeEventListener('change', onReducedMotionChange);
   });
+  const selectHomePromptPage = (page: number): void => {
+    homePromptPinned.value = true;
+    homePromptPage.value = page;
+  };
 
   const asRecord = (value: unknown): Record<string, unknown> | null =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -403,12 +422,16 @@
         <div
           v-if="entries.length === 0 && !streamingText"
           class="relative z-10 mx-auto flex min-h-[460px] max-w-3xl flex-col items-center justify-center px-4 py-4 text-center select-none"
+          @mouseenter="homePromptPaused = true"
+          @mouseleave="homePromptPaused = false"
+          @focusin="homePromptPaused = true"
+          @focusout="homePromptPaused = false"
         >
           <!-- 顶端微胶囊标识 -->
           <div
             class="mb-3.5 inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.08] px-3.5 py-0.5 text-[11px] font-semibold tracking-wider text-primary shadow-2xs"
           >
-            <span class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
+            <span class="agent-home-pulse h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
             <span>{{ $t('agent.conversation.heroTag') }}</span>
           </div>
 
@@ -435,7 +458,7 @@
               v-for="prompt in visibleHomePromptCards"
               :key="prompt.promptKey"
               type="button"
-              class="group relative flex items-center rounded-2xl border border-border/75 p-3.5 text-left shadow-sm backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99]"
+              class="agent-home-prompt group relative flex items-center rounded-2xl border border-border/75 p-3.5 text-left shadow-sm backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99]"
               :class="homePromptToneClasses[prompt.tone].card"
               @click="emit('updateDraft', $t(prompt.promptKey))"
             >
@@ -473,11 +496,11 @@
               v-for="page in homePromptPageCount"
               :key="page"
               type="button"
-              class="h-4 rounded-full px-0 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              class="agent-home-pager-dot h-4 rounded-full px-0 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               :class="page - 1 === homePromptPage ? 'w-5' : 'w-3 hover:w-4'"
               :aria-label="$t('agent.conversation.promptPage', { page })"
               :aria-current="page - 1 === homePromptPage ? 'true' : undefined"
-              @click="homePromptPage = page - 1"
+              @click="selectHomePromptPage(page - 1)"
             >
               <span
                 class="mx-auto block h-1.5 rounded-full transition-all duration-300"
@@ -839,6 +862,22 @@
   .agent-stop-button i,
   .agent-stop-button:hover i {
     color: var(--color-error);
+  }
+
+  /*
+   * §2.6：空态是"在用户指针下方自己动"的区域，声明 reduced-motion 时把轮播之外的
+   * hover 位移 / 脉冲 / 分页动画也一并关掉（轮播本身在脚本里已停）。
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .agent-home-prompt,
+    .agent-home-prompt *,
+    .agent-home-pager-dot,
+    .agent-home-pager-dot *,
+    .agent-home-pulse {
+      transition: none;
+      transform: none;
+      animation: none;
+    }
   }
 
   /*

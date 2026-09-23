@@ -45,7 +45,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示                                                                                                                                                                                                                                                                                                | `ai/AgentConversation.vue`（见 §7.4）                                                                         |
 | P1                                    | 主界面三层 chrome（44 + 36 + 160~256px）在最小窗口（560×380）下把消息区压到约 140px                                                                                                                                                                                                                                                                                                  | `host/AgentHubWindow.vue:355`、`host/AgentAppSurface.vue:1530`、`ai/AgentConversation.vue:722-788`（见 §7.2） |
 | **P2 · ✅ 已关闭 2026-09-23**         | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0                                                                                                                                                                                                                                                                                                   | `features/agent/**`（见 §7.8）                                                                                |
-| P1                                    | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、空态卡片 9s 自动轮播                                                                                                                                                                                                                                                                        | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`、`ai/AgentConversation.vue:163-166`     |
+| P1                                    | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、Launcher 6px 阈值拖拽（§2.6 的空态轮播已关闭）                                                                                                                                                                                                                                              | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8）                              |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 的 Send / Cancel Run 已拆成两个独立按钮（停止按钮图标-only + 错误色，运行中才出现）；`sendHint` 已渲染；空草稿按 Enter 不再误取消 Run                                                                                                                                                                                                                                       | `ai/AgentConversation.vue`（见 §2.5）                                                                         |
 | **P1 · ✅ 已关闭 2026-09-22**         | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation                                                                                                                                                                                                    | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7）                                              |
 | **P1 · ✅ 已关闭 2026-09-22**         | **Nexus 前后端真实 transport contract 已统一到 `packages/protocol`**：HTTP / Workspace WS / Agent HTTP / Agent event WS / Agent terminal WS 均由 canonical DTO/event contract 单一来源约束，并已接入 transport architecture guard；当前 HEAD 收尾复核再次通过 guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build` 与 Agent scenario suite **71/71** | `packages/protocol/**`、`scripts/check-transport-contract-boundaries.mjs`（见 §3.2）                          |
@@ -75,6 +75,7 @@
 | P1                                    | 设置区把后端原始原因码当"不可用原因"渲染（实测灰色的 `runtime_not_configured`），且这是唯一解释                                                                                                                                                                                                                                                                                      | `settings/WorkspaceRuntimeSettings.vue:270`（见 §7.15-b）                                                     |
 | P2                                    | 禁用态主按钮 = 品牌色 + `opacity .5`，与可用态难以区分（保存/预览导入/卸载/立即更新长期如此），且不解释原因                                                                                                                                                                                                                                                                          | `features/agent/settings/**`（实测见 §7.13-e）                                                                |
 | **P1 · ✅ 已关闭 2026-09-23**         | 图标颜色：未分层的 `i/.fas/.far/.fab { color: var(--icon-color) }` 压过 `@layer utilities`，132 个带 `text-primary/success/warning/error/foreground` 的图标一律渲染成 `#666`（`!text-white` 是既有绕过写法）                                                                                                                                                                         | `app/styles/global.css:91-110`（见 §7.19）                                                                    |
+| **P1 · ✅ 已关闭 2026-09-23**         | 空态便当卡自动轮播已可中断：悬停/焦点暂停、手动分页后固定、`prefers-reduced-motion` 时彻底不轮播（hover 位移与脉冲也一起关掉）                                                                                                                                                                                                                                                       | `ai/AgentConversation.vue`（见 §2.6）                                                                         |
 
 ---
 
@@ -417,7 +418,22 @@ Agent UI 中任意像素字号统计：
 
 建议方向：输入区只保留"发送/停止"与附件；模型/环境/目标移到 Run header 或"下一个 Run 设置"面板；批准策略单独成组并带风险说明；取消 Run 用独立按钮或明确二次确认。
 
-### 2.6 空态自动轮播（P1）
+### 2.6 空态自动轮播（P1 · ✅ 已关闭 2026-09-23）
+
+> ✅ **2026-09-23 闭环（真实 Hub 实测）**
+>
+> 保留 4 页 × 2 张的便当卡（"留哪 3–4 张"属于 §4 的产品决策，不在本轮），但把"自己动"变成可中断：
+>
+> 1. **悬停 / 键盘焦点在空态区时暂停**：空态容器加 `mouseenter/mouseleave/focusin/focusout` → `homePromptPaused`。
+>    实测：指针停在卡片上 10.5s，当前页 `active=1` 不变（`paused:true`）；移开指针后 10s 内又自动前进（`advanced:true`）。
+> 2. **用户手动点分页后固定（不再抢回去）**：`selectHomePromptPage()` 置 `homePromptPinned=true`。
+>    实测：点最后一页后离开指针再等 10.5s，仍停在 `active=3`。
+> 3. **`prefers-reduced-motion: reduce` 时完全不轮播**：`matchMedia` 同时管脚本定时器与动画。
+>    实测（`emulateMedia({ reducedMotion: 'reduce' })` 后重新加载）：10.5s 后仍 `active=0`，卡片 `transition-duration: 0s`、
+>    脉冲点 `animation-name: none` —— 即轮播 + hover 位移 + `animate-pulse` 全部停掉（原来全仓只有 2 处 reduced-motion）。
+> 4. 轮播本身继续只在"真的空态"里跑（`entries/streamingText/draft` 任一非空即跳过），没有改动卡片文案与分页 UI。
+
+**原始记录（2026-09-21）**：
 
 `ai/AgentConversation.vue:66`、`:163-166`：8 张 bento 卡片（`HOME_PROMPT_ROTATE_MS = 9000`）每 9 秒自动翻页，且只要没有内容就一直轮播。
 问题：内容会在用户指针下方自动移动（点击到错误卡片的风险）；整个 Agent 前端只有两处 `prefers-reduced-motion`（`host/AgentAppSurface.vue:2697` 侧栏 drawer、`runtime/TaskRail.vue:914` 卡片），轮播、`animate-pulse`、hover 位移都不受影响；8 张装饰卡对"第一次怎么用"的引导价值很低。
