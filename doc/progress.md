@@ -7,6 +7,21 @@
 
 ---
 
+## ✅ 已复核：陈旧 P0 / 样式根因条目同步关闭
+
+| 项              | 复验结果                                                                                                                          |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Design token    | `--color-card / border-hover / primary-hover / warning-foreground` 已接入 Tailwind；CDP `.bg-card` 探针为 `rgba(246,247,249,.92)` |
+| `saveFailed`    | en-US / ja-JP / zh-CN 三语均存在，`ModelProviderSettings` 保存失败路径真实引用                                                    |
+| 全局 font reset | 已进入 `@layer base`；设置页可见 `text-xs` 按钮 CDP 计算字号全部为 **12px**，旧 16px 覆盖消失                                     |
+| 无效 spacing    | `features/agent` 中 `py-0.2 / py-0.8 / py-1.8` 残留 **0**                                                                         |
+| Glass           | `.glass-surface` 已成为唯一玻璃 recipe；Gallery CDP alpha≈0.7544 / blur 16px / radius 16px                                        |
+
+- 同步关闭 `problem.md` §1.1 / §1.2 / §7.1 / §7.3 / §7.4 / §7.8 / §7.10 及顶层速览中的陈旧开放状态；旧复现数据保留作为历史证据。
+- §7.9 Composer 最终方案已纠正为用户确认的“**单行硬约束 + composer 自身 container query + compact**”，明确不再写成未采用的 More 菜单方案。
+
+---
+
 ## ✅ 已解决：设置区默认模型下拉统一到 Gen2 Popover
 
 | 项       | 内容                                                                                     |

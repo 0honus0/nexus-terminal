@@ -27,20 +27,20 @@
 
 | 级别 | 问题 | 关键位置 |
 | --- | --- | --- |
-| P0 | 设计 token 未定义，158 处 utility 类**静默失效**（`bg-card` 等），卡片/输入区/弹层实际是透明的 | `packages/frontend/src/features/agent/**`（见 §1.1） |
-| P0 | 缺失 i18n key `agent.ui.saveFailed`，保存失败时界面直接显示键名 | `settings/ModelProviderSettings.vue:94` |
+| **P0 · ✅ 已关闭 2026-09-23** | 设计 token 已补齐并接入 Tailwind：`--color-card / border-hover / primary-hover / warning-foreground` 均有真实规则；CDP `.bg-card` 计算背景为 `rgba(246,247,249,.92)` | `app/styles/tokens.css`（见 §1.1） |
+| **P0 · ✅ 已关闭 2026-09-23** | `agent.ui.saveFailed` 已补齐 en-US / ja-JP / zh-CN 且保存失败路径真实引用 | `settings/ModelProviderSettings.vue`、`i18n/*.json`（见 §1.2） |
 | **P0 · ✅ 已关闭 2026-09-23** | Agent Hub 模态边界已闭环：打开聚焦 Hub、背景 `#app.inert=true`、Tab/Shift+Tab 限制在 Hub 与 Hub-owned portal、Escape 关闭、关闭后焦点回 Launcher | `host/AgentHubWindow.vue`（CDP 复验见 §7.13-c） |
-| P0 | 「模型弹层的透明质感」其实是 `bg-card/95` 死 token 的副产物（无填充 + 只有 blur）；直接补 `--color-card` 会让整体观感变样，需先固化成 `.glass-surface` 再修 | `files/AgentConfigPopover.vue:154`（见 §7.1） |
+| **P0 · ✅ 已关闭 2026-09-23** | 玻璃层已固化为唯一 `.glass-surface`：token-based 半透明 fill + blur(16px) + 弱边框/阴影；Gallery CDP 实测 alpha≈0.7544 | `app/styles/global.css`、`foundation/ui/UiPopover.vue`（见 §7.1） |
 | P1 | 「模态遮罩 + 浮动窗口」定位自相矛盾：Hub 打开时整个应用不可操作，无法一边看 SSH 终端一边让 Agent 干活 | `host/AgentHubWindow.vue:341-344` |
 | P1 | 字号普遍在 8–11px（563 处），CJK 环境下可读性差；大量点击目标仅 20–28px | `features/agent/**`（见 §2.3、§2.4） |
 | P1 | 硬编码调色板（emerald/sky/amber/blue/purple/pink/indigo + 硬编码 rgba 阴影）绕开主题 token，切主题后视觉不可控 | `ai/AgentConversation.vue:127-152`、`host/AgentAppSurface.vue` |
 | P1 | 设置区控件风格分裂：同一个「主操作按钮」有 6 套写法、5 档圆角，添加/移除模型用原生 checkbox 与 11px 纯文字按钮 | `features/agent/settings/**`（见 §6.2、§6.3） |
 | P1 | 设置区模板内约 38 行硬编码中文（能力名称、存储、插件、预算等），另有英文选项混入中文界面 | 见 §6.5 |
-| P1 | 助手气泡 / 空态卡片 / 任务栏面板的 `bg-card` 全族失效 → 只剩描边没有填充，主界面看起来「平、糙」 | `ai/ConversationMessage.vue:342`、`ai/AgentConversation.vue:434`、`runtime/TaskRail.vue:182` |
-| P1 | Composer 工具条一行塞 7 个配置控件 + 右侧 3 个动作，容器变窄时用 `overflow-x-hidden` 静默裁掉「运行环境 / SSH 目标 / 思考强度」，用户无从察觉 | `ai/AgentConversation.vue:737、835-838`（见 §7.3） |
-| P1 | 「回到最新」按钮与发送/取消同排紧邻：语义错位、易误点、出现时整行跳动，应移到输入框上方独立一行右对齐 | `ai/AgentConversation.vue:747-756`（见 §7.4） |
+| **P1 · ✅ 已关闭 2026-09-23** | `bg-card` 族已恢复真实 surface；助手气泡改为有效 `bg-card`，TaskRail/空态卡继续使用已生效的 card token | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue` |
+| **P1 · ✅ 已关闭 2026-09-23** | Composer 改为自身 container query + 单行 compact；560px Hub CDP 实测 controls `462/462`，无静默裁切，思考等级优先靠前 | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.3） |
+| **P1 · ✅ 已关闭 2026-09-23** | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示 | `ai/AgentConversation.vue`（见 §7.4） |
 | P1 | 主界面三层 chrome（44 + 36 + 160~256px）在最小窗口（560×380）下把消息区压到约 140px | `host/AgentHubWindow.vue:355`、`host/AgentAppSurface.vue:1530`、`ai/AgentConversation.vue:722-788`（见 §7.2） |
-| P2 | 不存在的间距类 `py-0.2 / py-1.8 / py-0.8`（36 处）不产出任何 CSS → 按钮/徽章实际没有上下内边距 | `settings/ModelProviderSettings.vue:1596` 等（见 §7.8） |
+| **P2 · ✅ 已关闭 2026-09-23** | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0 | `features/agent/**`（见 §7.8） |
 | P1 | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、空态卡片 9s 自动轮播 | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`、`ai/AgentConversation.vue:163-166` |
 | P1 | Composer 底部一个问题一个按钮承担 Send / Cancel Run 两种语义，形态随状态变形 | `ai/AgentConversation.vue:767-778` |
 | **P1 · ✅ 已关闭 2026-09-22** | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7） |
@@ -51,7 +51,7 @@
 | P2 | 巨型文件问题**仍主要集中在 UI**；非 UI owner 已完成一轮拆分：`agent-api.ts` 791 行、`runner-http.adapter.ts` 770 行、`native-agent-backend.ts` 722 行，原 1k+ 行 state-commit 聚合文件已拆为细分 transition owners | 见 §3.1 |
 | P2 | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里 | `modules/agent/tools/host/*.ts` |
 | **P1 · ✅ 已关闭 2026-09-22** | **历史 Run 的 `GET /runs/:id/approvals` 稳定 500（`AGENT_DURABLE_STATE_INVALID`）**：已由 migration #45 将 legacy `inspection_json.target.kind = "machine"` 规范化为 canonical SSH target；真实数据库副本验证 26 条 legacy tool call → 0、25 条受影响 approval 全部可解码 | `sqlite-migrations.ts` migration #45、`tests/backend/agent-scenarios/runner.ts`（见 §1.9） |
-| **P0** | **全局 `button { font: inherit }`（unlayered，压过 `@layer utilities`）→ 设置区所有写在按钮上的字号类失效（实测 16px），这也是"设置区又大又糙"的机械原因** | `packages/frontend/src/app/styles/global.css:26-31`（见 §7.10） |
+| **P0 · ✅ 已关闭 2026-09-23** | 全局 form font/cursor reset 已移入 `@layer base`；CDP 设置页 `text-xs` 按钮均恢复为 12px（旧实测为 16px） | `app/styles/global.css:27-46`（见 §7.10） |
 | P1 | 设置区「Agent」页在**英文界面下仍有 29 处硬编码中文**（实测："6 个模型""已配密钥""执行步数保险丝""≈ 1 小时""(3,600 秒)"…） | `features/agent/settings/**`（见 §6.5、§7.11） |
 | P1 | 「备用模型链」把该 Provider 的**全部模型**平铺成按钮云：无顺序编号、无拖拽/移除、无搜索；"勾选顺序即生效顺序"却完全不可见 | `settings/ModelProviderSettings.vue:1062-1083`（见 §7.11） |
 | P1 | 设置区按钮规格失控（实测）：`添加 Provider` 144×38 fs16 / `关闭 Agent` 109×40 fs16 / `立即更新` 77×28 fs11；同一服务商行 `模型与测试(6)` 144px、`更新模型` 107px、`停用` 54px、删除 28×28 | 见 §7.11 |
@@ -75,7 +75,9 @@
 
 ## 1. 可直接复现的缺陷
 
-### 1.1 设计 token 未定义 → 158 处样式静默失效（P0）
+### 1.1 设计 token 未定义 → 158 处样式静默失效（P0 · ✅ 已关闭 2026-09-23）
+
+> ✅ **当前复验**：`tokens.css` 已暴露 `--color-card / --color-border-hover / --color-primary-hover / --color-warning-foreground`；2026-09-23 CDP 临时 `.bg-card` 探针计算背景为 `rgba(246, 247, 249, 0.92)`，不再透明。
 
 `tokens.css` 通过 `@theme inline` 只暴露了 `background / foreground / border / header / footer / button / primary / success / warning / error / text-secondary ...`，
 **没有 `--color-card`、`--color-border-hover`、`--color-primary-hover`、`--color-warning-foreground`**。
@@ -106,7 +108,9 @@ Agent UI 却大量使用 `bg-card`、`hover:border-border-hover`、`hover:bg-pri
 1) 在 `tokens.css` 里补齐 `--color-card`（例如映射到 `--input-bg-color` 或新增 `--card-bg-color`）并同步 `--color-border-hover`、`--color-primary-hover`、`--color-warning-foreground`；或
 2) 全量替换为已存在的 token 类（`bg-background` / `bg-header` / `border-border` / `hover:bg-button-hover`）。
 
-### 1.2 缺失 i18n key：`agent.ui.saveFailed`（P0）
+### 1.2 缺失 i18n key：`agent.ui.saveFailed`（P0 · ✅ 已关闭 2026-09-23）
+
+> ✅ **当前复验**：三份 locale 均已有 `saveFailed`，`ModelProviderSettings` 保存失败路径直接引用该 key。
 
 `settings/ModelProviderSettings.vue:94` 使用 `t('agent.ui.saveFailed')`，但 `features/agent/i18n/{zh-CN,en-US,ja-JP}.json` 三份文件都没有该 key（脚本核对：static refs 811 个，仅此 1 个缺失）。
 用户看到的会是原始键名 `agent.ui.saveFailed`。三份语言文件叶子 key 数一致（1148），说明不是漏同步语言，而是"用了不存在的 key"。
@@ -691,7 +695,9 @@ UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConf
 > 本轮的参考基准由用户明确：**Agent 主界面里"选择模型"那个弹层的透明 / 模糊 / 高级感**。
 > 因此本节先把这套观感拆成可复制的配方（§7.1），再逐层看主界面骨架（§7.2）、Composer（§7.3–7.4）、其它细节（§7.5）、以及设置区与主界面的落差（§7.6）。
 
-### 7.1 先把"高级感"讲清楚：它是 `--color-card` 缺失的副产物（P0，需要先决策）
+### 7.1 先把"高级感"讲清楚：它是 `--color-card` 缺失的副产物（P0 · ✅ 已关闭 2026-09-23）
+
+> ✅ **当前方案**：不再依赖“死 token 导致纯透明”的偶然效果。`.glass-surface` 统一使用 card token × 82% transparent mix + `blur(16px)` + 弱边框/阴影；DEV Gallery CDP 实测最终背景 alpha≈0.7544、16px radius。
 
 模型弹层的实际组成（`files/AgentConfigPopover.vue:154`）：
 
@@ -738,7 +744,9 @@ shadow-2xl ring-1 ring-border/20 outline-none
 - 状态持久化不一致：窗口 bounds / maximized / launcher 有 localStorage（`host/window-manager.ts:47`），任务栏卡片顺序有（`runtime/TaskRail.vue:125`），但侧栏开合（`threadSidebarVisible`）、任务栏开合（`taskRailVisible`）完全不持久化；`hubView`（会话/文件视图）也既不入 payload 也不恢复。用户每次重开窗口都要重新调一遍。
 - 窗口体感：最大化时 `borderRadius: 0`（`host/AgentHubWindow.vue:296`）圆角突变；只有按钮能最大化/还原，顶栏双击无响应；拖拽无贴边/吸附，多屏下只按当前视口 clamp。
 
-### 7.3 Composer 工具条：控件太多被静默裁掉（P1，用户实测）
+### 7.3 Composer 工具条：控件太多被静默裁掉（P1 · ✅ 已关闭 2026-09-23）
+
+> ✅ **2026-09-23 CDP**：560px Hub 下 composer shell 542px、toolbar 37px、controls `462/462`，附件/发送均 28×28，0 个控件越界。最终采用“单行硬约束 + composer 自身 container query + compact”，没有引入 More 菜单。
 
 > **根因补充（第四轮实测）**：本轮定位到"右组变宽"只是触发器，真正的结构性原因是 composer 外层 `max-w-3xl`（768px）封顶、而折叠断点挂在会话面板容器（1342px）上永不触发。**默认窗口下「思考强度」就已经被裁 42px、只剩一枚闪电图标**，实测数据与探针见 §7.14-a。
 
@@ -770,7 +778,9 @@ shadow-2xl ring-1 ring-border/20 outline-none
 3. 兜底：改用 `overflow-x-auto` + 两侧渐隐遮罩，或 `flex-wrap` 成两行自适应高度，**不要用 `overflow-x-hidden` 静默截断**。
 4. 复用已有的 `.agent-config-compact` 机制：阈值下退化成图标-only，而不是把控件丢掉。
 
-### 7.4 "回到最新"按钮的位置需要挪（P2，用户提出）
+### 7.4 "回到最新"按钮的位置需要挪（P2 · ✅ 已关闭 2026-09-23）
+
+> ✅ **当前实现**：「回到最新」已在 Composer 上方状态行右侧；token 使用量在左侧且仅总 token > 0 时显示，避免再次挤压工具条。
 
 **用户反馈**：滚动后出现的"一键跳到底部"按钮现在挤在输入框这一行，应该放到聊天输入框上方那一排的右侧。
 
@@ -838,7 +848,9 @@ shadow-2xl ring-1 ring-border/20 outline-none
 - `agent-settings-plugins-security.png`：三条绿色 toast 叠在右上，**压住了 Settings 的 Tab 导航**（无上限、无合并）；「已启用 1/1」「扩展生态与仓库」「官方通用智能体核心，内置自动化运维诊断与全栈工程协同技能」均为硬编码中文。
 - `agent-settings-runtime.png`：存储配额区整段中文（"单 Run 产物配额 / 单文件产物上限 / 全局产物存储配额 / 临时产物生命周期 (TTL)" 及其说明），数值后缀 `≈ 7 天(604,800 秒)` 也是拼出来的中文；同屏 3 个成功 toast。
 
-### 7.8 顺带发现：不存在的间距类（P2）
+### 7.8 顺带发现：不存在的间距类（P2 · ✅ 已关闭 2026-09-23）
+
+> ✅ **当前扫描**：`features/agent` 中 `py-0.2 / py-0.8 / py-1.8` 残留 **0**。
 
 `py-0.2`（25 处）、`py-1.8`（9 处）、`py-0.8`（2 处）在编译产物里**没有任何规则**（同文件中的 `py-0.5 / py-1.5 / py-2.5` 都能正常生成）：Tailwind 的 spacing 只接受 0.25 的倍数，`.2 / .8 / .18` 这类值会被静默丢弃。
 
@@ -850,24 +862,26 @@ shadow-2xl ring-1 ring-border/20 outline-none
 
 | # | 问题 | 位置 | 级别 |
 | --- | --- | --- | --- |
-| 1 | 把"玻璃层"固化成 `.glass-surface`（含 `--color-card` 透明度取值这一决策），再动手补 token | §7.1 | P0 |
-| 2 | Composer 工具条不再 `overflow-x-hidden` 静默裁切；低频项收进 `⋯ 更多`，思考强度前移 | `ai/AgentConversation.vue:737、835-838` | P1 |
-| 3 | 助手气泡 / 空态卡片 / 任务栏面板补上真实表面（`bg-card` 家族或改用 `bg-header/xx`） | `ai/ConversationMessage.vue:342`、`ai/AgentConversation.vue:434`、`runtime/TaskRail.vue:182` | P1 |
-| 4 | 「回到最新」移到输入框上方独立一行、右对齐 | `ai/AgentConversation.vue:747-756` | P1 |
+| 1 | ✅ **已关闭 2026-09-23**：玻璃层已固化为 `.glass-surface`，card/token 已补齐并做浅/深主题兼容 | §7.1 | P0 |
+| 2 | ✅ **已关闭 2026-09-23**：最终采用单行硬约束 + composer 自身 container query + compact；不引入 More 菜单，思考等级前移 | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue` | P1 |
+| 3 | ✅ **已关闭 2026-09-23**：card token 生效，助手气泡/空态/TaskRail 均有真实 surface | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue` | P1 |
+| 4 | ✅ **已关闭 2026-09-23**：「回到最新」已进入 Composer 上方状态行右侧 | `ai/AgentConversation.vue` | P1 |
 | 5 | 减少 chrome：矮窗口压缩顶栏/composer，提高 `MIN_HEIGHT` | §7.2 | P1 |
 | 6 | ✅ **已关闭 2026-09-23**：设置区默认模型自绘下拉已迁到 Gen2 `UiPopover`，统一 Escape / 焦点归还 / Portal collision / glass surface | `settings/ModelProviderSettings.vue`、`foundation/ui/UiPopover.vue` | P1 |
 | 7 | 窄窗口侧栏支持折叠；侧栏/任务栏/Hub 视图状态统一持久化 | `host/AgentAppSurface.vue:1543`、`host/window-manager.ts` | P2 |
 | 8 | 空态轮播改静态或显式翻页，pager 命中区 ≥32px | `ai/AgentConversation.vue:429-486` | P2 |
 | 9 | Hub 顶栏毛玻璃被覆盖、窗口阴影写死浅色 | `host/AgentHubWindow.vue:362、606-611、673-680` | P2 |
 | 10 | 无效间距类 `py-0.2 / py-0.8 / py-1.8` 与死 CSS 清理 | settings/**、`host/AgentAppSurface.vue:2612/2648/2692` | P2 |
-| 11 | **先修全局 `button { font: inherit }`（unlayered，压过 `@layer utilities`），否则设置区字号永远错、按钮总比浮窗大一号** | `app/styles/global.css:26-33`（见 §7.10） | **P0** |
+| 11 | ✅ **已关闭 2026-09-23**：font/cursor reset 已放入 `@layer base`，Tailwind 字号 utility 恢复生效 | `app/styles/global.css:27-46`（见 §7.10） | P0 |
 | 12 | 备用模型链改成"已选有序列表 + 可搜索的添加弹层"（复用 `AgentConfigPopover` 行结构），并把顺序显式画出来 | `settings/ModelProviderSettings.vue:1062-1083`（见 §7.11） | P1 |
 | 13 | 设置区把「状态」画成按钮（默认模型 / 活跃 App / 沙箱）与「自动保存」绿胶囊，需要收敛成只读 badge 规格 | §7.11 | P2 |
 | 14 | 空态 pager 命中区 12×16 → ≥32px；空态建议卡去掉自动轮播 | `ai/AgentConversation.vue:429-486`（实测见 §7.12） | P2 |
 
 ---
 
-### 7.10 实测根因（P0）：全局 `button { font: inherit }` 让按钮上的字号类集体失效
+### 7.10 实测根因（P0 · ✅ 已关闭 2026-09-23）：全局 `button { font: inherit }` 曾让按钮字号类集体失效
+
+> ✅ **2026-09-23 CDP 复验**：reset 已移入 `@layer base`；Agent 设置页 `text-xs` 按钮计算字号均为 **12px**（「添加 Provider」高 28/32px、「关闭 Agent」高 30px），旧的 16px 覆盖现象消失。
 
 `packages/frontend/src/app/styles/global.css:26-33`：
 
