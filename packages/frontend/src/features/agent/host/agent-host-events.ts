@@ -3,6 +3,8 @@ export interface AgentHostEventMap {
   'authorization-changed': Record<string, unknown>;
   'memory-changed': Record<string, unknown>;
   'host-changed': undefined;
+  // Provider / settings writes: the open Agent surface reloads its run configuration.
+  'configuration-changed': undefined;
 }
 
 type AgentHostEventType = keyof AgentHostEventMap;

@@ -1485,12 +1485,22 @@
     void refreshConnectionsAndAuthorization().catch(() => undefined);
   };
 
+  // Settings writes / provider edits (model added, provider toggled) must reach the open
+  // surface without a page reload, otherwise the model list keeps showing the stale set.
+  const onConfigurationChanged = (): void => {
+    void loadRunConfiguration().catch((cause) => {
+      error.value = explain(cause);
+    });
+  };
+
   let stopThreadChanged = (): void => {};
   let stopAuthorizationChanged = (): void => {};
+  let stopConfigurationChanged = (): void => {};
   onMounted(() => {
     window.addEventListener('focus', refreshConnectionsOnFocus);
     stopThreadChanged = agentHostEvents.on('thread-changed', onThreadChanged);
     stopAuthorizationChanged = agentHostEvents.on('authorization-changed', onAuthorizationChanged);
+    stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
     void nextTick(() => {
       void load();
     });
@@ -1501,6 +1511,7 @@
     window.removeEventListener('focus', refreshConnectionsOnFocus);
     stopThreadChanged();
     stopAuthorizationChanged();
+    stopConfigurationChanged();
     facade.dispose();
     resetStreamingPresentation();
   });

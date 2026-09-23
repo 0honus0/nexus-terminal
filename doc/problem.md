@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -1875,6 +1875,40 @@ Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
   列表 `clientHeight 288` / `scrollHeight 572` ⇒ `scrollable: true`，最后一行默认不可见（`lastRowVisible: false`），
   弹层总高 338px —— 即用户记忆中"上下滑动"的原始交互；此前只有 1 个模型的环境无法复现，现已实测。
 - 说明：新增模型原本要重新加载 Hub / 刷新页面才会出现，该刷新时机问题在 §7.22 修复。
+
+### 7.22 Provider / 设置写完后主界面不刷新（P1 · ✅ 已关闭 2026-09-23）
+
+**现象**：用户在设置区「模型与预算」里给 provider 补模型（`newapi` 从 1 个加到 11 个），回到 Hub 打开「模型」弹层
+仍是旧列表，必须刷新页面 / 重开 Hub 才更新。
+
+**根因**：`AgentAppSurface` 只在挂载时执行一次 `loadRunConfiguration()`（一次 `Promise.all` 同时拉 `definitions` /
+`providers` / `settings`）；设置区（`settings/AgentSettingsPanel.vue`）保存后只更新自己的 `providers` ref ——
+两边没有共享 store，也没有通知。仓库里已有的 `agent-host-events` 只有 `thread-changed` / `authorization-changed` /
+`memory-changed` / `host-changed`，而 `host-changed` 仅被 `AgentSurfaceHost` 用于刷新 host summary，
+`AgentAppSurface` 并未订阅。
+
+**改法**（新增一个事件，不改数据流）
+
+- `host/agent-host-events.ts` 新增 `configuration-changed`；
+- 设置区只在**真正写成功**之后发出：`execute()` 中 `locks.includes('providers')`（create / toggle / protocol / delete /
+  discover / add-model / update-models 全部经过这个口）与 `patchSection()`（模型 / 预算 / 性能等分区保存）；
+- `AgentAppSurface` 订阅该事件 → 重新执行 `loadRunConfiguration()`（失败沿用现有的 `error` 提示），`onBeforeUnmount` 退订。
+  刷新后仍用 session 里恢复的模型 key 重新匹配，因此**不会覆盖用户已选的模型**（`setModelSelection` 会写 `agentSurfaceSession`）。
+
+**CDP 复验**（同一页面、全程不刷新；Hub 是 `app/App.vue` 里的常驻浮窗，切路由不会卸载）
+
+| 步骤 | 操作                      | Hub 实测                                                            |
+| ---- | ------------------------- | ------------------------------------------------------------------- |
+| A    | 打开「模型」弹层          | trigger `gemini-3.8-flash-high`，列表 11 行                         |
+| B    | 设置区点 provider「停用」 | trigger 消失、弹层关闭、0 行（surface 立即换成 providerMissing 态） |
+| C    | 再点「启用」              | trigger 回到 `gemini-3.8-flash-high`                                |
+| D    | 重新打开弹层              | 11 行                                                               |
+
+- 每次写入触发 2 次 `/agent/ai/providers` GET（surface 的 `loadRunConfiguration` + 设置区自身的 `agentApi.providers()`）；
+- 复验结束后环境已复原：`newapi` `enabled: true`、11 个模型（`version 15`）；
+- 门禁：`all templates compile` + `vue-tsc --noEmit` exit 0 + `prettier --check` 通过；
+- 截图：`/tmp/shots/refresh-after-disable.png`、`/tmp/shots/refresh-after-enable.png`；
+- **未覆盖**：跨标签页（在另一个浏览器 tab 改 provider）仍不推送 —— `host-changed` 的 BroadcastChannel 只同步 host summary。
 
 ---
 

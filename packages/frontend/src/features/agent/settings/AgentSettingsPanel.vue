@@ -164,6 +164,8 @@
     for (const lock of locks) activeOperationLocks.add(lock);
     try {
       const result = await action();
+      // Provider list changed (model added/removed/enabled): let the open Agent surface reload.
+      if (locks.includes('providers')) agentHostEvents.emit('configuration-changed', undefined);
       if (success !== null) operationFeedback.notifySuccess(success ?? t('agent.ui.saved'));
       return result;
     } catch (cause) {
@@ -183,6 +185,7 @@
         settings.value = await agentApi.patchSettings({ [section]: patch }, settings.value.revision);
         storage.value = await agentApi.storage();
         agentHostEvents.emit('host-changed', undefined);
+        agentHostEvents.emit('configuration-changed', undefined);
       },
       success,
     );
