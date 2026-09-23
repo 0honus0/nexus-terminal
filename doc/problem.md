@@ -2058,6 +2058,10 @@ Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
     `UiInfoHint` 实测 `20×20`、`cursor: help`、`title` = 描述 + 口号（74 字）；
   - 删除随之失效的 i18n `agent.settings.feature.state`（三语，避免制造死 key）；
   - 截图：`/tmp/shots/feature-card-after.png`。
+  - **追加（2026-09-23，用户反馈）**：右侧「`已启用` 胶囊 + `关闭 Agent` 按钮」两个色块并排不好看 —— 把状态胶囊移到标题行
+    （`Agent 功能 · 已启用 · ⓘ`），右侧只留一个操作按钮，与同分组其它卡片（Provider / 插件 / 安全的"标题 + 统计胶囊 + ⓘ，右侧单个操作"）一致。
+    CDP 实测：标题 `@362` → 胶囊 `@440` → `ⓘ` `@516`，按钮独占右侧 `@1466`；把卡片压到 470px 宽仍是单行且按钮不越界（`overflow -21px`）。
+    截图 `/tmp/shots/feature-after.png`（宽）/ `feature-narrow.png`（窄）。
 - **b) ✅ 已关闭 2026-09-23：其余 16 张卡片的 `description` 段落全部迁到 `UiInfoHint`**
   - 范围：settings 的 **15 个文件 / 16 处卡头**（AcpRuntime / executionPolicy / browserRuntime / budget /
     mcpIntegrations / memory 卡头 / memory.import / providers / performance / plugins / safety / storage / subagents /

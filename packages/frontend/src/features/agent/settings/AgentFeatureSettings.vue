@@ -47,11 +47,8 @@
 <template>
   <section class="overflow-hidden rounded-xl border border-border/70 bg-card/35">
     <div class="flex flex-wrap items-center justify-between gap-3 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5">
-      <div class="flex items-center gap-1.5">
+      <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.feature.title') }}</h3>
-        <UiInfoHint :text="featureHelp" />
-      </div>
-      <div class="flex items-center gap-3">
         <span
           class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
           :class="stateBadgeClass"
@@ -59,16 +56,17 @@
           <span class="h-1.5 w-1.5 rounded-full" :class="stateDotClass"></span>
           {{ stateLabel }}
         </span>
-        <UiButton
-          type="button"
-          :appearance="runtimeEnabled ? 'soft' : 'solid'"
-          :tone="runtimeEnabled ? 'danger' : 'primary'"
-          :disabled="busy"
-          @click="emit('change', !runtimeEnabled)"
-        >
-          {{ runtimeEnabled ? $t('agent.settings.feature.disable') : $t('agent.settings.feature.enable') }}
-        </UiButton>
+        <UiInfoHint :text="featureHelp" />
       </div>
+      <UiButton
+        type="button"
+        :appearance="runtimeEnabled ? 'soft' : 'solid'"
+        :tone="runtimeEnabled ? 'danger' : 'primary'"
+        :disabled="busy"
+        @click="emit('change', !runtimeEnabled)"
+      >
+        {{ runtimeEnabled ? $t('agent.settings.feature.disable') : $t('agent.settings.feature.enable') }}
+      </UiButton>
     </div>
   </section>
 </template>
