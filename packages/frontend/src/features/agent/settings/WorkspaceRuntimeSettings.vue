@@ -26,6 +26,20 @@
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.workspace-runtime');
 
+  /*
+   * 后端 availability.reason 可能是约定码（runner_not_configured），也可能是上游
+   * 直接抛出的英文错误消息。先把已知码翻译成人话；未知值退回通用说明，原始值
+   * 只在 "原因代码" 行 + title 里出现，避免把机器码当唯一解释给用户看。
+   */
+  const availabilityReason = computed(() => {
+    const code = props.availability.reason?.trim();
+    if (!code) return null;
+    const key = `agent.settings.workspaceRuntime.reason.${code}`;
+    const translated = t(key);
+    if (translated !== key) return { text: translated, code: '', raw: code };
+    return { text: t('agent.settings.workspaceRuntime.reasonUnknown'), code, raw: code };
+  });
+
   const catalog = ref<AgentWorkspaceRuntimeCatalogDto | null>(null);
   const storage = ref<AgentWorkspaceRuntimeStorageDto | null>(null);
   const loading = ref(false);
@@ -130,7 +144,8 @@
     requested.value.toolVersions[pack.familyId] ?? { enabledVersionIds: [], defaultVersionId: null };
   const isDesiredEnabled = (pack: AgentToolchainCatalogPackDto) =>
     familyConfig(pack).enabledVersionIds.includes(pack.versionId);
-  const isDesiredDefault = (pack: AgentToolchainCatalogPackDto) => familyConfig(pack).defaultVersionId === pack.versionId;
+  const isDesiredDefault = (pack: AgentToolchainCatalogPackDto) =>
+    familyConfig(pack).defaultVersionId === pack.versionId;
 
   const savePackPreference = (pack: AgentToolchainCatalogPackDto, mode: 'toggle' | 'default') =>
     run('save-pack-preference', async () => {
@@ -269,7 +284,14 @@
             }}
           </span>
         </div>
-        <p v-if="availability.reason" class="mt-2 text-xs text-text-secondary">{{ availability.reason }}</p>
+        <template v-if="availabilityReason">
+          <p class="mt-2 text-xs text-text-secondary" :title="availabilityReason.raw">
+            {{ availabilityReason.text }}
+          </p>
+          <p v-if="availabilityReason.code" class="mt-1 font-mono text-[11px] text-text-secondary/60">
+            {{ $t('agent.settings.workspaceRuntime.reasonCode') }}: {{ availabilityReason.code }}
+          </p>
+        </template>
       </div>
 
       <template v-if="availability.available && catalog && storage">

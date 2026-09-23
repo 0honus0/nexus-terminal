@@ -365,7 +365,14 @@
         "none": "なし",
         "confirmUninstall": "アンインストールを確認",
         "cancel": "キャンセル",
-        "commandStatus": "最新コマンド：{action} · {status}"
+        "commandStatus": "最新コマンド：{action} · {status}",
+        "reasonUnknown": "Workspace ランタイムは現在利用できません。バックエンドからの詳細情報はありません。",
+        "reasonCode": "バックエンドの原因コード",
+        "reason": {
+          "runner_not_configured": "Workspace Runner が未設定です（アドレスまたはトークンがありません）。Workspace ランタイムは利用できません。",
+          "runner_unavailable": "Workspace Runner に接続できません。Workspace ランタイムは一時的に利用できません。",
+          "runtime_not_configured": "Workspace Runner に利用可能なランタイム環境が設定されていません。"
+        }
       },
       "safety": {
         "title": "グローバル禁止ターゲット",

@@ -72,7 +72,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | `zh-CN` 词典与 en-US 完全相同的 key 由 35 → 22、整句英文由 15 → 5（`ja` 49 → 31 / 20 → 5），剩 5 条是品牌与协议名（白名单）；枚举不再插进本地化句子（`审批状态：approved` / `当前状态：enabled` 走 `status` / `stateLabels` 映射）；新增 `pnpm lint:agent-i18n` 防回归                                                                                                               | `i18n/zh-CN.json`、`ApprovalCard.vue`、`AgentFeatureSettings.vue`（见 §7.15-a）                               |
 | P2                                    | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态，无粘性分区导航                                                                                                                                                                                                                                                                                           | `settings/**`（见 §7.15-c）                                                                                   |
 | P2                                    | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`），与主界面"图标+居中+引导按钮"的空态卡不是同一套语言                                                                                                                                                                                                                                                                     | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                        |
-| P1                                    | 设置区把后端原始原因码当"不可用原因"渲染（实测灰色的 `runtime_not_configured`），且这是唯一解释                                                                                                                                                                                                                                                                                      | `settings/WorkspaceRuntimeSettings.vue:270`（见 §7.15-b）                                                     |
+| **P1 · ✅ 已关闭 2026-09-23**         | 设置区不再把后端原始原因码当"不可用原因"渲染：已知码（`runner_not_configured` / `runner_unavailable` / `runtime_not_configured`）映射成中/英/日文说明，未知码退回通用说明并把原始值放进 `title` 与「后端原因代码」行                                                                                                                                                                 | `settings/WorkspaceRuntimeSettings.vue`（见 §7.15-b）                                                         |
 | P2                                    | 禁用态主按钮 = 品牌色 + `opacity .5`，与可用态难以区分（保存/预览导入/卸载/立即更新长期如此），且不解释原因                                                                                                                                                                                                                                                                          | `features/agent/settings/**`（实测见 §7.13-e）                                                                |
 | **P1 · ✅ 已关闭 2026-09-23**         | 图标颜色：未分层的 `i/.fas/.far/.fab { color: var(--icon-color) }` 压过 `@layer utilities`，132 个带 `text-primary/success/warning/error/foreground` 的图标一律渲染成 `#666`（`!text-white` 是既有绕过写法）                                                                                                                                                                         | `app/styles/global.css:91-110`（见 §7.19）                                                                    |
 | **P1 · ✅ 已关闭 2026-09-23**         | 空态便当卡自动轮播已可中断：悬停/焦点暂停、手动分页后固定、`prefers-reduced-motion` 时彻底不轮播（hover 位移与脉冲也一起关掉）                                                                                                                                                                                                                                                       | `ai/AgentConversation.vue`（见 §2.6）                                                                         |
@@ -1398,6 +1398,17 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 → 建议加一条 i18n 校验规则：`zh/ja` 中若某 value 与 `en` 完全相同且含多个英文单词则报错（品牌词 `MCP Integrations` / `Chat Completions` 之类进白名单），然后把这 14+18 条补上译文。
 
 **b) 把原始机器码当"不可用原因"给用户看（P1，新）**
+
+> ✅ **2026-09-23 闭环（CDP 复验，中文界面）**
+>
+> `WorkspaceRuntimeSettings.vue` 不再直接渲染 `availability.reason`：新增 `availabilityReason` computed，
+> 先按 `agent.settings.workspaceRuntime.reason.{code}` 查表（新增 `runner_not_configured` / `runner_unavailable` / `runtime_not_configured` 三个码，三语齐全），
+> 命中就显示人话、原始码只留在 `title`；未命中则显示 `reasonUnknown` 通用说明，并在下面加一行
+> `后端原因代码: <code>`（等宽小字）供排查 —— 既不再把机器码当解释，也不丢调试信息。
+>
+> 实测：接口当前返回 `{"available":false,"reason":"runner_not_configured"}`，界面显示
+> **「尚未配置 Workspace Runner（缺少地址或访问令牌），Workspace 运行时不可用。」**，页面内 `runner_not_configured` 命中 0 次。
+> （§7.15-b 原文记录的 `runtime_not_configured` 是当时那套配置下的取值，两者都已进映射表。）
 
 `settings/WorkspaceRuntimeSettings.vue:270` 的 `<p v-if="availability.reason">{{ availability.reason }}</p>` 直接渲染后端原因码；
 实测「Workspace 开发环境」卡片里显示的是灰色的 **`runtime_not_configured`**。

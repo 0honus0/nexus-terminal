@@ -365,7 +365,14 @@
         "none": "无",
         "confirmUninstall": "确认卸载",
         "cancel": "取消",
-        "commandStatus": "最近命令：{action} · {status}"
+        "commandStatus": "最近命令：{action} · {status}",
+        "reasonUnknown": "Workspace 运行时当前不可用，后端未提供进一步说明。",
+        "reasonCode": "后端原因代码",
+        "reason": {
+          "runner_not_configured": "尚未配置 Workspace Runner（缺少地址或访问令牌），Workspace 运行时不可用。",
+          "runner_unavailable": "无法连接 Workspace Runner，Workspace 运行时暂不可用。",
+          "runtime_not_configured": "Workspace Runner 尚未配置可用的运行时环境。"
+        }
       },
       "safety": {
         "title": "全局禁用目标",

@@ -365,7 +365,14 @@
         "none": "None",
         "confirmUninstall": "Confirm uninstall",
         "cancel": "Cancel",
-        "commandStatus": "Last command: {action} · {status}"
+        "commandStatus": "Last command: {action} · {status}",
+        "reasonUnknown": "The Workspace runtime is currently unavailable; the backend did not provide a further explanation.",
+        "reasonCode": "Backend reason code",
+        "reason": {
+          "runner_not_configured": "The Workspace Runner is not configured (missing address or token), so the Workspace runtime is unavailable.",
+          "runner_unavailable": "The Workspace Runner cannot be reached; the Workspace runtime is temporarily unavailable.",
+          "runtime_not_configured": "The Workspace Runner has no runtime environment configured."
+        }
       },
       "safety": {
         "title": "Globally blocked targets",
