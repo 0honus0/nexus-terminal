@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
   import { useConnections } from '@/features/connections/public';
+  import { UiInfoHint } from '@/foundation/ui';
   import AgentConversation from '../ai/AgentConversation.vue';
   import {
     createConversationCommandExecutor,
@@ -1918,11 +1919,9 @@
                   </template>
                   <template #panel="{ close }">
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
-                      <div>
-                        <div class="text-xs font-semibold">{{ $t('agent.operations.executionMode') }}</div>
-                        <div class="mt-1 text-[11px] leading-4 text-text-secondary">
-                          {{ $t('agent.operations.executionModeHint') }}
-                        </div>
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-semibold">{{ $t('agent.operations.executionMode') }}</span>
+                        <UiInfoHint :text="$t('agent.operations.executionModeHint')" />
                       </div>
                       <span
                         v-if="modelSelectionLocked"
@@ -2034,11 +2033,9 @@
                   </template>
                   <template #panel="{ close }">
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
-                      <div>
-                        <div class="text-xs font-semibold">{{ $t('agent.operations.approvalMode') }}</div>
-                        <div class="mt-1 text-[11px] leading-4 text-text-secondary">
-                          {{ $t('agent.operations.approvalModeHint') }}
-                        </div>
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-semibold">{{ $t('agent.operations.approvalMode') }}</span>
+                        <UiInfoHint :text="$t('agent.operations.approvalModeHint')" />
                       </div>
                       <span
                         v-if="modelSelectionLocked"
