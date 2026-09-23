@@ -20,6 +20,17 @@
   const emit = defineEmits<{ 'open-change': [open: boolean] }>();
 
   const open = ref(false);
+  /*
+   * The panel ships with a placeholder size so nothing is painted before it
+   * has been placed: a zero max-width collapses it and max-height 300px is the
+   * fallback cap. Measuring *that* box is what produced the one frame flash - a
+   * zero width fed the horizontal centring and the capped height fed the "open
+   * upwards" branch, so the panel first appeared at (433, 472) and then snapped
+   * to (426, 434) on the following frame, once the ResizeObserver corrected it.
+   * `positioned` keeps the panel invisible until the real measurement lands, so
+   * the first painted frame is already the final one.
+   */
+  const positioned = ref(false);
   const position = ref({ left: '0px', top: '0px', maxWidth: '0px', maxHeight: '300px' });
   const trigger = ref<HTMLButtonElement | null>(null);
   const panel = ref<HTMLElement | null>(null);
@@ -48,6 +59,7 @@
   const close = (restoreFocus = true): void => {
     if (!open.value) return;
     open.value = false;
+    positioned.value = false;
     emit('open-change', false);
     if (activePopoverCloser === close) {
       activePopoverCloser = null;
@@ -56,14 +68,27 @@
     if (restoreFocus) queueMicrotask(() => trigger.value?.focus());
   };
 
-  const positionPanel = () => {
+  const positionPanel = (): boolean => {
     const anchor = trigger.value?.getBoundingClientRect();
     const popup = panel.value;
-    if (!anchor || !popup) return;
+    if (!anchor || !popup) return false;
     const bounds = resolveBounds();
     const availableWidth = Math.max(0, bounds.right - bounds.left - EDGE_INSET * 2);
-    const width = Math.min(popup.getBoundingClientRect().width, availableWidth);
-    const height = popup.getBoundingClientRect().height;
+
+    const maxHeight = Math.max(120, bounds.height - EDGE_INSET * 2);
+
+    /*
+     * Release both placeholder caps before measuring, otherwise the box we read
+     * is still the placeholder one - zero wide and clipped to the fallback height
+     * - and every value derived from it is wrong. Writing the caps straight to
+     * the element forces a synchronous reflow, and the reactive values below land
+     * on the same numbers, so the later Vue patch is a no-op.
+     */
+    popup.style.maxWidth = `${availableWidth}px`;
+    popup.style.maxHeight = `${maxHeight}px`;
+    const measured = popup.getBoundingClientRect();
+    const width = Math.min(measured.width, availableWidth);
+    const height = measured.height;
 
     // 水平居中：展开内容的中心点严格对齐点击项中心点
     const anchorCenter = anchor.left + anchor.width / 2;
@@ -91,8 +116,10 @@
       left: `${left}px`,
       top: `${top}px`,
       maxWidth: `${availableWidth}px`,
-      maxHeight: `${Math.max(120, bounds.height - EDGE_INSET * 2)}px`,
+      maxHeight: `${maxHeight}px`,
     };
+    positioned.value = true;
+    return true;
   };
 
   const observeSizing = (): void => {
@@ -117,7 +144,7 @@
     emit('open-change', true);
     activePopoverCloser = close;
     await nextTick();
-    positionPanel();
+    if (!positionPanel()) requestAnimationFrame(() => positionPanel());
     observeSizing();
     panel.value?.focus();
   };
@@ -181,7 +208,7 @@
         v-if="open"
         data-agent-hub-portal
         tabindex="-1"
-        :style="position"
+        :style="[position, positioned ? null : { visibility: 'hidden' }]"
         :id="panelId"
         ref="panel"
         role="dialog"

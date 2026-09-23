@@ -10,6 +10,13 @@
   const triggerRef = ref<HTMLButtonElement | null>(null);
   const panelRef = ref<HTMLElement | null>(null);
   const position = ref({ left: '0px', top: '0px', maxWidth: '0px', maxHeight: '0px' });
+  /*
+   * Same guard as the composer popovers: the placeholder caps make the panel
+   * collapse to zero, so anything measured before they are released is wrong
+   * (this one silently fell back to 260x220 and placed the panel accordingly
+   * for one frame). Nothing is painted until the real measurement lands.
+   */
+  const positioned = ref(false);
   let hubResizeObserver: ResizeObserver | null = null;
 
   // Teleported panel bounds: stay inside the owning Agent Hub window when the
@@ -49,14 +56,16 @@
     return candidateApps.value.filter((app) => `${app.displayName} ${app.id}`.toLowerCase().includes(needle));
   });
 
-  const positionPanel = () => {
+  const positionPanel = (): boolean => {
     const anchor = triggerRef.value?.getBoundingClientRect();
     const popup = panelRef.value;
-    if (!anchor || !popup) return;
-    const popupRect = popup.getBoundingClientRect();
+    if (!anchor || !popup) return false;
     const bounds = resolveBounds();
     const availableWidth = Math.max(0, bounds.right - bounds.left - EDGE_INSET * 2);
     const availableHeight = Math.max(0, bounds.bottom - bounds.top - EDGE_INSET * 2);
+    popup.style.maxWidth = `${availableWidth}px`;
+    popup.style.maxHeight = `${availableHeight}px`;
+    const popupRect = popup.getBoundingClientRect();
     const width = Math.min(popupRect.width || 260, availableWidth);
     const height = Math.min(popupRect.height || 220, availableHeight);
 
@@ -78,6 +87,8 @@
       maxWidth: `${availableWidth}px`,
       maxHeight: `${availableHeight}px`,
     };
+    positioned.value = true;
+    return true;
   };
 
   const toggle = async () => {
@@ -88,7 +99,7 @@
     open.value = true;
     query.value = '';
     await nextTick();
-    positionPanel();
+    if (!positionPanel()) requestAnimationFrame(() => positionPanel());
     observeHub();
     panelRef.value?.focus();
   };
@@ -96,6 +107,7 @@
   const close = (restoreFocus = false) => {
     if (!open.value) return;
     open.value = false;
+    positioned.value = false;
     hubResizeObserver?.disconnect();
     if (restoreFocus) queueMicrotask(() => triggerRef.value?.focus());
   };
@@ -152,7 +164,7 @@
         data-agent-hub-portal
         ref="panelRef"
         tabindex="-1"
-        :style="position"
+        :style="[position, positioned ? null : { visibility: 'hidden' }]"
         class="fixed z-[60] flex w-72 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xl outline-none backdrop-blur-md"
       >
         <div class="flex items-center justify-between border-b border-border/60 px-3 py-2 text-xs font-semibold">
