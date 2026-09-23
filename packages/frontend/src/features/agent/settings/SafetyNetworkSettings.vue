@@ -350,7 +350,7 @@
                 <span v-if="connection.username" class="text-text-secondary">{{ connection.username }}@</span>
                 <span>{{ connection.host }}:{{ connection.port }}</span>
                 <span
-                  class="rounded bg-card/80 border border-border/70 px-1.5 py-0.5 text-[9px] uppercase font-semibold text-text-secondary"
+                  class="rounded bg-card/80 border border-border/70 px-1.5 py-0.5 text-[10px] uppercase font-semibold text-text-secondary"
                 >
                   {{ connection.type }}
                 </span>

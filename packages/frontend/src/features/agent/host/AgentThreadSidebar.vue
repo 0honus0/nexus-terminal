@@ -191,7 +191,7 @@
           </span>
           <span
             v-if="activeThreadCount > 0"
-            class="flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[9px] font-medium leading-none text-success"
+            class="flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-success"
           >
             <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-success"></span>{{ activeThreadCount }}
           </span>
@@ -313,7 +313,7 @@
               {{ thread.title || $t('agent.operations.untitledThread') }}
             </span>
             <div
-              class="mt-0.5 flex items-center justify-between gap-1.5 text-[9px] text-text-secondary/50"
+              class="mt-0.5 flex items-center justify-between gap-1.5 text-[10.75px] text-text-secondary/75"
               :style="{ fontSize: `${9 * scale}px` }"
             >
               <span

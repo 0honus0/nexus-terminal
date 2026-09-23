@@ -801,7 +801,7 @@
                     <p class="text-[10px] text-text-secondary leading-tight mt-0.5">
                       {{ getCapabilityMeta(capability).desc }}
                     </p>
-                    <span class="mt-1 inline-block font-mono text-[9px] text-text-secondary/60">
+                    <span class="mt-1 inline-block font-mono text-[11px] text-text-secondary/75">
                       {{ capability }}
                     </span>
 

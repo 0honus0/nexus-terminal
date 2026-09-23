@@ -51,7 +51,7 @@
 <template>
   <div v-if="selectableFamilies.length" class="mt-2 rounded border border-border p-2">
     <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.workspaceToolVersions') }}</div>
-    <p class="mt-0.5 text-[9px] text-text-secondary">
+    <p class="mt-0.5 text-[11px] text-text-secondary">
       {{ $t('agent.workspaceRuntime.workspaceToolVersionsHint') }}
     </p>
     <div class="mt-2 grid gap-2 sm:grid-cols-3">

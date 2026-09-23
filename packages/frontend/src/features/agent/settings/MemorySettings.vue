@@ -361,7 +361,7 @@
             <span
               v-for="item in provenanceProjection(memory)"
               :key="item"
-              class="max-w-full truncate rounded-md bg-header px-2 py-1 font-mono text-[9px] text-text-secondary"
+              class="max-w-full truncate rounded-md bg-header px-2 py-1 font-mono text-[11px] text-text-secondary"
               :title="item"
             >
               {{ item }}

@@ -175,7 +175,7 @@
               </div>
               <span
                 v-if="settings.requestedSettings.hardLimits[key] !== settings.effectiveSettings.hardLimits[key]"
-                class="shrink-0 text-[9px] leading-4 text-warning"
+                class="shrink-0 text-[11px] leading-4 text-warning"
                 :title="
                   $t('agent.settings.hardLimits.effective', { value: settings.effectiveSettings.hardLimits[key] })
                 "

@@ -279,7 +279,7 @@
               <div class="mt-0.5 font-mono font-medium text-foreground">
                 {{ detailSnapshot.usage.inputTokens + detailSnapshot.usage.outputTokens }}
               </div>
-              <div class="mt-1 truncate font-mono text-[9px] text-text-secondary/80">
+              <div class="mt-1 truncate font-mono text-[11px] text-text-secondary/80">
                 {{
                   $t('agent.tasks.tokenBreakdown', {
                     input: detailSnapshot.usage.inputTokens,
@@ -401,7 +401,7 @@
                   <div class="truncate font-mono text-[10px] font-medium text-foreground">
                     #{{ checkpoint.id.slice(-8) }}
                   </div>
-                  <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[8px] text-text-secondary">
+                  <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[10px] text-text-secondary">
                     {{
                       $t(
                         checkpoint.kind === 'recovery'
@@ -411,7 +411,7 @@
                     }}
                   </span>
                 </div>
-                <div class="mt-0.5 text-[9px] text-text-secondary">
+                <div class="mt-0.5 text-[11px] text-text-secondary">
                   {{
                     $t('agent.tasks.checkpointWatermark', {
                       ledger: checkpoint.ledgerThrough,
@@ -465,7 +465,7 @@
           >
             <div class="text-[10px] text-text-secondary">#{{ entry.sequence }} · {{ entry.kind }}</div>
             <pre
-              class="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-[9px] leading-snug"
+              class="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug"
               >{{ JSON.stringify(entry.payload, null, 2) }}</pre>
           </article>
         </details>
@@ -531,7 +531,7 @@
                       :class="currentPlanItem.status === 'blocked' ? 'bg-warning' : 'bg-primary'"
                     ></span>
                     <div class="min-w-0">
-                      <div class="text-[9px] text-text-secondary">{{ $t('agent.tasks.currentFocus') }}</div>
+                      <div class="text-[11px] text-text-secondary">{{ $t('agent.tasks.currentFocus') }}</div>
                       <div class="mt-0.5 line-clamp-2 text-xs font-medium leading-4">{{ currentPlanItem.title }}</div>
                     </div>
                   </div>
@@ -560,11 +560,11 @@
                         :style="{ width: `${contextPercent}%` }"
                       ></div>
                     </div>
-                    <div v-if="contextUsage" class="mt-1 font-mono text-[9px] text-text-secondary/75">
+                    <div v-if="contextUsage" class="mt-1 font-mono text-[11px] text-text-secondary/75">
                       {{ $t('agent.tasks.contextReserved', { value: contextUsage.reservedOutputTokens }) }} ·
                       {{ $t(`agent.tasks.contextSource.${contextUsage.source}`) }}
                     </div>
-                    <div class="mt-1 font-mono text-[9px] text-text-secondary/75">
+                    <div class="mt-1 font-mono text-[11px] text-text-secondary/75">
                       {{
                         $t('agent.tasks.tokenBreakdown', {
                           input: current.usage.inputTokens,
@@ -639,7 +639,7 @@
                           </span>
                           <button
                             type="button"
-                            class="flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-0.5 text-[9px] font-medium text-foreground hover:bg-header disabled:opacity-50"
+                            class="flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-[11px] font-medium text-foreground hover:bg-header disabled:opacity-50"
                             :disabled="busy || current.status === 'cancelling' || current.needsReconciliation"
                             @click="emit('saveCheckpoint', current)"
                           >
@@ -655,11 +655,11 @@
                           <div
                             v-for="cp in currentCheckpoints"
                             :key="cp.id"
-                            class="flex items-center justify-between gap-1 rounded-md border border-border/40 bg-card/80 px-2 py-1 text-[9px]"
+                            class="flex items-center justify-between gap-1 rounded-md border border-border/40 bg-card/80 px-2 py-1 text-[11px]"
                           >
                             <div class="flex min-w-0 items-center gap-1">
                               <div class="truncate font-mono text-foreground">#{{ cp.id.slice(-6) }}</div>
-                              <span class="shrink-0 rounded bg-header px-1 py-0.5 text-[8px] text-text-secondary">
+                              <span class="shrink-0 rounded bg-header px-1 py-0.5 text-[10px] text-text-secondary">
                                 {{
                                   $t(
                                     cp.kind === 'recovery'
@@ -672,7 +672,7 @@
                             <button
                               v-if="terminal.has(current.status) && cp.kind === 'user'"
                               type="button"
-                              class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary hover:bg-primary/20"
+                              class="shrink-0 rounded bg-primary/10 px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/20"
                               :disabled="busy || current.needsReconciliation"
                               @click="emit('resumeCheckpoint', current, cp)"
                             >
@@ -729,7 +729,7 @@
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex min-w-0 items-center gap-2">
                     <strong class="text-xs">{{ $t('agent.tasks.plan') }}</strong>
-                    <span class="text-[9px] text-text-secondary">r{{ current.plan.revision }}</span>
+                    <span class="text-[11px] text-text-secondary">r{{ current.plan.revision }}</span>
                     <span
                       v-if="blockedPlanItems"
                       class="rounded-full bg-warning/10 px-1.5 py-0.5 text-[9px] text-warning"
@@ -831,7 +831,7 @@
                     <span class="block truncate text-[10px] font-medium">{{
                       $t(`agent.tasks.runStatus.${item.status}`)
                     }}</span>
-                    <span class="mt-0.5 block truncate text-[9px] text-text-secondary">
+                    <span class="mt-0.5 block truncate text-[11px] text-text-secondary">
                       {{ item.definition.model.modelId }} · {{ item.usage.steps }}
                     </span>
                   </span>
@@ -865,7 +865,7 @@
                     <span class="block truncate text-[10px] font-medium">{{
                       $t(`agent.tasks.runStatus.${item.status}`)
                     }}</span>
-                    <span class="mt-0.5 block truncate text-[9px] text-text-secondary">
+                    <span class="mt-0.5 block truncate text-[11px] text-text-secondary">
                       {{ threadTitles[item.threadId] || item.threadId }} · {{ item.definition.model.modelId }}
                     </span>
                   </span>

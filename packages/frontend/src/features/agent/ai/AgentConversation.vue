@@ -559,7 +559,7 @@
                   <span class="font-medium">{{ choice.label }}</span>
                   <span
                     v-if="choice.value === question.recommendedChoice"
-                    class="ml-1 text-[9px] font-semibold uppercase tracking-wide text-primary"
+                    class="ml-1 text-[11px] font-semibold uppercase tracking-wide text-primary"
                   >
                     {{ $t('agent.conversation.clarificationRecommended') }}
                   </span>

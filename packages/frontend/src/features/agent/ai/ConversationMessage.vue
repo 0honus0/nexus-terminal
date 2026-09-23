@@ -203,7 +203,7 @@
           data-testid="agent-tool-call-detail"
           :data-tool-name="call.name"
         >
-          <div class="mb-1.5 flex min-w-0 items-center gap-1.5 text-[9px] text-text-secondary/60">
+          <div class="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-text-secondary/75">
             <code class="min-w-0 truncate font-mono font-semibold text-foreground/80">{{ call.name }}</code>
             <span aria-hidden="true">·</span>
             <span class="shrink-0">{{ $t('agent.conversation.toolArguments') }}</span>
@@ -275,7 +275,7 @@
       </summary>
       <div class="ml-7 mt-2 rounded-lg bg-header/25 px-3 py-2.5 ring-1 ring-inset ring-border/30">
         <div
-          class="mb-2 flex items-center gap-1.5 text-[9px] font-medium uppercase tracking-[0.08em] text-text-secondary/55"
+          class="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary/75"
         >
           <i class="fa-solid fa-code text-[8px]" aria-hidden="true"></i>
           <span>{{ $t('agent.conversation.jsonLabel') }}</span>
@@ -305,7 +305,7 @@
         <span>{{ $t('agent.conversation.kind.assistant_message') }}</span>
         <span
           v-if="messageUsage"
-          class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md bg-header/35 px-1.5 py-0.5 text-[9px] text-text-secondary/75 select-none"
+          class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md bg-header/35 px-1.5 py-0.5 text-[11px] text-text-secondary/75 select-none"
           :title="
             messageUsage.estimated
               ? `预估 Token: ${messageUsage.totalTokens}`
@@ -330,7 +330,7 @@
         <span>{{ text }}</span>
         <span
           v-if="messageUsage"
-          class="ml-2 inline-flex whitespace-nowrap align-middle items-center gap-1 rounded-md bg-header/35 px-1.5 py-0.5 text-[9px] leading-none text-text-secondary/70 select-none"
+          class="ml-2 inline-flex whitespace-nowrap align-middle items-center gap-1 rounded-md bg-header/35 px-1.5 py-0.5 text-[11px] leading-none text-text-secondary/75 select-none"
           :title="`预估 Token: ${messageUsage.totalTokens}`"
         >
           <i class="fa-solid fa-coins text-[7px] text-text-secondary/65" aria-hidden="true"></i>

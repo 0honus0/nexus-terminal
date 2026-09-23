@@ -1498,7 +1498,7 @@
                       <span class="font-mono text-xs text-foreground truncate">{{ model.id }}</span>
                       <span
                         v-if="model.ownedBy"
-                        class="rounded bg-header/60 px-1 py-0.5 font-mono text-[9px] text-text-secondary truncate"
+                        class="rounded bg-header/60 px-1 py-0.5 font-mono text-[11px] text-text-secondary truncate"
                       >
                         {{ model.ownedBy }}
                       </span>
@@ -1598,7 +1598,7 @@
                       <span class="font-mono text-xs text-foreground truncate">{{ model.id }}</span>
                       <span
                         v-if="provider.id === defaultProviderId && model.id === defaultModelId"
-                        class="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary"
+                        class="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
                       >
                         <i class="fa-solid fa-star text-[7px]"></i>
                         <span>{{ $t('agent.settings.providers.defaultBadge') }}</span>

@@ -18,7 +18,7 @@
           <span>#{{ message.recipientSequence }} · {{ message.kind }} · {{ message.status }}</span>
           <span>{{ new Date(message.createdAt * 1000).toLocaleString() }}</span>
         </div>
-        <div class="mt-1 break-all font-mono text-[9px] text-text-secondary">
+        <div class="mt-1 break-all font-mono text-[11px] text-text-secondary">
           {{ message.senderRuntimeId }} → {{ message.recipientRuntimeId }}
         </div>
         <pre class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[10px]">{{

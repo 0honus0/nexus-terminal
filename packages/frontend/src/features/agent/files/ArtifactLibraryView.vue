@@ -469,7 +469,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="min-w-44 flex-1">
             <div class="flex items-center justify-between gap-3">
-              <span class="text-[9px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+              <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
                 {{ $t('agent.files.storageOverview') }}
               </span>
               <span class="text-[10px] font-medium text-foreground">
@@ -482,26 +482,26 @@
                 :style="{ width: `${storageUsagePercent}%` }"
               ></div>
             </div>
-            <div class="mt-1.5 text-[9px] text-text-secondary">
+            <div class="mt-1.5 text-[11px] text-text-secondary">
               {{ $t('agent.files.storageUsedPercent', { percent: storageUsagePercent }) }}
             </div>
           </div>
 
           <div class="grid min-w-full grid-cols-3 gap-2 sm:min-w-[360px] sm:flex-1">
             <div class="border-l border-border/60 px-3 py-1.5">
-              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+              <div class="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
                 {{ $t('agent.files.protected') }}
               </div>
               <div class="mt-1 text-[11px] font-semibold text-foreground">{{ bytes(storage.protectedBytes) }}</div>
             </div>
             <div class="border-l border-border/60 px-3 py-1.5">
-              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+              <div class="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
                 {{ $t('agent.files.reclaimable') }}
               </div>
               <div class="mt-1 text-[11px] font-semibold text-foreground">{{ bytes(storage.reclaimableBytes) }}</div>
             </div>
             <div class="border-l border-border/60 px-3 py-1.5">
-              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+              <div class="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
                 {{ $t('agent.files.available') }}
               </div>
               <div class="mt-1 text-[11px] font-semibold text-foreground">{{ bytes(availableBytes) }}</div>
@@ -611,7 +611,7 @@
 
     <div v-if="items.length > 0" class="shrink-0 border-b border-border/60 bg-card/30 px-4">
       <div
-        class="grid h-8 grid-cols-[minmax(0,1fr)_5rem_5.5rem] items-center gap-3 px-2 text-[8px] font-semibold uppercase tracking-[0.08em] text-text-secondary sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_5.5rem]"
+        class="grid h-9 grid-cols-[minmax(0,1fr)_5rem_5.5rem] items-center gap-3 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_5.5rem]"
       >
         <span>{{ $t('agent.files.columns.name') }}</span>
         <span class="hidden sm:block">{{ $t('agent.files.columns.source') }}</span>
@@ -667,7 +667,7 @@
                 </span>
                 <span
                   v-if="extensionOf(item.originalName)"
-                  class="shrink-0 rounded bg-header px-1 py-0.5 text-[7px] font-semibold tracking-wide text-text-secondary"
+                  class="shrink-0 rounded bg-header px-1 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary"
                 >
                   {{ extensionOf(item.originalName) }}
                 </span>
@@ -678,7 +678,7 @@
                   aria-hidden="true"
                 ></i>
               </div>
-              <div class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[8px] text-text-secondary">
+              <div class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-text-secondary">
                 <span class="max-w-44 truncate" :title="item.mediaType">{{ item.mediaType }}</span>
                 <span aria-hidden="true">·</span>
                 <span class="shrink-0">{{ formatDate(item.createdAt) }}</span>
@@ -686,12 +686,12 @@
             </div>
           </div>
 
-          <div class="hidden min-w-0 truncate text-[9px] text-text-secondary sm:block" :title="appName(item)">
+          <div class="hidden min-w-0 truncate text-[11px] text-text-secondary sm:block" :title="appName(item)">
             {{ appName(item) }}
           </div>
-          <div class="hidden text-[9px] tabular-nums text-text-secondary sm:block">{{ bytes(item.sizeBytes) }}</div>
+          <div class="hidden text-[11px] tabular-nums text-text-secondary sm:block">{{ bytes(item.sizeBytes) }}</div>
           <div>
-            <span class="inline-flex rounded-md px-1.5 py-0.5 text-[8px] font-medium" :class="statusTone(item.status)">
+            <span class="inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-medium" :class="statusTone(item.status)">
               {{ $t(`agent.files.status.${item.status}`) }}
             </span>
           </div>

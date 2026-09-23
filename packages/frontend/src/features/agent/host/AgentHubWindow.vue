@@ -630,13 +630,13 @@
               v-if="displayedApps.length > 1"
               role="button"
               tabindex="0"
-              class="relative z-[1] ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-text-secondary/35 opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+              class="relative z-[1] -mr-1.5 ml-0.5 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-text-secondary/60 transition-all hover:bg-foreground/10 hover:text-foreground"
               :title="$t('agent.hub.closeApp', { app: app.displayName })"
               :aria-label="$t('agent.hub.closeApp', { app: app.displayName })"
               @click.stop="closeAppTab(app.id, $event)"
               @keydown.enter.stop="closeAppTab(app.id, $event)"
             >
-              <i class="fa-solid fa-xmark text-[9px]" aria-hidden="true"></i>
+              <i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
             </span>
           </button>
 

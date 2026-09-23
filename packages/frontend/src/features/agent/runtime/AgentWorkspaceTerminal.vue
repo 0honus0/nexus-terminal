@@ -49,7 +49,7 @@
     <div class="flex items-center justify-between gap-2">
       <div>
         <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.localTerminal') }}</div>
-        <div class="text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.localTerminalHint') }}</div>
+        <div class="text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.localTerminalHint') }}</div>
       </div>
       <button
         v-if="!opened"
@@ -64,7 +64,7 @@
         {{ $t('agent.workspaceRuntime.closeTerminal') }}
       </button>
     </div>
-    <p v-if="error" class="mt-1 text-[9px] text-error">{{ error }}</p>
+    <p v-if="error" class="mt-1 text-[11px] text-error">{{ error }}</p>
     <div v-if="channel" class="mt-2 h-72 min-h-0 overflow-hidden rounded border border-border bg-black">
       <TerminalView
         :channel="channel"

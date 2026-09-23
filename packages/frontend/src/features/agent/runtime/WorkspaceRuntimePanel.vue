@@ -316,18 +316,18 @@
     />
 
     <div v-if="activeWorkspace" class="mt-3 space-y-2">
-      <p class="text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.oneWorkspacePerRuntime') }}</p>
+      <p class="text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.oneWorkspacePerRuntime') }}</p>
       <article class="rounded bg-background p-2">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div class="font-medium">{{ activeWorkspace.profile.kind }} · {{ activeWorkspace.profile.recipeId }}</div>
-            <div class="mt-0.5 font-mono text-[9px] text-text-secondary">{{ activeWorkspace.id }}</div>
+            <div class="mt-0.5 font-mono text-[11px] text-text-secondary">{{ activeWorkspace.id }}</div>
           </div>
-          <span class="rounded bg-header px-1.5 py-0.5 text-[9px]">
+          <span class="rounded bg-header px-1.5 py-0.5 text-[11px]">
             {{ $t(`agent.workspaceRuntime.status.${activeWorkspace.status}`) }}
           </span>
         </div>
-        <p class="mt-1 text-[9px] text-text-secondary">
+        <p class="mt-1 text-[11px] text-text-secondary">
           {{
             $t('agent.workspaceRuntime.generationAndTargets', {
               generation: activeWorkspace.generation,
@@ -352,7 +352,7 @@
           <div
             v-for="target in activeWorkspace.profile.runnerPlugins"
             :key="target.pluginId"
-            class="rounded border border-border px-2 py-1 text-[9px]"
+            class="rounded border border-border px-2 py-1 text-[11px]"
           >
             <div class="font-medium">{{ target.pluginId }}</div>
             <div class="text-text-secondary">
@@ -364,7 +364,7 @@
                 })
               }}
             </div>
-            <div class="break-all font-mono text-[8px] text-text-secondary">
+            <div class="break-all font-mono text-[11px] text-text-secondary">
               {{ $t('agent.workspaceRuntime.targetSource', { entry: target.entry, hash: target.packageHash }) }}
             </div>
           </div>

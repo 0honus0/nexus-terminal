@@ -66,7 +66,7 @@
         <div
           v-for="precondition in approval.inspection.preconditions"
           :key="`${precondition.kind}:${precondition.key}`"
-          class="mb-1 break-all font-mono text-[9px]"
+          class="mb-1 break-all font-mono text-[11px]"
         >
           {{ precondition.kind }} · {{ precondition.key }}
         </div>
