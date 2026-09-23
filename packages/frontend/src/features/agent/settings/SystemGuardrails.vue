@@ -4,9 +4,7 @@
       class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4"
     >
       <div class="flex items-center gap-2.5">
-        <div
-          class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-        >
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10 text-success">
           <i class="fa-solid fa-gauge-high text-sm" aria-hidden="true"></i>
         </div>
         <div>
@@ -17,7 +15,7 @@
       <span
         class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium text-text-secondary shadow-2xs"
       >
-        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+        <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
         <span>系统硬边界</span>
       </span>
     </div>

@@ -127,28 +127,28 @@
 
   const homePromptToneClasses: Record<HomePromptTone, { card: string; icon: string; title: string; arrow: string }> = {
     primary: {
-      card: 'bg-gradient-to-br from-primary/[0.04] via-card to-card hover:border-primary/45 hover:shadow-[0_8px_24px_rgba(160,108,213,0.12)]',
+      card: 'bg-gradient-to-br from-primary/[0.04] via-card to-card hover:border-primary/45 hover:shadow-[0_8px_24px_color-mix(in_srgb,var(--color-primary)_18%,transparent)]',
       icon: 'bg-primary/10 text-primary border-primary/20 group-hover:bg-primary/15',
       title: 'group-hover:text-primary',
       arrow: 'group-hover:text-primary',
     },
     emerald: {
-      card: 'bg-gradient-to-br from-emerald-500/[0.04] via-card to-card hover:border-emerald-500/45 hover:shadow-[0_8px_24px_rgba(16,185,129,0.12)]',
-      icon: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 group-hover:bg-emerald-500/15',
-      title: 'group-hover:text-emerald-500',
-      arrow: 'group-hover:text-emerald-500',
+      card: 'bg-gradient-to-br from-success/[0.04] via-card to-card hover:border-success/45 hover:shadow-[0_8px_24px_color-mix(in_srgb,var(--color-success)_18%,transparent)]',
+      icon: 'bg-success/10 text-success border-success/20 group-hover:bg-success/15',
+      title: 'group-hover:text-success',
+      arrow: 'group-hover:text-success',
     },
     sky: {
-      card: 'bg-gradient-to-br from-sky-500/[0.04] via-card to-card hover:border-sky-500/45 hover:shadow-[0_8px_24px_rgba(14,165,233,0.12)]',
-      icon: 'bg-sky-500/10 text-sky-500 border-sky-500/20 group-hover:bg-sky-500/15',
-      title: 'group-hover:text-sky-500',
-      arrow: 'group-hover:text-sky-500',
+      card: 'bg-gradient-to-br from-info/[0.04] via-card to-card hover:border-info/45 hover:shadow-[0_8px_24px_color-mix(in_srgb,var(--color-info)_18%,transparent)]',
+      icon: 'bg-info/10 text-info border-info/20 group-hover:bg-info/15',
+      title: 'group-hover:text-info',
+      arrow: 'group-hover:text-info',
     },
     amber: {
-      card: 'bg-gradient-to-br from-amber-500/[0.04] via-card to-card hover:border-amber-500/45 hover:shadow-[0_8px_24px_rgba(245,158,11,0.12)]',
-      icon: 'bg-amber-500/10 text-amber-500 border-amber-500/20 group-hover:bg-amber-500/15',
-      title: 'group-hover:text-amber-500',
-      arrow: 'group-hover:text-amber-500',
+      card: 'bg-gradient-to-br from-warning/[0.04] via-card to-card hover:border-warning/45 hover:shadow-[0_8px_24px_color-mix(in_srgb,var(--color-warning)_18%,transparent)]',
+      icon: 'bg-warning/10 text-warning border-warning/20 group-hover:bg-warning/15',
+      title: 'group-hover:text-warning',
+      arrow: 'group-hover:text-warning',
     },
   };
 
@@ -439,7 +439,7 @@
               v-for="prompt in visibleHomePromptCards"
               :key="prompt.promptKey"
               type="button"
-              class="group relative flex items-center rounded-2xl border border-border/75 p-3.5 text-left shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99]"
+              class="group relative flex items-center rounded-2xl border border-border/75 p-3.5 text-left shadow-sm backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99]"
               :class="homePromptToneClasses[prompt.tone].card"
               @click="emit('updateDraft', $t(prompt.promptKey))"
             >
@@ -753,7 +753,7 @@
         </div>
 
         <div
-          class="agent-composer-shell rounded-xl border border-border/65 bg-card/88 backdrop-blur-md shadow-[0_2px_14px_rgba(0,0,0,0.035)] transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15 overflow-hidden"
+          class="agent-composer-shell rounded-xl border border-border/65 bg-card/88 backdrop-blur-md shadow-sm transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15 overflow-hidden"
         >
           <textarea
             id="agent-composer"

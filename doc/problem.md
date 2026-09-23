@@ -37,7 +37,7 @@
 | **✅ 已确认保留模态 2026-09-23**      | 「模态遮罩 + 浮动窗口」经产品确认是**有意设计**（背景不可交互，避免两边操作冲突；使用 Hub 时不需要同时看终端）；遮罩点击已收敛为真正 no-op，不再有 400ms「闪烁」                                                                                                                                                                                                                     | `host/AgentHubWindow.vue`（见 §2.1、§2.2）                                                                    |
 | **P1 · ✅ 已关闭 2026-09-23**         | **字号：实测推翻了"563 处 ≤11px 不可读"的整体判断**（181 处 ≤9px 里 95 处是图标；默认首屏只有 6 个 <11px 文本节点）。仍按"阅读文本 ≥11px"全量收敛：两轮共 33 文件 / 274 行，现 `<11px` 只剩图标字形与 5 个 14–16px 圆内计数/勾选，无任何阅读文字低于 11px                                                                                                                            | `features/agent/**`（见 §2.3）                                                                                |
 | **P1 · ✅ 已关闭 2026-09-23**         | **点击目标：** 关闭 App 标签 `16×16`→`24×24` 常显 + pointer；窄容器纯图标 Run 配置 `25px`→`28px`、字号 `10/10.5px`→`11px`；审批卡按钮追加 `min-h-8`（32px）                                                                                                                                                                                                                          | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`、`runtime/ApprovalCard.vue`（见 §2.4）                  |
-| P1                                    | 硬编码调色板（emerald/sky/amber/blue/purple/pink/indigo + 硬编码 rgba 阴影）绕开主题 token，切主题后视觉不可控                                                                                                                                                                                                                                                                       | `ai/AgentConversation.vue:127-152`、`host/AgentAppSurface.vue`                                                |
+| **P1 · ✅ 已关闭 2026-09-23**         | 调色板类 **182 → 0**：新增 `info` 语义 token，其余收敛到 `success/warning/error/primary`；硬编码阴影 / Hub 窗口阴影 / 遮罩改为从 token 推导。CDP 证明改 theme 变量后计算色跟随                                                                                                                                                                                                       | `app/styles/tokens.css`、`features/appearance/config/default-theme.ts`、`features/agent/**`（见 §2.7）        |
 | P1                                    | 设置区控件风格分裂：同一个「主操作按钮」有 6 套写法、5 档圆角，添加/移除模型用原生 checkbox 与 11px 纯文字按钮                                                                                                                                                                                                                                                                       | `features/agent/settings/**`（见 §6.2、§6.3）                                                                 |
 | P1                                    | 设置区模板内约 38 行硬编码中文（能力名称、存储、插件、预算等），另有英文选项混入中文界面                                                                                                                                                                                                                                                                                             | 见 §6.5                                                                                                       |
 | **P1 · ✅ 已关闭 2026-09-23**         | `bg-card` 族已恢复真实 surface；助手气泡改为有效 `bg-card`，TaskRail/空态卡继续使用已生效的 card token                                                                                                                                                                                                                                                                               | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue`                              |
@@ -401,7 +401,42 @@ Agent UI 中任意像素字号统计：
 
 建议方向：静态展示 3–4 个真实高频入口；确需轮播则只在 hover 时暂停 + 手动分页 + 尊重 reduced-motion。
 
-### 2.7 硬编码调色板绕过主题体系（P1）
+### 2.7 硬编码调色板绕过主题体系（P1 · ✅ 已关闭 2026-09-23）
+
+> ✅ **2026-09-23 闭环**：`features/agent/**` 的调色板类由 **182 处 → 0**，全部收敛到语义 token；顺带清掉硬编码阴影/遮罩。
+>
+> **① 新增 `info` 语义 token**（原有 `success/warning/error/primary` 无法覆盖"信息蓝"）：
+> `tokens.css` 增 `--color-info` / `--color-info-text` + `:root` 的 `--status-info-color: #0ea5e9`、`--status-info-text-color`；
+> `appearance/config/default-theme.ts` 的 `defaultUiTheme` 同步，`darkUiTheme` 覆盖为 `#38bdf8`（暗底提亮）。
+>
+> **② 类名收敛映射**（逐行生成补丁，11 文件 / 78 行）：
+>
+> | 原调色板                                         | → token   |
+> | ------------------------------------------------ | --------- |
+> | `emerald` / `teal` / `lime` / `green`            | `success` |
+> | `amber` / `yellow` / `orange`                    | `warning` |
+> | `sky` / `cyan`                                   | `info`    |
+> | `rose` / `red`                                   | `error`   |
+> | `indigo` / `blue` / `purple` / `violet` / `pink` | `primary` |
+>
+> 同时删掉因此变得冗余的 `dark:<token>` 变体（token 自身已随主题变化）。
+> 例外保留：推理强度滑杆的"光谱"语义改为 **`from-info via-primary to-warning`**（主题化的三段光谱，替代写死的 `blue→purple→pink`）。
+>
+> **③ 硬编码色值清理**：
+>
+> - 4 张 bento 卡的 hover 阴影 `rgba(16,185,129,.12)` 等 → `color-mix(in srgb, var(--color-<tone>) 18%, transparent)`；
+> - 滑杆发光 `rgba(168,85,247,.35)` → `color-mix(var(--color-primary) 35%)`；滑杆拇指 `bg-white text-gray-800 ring-black/10` → `bg-background text-foreground ring-border/70`；
+> - 中性阴影 → `shadow-2xs` / `shadow-sm`；搜索框 `inset_0_1px_0_rgba(255,255,255,.22)` → `shadow-xs` + `ring-2 ring-primary/15`；
+> - Hub 窗口阴影（原写死 `rgba(0,0,0,.22)` + 白色内高光，深色下发脏，§7.5-10）→ 由 `--overlay-bg-color` / `--border-color` / `--card-bg-color` 推导；
+> - Hub 遮罩 `rgba(15,23,42,.4)` → `color-mix(in srgb, var(--overlay-bg-color) 66%, transparent)`（浅色 ≈0.40、深色 ≈0.53）。
+>
+> **CDP 复验（真实页面）**
+>
+> - **主题跟随证明**：给 `--status-success-color / -info- / -warning-` 注入临时值后，`text-success / text-info / text-warning` 计算色同步变为品红/青/黄（原调色板类不会变）；
+> - 深色预设下 Hub 遮罩 = `rgba(0,0,0,.528)`、窗口阴影 = 黑色 0.296 + `#495057` 55% 描边（不再发白）；截图 `theme-light.png` / `theme-dark.png` 中侧栏、徽章、bento 卡均随主题变化；
+> - bento 卡渐变实测解析为 `oklab(... / 0.04)` + card token；Hub 内 `clippedCount = 0`。
+
+仓库有完整主题定制（`tokens.css` + appearance 设置 + 主题截图 `doc/imgs/e2e/theme-customization.png`），但 Agent UI 大量使用 Tailwind 调色板与硬编码色：
 
 仓库有完整主题定制（`tokens.css` + appearance 设置 + 主题截图 `doc/imgs/e2e/theme-customization.png`），但 Agent UI 大量使用 Tailwind 调色板与硬编码色：
 

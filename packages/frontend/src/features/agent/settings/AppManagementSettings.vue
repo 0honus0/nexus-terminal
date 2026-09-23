@@ -468,8 +468,7 @@
     if (appId === 'nexus.agent') {
       return {
         icon: 'fa-solid fa-wand-magic-sparkles',
-        iconBg:
-          'bg-gradient-to-br from-purple-500/20 via-primary/15 to-transparent text-primary ring-1 ring-primary/25',
+        iconBg: 'bg-gradient-to-br from-primary/20 via-primary/15 to-transparent text-primary ring-1 ring-primary/25',
         badge: 'agent.settings.apps.coreOfficial',
         summary: '官方通用智能体核心，内置自动化运维诊断与全栈工程协同技能',
       };
@@ -477,15 +476,14 @@
     if (appId === 'nexus.fullstack') {
       return {
         icon: 'fa-solid fa-layer-group',
-        iconBg:
-          'bg-gradient-to-br from-emerald-500/20 via-teal-500/15 to-transparent text-emerald-500 ring-1 ring-emerald-500/25',
+        iconBg: 'bg-gradient-to-br from-success/20 via-success/15 to-transparent text-success ring-1 ring-success/25',
         badge: '官方扩展',
         summary: '全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证',
       };
     }
     return {
       icon: 'fa-solid fa-puzzle-piece',
-      iconBg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 ring-1 ring-primary/20',
+      iconBg: 'bg-primary/10 text-primary  ring-1 ring-primary/20',
       badge: '三方扩展',
       summary: '已安装并校验签名的 Agent 插件应用',
     };
@@ -495,15 +493,15 @@
     if (health === 'healthy') {
       return {
         label: t('agent.settings.apps.healthHealthy'),
-        dot: 'bg-emerald-500',
-        badge: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+        dot: 'bg-success',
+        badge: 'border-success/30 bg-success/10 text-success ',
       };
     }
     if (health === 'degraded') {
       return {
         label: t('agent.settings.apps.healthDegraded'),
-        dot: 'bg-amber-500',
-        badge: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+        dot: 'bg-warning',
+        badge: 'border-warning/30 bg-warning/10 text-warning ',
       };
     }
     return {
@@ -533,7 +531,7 @@
         <span
           class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-text-secondary shadow-2xs"
         >
-          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+          <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
           已启用 {{ enabledCount }}/{{ apps.length }}
         </span>
       </div>
@@ -643,7 +641,7 @@
                 :disabled="busy"
                 @click="emit('toggle', app, !app.enabled)"
               >
-                <span class="h-1.5 w-1.5 rounded-full" :class="app.enabled ? 'bg-emerald-500' : 'bg-white/70'"></span>
+                <span class="h-1.5 w-1.5 rounded-full" :class="app.enabled ? 'bg-success' : 'bg-white/70'"></span>
                 <span>{{ app.enabled ? $t('agent.settings.apps.disable') : $t('agent.settings.apps.enable') }}</span>
               </button>
 

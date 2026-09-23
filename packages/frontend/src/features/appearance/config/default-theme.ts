@@ -60,9 +60,11 @@ export const defaultUiTheme: Record<string, string> = {
   '--status-success-color': '#28a745',
   '--status-warning-color': '#ffc107',
   '--status-error-color': '#dc3545',
+  '--status-info-color': '#0ea5e9',
   '--status-success-text-color': '#ffffff',
   '--status-warning-text-color': '#212529',
   '--status-error-text-color': '#ffffff',
+  '--status-info-text-color': '#ffffff',
   '--font-family-sans-serif': DEFAULT_FONT_FAMILY_SANS,
   '--font-family-monospace': DEFAULT_FONT_FAMILY_MONO,
   '--base-padding': '1rem',
@@ -84,6 +86,9 @@ export const darkUiTheme: Record<string, string> = {
   '--footer-bg-color': '#343a40',
   '--button-bg-color': '#a06cd5',
   '--button-hover-bg-color': '#8e44ad',
+  // Lifted for legibility on the dark surface, mirroring how the success /
+  // warning / error status colors are expected to be re-tinted per theme.
+  '--status-info-color': '#38bdf8',
   '--input-bg-color': '#2b3035',
   '--input-disabled-bg-color': '#343a40',
   '--input-disabled-text-color': '#adb5bd',

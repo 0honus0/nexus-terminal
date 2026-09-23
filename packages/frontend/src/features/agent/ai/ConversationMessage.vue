@@ -296,7 +296,7 @@
       class="group/message min-w-0"
       :class="
         isUser
-          ? 'max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 text-foreground ring-1 ring-inset ring-primary/10 shadow-[0_1px_2px_rgba(0,0,0,0.025)]'
+          ? 'max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 text-foreground ring-1 ring-inset ring-primary/10 shadow-2xs'
           : 'w-full'
       "
     >
@@ -337,10 +337,7 @@
           <span class="font-mono">{{ formatTokens(messageUsage.totalTokens) }} tok</span>
         </span>
       </p>
-      <div
-        v-else
-        class="rounded-xl bg-card px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
-      >
+      <div v-else class="rounded-xl bg-card px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-2xs">
         <AgentMessageBody :text="text" />
       </div>
     </div>

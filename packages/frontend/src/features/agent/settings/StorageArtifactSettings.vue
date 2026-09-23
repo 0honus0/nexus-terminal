@@ -95,7 +95,7 @@
         </div>
         <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.reclaimable') }}</div>
-          <div class="mt-1 font-mono text-sm font-semibold text-emerald-500">
+          <div class="mt-1 font-mono text-sm font-semibold text-success">
             {{ formatQuantity(storage.reclaimableBytes, 'bytes') }}
           </div>
         </div>

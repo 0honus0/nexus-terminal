@@ -42,24 +42,24 @@
 
   const kindToneClasses: Record<ArtifactFileKind, { icon: string; badge: string }> = {
     image: {
-      icon: 'border-violet-500/20 bg-violet-500/10 text-violet-500',
-      badge: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+      icon: 'border-primary/20 bg-primary/10 text-primary',
+      badge: 'bg-primary/10 text-primary ',
     },
     document: {
-      icon: 'border-sky-500/20 bg-sky-500/10 text-sky-500',
-      badge: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+      icon: 'border-info/20 bg-info/10 text-info',
+      badge: 'bg-info/10 text-info ',
     },
     code: {
-      icon: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-500',
-      badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      icon: 'border-success/20 bg-success/10 text-success',
+      badge: 'bg-success/10 text-success ',
     },
     archive: {
-      icon: 'border-amber-500/20 bg-amber-500/10 text-amber-500',
-      badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+      icon: 'border-warning/20 bg-warning/10 text-warning',
+      badge: 'bg-warning/10 text-warning ',
     },
     media: {
-      icon: 'border-rose-500/20 bg-rose-500/10 text-rose-500',
-      badge: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+      icon: 'border-error/20 bg-error/10 text-error',
+      badge: 'bg-error/10 text-error ',
     },
     other: {
       icon: 'border-border bg-header text-text-secondary',
@@ -512,7 +512,7 @@
 
       <div class="mt-3 flex items-center gap-2 border-t border-border/55 pt-2">
         <div
-          class="group flex h-10 min-w-0 flex-1 items-center rounded-xl border border-border/65 bg-gradient-to-b from-card/80 to-background px-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.22)] transition-[border-color,box-shadow] hover:border-border-hover focus-within:border-primary/30 focus-within:shadow-[0_1px_2px_rgba(15,23,42,0.05),0_0_0_3px_color-mix(in_srgb,var(--color-primary)_8%,transparent),inset_0_1px_0_rgba(255,255,255,0.22)]"
+          class="group flex h-10 min-w-0 flex-1 items-center rounded-xl border border-border/65 bg-gradient-to-b from-card/80 to-background px-1.5 shadow-xs transition-[border-color,box-shadow] hover:border-border-hover focus-within:border-primary/30 focus-within:shadow-xs focus-within:ring-2 focus-within:ring-primary/15"
         >
           <span
             class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-header/45 text-text-secondary/80 transition-colors group-focus-within:bg-primary/8 group-focus-within:text-primary"

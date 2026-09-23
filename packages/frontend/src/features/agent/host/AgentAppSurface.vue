@@ -1782,7 +1782,7 @@
                   panel-class="w-56"
                 >
                   <template #trigger>
-                    <i class="fa-solid fa-bolt text-[9px] text-indigo-500" aria-hidden="true"></i>
+                    <i class="fa-solid fa-bolt text-[9px] text-primary" aria-hidden="true"></i>
                     <span class="agent-config-reasoning min-w-4 whitespace-nowrap text-center">{{
                       reasoningDisplayLabel
                     }}</span>
@@ -1828,8 +1828,8 @@
                             :class="[
                               isDraggingReasoning ? '' : 'transition-[width] duration-150 ease-out',
                               isUltraOrMax
-                                ? 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 shadow-[0_0_8px_rgba(168,85,247,0.35)]'
-                                : 'bg-gradient-to-r from-blue-500 to-indigo-500',
+                                ? 'bg-gradient-to-r from-info via-primary to-warning shadow-[0_0_8px_color-mix(in_srgb,var(--color-primary)_35%,transparent)]'
+                                : 'bg-gradient-to-r from-info to-primary',
                             ]"
                             :style="{ width: `${trackFillPercent}%` }"
                           ></div>
@@ -1848,7 +1848,7 @@
 
                           <!-- 纯白精致圆形滑钮手柄 -->
                           <div
-                            class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-[18px] w-[18px] rounded-full bg-white text-gray-800 shadow-sm flex items-center justify-center cursor-grab active:cursor-grabbing z-20 ring-1 ring-black/10"
+                            class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-[18px] w-[18px] rounded-full bg-background text-foreground shadow-sm flex items-center justify-center cursor-grab active:cursor-grabbing z-20 ring-1 ring-border/70"
                             :class="
                               isDraggingReasoning
                                 ? 'scale-110 shadow-md cursor-grabbing'
@@ -1858,7 +1858,7 @@
                           >
                             <span
                               class="h-1.5 w-1.5 rounded-full transition-colors"
-                              :class="isDraggingReasoning ? 'bg-indigo-600' : 'bg-indigo-600/50'"
+                              :class="isDraggingReasoning ? 'bg-primary' : 'bg-primary/50'"
                             ></span>
                           </div>
                         </div>

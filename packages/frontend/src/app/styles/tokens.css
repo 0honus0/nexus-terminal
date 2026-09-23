@@ -33,9 +33,11 @@
   --color-success: var(--status-success-color);
   --color-warning: var(--status-warning-color);
   --color-error: var(--status-error-color);
+  --color-info: var(--status-info-color);
   --color-success-text: var(--status-success-text-color);
   --color-warning-text: var(--status-warning-text-color);
   --color-error-text: var(--status-error-text-color);
+  --color-info-text: var(--status-info-text-color);
 }
 
 :root {
@@ -71,9 +73,11 @@
   --status-success-color: #28a745;
   --status-warning-color: #ffc107;
   --status-error-color: #dc3545;
+  --status-info-color: #0ea5e9;
   --status-success-text-color: #ffffff;
   --status-warning-text-color: #212529;
   --status-error-text-color: #ffffff;
+  --status-info-text-color: #ffffff;
   --font-family-sans-serif:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Liberation Sans',
     'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif,

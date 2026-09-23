@@ -157,7 +157,7 @@
             :class="
               selectedIds.size > 0
                 ? 'border-error/30 bg-error/10 text-error font-semibold'
-                : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'border-success/30 bg-success/10 text-success '
             "
           >
             {{ $t('agent.settings.safety.blockedCount', { blocked: selectedIds.size, total: allConnections.length }) }}
@@ -369,7 +369,7 @@
             </span>
             <span
               v-else
-              class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 px-2 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+              class="inline-flex items-center gap-1 rounded-md bg-success/10 border border-success/25 px-2 py-1 text-[11px] font-medium text-success"
             >
               <i class="fa-solid fa-check text-[9px]"></i>
               <span>{{ $t('agent.settings.safety.allowedBadge') }}</span>
@@ -381,17 +381,17 @@
       <!-- 历史残留孤立 ID 提醒与一键清理（若黑名单中包含已不存在的连接） -->
       <div
         v-if="orphanIds.length > 0"
-        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning"
       >
         <div class="flex items-center gap-2">
-          <i class="fa-solid fa-triangle-exclamation text-amber-500 text-xs shrink-0"></i>
+          <i class="fa-solid fa-triangle-exclamation text-warning text-xs shrink-0"></i>
           <span>{{ $t('agent.settings.safety.orphanIds') }}</span>
           <div class="flex flex-wrap gap-1">
             <button
               v-for="id in orphanIds"
               :key="id"
               type="button"
-              class="inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 font-mono text-[11px] hover:bg-amber-500/25 cursor-pointer"
+              class="inline-flex items-center gap-1 rounded bg-warning/15 border border-warning/30 px-1.5 py-0.5 font-mono text-[11px] hover:bg-warning/25 cursor-pointer"
               title="点击移出黑名单"
               @click="removeOrphanId(id)"
             >

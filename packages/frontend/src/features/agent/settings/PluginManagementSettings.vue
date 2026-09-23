@@ -358,7 +358,7 @@
             <span>{{ $t('agent.settings.plugins.package') }}</span>
           </div>
           <span
-            class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+            class="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success"
           >
             <i class="fa-solid fa-shield-check text-[10px]"></i>
             <span>签名验真通过</span>
@@ -544,7 +544,7 @@
               </span>
               <span
                 v-if="source.official"
-                class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2.5 py-0.5 text-[11px] font-medium text-success"
               >
                 <i class="fa-solid fa-lock text-[9px]"></i>
                 <span>{{ $t('agent.settings.plugins.officialPublisherPinned') }}</span>
@@ -566,7 +566,7 @@
               <i
                 :class="
                   copiedSourceUrl === source.catalog.repositoryUrl
-                    ? 'fa-solid fa-check text-emerald-500'
+                    ? 'fa-solid fa-check text-success'
                     : 'fa-regular fa-copy'
                 "
               ></i>
@@ -587,9 +587,9 @@
                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
                   :class="
                     entry.appId === 'nexus.agent'
-                      ? 'bg-purple-500/15 text-primary ring-1 ring-purple-500/25'
+                      ? 'bg-primary/15 text-primary ring-1 ring-primary/25'
                       : entry.appId === 'nexus.fullstack'
-                        ? 'bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/25'
+                        ? 'bg-success/15 text-success ring-1 ring-success/25'
                         : 'bg-primary/10 text-primary ring-1 ring-primary/20'
                   "
                 >
@@ -622,9 +622,9 @@
                     </span>
                     <span
                       v-else-if="isInstalled(entry.appId)"
-                      class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                      class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
                     >
-                      <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                      <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
                       <span>{{ isInstalledAndEnabled(entry.appId) ? '已启用' : '已安装' }}</span>
                     </span>
                     <span v-else class="rounded-full bg-header px-2 py-0.5 text-[11px] font-medium text-text-secondary">
@@ -667,7 +667,7 @@
                 class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border"
               >
                 <span class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-secondary/70 font-mono">
-                  <i class="fa-solid fa-shield-check text-emerald-500 text-[10px]"></i>
+                  <i class="fa-solid fa-shield-check text-success text-[10px]"></i>
                   <span>Ed25519</span>
                 </span>
 

@@ -739,9 +739,9 @@
                 {{ $t('agent.settings.onboarding.title') }}
               </h2>
               <span
-                class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                class="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
               >
-                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="h-1.5 w-1.5 rounded-full bg-success animate-pulse"></span>
                 {{ $t('agent.settings.onboarding.publisherVerified') }}
               </span>
             </div>
@@ -802,7 +802,7 @@
 
           <div class="flex items-start gap-2.5 rounded-xl border border-border/60 bg-card/60 p-3 shadow-2xs">
             <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500 text-xs"
+              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success text-xs"
             >
               <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
             </div>
@@ -818,7 +818,7 @@
 
           <div class="flex items-start gap-2.5 rounded-xl border border-border/60 bg-card/60 p-3 shadow-2xs">
             <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500 text-xs"
+              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs"
             >
               <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
             </div>
@@ -866,7 +866,7 @@
               class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-text-secondary hover:bg-header hover:text-foreground transition-colors cursor-pointer"
               @click="copyKeyId(recommendedPlugin.publisherKeyId)"
             >
-              <i :class="copiedKey ? 'fa-solid fa-check text-emerald-500' : 'fa-regular fa-copy'"></i>
+              <i :class="copiedKey ? 'fa-solid fa-check text-success' : 'fa-regular fa-copy'"></i>
               <span>{{
                 copiedKey ? $t('agent.settings.onboarding.keyCopied') : $t('agent.settings.onboarding.copyKey')
               }}</span>
@@ -924,7 +924,7 @@
     <template #footer>
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-1.5 text-[11px] text-text-secondary">
-          <i class="fa-solid fa-lock text-[10px] text-emerald-500"></i>
+          <i class="fa-solid fa-lock text-[10px] text-success"></i>
           <span>{{ $t('agent.settings.onboarding.sandboxProtected') }}</span>
         </div>
         <div class="flex items-center gap-2">

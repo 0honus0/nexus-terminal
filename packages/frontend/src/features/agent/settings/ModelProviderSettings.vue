@@ -869,13 +869,13 @@
   const providerIcon = (provider: AgentProviderViewDto): string => {
     const name = provider.displayName.toLowerCase();
     const url = provider.baseUrl.toLowerCase();
-    if (name.includes('openai') || url.includes('openai')) return 'fa-solid fa-bolt text-emerald-500';
+    if (name.includes('openai') || url.includes('openai')) return 'fa-solid fa-bolt text-success';
     if (name.includes('deepseek') || url.includes('deepseek')) return 'fa-solid fa-wand-magic-sparkles text-primary';
     if (name.includes('moonshot') || name.includes('kimi') || url.includes('moonshot'))
-      return 'fa-solid fa-moon text-blue-500';
+      return 'fa-solid fa-moon text-primary';
     if (name.includes('ollama') || url.includes('localhost') || url.includes('127.0.0.1'))
-      return 'fa-solid fa-server text-amber-500';
-    if (name.includes('silicon') || url.includes('siliconflow')) return 'fa-solid fa-microchip text-indigo-500';
+      return 'fa-solid fa-server text-warning';
+    if (name.includes('silicon') || url.includes('siliconflow')) return 'fa-solid fa-microchip text-primary';
     return 'fa-solid fa-cube text-text-secondary';
   };
 
@@ -972,7 +972,7 @@
             <div class="flex items-center gap-2">
               <div class="text-xs font-semibold text-foreground">{{ $t('agent.settings.providers.defaultModel') }}</div>
               <span
-                class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                class="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/25 px-2 py-0.5 text-[11px] font-medium text-success"
               >
                 <i class="fa-solid fa-cloud-arrow-up text-[8px]"></i>
                 <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
@@ -1205,13 +1205,13 @@
                     class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
                     :class="
                       provider.enabled
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                        ? 'bg-success/10 text-success  border border-success/20'
                         : 'bg-header text-text-secondary border border-border/60'
                     "
                   >
                     <span
                       class="h-1.5 w-1.5 rounded-full"
-                      :class="provider.enabled ? 'bg-emerald-500' : 'bg-text-secondary'"
+                      :class="provider.enabled ? 'bg-success' : 'bg-text-secondary'"
                     ></span>
                     {{
                       provider.enabled
@@ -1228,10 +1228,7 @@
                     <i class="fa-solid fa-layer-group text-[9px] mr-1"></i>
                     <span>{{ provider.models.length }} 个模型</span>
                   </button>
-                  <span
-                    v-if="provider.hasCredential"
-                    class="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400"
-                  >
+                  <span v-if="provider.hasCredential" class="inline-flex items-center gap-1 text-[11px] text-success">
                     <i class="fa-solid fa-key text-[9px]"></i>
                     <span>已配密钥</span>
                   </span>
@@ -1259,9 +1256,7 @@
                     @click="copyText(provider.baseUrl)"
                   >
                     <i
-                      :class="
-                        copiedUrl === provider.baseUrl ? 'fa-solid fa-check text-emerald-500' : 'fa-regular fa-copy'
-                      "
+                      :class="copiedUrl === provider.baseUrl ? 'fa-solid fa-check text-success' : 'fa-regular fa-copy'"
                       class="text-[11px]"
                     ></i>
                   </button>
@@ -1369,7 +1364,7 @@
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                  class="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/25 px-2 py-0.5 text-[11px] font-medium text-success"
                 >
                   <i class="fa-solid fa-cloud-arrow-up text-[9px]"></i>
                   <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
@@ -1521,7 +1516,7 @@
                   class="py-6 text-center text-xs text-text-secondary"
                 >
                   <div
-                    class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 mx-auto mb-1.5"
+                    class="flex h-8 w-8 items-center justify-center rounded-full bg-success/10 text-success mx-auto mb-1.5"
                   >
                     <i class="fa-solid fa-check text-xs"></i>
                   </div>
@@ -1640,7 +1635,7 @@
             <!-- 抽屉底部操作条（即时持久化说明与收起/关闭动作） -->
             <div class="mt-3.5 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border/50">
               <div class="flex items-center gap-1.5 text-xs text-text-secondary">
-                <i class="fa-solid fa-cloud-check text-emerald-500 text-xs"></i>
+                <i class="fa-solid fa-cloud-check text-success text-xs"></i>
                 <span>{{ $t('agent.settings.providers.autoSaveHint') }}</span>
               </div>
               <button
@@ -1883,7 +1878,7 @@
         class="rounded-xl border p-3 flex items-center justify-between gap-2 text-xs transition-all"
         :class="
           modalTestResult.ok
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+            ? 'border-success/30 bg-success/10 text-success '
             : 'border-error/30 bg-error/10 text-error'
         "
       >
@@ -1960,7 +1955,7 @@
           </div>
           <!-- 实时自动保存指示徽标 -->
           <span
-            class="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+            class="shrink-0 inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/25 px-2 py-0.5 text-[11px] font-medium text-success"
           >
             <i class="fa-solid fa-cloud-arrow-up text-[9px]"></i>
             <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
@@ -2016,19 +2011,19 @@
                 </span>
                 <span
                   v-if="model.supportsTools"
-                  class="rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 font-medium"
+                  class="rounded bg-success/10 text-success border border-success/20 px-1.5 py-0.5 font-medium"
                 >
                   Tools
                 </span>
                 <span
                   v-if="model.supportsImageInput"
-                  class="rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 px-1.5 py-0.5 font-medium"
+                  class="rounded bg-info/10 text-info border border-info/20 px-1.5 py-0.5 font-medium"
                 >
                   {{ $t('agent.settings.providers.imageInput') }}
                 </span>
                 <span
                   v-if="model.supportsFileInput"
-                  class="rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 px-1.5 py-0.5 font-medium"
+                  class="rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
                 >
                   {{ $t('agent.settings.providers.fileInput') }}
                 </span>
@@ -2051,7 +2046,7 @@
               class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-mono font-medium"
               :class="
                 testResults[testKey(currentTestModalProvider, model.id)]?.state === 'success'
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                  ? 'bg-success/10 text-success  border border-success/20'
                   : testResults[testKey(currentTestModalProvider, model.id)]?.state === 'error'
                     ? 'bg-error/10 text-error border border-error/20'
                     : 'bg-header text-text-secondary'
@@ -2145,7 +2140,7 @@
     <template #footer>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-1.5 text-[11px] text-text-secondary">
-          <i class="fa-solid fa-cloud-check text-emerald-500 text-xs"></i>
+          <i class="fa-solid fa-cloud-check text-success text-xs"></i>
           <span>{{ $t('agent.settings.providers.autoSaveHint') }}</span>
         </div>
         <button

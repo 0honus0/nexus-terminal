@@ -695,9 +695,7 @@
           >
             <i
               class="text-[11px] transition-colors"
-              :class="
-                state.hubView === 'files' ? 'fa-solid fa-folder-open text-amber-500' : 'fa-regular fa-folder-open'
-              "
+              :class="state.hubView === 'files' ? 'fa-solid fa-folder-open text-warning' : 'fa-regular fa-folder-open'"
               aria-hidden="true"
             ></i>
             <span class="agent-hub-nav-label">{{ $t('agent.hub.files') }}</span>
@@ -790,13 +788,15 @@
     container-name: agent-hub-window;
     overscroll-behavior: contain;
     box-shadow:
-      0 20px 48px -12px rgba(0, 0, 0, 0.22),
-      0 0 0 1px rgba(0, 0, 0, 0.05),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+      /* Stays black in every theme (overlay is rgb(0 0 0 / 60%) light, /80% dark). */
+      0 20px 48px -12px color-mix(in srgb, var(--overlay-bg-color) 37%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--border-color) 55%, transparent),
+      inset 0 1px 0 0 var(--card-bg-color);
   }
 
   .agent-hub-backdrop {
-    background-color: rgba(15, 23, 42, 0.4);
+    /* 66% of the themed overlay colour lands near the original 40% slate scrim. */
+    background-color: color-mix(in srgb, var(--overlay-bg-color) 66%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
