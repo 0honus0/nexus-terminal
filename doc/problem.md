@@ -29,7 +29,7 @@
 | --- | --- | --- |
 | P0 | 设计 token 未定义，158 处 utility 类**静默失效**（`bg-card` 等），卡片/输入区/弹层实际是透明的 | `packages/frontend/src/features/agent/**`（见 §1.1） |
 | P0 | 缺失 i18n key `agent.ui.saveFailed`，保存失败时界面直接显示键名 | `settings/ModelProviderSettings.vue:94` |
-| P0 | Agent Hub 声明 `aria-modal` 但没有 Escape / 焦点进入 / 焦点限制 / 焦点恢复，背景也未 `inert` | `host/AgentHubWindow.vue:341-353` |
+| **P0 · ✅ 已关闭 2026-09-23** | Agent Hub 模态边界已闭环：打开聚焦 Hub、背景 `#app.inert=true`、Tab/Shift+Tab 限制在 Hub 与 Hub-owned portal、Escape 关闭、关闭后焦点回 Launcher | `host/AgentHubWindow.vue`（CDP 复验见 §7.13-c） |
 | P0 | 「模型弹层的透明质感」其实是 `bg-card/95` 死 token 的副产物（无填充 + 只有 blur）；直接补 `--color-card` 会让整体观感变样，需先固化成 `.glass-surface` 再修 | `files/AgentConfigPopover.vue:154`（见 §7.1） |
 | P1 | 「模态遮罩 + 浮动窗口」定位自相矛盾：Hub 打开时整个应用不可操作，无法一边看 SSH 终端一边让 Agent 干活 | `host/AgentHubWindow.vue:341-344` |
 | P1 | 字号普遍在 8–11px（563 处），CJK 环境下可读性差；大量点击目标仅 20–28px | `features/agent/**`（见 §2.3、§2.4） |
@@ -56,11 +56,11 @@
 | P1 | 「备用模型链」把该 Provider 的**全部模型**平铺成按钮云：无顺序编号、无拖拽/移除、无搜索；"勾选顺序即生效顺序"却完全不可见 | `settings/ModelProviderSettings.vue:1062-1083`（见 §7.11） |
 | P1 | 设置区按钮规格失控（实测）：`添加 Provider` 144×38 fs16 / `关闭 Agent` 109×40 fs16 / `立即更新` 77×28 fs11；同一服务商行 `模型与测试(6)` 144px、`更新模型` 107px、`停用` 54px、删除 28×28 | 见 §7.11 |
 | P2 | 空态 pager 可点区域仅 **12×16px**（点 6×6），远低于 32px 触控标准 | `ai/AgentConversation.vue:472-486`（实测见 §7.12） |
-| P1 | 弹层按**视口**而非 Hub 窗口 clamp：最小窗口（560×380）下附件选择器跑到窗口外（`[12,28,520,366]`）、模型弹层盖住顶栏与输入框 | `files/AgentConfigPopover.vue`、`ai/AgentConversation.vue`（见 §7.13-a） |
-| P1 | Hub 声明 `aria-modal="true"` 但实测：焦点不进弹窗（`activeElement=<body>`）、**按 1 次 Tab 焦点就回到背后的应用导航**、背景无 `inert` | `host/AgentHubWindow.vue`（实测见 §7.13-c） |
+| **P1 · ✅ 已关闭 2026-09-23** | 弹层已改为优先按 Hub 窗口 clamp，并限制 maxWidth/maxHeight、跟随 Hub resize；560px Hub 下附件弹层实测四边均在窗口内 | `files/AgentConfigPopover.vue`、`host/AgentAppSwitcher.vue`（见 §7.13-a） |
+| **P0 · ✅ 已关闭 2026-09-23** | Hub 键盘模态边界已修复并 CDP 复验：初始焦点进入 Hub、背景 inert、连续 35 次 Tab 0 次逃逸、Escape 关闭且焦点回 Launcher | `host/AgentHubWindow.vue`（见 §7.13-c） |
 | P2 | 会话列表缩放（Ctrl+滚轮）**持久化在 localStorage 且无重置入口**，行标题用内联 `fontSize: 10.75×scale`、行高 JS 计算 → 绕过 token，实测 `1.3` 时字号 13.975px | `host/AgentThreadSidebar.vue:64/127/310`（见 §7.13-d） |
 | **P0 · ✅ 核心缺陷已关闭 2026-09-22** | **Run 详情不再被单个辅助接口失败整体阻断**：`getRun` 成功即打开详情；checkpoints / approvals / subagents 独立 settled 回填，失败项仍走现有错误横幅。分区重试与错误本地化仍作为 UI 子项开放 | `host/AgentAppSurface.vue`（见 §1.10） |
-| **P0** | **composer 工具条裁切的根因**：composer 外层 `max-w-3xl`（768px）封顶 + 容器查询却监听整个会话面板（实测 1342px）→ 折叠断点永不触发；默认窗口下「思考强度」被裁 42px，只剩一枚无文字的闪电图标 | `ai/AgentConversation.vue:590`、`host/AgentAppSurface.vue:2553-2592`（见 §7.14-a） |
+| **P0 · ✅ 已关闭 2026-09-23** | **Composer 裁切已关闭**：container query 改为 composer 自身，工具条保持单行；560px Hub 实测 controls clientWidth=scrollWidth，无静默裁切 | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.14-a） |
 | P1 | 任务栏 6 个「拖动排序」把手是 `<button>` 但**没有任何键盘行为**（无 click/keydown，也无上移/下移替代） | `runtime/TaskRail.vue:516/710/742/783/807/850`（见 §7.14-b） |
 | P2 | 任务栏「目标」卡片直接渲染内部连接 ID（`#1`）、Run 历史 `slice(0, 8)` 硬上限（第 9 条无入口）、卡片顺序持久化无重置 | `runtime/TaskRail.vue:794/109/125`（见 §7.14-b） |
 | P2 | 审批卡：`risk` 枚举原样输出（`mutate`/`destructive`…，i18n 无对应 key）、`审批状态：approved` 拼英文枚举、`剩余 300s` 单位硬编码、"批准"按钮用 `bg-warning` | `runtime/ApprovalCard.vue:45/53/73/127`（见 §7.14-b） |
@@ -376,12 +376,12 @@ Agent UI 中任意像素字号统计：
 
 ### 2.10 无障碍与键盘（P1）
 
-- Hub：`role="dialog" aria-modal="true"`（`host/AgentHubWindow.vue:352-353`）但**全文没有 `keydown` 处理**（无 Escape、无 Tab 限制、无初始焦点、无关闭后焦点恢复），背景内容也没有 `inert`。
+- Hub：✅ **已闭环 2026-09-23**。打开时聚焦 Hub 根、背景 `#app.inert=true`；Hub 与 Hub-owned portal 共同构成焦点边界；Escape 关闭并恢复到 Launcher。
 - 窗口移动/缩放**只能 pointer**（`handleDragPointerDown` / `handleResizePointerDown`），没有键盘替代；缩放热区是右下角 `h-4 w-4`（`host/AgentHubWindow.vue:585`）。
-- 已有的共享能力没被复用：`foundation/ui/BaseModal.vue` + `OverlayPanel.vue` 已提供 `closeOnEscape` / `focusOnOpen` / `restoreFocus` / `keepMounted`，Agent Hub 全部自己实现且缺失这些行为。
+- Hub 未直接复用旧 `BaseModal/OverlayPanel`，但当前实现已补齐等价模态边界，并额外处理 Teleport 到 `body` 的 Hub-owned portal。
 - `prefers-reduced-motion` 只覆盖了两处（`host/AgentAppSurface.vue:2697`、`runtime/TaskRail.vue:914`），其余动画（`animate-pulse`、自动轮播、卡片 hover 位移、`active:scale-95`）未处理。
 
-建议：Hub 复用 `OverlayPanel` 的焦点/ESCAPE 能力；至少支持 `Esc = minimize`、打开时聚焦输入框、关闭后焦点回到 Launcher。
+剩余无障碍项集中在窗口移动/缩放的键盘替代与 reduced-motion；Hub 的 Escape / 初始焦点 / focus trap / inert / 焦点恢复已关闭。
 
 ### 2.11 视觉语言不统一（P2）
 
@@ -544,7 +544,7 @@ UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConf
 
 0. **P0 先修两处"会让人以为功能没做"的崩溃点**：① `openRunDetail` 的 `Promise.all` 无隔离 → 8/22 个 Run 打不开详情（§1.10）；② composer 工具条裁切根因（`max-w-3xl` 封顶 + 容器查询监听错容器）→ 默认窗口下"思考强度"已不可见（§7.14-a）。这两条都不需要设计决策，且修完立刻可见。
 1. **P0 样式与文案**：**先定"玻璃层"配方**（§7.1：`--color-card` 是否半透明 + 统一 `.glass-surface`），再补 token（或替换 158 处类名）——否则会一次性改掉所有弹层观感；补 `agent.ui.saveFailed`；清掉硬编码 `'未设置'` / 英文 fallback；顺手清掉无效间距类（§7.8）。
-2. **P0 无障碍底线**：Hub 支持 `Esc`、打开聚焦、关闭恢复焦点、背景 `inert`。
+2. **P0 无障碍底线 · ✅ 已关闭 2026-09-23**：Hub 已支持 `Esc`、打开聚焦、关闭恢复焦点、背景 `inert`，并覆盖 Hub-owned Teleport。
 3. **P1 定位决策**：模态 ↔ 非模态 / docking（需要产品拍板，决定后续所有布局工作）。
 4. **P1 交互减法**：Composer 拆分（发送/停止独立、配置外移）、删除列表缩放与卡片拖拽排序、空态静态化。
 5. **P1 排版基线**：字号下限、对比度、点击目标尺寸、统一圆角/边框/阴影。
@@ -1054,7 +1054,7 @@ select {
 也就是说 §7.1 的"纯透明 + 模糊"不只是风格问题：**当背后是高对比文本时（深色底、或长中文段落），弹层内容与背后文字会互相干扰**，可读性下降。
 这给 §7.1 的建议 1（固化成 `.glass-surface` 并给出真正的玻璃基色 alpha）提供了可复现的证据——建议 alpha 取 `0.72~0.85` + `blur(16~20px)`，并在深色主题下单独验证。
 
-**c) Hub 的键盘可达性：实测确认"Tab 会跑回背后的应用"（P0，对 §0 中已有条目的实测证据）**
+**c) Hub 的键盘可达性：✅ 已关闭 2026-09-23（以下保留旧复现证据）**
 
 ```
 打开 Hub 后：document.activeElement = <body>            // 焦点没有进入弹窗
@@ -1067,7 +1067,9 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 ```
 
 即：**声明了 `aria-modal="true"`，但用户按一次 Tab 焦点就跑到背后的 Dashboard/终端导航上**；键盘用户完全可能在不经意间操作到被"模态"遮住的应用。
-复现成本极低（打开 Hub → 按 Tab），建议按 §0 里那条 P0 修（焦点进入 + 焦点限制 + `inert` + 关闭后焦点归还）。
+复现成本极低（打开 Hub → 按 Tab）。
+
+> ✅ **2026-09-23 CDP 复验**：打开后 `activeElement = <section class="agent-hub-window">`、`#app.inert=true`；连续 35 次 Tab **0 次逃出** Hub/Hub-owned portal；Escape 后 Hub 关闭、`#app.inert=false`，焦点回到「打开 Agent」Launcher。附件 Popover 内再按 8 次 Tab 同样 0 次逃出，Escape 只关闭 Popover 并把焦点还给附件按钮。
 
 **d) 会话列表"Ctrl+滚轮缩放"被持久化，且会悄悄改变字号（P2，新发现；同时修正 §7.12-6）**
 
@@ -1297,7 +1299,7 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 | 打开时 `panel.focus()`、点击外部关闭、`ResizeObserver` 跟随重定位 | ✅ | `:85-90` |
 | 同一时刻只有一个弹层（`activePopoverCloser` 单例） | ✅ | `:2`、`:76-81` |
 
-对比 §7.13-c：**Hub 缺的正是这一套**。所以修 Hub 的键盘可达性不需要新造轮子——把 `AgentConfigPopover` 里已经验证过的"Escape / 焦点归还 / 唯一打开"模式套到 `AgentHubWindow` 上即可。
+对比 §7.13-c：Hub 现在已经补齐这套模态边界；`AgentConfigPopover` 的 Escape / 焦点归还模式也继续作为其它弹层的正面样本。
 （用户提出的"把设置区做成模型弹层那种质感"，除了视觉，也应包含**这套交互契约**。）
 
 **b) 正面样本 2：主界面「文件」视图的空态做对了，设置区没跟上（呼应 §7.15-d）**

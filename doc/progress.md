@@ -62,6 +62,25 @@
 
 ---
 
+## ✅ 已复验：Hub 模态键盘边界 + 560px Composer / Popover
+
+| 项                | 结果                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| CDP               | `http://172.30.31.11:9223`，复用既有 Chrome；页面直接使用 `https://api.honus.top/`                               |
+| Hub / Composer    | Hub `560×709`；composer shell `542px`；toolbar `37px`；controls `462/462`（clientWidth/scrollWidth），无横向裁切 |
+| 右侧动作          | 附件 `28×28`，发送 `28×28`                                                                                       |
+| 附件 Popover      | `520×366`；相对 Hub inset：left `28` / right `12` / top `293` / bottom `50`，四边均在 Hub 内                     |
+| 空模型状态        | hover 前后 background / border / text / cursor 全部一致；保持透明、secondary、`cursor:auto`                      |
+| Hub 打开          | 初始焦点落在 `section.agent-hub-window`；`#app.inert=true`；`aria-modal=true`                                    |
+| Focus trap        | 连续 35 次 Tab，逃出 Hub / Hub-owned portal **0 次**                                                             |
+| Escape / 焦点归还 | Escape 关闭 Hub 后 `#app.inert=false`，焦点回到「打开 Agent」Launcher                                            |
+| Hub-owned portal  | 附件 Popover 内连续 8 次 Tab 逃出 **0 次**；Escape 仅关闭 Popover，Hub 保持打开，焦点回附件按钮                  |
+
+- §7.13-c 旧的「Tab 会跑回背景应用」复现证据保留在 `problem.md` 作为历史记录，本轮已用真实 CDP 数据确认关闭。
+- §7.13-a 的 viewport clamp 回归也用 560px Hub 重新复验，附件选择器不再越出 Hub。
+
+---
+
 ## ✅ 已解决：Agent 浮层限制在 Hub 内 + Composer 状态行收口
 
 | 项       | 内容                                                                                                                                      |
