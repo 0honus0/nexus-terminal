@@ -256,7 +256,7 @@
     data-testid="agent-memory-settings"
   >
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5"
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 agent-settings-head"
     >
       <div class="flex items-center gap-2.5">
         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">

@@ -298,7 +298,7 @@
   <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
     <!-- 头部工具栏：现代 App Store 风格 -->
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4"
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4 agent-settings-head"
     >
       <div>
         <div class="flex items-center gap-2">
@@ -462,9 +462,9 @@
             </p>
           </div>
 
-          <!-- 添加新仓库输入条：无紫色高亮、中性微质感 -->
-          <div class="flex items-center gap-2">
-            <div class="relative min-w-[240px] sm:min-w-[280px]">
+          <!-- 添加新仓库输入条：无紫色高亮、中性微质感；窄屏整条换行，输入框独占一行 -->
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="relative w-full min-w-0 sm:w-auto sm:min-w-[280px]">
               <i
                 class="fa-solid fa-link absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
                 aria-hidden="true"

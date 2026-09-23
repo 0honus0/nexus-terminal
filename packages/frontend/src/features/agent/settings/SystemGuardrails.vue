@@ -5,7 +5,7 @@
 <template>
   <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4"
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4 agent-settings-head"
     >
       <div class="flex items-center gap-2.5">
         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10 text-success">

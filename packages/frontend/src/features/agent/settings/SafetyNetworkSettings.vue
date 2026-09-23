@@ -154,7 +154,7 @@
   <section class="rounded-2xl border border-border/70 bg-card/25 shadow-xs transition-all">
     <!-- 头部横栏与状态徽标 -->
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl"
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
     >
       <div>
         <div class="flex items-center gap-2.5">

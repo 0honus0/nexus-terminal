@@ -1235,6 +1235,33 @@
   }
 
   /*
+   * 模块标题带（18 个模块各写一遍的那条 `flex justify-between` 行）。
+   *
+   * 实测三个问题：一是 17 条灰底带子叠起来，滚起来像斑马纹（「很乱」的观感来源）；
+   * 二是标题簇与动作簇之间只有 12px，右侧还会挤下 3~4 个按钮；三是窄屏下动作簇换行后
+   * 直接贴左边缘，跟标题几乎连成一片。这里只改这三件事，不动各模块自己的内容排版。
+   */
+  .agent-settings-item :deep(.agent-settings-head) {
+    gap: 12px 16px;
+    padding: 14px 16px;
+    background: transparent;
+  }
+
+  @media (min-width: 640px) {
+    .agent-settings-item :deep(.agent-settings-head) {
+      padding: 16px 20px;
+    }
+  }
+
+  /* 窄屏：动作簇整行下移并左对齐，按钮不再与标题挤在一行。 */
+  @media (max-width: 639px) {
+    .agent-settings-item :deep(.agent-settings-head) {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+
+  /*
    * 头部指标快照。原来是三个「标签: 数值」小方块，标签带冒号、数值跟着跑，
    * 读起来像调试输出；改成通用统计形态：图标 + 标签/数值两行，整组无框。
    */

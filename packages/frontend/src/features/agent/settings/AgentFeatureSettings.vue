@@ -46,7 +46,9 @@
 
 <template>
   <section class="overflow-hidden rounded-xl border border-border/70 bg-card/35">
-    <div class="flex flex-wrap items-center justify-between gap-3 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5">
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
+    >
       <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.feature.title') }}</h3>
         <span
