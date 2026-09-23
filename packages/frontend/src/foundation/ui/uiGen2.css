@@ -130,6 +130,34 @@
   box-shadow: var(--ui-shadow-inset);
 }
 
+/*
+ * Disclosure marker for long-form help: the sentence lives in the title/aria
+ * label instead of the layout, so screens stay scannable.
+ */
+.ui-info-hint {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ui-pill-radius);
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  cursor: help;
+  transition: color var(--ui-motion-duration) var(--ui-motion-ease);
+}
+.ui-info-hint:hover,
+.ui-info-hint:focus-visible {
+  color: var(--ui-tone-ink);
+  outline: none;
+}
+.ui-info-hint:focus-visible {
+  box-shadow: var(--ui-focus-ring);
+}
+.ui-info-hint[data-tone='warning'] {
+  color: var(--status-warning-color);
+}
 .ui-radius--control {
   border-radius: var(--ui-control-radius);
 }

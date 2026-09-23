@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.24-a（设置区「Agent 功能」卡片瘦身）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -76,6 +76,7 @@
 | P2                                    | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`），与主界面"图标+居中+引导按钮"的空态卡不是同一套语言                                                                                                                                                                                                                                                                      | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                        |
 | **P1 · ✅ 已关闭 2026-09-23**         | 设置区不再把后端原始原因码当"不可用原因"渲染：已知码（`runner_not_configured` / `runner_unavailable` / `runtime_not_configured`）映射成中/英/日文说明，未知码退回通用说明并把原始值放进 `title` 与「后端原因代码」行                                                                                                                                                                  | `settings/WorkspaceRuntimeSettings.vue`（见 §7.15-b）                                                         |
 | **P2 · ✅ 已关闭 2026-09-23**         | 禁用态主按钮**已改为中性填充**（§6.2 批 1/2：`保存` / `预览导入` / `卸载` 等实测 `bg rgb(243,244,246)` + 中性描边，不再是品牌色 × 0.5）；**已补**：11 个稳态禁用按钮全部带原因 `title`（没有未保存的修改 / 没有待预览的改动 / 请先填写必填项 / 请先选择来源与目标 / 请先填写仓库地址，三语齐全）                                                                                      | `features/agent/settings/**`（实测见 §7.13-e）                                                                |
+| **P1**                                | Agent 的界面与设置里**提示性文字过多**：设置区实测 53 段 / 1155 字的解释句铺在版面上；长句应移入 `ⓘ` / `⚠` 图标，鼠标悬浮再展开说明                                                                                                                                                                                                                                                   | `features/agent/**`（见 §7.24）                                                                               |
 | **P2 · ✅ 已关闭 2026-09-23**         | 主操作（Composer 发送按钮）禁用态从「品牌色 + `opacity .2`」改为「中性填充 + 保留描边 + `opacity .5` + `title` 说明原因」，并把全仓禁用态不透明度收敛到单一值 `0.5`（原 20/25/35/40/45 五种）                                                                                                                                                                                         | `ai/AgentConversation.vue` 等 9 个文件（见 §7.17-c）                                                          |
 | **P1 · ✅ 已关闭 2026-09-23**         | 图标颜色：未分层的 `i/.fas/.far/.fab { color: var(--icon-color) }` 压过 `@layer utilities`，132 个带 `text-primary/success/warning/error/foreground` 的图标一律渲染成 `#666`（`!text-white` 是既有绕过写法）                                                                                                                                                                          | `app/styles/global.css:91-110`（见 §7.19）                                                                    |
 | **P1 · ✅ 已关闭 2026-09-23**         | 空态便当卡自动轮播已可中断：悬停/焦点暂停、手动分页后固定、`prefers-reduced-motion` 时彻底不轮播（hover 位移与脉冲也一起关掉）                                                                                                                                                                                                                                                        | `ai/AgentConversation.vue`（见 §2.6）                                                                         |
@@ -1968,6 +1969,42 @@ Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
 
 **提醒（未覆盖）**：`.glass-surface` 现在没有底色，浮在深色 / 复杂内容之上的 glass 表面（例如将来把 `UiDialog` 设成 `glass`）
 会牺牲可读性；`UiGalleryPage` 的 glass 样例与 `UiButton appearance="glass"` 未逐个目视，只在 gallery 出现。
+
+### 7.24 提示性文字过多：长句移入 `ⓘ` / `⚠` 悬浮说明（P1 · 进行中）
+
+**现象（CDP 实测，2026-09-23）**：Agent 设置页把大量解释性句子直接铺在版面上 —— 累计 **53 段 / 1155 字**；
+最长的一段 56 字（备用模型链），其次是 53 字（并发说明）、48 字（预算说明）、45 字（Agent 功能说明）。
+每张卡片的标题下面都挂一行 `description`，有的卡片底部还再挂一条状态句 / 口号句，与顶部的徽标重复。
+
+**根因**：`settings/**` 的 15 个面板都是同一个手写结构 ——
+`<h3>标题</h3><p class="mt-0.5 text-xs text-text-secondary">描述</p>` + 若干补充段落，全部当作正文排版；
+仓库里没有任何"帮助说明"的通用组件，所以每处都各自决定要不要显示（结果是都要显示）。
+
+**规则（用户给出）**
+
+1. 界面只保留**必要**的短提示（状态、单位、必填）；
+2. 长句 / 解释性文字移入 `ⓘ`（提醒类用 `⚠`）图标，**鼠标悬浮**展开完整说明；
+3. 图标必须有 `title` 与 `aria-label`，并可通过键盘聚焦（`tabindex=0` + 焦点环）。
+
+**落地**
+
+- 新增 Gen2 通用组件 `UiInfoHint`（`foundation/ui/UiInfoHint.vue` + `uiGen2.css` 的 `.ui-info-hint` + `index.ts` 导出）：
+  20×20 命中区、12px 图标、`cursor: help`、`tone="warning"` 走 `⚠`，`title` / `aria-label` 自动同步；
+- **a) ✅ 已关闭 2026-09-23：设置区「模型与预算 → Agent 功能」卡片**
+  - 问题（用户指出）：卡片底部那行「当前状态：已启用」与顶部徽标「已启用」重复冲突，右侧还挂着一句口号
+    「调度器支持多应用委派与动态预算管控」；标题下的 45 字描述也一直占版面。
+  - 改法：删掉整个底部信息行；45 字描述 + 口号句合并进标题右侧的 `UiInfoHint` 悬浮说明；
+    顶部徽标改用**真实可用性文案**（`stateLabels`：已启用 / 降级运行 / 正在启用 / 未启用 / 不可用），
+    并按状态配色（启用=success，降级/启用中=warning，其余=中性），顺手修掉"降级运行显示绿色"的隐患。
+  - CDP 复验：卡片 `1230×155 → 1230×62`（-93px，-60%）；`bodyRows 1 → 0`；
+    可见文字 `Agent 功能 控制 Agent Host… 已启用 关闭 Agent …调度器支持…` → `Agent 功能 已启用 关闭 Agent`；
+    `UiInfoHint` 实测 `20×20`、`cursor: help`、`title` = 描述 + 口号（74 字）；
+  - 删除随之失效的 i18n `agent.settings.feature.state`（三语，避免制造死 key）；
+  - 截图：`/tmp/shots/feature-card-after.png`。
+- **b) 待办**：其余 14 个设置卡片的同款 `description` 段落（AcpRuntime / executionPolicy / browserRuntime / budget /
+  mcpIntegrations / memory.import / providers / performance / plugins / safety / storage / subagents / guardrails /
+  workspaceRuntime）按规则 2 迁移到 `UiInfoHint`；
+- **c) 待办**：主界面（Hub）内的提示语（composer 工具条提示、空态副标题、会话侧栏说明等）同样审计一遍。
 
 ---
 

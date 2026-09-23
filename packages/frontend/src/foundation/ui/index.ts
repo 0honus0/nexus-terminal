@@ -21,6 +21,7 @@ export { default as UiCheckbox } from './UiCheckbox.vue';
 export { default as UiCombobox } from './UiCombobox.vue';
 export { default as UiDialog } from './UiDialog.vue';
 export { default as UiFormField } from './UiFormField.vue';
+export { default as UiInfoHint } from './UiInfoHint.vue';
 export { default as UiInput } from './UiInput.vue';
 export { default as UiPopover } from './UiPopover.vue';
 export { default as UiSelect } from './UiSelect.vue';

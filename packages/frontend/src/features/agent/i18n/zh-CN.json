@@ -8,7 +8,6 @@
       "feature": {
         "title": "Agent 功能",
         "description": "控制 Agent Host 是否接受并调度新的执行任务。关闭后历史数据与维护能力仍然可用。",
-        "state": "当前状态：{state}",
         "stateLabels": {
           "disabled": "已停用",
           "enabling": "正在启用",

@@ -8,7 +8,6 @@
       "feature": {
         "title": "Agent feature",
         "description": "Controls whether the Agent Host accepts and schedules new execution work. Historical data and maintenance remain available when disabled.",
-        "state": "Current state: {state}",
         "stateLabels": {
           "disabled": "Disabled",
           "enabling": "Enabling",

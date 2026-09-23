@@ -8,7 +8,6 @@
       "feature": {
         "title": "Agent 機能",
         "description": "Agent Host が新しい実行処理を受け付けてスケジュールするかを制御します。無効時も履歴データと保守機能は利用できます。",
-        "state": "現在の状態: {state}",
         "stateLabels": {
           "disabled": "無効",
           "enabling": "有効化中",
