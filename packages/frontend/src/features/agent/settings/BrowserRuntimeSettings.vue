@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { ref, watch } from 'vue';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
@@ -76,9 +76,13 @@
       </UiButton>
     </div>
     <div class="space-y-4 p-4 sm:p-5">
-      <p v-if="targets.length === 0" class="mt-4 rounded bg-background p-3 text-xs text-text-secondary">
-        {{ $t('agent.settings.browserRuntime.empty') }}
-      </p>
+      <UiEmptyState
+        v-if="targets.length === 0"
+        class="mt-4"
+        dense
+        icon="fa-solid fa-globe"
+        :title="$t('agent.settings.browserRuntime.empty')"
+      />
 
       <article v-for="(target, targetIndex) in targets" :key="targetIndex" class="mt-4 rounded-lg bg-header/25 p-4">
         <div class="flex items-start justify-between gap-3">

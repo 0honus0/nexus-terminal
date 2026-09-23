@@ -158,6 +158,98 @@
 .ui-info-hint[data-tone='warning'] {
   color: var(--status-warning-color);
 }
+/*
+ * Empty states.
+ *
+ * Before this existed the same idea was spelled three ways: a bare muted line
+ * (settings lists), a dashed box with one sentence, and a centred card with
+ * icon + title + description + button (the main Agent surface). Same product,
+ * three languages. One component, two sizes:
+ *   - default: centred card, for a whole pane / list that has nothing in it;
+ *   - dense:   one row, for "this sub-list is empty" inside a settings section.
+ * The action slot keeps the call-to-action of the card variant available.
+ */
+.ui-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 16px;
+  border-radius: var(--ui-control-radius);
+  text-align: center;
+}
+.ui-empty-state[data-bordered='true'] {
+  border: 1px dashed color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--card-bg-color) 30%, transparent);
+}
+.ui-empty-state__icon {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--link-active-color) 12%, transparent);
+  color: var(--link-active-color);
+  font-size: 16px;
+}
+.ui-empty-state__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+.ui-empty-state__description {
+  max-width: 32rem;
+  margin: 4px auto 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ui-text-muted);
+}
+.ui-empty-state__action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+.ui-empty-state[data-dense='true'] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  text-align: left;
+}
+/* 一个分组里常有四五个列表空着：dense 用实线发丝 + 极浅底，别铺成一排虚线洞。 */
+.ui-empty-state[data-dense='true'][data-bordered='true'] {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--border-color) 55%, transparent);
+  background: color-mix(in srgb, var(--text-color) 3%, transparent);
+}
+.ui-empty-state[data-dense='true'] .ui-empty-state__icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-color) 6%, transparent);
+  color: var(--ui-text-muted);
+  font-size: 10px;
+}
+.ui-empty-state[data-dense='true'] .ui-empty-state__title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ui-text-muted);
+}
+.ui-empty-state[data-dense='true'] .ui-empty-state__description {
+  max-width: none;
+  margin: 2px 0 0;
+  font-size: 11px;
+}
+.ui-empty-state[data-dense='true'] .ui-empty-state__action {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
 .ui-radius--control {
   border-radius: var(--ui-control-radius);
 }

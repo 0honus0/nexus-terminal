@@ -20,6 +20,7 @@ export { default as UiButton } from './UiButton.vue';
 export { default as UiCheckbox } from './UiCheckbox.vue';
 export { default as UiCombobox } from './UiCombobox.vue';
 export { default as UiDialog } from './UiDialog.vue';
+export { default as UiEmptyState } from './UiEmptyState.vue';
 export { default as UiFormField } from './UiFormField.vue';
 export { default as UiInfoHint } from './UiInfoHint.vue';
 export { default as UiInput } from './UiInput.vue';

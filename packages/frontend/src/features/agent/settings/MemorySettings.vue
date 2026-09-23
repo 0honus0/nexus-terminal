@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -303,12 +303,12 @@
       <p v-if="loading" class="py-4 text-center text-xs text-text-secondary">
         <i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-primary"></i>{{ $t('agent.settings.memory.loading') }}
       </p>
-      <div
+      <UiEmptyState
         v-else-if="memories.length === 0"
-        class="rounded-xl border border-dashed border-border/70 bg-header/20 px-4 py-6 text-center text-xs text-text-secondary"
-      >
-        {{ $t('agent.settings.memory.empty') }}
-      </div>
+        dense
+        icon="fa-solid fa-brain"
+        :title="$t('agent.settings.memory.empty')"
+      />
 
       <div v-else class="space-y-3">
         <article v-for="memory in memories" :key="memory.id" class="rounded-lg bg-header/25 p-3.5">

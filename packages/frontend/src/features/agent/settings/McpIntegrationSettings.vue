@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
@@ -321,9 +321,12 @@
       </UiButton>
 
       <p v-if="loading" class="text-xs text-text-secondary">{{ $t('agent.settings.mcpIntegrations.loading') }}</p>
-      <p v-else-if="integrations.length === 0" class="rounded bg-background p-3 text-xs text-text-secondary">
-        {{ $t('agent.settings.mcpIntegrations.empty') }}
-      </p>
+      <UiEmptyState
+        v-else-if="integrations.length === 0"
+        dense
+        icon="fa-solid fa-plug"
+        :title="$t('agent.settings.mcpIntegrations.empty')"
+      />
 
       <article v-for="integration in integrations" :key="integration.id" class="rounded bg-background p-3">
         <div class="flex flex-wrap items-start justify-between gap-3">

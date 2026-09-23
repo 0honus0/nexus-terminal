@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -215,9 +215,13 @@
       <div class="mt-4">
         <h3 class="text-sm font-semibold">{{ $t('agent.settings.acpRuntime.profiles') }}</h3>
         <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.acpRuntime.profilesHint') }}</p>
-        <p v-if="profiles.length === 0" class="mt-2 rounded bg-background p-3 text-xs text-text-secondary">
-          {{ $t('agent.settings.acpRuntime.noProfiles') }}
-        </p>
+        <UiEmptyState
+          v-if="profiles.length === 0"
+          class="mt-2"
+          dense
+          icon="fa-solid fa-terminal"
+          :title="$t('agent.settings.acpRuntime.noProfiles')"
+        />
         <article v-for="(profile, index) in profiles" :key="index" class="mt-2 rounded bg-background p-3">
           <div class="grid gap-2 md:grid-cols-[1fr_2fr_2fr_auto]">
             <label class="text-[11px] text-text-secondary">
@@ -334,9 +338,13 @@
           {{ $t('agent.settings.acpRuntime.saveProfileFirst') }}
         </p>
         <p v-if="loading" class="mt-3 text-xs text-text-secondary">{{ $t('agent.settings.acpRuntime.loading') }}</p>
-        <p v-else-if="integrations.length === 0" class="mt-3 rounded bg-background p-3 text-xs text-text-secondary">
-          {{ $t('agent.settings.acpRuntime.noIntegrations') }}
-        </p>
+        <UiEmptyState
+          v-else-if="integrations.length === 0"
+          class="mt-3"
+          dense
+          icon="fa-solid fa-plug"
+          :title="$t('agent.settings.acpRuntime.noIntegrations')"
+        />
 
         <article v-for="integration in integrations" :key="integration.id" class="mt-2 rounded bg-background p-3">
           <div class="flex flex-wrap items-center justify-between gap-3">

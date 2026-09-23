@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -838,9 +838,12 @@
                 {{ $t('agent.settings.plugins.revoked') }}
               </p>
             </div>
-            <p v-if="publishers.length === 0" class="text-center py-2 text-xs text-text-secondary">
-              {{ $t('agent.settings.plugins.noPublishers') }}
-            </p>
+            <UiEmptyState
+              v-if="publishers.length === 0"
+              dense
+              icon="fa-solid fa-key"
+              :title="$t('agent.settings.plugins.noPublishers')"
+            />
           </div>
         </div>
       </div>

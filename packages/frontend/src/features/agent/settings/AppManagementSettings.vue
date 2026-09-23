@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+  import { BaseModal, UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
@@ -824,13 +824,7 @@
         </div>
       </div>
 
-      <div
-        v-if="apps.length === 0"
-        class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 p-8 text-center"
-      >
-        <i class="fa-solid fa-box-open text-2xl text-text-secondary/40 mb-2"></i>
-        <p class="text-sm font-medium text-foreground">{{ $t('agent.settings.apps.empty') }}</p>
-      </div>
+      <UiEmptyState v-if="apps.length === 0" icon="fa-solid fa-box-open" :title="$t('agent.settings.apps.empty')" />
     </div>
   </section>
 

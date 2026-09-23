@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -442,9 +442,12 @@
               </button>
             </div>
           </article>
-          <p v-if="profileSettings.policy.profiles.length === 0" class="text-xs text-text-secondary">
-            {{ $t('agent.settings.subagents.noProfiles') }}
-          </p>
+          <UiEmptyState
+            v-if="profileSettings.policy.profiles.length === 0"
+            dense
+            icon="fa-solid fa-diagram-project"
+            :title="$t('agent.settings.subagents.noProfiles')"
+          />
         </div>
 
         <div class="mt-4 flex justify-end">

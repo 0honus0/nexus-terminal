@@ -6,6 +6,7 @@
     UiButton,
     UiCheckbox,
     UiCombobox,
+    UiEmptyState,
     UiInfoHint,
     UiPopover,
     type UiComboboxOption,
@@ -1655,19 +1656,19 @@
       </div>
 
       <!-- 空态引导 -->
-      <div v-else class="rounded-xl border border-dashed border-border/80 p-8 text-center bg-card/20">
-        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-          <i class="fa-solid fa-wand-magic-sparkles text-xl"></i>
-        </div>
-        <div class="mt-3 text-sm font-semibold text-foreground">{{ $t('agent.settings.providers.empty') }}</div>
-        <p class="mt-1 text-xs text-text-secondary max-w-sm mx-auto">
-          {{ $t('agent.settings.providers.emptyHint') }}
-        </p>
-        <UiButton appearance="solid" tone="primary" type="button" @click="openAddModal" class="mt-4">
-          <i class="fa-solid fa-plus text-xs"></i>
-          <span>{{ $t('agent.settings.providers.add') }}</span>
-        </UiButton>
-      </div>
+      <UiEmptyState
+        v-else
+        icon="fa-solid fa-wand-magic-sparkles"
+        :title="$t('agent.settings.providers.empty')"
+        :description="$t('agent.settings.providers.emptyHint')"
+      >
+        <template #action>
+          <UiButton appearance="solid" tone="primary" type="button" @click="openAddModal">
+            <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
+            <span>{{ $t('agent.settings.providers.add') }}</span>
+          </UiButton>
+        </template>
+      </UiEmptyState>
     </div>
   </section>
 

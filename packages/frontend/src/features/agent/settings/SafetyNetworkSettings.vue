@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useConnections, type ConnectionDto } from '@/features/connections/public';
@@ -287,16 +287,12 @@
       </div>
 
       <!-- 空态提示（系统无连接） -->
-      <div
+      <UiEmptyState
         v-else-if="allConnections.length === 0"
-        class="rounded-xl border border-dashed border-border/80 p-8 text-center bg-card/20"
-      >
-        <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <i class="fa-solid fa-network-wired text-base"></i>
-        </div>
-        <div class="mt-2.5 text-xs font-medium text-foreground">{{ $t('agent.settings.safety.emptyConnections') }}</div>
-        <p class="mt-1 text-[11px] text-text-secondary">{{ $t('agent.settings.safety.emptyConnectionsDetail') }}</p>
-      </div>
+        icon="fa-solid fa-network-wired"
+        :title="$t('agent.settings.safety.emptyConnections')"
+        :description="$t('agent.settings.safety.emptyConnectionsDetail')"
+      />
 
       <!-- 搜索无结果 -->
       <div
