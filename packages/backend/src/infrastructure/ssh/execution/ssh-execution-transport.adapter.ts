@@ -32,7 +32,7 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
     private readonly client: Client,
   ) {
     this.sftpPool = new SshSftpChannelPool(client);
-    client.on('error', (error: Error) => this.events.emit('error', error));
+    client.on('error', (error: Error) => this.events.emit('transport-error', error));
     client.on('close', () => {
       if (this.open) runtimePerformanceMetrics.recordSshDisconnect();
       this.open = false;
@@ -114,8 +114,8 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
   }
 
   onError(listener: (error: Error) => void): () => void {
-    this.events.on('error', listener);
-    return () => this.events.off('error', listener);
+    this.events.on('transport-error', listener);
+    return () => this.events.off('transport-error', listener);
   }
 
   async close(): Promise<void> {

@@ -13,7 +13,7 @@ export class SshShellSessionAdapter implements RemoteShellSession {
     channel.stderr.on('data', (data: Buffer | string) =>
       this.events.emit('stderr', Buffer.isBuffer(data) ? data : Buffer.from(data)),
     );
-    channel.on('error', (error: Error) => this.events.emit('error', error));
+    channel.on('error', (error: Error) => this.events.emit('shell-error', error));
     channel.on('close', () => {
       if (!this.open) return;
       this.open = false;
@@ -72,8 +72,8 @@ export class SshShellSessionAdapter implements RemoteShellSession {
   }
 
   onError(listener: (error: Error) => void): () => void {
-    this.events.on('error', listener);
-    return () => this.events.off('error', listener);
+    this.events.on('shell-error', listener);
+    return () => this.events.off('shell-error', listener);
   }
 
   close(): void {
