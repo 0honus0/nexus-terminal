@@ -995,6 +995,7 @@
       "capabilityTools": "Controlled tools",
       "capabilityEvidence": "Verified outcomes",
       "sendHint": "Enter to send",
+      "sendHintNewline": "Shift+Enter for a newline",
       "clarificationTitle": "More information needed",
       "clarificationHint": "Reply below to continue this same run. Choose an option or type your answer in the composer.",
       "clarificationRecommended": "Recommended",

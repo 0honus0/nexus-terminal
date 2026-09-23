@@ -249,23 +249,20 @@
     if (!text || !props.canSend || props.busy) return;
     emit('send', text, props.attachments);
   };
-  const primaryAction = (): void => {
-    if (activeRun.value && !hasDraft.value) {
-      if (!props.busy && props.run?.status !== 'cancelling') emit('cancel');
-      return;
-    }
-    send();
+  const cancelling = computed(() => props.run?.status === 'cancelling');
+  // 「发送」与「停止」是两个独立的动作：发送按钮永远只发送，活动 Run 的停止
+  // 由旁边独立的停止按钮承担，避免同一个按钮随草稿有无在两种语义间切换。
+  const sendDisabled = computed(() => props.busy || !props.canSend || !hasDraft.value);
+  const stopRun = (): void => {
+    if (props.busy || cancelling.value) return;
+    emit('cancel');
   };
-  const primaryActionDisabled = computed(() => {
-    if (props.busy) return true;
-    if (activeRun.value && !hasDraft.value) return props.run?.status === 'cancelling';
-    return !props.canSend || !hasDraft.value;
-  });
+  const stopDisabled = computed(() => props.busy || cancelling.value);
 
   const onComposerEnter = (event: KeyboardEvent): void => {
     if (event.isComposing || event.keyCode === 229) return;
     event.preventDefault();
-    primaryAction();
+    send();
   };
 
   const isNearBottom = (): boolean => {
@@ -320,7 +317,6 @@
   };
 
   const showRunTokens = computed(() => Boolean(props.run && totalRunTokens.value > 0));
-  const showComposerStatusRow = computed(() => showRunTokens.value || showJumpToLatest.value);
 
   const isRunSnapshot = (run: AgentRunViewDto): run is AgentRunSnapshotDto => 'terminalIssue' in run;
 
@@ -726,10 +722,7 @@
           </button>
         </div>
 
-        <div
-          v-if="showComposerStatusRow"
-          class="agent-composer-status mb-1.5 flex min-h-7 items-center justify-between gap-2"
-        >
+        <div class="agent-composer-status mb-1.5 flex min-h-7 items-center justify-between gap-2">
           <span
             v-if="showRunTokens"
             class="agent-token-status inline-flex h-6 items-center gap-1.5 rounded-lg border border-border/55 bg-background/50 px-2 text-[11px] text-text-secondary select-none"
@@ -738,7 +731,14 @@
             <i class="fa-solid fa-chart-simple text-[8px] text-text-secondary/70" aria-hidden="true"></i>
             <strong class="font-mono font-medium text-foreground/80">{{ formatTokens(totalRunTokens) }}</strong>
           </span>
-          <span v-else aria-hidden="true"></span>
+          <span
+            v-else
+            class="agent-composer-hint min-w-0 truncate text-[11px] leading-none text-text-secondary/65 select-none"
+          >
+            <i class="fa-regular fa-keyboard mr-1 text-[9px] opacity-80" aria-hidden="true"></i
+            >{{ $t('agent.conversation.sendHint') }}<span class="px-1 text-text-secondary/40">·</span
+            >{{ $t('agent.conversation.sendHintNewline') }}
+          </span>
           <button
             v-if="showJumpToLatest"
             type="button"
@@ -780,23 +780,30 @@
                 @update:model-value="emit('updateAttachments', $event)"
               />
               <button
+                v-if="activeRun"
                 type="button"
-                class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-20 disabled:bg-foreground/15 disabled:text-text-secondary disabled:shadow-none"
-                :aria-label="
-                  activeRun && !hasDraft ? $t('agent.conversation.cancelRun') : $t('agent.conversation.send')
-                "
-                :title="activeRun && !hasDraft ? $t('agent.conversation.cancelRun') : $t('agent.conversation.send')"
-                :disabled="primaryActionDisabled"
-                @click="primaryAction"
+                class="agent-stop-button flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-error/45 bg-error/10 text-[11px] font-semibold text-error transition-all hover:bg-error/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                :aria-label="$t('agent.conversation.cancelRun')"
+                :title="$t('agent.conversation.cancelRun')"
+                :disabled="stopDisabled"
+                @click="stopRun"
               >
-                <span class="agent-send-label">
-                  {{ activeRun && !hasDraft ? $t('agent.conversation.cancelRun') : $t('agent.conversation.send') }}
-                </span>
                 <i
-                  class="fa-solid text-xs"
-                  :class="activeRun && !hasDraft ? 'fa-circle-notch fa-spin' : 'fa-arrow-up'"
+                  class="fa-solid text-[10px] text-error"
+                  :class="cancelling ? 'fa-circle-notch fa-spin' : 'fa-stop'"
                   aria-hidden="true"
                 ></i>
+              </button>
+              <button
+                type="button"
+                class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-20 disabled:bg-foreground/15 disabled:text-text-secondary disabled:shadow-none"
+                :aria-label="$t('agent.conversation.send')"
+                :title="$t('agent.conversation.send')"
+                :disabled="sendDisabled"
+                @click="send"
+              >
+                <span class="agent-send-label">{{ $t('agent.conversation.send') }}</span>
+                <i class="fa-solid fa-arrow-up text-xs" aria-hidden="true"></i>
               </button>
             </div>
           </div>
@@ -823,6 +830,15 @@
   .agent-send-button {
     font-size: 11px;
     line-height: 1;
+  }
+
+  /*
+   * global.css 里 `i, .fas, .far, .fab { color: var(--icon-color) }` 是未分层规则，
+   * 图标默认不会继承按钮文字色；停止按钮必须在常态与 hover 下都保持错误色。
+   */
+  .agent-stop-button i,
+  .agent-stop-button:hover i {
+    color: var(--color-error);
   }
 
   /*

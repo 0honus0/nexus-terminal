@@ -995,6 +995,7 @@
       "capabilityTools": "受控工具",
       "capabilityEvidence": "结果验证",
       "sendHint": "Enter 发送",
+      "sendHintNewline": "Shift+Enter 换行",
       "clarificationTitle": "需要更多信息",
       "clarificationHint": "请在下方回复以继续同一个任务。你可以选择选项，或直接在输入框中回答。",
       "clarificationRecommended": "推荐",

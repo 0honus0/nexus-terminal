@@ -46,7 +46,7 @@
 | P1                                    | 主界面三层 chrome（44 + 36 + 160~256px）在最小窗口（560×380）下把消息区压到约 140px                                                                                                                                                                                                                                                                                                  | `host/AgentHubWindow.vue:355`、`host/AgentAppSurface.vue:1530`、`ai/AgentConversation.vue:722-788`（见 §7.2） |
 | **P2 · ✅ 已关闭 2026-09-23**         | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0                                                                                                                                                                                                                                                                                                   | `features/agent/**`（见 §7.8）                                                                                |
 | P1                                    | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、空态卡片 9s 自动轮播                                                                                                                                                                                                                                                                        | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`、`ai/AgentConversation.vue:163-166`     |
-| P1                                    | Composer 底部一个问题一个按钮承担 Send / Cancel Run 两种语义，形态随状态变形                                                                                                                                                                                                                                                                                                         | `ai/AgentConversation.vue:767-778`                                                                            |
+| **P1 · ✅ 已关闭 2026-09-23**         | Composer 的 Send / Cancel Run 已拆成两个独立按钮（停止按钮图标-only + 错误色，运行中才出现）；`sendHint` 已渲染；空草稿按 Enter 不再误取消 Run                                                                                                                                                                                                                                       | `ai/AgentConversation.vue`（见 §2.5）                                                                         |
 | **P1 · ✅ 已关闭 2026-09-22**         | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation                                                                                                                                                                                                    | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7）                                              |
 | **P1 · ✅ 已关闭 2026-09-22**         | **Nexus 前后端真实 transport contract 已统一到 `packages/protocol`**：HTTP / Workspace WS / Agent HTTP / Agent event WS / Agent terminal WS 均由 canonical DTO/event contract 单一来源约束，并已接入 transport architecture guard；当前 HEAD 收尾复核再次通过 guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build` 与 Agent scenario suite **71/71** | `packages/protocol/**`、`scripts/check-transport-contract-boundaries.mjs`（见 §3.2）                          |
 | **P1 · ✅ 已关闭 2026-09-22**         | **Agent scenario runner 已模块化并支持受控并发**：`runner.ts` 从 22k+ 行降至 258 行，当前 71 个独立 scenario 文件；默认按批次并发、仅显式 `SERIAL_SCENARIOS` 保持串行；当前扫描未发现通过 `readFileSync` 读取 `packages/*/src` 做 source-shape 架构断言                                                                                                                              | `tests/backend/agent-scenarios/**`（见 §3.6）                                                                 |
@@ -380,7 +380,29 @@ Agent UI 中任意像素字号统计：
 
 建议方向：交互元素最小 32px（触屏 40px+），危险操作（拒绝/删除/关闭标签）避免"hover 才出现"，改成常显或长按/菜单。
 
-### 2.5 Composer 的信息架构与按钮语义（P1）
+### 2.5 Composer 的信息架构与按钮语义（P1 · ✅ 已关闭 2026-09-23）
+
+> ✅ **2026-09-23 闭环（CDP 实测，Hub 1200/900/700/560 四档）**
+>
+> 1. **一个按钮两种语义 → 拆开**：发送按钮现在**只发送**（`sendDisabled = busy || !canSend || !draft`），
+>    旁边新增独立的 **停止按钮**（`w-7 h-7` 方形、`border-error/45 + bg-error/10 + text-error`，仅 `activeRun` 时出现，
+>    `cancelling` 时转圈并禁用）。实测活动 Run 时：`stop=true`（图标 `rgb(220,53,69)`）、`sendDisabled=true`；
+>    运行中再输入草稿 → `sendDisabled=false` 且 stop 仍在（转向/补充输入的原语义保留）。
+>    四档宽度 `toolbarOverflow=0`、控件与操作组**零重叠**（最紧的 1200 档仍留 31px 余量）。
+> 2. **`sendHint` 原来从未渲染（死 key）→ 渲染到 Composer 上方状态行**：`Enter 发送 · Shift+Enter 换行`（新增 `agent.conversation.sendHintNewline`）。
+>    没有放进工具栏：composer 工具条在 768px 上限下**已经零余量**，塞提示会让配置触发压到操作按钮下面（实测重叠 92px），所以复用已有状态行。
+> 3. **空草稿按 Enter 会误取消 Run（顺带发现的真实缺陷）**：`onComposerEnter` 之前走 `primaryAction()`，
+>    而 `primaryAction` 在「活动 Run + 空草稿」时 `emit('cancel')` —— 即光标在空输入框里敲回车 = 取消当前 Run。
+>    现在 Enter 只调用 `send()`（空草稿时是 no-op）。实测：活动 Run 下对空 composer 按 Enter，`stop` 仍在（未取消）。
+> 4. **批准策略的安全语义**：批准策略触发器在 `full_access`（全授权）时改为警示色（`text-warning`，盾牌），
+>    `ask`（按需询问）为 `text-success`；弹层两个选项的「绿=受保护 / 琥珀=放行写入」语义与触发器一致，
+>    两个选项的图标 tile 也补齐显式 `text-*`（原来 tile 有底色但图标是灰的）。
+>    这条依赖 §7.19：在此之前图标上的 `text-warning` 被未分层规则压成灰色，改了也看不见。
+> 5. **token 统计不在主操作区**：`agent/ui` token 胶囊位于 Composer 上方状态行左侧（§7.4 已处理），本节原文的「token 占据主操作区」已过时。
+>
+> **本轮未做（保留为设计决策）**：把「模型 / 执行 / 环境 / SSH」移出工具条收进「下一个 Run 设置」面板。
+> 工具条在 768px 上限下已零余量、且 §7.3 刚把裁切问题闭环，重排属于 §4「需要产品决策」范畴；
+> 现在只保证「模型 + 思考强度 + 发送」永远不会被裁掉（§7.3 的 compact 分层）。
 
 `ai/AgentConversation.vue:722-782` 的输入区底部一行同时容纳：
 `ArtifactPicker` + 模型选择 + 执行模式 + 批准策略 + 运行环境 + SSH 目标 + token 统计 + 跳转最新 + 发送/取消。

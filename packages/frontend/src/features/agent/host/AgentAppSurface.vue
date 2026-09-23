@@ -2005,7 +2005,7 @@
                   <template #trigger>
                     <i
                       class="fa-solid fa-shield-halved text-[9px]"
-                      :class="approvalModeValue === 'full_access' ? 'text-success' : 'text-warning'"
+                      :class="approvalModeValue === 'full_access' ? 'text-warning' : 'text-success'"
                       aria-hidden="true"
                     ></i>
                     <span class="agent-config-verbose max-w-24 truncate whitespace-nowrap text-left">
@@ -2043,7 +2043,7 @@
                         class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
                         :class="
                           approvalModeValue === 'ask'
-                            ? 'border-warning/25 bg-warning/[0.06] text-foreground'
+                            ? 'border-success/25 bg-success/[0.06] text-foreground'
                             : 'border-transparent text-text-secondary hover:bg-card/70'
                         "
                         :disabled="modelSelectionLocked || busy"
@@ -2053,9 +2053,9 @@
                         "
                       >
                         <span
-                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning"
+                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success"
                         >
-                          <i class="fa-solid fa-hand text-[9px]" aria-hidden="true"></i>
+                          <i class="fa-solid fa-hand text-[9px] text-success" aria-hidden="true"></i>
                         </span>
                         <span class="min-w-0 flex-1">
                           <span class="block text-xs font-semibold text-foreground">{{
@@ -2067,7 +2067,7 @@
                         </span>
                         <i
                           v-if="approvalModeValue === 'ask'"
-                          class="fa-solid fa-check mt-1.5 text-[9px] text-warning"
+                          class="fa-solid fa-check mt-1.5 text-[9px] text-success"
                           aria-hidden="true"
                         ></i>
                       </button>
@@ -2076,7 +2076,7 @@
                         class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
                         :class="
                           approvalModeValue === 'full_access'
-                            ? 'border-success/25 bg-success/[0.06] text-foreground'
+                            ? 'border-warning/25 bg-warning/[0.06] text-foreground'
                             : 'border-transparent text-text-secondary hover:bg-card/70'
                         "
                         :disabled="modelSelectionLocked || busy"
@@ -2086,9 +2086,9 @@
                         "
                       >
                         <span
-                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success"
+                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning"
                         >
-                          <i class="fa-solid fa-bolt text-[9px]" aria-hidden="true"></i>
+                          <i class="fa-solid fa-bolt text-[9px] text-warning" aria-hidden="true"></i>
                         </span>
                         <span class="min-w-0 flex-1">
                           <span class="block text-xs font-semibold text-foreground">{{
@@ -2100,7 +2100,7 @@
                         </span>
                         <i
                           v-if="approvalModeValue === 'full_access'"
-                          class="fa-solid fa-check mt-1.5 text-[9px] text-success"
+                          class="fa-solid fa-check mt-1.5 text-[9px] text-warning"
                           aria-hidden="true"
                         ></i>
                       </button>
