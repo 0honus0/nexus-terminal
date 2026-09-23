@@ -39,6 +39,20 @@
     if (translated !== key) return { text: translated, code: '', raw: code };
     return { text: t('agent.settings.workspaceRuntime.reasonUnknown'), code, raw: code };
   });
+  // 最近命令的 action / status 都是内部值，先查表再插进句子，未知值退回原值。
+  const translateOrRaw = (prefix: string, value: string): string => {
+    const key = `${prefix}.${value}`;
+    const translated = t(key);
+    return translated === key ? value : translated;
+  };
+  const lastCommandLabel = computed(() => {
+    const command = lastCommand.value;
+    if (!command) return '';
+    return t('agent.settings.workspaceRuntime.commandStatus', {
+      action: translateOrRaw('agent.settings.workspaceRuntime.commandAction', command.action),
+      status: translateOrRaw('agent.settings.workspaceRuntime.commandState', command.status),
+    });
+  });
 
   const catalog = ref<AgentWorkspaceRuntimeCatalogDto | null>(null);
   const storage = ref<AgentWorkspaceRuntimeStorageDto | null>(null);
@@ -547,12 +561,7 @@
         </div>
 
         <div v-if="lastCommand" class="mt-4 rounded-md bg-background p-3 text-xs text-text-secondary">
-          {{
-            $t('agent.settings.workspaceRuntime.commandStatus', {
-              action: lastCommand.action,
-              status: lastCommand.status,
-            })
-          }}
+          {{ lastCommandLabel }}
         </div>
       </template>
     </div>

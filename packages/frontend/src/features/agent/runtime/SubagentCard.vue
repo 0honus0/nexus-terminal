@@ -32,7 +32,9 @@
             {{ delegation.modelRef.providerId }}/{{ delegation.modelRef.modelId }}
           </div>
         </div>
-        <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[11px]">{{ delegation.status }}</span>
+        <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[11px]">{{
+          $t(`agent.subagents.status.${delegation.status}`)
+        }}</span>
       </div>
       <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-secondary">
         <span>{{ $t('agent.subagents.depth', { value: delegation.depth }) }}</span>
@@ -47,7 +49,8 @@
     </button>
     <div class="mt-2 flex items-center justify-between gap-2">
       <span class="truncate text-[11px] text-text-secondary"
-        >{{ delegation.profileId }} · {{ delegation.failureMode }}</span
+        >{{ $t('agent.subagents.profileLabel', { id: delegation.profileId }) }} ·
+        {{ $t(`agent.subagents.failureMode.${delegation.failureMode}`) }}</span
       >
       <button
         v-if="!terminal.has(delegation.status)"

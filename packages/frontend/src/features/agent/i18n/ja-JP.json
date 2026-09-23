@@ -372,6 +372,26 @@
           "runner_not_configured": "Workspace Runner が未設定です（アドレスまたはトークンがありません）。Workspace ランタイムは利用できません。",
           "runner_unavailable": "Workspace Runner に接続できません。Workspace ランタイムは一時的に利用できません。",
           "runtime_not_configured": "Workspace Runner に利用可能なランタイム環境が設定されていません。"
+        },
+        "commandState": {
+          "pending": "待機中",
+          "running": "実行中",
+          "succeeded": "成功",
+          "failed": "失敗",
+          "unknown": "結果不明"
+        },
+        "commandAction": {
+          "setup": "ランタイムのセットアップ",
+          "packInstall": "ツールパックのインストール",
+          "packUninstall": "ツールパックのアンインストール",
+          "cleanup": "クリーンアップ",
+          "cacheCleanup": "キャッシュ削除",
+          "settingsReset": "設定リセット",
+          "provision": "環境準備",
+          "start": "起動",
+          "stop": "停止",
+          "restart": "再起動",
+          "delete": "削除"
         }
       },
       "safety": {
@@ -1246,7 +1266,20 @@
       "cancel": "子 Agent をキャンセル",
       "messages": "Mailbox 交換",
       "noMessages": "この子 Agent の公開メッセージはありません。",
-      "artifacts": "Artifact 参照 {count} 件"
+      "artifacts": "Artifact 参照 {count} 件",
+      "status": {
+        "queued": "待機中",
+        "running": "実行中",
+        "waiting": "待機中",
+        "completed": "完了",
+        "failed": "失敗",
+        "cancelled": "キャンセル済み"
+      },
+      "failureMode": {
+        "isolate": "失敗は自身のみ",
+        "failFast": "失敗時に即時中止"
+      },
+      "profileLabel": "プロファイル {id}"
     },
     "approvals": {
       "title": "操作の承認が必要です",
@@ -1274,7 +1307,14 @@
         "expired": "期限切れ",
         "superseded": "上書き済み"
       },
-      "openPending": "承認待ち {count} 件を開く"
+      "openPending": "承認待ち {count} 件を開く",
+      "risk": {
+        "read": "読み取りのみ",
+        "control": "制御",
+        "mutate": "変更",
+        "destructive": "破壊的",
+        "forbidden": "禁止"
+      }
     },
     "ui": {
       "saved": "保存しました",

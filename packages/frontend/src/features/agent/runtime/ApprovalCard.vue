@@ -42,6 +42,12 @@
     const translated = t(key);
     return translated === key ? props.approval.status : translated;
   });
+  // 风险枚举（read/control/mutate/destructive/forbidden）不能原样进 UI。
+  const riskLabel = computed(() => {
+    const key = `agent.approvals.risk.${props.approval.inspection.risk}`;
+    const translated = t(key);
+    return translated === key ? props.approval.inspection.risk : translated;
+  });
 </script>
 
 <template>
@@ -54,7 +60,7 @@
         <div class="mt-1 truncate font-mono text-[11px]">{{ approval.inspection.toolName }}</div>
       </div>
       <span class="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium">
-        {{ approval.inspection.risk }}
+        {{ riskLabel }}
       </span>
     </div>
 

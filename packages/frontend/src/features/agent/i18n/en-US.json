@@ -372,6 +372,26 @@
           "runner_not_configured": "The Workspace Runner is not configured (missing address or token), so the Workspace runtime is unavailable.",
           "runner_unavailable": "The Workspace Runner cannot be reached; the Workspace runtime is temporarily unavailable.",
           "runtime_not_configured": "The Workspace Runner has no runtime environment configured."
+        },
+        "commandState": {
+          "pending": "Pending",
+          "running": "Running",
+          "succeeded": "Succeeded",
+          "failed": "Failed",
+          "unknown": "Outcome unknown"
+        },
+        "commandAction": {
+          "setup": "Runtime setup",
+          "packInstall": "Install tool pack",
+          "packUninstall": "Uninstall tool pack",
+          "cleanup": "Cleanup",
+          "cacheCleanup": "Clear cache",
+          "settingsReset": "Reset settings",
+          "provision": "Provision",
+          "start": "Start",
+          "stop": "Stop",
+          "restart": "Restart",
+          "delete": "Delete"
         }
       },
       "safety": {
@@ -1246,7 +1266,20 @@
       "cancel": "Cancel child",
       "messages": "Mailbox exchange",
       "noMessages": "No public messages for this child.",
-      "artifacts": "{count} artifact reference(s)"
+      "artifacts": "{count} artifact reference(s)",
+      "status": {
+        "queued": "Queued",
+        "running": "Running",
+        "waiting": "Waiting",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "failureMode": {
+        "isolate": "Isolated failures",
+        "failFast": "Fail fast"
+      },
+      "profileLabel": "Profile {id}"
     },
     "approvals": {
       "title": "Operation requires approval",
@@ -1274,7 +1307,14 @@
         "expired": "Expired",
         "superseded": "Superseded"
       },
-      "openPending": "Open {count} pending approvals"
+      "openPending": "Open {count} pending approvals",
+      "risk": {
+        "read": "Read only",
+        "control": "Control",
+        "mutate": "Mutate",
+        "destructive": "Destructive",
+        "forbidden": "Forbidden"
+      }
     },
     "ui": {
       "saved": "Saved",

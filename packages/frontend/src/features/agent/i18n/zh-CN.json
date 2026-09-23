@@ -372,6 +372,26 @@
           "runner_not_configured": "尚未配置 Workspace Runner（缺少地址或访问令牌），Workspace 运行时不可用。",
           "runner_unavailable": "无法连接 Workspace Runner，Workspace 运行时暂不可用。",
           "runtime_not_configured": "Workspace Runner 尚未配置可用的运行时环境。"
+        },
+        "commandState": {
+          "pending": "等待中",
+          "running": "执行中",
+          "succeeded": "已成功",
+          "failed": "已失败",
+          "unknown": "结果未知"
+        },
+        "commandAction": {
+          "setup": "运行时安装",
+          "packInstall": "安装工具包",
+          "packUninstall": "卸载工具包",
+          "cleanup": "清理",
+          "cacheCleanup": "清理缓存",
+          "settingsReset": "重置设置",
+          "provision": "准备环境",
+          "start": "启动",
+          "stop": "停止",
+          "restart": "重启",
+          "delete": "删除"
         }
       },
       "safety": {
@@ -1246,7 +1266,20 @@
       "cancel": "取消子 Agent",
       "messages": "Mailbox 交换",
       "noMessages": "此子 Agent 暂无公开消息。",
-      "artifacts": "{count} 个 Artifact 引用"
+      "artifacts": "{count} 个 Artifact 引用",
+      "status": {
+        "queued": "排队中",
+        "running": "执行中",
+        "waiting": "等待中",
+        "completed": "已完成",
+        "failed": "失败",
+        "cancelled": "已取消"
+      },
+      "failureMode": {
+        "isolate": "失败仅影响自身",
+        "failFast": "失败即中止同级"
+      },
+      "profileLabel": "配置档 {id}"
     },
     "approvals": {
       "title": "需要批准的操作",
@@ -1274,7 +1307,14 @@
         "expired": "已过期",
         "superseded": "已被取代"
       },
-      "openPending": "打开 {count} 个待审批操作"
+      "openPending": "打开 {count} 个待审批操作",
+      "risk": {
+        "read": "只读",
+        "control": "控制",
+        "mutate": "写入",
+        "destructive": "破坏性",
+        "forbidden": "禁止"
+      }
     },
     "ui": {
       "saved": "已保存",
