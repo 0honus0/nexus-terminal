@@ -1,7 +1,15 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton, UiCheckbox, UiCombobox, UiPopover, type UiComboboxOption } from '@/foundation/ui';
+  import {
+    BaseModal,
+    UiButton,
+    UiCheckbox,
+    UiCombobox,
+    UiInfoHint,
+    UiPopover,
+    type UiComboboxOption,
+  } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import {
@@ -899,8 +907,8 @@
           >
             {{ $t('agent.settings.providers.counts', { providers: providers.length, models: modelCount }) }}
           </span>
+          <UiInfoHint :text="$t('agent.settings.providers.description')" />
         </div>
-        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.providers.description') }}</p>
       </div>
 
       <!-- 添加服务商主按钮 -->

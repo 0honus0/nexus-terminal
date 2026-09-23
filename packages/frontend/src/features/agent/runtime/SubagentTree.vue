@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiInfoHint } from '@/foundation/ui';
   import type { AgentSubagentMessageDto, AgentSubagentViewDto } from '../api/agent-api';
   import MessageExchangePanel from './MessageExchangePanel.vue';
   import SubagentCard from './SubagentCard.vue';
@@ -19,9 +20,9 @@
 <template>
   <section class="mt-4 rounded border border-border p-3">
     <div class="flex items-center justify-between gap-2">
-      <div>
+      <div class="flex items-center gap-1.5">
         <h3 class="font-medium">{{ $t('agent.subagents.title') }}</h3>
-        <p class="mt-0.5 text-[11px] text-text-secondary">{{ $t('agent.subagents.description') }}</p>
+        <UiInfoHint :text="$t('agent.subagents.description')" />
       </div>
       <span class="rounded bg-header px-2 py-1 text-[11px]">{{ items.length }}</span>
     </div>

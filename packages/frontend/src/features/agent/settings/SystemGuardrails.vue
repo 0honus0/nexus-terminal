@@ -1,3 +1,7 @@
+<script setup lang="ts">
+  import { UiInfoHint } from '@/foundation/ui';
+</script>
+
 <template>
   <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
     <div
@@ -8,8 +12,10 @@
           <i class="fa-solid fa-gauge-high text-sm" aria-hidden="true"></i>
         </div>
         <div>
-          <h3 class="text-sm font-bold text-foreground">{{ $t('agent.settings.guardrails.title') }}</h3>
-          <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.guardrails.description') }}</p>
+          <div class="flex items-center gap-1.5">
+            <h3 class="text-sm font-bold text-foreground">{{ $t('agent.settings.guardrails.title') }}</h3>
+            <UiInfoHint :text="$t('agent.settings.guardrails.description')" />
+          </div>
         </div>
       </div>
       <span

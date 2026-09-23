@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiInfoHint } from '@/foundation/ui';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
@@ -272,9 +273,9 @@
 <template>
   <section class="mt-4 rounded border border-border p-3">
     <div class="flex items-center justify-between gap-2">
-      <div>
+      <div class="flex items-center gap-1.5">
         <h3 class="font-medium">{{ $t('agent.workspaceRuntime.title') }}</h3>
-        <p class="mt-0.5 text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.description') }}</p>
+        <UiInfoHint :text="$t('agent.workspaceRuntime.description')" />
       </div>
       <button
         type="button"

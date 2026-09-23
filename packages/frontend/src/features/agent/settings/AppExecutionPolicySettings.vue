@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -124,9 +124,9 @@
     <div
       class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/40 px-4 py-3 sm:px-5"
     >
-      <div>
+      <div class="flex items-center gap-1.5">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.executionPolicy.title') }}</h3>
-        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.executionPolicy.description') }}</p>
+        <UiInfoHint :text="$t('agent.settings.executionPolicy.description')" />
       </div>
       <label class="min-w-52">
         <span class="sr-only">{{ $t('agent.settings.executionPolicy.app') }}</span>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiInfoHint } from '@/foundation/ui';
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -309,8 +309,8 @@
             <i class="fa-solid fa-store text-[9px]" aria-hidden="true"></i>
             <span>{{ $t('agent.settings.plugins.ecosystemBadge') }}</span>
           </span>
+          <UiInfoHint :text="$t('agent.settings.plugins.description')" />
         </div>
-        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.plugins.description') }}</p>
       </div>
 
       <div class="flex items-center gap-2">

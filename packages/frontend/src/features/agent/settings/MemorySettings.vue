@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiInfoHint } from '@/foundation/ui';
   import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -262,9 +262,9 @@
         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <i class="fa-solid fa-brain text-sm" aria-hidden="true"></i>
         </div>
-        <div>
+        <div class="flex items-center gap-1.5">
           <h3 class="text-sm font-bold text-foreground">{{ $t('agent.settings.memory.title') }}</h3>
-          <p class="text-xs text-text-secondary">{{ $t('agent.settings.memory.description') }}</p>
+          <UiInfoHint :text="$t('agent.settings.memory.description')" />
         </div>
       </div>
       <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled || loading" @click="loadMemories">
@@ -387,9 +387,9 @@
       </div>
 
       <div class="border-t border-border/60 pt-5">
-        <div>
+        <div class="flex items-center gap-1.5">
           <h4 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.memory.importTitle') }}</h4>
-          <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.memory.importDescription') }}</p>
+          <UiInfoHint :text="$t('agent.settings.memory.importDescription')" />
         </div>
 
         <div class="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_auto]">

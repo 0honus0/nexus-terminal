@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiInfoHint } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { AgentSettingsDocumentDto, AgentSettingsViewDto } from '../api/agent-api';
@@ -215,9 +215,9 @@
     <div
       class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5"
     >
-      <div>
+      <div class="flex items-center gap-1.5">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.budget.title') }}</h3>
-        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.budget.description') }}</p>
+        <UiInfoHint :text="$t('agent.settings.budget.description')" />
       </div>
       <div class="flex items-center gap-2">
         <span

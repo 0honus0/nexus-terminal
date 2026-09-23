@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import { ref, watch } from 'vue';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
@@ -66,9 +66,9 @@
     <div
       class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5"
     >
-      <div>
+      <div class="flex items-center gap-1.5">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.browserRuntime.title') }}</h3>
-        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.browserRuntime.description') }}</p>
+        <UiInfoHint :text="$t('agent.settings.browserRuntime.description')" />
       </div>
       <UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="addTarget">
         <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>

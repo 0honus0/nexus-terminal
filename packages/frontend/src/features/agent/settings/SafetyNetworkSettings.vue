@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiCheckbox } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useConnections, type ConnectionDto } from '@/features/connections/public';
@@ -170,8 +170,8 @@
           >
             {{ $t('agent.settings.safety.blockedCount', { blocked: selectedIds.size, total: allConnections.length }) }}
           </span>
+          <UiInfoHint :text="$t('agent.settings.safety.description')" />
         </div>
-        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.safety.description') }}</p>
       </div>
 
       <div class="flex items-center gap-2">

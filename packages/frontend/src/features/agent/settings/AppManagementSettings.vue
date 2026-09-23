@@ -491,9 +491,9 @@
         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <i class="fa-solid fa-puzzle-piece text-sm" aria-hidden="true"></i>
         </div>
-        <div>
+        <div class="flex items-center gap-1.5">
           <h3 class="text-sm font-bold text-foreground">{{ $t('agent.settings.apps.title') }}</h3>
-          <p class="text-xs text-text-secondary">{{ $t('agent.settings.apps.description') }}</p>
+          <UiInfoHint :text="$t('agent.settings.apps.description')" />
         </div>
       </div>
       <div class="flex items-center gap-2">
