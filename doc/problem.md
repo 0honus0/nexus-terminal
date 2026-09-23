@@ -36,7 +36,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | **默认模型选择框「文字背景 ≠ 框背景」已关闭**：`UiCombobox` 输入框不再被全局未分层表单规则涂成纯白，trigger / panel / 输入区共用同一 glass fill                                                                                                                                                                                                                                      | `foundation/ui/uiGen2.css`（见 §7.18）                                                                        |
 | **✅ 已确认保留模态 2026-09-23**      | 「模态遮罩 + 浮动窗口」经产品确认是**有意设计**（背景不可交互，避免两边操作冲突；使用 Hub 时不需要同时看终端）；遮罩点击已收敛为真正 no-op，不再有 400ms「闪烁」                                                                                                                                                                                                                     | `host/AgentHubWindow.vue`（见 §2.1、§2.2）                                                                    |
 | **P1 · ✅ 已关闭 2026-09-23**         | **字号：实测推翻了"563 处 ≤11px 不可读"的整体判断**（181 处 ≤9px 里 95 处是图标；默认首屏只有 6 个 <11px 文本节点）。仍按"阅读文本 ≥11px"全量收敛：两轮共 33 文件 / 274 行，现 `<11px` 只剩图标字形与 5 个 14–16px 圆内计数/勾选，无任何阅读文字低于 11px                                                                                                                            | `features/agent/**`（见 §2.3）                                                                                |
-| **P1 · 🟡 部分关闭 2026-09-23**       | **点击目标：** 已修最明确的一处——关闭 App 标签由 `h-4 w-4 / opacity-0 / 无 pointer` 改为 `h-6 w-6 / 常显 / cursor-pointer`；窄容器 25px 图标按钮与"批准/拒绝"仍未处理                                                                                                                                                                                                                | `host/AgentHubWindow.vue`（见 §2.4）                                                                          |
+| **P1 · ✅ 已关闭 2026-09-23**         | **点击目标：** 关闭 App 标签 `16×16`→`24×24` 常显 + pointer；窄容器纯图标 Run 配置 `25px`→`28px`、字号 `10/10.5px`→`11px`；审批卡按钮追加 `min-h-8`（32px）                                                                                                                                                                                                                          | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`、`runtime/ApprovalCard.vue`（见 §2.4）                  |
 | P1                                    | 硬编码调色板（emerald/sky/amber/blue/purple/pink/indigo + 硬编码 rgba 阴影）绕开主题 token，切主题后视觉不可控                                                                                                                                                                                                                                                                       | `ai/AgentConversation.vue:127-152`、`host/AgentAppSurface.vue`                                                |
 | P1                                    | 设置区控件风格分裂：同一个「主操作按钮」有 6 套写法、5 档圆角，添加/移除模型用原生 checkbox 与 11px 纯文字按钮                                                                                                                                                                                                                                                                       | `features/agent/settings/**`（见 §6.2、§6.3）                                                                 |
 | P1                                    | 设置区模板内约 38 行硬编码中文（能力名称、存储、插件、预算等），另有英文选项混入中文界面                                                                                                                                                                                                                                                                                             | 见 §6.5                                                                                                       |
@@ -358,11 +358,19 @@ Agent UI 中任意像素字号统计：
 
 建议方向：正文/元信息下限 12px，辅助文字不低于 11px，取消 6–9px 档位；对比度不低于 4.5:1（`/50` 这类需要重新取值）。
 
-### 2.4 点击目标偏小（P1 · 🟡 部分关闭 2026-09-23）
+### 2.4 点击目标偏小（P1 · ✅ 已关闭 2026-09-23）
 
-> ✅ **2026-09-23 已修（最明确的一处）**：`host/AgentHubWindow.vue` 关闭 App 标签按钮由 `h-4 w-4`（16×16）+ `opacity-0`（仅 `group-hover`/`focus` 才出现）+ 无 `cursor`，改为 **`h-6 w-6`（24×24）+ 常显（`text-text-secondary/60`）+ `cursor-pointer`**。
-> 注入探针实测（该按钮需 ≥2 个 App 才渲染，当前真实环境只有 1 个）：旧 = `16×16 / opacity:0 / cursor:auto`，新 = `24×24 / opacity:1 / cursor:pointer`。
-> 尚待处理：窄容器下 25px 纯图标 Run 配置按钮（`host/AgentAppSurface.vue:2577+`）、`runtime/ApprovalCard.vue:107-134` 三列并排的"批准/拒绝"。
+> ✅ **2026-09-23 闭环（3 项）**
+>
+> | 位置                                                                                 | 修复前                                                   | 修复后                                                              |
+> | ------------------------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------- |
+> | 关闭 App 标签（`AgentHubWindow`）                                                    | `h-4 w-4`(16×16) + `opacity-0`(hover 才出现) + 无 cursor | `h-6 w-6`(24×24) + 常显 `text-text-secondary/60` + `cursor-pointer` |
+> | 窄容器纯图标 Run 配置（`AgentAppSurface` / `AgentConfigPopover` / `ArtifactPicker`） | `height/min-width: 25px`、`font-size: 10/10.5px`         | `28px`、`font-size: 11px`                                           |
+> | 审批卡「拒绝 / 反馈 / 批准」（`ApprovalCard`）                                       | 仅 `px-2 py-2`，高度随字体浮动                           | 追加 `min-h-8`（=32px 下限）                                        |
+>
+> 探针实测：关闭标签旧 `16×16 / opacity:0 / cursor:auto` → 新 `24×24 / opacity:1 / cursor:pointer`；配置图标档 `h-7 w-7` = **28×28**。
+> 未采纳"全局 32px 下限"：窄容器图标档取 **28px** 与同组件的 `agent-config-trigger-square`（28×28）保持一致，取 32px 会把 560×380 最小窗口下本就紧张的消息区再压缩（§7.2）；审批卡按钮则已用 `min-h-8` 保证 32px。
+> 复验：`vue-tsc --noEmit` 通过；CDP 在 1423px / 560px 两种 Hub 宽度下 `clippedCount = 0`、composer 单行未破（649/649、462/462）。
 
 - 工具栏/窗口按钮普遍 `h-7` / `h-7.5`（28–30px）：`runtime/TaskRail.vue:204`、`host/AgentHubWindow.vue:528/536/548`、`host/AgentAppSurface.vue:1535`、`:1567`；
 - `runtime/ApprovalCard.vue:107-134` 的"批准/拒绝"按钮 `py-2 text-xs` 且三列并排，在浮窗里每个按钮宽度很小；

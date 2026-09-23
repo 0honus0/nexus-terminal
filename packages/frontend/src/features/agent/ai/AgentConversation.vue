@@ -845,7 +845,7 @@
 
     .agent-budget-meter {
       gap: 0;
-      font-size: 9.5px;
+      font-size: 11px;
     }
 
     .agent-budget-bar {

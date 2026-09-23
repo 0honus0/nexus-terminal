@@ -111,7 +111,7 @@
       <div class="grid gap-2" :class="approval.kind === 'acp_permission' ? 'grid-cols-2' : 'grid-cols-3'">
         <button
           type="button"
-          class="rounded-md border border-error/40 px-2 py-2 font-medium text-error hover:bg-error/10 disabled:opacity-50"
+          class="min-h-8 rounded-md border border-error/40 px-2 py-2 font-medium text-error hover:bg-error/10 disabled:opacity-50"
           :disabled="!actionable"
           @click="emit('resolve', approval, 'denied')"
         >
@@ -120,7 +120,7 @@
         <button
           v-if="approval.kind !== 'acp_permission'"
           type="button"
-          class="rounded-md border border-border px-2 py-2 font-medium text-text-secondary hover:bg-header hover:text-foreground disabled:opacity-50"
+          class="min-h-8 rounded-md border border-border px-2 py-2 font-medium text-text-secondary hover:bg-header hover:text-foreground disabled:opacity-50"
           :disabled="!actionable"
           @click="feedbackVisible = !feedbackVisible"
         >
@@ -128,7 +128,7 @@
         </button>
         <button
           type="button"
-          class="rounded-md bg-warning px-2 py-2 font-semibold text-black disabled:opacity-50"
+          class="min-h-8 rounded-md bg-warning px-2 py-2 font-semibold text-black disabled:opacity-50"
           :disabled="!actionable"
           @click="emit('resolve', approval, 'approved')"
         >

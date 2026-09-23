@@ -217,21 +217,21 @@
 
   @container agent-hub-window (max-width: 1040px) {
     .agent-config-summary {
-      height: 25px;
+      height: 28px;
       gap: 4px;
       padding-inline: 6px;
-      font-size: 10.5px;
+      font-size: 11px;
       line-height: 1.25;
     }
   }
 
   @container agent-hub-window (max-width: 760px) {
     .agent-config-summary {
-      min-width: 25px;
-      height: 25px;
+      min-width: 28px;
+      height: 28px;
       gap: 3px;
       padding-inline: 6px;
-      font-size: 10px;
+      font-size: 11px;
       line-height: 1.25;
     }
   }

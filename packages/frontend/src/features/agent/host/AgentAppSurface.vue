@@ -2561,10 +2561,10 @@
     }
 
     :deep(.agent-config-summary) {
-      height: 25px;
+      height: 28px;
       padding-inline: 6px;
       gap: 4px;
-      font-size: 10.5px;
+      font-size: 11px;
       line-height: 1.25;
     }
 
@@ -2588,20 +2588,20 @@
     }
 
     :deep(.agent-config-summary) {
-      min-width: 25px;
-      height: 25px;
+      min-width: 28px;
+      height: 28px;
       gap: 3px;
       /* Icon-only tier: centre the glyph/dot instead of parking it on the left padding. */
       justify-content: center;
       padding-inline: 6px;
-      font-size: 10px;
+      font-size: 11px;
       line-height: 1.25;
     }
 
     .agent-config-reasoning {
       width: auto;
       min-width: 0.75rem;
-      font-size: 10px;
+      font-size: 11px;
       line-height: 1.25;
     }
   }
