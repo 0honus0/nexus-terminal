@@ -32,6 +32,8 @@ export const defaultUiTheme: Record<string, string> = {
   '--text-color': '#333333',
   '--text-color-secondary': '#666666',
   '--border-color': '#cccccc',
+  '--border-hover-color': 'color-mix(in srgb, var(--link-active-color) 45%, var(--border-color))',
+  '--card-bg-color': 'rgb(246 247 249 / 92%)',
   '--link-color': '#8e44ad',
   '--link-hover-color': '#b180e0',
   '--link-active-color': '#a06cd5',
@@ -73,6 +75,7 @@ export const darkUiTheme: Record<string, string> = {
   '--text-color': '#e9ecef',
   '--text-color-secondary': '#adb5bd',
   '--border-color': '#495057',
+  '--card-bg-color': 'rgb(43 48 53 / 90%)',
   '--link-color': '#bb86fc',
   '--link-hover-color': '#d1a9ff',
   '--link-active-color': '#a06cd5',
@@ -111,6 +114,7 @@ export const normalizeUiTheme = (theme: Record<string, string>): Record<string, 
     if (!Object.prototype.hasOwnProperty.call(theme, key)) normalized[key] = value;
   };
 
+  fallback('--card-bg-color', dark ? 'rgb(43 48 53 / 90%)' : 'rgb(246 247 249 / 92%)');
   fallback('--input-bg-color', dark ? '#1e293b' : '#ffffff');
   fallback('--input-text-color', dark ? '#f8fafc' : normalized['--text-color']);
   fallback('--input-placeholder-color', dark ? '#94a3b8' : normalized['--text-color-secondary']);

@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './tokens.css';
+@import '../../foundation/ui/uiGen2.css';
 
 html,
 body,
@@ -23,13 +24,25 @@ a {
   text-decoration: none;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
-  font-family: inherit;
-  font-feature-settings: inherit;
+@layer base {
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    font-family: inherit;
+    font-feature-settings: inherit;
+  }
+
+  /*
+   * Keep this inside @layer base. As an unlayered rule it beat every Tailwind
+   * `cursor-*` utility (e.g. `cursor-nwse-resize` on the window resize
+   * handles), because unlayered declarations win over any layer regardless of
+   * specificity — the same trap the font reset above was moved here for.
+   */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 code,
@@ -45,10 +58,6 @@ kbd,
 samp,
 pre {
   font-variant-numeric: tabular-nums;
-}
-
-button:not(:disabled) {
-  cursor: pointer;
 }
 
 input::placeholder,
@@ -142,4 +151,22 @@ button.bg-error .fas,
 button.bg-error .far,
 button.bg-error .fab {
   color: currentColor !important;
+}
+
+@layer components {
+  /*
+   * Single entry point for the translucent "glass" surfaces used by Agent
+   * popovers and cards. Keeps the recipe (fill + blur + ring + shadow) in one
+   * place instead of repeating utilities per component.
+   */
+  .glass-surface {
+    background-color: color-mix(in srgb, var(--color-card) 82%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 7%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--border-color) 35%, transparent),
+      0 24px 48px -24px color-mix(in srgb, var(--text-color) 32%, transparent);
+  }
 }

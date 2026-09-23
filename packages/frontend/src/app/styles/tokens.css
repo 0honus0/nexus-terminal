@@ -2,6 +2,10 @@
   --font-sans: var(--font-family-sans-serif);
   --font-mono: var(--font-family-monospace);
   --color-background: var(--app-bg-color);
+  --color-card: var(--card-bg-color);
+  --color-border-hover: var(--border-hover-color);
+  --color-primary-hover: var(--button-hover-bg-color);
+  --color-warning-foreground: var(--status-warning-text-color);
   --color-foreground: var(--text-color);
   --color-app: var(--app-bg-color);
   --color-text-default: var(--text-color);
@@ -39,6 +43,8 @@
   --text-color: #333333;
   --text-color-secondary: #666666;
   --border-color: #cccccc;
+  --border-hover-color: color-mix(in srgb, var(--link-active-color) 45%, var(--border-color));
+  --card-bg-color: rgb(246 247 249 / 92%);
   --link-color: #8e44ad;
   --link-hover-color: #b180e0;
   --link-active-color: #a06cd5;

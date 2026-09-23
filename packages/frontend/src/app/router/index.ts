@@ -98,6 +98,15 @@ const routes: RouteRecordRaw[] = [
   },
 ];
 
+if (import.meta.env.DEV) {
+  const catchAllIndex = routes.findIndex((route) => route.path === '/:pathMatch(.*)*');
+  routes.splice(catchAllIndex < 0 ? routes.length : catchAllIndex, 0, {
+    path: '/__ui',
+    name: 'UiGallery',
+    component: () => import('../pages/ui/UiGalleryPage.vue'),
+  });
+}
+
 export const createAppRouter = (pinia: Pinia) => {
   const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
