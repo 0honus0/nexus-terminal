@@ -1692,7 +1692,7 @@
               <div class="agent-run-config flex min-h-7 items-center gap-1">
                 <div
                   v-if="modelSelectionLocked && run"
-                  class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium leading-[1.25] text-text-secondary select-none"
+                  class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-secondary transition-colors duration-150 select-none hover:border-border/50 hover:bg-header/70 hover:text-foreground"
                   :title="`${$t('agent.operations.runModelLocked')}: ${run.definition.model.modelId}`"
                 >
                   <i class="fa-solid fa-microchip shrink-0 text-[9px] text-text-secondary" aria-hidden="true"></i>
@@ -1764,9 +1764,113 @@
                     </div>
                   </template>
                 </AgentConfigPopover>
-                <span v-else class="min-w-32 flex-1 px-2 text-xs text-text-secondary">
-                  {{ $t('agent.operations.providerMissing') }}
-                </span>
+                <div
+                  v-else
+                  class="agent-config-summary flex h-[26px] shrink-0 items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-secondary select-none"
+                  :title="$t('agent.operations.providerMissing')"
+                >
+                  <i class="fa-solid fa-microchip shrink-0 text-[9px] text-text-secondary" aria-hidden="true"></i>
+                  <span class="agent-config-verbose max-w-28 truncate whitespace-nowrap text-left">{{
+                    $t('agent.operations.providerMissing')
+                  }}</span>
+                </div>
+                <!-- 思考强度：GPT 官方饱满胶囊滑块卡片 -->
+                <AgentConfigPopover
+                  v-if="reasoningCapabilityAvailable || (modelSelectionLocked && reasoningValue)"
+                  :ariaLabel="$t('agent.ui.reasoning')"
+                  :title="`${$t('agent.ui.reasoning')}: ${reasoningDisplayLabel}`"
+                  panel-class="w-56"
+                >
+                  <template #trigger>
+                    <i class="fa-solid fa-bolt text-[9px] text-indigo-500" aria-hidden="true"></i>
+                    <span class="agent-config-reasoning min-w-4 whitespace-nowrap text-center">{{
+                      reasoningDisplayLabel
+                    }}</span>
+                    <i
+                      v-if="modelSelectionLocked"
+                      class="fa-solid fa-lock text-[7px] text-text-secondary"
+                      aria-hidden="true"
+                    ></i>
+                    <i
+                      v-else
+                      class="agent-config-affordance fa-solid fa-chevron-down text-[7px] text-text-secondary"
+                      aria-hidden="true"
+                    ></i>
+                  </template>
+                  <template #panel>
+                    <div class="p-1">
+                      <!-- 胶囊条上方纯净居中展示当前强度 -->
+                      <div
+                        class="mb-1.5 flex items-center justify-center gap-1 text-center text-xs font-semibold text-foreground select-none"
+                      >
+                        <span>{{ reasoningDisplayLabel }}</span>
+                        <i
+                          v-if="modelSelectionLocked"
+                          class="fa-solid fa-lock text-[9px] text-text-secondary"
+                          :title="$t('agent.operations.frozen')"
+                          aria-hidden="true"
+                        ></i>
+                      </div>
+
+                      <!-- 核心主体：精致小巧的 GPT 胶囊滑块条（支持平滑拖拽与吸附） -->
+                      <div class="relative my-1.5 px-0.5">
+                        <div
+                          ref="reasoningTrackRef"
+                          class="relative flex h-[26px] w-full items-center rounded-full bg-header/80 px-2 cursor-pointer select-none overflow-hidden border border-border/40 shadow-inner touch-none"
+                          @pointerdown="onTrackPointerDown"
+                          @pointermove="onTrackPointerMove"
+                          @pointerup="onTrackPointerUp"
+                          @pointercancel="onTrackPointerCancel"
+                        >
+                          <!-- 动态填充色带 -->
+                          <div
+                            class="absolute left-0 top-0 h-full rounded-full pointer-events-none"
+                            :class="[
+                              isDraggingReasoning ? '' : 'transition-[width] duration-150 ease-out',
+                              isUltraOrMax
+                                ? 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 shadow-[0_0_8px_rgba(168,85,247,0.35)]'
+                                : 'bg-gradient-to-r from-blue-500 to-indigo-500',
+                            ]"
+                            :style="{ width: `${trackFillPercent}%` }"
+                          ></div>
+
+                          <!-- 微小精致刻度点 -->
+                          <div
+                            class="relative z-10 flex w-full items-center justify-between pointer-events-none px-0.5"
+                          >
+                            <span
+                              v-for="(level, idx) in reasoningLevels"
+                              :key="level"
+                              class="h-1 w-1 rounded-full transition-colors"
+                              :class="idx <= activeReasoningIndex ? 'bg-white/90 shadow-2xs' : 'bg-foreground/20'"
+                            ></span>
+                          </div>
+
+                          <!-- 纯白精致圆形滑钮手柄 -->
+                          <div
+                            class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-[18px] w-[18px] rounded-full bg-white text-gray-800 shadow-sm flex items-center justify-center cursor-grab active:cursor-grabbing z-20 ring-1 ring-black/10"
+                            :class="
+                              isDraggingReasoning
+                                ? 'scale-110 shadow-md cursor-grabbing'
+                                : 'transition-[left,transform] duration-150 ease-out'
+                            "
+                            :style="{ left: `${thumbLeftPercent}%` }"
+                          >
+                            <span
+                              class="h-1.5 w-1.5 rounded-full transition-colors"
+                              :class="isDraggingReasoning ? 'bg-indigo-600' : 'bg-indigo-600/50'"
+                            ></span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 底部说明文案 -->
+                      <div class="mt-1.5 text-center text-[11px] text-text-secondary/80 leading-normal px-1">
+                        {{ currentReasoningDescription }}
+                      </div>
+                    </div>
+                  </template>
+                </AgentConfigPopover>
 
                 <!-- Run 执行模式：与批准策略正交；plan 模式在 model surface 前移除 mutation Tool -->
                 <AgentConfigPopover
@@ -2292,104 +2396,6 @@
                     </div>
                   </template>
                 </AgentConfigPopover>
-
-                <!-- 思考强度：GPT 官方饱满胶囊滑块卡片 -->
-                <AgentConfigPopover
-                  v-if="reasoningCapabilityAvailable || (modelSelectionLocked && reasoningValue)"
-                  :ariaLabel="$t('agent.ui.reasoning')"
-                  :title="`${$t('agent.ui.reasoning')}: ${reasoningDisplayLabel}`"
-                  panel-class="w-56"
-                >
-                  <template #trigger>
-                    <i class="fa-solid fa-bolt text-[9px] text-indigo-500" aria-hidden="true"></i>
-                    <span class="agent-config-reasoning min-w-4 whitespace-nowrap text-center">{{
-                      reasoningDisplayLabel
-                    }}</span>
-                    <i
-                      v-if="modelSelectionLocked"
-                      class="fa-solid fa-lock text-[7px] text-text-secondary"
-                      aria-hidden="true"
-                    ></i>
-                    <i
-                      v-else
-                      class="agent-config-affordance fa-solid fa-chevron-down text-[7px] text-text-secondary"
-                      aria-hidden="true"
-                    ></i>
-                  </template>
-                  <template #panel>
-                    <div class="p-1">
-                      <!-- 胶囊条上方纯净居中展示当前强度 -->
-                      <div
-                        class="mb-1.5 flex items-center justify-center gap-1 text-center text-xs font-semibold text-foreground select-none"
-                      >
-                        <span>{{ reasoningDisplayLabel }}</span>
-                        <i
-                          v-if="modelSelectionLocked"
-                          class="fa-solid fa-lock text-[9px] text-text-secondary"
-                          :title="$t('agent.operations.frozen')"
-                          aria-hidden="true"
-                        ></i>
-                      </div>
-
-                      <!-- 核心主体：精致小巧的 GPT 胶囊滑块条（支持平滑拖拽与吸附） -->
-                      <div class="relative my-1.5 px-0.5">
-                        <div
-                          ref="reasoningTrackRef"
-                          class="relative flex h-[26px] w-full items-center rounded-full bg-header/80 px-2 cursor-pointer select-none overflow-hidden border border-border/40 shadow-inner touch-none"
-                          @pointerdown="onTrackPointerDown"
-                          @pointermove="onTrackPointerMove"
-                          @pointerup="onTrackPointerUp"
-                          @pointercancel="onTrackPointerCancel"
-                        >
-                          <!-- 动态填充色带 -->
-                          <div
-                            class="absolute left-0 top-0 h-full rounded-full pointer-events-none"
-                            :class="[
-                              isDraggingReasoning ? '' : 'transition-[width] duration-150 ease-out',
-                              isUltraOrMax
-                                ? 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 shadow-[0_0_8px_rgba(168,85,247,0.35)]'
-                                : 'bg-gradient-to-r from-blue-500 to-indigo-500',
-                            ]"
-                            :style="{ width: `${trackFillPercent}%` }"
-                          ></div>
-
-                          <!-- 微小精致刻度点 -->
-                          <div
-                            class="relative z-10 flex w-full items-center justify-between pointer-events-none px-0.5"
-                          >
-                            <span
-                              v-for="(level, idx) in reasoningLevels"
-                              :key="level"
-                              class="h-1 w-1 rounded-full transition-colors"
-                              :class="idx <= activeReasoningIndex ? 'bg-white/90 shadow-2xs' : 'bg-foreground/20'"
-                            ></span>
-                          </div>
-
-                          <!-- 纯白精致圆形滑钮手柄 -->
-                          <div
-                            class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-[18px] w-[18px] rounded-full bg-white text-gray-800 shadow-sm flex items-center justify-center cursor-grab active:cursor-grabbing z-20 ring-1 ring-black/10"
-                            :class="
-                              isDraggingReasoning
-                                ? 'scale-110 shadow-md cursor-grabbing'
-                                : 'transition-[left,transform] duration-150 ease-out'
-                            "
-                            :style="{ left: `${thumbLeftPercent}%` }"
-                          >
-                            <span
-                              class="h-1.5 w-1.5 rounded-full transition-colors"
-                              :class="isDraggingReasoning ? 'bg-indigo-600' : 'bg-indigo-600/50'"
-                            ></span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- 底部说明文案 -->
-                      <div class="mt-1.5 text-center text-[11px] text-text-secondary/80 leading-normal px-1">
-                        {{ currentReasoningDescription }}
-                      </div>
-                    </div>
-                  </template>
-                </AgentConfigPopover>
               </div>
             </template>
           </AgentConversation>
@@ -2458,9 +2464,15 @@
     gap: 0.25rem;
     white-space: nowrap;
   }
+  /*
+   * Keep the line box tall enough for CJK ink. A `line-height: 1` box combined
+   * with `truncate` (overflow: hidden) on the inner label clipped the bottom of
+   * Chinese glyphs; this is an unlayered scoped rule, so the `leading-*`
+   * utility on the element could never win (see doc/problem.md §7.10).
+   */
   .agent-config-summary {
     font-size: 11px;
-    line-height: 1;
+    line-height: 1.3;
   }
   .agent-model-meta {
     display: flex;
@@ -2516,25 +2528,6 @@
   }
 
   @container agent-hub-window (max-width: 1040px) {
-    .agent-config-summary {
-      font-size: 10.5px;
-    }
-
-    .agent-config-affordance {
-      display: none;
-    }
-
-    :deep(.agent-config-summary) {
-      height: 25px;
-      padding-inline: 6px;
-      gap: 4px;
-      font-size: 10.5px;
-    }
-
-    .agent-config-verbose {
-      max-width: 5.5rem;
-    }
-
     .agent-surface-layout,
     .agent-surface-layout.has-task-rail {
       grid-template-columns: 256px minmax(0, 1fr);
@@ -2553,7 +2546,11 @@
     }
   }
 
-  @container agent-conversation-pane (max-width: 700px) {
+  /*
+   * Configuration density tiers follow the composer width (the composer shell
+   * declares the `agent-composer` container), never the conversation pane.
+   */
+  @container agent-composer (max-width: 730px) {
     .agent-run-config {
       min-width: 0;
       gap: 0.2rem;
@@ -2577,11 +2574,7 @@
     }
   }
 
-  @container agent-conversation-pane (max-width: 560px) {
-    .agent-run-config {
-      overflow: hidden;
-    }
-
+  @container agent-composer (max-width: 620px) {
     .agent-config-verbose,
     .agent-config-affordance,
     :deep(.agent-config-verbose),
@@ -2598,6 +2591,8 @@
       min-width: 25px;
       height: 25px;
       gap: 3px;
+      /* Icon-only tier: centre the glyph/dot instead of parking it on the left padding. */
+      justify-content: center;
       padding-inline: 6px;
       font-size: 10px;
       line-height: 1.25;
@@ -2649,50 +2644,6 @@
     }
 
     .agent-config-label {
-      display: none;
-    }
-
-    .agent-run-config {
-      flex-wrap: nowrap;
-      align-content: center;
-      gap: 0.2rem;
-    }
-
-    .agent-config-verbose,
-    .agent-config-affordance {
-      display: none;
-    }
-
-    :deep(.agent-config-verbose) {
-      display: none;
-    }
-
-    .agent-config-compact {
-      display: inline;
-    }
-
-    :deep(.agent-config-compact) {
-      display: inline;
-    }
-
-    .agent-config-reasoning {
-      width: auto;
-      min-width: 0.75rem;
-      font-size: 10px;
-      line-height: 1.25;
-    }
-
-    :deep(.agent-config-summary) {
-      min-width: 25px;
-      height: 25px;
-      gap: 3px;
-      border-radius: 6px;
-      padding-inline: 6px;
-      font-size: 10px;
-      line-height: 1.25;
-    }
-
-    .agent-detail-label {
       display: none;
     }
   }

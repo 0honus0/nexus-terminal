@@ -319,6 +319,9 @@
     return num.toLocaleString();
   };
 
+  const showRunTokens = computed(() => Boolean(props.run && totalRunTokens.value > 0));
+  const showComposerStatusRow = computed(() => showRunTokens.value || showJumpToLatest.value);
+
   const isRunSnapshot = (run: AgentRunViewDto): run is AgentRunSnapshotDto => 'terminalIssue' in run;
 
   const terminalIssueDetail = computed(() => {
@@ -724,6 +727,32 @@
         </div>
 
         <div
+          v-if="showComposerStatusRow"
+          class="agent-composer-status mb-1.5 flex min-h-7 items-center justify-between gap-2"
+        >
+          <span
+            v-if="showRunTokens"
+            class="agent-token-status inline-flex h-6 items-center gap-1.5 rounded-lg border border-border/55 bg-background/50 px-2 text-[9.5px] text-text-secondary select-none"
+            :title="`${$t('agent.tasks.totalTokens')}: ${totalRunTokens} · input ${run?.usage.inputTokens} · output ${run?.usage.outputTokens} · cache ${runCacheRate}% · steps ${run?.usage.steps}`"
+          >
+            <i class="fa-solid fa-chart-simple text-[8px] text-text-secondary/70" aria-hidden="true"></i>
+            <strong class="font-mono font-medium text-foreground/80">{{ formatTokens(totalRunTokens) }}</strong>
+          </span>
+          <span v-else aria-hidden="true"></span>
+          <button
+            v-if="showJumpToLatest"
+            type="button"
+            class="agent-jump-latest inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 text-[11px] text-text-secondary shadow-xs backdrop-blur-md transition-colors hover:bg-header hover:text-foreground"
+            :title="$t('agent.ui.latest')"
+            :aria-label="$t('agent.ui.latest')"
+            @click="scrollToBottom"
+          >
+            <i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
+            <span class="agent-jump-latest-label">{{ $t('agent.ui.latest') }}</span>
+          </button>
+        </div>
+
+        <div
           class="agent-composer-shell rounded-xl border border-border/65 bg-card/88 backdrop-blur-md shadow-[0_2px_14px_rgba(0,0,0,0.035)] transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15 overflow-hidden"
         >
           <textarea
@@ -737,36 +766,19 @@
             @keydown.enter.exact="onComposerEnter"
           ></textarea>
           <div
-            class="agent-composer-toolbar flex min-h-10 items-center justify-between gap-1.5 border-t border-border/35 bg-header/25 backdrop-blur-xs px-2 py-1"
+            class="agent-composer-toolbar flex min-h-10 flex-nowrap items-center justify-between gap-1.5 border-t border-border/35 bg-header/25 backdrop-blur-xs px-2 py-1"
           >
-            <div class="agent-toolbar-controls flex min-w-0 flex-1 items-center gap-1 overflow-x-hidden">
+            <div class="agent-toolbar-controls flex min-w-0 flex-1 flex-nowrap items-center gap-1">
+              <slot name="configuration" />
+            </div>
+            <div class="agent-composer-actions flex shrink-0 items-center gap-1.5">
               <ArtifactPicker
                 :app-id="appId"
                 :model-value="attachments"
                 :disabled="busy"
+                compact
                 @update:model-value="emit('updateAttachments', $event)"
               />
-              <slot name="configuration" />
-            </div>
-            <div class="flex shrink-0 items-center gap-1.5">
-              <button
-                v-if="showJumpToLatest"
-                type="button"
-                class="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background/60 text-text-secondary transition hover:bg-header hover:text-foreground"
-                :title="$t('agent.ui.latest')"
-                :aria-label="$t('agent.ui.latest')"
-                @click="scrollToBottom"
-              >
-                <i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
-              </button>
-              <span
-                v-if="run && (totalRunTokens > 0 || run.usage.steps > 0)"
-                class="agent-token-status inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/55 bg-background/50 px-2 text-[9.5px] text-text-secondary select-none"
-                :title="`${$t('agent.tasks.totalTokens')}: ${totalRunTokens} · input ${run.usage.inputTokens} · output ${run.usage.outputTokens} · cache ${runCacheRate}% · steps ${run.usage.steps}`"
-              >
-                <i class="fa-solid fa-chart-simple text-[8px] text-text-secondary/70" aria-hidden="true"></i>
-                <strong class="font-mono font-medium text-foreground/80">{{ formatTokens(totalRunTokens) }}</strong>
-              </span>
               <button
                 type="button"
                 class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-20 disabled:bg-foreground/15 disabled:text-text-secondary disabled:shadow-none"
@@ -813,6 +825,15 @@
     line-height: 1;
   }
 
+  /*
+   * The composer shell is capped at max-w-3xl (768px), so it — not the much
+   * wider conversation pane — is the real width constraint for the toolbar.
+   */
+  .agent-composer-shell {
+    container-type: inline-size;
+    container-name: agent-composer;
+  }
+
   @container agent-conversation-pane (max-width: 700px) {
     .agent-conversation-scroller {
       padding-inline: 14px;
@@ -830,28 +851,6 @@
     .agent-budget-bar {
       display: none;
     }
-
-    .agent-composer-toolbar {
-      min-height: 36px;
-      gap: 4px;
-      padding: 4px 6px;
-    }
-
-    .agent-toolbar-controls {
-      gap: 3px;
-      overflow-x: hidden;
-    }
-
-    .agent-send-button {
-      width: 28px;
-      height: 28px;
-      padding-inline: 0;
-      justify-content: center;
-    }
-
-    .agent-send-label {
-      display: none;
-    }
   }
 
   @container agent-conversation-pane (max-width: 560px) {
@@ -862,20 +861,13 @@
     .agent-composer-footer {
       padding: 5px 8px 8px;
     }
-
-    .agent-composer-shell {
-      border-radius: 12px;
-    }
-
-    #agent-composer {
-      min-height: 72px;
-      padding: 10px 12px 6px;
-      font-size: 12px;
-      line-height: 1.55;
-    }
   }
 
-  @container agent-hub-window (max-width: 1040px) {
+  /*
+   * Composer density tiers. Driven by the composer width (never by the window),
+   * so compacting always happens before the single-line toolbar can overflow.
+   */
+  @container agent-composer (max-width: 730px) {
     .agent-composer-toolbar {
       min-height: 36px;
       gap: 4px;
@@ -884,6 +876,16 @@
 
     .agent-toolbar-controls {
       gap: 3px;
+    }
+  }
+
+  @container agent-composer (max-width: 620px) {
+    .agent-composer-status {
+      gap: 4px;
+    }
+
+    .agent-jump-latest {
+      padding-inline: 6px;
     }
 
     .agent-send-button {
@@ -898,7 +900,7 @@
     }
   }
 
-  @container agent-hub-window (max-width: 760px) {
+  @container agent-composer (max-width: 520px) {
     .agent-composer-shell {
       border-radius: 12px;
     }
@@ -910,25 +912,7 @@
       line-height: 1.55;
     }
 
-    .agent-composer-toolbar {
-      min-height: 36px;
-      gap: 4px;
-      padding: 4px 6px;
-    }
-
-    .agent-toolbar-controls {
-      gap: 3px;
-    }
-
-    .agent-send-button {
-      width: 28px;
-      height: 28px;
-      padding-inline: 0;
-      justify-content: center;
-      border-radius: 8px;
-    }
-
-    .agent-send-label {
+    .agent-jump-latest-label {
       display: none;
     }
   }

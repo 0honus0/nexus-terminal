@@ -9,12 +9,12 @@
 
 ## ✅ 已完成：Foundation UI Gen2 基础库封版
 
-| 项 | 内容 |
-| --- | --- |
-| 状态 | **已完成 2026-09-23；停止继续扩组件，后续按 `problem.md` 实际迁移需求使用** |
-| 组件 | `UiBadge / UiButton / UiCheckbox / UiDialog / UiFormField / UiInput / UiPopover / UiSelect / UiSlider / UiSpinner / UiSurface / UiSwitch / UiTextarea` |
-| 行为底座 | `reka-ui`；Switch / Slider / Popover / Checkbox / Select / Dialog 的键盘、焦点、dismiss、portal / collision 等行为由 primitive 承担 |
-| 诊断页 | DEV-only `/__ui`；生产 build 已确认不包含 Gallery 文案或 chunk |
+| 项       | 内容                                                                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 状态     | **已完成 2026-09-23；停止继续扩组件，后续按 `problem.md` 实际迁移需求使用**                                                                            |
+| 组件     | `UiBadge / UiButton / UiCheckbox / UiDialog / UiFormField / UiInput / UiPopover / UiSelect / UiSlider / UiSpinner / UiSurface / UiSwitch / UiTextarea` |
+| 行为底座 | `reka-ui`；Switch / Slider / Popover / Checkbox / Select / Dialog 的键盘、焦点、dismiss、portal / collision 等行为由 primitive 承担                    |
+| 诊断页   | DEV-only `/__ui`；生产 build 已确认不包含 Gallery 文案或 chunk                                                                                         |
 
 - 统一 `data-ui-gen="2"` runtime marker、三档 density、tone / surface token、focus-visible、disabled、reduced-motion、forced-colors。
 - `.glass-surface` 成为浮层玻璃表面的单一配方；普通 raised / inset surface 不使用 blur。
@@ -24,12 +24,30 @@
 
 ---
 
+## ✅ 已解决：Agent 浮层限制在 Hub 内 + Composer 状态行收口
+
+| 项       | 内容                                                                                                                                      |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 状态     | **代码闭环 2026-09-23；静态/构建验收通过，CDP 因当前执行环境无法访问既有 9223 端口而未执行**                                              |
+| 对应问题 | `doc/problem.md` §7.13-a / §7.16-a（弹层按 viewport clamp）、§7.1（玻璃表面/token 前置）、§7.3 / §7.4 / §7.14-a（Composer 裁切/回到最新） |
+
+- `AgentConfigPopover`：Teleport 面板优先取最近的 `.agent-hub-window` 矩形作为边界，12px inset；同时限制 `maxWidth/maxHeight`，并观察 panel + Hub resize，只有不在 Hub 内时才回退 viewport。
+- `AgentAppSwitcher`：同步改为 Hub-bound clamp，限制最大宽高，Hub resize 时重定位；Escape 关闭会把焦点还给触发按钮。
+- `.glass-surface` 已成为浮层统一配方，`--color-card / --color-border-hover / --color-primary-hover / --color-warning-foreground` 已接入 Tailwind token。
+- 旧自定义深色主题迁移验证：缺失 card key → `rgb(43 48 53 / 90%)`；显式 `--card-bg-color` 保持原值；旧浅色主题补 `rgb(246 247 249 / 92%)`。
+- Composer token 状态只在 **真实 token 总量 > 0** 时显示，不再因为 steps>0 显示 `0` token；「回到最新」与 token 移到 composer 上方状态行。
+- 配置工具条改为 composer 自身 container query，保持单行；附件迁到右侧固定 `+`；思考等级前移。已有 2026-09-22 CDP matrix 证据保持有效。
+- 「尚未配置模型」保持 26px 统一结构，但作为非交互状态不再有 hover 边框/底色/文字变化，避免伪装成可点击入口。
+- 本轮验证：`git diff --check`、Prettier、相关文件 ESLint、frontend `vue-tsc --noEmit`、Vite production build 全部通过。
+
+---
+
 ## ✅ 已解决：Composer 工具条静默裁切「思考强度」
 
 | 项       | 内容                                                                                        |
 | -------- | ------------------------------------------------------------------------------------------- |
 | 级别     | P1（用户实测反馈）                                                                          |
-| 状态     | **已解决 2026-09-22（含下方两个子项，均已实测）**                                            |
+| 状态     | **已解决 2026-09-22（含下方两个子项，均已实测）**                                           |
 | 同时关闭 | `doc/problem.md` §7.4（「回到最新」按钮位置）、§7.3-3.1（空态模型项与正常模型项视觉不一致） |
 
 ### 问题
@@ -89,20 +107,20 @@
 
 ### 遗留子项（同一问题内的反馈）：空态模型项 hover 无边界
 
-| 项   | 内容                                                                     |
-| ---- | ------------------------------------------------------------------------ |
-| 状态 | **已修复 2026-09-22（用户选定方案 A）**                                   |
-| 位置 | `host/AgentAppSurface.vue` 配置行首项「尚未配置模型」（1600 行附近）      |
+| 项   | 内容                                                                 |
+| ---- | -------------------------------------------------------------------- |
+| 状态 | **已修复 2026-09-22（用户选定方案 A）**                              |
+| 位置 | `host/AgentAppSurface.vue` 配置行首项「尚未配置模型」（1600 行附近） |
 
 **已修部分（待人工确认）**：「尚未配置模型」字底被裁。根因是 `.agent-config-summary` 的 scoped 规则 `line-height: 1` 压过 Tailwind `leading-*`，叠加文本 span 的 `truncate`（`overflow: hidden`）→ 行框 11px、内容 13px，被裁 2px。已改为 `line-height: 1.3`。
 
 实测（CDP，用户浏览器 dpr 1.5，原生像素放大 8×）：
 
-| 宽度档                   | font-size / line-height | 行框  | 字墨下沿 | 裁切 |
-| ------------------------ | ----------------------- | ----- | -------- | ---- |
-| hub 1148（composer 768） | 11px / 14.3px           | 14.3  | 12.65    | 无   |
-| hub 760（composer 727）  | 10.5px / 13.125px       | 13.13 | 11.56    | 无   |
-| hub 640（compact 图标态）| 10px / 12.5px           | —     | —        | 无   |
+| 宽度档                    | font-size / line-height | 行框  | 字墨下沿 | 裁切 |
+| ------------------------- | ----------------------- | ----- | -------- | ---- |
+| hub 1148（composer 768）  | 11px / 14.3px           | 14.3  | 12.65    | 无   |
+| hub 760（composer 727）   | 10.5px / 13.125px       | 13.13 | 11.56    | 无   |
+| hub 640（compact 图标态） | 10px / 12.5px           | —     | —        | 无   |
 
 **已修部分（方案 A）**：hover 无边界。实测改前 `hover-border-color: rgba(0,0,0,0)`、`hover-background: rgba(0,0,0,0)`、`cursor: auto`；相邻的「执行」hover 是 `border/50 + header/70 + 文字加深`。空态项是 `<div>`，类名里只有 `border-transparent`，没有 hover 规则，属于本次改造引入的视觉落差。已补 `transition-colors duration-150 hover:border-border/50 hover:bg-header/70 hover:text-foreground`，「运行中锁定模型」项同步对齐；仍是不可点击（无 `cursor: pointer` / `tabindex` / 点击）；顺带删掉该锁定项上已失效的 `leading-[1.25]`（被 scoped 规则的 `line-height: 1.3` 压制，留着是陷阱）。
 
@@ -116,20 +134,20 @@
 
 ### 遗留子项 2（同一问题内的反馈）：窄模式下「运行环境」小圆点不居中
 
-| 项   | 内容                                                                    |
-| ---- | ----------------------------------------------------------------------- |
-| 状态 | **已修复 2026-09-22**                                                   |
+| 项   | 内容                                                                              |
+| ---- | --------------------------------------------------------------------------------- |
+| 状态 | **已修复 2026-09-22**                                                             |
 | 位置 | `host/AgentAppSurface.vue` 配置行「运行环境」触发项 + `agent-composer` 紧凑档规则 |
 
 实测（CDP，hub 640 / composer 619，即 `@container agent-composer (max-width: 620px)` 档）：
 
-| 触发项          | 内容宽 | chip 宽 | 内容中心 − chip 中心 |
-| --------------- | ------ | ------- | -------------------- |
-| 模型（图标态）  | 11.3px | 25px    | −0.21px              |
-| 执行（图标态）  | 11.3px | 25px    | −0.21px              |
-| 全授权（图标态）| 11.3px | 25px    | −0.21px              |
-| **运行环境**    | **6px**| 25px    | **−2.83px**          |
-| SSH（带短标签） | 43.8px | 57.2px  | 0                    |
+| 触发项           | 内容宽  | chip 宽 | 内容中心 − chip 中心 |
+| ---------------- | ------- | ------- | -------------------- |
+| 模型（图标态）   | 11.3px  | 25px    | −0.21px              |
+| 执行（图标态）   | 11.3px  | 25px    | −0.21px              |
+| 全授权（图标态） | 11.3px  | 25px    | −0.21px              |
+| **运行环境**     | **6px** | 25px    | **−2.83px**          |
+| SSH（带短标签）  | 43.8px  | 57.2px  | 0                    |
 
 根因：紧凑档把 `.agent-config-verbose` / `.agent-config-affordance` 全部 `display: none`，chip 只剩内容项，但 chip 仍是 `min-width: 25px` + `padding-inline: 6px` + `justify-content: normal`（= flex-start）。11.3px 的图标刚好填满 13px 内容盒，所以看着居中；6px 的圆点则贴在左内边距上 → 左偏 2.83px（垂直方向 `dy = 0`，正常）。
 
@@ -139,10 +157,10 @@
 
 改后实测（padding 保持 `0px 6px`，chip 宽度与改前完全一致）：
 
-| 档位                   | 运行环境圆点 内容中心 − chip 中心 | 图标态 | SSH（带短标签） |
-| ---------------------- | --------------------------------- | ------ | --------------- |
-| hub 640（composer 619）| **0**（改前 −2.83）               | 0      | 0               |
-| hub 560（composer 543）| **0**                             | 0      | 0               |
+| 档位                    | 运行环境圆点 内容中心 − chip 中心 | 图标态 | SSH（带短标签） |
+| ----------------------- | --------------------------------- | ------ | --------------- |
+| hub 640（composer 619） | **0**（改前 −2.83）               | 0      | 0               |
+| hub 560（composer 543） | **0**                             | 0      | 0               |
 
 截图 `/tmp/shots/center-640.png`、`/tmp/shots/center-560.png`（5× 放大 `/tmp/shots/center-560-5x.png`）。回归：`composer-matrix.mjs` 八档全部零溢出、工具条仍单行、`+` 仍 28×28；`vue-tsc` / `eslint` / `prettier` 均通过。
 
@@ -150,11 +168,11 @@
 
 ## ✅ 已解决：Agent Hub 右下角缩放手柄（最终：加粗圆弧 + 无 hover 高亮）与按钮 cursor 失效
 
-| 项   | 内容                                                                 |
-| ---- | -------------------------------------------------------------------- |
-| 级别 | P2（用户实测反馈：原提示「不好看」）                                 |
+| 项   | 内容                                                                                    |
+| ---- | --------------------------------------------------------------------------------------- |
+| 级别 | P2（用户实测反馈：原提示「不好看」）                                                    |
 | 状态 | **已解决 2026-09-22（先按方案 A 改成加粗圆弧，用户看完后要求去掉圆弧 → 最终不带图形）** |
-| 位置 | `features/agent/host/AgentHubWindow.vue:588-593`                     |
+| 位置 | `features/agent/host/AgentHubWindow.vue:588-593`                                        |
 
 ### 问题
 
@@ -174,12 +192,12 @@
 
 ### 中间态（方案 A 实测，已被下一步取代）
 
-| 项             | 结果                                                                     |
-| -------------- | ------------------------------------------------------------------------ |
-| 静默态         | `background: rgba(0,0,0,0)`、`border-width: 0px`、`border-radius: 6px/16px`（与窗口 `rounded-2xl` 同角） |
-| 图形           | `svg` 12×12、`stroke-width 1.9`、`stroke-linecap round`、旧 `circle` 数量 0 |
-| hover          | `background: foreground/10`、`color: foreground`                          |
-| 拖拽回归       | 手柄拖动仍生效：hub 1148 → 1268（宽）                                    |
+| 项       | 结果                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------- |
+| 静默态   | `background: rgba(0,0,0,0)`、`border-width: 0px`、`border-radius: 6px/16px`（与窗口 `rounded-2xl` 同角） |
+| 图形     | `svg` 12×12、`stroke-width 1.9`、`stroke-linecap round`、旧 `circle` 数量 0                              |
+| hover    | `background: foreground/10`、`color: foreground`                                                         |
+| 拖拽回归 | 手柄拖动仍生效：hub 1148 → 1268（宽）                                                                    |
 
 截图：`/tmp/shots/resize-after-rest.png`、`/tmp/shots/resize-after-hover.png`；对照用四方案预览图 `/tmp/shots/resize-preview.png`。
 
@@ -194,13 +212,13 @@
 
 实测：
 
-| 项       | 结果                                                                              |
-| -------- | --------------------------------------------------------------------------------- |
-| 静默态   | `background: rgba(0,0,0,0)`、`border-width: 0px`、`color: text-secondary/70`、无外框 |
-| 圆弧     | 12×12、`M10.4 1.6A8.8 8.8 0 0 1 1.6 10.4`、`stroke-width 1.9`、`linecap round`       |
+| 项       | 结果                                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------- |
+| 静默态   | `background: rgba(0,0,0,0)`、`border-width: 0px`、`color: text-secondary/70`、无外框                          |
+| 圆弧     | 12×12、`M10.4 1.6A8.8 8.8 0 0 1 1.6 10.4`、`stroke-width 1.9`、`linecap round`                                |
 | 悬停     | 与静默**逐项相同**：`bg rgba(0,0,0,0)`、`color` 不变、`box-shadow: none`、`outline: none` —— 高亮圆饼已不存在 |
-| 键盘焦点 | 保留 `focus-visible` ring（该按钮无其它视觉反馈）                                  |
-| 拖拽回归 | hub 1126 → 1036（宽）仍生效                                                        |
+| 键盘焦点 | 保留 `focus-visible` ring（该按钮无其它视觉反馈）                                                             |
+| 拖拽回归 | hub 1126 → 1036（宽）仍生效                                                                                   |
 
 截图：静默 `/tmp/shots/resize-arc-rest.png`、悬停 `/tmp/shots/resize-arc-hover.png`（12× 放大同名前缀）。静态检查：`eslint` / `prettier` 通过。
 
@@ -217,12 +235,12 @@
 
 **验收**：
 
-| 检查项                     | 结果                                                                     |
-| -------------------------- | ------------------------------------------------------------------------ |
+| 检查项                     | 结果                                                                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | 缩放手柄（hover 时）       | `cursor: nwse-resize`（改前 `pointer`）；命中规则 `@layer utilities` 的 `.cursor-nwse-resize` + `@layer base` 的 `button:not(:disabled)` |
-| 普通按钮（无 cursor 类）   | 仍是 `pointer`（`执行模式` 触发项、hub 内其它按钮实测）                   |
-| 当前视图 32 个按钮全量扫描 | `pointer 30 / not-allowed 1 / nwse-resize 1`，无「写了 utility 却被压掉」的残留 |
-| 静态检查                   | `prettier` 通过                                                          |
+| 普通按钮（无 cursor 类）   | 仍是 `pointer`（`执行模式` 触发项、hub 内其它按钮实测）                                                                                  |
+| 当前视图 32 个按钮全量扫描 | `pointer 30 / not-allowed 1 / nwse-resize 1`，无「写了 utility 却被压掉」的残留                                                          |
+| 静态检查                   | `prettier` 通过                                                                                                                          |
 
 ### ⚠️ 同类陷阱仍在（未改，待用户决定）：`placeholder:text-*` 全项目失效
 

@@ -8,6 +8,7 @@
     appId: string;
     modelValue: AgentArtifactRefDto[];
     disabled?: boolean;
+    compact?: boolean;
   }>();
   const emit = defineEmits<{ 'update:modelValue': [value: AgentArtifactRefDto[]] }>();
 
@@ -106,16 +107,28 @@
     :title="$t('agent.attachments.button', { count: modelValue.length })"
     :disabled="disabled"
     panel-class="w-[min(520px,calc(100vw-24px))]"
+    :trigger-variant="compact ? 'square' : 'default'"
     @open-change="handleOpenChange"
   >
     <template #trigger>
-      <i class="fa-solid fa-paperclip text-[10px]" aria-hidden="true"></i>
-      <span class="agent-config-verbose whitespace-nowrap">{{
-        $t('agent.attachments.button', { count: modelValue.length })
-      }}</span>
-      <span v-if="modelValue.length > 0" class="agent-config-compact hidden text-[10px] font-medium">{{
-        modelValue.length
-      }}</span>
+      <template v-if="compact">
+        <i class="fa-solid fa-plus text-[11px]" aria-hidden="true"></i>
+        <span
+          v-if="modelValue.length > 0"
+          class="pointer-events-none absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold leading-none text-white"
+          aria-hidden="true"
+          >{{ modelValue.length }}</span
+        >
+      </template>
+      <template v-else>
+        <i class="fa-solid fa-paperclip text-[10px]" aria-hidden="true"></i>
+        <span class="agent-config-verbose whitespace-nowrap">{{
+          $t('agent.attachments.button', { count: modelValue.length })
+        }}</span>
+        <span v-if="modelValue.length > 0" class="agent-config-compact hidden text-[10px] font-medium">{{
+          modelValue.length
+        }}</span>
+      </template>
     </template>
 
     <template #panel>

@@ -9,7 +9,36 @@
   const query = ref('');
   const triggerRef = ref<HTMLButtonElement | null>(null);
   const panelRef = ref<HTMLElement | null>(null);
-  const position = ref({ left: '0px', top: '0px' });
+  const position = ref({ left: '0px', top: '0px', maxWidth: '0px', maxHeight: '0px' });
+  let hubResizeObserver: ResizeObserver | null = null;
+
+  // Teleported panel bounds: stay inside the owning Agent Hub window when the
+  // trigger lives inside one, otherwise fall back to the viewport.
+  const HUB_SELECTOR = '.agent-hub-window';
+  const EDGE_INSET = 12;
+
+  const getHubElement = (): HTMLElement | null => {
+    const hub = triggerRef.value?.closest(HUB_SELECTOR);
+    return hub instanceof HTMLElement ? hub : null;
+  };
+
+  const resolveBounds = () => {
+    const hub = getHubElement();
+    if (hub) {
+      const rect = hub.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    }
+    return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  };
+
+  const observeHub = () => {
+    if (typeof ResizeObserver === 'undefined') return;
+    hubResizeObserver?.disconnect();
+    const hub = getHubElement();
+    if (!hub) return;
+    hubResizeObserver = new ResizeObserver(() => positionPanel());
+    hubResizeObserver.observe(hub);
+  };
 
   const enabledApps = computed(() => props.apps.filter((app) => app.enabled));
   const candidateApps = computed(() => enabledApps.value);
@@ -25,39 +54,50 @@
     const popup = panelRef.value;
     if (!anchor || !popup) return;
     const popupRect = popup.getBoundingClientRect();
-    const width = popupRect.width || 260;
-    const height = popupRect.height || 220;
+    const bounds = resolveBounds();
+    const availableWidth = Math.max(0, bounds.right - bounds.left - EDGE_INSET * 2);
+    const availableHeight = Math.max(0, bounds.bottom - bounds.top - EDGE_INSET * 2);
+    const width = Math.min(popupRect.width || 260, availableWidth);
+    const height = Math.min(popupRect.height || 220, availableHeight);
 
     let left = anchor.left;
-    if (left + width > window.innerWidth - 12) {
-      left = Math.max(12, anchor.right - width);
+    if (left + width > bounds.right - EDGE_INSET) {
+      left = Math.max(bounds.left + EDGE_INSET, anchor.right - width);
     }
+    left = Math.max(bounds.left + EDGE_INSET, Math.min(left, bounds.right - EDGE_INSET - width));
 
     let top = anchor.bottom + 6;
-    if (top + height > window.innerHeight - 12) {
-      top = Math.max(12, anchor.top - height - 6);
+    if (top + height > bounds.bottom - EDGE_INSET) {
+      top = Math.max(bounds.top + EDGE_INSET, anchor.top - height - 6);
     }
+    top = Math.max(bounds.top + EDGE_INSET, Math.min(top, bounds.bottom - EDGE_INSET - height));
 
     position.value = {
       left: `${Math.round(left)}px`,
       top: `${Math.round(top)}px`,
+      maxWidth: `${availableWidth}px`,
+      maxHeight: `${availableHeight}px`,
     };
   };
 
   const toggle = async () => {
     if (open.value) {
-      open.value = false;
+      close();
       return;
     }
     open.value = true;
     query.value = '';
     await nextTick();
     positionPanel();
+    observeHub();
     panelRef.value?.focus();
   };
 
-  const close = () => {
+  const close = (restoreFocus = false) => {
+    if (!open.value) return;
     open.value = false;
+    hubResizeObserver?.disconnect();
+    if (restoreFocus) queueMicrotask(() => triggerRef.value?.focus());
   };
 
   const selectApp = (appId: string) => {
@@ -74,7 +114,7 @@
   const onKeyDown = (event: KeyboardEvent) => {
     if (!open.value || event.key !== 'Escape') return;
     event.preventDefault();
-    close();
+    close(true);
   };
 
   onMounted(() => {
@@ -84,6 +124,7 @@
   });
 
   onBeforeUnmount(() => {
+    hubResizeObserver?.disconnect();
     window.removeEventListener('resize', positionPanel);
     document.removeEventListener('pointerdown', onPointerDown, true);
     document.removeEventListener('keydown', onKeyDown, true);
@@ -127,7 +168,7 @@
             class="flex h-5 w-5 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-header hover:text-foreground"
             :aria-label="$t('agent.hub.close')"
             :title="$t('agent.hub.close')"
-            @click.stop="close"
+            @click.stop="close()"
           >
             <i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
           </button>
