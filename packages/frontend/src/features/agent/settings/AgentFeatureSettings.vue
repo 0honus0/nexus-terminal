@@ -1,10 +1,17 @@
 <script setup lang="ts">
   import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
+  const { t } = useI18n();
   const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
   const emit = defineEmits<{ change: [enabled: boolean] }>();
   const runtimeEnabled = computed(() => ['enabled', 'degraded'].includes(props.settings.availability.state));
+  const stateLabel = computed(() => {
+    const key = `agent.settings.feature.stateLabels.${props.settings.availability.state}`;
+    const translated = t(key);
+    return translated === key ? props.settings.availability.state : translated;
+  });
 </script>
 
 <template>
@@ -45,9 +52,7 @@
       >
         <div class="flex items-center gap-2">
           <i class="fa-solid fa-circle-info text-xs text-primary" aria-hidden="true"></i>
-          <span class="text-text-secondary">{{
-            $t('agent.settings.feature.state', { state: settings.availability.state })
-          }}</span>
+          <span class="text-text-secondary">{{ $t('agent.settings.feature.state', { state: stateLabel }) }}</span>
         </div>
         <div class="text-[11px] text-text-secondary">调度器支持多应用委派与动态预算管控</div>
       </div>

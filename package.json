@@ -33,8 +33,9 @@
     "build:agent-runner": "pnpm --filter @nexus-terminal/agent-runner build",
     "perf:database-runtime": "pnpm --filter @nexus-terminal/backend exec tsx ../../scripts/backend/perf/database-runtime-benchmark.ts",
     "agent:model-registry:sync": "pnpm --filter @nexus-terminal/backend exec tsx tools/sync-model-capability-registry.ts",
-    "lint": "pnpm run lint:transport-contracts && pnpm run lint:agent",
+    "lint": "pnpm run lint:transport-contracts && pnpm run lint:agent-i18n && pnpm run lint:agent",
     "lint:transport-contracts": "node scripts/check-transport-contract-boundaries.mjs",
+    "lint:agent-i18n": "node scripts/check-agent-i18n.mjs",
     "lint:agent": "eslint packages/backend/src/modules/agent packages/backend/src/infrastructure/agent packages/backend/src/interfaces/http/agent packages/backend/src/interfaces/websocket/agent*.ts packages/agent-runner/src packages/frontend/src/features/agent tests/backend/agent-scenarios"
   },
   "repository": {

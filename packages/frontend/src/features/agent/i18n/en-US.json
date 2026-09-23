@@ -9,6 +9,13 @@
         "title": "Agent feature",
         "description": "Controls whether the Agent Host accepts and schedules new execution work. Historical data and maintenance remain available when disabled.",
         "state": "Current state: {state}",
+        "stateLabels": {
+          "disabled": "Disabled",
+          "enabling": "Enabling",
+          "enabled": "Enabled",
+          "degraded": "Degraded",
+          "unavailable": "Unavailable"
+        },
         "disable": "Disable Agent",
         "enable": "Enable Agent",
         "enabledSuccess": "Agent enabled",
@@ -1253,6 +1260,13 @@
       "feedbackPlaceholder": "Example: do not modify this file; inspect it read-only and propose a plan first.",
       "expired": "This approval has expired.",
       "resolved": "Approval status: {state}",
+      "status": {
+        "requested": "Pending approval",
+        "approved": "Approved",
+        "denied": "Denied",
+        "expired": "Expired",
+        "superseded": "Superseded"
+      },
       "openPending": "Open {count} pending approvals"
     },
     "ui": {

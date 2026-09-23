@@ -1,7 +1,9 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import type { AgentApprovalViewDto, AgentServerClockAnchorViewModel } from '../api/agent-api';
 
+  const { t } = useI18n();
   const props = defineProps<{
     approval: AgentApprovalViewDto;
     clock: AgentServerClockAnchorViewModel;
@@ -34,6 +36,12 @@
     }
   });
   const target = computed(() => props.approval.inspection.target);
+  // 枚举不进本地化句子：先映射成译文，再插进 `审批状态：{state}`。
+  const statusLabel = computed(() => {
+    const key = `agent.approvals.status.${props.approval.status}`;
+    const translated = t(key);
+    return translated === key ? props.approval.status : translated;
+  });
 </script>
 
 <template>
@@ -74,7 +82,7 @@
     </details>
 
     <p v-if="approval.status !== 'requested'" class="mt-3 text-[11px] text-text-secondary">
-      {{ $t('agent.approvals.resolved', { state: approval.status }) }}
+      {{ $t('agent.approvals.resolved', { state: statusLabel }) }}
     </p>
     <p v-else-if="remaining === 0" class="mt-3 text-[11px] text-error">{{ $t('agent.approvals.expired') }}</p>
     <div v-else class="mt-3 space-y-2">

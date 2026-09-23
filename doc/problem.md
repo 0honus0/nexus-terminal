@@ -69,7 +69,7 @@
 | P2                                    | 任务栏「目标」卡片直接渲染内部连接 ID（`#1`）、Run 历史 `slice(0, 8)` 硬上限（第 9 条无入口）、卡片顺序持久化无重置                                                                                                                                                                                                                                                                  | `runtime/TaskRail.vue:794/109/125`（见 §7.14-b）                                                              |
 | P2                                    | 审批卡：`risk` 枚举原样输出（`mutate`/`destructive`…，i18n 无对应 key）、`审批状态：approved` 拼英文枚举、`剩余 300s` 单位硬编码、"批准"按钮用 `bg-warning`                                                                                                                                                                                                                          | `runtime/ApprovalCard.vue:45/53/73/127`（见 §7.14-b）                                                         |
 | P1                                    | 前端 agent 区仍有 **118 行**非注释硬编码中文（不止 38 行）：`AppManagementSettings` 37、`StorageArtifactSettings` 16、`ModelProviderSettings` 14、`ConversationMessage` 13、`PluginManagementSettings` 13、`quantity-format.ts` 8…                                                                                                                                                   | `features/agent/**`（见 §7.14-c）                                                                             |
-| P1                                    | `zh-CN` 词典里 34 个 key 与 en-US 完全相同、**14 条是整句英文**（ja 18 条）→ 中文界面实测显示 `Denylist revision 1`；另有把枚举直接插进本地化句子的 3 处（`审批状态：approved`、`当前状态：enabled`）                                                                                                                                                                                | `i18n/zh-CN.json`、`ApprovalCard.vue:73`、`AgentFeatureSettings.vue:49`（见 §7.15-a）                         |
+| **P1 · ✅ 已关闭 2026-09-23**         | `zh-CN` 词典与 en-US 完全相同的 key 由 35 → 22、整句英文由 15 → 5（`ja` 49 → 31 / 20 → 5），剩 5 条是品牌与协议名（白名单）；枚举不再插进本地化句子（`审批状态：approved` / `当前状态：enabled` 走 `status` / `stateLabels` 映射）；新增 `pnpm lint:agent-i18n` 防回归                                                                                                               | `i18n/zh-CN.json`、`ApprovalCard.vue`、`AgentFeatureSettings.vue`（见 §7.15-a）                               |
 | P2                                    | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态，无粘性分区导航                                                                                                                                                                                                                                                                                           | `settings/**`（见 §7.15-c）                                                                                   |
 | P2                                    | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`），与主界面"图标+居中+引导按钮"的空态卡不是同一套语言                                                                                                                                                                                                                                                                     | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                        |
 | P1                                    | 设置区把后端原始原因码当"不可用原因"渲染（实测灰色的 `runtime_not_configured`），且这是唯一解释                                                                                                                                                                                                                                                                                      | `settings/WorkspaceRuntimeSettings.vue:270`（见 §7.15-b）                                                     |
@@ -1363,6 +1363,23 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 > 本轮把设置区三个分组逐页截图核对（全页截图：`/tmp/shots/66-full-{models,runtime,plugins}.png`），补上此前"只看了 Agent 首屏"的缺口。窗口仍是 1600×773。
 
 **a) `zh-CN` 词典里有 14 条"整句英文"（34 个 key 与 en-US 完全相同）→ 中文界面直接显示英文（P1，新）**
+
+> ✅ **2026-09-23 闭环**
+>
+> - **词典补齐**：`zh-CN` 与 `en-US` 取值完全相同的 key 由 **35 → 22**，其中"整句英文"由 **15 → 5**；
+>   `ja-JP` 由 **49 → 31**（整句英文 **20 → 5**）。剩下 5 条都是品牌/协议/格式（`Chat Completions`、`Responses API`、
+>   `{count}/{max}`、`https://api.openai.com/v1`、`{entry} · sha256:{hash}`），按规则进白名单。
+> - **本轮实际改了这些**：`safety.revision`（`Denylist revision 1` → `禁用清单版本 1`）、`hardLimits.title`/`panelHint`/`confirmTitle`/
+>   `hardLimitHint`/`profileHint`、`browserRuntime.endpoints`、`mcpIntegrations.title`/`retry`、`acpRuntime.profiles`/`integrations`/`integrationProfile`、
+>   `commands.goalRevision`/`planRevision`、`workspaceRuntime.acpProfiles`/`exportTitle`/`importTitle`、`plugins.officialRepository`、
+>   `subagents.templateWorker`/`peerMessaging`（后两条是 ja 侧），ja 侧同步。
+> - **枚举不再拼进本地化句子**：新增 `agent.approvals.status.{requested,approved,denied,expired,superseded}` 与
+>   `agent.settings.feature.stateLabels.{disabled,enabling,enabled,degraded,unavailable}`（三语齐全，沿用 `agent.tasks.runStatus.*` 的嵌套约定），
+>   `ApprovalCard.vue` / `AgentFeatureSettings.vue` 改为查表后再插入 `{state}`。
+> - **CDP 复验（中文界面）**：设置 > Agent > 插件与安全 → 「全局禁用目标」右上角显示 **`禁用清单版本 1`**（`Denylist revision` 命中 0 次）；
+>   Agent 功能卡片显示 **`当前状态：已启用`**（`当前状态：enabled` 命中 0 次）；两页 `Hard Limits` / `MCP Integrations` / `CDP Endpoints` 命中 0 次。
+> - **防回归**：新增 `scripts/check-agent-i18n.mjs`（`pnpm lint:agent-i18n`，已挂进 `pnpm lint`）：
+>   校验三份词典 key 完全对齐 + `zh/ja` 中与 `en` 逐字相同且"含 ≥2 个英文单词"的取值必须进白名单；脚本自身做过负向验证（注入英文整句会 fail 并退出 1）。
 
 实测位置：设置 > Agent > **插件与安全** → 「全局禁用目标」卡片右上角写着 **`Denylist revision 1`**（截图 66-full-plugins）。
 来源不是组件代码，而是**翻译文件本身没翻译**：`features/agent/i18n/zh-CN.json` → `agent.settings.safety.revision = "Denylist revision {revision}"`（与 en-US 一模一样）。
