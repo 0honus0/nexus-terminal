@@ -37,6 +37,7 @@
     AgentWorkspaceRuntimeCatalogDto,
   } from '../api/agent-api';
   import { agentHostEvents } from './agent-host-events';
+  import { agentWindowManager } from './window-manager';
   import { agentSurfaceSession } from './surface-session';
   import AgentThreadSidebar from './AgentThreadSidebar.vue';
   import AgentConfigPopover from '../files/AgentConfigPopover.vue';
@@ -141,11 +142,27 @@
     agentSurfaceSession.restoreExecutionMode(props.appId) ?? 'execute',
   );
   const selectedEnvironmentRecipeId = ref(agentSurfaceSession.restoreEnvironmentRecipeId(props.appId) ?? '');
-  const taskRailVisible = ref(false);
+  /*
+   * §7.2-c/-e: both panels used to start closed on every session and the sidebar
+   * could not be collapsed at all on wide windows. They now read their initial
+   * value from the persisted window layout and write every toggle back to it.
+   */
+  const taskRailVisible = ref(agentWindowManager.state.taskRailVisible);
   const threadDeleteArmedId = ref<string | null>(null);
   const deleteAllThreadsArmed = ref(false);
-  const threadSidebarVisible = ref(false);
+  const threadSidebarVisible = ref(agentWindowManager.state.threadSidebarVisible);
+  /*
+   * The sidebar is a docked column on wide containers and an overlay drawer below the
+   * 760px container query. Only the dock intent is worth persisting; the drawer is
+   * transient and closes as soon as a thread is picked, so it stays local.
+   */
+  const threadsOverlay = ref(false);
+  const threadDrawerOpen = ref(false);
+  const THREADS_OVERLAY_BREAKPOINT = 760;
   const threadSidebar = ref<InstanceType<typeof AgentThreadSidebar> | null>(null);
+  watch(threadSidebarVisible, (visible) => agentWindowManager.setThreadSidebarVisible(visible));
+  watch(taskRailVisible, (visible) => agentWindowManager.setTaskRailVisible(visible));
+
   const threadPageSize = ref(12);
   const streamingText = ref('');
   const streamingAttempt = ref<{ attemptId: string; attemptIndex: number } | null>(null);
@@ -736,7 +753,7 @@
   };
 
   const selectThread = async (thread: AgentThreadViewDto): Promise<void> => {
-    threadSidebarVisible.value = false;
+    threadDrawerOpen.value = false;
     if (currentThread.value?.id === thread.id) return;
     const selectionGeneration = ++threadSelectionGeneration;
     stopRunStream();
@@ -1506,6 +1523,25 @@
       void load();
     });
   });
+  /*
+   * §7.2-c: measures this surface (never the viewport, per FRONTEND.md:519) so the
+   * toggle knows whether it is moving the docked column or the overlay drawer. The
+   * breakpoint mirrors the `agent-hub-window` container query below.
+   */
+  const layoutRoot = ref<HTMLElement | null>(null);
+  let layoutObserver: ResizeObserver | null = null;
+  onMounted(() => {
+    if (!layoutRoot.value || typeof ResizeObserver === 'undefined') return;
+    layoutObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      threadsOverlay.value = width <= THREADS_OVERLAY_BREAKPOINT;
+    });
+    layoutObserver.observe(layoutRoot.value);
+  });
+  onBeforeUnmount(() => {
+    layoutObserver?.disconnect();
+    layoutObserver = null;
+  });
   onBeforeUnmount(() => {
     clearThreadDeleteArm();
     clearDeleteAllThreadsArm();
@@ -1519,10 +1555,14 @@
 </script>
 
 <template>
-  <div class="agent-surface-layout relative grid h-full min-h-0" :class="{ 'has-task-rail': taskRailVisible }">
+  <div
+    ref="layoutRoot"
+    class="agent-surface-layout relative grid h-full min-h-0"
+    :class="{ 'has-task-rail': taskRailVisible, 'is-threads-hidden': !threadSidebarVisible }"
+  >
     <AgentThreadSidebar
       ref="threadSidebar"
-      :open="threadSidebarVisible"
+      :open="threadDrawerOpen"
       :threads="threads"
       :next-cursor="threadNextCursor"
       :loading-more="threadListLoadingMore"
@@ -1532,7 +1572,7 @@
       :thread-statuses="threadStatuses"
       :thread-delete-armed-id="threadDeleteArmedId"
       :delete-all-threads-armed="deleteAllThreadsArmed"
-      @close="threadSidebarVisible = false"
+      @close="threadDrawerOpen = false"
       @new-thread="beginThreadCreation"
       @select="selectThread"
       @delete-thread="requestDeleteThread"
@@ -1547,9 +1587,19 @@
           <div class="flex min-w-0 items-center gap-2">
             <button
               type="button"
-              class="agent-thread-toggle hidden h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-card text-text-secondary hover:bg-header hover:text-foreground transition-colors"
+              class="agent-thread-toggle flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border transition-colors"
+              :class="
+                (threadsOverlay ? threadDrawerOpen : threadSidebarVisible)
+                  ? 'border-border bg-card text-foreground shadow-xs ring-1 ring-border/20'
+                  : 'border-border/70 bg-card/60 text-text-secondary hover:border-border hover:bg-header hover:text-foreground'
+              "
+              :aria-expanded="threadsOverlay ? threadDrawerOpen : threadSidebarVisible"
+              aria-controls="agent-thread-sidebar"
               :aria-label="$t('agent.operations.openThreads')"
-              @click="threadSidebarVisible = true"
+              :title="$t('agent.operations.openThreads')"
+              @click="
+                threadsOverlay ? (threadDrawerOpen = !threadDrawerOpen) : (threadSidebarVisible = !threadSidebarVisible)
+              "
             >
               <i class="fa-regular fa-comments text-xs" aria-hidden="true"></i>
             </button>
@@ -2452,17 +2502,38 @@
 </template>
 
 <style scoped>
+  /*
+   * §7.2-c: the column widths are variables, so collapsing the thread sidebar is
+   * one declaration instead of a restatement in every container-query tier (the
+   * tiers below only have to decide whether the rail is docked or an overlay).
+   */
   .agent-surface-layout {
-    grid-template-columns: 256px minmax(0, 1fr);
+    --agent-thread-sidebar-column: 256px;
+    --agent-task-rail-column: 0px;
+    grid-template-columns: var(--agent-thread-sidebar-column) minmax(0, 1fr) var(--agent-task-rail-column);
+  }
+
+  .agent-surface-layout.has-task-rail {
+    --agent-task-rail-column: 320px;
+  }
+
+  .agent-surface-layout.is-threads-hidden {
+    --agent-thread-sidebar-column: 0px;
+  }
+
+  /*
+   * A zero-width track alone would let the sidebar overflow its column, so the
+   * panel is clipped instead; the narrow tier positions it absolutely and never
+   * looks at this track, which keeps the two mechanisms from fighting.
+   */
+  .agent-surface-layout.is-threads-hidden :deep(.agent-thread-sidebar) {
+    min-width: 0;
+    overflow: hidden;
   }
 
   .agent-conversation-pane {
     container-type: inline-size;
     container-name: agent-conversation-pane;
-  }
-
-  .agent-surface-layout.has-task-rail {
-    grid-template-columns: 256px minmax(0, 1fr) 320px;
   }
   .agent-task-rail {
     position: relative;
@@ -2538,7 +2609,7 @@
   @container agent-hub-window (max-width: 1040px) {
     .agent-surface-layout,
     .agent-surface-layout.has-task-rail {
-      grid-template-columns: 256px minmax(0, 1fr);
+      grid-template-columns: var(--agent-thread-sidebar-column) minmax(0, 1fr);
     }
 
     .agent-task-rail {
@@ -2646,7 +2717,6 @@
       display: block;
     }
 
-    .agent-thread-toggle,
     .agent-header-thread-delete {
       display: flex;
     }

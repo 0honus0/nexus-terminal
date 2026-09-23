@@ -193,6 +193,7 @@
 
 <template>
   <aside
+    id="agent-thread-sidebar"
     class="agent-thread-sidebar flex min-h-0 flex-col border-r border-border/45 bg-header/30 backdrop-blur-xs select-none"
     :class="{ 'is-open': open }"
     :style="{ '--agent-thread-scale': scale }"

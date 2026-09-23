@@ -18,6 +18,9 @@ interface AgentHubState {
   recentAppIds: string[];
   hubView: 'conversation' | 'files';
   launcherPosition: { right: number; bottom: number };
+  /** §7.2-c: drives the desktop sidebar column and the narrow overlay drawer alike. */
+  threadSidebarVisible: boolean;
+  taskRailVisible: boolean;
 }
 
 const DEFAULT_BOUNDS: AgentHubBounds = { x: 80, y: 16, width: 1180, height: 740 };
@@ -37,6 +40,8 @@ const state = reactive<AgentHubState>({
   recentAppIds: [],
   hubView: 'conversation',
   launcherPosition: { right: 22, bottom: 24 },
+  threadSidebarVisible: true,
+  taskRailVisible: false,
 });
 
 // Keep the user's intended bounds separate from viewport-clamped render bounds.
@@ -85,6 +90,8 @@ const logContext = () => ({
   maximized: state.maximized,
   activeAppId: state.activeAppId,
   hubView: state.hubView,
+  threadSidebarVisible: state.threadSidebarVisible,
+  taskRailVisible: state.taskRailVisible,
   bounds: { ...state.bounds },
   launcherPosition: { ...state.launcherPosition },
 });
@@ -120,6 +127,21 @@ export const agentWindowManager = {
     state.hubView = view;
     logger.debug({ previousView, ...logContext() }, 'Agent floating window view changed');
   },
+  /*
+   * §7.2-c: the thread sidebar used to be nailed open on wide windows (the toggle
+   * only existed below the 760px container query) and neither panel remembered its
+   * state across sessions — the user re-arranged the window on every visit.
+   */
+  setThreadSidebarVisible(visible: boolean): void {
+    if (state.threadSidebarVisible === visible) return;
+    state.threadSidebarVisible = visible;
+    logger.debug({ visible, ...logContext() }, 'Agent floating window sidebar toggled');
+  },
+  setTaskRailVisible(visible: boolean): void {
+    if (state.taskRailVisible === visible) return;
+    state.taskRailVisible = visible;
+    logger.debug({ visible, ...logContext() }, 'Agent floating window task rail toggled');
+  },
   setLauncherPosition(position: { right: number; bottom: number }): void {
     const screen = viewport();
     state.launcherPosition = {
@@ -147,6 +169,9 @@ export const agentWindowManager = {
         state.bounds = clampBounds(preferredBounds);
       }
       state.maximized = stored.maximized === true;
+      state.threadSidebarVisible = stored.threadSidebarVisible !== false;
+      state.taskRailVisible = stored.taskRailVisible === true;
+      if (stored.hubView === 'conversation' || stored.hubView === 'files') state.hubView = stored.hubView;
       state.recentAppIds = Array.isArray(stored.recentAppIds)
         ? stored.recentAppIds.filter((value): value is string => typeof value === 'string').slice(0, 8)
         : [];
@@ -168,6 +193,9 @@ export const agentWindowManager = {
         maximized: state.maximized,
         launcherPosition: state.launcherPosition,
         recentAppIds: state.recentAppIds,
+        hubView: state.hubView,
+        threadSidebarVisible: state.threadSidebarVisible,
+        taskRailVisible: state.taskRailVisible,
       });
       if (payload.length > 8 * 1024) {
         logger.warn({ userId, payloadBytes: payload.length }, 'Skipped oversized Agent floating window layout');

@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面骨架的其余项（§7.2 侧栏折叠 / 状态持久化 / 窗口体感）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2-a（最小窗口高度 380 → 480 + 矮窗口 composer 压缩）、§7.2-c/-e（侧栏可折叠 + 窗口状态持久化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面骨架的其余项（§7.2 列宽压缩 / 窗口体感）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -43,7 +43,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | `bg-card` 族已恢复真实 surface；助手气泡改为有效 `bg-card`，TaskRail/空态卡继续使用已生效的 card token                                                                                                                                                                                                                                                                                | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue`                           |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 改为自身 container query + 单行 compact；560px Hub CDP 实测 controls `462/462`，无静默裁切，思考等级优先靠前                                                                                                                                                                                                                                                                 | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.3）                                          |
 | **P1 · ✅ 已关闭 2026-09-23**         | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示                                                                                                                                                                                                                                                                                                 | `ai/AgentConversation.vue`（见 §7.4）                                                                      |
-| **P1 · ✅ 已关闭 2026-09-23**         | 主界面三层 chrome 压扁消息区：`MIN_HEIGHT` 380 → 480，并在矮窗口下把 composer 压成两行；CDP 实测最小高度时会话区 **94 → 227px**（§7.2 其余项：侧栏折叠、状态持久化、窗口体感仍开放）                                                                                                                                                                                                  | `host/window-manager.ts`、`host/AgentHubWindow.vue`、`ai/AgentConversation.vue`（见 §7.2-a）               |
+| **P1 · ✅ 已关闭 2026-09-23**         | 主界面三层 chrome 压扁消息区：`MIN_HEIGHT` 380 → 480，并在矮窗口下把 composer 压成两行；CDP 实测最小高度时会话区 **94 → 227px**（§7.2 其余项：列宽压缩、窗口体感仍开放）                                                                                                                                                                                                              | `host/window-manager.ts`、`host/AgentHubWindow.vue`、`ai/AgentConversation.vue`（见 §7.2-a）               |
 | **P2 · ✅ 已关闭 2026-09-23**         | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0                                                                                                                                                                                                                                                                                                    | `features/agent/**`（见 §7.8）                                                                             |
 | P1                                    | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、Launcher 6px 阈值拖拽（§2.6 的空态轮播已关闭）                                                                                                                                                                                                                                               | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8）                           |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 的 Send / Cancel Run 已拆成两个独立按钮（停止按钮图标-only + 错误色，运行中才出现）；`sendHint` 已渲染；空草稿按 Enter 不再误取消 Run                                                                                                                                                                                                                                        | `ai/AgentConversation.vue`（见 §2.5）                                                                      |
@@ -956,11 +956,41 @@ shadow-2xl ring-1 ring-border/20 outline-none
 >   把窗口拉回 614 / 874px 时 `data-hub-compact` 消失、composer 回到 203px / textarea 96px —— 压缩只在矮窗口生效。
 > - 截图：`/tmp/shots/hub-min-height-after.png`（探针 `probe-hub-min-height2.mjs` / `probe-hub-min-height3.mjs`）。
 
+> ✅ **2026-09-23 闭环（c 侧栏折叠 + e 状态持久化）**
+>
+> - **现象/根因**：`agent-thread-toggle` 默认 `hidden`，只有 `@container agent-hub-window (max-width:760px)` 才 `display:flex` ——
+>   宽窗口下侧栏被 256px 网格列钉死，用户没有任何办法把会话列让宽；同时 `threadSidebarVisible` / `taskRailVisible` / `hubView`
+>   既不在 `window-manager` 的 localStorage payload 里（只存了 bounds / maximized / launcher / recentAppIds），`hubView` 也不恢复。
+> - **改法**：
+>   - `window-manager` 增加 `threadSidebarVisible`（默认 true）、`taskRailVisible`（默认 false）并让 `hubView` 一起进 payload / restore；
+>   - 布局列宽改为 CSS 变量（`--agent-thread-sidebar-column` / `--agent-task-rail-column`），侧栏折叠 = 列宽置 0 + 面板 `min-width:0; overflow:hidden`
+>     （**不写 `display:none`**，否则会与 ≤760 的浮层抽屉规则互相覆盖）；
+>   - 开关按钮不再有 `hidden`，宽容器下切「停靠列」、窄容器下切「浮层抽屉」；两种模式由 ResizeObserver 量**自身容器**宽度区分
+>     （不是 `window.innerWidth`，延续 §1.6 的容器查询约定）；
+>   - `selectThread` 现在只关抽屉、不再关停靠 —— 这正是旧实现里"宽窗口点一下会话侧栏状态被写死"的来源。
+> - **CDP 复验**：
+
+| 场景                                  | 侧栏列        | 会话列     | 任务栏 | 抽屉                |
+| ------------------------------------- | ------------- | ---------- | ------ | ------------------- |
+| 默认 1180×740（清空 localStorage 后） | 256px         | 922px      | —      | —                   |
+| 点开关折叠                            | 1px（被裁掉） | **1178px** | —      | —                   |
+| 刷新后                                | 1px           | 1178px     | —      | 记忆生效            |
+| 重新停靠 + 打开任务栏                 | 256px         | 602px      | 320px  | —                   |
+| 刷新后                                | 256px         | 602px      | 320px  | 记忆生效            |
+| 560 宽：抽屉关闭                      | absolute      | —          | —      | `hidden`            |
+| 560 宽：点开关                        | absolute      | —          | —      | `is-open` / visible |
+| 560 宽：选一条会话                    | absolute      | —          | —      | 自动 `hidden`       |
+
+`hubView` 同样复验：会话 → 文件 → 刷新后仍是文件。截图为 `/tmp/shots/hub-sidebar-collapsed.png`、
+`/tmp/shots/hub-sidebar-narrow-clip.png`（探针 `probe-hub-sidebar.mjs` / `probe-hub-sidebar-narrow.mjs` / `probe-hub-view.mjs`）。
+
+> - **门禁**：模板编译、`vue-tsc --noEmit`、`eslint`、`prettier --check` 全绿。
+
 - ✅（2026-09-23）窗口高度问题已闭环：`MIN_HEIGHT` 提到 480 且矮窗口下 composer 自动收成两行，实测最小高度下会话区 94 → 227px，见上方闭环块。
 - 列宽：`.agent-surface-layout` 是 `256px minmax(0,1fr)`（`host/AgentAppSurface.vue:2438`），任务栏打开再 `+320px`（`:2447`）。容器 560px 时会话列只剩 **304px**，而配置弹层固定 `w-72`（288px）→ 弹层几乎铺满会话列，视觉上"压过来一大片"，这也是窄窗口下弹层观感变差的原因之一。
-- 侧栏在容器 >760px 时**不能折叠**：`agent-thread-toggle` 默认 `hidden`，只有 `@container agent-hub-window (max-width:760px)` 才 `display:flex`（模板 `:1543` vs 样式 `:2643`）。桌面用户想让消息区更宽没有任何办法，建议支持折叠成 48px 图标栏并记忆状态。
+- ✅（2026-09-23）侧栏折叠已上线并记忆状态：开关常显，宽容器切停靠列、窄容器切浮层抽屉，实测会话列 922 → 1178px，见上方闭环块。
 - ✅（2026-09-22，见 §1.6）断点基准已统一：死变量 `taskRailWideViewport` 与那个只写不读的 `resize` 监听已删除，`AgentAppSurface.vue` 里不再有 `window.innerWidth` 判断。
-- 状态持久化不一致：窗口 bounds / maximized / launcher 有 localStorage（`host/window-manager.ts:47`），任务栏卡片顺序有（`runtime/TaskRail.vue:125`），但侧栏开合（`threadSidebarVisible`）、任务栏开合（`taskRailVisible`）完全不持久化；`hubView`（会话/文件视图）也既不入 payload 也不恢复。用户每次重开窗口都要重新调一遍。
+- ✅（2026-09-23）状态持久化已补齐：`threadSidebarVisible` / `taskRailVisible` / `hubView` 一并写入 `window-manager` 的 localStorage payload（schemaVersion 1）并在 restore 时校验恢复。
 - 窗口体感：最大化时 `borderRadius: 0`（`host/AgentHubWindow.vue:296`）圆角突变；只有按钮能最大化/还原，顶栏双击无响应；拖拽无贴边/吸附，多屏下只按当前视口 clamp。
 
 ### 7.3 Composer 工具条：控件太多被静默裁掉（P1 · ✅ 已关闭 2026-09-23）

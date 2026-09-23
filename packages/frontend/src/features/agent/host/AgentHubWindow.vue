@@ -528,6 +528,15 @@
    * AgentConversation.vue) instead of letting it eat the transcript.
    */
   const hubCompact = computed(() => !state.maximized && state.bounds.height < 560);
+  /*
+   * §7.2-e: the sidebar / rail toggles and the conversation-files view live in the
+   * surface, but persistence is driven from here — any of them changing is a layout
+   * change that has to reach localStorage.
+   */
+  watch(
+    () => [state.threadSidebarVisible, state.taskRailVisible, state.hubView] as const,
+    () => emit('layoutChange'),
+  );
   const handleResize = () => {
     const previousBounds = { ...state.bounds };
     agentWindowManager.clamp();
