@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { UiPopover } from '@/foundation/ui';
   import type { AgentRunStatusDto, AgentThreadViewDto } from '../api/agent-api';
 
   const props = defineProps<{
@@ -37,6 +38,7 @@
   const THREAD_OVERSCAN = 6;
   const SCALE_MIN = 0.8;
   const SCALE_MAX = 1.3;
+  const SCALE_DEFAULT = 1;
   const SCALE_STEP = 0.1;
   const SCALE_STORAGE_KEY = 'nexus.agent.thread-list-scale.v1';
   const nonTerminal = new Set<AgentRunStatusDto>([
@@ -62,6 +64,13 @@
   };
 
   const scale = ref(restoreScale());
+  const zoomMenuOpen = ref(false);
+  const zoomPercent = computed(() => Math.round(scale.value * 100));
+  const canZoomIn = computed(() => scale.value < SCALE_MAX);
+  const canZoomOut = computed(() => scale.value > SCALE_MIN);
+  const canResetZoom = computed(() => scale.value !== SCALE_DEFAULT);
+  // §7.13-d：字号 / 内边距全部由 `--agent-thread-scale` 驱动（见 scoped 样式），
+  // 只有虚拟列表需要的行高仍在 JS 里算。
   const rowHeight = computed(() => Math.round(THREAD_ROW_BASE_HEIGHT * scale.value));
   const pageSize = computed(() => {
     const visibleRows = viewportHeight.value > 0 ? Math.ceil(viewportHeight.value / rowHeight.value) : THREAD_PAGE_MIN;
@@ -129,23 +138,29 @@
       // View preference persistence is best-effort.
     }
   };
-  const onWheel = (event: WheelEvent): void => {
-    if (!(event.ctrlKey || event.metaKey) || event.deltaY === 0) return;
-    const nextScale = Math.min(
-      SCALE_MAX,
-      Math.max(SCALE_MIN, Math.round((scale.value + (event.deltaY < 0 ? 1 : -1) * SCALE_STEP) * 10) / 10),
-    );
-    if (nextScale === scale.value) return;
-    event.preventDefault();
+  const clampScale = (value: number): number => Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.round(value * 10) / 10));
+  // 唯一的缩放写入路径（Ctrl/⌘+滚轮与弹出面板共用）：改字号时保持"当前行"不跳动。
+  const applyScale = (next: number): void => {
+    const clamped = clampScale(next);
+    if (clamped === scale.value) return;
     const element = scroller.value;
     const anchorRow = element ? element.scrollTop / rowHeight.value : 0;
-    scale.value = nextScale;
+    scale.value = clamped;
     persistScale();
     void nextTick(() => {
       if (element) element.scrollTop = anchorRow * rowHeight.value;
       syncMetrics();
       maybeLoadMore();
     });
+  };
+  const stepScale = (direction: 1 | -1): void => applyScale(scale.value + direction * SCALE_STEP);
+  const resetScale = (): void => applyScale(SCALE_DEFAULT);
+  const onWheel = (event: WheelEvent): void => {
+    if (!(event.ctrlKey || event.metaKey) || event.deltaY === 0) return;
+    const next = clampScale(scale.value + (event.deltaY < 0 ? SCALE_STEP : -SCALE_STEP));
+    if (next === scale.value) return;
+    event.preventDefault();
+    applyScale(next);
   };
   const resetScroll = (): void => {
     scrollTop.value = 0;
@@ -180,6 +195,7 @@
   <aside
     class="agent-thread-sidebar flex min-h-0 flex-col border-r border-border/45 bg-header/30 backdrop-blur-xs select-none"
     :class="{ 'is-open': open }"
+    :style="{ '--agent-thread-scale': scale }"
   >
     <div class="flex h-10 shrink-0 items-center justify-between border-b border-border/45 px-3">
       <div class="flex min-w-0 items-center gap-2">
@@ -198,6 +214,59 @@
         </div>
       </div>
       <div class="flex items-center gap-0.5">
+        <!-- §7.13-d：缩放原本只有 Ctrl/⌘+滚轮这一条不可发现的路径，且没有重置入口 -->
+        <UiPopover
+          v-model:open="zoomMenuOpen"
+          :ariaLabel="$t('agent.operations.threadZoom')"
+          :title="$t('agent.operations.threadZoomHint')"
+          trigger-appearance="ghost"
+          trigger-tone="neutral"
+          density="compact"
+          align="end"
+          placement="bottom"
+          :offset="6"
+          boundary-selector=".agent-hub-window"
+          panel-class="w-44 p-1"
+        >
+          <template #trigger>
+            <span class="tabular-nums">{{ $t('agent.operations.threadZoomValue', { value: zoomPercent }) }}</span>
+          </template>
+          <template #panel>
+            <div class="flex items-center justify-between gap-2 px-2 py-1.5">
+              <span class="text-[11px] text-text-secondary">{{ $t('agent.operations.threadZoom') }}</span>
+              <span class="text-[11px] font-medium tabular-nums text-foreground">{{
+                $t('agent.operations.threadZoomValue', { value: zoomPercent })
+              }}</span>
+            </div>
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-header/60 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="!canZoomIn"
+              @click="stepScale(1)"
+            >
+              <i class="fa-solid fa-magnifying-glass-plus text-[11px] text-text-secondary" aria-hidden="true"></i>
+              <span>{{ $t('agent.operations.threadZoomIn') }}</span>
+            </button>
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-header/60 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="!canZoomOut"
+              @click="stepScale(-1)"
+            >
+              <i class="fa-solid fa-magnifying-glass-minus text-[11px] text-text-secondary" aria-hidden="true"></i>
+              <span>{{ $t('agent.operations.threadZoomOut') }}</span>
+            </button>
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-header/60 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="!canResetZoom"
+              @click="resetScale()"
+            >
+              <i class="fa-solid fa-rotate-left text-[11px] text-text-secondary" aria-hidden="true"></i>
+              <span>{{ $t('agent.operations.threadZoomReset') }}</span>
+            </button>
+          </template>
+        </UiPopover>
         <button
           v-if="threads.length"
           type="button"
@@ -273,8 +342,7 @@
       >
         <button
           type="button"
-          class="agent-thread-row relative flex h-full w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-8 text-left transition-[height,background-color,color] duration-150"
-          :style="{ paddingTop: `${6 * scale}px`, paddingBottom: `${6 * scale}px` }"
+          class="agent-thread-row relative flex h-full w-full items-center gap-2 rounded-lg px-2 pr-8 text-left transition-[height,background-color,color] duration-150"
           :class="
             currentThreadId === thread.id
               ? 'bg-primary/[0.055] pl-2.5 font-medium text-foreground'
@@ -306,16 +374,12 @@
           </span>
           <div class="min-w-0 flex-1">
             <span
-              class="block truncate text-[11px] leading-[1.35] tracking-[-0.012em] text-foreground/90"
-              :style="{ fontSize: `${10.75 * scale}px` }"
+              class="agent-thread-title block truncate leading-[1.35] tracking-[-0.012em] text-foreground/90"
               :title="thread.title || $t('agent.operations.untitledThread')"
             >
               {{ thread.title || $t('agent.operations.untitledThread') }}
             </span>
-            <div
-              class="mt-0.5 flex items-center justify-between gap-1.5 text-[11px] text-text-secondary/75"
-              :style="{ fontSize: `${9 * scale}px` }"
-            >
+            <div class="agent-thread-meta mt-0.5 flex items-center justify-between gap-1.5 text-text-secondary/75">
               <span
                 v-if="statusFor(thread.id) && nonTerminal.has(statusFor(thread.id)!)"
                 class="rounded-sm px-1 py-0.5 font-medium"
@@ -388,3 +452,23 @@
     @click="emit('close')"
   ></button>
 </template>
+
+<style scoped>
+  /*
+   * §7.13-d：缩放系数只写在根节点的 `--agent-thread-scale` 上，字号与内边距都在这里统一
+   * 换算——不再用内联 `font-size`，否则同一份代码在不同机器上侧栏字号可以差 30%。
+   * 行高仍然由 JS 计算：虚拟列表要按它算窗口与占位高度。
+   */
+  .agent-thread-row {
+    padding-top: calc(6px * var(--agent-thread-scale, 1));
+    padding-bottom: calc(6px * var(--agent-thread-scale, 1));
+  }
+
+  .agent-thread-title {
+    font-size: calc(10.75px * var(--agent-thread-scale, 1));
+  }
+
+  .agent-thread-meta {
+    font-size: calc(9px * var(--agent-thread-scale, 1));
+  }
+</style>
