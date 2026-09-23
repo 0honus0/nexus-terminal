@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。、§7.31（**设置区 8 处独立「保存」按钮语义分级**：无未保存变更时由浅紫实心主按钮降为 `soft`/`neutral` + 禁用 + 原因 `title`，并给 Browser / ACP / Subagent 三处补上 dirty 快照比对，§7.15-c 整条关闭）。、§7.32（**设置区 22 处原生 `<select>` 全部收敛到 Gen2 `UiSelect`**：新增 `pickOption()` / `NONE_OPTION`，`UiSelect` 的 v-model 收窄为「可空进、非空出」，实测三组可见 10 处、残留原生 0、414px 无溢出）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px（跨页 chrome，按约定不动）/ `QuantityInput` 单位切换命中区 18×20 / 22 处原生 `<select>`；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。、§7.31（**设置区 8 处独立「保存」按钮语义分级**：无未保存变更时由浅紫实心主按钮降为 `soft`/`neutral` + 禁用 + 原因 `title`，并给 Browser / ACP / Subagent 三处补上 dirty 快照比对，§7.15-c 整条关闭）。、§7.32（**设置区 22 处原生 `<select>` 全部收敛到 Gen2 `UiSelect`**：新增 `pickOption()` / `NONE_OPTION`，`UiSelect` 的 v-model 收窄为「可空进、非空出」，实测三组可见 10 处、残留原生 0、414px 无溢出）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。、§7.33（`QuantityInput` 单位药丸 18×20 → 24×24）、§7.34（模型行 11px 纯文字按钮 → Gen2 `UiButton` + 「一键取消」补确认弹窗）、§7.35（Workspace 运行时 5 处原生 `<select>` → `UiSelect`，`features/agent/**` 原生 select 归零）、§7.36（TaskRail「最近事实」改 `dl` 投影 + 原始 payload 折进二级 `<details>`）、§7.37（**Agent 错误横幅补失败域与重试入口**：9 个失败域 + 读「重试」/ 写「重新同步」，机器码不再直接当兜底文案，§2.9 收口）。每条闭环均带真实 CDP 实测数据 + 类型检查；**§0 速览表的 P1 / P2 开放项已只剩**：设置区顶部 Tab 36px（跨页 chrome，按约定不动）、Launcher 6px 阈值拖拽与任务栏拖拽排序（§2.8）、巨型 UI 文件拆分（§3.1）、i18n 死 key 274/1148（§3.5）、后端工具结果摘要英文硬编码（§3.6，非 UI）；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -38,14 +38,14 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | **字号：实测推翻了"563 处 ≤11px 不可读"的整体判断**（181 处 ≤9px 里 95 处是图标；默认首屏只有 6 个 <11px 文本节点）。仍按"阅读文本 ≥11px"全量收敛：两轮共 33 文件 / 274 行，现 `<11px` 只剩图标字形与 5 个 14–16px 圆内计数/勾选，无任何阅读文字低于 11px                                                                                                                                                                                      | `features/agent/**`（见 §2.3）                                                                               |
 | **P1 · ✅ 已关闭 2026-09-23**         | **点击目标：** 关闭 App 标签 `16×16`→`24×24` 常显 + pointer；窄容器纯图标 Run 配置 `25px`→`28px`、字号 `10/10.5px`→`11px`；审批卡按钮追加 `min-h-8`（32px）                                                                                                                                                                                                                                                                                    | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`、`runtime/ApprovalCard.vue`（见 §2.4）                 |
 | **P1 · ✅ 已关闭 2026-09-23**         | 调色板类 **182 → 0**：新增 `info` 语义 token，其余收敛到 `success/warning/error/primary`；硬编码阴影 / Hub 窗口阴影 / 遮罩改为从 token 推导。CDP 证明改 theme 变量后计算色跟随                                                                                                                                                                                                                                                                 | `app/styles/tokens.css`、`features/appearance/config/default-theme.ts`、`features/agent/**`（见 §2.7）       |
-| P1                                    | 设置区控件风格分裂：**按钮档位已收敛**（主/次/危险/图标四档全部走 Gen2 `UiButton`，实测统一 `32px / fs12 / r8`）；**原生 checkbox 已收敛**（27 处 → Gen2 `UiCheckbox`，实测 `16×16 / r5 / role=checkbox`，见 §7.20）；**仍开放**：顶部 Tab 仍是 36px（胶囊已收敛为 `115×32 r8`，见 §6.2 第三批）、`QuantityInput` 单位切换命中区 18×20、原生 `<select>` 22 处，以及添加/移除模型行里的 11px 纯文字按钮（§6.3/§6.7）                            | `features/agent/settings/**`（见 §6.2、§6.3、§7.20）                                                         |
+| **P1 · ✅ 已关闭 2026-09-23**         | 设置区控件风格分裂**已收口**：按钮档位（主/次/危险/图标四档 Gen2 `UiButton`，`32px / fs12 / r8`，§6.2 批 1/2）、原生 checkbox（27 处 → `UiCheckbox`，§7.20）、原生 `<select>`（22 处 → `UiSelect`，§7.32）、`QuantityInput` 单位命中区（18×20 → 24×24，§7.33）、添加/移除模型行的 11px 纯文字按钮（→ `UiButton` soft+compact，§7.34）全部闭环。**仍开放**：顶部 Tab 仍是 36px（跨页 chrome，按约定本轮不动）                                   | `features/agent/settings/**`（见 §6.2、§6.3、§7.20、§7.32–§7.34）                                            |
 | **P1 · ✅ 已关闭 2026-09-23**         | 设置区模板与能力清单里的硬编码中文（能力名称/描述、存储、插件、预算、数值单位）已全部接入词典；中英日三语键位对齐                                                                                                                                                                                                                                                                                                                              | `features/agent/settings/**`（见 §6.5、§7.14-c）                                                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | `bg-card` 族已恢复真实 surface；助手气泡改为有效 `bg-card`，TaskRail/空态卡继续使用已生效的 card token                                                                                                                                                                                                                                                                                                                                         | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue`                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 改为自身 container query + 单行 compact；560px Hub CDP 实测 controls `462/462`，无静默裁切，思考等级优先靠前                                                                                                                                                                                                                                                                                                                          | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.3）                                            |
 | **P1 · ✅ 已关闭 2026-09-23**         | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示                                                                                                                                                                                                                                                                                                                                                          | `ai/AgentConversation.vue`（见 §7.4）                                                                        |
 | **P1 · ✅ 已关闭 2026-09-23**         | 主界面三层 chrome 压扁消息区：`MIN_HEIGHT` 380 → 480，并在矮窗口下把 composer 压成两行；CDP 实测最小高度时会话区 **94 → 227px**（§7.2 列宽 / 体感已复核，见 §7.2-b、§7.2-f；停靠态折叠闪烁见 §7.2-g）                                                                                                                                                                                                                                          | `host/window-manager.ts`、`host/AgentHubWindow.vue`、`ai/AgentConversation.vue`（见 §7.2-a）                 |
 | **P2 · ✅ 已关闭 2026-09-23**         | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0                                                                                                                                                                                                                                                                                                                                                             | `features/agent/**`（见 §7.8）                                                                               |
-| P1                                    | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、Launcher 6px 阈值拖拽（§2.6 的空态轮播已关闭）                                                                                                                                                                                                                                                                                                        | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8）                             |
+| P1                                    | 多处「不可发现 / 与产品整体不一致」的交互：**会话列表 Ctrl+滚轮缩放已关闭 2026-09-23**（§7.13-d：补缩放入口 + 重置 + `title` 说明）；**仍开放**：任务栏卡片可拖拽排序、Launcher 6px 阈值拖拽（§2.6 的空态轮播已关闭）                                                                                                                                                                                                                          | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8）                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 的 Send / Cancel Run 已拆成两个独立按钮（停止按钮图标-only + 错误色，运行中才出现）；`sendHint` 已渲染；空草稿按 Enter 不再误取消 Run                                                                                                                                                                                                                                                                                                 | `ai/AgentConversation.vue`（见 §2.5）                                                                        |
 | **P1 · ✅ 已关闭 2026-09-22**         | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation                                                                                                                                                                                                                                                              | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7）                                             |
 | **P1 · ✅ 已关闭 2026-09-22**         | **Nexus 前后端真实 transport contract 已统一到 `packages/protocol`**：HTTP / Workspace WS / Agent HTTP / Agent event WS / Agent terminal WS 均由 canonical DTO/event contract 单一来源约束，并已接入 transport architecture guard；当前 HEAD 收尾复核再次通过 guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build` 与 Agent scenario suite **71/71**                                                           | `packages/protocol/**`、`scripts/check-transport-contract-boundaries.mjs`（见 §3.2）                         |
@@ -72,8 +72,8 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | 前端 agent 区非注释硬编码中文 **116 行 → 0**：能力清单、会话用量、错误解释、存储/插件/预算文案全部走词典（中英日三语）                                                                                                                                                                                                                                                                                                                         | `features/agent/**`（见 §7.14-c）                                                                            |
 | **P1 · ✅ 已关闭 2026-09-23**         | `zh-CN` 词典与 en-US 完全相同的 key 由 35 → 22、整句英文由 15 → 5（`ja` 49 → 31 / 20 → 5），剩 5 条是品牌与协议名（白名单）；枚举不再插进本地化句子（`审批状态：approved` / `当前状态：enabled` 走 `status` / `stateLabels` 映射）；新增 `pnpm lint:agent-i18n` 防回归                                                                                                                                                                         | `i18n/zh-CN.json`、`ApprovalCard.vue`、`AgentFeatureSettings.vue`（见 §7.15-a）                              |
 | **P1 · ✅ 已关闭 2026-09-23**         | 未本地化枚举/内部标识：Subagent 状态与失败模式、审批 `risk`、Workspace 命令 `action`/`status` 全部改为查表（新增 `agent.subagents.status/failureMode`、`agent.approvals.risk`、`workspaceRuntime.commandAction/commandState`）；原始值只保留在折叠的「规范化操作」调试区                                                                                                                                                                       | `runtime/SubagentCard.vue`、`runtime/ApprovalCard.vue`、`settings/WorkspaceRuntimeSettings.vue`（见 §1.4）   |
-| P2                                    | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态，无粘性分区导航                                                                                                                                                                                                                                                                                                                                                     | `settings/**`（见 §7.15-c）                                                                                  |
-| P2                                    | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`），与主界面"图标+居中+引导按钮"的空态卡不是同一套语言                                                                                                                                                                                                                                                                                                                               | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                       |
+| **P2 · ✅ 已关闭 2026-09-23**         | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态、无粘性分区导航 → 粘性分区导航与嵌套框收口（§7.25，3423px）、保存按钮按 dirty 分级（§7.31，无改动时降级为禁用 + 原因 `title`）、面板头摘要与信息密度收口（§7.29 / §7.30）                                                                                                                                                                                           | `settings/**`（见 §7.15-c）                                                                                  |
+| **P2 · ✅ 已关闭 2026-09-23**         | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`）→ 新增 Gen2 `UiEmptyState` 并在设置区 10 处接入（图标 + 标题 + 说明 + 可选动作，`dense` 档实测 950×38、卡片档 950×143，见 §7.28）                                                                                                                                                                                                                                                  | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                       |
 | **P1 · ✅ 已关闭 2026-09-23**         | 设置区不再把后端原始原因码当"不可用原因"渲染：已知码（`runner_not_configured` / `runner_unavailable` / `runtime_not_configured`）映射成中/英/日文说明，未知码退回通用说明并把原始值放进 `title` 与「后端原因代码」行                                                                                                                                                                                                                           | `settings/WorkspaceRuntimeSettings.vue`（见 §7.15-b）                                                        |
 | **P2 · ✅ 已关闭 2026-09-23**         | 禁用态主按钮**已改为中性填充**（§6.2 批 1/2：`保存` / `预览导入` / `卸载` 等实测 `bg rgb(243,244,246)` + 中性描边，不再是品牌色 × 0.5）；**已补**：11 个稳态禁用按钮全部带原因 `title`（没有未保存的修改 / 没有待预览的改动 / 请先填写必填项 / 请先选择来源与目标 / 请先填写仓库地址，三语齐全）                                                                                                                                               | `features/agent/settings/**`（实测见 §7.13-e）                                                               |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 配置弹层（模型 / 思考强度）**首帧位置错乱**：定位时面板仍是占位尺寸（`max-width:0`/`max-height:300`），首帧算到 `(470,472)` 等错位值、下一帧才跳到 `(426,667.5)`（上偏 195px）→ 改为测量前解除占位上限 + 未定位不绘制；App 切换器同源一并修（见 §7.26）                                                                                                                                                                               | `files/AgentConfigPopover.vue`、`host/AgentAppSwitcher.vue`（见 §7.26）                                      |
@@ -309,7 +309,11 @@ GET /runs/7aefe2fb-…/approvals  500
 **两个次生问题（错误协议已关闭，UI 重试仍开放）**：
 
 1. ✅ **错误协议 / 5xx 本地化阻断已关闭 2026-09-22**：此前 `AGENT_DURABLE_STATE_INVALID` / `SUBAGENT_DURABLE_STATE_INVALID` 会对外退化成 `INTERNAL_ERROR + "Agent request failed."`，前端又优先回显该英文 message。现在 backend 只对白名单中的 durable-state 解码故障保留稳定机器码（HTTP 仍为 500，message 使用安全泛化文案），未知内部异常继续掩码为 `INTERNAL_ERROR`；frontend 的 `formatAgentApiError` 对所有 5xx 统一使用调用方传入的本地化 fallback，不再把 backend 英文兜底直接显示给用户，稳定 `AgentApiError.code` 仍保留供日志/诊断。lint、backend build、frontend build、5xx 本地化探针与完整 Agent scenario suite 均通过。
-2. **仍开放（UI）— 没有重试入口**：横幅只有关闭按钮，用户无法"再试一次"，也不会知道是审批这一路失败。
+2. ✅ **已关闭 2026-09-23**：横幅以前只有关闭按钮，用户既无法"再试一次"、也不知道哪一路失败，
+   而且 `AgentAppSurface.vue` 把机器码 `AGENT_REQUEST_FAILED` 直接当兜底文案渲染。
+   现在横幅与空态面板都会**先给出失败域**（会话列表 / 会话记录 / 运行状态 / 审批 / 检查点 / 任务详情 / 配置 / 实时事件 / 运行时操作），
+   再给一句本地化的兜底文案，并把稳定错误码放进 `title`；**读路径带「重试」、写路径带「重新同步」**，
+   未清除原修改语义（对账提示仍写明"不要重试原修改操作"）。详见 §7.37。
 
 ---
 
@@ -843,7 +847,7 @@ UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConf
 | **备用模型链 `:1062-1083`（第二轮新增）**        | `v-for` 渲染**该 Provider 除默认模型外的全部模型**（实测 6 个模型 → 5 枚按钮），无搜索/无折叠/无序号                                          | 不是"已选列表"而是"全部模型按钮墙"；"按顺序勾选"的顺序**在界面上完全不可见**（无序号、无拖拽、无上移下移、无单项移除）；模型一多就会撑爆卡片（详见 §7.11-c） |
 
 > ✅ **2026-09-23 部分闭环（原生 checkbox 部分，见 §7.20）**：本表里所有"原生 `<input type="checkbox">`"写法（可添加模型列表、能力编辑弹窗、应用能力授权、禁用目标、MCP/ACP/Subagent 等）已统一为 Gen2 `UiCheckbox`，实测 `16×16 / r5 / role=checkbox` + Gen2 焦点环。
-> **仍开放**：11px 纯文字按钮（单项「移除」「移除全部」无确认、文本链接式按钮）、协议切换的原生 `<select>`，以及批量动作的视觉权重——按原顺序继续。
+> ✅ **2026-09-23 追加闭环**：11px 纯文字按钮已收成 Gen2 `UiButton`（soft + compact，danger/neutral 分档）并给「一键取消」补了确认弹窗（§7.34）；协议/强度等原生 `<select>` 已全部换成 `UiSelect`（§7.32）。批量动作的视觉权重随 §7.30 的动作簇收敛一并调整。
 
 **第二轮实测（把"粗糙"量化）**：同一屏内 `添加 Provider` 144×38/16px、`关闭 Agent` 109×40/16px、`立即更新` 77×28/11px、服务商行 `模型与测试(6)` 144×36、`更新模型` 107×36、`停用` 54×36、删除 28×28 —— **3 档高度、2 档字号、4 档圆角**；其中"停用 / 删除"这两个危险操作的视觉权重低于"模型与测试"，删除还只有 28×28 且点击即执行（详见 §7.11-b）。
 
@@ -926,7 +930,7 @@ UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConf
 | 9   | 全设置区                                                               | 6 套主按钮 / 5 档圆角 / 3 套裸按钮           | 收敛到 §6.6 的三档 + 3 档圆角                           |
 | 10  | 全设置区                                                               | 约 38 行硬编码中文                           | 全部迁 i18n（可与 §3.5 的死 key 清理一起做）            |
 
-> ✅ **2026-09-23 进度**：#4 / #8 里的"原生 checkbox"部分已关闭（27 处 → Gen2 `UiCheckbox`，见 §7.20）；#6 / #9 / #10 已由 §6.5（i18n）与 §6.2 批 1/2（按钮三档）关闭。**仍开放**：#2 / #3（11px 文本按钮、无确认的批量移除）、#7（窄屏导航）、#1 / #8 的剩余表单控件（原生 `<select>`）。
+> ✅ **2026-09-23 进度**：#4 / #8 里的"原生 checkbox"部分已关闭（27 处 → Gen2 `UiCheckbox`，见 §7.20）；#6 / #9 / #10 已由 §6.5（i18n）与 §6.2 批 1/2（按钮三档）关闭；#1 / #8 的剩余表单控件（原生 `<select>`）由 §7.32 关闭；#2 / #3（11px 文本按钮、无确认的批量移除）由 §7.34 关闭；#7（窄屏导航与窄屏动作簇）由 §7.27 / §7.30 关闭。**本节已全部闭环。**
 
 ## 7. 主界面布局与细节复查（第二轮）
 
@@ -1700,7 +1704,7 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 它们用的是同一个浅紫主按钮样式、且**大多数时候处于 `disabled`**（没改动时），页面又没有粘性分区导航 ——
 
 > **部分闭环（2026-09-23，见 §7.25）**：分组导航已改为粘性（滚 807px 后停 y=0），嵌套框也从 3~4 层收到 1 层，
-> `运行与环境` 全页高 3625 → 3423px；**8 个独立保存按钮与本条其余部分仍开放**。原文如下：
+> `运行与环境` 全页高 3625 → 3423px；其中 **8 个独立保存按钮已由 §7.31 关闭**（按 dirty 分级：无未保存变更时降级为 `soft`/`neutral` + 禁用 + 原因 `title`），本条整节闭环。原文如下：
 > 滚到页面中段时用户既不知道自己在上/下哪一段，也不知道刚才改的那一项有没有生效（§7.13-e 已记"禁用态难识别"，这里是它的放大版）。
 
 **d) 空态风格与主界面不一致（P2，新）**
@@ -2218,8 +2222,8 @@ Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
   同一块设置外层只剩「分组卡 + 控件」一层边框。
 - 截图：`/tmp/shots/agent-before-{0,1,2}.png`（1600 桌面，改后）、`/tmp/shots/mobile-agent-{0,1,2}.png`（414 手机）；
   探针 `probe-box-depth.mjs` / `probe-page-height.mjs` / `probe-flat-check.mjs` / `shot-mobile-settings.mjs`。
-- **未一并处理**（仍开放）：卡片内 8 处独立「保存」按钮（§7.15-c）、设置区空态仍是纯文本（§7.15-d）、
-  22 处原生 `<select>`（§7.15-f）—— 本轮只动"框的层数"，不动这些控件本体。
+- **本轮只动"框的层数"，不动控件本体**；当时列出的三项后续均已闭环：卡片内 8 处独立「保存」按钮（§7.31）、
+  设置区空态仍是纯文本（§7.28）、22 处原生 `<select>`（§7.32）。
 - **门禁**：模板编译、`vue-tsc --noEmit`、`eslint`、`prettier --check` 全绿。
 
 ---
@@ -2596,6 +2600,53 @@ CDP 实测确实如此：三块是 `rounded-lg border border-border/70 bg-card/6
 与 §7.15-b / §7.20 / §7.35 属同一类环境限制，本轮据此只有：
 模板编译、`vue-tsc --noEmit`、`eslint`、`prettier --check`、i18n 校验（三语齐平）；
 并静态确认 `JSON.stringify(entry.payload` 现在**只**出现在二级折叠的 `<pre>` 里（`TaskRail.vue:556`）。
+
+### 7.37 Agent 错误横幅：补失败域与重试入口（§2.9 收口，P1 · ✅ 已关闭 2026-09-23）
+
+**现象（§2.9 原文 + 本轮 CDP 复现）**：错误横幅只有关闭按钮 —— 用户既不能"再试一次"，也不知道**是哪一路失败**。
+本轮先用 CDP 把现象钉死（`probe-237-b7.mjs`）：拦截 `GET /api/v1/apps/nexus.agent/runs?limit=50&threadId=…` 回 500 后，
+`[role="alert"]` 的文本是 **`AGENT_REQUEST_FAILED`** 本身，按钮只有 1 个（`aria-label="关闭"`）——
+比原记录更糟：**机器码被直接渲染给了用户**。
+
+**根因**：
+
+1. 文案：`host/AgentAppSurface.vue` 的 `explain` 把 `formatAgentApiError(cause, 'AGENT_REQUEST_FAILED')` 的兜底参数写成机器码，
+   而 `formatAgentApiError` 对所有 5xx 直接返回兜底值 ⇒ 内部标识漏到界面。同类写法还有 `PluginManagementSettings.vue`、
+   `AppManagementSettings.vue`、`ArtifactLibraryView.vue`、`ArtifactPicker.vue`；`AgentSettingsPanel.vue` 用的是英文整句。
+2. 入口：`error` 只是一个 `ref<string>`，状态里没有"哪一路失败 / 怎么重跑"，横幅自然只能渲染文案 + 关闭。
+
+**改法**：
+
+- 失败状态升级为 `{ message, domainKey, code, retry }`（`applyFailure` / `fail` / `clearError`），
+  9 个失败域三语齐平：会话列表、会话记录、运行状态、审批、检查点、任务详情、配置、实时事件、运行时操作。
+- 兜底文案改为 `agent.operations.requestFailed`；稳定错误码不再当正文，改放进 `title`；
+  上述 5 处以机器码/英文整句当兜底文案的调用点同步换成词典值。
+- `openRunDetail` 的辅助请求按索引映射失败域（checkpoints / approvals / subagents → 检查点 / **审批** / 任务详情），
+  正是 §2.9 点名的"不会知道是审批这一路失败"。
+- `formatAgentApiError` 不再把 `SCREAMING_SNAKE` 的机器码当文案（4xx 未带 message 时会漏出 `RUN_VERSION_CONFLICT` 这类内部标识）：
+  只有真正的人类可读 message 才渲染，机器码一律回到兜底文案并留给 `title`。
+- 横幅与"无内容"空态面板都带动作按钮：**读路径 = `agent.operations.retry`（重试）**，
+  **写路径 = `agent.operations.resync`（重新同步）** —— 只重新拉取权威状态，不重放原修改操作，
+  与对账提示"不要重试原修改操作"保持同一语义；`title` 统一为 `agent.operations.retryHint`。
+
+**CDP 验证（注入 500 的实测数据）**：
+
+- 读路径（切换会话 → `GET /runs` 500）：横幅实测 `会话记录 · 请求失败，请稍后重试。` + `重试` 按钮 **42×28 / r8 / fs11 / soft**
+  （`title=重新加载失败的数据`）+ 关闭；解除注入后点「重试」，`[role=alert]` 归零、会话内容正常加载。
+- 空态面板（`GET /threads` 500，`entries.length === 0`）：实测 `会话列表 / 请求失败，请稍后重试。` + `重试 42×28`；
+  点击后报错清零、侧栏 3 个会话加载成功。
+- 4xx 机器码（`GET /runs` → 409 `{error:{code:'RUN_VERSION_CONFLICT'}}`，故意不带 message）：横幅实测 `会话记录 · 请求失败，请稍后重试。`，
+  内部标识只出现在 `title="RUN_VERSION_CONFLICT"`；对照组带 message 的 400 仍原样展示后端 message（`threadId must be a uuid`，`title=VALIDATION_FAILED`）——
+  即"内部码不再进正文、真实后端文案保留"。
+- 截图：`/tmp/shots/probe-237-after-fail.png`、`probe-237-after-retry.png`、`probe-237-panel-fail.png`；
+  探针 `probe-237-{b7,after,panel}.mjs`。
+- 方法备注：注入必须用 CDP `Fetch.enable` + `Fetch.fulfillRequest`；实测 `connectOverCDP` 拿到的页面**不经过 Playwright 路由**
+  （`page.route` 安装了但 `requestPaused` 为 0），这条坑记在此处以免复发。
+- 同轮修掉两个自己引入的运行时缺陷（`clearError` 自递归 → `RangeError: Maximum call stack size exceeded`；
+  空态面板漏 `import UiButton`），两者都是被 CDP 探针 + `/tmp/frontend-dev.log` 抓到的。
+
+**门禁**：模板编译、`vue-tsc --noEmit`、`eslint packages/frontend/src/features/agent/`、`prettier --check`、
+`node scripts/check-agent-i18n.mjs`（三语齐平 + 无硬编码句子）全绿。
 
 ---
 

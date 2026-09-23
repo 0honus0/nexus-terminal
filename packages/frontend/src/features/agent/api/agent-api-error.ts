@@ -47,10 +47,13 @@ export const toAgentApiError = (cause: unknown): AgentApiError => {
   return new AgentApiError({ code: 'AGENT_REQUEST_FAILED', message: 'AGENT_REQUEST_FAILED' });
 };
 
+// Stable machine codes (AGENT_REQUEST_FAILED, RUN_VERSION_CONFLICT, ...) are diagnostics, not copy:
+// they belong in a title / log, never in the interface.
+const isMachineCode = (value: string): boolean => /^[A-Z][A-Z0-9_]{3,}$/.test(value);
+
 export const formatAgentApiError = (cause: unknown, fallback: string): string => {
   const error = toAgentApiError(cause);
   if (error.status !== undefined && error.status >= 500) return fallback;
-  if (error.message && error.message !== 'AGENT_REQUEST_FAILED') return error.message;
-  if (error.code && error.code !== 'AGENT_REQUEST_FAILED') return error.code;
+  if (error.message && !isMachineCode(error.message)) return error.message;
   return fallback;
 };

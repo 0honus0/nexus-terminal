@@ -251,7 +251,7 @@
     return settings.value.requestedSettings.model.defaultModelId;
   });
 
-  const message = (cause: unknown): string => formatAgentApiError(cause, 'Agent request failed.');
+  const message = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
 
   const load = async () => {
     loading.value = true;

@@ -13,11 +13,16 @@
   import ArtifactPicker from '../files/ArtifactPicker.vue';
   import AgentMessageBody from './AgentMessageBody.vue';
   import ConversationMessage from './ConversationMessage.vue';
+  import { UiButton } from '@/foundation/ui';
   import { conversationCommandSuggestions, type ConversationCommandSuggestion } from './conversation-commands';
 
   const props = defineProps<{
     appId: string;
     error?: string;
+    errorDomain?: string;
+    errorCode?: string;
+    canRetry?: boolean;
+    retryLabel?: string;
     reconciliation?: boolean;
     reconciliationDetails?: AgentRunReconciliationViewDto | null;
     reconciliationBusy?: boolean;
@@ -34,6 +39,7 @@
   }>();
   const emit = defineEmits<{
     dismissError: [];
+    retryError: [];
     loadOlder: [];
     send: [text: string, attachments: AgentArtifactRefDto[]];
     cancel: [];
@@ -629,9 +635,23 @@
         >
           <div class="flex items-start gap-2">
             <i class="fa-solid fa-circle-exclamation mt-1" aria-hidden="true"></i>
-            <span class="min-w-0 flex-1 break-words">{{
-              reconciliation ? $t('agent.operations.reconciliationRequired') : error
-            }}</span>
+            <span v-if="reconciliation" class="min-w-0 flex-1 break-words">
+              {{ $t('agent.operations.reconciliationRequired') }}
+            </span>
+            <span v-else class="min-w-0 flex-1 break-words" :title="errorCode">
+              <span v-if="errorDomain" class="font-semibold text-error/80">{{ errorDomain }} · </span>{{ error }}
+            </span>
+            <UiButton
+              v-if="!reconciliation && canRetry"
+              appearance="soft"
+              tone="neutral"
+              density="compact"
+              class="shrink-0"
+              :title="$t('agent.operations.retryHint')"
+              @click="emit('retryError')"
+            >
+              {{ retryLabel || $t('agent.operations.retry') }}
+            </UiButton>
             <button v-if="!reconciliation" type="button" :aria-label="$t('common.close')" @click="emit('dismissError')">
               <i class="fa-solid fa-xmark" aria-hidden="true"></i>
             </button>

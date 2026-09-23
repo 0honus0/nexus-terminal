@@ -84,7 +84,7 @@
     return Boolean(app?.enabled);
   };
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
 
   const copyCatalogUrl = async (url: string) => {
     try {

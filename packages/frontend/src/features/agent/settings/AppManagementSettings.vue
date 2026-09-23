@@ -31,7 +31,7 @@
   const expandedGrants = ref<Record<string, boolean>>({});
   const grantLoadGeneration = new Map<string, number>();
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
   type CapabilityId = AgentCapabilityGrantInputDto['capability'];
 
   const cloneSelection = (selection: AgentTargetGrantSelectionDto): AgentTargetGrantSelectionDto =>

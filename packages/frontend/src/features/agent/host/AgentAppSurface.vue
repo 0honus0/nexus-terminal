@@ -3,14 +3,14 @@
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
   import { useConnections } from '@/features/connections/public';
-  import { UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiInfoHint } from '@/foundation/ui';
   import AgentConversation from '../ai/AgentConversation.vue';
   import {
     createConversationCommandExecutor,
     type ConversationCommandResult,
   } from '../ai/conversation-command-executor';
   import { parseConversationSubmission } from '../ai/conversation-commands';
-  import { agentApi, formatAgentApiError } from '../api/agent-api';
+  import { agentApi, formatAgentApiError, toAgentApiError } from '../api/agent-api';
   import type {
     AgentApprovalModeDto,
     AgentExecutionModeDto,
@@ -98,7 +98,23 @@
   const detailCheckpoints = ref<AgentCheckpointViewDto[]>([]);
   const currentRunCheckpoints = ref<AgentCheckpointViewDto[]>([]);
   const detailApprovalBatch = shallowRef<AgentApprovalBatchViewModel | null>(null);
+  interface AgentSurfaceRetry {
+    labelKey: string;
+    run: () => void;
+  }
+
+  const DETAIL_FAILURE_DOMAIN = 'agent.operations.failureDomain.detail';
+  // Human-facing label for each auxiliary Run-detail request (checkpoints / approvals / subagents).
+  const DETAIL_AUXILIARY_FAILURE_DOMAINS = [
+    'agent.operations.failureDomain.checkpoints',
+    'agent.operations.failureDomain.approvals',
+    DETAIL_FAILURE_DOMAIN,
+  ] as const;
+
   const error = ref('');
+  const errorDomainKey = ref('');
+  const errorCode = ref('');
+  const errorRetry = shallowRef<AgentSurfaceRetry | null>(null);
   let currentRunCheckpointsGeneration = 0;
 
   const refreshCurrentCheckpoints = async (): Promise<void> => {
@@ -116,7 +132,10 @@
       if (requestGeneration !== currentRunCheckpointsGeneration || run.value?.id !== runId) return;
       currentRunCheckpoints.value = [];
       logger.warn({ err: cause, appId: props.appId, runId }, 'Agent UI failed to refresh current Run checkpoints');
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.checkpoints',
+        retry: () => void refreshCurrentCheckpoints(),
+      });
     }
   };
 
@@ -461,7 +480,40 @@
     );
   });
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+
+  const applyFailure = (
+    message: string,
+    code: string,
+    options: { domainKey: string; retry?: () => void; retryLabelKey?: string },
+  ): void => {
+    error.value = message;
+    errorDomainKey.value = options.domainKey;
+    errorCode.value = code === 'AGENT_REQUEST_FAILED' ? '' : code;
+    errorRetry.value = options.retry
+      ? { labelKey: options.retryLabelKey ?? 'agent.operations.retry', run: options.retry }
+      : null;
+  };
+
+  const fail = (cause: unknown, options: { domainKey: string; retry?: () => void; retryLabelKey?: string }): void => {
+    applyFailure(explain(cause), toAgentApiError(cause).code, options);
+  };
+
+  const clearError = (): void => {
+    error.value = '';
+    errorDomainKey.value = '';
+    errorCode.value = '';
+    errorRetry.value = null;
+  };
+
+  const errorDomainLabel = computed(() => (errorDomainKey.value ? t(errorDomainKey.value) : ''));
+  const errorRetryLabel = computed(() => (errorRetry.value ? t(errorRetry.value.labelKey) : ''));
+
+  const retryFailedOperation = (): void => {
+    const retry = errorRetry.value;
+    clearError();
+    retry?.run();
+  };
 
   const rememberThreadRun = (candidate: AgentRunViewDto): void => {
     if (currentThread.value?.id !== candidate.threadId) return;
@@ -548,7 +600,10 @@
     } catch (cause) {
       if (requestGeneration !== reconciliationGeneration || run.value?.id !== runId) return;
       reconciliationDetails.value = null;
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.run',
+        retry: () => void refreshReconciliation(runId),
+      });
     }
   };
 
@@ -575,7 +630,12 @@
         { err: cause, appId: props.appId, runId, minimumEventCursor },
         'Agent UI failed to refresh authoritative Run state',
       );
-      if (reportFailure) error.value = explain(cause);
+      if (reportFailure) {
+        fail(cause, {
+          domainKey: 'agent.operations.failureDomain.run',
+          retry: () => void refreshRun(runId, minimumEventCursor),
+        });
+      }
       return null;
     }
   };
@@ -607,7 +667,18 @@
 
   const recoverRuntimeFailure = async (cause: unknown, runId?: string): Promise<void> => {
     const decision = runtimeOperation.fail(cause);
-    error.value = explain(cause);
+    fail(cause, {
+      domainKey: 'agent.operations.failureDomain.mutation',
+      retryLabelKey: 'agent.operations.resync',
+      retry: () => {
+        const targetRunId = runId ?? run.value?.id;
+        if (!targetRunId) return;
+        void (async () => {
+          await refreshRun(targetRunId, 0, false);
+          await Promise.all([refreshApprovals(targetRunId), refreshLedger(), refreshBackgroundRuns()]);
+        })();
+      },
+    });
     if (!decision.refreshAuthoritativeState) return;
 
     const targetRunId = runId ?? run.value?.id;
@@ -628,7 +699,7 @@
     if (!currentRun?.needsReconciliation || !details?.required || !normalizedNote || reconciliationBusy.value) return;
 
     reconciliationBusy.value = true;
-    error.value = '';
+    clearError();
     try {
       const resolved = await facade.resolveReconciliation(currentRun, details, normalizedNote);
       if (run.value?.id !== resolved.id) return;
@@ -708,8 +779,9 @@
           event.type === 'run.recovery_deferred' ||
           event.type === 'run.recovery_failed';
         if (event.type === 'run.recovery_failed') {
-          error.value = t('agent.operations.restartRecoveryFailed', {
-            reasons: event.payload.reasons.join(', '),
+          applyFailure(t('agent.operations.restartRecoveryFailed', { reasons: event.payload.reasons.join(', ') }), '', {
+            domainKey: 'agent.operations.failureDomain.run',
+            retry: () => void refreshRun(initial.id, 0),
           });
         }
         const durableCursor = event.id === undefined ? 0 : Number(event.id);
@@ -747,14 +819,17 @@
           { appId: props.appId, runId: initial.id, threadId: initial.threadId, err: cause },
           'Agent UI run stream failed',
         );
-        error.value = explain(cause);
+        fail(cause, {
+          domainKey: 'agent.operations.failureDomain.stream',
+          retry: () => void refreshRun(initial.id, 0, false),
+        });
       },
     });
   };
 
-  const selectThread = async (thread: AgentThreadViewDto): Promise<void> => {
+  const selectThread = async (thread: AgentThreadViewDto, force = false): Promise<void> => {
     threadDrawerOpen.value = false;
-    if (currentThread.value?.id === thread.id) return;
+    if (!force && currentThread.value?.id === thread.id) return;
     const selectionGeneration = ++threadSelectionGeneration;
     stopRunStream();
     currentThread.value = thread;
@@ -764,7 +839,7 @@
     threadRuns.value = [];
     approvalBatch.value = null;
     nextCursor.value = null;
-    error.value = '';
+    clearError();
     runtimeOperation.succeed();
     commandResult.value = null;
     agentSurfaceSession.setThread(props.appId, thread.id);
@@ -792,7 +867,12 @@
       if (active && nonTerminal.has(active.status)) startRunStream(active);
       await refreshBackgroundRuns();
     } catch (cause) {
-      if (selectionGeneration === threadSelectionGeneration) error.value = explain(cause);
+      if (selectionGeneration === threadSelectionGeneration) {
+        fail(cause, {
+          domainKey: 'agent.operations.failureDomain.transcript',
+          retry: () => void selectThread(thread, true),
+        });
+      }
     } finally {
       if (selectionGeneration === threadSelectionGeneration) selectingThread.value = false;
     }
@@ -822,7 +902,7 @@
   const createThread = async (title?: string): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
-    error.value = '';
+    clearError();
     try {
       const normalizedTitle = title?.trim();
       const thread = await facade.createThread(normalizedTitle || undefined);
@@ -830,7 +910,10 @@
       threadSidebar.value?.resetScroll();
       await selectThread(thread);
     } catch (cause) {
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.threads',
+        retry: () => void createThread(title),
+      });
     } finally {
       busy.value = false;
     }
@@ -852,7 +935,10 @@
       threads.value = [...threads.value, ...page.items.filter((thread) => !known.has(thread.id))];
       threadNextCursor.value = page.nextCursor;
     } catch (cause) {
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.threads',
+        retry: () => void loadMoreThreads(),
+      });
     } finally {
       threadListLoadingMore.value = false;
     }
@@ -909,9 +995,12 @@
 
   const load = async (): Promise<void> => {
     loading.value = true;
-    error.value = '';
+    clearError();
     const configurationPromise = loadRunConfiguration().catch((cause) => {
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.configuration',
+        retry: () => void loadRunConfiguration(),
+      });
     });
     try {
       const threadPage = await facade.listThreads(undefined, threadPageSize.value);
@@ -922,7 +1011,10 @@
       if (selected) await selectThread(selected);
       else await createThread();
     } catch (cause) {
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.threads',
+        retry: () => void load(),
+      });
     } finally {
       loading.value = false;
     }
@@ -933,7 +1025,7 @@
     if (mutationLocked.value) return false;
     busy.value = true;
     runtimeOperation.beginMutation();
-    error.value = '';
+    clearError();
     return true;
   };
 
@@ -1235,7 +1327,11 @@
       runtimeOperation.succeed();
     } catch (cause) {
       const decision = runtimeOperation.fail(cause);
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.mutation',
+        retryLabelKey: 'agent.operations.resync',
+        retry: () => void refreshDetailSubagents(delegation.runId),
+      });
       if (decision.refreshAuthoritativeState) {
         try {
           await refreshDetailSubagents(delegation.runId);
@@ -1274,13 +1370,21 @@
       if (checkpoints.status === 'fulfilled') detailCheckpoints.value = checkpoints.value;
       if (detailApprovals.status === 'fulfilled') detailApprovalBatch.value = detailApprovals.value;
       if (subagents.status === 'fulfilled') detailSubagents.value = subagents.value.items;
-      const failure = [checkpoints, detailApprovals, subagents].find(
-        (result): result is PromiseRejectedResult => result.status === 'rejected',
-      );
-      if (failure) error.value = explain(failure.reason);
+      const auxiliaryResults = [checkpoints, detailApprovals, subagents];
+      const failureIndex = auxiliaryResults.findIndex((result) => result.status === 'rejected');
+      const failure = failureIndex < 0 ? null : (auxiliaryResults[failureIndex] as PromiseRejectedResult);
+      if (failure) {
+        fail(failure.reason, {
+          domainKey: DETAIL_AUXILIARY_FAILURE_DOMAINS[failureIndex] ?? DETAIL_FAILURE_DOMAIN,
+          retry: () => void openRunDetail(candidate),
+        });
+      }
     } catch (cause) {
       if (requestGeneration !== detailOpenGeneration) return;
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: DETAIL_FAILURE_DOMAIN,
+        retry: () => void openRunDetail(candidate),
+      });
     }
   };
 
@@ -1350,7 +1454,15 @@
       await refreshBackgroundRuns();
       runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.mutation',
+        retryLabelKey: 'agent.operations.resync',
+        retry: () => {
+          const thread = currentThread.value;
+          if (thread) void selectThread(thread, true);
+          else void refreshBackgroundRuns();
+        },
+      });
       runtimeOperation.fail(cause);
     } finally {
       finishRuntimeMutation();
@@ -1400,7 +1512,7 @@
   const deleteThreadConversation = async (thread: AgentThreadViewDto): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
-    error.value = '';
+    clearError();
     clearThreadDeleteArm();
     try {
       const deletingCurrent = currentThread.value?.id === thread.id;
@@ -1415,7 +1527,11 @@
       await refreshBackgroundRuns();
       runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.threads',
+        retryLabelKey: 'agent.operations.resync',
+        retry: () => void load(),
+      });
       runtimeOperation.fail(cause);
     } finally {
       busy.value = false;
@@ -1437,7 +1553,7 @@
   const deleteAllConversations = async (): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
-    error.value = '';
+    clearError();
     clearDeleteAllThreadsArm();
     clearThreadDeleteArm();
     try {
@@ -1450,7 +1566,11 @@
       await selectFirstOrCreateThread();
       runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.threads',
+        retryLabelKey: 'agent.operations.resync',
+        retry: () => void load(),
+      });
       runtimeOperation.fail(cause);
     } finally {
       busy.value = false;
@@ -1507,7 +1627,10 @@
   // surface without a page reload, otherwise the model list keeps showing the stale set.
   const onConfigurationChanged = (): void => {
     void loadRunConfiguration().catch((cause) => {
-      error.value = explain(cause);
+      fail(cause, {
+        domainKey: 'agent.operations.failureDomain.configuration',
+        retry: () => void loadRunConfiguration(),
+      });
     });
   };
 
@@ -1690,20 +1813,43 @@
             <span class="text-xs">{{ $t('agent.operations.loading') }}</span>
           </div>
         </div>
-        <div
-          v-else-if="error && entries.length === 0"
-          class="flex h-full items-center justify-center p-6 text-center text-sm text-error"
-        >
-          <div class="max-w-sm rounded-xl border border-error/30 bg-error/10 px-4 py-3">{{ error }}</div>
+        <div v-else-if="error && entries.length === 0" class="flex h-full items-center justify-center p-6 text-sm">
+          <div class="max-w-sm rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-error" role="alert">
+            <div class="flex items-start gap-2">
+              <i class="fa-solid fa-circle-exclamation mt-1" aria-hidden="true"></i>
+              <div class="min-w-0 flex-1 break-words text-left" :title="errorCode">
+                <div v-if="errorDomainLabel" class="text-[11px] font-semibold text-error/80">
+                  {{ errorDomainLabel }}
+                </div>
+                <div>{{ error }}</div>
+              </div>
+            </div>
+            <div v-if="errorRetry" class="mt-2 flex justify-end">
+              <UiButton
+                appearance="soft"
+                tone="neutral"
+                density="compact"
+                :title="$t('agent.operations.retryHint')"
+                @click="retryFailedOperation"
+              >
+                {{ errorRetryLabel }}
+              </UiButton>
+            </div>
+          </div>
         </div>
         <div v-else class="relative h-full min-h-0">
           <AgentConversation
             :app-id="appId"
             :error="error"
+            :error-domain="errorDomainLabel"
+            :error-code="errorCode"
+            :can-retry="errorRetry !== null"
+            :retry-label="errorRetryLabel"
             :reconciliation="run?.needsReconciliation === true || runtimeOperation.phase.value === 'reconciling'"
             :reconciliation-details="reconciliationDetails"
             :reconciliation-busy="reconciliationBusy"
-            @dismiss-error="error = ''"
+            @dismiss-error="clearError()"
+            @retry-error="retryFailedOperation"
             :entries="entries"
             :next-cursor="nextCursor"
             :run="run"
