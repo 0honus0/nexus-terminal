@@ -1,12 +1,14 @@
 # Nexus Agent 复查记录（代码 / 设计 / 模块关系 / UI）
 
-> 状态：Review 记录，仅供参考。**本次只记录问题、不改动任何代码。**
+> 状态：持续维护的 Review / 闭环记录；已完成项保留历史证据并标记关闭，开放项按当前代码事实继续复核。
 > 复查对象：当前工作区里新增的 Agent 功能（Backend `modules/agent` + `infrastructure/agent`、Frontend `features/agent`、`packages/agent-runner`）。
 > 基准文档：`doc/AGENT.md`、`doc/architecture/FRONTEND.md`、`doc/software-requirements/requirements/agent.md`。
 > 复核方式：静态阅读 + 计数 + 构建产物核对 + **第二轮起在真实环境用 CDP 浏览器截图 / 读计算样式实测**（方法见文末「附录 A」）。
 > 实测环境（2026-09-21）：后端 `tsx src/index.ts`（:3001，dev）+ 前端 vite（:9998）+ 反代 `https://api.honus.top`，账号 `honus`。
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
-> 仓库没有可用 git 元数据，未做历史比对。
+> Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
+>
+> **当前实施状态（2026-09-23）**：最新 UI 闭环为 `663f26d feat(agent): unify model selection ux`。默认模型已采用 Gen2 `UiCombobox`，fallback chain 已改为有序 `1..N` 列表并保留 Add `UiPopover`；真实 CDP、类型检查与 production build 已通过。用户指出的默认模型 trigger / panel 背景断层也已修正为展开态共用同一 glass fill / blur / border。下一条开放 UI P1 尚未开始施工；本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
