@@ -223,15 +223,15 @@
     modalTestResult.value = null;
 
     if (!form.displayName.trim()) {
-      modalError.value = t('agent.settings.providers.name') + ' 不能为空';
+      modalError.value = t('agent.settings.providers.fieldRequired', { field: t('agent.settings.providers.name') });
       return;
     }
     if (!form.baseUrl.trim()) {
-      modalError.value = t('agent.settings.providers.baseUrl') + ' 不能为空';
+      modalError.value = t('agent.settings.providers.fieldRequired', { field: t('agent.settings.providers.baseUrl') });
       return;
     }
     if (!form.modelId.trim()) {
-      modalError.value = t('agent.settings.providers.model') + ' 不能为空';
+      modalError.value = t('agent.settings.providers.fieldRequired', { field: t('agent.settings.providers.model') });
       return;
     }
 
@@ -312,7 +312,7 @@
 
     modalError.value = '';
     if (!form.displayName.trim() || !form.baseUrl.trim() || !form.modelId.trim()) {
-      modalError.value = '请补全服务商与模型必填信息';
+      modalError.value = t('agent.settings.providers.completeRequired');
       return;
     }
 
@@ -1226,11 +1226,11 @@
                     @click="openTestModal(provider)"
                   >
                     <i class="fa-solid fa-layer-group text-[9px] mr-1"></i>
-                    <span>{{ provider.models.length }} 个模型</span>
+                    <span>{{ $t('agent.settings.providers.modelCount', { count: provider.models.length }) }}</span>
                   </button>
                   <span v-if="provider.hasCredential" class="inline-flex items-center gap-1 text-[11px] text-success">
                     <i class="fa-solid fa-key text-[9px]"></i>
-                    <span>已配密钥</span>
+                    <span>{{ $t('agent.settings.providers.credentialConfigured') }}</span>
                   </span>
                 </div>
 
@@ -1251,7 +1251,9 @@
                     type="button"
                     class="hover:text-foreground transition-colors cursor-pointer"
                     :title="
-                      copiedUrl === provider.baseUrl ? $t('agent.settings.providers.copyUrlSuccess') : '复制接口地址'
+                      copiedUrl === provider.baseUrl
+                        ? $t('agent.settings.providers.copyUrlSuccess')
+                        : $t('agent.settings.providers.copyUrl')
                     "
                     @click="copyText(provider.baseUrl)"
                   >
@@ -1887,7 +1889,7 @@
           <span class="font-medium">{{ modalTestResult.message }}</span>
         </div>
         <span v-if="modalTestResult.latencyMs" class="font-mono text-[11px]">
-          响应延迟: {{ modalTestResult.latencyMs }}ms
+          {{ $t('agent.settings.providers.latency', { ms: modalTestResult.latencyMs }) }}
         </span>
       </div>
     </div>
@@ -2004,10 +2006,10 @@
               </div>
               <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-text-secondary">
                 <span class="rounded bg-card border border-border/50 px-1.5 py-0.5 font-mono">
-                  {{ compactTokens(model.contextWindow) }} 上下文
+                  {{ $t('agent.settings.providers.contextShort', { value: compactTokens(model.contextWindow) }) }}
                 </span>
                 <span class="rounded bg-card border border-border/50 px-1.5 py-0.5 font-mono">
-                  {{ compactTokens(model.maxOutputTokens) }} 输出
+                  {{ $t('agent.settings.providers.outputShort', { value: compactTokens(model.maxOutputTokens) }) }}
                 </span>
                 <span
                   v-if="model.supportsTools"
@@ -2032,7 +2034,7 @@
                   class="inline-flex items-center gap-1 rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
                 >
                   <i class="fa-solid fa-brain text-[8px]"></i>
-                  <span>思考</span>
+                  <span>{{ $t('agent.settings.providers.reasoning') }}</span>
                 </span>
               </div>
             </div>
@@ -2132,7 +2134,7 @@
         </div>
 
         <div v-if="filteredTestModalModels.length === 0" class="py-8 text-center text-xs text-text-secondary">
-          未匹配到任何已配置模型
+          {{ $t('agent.settings.providers.noMatchingModel') }}
         </div>
       </div>
     </div>

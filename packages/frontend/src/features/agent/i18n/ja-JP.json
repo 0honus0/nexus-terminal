@@ -96,7 +96,102 @@
         "enableCapabilities": "有効化",
         "disableCapabilities": "無効化",
         "enableAllCapabilities": "すべての権限を有効化",
-        "disableAllCapabilities": "すべての権限を無効化"
+        "disableAllCapabilities": "すべての権限を無効化",
+        "capabilityUnknownDesc": "ホスト基盤レベルの能力宣言",
+        "badges": {
+          "officialExtension": "公式拡張",
+          "thirdParty": "サードパーティ拡張"
+        },
+        "summaries": {
+          "nexusAgent": "公式の汎用エージェントコア。自動運用診断とフルスタック協業スキルを内蔵",
+          "nexusFullstack": "フルスタック納品スイート。マイクロサービス運用、複雑な依存関係の結合検証、デプロイ検証に対応",
+          "default": "署名検証済みのインストール済み Agent プラグイン App"
+        },
+        "enabledCount": "有効 {enabled}/{total}",
+        "grantedCount": "{granted}/{total} 件許可済み",
+        "deleteDataOnUninstall": "このプラグイン専用の永続データ領域も完全に削除する",
+        "capabilities": {
+          "file": {
+            "read": {
+              "name": "ファイルを読む",
+              "desc": "許可された Workspace または SSH ターゲット内のファイル内容を読み取り・検索します"
+            },
+            "write": {
+              "name": "ファイルを書き込む",
+              "desc": "許可された Workspace または SSH ターゲットでファイルを作成・置換・移動・パッチ適用します"
+            },
+            "delete": {
+              "name": "ファイルを削除",
+              "desc": "許可された Workspace または SSH ターゲット内のファイルやディレクトリを削除します"
+            }
+          },
+          "machine": {
+            "inspect": {
+              "name": "ホスト状態と接続情報",
+              "desc": "利用可能な接続、システム負荷、制御された診断情報を読み取ります"
+            },
+            "docker": {
+              "manage": {
+                "name": "Docker コンテナを管理",
+                "desc": "許可されたターゲット上のコンテナを起動・停止・再起動・削除します"
+              }
+            }
+          },
+          "shell": {
+            "execute": {
+              "name": "コマンドを実行",
+              "desc": "許可された Workspace または SSH ターゲットでポリシーと承認に従ってコマンドを実行します"
+            }
+          },
+          "workspace": {
+            "manage": {
+              "name": "Workspace 環境を管理",
+              "desc": "環境の作成・起動・停止・削除とツールチェーンの切り替えを行います"
+            }
+          },
+          "browser": {
+            "read": {
+              "name": "ブラウザの読み取りと操作",
+              "desc": "セッション作成、ナビゲーション、スナップショット、スクリーンショット、コンソールとダウンロードの読み取りを行います"
+            },
+            "interact": {
+              "name": "ブラウザページの操作",
+              "desc": "クリック、入力、キー操作、選択、アップロード。リモートページの状態を変更する可能性があります"
+            }
+          },
+          "integration": {
+            "mcp": {
+              "read": {
+                "name": "MCP リソースを読む",
+                "desc": "MCP リソース、プロンプト、読み取り専用ツールの結果を検出して読み取ります"
+              },
+              "invoke": {
+                "name": "MCP アクションを呼び出す",
+                "desc": "制御や変更を伴う MCP ツールを呼び出します"
+              }
+            },
+            "acp": {
+              "invoke": {
+                "name": "ACP Agent を呼び出す",
+                "desc": "Agent Client Protocol 経由で外部の協調実行器を呼び出します"
+              }
+            }
+          },
+          "artifacts": {
+            "read": {
+              "name": "タスク成果物を読む",
+              "desc": "現在の App がアクセスできる永続成果物を読み取ります"
+            }
+          },
+          "app": {
+            "intents": {
+              "exchange": {
+                "name": "App 間データ交換",
+                "desc": "宣言された App Intent を通じて他の App とデータを送受信します"
+              }
+            }
+          }
+        }
       },
       "plugins": {
         "title": "インストール可能な App と Skill",
@@ -150,7 +245,19 @@
         "prepareRemote": "パッケージを検証",
         "removeRepository": "削除",
         "incompatible": "非互換",
-        "compatibilityRequirement": "Plugin SDK {sdk} と Nexus {min}–{max} が必要です。"
+        "compatibilityRequirement": "Plugin SDK {sdk} と Nexus {min}–{max} が必要です。",
+        "ecosystemBadge": "拡張エコシステムとリポジトリ",
+        "signatureVerified": "署名検証に成功",
+        "skillCount": "Skills: {count} 件",
+        "thirdPartyRepository": "サードパーティリポジトリ",
+        "stateEnabled": "有効",
+        "stateInstalled": "インストール済み",
+        "stateNotInstalled": "未インストール",
+        "summaryNexusAgent": "公式の汎用エージェントコア。運用診断とエンジニアリング協業に対応し、制御されたサンドボックス内で安全に実行します。",
+        "summaryNexusFullstack": "フルスタック納品スイート。マイクロサービス運用、複雑な依存関係の結合検証、デプロイ検証に対応します。",
+        "compatibilityShort": "(要件: Nexus {min}〜{max})",
+        "reverifyPackage": "パッケージを再検証",
+        "publisherCount": "{count} 件の鍵"
       },
       "hardLimits": {
         "title": "ハードリミット",
@@ -331,7 +438,30 @@
         "protected": "保護済み",
         "limit": "現在の上限",
         "hardLimitHint": "要求したストレージ値は対応するハードリミットの範囲内で有効になります。",
-        "inputHelp": "数値を直接入力するか、単位ショートカットを使用できます（例: 10M, 500K, 2G, 1d）"
+        "inputHelp": "数値を直接入力するか、単位ショートカットを使用できます（例: 10M, 500K, 2G, 1d）",
+        "example": "例: {examples}",
+        "currentUsage": "現在の使用量",
+        "quotaTitle": "成果物ストレージの上限と保持ポリシー",
+        "unsavedChanges": "保存されていないストレージ割り当ての変更があります",
+        "savedNotice": "保存後の容量割り当ては以降の作成 / Run 連携に適用されます。TTL は成果物が ready になった時点、または保持解除時に確定します",
+        "fields": {
+          "maxArtifactBytes": {
+            "label": "Run ごとの成果物割り当て",
+            "hint": "単一 Run が生成するすべての成果物の合計容量上限"
+          },
+          "maxSingleArtifactBytes": {
+            "label": "単一ファイルの成果物上限",
+            "hint": "成果物ファイル 1 件の最大許容サイズ"
+          },
+          "maxGlobalArtifactBytes": {
+            "label": "成果物ストレージの全体割り当て",
+            "hint": "システム内の全エージェント成果物の合計上限"
+          },
+          "unretainedArtifactTtlSeconds": {
+            "label": "一時成果物のライフサイクル (TTL)",
+            "hint": "保持指定のない一時ビルド生成物を残す期間"
+          }
+        }
       },
       "workspaceRuntime": {
         "title": "Workspace 開発環境",
@@ -579,7 +709,14 @@
         "imageInput": "画像入力",
         "fileInput": "ファイル入力",
         "reasoningCapability": "推論レベル",
-        "registryManaged": "Registry 管理"
+        "registryManaged": "Registry 管理",
+        "fieldRequired": "{field} は必須です",
+        "completeRequired": "プロバイダーとモデルの必須項目を入力してください",
+        "credentialConfigured": "認証情報を設定済み",
+        "copyUrl": "エンドポイント URL をコピー",
+        "latency": "応答遅延: {ms}ms",
+        "reasoning": "推論",
+        "noMatchingModel": "一致する設定済みモデルがありません"
       },
       "guardrails": {
         "title": "システムガードレール",
@@ -1135,7 +1272,23 @@
       "bentoAutomationDesc": "反復作業を見つけ、実装可能な自動化案を提示します",
       "bentoNextStepsTitle": "次のアクション",
       "bentoNextStepsDesc": "現在の状態から優先順位付きの実行項目を整理します",
-      "heroTag": "エージェントワークスペース"
+      "heroTag": "エージェントワークスペース",
+      "usage": {
+        "estimated": "推定トークン: {total}",
+        "total": "合計: {total} (入力: {input}, 出力: {output})",
+        "cached": "キャッシュ命中: {tokens} tokens"
+      },
+      "toolFailure": {
+        "RESOURCE_QUARANTINED": "対象リソースは以前の変更またはリース状態の照合が必要なため隔離されています。先に現状を確認し照合を完了してください。",
+        "RECONCILIATION_REQUIRED": "以前の変更がまだ照合を必要とするため、今回の変更は実行されませんでした。",
+        "LEASE_CONFLICT": "対象リソースは別の操作が使用中です。完了または停止を待って再試行してください。",
+        "LEASE_LOST": "実行中にリソースリースを失いました。継続が安全か判断できません。",
+        "APPROVAL_STALE": "承認後にターゲット、入力、ポリシー、またはリソース状態が変わったため、この操作は無効化され実行されませんでした。",
+        "MUTATION_ALREADY_CONFIRMED": "同一 Run で完全に同じ変更がすでに確認済みのため、重複提案は安全にスキップされ再実行されませんでした。",
+        "ECONNREFUSED": "リモートエンドポイントが接続を拒否しました。サービスの待ち受け、アドレスとポート、ネットワーク経路を確認してください。",
+        "ENOTFOUND": "対象ホスト名を解決できません。ホスト名または DNS を確認してください。",
+        "ETIMEDOUT": "接続または操作がタイムアウトしました。ターゲットが到達不能、応答が遅い、またはネットワークポリシーで遮断されている可能性があります。"
+      }
     },
     "attachments": {
       "button": "ファイル ({count})",

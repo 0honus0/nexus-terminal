@@ -39,7 +39,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | **点击目标：** 关闭 App 标签 `16×16`→`24×24` 常显 + pointer；窄容器纯图标 Run 配置 `25px`→`28px`、字号 `10/10.5px`→`11px`；审批卡按钮追加 `min-h-8`（32px）                                                                                                                                                                                                                          | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`、`runtime/ApprovalCard.vue`（见 §2.4）                  |
 | **P1 · ✅ 已关闭 2026-09-23**         | 调色板类 **182 → 0**：新增 `info` 语义 token，其余收敛到 `success/warning/error/primary`；硬编码阴影 / Hub 窗口阴影 / 遮罩改为从 token 推导。CDP 证明改 theme 变量后计算色跟随                                                                                                                                                                                                       | `app/styles/tokens.css`、`features/appearance/config/default-theme.ts`、`features/agent/**`（见 §2.7）        |
 | P1                                    | 设置区控件风格分裂：同一个「主操作按钮」有 6 套写法、5 档圆角，添加/移除模型用原生 checkbox 与 11px 纯文字按钮                                                                                                                                                                                                                                                                       | `features/agent/settings/**`（见 §6.2、§6.3）                                                                 |
-| P1                                    | 设置区模板内约 38 行硬编码中文（能力名称、存储、插件、预算等），另有英文选项混入中文界面                                                                                                                                                                                                                                                                                             | 见 §6.5                                                                                                       |
+| **P1 · ✅ 已关闭 2026-09-23**         | 设置区模板与能力清单里的硬编码中文（能力名称/描述、存储、插件、预算、数值单位）已全部接入词典；中英日三语键位对齐                                                                                                                                                                                                                                                                    | `features/agent/settings/**`（见 §6.5、§7.14-c）                                                              |
 | **P1 · ✅ 已关闭 2026-09-23**         | `bg-card` 族已恢复真实 surface；助手气泡改为有效 `bg-card`，TaskRail/空态卡继续使用已生效的 card token                                                                                                                                                                                                                                                                               | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue`                              |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 改为自身 container query + 单行 compact；560px Hub CDP 实测 controls `462/462`，无静默裁切，思考等级优先靠前                                                                                                                                                                                                                                                                | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.3）                                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示                                                                                                                                                                                                                                                                                                | `ai/AgentConversation.vue`（见 §7.4）                                                                         |
@@ -56,7 +56,7 @@
 | P2                                    | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里                                                                                                                                                                                                                                                                                                                                  | `modules/agent/tools/host/*.ts`                                                                               |
 | **P1 · ✅ 已关闭 2026-09-22**         | **历史 Run 的 `GET /runs/:id/approvals` 稳定 500（`AGENT_DURABLE_STATE_INVALID`）**：已由 migration #45 将 legacy `inspection_json.target.kind = "machine"` 规范化为 canonical SSH target；真实数据库副本验证 26 条 legacy tool call → 0、25 条受影响 approval 全部可解码                                                                                                            | `sqlite-migrations.ts` migration #45、`tests/backend/agent-scenarios/runner.ts`（见 §1.9）                    |
 | **P0 · ✅ 已关闭 2026-09-23**         | 全局 form font/cursor reset 已移入 `@layer base`；CDP 设置页 `text-xs` 按钮均恢复为 12px（旧实测为 16px）                                                                                                                                                                                                                                                                            | `app/styles/global.css:27-46`（见 §7.10）                                                                     |
-| P1                                    | 设置区「Agent」页在**英文界面下仍有 29 处硬编码中文**（实测："6 个模型""已配密钥""执行步数保险丝""≈ 1 小时""(3,600 秒)"…）                                                                                                                                                                                                                                                           | `features/agent/settings/**`（见 §6.5、§7.11）                                                                |
+| **P1 · ✅ 已关闭 2026-09-23**         | 设置区「Agent」页在英文界面下的硬编码中文：三个子页可见中文文本节点 **29 → 0**（数值+单位改由 `use-quantity-labels` 注入）                                                                                                                                                                                                                                                           | `features/agent/settings/**`（见 §6.5、§7.11、§7.14-c）                                                       |
 | **P1 · ✅ 已关闭 2026-09-23**         | 备用模型链已改为 `1..N` 有序列表 + 上移/下移/移除；Add 使用可搜索 Gen2 `UiPopover`，排除默认/已选并限制最多 8 项                                                                                                                                                                                                                                                                     | `settings/ModelProviderSettings.vue`（见 §7.11）                                                              |
 | P1                                    | 设置区按钮规格失控（实测）：`添加 Provider` 144×38 fs16 / `关闭 Agent` 109×40 fs16 / `立即更新` 77×28 fs11；同一服务商行 `模型与测试(6)` 144px、`更新模型` 107px、`停用` 54px、删除 28×28                                                                                                                                                                                            | 见 §7.11                                                                                                      |
 | P2                                    | 空态 pager 可点区域仅 **12×16px**（点 6×6），远低于 32px 触控标准                                                                                                                                                                                                                                                                                                                    | `ai/AgentConversation.vue:472-486`（实测见 §7.12）                                                            |
@@ -69,7 +69,7 @@
 | P2                                    | 任务栏「目标」卡片直接渲染内部连接 ID（`#1`）、Run 历史 `slice(0, 8)` 硬上限（第 9 条无入口）、卡片顺序持久化无重置                                                                                                                                                                                                                                                                  | `runtime/TaskRail.vue:794/109/125`（见 §7.14-b）                                                              |
 | **P2 · ✅ 已关闭 2026-09-23**         | 审批卡：`risk` 枚举已本地化（新增 `agent.approvals.risk.*`）；「`审批状态：approved`」由 §1.4/§7.15-a 关闭（`status` 映射）；「剩余 300s」改为 `agent.approvals.expiresIn`（中/日文为「300 秒」）；「批准」按钮由 `bg-warning text-black` 改成品牌主色 `bg-primary text-white`                                                                                                       | `runtime/ApprovalCard.vue`（见 §7.14-b）                                                                      |
 | **P1 · ✅ 已关闭 2026-09-23**         | Hub 窗口几何补上键盘路径（标题栏/缩放热区方向键 16px、Shift 64px，`aria-keyshortcuts` + `tabindex`），并新增全局 `prefers-reduced-motion` 基线（未分层），Hub 内 60 个带过渡的元素降级为 0                                                                                                                                                                                           | `host/AgentHubWindow.vue`、`app/styles/global.css`（见 §2.10）                                                |
-| P1                                    | 前端 agent 区仍有 **118 行**非注释硬编码中文（不止 38 行）：`AppManagementSettings` 37、`StorageArtifactSettings` 16、`ModelProviderSettings` 14、`ConversationMessage` 13、`PluginManagementSettings` 13、`quantity-format.ts` 8…                                                                                                                                                   | `features/agent/**`（见 §7.14-c）                                                                             |
+| **P1 · ✅ 已关闭 2026-09-23**         | 前端 agent 区非注释硬编码中文 **116 行 → 0**：能力清单、会话用量、错误解释、存储/插件/预算文案全部走词典（中英日三语）                                                                                                                                                                                                                                                               | `features/agent/**`（见 §7.14-c）                                                                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | `zh-CN` 词典与 en-US 完全相同的 key 由 35 → 22、整句英文由 15 → 5（`ja` 49 → 31 / 20 → 5），剩 5 条是品牌与协议名（白名单）；枚举不再插进本地化句子（`审批状态：approved` / `当前状态：enabled` 走 `status` / `stateLabels` 映射）；新增 `pnpm lint:agent-i18n` 防回归                                                                                                               | `i18n/zh-CN.json`、`ApprovalCard.vue`、`AgentFeatureSettings.vue`（见 §7.15-a）                               |
 | **P1 · ✅ 已关闭 2026-09-23**         | 未本地化枚举/内部标识：Subagent 状态与失败模式、审批 `risk`、Workspace 命令 `action`/`status` 全部改为查表（新增 `agent.subagents.status/failureMode`、`agent.approvals.risk`、`workspaceRuntime.commandAction/commandState`）；原始值只保留在折叠的「规范化操作」调试区                                                                                                             | `runtime/SubagentCard.vue`、`runtime/ApprovalCard.vue`、`settings/WorkspaceRuntimeSettings.vue`（见 §1.4）    |
 | P2                                    | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态，无粘性分区导航                                                                                                                                                                                                                                                                                           | `settings/**`（见 §7.15-c）                                                                                   |
@@ -812,7 +812,7 @@ UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConf
 - **AgentSettingsPanel.vue**：3 组胶囊导航（`:508-526`）在窄屏是 `flex-wrap` 折行，而 `doc/software-requirements/requirements/agent.md` 要求"手机使用选择器"；loading 是 `p-10 text-center`（`:497`）没有骨架屏；外壳 `rounded-xl` 里嵌 `rounded-2xl` 子卡（Memory/Safety/AppManagement），圆角层级反了。
 - **SafetyNetworkSettings.vue**：反而是全设置区最接近浮窗基准的一个（`rounded-2xl` 卡片 + 头部横栏 + 状态胶囊 + 折叠 chevron + `h-8` 带 icon 的次要按钮 + `active:scale-95`）。**建议直接以它为设置区风格样本**，把其他面板对齐到它 + `AgentConfigPopover` 这两套现成实现。
 
-### 6.5 文案层：设置区约 38 行硬编码中文 + 硬编码英文选项
+### 6.5 文案层：设置区约 38 行硬编码中文 + 硬编码英文选项（P1 · ✅ 已关闭 2026-09-23）
 
 模板内硬编码中文（脚本扫描 `<template>` 段落，settings 目录 38 行 / 9 个文件；另有 `ai/ConversationMessage.vue` 4 行）：
 
@@ -841,6 +841,10 @@ UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConf
 > 结论：i18n 缺口**只在设置区**（`features/agent/settings/**`），Hub 是干净的——这让修复范围很明确。
 > 另外注意"数字 + 单位"这类文案**不适合逐个 `$t`**：应为 `Intl.NumberFormat`（字节/步数）与 `Intl.RelativeTimeFormat`/`Intl.NumberFormat`（时长）配一个 `unit` 参数的 i18n 方案，否则日文界面同样会露馅。
 > 截图：`doc/imgs/review-2026-09-21/agent-settings-agent-en-mixed-language.png`（英文界面里的中文）。
+
+> ✅ **2026-09-23 闭环**：见 §7.14-c 的闭环记录——`features/agent/**` 里 116 行非注释硬编码中文已全部接入词典，
+> 英文界面下 `Settings > Agent` 三个子页的可见中文文本节点从 **29 → 0**；"数值 + 单位"按上面这条建议改成了
+> **formatter 收 `labels` 参数**（`settings/use-quantity-labels.ts`），而不是逐个 `$t` 拼字符串。
 
 ### 6.6 对齐基准的最小规范（可直接当实现清单）
 
@@ -1406,16 +1410,35 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 会直接显示给用户的代表：`ai/ConversationMessage.vue:99-107`（9 条中文错误解释）、`:311-334`（`总消耗: N (输入: …, 输出: …)`）、`settings/quantity-format.ts`（`≈ 1 小时 (3,600 秒)` 这类"数值+单位"）、`settings/AppManagementSettings.vue:335-425`（能力名称/描述）、`settings/SubagentSettings.vue:217-221`（字段名）、`settings/AgentSettingsPanel.vue:104`（`'未设置'`）。
 → 与 §6.5 实测的"英文界面下 29 个可见中文文本节点"互相印证；**修复范围应按这 118 行评估**，而不是 38 行。
 
-> 🚧 **2026-09-23 进行中（第一批已提交）**：把"数值 + 单位"与小型设置面板的中文全部接入词典，
-> 新增 `agent.settings.quantity.*`（`use-quantity-labels.ts` 把 `formatQuantity` / `getQuantityFeedback`
-> 的文字部分接到当前语言）、`agent.settings.budget.groups/presetSteps/customTuning/effective/unsavedChanges`、
-> `agent.settings.performance.unsavedChanges/activeNotice`、`agent.settings.feature.schedulerHint`、
-> `agent.settings.guardrails.hardBoundary`、`agent.settings.modelNotSet`、`agent.settings.subagents.labels.*`、
-> `agent.settings.safety.reasonPresets.* / defaultReason / removeOrphanId`。
-> **CDP 实测（真实 `https://api.honus.top/settings` → Agent）**：切到 en-US 后，可见中文叶子文本节点由 **28 → 2**
-> （剩余 2 条在 `ModelProviderSettings.vue`，属下一批）；切回 zh-CN 后预设计数仍为 `25 步 · 10 min` / `自定义微调` / `执行步数保险丝`。
-
-**d) 一致性观察：作者知道要"模态"，但只做了一半（支撑 §7.13-c）**
+> ✅ **2026-09-23 闭环**：`features/agent/**` 里**非注释硬编码中文 116 行 → 0**（同一个扫描口径：排除 `i18n/`、排除注释行）。
+>
+> **改了哪些**
+>
+> | 批次 | 范围                        | 新增 key（节选）                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+> | ---- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | 1    | "数值 + 单位"与小型设置面板 | `agent.settings.quantity.*`（新增 `settings/use-quantity-labels.ts`，`formatQuantity` / `getQuantityFeedback` 改收 `labels` 参数，而不是在 formatter 里写死中文）、`budget.groups/presetSteps/customTuning/effective/unsavedChanges`、`performance.*`、`feature.schedulerHint`、`guardrails.hardBoundary`、`modelNotSet`、`subagents.labels.*`、`safety.reasonPresets.* / defaultReason / removeOrphanId`                                                |
+> | 2    | 模型 / 存储 / 插件面板      | `providers.fieldRequired / completeRequired / credentialConfigured / copyUrl / latency / reasoning / noMatchingModel`（`modelCount` / `contextShort` / `outputShort` 复用既有 key）、`storage.fields.*`、`storage.currentUsage / quotaTitle / unsavedChanges / savedNotice / example`、`plugins.ecosystemBadge / signatureVerified / skillCount / thirdPartyRepository / state* / summaryNexus* / compatibilityShort / reverifyPackage / publisherCount` |
+> | 3    | 能力清单与对话用量          | `apps.capabilities.<id>.name/desc`（14 个能力 × 2）、`apps.badges.*`、`apps.summaries.*`、`apps.enabledCount / grantedCount / deleteDataOnUninstall`、`conversation.toolFailure.<CODE>`（9 条错误解释）、`conversation.usage.estimated/total/cached`                                                                                                                                                                                                     |
+>
+> **做法上的两个决定**
+>
+> - **formatter 不再自己拼中文**：`quantity-format.ts` 是纯函数模块，按层约定不能 import `@/app/i18n`（`features/**` 目前 0 处依赖 `@/app/**`），所以改成由组件注入 `QuantityLabels`；`use-quantity-labels.ts` 把位置参数包成 `{ value }` 模板，日文的"分/時間/日"也能正确渲染。
+> - **能力名称走 id 查表**：`CAPABILITY_METAS` 只保留 `category` / `icon` 这类结构性数据，`name` / `desc` 用 `t('agent.settings.apps.capabilities.<cap>.name')` 动态查（`file.read` 这类带点的 id 正好对应词典的嵌套路径）；未知能力回退到 `capabilityUnknownDesc`。
+>
+> **真实 CDP 复验（`https://api.honus.top/settings` → Agent）**
+>
+> | 语言  | 子页                    | 可见中文文本节点         |
+> | ----- | ----------------------- | ------------------------ |
+> | en-US | Models & Budget         | **0**（修复前 29）       |
+> | en-US | Runtime & Environments  | **0**                    |
+> | en-US | Plugins & Security      | **0**                    |
+> | zh-CN | 插件与安全 / 运行与环境 | 68 / 122（正常中文界面） |
+>
+> 抽取样本：en-US `Ecosystem and registries` / `1 keys` / `Verify package again` / `Scheduler delegates across apps with dynamic budget control`，
+> 对应 zh-CN `扩展生态与仓库` / `1 个密钥` / `重新校验包` / `调度器支持多应用委派与动态预算管控`；
+> 预算页 zh-CN 仍为 `25 步 · 10 min` / `自定义微调` / `执行步数保险丝`，en-US 变为 `25 steps · 10 min` / `Custom tuning` / `Execution step fuse`。
+> `vue-tsc --noEmit`、`pnpm lint:agent-i18n`（键位对齐 + zh/ja 无整句英文）、Prettier 全部通过。
+> **d) 一致性观察：作者知道要"模态"，但只做了一半（支撑 §7.13-c）**
 
 `host/AgentHubWindow.vue:22-56` 在 Hub 可见时会锁死 `documentElement/body` 的 `overflow` 与 `overscroll-behavior`（`lockBackgroundScroll`），
 说明"打开 Hub 时不该操作背后的页面"是被明确认知的；但**焦点/键盘层面完全没有对应处理**（没有 `inert`、没有焦点陷阱、没有 Escape、没有 `aria-hidden`），

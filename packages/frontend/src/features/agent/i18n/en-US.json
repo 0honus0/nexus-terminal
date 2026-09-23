@@ -96,7 +96,102 @@
         "enableCapabilities": "Enable",
         "disableCapabilities": "Disable",
         "enableAllCapabilities": "Enable all capabilities",
-        "disableAllCapabilities": "Disable all capabilities"
+        "disableAllCapabilities": "Disable all capabilities",
+        "capabilityUnknownDesc": "Host-level capability declaration",
+        "badges": {
+          "officialExtension": "Official Extension",
+          "thirdParty": "Third-party Extension"
+        },
+        "summaries": {
+          "nexusAgent": "Official general-purpose agent core with built-in automation, diagnostics and full-stack engineering skills",
+          "nexusFullstack": "Full-stack delivery suite covering microservice governance, complex dependency integration and deployment verification",
+          "default": "Installed Agent plugin app with a verified signature"
+        },
+        "enabledCount": "Enabled {enabled}/{total}",
+        "grantedCount": "{granted}/{total} granted",
+        "deleteDataOnUninstall": "Also permanently delete this plugin’s dedicated persisted data space",
+        "capabilities": {
+          "file": {
+            "read": {
+              "name": "Read files",
+              "desc": "Read and search file contents in authorized Workspace or SSH targets"
+            },
+            "write": {
+              "name": "Write files",
+              "desc": "Create, replace, move or patch files in authorized Workspace or SSH targets"
+            },
+            "delete": {
+              "name": "Delete files",
+              "desc": "Delete files or directories in authorized Workspace or SSH targets"
+            }
+          },
+          "machine": {
+            "inspect": {
+              "name": "Host status and connections",
+              "desc": "Read available connections, system load and controlled diagnostics"
+            },
+            "docker": {
+              "manage": {
+                "name": "Manage Docker containers",
+                "desc": "Start, stop, restart or remove containers on authorized targets"
+              }
+            }
+          },
+          "shell": {
+            "execute": {
+              "name": "Execute commands",
+              "desc": "Run commands bounded by policy and approvals in authorized Workspace or SSH targets"
+            }
+          },
+          "workspace": {
+            "manage": {
+              "name": "Manage Workspace environments",
+              "desc": "Create, start, stop and delete environments and switch toolchain versions"
+            }
+          },
+          "browser": {
+            "read": {
+              "name": "Browser read and navigation",
+              "desc": "Create sessions, navigate, snapshot, screenshot, and read console or downloads"
+            },
+            "interact": {
+              "name": "Browser page interaction",
+              "desc": "Click, type, press keys, select and upload; may change remote page state"
+            }
+          },
+          "integration": {
+            "mcp": {
+              "read": {
+                "name": "Read MCP resources",
+                "desc": "Discover and read MCP resources, prompts and read-only tool output"
+              },
+              "invoke": {
+                "name": "Invoke MCP actions",
+                "desc": "Invoke MCP tools that control or mutate state"
+              }
+            },
+            "acp": {
+              "invoke": {
+                "name": "Invoke ACP agents",
+                "desc": "Invoke external collaborating executors over the Agent Client Protocol"
+              }
+            }
+          },
+          "artifacts": {
+            "read": {
+              "name": "Read task artifacts",
+              "desc": "Read persisted artifacts reachable by the current app"
+            }
+          },
+          "app": {
+            "intents": {
+              "exchange": {
+                "name": "Cross-app data exchange",
+                "desc": "Send or receive data with other apps through declared App Intents"
+              }
+            }
+          }
+        }
       },
       "plugins": {
         "title": "Installable apps and skills",
@@ -150,7 +245,19 @@
         "prepareRemote": "Verify package",
         "removeRepository": "Remove",
         "incompatible": "Incompatible",
-        "compatibilityRequirement": "Requires Plugin SDK {sdk} and Nexus {min}–{max}."
+        "compatibilityRequirement": "Requires Plugin SDK {sdk} and Nexus {min}–{max}.",
+        "ecosystemBadge": "Ecosystem and registries",
+        "signatureVerified": "Signature verified",
+        "skillCount": "Skills: {count}",
+        "thirdPartyRepository": "Third-party registry",
+        "stateEnabled": "Enabled",
+        "stateInstalled": "Installed",
+        "stateNotInstalled": "Not installed",
+        "summaryNexusAgent": "Official general-purpose agent core for operations diagnostics and engineering collaboration, executed inside a controlled sandbox.",
+        "summaryNexusFullstack": "Full-stack delivery suite covering microservice governance, complex dependency integration and deployment verification.",
+        "compatibilityShort": "(requires Nexus {min}–{max})",
+        "reverifyPackage": "Verify package again",
+        "publisherCount": "{count} keys"
       },
       "hardLimits": {
         "title": "Hard Limits",
@@ -331,7 +438,30 @@
         "protected": "Protected",
         "limit": "Current limit",
         "hardLimitHint": "Requested storage values remain bounded by the corresponding Hard Limits.",
-        "inputHelp": "Enter a number directly or use unit shortcuts (e.g. 10M, 500K, 2G, 1d)"
+        "inputHelp": "Enter a number directly or use unit shortcuts (e.g. 10M, 500K, 2G, 1d)",
+        "example": "e.g. {examples}",
+        "currentUsage": "Current usage",
+        "quotaTitle": "Artifact quota and retention policy",
+        "unsavedChanges": "Storage quota changes are not saved yet",
+        "savedNotice": "Saved quotas apply to later creates and Run links; the TTL is fixed when an artifact becomes ready or retention is removed",
+        "fields": {
+          "maxArtifactBytes": {
+            "label": "Per-Run artifact quota",
+            "hint": "Total artifact capacity produced by a single Run"
+          },
+          "maxSingleArtifactBytes": {
+            "label": "Single artifact size limit",
+            "hint": "Largest allowed size of one delivered artifact file"
+          },
+          "maxGlobalArtifactBytes": {
+            "label": "Global artifact storage quota",
+            "hint": "Total capacity for every Agent artifact in the system"
+          },
+          "unretainedArtifactTtlSeconds": {
+            "label": "Temporary artifact lifetime (TTL)",
+            "hint": "How long unretained temporary build artifacts are kept"
+          }
+        }
       },
       "workspaceRuntime": {
         "title": "Workspace dev environment",
@@ -579,7 +709,14 @@
         "imageInput": "Image input",
         "fileInput": "File input",
         "reasoningCapability": "Reasoning levels",
-        "registryManaged": "Registry"
+        "registryManaged": "Registry",
+        "fieldRequired": "{field} is required",
+        "completeRequired": "Fill in the provider and model fields first",
+        "credentialConfigured": "Credential configured",
+        "copyUrl": "Copy endpoint URL",
+        "latency": "Latency: {ms}ms",
+        "reasoning": "Reasoning",
+        "noMatchingModel": "No configured model matches."
       },
       "guardrails": {
         "title": "System guardrails",
@@ -1135,7 +1272,23 @@
       "bentoAutomationDesc": "Identify repetitive work and propose practical automation",
       "bentoNextStepsTitle": "Next-Step Checklist",
       "bentoNextStepsDesc": "Turn the current project state into clear, actionable follow-up tasks",
-      "heroTag": "Agent Workspace"
+      "heroTag": "Agent Workspace",
+      "usage": {
+        "estimated": "Estimated tokens: {total}",
+        "total": "Total: {total} (input: {input}, output: {output})",
+        "cached": "Cached: {tokens} tokens"
+      },
+      "toolFailure": {
+        "RESOURCE_QUARANTINED": "The target resource is quarantined until a previous mutation or lease state is reconciled; verify the current state and finish reconciliation first.",
+        "RECONCILIATION_REQUIRED": "A previous mutation still needs reconciliation, so this change was not executed.",
+        "LEASE_CONFLICT": "The target resource is held by another operation; wait for it to finish or stop it, then retry.",
+        "LEASE_LOST": "The resource lease was lost during execution; it is not safe to assume the run continued.",
+        "APPROVAL_STALE": "The target, input, policy or resource state changed after approval, so this operation was voided and not executed.",
+        "MUTATION_ALREADY_CONFIRMED": "An identical mutation was already confirmed in this Run, so the duplicate proposal was skipped and not executed again.",
+        "ECONNREFUSED": "The remote endpoint refused the connection; check that the service listens, the host/port is correct, and the network path is open.",
+        "ENOTFOUND": "The target hostname could not be resolved; check the hostname or DNS.",
+        "ETIMEDOUT": "The connection or operation timed out; the target may be unreachable, slow, or blocked by network policy."
+      }
     },
     "attachments": {
       "button": "Files ({count})",

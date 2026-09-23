@@ -96,7 +96,102 @@
         "enableCapabilities": "启用",
         "disableCapabilities": "禁用",
         "enableAllCapabilities": "启用全部能力",
-        "disableAllCapabilities": "禁用全部能力"
+        "disableAllCapabilities": "禁用全部能力",
+        "capabilityUnknownDesc": "系统底层能力声明",
+        "badges": {
+          "officialExtension": "官方扩展",
+          "thirdParty": "三方扩展"
+        },
+        "summaries": {
+          "nexusAgent": "官方通用智能体核心，内置自动化运维诊断与全栈工程协同技能",
+          "nexusFullstack": "全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证",
+          "default": "已安装并校验签名的 Agent 插件应用"
+        },
+        "enabledCount": "已启用 {enabled}/{total}",
+        "grantedCount": "{granted}/{total} 项已授权",
+        "deleteDataOnUninstall": "同时彻底删除此插件专属的独立持久化数据空间",
+        "capabilities": {
+          "file": {
+            "read": {
+              "name": "读取文件",
+              "desc": "读取与搜索已授权 Workspace 或 SSH 目标中的文件内容"
+            },
+            "write": {
+              "name": "写入文件",
+              "desc": "在已授权 Workspace 或 SSH 目标中创建、替换、移动或应用补丁"
+            },
+            "delete": {
+              "name": "删除文件",
+              "desc": "删除已授权 Workspace 或 SSH 目标中的文件或目录"
+            }
+          },
+          "machine": {
+            "inspect": {
+              "name": "主机状态与连接信息",
+              "desc": "读取可用连接、系统负载与受控诊断信息"
+            },
+            "docker": {
+              "manage": {
+                "name": "管理 Docker 容器",
+                "desc": "启停、重启或移除授权目标上的容器"
+              }
+            }
+          },
+          "shell": {
+            "execute": {
+              "name": "执行命令",
+              "desc": "在已授权 Workspace 或 SSH 目标执行受策略与审批约束的命令"
+            }
+          },
+          "workspace": {
+            "manage": {
+              "name": "管理 Workspace 环境",
+              "desc": "创建、启停、删除环境并切换工具链版本"
+            }
+          },
+          "browser": {
+            "read": {
+              "name": "浏览器读取与导航",
+              "desc": "创建浏览会话、导航、快照、截图、控制台与下载读取"
+            },
+            "interact": {
+              "name": "浏览器页面交互",
+              "desc": "点击、输入、按键、选择与上传，可能改变远端页面状态"
+            }
+          },
+          "integration": {
+            "mcp": {
+              "read": {
+                "name": "读取 MCP 资源",
+                "desc": "发现并读取 MCP Resource、Prompt 与只读工具结果"
+              },
+              "invoke": {
+                "name": "调用 MCP 动作",
+                "desc": "调用具有控制或修改效果的 MCP 工具"
+              }
+            },
+            "acp": {
+              "invoke": {
+                "name": "调用 ACP Agent",
+                "desc": "通过 Agent Client Protocol 调用外部协作执行器"
+              }
+            }
+          },
+          "artifacts": {
+            "read": {
+              "name": "读取任务产物",
+              "desc": "读取当前 App 可访问的持久化产物"
+            }
+          },
+          "app": {
+            "intents": {
+              "exchange": {
+                "name": "跨 App 数据交换",
+                "desc": "通过声明的 App Intent 向其它 App 发送或接收数据"
+              }
+            }
+          }
+        }
       },
       "plugins": {
         "title": "可安装 App 与 Skill",
@@ -150,7 +245,19 @@
         "prepareRemote": "校验插件包",
         "removeRepository": "移除",
         "incompatible": "不兼容",
-        "compatibilityRequirement": "需要 Plugin SDK {sdk}，且 Nexus 版本须为 {min}–{max}。"
+        "compatibilityRequirement": "需要 Plugin SDK {sdk}，且 Nexus 版本须为 {min}–{max}。",
+        "ecosystemBadge": "扩展生态与仓库",
+        "signatureVerified": "签名验真通过",
+        "skillCount": "Skills: {count} 个",
+        "thirdPartyRepository": "第三方扩展仓库",
+        "stateEnabled": "已启用",
+        "stateInstalled": "已安装",
+        "stateNotInstalled": "未安装",
+        "summaryNexusAgent": "官方通用智能体核心，支持运维诊断与工程协作，在受控沙箱内安全执行。",
+        "summaryNexusFullstack": "全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证。",
+        "compatibilityShort": "(兼容要求: Nexus {min}~{max})",
+        "reverifyPackage": "重新校验包",
+        "publisherCount": "{count} 个密钥"
       },
       "hardLimits": {
         "title": "硬性限制",
@@ -331,7 +438,30 @@
         "protected": "受保护",
         "limit": "当前上限",
         "hardLimitHint": "存储请求值始终受对应硬性限制约束。",
-        "inputHelp": "支持直接输入数字或快捷单位（例: 10M, 500K, 2G, 1d）"
+        "inputHelp": "支持直接输入数字或快捷单位（例: 10M, 500K, 2G, 1d）",
+        "example": "例: {examples}",
+        "currentUsage": "当前占用",
+        "quotaTitle": "产物存储上限与保留策略",
+        "unsavedChanges": "有尚未保存的存储配额变更",
+        "savedNotice": "保存后，容量配额作用于后续创建/Run 关联；TTL 在产物 ready 或取消保留时确定",
+        "fields": {
+          "maxArtifactBytes": {
+            "label": "单 Run 产物配额",
+            "hint": "单个 Run 产生的所有产物总容量上限"
+          },
+          "maxSingleArtifactBytes": {
+            "label": "单文件产物上限",
+            "hint": "单个交付产物文件的最大允许大小"
+          },
+          "maxGlobalArtifactBytes": {
+            "label": "全局产物存储配额",
+            "hint": "系统所有智能体产物累计占用的总上限"
+          },
+          "unretainedArtifactTtlSeconds": {
+            "label": "临时产物生命周期 (TTL)",
+            "hint": "未标记保留的临时构建物保留时长"
+          }
+        }
       },
       "workspaceRuntime": {
         "title": "Workspace 开发环境",
@@ -579,7 +709,14 @@
         "imageInput": "图片输入",
         "fileInput": "文件输入",
         "reasoningCapability": "思考等级",
-        "registryManaged": "模型库"
+        "registryManaged": "模型库",
+        "fieldRequired": "{field} 不能为空",
+        "completeRequired": "请补全服务商与模型必填信息",
+        "credentialConfigured": "已配密钥",
+        "copyUrl": "复制接口地址",
+        "latency": "响应延迟: {ms}ms",
+        "reasoning": "思考",
+        "noMatchingModel": "未匹配到任何已配置模型"
       },
       "guardrails": {
         "title": "系统保护边界",
@@ -1135,7 +1272,23 @@
       "bentoAutomationDesc": "找出重复操作并给出可落地的自动化实现方案",
       "bentoNextStepsTitle": "下一步行动清单",
       "bentoNextStepsDesc": "结合当前项目状态整理清晰、可执行的后续任务",
-      "heroTag": "智能协作工作台"
+      "heroTag": "智能协作工作台",
+      "usage": {
+        "estimated": "预估 Token: {total}",
+        "total": "总消耗: {total} (输入: {input}, 输出: {output})",
+        "cached": "命中缓存: {tokens} tokens"
+      },
+      "toolFailure": {
+        "RESOURCE_QUARANTINED": "目标资源因先前修改或资源锁状态仍需对账而处于隔离状态；请先核验现场并完成对账。",
+        "RECONCILIATION_REQUIRED": "先前修改仍需要对账，当前修改没有执行。",
+        "LEASE_CONFLICT": "目标资源正被另一个操作占用，请等待该操作完成或停止后重试。",
+        "LEASE_LOST": "执行期间资源锁已丢失，无法确认继续执行是否安全。",
+        "APPROVAL_STALE": "批准后目标、输入、策略或资源状态发生变化，本次操作已作废且未执行。",
+        "MUTATION_ALREADY_CONFIRMED": "同一 Run 中完全相同的修改已经确认成功，本次重复提议已被安全跳过，没有再次执行。",
+        "ECONNREFUSED": "远端端点拒绝连接；请检查服务是否监听、地址端口是否正确以及网络路径。",
+        "ENOTFOUND": "无法解析目标主机名；请检查主机名或 DNS。",
+        "ETIMEDOUT": "连接或操作超时；目标可能不可达、响应过慢或被网络策略阻断。"
+      }
     },
     "attachments": {
       "button": "文件（{count}）",

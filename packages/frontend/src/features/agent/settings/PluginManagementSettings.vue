@@ -306,7 +306,7 @@
             class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
           >
             <i class="fa-solid fa-store text-[9px]" aria-hidden="true"></i>
-            <span>扩展生态与仓库</span>
+            <span>{{ $t('agent.settings.plugins.ecosystemBadge') }}</span>
           </span>
         </div>
         <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.plugins.description') }}</p>
@@ -361,7 +361,7 @@
             class="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success"
           >
             <i class="fa-solid fa-shield-check text-[10px]"></i>
-            <span>签名验真通过</span>
+            <span>{{ $t('agent.settings.plugins.signatureVerified') }}</span>
           </span>
         </div>
 
@@ -392,7 +392,7 @@
               class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-header/40 px-2 py-1 text-[11px]"
             >
               <i class="fa-solid fa-screwdriver-wrench text-primary text-[10px]" aria-hidden="true"></i>
-              <span>Skills: {{ candidate.plugin.skillFiles.length }} 个</span>
+              <span>{{ $t('agent.settings.plugins.skillCount', { count: candidate.plugin.skillFiles.length }) }}</span>
             </span>
             <span
               class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-header/40 px-2 py-1 text-[11px]"
@@ -554,7 +554,7 @@
                 class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[11px] font-medium text-text-secondary"
               >
                 <i class="fa-solid fa-network-wired text-[9px]"></i>
-                <span>第三方扩展仓库</span>
+                <span>{{ $t('agent.settings.plugins.thirdPartyRepository') }}</span>
               </span>
             </div>
 
@@ -625,10 +625,14 @@
                       class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
                     >
                       <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-                      <span>{{ isInstalledAndEnabled(entry.appId) ? '已启用' : '已安装' }}</span>
+                      <span>{{
+                        isInstalledAndEnabled(entry.appId)
+                          ? $t('agent.settings.plugins.stateEnabled')
+                          : $t('agent.settings.plugins.stateInstalled')
+                      }}</span>
                     </span>
                     <span v-else class="rounded-full bg-header px-2 py-0.5 text-[11px] font-medium text-text-secondary">
-                      未安装
+                      {{ $t('agent.settings.plugins.stateNotInstalled') }}
                     </span>
                     <span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
                       {{ entry.appId }}
@@ -641,22 +645,27 @@
                       class="truncate text-[11px] leading-relaxed max-w-md lg:max-w-xl"
                       :title="
                         entry.appId === 'nexus.agent'
-                          ? '官方通用智能体核心，支持运维诊断与工程协作，在受控沙箱内安全执行。'
+                          ? $t('agent.settings.plugins.summaryNexusAgent')
                           : entry.appId === 'nexus.fullstack'
-                            ? '全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证。'
+                            ? $t('agent.settings.plugins.summaryNexusFullstack')
                             : entry.description
                       "
                     >
                       {{
                         entry.appId === 'nexus.agent'
-                          ? '官方通用智能体核心，支持运维诊断与工程协作，在受控沙箱内安全执行。'
+                          ? $t('agent.settings.plugins.summaryNexusAgent')
                           : entry.appId === 'nexus.fullstack'
-                            ? '全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证。'
+                            ? $t('agent.settings.plugins.summaryNexusFullstack')
                             : entry.description
                       }}
                     </p>
                     <span v-if="!entry.compatible" class="shrink-0 text-[11px] text-warning font-mono">
-                      (兼容要求: Nexus {{ entry.nexus.minVersion }}~{{ entry.nexus.maxVersion }})
+                      {{
+                        $t('agent.settings.plugins.compatibilityShort', {
+                          min: entry.nexus.minVersion,
+                          max: entry.nexus.maxVersion,
+                        })
+                      }}
                     </span>
                   </div>
                 </div>
@@ -710,7 +719,9 @@
                       aria-hidden="true"
                     ></i>
                     <span>{{
-                      isInstalled(entry.appId) ? '重新校验包' : $t('agent.settings.plugins.prepareRemote')
+                      isInstalled(entry.appId)
+                        ? $t('agent.settings.plugins.reverifyPackage')
+                        : $t('agent.settings.plugins.prepareRemote')
                     }}</span>
                   </button>
                 </div>
@@ -786,7 +797,7 @@
             <span
               class="rounded-md border border-border/60 bg-card px-2 py-0.5 font-mono text-[11px] text-text-secondary"
             >
-              {{ publishers.length }} 个密钥
+              {{ $t('agent.settings.plugins.publisherCount', { count: publishers.length }) }}
             </span>
           </div>
           <i

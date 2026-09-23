@@ -1,8 +1,10 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import type { AgentLedgerEntryDto } from '../api/agent-api';
   import AgentMessageBody from './AgentMessageBody.vue';
   const props = defineProps<{ entry: AgentLedgerEntryDto; relatedToolName?: string }>();
+  const { t } = useI18n();
   const emit = defineEmits<{ layoutChange: [] }>();
   const root = ref<HTMLElement | null>(null);
   let resizeObserver: ResizeObserver | null = null;
@@ -95,22 +97,24 @@
     const value = toolResult.value?.errorCode;
     return typeof value === 'string' && value ? value : '';
   });
-  const friendlyFailureByCode: Readonly<Record<string, string>> = {
-    RESOURCE_QUARANTINED: '目标资源因先前修改或资源锁状态仍需对账而处于隔离状态；请先核验现场并完成对账。',
-    RECONCILIATION_REQUIRED: '先前修改仍需要对账，当前修改没有执行。',
-    LEASE_CONFLICT: '目标资源正被另一个操作占用，请等待该操作完成或停止后重试。',
-    LEASE_LOST: '执行期间资源锁已丢失，无法确认继续执行是否安全。',
-    APPROVAL_STALE: '批准后目标、输入、策略或资源状态发生变化，本次操作已作废且未执行。',
-    MUTATION_ALREADY_CONFIRMED: '同一 Run 中完全相同的修改已经确认成功，本次重复提议已被安全跳过，没有再次执行。',
-    ECONNREFUSED: '远端端点拒绝连接；请检查服务是否监听、地址端口是否正确以及网络路径。',
-    ENOTFOUND: '无法解析目标主机名；请检查主机名或 DNS。',
-    ETIMEDOUT: '连接或操作超时；目标可能不可达、响应过慢或被网络策略阻断。',
-  };
+  const friendlyFailureCodes = [
+    'RESOURCE_QUARANTINED',
+    'RECONCILIATION_REQUIRED',
+    'LEASE_CONFLICT',
+    'LEASE_LOST',
+    'APPROVAL_STALE',
+    'MUTATION_ALREADY_CONFIRMED',
+    'ECONNREFUSED',
+    'ENOTFOUND',
+    'ETIMEDOUT',
+  ] as const;
   const visibleToolSummary = computed(() => {
     const summary = toolSummary.value;
     const code = toolErrorCode.value;
     if (!failed.value || !code) return summary;
-    const friendly = friendlyFailureByCode[code];
+    const friendly = friendlyFailureCodes.includes(code as (typeof friendlyFailureCodes)[number])
+      ? t(`agent.conversation.toolFailure.${code}`)
+      : '';
     if (!friendly) return summary || code;
     if (!summary || summary === code || summary.endsWith(`: ${code}`) || summary.includes(`: ${code} `)) {
       return `${friendly} [${code}]`;
@@ -308,8 +312,12 @@
           class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md bg-header/35 px-1.5 py-0.5 text-[11px] text-text-secondary/75 select-none"
           :title="
             messageUsage.estimated
-              ? `预估 Token: ${messageUsage.totalTokens}`
-              : `总消耗: ${messageUsage.totalTokens} (输入: ${messageUsage.inputTokens}, 输出: ${messageUsage.outputTokens})`
+              ? $t('agent.conversation.usage.estimated', { total: messageUsage.totalTokens })
+              : $t('agent.conversation.usage.total', {
+                  total: messageUsage.totalTokens,
+                  input: messageUsage.inputTokens,
+                  output: messageUsage.outputTokens,
+                })
           "
         >
           <span class="inline-flex items-center gap-1">
@@ -319,7 +327,7 @@
           <span
             v-if="messageUsage.cacheRate > 0"
             class="inline-flex items-center gap-0.5 border-l border-border/50 pl-1 font-medium text-success"
-            :title="`命中缓存: ${messageUsage.cachedInputTokens} tokens`"
+            :title="$t('agent.conversation.usage.cached', { tokens: messageUsage.cachedInputTokens })"
           >
             <i class="fa-solid fa-bolt text-[7px]" aria-hidden="true"></i>
             <span>{{ messageUsage.cacheRate }}%</span>
@@ -331,7 +339,7 @@
         <span
           v-if="messageUsage"
           class="ml-2 inline-flex whitespace-nowrap align-middle items-center gap-1 rounded-md bg-header/35 px-1.5 py-0.5 text-[11px] leading-none text-text-secondary/75 select-none"
-          :title="`预估 Token: ${messageUsage.totalTokens}`"
+          :title="$t('agent.conversation.usage.estimated', { total: messageUsage.totalTokens })"
         >
           <i class="fa-solid fa-coins text-[7px] text-text-secondary/65" aria-hidden="true"></i>
           <span class="font-mono">{{ formatTokens(messageUsage.totalTokens) }} tok</span>

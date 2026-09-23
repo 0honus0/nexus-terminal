@@ -350,108 +350,80 @@
   };
 
   interface CapabilityMeta {
-    name: string;
-    desc: string;
     category: 'files' | 'execution' | 'machine' | 'workspace' | 'browser' | 'integration' | 'data';
     icon: string;
+    name?: string;
+    desc?: string;
   }
 
   const CAPABILITY_METAS: Record<string, CapabilityMeta> = {
     'file.read': {
-      name: '读取文件',
-      desc: '读取与搜索已授权 Workspace 或 SSH 目标中的文件内容',
       category: 'files',
       icon: 'fa-solid fa-file-lines',
     },
     'file.write': {
-      name: '写入文件',
-      desc: '在已授权 Workspace 或 SSH 目标中创建、替换、移动或应用补丁',
       category: 'files',
       icon: 'fa-solid fa-file-pen',
     },
     'file.delete': {
-      name: '删除文件',
-      desc: '删除已授权 Workspace 或 SSH 目标中的文件或目录',
       category: 'files',
       icon: 'fa-solid fa-trash-can',
     },
     'machine.inspect': {
-      name: '主机状态与连接信息',
-      desc: '读取可用连接、系统负载与受控诊断信息',
       category: 'machine',
       icon: 'fa-solid fa-chart-line',
     },
     'shell.execute': {
-      name: '执行命令',
-      desc: '在已授权 Workspace 或 SSH 目标执行受策略与审批约束的命令',
       category: 'execution',
       icon: 'fa-solid fa-terminal',
     },
     'machine.docker.manage': {
-      name: '管理 Docker 容器',
-      desc: '启停、重启或移除授权目标上的容器',
       category: 'machine',
       icon: 'fa-brands fa-docker',
     },
     'workspace.manage': {
-      name: '管理 Workspace 环境',
-      desc: '创建、启停、删除环境并切换工具链版本',
       category: 'workspace',
       icon: 'fa-solid fa-cubes',
     },
     'browser.read': {
-      name: '浏览器读取与导航',
-      desc: '创建浏览会话、导航、快照、截图、控制台与下载读取',
       category: 'browser',
       icon: 'fa-solid fa-globe',
     },
     'browser.interact': {
-      name: '浏览器页面交互',
-      desc: '点击、输入、按键、选择与上传，可能改变远端页面状态',
       category: 'browser',
       icon: 'fa-solid fa-arrow-pointer',
     },
     'integration.mcp.read': {
-      name: '读取 MCP 资源',
-      desc: '发现并读取 MCP Resource、Prompt 与只读工具结果',
       category: 'integration',
       icon: 'fa-solid fa-book-open',
     },
     'integration.mcp.invoke': {
-      name: '调用 MCP 动作',
-      desc: '调用具有控制或修改效果的 MCP 工具',
       category: 'integration',
       icon: 'fa-solid fa-network-wired',
     },
     'integration.acp.invoke': {
-      name: '调用 ACP Agent',
-      desc: '通过 Agent Client Protocol 调用外部协作执行器',
       category: 'integration',
       icon: 'fa-solid fa-satellite-dish',
     },
     'artifacts.read': {
-      name: '读取任务产物',
-      desc: '读取当前 App 可访问的持久化产物',
       category: 'data',
       icon: 'fa-solid fa-box-archive',
     },
     'app.intents.exchange': {
-      name: '跨 App 数据交换',
-      desc: '通过声明的 App Intent 向其它 App 发送或接收数据',
       category: 'data',
       icon: 'fa-solid fa-right-left',
     },
   };
 
   const getCapabilityMeta = (cap: string): CapabilityMeta => {
-    return (
-      CAPABILITY_METAS[cap] ?? {
-        name: cap,
-        desc: '系统底层能力声明',
-        category: 'data',
-        icon: 'fa-solid fa-key',
-      }
-    );
+    const meta = CAPABILITY_METAS[cap] ?? { category: 'data' as const, icon: 'fa-solid fa-key' };
+    return {
+      ...meta,
+      name: CAPABILITY_METAS[cap] ? t(`agent.settings.apps.capabilities.${cap}.name`) : cap,
+      desc: CAPABILITY_METAS[cap]
+        ? t(`agent.settings.apps.capabilities.${cap}.desc`)
+        : t('agent.settings.apps.capabilityUnknownDesc'),
+    };
   };
 
   const categoryGroups = [
@@ -470,22 +442,22 @@
         icon: 'fa-solid fa-wand-magic-sparkles',
         iconBg: 'bg-gradient-to-br from-primary/20 via-primary/15 to-transparent text-primary ring-1 ring-primary/25',
         badge: 'agent.settings.apps.coreOfficial',
-        summary: '官方通用智能体核心，内置自动化运维诊断与全栈工程协同技能',
+        summary: 'agent.settings.apps.summaries.nexusAgent',
       };
     }
     if (appId === 'nexus.fullstack') {
       return {
         icon: 'fa-solid fa-layer-group',
         iconBg: 'bg-gradient-to-br from-success/20 via-success/15 to-transparent text-success ring-1 ring-success/25',
-        badge: '官方扩展',
-        summary: '全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证',
+        badge: 'agent.settings.apps.badges.officialExtension',
+        summary: 'agent.settings.apps.summaries.nexusFullstack',
       };
     }
     return {
       icon: 'fa-solid fa-puzzle-piece',
       iconBg: 'bg-primary/10 text-primary  ring-1 ring-primary/20',
-      badge: '三方扩展',
-      summary: '已安装并校验签名的 Agent 插件应用',
+      badge: 'agent.settings.apps.badges.thirdParty',
+      summary: 'agent.settings.apps.summaries.default',
     };
   };
 
@@ -532,7 +504,7 @@
           class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-text-secondary shadow-2xs"
         >
           <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-          已启用 {{ enabledCount }}/{{ apps.length }}
+          {{ $t('agent.settings.apps.enabledCount', { enabled: enabledCount, total: apps.length }) }}
         </span>
       </div>
     </div>
@@ -581,7 +553,7 @@
                 </div>
 
                 <p class="mt-1 text-xs text-text-secondary line-clamp-1 leading-relaxed">
-                  {{ appVisuals(app.id).summary }}
+                  {{ $t(appVisuals(app.id).summary) }}
                 </p>
 
                 <!-- 微指标胶囊群 -->
@@ -764,7 +736,12 @@
                   <span>{{ $t(cat.label) }}</span>
                 </div>
                 <span class="font-mono text-[11px] text-text-secondary">
-                  {{ categoryCount(app.id, cat.id).checked }}/{{ categoryCount(app.id, cat.id).total }} 项已授权
+                  {{
+                    $t('agent.settings.apps.grantedCount', {
+                      granted: categoryCount(app.id, cat.id).checked,
+                      total: categoryCount(app.id, cat.id).total,
+                    })
+                  }}
                 </span>
               </div>
 
@@ -904,7 +881,9 @@
         class="flex items-start gap-2 rounded-lg border border-border/70 bg-header/20 p-2.5 cursor-pointer select-none"
       >
         <input v-model="deleteDataOnUninstall" type="checkbox" class="mt-0.5 rounded accent-error cursor-pointer" />
-        <span class="text-xs text-text-secondary leading-tight"> 同时彻底删除此插件专属的独立持久化数据空间 </span>
+        <span class="text-xs text-text-secondary leading-tight">
+          {{ $t('agent.settings.apps.deleteDataOnUninstall') }}
+        </span>
       </label>
     </div>
 

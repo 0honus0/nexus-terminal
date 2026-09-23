@@ -4,8 +4,10 @@
   import QuantityInput from './QuantityInput.vue';
   import { formatQuantity, type QuantityType } from './quantity-format';
   import { useQuantityLabels } from './use-quantity-labels';
+  import { useI18n } from 'vue-i18n';
 
   const quantityLabels = useQuantityLabels();
+  const { t } = useI18n();
 
   const props = defineProps<{
     settings: AgentSettingsViewDto;
@@ -25,32 +27,23 @@
     { immediate: true },
   );
 
-  const storageFieldMeta: Record<string, { label: string; hint: string; type: QuantityType; placeholder: string }> = {
-    maxArtifactBytes: {
-      label: '单 Run 产物配额',
-      hint: '单个 Run 产生的所有产物总容量上限',
-      type: 'bytes',
-      placeholder: '例: 50M, 100M',
-    },
-    maxSingleArtifactBytes: {
-      label: '单文件产物上限',
-      hint: '单个交付产物文件的最大允许大小',
-      type: 'bytes',
-      placeholder: '例: 10M, 25M',
-    },
-    maxGlobalArtifactBytes: {
-      label: '全局产物存储配额',
-      hint: '系统所有智能体产物累计占用的总上限',
-      type: 'bytes',
-      placeholder: '例: 500M, 2G',
-    },
-    unretainedArtifactTtlSeconds: {
-      label: '临时产物生命周期 (TTL)',
-      hint: '未标记保留的临时构建物保留时长',
-      type: 'seconds',
-      placeholder: '例: 1d, 12h, 86400',
-    },
-  };
+  const storageFieldMeta = computed<
+    Record<string, { label: string; hint: string; type: QuantityType; placeholder: string }>
+  >(() => {
+    const example = (examples: string) => t('agent.settings.storage.example', { examples });
+    const field = (key: string, type: QuantityType, examples: string) => ({
+      label: t(`agent.settings.storage.fields.${key}.label`),
+      hint: t(`agent.settings.storage.fields.${key}.hint`),
+      type,
+      placeholder: example(examples),
+    });
+    return {
+      maxArtifactBytes: field('maxArtifactBytes', 'bytes', '50M, 100M'),
+      maxSingleArtifactBytes: field('maxSingleArtifactBytes', 'bytes', '10M, 25M'),
+      maxGlobalArtifactBytes: field('maxGlobalArtifactBytes', 'bytes', '500M, 2G'),
+      unretainedArtifactTtlSeconds: field('unretainedArtifactTtlSeconds', 'seconds', '1d, 12h, 86400'),
+    };
+  });
 
   const isDirty = computed(() => {
     const original = props.settings.requestedSettings.storage;
@@ -79,7 +72,7 @@
       </div>
       <div class="flex items-center gap-2">
         <span class="rounded-full border border-border/80 bg-background px-2.5 py-0.5 text-xs text-text-secondary">
-          当前占用
+          {{ $t('agent.settings.storage.currentUsage') }}
           <strong class="font-mono text-foreground">{{
             formatQuantity(storage.totalBytes + storage.reservedBytes, 'bytes', quantityLabels)
           }}</strong>
@@ -119,7 +112,7 @@
       <!-- 配额参数输入网格：支持 K、M、G 单位输入与实时换算 -->
       <div class="rounded-xl border border-border/60 bg-background/50 p-4">
         <div class="flex items-center justify-between pb-3 mb-3 border-b border-border/40">
-          <span class="text-xs font-semibold text-foreground">产物存储上限与保留策略</span>
+          <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.storage.quotaTitle') }}</span>
           <span class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.inputHelp') }}</span>
         </div>
 
@@ -148,10 +141,10 @@
 
       <div class="flex items-center justify-between border-t border-border/40 pt-3">
         <span v-if="isDirty" class="text-xs text-warning">
-          <i class="fa-solid fa-circle-exclamation mr-1"></i>有尚未保存的存储配额变更
+          <i class="fa-solid fa-circle-exclamation mr-1"></i>{{ $t('agent.settings.storage.unsavedChanges') }}
         </span>
         <span v-else class="text-xs text-text-secondary">
-          保存后，容量配额作用于后续创建/Run 关联；TTL 在产物 ready 或取消保留时确定
+          {{ $t('agent.settings.storage.savedNotice') }}
         </span>
 
         <button

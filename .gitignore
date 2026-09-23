@@ -53,6 +53,7 @@ scripts/*
 !scripts/backend/
 !scripts/backend/**
 !scripts/check-test-policy.mjs
+!scripts/check-agent-i18n.mjs
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
