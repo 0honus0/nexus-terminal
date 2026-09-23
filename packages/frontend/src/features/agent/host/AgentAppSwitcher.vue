@@ -149,6 +149,7 @@
     <Teleport to="body">
       <div
         v-if="open"
+        data-agent-hub-portal
         ref="panelRef"
         tabindex="-1"
         :style="position"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { logger } from '@/client/logging/logger';
+  import { overlayStack, type OverlayStackRegistration } from '@/foundation/ui/overlayStack';
   import type { AgentAppSummaryDto, AgentHostSummaryDto } from '../api/agent-api';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
@@ -17,7 +18,22 @@
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
   const visible = computed(() => state.status === 'visible');
   const hasOpened = ref(visible.value);
+  const hubWindowRef = ref<HTMLElement | null>(null);
   let backgroundScrollRestore: (() => void) | null = null;
+  let backgroundInteractionRestore: (() => void) | null = null;
+  let previouslyFocused: HTMLElement | null = null;
+  let lastHubFocus: HTMLElement | null = null;
+  let hubOverlayRegistration: OverlayStackRegistration | null = overlayStack.register(visible.value, 50);
+
+  const FOCUSABLE_SELECTOR = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[contenteditable="true"]',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
 
   const unlockBackgroundScroll = () => {
     backgroundScrollRestore?.();
@@ -46,14 +62,177 @@
     };
   };
 
+  const unlockBackgroundInteraction = () => {
+    backgroundInteractionRestore?.();
+    backgroundInteractionRestore = null;
+  };
+
+  const lockBackgroundInteraction = () => {
+    if (backgroundInteractionRestore || typeof document === 'undefined') return;
+    const appRoot = document.getElementById('app');
+    if (!appRoot) return;
+    const previousInert = appRoot.inert;
+    appRoot.inert = true;
+    backgroundInteractionRestore = () => {
+      appRoot.inert = previousInert;
+    };
+  };
+
+  const isActuallyFocusable = (element: HTMLElement): boolean => {
+    if (!element.isConnected || element.hasAttribute('disabled') || element.getAttribute('aria-hidden') === 'true') {
+      return false;
+    }
+    if (element.closest('[inert]')) return false;
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    return element.getClientRects().length > 0;
+  };
+
+  const getFocusableElements = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isActuallyFocusable);
+
+  const resolveHubOwnedPortal = (target: HTMLElement): HTMLElement | null => {
+    const markedPortal = target.closest<HTMLElement>('[data-agent-hub-portal]');
+    if (markedPortal) return markedPortal;
+
+    const hub = hubWindowRef.value;
+    if (!hub) return null;
+    const controlledIds = new Set<string>();
+    for (const controller of hub.querySelectorAll<HTMLElement>('[aria-controls]')) {
+      const controls = controller.getAttribute('aria-controls');
+      if (!controls) continue;
+      for (const id of controls.split(/\s+/)) {
+        if (id) controlledIds.add(id);
+      }
+    }
+
+    let current: HTMLElement | null = target;
+    while (current && current !== document.body) {
+      if (current.id && controlledIds.has(current.id)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  };
+
+  const focusHubRoot = () => {
+    const hub = hubWindowRef.value;
+    if (!hub) return;
+    hub.focus({ preventScroll: true });
+    lastHubFocus = hub;
+  };
+
+  const restoreFocusAfterHide = async (target: HTMLElement | null) => {
+    await nextTick();
+    if (visible.value) return;
+    if (target?.isConnected && isActuallyFocusable(target)) {
+      target.focus({ preventScroll: true });
+      return;
+    }
+    const launcher = document.querySelector<HTMLElement>('[data-agent-launcher-trigger]');
+    if (launcher && isActuallyFocusable(launcher)) launcher.focus({ preventScroll: true });
+  };
+
+  const handleDocumentFocusIn = (event: FocusEvent) => {
+    if (!visible.value || !hubOverlayRegistration?.isTop()) return;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const hub = hubWindowRef.value;
+    if (!hub) return;
+    if (hub.contains(target)) {
+      lastHubFocus = target;
+      return;
+    }
+    if (resolveHubOwnedPortal(target)) return;
+
+    const fallback =
+      lastHubFocus?.isConnected && hub.contains(lastHubFocus) && isActuallyFocusable(lastHubFocus) ? lastHubFocus : hub;
+    fallback.focus({ preventScroll: true });
+  };
+
+  const handleHubKeydown = (event: KeyboardEvent) => {
+    if (!visible.value || !hubOverlayRegistration?.isTop()) return;
+    if (event.key === 'Escape') {
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopPropagation();
+      agentWindowManager.closeHub();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const hub = hubWindowRef.value;
+    if (!hub) return;
+    const focusables = getFocusableElements(hub);
+    if (focusables.length === 0) {
+      event.preventDefault();
+      focusHubRoot();
+      return;
+    }
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const index = target ? focusables.indexOf(target) : -1;
+    if (index === -1) {
+      event.preventDefault();
+      (event.shiftKey ? focusables[focusables.length - 1] : focusables[0])?.focus({ preventScroll: true });
+      return;
+    }
+    if (!event.shiftKey && index === focusables.length - 1) {
+      event.preventDefault();
+      focusables[0]?.focus({ preventScroll: true });
+    } else if (event.shiftKey && index === 0) {
+      event.preventDefault();
+      focusables[focusables.length - 1]?.focus({ preventScroll: true });
+    }
+  };
+
+  const handleDocumentKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Tab' || !visible.value || !hubOverlayRegistration?.isTop()) return;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const portalRoot = resolveHubOwnedPortal(target);
+    if (!portalRoot || target === portalRoot) return;
+
+    const portalFocusables = getFocusableElements(portalRoot);
+    const index = portalFocusables.indexOf(target);
+    if (index === -1) return;
+    const hub = hubWindowRef.value;
+    if (!hub) return;
+    const hubFocusables = getFocusableElements(hub);
+    const fallback = hubFocusables[0] ?? hub;
+    const reverseFallback = hubFocusables[hubFocusables.length - 1] ?? hub;
+    if (!event.shiftKey && index === portalFocusables.length - 1) {
+      event.preventDefault();
+      fallback.focus({ preventScroll: true });
+    } else if (event.shiftKey && index === 0) {
+      event.preventDefault();
+      reverseFallback.focus({ preventScroll: true });
+    }
+  };
+
   watch(
     visible,
-    (isVisible) => {
+    (isVisible, wasVisible) => {
+      hubOverlayRegistration?.setVisible(isVisible);
       if (isVisible) {
         hasOpened.value = true;
+        if (!wasVisible) {
+          const active = document.activeElement;
+          previouslyFocused = active instanceof HTMLElement ? active : null;
+          lastHubFocus = null;
+        }
         lockBackgroundScroll();
+        lockBackgroundInteraction();
+        void nextTick(() => {
+          if (visible.value) focusHubRoot();
+        });
       } else {
         unlockBackgroundScroll();
+        unlockBackgroundInteraction();
+        if (wasVisible) {
+          const focusTarget = previouslyFocused;
+          previouslyFocused = null;
+          lastHubFocus = null;
+          void restoreFocusAfterHide(focusTarget);
+        }
       }
     },
     { immediate: true },
@@ -312,6 +491,8 @@
   };
   onMounted(() => {
     window.addEventListener('resize', handleResize);
+    document.addEventListener('focusin', handleDocumentFocusIn, true);
+    document.addEventListener('keydown', handleDocumentKeydown, true);
     if ('requestIdleCallback' in window) {
       surfacePreloadUsesIdleCallback = true;
       surfacePreloadHandle = window.requestIdleCallback(() => void loadAgentAppSurface(), { timeout: 1200 });
@@ -321,6 +502,8 @@
   });
   onBeforeUnmount(() => {
     window.removeEventListener('resize', handleResize);
+    document.removeEventListener('focusin', handleDocumentFocusIn, true);
+    document.removeEventListener('keydown', handleDocumentKeydown, true);
     if (flashTimer) clearTimeout(flashTimer);
     if (surfacePreloadHandle !== null) {
       if (surfacePreloadUsesIdleCallback && 'cancelIdleCallback' in window) {
@@ -330,6 +513,11 @@
       }
     }
     cancelActiveInteraction();
+    hubOverlayRegistration?.unregister();
+    hubOverlayRegistration = null;
+    previouslyFocused = null;
+    lastHubFocus = null;
+    unlockBackgroundInteraction();
     unlockBackgroundScroll();
   });
 </script>
@@ -349,12 +537,15 @@
   <section
     v-if="hasOpened"
     v-show="visible"
+    ref="hubWindowRef"
     role="dialog"
     aria-modal="true"
+    tabindex="-1"
     class="agent-hub-window fixed z-50 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl transition-[box-shadow,transform] duration-150"
     :class="flashWindow ? 'ring-2 ring-primary/60 scale-[1.002]' : ''"
     :style="style"
     :aria-label="$t('agent.hub.title')"
+    @keydown="handleHubKeydown"
     @wheel.stop
     @touchmove.stop
   >
@@ -378,7 +569,7 @@
             }}</span>
             <span
               v-if="activityCount > 0"
-              class="rounded-full bg-primary/15 px-1.5 py-0.2 text-[10px] font-semibold text-primary"
+              class="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
             >
               {{ activityCount }}
             </span>
@@ -587,15 +778,13 @@
     <button
       v-if="!state.maximized"
       type="button"
-      class="group absolute bottom-0 right-0 z-40 flex h-4 w-4 touch-none select-none cursor-nwse-resize items-end justify-end rounded-tl-md rounded-br-2xl border-l border-t border-border/40 bg-header/60 p-0.5 text-text-secondary/50 transition-all hover:bg-header hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+      class="absolute bottom-0 right-0 z-40 flex h-4 w-4 touch-none select-none cursor-nwse-resize items-end justify-end rounded-tl-md rounded-br-2xl p-0.5 text-text-secondary/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
       :title="$t('agent.hub.resize')"
       :aria-label="$t('agent.hub.resize')"
       @pointerdown="handleResizePointerDown"
     >
-      <svg class="h-2 w-2" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true">
-        <circle cx="7" cy="7" r="0.8" />
-        <circle cx="7" cy="4" r="0.8" />
-        <circle cx="4" cy="7" r="0.8" />
+      <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+        <path d="M10.4 1.6A8.8 8.8 0 0 1 1.6 10.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
       </svg>
     </button>
   </section>

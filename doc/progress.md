@@ -7,6 +7,27 @@
 
 ---
 
+## ✅ 代码闭环：Agent Hub 模态键盘边界
+
+| 项       | 内容                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------- |
+| 级别     | P0                                                                                                       |
+| 状态     | **代码闭环 2026-09-23；静态/构建验收通过，CDP 因当前执行环境无法访问既有 9223 端口而未执行**             |
+| 对应问题 | `doc/problem.md` §7.13-c / §7.14-d（`aria-modal` 但焦点留在背景、Tab 可操作背后页面、Escape 不关闭 Hub） |
+
+- Hub 打开时先保存当前焦点，再把 `#app` 设为 `inert`；Hub 本身通过 Teleport 位于 `body`，因此不会被背景 inert 误伤。
+- Hub 根节点增加 `tabindex="-1"` 并在打开后的 `nextTick` 获取初始焦点；Tab / Shift+Tab 在 Hub 可聚焦元素首尾循环。
+- Hub 注册进已有 `overlayStack`（z=50）；更高层 `BaseModal / OverlayPanel` 打开时，Hub 自动暂停 Escape 与焦点强制，不抢上层弹窗焦点。
+- `AgentConfigPopover` / `AgentAppSwitcher` 的 body Teleport 面板增加 `data-agent-hub-portal`；`BaseListboxSelect` 则通过 Hub 内 trigger 的 `aria-controls` 与 panel id 自动识别为 Hub-owned portal。焦点可合法进入这些浮层，Tab 到边界后回到 Hub。
+- Hub 内部控件先处理 Escape：Hub 的 Escape 监听使用 bubble 而非 capture；例如打开的 `BaseListboxSelect` 会先 `preventDefault` 并关闭自身，未被内部控件消费的 Escape 才关闭 Hub。
+- 关闭或最小化 Hub 后恢复打开前焦点；launcher 因 `v-if` 会在 Hub 打开时卸载，因此新增 `data-agent-launcher-trigger` 作为重建后的稳定 fallback。
+- 背景滚动锁与 inert 都在关闭 / 最小化 / unmount 时恢复；document 级 `focusin` / portal Tab 监听同步清理。
+- 本轮同时纳入此前已独立验收并记录的 Hub 活动数间距修正与右下角缩放手柄最终视觉，不引入其它窗口布局改动。
+- 最终门禁：`git diff --check`、Prettier、相关文件 ESLint、frontend `vue-tsc --noEmit`、Vite production build 全部通过。
+- **待浏览器复验**：当前 Runner 与主执行环境均无法连接用户指定的既有 Chrome CDP `172.30.31.11:9223`；因此本条不伪造 Tab / Escape / inert 的运行时测量数据。
+
+---
+
 ## ✅ 已完成：Foundation UI Gen2 基础库封版
 
 | 项       | 内容                                                                                                                                                   |
