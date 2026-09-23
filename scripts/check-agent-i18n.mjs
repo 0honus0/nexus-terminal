@@ -6,6 +6,8 @@
  *      "Denylist revision {revision}" shown inside a Chinese UI);
  *   3. §7.14-c: user-facing Chinese hardcoded in the component sources, which
  *      leaks into the English/Japanese UI.
+ *   4. §3.5: dictionary keys that no source file can ever resolve, which keep
+ *      three locales worth of dead copy alive (see §7.40).
  *
  * Anything that is genuinely untranslatable (brand, protocol, URL/sample
  * values, pure placeholders) belongs in BRAND_TERMS below, and any source line
@@ -22,6 +24,10 @@ const LOCALES = ['en-US', 'zh-CN', 'ja-JP'];
 
 // Source lines that may keep CJK on purpose (e.g. a CJK-only regex range).
 const SOURCE_CJK_ALLOWLIST = new Set([]);
+
+// Keys that are only resolved through a runtime path the scanner cannot see.
+// Keep this empty unless a key is genuinely reachable; delete the key otherwise.
+const UNUSED_KEY_ALLOWLIST = new Set([]);
 
 // Brand / protocol / format values that are intentionally identical across locales.
 const BRAND_TERMS = new Set([
@@ -123,12 +129,70 @@ for (const file of sourceFiles) {
   });
 }
 
+/*
+ * §3.5 / §7.40: a key is reachable when some source file names it (or names a
+ * parent/child of it) as a string literal, or when a template literal builds it
+ * from a literal prefix. Anything left over is unreachable copy.
+ */
+const REFERENCE_ROOTS = [
+  resolve(here, '../packages/frontend/src'),
+  resolve(here, '../packages/backend/src'),
+  resolve(here, '../packages/agent-runner/src'),
+  resolve(here, '../tests'),
+  resolve(here, '../scripts'),
+];
+
+const referenceFiles = [];
+const collectReferences = (dir) => {
+  for (const entry of readdirSync(dir)) {
+    if (entry === 'node_modules' || entry === 'dist' || entry === '.tmp' || entry === 'i18n') continue;
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) collectReferences(full);
+    else if (/\.(vue|ts|mjs|cjs|js)$/.test(entry)) referenceFiles.push(full);
+  }
+};
+for (const root of REFERENCE_ROOTS) collectReferences(root);
+
+const referencedLiterals = new Set();
+const referencedPrefixes = new Set();
+for (const file of referenceFiles) {
+  const text = readFileSync(file, 'utf8');
+  for (const match of text.matchAll(/['"`](agent\.[A-Za-z0-9_.-]+)['"`]/g)) referencedLiterals.add(match[1]);
+  for (const match of text.matchAll(/['"`](agent\.[A-Za-z0-9_.-]+)\.\$\{/g)) referencedPrefixes.add(match[1]);
+  for (const match of text.matchAll(/`(agent\.[A-Za-z0-9_.-]*)\$\{/g)) {
+    referencedPrefixes.add(match[1].replace(/\.$/, ''));
+  }
+  for (const match of text.matchAll(/['"`](agent\.[A-Za-z0-9_.]*)\*/g)) referencedPrefixes.add(match[1]);
+}
+// A literal that is a strict prefix of dictionary keys but is not itself a key
+// is a runtime-built lookahead: `translateOrRaw('agent.settings.x', value)` and
+// friends concatenate the value straight onto the literal.
+for (const literal of referencedLiterals) {
+  if (english.has(literal)) continue;
+  if ([...english.keys()].some((candidate) => candidate.startsWith(literal))) referencedPrefixes.add(literal);
+}
+
+const reachable = (key) => {
+  if (referencedLiterals.has(key)) return true;
+  // Template literals concatenate, so `agent.a.` + value has no separator.
+  for (const prefix of referencedPrefixes) if (key === prefix || key.startsWith(prefix)) return true;
+  // A key an exact literal nests under is kept as well: it is plausibly a tree
+  // root the caller walks, and deleting it would be the riskier mistake.
+  for (const literal of referencedLiterals) if (literal.startsWith(`${key}.`)) return true;
+  return false;
+};
+
+for (const key of english.keys()) {
+  if (!key.startsWith('agent.')) continue;
+  if (reachable(key)) continue;
+  if (UNUSED_KEY_ALLOWLIST.has(key)) continue;
+  problems.push(`unused i18n key (unreachable from any source file): ${key}`);
+}
+
 if (problems.length) {
   console.error(`Agent i18n check failed (${problems.length}):`);
   for (const problem of problems) console.error(`  - ${problem}`);
   process.exit(1);
 }
 
-console.log(
-  'Agent i18n check passed (key parity + no verbatim English in zh-CN / ja-JP + no hardcoded CJK in agent sources).',
-);
+console.log('Agent i18n check passed (key parity + no verbatim English + no hardcoded CJK + no unused keys).');

@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。、§7.31（**设置区 8 处独立「保存」按钮语义分级**：无未保存变更时由浅紫实心主按钮降为 `soft`/`neutral` + 禁用 + 原因 `title`，并给 Browser / ACP / Subagent 三处补上 dirty 快照比对，§7.15-c 整条关闭）。、§7.32（**设置区 22 处原生 `<select>` 全部收敛到 Gen2 `UiSelect`**：新增 `pickOption()` / `NONE_OPTION`，`UiSelect` 的 v-model 收窄为「可空进、非空出」，实测三组可见 10 处、残留原生 0、414px 无溢出）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。、§7.33（`QuantityInput` 单位药丸 18×20 → 24×24）、§7.34（模型行 11px 纯文字按钮 → Gen2 `UiButton` + 「一键取消」补确认弹窗）、§7.35（Workspace 运行时 5 处原生 `<select>` → `UiSelect`，`features/agent/**` 原生 select 归零）、§7.36（TaskRail「最近事实」改 `dl` 投影 + 原始 payload 折进二级 `<details>`）、§7.38（**§2.8 收口**：Launcher 改长按拖动 + 「重置位置」，虚拟列表行高改量探针行）、§7.37（**Agent 错误横幅补失败域与重试入口**：9 个失败域 + 读「重试」/ 写「重新同步」，机器码不再直接当兜底文案，§2.9 收口）、§7.39（**工具结果摘要的「模型证据 / 用户投影」拆分**：`ToolResult.userSummary` 在 `projectToolResult` 被剥离、ledger payload 旁路携带、`ConversationMessage.vue` 优先渲染并回退历史 `summary`；`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要接入，新增三语 `agent.conversation.toolSummary.*`（72 句 + 39 枚举标签），§1.8 / §3.6 的"工具摘要英文硬编码"整条关闭）。每条闭环均带真实 CDP 实测数据 + 类型检查；**§0 速览表的 P1 / P2 开放项已只剩**：设置区顶部 Tab 36px（跨页 chrome，按约定不动）、巨型 UI 文件拆分（§3.1）、i18n 死 key 274/1148（§3.5）；**"后端工具结果摘要英文硬编码" 本轮已关闭**，仅剩 `mcp-tools.ts`（远端不可信内容，刻意排除）、`execution-errors.ts` 前缀与 `command.reason` 三处非 UI 残余并入 §3.6 跟踪；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。、§7.31（**设置区 8 处独立「保存」按钮语义分级**：无未保存变更时由浅紫实心主按钮降为 `soft`/`neutral` + 禁用 + 原因 `title`，并给 Browser / ACP / Subagent 三处补上 dirty 快照比对，§7.15-c 整条关闭）。、§7.32（**设置区 22 处原生 `<select>` 全部收敛到 Gen2 `UiSelect`**：新增 `pickOption()` / `NONE_OPTION`，`UiSelect` 的 v-model 收窄为「可空进、非空出」，实测三组可见 10 处、残留原生 0、414px 无溢出）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。、§7.33（`QuantityInput` 单位药丸 18×20 → 24×24）、§7.34（模型行 11px 纯文字按钮 → Gen2 `UiButton` + 「一键取消」补确认弹窗）、§7.35（Workspace 运行时 5 处原生 `<select>` → `UiSelect`，`features/agent/**` 原生 select 归零）、§7.36（TaskRail「最近事实」改 `dl` 投影 + 原始 payload 折进二级 `<details>`）、§7.38（**§2.8 收口**：Launcher 改长按拖动 + 「重置位置」，虚拟列表行高改量探针行）、§7.37（**Agent 错误横幅补失败域与重试入口**：9 个失败域 + 读「重试」/ 写「重新同步」，机器码不再直接当兜底文案，§2.9 收口）、§7.39（**工具结果摘要的「模型证据 / 用户投影」拆分**：`ToolResult.userSummary` 在 `projectToolResult` 被剥离、ledger payload 旁路携带、`ConversationMessage.vue` 优先渲染并回退历史 `summary`；`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要接入，新增三语 `agent.conversation.toolSummary.*`（72 句 + 39 枚举标签），§1.8 / §3.6 的"工具摘要英文硬编码"整条关闭）、§7.40（**i18n 死 key 收口**：`scripts/check-agent-i18n.mjs` 新增第 4 条"key 可达性"守卫，三语字典删除 75×3 条不可达文案，1,467 → 1,392，§3.5 收口）。每条闭环均带真实 CDP 实测数据 + 类型检查；**§0 速览表的 P1 / P2 开放项已只剩**：设置区顶部 Tab 36px（跨页 chrome，按约定不动）、巨型 UI 文件拆分（§3.1）；**§3.5 的"i18n 死 key"已于本轮关闭**（§7.40：新增可达性门禁 + 清掉 75×3 条不可达文案，字典 1,467 → 1,392）；**"后端工具结果摘要英文硬编码" 本轮已关闭**，仅剩 `mcp-tools.ts`（远端不可信内容，刻意排除）、`execution-errors.ts` 前缀与 `command.reason` 三处非 UI 残余并入 §3.6 跟踪；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -50,7 +50,7 @@
 | **P1 · ✅ 已关闭 2026-09-22**         | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation                                                                                                                                                                                                                                                              | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7）                                             |
 | **P1 · ✅ 已关闭 2026-09-22**         | **Nexus 前后端真实 transport contract 已统一到 `packages/protocol`**：HTTP / Workspace WS / Agent HTTP / Agent event WS / Agent terminal WS 均由 canonical DTO/event contract 单一来源约束，并已接入 transport architecture guard；当前 HEAD 收尾复核再次通过 guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build` 与 Agent scenario suite **71/71**                                                           | `packages/protocol/**`、`scripts/check-transport-contract-boundaries.mjs`（见 §3.2）                         |
 | **P1 · ✅ 已关闭 2026-09-22**         | **Agent scenario runner 已模块化并支持受控并发**：`runner.ts` 从 22k+ 行降至 258 行，当前 71 个独立 scenario 文件；默认按批次并发、仅显式 `SERIAL_SCENARIOS` 保持串行；当前扫描未发现通过 `readFileSync` 读取 `packages/*/src` 做 source-shape 架构断言                                                                                                                                                                                        | `tests/backend/agent-scenarios/**`（见 §3.6）                                                                |
-| P2                                    | 274/1148（约 24%）i18n key 已无引用，且三种语言各存一份                                                                                                                                                                                                                                                                                                                                                                                        | `features/agent/i18n/*.json`                                                                                 |
+| **P2 · ✅ 已关闭 2026-09-23**         | 274/1148（约 24%）i18n key 已无引用，且三种语言各存一份 → **升级成常驻门禁并清零**：`scripts/check-agent-i18n.mjs` 新增"key 可达性"守卫（字面量 / 模板拼接前缀 / 后端构造的投影 key 都算可达），三语字典 1,467 → 1,392 个叶子 key，删除 75×3 条不可达文案；CDP 走完 20 个设置分区 0 处原始 key、0 条 intlify 告警（见 §3.5 / §7.40）                                                                                                           | `features/agent/i18n/*.json`                                                                                 |
 | **P2 · ✅ 基础门禁已关闭 2026-09-22** | **Agent review 范围已接入 ESLint flat config**：`no-unused-vars` + Vue `v-if/v-for` 规则成为 error；首跑发现并清理 47 个真实 unused 符号。自定义 i18n / 设计 token 规则仍开放                                                                                                                                                                                                                                                                  | `eslint.config.mjs`、`package.json` scripts                                                                  |
 | P2                                    | 巨型文件问题**仍主要集中在 UI**；非 UI owner 已完成一轮拆分：`agent-api.ts` 791 行、`runner-http.adapter.ts` 770 行、`native-agent-backend.ts` 722 行，原 1k+ 行 state-commit 聚合文件已拆为细分 transition owners                                                                                                                                                                                                                             | 见 §3.1                                                                                                      |
 | **P2 · ✅ 已关闭 2026-09-23**         | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里 → **「模型可见证据 / 用户可见摘要」拆分**：`ToolResult.userSummary` 在 `projectToolResult` 被剥离（模型侧零变化），ledger payload 旁路携带，`ConversationMessage.vue` 优先渲染、缺失回退原 `summary`（历史数据零迁移）；`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要全部接入，三语 `toolSummary.*`（72 句 + 39 标签）齐平；CDP 双语言实测通过                                | `modules/agent/tools/host/*.ts`（见 §1.8 / §7.39）                                                           |
@@ -745,7 +745,11 @@ UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConf
 
 ### 3.5 死代码与 i18n 冗余（P2）
 
-- **i18n**：`features/agent/i18n/*.json` 每种语言 1,148 个叶子 key，其中 **274 个（约 24%）** 在 `features/agent` 源码中已无引用（脚本核对）；三种语言各存一份 ⇒ 约 822 条死文案。典型：`agent.conversation.sendHint`（"Enter 发送"）已定义但未渲染、`agent.operations.environmentRecipes`、`agent.files.status.*`、`agent.hub.appActivity` 等。
+- **i18n（✅ 已关闭 2026-09-23）**：原记录为"每种语言 1,148 个叶子 key，其中 274 个（约 24%）无引用，三语各存一份 ⇒ 约 822 条死文案"。
+  本轮把"无引用"从一次性脚本结论升级成**常驻门禁**，并清掉当前真正不可达的 key：`scripts/check-agent-i18n.mjs` 新增第 4 条守卫（key 可达性），
+  三语字典从 **1,467 → 1,392** 个叶子 key，删除 **75 × 3 = 225** 条死文案。
+  典型删除项：`agent.operations.environmentRecipes`、`agent.files.used`、`agent.hub.appActivity`、`agent.ui.budget`、`agent.tasks.progress`、
+  `agent.settings.hardLimits.preset*`。详见 §7.40。
 - **死变量（✅ 已清理 2026-09-22）**：`taskRailWideViewport` 与无效 `resize` 监听已删除（§1.6）。
 - **无效样式类**：§1.1 的 158 处。
 - 以上三类问题都能被规则检查拦住（§3.6）。
@@ -2822,6 +2826,58 @@ CDP 实测确实如此：三块是 `rounded-lg border border-border/70 bg-card/6
 - **仍开放（并入 §3.6 跟踪，不计入本节）**：`mcp-tools.ts` 的远端摘要、`execution-errors.ts` 的执行期错误前缀、
   `command.reason`（`supersedeMutationTool` 的自由文本原因，按 `errorCode` 变化）仍是英文；
   它们不在 `tools/host/**` 范围内，且依赖 Runner / 远端才能触发（本环境 `runner_not_configured` 无法实测）。
+
+---
+
+### 7.40 §3.5 收口：i18n 死 key 从"一次性脚本结论"升级为常驻门禁（P2 · ✅ 已关闭 2026-09-23）
+
+**a) 现象与根因**
+
+- **现象**：`features/agent/i18n/*.json` 三份字典各存一份文案，但"某个 key 是否还有人用"从来没进过任何门禁；
+  §3.5 记的 274/1148（约 24%）只是一次手工脚本的**快照**，之后既没人复核，也没有机制阻止继续加死 key。
+- **根因**：`scripts/check-agent-i18n.mjs` 原有三条守卫只查「三语 key 齐平 / zh-ja 无逐字英文 / 组件无硬编码 CJK」——
+  **都是"已存在的 key 是否合规"，没有一条问"这个 key 还有没有人读"**。
+
+**b) 改法：先给门禁补第 4 条守卫，再按守卫的结论删**
+
+`scripts/check-agent-i18n.mjs` 新增"key 可达性"检查，并把扫描范围从 `features/agent` 扩到前端全部源码 + **后端源码** + `tests` + `scripts`。
+判定「可达」的三种形态（任一命中即保留）：
+
+| 形态                 | 例子                                                                                                                | 说明                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 精确字面量           | `$t('agent.tasks.title')`                                                                                           | 最常见                                         |
+| key 是某字面量的祖先 | 代码里写了 `agent.files.status.ready`，则 `agent.files.status` 视为树节点保留                                       | 保守规则，宁可少删                             |
+| 模板/拼接前缀        | ``t(`agent.tasks.runStatus.${status}`)``、`translateOrRaw('agent.settings.workspaceRuntime.commandAction', action)` | 拼接语义按 `startsWith` 判定（**没有分隔点**） |
+
+构建这条守卫时踩到三个坑，都直接决定"会不会误删活 key"，已写进规则：
+
+1. **只看前端会误删活 key**：`agent.conversation.toolSummary.*` 的 key 路径是**后端**（`tools/host/**`、`state-commit/*`）拼出来的，
+   只扫 `features/agent` 会把整套刚落地的工具摘要投影判成死文案 → 扫描根必须包含 `packages/backend/src`。
+2. **模板拼接没有分隔点**：`agent.settings.subagents.template${'Explore'}` 拼出来是 `…templateExplore`，
+   若按 `prefix + '.'` 判定就会漏，导致误判；必须按 `startsWith(prefix)` 判定。
+3. **裸前缀字面量**：`translateOrRaw('agent.settings.workspaceRuntime.commandAction', command.action)` 把字面量当**前缀**传进函数，
+   既不是完整 key 也不是模板 —— 规则补成"某字面量若不是字典 key、却是某些 key 的前缀，则它整体视为动态前缀"。
+
+**c) 执行结果**
+
+- 三语字典叶子 key：**1,467 → 1,392**（每个语言删除 **75** 条，合计 225 条死文案），三语仍完全齐平。
+- 删掉的典型：`agent.operations.environment*`（13 条）、`agent.tasks.{progress,status,detail,current,activity,openDetail,closeDetail,…}`（12 条）、
+  `agent.ui.{budget,limits,toolOutput,advanced,usageDetails,reasoning*}`（13 条）、`agent.settings.hardLimits.preset*`（7 条）、
+  `agent.settings.groups/groupDescriptions/*`、`agent.hub.{appSwitcher,appActivity,idle,workspace}`、`agent.conversation.kind.{user_input,tool_result,system_notice}`、
+  `agent.files.{used,typeFilter,loadedCount,moreAvailable}`、`agent.workspaceRuntime.artifactId`、`agent.subagents.tokens`、`agent.approvals.openPending` 等。
+- 门禁自带兜底：`UNUSED_KEY_ALLOWLIST`（当前为空），将来若确有只能运行时解析的 key，显式登记即可，不会再靠一次性脚本。
+
+**d) CDP 验证（防"删过头"）**
+
+- `/tmp/w/verify-i18n-usage.mjs`：登录后进「设置 → Agent」，**逐个点完左栏 20 个分区**
+  （模型与预算 4 项 / 运行与环境 8 项 / 插件与安全 5 项 + 3 个分组标题），每切一次就全量扫描 DOM 文本；
+  再回首页与 Hub。
+  - 结果：**渲染出的原始 key 路径 0 处**、**intlify "Not found key" 告警 0 条**、**console error 0 条**。
+  - 说明删掉的 key 里没有"有人读但被误判"的项；同一轮也复测了 §7.39 的工具摘要投影，历史数据仍按预期回退英文。
+- 截图：`/tmp/shots/i18n-usage-settings.png`。
+
+**门禁**：`node scripts/check-agent-i18n.mjs`（4 条守卫全绿）、`node scripts/check-transport-contract-boundaries.mjs`、`prettier --check`、
+backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后端）全部通过。
 
 ---
 
