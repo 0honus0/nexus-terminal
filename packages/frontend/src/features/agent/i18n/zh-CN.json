@@ -1380,7 +1380,10 @@
       "totalTokens": "Token 总量",
       "advancedDetails": "高级详情与检查点",
       "backToTasks": "返回任务列表",
-      "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}"
+      "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}",
+      "dragCardHint": "拖动或按 ↑/↓ 调整卡片顺序",
+      "resetCardOrder": "重置卡片顺序",
+      "showOlderRuns": "显示更早的 Run（还有 {count} 条）"
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",

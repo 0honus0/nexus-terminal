@@ -1380,7 +1380,10 @@
       "totalTokens": "Token 合計",
       "advancedDetails": "詳細設定とチェックポイント",
       "backToTasks": "タスク一覧に戻る",
-      "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}"
+      "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}",
+      "dragCardHint": "ドラッグまたは ↑/↓ で並べ替え",
+      "resetCardOrder": "カード順をリセット",
+      "showOlderRuns": "以前の Run を表示（残り {count} 件）"
     },
     "workspaceRuntime": {
       "title": "Workspace 開発環境",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, onMounted, ref, watch } from 'vue';
   import draggable from 'vuedraggable';
   import type {
     AgentApprovalViewDto,
@@ -15,6 +15,7 @@
   import WorkspaceRuntimePanel from './WorkspaceRuntimePanel.vue';
   import SubagentTree from './SubagentTree.vue';
   import ApprovalTimeline from './ApprovalTimeline.vue';
+  import { useConnections } from '@/features/connections/public';
 
   const props = withDefaults(
     defineProps<{
@@ -106,7 +107,16 @@
     if (props.current.status === 'awaiting_input') return 'input';
     return null;
   });
-  const historyRuns = computed(() => props.threadRuns.filter((item) => item.id !== props.current?.id).slice(0, 8));
+  // §7.14-b：历史 Run 原先硬截断到 8 条、第 9 条没有任何入口。改成先展示 8 条，
+  // 有更多时给一个「显示更早的 Run」按钮逐批展开。
+  const historyLimit = ref(8);
+  const HISTORY_PAGE = 8;
+  const allHistoryRuns = computed(() => props.threadRuns.filter((item) => item.id !== props.current?.id));
+  const historyRuns = computed(() => allHistoryRuns.value.slice(0, historyLimit.value));
+  const hiddenHistoryCount = computed(() => Math.max(0, allHistoryRuns.value.length - historyRuns.value.length));
+  const revealOlderRuns = (): void => {
+    historyLimit.value += HISTORY_PAGE;
+  };
   const requestedApprovals = computed(() => props.approvals.filter((approval) => approval.status === 'requested'));
 
   type RailCardId = 'progress' | 'approvals' | 'plan' | 'targets' | 'history' | 'background';
@@ -157,6 +167,50 @@
   watch(railCards, (cards) => localStorage.setItem(railStorageKey, JSON.stringify(cards.map((card) => card.id))), {
     deep: true,
   });
+
+  // §7.14-b：卡片顺序写进 localStorage 后没有恢复入口，键盘/误拖之后无法回到默认顺序。
+  const orderChanged = computed(
+    () => railCards.value.map((card) => card.id).join(',') !== defaultCardOrder.map((card) => card.id).join(','),
+  );
+  const resetCardOrder = (): void => {
+    railCards.value = defaultCardOrder.map((card) => ({ id: card.id }));
+  };
+
+  /*
+   * §7.14-b / §2.10：6 个拖拽把手此前只有 pointer 路径（无 click/keydown）。
+   * 这里给同一组把手补上方向键重排：在「当前可见卡片」的序列里与相邻卡片交换，
+   * 与拖拽走同一条写回路径（visibleCards 的 setter）。
+   */
+  const moveCard = (id: RailCardId, offset: number): void => {
+    const order = visibleCards.value.map((card) => card.id);
+    const index = order.indexOf(id);
+    const target = index + offset;
+    if (index === -1 || target < 0 || target >= order.length) return;
+    const next = [...order];
+    next[index] = order[target]!;
+    next[target] = order[index]!;
+    visibleCards.value = next.map((cardId) => ({ id: cardId }));
+  };
+
+  const handleDragHandleKeydown = (event: KeyboardEvent, id: RailCardId): void => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    moveCard(id, event.key === 'ArrowUp' ? -1 : 1);
+  };
+
+  // §7.14-b：目标卡原先只渲染内部连接 ID（`#1`），改成连接名，ID 退到 title。
+  const connectionsStore = useConnections();
+  onMounted(() => {
+    if (!connectionsStore.loaded.value) void connectionsStore.load().catch(() => {});
+  });
+  const targetLabels = computed(() => {
+    const map = new Map<number, string>();
+    for (const connection of connectionsStore.connections.value) {
+      map.set(connection.id, connection.name?.trim() || `${connection.username}@${connection.host}`);
+    }
+    return map;
+  });
+  const targetLabel = (id: number): string => targetLabels.value.get(id) ?? `#${id}`;
 
   const increase = (): void => {
     const run = props.current;
@@ -513,8 +567,11 @@
                   <div class="flex items-center gap-1">
                     <button
                       type="button"
-                      class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing"
+                      class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/45"
                       :aria-label="$t('agent.tasks.dragCard')"
+                      :title="$t('agent.tasks.dragCardHint')"
+                      aria-keyshortcuts="ArrowUp ArrowDown"
+                      @keydown="handleDragHandleKeydown($event, element.id)"
                     >
                       <i class="fa-solid fa-grip-vertical text-[10px]" aria-hidden="true"></i>
                     </button>
@@ -707,8 +764,11 @@
                   </div>
                   <button
                     type="button"
-                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing"
+                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/45"
                     :aria-label="$t('agent.tasks.dragCard')"
+                    :title="$t('agent.tasks.dragCardHint')"
+                    aria-keyshortcuts="ArrowUp ArrowDown"
+                    @keydown="handleDragHandleKeydown($event, element.id)"
                   >
                     <i class="fa-solid fa-grip-vertical text-[10px]" aria-hidden="true"></i>
                   </button>
@@ -739,8 +799,11 @@
                   </div>
                   <button
                     type="button"
-                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing"
+                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/45"
                     :aria-label="$t('agent.tasks.dragCard')"
+                    :title="$t('agent.tasks.dragCardHint')"
+                    aria-keyshortcuts="ArrowUp ArrowDown"
+                    @keydown="handleDragHandleKeydown($event, element.id)"
                   >
                     <i class="fa-solid fa-grip-vertical text-[10px]" aria-hidden="true"></i>
                   </button>
@@ -780,8 +843,11 @@
                   </div>
                   <button
                     type="button"
-                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing"
+                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/45"
                     :aria-label="$t('agent.tasks.dragCard')"
+                    :title="$t('agent.tasks.dragCardHint')"
+                    aria-keyshortcuts="ArrowUp ArrowDown"
+                    @keydown="handleDragHandleKeydown($event, element.id)"
                   >
                     <i class="fa-solid fa-grip-vertical text-[10px]" aria-hidden="true"></i>
                   </button>
@@ -791,7 +857,8 @@
                     v-for="id in current.definition.connectionIds"
                     :key="id"
                     class="rounded-lg bg-header px-2 py-1 text-[11px] text-text-secondary"
-                    >#{{ id }}</span
+                    :title="`#${id}`"
+                    >{{ targetLabel(id) }}</span
                   >
                 </div>
               </template>
@@ -804,8 +871,11 @@
                   </div>
                   <button
                     type="button"
-                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing"
+                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/45"
                     :aria-label="$t('agent.tasks.dragCard')"
+                    :title="$t('agent.tasks.dragCardHint')"
+                    aria-keyshortcuts="ArrowUp ArrowDown"
+                    @keydown="handleDragHandleKeydown($event, element.id)"
                   >
                     <i class="fa-solid fa-grip-vertical text-[10px]" aria-hidden="true"></i>
                   </button>
@@ -837,6 +907,14 @@
                   </span>
                   <i class="fa-solid fa-chevron-right text-[8px] text-text-secondary" aria-hidden="true"></i>
                 </button>
+                <button
+                  v-if="hiddenHistoryCount > 0"
+                  type="button"
+                  class="mt-1 w-full rounded-xl border border-dashed border-border/70 px-2 py-1.5 text-[11px] text-text-secondary transition-colors hover:border-border hover:text-foreground"
+                  @click="revealOlderRuns"
+                >
+                  {{ $t('agent.tasks.showOlderRuns', { count: hiddenHistoryCount }) }}
+                </button>
               </template>
 
               <template v-else-if="element.id === 'background'">
@@ -847,8 +925,11 @@
                   </div>
                   <button
                     type="button"
-                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing"
+                    class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/45"
                     :aria-label="$t('agent.tasks.dragCard')"
+                    :title="$t('agent.tasks.dragCardHint')"
+                    aria-keyshortcuts="ArrowUp ArrowDown"
+                    @keydown="handleDragHandleKeydown($event, element.id)"
                   >
                     <i class="fa-solid fa-grip-vertical text-[10px]" aria-hidden="true"></i>
                   </button>
@@ -875,6 +956,16 @@
             </section>
           </template>
         </draggable>
+
+        <div v-if="orderChanged" class="mt-3 flex justify-end">
+          <button
+            type="button"
+            class="rounded-lg border border-border/60 px-2 py-1 text-[11px] text-text-secondary transition-colors hover:border-border-hover hover:text-foreground"
+            @click="resetCardOrder"
+          >
+            {{ $t('agent.tasks.resetCardOrder') }}
+          </button>
+        </div>
 
         <div
           v-else

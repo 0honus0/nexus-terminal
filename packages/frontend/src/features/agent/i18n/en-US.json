@@ -1380,7 +1380,10 @@
       "totalTokens": "Token total",
       "advancedDetails": "Advanced Details & Checkpoints",
       "backToTasks": "Back to Tasks",
-      "tokenBreakdown": "In {input} · Out {output} · Cached {cached}"
+      "tokenBreakdown": "In {input} · Out {output} · Cached {cached}",
+      "dragCardHint": "Drag or press ↑/↓ to reorder",
+      "resetCardOrder": "Reset card order",
+      "showOlderRuns": "Show older runs ({count} more)"
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",
