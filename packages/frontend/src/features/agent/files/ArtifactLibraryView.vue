@@ -369,26 +369,26 @@
           </div>
           <div class="min-w-0">
             <h2 class="text-sm font-semibold tracking-tight text-foreground">{{ $t('agent.hub.files') }}</h2>
-            <p class="mt-0.5 max-w-xl text-[10px] leading-4 text-text-secondary">
+            <p class="mt-0.5 max-w-xl text-[11px] leading-4 text-text-secondary">
               {{ $t('agent.files.libraryHint') }}
             </p>
           </div>
         </div>
 
         <div class="flex flex-wrap items-center justify-end gap-2">
-          <span v-if="deleteNotice" class="rounded-xl bg-success/10 px-2.5 py-1.5 text-[10px] font-medium text-success">
+          <span v-if="deleteNotice" class="rounded-xl bg-success/10 px-2.5 py-1.5 text-[11px] font-medium text-success">
             <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
             {{ deleteNotice }}
           </span>
 
-          <span v-if="notice" class="rounded-xl bg-success/10 px-2.5 py-1.5 text-[10px] font-medium text-success">
+          <span v-if="notice" class="rounded-xl bg-success/10 px-2.5 py-1.5 text-[11px] font-medium text-success">
             <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
             {{ $t('agent.files.cleanupDone', { count: notice }) }}
           </span>
 
           <div
             v-if="deleteTarget"
-            class="flex flex-wrap items-center gap-2 rounded-xl border border-error/30 bg-error/6 px-3 py-1.5 text-[10px] shadow-2xs"
+            class="flex flex-wrap items-center gap-2 rounded-xl border border-error/30 bg-error/6 px-3 py-1.5 text-[11px] shadow-2xs"
           >
             <i class="fa-solid fa-trash-can text-error" aria-hidden="true"></i>
             <span class="font-medium text-foreground">
@@ -422,7 +422,7 @@
           <button
             v-if="!cleanupPreview"
             type="button"
-            class="flex h-8 items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-[10px] font-medium text-text-secondary transition-colors hover:border-border-hover hover:bg-header hover:text-foreground disabled:opacity-50"
+            class="flex h-8 items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-[11px] font-medium text-text-secondary transition-colors hover:border-border-hover hover:bg-header hover:text-foreground disabled:opacity-50"
             :disabled="busy"
             @click="previewCleanup"
           >
@@ -432,7 +432,7 @@
 
           <div
             v-else
-            class="flex flex-wrap items-center gap-2 rounded-xl border border-warning/40 bg-warning/8 px-3 py-1.5 text-[10px] shadow-2xs"
+            class="flex flex-wrap items-center gap-2 rounded-xl border border-warning/40 bg-warning/8 px-3 py-1.5 text-[11px] shadow-2xs"
           >
             <i class="fa-solid fa-triangle-exclamation text-warning" aria-hidden="true"></i>
             <span class="font-medium text-foreground">
@@ -472,7 +472,7 @@
               <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
                 {{ $t('agent.files.storageOverview') }}
               </span>
-              <span class="text-[10px] font-medium text-foreground">
+              <span class="text-[11px] font-medium text-foreground">
                 {{ bytes(storage.totalBytes) }} / {{ bytes(storage.limitBytes) }}
               </span>
             </div>
@@ -595,7 +595,7 @@
         <button
           v-if="hasFilters"
           type="button"
-          class="flex h-8 shrink-0 items-center gap-1.5 px-1 text-[10px] font-medium text-text-secondary transition-colors hover:text-foreground disabled:opacity-40"
+          class="flex h-8 shrink-0 items-center gap-1.5 px-1 text-[11px] font-medium text-text-secondary transition-colors hover:text-foreground disabled:opacity-40"
           :disabled="busy"
           @click="resetFilters"
         >
@@ -604,7 +604,7 @@
         </button>
       </div>
 
-      <p v-if="error" class="mt-2 rounded-xl border border-error/20 bg-error/8 px-3 py-2 text-[10px] text-error">
+      <p v-if="error" class="mt-2 rounded-xl border border-error/20 bg-error/8 px-3 py-2 text-[11px] text-error">
         <i class="fa-solid fa-circle-exclamation mr-1.5" aria-hidden="true"></i>{{ error }}
       </p>
     </header>
@@ -637,11 +637,11 @@
         </div>
       </div>
       <p class="mt-4 text-xs font-semibold text-foreground">{{ $t('agent.files.emptyTitle') }}</p>
-      <p class="mt-1 max-w-xs text-[10px] leading-4 text-text-secondary">{{ $t('agent.files.empty') }}</p>
+      <p class="mt-1 max-w-xs text-[11px] leading-4 text-text-secondary">{{ $t('agent.files.empty') }}</p>
       <button
         v-if="hasFilters"
         type="button"
-        class="mt-3 rounded-xl border border-border bg-card px-3 py-1.5 text-[10px] font-medium text-foreground transition-colors hover:bg-header"
+        class="mt-3 rounded-xl border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-header"
         @click="resetFilters"
       >
         {{ $t('agent.files.resetFilters') }}
@@ -662,12 +662,12 @@
             </div>
             <div class="min-w-0">
               <div class="flex min-w-0 items-center gap-1.5">
-                <span class="min-w-0 truncate text-[10px] font-semibold text-foreground" :title="item.originalName">
+                <span class="min-w-0 truncate text-[11px] font-semibold text-foreground" :title="item.originalName">
                   {{ item.originalName }}
                 </span>
                 <span
                   v-if="extensionOf(item.originalName)"
-                  class="shrink-0 rounded bg-header px-1 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary"
+                  class="shrink-0 rounded bg-header px-1 py-0.5 text-[11px] font-semibold tracking-wide text-text-secondary"
                 >
                   {{ extensionOf(item.originalName) }}
                 </span>
@@ -730,7 +730,7 @@
     <footer v-if="nextCursor" class="shrink-0 border-t border-border/60 bg-card/35 p-2 text-center">
       <button
         type="button"
-        class="rounded-xl px-4 py-1.5 text-[10px] font-medium text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+        class="rounded-xl px-4 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-header hover:text-foreground"
         :disabled="busy"
         @click="loadMore"
       >

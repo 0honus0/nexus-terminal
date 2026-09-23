@@ -186,12 +186,12 @@
         <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70"></span>
         <div class="flex min-w-0 items-center gap-1.5">
           <span class="text-xs font-semibold leading-none text-foreground">{{ $t('agent.operations.threads') }}</span>
-          <span v-if="threads.length" class="text-[10px] font-medium leading-none text-text-secondary/60">
+          <span v-if="threads.length" class="text-[11px] font-medium leading-none text-text-secondary/60">
             {{ nextCursor ? `${threads.length}+` : threads.length }}
           </span>
           <span
             v-if="activeThreadCount > 0"
-            class="flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-success"
+            class="flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[11px] font-medium leading-none text-success"
           >
             <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-success"></span>{{ activeThreadCount }}
           </span>
@@ -239,7 +239,7 @@
           v-model="query"
           type="search"
           data-no-highlight
-          class="h-7 w-full rounded-lg border border-transparent bg-background/55 pl-7.5 pr-7 text-[10.5px] text-foreground placeholder:text-text-secondary/40 outline-none transition-all hover:bg-card/65 focus:border-primary/20 focus:bg-card/80 focus:ring-2 focus:ring-primary/10"
+          class="h-7 w-full rounded-lg border border-transparent bg-background/55 pl-7.5 pr-7 text-[11px] text-foreground placeholder:text-text-secondary/40 outline-none transition-all hover:bg-card/65 focus:border-primary/20 focus:bg-card/80 focus:ring-2 focus:ring-primary/10"
           :placeholder="$t('agent.operations.searchThreads')"
         />
         <button
@@ -306,14 +306,14 @@
           </span>
           <div class="min-w-0 flex-1">
             <span
-              class="block truncate text-[10.75px] leading-[1.35] tracking-[-0.012em] text-foreground/90"
+              class="block truncate text-[11px] leading-[1.35] tracking-[-0.012em] text-foreground/90"
               :style="{ fontSize: `${10.75 * scale}px` }"
               :title="thread.title || $t('agent.operations.untitledThread')"
             >
               {{ thread.title || $t('agent.operations.untitledThread') }}
             </span>
             <div
-              class="mt-0.5 flex items-center justify-between gap-1.5 text-[10.75px] text-text-secondary/75"
+              class="mt-0.5 flex items-center justify-between gap-1.5 text-[11px] text-text-secondary/75"
               :style="{ fontSize: `${9 * scale}px` }"
             >
               <span
@@ -362,7 +362,7 @@
       ></div>
       <div
         v-if="loadingMore && !query"
-        class="mx-auto mt-1.5 flex h-7 items-center gap-1.5 px-2.5 text-[10px] text-text-secondary/70"
+        class="mx-auto mt-1.5 flex h-7 items-center gap-1.5 px-2.5 text-[11px] text-text-secondary/70"
         aria-live="polite"
       >
         <i class="fa-solid fa-spinner fa-spin text-[8px]" aria-hidden="true"></i

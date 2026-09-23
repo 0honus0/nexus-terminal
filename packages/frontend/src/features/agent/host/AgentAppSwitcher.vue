@@ -159,7 +159,7 @@
           <div class="flex items-center gap-1.5">
             <span class="text-foreground">{{ $t('agent.hub.apps') }}</span>
             <span
-              class="rounded border border-border/60 bg-header px-1.5 py-0.5 text-[10px] font-medium text-text-secondary"
+              class="rounded border border-border/60 bg-header px-1.5 py-0.5 text-[11px] font-medium text-text-secondary"
             >
               {{ candidateApps.length }}
             </span>
@@ -217,7 +217,7 @@
               ></span>
               <div class="min-w-0">
                 <div class="truncate text-xs font-medium leading-none">{{ app.displayName }}</div>
-                <div class="mt-1 truncate text-[10px] text-text-secondary">
+                <div class="mt-1 truncate text-[11px] text-text-secondary">
                   {{ app.id }}
                 </div>
               </div>
@@ -226,14 +226,14 @@
             <div class="flex shrink-0 items-center gap-1.5">
               <span
                 v-if="app.runningRuns"
-                class="rounded-md border border-border/60 bg-header px-1.5 py-0.5 text-[9px] font-medium text-foreground"
+                class="rounded-md border border-border/60 bg-header px-1.5 py-0.5 text-[11px] font-medium text-foreground"
                 :title="$t('agent.hub.runningRuns')"
               >
                 <i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.runningRuns }}
               </span>
               <span
                 v-if="app.pendingApprovals"
-                class="rounded-md bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
+                class="rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
                 :title="$t('agent.hub.pendingApprovals')"
               >
                 <i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingApprovals }}

@@ -103,7 +103,7 @@
 <template>
   <div class="mt-3 rounded bg-background p-2">
     <div class="grid gap-2 sm:grid-cols-2">
-      <label class="text-[10px] text-text-secondary">
+      <label class="text-[11px] text-text-secondary">
         {{ $t('agent.workspaceRuntime.recipe') }}
         <select v-model="selectedRecipeId" class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs">
           <option v-for="recipe in catalog.recipes" :key="recipe.id" :value="recipe.id">
@@ -111,13 +111,13 @@
           </option>
         </select>
       </label>
-      <label class="flex items-end gap-2 pb-1 text-[10px]">
+      <label class="flex items-end gap-2 pb-1 text-[11px]">
         <input v-model="retained" type="checkbox" />
         {{ $t('agent.workspaceRuntime.retained') }}
       </label>
     </div>
 
-    <label v-if="browserRecipe" class="mt-2 block text-[10px] text-text-secondary">
+    <label v-if="browserRecipe" class="mt-2 block text-[11px] text-text-secondary">
       {{ $t('agent.workspaceRuntime.browserTarget') }}
       <select
         v-model="selectedBrowserTargetId"
@@ -130,19 +130,19 @@
     </label>
 
     <div v-if="acpProfiles.length" class="mt-2 rounded border border-border p-2">
-      <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.acpProfiles') }}</div>
+      <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.acpProfiles') }}</div>
       <p class="mt-0.5 text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.acpProfilesHint') }}</p>
-      <label v-for="profile in acpProfiles" :key="profile.id" class="mt-1 flex items-center gap-2 text-[10px]">
+      <label v-for="profile in acpProfiles" :key="profile.id" class="mt-1 flex items-center gap-2 text-[11px]">
         <input v-model="selectedAcpProfileIds" type="checkbox" :value="profile.id" />
         <span>{{ profile.id }} · {{ profile.argv.join(' ') }}</span>
       </label>
     </div>
 
     <div v-if="toolFamilies.length" class="mt-2 rounded border border-border p-2">
-      <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.toolVersions') }}</div>
+      <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.toolVersions') }}</div>
       <p class="mt-0.5 text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.toolVersionsHint') }}</p>
       <div class="mt-2 grid gap-2 sm:grid-cols-3">
-        <label v-for="familyId in toolFamilies" :key="familyId" class="text-[10px] text-text-secondary">
+        <label v-for="familyId in toolFamilies" :key="familyId" class="text-[11px] text-text-secondary">
           {{ familyId }}
           <select
             v-model="toolVersions[familyId]"
@@ -158,9 +158,9 @@
     </div>
 
     <div class="mt-2">
-      <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.runnerPlugins') }}</div>
+      <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.runnerPlugins') }}</div>
       <p class="mt-0.5 text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.runnerPluginsHint') }}</p>
-      <label v-for="plugin in runnerCandidates" :key="plugin.pluginId" class="mt-1 flex items-center gap-2 text-[10px]">
+      <label v-for="plugin in runnerCandidates" :key="plugin.pluginId" class="mt-1 flex items-center gap-2 text-[11px]">
         <input v-model="selectedRunnerPluginIds" type="checkbox" :value="plugin.pluginId" />
         <span>{{ plugin.displayName }} · {{ plugin.pluginId }} · v{{ plugin.version }}</span>
       </label>

@@ -42,29 +42,29 @@
 <template>
   <div class="mt-3 grid gap-3 sm:grid-cols-2">
     <form class="rounded bg-background p-2" @submit.prevent="exportArtifact">
-      <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.exportTitle') }}</div>
+      <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.exportTitle') }}</div>
       <input
         v-model.trim="exportPath"
-        class="mt-2 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
+        class="mt-2 w-full rounded border border-border bg-card px-2 py-1 text-[11px]"
         :placeholder="$t('agent.workspaceRuntime.workspacePath')"
       />
       <input
         v-model.trim="exportName"
-        class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
+        class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[11px]"
         :placeholder="$t('agent.workspaceRuntime.artifactName')"
       />
       <input
         v-model.trim="exportMediaType"
-        class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
+        class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[11px]"
         :placeholder="$t('agent.workspaceRuntime.mediaType')"
       />
-      <button type="submit" class="mt-2 rounded border border-border px-2 py-1 text-[10px]" :disabled="locked">
+      <button type="submit" class="mt-2 rounded border border-border px-2 py-1 text-[11px]" :disabled="locked">
         {{ $t('agent.workspaceRuntime.exportAction') }}
       </button>
     </form>
     <form class="rounded bg-background p-2" @submit.prevent="importArtifact">
-      <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.importTitle') }}</div>
-      <select v-model="importArtifactId" class="mt-2 w-full rounded border border-border bg-card px-2 py-1 text-[10px]">
+      <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.importTitle') }}</div>
+      <select v-model="importArtifactId" class="mt-2 w-full rounded border border-border bg-card px-2 py-1 text-[11px]">
         <option value="">{{ $t('agent.workspaceRuntime.selectArtifact') }}</option>
         <option v-for="artifact in artifacts" :key="artifact.id" :value="artifact.id">
           {{ artifact.originalName }} · {{ artifact.id }}
@@ -72,10 +72,10 @@
       </select>
       <input
         v-model.trim="importPath"
-        class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
+        class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[11px]"
         :placeholder="$t('agent.workspaceRuntime.workspacePath')"
       />
-      <button type="submit" class="mt-2 rounded border border-border px-2 py-1 text-[10px]" :disabled="locked">
+      <button type="submit" class="mt-2 rounded border border-border px-2 py-1 text-[11px]" :disabled="locked">
         {{ $t('agent.workspaceRuntime.importAction') }}
       </button>
     </form>

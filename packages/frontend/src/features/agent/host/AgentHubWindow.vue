@@ -553,7 +553,7 @@
         <!-- 品牌徽标 -->
         <div class="agent-hub-brand flex shrink-0 items-center gap-1.5 pointer-events-none pr-0.5">
           <div
-            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] text-primary"
+            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] text-primary"
           >
             <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
           </div>
@@ -563,7 +563,7 @@
             }}</span>
             <span
               v-if="activityCount > 0"
-              class="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+              class="rounded-full bg-primary/15 px-1.5 py-0.5 text-[11px] font-semibold text-primary"
             >
               {{ activityCount }}
             </span>
@@ -605,21 +605,21 @@
             <!-- 运行状态指示徽标 -->
             <span
               v-if="app.runningRuns"
-              class="relative z-[1] shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary"
+              class="relative z-[1] shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-[11px] font-medium text-primary"
               :title="$t('agent.hub.runningRuns')"
             >
               <i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.runningRuns }}
             </span>
             <span
               v-if="app.pendingApprovals"
-              class="relative z-[1] shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
+              class="relative z-[1] shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
               :title="$t('agent.hub.pendingApprovals')"
             >
               <i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingApprovals }}
             </span>
             <span
               v-if="app.pendingBudgetRequests"
-              class="relative z-[1] shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
+              class="relative z-[1] shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
               :title="$t('agent.hub.pendingBudget')"
             >
               <i class="fa-solid fa-coins mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingBudgetRequests }}
@@ -651,7 +651,7 @@
       <div class="flex shrink-0 items-center gap-1.5" @pointerdown.stop>
         <span
           v-if="summary.totalPendingApprovals > 0"
-          class="agent-hub-approval-badge mr-0.5 flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[9px] font-medium text-warning"
+          class="agent-hub-approval-badge mr-0.5 flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
         >
           <span class="h-1.5 w-1.5 rounded-full bg-warning animate-pulse"></span>
           {{ $t('agent.hub.approvals', { count: summary.totalPendingApprovals }) }}

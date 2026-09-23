@@ -21,11 +21,11 @@
     <div class="flex items-center justify-between gap-2">
       <div>
         <h3 class="font-medium">{{ $t('agent.subagents.title') }}</h3>
-        <p class="mt-0.5 text-[10px] text-text-secondary">{{ $t('agent.subagents.description') }}</p>
+        <p class="mt-0.5 text-[11px] text-text-secondary">{{ $t('agent.subagents.description') }}</p>
       </div>
-      <span class="rounded bg-header px-2 py-1 text-[10px]">{{ items.length }}</span>
+      <span class="rounded bg-header px-2 py-1 text-[11px]">{{ items.length }}</span>
     </div>
-    <p v-if="items.length === 0" class="mt-3 text-[10px] text-text-secondary">
+    <p v-if="items.length === 0" class="mt-3 text-[11px] text-text-secondary">
       {{ $t('agent.subagents.empty') }}
     </p>
     <div v-else class="mt-3 space-y-2">

@@ -178,13 +178,13 @@
         <span class="relative flex h-5 w-5 shrink-0 items-center justify-center">
           <span class="absolute h-2 w-2 rounded-full bg-primary ring-4 ring-primary/10"></span>
         </span>
-        <span class="min-w-0 truncate text-[10px] font-semibold text-foreground/90">
+        <span class="min-w-0 truncate text-[11px] font-semibold text-foreground/90">
           {{ $t('agent.conversation.toolCall') }}
         </span>
         <span
           v-if="toolCalls.length > 1"
           data-testid="agent-tool-call-count"
-          class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-primary"
+          class="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-primary"
         >
           {{ toolCalls.length }}
         </span>
@@ -209,7 +209,7 @@
             <span class="shrink-0">{{ $t('agent.conversation.toolArguments') }}</span>
           </div>
           <pre
-            class="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-header/30 px-3 py-2.5 font-mono text-[10px] leading-5 text-foreground/80 ring-1 ring-inset ring-border/30"
+            class="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-header/30 px-3 py-2.5 font-mono text-[11px] leading-5 text-foreground/80 ring-1 ring-inset ring-border/30"
             >{{ call.formattedArguments }}</pre>
         </div>
       </div>
@@ -237,7 +237,7 @@
           "
         >
           <i
-            class="text-[9px]"
+            class="text-[11px]"
             :class="
               failed
                 ? 'fa-solid fa-triangle-exclamation'
@@ -250,7 +250,7 @@
         </span>
         <code
           v-if="toolName"
-          class="shrink-0 font-mono text-[10px] font-semibold"
+          class="shrink-0 font-mono text-[11px] font-semibold"
           :class="failed ? 'text-error' : 'text-foreground/80'"
         >
           {{ toolName }}
@@ -258,7 +258,7 @@
         <span class="min-w-0 flex flex-1 items-baseline overflow-hidden">
           <span
             v-if="visibleToolSummary"
-            class="min-w-0 truncate text-[10px] text-text-secondary/75"
+            class="min-w-0 truncate text-[11px] text-text-secondary/75"
             :title="visibleToolSummary"
           >
             {{ visibleToolSummary }}
@@ -281,7 +281,7 @@
           <span>{{ $t('agent.conversation.jsonLabel') }}</span>
         </div>
         <pre
-          class="max-h-72 overflow-auto whitespace-pre font-mono text-[10px] leading-5 text-foreground/80 tabular-nums"
+          class="max-h-72 overflow-auto whitespace-pre font-mono text-[11px] leading-5 text-foreground/80 tabular-nums"
           >{{ formattedToolOutput }}</pre>
       </div>
     </details>
@@ -300,7 +300,7 @@
           : 'w-full'
       "
     >
-      <div v-if="!isUser" class="mb-2.5 flex items-center gap-2 px-1 text-[10px] font-medium text-text-secondary/70">
+      <div v-if="!isUser" class="mb-2.5 flex items-center gap-2 px-1 text-[11px] font-medium text-text-secondary/70">
         <span class="h-1.5 w-1.5 rounded-full bg-primary"></span>
         <span>{{ $t('agent.conversation.kind.assistant_message') }}</span>
         <span

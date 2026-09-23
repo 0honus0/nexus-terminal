@@ -176,7 +176,7 @@
           :key="pill"
           type="button"
           tabindex="-1"
-          class="inline-flex h-5 items-center justify-center rounded px-1.5 font-mono text-[10px] font-semibold text-text-secondary/80 hover:bg-header hover:text-foreground active:scale-95 transition-all cursor-pointer select-none"
+          class="inline-flex h-5 items-center justify-center rounded px-1.5 font-mono text-[11px] font-semibold text-text-secondary/80 hover:bg-header hover:text-foreground active:scale-95 transition-all cursor-pointer select-none"
           :class="{
             'bg-primary/15 text-primary font-bold ring-1 ring-primary/30 shadow-xs': isPillActive(pill),
           }"
@@ -189,7 +189,7 @@
     </div>
 
     <!-- 实时换算与解析微反馈 -->
-    <div v-if="shouldShowFeedback" class="flex items-center justify-between px-0.5 text-[10px]">
+    <div v-if="shouldShowFeedback" class="flex items-center justify-between px-0.5 text-[11px]">
       <span v-if="feedback?.valid" class="truncate text-text-secondary flex items-center gap-1 font-mono">
         <span class="text-primary font-semibold">≈ {{ feedback.readable }}</span>
         <span class="opacity-60">({{ feedback.exact }})</span>

@@ -410,7 +410,7 @@
         >
           <!-- 顶端微胶囊标识 -->
           <div
-            class="mb-3.5 inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.08] px-3.5 py-0.5 text-[10px] font-semibold tracking-wider text-primary shadow-2xs"
+            class="mb-3.5 inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.08] px-3.5 py-0.5 text-[11px] font-semibold tracking-wider text-primary shadow-2xs"
           >
             <span class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
             <span>{{ $t('agent.conversation.heroTag') }}</span>
@@ -539,7 +539,7 @@
               class="rounded-xl border border-border/65 bg-card/70 px-3 py-2.5"
             >
               <div class="text-xs font-medium leading-5 text-foreground">{{ question.prompt }}</div>
-              <div v-if="question.context" class="mt-0.5 text-[10px] leading-4 text-text-secondary/70">
+              <div v-if="question.context" class="mt-0.5 text-[11px] leading-4 text-text-secondary/70">
                 {{ question.context }}
               </div>
               <div v-if="question.kind === 'choice' && question.choices?.length" class="mt-2 flex flex-wrap gap-1.5">
@@ -563,12 +563,12 @@
                   >
                     {{ $t('agent.conversation.clarificationRecommended') }}
                   </span>
-                  <span v-if="choice.description" class="mt-0.5 block max-w-sm text-[10px] leading-4 opacity-75">
+                  <span v-if="choice.description" class="mt-0.5 block max-w-sm text-[11px] leading-4 opacity-75">
                     {{ choice.description }}
                   </span>
                 </button>
               </div>
-              <div v-else class="mt-1 text-[10px] text-text-secondary/65">
+              <div v-else class="mt-1 text-[11px] text-text-secondary/65">
                 {{ $t('agent.conversation.clarificationTextHint') }}
               </div>
             </div>
@@ -615,7 +615,7 @@
           </div>
           <div v-if="reconciliation" class="mt-2 border-t border-warning/20 pt-2 text-foreground">
             <div v-if="reconciliationDetails?.resources.length" class="mb-2 space-y-1">
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+              <div class="text-[11px] font-semibold uppercase tracking-wide text-text-secondary">
                 {{ $t('agent.operations.reconciliationResources') }}
               </div>
               <div
@@ -623,13 +623,13 @@
                 :key="`${resource.resourceKey}:${resource.version}`"
                 class="rounded-lg border border-warning/20 bg-background/60 px-2.5 py-1.5"
               >
-                <div class="font-mono text-[10px] font-semibold text-foreground">{{ resource.resourceKey }}</div>
-                <div class="mt-0.5 text-[10px] leading-4 text-text-secondary">
+                <div class="font-mono text-[11px] font-semibold text-foreground">{{ resource.resourceKey }}</div>
+                <div class="mt-0.5 text-[11px] leading-4 text-text-secondary">
                   {{ reconciliationResourceReason(resource.reason) }}
                 </div>
               </div>
             </div>
-            <div v-else class="mb-2 text-[10px] text-text-secondary">
+            <div v-else class="mb-2 text-[11px] text-text-secondary">
               {{ $t('agent.operations.reconciliationLoading') }}
             </div>
             <textarea
@@ -640,7 +640,7 @@
               :disabled="reconciliationBusy || !reconciliationDetails?.required"
             ></textarea>
             <div class="mt-2 flex items-center justify-between gap-3">
-              <span class="text-[10px] leading-4 text-text-secondary">
+              <span class="text-[11px] leading-4 text-text-secondary">
                 {{ $t('agent.operations.reconciliationHint') }}
               </span>
               <button
@@ -732,7 +732,7 @@
         >
           <span
             v-if="showRunTokens"
-            class="agent-token-status inline-flex h-6 items-center gap-1.5 rounded-lg border border-border/55 bg-background/50 px-2 text-[9.5px] text-text-secondary select-none"
+            class="agent-token-status inline-flex h-6 items-center gap-1.5 rounded-lg border border-border/55 bg-background/50 px-2 text-[11px] text-text-secondary select-none"
             :title="`${$t('agent.tasks.totalTokens')}: ${totalRunTokens} · input ${run?.usage.inputTokens} · output ${run?.usage.outputTokens} · cache ${runCacheRate}% · steps ${run?.usage.steps}`"
           >
             <i class="fa-solid fa-chart-simple text-[8px] text-text-secondary/70" aria-hidden="true"></i>

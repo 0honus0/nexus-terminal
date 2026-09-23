@@ -195,7 +195,7 @@
           <i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>
           <span class="text-[11px]">{{ $t('agent.tasks.backToTasks') }}</span>
         </button>
-        <span class="truncate font-mono text-[10px] font-medium text-text-secondary">
+        <span class="truncate font-mono text-[11px] font-medium text-text-secondary">
           #{{ detailSnapshot.id.slice(-6) }}
         </span>
       </div>
@@ -223,7 +223,7 @@
       <div class="flex items-center gap-1.5">
         <span
           v-if="requestedApprovals.length || backgroundRuns.length"
-          class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary"
+          class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary"
         >
           {{ requestedApprovals.length + backgroundRuns.length }}
         </span>
@@ -245,7 +245,7 @@
         <section class="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <div class="text-[10px] font-semibold uppercase tracking-wider text-text-secondary">
+              <div class="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                 {{ $t('agent.tasks.runOverview') }}
               </div>
               <div class="mt-1 flex items-center gap-1.5">
@@ -264,12 +264,12 @@
                 <strong class="text-xs truncate">{{ $t(`agent.tasks.runStatus.${detailSnapshot.status}`) }}</strong>
               </div>
             </div>
-            <span class="rounded-md bg-header px-2 py-0.5 text-[10px] text-text-secondary shrink-0">
+            <span class="rounded-md bg-header px-2 py-0.5 text-[11px] text-text-secondary shrink-0">
               {{ $t(`agent.tasks.verificationStatus.${detailSnapshot.verificationStatus}`) }}
             </span>
           </div>
 
-          <div class="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5 text-[10px]">
+          <div class="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5 text-[11px]">
             <div class="rounded-lg border border-border/40 bg-background/50 p-2">
               <div class="text-text-secondary">{{ $t('agent.tasks.steps') }}</div>
               <div class="mt-0.5 font-mono font-medium text-foreground">{{ detailSnapshot.usage.steps }}</div>
@@ -302,7 +302,7 @@
           </div>
 
           <div
-            class="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2 text-[10px] text-text-secondary"
+            class="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2 text-[11px] text-text-secondary"
           >
             <span class="rounded-md bg-header px-2 py-0.5 font-mono">
               <i class="fa-solid fa-microchip mr-1 text-[8px]" aria-hidden="true"></i
@@ -319,12 +319,12 @@
             v-if="terminal.has(detailSnapshot.status)"
             class="mt-2.5 flex items-center justify-between gap-2 border-t border-border/50 pt-2"
           >
-            <span class="text-[10px] text-text-secondary">{{ $t('agent.tasks.deleteRunHint') }}</span>
+            <span class="text-[11px] text-text-secondary">{{ $t('agent.tasks.deleteRunHint') }}</span>
             <div class="flex shrink-0 items-center gap-1">
               <button
                 v-if="deleteArmed"
                 type="button"
-                class="rounded-md border border-border/70 px-2 py-1 text-[10px] font-medium text-text-secondary hover:bg-header"
+                class="rounded-md border border-border/70 px-2 py-1 text-[11px] font-medium text-text-secondary hover:bg-header"
                 :disabled="busy"
                 @click="deleteArmed = false"
               >
@@ -332,7 +332,7 @@
               </button>
               <button
                 type="button"
-                class="rounded-md border border-error/40 px-2 py-1 text-[10px] font-semibold text-error hover:bg-error/10 disabled:opacity-50"
+                class="rounded-md border border-error/40 px-2 py-1 text-[11px] font-semibold text-error hover:bg-error/10 disabled:opacity-50"
                 :disabled="busy"
                 @click="deleteArmed ? $emit('deleteRun', detailSnapshot) : (deleteArmed = true)"
               >
@@ -373,10 +373,10 @@
             {{ $t('agent.tasks.checkpoints') }} · {{ detailCheckpoints.length }}
           </summary>
           <div class="mt-2.5 flex items-center justify-between gap-1">
-            <span class="text-[10px] text-text-secondary leading-tight">{{ $t('agent.tasks.checkpointHint') }}</span>
+            <span class="text-[11px] text-text-secondary leading-tight">{{ $t('agent.tasks.checkpointHint') }}</span>
             <button
               type="button"
-              class="shrink-0 rounded-md border border-border/70 bg-background px-2 py-1 text-[10px] font-medium hover:bg-header disabled:opacity-50"
+              class="shrink-0 rounded-md border border-border/70 bg-background px-2 py-1 text-[11px] font-medium hover:bg-header disabled:opacity-50"
               :disabled="busy || !canSaveDetail()"
               @click="$emit('saveCheckpoint', detailSnapshot)"
             >
@@ -386,7 +386,7 @@
           </div>
           <div
             v-if="detailCheckpoints.length === 0"
-            class="mt-2 rounded-lg bg-background/60 px-2.5 py-2 text-[10px] text-text-secondary"
+            class="mt-2 rounded-lg bg-background/60 px-2.5 py-2 text-[11px] text-text-secondary"
           >
             {{ $t('agent.tasks.noCheckpoints') }}
           </div>
@@ -398,10 +398,10 @@
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
                 <div class="flex min-w-0 items-center gap-1.5">
-                  <div class="truncate font-mono text-[10px] font-medium text-foreground">
+                  <div class="truncate font-mono text-[11px] font-medium text-foreground">
                     #{{ checkpoint.id.slice(-8) }}
                   </div>
-                  <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[10px] text-text-secondary">
+                  <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[11px] text-text-secondary">
                     {{
                       $t(
                         checkpoint.kind === 'recovery'
@@ -423,7 +423,7 @@
               <button
                 v-if="terminal.has(detailSnapshot.status) && checkpoint.kind === 'user'"
                 type="button"
-                class="shrink-0 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
+                class="shrink-0 rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
                 :disabled="busy || detailSnapshot.needsReconciliation"
                 @click="$emit('resumeCheckpoint', detailSnapshot, checkpoint)"
               >
@@ -463,7 +463,7 @@
             :key="entry.id"
             class="mt-2 rounded-lg bg-background/60 p-2"
           >
-            <div class="text-[10px] text-text-secondary">#{{ entry.sequence }} · {{ entry.kind }}</div>
+            <div class="text-[11px] text-text-secondary">#{{ entry.sequence }} · {{ entry.kind }}</div>
             <pre
               class="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug"
               >{{ JSON.stringify(entry.payload, null, 2) }}</pre>
@@ -506,7 +506,7 @@
                       ></span>
                       <strong class="truncate text-xs">{{ $t(`agent.tasks.runStatus.${current.status}`) }}</strong>
                     </div>
-                    <div v-if="planItems.length" class="mt-1 text-[10px] text-text-secondary">
+                    <div v-if="planItems.length" class="mt-1 text-[11px] text-text-secondary">
                       {{ completedPlanItems }}/{{ planItems.length }} · {{ planPercent }}%
                     </div>
                   </div>
@@ -539,7 +539,7 @@
 
                 <div
                   v-if="attentionKey && attentionKey !== 'reconciliation'"
-                  class="mt-3 rounded-xl border border-warning/25 bg-warning/5 px-2.5 py-2 text-[10px] leading-4 text-warning"
+                  class="mt-3 rounded-xl border border-warning/25 bg-warning/5 px-2.5 py-2 text-[11px] leading-4 text-warning"
                 >
                   <i class="fa-solid fa-triangle-exclamation mr-1 text-[8px]" aria-hidden="true"></i>
                   {{ $t(`agent.tasks.attention.${attentionKey}`) }}
@@ -547,7 +547,7 @@
 
                 <div class="mt-3 border-t border-border/50 pt-2.5 space-y-2.5">
                   <div>
-                    <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
+                    <div class="mb-1 flex items-center justify-between text-[11px] text-text-secondary">
                       <span class="font-medium">{{ $t('agent.tasks.contextUsage') }}</span>
                       <span v-if="contextUsage" class="font-mono">
                         {{ contextUsage.inputTokens }} / {{ contextUsage.contextWindowTokens }} · {{ contextPercent }}%
@@ -575,12 +575,12 @@
                     </div>
                   </div>
                   <div>
-                    <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
+                    <div class="mb-1 flex items-center justify-between text-[11px] text-text-secondary">
                       <span class="font-medium">{{ $t('agent.tasks.steps') }}</span>
                       <span class="font-mono">{{ current.usage.steps }} / {{ current.budget.maxRunSteps }}</span>
                     </div>
                   </div>
-                  <div class="grid grid-cols-2 gap-2 text-[10px]">
+                  <div class="grid grid-cols-2 gap-2 text-[11px]">
                     <div class="rounded-lg border border-border/40 bg-background/50 px-2 py-1.5">
                       <div class="text-text-secondary">{{ $t('agent.tasks.activeTime') }}</div>
                       <div class="mt-0.5 font-medium font-mono">{{ current.activeExecutionSeconds }}s</div>
@@ -605,7 +605,7 @@
                         <span>{{ $t('agent.tasks.advancedDetails') }}</span>
                         <span
                           v-if="currentCheckpoints.length"
-                          class="rounded-full bg-header px-1.5 py-0.5 text-[9px] text-text-secondary font-mono"
+                          class="rounded-full bg-header px-1.5 py-0.5 text-[11px] text-text-secondary font-mono"
                         >
                           {{ currentCheckpoints.length }}
                         </span>
@@ -619,7 +619,7 @@
 
                     <div v-if="showInlineDetails" class="mt-2 space-y-2.5 pt-0.5">
                       <!-- 模型与思考强度 -->
-                      <div class="flex flex-wrap items-center gap-1 text-[10px] text-text-secondary">
+                      <div class="flex flex-wrap items-center gap-1 text-[11px] text-text-secondary">
                         <span class="rounded-md bg-header px-2 py-0.5 font-mono">
                           <i class="fa-solid fa-microchip mr-1 text-[8px]" aria-hidden="true"></i
                           >{{ current.definition.model.modelId }}
@@ -633,7 +633,7 @@
                       <!-- 检查点 -->
                       <div class="rounded-lg border border-border/50 bg-background/50 p-2.5">
                         <div class="flex items-center justify-between gap-1 mb-1.5">
-                          <span class="text-[10px] font-semibold text-foreground flex items-center gap-1">
+                          <span class="text-[11px] font-semibold text-foreground flex items-center gap-1">
                             <i class="fa-solid fa-bookmark text-[8px] text-primary" aria-hidden="true"></i>
                             {{ $t('agent.tasks.checkpoints') }}
                           </span>
@@ -648,7 +648,7 @@
                           </button>
                         </div>
 
-                        <div v-if="currentCheckpoints.length === 0" class="py-1 text-[10px] text-text-secondary">
+                        <div v-if="currentCheckpoints.length === 0" class="py-1 text-[11px] text-text-secondary">
                           {{ $t('agent.tasks.noCheckpoints') }}
                         </div>
                         <div v-else class="space-y-1.5 max-h-32 overflow-y-auto">
@@ -659,7 +659,7 @@
                           >
                             <div class="flex min-w-0 items-center gap-1">
                               <div class="truncate font-mono text-foreground">#{{ cp.id.slice(-6) }}</div>
-                              <span class="shrink-0 rounded bg-header px-1 py-0.5 text-[10px] text-text-secondary">
+                              <span class="shrink-0 rounded bg-header px-1 py-0.5 text-[11px] text-text-secondary">
                                 {{
                                   $t(
                                     cp.kind === 'recovery'
@@ -701,7 +701,7 @@
                   <div class="flex items-center gap-1.5">
                     <i class="fa-solid fa-shield-halved text-[10px] text-warning" aria-hidden="true"></i>
                     <strong class="text-xs">{{ $t('agent.approvals.timeline') }}</strong>
-                    <span class="rounded-full bg-warning/10 px-1.5 py-0.5 text-[9px] text-warning">
+                    <span class="rounded-full bg-warning/10 px-1.5 py-0.5 text-[11px] text-warning">
                       {{ requestedApprovals.length }}
                     </span>
                   </div>
@@ -732,7 +732,7 @@
                     <span class="text-[11px] text-text-secondary">r{{ current.plan.revision }}</span>
                     <span
                       v-if="blockedPlanItems"
-                      class="rounded-full bg-warning/10 px-1.5 py-0.5 text-[9px] text-warning"
+                      class="rounded-full bg-warning/10 px-1.5 py-0.5 text-[11px] text-warning"
                     >
                       {{ blockedPlanItems }}
                     </span>
@@ -748,7 +748,7 @@
                 <ol class="mt-2.5 space-y-2">
                   <li v-for="item in planItems" :key="item.id" class="relative pl-5">
                     <span
-                      class="absolute left-0 top-0.5 flex h-4 w-4 items-center justify-center rounded-full border text-[7px]"
+                      class="absolute left-0 top-0.5 flex h-4 w-4 items-center justify-center rounded-full border text-[9px]"
                       :class="
                         item.status === 'completed'
                           ? 'border-success/40 bg-success/10 text-success'
@@ -765,7 +765,7 @@
                       ></i>
                     </span>
                     <div class="text-xs font-medium leading-4">{{ item.title }}</div>
-                    <p v-if="item.detail" class="mt-0.5 line-clamp-2 text-[10px] leading-4 text-text-secondary">
+                    <p v-if="item.detail" class="mt-0.5 line-clamp-2 text-[11px] leading-4 text-text-secondary">
                       {{ item.detail }}
                     </p>
                   </li>
@@ -790,7 +790,7 @@
                   <span
                     v-for="id in current.definition.connectionIds"
                     :key="id"
-                    class="rounded-lg bg-header px-2 py-1 text-[10px] text-text-secondary"
+                    class="rounded-lg bg-header px-2 py-1 text-[11px] text-text-secondary"
                     >#{{ id }}</span
                   >
                 </div>
@@ -800,7 +800,7 @@
                 <div class="mb-2 flex items-center justify-between gap-2">
                   <div class="flex items-center gap-2">
                     <strong class="text-xs">{{ $t('agent.tasks.history') }}</strong>
-                    <span class="text-[9px] text-text-secondary">{{ historyRuns.length }}</span>
+                    <span class="text-[11px] text-text-secondary">{{ historyRuns.length }}</span>
                   </div>
                   <button
                     type="button"
@@ -828,7 +828,7 @@
                     "
                   ></span>
                   <span class="min-w-0 flex-1">
-                    <span class="block truncate text-[10px] font-medium">{{
+                    <span class="block truncate text-[11px] font-medium">{{
                       $t(`agent.tasks.runStatus.${item.status}`)
                     }}</span>
                     <span class="mt-0.5 block truncate text-[11px] text-text-secondary">
@@ -843,7 +843,7 @@
                 <div class="mb-2 flex items-center justify-between gap-2">
                   <div class="flex items-center gap-2">
                     <strong class="text-xs">{{ $t('agent.tasks.background') }}</strong>
-                    <span class="text-[9px] text-text-secondary">{{ backgroundRuns.length }}</span>
+                    <span class="text-[11px] text-text-secondary">{{ backgroundRuns.length }}</span>
                   </div>
                   <button
                     type="button"
@@ -862,7 +862,7 @@
                 >
                   <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"></span>
                   <span class="min-w-0 flex-1">
-                    <span class="block truncate text-[10px] font-medium">{{
+                    <span class="block truncate text-[11px] font-medium">{{
                       $t(`agent.tasks.runStatus.${item.status}`)
                     }}</span>
                     <span class="mt-0.5 block truncate text-[11px] text-text-secondary">

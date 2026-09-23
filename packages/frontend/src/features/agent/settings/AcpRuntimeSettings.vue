@@ -337,7 +337,7 @@
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="min-w-0">
               <div class="text-sm font-medium">{{ acpConfiguration(integration).displayName }}</div>
-              <div class="mt-0.5 break-all font-mono text-[10px] text-text-secondary">{{ integration.id }}</div>
+              <div class="mt-0.5 break-all font-mono text-[11px] text-text-secondary">{{ integration.id }}</div>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <select

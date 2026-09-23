@@ -266,7 +266,7 @@
                 </div>
                 <span
                   v-if="preset.badge"
-                  class="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                  class="rounded-full bg-primary/20 px-1.5 py-0.5 text-[11px] font-medium text-primary"
                 >
                   {{ preset.badge }}
                 </span>
@@ -274,7 +274,7 @@
               <p class="mt-1 text-[11px] leading-relaxed text-text-secondary">{{ preset.description }}</p>
             </div>
             <div
-              class="mt-2.5 flex items-center justify-between border-t border-border/40 pt-1.5 text-[10px] text-text-secondary"
+              class="mt-2.5 flex items-center justify-between border-t border-border/40 pt-1.5 text-[11px] text-text-secondary"
             >
               <span v-if="preset.id !== 'custom'"
                 >{{ preset.values.maxRunSteps }} 步 ·
@@ -310,12 +310,12 @@
                   </span>
                   <span
                     v-if="settings.requestedSettings.budget[key] !== settings.effectiveSettings.budget[key]"
-                    class="text-[10px] text-warning"
+                    class="text-[11px] text-warning"
                   >
                     有效: {{ formatQuantity(settings.effectiveSettings.budget[key], getFieldType(key)) }}
                   </span>
                 </div>
-                <p class="mb-1.5 text-[10px] text-text-secondary">
+                <p class="mb-1.5 text-[11px] text-text-secondary">
                   {{ $t(`agent.settings.budget.fields.${key}Hint`) }}
                 </p>
                 <QuantityInput v-model="draft[key]" :type="getFieldType(key)" :min="1" :disabled="busy" />

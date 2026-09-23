@@ -167,7 +167,7 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="hidden text-[10px] font-mono text-text-secondary/60 sm:inline">
+        <span class="hidden text-[11px] font-mono text-text-secondary/60 sm:inline">
           {{ $t('agent.settings.safety.revision', { revision: denylist.revision }) }}
         </span>
         <button
@@ -200,14 +200,14 @@
             <span
               v-for="connection in blockedConnections.slice(0, 6)"
               :key="connection.id"
-              class="inline-flex max-w-52 items-center gap-1 rounded-md bg-error/8 px-2 py-1 text-[10px] text-error"
+              class="inline-flex max-w-52 items-center gap-1 rounded-md bg-error/8 px-2 py-1 text-[11px] text-error"
             >
               <i class="fa-solid fa-ban text-[8px]" aria-hidden="true"></i>
               <span class="truncate">{{ connection.name || connection.host }}</span>
             </span>
             <span
               v-if="blockedConnections.length > 6"
-              class="rounded-md bg-header/60 px-2 py-1 text-[10px] text-text-secondary"
+              class="rounded-md bg-header/60 px-2 py-1 text-[11px] text-text-secondary"
             >
               +{{ blockedConnections.length - 6 }}
             </span>
@@ -342,7 +342,7 @@
                   {{ connection.name || connection.host }}
                 </span>
                 <!-- ID 微标 -->
-                <span class="rounded bg-header px-1.5 py-0.5 text-[10px] font-mono text-text-secondary font-medium">
+                <span class="rounded bg-header px-1.5 py-0.5 text-[11px] font-mono text-text-secondary font-medium">
                   ID: #{{ connection.id }}
                 </span>
               </div>
@@ -350,7 +350,7 @@
                 <span v-if="connection.username" class="text-text-secondary">{{ connection.username }}@</span>
                 <span>{{ connection.host }}:{{ connection.port }}</span>
                 <span
-                  class="rounded bg-card/80 border border-border/70 px-1.5 py-0.5 text-[10px] uppercase font-semibold text-text-secondary"
+                  class="rounded bg-card/80 border border-border/70 px-1.5 py-0.5 text-[11px] uppercase font-semibold text-text-secondary"
                 >
                   {{ connection.type }}
                 </span>
@@ -362,14 +362,14 @@
           <div class="shrink-0">
             <span
               v-if="selectedIds.has(connection.id)"
-              class="inline-flex items-center gap-1 rounded-md bg-error/15 border border-error/30 px-2 py-1 text-[10px] font-semibold text-error shadow-2xs"
+              class="inline-flex items-center gap-1 rounded-md bg-error/15 border border-error/30 px-2 py-1 text-[11px] font-semibold text-error shadow-2xs"
             >
               <i class="fa-solid fa-ban text-[9px]"></i>
               <span>{{ $t('agent.settings.safety.blockedBadge') }}</span>
             </span>
             <span
               v-else
-              class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 px-2 py-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+              class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 px-2 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
             >
               <i class="fa-solid fa-check text-[9px]"></i>
               <span>{{ $t('agent.settings.safety.allowedBadge') }}</span>
@@ -391,7 +391,7 @@
               v-for="id in orphanIds"
               :key="id"
               type="button"
-              class="inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 font-mono text-[10px] hover:bg-amber-500/25 cursor-pointer"
+              class="inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 font-mono text-[11px] hover:bg-amber-500/25 cursor-pointer"
               title="点击移出黑名单"
               @click="removeOrphanId(id)"
             >
@@ -414,18 +414,18 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <label class="text-xs font-semibold text-foreground flex items-center gap-1.5">
             <span>{{ $t('agent.settings.safety.reason') }}</span>
-            <span class="text-[10px] text-text-secondary font-normal">{{
+            <span class="text-[11px] text-text-secondary font-normal">{{
               $t('agent.settings.safety.reasonAudit')
             }}</span>
           </label>
           <!-- 快捷预设药丸 -->
           <div class="flex flex-wrap items-center gap-1.5">
-            <span class="text-[10px] text-text-secondary">{{ $t('agent.settings.safety.commonReasons') }}</span>
+            <span class="text-[11px] text-text-secondary">{{ $t('agent.settings.safety.commonReasons') }}</span>
             <button
               v-for="preset in reasonPresets"
               :key="preset"
               type="button"
-              class="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] text-text-secondary hover:border-primary/40 hover:text-primary transition-all cursor-pointer shadow-2xs"
+              class="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-text-secondary hover:border-primary/40 hover:text-primary transition-all cursor-pointer shadow-2xs"
               @click="setPresetReason(preset)"
             >
               {{ preset }}

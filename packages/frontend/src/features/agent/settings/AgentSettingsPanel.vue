@@ -739,7 +739,7 @@
                 {{ $t('agent.settings.onboarding.title') }}
               </h2>
               <span
-                class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
               >
                 <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 {{ $t('agent.settings.onboarding.publisherVerified') }}
@@ -771,7 +771,7 @@
                 >
                   v{{ recommendedPlugin.availableVersion }}
                 </span>
-                <span class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                <span class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
                   {{ $t('agent.settings.onboarding.badge') }}
                 </span>
               </div>
@@ -863,7 +863,7 @@
             </div>
             <button
               type="button"
-              class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[10px] text-text-secondary hover:bg-header hover:text-foreground transition-colors cursor-pointer"
+              class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-text-secondary hover:bg-header hover:text-foreground transition-colors cursor-pointer"
               @click="copyKeyId(recommendedPlugin.publisherKeyId)"
             >
               <i :class="copiedKey ? 'fa-solid fa-check text-emerald-500' : 'fa-regular fa-copy'"></i>
@@ -875,7 +875,7 @@
 
           <div
             v-if="showKeyDetails"
-            class="mt-2.5 space-y-2 border-t border-border/50 pt-2.5 text-[10px] text-text-secondary"
+            class="mt-2.5 space-y-2 border-t border-border/50 pt-2.5 text-[11px] text-text-secondary"
           >
             <div>
               <div class="font-medium text-foreground">{{ $t('agent.settings.onboarding.fullKeyId') }}</div>

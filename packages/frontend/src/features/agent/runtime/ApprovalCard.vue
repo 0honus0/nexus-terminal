@@ -45,7 +45,7 @@
         </div>
         <div class="mt-1 truncate font-mono text-[11px]">{{ approval.inspection.toolName }}</div>
       </div>
-      <span class="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium">
+      <span class="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium">
         {{ approval.inspection.risk }}
       </span>
     </div>
@@ -59,10 +59,10 @@
 
     <details class="mt-3 rounded border border-border bg-background p-2">
       <summary class="cursor-pointer font-medium">{{ $t('agent.approvals.operation') }}</summary>
-      <p class="mt-2 break-all font-mono text-[10px]">{{ $t('agent.approvals.hash') }}: {{ approval.operationHash }}</p>
-      <pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[10px]">{{ argumentsText }}</pre>
+      <p class="mt-2 break-all font-mono text-[11px]">{{ $t('agent.approvals.hash') }}: {{ approval.operationHash }}</p>
+      <pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px]">{{ argumentsText }}</pre>
       <div v-if="approval.inspection.preconditions.length" class="mt-2 border-t border-border pt-2">
-        <div class="mb-1 text-[10px] font-medium text-text-secondary">{{ $t('agent.approvals.preconditions') }}</div>
+        <div class="mb-1 text-[11px] font-medium text-text-secondary">{{ $t('agent.approvals.preconditions') }}</div>
         <div
           v-for="precondition in approval.inspection.preconditions"
           :key="`${precondition.kind}:${precondition.key}`"
@@ -79,7 +79,7 @@
     <p v-else-if="remaining === 0" class="mt-3 text-[11px] text-error">{{ $t('agent.approvals.expired') }}</p>
     <div v-else class="mt-3 space-y-2">
       <div v-if="feedbackVisible" class="rounded-lg border border-border/70 bg-background/70 p-2">
-        <label class="mb-1.5 block text-[10px] font-medium text-text-secondary">
+        <label class="mb-1.5 block text-[11px] font-medium text-text-secondary">
           {{ $t('agent.approvals.feedbackLabel') }}
         </label>
         <textarea
@@ -92,7 +92,7 @@
         <div class="mt-2 flex justify-end gap-1.5">
           <button
             type="button"
-            class="rounded-md px-2.5 py-1.5 text-[10px] text-text-secondary hover:bg-header disabled:opacity-50"
+            class="rounded-md px-2.5 py-1.5 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
             :disabled="!actionable"
             @click="feedbackVisible = false"
           >
@@ -100,7 +100,7 @@
           </button>
           <button
             type="button"
-            class="rounded-md bg-error px-2.5 py-1.5 text-[10px] font-medium text-white disabled:opacity-50"
+            class="rounded-md bg-error px-2.5 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
             :disabled="!actionable || !feedback.trim()"
             @click="emit('resolve', approval, 'denied', feedback.trim())"
           >

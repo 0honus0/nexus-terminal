@@ -28,13 +28,13 @@
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
           <div class="truncate text-xs font-medium">{{ delegation.objective }}</div>
-          <div class="mt-0.5 truncate font-mono text-[10px] text-text-secondary">
+          <div class="mt-0.5 truncate font-mono text-[11px] text-text-secondary">
             {{ delegation.modelRef.providerId }}/{{ delegation.modelRef.modelId }}
           </div>
         </div>
-        <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[10px]">{{ delegation.status }}</span>
+        <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[11px]">{{ delegation.status }}</span>
       </div>
-      <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-secondary">
+      <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-secondary">
         <span>{{ $t('agent.subagents.depth', { value: delegation.depth }) }}</span>
         <span>{{
           $t('agent.subagents.steps', { used: delegation.usage.steps, max: delegation.budget.maxSteps })
@@ -46,13 +46,13 @@
       </div>
     </button>
     <div class="mt-2 flex items-center justify-between gap-2">
-      <span class="truncate text-[10px] text-text-secondary"
+      <span class="truncate text-[11px] text-text-secondary"
         >{{ delegation.profileId }} · {{ delegation.failureMode }}</span
       >
       <button
         v-if="!terminal.has(delegation.status)"
         type="button"
-        class="rounded border border-border px-2 py-1 text-[10px] hover:bg-header disabled:opacity-50"
+        class="rounded border border-border px-2 py-1 text-[11px] hover:bg-header disabled:opacity-50"
         :disabled="busy"
         @click.stop="$emit('cancel', delegation)"
       >

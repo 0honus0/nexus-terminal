@@ -115,7 +115,7 @@
         <i class="fa-solid fa-plus text-[11px]" aria-hidden="true"></i>
         <span
           v-if="modelValue.length > 0"
-          class="pointer-events-none absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold leading-none text-white"
+          class="pointer-events-none absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold leading-none text-white"
           aria-hidden="true"
           >{{ modelValue.length }}</span
         >
@@ -125,7 +125,7 @@
         <span class="agent-config-verbose whitespace-nowrap">{{
           $t('agent.attachments.button', { count: modelValue.length })
         }}</span>
-        <span v-if="modelValue.length > 0" class="agent-config-compact hidden text-[10px] font-medium">{{
+        <span v-if="modelValue.length > 0" class="agent-config-compact hidden text-[11px] font-medium">{{
           modelValue.length
         }}</span>
       </template>
@@ -178,7 +178,7 @@
               ></i>
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-xs font-medium text-foreground">{{ item.originalName }}</span>
-                <span class="mt-0.5 block truncate text-[10px] text-text-secondary"
+                <span class="mt-0.5 block truncate text-[11px] text-text-secondary"
                   >{{ item.appId }} · {{ item.mediaType }}</span
                 >
               </span>

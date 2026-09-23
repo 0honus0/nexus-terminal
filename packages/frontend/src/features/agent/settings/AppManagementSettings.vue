@@ -570,11 +570,11 @@
                   >
                     v{{ app.version }}
                   </span>
-                  <span class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                  <span class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
                     {{ $t(appVisuals(app.id).badge) }}
                   </span>
                   <span
-                    class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                    class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
                     :class="healthBadge(app.health).badge"
                   >
                     <span class="h-1.5 w-1.5 rounded-full" :class="healthBadge(app.health).dot"></span>
@@ -714,7 +714,7 @@
                 @click="toggleAllCapabilities(app.id)"
               >
                 <span
-                  class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border border-current text-[8px]"
+                  class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border border-current text-[9px]"
                   aria-hidden="true"
                 >
                   <i v-if="capabilitySelectionState(app.id) === 'all'" class="fa-solid fa-check" aria-hidden="true"></i>
@@ -765,7 +765,7 @@
                   <i :class="cat.icon" class="text-primary text-[11px]" aria-hidden="true"></i>
                   <span>{{ $t(cat.label) }}</span>
                 </div>
-                <span class="font-mono text-[10px] text-text-secondary">
+                <span class="font-mono text-[11px] text-text-secondary">
                   {{ categoryCount(app.id, cat.id).checked }}/{{ categoryCount(app.id, cat.id).total }} 项已授权
                 </span>
               </div>
@@ -793,12 +793,12 @@
                   />
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
-                      <i :class="getCapabilityMeta(capability).icon" class="text-[10px] text-text-secondary"></i>
+                      <i :class="getCapabilityMeta(capability).icon" class="text-[11px] text-text-secondary"></i>
                       <span class="text-xs font-semibold text-foreground">{{
                         getCapabilityMeta(capability).name
                       }}</span>
                     </div>
-                    <p class="text-[10px] text-text-secondary leading-tight mt-0.5">
+                    <p class="text-[11px] text-text-secondary leading-tight mt-0.5">
                       {{ getCapabilityMeta(capability).desc }}
                     </p>
                     <span class="mt-1 inline-block font-mono text-[11px] text-text-secondary/75">
@@ -822,10 +822,10 @@
                             :disabled="busy || grantBusy[app.id]"
                             @change="onTargetEnabledChange(app.id, capability, target, $event)"
                           />
-                          <span class="text-[10px] font-semibold text-foreground">{{ targetLabel(target) }}</span>
+                          <span class="text-[11px] font-semibold text-foreground">{{ targetLabel(target) }}</span>
                           <select
                             v-if="targetEnabled(app.id, capability, target)"
-                            class="ml-auto rounded border border-border bg-card px-1.5 py-0.5 text-[10px] text-foreground"
+                            class="ml-auto rounded border border-border bg-card px-1.5 py-0.5 text-[11px] text-foreground"
                             :value="targetScopeSelection(app.id, capability, target)?.mode"
                             :disabled="busy || grantBusy[app.id]"
                             @change="onTargetModeChange(app.id, capability, target, $event)"
@@ -837,7 +837,7 @@
                         <input
                           v-if="targetScopeSelection(app.id, capability, target)?.mode === 'ids'"
                           type="text"
-                          class="mt-2 w-full rounded border border-border bg-card px-2 py-1 font-mono text-[10px] text-foreground"
+                          class="mt-2 w-full rounded border border-border bg-card px-2 py-1 font-mono text-[11px] text-foreground"
                           :value="targetIdsValue(app.id, capability, target)"
                           placeholder="id-1, id-2"
                           :disabled="busy || grantBusy[app.id]"

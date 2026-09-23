@@ -141,11 +141,11 @@
               <div class="text-xs font-medium text-foreground">
                 {{ $t(`agent.settings.executionPolicy.fields.${field.key}`) }}
               </div>
-              <div class="mt-0.5 text-[10px] text-text-secondary">
+              <div class="mt-0.5 text-[11px] text-text-secondary">
                 {{ $t('agent.settings.executionPolicy.effective', { value: effectiveValue(field) }) }}
               </div>
             </div>
-            <label class="flex items-center gap-1 text-[10px] text-text-secondary">
+            <label class="flex items-center gap-1 text-[11px] text-text-secondary">
               <input
                 type="checkbox"
                 :checked="hasOverride(field.key)"
@@ -174,11 +174,11 @@
               <div class="text-xs font-medium text-foreground">
                 {{ $t('agent.settings.executionPolicy.fields.contextProfile') }}
               </div>
-              <div class="mt-0.5 text-[10px] text-text-secondary">
+              <div class="mt-0.5 text-[11px] text-text-secondary">
                 {{ $t('agent.settings.executionPolicy.profileHint') }}
               </div>
             </div>
-            <label class="flex items-center gap-1 text-[10px] text-text-secondary">
+            <label class="flex items-center gap-1 text-[11px] text-text-secondary">
               <input
                 type="checkbox"
                 :checked="hasOverride('contextProfile')"
@@ -208,11 +208,11 @@
               <div class="text-xs font-medium text-foreground">
                 {{ $t('agent.settings.executionPolicy.fields.contextCompactionMode') }}
               </div>
-              <div class="mt-0.5 text-[10px] text-text-secondary">
+              <div class="mt-0.5 text-[11px] text-text-secondary">
                 {{ $t('agent.settings.executionPolicy.compactionHint') }}
               </div>
             </div>
-            <label class="flex items-center gap-1 text-[10px] text-text-secondary">
+            <label class="flex items-center gap-1 text-[11px] text-text-secondary">
               <input
                 type="checkbox"
                 :checked="hasOverride('contextCompactionMode')"

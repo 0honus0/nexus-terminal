@@ -303,7 +303,7 @@
         <div class="flex items-center gap-2">
           <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.plugins.title') }}</h3>
           <span
-            class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
+            class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
           >
             <i class="fa-solid fa-store text-[9px]" aria-hidden="true"></i>
             <span>扩展生态与仓库</span>
@@ -358,7 +358,7 @@
             <span>{{ $t('agent.settings.plugins.package') }}</span>
           </div>
           <span
-            class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+            class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
           >
             <i class="fa-solid fa-shield-check text-[10px]"></i>
             <span>签名验真通过</span>
@@ -537,21 +537,21 @@
             <div class="flex flex-wrap items-center gap-2">
               <span
                 v-if="source.official"
-                class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary"
+                class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary"
               >
                 <i class="fa-solid fa-certificate text-[9px]"></i>
                 <span>{{ $t('agent.settings.plugins.officialRepository') }}</span>
               </span>
               <span
                 v-if="source.official"
-                class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
               >
                 <i class="fa-solid fa-lock text-[9px]"></i>
                 <span>{{ $t('agent.settings.plugins.officialPublisherPinned') }}</span>
               </span>
               <span
                 v-else
-                class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[10px] font-medium text-text-secondary"
+                class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[11px] font-medium text-text-secondary"
               >
                 <i class="fa-solid fa-network-wired text-[9px]"></i>
                 <span>第三方扩展仓库</span>
@@ -560,7 +560,7 @@
 
             <button
               type="button"
-              class="inline-flex items-center gap-1 font-mono text-[10px] text-text-secondary hover:text-foreground transition-colors cursor-pointer"
+              class="inline-flex items-center gap-1 font-mono text-[11px] text-text-secondary hover:text-foreground transition-colors cursor-pointer"
               @click="copyCatalogUrl(source.catalog.repositoryUrl)"
             >
               <i
@@ -610,27 +610,27 @@
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="text-xs sm:text-sm font-bold text-foreground truncate">{{ entry.displayName }}</span>
                     <span
-                      class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
+                      class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
                     >
                       v{{ entry.version }}
                     </span>
                     <span
                       v-if="!entry.compatible"
-                      class="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning"
+                      class="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
                     >
                       {{ $t('agent.settings.plugins.incompatible') }}
                     </span>
                     <span
                       v-else-if="isInstalled(entry.appId)"
-                      class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                      class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
                     >
                       <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                       <span>{{ isInstalledAndEnabled(entry.appId) ? '已启用' : '已安装' }}</span>
                     </span>
-                    <span v-else class="rounded-full bg-header px-2 py-0.5 text-[10px] font-medium text-text-secondary">
+                    <span v-else class="rounded-full bg-header px-2 py-0.5 text-[11px] font-medium text-text-secondary">
                       未安装
                     </span>
-                    <span class="hidden md:inline font-mono text-[10px] text-text-secondary/60">
+                    <span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
                       {{ entry.appId }}
                     </span>
                   </div>
@@ -655,7 +655,7 @@
                             : entry.description
                       }}
                     </p>
-                    <span v-if="!entry.compatible" class="shrink-0 text-[10px] text-warning font-mono">
+                    <span v-if="!entry.compatible" class="shrink-0 text-[11px] text-warning font-mono">
                       (兼容要求: Nexus {{ entry.nexus.minVersion }}~{{ entry.nexus.maxVersion }})
                     </span>
                   </div>
@@ -666,7 +666,7 @@
               <div
                 class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border"
               >
-                <span class="hidden sm:inline-flex items-center gap-1 text-[10px] text-text-secondary/70 font-mono">
+                <span class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-secondary/70 font-mono">
                   <i class="fa-solid fa-shield-check text-emerald-500 text-[10px]"></i>
                   <span>Ed25519</span>
                 </span>
@@ -784,14 +784,14 @@
             <i class="fa-solid fa-key text-xs text-primary"></i>
             <span class="text-xs font-medium text-foreground">{{ $t('agent.settings.plugins.publishers') }}</span>
             <span
-              class="rounded-md border border-border/60 bg-card px-2 py-0.5 font-mono text-[10px] text-text-secondary"
+              class="rounded-md border border-border/60 bg-card px-2 py-0.5 font-mono text-[11px] text-text-secondary"
             >
               {{ publishers.length }} 个密钥
             </span>
           </div>
           <i
             :class="showPublishers ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"
-            class="text-[10px] text-text-secondary"
+            class="text-[11px] text-text-secondary"
           ></i>
         </button>
 
@@ -843,8 +843,8 @@
                   {{ $t('agent.settings.plugins.revokePublisher') }}
                 </button>
               </div>
-              <p class="mt-1 break-all font-mono text-[10px] text-text-secondary">{{ publisher.keyId }}</p>
-              <p v-if="publisher.revokedAt !== null" class="mt-1 text-[10px] text-error">
+              <p class="mt-1 break-all font-mono text-[11px] text-text-secondary">{{ publisher.keyId }}</p>
+              <p v-if="publisher.revokedAt !== null" class="mt-1 text-[11px] text-error">
                 {{ $t('agent.settings.plugins.revoked') }}
               </p>
             </div>

@@ -1548,7 +1548,7 @@
               }}</span>
               <span
                 v-if="run"
-                class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium leading-none"
+                class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium leading-none"
                 :class="
                   run.status === 'running'
                     ? 'bg-success/10 text-success'
@@ -1607,7 +1607,7 @@
               <i class="fa-solid fa-table-columns text-xs" aria-hidden="true"></i>
               <span
                 v-if="pendingApprovals.length || backgroundRuns.length"
-                class="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[8px] font-bold leading-none text-white shadow-xs"
+                class="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none text-white shadow-xs"
                 :class="pendingApprovals.length ? 'bg-warning' : 'bg-primary'"
               >
                 {{ pendingApprovals.length || backgroundRuns.length }}
@@ -1671,7 +1671,7 @@
                   </span>
                   <div class="min-w-0 flex-1">
                     <div class="font-semibold text-foreground">{{ $t('agent.conversation.approvalRequestTitle') }}</div>
-                    <div class="mt-0.5 text-[10px] leading-4 text-text-secondary/75">
+                    <div class="mt-0.5 text-[11px] leading-4 text-text-secondary/75">
                       {{ $t('agent.conversation.approvalRequestHint') }}
                     </div>
                   </div>
@@ -1751,7 +1751,7 @@
                         </span>
                         <span class="min-w-0 flex-1">
                           <span class="block truncate text-xs font-medium text-foreground">{{ option.model.id }}</span>
-                          <span class="block text-[10px] text-text-secondary">
+                          <span class="block text-[11px] text-text-secondary">
                             {{ modelOptionHint(option) }}
                           </span>
                         </span>
@@ -1889,7 +1889,7 @@
                           ? 'fa-solid fa-list-check text-primary'
                           : 'fa-solid fa-play text-success'
                       "
-                      class="text-[9px]"
+                      class="text-[11px]"
                       aria-hidden="true"
                     ></i>
                     <span class="agent-config-verbose max-w-24 truncate whitespace-nowrap text-left">
@@ -1901,7 +1901,7 @@
                     </span>
                     <i
                       :class="modelSelectionLocked ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
-                      class="agent-config-affordance text-[7px] text-text-secondary"
+                      class="agent-config-affordance text-[11px] text-text-secondary"
                       aria-hidden="true"
                     ></i>
                   </template>
@@ -1909,13 +1909,13 @@
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
                       <div>
                         <div class="text-xs font-semibold">{{ $t('agent.operations.executionMode') }}</div>
-                        <div class="mt-1 text-[10px] leading-4 text-text-secondary">
+                        <div class="mt-1 text-[11px] leading-4 text-text-secondary">
                           {{ $t('agent.operations.executionModeHint') }}
                         </div>
                       </div>
                       <span
                         v-if="modelSelectionLocked"
-                        class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary"
+                        class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary"
                       >
                         <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
                         >{{ $t('agent.operations.frozen') }}
@@ -1945,7 +1945,7 @@
                           <span class="block text-xs font-semibold text-foreground">{{
                             $t('agent.operations.executionExecute')
                           }}</span>
-                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                          <span class="mt-0.5 block text-[11px] leading-4 text-text-secondary">{{
                             $t('agent.operations.executionExecuteDesc')
                           }}</span>
                         </span>
@@ -1978,7 +1978,7 @@
                           <span class="block text-xs font-semibold text-foreground">{{
                             $t('agent.operations.executionPlan')
                           }}</span>
-                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                          <span class="mt-0.5 block text-[11px] leading-4 text-text-secondary">{{
                             $t('agent.operations.executionPlanDesc')
                           }}</span>
                         </span>
@@ -2017,7 +2017,7 @@
                     </span>
                     <i
                       :class="modelSelectionLocked ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
-                      class="agent-config-affordance text-[7px] text-text-secondary"
+                      class="agent-config-affordance text-[11px] text-text-secondary"
                       aria-hidden="true"
                     ></i>
                   </template>
@@ -2025,13 +2025,13 @@
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
                       <div>
                         <div class="text-xs font-semibold">{{ $t('agent.operations.approvalMode') }}</div>
-                        <div class="mt-1 text-[10px] leading-4 text-text-secondary">
+                        <div class="mt-1 text-[11px] leading-4 text-text-secondary">
                           {{ $t('agent.operations.approvalModeHint') }}
                         </div>
                       </div>
                       <span
                         v-if="modelSelectionLocked"
-                        class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary"
+                        class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary"
                       >
                         <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
                         >{{ $t('agent.operations.frozen') }}
@@ -2061,7 +2061,7 @@
                           <span class="block text-xs font-semibold text-foreground">{{
                             $t('agent.operations.approvalAsk')
                           }}</span>
-                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                          <span class="mt-0.5 block text-[11px] leading-4 text-text-secondary">{{
                             $t('agent.operations.approvalAskDesc')
                           }}</span>
                         </span>
@@ -2094,7 +2094,7 @@
                           <span class="block text-xs font-semibold text-foreground">{{
                             $t('agent.operations.approvalFullAccess')
                           }}</span>
-                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                          <span class="mt-0.5 block text-[11px] leading-4 text-text-secondary">{{
                             $t('agent.operations.approvalFullAccessDesc')
                           }}</span>
                         </span>
@@ -2121,7 +2121,7 @@
                     }}</span>
                     <i
                       :class="modelSelectionLocked ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
-                      class="agent-config-affordance text-[7px] text-text-secondary"
+                      class="agent-config-affordance text-[11px] text-text-secondary"
                       aria-hidden="true"
                     ></i>
                   </template>
@@ -2130,7 +2130,7 @@
                       <span class="text-xs font-semibold">{{ $t('agent.operations.environment') }}</span>
                       <span
                         v-if="modelSelectionLocked"
-                        class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary"
+                        class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary"
                       >
                         <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
                         >{{ $t('agent.operations.frozen') }}
@@ -2164,7 +2164,7 @@
                           <span class="block truncate text-xs font-medium text-foreground">{{
                             $t('agent.operations.environmentNone')
                           }}</span>
-                          <span class="block truncate text-[10px] text-text-secondary">{{
+                          <span class="block truncate text-[11px] text-text-secondary">{{
                             $t('agent.operations.environmentNoneHint')
                           }}</span>
                         </span>
@@ -2204,7 +2204,7 @@
                           <span class="block truncate text-xs font-medium text-foreground">{{
                             recipe.displayName
                           }}</span>
-                          <span class="block truncate font-mono text-[10px] text-text-secondary">{{ recipe.id }}</span>
+                          <span class="block truncate font-mono text-[11px] text-text-secondary">{{ recipe.id }}</span>
                         </span>
                         <i
                           v-if="selectedEnvironmentRecipeId === recipe.id"
@@ -2240,7 +2240,7 @@
                     <span class="agent-config-verbose whitespace-nowrap">SSH</span>
                     <span class="agent-config-compact hidden whitespace-nowrap">SSH</span>
                     <span
-                      class="agent-ssh-count inline-flex min-w-[0.6rem] items-center justify-center text-[9px] font-semibold leading-none"
+                      class="agent-ssh-count inline-flex min-w-[0.6rem] items-center justify-center text-[11px] font-semibold leading-none"
                       :class="displayedConnectionIds.length ? 'text-success' : 'text-error/80'"
                       >{{ displayedConnectionIds.length }}</span
                     >
@@ -2261,13 +2261,13 @@
                         <div class="text-[11px] font-semibold leading-tight text-foreground">
                           {{ $t('agent.operations.targets') }}
                         </div>
-                        <div class="mt-1 text-[10px] leading-snug text-text-secondary/70">
+                        <div class="mt-1 text-[11px] leading-snug text-text-secondary/70">
                           {{ $t('agent.operations.targetsHint') }}
                         </div>
                       </div>
                       <span
                         v-if="modelSelectionLocked"
-                        class="shrink-0 rounded-md bg-header/70 px-1.5 py-1 text-[9px] leading-none text-text-secondary"
+                        class="shrink-0 rounded-md bg-header/70 px-1.5 py-1 text-[11px] leading-none text-text-secondary"
                       >
                         <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
                         >{{ $t('agent.operations.frozen') }}
@@ -2278,7 +2278,7 @@
                       v-if="connections.length > 0"
                       class="mb-1.5 flex items-center justify-between gap-2 rounded-lg bg-header/30 px-2 py-1.5"
                     >
-                      <div class="flex min-w-0 items-center gap-1.5 text-[9.5px] text-text-secondary/70">
+                      <div class="flex min-w-0 items-center gap-1.5 text-[11px] text-text-secondary/70">
                         <span
                           class="h-1.5 w-1.5 shrink-0 rounded-full"
                           :class="displayedConnectionIds.length ? 'bg-success' : 'bg-error/75'"
@@ -2308,7 +2308,7 @@
                         @click="toggleAllConnectionSelections"
                       >
                         <span
-                          class="flex h-5 items-center justify-center rounded-[4px] text-[8px] transition-all"
+                          class="flex h-5 items-center justify-center rounded-[4px] text-[11px] transition-all"
                           :class="
                             connectionSelectionState === 'off' ? 'bg-error/10 text-error/85' : 'text-text-secondary/45'
                           "
@@ -2317,7 +2317,7 @@
                           <i class="fa-solid fa-xmark"></i>
                         </span>
                         <span
-                          class="flex h-5 items-center justify-center rounded-[4px] text-[8px] transition-all"
+                          class="flex h-5 items-center justify-center rounded-[4px] text-[11px] transition-all"
                           :class="
                             connectionSelectionState === 'mixed'
                               ? 'bg-primary/10 text-primary'
@@ -2328,7 +2328,7 @@
                           <i class="fa-solid fa-minus"></i>
                         </span>
                         <span
-                          class="flex h-5 items-center justify-center rounded-[4px] text-[8px] transition-all"
+                          class="flex h-5 items-center justify-center rounded-[4px] text-[11px] transition-all"
                           :class="
                             connectionSelectionState === 'on' ? 'bg-success/14 text-success' : 'text-text-secondary/45'
                           "
@@ -2369,7 +2369,7 @@
                           <span class="block truncate text-[11px] font-medium leading-tight text-foreground">{{
                             connection.name || connection.host
                           }}</span>
-                          <span class="mt-1 block truncate font-mono text-[9.5px] leading-none text-text-secondary/60"
+                          <span class="mt-1 block truncate font-mono text-[11px] leading-none text-text-secondary/60"
                             >{{ connection.host }}:{{ connection.port }}</span
                           >
                         </span>

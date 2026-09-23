@@ -35,7 +35,7 @@
 | **P0 · ✅ 已关闭 2026-09-23**         | 玻璃层已固化为唯一 `.glass-surface`：token-based 半透明 fill + blur(16px) + 弱边框/阴影；Gallery CDP 实测 alpha≈0.7544                                                                                                                                                                                                                                                               | `app/styles/global.css`、`foundation/ui/UiPopover.vue`（见 §7.1）                                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | **默认模型选择框「文字背景 ≠ 框背景」已关闭**：`UiCombobox` 输入框不再被全局未分层表单规则涂成纯白，trigger / panel / 输入区共用同一 glass fill                                                                                                                                                                                                                                      | `foundation/ui/uiGen2.css`（见 §7.18）                                                                        |
 | **✅ 已确认保留模态 2026-09-23**      | 「模态遮罩 + 浮动窗口」经产品确认是**有意设计**（背景不可交互，避免两边操作冲突；使用 Hub 时不需要同时看终端）；遮罩点击已收敛为真正 no-op，不再有 400ms「闪烁」                                                                                                                                                                                                                     | `host/AgentHubWindow.vue`（见 §2.1、§2.2）                                                                    |
-| **P1 · 🟡 部分关闭 2026-09-23**       | **字号：实测推翻了"563 处 ≤11px 不可读"的整体判断**——181 处 ≤9px 里 95 处是 FontAwesome 图标，真实文字仅约 86 处，且默认首屏只有 6 个 <11px 文本节点。已按"阅读文本 ≥11px"抬升真实小字（hint / mono / 表头 / 行内标签，17 文件 28 处），**10px 档与纯计数徽章暂留**，不做 610 处全量重排                                                                                             | `features/agent/**`（见 §2.3）                                                                                |
+| **P1 · ✅ 已关闭 2026-09-23**         | **字号：实测推翻了"563 处 ≤11px 不可读"的整体判断**（181 处 ≤9px 里 95 处是图标；默认首屏只有 6 个 <11px 文本节点）。仍按"阅读文本 ≥11px"全量收敛：两轮共 33 文件 / 274 行，现 `<11px` 只剩图标字形与 5 个 14–16px 圆内计数/勾选，无任何阅读文字低于 11px                                                                                                                            | `features/agent/**`（见 §2.3）                                                                                |
 | **P1 · 🟡 部分关闭 2026-09-23**       | **点击目标：** 已修最明确的一处——关闭 App 标签由 `h-4 w-4 / opacity-0 / 无 pointer` 改为 `h-6 w-6 / 常显 / cursor-pointer`；窄容器 25px 图标按钮与"批准/拒绝"仍未处理                                                                                                                                                                                                                | `host/AgentHubWindow.vue`（见 §2.4）                                                                          |
 | P1                                    | 硬编码调色板（emerald/sky/amber/blue/purple/pink/indigo + 硬编码 rgba 阴影）绕开主题 token，切主题后视觉不可控                                                                                                                                                                                                                                                                       | `ai/AgentConversation.vue:127-152`、`host/AgentAppSurface.vue`                                                |
 | P1                                    | 设置区控件风格分裂：同一个「主操作按钮」有 6 套写法、5 档圆角，添加/移除模型用原生 checkbox 与 11px 纯文字按钮                                                                                                                                                                                                                                                                       | `features/agent/settings/**`（见 §6.2、§6.3）                                                                 |
@@ -316,7 +316,7 @@ GET /runs/7aefe2fb-…/approvals  500
 > ✅ **2026-09-23 闭环**：结合 §2.1 的"保留模态"决策，遮罩点击收敛为**真正的 no-op**——移除了 `flashWindow` / `flashTimer` 与窗口上的 `ring-2 ring-primary/60 scale-[1.002]`，遮罩只保留 `@pointerdown.stop` + `@wheel.prevent` + `@touchmove.prevent`（继续吸收背景事件，保证"不要交互"）。
 > CDP 复验：在 Hub 打开时点击导航栏处遮罩 `(150,25)`，`#app.inert` 仍为 `true`、Hub 仍打开、URL 不变、窗口 `class`/几何均无变化（不再出现 400ms 闪烁）。
 
-### 2.3 字号与可读性（P1 · 🟡 部分关闭 2026-09-23）
+### 2.3 字号与可读性（P1 · ✅ 已关闭 2026-09-23）
 
 > **复核修正（2026-09-23）**：本文原先"563 处 ≤11px ⇒ 中文几乎不可读"的结论**大部分不成立**，实测如下——
 >
@@ -327,16 +327,19 @@ GET /runs/7aefe2fb-…/approvals  500
 >
 > 因此**不做 610 处全量重排**（收益低、`doc/imgs/e2e/*` 全部失效、回归成本高）。本轮按窄口径执行"阅读文本 ≥11px"：
 >
-> | 档位           | 处置                                                         |
-> | -------------- | ------------------------------------------------------------ |
-> | 6–9px 真实文字 | ✅ 抬到 **11px**（hint / mono / 表头 / 行内标签 / 按钮文案） |
-> | 8–9px 文字徽章 | ✅ 抬到 **10px**（保留徽章层级，不撑破 pill）                |
-> | 10px 阅读文本  | ⏸ 暂留（若后续统一，再单独一轮）                             |
-> | 纯计数徽章     | ⏸ 保留小字号（容器仅 16px，放大即溢出）                      |
-> | 图标           | ⏸ 不改                                                       |
+> | 档位                           | 处置                                                                |
+> | ------------------------------ | ------------------------------------------------------------------- |
+> | ≤10px 真实阅读文字（全量）     | ✅ 抬到 **11px**（hint / mono / 表头 / 行内标签 / 按钮文案 / 徽章） |
+> | 图标字形（`<i class="fa-…">`） | ⏸ 不改（95 处；图标小字号是正常做法）                               |
+> | 14–16px 固定圆内的计数 / 勾选  | ⏸ 保留 9px（`h-3.5 min-w-3.5` / `h-4 w-4`，放大即溢出）             |
 >
-> 已改文件（17 个 / 28 处）：`runtime/{WorkspaceCreateCard,WorkspaceRuntimePanel,WorkspaceToolchainCard,AgentWorkspaceTerminal,MessageExchangePanel,ApprovalCard,TaskRail}.vue`、`files/ArtifactLibraryView.vue`、`ai/{ConversationMessage,AgentConversation}.vue`、`host/AgentThreadSidebar.vue`、`settings/{HardLimitsSettings,MemorySettings,AppManagementSettings,SafetyNetworkSettings,ModelProviderSettings}.vue`。
-> 复验：`vue-tsc --noEmit` 通过；CDP 截图 `tb-hub.png` / `tb-files.png`（文件页"存储概览/受保护/可回收"回到可读字号）无裁切、无布局回归。
+> **执行记录（两轮，合计 33 文件 / 274 行）**
+>
+> - 第一轮：17 文件 / 28 处（图标外的 8–9px 阅读文字 → 11px，文字徽章 → 10px）。
+> - 第二轮：33 文件 / 269 处（`text-[6..10.75px]` → `text-[11px]`，逐行排除图标与固定圆形容器；其中 5 处固定圆形徽章主动回退到 9px）。
+> - 收敛后 `features/agent/**` 的 `<11px` 只剩图标字形与 5 个 14–16px 圆形容器内的数字/勾选（`ArtifactPicker`、`AgentAppSurface`、`AgentLauncher`、`TaskRail`、`AppManagementSettings`）——**已无任何阅读文字低于 11px**。
+>
+> 复验：`vue-tsc --noEmit` 通过；`format-changed --check` 通过；CDP 溢出扫描在 Hub **1423px** 与最小 **560px** 两种宽度下均 `scrollWidth === clientWidth`、`clippedCount = 0`（composer 工具条 649/649 与 462/462），截图 `overflow-small.png`、`tb-hub.png`、`tb-files.png`。
 
 Agent UI 中任意像素字号统计：
 

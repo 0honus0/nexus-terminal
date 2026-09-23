@@ -4,7 +4,11 @@
   import QuantityInput from './QuantityInput.vue';
   import { formatQuantity, type QuantityType } from './quantity-format';
 
-  const props = defineProps<{ settings: AgentSettingsViewDto; storage: AgentArtifactStorageSummaryDto; busy: boolean }>();
+  const props = defineProps<{
+    settings: AgentSettingsViewDto;
+    storage: AgentArtifactStorageSummaryDto;
+    busy: boolean;
+  }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
   const draft = ref<Record<string, number | null>>({});
 
@@ -122,7 +126,7 @@
               <span class="mb-1 block text-xs font-medium text-foreground">
                 {{ storageFieldMeta[key]?.label || key }}
               </span>
-              <p class="mb-1.5 text-[10px] text-text-secondary line-clamp-1">
+              <p class="mb-1.5 text-[11px] text-text-secondary line-clamp-1">
                 {{ storageFieldMeta[key]?.hint || '' }}
               </p>
               <QuantityInput

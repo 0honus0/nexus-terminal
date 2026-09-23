@@ -157,7 +157,7 @@
           <h4 class="text-xs font-semibold text-foreground">
             {{ $t(`agent.settings.hardLimits.groups.${group.id}`) }}
           </h4>
-          <p class="mt-0.5 text-[10px] leading-4 text-text-secondary">
+          <p class="mt-0.5 text-[11px] leading-4 text-text-secondary">
             {{ $t(`agent.settings.hardLimits.groups.${group.id}Desc`) }}
           </p>
         </div>
@@ -169,7 +169,7 @@
                 <span class="block text-xs font-medium text-foreground">
                   {{ $t(`agent.settings.hardLimits.fields.${key}.label`) }}
                 </span>
-                <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">
+                <span class="mt-0.5 block text-[11px] leading-4 text-text-secondary">
                   {{ $t(`agent.settings.hardLimits.fields.${key}.hint`) }}
                 </span>
               </div>
@@ -206,7 +206,7 @@
             }}
           </p>
         </div>
-        <span v-if="preview.impact.hasIncrease" class="rounded-md bg-warning/12 px-2 py-1 text-[10px] text-warning">
+        <span v-if="preview.impact.hasIncrease" class="rounded-md bg-warning/12 px-2 py-1 text-[11px] text-warning">
           {{ $t('agent.settings.hardLimits.increaseWarning') }}
         </span>
       </div>
@@ -218,14 +218,14 @@
           class="flex items-center justify-between gap-3 rounded-lg bg-background/80 px-3 py-2 text-xs"
         >
           <span class="min-w-0 truncate">{{ $t(`agent.settings.hardLimits.fields.${change.key}.label`) }}</span>
-          <span class="shrink-0 font-mono text-[10px] text-text-secondary">
+          <span class="shrink-0 font-mono text-[11px] text-text-secondary">
             {{ formatHardLimitValue(change.key, change.current) }} →
             {{ formatHardLimitValue(change.key, change.proposed) }}
           </span>
         </div>
       </div>
 
-      <p class="mt-3 text-[10px] text-text-secondary">
+      <p class="mt-3 text-[11px] text-text-secondary">
         {{ $t('agent.settings.hardLimits.usage', { bytes: artifactUsage }) }}
       </p>
       <div class="mt-3 flex justify-end gap-2">

@@ -25,7 +25,15 @@
   const operationFeedback = useOperationFeedback('agent.settings.model-capabilities');
   const capabilityEditorProvider = computed(() => props.provider);
   const capabilityEditorModel = computed(() => props.model);
-  const reasoningEffortOptions: AgentReasoningEffortDto[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+  const reasoningEffortOptions: AgentReasoningEffortDto[] = [
+    'none',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+  ];
   const capabilityForm = reactive({
     contextWindow: 0,
     maxOutputTokens: 0,
@@ -219,7 +227,7 @@
         <label class="block">
           <div class="mb-1 flex items-center justify-between gap-2">
             <span class="text-xs font-medium text-foreground">{{ $t('agent.settings.providers.contextWindow') }}</span>
-            <div class="flex items-center gap-2 text-[10px]">
+            <div class="flex items-center gap-2 text-[11px]">
               <span :class="capabilityFieldIsDefault('contextWindow') ? 'text-primary' : 'text-text-secondary'">
                 {{ capabilitySourceLabel('contextWindow') }}
               </span>
@@ -248,7 +256,7 @@
             <span class="text-xs font-medium text-foreground">{{
               $t('agent.settings.providers.maxOutputTokens')
             }}</span>
-            <div class="flex items-center gap-2 text-[10px]">
+            <div class="flex items-center gap-2 text-[11px]">
               <span :class="capabilityFieldIsDefault('maxOutputTokens') ? 'text-primary' : 'text-text-secondary'">
                 {{ capabilitySourceLabel('maxOutputTokens') }}
               </span>
@@ -286,7 +294,7 @@
                 )
               }}</span>
             </label>
-            <div class="flex items-center gap-2 text-[10px]">
+            <div class="flex items-center gap-2 text-[11px]">
               <span :class="capabilityFieldIsDefault(field) ? 'text-primary' : 'text-text-secondary'">
                 {{ capabilitySourceLabel(field) }}
               </span>
@@ -314,14 +322,14 @@
               />
               <span>{{ $t('agent.settings.providers.reasoningCapability') }}</span>
             </label>
-            <span v-if="reasoningBaseline" class="text-[10px] text-primary">
+            <span v-if="reasoningBaseline" class="text-[11px] text-primary">
               {{
                 capabilityEditorModel.reasoningSource === 'provider'
                   ? $t('agent.settings.providers.providerLive')
                   : $t('agent.settings.providers.registryManaged')
               }}
             </span>
-            <span v-else class="text-[10px] text-text-secondary">
+            <span v-else class="text-[11px] text-text-secondary">
               {{ $t('agent.settings.providers.reasoningOptional') }}
             </span>
           </div>
@@ -332,7 +340,7 @@
                 v-for="effort in reasoningEffortOptions"
                 :key="effort"
                 type="button"
-                class="rounded-md border px-2 py-1 font-mono text-[10px] transition-colors"
+                class="rounded-md border px-2 py-1 font-mono text-[11px] transition-colors"
                 :class="
                   capabilityForm.reasoningEfforts.includes(effort)
                     ? 'border-primary/40 bg-primary/10 text-primary'
@@ -345,7 +353,7 @@
             </div>
             <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label class="block">
-                <span class="mb-1 block text-[10px] text-text-secondary">{{
+                <span class="mb-1 block text-[11px] text-text-secondary">{{
                   $t('agent.settings.providers.reasoningDefault')
                 }}</span>
                 <select

@@ -324,11 +324,11 @@
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-sm font-medium">{{ mcpConfiguration(integration).displayName }}</span>
-              <span class="rounded border px-2 py-0.5 text-[10px] font-medium" :class="statusClass(integration)">
+              <span class="rounded border px-2 py-0.5 text-[11px] font-medium" :class="statusClass(integration)">
                 {{ statusLabel(integration) }}
               </span>
             </div>
-            <div class="mt-0.5 break-all font-mono text-[10px] text-text-secondary">{{ integration.id }}</div>
+            <div class="mt-0.5 break-all font-mono text-[11px] text-text-secondary">{{ integration.id }}</div>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-3 text-xs">
             <label class="flex items-center gap-1">

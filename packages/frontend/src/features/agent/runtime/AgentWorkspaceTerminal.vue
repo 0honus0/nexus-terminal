@@ -48,19 +48,19 @@
   <div class="mt-2 rounded border border-border bg-background p-2">
     <div class="flex items-center justify-between gap-2">
       <div>
-        <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.localTerminal') }}</div>
+        <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.localTerminal') }}</div>
         <div class="text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.localTerminalHint') }}</div>
       </div>
       <button
         v-if="!opened"
         type="button"
-        class="rounded border border-border px-2 py-1 text-[10px] disabled:opacity-50"
+        class="rounded border border-border px-2 py-1 text-[11px] disabled:opacity-50"
         :disabled="!running"
         @click="open"
       >
         {{ $t('agent.workspaceRuntime.openTerminal') }}
       </button>
-      <button v-else type="button" class="rounded border border-border px-2 py-1 text-[10px]" @click="close">
+      <button v-else type="button" class="rounded border border-border px-2 py-1 text-[11px]" @click="close">
         {{ $t('agent.workspaceRuntime.closeTerminal') }}
       </button>
     </div>

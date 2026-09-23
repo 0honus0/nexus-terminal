@@ -928,7 +928,7 @@
           <span>{{ formatRegistryDate(modelRegistryStatus.generatedAt) }}</span>
           <span
             v-if="modelRegistryStatus.lastErrorCode"
-            class="rounded bg-error/10 px-1.5 py-0.5 font-mono text-[10px] text-error"
+            class="rounded bg-error/10 px-1.5 py-0.5 font-mono text-[11px] text-error"
           >
             {{ modelRegistryStatus.lastErrorCode }}
           </span>
@@ -972,7 +972,7 @@
             <div class="flex items-center gap-2">
               <div class="text-xs font-semibold text-foreground">{{ $t('agent.settings.providers.defaultModel') }}</div>
               <span
-                class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[9px] font-medium text-emerald-600 dark:text-emerald-400"
+                class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
               >
                 <i class="fa-solid fa-cloud-arrow-up text-[8px]"></i>
                 <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
@@ -999,9 +999,9 @@
             <template #meta="{ selected }">
               <span
                 v-if="selected"
-                class="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 bg-header/50 px-1.5 py-1 text-[10px] font-medium text-text-secondary"
+                class="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 bg-header/50 px-1.5 py-1 text-[11px] font-medium text-text-secondary"
               >
-                <i :class="providerIconForKey(selected.value)" class="text-[10px] shrink-0"></i>
+                <i :class="providerIconForKey(selected.value)" class="text-[11px] shrink-0"></i>
                 <span class="max-w-28 truncate">{{ selected.description }}</span>
               </span>
             </template>
@@ -1014,7 +1014,7 @@
                 </div>
                 <span
                   v-if="option.description"
-                  class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
+                  class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[11px] text-text-secondary leading-none"
                 >
                   {{ option.description }}
                 </span>
@@ -1031,7 +1031,7 @@
               {{ $t('agent.settings.providers.fallbackTitle') }}
             </div>
             <span
-              class="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-medium text-text-secondary"
+              class="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] font-medium text-text-secondary"
             >
               {{
                 $t('agent.settings.providers.fallbackCount', {
@@ -1095,7 +1095,7 @@
                     <span class="font-mono text-xs font-medium truncate">{{ option.model.id }}</span>
                   </div>
                   <span
-                    class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
+                    class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[11px] text-text-secondary leading-none"
                   >
                     {{ option.provider.displayName }}
                   </span>
@@ -1121,7 +1121,7 @@
             class="flex items-center gap-2.5 rounded-lg border border-border/70 bg-background/60 px-3 py-2"
           >
             <span
-              class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold text-primary"
+              class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] font-semibold text-primary"
             >
               {{ index + 1 }}
             </span>
@@ -1130,7 +1130,7 @@
               <span class="font-mono text-xs font-semibold text-foreground truncate">{{ row.modelId }}</span>
               <span
                 v-if="row.option"
-                class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
+                class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[11px] text-text-secondary leading-none"
               >
                 {{ row.option.provider.displayName }}
               </span>
@@ -1202,7 +1202,7 @@
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-semibold text-sm text-foreground truncate">{{ provider.displayName }}</span>
                   <span
-                    class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                    class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
                     :class="
                       provider.enabled
                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
@@ -1221,7 +1221,7 @@
                   </span>
                   <button
                     type="button"
-                    class="rounded-md bg-header/60 border border-border/60 px-1.5 py-0.5 font-mono text-[10px] text-text-secondary hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
+                    class="rounded-md bg-header/60 border border-border/60 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
                     :title="$t('agent.settings.providers.testModalTitle')"
                     @click="openTestModal(provider)"
                   >
@@ -1230,7 +1230,7 @@
                   </button>
                   <span
                     v-if="provider.hasCredential"
-                    class="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400"
+                    class="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400"
                   >
                     <i class="fa-solid fa-key text-[9px]"></i>
                     <span>已配密钥</span>
@@ -1241,7 +1241,7 @@
                 <div class="flex items-center gap-1.5 text-xs text-text-secondary/70 mt-1">
                   <select
                     :value="provider.protocol"
-                    class="h-6 rounded-md border border-border/70 bg-background px-1.5 text-[10px] text-text-secondary outline-none"
+                    class="h-6 rounded-md border border-border/70 bg-background px-1.5 text-[11px] text-text-secondary outline-none"
                     :aria-label="$t('agent.settings.providers.protocol')"
                     :disabled="busy"
                     @change="emit('protocol', provider, protocolFromEvent($event))"
@@ -1262,7 +1262,7 @@
                       :class="
                         copiedUrl === provider.baseUrl ? 'fa-solid fa-check text-emerald-500' : 'fa-regular fa-copy'
                       "
-                      class="text-[10px]"
+                      class="text-[11px]"
                     ></i>
                   </button>
                 </div>
@@ -1349,12 +1349,12 @@
                 </div>
                 <span class="text-xs font-bold text-foreground">{{ $t('agent.settings.providers.drawerTitle') }}</span>
                 <span
-                  class="rounded-md border border-border/70 bg-card px-2 py-0.5 text-[10px] font-mono text-text-secondary"
+                  class="rounded-md border border-border/70 bg-card px-2 py-0.5 text-[11px] font-mono text-text-secondary"
                 >
                   {{ $t('agent.settings.providers.discoveredModels') }}: {{ availableDiscoveries(provider).length }}
                 </span>
                 <span
-                  class="rounded-md border border-border/70 bg-card px-2 py-0.5 text-[10px] font-mono text-text-secondary"
+                  class="rounded-md border border-border/70 bg-card px-2 py-0.5 text-[11px] font-mono text-text-secondary"
                 >
                   {{ $t('agent.settings.providers.configuredModels') }}: {{ provider.models.length }}
                 </span>
@@ -1362,14 +1362,14 @@
                 <!-- 实时自动保存指示微胶囊 -->
                 <span
                   v-if="isSavingModels[provider.id]"
-                  class="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/25 px-2 py-0.5 text-[10px] font-medium text-primary"
+                  class="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/25 px-2 py-0.5 text-[11px] font-medium text-primary"
                 >
                   <i class="fa-solid fa-circle-notch fa-spin text-[9px]"></i>
                   <span>{{ $t('agent.settings.providers.saving') }}</span>
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                  class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
                 >
                   <i class="fa-solid fa-cloud-arrow-up text-[9px]"></i>
                   <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
@@ -1411,7 +1411,7 @@
                       $t('agent.settings.providers.discoveredModels')
                     }}</span>
                     <span
-                      class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-mono text-primary font-medium"
+                      class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-mono text-primary font-medium"
                     >
                       {{ filteredAvailable(provider).length }}
                     </span>
@@ -1564,7 +1564,7 @@
                       $t('agent.settings.providers.configuredModels')
                     }}</span>
                     <span
-                      class="rounded-full bg-header px-1.5 py-0.5 text-[10px] font-mono text-text-secondary font-medium"
+                      class="rounded-full bg-header px-1.5 py-0.5 text-[11px] font-mono text-text-secondary font-medium"
                     >
                       {{ provider.models.length }}
                     </span>
@@ -1598,7 +1598,7 @@
                       <span class="font-mono text-xs text-foreground truncate">{{ model.id }}</span>
                       <span
                         v-if="provider.id === defaultProviderId && model.id === defaultModelId"
-                        class="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                        class="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[11px] font-semibold text-primary"
                       >
                         <i class="fa-solid fa-star text-[7px]"></i>
                         <span>{{ $t('agent.settings.providers.defaultBadge') }}</span>
@@ -1831,7 +1831,7 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <label class="block">
-              <span class="mb-1 block text-[10px] text-text-secondary"
+              <span class="mb-1 block text-[11px] text-text-secondary"
                 >{{ $t('agent.settings.providers.model') }} <span class="text-error">*</span></span
               >
               <input
@@ -1844,7 +1844,7 @@
             </label>
 
             <label class="block">
-              <span class="mb-1 block text-[10px] text-text-secondary">{{
+              <span class="mb-1 block text-[11px] text-text-secondary">{{
                 $t('agent.settings.providers.contextWindow')
               }}</span>
               <input
@@ -1857,7 +1857,7 @@
             </label>
 
             <label class="block">
-              <span class="mb-1 block text-[10px] text-text-secondary">{{
+              <span class="mb-1 block text-[11px] text-text-secondary">{{
                 $t('agent.settings.providers.maxOutputTokens')
               }}</span>
               <input
@@ -1960,7 +1960,7 @@
           </div>
           <!-- 实时自动保存指示徽标 -->
           <span
-            class="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+            class="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
           >
             <i class="fa-solid fa-cloud-arrow-up text-[9px]"></i>
             <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
@@ -2001,13 +2001,13 @@
                 <span class="font-mono text-xs font-bold text-foreground truncate">{{ model.id }}</span>
                 <span
                   v-if="currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId"
-                  class="inline-flex items-center gap-1 rounded-md bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                  class="inline-flex items-center gap-1 rounded-md bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[11px] font-semibold text-primary"
                 >
                   <i class="fa-solid fa-star text-[8px]"></i>
                   <span>{{ $t('agent.settings.providers.defaultBadge') }}</span>
                 </span>
               </div>
-              <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-text-secondary">
+              <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-text-secondary">
                 <span class="rounded bg-card border border-border/50 px-1.5 py-0.5 font-mono">
                   {{ compactTokens(model.contextWindow) }} 上下文
                 </span>
@@ -2065,7 +2065,7 @@
                       ? 'fa-solid fa-check'
                       : 'fa-solid fa-circle-exclamation'
                 "
-                class="text-[9px]"
+                class="text-[11px]"
               ></i>
               <span>{{ testResults[testKey(currentTestModalProvider, model.id)]?.message }}</span>
             </span>

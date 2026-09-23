@@ -274,7 +274,7 @@
     <div class="flex items-center justify-between gap-2">
       <div>
         <h3 class="font-medium">{{ $t('agent.workspaceRuntime.title') }}</h3>
-        <p class="mt-0.5 text-[10px] text-text-secondary">{{ $t('agent.workspaceRuntime.description') }}</p>
+        <p class="mt-0.5 text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.description') }}</p>
       </div>
       <button
         type="button"
@@ -286,12 +286,12 @@
       </button>
     </div>
 
-    <p v-if="error" class="mt-2 rounded bg-error/10 px-2 py-1 text-[10px] text-error">{{ error }}</p>
-    <p v-if="notice" class="mt-2 rounded bg-header px-2 py-1 text-[10px]">{{ notice }}</p>
+    <p v-if="error" class="mt-2 rounded bg-error/10 px-2 py-1 text-[11px] text-error">{{ error }}</p>
+    <p v-if="notice" class="mt-2 rounded bg-header px-2 py-1 text-[11px]">{{ notice }}</p>
 
     <div
       v-if="operationState.phase.value === 'reconciling'"
-      class="mt-2 flex items-center justify-between gap-2 rounded border border-warning/40 bg-warning/10 px-2 py-1 text-[10px]"
+      class="mt-2 flex items-center justify-between gap-2 rounded border border-warning/40 bg-warning/10 px-2 py-1 text-[11px]"
     >
       <span>{{ $t('agent.workspaceRuntime.reconciliationRequired') }}</span>
       <button
@@ -373,7 +373,7 @@
           <button
             v-if="['ready', 'stopped'].includes(activeWorkspace.status)"
             type="button"
-            class="rounded border border-border px-2 py-1 text-[10px]"
+            class="rounded border border-border px-2 py-1 text-[11px]"
             :disabled="locked"
             @click="workspaceAction(activeWorkspace, 'start')"
           >
@@ -382,7 +382,7 @@
           <button
             v-if="['running', 'starting'].includes(activeWorkspace.status)"
             type="button"
-            class="rounded border border-border px-2 py-1 text-[10px]"
+            class="rounded border border-border px-2 py-1 text-[11px]"
             :disabled="locked"
             @click="workspaceAction(activeWorkspace, 'stop')"
           >
@@ -391,7 +391,7 @@
           <button
             v-if="activeWorkspace.status === 'running'"
             type="button"
-            class="rounded border border-border px-2 py-1 text-[10px]"
+            class="rounded border border-border px-2 py-1 text-[11px]"
             :disabled="locked"
             @click="workspaceAction(activeWorkspace, 'restart')"
           >
@@ -400,7 +400,7 @@
           <button
             v-if="!['deleted', 'deleting'].includes(activeWorkspace.status)"
             type="button"
-            class="rounded border border-error/40 px-2 py-1 text-[10px] text-error"
+            class="rounded border border-error/40 px-2 py-1 text-[11px] text-error"
             :disabled="locked"
             @click="workspaceAction(activeWorkspace, 'delete')"
           >
