@@ -1860,20 +1860,21 @@ Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
   "可上下滚动"只能由 `max-height 288px + overflow-y auto` 推断，无法真实滚动验证；`shadow-2xl` / `ring-1`
   在当前 oklab token 体系下 computed 值接近透明（既有现象，非本次引入）。
 
-**追加（同日）：选项副信息字号回到 10px**
+**追加（同日）：选项副信息回到 9px，并补上「可上下滑动」的实测**
 
 - **现象**：用户反馈"选择项信息排布不是这样、提示信息太大"。CDP 实测主行 `12px`、副行（提供方 / 缺失能力）`11px`，
-  两行只差 1px，层次被压平，在 288px 宽的弹层里读起来"整块偏大"。
+  两行只差 1px，层次被压平，288px 宽的弹层里读起来"整块偏大"。
 - **根因**：`e4d86e2`（09-23 04:34，"finish the 11px reading-text floor"）把可读文本下限统一提到 11px，
   模型弹层副行随同批 269 行从 `text-[10px]` 变成 `text-[11px]`；主行一直是 `text-xs`（12px），没动。
-- **改法**：只把模型弹层副行改回 `text-[10px]`（09-22 的原值），主行、间距、配色都不动。
-- **复验**：副行 computed `font-size 11px → 10px`，选项行高 `50 → 48`，弹层高 `207 → 202`；
-  与 09-21 参考截图（`doc/imgs/review-2026-09-21/agent-hub-model-popover-zh.png`）逐像素对照：
-  两图主行墨迹高度同为 **12px**（对照组，说明可直接比较），参考图副行大写字母墨迹 **7px** ⇒ 对应 10px 字号，
-  改后副行墨迹比例与之一致；放大对照图 `/tmp/shots/cmp-both.png`（上 09-21 参考 / 下 当前）。
-- 环境补充：本环境的 provider 已加到 3 个模型（`gemini-3.8-flash-high` / `gpt-5.6-luna` / `gpt-6-luna`，
-  `version 3`，全部 `compatible`），弹层实测 3 行、行高 48px；用户侧"新加的模型不出现"在重新加载 Hub
-  （重新拉取 provider 列表）后即恢复，属于刷新时机问题，本次未改代码。
+- **改法**：副行回到 `413f2e9^`（09-14）的原写法 —— `mt-0.5 block truncate text-[9px] text-text-secondary`
+  （先降到 10px 用户仍觉得偏大，同日再降到 9px）；主行、配色、行高不变。
+- **复验**：副行 computed `font-size 11px → 10px → 9px`、`line-height 14.4px`、`margin-top 2px`；选项行高 `50 → 48`；
+  与 09-21 参考截图（10px，副行大写字母墨迹 7px）对照，9px 副行明显更小一档，放大对照 `/tmp/shots/cmp-9px.png`。
+- **滚动实测（用户此时已补到 11 个模型）**：`newapi`（`version 11`）= `gemini-3.8-flash-high` / `gpt-5.6-luna` /
+  `gpt-6-luna` / `gpt-5.6-terra` / `gpt-5.6-sol` / `gpt-5.5` / `gpt-6-astra` / `gpt-6-sol` / `grok-4.6` / `grok-4.5` / `grok-4.7`；
+  列表 `clientHeight 288` / `scrollHeight 572` ⇒ `scrollable: true`，最后一行默认不可见（`lastRowVisible: false`），
+  弹层总高 338px —— 即用户记忆中"上下滑动"的原始交互；此前只有 1 个模型的环境无法复现，现已实测。
+- 说明：新增模型原本要重新加载 Hub / 刷新页面才会出现，该刷新时机问题在 §7.22 修复。
 
 ---
 
