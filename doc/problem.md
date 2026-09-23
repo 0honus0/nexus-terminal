@@ -12,7 +12,7 @@
 > 巨型 UI 文件拆分（§3.1；2026-09-23 已复核并**按约定延后**——该条无隐藏的用户可见缺陷，拆分需搬迁约 30 props + 15 emit，
 > 正确验收依赖 Provider CRUD / Run 详情两条主路径的逐控件回归，本环境 `runner_not_configured` 无法覆盖，详见 §3.1 的复核块）；**§3.5 的"i18n 死 key"已于本轮关闭**（§7.40：新增可达性门禁 + 清掉 75×3 条不可达文案，字典 1,467 → 1,392）；**"后端工具结果摘要英文硬编码" 本轮已关闭**，仅剩 `mcp-tools.ts`（远端不可信内容，刻意排除）、`execution-errors.ts` 前缀与 `command.reason` 三处非 UI 残余并入 §3.6 跟踪；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
-> **历史提交复核补充（2026-09-23）**：在完成上述闭环后，又按 `b0d7b220..862a458` 的 66 个提交回看当天 UI 改动，确认重新开放 **2 条**可证明的正确性问题：§7.41（创建会话失败横幅会直接重放一个**无幂等键**的 POST，可能重复创建会话）与 §7.42（`30fa0ed` 新增的侧栏 / TaskRail 持久化字段未进入 `reset()`，同一 SPA 内切换账号时可继承上一账号的布局开关）。因此上文“§0 只剩 2 条开放项”仅代表 §7.40 收口当时的快照；**当前开放项应再加 §7.41 / §7.42**。本轮同时复核了 Launcher 长按拖动 / 虚拟列表量测、Gen2 `UiSelect` 空值哨兵、设置区 dirty-state 与锚点导航，未找到第三条达到可确认标准的新缺陷。
+> **历史提交完整复核补充（2026-09-23）**：现已对 `b0d7b220..862a458` **66/66 个提交**逐个回看“改动文件 → 对应 Problem 闭环 → 当前 HEAD 实现”。首轮已确认 §7.41（创建会话失败重放无幂等 POST）与 §7.42（per-user 侧栏开关漏 reset）；完整复核又确认 / 提升 **9 条**开放项：§7.43（TaskRail 顺序 + 会话缩放仍跨账号共用）、§7.44（16/20px 操作命中区残留）、§7.45（对象型 dirty-state 受 key insertion order 影响）、§7.46（4 条 state-commit `userSummary` 放错层级）、§7.47（`cancelling` Run 仍可 Send）、§7.48（模型 option hint 被后续 commit 降回 9px）、§7.49（ACP 设置 toast/fallback 仍硬编码英文）、§7.50（§7.22 已知的跨 tab 配置刷新缺口仍在）、§7.51（Gen2 `foundation/ui/**` 仍没有正确 ESLint parser/rules 覆盖）。因此上文“§0 只剩 2 条开放项”只代表 §7.40 收口当时的快照；当前状态以 §7.41–§7.51 与 §7.52 的 66/66 矩阵为准。当前工作树另有未提交 Settings 重构，本轮按 committed HEAD 做历史归因，未把临时改动算进 66 commit。
 
 复查规模（行数统计）：
 
@@ -101,6 +101,15 @@
 | **P2 · ✅ 已关闭 2026-09-23**             | `AppManagementSettings.vue` 用了 `<UiInfoHint>` 却漏 import，被当成未知元素渲染（`agent.settings.apps.description` 提示整条丢失 + Vue 运行时警告）；已补 import，实测 `data-ui="info-hint"` 正常输出                                                                                                                                                                                                                                                                                                                                                                             | `settings/AppManagementSettings.vue`（见 §7.27）                                                             |
 | **P1 · 🟠 开放 2026-09-23**               | **错误横幅仍有一条写路径直接重放原 mutation**：`createThread()` 失败后把「重试」绑定回同一个 `POST /threads`；该接口只有 CSRF header、没有 caller-stable `Idempotency-Key`，后端又为每次请求生成新 UUID。若服务端已提交但响应丢失，用户点击「重试」会创建第二条会话，和 §7.37 声明的“写失败只重新同步、不重放”不一致。                                                                                                                                                                                                                                                           | `host/AgentAppSurface.vue:902-916`、`api/agent-api.ts:364-374`（见 §7.41）                                   |
 | **P2 · 🟠 开放 2026-09-23**               | **侧栏 / TaskRail 的“按用户持久化”在账号切换时会串状态**：`30fa0ed` 把 `threadSidebarVisible` / `taskRailVisible` 写入每用户 localStorage，但 `agentWindowManager.reset()` 没重置这两个字段；登出 A 后若 B 没有已存布局，`restoreForUser(B)` 直接返回，B 会继承 A 的内存开关状态。                                                                                                                                                                                                                                                                                               | `host/window-manager.ts:161-218,258-268`、`host/AgentSurfaceHost.vue:191-211`（见 §7.42）                    |
+| **P2 · 🟠 开放 2026-09-23**               | **两类 UI 偏好仍跨账号共用**：TaskRail 顺序和线程列表缩放都使用全局 localStorage key；已有“重置”入口但没有 user scope，同一浏览器换账号会继承上一账号偏好。                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtime/TaskRail.vue`、`host/AgentThreadSidebar.vue`（见 §7.43）                                            |
+| **P1 · 🟠 开放 2026-09-23**               | **命中区 floor 未完全收口**：Hub resize 仍 16×16；插件仓库删除和 AppSwitcher 关闭仍 20×20。pager 的透明伪元素命中区仍正常，不在本条。                                                                                                                                                                                                                                                                                                                                                                                                                                            | `host/AgentHubWindow.vue`、`settings/PluginManagementSettings.vue`、`host/AgentAppSwitcher.vue`（见 §7.44）  |
+| **P2 · 🟠 开放 2026-09-23**               | **AppExecutionPolicy dirty-state 有 false positive**：对象 overrides 用 `JSON.stringify` 比较，关闭再恢复同一个 override 会改变 key 插入顺序，即使值完全一致也被判 dirty。                                                                                                                                                                                                                                                                                                                                                                                                       | `settings/AppExecutionPolicySettings.vue`（见 §7.45）                                                        |
+| **P1 · 🟠 开放 2026-09-23**               | **4 条 state-commit 工具失败摘要的 `userSummary` 层级错误**：被 stringify 进模型 `payload.text`，UI sibling 反而为空；用户继续看到英文，模型侧却看到 i18n key。                                                                                                                                                                                                                                                                                                                                                                                                                  | `infrastructure/agent/runtime/state-commit/{approval,input,run}-transitions.ts`（见 §7.46）                  |
+| **P1 · 🟠 开放 2026-09-23**               | **Run 处于 `cancelling` 时 Send 仍可点击**：前端把 cancelling 算作可追加输入的 nonTerminal，backend 明确返回 `RUN_NOT_ACCEPTING_INPUT`。                                                                                                                                                                                                                                                                                                                                                                                                                                         | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`、backend `input-transitions.ts`（见 §7.47）           |
+| **P1 · 🟠 开放 2026-09-23**               | **11px 阅读文字 floor 被后续 commit 回归**：模型选项说明 `modelOptionHint` 当前是 `text-[9px]`；全量非 icon 小文本扫描确认这一处仍在。                                                                                                                                                                                                                                                                                                                                                                                                                                           | `host/AgentAppSurface.vue`（见 §7.48）                                                                       |
+| **P2 · 🟠 开放 2026-09-23**               | **ACP 设置仍有用户可见英文硬编码**：create/update/profile update/delete 成功 toast + request failed fallback 在 zh-CN/ja-JP 下仍显示英文。                                                                                                                                                                                                                                                                                                                                                                                                                                       | `settings/AcpRuntimeSettings.vue`（见 §7.49）                                                                |
+| **P2 · 🟠 开放 2026-09-23**               | **Provider / Settings 写后刷新只覆盖同 tab**：跨标签页 BroadcastChannel 只刷新 host summary，不触发另一个 tab 的 run configuration reload；§7.22 正文已记录该缺口但总状态仍标关闭。                                                                                                                                                                                                                                                                                                                                                                                              | `host/AgentSurfaceHost.vue`、`host/agent-host-events.ts`、`settings/AgentSettingsPanel.vue`（见 §7.50）      |
+| **P2 · 🟠 开放 2026-09-23**               | **Gen2 `foundation/ui/**` 没有正确 ESLint 覆盖**：直接 lint `UiSelect.vue` 会报 TS parsing error；公共组件已进入大量 Agent 主路径，不能继续只靠模板编译 + vue-tsc。                                                                                                                                                                                                                                                                                                                                                                                                              | `eslint.config.mjs`、`packages/frontend/src/foundation/ui/**`（见 §7.51）                                    |
 
 ---
 
@@ -2942,6 +2951,222 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 **建议修复**：把所有有默认值、且会进入 per-user payload 的字段集中到一个 `defaultState()` / `resetLayoutPreferences()`，`reset()` 必须一次性恢复 `threadSidebarVisible=true`、`taskRailVisible=false`，避免以后新增字段再次漏 reset；补一条 A→logout→B（B 无 localStorage）回归。
 
 **本轮证据**：`git show 30fa0ed` 明确显示该提交新增了 state / restore / persist 三处字段但没有改 `reset()`；当前 HEAD 仍保持这一缺口。frontend `vue-tsc --noEmit` 通过。
+
+### 7.43 §7.13-d / §7.14-b 回看：两类 localStorage UI 偏好仍跨账号共用（P2 · 🟠 开放 2026-09-23）
+
+**当前代码事实**：
+
+- `host/AgentThreadSidebar.vue` 的缩放使用固定 key `nexus.agent.thread-list-scale.v1`；`0a467b6` 补了可发现入口和“重置”，但没有把 key 加上 user id。
+- `runtime/TaskRail.vue` 的卡片顺序使用固定 key `nexus.agent.task-rail-order.v1`；`ded8071` 补了键盘排序和“恢复默认顺序”，但 §7.14-b 原来明确指出的“换账号共用同一顺序”没有修。
+- 对照 `window-manager.ts` 已经采用 `nexus.agent.surface.v1.user.<userId>`，说明同一产品已有按账号隔离 UI 偏好的模型。
+
+因此 A 用户调整缩放 / TaskRail 顺序后退出，同一浏览器登录 B，B 会直接看到 A 的两项 UI 偏好。它不泄漏业务数据，但与其它 Agent 布局的 per-user 语义不一致。
+
+**建议修复**：把两枚 key 一并迁到 user-scoped namespace；首次读取新 key 为空时可以一次性迁移旧全局值，也可以直接采用默认值。补 A→logout→B 的浏览器回归。
+
+---
+
+### 7.44 §2.4 / §7.14-b 回看：命中区 floor 并未真正收口（P1 · 🟠 开放 2026-09-23）
+
+`8a3bc76` 的标题是 “finish the hit-target floor for 2.4”，`761a970` 又给 Hub resize 补了键盘几何，但当前 HEAD 仍存在可直接证明的小操作目标：
+
+| 位置                                             |             当前盒尺寸 | 说明                                                     |
+| ------------------------------------------------ | ---------------------: | -------------------------------------------------------- |
+| `host/AgentHubWindow.vue` 右下 resize            | **16×16**（`h-4 w-4`） | 方向键现已可用，但指针命中区仍是 §7.14-b 当时记录的 16px |
+| `settings/PluginManagementSettings.vue` 仓库删除 | **20×20**（`h-5 w-5`） | 真正的删除操作按钮                                       |
+| `host/AgentAppSwitcher.vue` 关闭                 | **20×20**（`h-5 w-5`） | 真正的关闭按钮                                           |
+
+空态 pager **不属于本条**：它虽然按钮盒仍是 12/20×16，但 `.agent-home-pager-dot::after { inset: -8px }` 仍存在，独占命中格按 §7.12 的 28/36×32 设计保留。
+
+**建议修复**：可见尺寸不一定要变，但上述三个操作至少用 transparent pseudo hit-area 或 wrapper 把指针目标扩到 ≥24px（优先 28–32px）；resize 仍保留 separator + 方向键语义。
+
+---
+
+### 7.45 §7.31 回看：对象型 dirty-state 用 JSON.stringify，会把“值相同、键顺序不同”判成未保存修改（P2 · 🟠 开放 2026-09-23）
+
+`fb10342` 给 8 处保存按钮补 dirty 语义，其中 `AppExecutionPolicySettings.vue` 当前使用：
+
+`JSON.stringify(draft.value) !== JSON.stringify(view.value?.overrides ?? {})`
+
+但该页面的 `toggleOverride()` 会先 `delete next[key]`，再次启用时再用 spread 把同一个 key 加回对象尾部。用户可以：
+
+1. 初始 overrides 为 `{ maxRunSteps, toolTimeoutSeconds, contextProfile }`；
+2. 关闭 `maxRunSteps` override；
+3. 再启用并恢复到原值。
+
+此时语义内容完全一致，但插入顺序变成 `{ toolTimeoutSeconds, contextProfile, maxRunSteps }`，`JSON.stringify` 字符串不同，Save 会错误进入 dirty/primary 状态。
+
+**建议修复**：对象 map 用排序后的 entries / 稳定 stringify，或按允许字段逐一比较值；不要把 JS insertion order 当业务变更。
+
+---
+
+### 7.46 §7.39 回看：4 条 state-commit 失败结果把 userSummary 放进了模型 text，而不是 ledger sibling（P1 · 🟠 开放 2026-09-23）
+
+§7.39 的核心边界是：模型只看英文证据 `payload.text`，用户本地化摘要走 ledger sibling `payload.userSummary`。普通工具结果通过 `toolResultLedgerPayload()` 正确实现了这一点，但 `2564ec7` 同批改的 4 类 state-commit 路径没有走 helper，而是把 `userSummary` **JSON.stringify 进 text 本体**：
+
+- `approval-transitions.ts`：`APPROVAL_DENIED`；
+- `approval-transitions.ts`：`APPROVAL_EXPIRED`；
+- `input-transitions.ts`：`APPROVAL_SUPERSEDED`；
+- `run-transitions.ts`：`RUN_CANCELLED_BEFORE_TOOL_EXECUTION`。
+
+这带来两个同时发生的错误：
+
+1. `ConversationMessage.vue` 只从 ledger payload sibling 读 `payload.userSummary`，因此这 4 条读不到本地化摘要，仍回退到 text 里的英文 `summary`；
+2. 模型证据 text 反而包含 `agent.conversation.toolSummary.*` i18n key，违背“模型侧结构上看不到 userSummary”的隔离目标。
+
+**建议修复**：这 4 条全部构造标准 `ToolResult` 后走 `toolResultLedgerPayload()`，或至少显式把 `userSummary` 提到 ledger payload sibling、从 text JSON 删除；加断言同时验证“UI sibling 有 key”和“解析 text 后无 userSummary”。
+
+---
+
+### 7.47 §2.5 回看：Run 已进入 cancelling 时 Send 仍可用，后端会必然拒绝（P1 · 🟠 开放 2026-09-23）
+
+`d9c7ed4` 正确把 Send 与 Stop 拆成两个按钮，但状态边界漏了 `cancelling`：
+
+- `AgentConversation.vue` 把 `cancelling` 算入 `activeRun`，只让 Stop 在 cancelling 时转圈并禁用；
+- 父层 `AgentAppSurface.vue` 的 `canSend` / `send()` 使用包含 `cancelling` 的 `nonTerminal`，因此非空草稿时 Send 仍可点击；
+- backend `input-transitions.ts` 明确写着 `row.status === 'cancelling' -> RUN_NOT_ACCEPTING_INPUT`。
+
+所以用户点击取消后、Run 尚未最终进入 `cancelled` 的窗口里，发送新输入会发出一个**后端必拒绝**的请求并产生错误反馈。Slash-command 的 active-run 判断反而已经排除了 cancelling，两个入口语义不一致。
+
+**建议修复**：把 “accepting input” 从 `nonTerminal` 独立成集合 / helper，至少排除 `cancelling`；Send disabled hint 显示“正在停止当前 Run”。
+
+---
+
+### 7.48 §2.3 回看：11px 阅读文字 floor 被 8166c89 重新打穿（P1 · 🟠 开放 2026-09-23）
+
+`5364e2b` / `e4d86e2` 刚把真实阅读文本提升到 ≥11px，随后：
+
+- `3fddac2` 把 Hub 模型 option hint 恢复到 10px；
+- `8166c89` 又明确改成 **9px**；
+- 当前 `AgentAppSurface.vue` 的 `modelOptionHint(option)` 仍渲染为 `<span class="... text-[9px] ...">`。
+
+全量扫 `features/agent/**/*.vue` 的非 icon 文本元素后，当前确认的 `text-[9px]/text-[10px]` 阅读文本就是这一处；其余 9/10px 命中主要是图标 / badge。
+
+因此 §2.3 “无阅读文字低于 11px”应重新开放这一个回归点。
+
+---
+
+### 7.49 §7.14-c i18n 回看：ACP 设置仍直接显示英文 toast / fallback（P2 · 🟠 开放 2026-09-23）
+
+当时的硬编码扫描主要以 CJK / 字典值为抓手，漏掉了**源码里的英文用户文案**。当前 `AcpRuntimeSettings.vue` 仍有：
+
+- `'ACP integration created.'`
+- `'ACP integration updated.'`
+- `'ACP integration profile updated.'`
+- `'ACP integration deleted.'`
+- `formatAgentApiError(cause, 'ACP request failed.')`
+
+同目录 MCP Integration 的对应路径已经全部使用 `t('agent.settings.mcpIntegrations.*')`。所以在 zh-CN / ja-JP 下操作 ACP Integration 时，成功 toast 或未知错误 fallback 会直接显示英文。
+
+**建议修复**：把 5 条补进三语字典；i18n 门禁后续增加“用户反馈 API 的裸英文 literal”扫描，而不只查硬编码 CJK。
+
+---
+
+### 7.50 §7.22 已知残留提升：跨标签页修改 Provider / Settings，另一个 tab 的 Hub 不刷新运行配置（P2 · 🟠 开放 2026-09-23）
+
+§7.22 行 2142 已经记录“未覆盖：跨标签页仍不推送”，但顶部总状态把 §7.22 整体列为关闭。本轮复核当前代码后确认该缺口仍存在：
+
+- `configuration-changed` 只存在于进程内 `agentHostEvents`，设置写成功后只通知**当前 tab** 的 `AgentAppSurface`；
+- `AgentSurfaceHost` 的 BroadcastChannel 会向其它 tab 发送 `host.changed`，但接收端只刷新 host summary；没有转发 `configuration-changed`；
+- 因此 tab A 禁用 provider / 改模型配置后，tab B 已打开的 Hub 会继续持有旧的 definitions/providers/settings，直到自身重载 / 重挂 surface。
+
+**建议修复**：给 BroadcastChannel 消息增加 sourceType=`configuration.changed`（或让后端 host event 提供同类 durable sourceType），另一 tab 收到后同时刷新 summary 与 run configuration。
+
+---
+
+### 7.51 Gen2 foundation 进入主路径后仍没有正确 ESLint 配置（P2 · 🟠 开放 2026-09-23）
+
+§7.28 已记录 “`foundation/ui/**` 不在 eslint flat-config 的 files 范围”，本轮 66 commit 复核后这个问题的重要性已上升：`a2a9e94` 以及后续提交让 `UiButton / UiSelect / UiPopover / UiEmptyState / UiInfoHint` 成为 Agent 设置和 Hub 的公共基础层。
+
+当前 `eslint.config.mjs` 仍只为 `features/agent/**/*.ts|vue` 等路径配置 Vue/TS parser。实测：
+
+`pnpm exec eslint packages/frontend/src/foundation/ui/UiSelect.vue`
+
+直接报 `Parsing error: Unexpected token {`，不是规则通过。
+
+**建议修复**：把 `packages/frontend/src/foundation/ui/**/*.{ts,vue}` 纳入同一 Vue/TS lint 配置（或抽成 frontend shared glob），然后先清现有告警再把它加入 `lint:agent` / CI。
+
+---
+
+### 7.52 66/66 历史 commit 对照矩阵（2026-09-23）
+
+复核范围固定为 `b0d7b22..862a458`，`git rev-list --count` = **66**。判断基准是**committed HEAD + 当前未被其它未提交工作树改动覆盖的代码**；当前另有未提交的 Settings 重构，不计入这 66 个 commit 的责任归因。
+
+| Commit    | 主题                                                                                     | 复核结论                                                 |
+| --------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `a2a9e94` | feat(ui): add Gen2 foundation primitives                                                 | ⚠ 见 §7.51                                               |
+| `af405e9` | fix(agent): close composer and popover layout issues                                     | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `80ff943` | fix(agent): enforce hub modal focus boundary                                             | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `191aba4` | fix(agent): close card and spacing utility gaps                                          | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `9b3f703` | fix(agent): restore hub focus after close                                                | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `48ecb85` | docs(agent): close verified UI regressions                                               | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `770dc31` | fix(agent): unify model settings popover                                                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `493b356` | docs(agent): close stale UI root causes                                                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `663f26d` | feat(agent): unify model selection ux                                                    | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `54003ba` | docs(agent): consolidate ui closure status                                               | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `e7442ee` | fix(agent): align default model combobox text background                                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `2210d07` | fix(agent): make hub backdrop a true no-op                                               | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `5364e2b` | fix(agent): raise real small text to an 11px floor                                       | ✅ 当时闭环成立；后续回归见 §7.48                        |
+| `e4d86e2` | fix(agent): finish the 11px reading-text floor                                           | ✅ 当时闭环成立；后续回归见 §7.48                        |
+| `8a3bc76` | fix(agent): finish the hit-target floor for 2.4                                          | ⚠ 见 §7.44                                               |
+| `1e92d78` | fix(agent): route hardcoded palette through theme tokens                                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `bdee90b` | fix(ui): let icon color utilities win over the global icon rule                          | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `d9c7ed4` | fix(agent): split composer send from run stop (2.5)                                      | ⚠ 见 §7.47                                               |
+| `1ae8e43` | fix(agent): make the empty-state bento rotation interruptible (2.6)                      | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `d6293b9` | fix(agent): translate the untranslated dictionary entries (7.15-a)                       | ⚠ 见 §7.49                                               |
+| `da1aa01` | fix(agent): explain workspace runtime unavailability (7.15-b)                            | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `05705b8` | fix(agent): localize the remaining raw enums (1.4)                                       | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `e66c4c1` | fix(agent): clean up the approval card details (7.14-b)                                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `2959d36` | fix(agent): make the disabled send state readable (7.17-c)                               | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `761a970` | fix(agent): give the hub window keyboard geometry (2.10)                                 | ⚠ 键盘路径已修，16px 命中区仍在；见 §7.44                |
+| `5986bfb` | i18n(agent): localize the settings numbers and small panels (7.14-c, part 1)             | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `e79cda3` | i18n(agent): finish the hardcoded text cleanup (7.14-c, part 2)                          | ⚠ 见 §7.49                                               |
+| `ded8071` | fix(agent): make the task rail reachable without a pointer (7.14-b)                      | ⚠ 见 §7.43                                               |
+| `9829d0d` | fix(agent): give the empty-state pager real hit targets (7.12)                           | ✅ 伪元素命中区仍在，闭环成立                            |
+| `0a467b6` | fix(agent): make the thread-list zoom discoverable and resettable (7.13-d)               | ⚠ 见 §7.43                                               |
+| `d81c7e0` | refactor(agent): converge the settings primary actions on the Gen2 button (6.2, batch 1) | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `7855cdc` | refactor(agent): converge the settings secondary, danger and icon actions (6.2, batch 2) | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `b3e397a` | refactor(agent): converge the settings checkboxes on the Gen2 control (6.3/6.7, batch 3) | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `d2056c5` | revert(agent): restore the true glass popover and box-free model options                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `3fddac2` | fix(agent): restore the 10px option hint in the hub model popover                        | ✅ 后续被 `8166c89` 改到 9px；见 §7.48                   |
+| `8166c89` | style(agent): shrink the hub model popover hint to 9px                                   | 🟠 直接重新引入 §2.3；见 §7.48                           |
+| `64953ed` | fix(agent): refresh the open surface after provider and settings writes                  | ⚠ 同 tab 已修，跨 tab 残留；见 §7.50                     |
+| `2b60702` | style(agent): lift the popover glass to 6px blur                                         | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `0a4b6c8` | refactor(ui): make the glass recipe a shared Gen2 surface                                | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `d7abf63` | fix(agent): explain why the steady-state settings buttons are disabled                   | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `2893c88` | feat(ui): add UiInfoHint and slim the Agent feature card                                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `cb13a89` | refactor(agent): move card descriptions behind the shared info hint                      | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `ef21441` | refactor(agent): audit the hub hint text and fold the popover headers                    | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `f820e16` | fix(agent): stop the hub window from squeezing out the transcript                        | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `30fa0ed` | feat(agent): let the thread sidebar collapse and remember the layout                     | 🟠 见 §7.42                                              |
+| `950a235` | feat(agent): double click the hub title bar to maximise                                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `8516cc9` | style(agent): move the feature state pill next to its title                              | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `b9978f1` | fix(agent): animate the docked thread sidebar instead of snapping                        | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `833cb9b` | style(agent): align the settings group pills with the Gen2 control spec                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `81d0987` | refactor(agent): flatten the settings nesting to a single card                           | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `6b1d3f2` | fix(agent): place the composer popovers before they paint                                | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `308f653` | refactor(agent): give the settings panel a section rail on wide screens                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `5617668` | feat(ui): add a Gen2 empty-state primitive and adopt it in agent settings                | ✅ 功能闭环；lint 覆盖缺口统一见 §7.51                   |
+| `606c5c6` | style(agent): make the settings header summary read as stats, not debug output           | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `2128787` | style(agent): calm the settings header bands and action clusters                         | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `fb10342` | style(agent): let settings save buttons follow the dirty state                           | 🟠 见 §7.45                                              |
+| `d6fcb42` | refactor(agent): move the settings dropdowns onto the Gen2 select                        | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `606fe71` | style(agent): give the quantity unit pills a 24px hit target                             | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `55fac86` | fix(agent): make the model removal buttons and batch confirm consistent                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `4d57ecd` | refactor(agent): finish the select migration in the workspace runtime                    | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `ddc887b` | fix(agent): stop dumping raw ledger payloads in the task rail                            | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `441810d` | fix(agent): give the error banner a failure domain and a retry action                    | 🟠 见 §7.41                                              |
+| `3016ffb` | fix(agent): make the launcher drag deliberate and measure thread row height              | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| `2564ec7` | fix(agent): localize tool-result summaries behind a user-only projection                 | 🟠 见 §7.46                                              |
+| `63ea08b` | chore(agent): gate i18n dictionaries on key reachability                                 | ✅ committed HEAD 复核成立；未提交设置重构不计入历史归因 |
+| `862a458` | docs(agent): record the giant-file review decision with measurements                     | ✅ 当前 HEAD 未发现新增可证明回归                        |
+
+**汇总**：
+
+- 66/66 均完成路径与当前实现反查；
+- 可证明需要重新打开 / 提升为开放项的 commit 关联见 §7.41–§7.51；
+- 表中 “✅” 的含义仅是“本轮没有找到达到可证明标准的新回归”，不是替代对应功能的完整 E2E；
+- `63ea08b` 在 committed HEAD 下仍有真实 `agent.settings.groups.plugins` 导航引用；当前工作树里出现的临时兼容引用属于**未提交设置重构**，本轮明确没有把它错误归因到历史 commit。
 
 ---
 
