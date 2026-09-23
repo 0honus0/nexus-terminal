@@ -1751,7 +1751,7 @@
                         </span>
                         <span class="min-w-0 flex-1">
                           <span class="block truncate text-xs font-medium text-foreground">{{ option.model.id }}</span>
-                          <span class="block text-[11px] text-text-secondary">
+                          <span class="block text-[10px] text-text-secondary">
                             {{ modelOptionHint(option) }}
                           </span>
                         </span>
