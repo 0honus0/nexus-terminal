@@ -299,23 +299,25 @@
                 </option>
               </select>
             </label>
-            <button
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               v-if="profileSettings?.templates.length"
               type="button"
-              class="rounded-md border border-border px-3 py-2 text-xs disabled:opacity-50"
               :disabled="profileBusy || !preferredModel"
               @click="addTemplateProfile"
             >
               {{ $t('agent.settings.subagents.addTemplate') }}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               type="button"
-              class="rounded-md border border-border px-3 py-2 text-xs disabled:opacity-50"
               :disabled="profileBusy || !preferredModel"
               @click="addProfile"
             >
               {{ $t('agent.settings.subagents.addProfile') }}
-            </button>
+            </UiButton>
           </div>
         </div>
         <p class="mt-2 text-xs text-text-secondary">{{ $t('agent.settings.subagents.profileHint') }}</p>

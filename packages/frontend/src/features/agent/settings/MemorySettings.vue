@@ -267,15 +267,10 @@
           <p class="text-xs text-text-secondary">{{ $t('agent.settings.memory.description') }}</p>
         </div>
       </div>
-      <button
-        type="button"
-        class="rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-text-secondary hover:text-foreground disabled:opacity-50"
-        :disabled="disabled || loading"
-        @click="loadMemories"
-      >
+      <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled || loading" @click="loadMemories">
         <i class="fa-solid fa-rotate mr-1" aria-hidden="true"></i>
         {{ $t('agent.settings.memory.reload') }}
-      </button>
+      </UiButton>
     </div>
 
     <div class="space-y-5 p-4 sm:p-5">
@@ -379,24 +374,14 @@
             >
               {{ $t('agent.settings.memory.publish') }}
             </UiButton>
-            <button
-              type="button"
-              class="rounded-lg border border-error/30 px-3 py-1.5 text-xs text-error disabled:opacity-50"
-              :disabled="disabled"
-              @click="reject(memory)"
-            >
+            <UiButton appearance="soft" tone="danger" type="button" :disabled="disabled" @click="reject(memory)">
               {{ $t('agent.settings.memory.reject') }}
-            </button>
+            </UiButton>
           </div>
           <div v-else-if="memory.status === 'published'" class="mt-3">
-            <button
-              type="button"
-              class="rounded-lg border border-error/30 px-3 py-1.5 text-xs text-error disabled:opacity-50"
-              :disabled="disabled"
-              @click="revoke(memory)"
-            >
+            <UiButton appearance="soft" tone="danger" type="button" :disabled="disabled" @click="revoke(memory)">
               {{ $t('agent.settings.memory.revoke') }}
-            </button>
+            </UiButton>
           </div>
         </article>
       </div>
@@ -436,14 +421,16 @@
             </select>
           </label>
           <div class="flex items-end">
-            <button
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               type="button"
-              class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground disabled:opacity-50"
               :disabled="disabled || !selectedAppId || !sourceAppId || !sourceMemoryId"
               @click="previewImport"
+              class="w-full"
             >
               {{ $t('agent.settings.memory.previewImport') }}
-            </button>
+            </UiButton>
           </div>
         </div>
 

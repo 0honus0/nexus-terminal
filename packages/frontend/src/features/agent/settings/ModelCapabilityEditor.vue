@@ -378,25 +378,21 @@
 
     <template #footer>
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <button
+        <UiButton
+          appearance="soft"
+          tone="neutral"
           v-if="capabilityEditorModel?.providerCapabilities || capabilityEditorModel?.registryDefaults"
           type="button"
-          class="rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-primary hover:bg-header disabled:opacity-50"
           :disabled="busy"
           @click="restoreAllCapabilities"
         >
           {{ $t('agent.settings.providers.restoreAllDefaults') }}
-        </button>
+        </UiButton>
         <span v-else></span>
         <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-header"
-            :disabled="busy"
-            @click="close"
-          >
+          <UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="close">
             {{ $t('common.cancel') }}
-          </button>
+          </UiButton>
           <UiButton appearance="solid" tone="primary" type="button" :disabled="busy" @click="saveCapabilities">
             {{ $t('common.save') }}
           </UiButton>

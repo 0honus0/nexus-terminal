@@ -939,9 +939,10 @@
             />
             <span>{{ $t('agent.settings.providers.registryAutoUpdate') }}</span>
           </label>
-          <button
+          <UiButton
+            appearance="soft"
+            tone="neutral"
             type="button"
-            class="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background px-2 py-1 font-medium text-foreground hover:bg-header disabled:opacity-50"
             :disabled="modelRegistryBusy"
             @click="refreshModelRegistry"
           >
@@ -951,7 +952,7 @@
               aria-hidden="true"
             ></i>
             <span>{{ $t('agent.settings.providers.registryRefresh') }}</span>
-          </button>
+          </UiButton>
         </div>
       </div>
 
@@ -1131,36 +1132,45 @@
               </span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              <button
+              <UiButton
+                appearance="ghost"
+                tone="neutral"
+                icon-only
+                density="compact"
                 type="button"
-                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-border-hover hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 :disabled="busy || index === 0"
                 :aria-label="$t('agent.settings.providers.fallbackMoveUp')"
                 :title="$t('agent.settings.providers.fallbackMoveUp')"
                 @click="moveFallbackModel(index, -1)"
               >
                 <i class="fa-solid fa-arrow-up text-[10px]" aria-hidden="true"></i>
-              </button>
-              <button
+              </UiButton>
+              <UiButton
+                appearance="ghost"
+                tone="neutral"
+                icon-only
+                density="compact"
                 type="button"
-                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-border-hover hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 :disabled="busy || index === selectedFallbackRows.length - 1"
                 :aria-label="$t('agent.settings.providers.fallbackMoveDown')"
                 :title="$t('agent.settings.providers.fallbackMoveDown')"
                 @click="moveFallbackModel(index, 1)"
               >
                 <i class="fa-solid fa-arrow-down text-[10px]" aria-hidden="true"></i>
-              </button>
-              <button
+              </UiButton>
+              <UiButton
+                appearance="ghost"
+                tone="danger"
+                icon-only
+                density="compact"
                 type="button"
-                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-error/40 hover:text-error disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 :disabled="busy"
                 :aria-label="$t('agent.settings.providers.fallbackRemove')"
                 :title="$t('agent.settings.providers.fallbackRemove')"
                 @click="removeFallbackModel(row.key)"
               >
                 <i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
-              </button>
+              </UiButton>
             </div>
           </li>
         </ol>
@@ -1264,9 +1274,10 @@
             <!-- 右侧操作工具条 -->
             <div class="flex items-center gap-1.5 shrink-0">
               <!-- 查看已配模型并进行连通测试弹窗入口 -->
-              <button
+              <UiButton
+                appearance="soft"
+                tone="neutral"
                 type="button"
-                class="inline-flex items-center gap-1 rounded-lg border border-border/75 bg-card px-2.5 py-1 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs"
                 :title="$t('agent.settings.providers.testModalTitle')"
                 :disabled="busy"
                 @click="openTestModal(provider)"
@@ -1275,17 +1286,13 @@
                 <span class="hidden sm:inline">{{
                   $t('agent.settings.providers.testModalBtn', { count: provider.models.length })
                 }}</span>
-              </button>
+              </UiButton>
 
               <!-- 更新模型（抽屉式同步） -->
-              <button
+              <UiButton
                 type="button"
-                class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all cursor-pointer shadow-2xs"
-                :class="
-                  drawerOpen[provider.id]
-                    ? 'border-primary/60 bg-primary/10 text-primary font-semibold'
-                    : 'border-border/75 bg-card text-text-secondary hover:bg-header hover:text-foreground'
-                "
+                appearance="soft"
+                :tone="drawerOpen[provider.id] ? 'primary' : 'neutral'"
                 :title="$t('agent.settings.providers.discover')"
                 :disabled="busy"
                 @click="toggleDrawer(provider)"
@@ -1295,7 +1302,7 @@
                   :class="{ 'fa-spin': busy || drawerLoading[provider.id] }"
                 ></i>
                 <span class="hidden sm:inline">{{ $t('agent.settings.providers.discover') }}</span>
-              </button>
+              </UiButton>
 
               <!-- 启停状态切换 -->
               <UiButton
@@ -1309,15 +1316,18 @@
               </UiButton>
 
               <!-- 删除服务商 -->
-              <button
+              <UiButton
                 type="button"
-                class="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary hover:bg-error/10 hover:text-error transition-colors cursor-pointer"
+                appearance="ghost"
+                tone="danger"
+                icon-only
+                density="compact"
                 :title="$t('agent.settings.providers.deleteConfirm')"
                 :disabled="busy"
                 @click="deletingProvider = provider"
               >
                 <i class="fa-regular fa-trash-can text-xs"></i>
-              </button>
+              </UiButton>
             </div>
           </div>
 
@@ -1365,9 +1375,10 @@
               </div>
 
               <div class="flex items-center">
-                <button
+                <UiButton
+                  appearance="soft"
+                  tone="neutral"
                   type="button"
-                  class="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-2.5 py-1 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs"
                   :disabled="busy || drawerLoading[provider.id]"
                   :title="$t('agent.settings.providers.discover')"
                   @click="triggerDiscover(provider)"
@@ -1377,7 +1388,7 @@
                     :class="{ 'fa-spin': busy || drawerLoading[provider.id] }"
                   ></i>
                   <span class="hidden sm:inline">{{ $t('agent.settings.providers.discover') }}</span>
-                </button>
+                </UiButton>
               </div>
             </div>
 
@@ -1423,17 +1434,18 @@
                     </UiButton>
 
                     <!-- 一键添加所有模型按钮 -->
-                    <button
+                    <UiButton
+                      appearance="soft"
+                      tone="neutral"
                       v-if="availableDiscoveries(provider).length > 0"
                       type="button"
-                      class="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition-all cursor-pointer shadow-2xs"
                       :disabled="busy"
                       :title="$t('agent.settings.providers.addAllModels')"
                       @click="addAllDiscovered(provider)"
                     >
                       <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
                       <span>{{ $t('agent.settings.providers.addAllModels') }}</span>
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
 
@@ -1532,15 +1544,16 @@
                       :placeholder="$t('agent.settings.providers.manualAddPrompt')"
                       @keydown.enter.prevent="addManualModel(provider)"
                     />
-                    <button
+                    <UiButton
+                      appearance="soft"
+                      tone="neutral"
                       type="button"
-                      class="h-7 rounded-lg bg-card border border-border/80 px-2.5 text-xs font-medium text-foreground hover:bg-header transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap"
                       :disabled="busy || !manualModelId[provider.id]?.trim()"
                       @click="addManualModel(provider)"
                     >
                       <i class="fa-solid fa-plus text-[10px] mr-1 text-primary"></i>
                       <span>{{ $t('agent.settings.providers.discoveryAdd') }}</span>
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
               </div>
@@ -1561,18 +1574,19 @@
 
                   <!-- 已生效模型只保留一个批量取消入口，单项仍可在列表中逐个取消 -->
                   <div class="flex items-center gap-1.5">
-                    <button
+                    <UiButton
+                      appearance="soft"
+                      tone="danger"
                       v-if="removableConfiguredModels(provider).length > 0"
                       type="button"
                       data-testid="configured-models-remove-all"
-                      class="inline-flex items-center gap-1 rounded-lg border border-error/40 bg-error/10 px-2.5 py-1 text-xs font-semibold text-error hover:bg-error/20 transition-all cursor-pointer shadow-2xs"
                       :disabled="busy"
                       :title="$t('agent.settings.providers.removeAllModels')"
                       @click="removeAllConfigured(provider)"
                     >
                       <i class="fa-solid fa-trash-can text-xs"></i>
                       <span>{{ $t('agent.settings.providers.removeAllModels') }}</span>
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
 
@@ -1632,13 +1646,9 @@
                 <i class="fa-solid fa-cloud-check text-success text-xs"></i>
                 <span>{{ $t('agent.settings.providers.autoSaveHint') }}</span>
               </div>
-              <button
-                type="button"
-                class="rounded-lg border border-border/80 bg-background px-4 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground shadow-2xs transition-all active:scale-95 cursor-pointer"
-                @click="drawerOpen[provider.id] = false"
-              >
+              <UiButton appearance="soft" tone="neutral" type="button" @click="drawerOpen[provider.id] = false">
                 {{ $t('common.close') }}
-              </button>
+              </UiButton>
             </div>
           </div>
         </article>
@@ -1675,14 +1685,9 @@
     </p>
     <template #footer>
       <div class="flex w-full justify-end gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-border/80 bg-background px-3.5 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
-          :disabled="busy"
-          @click="deletingProvider = null"
-        >
+        <UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="deletingProvider = null">
           {{ $t('common.cancel') }}
-        </button>
+        </UiButton>
         <button
           type="button"
           class="rounded-lg bg-error px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-error/90 active:scale-95 disabled:opacity-50 cursor-pointer"
@@ -1887,9 +1892,10 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <!-- 左侧：模型测试按钮 -->
         <div>
-          <button
+          <UiButton
+            appearance="soft"
+            tone="neutral"
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3.5 py-2 text-xs font-semibold text-foreground shadow-2xs transition-all hover:bg-header hover:border-border active:scale-95 disabled:opacity-50 cursor-pointer"
             :disabled="modalTesting || busy || !form.displayName.trim() || !form.baseUrl.trim() || !form.modelId.trim()"
             @click="testInModal"
           >
@@ -1900,19 +1906,14 @@
                 ? $t('agent.settings.providers.testingConnection')
                 : $t('agent.settings.providers.testConnection')
             }}</span>
-          </button>
+          </UiButton>
         </div>
 
         <!-- 右侧：取消与确认保存 -->
         <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="rounded-lg border border-border/80 bg-background px-3.5 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
-            :disabled="modalTesting"
-            @click="closeModal"
-          >
+          <UiButton appearance="soft" tone="neutral" type="button" :disabled="modalTesting" @click="closeModal">
             {{ $t('common.cancel') }}
-          </button>
+          </UiButton>
           <UiButton
             appearance="solid"
             tone="primary"
@@ -2057,30 +2058,33 @@
             </span>
 
             <!-- 设为默认模型 -->
-            <button
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               v-if="!(currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)"
               type="button"
-              class="rounded-lg border border-border/70 bg-card px-2.5 py-1 text-xs text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs"
               :disabled="busy || !currentTestModalProvider.enabled"
               @click="emit('defaultModel', currentTestModalProvider.id, model.id)"
             >
               {{ $t('agent.settings.providers.setDefault') }}
-            </button>
+            </UiButton>
 
-            <button
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-card px-2.5 py-1 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs"
               :disabled="busy"
               @click="openCapabilityEditor(currentTestModalProvider, model)"
             >
               <i class="fa-solid fa-sliders text-[10px]" aria-hidden="true"></i>
               <span>{{ $t('agent.settings.providers.capabilityEdit') }}</span>
-            </button>
+            </UiButton>
 
             <!-- 快速测试连通性 -->
-            <button
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
               :disabled="
                 busy ||
                 !currentTestModalProvider.enabled ||
@@ -2090,17 +2094,17 @@
             >
               <i class="fa-solid fa-vial text-[10px]" aria-hidden="true"></i>
               <span>{{ $t('agent.settings.providers.test') }}</span>
-            </button>
+            </UiButton>
 
             <!-- 取消已添加模型 -->
-            <button
+            <UiButton
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all select-none"
-              :class="
+              appearance="soft"
+              :tone="
                 currentTestModalProvider.models.length <= 1 ||
                 (currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)
-                  ? 'border-border/40 bg-header/20 text-text-secondary/40 cursor-not-allowed'
-                  : 'border-error/30 bg-error/5 text-error hover:bg-error/15 hover:border-error/50 cursor-pointer shadow-2xs'
+                  ? 'neutral'
+                  : 'danger'
               "
               :disabled="
                 busy ||
@@ -2118,7 +2122,7 @@
             >
               <i class="fa-regular fa-trash-can text-[10px]"></i>
               <span>{{ $t('agent.settings.providers.removeModel') }}</span>
-            </button>
+            </UiButton>
           </div>
         </div>
 
@@ -2134,13 +2138,9 @@
           <i class="fa-solid fa-cloud-check text-success text-xs"></i>
           <span>{{ $t('agent.settings.providers.autoSaveHint') }}</span>
         </div>
-        <button
-          type="button"
-          class="rounded-lg border border-border/80 bg-background px-4 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground shadow-2xs transition-all active:scale-95 cursor-pointer"
-          @click="testModalOpen = false"
-        >
+        <UiButton appearance="soft" tone="neutral" type="button" @click="testModalOpen = false">
           {{ $t('common.close') }}
-        </button>
+        </UiButton>
       </div>
     </template>
   </BaseModal>

@@ -251,14 +251,15 @@
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.mcpIntegrations.title') }}</h3>
         <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.mcpIntegrations.description') }}</p>
       </div>
-      <button
+      <UiButton
+        appearance="soft"
+        tone="neutral"
         type="button"
-        class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
         :disabled="disabled || loading || !agentAvailable"
         @click="loadIntegrations"
       >
         {{ $t('agent.settings.mcpIntegrations.reload') }}
-      </button>
+      </UiButton>
     </div>
 
     <div class="space-y-4 p-4 sm:p-5">
@@ -375,23 +376,25 @@
             />
           </label>
           <div class="flex flex-wrap items-end gap-2">
-            <button
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               type="button"
-              class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
               :disabled="disabled || !(credentialDrafts[integration.id] ?? '').trim()"
               @click="replaceCredential(integration)"
             >
               {{ $t('agent.settings.mcpIntegrations.saveCredential') }}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               v-if="integration.hasCredential"
               type="button"
-              class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
               :disabled="disabled"
               @click="clearCredential(integration)"
             >
               {{ $t('agent.settings.mcpIntegrations.clearCredential') }}
-            </button>
+            </UiButton>
           </div>
         </div>
 
@@ -415,22 +418,24 @@
         </dl>
 
         <div class="mt-3 flex flex-wrap gap-2">
-          <button
+          <UiButton
+            appearance="soft"
+            tone="neutral"
             type="button"
-            class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
             :disabled="disabled || !integration.enabled || integration.refreshState === 'refreshing'"
             @click="refreshIntegration(integration)"
           >
             {{ $t('agent.settings.mcpIntegrations.retry') }}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
+            appearance="soft"
+            tone="danger"
             type="button"
-            class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
             :disabled="disabled"
             @click="removeIntegration(integration)"
           >
             {{ $t('agent.settings.mcpIntegrations.delete') }}
-          </button>
+          </UiButton>
         </div>
       </article>
     </div>

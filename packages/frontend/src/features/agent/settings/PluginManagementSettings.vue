@@ -314,12 +314,7 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
-          :disabled="locked"
-          @click="run('refresh', refresh)"
-        >
+        <UiButton appearance="soft" tone="neutral" type="button" :disabled="locked" @click="run('refresh', refresh)">
           <i
             :class="
               localBusy
@@ -330,17 +325,12 @@
             aria-hidden="true"
           ></i>
           <span>{{ $t('agent.settings.plugins.refreshRemote') }}</span>
-        </button>
+        </UiButton>
 
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-header shadow-2xs transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
-          :disabled="locked"
-          @click="choosePackage"
-        >
+        <UiButton appearance="soft" tone="neutral" type="button" :disabled="locked" @click="choosePackage">
           <i class="fa-solid fa-file-arrow-up text-xs text-primary" aria-hidden="true"></i>
           <span>{{ $t('agent.settings.plugins.choosePackage') }}</span>
-        </button>
+        </UiButton>
         <input ref="packageInput" type="file" class="hidden" accept=".tar,application/x-tar" @change="preparePackage" />
       </div>
     </div>
@@ -678,10 +668,11 @@
                 </span>
 
                 <div class="flex items-center gap-1.5">
-                  <button
+                  <UiButton
+                    appearance="soft"
+                    tone="neutral"
                     v-if="!source.official && !publisherTrusted(entry.publisherKeyId)"
                     type="button"
-                    class="rounded-lg border border-border/70 bg-background px-2.5 py-1 text-xs hover:bg-header disabled:opacity-50 cursor-pointer"
                     :disabled="
                       locked || !source.catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
                     "
@@ -692,7 +683,7 @@
                     "
                   >
                     {{ $t('agent.settings.plugins.trustRemotePublisher') }}
-                  </button>
+                  </UiButton>
 
                   <UiButton
                     type="button"
@@ -739,15 +730,16 @@
           >
             <div class="flex flex-wrap items-center justify-between gap-3">
               <span class="font-mono text-xs text-foreground">{{ installation.appId }}</span>
-              <button
+              <UiButton
+                appearance="soft"
+                tone="danger"
                 v-if="pendingDataDeletionAppId !== installation.appId"
                 type="button"
-                class="rounded-lg border border-error/40 px-3 py-1 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50 cursor-pointer"
                 :disabled="locked"
                 @click="requestDeleteData(installation)"
               >
                 {{ $t('agent.settings.plugins.deleteData') }}
-              </button>
+              </UiButton>
             </div>
             <div
               v-if="pendingDataDeletionAppId === installation.appId"
@@ -763,14 +755,9 @@
                 >
                   {{ $t('agent.settings.plugins.confirmDeleteData') }}
                 </button>
-                <button
-                  type="button"
-                  class="rounded-lg border border-border px-3 py-1 text-xs text-text-secondary hover:bg-header disabled:opacity-50 cursor-pointer"
-                  :disabled="locked"
-                  @click="cancelDeleteData"
-                >
+                <UiButton appearance="soft" tone="neutral" type="button" :disabled="locked" @click="cancelDeleteData">
                   {{ $t('agent.settings.plugins.cancelDeleteData') }}
-                </button>
+                </UiButton>
               </div>
             </div>
           </div>
@@ -838,15 +825,16 @@
             >
               <div class="flex items-center justify-between gap-2">
                 <span class="min-w-0 truncate text-xs font-semibold text-foreground">{{ publisher.label }}</span>
-                <button
+                <UiButton
                   v-if="publisher.revokedAt === null"
                   type="button"
-                  class="rounded-lg border border-error/30 bg-error/5 px-2 py-0.5 text-[11px] text-error hover:bg-error/15 disabled:opacity-50 cursor-pointer"
+                  appearance="soft"
+                  tone="danger"
                   :disabled="locked"
                   @click="revokePublisher(publisher.keyId)"
                 >
                   {{ $t('agent.settings.plugins.revokePublisher') }}
-                </button>
+                </UiButton>
               </div>
               <p class="mt-1 break-all font-mono text-[11px] text-text-secondary">{{ publisher.keyId }}</p>
               <p v-if="publisher.revokedAt !== null" class="mt-1 text-[11px] text-error">

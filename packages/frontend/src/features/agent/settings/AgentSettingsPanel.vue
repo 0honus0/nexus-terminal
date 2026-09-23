@@ -929,14 +929,15 @@
           <span>{{ $t('agent.settings.onboarding.sandboxProtected') }}</span>
         </div>
         <div class="flex items-center gap-2">
-          <button
+          <UiButton
+            appearance="soft"
+            tone="neutral"
             type="button"
-            class="inline-flex h-9 items-center justify-center rounded-lg border border-border/80 bg-card px-4 text-xs font-medium text-text-secondary shadow-2xs transition-all hover:bg-header hover:text-foreground disabled:opacity-50 cursor-pointer whitespace-nowrap"
             :disabled="featureOperationBusy"
             @click="closeOnboarding"
           >
             {{ $t('agent.settings.onboarding.cancel') }}
-          </button>
+          </UiButton>
           <UiButton
             appearance="solid"
             tone="primary"

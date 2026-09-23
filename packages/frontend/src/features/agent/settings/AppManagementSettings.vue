@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal } from '@/foundation/ui';
+  import { BaseModal, UiButton } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
@@ -588,9 +588,10 @@
 
             <!-- 右侧：状态切换开关与安全策略配置按钮 -->
             <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
-              <button
+              <UiButton
+                appearance="soft"
+                tone="neutral"
                 type="button"
-                class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs"
                 @click="expandedGrants[app.id] = !expandedGrants[app.id]"
               >
                 <i class="fa-solid fa-shield-halved text-xs text-primary" aria-hidden="true"></i>
@@ -600,7 +601,7 @@
                   :class="{ 'rotate-180': expandedGrants[app.id] }"
                   aria-hidden="true"
                 ></i>
-              </button>
+              </UiButton>
 
               <UiButton
                 type="button"
@@ -615,23 +616,25 @@
 
               <!-- 只有停用的应用才能卸载 -->
               <!-- 停用状态：激活卸载按钮 -->
-              <button
+              <UiButton
+                appearance="soft"
+                tone="danger"
                 v-if="!app.enabled && app.surface !== 'builtin'"
                 type="button"
-                class="inline-flex items-center gap-1 rounded-xl border border-error/30 bg-error/5 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/15 hover:border-error/50 transition-all cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
                 :disabled="busy || uninstallBusy"
                 :title="$t('agent.settings.apps.uninstall')"
                 @click="requestUninstall(app)"
               >
                 <i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
                 <span>{{ $t('agent.settings.apps.uninstall') }}</span>
-              </button>
+              </UiButton>
 
               <!-- 启用状态：禁用置灰按钮，引导先停用后卸载 -->
-              <button
+              <UiButton
                 v-else
                 type="button"
-                class="inline-flex items-center gap-1 rounded-xl border border-border/50 bg-header/30 px-3 py-1.5 text-xs font-medium text-text-secondary/40 cursor-not-allowed select-none transition-all"
+                appearance="soft"
+                tone="neutral"
                 :title="
                   app.surface === 'builtin'
                     ? $t('agent.settings.apps.coreAppCannotUninstall')
@@ -641,7 +644,7 @@
               >
                 <i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
                 <span>{{ $t('agent.settings.apps.uninstall') }}</span>
-              </button>
+              </UiButton>
             </div>
           </div>
         </div>
@@ -667,10 +670,11 @@
             </div>
 
             <div class="flex items-center gap-2">
-              <button
+              <UiButton
                 v-if="grantViews[app.id]?.capabilityDefinitions.length"
                 type="button"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] shadow-2xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
+                appearance="soft"
+                tone="neutral"
                 :aria-label="
                   capabilitySelectionState(app.id) === 'all'
                     ? $t('agent.settings.apps.disableAllCapabilities')
@@ -697,7 +701,7 @@
                       : $t('agent.settings.apps.enableCapabilities')
                   }}
                 </span>
-              </button>
+              </UiButton>
               <UiButton
                 v-if="grantViews[app.id]"
                 type="button"
@@ -885,14 +889,15 @@
 
     <template #footer>
       <div class="flex justify-end gap-2">
-        <button
+        <UiButton
+          appearance="soft"
+          tone="neutral"
           type="button"
-          class="rounded-lg border border-border/80 bg-background px-3.5 py-2 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
           :disabled="uninstallBusy"
           @click="uninstallModalOpen = false"
         >
           {{ $t('common.cancel') }}
-        </button>
+        </UiButton>
         <button
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg bg-error px-4 py-2 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-error/90 active:scale-95 disabled:opacity-50 cursor-pointer"

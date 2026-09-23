@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useConnections, type ConnectionDto } from '@/features/connections/public';
@@ -177,9 +178,10 @@
         <span class="hidden text-[11px] font-mono text-text-secondary/60 sm:inline">
           {{ $t('agent.settings.safety.revision', { revision: denylist.revision }) }}
         </span>
-        <button
+        <UiButton
           type="button"
-          class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-background/80 px-3 text-[11px] font-medium text-foreground transition-colors hover:bg-header/70"
+          appearance="soft"
+          tone="neutral"
           :aria-expanded="expanded"
           @click="expanded = !expanded"
         >
@@ -192,7 +194,7 @@
             :class="{ 'rotate-180': expanded }"
             aria-hidden="true"
           ></i>
-        </button>
+        </UiButton>
       </div>
     </div>
 
@@ -250,24 +252,26 @@
 
         <!-- 批量全选/全清操作 -->
         <div v-if="filteredConnections.length > 0" class="flex items-center gap-2">
-          <button
+          <UiButton
+            appearance="soft"
+            tone="danger"
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-error/30 bg-error/5 px-2.5 py-1.5 text-xs font-medium text-error hover:bg-error/15 hover:border-error/50 transition-all cursor-pointer shadow-2xs disabled:opacity-50 active:scale-95"
             :disabled="busy || isAllFilteredBlocked"
             @click="blockAll"
           >
             <i class="fa-solid fa-ban text-[11px]"></i>
             <span>{{ $t('agent.settings.safety.blockAll') }}</span>
-          </button>
-          <button
+          </UiButton>
+          <UiButton
+            appearance="soft"
+            tone="neutral"
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs disabled:opacity-50 active:scale-95"
             :disabled="busy || isNoneFilteredBlocked"
             @click="allowAll"
           >
             <i class="fa-solid fa-check text-[11px]"></i>
             <span>{{ $t('agent.settings.safety.allowAll') }}</span>
-          </button>
+          </UiButton>
         </div>
       </div>
 

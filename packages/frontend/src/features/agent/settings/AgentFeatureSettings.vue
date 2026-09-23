@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { AgentSettingsViewDto } from '../api/agent-api';

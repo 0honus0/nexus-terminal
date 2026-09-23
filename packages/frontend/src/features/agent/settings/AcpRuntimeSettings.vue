@@ -206,15 +206,10 @@
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.acpRuntime.title') }}</h3>
         <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.acpRuntime.description') }}</p>
       </div>
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-header disabled:opacity-50"
-        :disabled="disabled"
-        @click="addProfile"
-      >
+      <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled" @click="addProfile">
         <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
         <span>{{ $t('agent.settings.acpRuntime.addProfile') }}</span>
-      </button>
+      </UiButton>
     </div>
     <div class="space-y-4 p-4 sm:p-5">
       <div class="mt-4">
@@ -247,14 +242,15 @@
               />
             </label>
             <div class="flex items-end">
-              <button
+              <UiButton
+                appearance="soft"
+                tone="danger"
                 type="button"
-                class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
                 :disabled="disabled"
                 @click="removeProfile(index)"
               >
                 {{ $t('agent.settings.acpRuntime.remove') }}
-              </button>
+              </UiButton>
             </div>
           </div>
         </article>
@@ -276,14 +272,15 @@
             <h3 class="text-sm font-semibold">{{ $t('agent.settings.acpRuntime.integrations') }}</h3>
             <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.acpRuntime.integrationsHint') }}</p>
           </div>
-          <button
+          <UiButton
+            appearance="soft"
+            tone="neutral"
             type="button"
-            class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
             :disabled="disabled || loading || !agentAvailable"
             @click="loadIntegrations"
           >
             {{ $t('agent.settings.acpRuntime.refresh') }}
-          </button>
+          </UiButton>
         </div>
 
         <p
@@ -363,14 +360,15 @@
                 />
                 {{ $t('agent.settings.acpRuntime.enabled') }}
               </label>
-              <button
+              <UiButton
+                appearance="soft"
+                tone="danger"
                 type="button"
-                class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
                 :disabled="disabled"
                 @click="removeIntegration(integration)"
               >
                 {{ $t('agent.settings.acpRuntime.deleteIntegration') }}
-              </button>
+              </UiButton>
             </div>
           </div>
         </article>

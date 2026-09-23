@@ -276,16 +276,17 @@
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.workspaceRuntime.title') }}</h3>
         <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.workspaceRuntime.description') }}</p>
       </div>
-      <button
+      <UiButton
+        appearance="soft"
+        tone="neutral"
         v-if="availability.available"
         type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-header disabled:opacity-50"
         :disabled="disabled || loading"
         @click="refreshObserved"
       >
         <i class="fa-solid fa-arrows-rotate text-xs" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
         <span>{{ $t('agent.settings.workspaceRuntime.refresh') }}</span>
-      </button>
+      </UiButton>
     </div>
     <div class="space-y-4 p-4 sm:p-5">
       <div class="mt-4 rounded-md bg-background p-4">
@@ -393,30 +394,21 @@
               {{ $t('agent.settings.workspaceRuntime.reclaimable', { bytes: formatBytes(storage.reclaimableBytes) }) }}
             </p>
             <div class="mt-3 flex flex-wrap gap-2">
-              <button
+              <UiButton
+                appearance="soft"
+                tone="neutral"
                 type="button"
-                class="rounded border border-border px-3 py-1.5 text-xs"
                 :disabled="disabled"
                 @click="previewRuntimeCleanup"
               >
                 {{ $t('agent.settings.workspaceRuntime.previewCleanup') }}
-              </button>
-              <button
-                type="button"
-                class="rounded border border-border px-3 py-1.5 text-xs"
-                :disabled="disabled"
-                @click="cleanupCache"
-              >
+              </UiButton>
+              <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled" @click="cleanupCache">
                 {{ $t('agent.settings.workspaceRuntime.clearCache') }}
-              </button>
-              <button
-                type="button"
-                class="rounded border border-border px-3 py-1.5 text-xs"
-                :disabled="disabled"
-                @click="previewReset"
-              >
+              </UiButton>
+              <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled" @click="previewReset">
                 {{ $t('agent.settings.workspaceRuntime.previewReset') }}
-              </button>
+              </UiButton>
             </div>
             <div v-if="cleanupPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
               <p>
@@ -491,18 +483,20 @@
                 <p class="mt-1 text-xs text-text-secondary">{{ formatBytes(pack.diskBytes) }} · {{ pack.status }}</p>
               </div>
               <div class="flex flex-wrap gap-1.5">
-                <button
+                <UiButton
+                  appearance="soft"
+                  tone="neutral"
                   v-if="!pack.installed"
                   type="button"
-                  class="rounded border border-border px-2 py-1 text-xs"
                   :disabled="disabled || pack.status === 'unavailable'"
                   @click="installPack(pack)"
                 >
                   {{ $t('agent.settings.workspaceRuntime.install') }}
-                </button>
-                <button
+                </UiButton>
+                <UiButton
+                  appearance="soft"
+                  tone="neutral"
                   type="button"
-                  class="rounded border border-border px-2 py-1 text-xs"
                   :disabled="disabled || pack.status === 'unavailable'"
                   @click="savePackPreference(pack, 'toggle')"
                 >
@@ -511,24 +505,26 @@
                       ? $t('agent.settings.workspaceRuntime.disableVersion')
                       : $t('agent.settings.workspaceRuntime.enableVersion')
                   }}
-                </button>
-                <button
+                </UiButton>
+                <UiButton
+                  appearance="soft"
+                  tone="neutral"
                   type="button"
-                  class="rounded border border-border px-2 py-1 text-xs"
                   :disabled="disabled || isDesiredDefault(pack) || pack.status === 'unavailable'"
                   @click="savePackPreference(pack, 'default')"
                 >
                   {{ $t('agent.settings.workspaceRuntime.makeDefault') }}
-                </button>
-                <button
+                </UiButton>
+                <UiButton
+                  appearance="soft"
+                  tone="danger"
                   v-if="pack.installed"
                   type="button"
-                  class="rounded border border-error/50 px-2 py-1 text-xs text-error"
                   :disabled="disabled"
                   @click="previewUninstall(pack)"
                 >
                   {{ $t('agent.settings.workspaceRuntime.uninstall') }}
-                </button>
+                </UiButton>
               </div>
             </div>
           </div>
@@ -558,14 +554,15 @@
             >
               {{ $t('agent.settings.workspaceRuntime.confirmUninstall') }}
             </button>
-            <button
+            <UiButton
+              appearance="soft"
+              tone="neutral"
               type="button"
-              class="rounded border border-border px-3 py-1.5 text-xs"
               :disabled="disabled"
               @click="uninstallPreview = null"
             >
               {{ $t('agent.settings.workspaceRuntime.cancel') }}
-            </button>
+            </UiButton>
           </div>
         </div>
 

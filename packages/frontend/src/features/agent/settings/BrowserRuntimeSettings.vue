@@ -70,15 +70,10 @@
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.browserRuntime.title') }}</h3>
         <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.browserRuntime.description') }}</p>
       </div>
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-header disabled:opacity-50"
-        :disabled="busy"
-        @click="addTarget"
-      >
+      <UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="addTarget">
         <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
         <span>{{ $t('agent.settings.browserRuntime.addTarget') }}</span>
-      </button>
+      </UiButton>
     </div>
     <div class="space-y-4 p-4 sm:p-5">
       <p v-if="targets.length === 0" class="mt-4 rounded bg-background p-3 text-xs text-text-secondary">
@@ -98,14 +93,9 @@
               class="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-sm"
             />
           </label>
-          <button
-            type="button"
-            class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
-            :disabled="busy"
-            @click="removeTarget(targetIndex)"
-          >
+          <UiButton appearance="soft" tone="danger" type="button" :disabled="busy" @click="removeTarget(targetIndex)">
             {{ $t('agent.settings.browserRuntime.remove') }}
-          </button>
+          </UiButton>
         </div>
 
         <label class="mt-3 block text-xs text-text-secondary">
@@ -123,14 +113,9 @@
             <h3 class="text-sm font-medium">{{ $t('agent.settings.browserRuntime.endpoints') }}</h3>
             <p class="text-[11px] text-text-secondary">{{ $t('agent.settings.browserRuntime.endpointHint') }}</p>
           </div>
-          <button
-            type="button"
-            class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
-            :disabled="busy"
-            @click="addEndpoint(target)"
-          >
+          <UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="addEndpoint(target)">
             {{ $t('agent.settings.browserRuntime.addEndpoint') }}
-          </button>
+          </UiButton>
         </div>
 
         <div
@@ -167,14 +152,15 @@
               />
             </label>
             <div class="flex items-end justify-end">
-              <button
+              <UiButton
+                appearance="soft"
+                tone="danger"
                 type="button"
-                class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
                 :disabled="busy"
                 @click="removeEndpoint(target, endpointIndex)"
               >
                 {{ $t('agent.settings.browserRuntime.removeEndpoint') }}
-              </button>
+              </UiButton>
             </div>
           </div>
           <label class="mt-2 block text-[11px] text-text-secondary">
