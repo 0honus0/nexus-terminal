@@ -2511,6 +2511,7 @@
     --agent-thread-sidebar-column: 256px;
     --agent-task-rail-column: 0px;
     grid-template-columns: var(--agent-thread-sidebar-column) minmax(0, 1fr) var(--agent-task-rail-column);
+    transition: grid-template-columns 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .agent-surface-layout.has-task-rail {
@@ -2525,10 +2526,26 @@
    * A zero-width track alone would let the sidebar overflow its column, so the
    * panel is clipped instead; the narrow tier positions it absolutely and never
    * looks at this track, which keeps the two mechanisms from fighting.
+   *
+   * The clip has to hold while the track animates in either direction, or the
+   * panel's min-content width would spill over the conversation pane mid-flight;
+   * the fade keeps the reflowing content from looking like a glitch. Both rules
+   * live in the docked tier only, because the narrow tier drives the panel with
+   * its own transform/visibility pair and must never inherit this opacity.
+   *
+   * `(width > 760px)` mirrors the `max-width: 760px` overlay tier exactly, so no
+   * window falls between them and loses both the docked clip and the drawer.
    */
-  .agent-surface-layout.is-threads-hidden :deep(.agent-thread-sidebar) {
-    min-width: 0;
-    overflow: hidden;
+  @container agent-hub-window (width > 760px) {
+    .agent-surface-layout :deep(.agent-thread-sidebar) {
+      min-width: 0;
+      overflow: hidden;
+      transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .agent-surface-layout.is-threads-hidden :deep(.agent-thread-sidebar) {
+      opacity: 0;
+    }
   }
 
   .agent-conversation-pane {
@@ -2727,6 +2744,10 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .agent-surface-layout {
+      transition: none;
+    }
+
     :deep(.agent-thread-sidebar) {
       transition: none;
     }
