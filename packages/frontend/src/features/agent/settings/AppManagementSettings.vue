@@ -602,20 +602,16 @@
                 ></i>
               </button>
 
-              <button
+              <UiButton
                 type="button"
-                class="inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-semibold shadow-2xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                :class="
-                  app.enabled
-                    ? 'border border-border bg-card text-foreground hover:bg-header hover:border-border-hover'
-                    : 'bg-primary text-white hover:bg-primary/90'
-                "
+                :appearance="app.enabled ? 'soft' : 'solid'"
+                :tone="app.enabled ? 'neutral' : 'primary'"
                 :disabled="busy"
                 @click="emit('toggle', app, !app.enabled)"
               >
                 <span class="h-1.5 w-1.5 rounded-full" :class="app.enabled ? 'bg-success' : 'bg-white/70'"></span>
                 <span>{{ app.enabled ? $t('agent.settings.apps.disable') : $t('agent.settings.apps.enable') }}</span>
-              </button>
+              </UiButton>
 
               <!-- 只有停用的应用才能卸载 -->
               <!-- 停用状态：激活卸载按钮 -->
@@ -702,11 +698,11 @@
                   }}
                 </span>
               </button>
-              <button
+              <UiButton
                 v-if="grantViews[app.id]"
                 type="button"
-                class="inline-flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-semibold text-white shadow-2xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                :class="grantChanged(app.id) ? 'bg-primary hover:bg-primary/90' : 'bg-primary/60 cursor-not-allowed'"
+                appearance="solid"
+                tone="primary"
                 :disabled="busy || grantBusy[app.id] || !grantChanged(app.id)"
                 @click="saveGrants(app.id)"
               >
@@ -719,7 +715,7 @@
                       : $t('agent.settings.apps.savePermissions')
                   }}
                 </span>
-              </button>
+              </UiButton>
             </div>
           </div>
 

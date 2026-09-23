@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -332,14 +333,16 @@
                 </span>
               </label>
             </div>
-            <button
+            <UiButton
+              appearance="solid"
+              tone="primary"
               type="button"
-              class="mt-3 rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
               :disabled="disabled || !selectedRecipeIds.length"
               @click="previewSetup"
+              class="mt-3"
             >
               {{ $t('agent.settings.workspaceRuntime.previewSetup') }}
-            </button>
+            </UiButton>
             <div v-if="setupPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
               <p>
                 {{
@@ -349,14 +352,16 @@
                   })
                 }}
               </p>
-              <button
+              <UiButton
+                appearance="solid"
+                tone="primary"
                 type="button"
-                class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
                 :disabled="disabled"
                 @click="confirmSetup"
+                class="mt-2"
               >
                 {{ $t('agent.settings.workspaceRuntime.confirmSetup') }}
-              </button>
+              </UiButton>
             </div>
           </div>
 
@@ -424,25 +429,29 @@
                   })
                 }}
               </p>
-              <button
+              <UiButton
+                appearance="solid"
+                tone="primary"
                 type="button"
-                class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
                 :disabled="disabled"
                 @click="confirmRuntimeCleanup"
+                class="mt-2"
               >
                 {{ $t('agent.settings.workspaceRuntime.confirmCleanup') }}
-              </button>
+              </UiButton>
             </div>
             <div v-if="resetPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
               <p>{{ $t('agent.settings.workspaceRuntime.resetImpact') }}</p>
-              <button
+              <UiButton
+                appearance="solid"
+                tone="primary"
                 type="button"
-                class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
                 :disabled="disabled"
                 @click="confirmReset"
+                class="mt-2"
               >
                 {{ $t('agent.settings.workspaceRuntime.confirmReset') }}
-              </button>
+              </UiButton>
             </div>
           </div>
         </div>

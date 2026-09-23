@@ -446,20 +446,20 @@
             type="text"
             maxlength="512"
             data-no-highlight
-            class="h-9 flex-1 rounded-xl border border-border bg-background px-3 text-xs shadow-2xs text-foreground placeholder:text-text-secondary/60 outline-none focus:border-border-hover transition-all"
+            class="h-8 flex-1 rounded-lg border border-border bg-background px-3 text-xs shadow-2xs text-foreground placeholder:text-text-secondary/60 outline-none focus:border-border-hover transition-all"
             :placeholder="$t('agent.settings.safety.reasonPlaceholder')"
             @keydown.enter.prevent="save"
           />
-          <button
+          <UiButton
             type="button"
-            class="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-semibold text-white shadow-2xs transition-all cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50"
-            :class="isDirty && reason.trim() ? 'bg-primary hover:bg-primary/90' : 'bg-primary/80 opacity-60'"
+            :appearance="isDirty && reason.trim() ? 'solid' : 'soft'"
+            :tone="isDirty && reason.trim() ? 'primary' : 'neutral'"
             :disabled="busy || !reason.trim()"
             @click="save"
           >
             <i class="fa-solid fa-shield-check text-xs"></i>
             <span>{{ $t('agent.settings.safety.savePolicy') }}</span>
-          </button>
+          </UiButton>
         </div>
       </div>
     </div>

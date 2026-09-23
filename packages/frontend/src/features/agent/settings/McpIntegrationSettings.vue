@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
@@ -305,14 +306,15 @@
         </div>
       </div>
 
-      <button
+      <UiButton
+        appearance="solid"
+        tone="primary"
         type="button"
-        class="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
         :disabled="disabled || !agentAvailable || !displayName.trim() || !endpoint.trim()"
         @click="createIntegration"
       >
         {{ $t('agent.settings.mcpIntegrations.create') }}
-      </button>
+      </UiButton>
 
       <p v-if="loading" class="text-xs text-text-secondary">{{ $t('agent.settings.mcpIntegrations.loading') }}</p>
       <p v-else-if="integrations.length === 0" class="rounded bg-background p-3 text-xs text-text-secondary">

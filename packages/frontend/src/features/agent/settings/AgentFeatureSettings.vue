@@ -31,19 +31,15 @@
           <span class="h-1.5 w-1.5 rounded-full" :class="runtimeEnabled ? 'bg-success' : 'bg-text-secondary'"></span>
           {{ runtimeEnabled ? $t('agent.settings.enabled') : $t('agent.settings.disabled') }}
         </span>
-        <button
+        <UiButton
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-medium shadow-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          :class="
-            runtimeEnabled
-              ? 'border border-error/30 bg-error/10 text-error hover:bg-error/20'
-              : 'bg-primary text-white hover:bg-primary/90'
-          "
+          :appearance="runtimeEnabled ? 'soft' : 'solid'"
+          :tone="runtimeEnabled ? 'danger' : 'primary'"
           :disabled="busy"
           @click="emit('change', !runtimeEnabled)"
         >
           {{ runtimeEnabled ? $t('agent.settings.feature.disable') : $t('agent.settings.feature.enable') }}
-        </button>
+        </UiButton>
       </div>
     </div>
     <div class="p-4 sm:p-5">

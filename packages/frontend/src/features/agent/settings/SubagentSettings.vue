@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -259,14 +260,15 @@
         </label>
       </div>
       <div class="mt-4 flex justify-end">
-        <button
+        <UiButton
+          appearance="solid"
+          tone="primary"
           type="button"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           :disabled="busy || invalidGlobalLimits"
           @click="saveGlobalLimits"
         >
           {{ $t('common.save') }}
-        </button>
+        </UiButton>
       </div>
 
       <div class="mt-5 border-t border-border pt-5">
@@ -446,14 +448,15 @@
         </div>
 
         <div class="mt-4 flex justify-end">
-          <button
+          <UiButton
+            appearance="solid"
+            tone="primary"
             type="button"
-            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             :disabled="profileBusy || !profileSettings || invalidProfileLimits"
             @click="saveProfiles"
           >
             {{ $t('agent.settings.subagents.saveProfiles') }}
-          </button>
+          </UiButton>
         </div>
       </div>
     </div>

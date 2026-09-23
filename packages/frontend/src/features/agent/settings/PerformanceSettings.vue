@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
@@ -120,15 +121,10 @@
       <span class="text-xs text-text-secondary">
         {{ isDirty ? $t('agent.settings.performance.unsavedChanges') : $t('agent.settings.performance.activeNotice') }}
       </span>
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white shadow-sm transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        :disabled="busy || !isDirty || invalid"
-        @click="save"
-      >
+      <UiButton appearance="solid" tone="primary" type="button" :disabled="busy || !isDirty || invalid" @click="save">
         <i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>
         <span>{{ busy ? $t('agent.ui.working') : $t('common.save') }}</span>
-      </button>
+      </UiButton>
     </div>
   </section>
 </template>

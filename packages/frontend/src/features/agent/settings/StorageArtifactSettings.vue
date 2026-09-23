@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import type { AgentSettingsViewDto, AgentArtifactStorageSummaryDto } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
@@ -147,16 +148,17 @@
           {{ $t('agent.settings.storage.savedNotice') }}
         </span>
 
-        <button
+        <UiButton
+          appearance="solid"
+          tone="primary"
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer"
           :disabled="busy || !isDirty || hasInvalidDraft"
           @click="save"
         >
           <i v-if="busy" class="fa-solid fa-circle-notch fa-spin text-xs"></i>
           <i v-else class="fa-solid fa-check text-xs"></i>
           <span>{{ busy ? $t('agent.ui.working') : $t('common.save') }}</span>
-        </button>
+        </UiButton>
       </div>
     </div>
   </section>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -369,14 +370,15 @@
           </div>
 
           <div v-if="memory.status === 'candidate'" class="mt-3 flex flex-wrap gap-2">
-            <button
+            <UiButton
+              appearance="solid"
+              tone="primary"
               type="button"
-              class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
               :disabled="disabled || !(drafts[memory.id] ?? '').trim()"
               @click="publish(memory)"
             >
               {{ $t('agent.settings.memory.publish') }}
-            </button>
+            </UiButton>
             <button
               type="button"
               class="rounded-lg border border-error/30 px-3 py-1.5 text-xs text-error disabled:opacity-50"
@@ -468,14 +470,16 @@
             </span>
             <span>{{ $t('agent.settings.memory.expires') }}: {{ formatTime(previewSnapshot?.expiresAt ?? null) }}</span>
           </div>
-          <button
+          <UiButton
+            appearance="solid"
+            tone="primary"
             type="button"
-            class="mt-3 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
             :disabled="disabled"
             @click="confirmImport"
+            class="mt-3"
           >
             {{ $t('agent.settings.memory.confirmImport') }}
-          </button>
+          </UiButton>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiCombobox, UiPopover, type UiComboboxOption } from '@/foundation/ui';
+  import { BaseModal, UiButton, UiCombobox, UiPopover, type UiComboboxOption } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import {
@@ -905,15 +905,10 @@
       </div>
 
       <!-- 添加服务商主按钮 -->
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer"
-        :disabled="busy"
-        @click="openAddModal"
-      >
+      <UiButton appearance="solid" tone="primary" type="button" :disabled="busy" @click="openAddModal">
         <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
         <span>{{ $t('agent.settings.providers.add') }}</span>
-      </button>
+      </UiButton>
     </div>
 
     <div class="space-y-4 p-4 sm:p-5">
@@ -1303,19 +1298,15 @@
               </button>
 
               <!-- 启停状态切换 -->
-              <button
+              <UiButton
                 type="button"
-                class="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer shadow-2xs"
-                :class="
-                  provider.enabled
-                    ? 'border border-border/75 bg-card text-text-secondary hover:bg-header hover:text-foreground'
-                    : 'bg-primary text-white hover:bg-primary/90'
-                "
+                :appearance="provider.enabled ? 'soft' : 'solid'"
+                :tone="provider.enabled ? 'neutral' : 'primary'"
                 :disabled="busy"
                 @click="emit('toggle', provider, !provider.enabled)"
               >
                 {{ provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable') }}
-              </button>
+              </UiButton>
 
               <!-- 删除服务商 -->
               <button
@@ -1417,10 +1408,11 @@
                   <!-- 批量操作动作区 -->
                   <div class="flex items-center gap-1.5">
                     <!-- 多选添加按钮 -->
-                    <button
+                    <UiButton
+                      appearance="solid"
+                      tone="primary"
                       v-if="selectedDiscoveredCount(provider) > 0"
                       type="button"
-                      class="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer"
                       :disabled="busy"
                       @click="addSelectedDiscovered(provider)"
                     >
@@ -1428,7 +1420,7 @@
                       <span>{{
                         $t('agent.settings.providers.addSelected', { count: selectedDiscoveredCount(provider) })
                       }}</span>
-                    </button>
+                    </UiButton>
 
                     <!-- 一键添加所有模型按钮 -->
                     <button
@@ -1661,14 +1653,10 @@
         <p class="mt-1 text-xs text-text-secondary max-w-sm mx-auto">
           {{ $t('agent.settings.providers.emptyHint') }}
         </p>
-        <button
-          type="button"
-          class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary/90 active:scale-95 cursor-pointer"
-          @click="openAddModal"
-        >
+        <UiButton appearance="solid" tone="primary" type="button" @click="openAddModal" class="mt-4">
           <i class="fa-solid fa-plus text-xs"></i>
           <span>{{ $t('agent.settings.providers.add') }}</span>
-        </button>
+        </UiButton>
       </div>
     </div>
   </section>
@@ -1925,15 +1913,16 @@
           >
             {{ $t('common.cancel') }}
           </button>
-          <button
+          <UiButton
+            appearance="solid"
+            tone="primary"
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer"
             :disabled="modalTesting || busy || !form.displayName.trim() || !form.baseUrl.trim() || !form.modelId.trim()"
             @click="submitModal"
           >
             <i v-if="createdProviderId" class="fa-solid fa-check text-xs"></i>
             <span>{{ createdProviderId ? $t('common.confirm') : $t('agent.settings.providers.saveAndAdd') }}</span>
-          </button>
+          </UiButton>
         </div>
       </div>
     </template>

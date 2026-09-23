@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { ref, watch } from 'vue';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
@@ -198,14 +199,9 @@
         </div>
       </article>
 
-      <button
-        type="button"
-        class="mt-4 rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
-        :disabled="busy"
-        @click="save"
-      >
+      <UiButton appearance="solid" tone="primary" type="button" :disabled="busy" @click="save" class="mt-4">
         {{ $t('agent.settings.browserRuntime.save') }}
-      </button>
+      </UiButton>
     </div>
   </section>
 </template>

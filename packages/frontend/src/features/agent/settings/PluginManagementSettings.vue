@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -440,12 +441,7 @@
               {{ candidateArtifactName }}
             </span>
             <span v-else></span>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer"
-              :disabled="locked"
-              @click="applyCandidate"
-            >
+            <UiButton appearance="solid" tone="primary" type="button" :disabled="locked" @click="applyCandidate">
               <i class="fa-solid fa-download text-xs" aria-hidden="true"></i>
               <span>
                 {{
@@ -456,7 +452,7 @@
                     : $t('agent.settings.plugins.install')
                 }}
               </span>
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>
@@ -492,14 +488,15 @@
                 :disabled="locked"
               />
             </div>
-            <button
+            <UiButton
+              appearance="solid"
+              tone="primary"
               type="button"
-              class="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-xs font-medium text-white shadow-2xs transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap"
               :disabled="locked || !repositoryUrl.trim()"
               @click="addRepository"
             >
               {{ $t('agent.settings.plugins.addRepository') }}
-            </button>
+            </UiButton>
           </div>
         </div>
 
@@ -697,14 +694,10 @@
                     {{ $t('agent.settings.plugins.trustRemotePublisher') }}
                   </button>
 
-                  <button
+                  <UiButton
                     type="button"
-                    class="inline-flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-semibold shadow-2xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap"
-                    :class="
-                      isInstalled(entry.appId)
-                        ? 'border border-border/80 bg-background text-text-secondary hover:bg-header hover:text-foreground'
-                        : 'bg-primary text-white hover:bg-primary/90'
-                    "
+                    :appearance="isInstalled(entry.appId) ? 'soft' : 'solid'"
+                    :tone="isInstalled(entry.appId) ? 'neutral' : 'primary'"
                     :disabled="
                       locked || !entry.compatible || (!source.official && !publisherTrusted(entry.publisherKeyId))
                     "
@@ -723,7 +716,7 @@
                         ? $t('agent.settings.plugins.reverifyPackage')
                         : $t('agent.settings.plugins.prepareRemote')
                     }}</span>
-                  </button>
+                  </UiButton>
                 </div>
               </div>
             </div>
@@ -825,14 +818,15 @@
               :disabled="locked"
             ></textarea>
             <div class="flex justify-end">
-              <button
+              <UiButton
+                appearance="solid"
+                tone="primary"
                 type="button"
-                class="rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
                 :disabled="locked || !publisherLabel.trim() || !publisherPem.trim()"
                 @click="trustPublisher"
               >
                 {{ $t('agent.settings.plugins.trustPublisher') }}
-              </button>
+              </UiButton>
             </div>
           </div>
 

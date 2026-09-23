@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -243,14 +244,15 @@
       </div>
 
       <div class="flex justify-end">
-        <button
+        <UiButton
+          appearance="solid"
+          tone="primary"
           type="button"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           :disabled="busy || saving || loading || invalid || !dirty"
           @click="save"
         >
           {{ $t('common.save') }}
-        </button>
+        </UiButton>
       </div>
     </div>
   </section>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BaseModal from '@/foundation/ui/BaseModal.vue';
@@ -936,9 +937,10 @@
           >
             {{ $t('agent.settings.onboarding.cancel') }}
           </button>
-          <button
+          <UiButton
+            appearance="solid"
+            tone="primary"
             type="button"
-            class="group inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 disabled:active:scale-100 cursor-pointer whitespace-nowrap"
             :disabled="featureOperationBusy"
             @click="confirmRecommendedInstall"
           >
@@ -953,7 +955,7 @@
                 ? $t('agent.settings.onboarding.installing')
                 : $t('agent.settings.onboarding.installAndEnable')
             }}</span>
-          </button>
+          </UiButton>
         </div>
       </div>
     </template>

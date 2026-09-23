@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import type { AgentHardLimitsDto, AgentSettingsViewDto, AgentHardLimitPreviewDto } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
@@ -140,15 +141,16 @@
       <p class="max-w-3xl text-xs leading-5 text-text-secondary">
         {{ $t('agent.settings.hardLimits.description') }}
       </p>
-      <button
+      <UiButton
+        appearance="solid"
+        tone="primary"
         type="button"
-        class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-white shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         :disabled="!canPreview"
         @click="emit('preview', proposedChanges)"
       >
         <i class="fa-solid fa-shield-halved text-[10px]" aria-hidden="true"></i>
         {{ $t('agent.settings.hardLimits.review') }}
-      </button>
+      </UiButton>
     </div>
 
     <div class="mt-4 space-y-3">
@@ -241,14 +243,15 @@
         >
           {{ $t('common.cancel') }}
         </button>
-        <button
+        <UiButton
+          appearance="solid"
+          tone="primary"
           type="button"
-          class="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           :disabled="busy"
           @click="emit('confirm', preview.confirmationId, preview.expectedVersion)"
         >
           {{ $t('agent.settings.hardLimits.confirm') }}
-        </button>
+        </UiButton>
       </div>
     </div>
   </section>

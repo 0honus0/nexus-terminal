@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, reactive, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal } from '@/foundation/ui';
+  import { BaseModal, UiButton } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import type { AgentProviderViewDto, AgentReasoningEffortDto } from '../api/agent-api';
 
@@ -397,14 +397,9 @@
           >
             {{ $t('common.cancel') }}
           </button>
-          <button
-            type="button"
-            class="rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
-            :disabled="busy"
-            @click="saveCapabilities"
-          >
+          <UiButton appearance="solid" tone="primary" type="button" :disabled="busy" @click="saveCapabilities">
             {{ $t('common.save') }}
-          </button>
+          </UiButton>
         </div>
       </div>
     </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { UiButton } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -257,14 +258,16 @@
             </div>
           </div>
         </article>
-        <button
+        <UiButton
+          appearance="solid"
+          tone="primary"
           type="button"
-          class="mt-3 rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
           :disabled="disabled"
           @click="saveProfiles"
+          class="mt-3"
         >
           {{ $t('agent.settings.acpRuntime.saveProfiles') }}
-        </button>
+        </UiButton>
       </div>
 
       <div class="mt-5 border-t border-border pt-4">
@@ -314,14 +317,15 @@
             <input v-model="enabled" type="checkbox" />{{ $t('agent.settings.acpRuntime.enabled') }}
           </label>
           <div class="flex items-end">
-            <button
+            <UiButton
+              appearance="solid"
+              tone="primary"
               type="button"
-              class="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
               :disabled="disabled || !agentAvailable || !displayName.trim() || !profileId"
               @click="createIntegration"
             >
               {{ $t('agent.settings.acpRuntime.createIntegration') }}
-            </button>
+            </UiButton>
           </div>
         </div>
 
