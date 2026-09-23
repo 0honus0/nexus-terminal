@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiCheckbox } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useConnections, type ConnectionDto } from '@/features/connections/public';
@@ -327,10 +327,10 @@
           <!-- 左侧信息区 -->
           <div class="flex items-center gap-2.5 min-w-0 flex-1">
             <!-- 复选框（大触点） -->
-            <input
-              type="checkbox"
-              class="h-4 w-4 rounded accent-error cursor-pointer shrink-0"
-              :checked="selectedIds.has(connection.id)"
+            <UiCheckbox
+              class="shrink-0"
+              tone="danger"
+              :model-value="selectedIds.has(connection.id)"
               @click.stop="toggleConnection(connection.id)"
             />
 

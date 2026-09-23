@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton, UiCombobox, UiPopover, type UiComboboxOption } from '@/foundation/ui';
+  import { BaseModal, UiButton, UiCheckbox, UiCombobox, UiPopover, type UiComboboxOption } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import {
@@ -86,8 +86,7 @@
     }
   };
 
-  const setModelRegistryAutoUpdate = async (event: Event): Promise<void> => {
-    const enabled = Boolean((event.target as HTMLInputElement | null)?.checked);
+  const setModelRegistryAutoUpdate = async (enabled: boolean): Promise<void> => {
     if (modelRegistryBusy.value) return;
     modelRegistryBusy.value = true;
     try {
@@ -930,12 +929,10 @@
         </div>
         <div class="flex items-center gap-2">
           <label class="flex items-center gap-1.5 text-text-secondary">
-            <input
-              type="checkbox"
-              class="rounded accent-primary"
-              :checked="modelRegistryStatus.autoUpdate"
+            <UiCheckbox
+              :model-value="modelRegistryStatus.autoUpdate"
               :disabled="modelRegistryBusy"
-              @change="setModelRegistryAutoUpdate"
+              @update:model-value="setModelRegistryAutoUpdate"
             />
             <span>{{ $t('agent.settings.providers.registryAutoUpdate') }}</span>
           </label>
@@ -1452,11 +1449,9 @@
                 <!-- 搜索过滤与全选控制器 -->
                 <div v-if="availableDiscoveries(provider).length > 0" class="flex items-center gap-2 py-2">
                   <label class="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      class="rounded border-border/80 accent-primary cursor-pointer"
-                      :checked="isAllDiscoveredSelected(provider)"
-                      @change="toggleSelectAllDiscovered(provider)"
+                    <UiCheckbox
+                      :model-value="isAllDiscoveredSelected(provider)"
+                      @update:model-value="toggleSelectAllDiscovered(provider)"
                     />
                     <span class="text-[11px]">{{
                       isAllDiscoveredSelected(provider)
@@ -1490,11 +1485,9 @@
                     class="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-header/20 px-2.5 py-1.5 transition-all hover:bg-header/40"
                   >
                     <label class="flex items-center gap-2 min-w-0 cursor-pointer flex-1 select-none">
-                      <input
-                        type="checkbox"
-                        class="rounded border-border/80 accent-primary cursor-pointer"
-                        :checked="Boolean(selectedDiscovered[provider.id]?.[model.id])"
-                        @change="toggleDiscoveredItem(provider, model.id)"
+                      <UiCheckbox
+                        :model-value="Boolean(selectedDiscovered[provider.id]?.[model.id])"
+                        @update:model-value="toggleDiscoveredItem(provider, model.id)"
                       />
                       <span class="font-mono text-xs text-foreground truncate">{{ model.id }}</span>
                       <span
@@ -1801,19 +1794,19 @@
               <label
                 class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none"
               >
-                <input v-model="form.supportsTools" type="checkbox" class="rounded accent-primary" />
+                <UiCheckbox v-model="form.supportsTools" />
                 <span>{{ $t('agent.settings.providers.tools') }}</span>
               </label>
               <label
                 class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none"
               >
-                <input v-model="form.supportsImageInput" type="checkbox" class="rounded accent-primary" />
+                <UiCheckbox v-model="form.supportsImageInput" />
                 <span>{{ $t('agent.settings.providers.imageInput') }}</span>
               </label>
               <label
                 class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none"
               >
-                <input v-model="form.supportsFileInput" type="checkbox" class="rounded accent-primary" />
+                <UiCheckbox v-model="form.supportsFileInput" />
                 <span>{{ $t('agent.settings.providers.fileInput') }}</span>
               </label>
             </div>

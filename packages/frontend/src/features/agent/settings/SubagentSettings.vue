@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiCheckbox } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -410,12 +410,11 @@
               <div class="text-xs text-text-secondary">{{ $t('agent.settings.subagents.allowedModels') }}</div>
               <div class="mt-1 flex flex-wrap gap-2">
                 <label v-for="model in modelOptions" :key="model.key" class="flex items-center gap-1 text-xs">
-                  <input
-                    type="checkbox"
-                    :checked="profile.allowedModels.some((item) => modelKey(item) === model.key)"
-                    @change="toggleAllowedModel(profile, model.key, ($event.target as HTMLInputElement).checked)"
+                  <UiCheckbox
+                    :model-value="profile.allowedModels.some((item) => modelKey(item) === model.key)"
+                    @update:model-value="(value: boolean) => toggleAllowedModel(profile, model.key, value)"
                   />
-                  {{ model.label }}
+                  <span>{{ model.label }}</span>
                 </label>
               </div>
             </div>
@@ -428,12 +427,11 @@
                   :key="capability"
                   class="flex items-center gap-1 text-xs"
                 >
-                  <input
-                    type="checkbox"
-                    :checked="profile.capabilities.includes(capability)"
-                    @change="toggleCapability(profile, capability, ($event.target as HTMLInputElement).checked)"
+                  <UiCheckbox
+                    :model-value="profile.capabilities.includes(capability)"
+                    @update:model-value="(value: boolean) => toggleCapability(profile, capability, value)"
                   />
-                  {{ capability }}
+                  <span>{{ capability }}</span>
                 </label>
               </div>
             </div>

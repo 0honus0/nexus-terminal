@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiCheckbox } from '@/foundation/ui';
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
@@ -297,12 +297,12 @@
         </label>
         <div class="flex flex-wrap items-end gap-4 pb-1 text-xs">
           <label class="flex items-center gap-1">
-            <input v-model="enabled" type="checkbox" :disabled="disabled || !agentAvailable" />
-            {{ $t('agent.settings.mcpIntegrations.enabled') }}
+            <UiCheckbox v-model="enabled" :disabled="disabled || !agentAvailable" />
+            <span>{{ $t('agent.settings.mcpIntegrations.enabled') }}</span>
           </label>
           <label class="flex items-center gap-1">
-            <input v-model="trustToolAnnotations" type="checkbox" :disabled="disabled || !agentAvailable" />
-            {{ $t('agent.settings.mcpIntegrations.trustAnnotations') }}
+            <UiCheckbox v-model="trustToolAnnotations" :disabled="disabled || !agentAvailable" />
+            <span>{{ $t('agent.settings.mcpIntegrations.trustAnnotations') }}</span>
           </label>
         </div>
       </div>
@@ -335,22 +335,20 @@
           </div>
           <div class="flex flex-wrap items-center justify-end gap-3 text-xs">
             <label class="flex items-center gap-1">
-              <input
-                type="checkbox"
-                :checked="mcpConfiguration(integration).trustToolAnnotations === true"
+              <UiCheckbox
+                :model-value="mcpConfiguration(integration).trustToolAnnotations === true"
                 :disabled="disabled"
-                @change="toggleTrustAnnotations(integration, ($event.target as HTMLInputElement).checked)"
+                @update:model-value="(value: boolean) => toggleTrustAnnotations(integration, value)"
               />
-              {{ $t('agent.settings.mcpIntegrations.trustAnnotations') }}
+              <span>{{ $t('agent.settings.mcpIntegrations.trustAnnotations') }}</span>
             </label>
             <label class="flex items-center gap-1">
-              <input
-                type="checkbox"
-                :checked="integration.enabled"
+              <UiCheckbox
+                :model-value="integration.enabled"
                 :disabled="disabled"
-                @change="toggleIntegration(integration, ($event.target as HTMLInputElement).checked)"
+                @update:model-value="(value: boolean) => toggleIntegration(integration, value)"
               />
-              {{ $t('agent.settings.mcpIntegrations.enabled') }}
+              <span>{{ $t('agent.settings.mcpIntegrations.enabled') }}</span>
             </label>
           </div>
         </div>

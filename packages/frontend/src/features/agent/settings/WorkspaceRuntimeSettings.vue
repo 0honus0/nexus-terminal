@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiCheckbox } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -321,12 +321,11 @@
                 :key="recipe.id"
                 class="flex items-start gap-2 rounded bg-background p-2"
               >
-                <input
-                  type="checkbox"
+                <UiCheckbox
                   class="mt-0.5"
-                  :checked="selectedRecipeIds.includes(recipe.id)"
+                  :model-value="selectedRecipeIds.includes(recipe.id)"
                   :disabled="disabled"
-                  @change="toggleRecipe(recipe.id)"
+                  @update:model-value="toggleRecipe(recipe.id)"
                 />
                 <span>
                   <span class="block text-sm font-medium">{{ recipe.displayName }}</span>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiCheckbox } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -149,11 +149,10 @@
               </div>
             </div>
             <label class="flex items-center gap-1 text-[11px] text-text-secondary">
-              <input
-                type="checkbox"
-                :checked="hasOverride(field.key)"
+              <UiCheckbox
+                :model-value="hasOverride(field.key)"
                 :disabled="busy || saving"
-                @change="toggleOverride(field.key, ($event.target as HTMLInputElement).checked)"
+                @update:model-value="(value: boolean) => toggleOverride(field.key, value)"
               />
               {{ $t('agent.settings.executionPolicy.override') }}
             </label>
@@ -182,11 +181,10 @@
               </div>
             </div>
             <label class="flex items-center gap-1 text-[11px] text-text-secondary">
-              <input
-                type="checkbox"
-                :checked="hasOverride('contextProfile')"
+              <UiCheckbox
+                :model-value="hasOverride('contextProfile')"
                 :disabled="busy || saving"
-                @change="toggleOverride('contextProfile', ($event.target as HTMLInputElement).checked)"
+                @update:model-value="(value: boolean) => toggleOverride('contextProfile', value)"
               />
               {{ $t('agent.settings.executionPolicy.override') }}
             </label>
@@ -216,11 +214,10 @@
               </div>
             </div>
             <label class="flex items-center gap-1 text-[11px] text-text-secondary">
-              <input
-                type="checkbox"
-                :checked="hasOverride('contextCompactionMode')"
+              <UiCheckbox
+                :model-value="hasOverride('contextCompactionMode')"
                 :disabled="busy || saving"
-                @change="toggleOverride('contextCompactionMode', ($event.target as HTMLInputElement).checked)"
+                @update:model-value="(value: boolean) => toggleOverride('contextCompactionMode', value)"
               />
               {{ $t('agent.settings.executionPolicy.override') }}
             </label>

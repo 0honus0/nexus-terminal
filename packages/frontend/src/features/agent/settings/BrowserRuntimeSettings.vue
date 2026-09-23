@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiCheckbox } from '@/foundation/ui';
   import { ref, watch } from 'vue';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
@@ -171,16 +171,14 @@
             />
           </label>
           <div class="mt-2 flex flex-wrap gap-4 text-[11px]">
-            <label class="flex items-center gap-2"
-              ><input v-model="endpoint.allowPlaintext" type="checkbox" />{{
-                $t('agent.settings.browserRuntime.allowPlaintext')
-              }}</label
-            >
-            <label class="flex items-center gap-2"
-              ><input v-model="endpoint.verifyTls" type="checkbox" />{{
-                $t('agent.settings.browserRuntime.verifyTls')
-              }}</label
-            >
+            <label class="flex items-center gap-2">
+              <UiCheckbox v-model="endpoint.allowPlaintext" />
+              <span>{{ $t('agent.settings.browserRuntime.allowPlaintext') }}</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <UiCheckbox v-model="endpoint.verifyTls" />
+              <span>{{ $t('agent.settings.browserRuntime.verifyTls') }}</span>
+            </label>
           </div>
         </div>
       </article>

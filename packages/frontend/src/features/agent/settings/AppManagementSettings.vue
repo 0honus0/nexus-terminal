@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton } from '@/foundation/ui';
+  import { BaseModal, UiButton, UiCheckbox } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
@@ -116,10 +116,8 @@
     drafts.value = { ...drafts.value, [appId]: current };
   };
 
-  const onCapabilityChange = (appId: string, capability: CapabilityId, event: Event): void => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    toggleCapability(appId, capability, target.checked);
+  const onCapabilityChange = (appId: string, capability: CapabilityId, checked: boolean): void => {
+    toggleCapability(appId, capability, checked);
   };
 
   const updateGrantScope = (
@@ -168,10 +166,9 @@
     appId: string,
     capability: CapabilityId,
     target: AgentTargetKindDto,
-    event: Event,
+    checked: boolean,
   ): void => {
-    const input = event.target;
-    if (input instanceof HTMLInputElement) setTargetEnabled(appId, capability, target, input.checked);
+    setTargetEnabled(appId, capability, target, checked);
   };
 
   const setTargetMode = (
@@ -759,12 +756,11 @@
                       : 'border-border bg-background hover:bg-header/50 hover:border-border-hover'
                   "
                 >
-                  <input
-                    type="checkbox"
-                    class="mt-0.5 h-4 w-4 rounded border-border text-primary accent-primary cursor-pointer"
-                    :checked="checked(app.id, capability)"
+                  <UiCheckbox
+                    class="mt-0.5"
+                    :model-value="checked(app.id, capability)"
                     :disabled="busy || grantBusy[app.id]"
-                    @change="onCapabilityChange(app.id, capability, $event)"
+                    @update:model-value="(value: boolean) => onCapabilityChange(app.id, capability, value)"
                   />
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
@@ -790,12 +786,13 @@
                         class="rounded-md border border-border/70 bg-background/70 p-2"
                       >
                         <div class="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            class="h-3.5 w-3.5 rounded border-border accent-primary"
-                            :checked="targetEnabled(app.id, capability, target)"
+                          <UiCheckbox
+                            density="compact"
+                            :model-value="targetEnabled(app.id, capability, target)"
                             :disabled="busy || grantBusy[app.id]"
-                            @change="onTargetEnabledChange(app.id, capability, target, $event)"
+                            @update:model-value="
+                              (value: boolean) => onTargetEnabledChange(app.id, capability, target, value)
+                            "
                           />
                           <span class="text-[11px] font-semibold text-foreground">{{ targetLabel(target) }}</span>
                           <select
@@ -880,7 +877,7 @@
       <label
         class="flex items-start gap-2 rounded-lg border border-border/70 bg-header/20 p-2.5 cursor-pointer select-none"
       >
-        <input v-model="deleteDataOnUninstall" type="checkbox" class="mt-0.5 rounded accent-error cursor-pointer" />
+        <UiCheckbox v-model="deleteDataOnUninstall" tone="danger" class="mt-0.5" />
         <span class="text-xs text-text-secondary leading-tight">
           {{ $t('agent.settings.apps.deleteDataOnUninstall') }}
         </span>

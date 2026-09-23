@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, reactive, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton } from '@/foundation/ui';
+  import { BaseModal, UiButton, UiCheckbox } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import type { AgentProviderViewDto, AgentReasoningEffortDto } from '../api/agent-api';
 
@@ -287,7 +287,7 @@
         >
           <div class="flex items-center justify-between gap-3">
             <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
-              <input v-model="capabilityForm[field]" type="checkbox" class="rounded accent-primary" />
+              <UiCheckbox v-model="capabilityForm[field]" />
               <span>{{
                 $t(
                   `agent.settings.providers.${field === 'supportsTools' ? 'tools' : field === 'supportsImageInput' ? 'imageInput' : 'fileInput'}`,
@@ -314,12 +314,7 @@
         <div class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5 text-xs">
           <div class="flex items-center justify-between gap-3">
             <label class="flex items-center gap-2 font-medium text-foreground">
-              <input
-                v-model="capabilityForm.reasoningEnabled"
-                type="checkbox"
-                class="rounded accent-primary"
-                :disabled="Boolean(reasoningBaseline)"
-              />
+              <UiCheckbox v-model="capabilityForm.reasoningEnabled" :disabled="Boolean(reasoningBaseline)" />
               <span>{{ $t('agent.settings.providers.reasoningCapability') }}</span>
             </label>
             <span v-if="reasoningBaseline" class="text-[11px] text-primary">
@@ -367,7 +362,7 @@
                 </select>
               </label>
               <label class="flex items-end gap-2 pb-1 text-[11px] text-foreground">
-                <input v-model="capabilityForm.reasoningMandatory" type="checkbox" class="rounded accent-primary" />
+                <UiCheckbox v-model="capabilityForm.reasoningMandatory" />
                 <span>{{ $t('agent.settings.providers.reasoningMandatory') }}</span>
               </label>
             </div>

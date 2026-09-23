@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiCheckbox } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -311,7 +311,8 @@
             </select>
           </label>
           <label class="flex items-end gap-2 pb-1 text-xs">
-            <input v-model="enabled" type="checkbox" />{{ $t('agent.settings.acpRuntime.enabled') }}
+            <UiCheckbox v-model="enabled" />
+            <span>{{ $t('agent.settings.acpRuntime.enabled') }}</span>
           </label>
           <div class="flex items-end">
             <UiButton
@@ -352,13 +353,12 @@
                 </option>
               </select>
               <label class="flex items-center gap-1 text-xs">
-                <input
-                  type="checkbox"
-                  :checked="integration.enabled"
+                <UiCheckbox
+                  :model-value="integration.enabled"
                   :disabled="disabled"
-                  @change="toggleIntegration(integration, ($event.target as HTMLInputElement).checked)"
+                  @update:model-value="(value: boolean) => toggleIntegration(integration, value)"
                 />
-                {{ $t('agent.settings.acpRuntime.enabled') }}
+                <span>{{ $t('agent.settings.acpRuntime.enabled') }}</span>
               </label>
               <UiButton
                 appearance="soft"
