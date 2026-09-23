@@ -299,6 +299,16 @@
     emit('layoutChange');
   };
 
+  /*
+   * §7.2-f: the title bar dragged and moved by keyboard, but the double click every
+   * other window manager maps to maximise / restore did nothing.
+   */
+  const handleHeaderDoubleClick = (event: MouseEvent): void => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, a, input, select, textarea, [role='button'], .no-drag")) return;
+    agentWindowManager.toggleMaximize();
+    emit('layoutChange');
+  };
   const handleResizeKeydown = (event: KeyboardEvent) => {
     if (state.maximized) return;
     const delta = keyboardDelta(event);
@@ -614,6 +624,7 @@
       :aria-keyshortcuts="state.maximized ? undefined : 'ArrowLeft ArrowRight ArrowUp ArrowDown'"
       @pointerdown="handleDragPointerDown"
       @keydown="handleMoveKeydown"
+      @dblclick="handleHeaderDoubleClick"
     >
       <!-- 左侧：Agent 品牌徽标与流体 App 标签栏 -->
       <div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">

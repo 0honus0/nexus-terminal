@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2-a（最小窗口高度 380 → 480 + 矮窗口 composer 压缩）、§7.2-c/-e（侧栏可折叠 + 窗口状态持久化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面骨架的其余项（§7.2 列宽压缩 / 窗口体感）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -43,7 +43,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | `bg-card` 族已恢复真实 surface；助手气泡改为有效 `bg-card`，TaskRail/空态卡继续使用已生效的 card token                                                                                                                                                                                                                                                                                | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue`                           |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 改为自身 container query + 单行 compact；560px Hub CDP 实测 controls `462/462`，无静默裁切，思考等级优先靠前                                                                                                                                                                                                                                                                 | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.3）                                          |
 | **P1 · ✅ 已关闭 2026-09-23**         | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示                                                                                                                                                                                                                                                                                                 | `ai/AgentConversation.vue`（见 §7.4）                                                                      |
-| **P1 · ✅ 已关闭 2026-09-23**         | 主界面三层 chrome 压扁消息区：`MIN_HEIGHT` 380 → 480，并在矮窗口下把 composer 压成两行；CDP 实测最小高度时会话区 **94 → 227px**（§7.2 其余项：列宽压缩、窗口体感仍开放）                                                                                                                                                                                                              | `host/window-manager.ts`、`host/AgentHubWindow.vue`、`ai/AgentConversation.vue`（见 §7.2-a）               |
+| **P1 · ✅ 已关闭 2026-09-23**         | 主界面三层 chrome 压扁消息区：`MIN_HEIGHT` 380 → 480，并在矮窗口下把 composer 压成两行；CDP 实测最小高度时会话区 **94 → 227px**（§7.2 列宽 / 体感已复核，见 §7.2-b、§7.2-f）                                                                                                                                                                                                          | `host/window-manager.ts`、`host/AgentHubWindow.vue`、`ai/AgentConversation.vue`（见 §7.2-a）               |
 | **P2 · ✅ 已关闭 2026-09-23**         | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0                                                                                                                                                                                                                                                                                                    | `features/agent/**`（见 §7.8）                                                                             |
 | P1                                    | 多处「不可发现 / 与产品整体不一致」的交互：会话列表 Ctrl+滚轮缩放、任务栏卡片可拖拽排序、Launcher 6px 阈值拖拽（§2.6 的空态轮播已关闭）                                                                                                                                                                                                                                               | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8）                           |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 的 Send / Cancel Run 已拆成两个独立按钮（停止按钮图标-only + 错误色，运行中才出现）；`sendHint` 已渲染；空草稿按 Enter 不再误取消 Run                                                                                                                                                                                                                                        | `ai/AgentConversation.vue`（见 §2.5）                                                                      |
@@ -932,7 +932,7 @@ shadow-2xl ring-1 ring-border/20 outline-none
 4. 改完必须做一次视觉回归（`doc/imgs/e2e/agent-*.png` 可作基线位），否则"观感变化"没法评审。
 5. 深色主题要单独验证：`ring-border/20`、`shadow-2xl`、`inset 0 1px 0 rgba(255,255,255,.2)`（`host/AgentHubWindow.vue:606-611`）都是浅色假设。
 
-### 7.2 主界面骨架：三层 chrome 把消息区压得很窄
+### 7.2 主界面骨架：三层 chrome 把消息区压得很窄（P1 · ✅ 已关闭 2026-09-23）
 
 默认窗口 `1180×740`，最小 `560×480`（2026-09-23 由 380 上调，见下方闭环 a）：
 
@@ -986,12 +986,25 @@ shadow-2xl ring-1 ring-border/20 outline-none
 
 > - **门禁**：模板编译、`vue-tsc --noEmit`、`eslint`、`prettier --check` 全绿。
 
-- ✅（2026-09-23）窗口高度问题已闭环：`MIN_HEIGHT` 提到 480 且矮窗口下 composer 自动收成两行，实测最小高度下会话区 94 → 227px，见上方闭环块。
-- 列宽：`.agent-surface-layout` 是 `256px minmax(0,1fr)`（`host/AgentAppSurface.vue:2438`），任务栏打开再 `+320px`（`:2447`）。容器 560px 时会话列只剩 **304px**，而配置弹层固定 `w-72`（288px）→ 弹层几乎铺满会话列，视觉上"压过来一大片"，这也是窄窗口下弹层观感变差的原因之一。
+> ✅ **2026-09-23 闭环（b 列宽 + f 窗口体感）**
+>
+> - **b) 列宽**：原记录"容器 560px 时会话列只剩 304px、弹层几乎铺满"已过时。CDP 在 560×740 实测：
+>   `.agent-conversation-pane` **558px**，侧栏 280px 与任务栏 340px 都是 `position: absolute` 浮层（不占网格列），
+>   配置弹层 `288×338` 完整落在窗口内（`overflowsLeft/Right` 均为 false）。≤1040 / ≤760 两档容器查询
+>   已经把网格让回会话列，本条无需再改，只补实测证据。
+> - **f) 顶栏双击**：原来双击无响应。现在 Hub 顶栏空白处双击 = 最大化 / 还原（`@dblclick`，命中
+>   `button, a, input, select, textarea, [role=button], .no-drag` 时忽略，避免与 App 标签、窗口按钮冲突）。
+>   实测：560×740 → **1920×953 @0,0** → 560×740；双击 App 标签不触发。
+> - **保留不改（记录为有意设计）**：最大化时 `borderRadius: 0`（贴满视口，刻意不露背景）；拖拽不做贴边/吸附，
+>   多屏下只按当前视口 clamp —— 这两项需要窗口级 API，超出前端渲染层职责。
+> - 探针：`probe-hub-columns.mjs`、`probe-hub-dblclick2.mjs` / `probe-hub-dblclick3.mjs`。
+>   ：`MIN_HEIGHT` 提到 480 且矮窗口下 composer 自动收成两行，实测最小高度下会话区 94 → 227px，见上方闭环块。
+
+- ✅（2026-09-23）列宽已复核：窄容器下侧栏与任务栏都是浮层，560×740 实测会话列 558px、弹层 288×338 不越界，见上方闭环块（原 304px 记录已过时）。
 - ✅（2026-09-23）侧栏折叠已上线并记忆状态：开关常显，宽容器切停靠列、窄容器切浮层抽屉，实测会话列 922 → 1178px，见上方闭环块。
 - ✅（2026-09-22，见 §1.6）断点基准已统一：死变量 `taskRailWideViewport` 与那个只写不读的 `resize` 监听已删除，`AgentAppSurface.vue` 里不再有 `window.innerWidth` 判断。
 - ✅（2026-09-23）状态持久化已补齐：`threadSidebarVisible` / `taskRailVisible` / `hubView` 一并写入 `window-manager` 的 localStorage payload（schemaVersion 1）并在 restore 时校验恢复。
-- 窗口体感：最大化时 `borderRadius: 0`（`host/AgentHubWindow.vue:296`）圆角突变；只有按钮能最大化/还原，顶栏双击无响应；拖拽无贴边/吸附，多屏下只按当前视口 clamp。
+- ✅（2026-09-23）顶栏双击已支持最大化/还原；最大化 `borderRadius: 0`、无贴边吸附两项按有意设计保留（见上方闭环块）。
 
 ### 7.3 Composer 工具条：控件太多被静默裁掉（P1 · ✅ 已关闭 2026-09-23）
 
