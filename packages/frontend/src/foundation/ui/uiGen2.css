@@ -1042,6 +1042,16 @@
   background: var(--ui-tone-soft);
   color: var(--ui-tone-ink);
   box-shadow: var(--ui-shadow-control);
+  /*
+   * The global form-control rule in app/styles/global.css is unlayered and far
+   * more specific than `.ui-combobox__input`, so it would otherwise paint the
+   * combobox input with the opaque `--input-bg-color` fill. That left the model
+   * text sitting on a white rectangle inside a translucent trigger. Neutralise
+   * it here, exactly like `.ui-input` / `.ui-textarea` do.
+   */
+  --input-bg-color: transparent;
+  --input-text-color: currentColor;
+  --input-placeholder-color: color-mix(in srgb, var(--ui-text-muted) 72%, transparent);
   transition:
     border-color var(--ui-motion-duration) var(--ui-motion-ease),
     border-radius var(--ui-motion-duration) var(--ui-motion-ease),
@@ -1070,6 +1080,11 @@
   background: var(--ui-disabled-fill);
   color: var(--ui-disabled-text);
   box-shadow: none;
+  --input-bg-color: transparent;
+  --input-text-color: currentColor;
+  --input-disabled-bg-color: transparent;
+  --input-disabled-text-color: currentColor;
+  --input-disabled-border-color: transparent;
 }
 
 .ui-combobox[data-state='open'] .ui-combobox__anchor {
