@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton, UiCheckbox } from '@/foundation/ui';
+  import { BaseModal, UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,

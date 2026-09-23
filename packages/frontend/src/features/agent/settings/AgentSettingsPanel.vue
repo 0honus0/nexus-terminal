@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { UiButton } from '@/foundation/ui';
-  import { computed, onMounted, reactive, ref } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BaseModal from '@/foundation/ui/BaseModal.vue';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -111,6 +111,140 @@
   const activeGroup = ref<AgentSettingsGroupId>('models');
   const visitedGroups = reactive(new Set<AgentSettingsGroupId>(['models']));
 
+  // 「一个分组下到底有哪些设置」的地图：宽屏左栏用它做跳转与滚动联动。
+  // 标签直接复用各模块自己的标题 key，避免同义文案两处维护。
+  const sectionGroups: Record<AgentSettingsGroupId, { id: string; label: string; icon: string }[]> = {
+    models: [
+      { id: 'feature', label: 'agent.settings.feature.title', icon: 'fa-solid fa-toggle-on' },
+      { id: 'providers', label: 'agent.settings.providers.title', icon: 'fa-solid fa-server' },
+      { id: 'budget', label: 'agent.settings.budget.title', icon: 'fa-solid fa-coins' },
+      { id: 'hardLimits', label: 'agent.settings.hardLimits.title', icon: 'fa-solid fa-lock' },
+    ],
+    runtime: [
+      { id: 'performance', label: 'agent.settings.performance.title', icon: 'fa-solid fa-bolt' },
+      { id: 'executionPolicy', label: 'agent.settings.executionPolicy.title', icon: 'fa-solid fa-sliders' },
+      { id: 'workspace', label: 'agent.settings.workspaceRuntime.title', icon: 'fa-solid fa-cube' },
+      { id: 'browser', label: 'agent.settings.browserRuntime.title', icon: 'fa-solid fa-globe' },
+      { id: 'mcp', label: 'agent.settings.mcpIntegrations.title', icon: 'fa-solid fa-plug' },
+      { id: 'acp', label: 'agent.settings.acpRuntime.title', icon: 'fa-solid fa-terminal' },
+      { id: 'subagents', label: 'agent.settings.subagents.title', icon: 'fa-solid fa-diagram-project' },
+      { id: 'storage', label: 'agent.settings.storage.title', icon: 'fa-solid fa-database' },
+    ],
+    plugins: [
+      { id: 'apps', label: 'agent.settings.apps.title', icon: 'fa-solid fa-puzzle-piece' },
+      { id: 'memory', label: 'agent.settings.memory.title', icon: 'fa-solid fa-brain' },
+      { id: 'plugins', label: 'agent.settings.plugins.title', icon: 'fa-solid fa-store' },
+      { id: 'safety', label: 'agent.settings.safety.title', icon: 'fa-solid fa-ban' },
+      { id: 'guardrails', label: 'agent.settings.guardrails.title', icon: 'fa-solid fa-shield-halved' },
+    ],
+  };
+
+  const sectionAnchor = (id: string): string => 'agent-settings-sec-' + id;
+
+  // 页面用 window 滚动，顶栏 h-14 sticky 占位，滚动联动以它为基准线。
+  const STICKY_OFFSET = 56 + 14;
+  const activeSection = ref(sectionGroups.models[0].id);
+  let scrollFrame = 0;
+  let anchorToken = 0;
+  let anchorTimer = 0;
+
+  const syncActiveSection = (): void => {
+    const sections = sectionGroups[activeGroup.value] ?? [];
+    if (sections.length === 0) return;
+    let current = sections[0].id;
+    // 最后一个分区永远够不到顶（页面滚到底即被夹住），此时直接认它。
+    const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    if (atBottom) {
+      activeSection.value = sections[sections.length - 1].id;
+      return;
+    }
+    for (const section of sections) {
+      const element = document.getElementById(sectionAnchor(section.id));
+      if (!element) continue;
+      if (element.getBoundingClientRect().top <= STICKY_OFFSET + 8) current = section.id;
+    }
+    activeSection.value = current;
+  };
+
+  const onViewportChange = (): void => {
+    if (scrollFrame) return;
+    scrollFrame = window.requestAnimationFrame(() => {
+      scrollFrame = 0;
+      syncActiveSection();
+    });
+  };
+
+  /**
+   * 刚切分组时模块还没渲染完，文档高度还在长（实测 2760 → 3370 → 3394）。
+   * 此时按当前布局算出的落点是错的，跳过去之后内容再撑高就变成了「跳两次」。
+   * 等连续两帧高度不变再量、再跳。
+   */
+  const waitForStableLayout = (): Promise<void> =>
+    new Promise((resolve) => {
+      const started = performance.now();
+      let previous = -1;
+      let stableFrames = 0;
+      const step = (): void => {
+        const height = document.documentElement.scrollHeight;
+        stableFrames = height === previous ? stableFrames + 1 : 0;
+        previous = height;
+        const elapsed = performance.now() - started;
+        // 高度稳定只是必要条件：异步内容（模型 / 集成列表）常在 100ms 后才到，
+        // 所以再压一个最短观察窗口，避免刚量完就又被撑开。
+        if ((stableFrames >= 2 && elapsed >= 140) || elapsed >= 600) {
+          resolve();
+          return;
+        }
+        window.requestAnimationFrame(step);
+      };
+      window.requestAnimationFrame(step);
+    });
+
+  /**
+   * 落点仍然偏了就再校一次（迟到的异步内容会把目标推开），收敛到 4px 以内即停；
+   * 用户自己一动滚轮 / 键盘就立刻放弃，不抢滚动权。
+   */
+  const settleAnchor = (sectionId: string, token: number, attempt = 8): void => {
+    if (token !== anchorToken) return;
+    const element = document.getElementById(sectionAnchor(sectionId));
+    if (!element) return;
+    const delta = element.getBoundingClientRect().top - STICKY_OFFSET;
+    // 只补看得出来的偏差；几个像素的迟到位移不再折腾第二次跳转。
+    if (Math.abs(delta) < 24 || attempt === 0) {
+      syncActiveSection();
+      return;
+    }
+    window.scrollBy({ top: delta, behavior: 'smooth' });
+    anchorTimer = window.setTimeout(() => settleAnchor(sectionId, token, attempt - 1), 220);
+  };
+
+  const cancelAnchorSettle = (): void => {
+    anchorToken += 1;
+    if (anchorTimer) {
+      window.clearTimeout(anchorTimer);
+      anchorTimer = 0;
+    }
+  };
+
+  const gotoSection = async (groupId: AgentSettingsGroupId, sectionId: string): Promise<void> => {
+    cancelAnchorSettle();
+    const token = anchorToken;
+    if (activeGroup.value !== groupId) {
+      activeGroup.value = groupId;
+      visitedGroups.add(groupId);
+      loadError.value = '';
+      await nextTick();
+      await waitForStableLayout();
+      if (token !== anchorToken) return;
+    }
+    activeSection.value = sectionId;
+    const element = document.getElementById(sectionAnchor(sectionId));
+    if (!element) return;
+    window.scrollBy({ top: element.getBoundingClientRect().top - STICKY_OFFSET, behavior: 'smooth' });
+    // 集成 / 运行时列表是异步到的，晚到的内容会把目标推开，所以看得久一点。
+    anchorTimer = window.setTimeout(() => settleAnchor(sectionId, token, 8), 220);
+  };
+
   const enabledApps = computed(() => apps.value.filter((app) => app.enabled).length);
   const defaultModelName = computed(() => {
     if (!settings.value?.requestedSettings.model.defaultModelId) return t('agent.settings.modelNotSet');
@@ -143,6 +277,7 @@
       operationFeedback.notifyError({ operation: 'load-settings', message: loadError.value, cause });
     } finally {
       loading.value = false;
+      void nextTick(syncActiveSection);
     }
   };
 
@@ -454,516 +589,612 @@
     activeGroup.value = id;
     visitedGroups.add(id);
     loadError.value = '';
+    void nextTick(syncActiveSection);
   };
 
-  onMounted(load);
+  onMounted(() => {
+    void load();
+    window.addEventListener('scroll', onViewportChange, { passive: true });
+    window.addEventListener('resize', onViewportChange, { passive: true });
+    window.addEventListener('wheel', cancelAnchorSettle, { passive: true });
+    window.addEventListener('touchstart', cancelAnchorSettle, { passive: true });
+    window.addEventListener('keydown', cancelAnchorSettle);
+  });
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('scroll', onViewportChange);
+    window.removeEventListener('resize', onViewportChange);
+    window.removeEventListener('wheel', cancelAnchorSettle);
+    window.removeEventListener('touchstart', cancelAnchorSettle);
+    window.removeEventListener('keydown', cancelAnchorSettle);
+    cancelAnchorSettle();
+    if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+  });
 </script>
 
 <template>
-  <section
-    id="settings-panel-agent"
-    class="rounded-xl border border-border bg-background shadow-sm"
-    aria-labelledby="settings-agent-title"
-  >
-    <!-- 主卡片头部：包含全局概览微状态 -->
-    <header class="rounded-t-xl border-b border-border bg-header/40 px-5 py-4 sm:px-6">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div class="flex items-center gap-2.5">
-            <h2 id="settings-agent-title" class="text-base font-semibold text-foreground">
-              {{ $t('agent.settings.title') }}
-            </h2>
-            <span
-              v-if="settings"
-              class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-              :class="
-                runtimeReady(settings.availability.state)
-                  ? 'bg-success/15 text-success'
-                  : 'bg-text-secondary/15 text-text-secondary'
-              "
-            >
-              <span
-                class="h-1.5 w-1.5 rounded-full"
-                :class="runtimeReady(settings.availability.state) ? 'bg-success' : 'bg-text-secondary'"
-              ></span>
-              {{
-                runtimeReady(settings.availability.state) ? $t('agent.settings.enabled') : $t('agent.settings.disabled')
-              }}
-            </span>
-          </div>
-          <p class="mt-1 text-xs text-text-secondary">
-            {{ $t('agent.settings.description') }}
-          </p>
-        </div>
-
-        <!-- 关键指标快照：无需额外概览 Tab，直接在此处呈现关键摘要 -->
-        <div v-if="settings" class="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-          <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
-            <span class="opacity-70">{{ $t('agent.settings.summary.defaultModel') }}:</span>
-            <span class="ml-1 font-medium text-foreground">{{ defaultModelName }}</span>
-          </span>
-          <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
-            <span class="opacity-70">{{ $t('agent.settings.summary.activeApps') }}:</span>
-            <span class="ml-1 font-medium text-foreground">{{ enabledApps }}/{{ apps.length }}</span>
-          </span>
-          <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
-            <span class="opacity-70">{{ $t('agent.settings.summary.sandbox') }}:</span>
-            <span
-              class="ml-1 font-medium"
-              :class="workspaceRuntime?.available ? 'text-success' : 'text-text-secondary'"
-            >
-              {{
-                workspaceRuntime?.available ? $t('agent.settings.summary.ready') : $t('agent.settings.summary.notReady')
-              }}
-            </span>
-          </span>
-        </div>
-      </div>
-    </header>
-
-    <div v-if="loading" class="p-10 text-center text-sm text-text-secondary">
-      {{ $t('agent.settings.loading') }}
-    </div>
-
-    <p v-else-if="!settings && loadError" role="alert" class="p-6 text-sm text-error">{{ loadError }}</p>
-
-    <template v-else-if="settings && storage && workspaceRuntime && denylist">
-      <div class="flex flex-col">
-        <!-- 3 大核心分类胶囊导航：居中对称、大气现代 -->
-        <nav
-          class="sticky top-0 z-20 flex shrink-0 flex-wrap justify-center gap-2 border-b border-border/60 bg-header/80 p-2.5 backdrop-blur-md sm:px-6"
-          :aria-label="$t('agent.settings.navigation')"
-        >
-          <button
-            v-for="group in groups"
-            :key="group.id"
-            type="button"
-            class="inline-flex min-h-8 items-center gap-2 rounded-lg px-4 py-1.5 text-xs font-medium transition-all focus-visible:outline-2 focus-visible:outline-primary"
-            :class="
-              activeGroup === group.id
-                ? 'bg-primary text-white shadow-xs font-semibold'
-                : 'text-text-secondary hover:bg-header hover:text-foreground'
-            "
-            :aria-current="activeGroup === group.id ? 'page' : undefined"
-            :aria-controls="`agent-settings-${group.id}`"
-            @click="selectGroup(group.id)"
-          >
-            <i :class="group.icon" class="text-xs" aria-hidden="true"></i>
-            <span>{{ $t(group.label) }}</span>
-          </button>
-        </nav>
-
-        <!-- 分区内容流：自然流动排版，无局部高度截断与双层滚动条 -->
-        <div class="agent-settings-flow p-4 sm:p-6">
-          <!-- 1. 模型与预算（核心大本营） -->
-          <section
-            v-if="visitedGroups.has('models')"
-            v-show="activeGroup === 'models'"
-            id="agent-settings-models"
-            class="agent-settings-group"
-          >
-            <!-- Agent 功能开关 -->
-            <AgentFeatureSettings :settings="settings" :busy="featureControlBusy" @change="changeFeature" />
-
-            <!-- 模型服务商与默认模型 -->
-            <ModelProviderSettings
-              :providers="providers"
-              :busy="providerBusy"
-              :discoveries="discoveredModels"
-              :default-provider-id="settings.requestedSettings.model.defaultProviderId"
-              :default-model-id="settings.requestedSettings.model.defaultModelId"
-              :fallback-models="settings.requestedSettings.model.fallbackModels"
-              :create-provider="createProvider"
-              @toggle="toggleProvider"
-              @protocol="changeProviderProtocol"
-              @discover="discoverProviderModels"
-              :add-provider-model="addProviderModel"
-              :update-provider-models="updateProviderModels"
-              @default-model="setDefaultModel"
-              @fallback-models="setFallbackModels"
-              @delete="deleteProvider"
-            />
-
-            <!-- 预算预设与参数控制 -->
-            <BudgetContextSettings
-              :settings="settings"
-              :busy="settingsMutationBusy"
-              @save="(patch) => patchSection('budget', patch)"
-            />
-
-            <!-- 高级实例硬限制策略：收拢为优雅的可折叠高级面板，避免喧宾夺主 -->
-            <details class="group overflow-hidden rounded-xl border border-border/70 bg-card/25 transition-all">
-              <summary
-                class="flex cursor-pointer list-none items-center justify-between gap-3 bg-header/30 px-4 py-3 select-none hover:bg-header/50 sm:px-5 sm:py-3.5"
-              >
-                <div class="flex items-center gap-2.5">
-                  <i class="fa-solid fa-shield text-xs text-text-secondary" aria-hidden="true"></i>
-                  <div>
-                    <span class="text-sm font-semibold text-foreground">{{
-                      $t('agent.settings.hardLimits.panelTitle')
-                    }}</span>
-                    <span class="ml-2 text-xs text-text-secondary">{{
-                      $t('agent.settings.hardLimits.panelHint')
-                    }}</span>
-                  </div>
-                </div>
-                <i
-                  class="fa-solid fa-chevron-down text-xs text-text-secondary transition-transform group-open:rotate-180"
-                  aria-hidden="true"
-                ></i>
-              </summary>
-              <div class="border-t border-border/60 p-1">
-                <HardLimitsSettings
-                  :settings="settings"
-                  :preview="hardLimitPreview"
-                  :busy="settingsMutationBusy"
-                  @preview="previewHardLimits"
-                  @confirm="confirmHardLimits"
-                  @dismiss="hardLimitPreview = null"
-                />
-              </div>
-            </details>
-          </section>
-
-          <!-- 2. 运行与环境（并发、沙箱容器与存储空间） -->
-          <section
-            v-if="visitedGroups.has('runtime')"
-            v-show="activeGroup === 'runtime'"
-            id="agent-settings-runtime"
-            class="agent-settings-group"
-          >
-            <!-- 并发与性能 -->
-            <PerformanceSettings
-              :settings="settings"
-              :busy="settingsMutationBusy"
-              @save="(patch) => patchSection('performance', patch)"
-            />
-
-            <!-- 每个 Agent Plugin/App 独立执行预算；未覆盖字段继承全局默认 -->
-            <AppExecutionPolicySettings :apps="apps" :busy="appContextBusy" />
-
-            <!-- Workspace 开发环境运行时 -->
-            <WorkspaceRuntimeSettings
-              :availability="workspaceRuntime"
-              :settings="settings"
-              :busy="settingsMutationBusy"
-              @settings-updated="(updated) => (settings = updated)"
-            />
-
-            <!-- 浏览器 CDP 运行时与 ACP 协议 -->
-            <BrowserRuntimeSettings
-              :settings="settings"
-              :busy="settingsMutationBusy"
-              @save="(patch) => patchSection('browser', patch)"
-            />
-
-            <McpIntegrationSettings
-              :busy="appContextBusy"
-              :agent-available="apps.some((app) => app.id === 'nexus.agent')"
-            />
-
-            <AcpRuntimeSettings
-              :settings="settings"
-              :busy="runtimeIntegrationBusy"
-              :agent-available="apps.some((app) => app.id === 'nexus.agent')"
-              @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
-            />
-
-            <!-- 子 Agent 委派 -->
-            <SubagentSettings
-              :settings="settings"
-              :apps="apps"
-              :providers="providers"
-              :busy="settingsMutationBusy"
-              @save="(patch) => patchSection('subagents', patch)"
-            />
-
-            <!-- 产物存储与清理配额 -->
-            <StorageArtifactSettings
-              :settings="settings"
-              :storage="storage"
-              :busy="settingsMutationBusy"
-              @save="(patch) => patchSection('storage', patch)"
-            />
-          </section>
-
-          <!-- 3. 插件与安全（应用、生态与安全边界） -->
-          <section
-            v-if="visitedGroups.has('plugins')"
-            v-show="activeGroup === 'plugins'"
-            id="agent-settings-plugins"
-            class="agent-settings-group"
-          >
-            <!-- Agent App 与能力授权 -->
-            <AppManagementSettings :apps="apps" :busy="appContextBusy" @toggle="toggleApp" @refresh="load" />
-
-            <!-- Durable Memory 审核、发布、撤销与跨 App 导入 -->
-            <MemorySettings :apps="apps" :busy="appContextBusy" />
-
-            <!-- 插件市场与签名包管理 -->
-            <PluginManagementSettings
-              :apps="apps"
-              :settings="settings"
-              :busy="runtimeIntegrationBusy"
-              @refresh="load"
-              @settings-updated="(updated) => (settings = updated)"
-            />
-
-            <!-- 安全黑名单与系统护栏 -->
-            <SafetyNetworkSettings :denylist="denylist" :busy="denylistBusy" @save="saveDenylist" />
-            <SystemGuardrails />
-          </section>
-        </div>
-      </div>
-    </template>
-  </section>
-
-  <BaseModal
-    :visible="onboardingVisible && Boolean(recommendedPlugin)"
-    :title="$t('agent.settings.onboarding.title')"
-    :aria-label="$t('agent.settings.onboarding.title')"
-    :close-on-backdrop="!featureOperationBusy"
-    :close-on-escape="!featureOperationBusy"
-    :focus-on-open="true"
-    :restore-focus="true"
-    panel-class="max-w-xl p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
-    @close="closeOnboarding"
-  >
-    <template #header>
-      <div class="flex items-center justify-between w-full pr-6">
-        <div class="flex items-center gap-3">
-          <div
-            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/25 shadow-xs"
-          >
-            <i class="fa-solid fa-wand-magic-sparkles text-base" aria-hidden="true"></i>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <h2 class="text-base font-semibold text-foreground tracking-tight">
-                {{ $t('agent.settings.onboarding.title') }}
+  <!-- 单根节点：BaseModal 只是 teleport 门户，但两个根会让父级 v-show 落到非元素根上而失效（切 Tab 后本块仍留在页面下方），包一层无样式 div。 -->
+  <div>
+    <section
+      id="settings-panel-agent"
+      class="rounded-xl border border-border bg-background shadow-sm"
+      aria-labelledby="settings-agent-title"
+    >
+      <!-- 主卡片头部：包含全局概览微状态 -->
+      <header class="rounded-t-xl border-b border-border bg-header/40 px-5 py-4 sm:px-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h2 id="settings-agent-title" class="text-base font-semibold text-foreground">
+                {{ $t('agent.settings.title') }}
               </h2>
               <span
-                class="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
+                v-if="settings"
+                class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                :class="
+                  runtimeReady(settings.availability.state)
+                    ? 'bg-success/15 text-success'
+                    : 'bg-text-secondary/15 text-text-secondary'
+                "
               >
-                <span class="h-1.5 w-1.5 rounded-full bg-success animate-pulse"></span>
-                {{ $t('agent.settings.onboarding.publisherVerified') }}
+                <span
+                  class="h-1.5 w-1.5 rounded-full"
+                  :class="runtimeReady(settings.availability.state) ? 'bg-success' : 'bg-text-secondary'"
+                ></span>
+                {{
+                  runtimeReady(settings.availability.state)
+                    ? $t('agent.settings.enabled')
+                    : $t('agent.settings.disabled')
+                }}
               </span>
             </div>
-            <p class="text-xs text-text-secondary mt-0.5">
-              {{ $t('agent.settings.onboarding.subtitle') }}
+            <p class="mt-1 text-xs text-text-secondary">
+              {{ $t('agent.settings.description') }}
             </p>
           </div>
-        </div>
-      </div>
-    </template>
 
-    <template v-if="recommendedPlugin">
-      <div class="space-y-4">
-        <!-- 插件基础信息主卡片 -->
-        <div class="relative overflow-hidden rounded-lg bg-header/25 p-4 transition-colors">
-          <div class="flex items-start gap-3.5">
-            <div
-              class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 shadow-xs"
-            >
-              <i class="fa-solid fa-robot text-xl" aria-hidden="true"></i>
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="text-sm font-bold text-foreground">{{ recommendedPlugin.displayName }}</span>
-                <span
-                  class="rounded-md border border-border/60 bg-card px-2 py-0.5 font-mono text-[11px] font-medium text-foreground"
+          <!-- 关键指标快照：无需额外概览 Tab，直接在此处呈现关键摘要 -->
+          <div v-if="settings" class="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+            <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
+              <span class="opacity-70">{{ $t('agent.settings.summary.defaultModel') }}:</span>
+              <span class="ml-1 font-medium text-foreground">{{ defaultModelName }}</span>
+            </span>
+            <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
+              <span class="opacity-70">{{ $t('agent.settings.summary.activeApps') }}:</span>
+              <span class="ml-1 font-medium text-foreground">{{ enabledApps }}/{{ apps.length }}</span>
+            </span>
+            <span class="rounded-lg border border-border/70 bg-card/60 px-2.5 py-1">
+              <span class="opacity-70">{{ $t('agent.settings.summary.sandbox') }}:</span>
+              <span
+                class="ml-1 font-medium"
+                :class="workspaceRuntime?.available ? 'text-success' : 'text-text-secondary'"
+              >
+                {{
+                  workspaceRuntime?.available
+                    ? $t('agent.settings.summary.ready')
+                    : $t('agent.settings.summary.notReady')
+                }}
+              </span>
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <div v-if="loading" class="p-10 text-center text-sm text-text-secondary">
+        {{ $t('agent.settings.loading') }}
+      </div>
+
+      <p v-else-if="!settings && loadError" role="alert" class="p-6 text-sm text-error">{{ loadError }}</p>
+
+      <template v-else-if="settings && storage && workspaceRuntime && denylist">
+        <div class="agent-settings-shell">
+          <!-- 宽屏常驻分区导航：左栏是「这个分组里有哪些设置」的地图，右侧只滚动一个分组。 -->
+          <div class="agent-settings-rail">
+            <nav class="agent-settings-rail-nav" :aria-label="$t('agent.settings.navigation')">
+              <template v-for="group in groups" :key="group.id">
+                <button
+                  type="button"
+                  class="agent-settings-rail-heading"
+                  :class="activeGroup === group.id ? 'is-active' : undefined"
+                  :aria-current="activeGroup === group.id ? 'true' : undefined"
+                  @click="selectGroup(group.id)"
                 >
-                  v{{ recommendedPlugin.availableVersion }}
-                </span>
-                <span class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
-                  {{ $t('agent.settings.onboarding.badge') }}
+                  <i :class="group.icon" aria-hidden="true"></i>
+                  <span>{{ $t(group.label) }}</span>
+                </button>
+                <ul class="agent-settings-rail-list">
+                  <li v-for="section in sectionGroups[group.id]" :key="section.id">
+                    <button
+                      type="button"
+                      class="agent-settings-rail-item"
+                      :class="activeGroup === group.id && activeSection === section.id ? 'is-active' : undefined"
+                      :aria-current="activeGroup === group.id && activeSection === section.id ? 'true' : undefined"
+                      @click="gotoSection(group.id, section.id)"
+                    >
+                      <i :class="section.icon" aria-hidden="true"></i>
+                      <span>{{ $t(section.label) }}</span>
+                    </button>
+                  </li>
+                </ul>
+              </template>
+            </nav>
+          </div>
+
+          <div class="agent-settings-main">
+            <!-- 窄屏 3 大核心分类胶囊导航（宽屏由左栏接管） -->
+            <nav
+              class="agent-settings-pills sticky top-14 z-20 flex shrink-0 flex-wrap justify-center gap-2 border-b border-border/60 bg-header p-2.5 sm:px-6"
+              :aria-label="$t('agent.settings.navigation')"
+            >
+              <button
+                v-for="group in groups"
+                :key="group.id"
+                type="button"
+                class="inline-flex min-h-8 items-center gap-2 rounded-lg px-4 py-1.5 text-xs font-medium transition-all focus-visible:outline-2 focus-visible:outline-primary"
+                :class="
+                  activeGroup === group.id
+                    ? 'bg-primary text-white shadow-xs font-semibold'
+                    : 'text-text-secondary hover:bg-header hover:text-foreground'
+                "
+                :aria-current="activeGroup === group.id ? 'page' : undefined"
+                :aria-controls="`agent-settings-${group.id}`"
+                @click="selectGroup(group.id)"
+              >
+                <i :class="group.icon" class="text-xs" aria-hidden="true"></i>
+                <span>{{ $t(group.label) }}</span>
+              </button>
+            </nav>
+
+            <!-- 分区内容流：自然流动排版，无局部高度截断与双层滚动条 -->
+            <div class="agent-settings-flow p-4 sm:p-6">
+              <!-- 1. 模型与预算（核心大本营） -->
+              <section
+                v-if="visitedGroups.has('models')"
+                v-show="activeGroup === 'models'"
+                id="agent-settings-models"
+                class="agent-settings-group"
+              >
+                <!-- Agent 功能开关 -->
+                <div :id="sectionAnchor('feature')" class="agent-settings-item">
+                  <AgentFeatureSettings :settings="settings" :busy="featureControlBusy" @change="changeFeature" />
+                </div>
+
+                <!-- 模型服务商与默认模型 -->
+                <div :id="sectionAnchor('providers')" class="agent-settings-item">
+                  <ModelProviderSettings
+                    :providers="providers"
+                    :busy="providerBusy"
+                    :discoveries="discoveredModels"
+                    :default-provider-id="settings.requestedSettings.model.defaultProviderId"
+                    :default-model-id="settings.requestedSettings.model.defaultModelId"
+                    :fallback-models="settings.requestedSettings.model.fallbackModels"
+                    :create-provider="createProvider"
+                    @toggle="toggleProvider"
+                    @protocol="changeProviderProtocol"
+                    @discover="discoverProviderModels"
+                    :add-provider-model="addProviderModel"
+                    :update-provider-models="updateProviderModels"
+                    @default-model="setDefaultModel"
+                    @fallback-models="setFallbackModels"
+                    @delete="deleteProvider"
+                  />
+                </div>
+
+                <!-- 预算预设与参数控制 -->
+                <div :id="sectionAnchor('budget')" class="agent-settings-item">
+                  <BudgetContextSettings
+                    :settings="settings"
+                    :busy="settingsMutationBusy"
+                    @save="(patch) => patchSection('budget', patch)"
+                  />
+                </div>
+
+                <!-- 高级实例硬限制策略：收拢为优雅的可折叠高级面板，避免喧宾夺主 -->
+                <div :id="sectionAnchor('hardLimits')" class="agent-settings-item">
+                  <details class="group overflow-hidden rounded-xl border border-border/70 bg-card/25 transition-all">
+                    <summary
+                      class="flex cursor-pointer list-none items-center justify-between gap-3 bg-header/30 px-4 py-3 select-none hover:bg-header/50 sm:px-5 sm:py-3.5"
+                    >
+                      <div class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-shield text-xs text-text-secondary" aria-hidden="true"></i>
+                        <div>
+                          <span class="text-sm font-semibold text-foreground">{{
+                            $t('agent.settings.hardLimits.panelTitle')
+                          }}</span>
+                          <span class="ml-2 text-xs text-text-secondary">{{
+                            $t('agent.settings.hardLimits.panelHint')
+                          }}</span>
+                        </div>
+                      </div>
+                      <i
+                        class="fa-solid fa-chevron-down text-xs text-text-secondary transition-transform group-open:rotate-180"
+                        aria-hidden="true"
+                      ></i>
+                    </summary>
+                    <div class="border-t border-border/60 p-1">
+                      <HardLimitsSettings
+                        :settings="settings"
+                        :preview="hardLimitPreview"
+                        :busy="settingsMutationBusy"
+                        @preview="previewHardLimits"
+                        @confirm="confirmHardLimits"
+                        @dismiss="hardLimitPreview = null"
+                      />
+                    </div>
+                  </details>
+                </div>
+              </section>
+
+              <!-- 2. 运行与环境（并发、沙箱容器与存储空间） -->
+              <section
+                v-if="visitedGroups.has('runtime')"
+                v-show="activeGroup === 'runtime'"
+                id="agent-settings-runtime"
+                class="agent-settings-group"
+              >
+                <!-- 并发与性能 -->
+                <div :id="sectionAnchor('performance')" class="agent-settings-item">
+                  <PerformanceSettings
+                    :settings="settings"
+                    :busy="settingsMutationBusy"
+                    @save="(patch) => patchSection('performance', patch)"
+                  />
+                </div>
+
+                <!-- 每个 Agent Plugin/App 独立执行预算；未覆盖字段继承全局默认 -->
+                <div :id="sectionAnchor('executionPolicy')" class="agent-settings-item">
+                  <AppExecutionPolicySettings :apps="apps" :busy="appContextBusy" />
+                </div>
+
+                <!-- Workspace 开发环境运行时 -->
+                <div :id="sectionAnchor('workspace')" class="agent-settings-item">
+                  <WorkspaceRuntimeSettings
+                    :availability="workspaceRuntime"
+                    :settings="settings"
+                    :busy="settingsMutationBusy"
+                    @settings-updated="(updated) => (settings = updated)"
+                  />
+                </div>
+
+                <!-- 浏览器 CDP 运行时与 ACP 协议 -->
+                <div :id="sectionAnchor('browser')" class="agent-settings-item">
+                  <BrowserRuntimeSettings
+                    :settings="settings"
+                    :busy="settingsMutationBusy"
+                    @save="(patch) => patchSection('browser', patch)"
+                  />
+                </div>
+
+                <div :id="sectionAnchor('mcp')" class="agent-settings-item">
+                  <McpIntegrationSettings
+                    :busy="appContextBusy"
+                    :agent-available="apps.some((app) => app.id === 'nexus.agent')"
+                  />
+                </div>
+
+                <div :id="sectionAnchor('acp')" class="agent-settings-item">
+                  <AcpRuntimeSettings
+                    :settings="settings"
+                    :busy="runtimeIntegrationBusy"
+                    :agent-available="apps.some((app) => app.id === 'nexus.agent')"
+                    @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
+                  />
+                </div>
+
+                <!-- 子 Agent 委派 -->
+                <div :id="sectionAnchor('subagents')" class="agent-settings-item">
+                  <SubagentSettings
+                    :settings="settings"
+                    :apps="apps"
+                    :providers="providers"
+                    :busy="settingsMutationBusy"
+                    @save="(patch) => patchSection('subagents', patch)"
+                  />
+                </div>
+
+                <!-- 产物存储与清理配额 -->
+                <div :id="sectionAnchor('storage')" class="agent-settings-item">
+                  <StorageArtifactSettings
+                    :settings="settings"
+                    :storage="storage"
+                    :busy="settingsMutationBusy"
+                    @save="(patch) => patchSection('storage', patch)"
+                  />
+                </div>
+              </section>
+
+              <!-- 3. 插件与安全（应用、生态与安全边界） -->
+              <section
+                v-if="visitedGroups.has('plugins')"
+                v-show="activeGroup === 'plugins'"
+                id="agent-settings-plugins"
+                class="agent-settings-group"
+              >
+                <!-- Agent App 与能力授权 -->
+                <div :id="sectionAnchor('apps')" class="agent-settings-item">
+                  <AppManagementSettings :apps="apps" :busy="appContextBusy" @toggle="toggleApp" @refresh="load" />
+                </div>
+
+                <!-- Durable Memory 审核、发布、撤销与跨 App 导入 -->
+                <div :id="sectionAnchor('memory')" class="agent-settings-item">
+                  <MemorySettings :apps="apps" :busy="appContextBusy" />
+                </div>
+
+                <!-- 插件市场与签名包管理 -->
+                <div :id="sectionAnchor('plugins')" class="agent-settings-item">
+                  <PluginManagementSettings
+                    :apps="apps"
+                    :settings="settings"
+                    :busy="runtimeIntegrationBusy"
+                    @refresh="load"
+                    @settings-updated="(updated) => (settings = updated)"
+                  />
+                </div>
+
+                <!-- 安全黑名单与系统护栏 -->
+                <div :id="sectionAnchor('safety')" class="agent-settings-item">
+                  <SafetyNetworkSettings :denylist="denylist" :busy="denylistBusy" @save="saveDenylist" />
+                </div>
+                <div :id="sectionAnchor('guardrails')" class="agent-settings-item">
+                  <SystemGuardrails />
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <BaseModal
+      :visible="onboardingVisible && Boolean(recommendedPlugin)"
+      :title="$t('agent.settings.onboarding.title')"
+      :aria-label="$t('agent.settings.onboarding.title')"
+      :close-on-backdrop="!featureOperationBusy"
+      :close-on-escape="!featureOperationBusy"
+      :focus-on-open="true"
+      :restore-focus="true"
+      panel-class="max-w-xl p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+      @close="closeOnboarding"
+    >
+      <template #header>
+        <div class="flex items-center justify-between w-full pr-6">
+          <div class="flex items-center gap-3">
+            <div
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/25 shadow-xs"
+            >
+              <i class="fa-solid fa-wand-magic-sparkles text-base" aria-hidden="true"></i>
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold text-foreground tracking-tight">
+                  {{ $t('agent.settings.onboarding.title') }}
+                </h2>
+                <span
+                  class="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-success animate-pulse"></span>
+                  {{ $t('agent.settings.onboarding.publisherVerified') }}
                 </span>
               </div>
-              <p class="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                {{ pluginDescription }}
+              <p class="text-xs text-text-secondary mt-0.5">
+                {{ $t('agent.settings.onboarding.subtitle') }}
               </p>
             </div>
           </div>
         </div>
+      </template>
 
-        <!-- 3 栏核心特性网格 -->
-        <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-          <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
-            <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs"
-            >
-              <i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>
-            </div>
-            <div class="min-w-0">
-              <div class="text-xs font-semibold text-foreground">
-                {{ $t('agent.settings.onboarding.featureSkillsTitle') }}
-              </div>
-              <div class="text-[11px] text-text-secondary leading-normal mt-0.5">
-                {{ $t('agent.settings.onboarding.featureSkillsDesc') }}
-              </div>
-            </div>
-          </div>
-
-          <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
-            <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success text-xs"
-            >
-              <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
-            </div>
-            <div class="min-w-0">
-              <div class="text-xs font-semibold text-foreground">
-                {{ $t('agent.settings.onboarding.featureSandboxTitle') }}
-              </div>
-              <div class="text-[11px] text-text-secondary leading-normal mt-0.5">
-                {{ $t('agent.settings.onboarding.featureSandboxDesc') }}
-              </div>
-            </div>
-          </div>
-
-          <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
-            <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs"
-            >
-              <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
-            </div>
-            <div class="min-w-0">
-              <div class="text-xs font-semibold text-foreground">
-                {{ $t('agent.settings.onboarding.featureDecoupledTitle') }}
-              </div>
-              <div class="text-[11px] text-text-secondary leading-normal mt-0.5">
-                {{ $t('agent.settings.onboarding.featureDecoupledDesc') }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 安全凭据与发布者来源（消除裸露长串） -->
-        <div class="rounded-lg bg-header/25 p-3 text-xs">
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2 font-medium text-foreground text-xs">
-              <i class="fa-solid fa-certificate text-primary text-sm" aria-hidden="true"></i>
-              <span>{{ $t('agent.settings.onboarding.verifiedPublisher') }}</span>
-            </div>
-            <button
-              type="button"
-              class="flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer"
-              @click="showKeyDetails = !showKeyDetails"
-            >
-              <span>{{
-                showKeyDetails
-                  ? $t('agent.settings.onboarding.hideDetails')
-                  : $t('agent.settings.onboarding.detailsToggle')
-              }}</span>
-              <i :class="showKeyDetails ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'" class="text-[9px]"></i>
-            </button>
-          </div>
-
-          <div
-            class="mt-2 flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 font-mono text-[11px] text-text-secondary shadow-2xs"
-          >
-            <div class="flex items-center gap-1.5 truncate">
-              <i class="fa-solid fa-key text-[10px] text-primary/70"></i>
-              <span class="truncate">{{ compactKeyId(recommendedPlugin.publisherKeyId) }}</span>
-            </div>
-            <button
-              type="button"
-              class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-text-secondary hover:bg-header hover:text-foreground transition-colors cursor-pointer"
-              @click="copyKeyId(recommendedPlugin.publisherKeyId)"
-            >
-              <i :class="copiedKey ? 'fa-solid fa-check text-success' : 'fa-regular fa-copy'"></i>
-              <span>{{
-                copiedKey ? $t('agent.settings.onboarding.keyCopied') : $t('agent.settings.onboarding.copyKey')
-              }}</span>
-            </button>
-          </div>
-
-          <div
-            v-if="showKeyDetails"
-            class="mt-2.5 space-y-2 border-t border-border/50 pt-2.5 text-[11px] text-text-secondary"
-          >
-            <div>
-              <div class="font-medium text-foreground">{{ $t('agent.settings.onboarding.fullKeyId') }}</div>
+      <template v-if="recommendedPlugin">
+        <div class="space-y-4">
+          <!-- 插件基础信息主卡片 -->
+          <div class="relative overflow-hidden rounded-lg bg-header/25 p-4 transition-colors">
+            <div class="flex items-start gap-3.5">
               <div
-                class="mt-1 break-all font-mono select-all rounded-lg border border-border/40 bg-header/40 p-2 text-foreground/90"
+                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 shadow-xs"
               >
-                {{ recommendedPlugin.publisherKeyId }}
+                <i class="fa-solid fa-robot text-xl" aria-hidden="true"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm font-bold text-foreground">{{ recommendedPlugin.displayName }}</span>
+                  <span
+                    class="rounded-md border border-border/60 bg-card px-2 py-0.5 font-mono text-[11px] font-medium text-foreground"
+                  >
+                    v{{ recommendedPlugin.availableVersion }}
+                  </span>
+                  <span class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                    {{ $t('agent.settings.onboarding.badge') }}
+                  </span>
+                </div>
+                <p class="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                  {{ pluginDescription }}
+                </p>
               </div>
             </div>
-            <div>
-              <div class="font-medium text-foreground">{{ $t('agent.settings.onboarding.catalogSource') }}</div>
+          </div>
+
+          <!-- 3 栏核心特性网格 -->
+          <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
               <div
-                class="mt-1 break-all font-mono select-all rounded-lg border border-border/40 bg-header/40 p-2 text-foreground/90"
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs"
               >
-                {{ recommendedPlugin.catalogUrl }}
+                <i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-foreground">
+                  {{ $t('agent.settings.onboarding.featureSkillsTitle') }}
+                </div>
+                <div class="text-[11px] text-text-secondary leading-normal mt-0.5">
+                  {{ $t('agent.settings.onboarding.featureSkillsDesc') }}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <!-- 安装中进度状态（如果 busy 为 true） -->
-        <div v-if="featureOperationBusy" class="rounded-xl border border-primary/25 bg-primary/5 p-4 transition-all">
-          <div class="flex items-center gap-3">
-            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              <i class="fa-solid fa-circle-notch fa-spin text-sm"></i>
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="text-xs font-semibold text-foreground">
-                {{ $t('agent.settings.onboarding.installingTitle') }}
+            <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
+              <div
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success text-xs"
+              >
+                <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
               </div>
-              <div class="text-[11px] text-text-secondary mt-0.5">
-                {{ installingStepText }}
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-foreground">
+                  {{ $t('agent.settings.onboarding.featureSandboxTitle') }}
+                </div>
+                <div class="text-[11px] text-text-secondary leading-normal mt-0.5">
+                  {{ $t('agent.settings.onboarding.featureSandboxDesc') }}
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
+              <div
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs"
+              >
+                <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-foreground">
+                  {{ $t('agent.settings.onboarding.featureDecoupledTitle') }}
+                </div>
+                <div class="text-[11px] text-text-secondary leading-normal mt-0.5">
+                  {{ $t('agent.settings.onboarding.featureDecoupledDesc') }}
+                </div>
               </div>
             </div>
           </div>
-          <div class="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-primary/15">
+
+          <!-- 安全凭据与发布者来源（消除裸露长串） -->
+          <div class="rounded-lg bg-header/25 p-3 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 font-medium text-foreground text-xs">
+                <i class="fa-solid fa-certificate text-primary text-sm" aria-hidden="true"></i>
+                <span>{{ $t('agent.settings.onboarding.verifiedPublisher') }}</span>
+              </div>
+              <button
+                type="button"
+                class="flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                @click="showKeyDetails = !showKeyDetails"
+              >
+                <span>{{
+                  showKeyDetails
+                    ? $t('agent.settings.onboarding.hideDetails')
+                    : $t('agent.settings.onboarding.detailsToggle')
+                }}</span>
+                <i
+                  :class="showKeyDetails ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"
+                  class="text-[9px]"
+                ></i>
+              </button>
+            </div>
+
             <div
-              class="h-full bg-primary rounded-full transition-all duration-300 ease-out"
-              :style="{ width: `${installProgress}%` }"
-            ></div>
+              class="mt-2 flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 font-mono text-[11px] text-text-secondary shadow-2xs"
+            >
+              <div class="flex items-center gap-1.5 truncate">
+                <i class="fa-solid fa-key text-[10px] text-primary/70"></i>
+                <span class="truncate">{{ compactKeyId(recommendedPlugin.publisherKeyId) }}</span>
+              </div>
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-text-secondary hover:bg-header hover:text-foreground transition-colors cursor-pointer"
+                @click="copyKeyId(recommendedPlugin.publisherKeyId)"
+              >
+                <i :class="copiedKey ? 'fa-solid fa-check text-success' : 'fa-regular fa-copy'"></i>
+                <span>{{
+                  copiedKey ? $t('agent.settings.onboarding.keyCopied') : $t('agent.settings.onboarding.copyKey')
+                }}</span>
+              </button>
+            </div>
+
+            <div
+              v-if="showKeyDetails"
+              class="mt-2.5 space-y-2 border-t border-border/50 pt-2.5 text-[11px] text-text-secondary"
+            >
+              <div>
+                <div class="font-medium text-foreground">{{ $t('agent.settings.onboarding.fullKeyId') }}</div>
+                <div
+                  class="mt-1 break-all font-mono select-all rounded-lg border border-border/40 bg-header/40 p-2 text-foreground/90"
+                >
+                  {{ recommendedPlugin.publisherKeyId }}
+                </div>
+              </div>
+              <div>
+                <div class="font-medium text-foreground">{{ $t('agent.settings.onboarding.catalogSource') }}</div>
+                <div
+                  class="mt-1 break-all font-mono select-all rounded-lg border border-border/40 bg-header/40 p-2 text-foreground/90"
+                >
+                  {{ recommendedPlugin.catalogUrl }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 安装中进度状态（如果 busy 为 true） -->
+          <div v-if="featureOperationBusy" class="rounded-xl border border-primary/25 bg-primary/5 p-4 transition-all">
+            <div class="flex items-center gap-3">
+              <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <i class="fa-solid fa-circle-notch fa-spin text-sm"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-xs font-semibold text-foreground">
+                  {{ $t('agent.settings.onboarding.installingTitle') }}
+                </div>
+                <div class="text-[11px] text-text-secondary mt-0.5">
+                  {{ installingStepText }}
+                </div>
+              </div>
+            </div>
+            <div class="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-primary/15">
+              <div
+                class="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+                :style="{ width: `${installProgress}%` }"
+              ></div>
+            </div>
           </div>
         </div>
-      </div>
-    </template>
+      </template>
 
-    <template #footer>
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex items-center gap-1.5 text-[11px] text-text-secondary">
-          <i class="fa-solid fa-lock text-[10px] text-success"></i>
-          <span>{{ $t('agent.settings.onboarding.sandboxProtected') }}</span>
+      <template #footer>
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-1.5 text-[11px] text-text-secondary">
+            <i class="fa-solid fa-lock text-[10px] text-success"></i>
+            <span>{{ $t('agent.settings.onboarding.sandboxProtected') }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <UiButton
+              appearance="soft"
+              tone="neutral"
+              type="button"
+              :disabled="featureOperationBusy"
+              @click="closeOnboarding"
+            >
+              {{ $t('agent.settings.onboarding.cancel') }}
+            </UiButton>
+            <UiButton
+              appearance="solid"
+              tone="primary"
+              type="button"
+              :disabled="featureOperationBusy"
+              @click="confirmRecommendedInstall"
+            >
+              <i
+                v-if="!featureOperationBusy"
+                class="fa-solid fa-download text-xs transition-transform group-hover:-translate-y-0.5"
+                aria-hidden="true"
+              ></i>
+              <i v-else class="fa-solid fa-circle-notch fa-spin text-xs" aria-hidden="true"></i>
+              <span>{{
+                featureOperationBusy
+                  ? $t('agent.settings.onboarding.installing')
+                  : $t('agent.settings.onboarding.installAndEnable')
+              }}</span>
+            </UiButton>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <UiButton
-            appearance="soft"
-            tone="neutral"
-            type="button"
-            :disabled="featureOperationBusy"
-            @click="closeOnboarding"
-          >
-            {{ $t('agent.settings.onboarding.cancel') }}
-          </UiButton>
-          <UiButton
-            appearance="solid"
-            tone="primary"
-            type="button"
-            :disabled="featureOperationBusy"
-            @click="confirmRecommendedInstall"
-          >
-            <i
-              v-if="!featureOperationBusy"
-              class="fa-solid fa-download text-xs transition-transform group-hover:-translate-y-0.5"
-              aria-hidden="true"
-            ></i>
-            <i v-else class="fa-solid fa-circle-notch fa-spin text-xs" aria-hidden="true"></i>
-            <span>{{
-              featureOperationBusy
-                ? $t('agent.settings.onboarding.installing')
-                : $t('agent.settings.onboarding.installAndEnable')
-            }}</span>
-          </UiButton>
-        </div>
-      </div>
-    </template>
-  </BaseModal>
+      </template>
+    </BaseModal>
+  </div>
 </template>
 
 <style scoped>
@@ -980,14 +1211,147 @@
    * The overrides only reach *direct* children of a group, so a module's own
    * internal chrome (header band, callouts, controls) is untouched.
    */
-  .agent-settings-group > :deep(*) {
+  .agent-settings-group > .agent-settings-item > :deep(*) {
     border: 0;
     border-radius: 0;
     background: transparent;
     box-shadow: none;
   }
 
-  .agent-settings-group > :deep(*) + :deep(*) {
+  .agent-settings-item + .agent-settings-item {
     border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  }
+
+  .agent-settings-item {
+    scroll-margin-top: 4.5rem;
+  }
+
+  /*
+   * 模块自带 z-index（Provider 卡根节点是 `relative z-20`）且 DOM 在后，
+   * 同层级下会盖住粘性导航条，内容看起来像「从条上穿过去」。
+   * 粘性条要压在内容之上，但仍留在全局顶栏（z-30）之下。
+   */
+  .agent-settings-pills {
+    z-index: 29;
+  }
+
+  /*
+   * 宽屏：常驻左栏分区导航 + 右侧单列内容。
+   *
+   * 17 个模块排在一条长流里时，用户只能靠滚动找入口，分组之间也没有
+   * 可导航的结构。>=1280px 时把「分组 + 组内模块」搬到左栏，右侧只滚动
+   * 当前分组；窄屏放不下左栏，仍用顶部胶囊切换分组。
+   */
+  .agent-settings-rail {
+    display: none;
+  }
+
+  @media (min-width: 1280px) {
+    .agent-settings-shell {
+      display: grid;
+      grid-template-columns: 15rem minmax(0, 1fr);
+    }
+
+    .agent-settings-rail {
+      display: block;
+      background: color-mix(in srgb, var(--header-bg-color) 45%, transparent);
+      border-right: 1px solid var(--border-color);
+      border-bottom-left-radius: 0.75rem;
+    }
+
+    /* 粘在全局顶栏（h-14）下面；用自身滚动兜住矮窗口。 */
+    .agent-settings-rail-nav {
+      position: sticky;
+      top: 3.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+      max-height: calc(100vh - 3.5rem);
+      overflow-y: auto;
+      padding: 1rem 0.75rem 1.25rem 0.875rem;
+      scrollbar-width: thin;
+    }
+
+    .agent-settings-pills {
+      display: none;
+    }
+  }
+
+  .agent-settings-rail-heading {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-color-secondary);
+    transition:
+      color 150ms ease-in-out,
+      background-color 150ms ease-in-out;
+  }
+
+  .agent-settings-rail-heading:first-child {
+    margin-top: 0;
+  }
+
+  .agent-settings-rail-heading:hover {
+    background: color-mix(in srgb, var(--border-color) 28%, transparent);
+    color: var(--text-color);
+  }
+
+  .agent-settings-rail-heading.is-active {
+    color: var(--link-active-color);
+  }
+
+  .agent-settings-rail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0;
+    margin: 0 0 0 0.375rem;
+    list-style: none;
+  }
+
+  .agent-settings-rail-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem 0.375rem 0.625rem;
+    border-radius: 0.5rem;
+    font-size: 12px;
+    line-height: 1.25rem;
+    text-align: left;
+    color: var(--text-color-secondary);
+    transition:
+      color 150ms ease-in-out,
+      background-color 150ms ease-in-out;
+  }
+
+  .agent-settings-rail-item i {
+    width: 0.875rem;
+    flex: none;
+    font-size: 11px;
+    text-align: center;
+    opacity: 0.75;
+  }
+
+  .agent-settings-rail-item:hover {
+    background: color-mix(in srgb, var(--border-color) 30%, transparent);
+    color: var(--text-color);
+  }
+
+  .agent-settings-rail-item.is-active {
+    background: var(--link-active-bg-color);
+    color: var(--link-active-color);
+    font-weight: 600;
+  }
+
+  .agent-settings-rail-item.is-active i {
+    opacity: 1;
   }
 </style>
