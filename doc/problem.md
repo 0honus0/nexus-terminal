@@ -68,6 +68,7 @@
 | P1                                    | 任务栏 6 个「拖动排序」把手是 `<button>` 但**没有任何键盘行为**（无 click/keydown，也无上移/下移替代）                                                                                                                                                                                                                                                                               | `runtime/TaskRail.vue:516/710/742/783/807/850`（见 §7.14-b）                                                  |
 | P2                                    | 任务栏「目标」卡片直接渲染内部连接 ID（`#1`）、Run 历史 `slice(0, 8)` 硬上限（第 9 条无入口）、卡片顺序持久化无重置                                                                                                                                                                                                                                                                  | `runtime/TaskRail.vue:794/109/125`（见 §7.14-b）                                                              |
 | **P2 · ✅ 已关闭 2026-09-23**         | 审批卡：`risk` 枚举已本地化（新增 `agent.approvals.risk.*`）；「`审批状态：approved`」由 §1.4/§7.15-a 关闭（`status` 映射）；「剩余 300s」改为 `agent.approvals.expiresIn`（中/日文为「300 秒」）；「批准」按钮由 `bg-warning text-black` 改成品牌主色 `bg-primary text-white`                                                                                                       | `runtime/ApprovalCard.vue`（见 §7.14-b）                                                                      |
+| **P1 · ✅ 已关闭 2026-09-23**         | Hub 窗口几何补上键盘路径（标题栏/缩放热区方向键 16px、Shift 64px，`aria-keyshortcuts` + `tabindex`），并新增全局 `prefers-reduced-motion` 基线（未分层），Hub 内 60 个带过渡的元素降级为 0                                                                                                                                                                                           | `host/AgentHubWindow.vue`、`app/styles/global.css`（见 §2.10）                                                |
 | P1                                    | 前端 agent 区仍有 **118 行**非注释硬编码中文（不止 38 行）：`AppManagementSettings` 37、`StorageArtifactSettings` 16、`ModelProviderSettings` 14、`ConversationMessage` 13、`PluginManagementSettings` 13、`quantity-format.ts` 8…                                                                                                                                                   | `features/agent/**`（见 §7.14-c）                                                                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | `zh-CN` 词典与 en-US 完全相同的 key 由 35 → 22、整句英文由 15 → 5（`ja` 49 → 31 / 20 → 5），剩 5 条是品牌与协议名（白名单）；枚举不再插进本地化句子（`审批状态：approved` / `当前状态：enabled` 走 `status` / `stateLabels` 映射）；新增 `pnpm lint:agent-i18n` 防回归                                                                                                               | `i18n/zh-CN.json`、`ApprovalCard.vue`、`AgentFeatureSettings.vue`（见 §7.15-a）                               |
 | **P1 · ✅ 已关闭 2026-09-23**         | 未本地化枚举/内部标识：Subagent 状态与失败模式、审批 `risk`、Workspace 命令 `action`/`status` 全部改为查表（新增 `agent.subagents.status/failureMode`、`agent.approvals.risk`、`workspaceRuntime.commandAction/commandState`）；原始值只保留在折叠的「规范化操作」调试区                                                                                                             | `runtime/SubagentCard.vue`、`runtime/ApprovalCard.vue`、`settings/WorkspaceRuntimeSettings.vue`（见 §1.4）    |
@@ -530,7 +531,7 @@ Agent UI 中任意像素字号统计：
 
 建议方向：把 Run 详情变成"概览 + 折叠的高级信息"；调试类数据（JSON payload、hash、lease、watermark）统一收进开发者/诊断面板；待处理事项收敛成一个可跳转的收件箱。
 
-### 2.10 无障碍与键盘（P1）
+### 2.10 无障碍与键盘（P1 · ✅ 已关闭 2026-09-23）
 
 - Hub：✅ **已闭环 2026-09-23**。打开时聚焦 Hub 根、背景 `#app.inert=true`；Hub 与 Hub-owned portal 共同构成焦点边界；Escape 关闭并恢复到 Launcher。
 - 窗口移动/缩放**只能 pointer**（`handleDragPointerDown` / `handleResizePointerDown`），没有键盘替代；缩放热区是右下角 `h-4 w-4`（`host/AgentHubWindow.vue:585`）。
@@ -538,6 +539,33 @@ Agent UI 中任意像素字号统计：
 - `prefers-reduced-motion` 只覆盖了两处（`host/AgentAppSurface.vue:2697`、`runtime/TaskRail.vue:914`），其余动画（`animate-pulse`、自动轮播、卡片 hover 位移、`active:scale-95`）未处理。
 
 剩余无障碍项集中在窗口移动/缩放的键盘替代与 reduced-motion；Hub 的 Escape / 初始焦点 / focus trap / inert / 焦点恢复已关闭。
+
+> ✅ **2026-09-23 闭环**：补上窗口几何的键盘路径与全局 reduced-motion 基线；Hub 的 Escape / 初始焦点 / focus trap / inert / 焦点恢复此前已关闭。
+>
+> **修复前 CDP 实测（`https://api.honus.top/`，视口 1920×953，Hub 1600×711 持久化几何）**
+>
+> | 探测点                                      | 修复前                              | 修复后                                           |
+> | ------------------------------------------- | ----------------------------------- | ------------------------------------------------ |
+> | `.agent-hub-header` 的 `tabindex` / 键盘    | 无 `tabindex`，方向键对窗口无作用   | `tabindex=0`，`aria-label` + `aria-keyshortcuts` |
+> | 聚焦缩放热区后按方向键                      | 窗口尺寸不变（1423×800 → 1423×800） | 1423×800 → 1439×880（+16 / +16+64，符合步进）    |
+> | Hub 内 `transition-duration > 0.05s` 的元素 | **60 个**（最大 `0.2s`）            | **0 个**（最大 `0.00001s`）                      |
+>
+> **改法**
+>
+> 1. `host/AgentHubWindow.vue`：新增 `handleMoveKeydown` / `handleResizeKeydown`（方向键 16px、Shift 64px），
+>    分别挂在标题栏与右下角缩放热区上；标题栏在非最大化时 `tabindex="0"`，最大化时退回 `-1`，并带
+>    `aria-label`（`agent.hub.moveHandle`）与 `aria-keyshortcuts`。缩放热区的 `title` 改为
+>    `agent.hub.resizeHint`（含步进说明）。顺带补齐最小化 / 最大化 / 关闭三个窗口按钮的 `aria-label`
+>    （`agent.hub.restore` 为新 key，最大化态切换文案）。
+> 2. `app/styles/global.css`：新增**未分层**的 reduced-motion 基线（`animation-duration: 0.01ms`、
+>    `animation-iteration-count: 1`、`transition-duration: 0.01ms`、`transition-delay: 0ms`、
+>    `scroll-behavior: auto`）。放在未分层区是为了不被 `@layer utilities` 的 `transition-*` 工具类按层序盖回。
+>    刻意**不动 `transform`**：全局 `transform: none` 会破坏 `-translate-x-1/2` 这类居中布局；
+>    `active:scale-95` 变成瞬时跳变（无动画过程），这正是 reduced-motion 想要的结果。
+>
+> **验证**：最大化后方向键不再移动/缩放窗口（几何 `0,0 1920×953` 不变，标题栏 `tabindex` 退回 `-1`）；
+> Hub 内 Tab 首个落点是标题栏、`Shift+Tab` 从标题栏绕回缩放热区（焦点边界未破坏）；
+> `vue-tsc --noEmit`、`pnpm lint:agent-i18n`、Prettier 全部通过。
 
 ### 2.11 视觉语言不统一（P2）
 

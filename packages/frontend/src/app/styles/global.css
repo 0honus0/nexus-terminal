@@ -159,6 +159,31 @@ button.bg-error .fab {
   color: currentColor !important;
 }
 
+/*
+ * §2.10：reduced-motion 基线。
+ *
+ * 此前只有三处 scoped 覆盖（空态轮播 / 侧栏过渡 / 任务栏卡片），Hub 里仍有 60 个
+ * `transition-*` 元素照常过渡。这里补一条全局降级：动画只跑一帧、过渡即时完成、
+ * 遵循用户的滚动偏好。放在未分层区域，避免被 `@layer utilities` 的 `transition-*`
+ * 工具类按层序盖回。
+ *
+ * 注意：这里不动 `transform`。把 `transform: none !important` 全局化会破坏用
+ * `-translate-x-1/2` 居中的布局；`active:scale-95` 这类按压反馈会变成瞬时跳变
+ * （没有动画过程），这正是 reduced-motion 想要的结果。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer components {
   /*
    * Single entry point for the translucent "glass" surfaces used by Agent

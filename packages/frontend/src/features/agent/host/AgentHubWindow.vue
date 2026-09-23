@@ -262,6 +262,53 @@
     }
   };
 
+  /*
+   * §2.10：窗口几何此前只有 pointer 路径。这里给标题栏与右下角手柄补上等价的键盘路径
+   * （方向键 16px 步进，Shift 64px），让纯键盘用户也能调整窗口位置与大小。
+   */
+  const KEYBOARD_NUDGE_STEP = 16;
+  const KEYBOARD_NUDGE_STEP_LARGE = 64;
+
+  const keyboardDelta = (event: KeyboardEvent): { dx: number; dy: number } | null => {
+    const step = event.shiftKey ? KEYBOARD_NUDGE_STEP_LARGE : KEYBOARD_NUDGE_STEP;
+    switch (event.key) {
+      case 'ArrowLeft':
+        return { dx: -step, dy: 0 };
+      case 'ArrowRight':
+        return { dx: step, dy: 0 };
+      case 'ArrowUp':
+        return { dx: 0, dy: -step };
+      case 'ArrowDown':
+        return { dx: 0, dy: step };
+      default:
+        return null;
+    }
+  };
+
+  const handleMoveKeydown = (event: KeyboardEvent) => {
+    if (state.maximized) return;
+    const delta = keyboardDelta(event);
+    if (!delta) return;
+    event.preventDefault();
+    event.stopPropagation();
+    agentWindowManager.setBounds({
+      ...state.bounds,
+      x: state.bounds.x + delta.dx,
+      y: state.bounds.y + delta.dy,
+    });
+    emit('layoutChange');
+  };
+
+  const handleResizeKeydown = (event: KeyboardEvent) => {
+    if (state.maximized) return;
+    const delta = keyboardDelta(event);
+    if (!delta) return;
+    event.preventDefault();
+    event.stopPropagation();
+    agentWindowManager.resize(state.bounds.width + delta.dx, state.bounds.height + delta.dy);
+    emit('layoutChange');
+  };
+
   const handleDragPointerDown = (event: PointerEvent) => {
     if (state.maximized || event.button !== 0) return;
     const target = event.target as HTMLElement | null;
@@ -544,9 +591,13 @@
     @touchmove.stop
   >
     <header
-      class="agent-hub-header flex h-11 shrink-0 touch-none select-none items-center justify-between gap-2.5 border-b border-border/45 bg-header/45 px-3 backdrop-blur-md"
+      class="agent-hub-header flex h-11 shrink-0 touch-none select-none items-center justify-between gap-2.5 border-b border-border/45 bg-header/45 px-3 backdrop-blur-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/45"
       :class="state.maximized ? '' : 'cursor-move'"
+      :tabindex="state.maximized ? -1 : 0"
+      :aria-label="$t('agent.hub.moveHandle')"
+      :aria-keyshortcuts="state.maximized ? undefined : 'ArrowLeft ArrowRight ArrowUp ArrowDown'"
       @pointerdown="handleDragPointerDown"
+      @keydown="handleMoveKeydown"
     >
       <!-- 左侧：Agent 品牌徽标与流体 App 标签栏 -->
       <div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
@@ -710,6 +761,7 @@
             type="button"
             class="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-text-secondary hover:bg-header hover:text-foreground transition-colors"
             :title="$t('agent.hub.minimize')"
+            :aria-label="$t('agent.hub.minimize')"
             @click="agentWindowManager.minimizeHub()"
           >
             <i class="fa-solid fa-minus text-[11px]" aria-hidden="true"></i>
@@ -718,6 +770,7 @@
             type="button"
             class="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-text-secondary hover:bg-header hover:text-foreground transition-colors"
             :title="$t('agent.hub.maximize')"
+            :aria-label="state.maximized ? $t('agent.hub.restore') : $t('agent.hub.maximize')"
             @click="agentWindowManager.toggleMaximize()"
           >
             <i
@@ -730,6 +783,7 @@
             type="button"
             class="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-text-secondary hover:bg-error/10 hover:text-error transition-colors"
             :title="$t('agent.hub.close')"
+            :aria-label="$t('agent.hub.close')"
             @click="agentWindowManager.closeHub()"
           >
             <i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
@@ -771,9 +825,11 @@
       v-if="!state.maximized"
       type="button"
       class="absolute bottom-0 right-0 z-40 flex h-4 w-4 touch-none select-none cursor-nwse-resize items-end justify-end rounded-tl-md rounded-br-2xl p-0.5 text-text-secondary/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-      :title="$t('agent.hub.resize')"
+      :title="$t('agent.hub.resizeHint')"
       :aria-label="$t('agent.hub.resize')"
+      :aria-keyshortcuts="'ArrowLeft ArrowRight ArrowUp ArrowDown'"
       @pointerdown="handleResizePointerDown"
+      @keydown="handleResizeKeydown"
     >
       <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" aria-hidden="true">
         <path d="M10.4 1.6A8.8 8.8 0 0 1 1.6 10.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
