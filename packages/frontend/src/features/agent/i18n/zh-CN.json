@@ -678,6 +678,8 @@
         "fallbackEmpty": "尚未设置备用模型。添加后可在默认路由不可用时自动降级。",
         "autoSaveHint": "变更自动保存，下次 Run 生效。",
         "removeAllModels": "一键取消",
+        "removeAllModelsConfirmTitle": "确认移除全部模型",
+        "removeAllModelsConfirmPrompt": "将移除 {name} 下 {count} 个可移除模型；默认主力模型或首个基础模型会保留。",
         "saveNoticeRemovedAll": "已成功一键移除 {count} 个模型并保存至服务端",
         "emptyHint": "点击右上角“添加 Provider”按钮，即可快速接入 OpenAI、DeepSeek、Moonshot 或本地 Ollama 模型服务。",
         "namePlaceholder": "例如：OpenAI 官方",

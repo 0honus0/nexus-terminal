@@ -125,6 +125,7 @@
 
   // 删除确认
   const deletingProvider = ref<AgentProviderViewDto | null>(null);
+  const confirmingRemoveAll = ref<AgentProviderViewDto | null>(null);
 
   // 已配置模型与连通测试模态弹窗状态
   const testModalOpen = ref(false);
@@ -888,6 +889,13 @@
     return 'fa-solid fa-cube text-text-secondary';
   };
 
+  const confirmRemoveAll = async (): Promise<void> => {
+    const provider = confirmingRemoveAll.value;
+    if (!provider) return;
+    confirmingRemoveAll.value = null;
+    await removeAllConfigured(provider);
+  };
+
   const confirmDelete = () => {
     if (!deletingProvider.value) return;
     emit('delete', deletingProvider.value);
@@ -1586,7 +1594,7 @@
                       data-testid="configured-models-remove-all"
                       :disabled="busy"
                       :title="$t('agent.settings.providers.removeAllModels')"
-                      @click="removeAllConfigured(provider)"
+                      @click="confirmingRemoveAll = provider"
                     >
                       <i class="fa-solid fa-trash-can text-xs"></i>
                       <span>{{ $t('agent.settings.providers.removeAllModels') }}</span>
@@ -1613,15 +1621,17 @@
                     </div>
 
                     <!-- 单项取消添加 -->
-                    <button
-                      type="button"
-                      class="shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-all select-none"
-                      :class="
+                    <UiButton
+                      class="shrink-0"
+                      appearance="soft"
+                      density="compact"
+                      :tone="
                         provider.models.length <= 1 ||
                         (provider.id === defaultProviderId && model.id === defaultModelId)
-                          ? 'text-text-secondary/40 cursor-not-allowed'
-                          : 'text-error hover:bg-error/10 cursor-pointer'
+                          ? 'neutral'
+                          : 'danger'
                       "
+                      type="button"
                       :disabled="
                         busy ||
                         provider.models.length <= 1 ||
@@ -1636,9 +1646,9 @@
                       "
                       @click="removeConfiguredModel(provider, model.id)"
                     >
-                      <i class="fa-regular fa-trash-can text-[10px]"></i>
+                      <i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
                       <span>{{ $t('agent.settings.providers.removeModel') }}</span>
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
               </div>
@@ -1674,6 +1684,35 @@
       </UiEmptyState>
     </div>
   </section>
+
+  <BaseModal
+    :visible="Boolean(confirmingRemoveAll)"
+    :title="$t('agent.settings.providers.removeAllModelsConfirmTitle')"
+    :aria-label="$t('agent.settings.providers.removeAllModelsConfirmTitle')"
+    :focus-on-open="true"
+    :restore-focus="true"
+    panel-class="max-w-md p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    @close="confirmingRemoveAll = null"
+  >
+    <p class="text-sm leading-6 text-text-secondary">
+      {{
+        $t('agent.settings.providers.removeAllModelsConfirmPrompt', {
+          count: confirmingRemoveAll ? removableConfiguredModels(confirmingRemoveAll).length : 0,
+          name: confirmingRemoveAll?.displayName || '',
+        })
+      }}
+    </p>
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="confirmingRemoveAll = null">
+          {{ $t('common.cancel') }}
+        </UiButton>
+        <UiButton appearance="solid" tone="danger" type="button" :disabled="busy" @click="confirmRemoveAll">
+          {{ $t('agent.settings.providers.removeAllModels') }}
+        </UiButton>
+      </div>
+    </template>
+  </BaseModal>
 
   <BaseModal
     :visible="Boolean(deletingProvider)"

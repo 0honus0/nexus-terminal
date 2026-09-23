@@ -678,6 +678,8 @@
         "fallbackEmpty": "フォールバックモデルは未設定です。既定ルートが利用できない場合に備えて追加してください。",
         "autoSaveHint": "すべての変更は即座にサーバーへ保存され、次回の実行から反映されます。",
         "removeAllModels": "一括解除",
+        "removeAllModelsConfirmTitle": "すべてのモデルを削除しますか？",
+        "removeAllModelsConfirmPrompt": "{name} から削除可能なモデルを {count} 件削除します。デフォルトモデルまたは最初の基本モデルは保持されます。",
         "saveNoticeRemovedAll": "{count} 個のモデルを一括解除し保存しました",
         "emptyHint": "「Provider を追加」から OpenAI、DeepSeek、Moonshot、またはローカル Ollama に接続できます。",
         "namePlaceholder": "例: OpenAI Official",

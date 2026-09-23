@@ -678,6 +678,8 @@
         "fallbackEmpty": "No fallback models yet. Add one so new runs can fail over when the default route is unavailable.",
         "autoSaveHint": "Changes are saved automatically for the next Run.",
         "removeAllModels": "Remove all",
+        "removeAllModelsConfirmTitle": "Remove all models?",
+        "removeAllModelsConfirmPrompt": "This removes {count} removable models from {name}. The default model or the first base model is kept.",
         "saveNoticeRemovedAll": "Successfully removed {count} models and saved",
         "emptyHint": "Use Add Provider to connect OpenAI, DeepSeek, Moonshot, or a local Ollama service.",
         "namePlaceholder": "e.g. OpenAI Official",

@@ -88,6 +88,7 @@
 | **P2 · ✅ 已关闭 2026-09-23**         | **设置区 8 处独立「保存」按钮语义分级**（§7.15-c 收口）：原本 8 处全写死浅紫实心主按钮、无变更时只是 disabled， 现统一为「有未保存变更 → `solid`+`primary`；无变更 → `soft`+`neutral`+`disabled`+原因 `title`」， 并给 Browser / ACP / Subagent 三处**原本没有 dirty 概念**的按钮补上快照比对（实测 8 处全 `rgb(243,244,246)`， 改一个值后仅该模块转 `rgb(160,108,213)` 可用）                                                                 | `features/agent/settings/**`（见 §7.31）                                                                     |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区 22 处原生 `<select>` 收敛到 Gen2 `UiSelect`**：原先 4 种规格并存（`h-6 text-[11px]` … `h-9 text-xs`）且展开是浏览器原生下拉， 现全部走 Reka listbox（玻璃面板 `z-index:85` / `blur(6px)`）；`UiSelect` 的 v-model 收窄为「可空进、非空出」， 新增 `NONE_OPTION` 哨兵（4 处「不选择」项）与 `pickOption()`（8 个窄联合字段）， CDP 实测三组共 10 处可见、残留原生 0、414px 无横向溢出，e2e 的 `selectOption` 断言同步改为 listbox 交互 | `features/agent/settings/**`、`foundation/ui/UiSelect.vue`、`tests/e2e/specs/agent/host.spec.ts`（见 §7.32） |
 | **P1 · ✅ 已关闭 2026-09-23**         | **`QuantityInput` 单位药丸命中区 `18×20` → `24×24`**：高度 `h-5` → `h-6` 并补 `min-w-6`， 输入框预留内边距 `pr-20` → `pr-24`（字节型有 3 枚药丸，旧值已压到边）；实测 10 枚药丸全部 `24×24`                                                                                                                                                                                                                                                    | `features/agent/settings/QuantityInput.vue`（见 §7.33）                                                      |
+| **P1 · ✅ 已关闭 2026-09-23**         | **模型列表的「取消添加 / 一键取消」收敛 + 补确认**（§6.3 / §6.7 收口）：11px 裸文字按钮 → Gen2 `UiButton` （`soft` + `compact`，可移除 `danger` / 不可移除 `neutral` + 原因 `title`，实测 11 个 `85×28`）；批量移除改为先弹确认 （实测文案含「将移除 newapi 下 10 个可移除模型；默认主力模型或首个基础模型会保留。」）。至此 §6.2 控件清单只剩跨页 chrome 的顶部 Tab 36px（按约定不动）                                                        | `settings/ModelProviderSettings.vue`（见 §7.34）                                                             |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区模块标题带的斑马纹与动作簇拥挤**：16 条 `bg-header/40` 灰底标题带统一去底色（`990×64` 实测）， 标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`；414px 下动作簇由右对齐改为整行下移左对齐 （末位控件距右缘 20 → 248px），同轮修掉插件仓库输入框 `min-w` 硬撑导致的窄屏横向溢出                                                                                                                                        | `settings/AgentSettingsPanel.vue`、`ModelProviderSettings.vue`、`PluginManagementSettings.vue`（见 §7.30）   |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区粘性分组导航此前形同失效**：`sticky top-0` 恰好落在 56px 全局顶栏之下（z-30 盖住 z-20），滚起来就被吞掉；现已对齐 `top-14`，并让导航条压在自带 `z-20` 的模块之上（`z-index: 29`），移动端不再被内容穿透                                                                                                                                                                                                                                | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
 | **P1 · ✅ 已关闭 2026-09-23**         | **`v-show` 在 Agent 设置面板上完全失效**：SFC 是 `section + BaseModal` 双根，父级 `v-show` 落到「非元素根」被 Vue 忽略——切到「工作区」等其它 Tab 后，整块 Agent 设置仍留在页面下方（实测 top 1852 / 高 1584）；已包一层无样式 div 收成单根                                                                                                                                                                                                     | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
@@ -2520,6 +2521,38 @@ CDP 实测确实如此：三块是 `rounded-lg border border-border/70 bg-card/6
 `128K` / `16K` 这类三药丸字段的输入框右内边距实测 `96px`，数值文本未被药丸压住；控制台噪声 0 条。
 
 **门禁**：模板编译、`vue-tsc --noEmit`、`eslint`、`prettier --check`。
+
+### 7.34 模型列表的「取消添加 / 一键取消」升级为 Gen2 按钮并补确认（§6.3 / §6.7 收口，P1 · ✅ 已关闭 2026-09-23）
+
+**现象**：§6.3 把设置区"粗糙感"量化时点名的两处 ——
+
+1. 「已生效模型」列表的单项移除是 `text-[11px] text-error` 的**纯文字**（§6.7 表格 #2：无图标、无底色、无确认），
+   与同屏其它按钮（`32px / fs12 / r8` 的 Gen2 档位）明显不是一套；
+2. 「移除全部模型」是**批量危险动作**却没有二次确认（§6.7 #3），点下去直接改写服务端模型列表。
+
+**根因**：这两处是从早期"抽屉式模型管理"沿留下来的手写 `<button>`，
+没有跟着 §6.2 的按钮三档一起收敛；而"批量删除"在设置区其它位置（如删除 Provider）已经有确认弹窗范式，
+只有这里漏了。
+
+**改法**：
+
+- 单项移除（抽屉内「已生效模型」列表）：手写 11px 文字按钮 → **Gen2 `UiButton`（`appearance="soft"`、`density="compact"`）**，
+  可移除时 `tone="danger"`，不可移除（仅剩一个模型 / 是默认主力模型）时 `tone="neutral"` + `disabled`，
+  原因仍走 `title`（`atLeastOneModel` / `cannotRemoveDefault`），延续 §7.13-e 的"禁用必须给理由"；
+- 批量移除：`@click` 改为先打开确认弹窗（复用删除 Provider 那套 `BaseModal` 形态），
+  正文写明**将移除几个、保留哪一个**（`{name}` / `{count}` 插值），确认键才真正调用 `removeAllConfigured`。
+
+**CDP 复验（`probe-734.mjs`，1920×953）**
+
+- 抽屉内单项按钮实测 **11 个、`85×28`、`data-appearance="soft"`**；首个（默认主力模型那一行）为 `tone="neutral"` 且禁用，
+  其余为 `tone="danger"`（红底红字 + 垃圾桶图标），不再是裸文字；
+- 点「一键取消」→ 弹窗实测文案 **「确认移除全部模型 / 将移除 newapi 下 10 个可移除模型；默认主力模型或首个基础模型会保留。」**，
+  按钮为「取消 / 一键取消」；Esc 可关闭，未确认前**不会**发出任何写请求；
+- 控制台噪声 0 条；`vue-tsc`、模板编译、`eslint`、`prettier --check`、i18n 校验（新增两条 key 三语齐平）全绿。
+
+**同条余项**：§6.2「设置区控件风格分裂」清单里，按钮三档（已闭环）、原生 checkbox（§7.20）、原生 `<select>`（§7.32）、
+`QuantityInput` 命中区（§7.33）、11px 纯文字按钮（本条）均已收口；**唯一保留项是顶部 Tab 的 36px 高度**——
+它属于跨页 chrome（工作区 / 系统 / 安全 / IP 管控…共用），按约定不在 Agent 设置范围内单独改。
 
 ---
 
