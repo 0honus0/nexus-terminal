@@ -110,6 +110,10 @@ export const createSkillSearchTool = (skills: SkillRegistry, cryptoHash: CryptoH
     return {
       ok: true,
       summary: `Found ${matches.length} relevant signed Skill metadata entr${matches.length === 1 ? 'y' : 'ies'}.`,
+      userSummary: {
+        key: 'agent.conversation.toolSummary.skillMetadataFound',
+        params: { count: matches.length },
+      },
       data: {
         matches: matches.map((skill) => ({
           id: skill.id,
@@ -214,6 +218,10 @@ export const createSkillReadTool = (skills: SkillRegistry, cryptoHash: CryptoHas
     return {
       ok: true,
       summary: `Loaded signed Skill ${skill.name} (${skill.id}).`,
+      userSummary: {
+        key: 'agent.conversation.toolSummary.skillLoaded',
+        params: { name: skill.name, id: skill.id },
+      },
       data: {
         id: skill.id,
         name: skill.name,

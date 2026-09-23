@@ -145,11 +145,15 @@ const jobSemantic = (job: WorkspaceJobView): NonNullable<ToolResult['semantic']>
   job: { jobId: job.jobId, workspaceId: job.workspaceId, generation: job.generation },
 });
 
+const jobStateKey = (status: WorkspaceJobView['status']): string =>
+  `agent.conversation.toolSummary.labels.jobState.${status}`;
+
 const workspaceExecutionResult = (job: WorkspaceJobView, mode: 'foreground' | 'background'): ToolResult => {
   if (mode === 'background' && (job.status === 'pending' || job.status === 'running')) {
     return {
       ok: true,
       summary: 'Workspace background job accepted by the durable Runner job journal.',
+      userSummary: { key: 'agent.conversation.toolSummary.backgroundJobAccepted' },
       data: { jobId: job.jobId, workspaceId: job.workspaceId, generation: job.generation, status: job.status },
       artifactRefs: [],
       truncated: false,
@@ -166,6 +170,7 @@ const workspaceExecutionResult = (job: WorkspaceJobView, mode: 'foreground' | 'b
     return {
       ok: false,
       summary: 'The Workspace job outcome could not be confirmed.',
+      userSummary: { key: 'agent.conversation.toolSummary.jobOutcomeUnknown' },
       data: { jobId: job.jobId, workspaceId: job.workspaceId, generation: job.generation, status: job.status },
       artifactRefs: [],
       truncated: false,
@@ -183,6 +188,7 @@ const workspaceExecutionResult = (job: WorkspaceJobView, mode: 'foreground' | 'b
     return {
       ok: false,
       summary: `Workspace job ${job.status}.`,
+      userSummary: { key: 'agent.conversation.toolSummary.jobState', params: { stateKey: jobStateKey(job.status) } },
       data: {
         jobId: job.jobId,
         workspaceId: job.workspaceId,
@@ -210,6 +216,14 @@ const workspaceExecutionResult = (job: WorkspaceJobView, mode: 'foreground' | 'b
       : job.result.timedOut
         ? 'Workspace command timed out.'
         : `Workspace command exited with code ${job.result.exitCode}.`,
+    userSummary: ok
+      ? { key: 'agent.conversation.toolSummary.commandCompleted' }
+      : job.result.timedOut
+        ? { key: 'agent.conversation.toolSummary.commandTimedOut' }
+        : {
+            key: 'agent.conversation.toolSummary.commandExited',
+            params: { code: job.result.exitCode ?? 0 },
+          },
     data: {
       jobId: job.jobId,
       workspaceId: job.workspaceId,
@@ -258,6 +272,15 @@ const jobControlResult = (
           : action === 'wait'
             ? `Workspace job is still ${job.status} after the server-side wait window.`
             : `Workspace job is ${job.status}.`,
+      userSummary:
+        action === 'cancel'
+          ? { key: 'agent.conversation.toolSummary.jobCancelPending', params: { stateKey: jobStateKey(job.status) } }
+          : action === 'wait'
+            ? {
+                key: 'agent.conversation.toolSummary.jobWaitWindowExpired',
+                params: { stateKey: jobStateKey(job.status) },
+              }
+            : { key: 'agent.conversation.toolSummary.jobState', params: { stateKey: jobStateKey(job.status) } },
       data: {
         jobId: job.jobId,
         workspaceId: job.workspaceId,
@@ -281,6 +304,7 @@ const jobControlResult = (
     return {
       ok: action === 'cancel',
       summary: 'Runner confirmed that the Workspace job is cancelled.',
+      userSummary: { key: 'agent.conversation.toolSummary.jobCancelled' },
       data: {
         jobId: job.jobId,
         workspaceId: job.workspaceId,
@@ -305,6 +329,7 @@ const jobControlResult = (
     return {
       ok: false,
       summary: `Workspace job is ${job.status}.`,
+      userSummary: { key: 'agent.conversation.toolSummary.jobState', params: { stateKey: jobStateKey(job.status) } },
       data: {
         jobId: job.jobId,
         workspaceId: job.workspaceId,
@@ -339,6 +364,11 @@ const jobControlResult = (
       : job.result.timedOut
         ? 'Workspace job timed out.'
         : `Workspace job exited with code ${job.result.exitCode}.`,
+    userSummary: ok
+      ? { key: 'agent.conversation.toolSummary.jobCompleted' }
+      : job.result.timedOut
+        ? { key: 'agent.conversation.toolSummary.jobTimedOut' }
+        : { key: 'agent.conversation.toolSummary.jobExited', params: { code: job.result.exitCode ?? 0 } },
     data: {
       jobId: job.jobId,
       workspaceId: job.workspaceId,
@@ -480,6 +510,9 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
       summary: ok
         ? 'SSH shell command completed successfully.'
         : `SSH shell command exited with code ${executed.result.exitCode}.`,
+      userSummary: ok
+        ? { key: 'agent.conversation.toolSummary.sshShellCompleted' }
+        : { key: 'agent.conversation.toolSummary.sshShellExited', params: { code: executed.result.exitCode ?? 0 } },
       data: {
         exitCode: executed.result.exitCode,
         signal: executed.result.signal,

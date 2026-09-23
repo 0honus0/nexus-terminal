@@ -1,5 +1,5 @@
 import type { JsonValue } from '../../../agent.types';
-import type { ToolResult } from '../../../capabilities/tool.types';
+import type { ToolResult, ToolUserSummary } from '../../../capabilities/tool.types';
 
 export const MAX_URL_BYTES = 8 * 1024;
 export const MAX_TYPE_BYTES = 16 * 1024;
@@ -56,9 +56,10 @@ export const browserToolStringArray = (
   return value as string[];
 };
 
-export const browserToolResult = (summary: string, data?: JsonValue): ToolResult => ({
+export const browserToolResult = (summary: string, data?: JsonValue, userSummary?: ToolUserSummary): ToolResult => ({
   ok: true,
   summary,
+  ...(userSummary ? { userSummary } : {}),
   ...(data === undefined ? {} : { data }),
   artifactRefs: [],
   truncated: false,

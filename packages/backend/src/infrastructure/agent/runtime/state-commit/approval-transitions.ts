@@ -249,6 +249,12 @@ export const resolveToolApprovalTransition = async (
               summary: command.feedback
                 ? `The user denied this remote mutation and provided guidance: ${command.feedback}`
                 : 'The user denied this remote mutation.',
+              userSummary: command.feedback
+                ? {
+                    key: 'agent.conversation.toolSummary.approvalDeniedWithFeedback',
+                    params: { feedback: command.feedback },
+                  }
+                : { key: 'agent.conversation.toolSummary.approvalDenied' },
               ...(command.feedback ? { userFeedback: command.feedback } : {}),
             }),
           },
@@ -352,6 +358,7 @@ export const expireToolApprovalsTransition = async (tx: RelationalDatabase, now:
               outcome: 'confirmed',
               errorCode: 'APPROVAL_EXPIRED',
               summary: 'The approval request expired before it was consumed.',
+              userSummary: { key: 'agent.conversation.toolSummary.approvalExpired' },
             }),
           },
         },

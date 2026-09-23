@@ -233,6 +233,7 @@ export const appendInputTransition = async (
               outcome: 'confirmed',
               errorCode: 'APPROVAL_SUPERSEDED',
               summary: 'A newer user input superseded the pending approval.',
+              userSummary: { key: 'agent.conversation.toolSummary.approvalSuperseded' },
             }),
           },
         },

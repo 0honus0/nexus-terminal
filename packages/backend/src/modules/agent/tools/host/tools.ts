@@ -3,7 +3,13 @@ import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 import type { MachineCapabilityPort } from '../../capabilities/machine.port';
 import type { SshTargetResolverPort } from '../../capabilities/ssh-target-resolver.port';
-import type { AgentTool, ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolInspection,
+  ToolResult,
+  ToolUserSummary,
+} from '../../capabilities/tool.types';
 
 const record = (value: JsonValue): Record<string, JsonValue> => {
   if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');
@@ -54,9 +60,15 @@ const operation = (
 const hasSelectedConnection = (context: { connectionIds?: readonly number[] }): boolean =>
   context.connectionIds === undefined || context.connectionIds.length > 0;
 
-const confirmedResult = (summary: string, data: JsonValue, truncated = false): ToolResult => ({
+const confirmedResult = (
+  summary: string,
+  data: JsonValue,
+  truncated = false,
+  userSummary?: ToolUserSummary,
+): ToolResult => ({
   ok: true,
   summary,
+  ...(userSummary ? { userSummary } : {}),
   data,
   artifactRefs: [],
   truncated,
@@ -129,9 +141,12 @@ export const createConnectionListTool = (machine: MachineCapabilityPort, cryptoH
   },
   execute: async (_inspection, context) => {
     const connections = await machine.listConnections(context);
-    return confirmedResult(`Found ${connections.length} authorized SSH connection(s).`, {
-      connections: connections.map((connection) => ({ ...connection })),
-    });
+    return confirmedResult(
+      `Found ${connections.length} authorized SSH connection(s).`,
+      { connections: connections.map((connection) => ({ ...connection })) },
+      false,
+      { key: 'agent.conversation.toolSummary.connectionsFound', params: { count: connections.length } },
+    );
   },
 });
 
@@ -202,10 +217,15 @@ export const createDiagnosticsTool = (
       context.agentRuntimeId,
       context.signal,
     );
-    return confirmedResult(`Collected ${report.observations.length} diagnostic observation(s).`, {
-      generatedAt: report.generatedAt,
-      observations: [...report.observations],
-      target: { ...inspection.target },
-    });
+    return confirmedResult(
+      `Collected ${report.observations.length} diagnostic observation(s).`,
+      {
+        generatedAt: report.generatedAt,
+        observations: [...report.observations],
+        target: { ...inspection.target },
+      },
+      false,
+      { key: 'agent.conversation.toolSummary.diagnosticsCollected', params: { count: report.observations.length } },
+    );
   },
 });

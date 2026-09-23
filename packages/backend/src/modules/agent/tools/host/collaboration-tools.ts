@@ -2,7 +2,13 @@ import type { JsonValue } from '../../agent.types';
 import type { MemoryService } from '../../ai/memory.service';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
-import type { AgentTool, ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolInspection,
+  ToolResult,
+  ToolUserSummary,
+} from '../../capabilities/tool.types';
 import type { MailboxService } from '../../runtime/collaboration/mailbox.service';
 import type { SharedFactsService } from '../../runtime/collaboration/shared-facts.service';
 import type { SubagentService } from '../../runtime/collaboration/subagent.service';
@@ -11,9 +17,10 @@ const UUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB
 
 const jsonValue = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value ?? null)) as JsonValue;
 
-const result = (summary: string, data: unknown): ToolResult => ({
+const result = (summary: string, data: unknown, userSummary?: ToolUserSummary): ToolResult => ({
   ok: true,
   summary,
+  ...(userSummary ? { userSummary } : {}),
   data: jsonValue(data),
   artifactRefs: [],
   truncated: false,
@@ -126,7 +133,9 @@ const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): A
     const idempotencyKey = String(input.idempotencyKey ?? '');
     const { idempotencyKey: _ignored, ...request } = input;
     const delegation = await subagents.create(context, context.runId, context.agentRuntimeId, request, idempotencyKey);
-    return result('Subagent delegation created.', delegation);
+    return result('Subagent delegation created.', delegation, {
+      key: 'agent.conversation.toolSummary.subagentCreated',
+    });
   },
 });
 
@@ -153,7 +162,9 @@ const listSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
     const parentRuntimeId = typeof input.parentRuntimeId === 'string' ? input.parentRuntimeId : context.agentRuntimeId;
     const limit = typeof input.limit === 'number' ? input.limit : 50;
     const delegations = await subagents.list(context, context.runId, parentRuntimeId, limit);
-    return result('Subagent delegations loaded.', delegations);
+    return result('Subagent delegations loaded.', delegations, {
+      key: 'agent.conversation.toolSummary.subagentsLoaded',
+    });
   },
 });
 
@@ -198,6 +209,11 @@ const joinSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
     return result(
       joined.ready ? 'Subagent join condition is ready.' : 'Subagent join is waiting for child progress.',
       joined,
+      {
+        key: joined.ready
+          ? 'agent.conversation.toolSummary.subagentJoinReady'
+          : 'agent.conversation.toolSummary.subagentJoinWaiting',
+      },
     );
   },
 });
@@ -247,7 +263,9 @@ const sendMessageTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): A
     const idempotencyKey = String(input.idempotencyKey ?? '');
     const { idempotencyKey: _ignored, ...message } = input;
     const receipt = await mailbox.send(context, context.runId, context.agentRuntimeId, message, idempotencyKey);
-    return result('Agent message accepted by the durable mailbox.', receipt);
+    return result('Agent message accepted by the durable mailbox.', receipt, {
+      key: 'agent.conversation.toolSummary.agentMessageAccepted',
+    });
   },
 });
 
@@ -278,7 +296,7 @@ const readMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): 
       Number(input.after),
       Number(input.limit),
     );
-    return result('Mailbox messages loaded.', messages);
+    return result('Mailbox messages loaded.', messages, { key: 'agent.conversation.toolSummary.mailboxLoaded' });
   },
 });
 
@@ -310,7 +328,13 @@ const consumeMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort
       Number(input.through),
       Number(input.expectedConsumedSequence),
     );
-    return result('Mailbox consumption watermark advanced.', { consumedThrough: through });
+    return result(
+      'Mailbox consumption watermark advanced.',
+      { consumedThrough: through },
+      {
+        key: 'agent.conversation.toolSummary.mailboxWatermarkAdvanced',
+      },
+    );
   },
 });
 
@@ -333,7 +357,7 @@ const getFactTool = (facts: SharedFactsService, cryptoHash: CryptoHashPort): Age
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const fact = await facts.get(context, context.runId, String(input.key));
-    return result('Shared fact loaded.', { fact });
+    return result('Shared fact loaded.', { fact }, { key: 'agent.conversation.toolSummary.sharedFactLoaded' });
   },
 });
 
@@ -367,7 +391,7 @@ const compareAndSetFactTool = (facts: SharedFactsService, cryptoHash: CryptoHash
       input.value,
       expectedVersion,
     );
-    return result('Shared fact committed.', fact);
+    return result('Shared fact committed.', fact, { key: 'agent.conversation.toolSummary.sharedFactCommitted' });
   },
 });
 
@@ -397,7 +421,9 @@ const proposeMemoryTool = (memories: MemoryService, cryptoHash: CryptoHashPort):
       runId: context.runId,
       runtimeId: context.agentRuntimeId,
     });
-    return result('Memory candidate created for user review.', memory);
+    return result('Memory candidate created for user review.', memory, {
+      key: 'agent.conversation.toolSummary.memoryCandidateCreated',
+    });
   },
 });
 

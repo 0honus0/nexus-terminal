@@ -74,9 +74,21 @@ export interface ToolExecutionSemantic {
 
 export type ToolResultSemantic = ToolExecutionSemantic;
 
+/**
+ * §1.8: `ToolResult.summary` is English execution evidence written for the model, so it must stay
+ * verbatim and stable. This is the *user* projection instead: an i18n key plus locale-neutral params
+ * (numbers, paths, ids) that the conversation UI renders in the active locale. It is deliberately
+ * stripped before the result is sent to the model and carried in the ledger payload beside the text.
+ */
+export interface ToolUserSummary {
+  key: string;
+  params?: Record<string, JsonValue>;
+}
+
 export interface ToolResult {
   ok: boolean;
   summary: string;
+  userSummary?: ToolUserSummary;
   data?: JsonValue;
   artifactRefs: string[];
   truncated: boolean;

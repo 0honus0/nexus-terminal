@@ -9,6 +9,7 @@ import type {
   ToolInspection,
   ToolPrecondition,
   ToolResult,
+  ToolUserSummary,
 } from '../../capabilities/tool.types';
 
 const record = (value: JsonValue): Record<string, JsonValue> => {
@@ -78,9 +79,11 @@ const result = (
   verificationSummary: string,
   artifactRefs: string[] = [],
   truncated = false,
+  userSummary?: ToolUserSummary,
 ): ToolResult => ({
   ok,
   summary,
+  ...(userSummary ? { userSummary } : {}),
   data,
   artifactRefs,
   truncated,
@@ -202,6 +205,15 @@ export const createDockerMutationTool = (
       action === 'remove'
         ? 'The target container was absent from the post-operation Docker inventory.'
         : 'The post-operation Docker state matched the requested action.',
+      [],
+      false,
+      {
+        key: 'agent.conversation.toolSummary.containerActionVerified',
+        params: {
+          actionKey: `agent.conversation.toolSummary.labels.containerAction.${action}`,
+          containerId: mutated.containerId,
+        },
+      },
     );
   },
 });

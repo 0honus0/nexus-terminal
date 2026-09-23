@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。、§7.31（**设置区 8 处独立「保存」按钮语义分级**：无未保存变更时由浅紫实心主按钮降为 `soft`/`neutral` + 禁用 + 原因 `title`，并给 Browser / ACP / Subagent 三处补上 dirty 快照比对，§7.15-c 整条关闭）。、§7.32（**设置区 22 处原生 `<select>` 全部收敛到 Gen2 `UiSelect`**：新增 `pickOption()` / `NONE_OPTION`，`UiSelect` 的 v-model 收窄为「可空进、非空出」，实测三组可见 10 处、残留原生 0、414px 无溢出）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。、§7.33（`QuantityInput` 单位药丸 18×20 → 24×24）、§7.34（模型行 11px 纯文字按钮 → Gen2 `UiButton` + 「一键取消」补确认弹窗）、§7.35（Workspace 运行时 5 处原生 `<select>` → `UiSelect`，`features/agent/**` 原生 select 归零）、§7.36（TaskRail「最近事实」改 `dl` 投影 + 原始 payload 折进二级 `<details>`）、§7.38（**§2.8 收口**：Launcher 改长按拖动 + 「重置位置」，虚拟列表行高改量探针行）、§7.37（**Agent 错误横幅补失败域与重试入口**：9 个失败域 + 读「重试」/ 写「重新同步」，机器码不再直接当兜底文案，§2.9 收口）。每条闭环均带真实 CDP 实测数据 + 类型检查；**§0 速览表的 P1 / P2 开放项已只剩**：设置区顶部 Tab 36px（跨页 chrome，按约定不动）、巨型 UI 文件拆分（§3.1）、i18n 死 key 274/1148（§3.5）、后端工具结果摘要英文硬编码（§3.6，非 UI）；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。、§7.31（**设置区 8 处独立「保存」按钮语义分级**：无未保存变更时由浅紫实心主按钮降为 `soft`/`neutral` + 禁用 + 原因 `title`，并给 Browser / ACP / Subagent 三处补上 dirty 快照比对，§7.15-c 整条关闭）。、§7.32（**设置区 22 处原生 `<select>` 全部收敛到 Gen2 `UiSelect`**：新增 `pickOption()` / `NONE_OPTION`，`UiSelect` 的 v-model 收窄为「可空进、非空出」，实测三组可见 10 处、残留原生 0、414px 无溢出）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。、§7.33（`QuantityInput` 单位药丸 18×20 → 24×24）、§7.34（模型行 11px 纯文字按钮 → Gen2 `UiButton` + 「一键取消」补确认弹窗）、§7.35（Workspace 运行时 5 处原生 `<select>` → `UiSelect`，`features/agent/**` 原生 select 归零）、§7.36（TaskRail「最近事实」改 `dl` 投影 + 原始 payload 折进二级 `<details>`）、§7.38（**§2.8 收口**：Launcher 改长按拖动 + 「重置位置」，虚拟列表行高改量探针行）、§7.37（**Agent 错误横幅补失败域与重试入口**：9 个失败域 + 读「重试」/ 写「重新同步」，机器码不再直接当兜底文案，§2.9 收口）、§7.39（**工具结果摘要的「模型证据 / 用户投影」拆分**：`ToolResult.userSummary` 在 `projectToolResult` 被剥离、ledger payload 旁路携带、`ConversationMessage.vue` 优先渲染并回退历史 `summary`；`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要接入，新增三语 `agent.conversation.toolSummary.*`（72 句 + 39 枚举标签），§1.8 / §3.6 的"工具摘要英文硬编码"整条关闭）。每条闭环均带真实 CDP 实测数据 + 类型检查；**§0 速览表的 P1 / P2 开放项已只剩**：设置区顶部 Tab 36px（跨页 chrome，按约定不动）、巨型 UI 文件拆分（§3.1）、i18n 死 key 274/1148（§3.5）；**"后端工具结果摘要英文硬编码" 本轮已关闭**，仅剩 `mcp-tools.ts`（远端不可信内容，刻意排除）、`execution-errors.ts` 前缀与 `command.reason` 三处非 UI 残余并入 §3.6 跟踪；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -45,7 +45,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示                                                                                                                                                                                                                                                                                                                                                          | `ai/AgentConversation.vue`（见 §7.4）                                                                        |
 | **P1 · ✅ 已关闭 2026-09-23**         | 主界面三层 chrome 压扁消息区：`MIN_HEIGHT` 380 → 480，并在矮窗口下把 composer 压成两行；CDP 实测最小高度时会话区 **94 → 227px**（§7.2 列宽 / 体感已复核，见 §7.2-b、§7.2-f；停靠态折叠闪烁见 §7.2-g）                                                                                                                                                                                                                                          | `host/window-manager.ts`、`host/AgentHubWindow.vue`、`ai/AgentConversation.vue`（见 §7.2-a）                 |
 | **P2 · ✅ 已关闭 2026-09-23**         | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0                                                                                                                                                                                                                                                                                                                                                             | `features/agent/**`（见 §7.8）                                                                               |
-| P1                                    | 多处「不可发现 / 与产品整体不一致」的交互**已全部闭环**：会话列表 Ctrl+滚轮缩放（§7.13-d 面板化 + 重置）、任务栏卡片拖拽排序（§7.14-b 独立把手 + 方向键 + 恢复默认顺序）、Launcher 6px 阈值拖拽（§7.38 长按拖动 + 重置位置）、虚拟列表固定行高（§7.38 探针行实测）；§2.6 的空态轮播此前已关闭                                                                                                                                                  | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8）                             |
+| **P1 · ✅ 已关闭 2026-09-23**         | 多处「不可发现 / 与产品整体不一致」的交互**已全部闭环**：会话列表 Ctrl+滚轮缩放（§7.13-d 面板化 + 重置）、任务栏卡片拖拽排序（§7.14-b 独立把手 + 方向键 + 恢复默认顺序）、Launcher 6px 阈值拖拽（§7.38 长按拖动 + 重置位置）、虚拟列表固定行高（§7.38 探针行实测）；§2.6 的空态轮播此前已关闭                                                                                                                                                  | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8 / §7.38）                     |
 | **P1 · ✅ 已关闭 2026-09-23**         | Composer 的 Send / Cancel Run 已拆成两个独立按钮（停止按钮图标-only + 错误色，运行中才出现）；`sendHint` 已渲染；空草稿按 Enter 不再误取消 Run                                                                                                                                                                                                                                                                                                 | `ai/AgentConversation.vue`（见 §2.5）                                                                        |
 | **P1 · ✅ 已关闭 2026-09-22**         | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation                                                                                                                                                                                                                                                              | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7）                                             |
 | **P1 · ✅ 已关闭 2026-09-22**         | **Nexus 前后端真实 transport contract 已统一到 `packages/protocol`**：HTTP / Workspace WS / Agent HTTP / Agent event WS / Agent terminal WS 均由 canonical DTO/event contract 单一来源约束，并已接入 transport architecture guard；当前 HEAD 收尾复核再次通过 guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build` 与 Agent scenario suite **71/71**                                                           | `packages/protocol/**`、`scripts/check-transport-contract-boundaries.mjs`（见 §3.2）                         |
@@ -53,7 +53,7 @@
 | P2                                    | 274/1148（约 24%）i18n key 已无引用，且三种语言各存一份                                                                                                                                                                                                                                                                                                                                                                                        | `features/agent/i18n/*.json`                                                                                 |
 | **P2 · ✅ 基础门禁已关闭 2026-09-22** | **Agent review 范围已接入 ESLint flat config**：`no-unused-vars` + Vue `v-if/v-for` 规则成为 error；首跑发现并清理 47 个真实 unused 符号。自定义 i18n / 设计 token 规则仍开放                                                                                                                                                                                                                                                                  | `eslint.config.mjs`、`package.json` scripts                                                                  |
 | P2                                    | 巨型文件问题**仍主要集中在 UI**；非 UI owner 已完成一轮拆分：`agent-api.ts` 791 行、`runner-http.adapter.ts` 770 行、`native-agent-backend.ts` 722 行，原 1k+ 行 state-commit 聚合文件已拆为细分 transition owners                                                                                                                                                                                                                             | 见 §3.1                                                                                                      |
-| P2                                    | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里                                                                                                                                                                                                                                                                                                                                                                                            | `modules/agent/tools/host/*.ts`                                                                              |
+| **P2 · ✅ 已关闭 2026-09-23**         | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里 → **「模型可见证据 / 用户可见摘要」拆分**：`ToolResult.userSummary` 在 `projectToolResult` 被剥离（模型侧零变化），ledger payload 旁路携带，`ConversationMessage.vue` 优先渲染、缺失回退原 `summary`（历史数据零迁移）；`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要全部接入，三语 `toolSummary.*`（72 句 + 39 标签）齐平；CDP 双语言实测通过                                | `modules/agent/tools/host/*.ts`（见 §1.8 / §7.39）                                                           |
 | **P1 · ✅ 已关闭 2026-09-22**         | **历史 Run 的 `GET /runs/:id/approvals` 稳定 500（`AGENT_DURABLE_STATE_INVALID`）**：已由 migration #45 将 legacy `inspection_json.target.kind = "machine"` 规范化为 canonical SSH target；真实数据库副本验证 26 条 legacy tool call → 0、25 条受影响 approval 全部可解码                                                                                                                                                                      | `sqlite-migrations.ts` migration #45、`tests/backend/agent-scenarios/runner.ts`（见 §1.9）                   |
 | **P0 · ✅ 已关闭 2026-09-23**         | 全局 form font/cursor reset 已移入 `@layer base`；CDP 设置页 `text-xs` 按钮均恢复为 12px（旧实测为 16px）                                                                                                                                                                                                                                                                                                                                      | `app/styles/global.css:27-46`（见 §7.10）                                                                    |
 | **P1 · ✅ 已关闭 2026-09-23**         | 设置区「Agent」页在英文界面下的硬编码中文：三个子页可见中文文本节点 **29 → 0**（数值+单位改由 `use-quantity-labels` 注入）                                                                                                                                                                                                                                                                                                                     | `features/agent/settings/**`（见 §6.5、§7.11、§7.14-c）                                                      |
@@ -224,7 +224,7 @@ const syncTaskRailViewport = (): void => {
 
 > **关闭记录（2026-09-22）**：Hub 主内容区现在由持续存在的 `<KeepAlive>` 缓存 `AgentAppSurface` / Plugin surface / Files surface，切 App 或 Files 只 deactivate，不再触发 Agent surface 的 `onBeforeUnmount → facade.dispose() → resetStreamingPresentation()`；`transport.disconnected` 与 stream `onError` 也不再主动清空已经显示的 partial text，断线重连期间保留用户已经看到的内容。Run 真正结束、切线程/停止订阅时仍按原逻辑清理。前端 `vue-tsc --noEmit && vite build` 通过。
 
-### 1.8 后端工具摘要英文硬编码，直接进对话 UI（P1）
+### 1.8 后端工具摘要英文硬编码，直接进对话 UI（P1，✅ 已关闭 2026-09-23）
 
 `modules/agent/tools/host/**` 中 `summary` 是面向模型与用户的同一条字符串，例如：
 
@@ -235,6 +235,49 @@ return confirmed(`Read ${data.contentBytes} byte(s) from ${data.path}.`, ...);
 
 同类字符串在该目录至少 34 处（`Found ${n} ... matches`、`Waiting for the user to answer ...` 等），会被 `ai/ConversationMessage.vue` 作为工具结果摘要渲染。
 即：中文/日文界面里混入英文短句。**一个字符串同时服务模型与用户**本身也是设计问题（建议分离"模型可见证据"与"用户可见摘要"）。
+
+> **关闭记录（2026-09-23）**：不在 Agent 工具层引入 i18n 框架，改为把"模型可见证据"与"用户可见摘要"拆开——
+> `ToolResult` 新增**可选** `userSummary?: { key: string; params?: Record<string, JsonValue> }`，`summary` 保持英文不变。
+>
+> - **模型侧零变化（这是硬约束）**：`capabilities/tool-result-projection.ts` 的 `projectToolResult` 第一行就 `withoutUserSummary(toolResult)`，
+>   而模型只通过 ledger 的 `payload.text`（= `modelToolResultJson` → `projectToolResult`）与子代理上下文里的同一个投影函数读结果，
+>   因此 `userSummary` **不可能**进入任何一条发给模型的 JSON。实测展开任意工具结果的 JSON 面板，含 `userSummary` 的 `<pre>` 为 **0** 个。
+> - **用户侧**：`infrastructure/agent/runtime/state-commit/tool-transition-result.ts` 新增 `toolResultLedgerPayload(row, result, toolCallId)`，
+>   在 `text` 旁边旁路写入 `userSummary`；3 个 ledger 落库点（proposal / mutation / interactive）全部切到它，
+>   顺带修掉 `tool-interactive-transitions.ts` 里唯一还在手写 `{ toolCallId, text }` 的成功路径。
+>   `ai/ConversationMessage.vue` 新增 `localizedToolSummary`：优先渲染 `payload.userSummary`，**缺失时原样回退** `summary`（历史数据零迁移）。
+> - **参数里的枚举不再裸奔**：约定 `params` 里以 `Key` 结尾的参数值本身是 i18n key，由前端 `te()` 解析成标签后插值
+>   （如 `stateKey → labels.jobState.running → 运行中`），缺失时退化成 key 末段，不会把 key 路径渲染到界面上。
+> - **覆盖范围**：`tools/host/**` 共 **16 个文件、52 处**用户可见 `summary` 全部接上（file / machine / shell+job / workspace 管理 / workspace 代码智能 /
+>   skill / tool-discovery / user-input / artifact / docker mutation / collaboration / ACP / browser 6 个文件 / plan-tool），
+>   另把 `state-commit` 里 4 条明确面向用户的失败摘要（审批拒绝、审批过期、审批被新输入取代、Run 取消）一起收口；
+>   `mcp-tools.ts` 有意排除（远端不可信内容不能进本地字典），`verification.summary` 保持英文（前端不渲染它）。
+> - **顺带修掉一个真实维护隐患**：`ConversationMessage.vue` 原先把"有中文文案的失败码"硬编码成 `friendlyFailureCodes` 数组，
+>   新增失败域必须同步改组件；现在改成 `te('agent.conversation.toolFailure.<CODE>')` 查表，后端只要码在字典里就能本地化。
+> - **三语齐平**：新增 `agent.conversation.toolSummary.*`（72 条句子 + 39 条 `labels.*` 枚举标签）与 5 条补充失败文案，
+>   `node scripts/check-agent-i18n.mjs` 通过（三语 key 齐平、zh/ja 无逐字英文、组件源码无硬编码 CJK）。
+>
+> **CDP 实测（`/tmp/w/verify-summaries.mjs`、`verify-en.mjs`，复用历史会话 `8dce1e79`… 的 9 条真实 `tool_result`）**：
+> 为了在无 Runner 的环境里验收"新投影 + 老数据回退"两条路径，临时给 4 条历史 ledger 行补上 `userSummary`（验收后逐字节还原，DB 已恢复、FTS 索引行数 27 未变）。
+>
+> | 工具                                       | 无 `userSummary`（历史数据，回退）                       | 有 `userSummary`（zh-CN）                                                 | 同一条的 en-US                                             |
+> | ------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------- |
+> | `plan_update`                              | `Plan updated to revision 2 with 3 item(s).`             | `计划已更新到修订 1，共 3 项。`                                           | `Plan updated to revision 1 with 3 item(s).`               |
+> | `machine_list_connections`                 | —                                                        | `找到 0 个已授权的 SSH 连接。`                                            | `Found 0 authorized SSH connection(s).`                    |
+> | `skill_read`                               | `Loaded signed Skill developer (nexus.agent.developer).` | `已加载已签名 Skill operations（nexus.agent.operations）。`               | `Loaded signed Skill operations (nexus.agent.operations).` |
+> | `get_shared_fact`                          | `Shared fact loaded.`                                    | `共享事实已加载。`                                                        | `Shared fact loaded.`                                      |
+> | 带 `*Key` 参数（`browserActionCompleted`） | —                                                        | `浏览器点击已完成。`（`actionKey` → `labels.browserAction.click` = 点击） | `Browser click completed.`                                 |
+> | 带 `*Key` 参数（`jobState`）               | —                                                        | `工作区任务状态：运行中。`（`stateKey` → `labels.jobState.running`）      | `Workspace job is running.`                                |
+>
+> 展开面板里含 `userSummary` 的 JSON 块 **0** 个（模型证据未被污染）；同一 `userSummary` 随 `localStorage.user-locale` 在 zh/en 间切换（`localStorage.user-locale` 实测）。
+> 初次验收还抓出两个自身缺陷并修掉：**标签值发生了语言错位**（zh-CN 拿到的其实是英文标签，CDP 显示 `浏览器click已完成。` / `工作区任务状态：running。`），
+> 以及 **i18n 占位符与后端参数名不一致**（`{action}` vs `actionKey`），修完复测即达标；这两个缺陷只有真实浏览器渲染才能暴露，已补进验收清单。
+>
+> **门禁**：backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后端 + `infrastructure/agent`）、
+> `prettier --check`、`node scripts/check-agent-i18n.mjs` 全绿。
+>
+> **仍开放（不计入本节）**：`mcp-tools.ts` 的远端摘要、`execution-errors.ts` 的执行期错误前缀、`command.reason`（`supersedeMutationTool` 的自由文本原因）
+> 仍是英文——它们不在 `tools/host/**` 范围内，且依赖 Runner / 远端才能触发，已并入 §3.6 的"非 UI 残余"继续跟踪。
 
 ### 1.9 历史 Run 的审批接口稳定 500，且前端完全静默（P1，✅ 已关闭 2026-09-22）
 
@@ -712,6 +755,7 @@ UI 侧后续建议仍是：`useAgentThreads` / `useAgentRunStream` / `useRunConf
 - ✅ **基础 lint 门禁已关闭 2026-09-22**：新增 ESLint flat config 与根级 `lint / lint:agent` 脚本，覆盖 Backend Agent、HTTP/WebSocket Agent interface、Agent Runner、Frontend Agent、Agent scenario runner；启用 `@typescript-eslint/no-unused-vars` 与 `vue/no-use-v-if-with-v-for` 为 error。首跑实际发现 **47** 个 unused import/type/helper/局部变量，逐项确认后清理；backend / frontend / agent-runner build 均已有通过记录。**未定义 utility 类、未使用 i18n key、设计 token 等需要自定义规则，仍开放，但属于后续 UI / i18n / design-system 门禁，不阻塞本轮非 UI 收尾。**
 - ✅ **scenario 单文件与串行问题已关闭 2026-09-22**：`tests/backend/agent-scenarios/runner.ts` 当前为 **258 行编排器**，场景已拆为 **71 个独立 `*.scenario.ts` 文件**；runner 以 `SCENARIO_CONCURRENCY` 分批 `Promise.all` 执行可并发场景，仅 `SERIAL_SCENARIOS` 中显式列出的共享资源场景保持串行。失败仍会聚合并最终非零退出，不会因首个失败遮蔽后续结果。
 - ✅ **源码形态正则架构测试已关闭 2026-09-22**：当前扫描未发现 scenario 通过 `readFileSync` 读取 `packages/backend/src` / `packages/frontend/src` 源文件做 source-shape 断言。现存 `readFileSync` 与 `assert.match/doesNotMatch` 用于 Workspace 文件内容、checkpoint、projection、fingerprint 等**运行行为/数据结果**断言，不再以源码排版、命名或字符串形态充当架构门禁；transport 等架构约束已迁入独立 guard/lint。
+- ✅ **工具摘要英文硬编码的残余已收敛 2026-09-23**：用户可见的工具摘要改由 `ToolResult.userSummary` 旁路承载（见 §1.8 / §7.39），`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要全部本地化。**仍属"非 UI 残余"、明确保留英文的三处**：`tools/host/mcp-tools.ts` 的远端摘要（远端不可信内容不应进本地字典）、`runtime/execution/execution-errors.ts` 的执行期错误前缀（`${context.summaryPrefix}: ${detail} [CODE]`，模型与用户共用的证据文本）、以及 `supersedeMutationTool` 的 `command.reason` 自由文本。三者都依赖 Runner / 远端才能触发，本环境 `runner_not_configured`，无法实测。
 - ⏸ **缺模块级 backend 单测保持冻结 / 不实施**：按当前明确要求，本轮及后续接手者**不要新增、迁移或补 backend unit test**；除非后续再次得到明确授权，否则保持现状。此项仅保留为审计记录，不计入本轮待改总数。
 
 **本轮非 UI 工程保障收尾结论**：scenario runner 模块化、受控并发、source-shape 架构断言迁出、transport architecture guard 与基础 ESLint 门禁均已落地。后续工程规则新增项主要是 i18n / design token / utility class 等 UI-facing 静态检查，不再继续扩张本轮非 UI 改造范围。
@@ -2710,6 +2754,74 @@ CDP 实测确实如此：三块是 `rounded-lg border border-border/70 bg-card/6
 `node scripts/check-agent-i18n.mjs`（新增 3 个 launcher key 三语齐平）全绿。
 
 - 截图：`/tmp/shots/probe-238-launcher-dragged.png`（拖动后 + 重置胶囊）、`probe-238-drawer.png`（展开侧栏的行高）。
+
+---
+
+### 7.39 §1.8 收口：工具结果摘要的「模型可见证据 / 用户可见摘要」拆分（P2 · ✅ 已关闭 2026-09-23）
+
+本节关闭 §0 速览表里最后一条「非 UI 但影响 UI」的开放项：`modules/agent/tools/host/**` 的工具摘要只有英文一份，
+中文/日文界面里直接混入 `Found 0 authorized SSH connection(s).` 这类句子。
+
+**a) 现象与根因（先 CDP 复现，再动手）**
+
+- **现象（CDP 实测基线）**：历史会话 `8dce1e79`… 的 9 条真实 `tool_result`，在 **zh-CN** 界面里渲染为
+  `Plan updated to revision 1 with 3 item(s).` / `Found 0 authorized SSH connection(s).` /
+  `Loaded signed Skill operations (nexus.agent.operations).` / `Shared fact loaded.` —— 全英文。
+  探针：`/tmp/w/dump2.mjs`（读 `.agent-conversation-scroller summary` 的文本）。
+- **根因**：`ToolResult.summary` 是**同一条字符串**同时服务模型（函数返回的证据文本）与用户（`ai/ConversationMessage.vue` 渲染的摘要行），
+  工具层没有任何"用户可见文案"的表达能力；直接在工具里查表又会把 i18n 依赖灌进后端领域层，并把 key 写进模型能读到的 JSON 里。
+
+**b) 改法：加一条"只给用户的旁路"，模型侧一字不动**
+
+| 层                                       | 改动                                                                                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capabilities/tool.types.ts`             | 新增 `ToolUserSummary { key: string; params?: Record<string, JsonValue> }`；`ToolResult.userSummary?` 可选                                                    |
+| `capabilities/tool-result-projection.ts` | `projectToolResult` 首行 `withoutUserSummary(toolResult)` —— 模型侧投影**结构上不可能**带出 `userSummary`                                                     |
+| `state-commit/tool-transition-result.ts` | 新增 `toolResultLedgerPayload(row, result, toolCallId)`：`text` 仍是 `modelToolResultJson`，旁边旁路写 `userSummary`                                          |
+| ledger 落库点                            | proposal / mutation / interactive 三个 transition 全部改用 `toolResultLedgerPayload`（顺带修掉 interactive 成功路径里唯一手写 `{ toolCallId, text }` 的漏网） |
+| `ai/ConversationMessage.vue`             | 新增 `localizedToolSummary`：优先 `payload.userSummary`，**缺失时原样回退** `summary`（历史数据零迁移、无需 backfill）                                        |
+| `i18n/{zh-CN,en-US,ja-JP}.json`          | 新增 `agent.conversation.toolSummary.*`：**72 条句子 + 39 条 `labels.*` 枚举标签**，三语键序一致                                                              |
+
+- **枚举不裸奔的约定**：`params` 里以 `Key` 结尾的参数值**本身是 i18n key**，前端 `te()` 解析成标签后插值
+  （`stateKey → labels.jobState.running → 运行中`）；key 缺失时退化成 key 末段，**不会**把 `agent.conversation.…` 路径渲染到界面。
+- **覆盖范围**：`tools/host/**` **16 个文件、52 处**用户可见 `summary` 全部接入（file×7 / machine×2 / shell+job×9 / workspace 管理×5 /
+  workspace 代码智能×3 / skill×2 / tool-discovery / user-input / artifact×3 / docker mutation / collaboration×10 / ACP / browser 6 文件×14 / plan-tool），
+  外加 `state-commit` 里 4 条明确面向用户的失败摘要（审批拒绝 / 审批过期 / 审批被新输入取代 / Run 取消）。
+  **刻意排除**：`mcp-tools.ts`（远端不可信内容不应进本地字典）、`verification.summary`（前端不渲染）。
+- **顺带修掉一个维护隐患**：`ConversationMessage.vue` 原先把"有中文文案的失败码"硬编码成 `friendlyFailureCodes` 数组，
+  新增失败域必须同步改组件；现在改成 `te('agent.conversation.toolFailure.<CODE>')` 查表。
+
+**c) CDP 验证（复用历史会话的真实 `tool_result`，不造数据）**
+
+历史行没有 `userSummary`，正好可以同时验收「新投影」与「老数据回退」两条路径：
+临时给 4 条历史 ledger 行补上 `userSummary`（`/tmp/w/patch-ledger*.mts`，走真实 `nexus_ledger_search_terms` 触发器），验收后**逐字节还原**。
+
+| 工具                                         | 无 `userSummary`（历史数据，回退）                       | 有 `userSummary`（zh-CN）                                   | 同一条的 en-US                                             |
+| -------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| `plan_update`                                | `Plan updated to revision 2 with 3 item(s).`             | `计划已更新到修订 1，共 3 项。`                             | `Plan updated to revision 1 with 3 item(s).`               |
+| `machine_list_connections`                   | —                                                        | `找到 0 个已授权的 SSH 连接。`                              | `Found 0 authorized SSH connection(s).`                    |
+| `skill_read`                                 | `Loaded signed Skill developer (nexus.agent.developer).` | `已加载已签名 Skill operations（nexus.agent.operations）。` | `Loaded signed Skill operations (nexus.agent.operations).` |
+| `get_shared_fact`                            | `Shared fact loaded.`                                    | `共享事实已加载。`                                          | `Shared fact loaded.`                                      |
+| `browserActionCompleted`（`actionKey` 参数） | —                                                        | `浏览器点击已完成。`                                        | `Browser click completed.`                                 |
+| `jobState`（`stateKey` 参数）                | —                                                        | `工作区任务状态：运行中。`                                  | `Workspace job is running.`                                |
+
+- **模型侧未被污染的硬证据**：展开任意工具结果的 JSON 面板，含 `userSummary` 的 `<pre>` 为 **0** 个
+  （模型只读 ledger 的 `payload.text`，其值来自 `projectToolResult`）。
+- **投影随语言切换**：把 `localStorage.user-locale` 切到 `en-US` 重新加载，同一条记录渲染回英文（`Browser click completed.`），
+  `title`（悬停提示）与摘要正文同步本地化。
+- **同轮抓出并修掉两个自身缺陷**（只有真实浏览器渲染才能暴露，已并入验收清单）：
+  1. **标签值语言错位** —— 生成字典时把 `zh-CN` 映射到了英文标签，CDP 显示 `浏览器click已完成。` / `工作区任务状态：running。`；修正后复测通过。
+  2. **占位符与后端参数名不一致** —— i18n 写 `{action}` 而后端传 `actionKey`，导致插值为空（`浏览器已完成。`）；
+     改为 `{actionKey}` / `{stateKey}` / `{reasonKey}` 后复测通过，并补了一个参数/占位符一致性审计脚本（`/tmp/w/audit-params.mjs`）。
+
+**d) 门禁与残留**
+
+- `packages/backend` `tsc --noEmit`、`packages/frontend` `vue-tsc --noEmit`、`eslint`（`modules/agent` + `infrastructure/agent` + `features/agent`）、
+  `prettier --check`、`node scripts/check-agent-i18n.mjs`（三语 key 齐平 + 无逐字英文 + 组件无硬编码 CJK）全部通过。
+- 验收后 dev 数据库已还原（9 行 `payload_json` 逐字节回写，`ai_thread_entries_search` 行数仍为 27），`localStorage.user-locale` 复位为 `zh-CN`。
+- **仍开放（并入 §3.6 跟踪，不计入本节）**：`mcp-tools.ts` 的远端摘要、`execution-errors.ts` 的执行期错误前缀、
+  `command.reason`（`supersedeMutationTool` 的自由文本原因，按 `errorCode` 变化）仍是英文；
+  它们不在 `tools/host/**` 范围内，且依赖 Runner / 远端才能触发（本环境 `runner_not_configured` 无法实测）。
 
 ---
 

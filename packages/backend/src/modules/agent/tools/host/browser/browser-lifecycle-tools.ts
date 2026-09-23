@@ -68,7 +68,9 @@ export const createBrowserLifecycleTools = (
         },
         context.signal,
       );
-      return result('Browser session created.', session as unknown as JsonValue);
+      return result('Browser session created.', session as unknown as JsonValue, {
+        key: 'agent.conversation.toolSummary.browserSessionCreated',
+      });
     },
   },
   {
@@ -103,7 +105,9 @@ export const createBrowserLifecycleTools = (
       const sessionId = string(object(value.normalizedArguments).sessionId, MAX_ID_BYTES);
       await authority.session(context, sessionId);
       await gateway.close(sessionId);
-      return result('Browser session closed.');
+      return result('Browser session closed.', undefined, {
+        key: 'agent.conversation.toolSummary.browserSessionClosed',
+      });
     },
   },
 ];

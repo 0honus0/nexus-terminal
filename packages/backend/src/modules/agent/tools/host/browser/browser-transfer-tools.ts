@@ -129,16 +129,20 @@ export const createBrowserTransferTools = (
         context.signal,
       );
       return {
-        ...result('Browser Artifact upload completed.', {
-          state: state as unknown as JsonValue,
-          sourceArtifact: {
-            id: source.id,
-            name: source.name,
-            mediaType: source.mediaType,
-            sha256: source.sha256,
-            sizeBytes: source.sizeBytes,
+        ...result(
+          'Browser Artifact upload completed.',
+          {
+            state: state as unknown as JsonValue,
+            sourceArtifact: {
+              id: source.id,
+              name: source.name,
+              mediaType: source.mediaType,
+              sha256: source.sha256,
+              sizeBytes: source.sizeBytes,
+            },
           },
-        }),
+          { key: 'agent.conversation.toolSummary.browserArtifactUpload' },
+        ),
         artifactRefs: [source.id],
       };
     },
@@ -211,6 +215,7 @@ export const createBrowserTransferTools = (
       return {
         ok: true,
         summary: 'Browser download persisted as a ready Artifact.',
+        userSummary: { key: 'agent.conversation.toolSummary.browserDownloadPersisted' },
         data: {
           sessionId: downloaded.sessionId,
           targetId: downloaded.targetId,

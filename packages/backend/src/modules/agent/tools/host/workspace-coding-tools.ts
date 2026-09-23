@@ -1,7 +1,13 @@
 import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
-import type { AgentTool, ToolContext, ToolInspection, ToolPrecondition } from '../../capabilities/tool.types';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolInspection,
+  ToolPrecondition,
+  ToolUserSummary,
+} from '../../capabilities/tool.types';
 import type { AgentTargetResolver } from '../../capabilities/target-resolver';
 import type { WorkspaceRuntimeService } from '../../workspace-runtime/workspace-runtime.service';
 
@@ -204,6 +210,10 @@ export const createWorkspaceRepoMapTool = (
     return {
       ok: true,
       summary: `Mapped ${result.files.length} file(s) from ${result.indexedFiles} indexed TypeScript/JavaScript source file(s).`,
+      userSummary: {
+        key: 'agent.conversation.toolSummary.codeFilesMapped',
+        params: { files: result.files.length, indexed: result.indexedFiles },
+      },
       data: { generation, ...result } as unknown as JsonValue,
       artifactRefs: [],
       truncated: result.truncated,
@@ -321,11 +331,28 @@ export const createWorkspaceCodeIntelTool = (
       },
       context.signal,
     );
+    const userSummary: ToolUserSummary = result.supported
+      ? {
+          key: 'agent.conversation.toolSummary.codeResults',
+          params: {
+            count: result.results.length,
+            actionKey: `agent.conversation.toolSummary.labels.codeAction.${action}`,
+          },
+        }
+      : {
+          key: 'agent.conversation.toolSummary.codeUnavailable',
+          params: {
+            path: result.path,
+            search: result.fallback?.searchTool ?? 'file_search',
+            read: result.fallback?.readTool ?? 'file_read',
+          },
+        };
     return {
       ok: true,
       summary: result.supported
         ? `Returned ${result.results.length} ${action} result(s) from TypeScript native code intelligence.`
         : `Code intelligence is unavailable for ${result.path}; use ${result.fallback?.searchTool ?? 'file_search'} and ${result.fallback?.readTool ?? 'file_read'}.`,
+      userSummary,
       data: { generation, ...result } as unknown as JsonValue,
       artifactRefs: [],
       truncated: result.truncated,

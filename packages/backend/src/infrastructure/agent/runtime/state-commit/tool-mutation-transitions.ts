@@ -22,7 +22,7 @@ import {
   updateAppLiveCount,
   usageWithDelta,
 } from './transaction-primitives';
-import { modelToolResultJson } from './tool-transition-result';
+import { toolResultLedgerPayload } from './tool-transition-result';
 
 export const supersedeMutationToolTransition = async (
   tx: RelationalDatabase,
@@ -240,10 +240,7 @@ export const settleMutationToolTransition = async (
         id: command.toolResultEntryId,
         runId: row.id,
         kind: 'tool_result',
-        payload: {
-          toolCallId: command.providerCallId,
-          text: modelToolResultJson(row, safeResult),
-        },
+        payload: toolResultLedgerPayload(row, safeResult, command.providerCallId),
       },
     ],
     command.now,

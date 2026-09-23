@@ -24,7 +24,7 @@ import {
   updateAppLiveCount,
   usageWithDelta,
 } from './transaction-primitives';
-import { modelToolResultJson } from './tool-transition-result';
+import { toolResultLedgerPayload } from './tool-transition-result';
 
 export const beginReadToolBatchTransition = async (
   tx: RelationalDatabase,
@@ -158,7 +158,6 @@ export const settleUserInputRequestToolTransition = async (
 
   await linkVerifiedToolEvidence(tx, currentRow, command.result, command.now);
   const resultJson = JSON.stringify(command.result);
-  const modelResultJson = modelToolResultJson(currentRow, command.result);
   const toolChanged = await tx.execute(
     `UPDATE agent_tool_calls SET status = 'succeeded', result_json = ?, completed_at = ?, version = version + 1
      WHERE id = ? AND run_id = ? AND status = 'running' AND version = ?`,
@@ -211,7 +210,7 @@ export const settleUserInputRequestToolTransition = async (
         id: command.toolResultEntryId,
         runId: currentRow.id,
         kind: 'tool_result',
-        payload: { toolCallId: command.providerCallId, text: modelResultJson },
+        payload: toolResultLedgerPayload(currentRow, command.result, command.providerCallId),
       },
     ],
     command.now,
@@ -480,7 +479,7 @@ export const settleReadToolBatchTransition = async (
       id: item.toolResultEntryId,
       runId: row.id,
       kind: 'tool_result' as const,
-      payload: { toolCallId: item.providerCallId, text: modelToolResultJson(row, safeResult) },
+      payload: toolResultLedgerPayload(row, safeResult, item.providerCallId),
     });
     events.push({
       type: item.result.ok ? 'tool.completed' : 'tool.failed',

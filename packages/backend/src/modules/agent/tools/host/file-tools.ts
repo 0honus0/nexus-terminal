@@ -9,6 +9,7 @@ import type {
   ToolInspection,
   ToolPrecondition,
   ToolResult,
+  ToolUserSummary,
 } from '../../capabilities/tool.types';
 
 const MAX_PATH_BYTES = 4096;
@@ -110,9 +111,16 @@ const operation = (
     },
     cryptoHash,
   );
-const confirmed = (summary: string, data: JsonValue, verification: string, truncated = false): ToolResult => ({
+const confirmed = (
+  summary: string,
+  data: JsonValue,
+  verification: string,
+  truncated = false,
+  userSummary?: ToolUserSummary,
+): ToolResult => ({
   ok: true,
   summary,
+  ...(userSummary ? { userSummary } : {}),
   data,
   artifactRefs: [],
   truncated,
@@ -221,6 +229,7 @@ export const createFileReadTool = (files: FileCapabilityService, cryptoHash: Cry
       data as unknown as JsonValue,
       'The selected target returned bounded UTF-8 content and a stable file SHA-256.',
       data.truncated,
+      { key: 'agent.conversation.toolSummary.fileRead', params: { bytes: data.contentBytes, path: data.path } },
     );
   },
 });
@@ -268,6 +277,7 @@ export const createFileListTool = (files: FileCapabilityService, cryptoHash: Cry
       data as unknown as JsonValue,
       'The target filesystem returned bounded non-symlink directory entries.',
       data.truncated,
+      { key: 'agent.conversation.toolSummary.fileList', params: { count: data.entries.length, path: data.path } },
     );
   },
 });
@@ -327,6 +337,7 @@ export const createFileSearchTool = (files: FileCapabilityService, cryptoHash: C
       data as unknown as JsonValue,
       'The target adapter searched bounded UTF-8 source text without invoking model-authorized shell execution.',
       data.truncated,
+      { key: 'agent.conversation.toolSummary.fileSearch', params: { count: data.matches.length, path: data.path } },
     );
   },
 });
@@ -426,6 +437,13 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
       `${data.created ? 'Created' : 'Wrote'} ${data.path}.`,
       data as unknown as JsonValue,
       'The file was atomically replaced and re-read to verify the resulting SHA-256.',
+      false,
+      {
+        key: data.created
+          ? 'agent.conversation.toolSummary.fileCreated'
+          : 'agent.conversation.toolSummary.fileReplaced',
+        params: { path: data.path },
+      },
     );
   },
 });
@@ -492,6 +510,11 @@ export const createFilePatchTool = (files: FileCapabilityService, cryptoHash: Cr
       `Applied patch to ${changes.length} file(s): +${additions}/-${deletions} lines.`,
       { changes, additions, deletions } as unknown as JsonValue,
       'Every patched file matched its frozen source hash; exact-context patching was applied and resulting hashes were verified.',
+      false,
+      {
+        key: 'agent.conversation.toolSummary.filePatch',
+        params: { files: changes.length, added: additions, removed: deletions },
+      },
     );
   },
 });
@@ -555,6 +578,11 @@ export const createFileMoveTool = (files: FileCapabilityService, cryptoHash: Cry
       `Moved ${data.path} to ${data.destinationPath}.`,
       data as unknown as JsonValue,
       'The source precondition was rechecked, the move completed, the source disappeared, and destination identity was verified.',
+      false,
+      {
+        key: 'agent.conversation.toolSummary.fileMove',
+        params: { path: data.path, destination: data.destinationPath },
+      },
     );
   },
 });
@@ -604,6 +632,8 @@ export const createFileDeleteTool = (files: FileCapabilityService, cryptoHash: C
       `Deleted ${data.path}.`,
       data as unknown as JsonValue,
       'The frozen source precondition was rechecked and the target confirmed the path no longer exists.',
+      false,
+      { key: 'agent.conversation.toolSummary.fileDelete', params: { path: data.path } },
     );
   },
 });

@@ -232,6 +232,10 @@ export const createAcpExecuteTool = (
     return {
       ok: true,
       summary: `ACP execution completed (${result.stopReason}).`,
+      userSummary: {
+        key: 'agent.conversation.toolSummary.acpCompleted',
+        params: { reasonKey: `agent.conversation.toolSummary.labels.acpStopReason.${result.stopReason}` },
+      },
       data: { text: result.text, stopReason: result.stopReason },
       artifactRefs: [],
       truncated: false,

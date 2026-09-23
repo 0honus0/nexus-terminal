@@ -104,6 +104,10 @@ export const createRequestUserInputTool = (cryptoHash: CryptoHashPort): AgentToo
     return {
       ok: true,
       summary: `Waiting for the user to answer ${questions.length} clarification question(s).`,
+      userSummary: {
+        key: 'agent.conversation.toolSummary.userInputWaiting',
+        params: { count: questions.length },
+      },
       data: { request: { questions: userInputQuestionsJson(questions) } },
       artifactRefs: [],
       truncated: false,

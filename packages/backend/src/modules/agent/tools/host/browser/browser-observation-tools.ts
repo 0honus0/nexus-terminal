@@ -72,7 +72,9 @@ export const createBrowserObservationTools = (
         context.signal,
       );
       return {
-        ...result('Browser snapshot captured.', snapshot as unknown as JsonValue),
+        ...result('Browser snapshot captured.', snapshot as unknown as JsonValue, {
+          key: 'agent.conversation.toolSummary.browserSnapshotCaptured',
+        }),
         truncated: snapshot.truncated,
       };
     },
@@ -152,6 +154,7 @@ export const createBrowserObservationTools = (
       return {
         ok: true,
         summary: 'Browser viewport screenshot captured as an image Artifact.',
+        userSummary: { key: 'agent.conversation.toolSummary.browserScreenshot' },
         data: {
           type: 'browser_screenshot',
           sessionId: capture.sessionId,
@@ -234,7 +237,9 @@ export const createBrowserObservationTools = (
         context.signal,
       );
       return {
-        ...result('Browser console read completed.', view as unknown as JsonValue),
+        ...result('Browser console read completed.', view as unknown as JsonValue, {
+          key: 'agent.conversation.toolSummary.browserConsoleRead',
+        }),
         truncated: view.truncated,
       };
     },

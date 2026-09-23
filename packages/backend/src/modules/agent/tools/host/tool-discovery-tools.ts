@@ -186,6 +186,10 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
     return {
       ok: true,
       summary: `Found ${result.matches.length} deferred MCP capability match${result.matches.length === 1 ? '' : 'es'}.`,
+      userSummary: {
+        key: 'agent.conversation.toolSummary.deferredCapabilityFound',
+        params: { count: result.matches.length },
+      },
       data: {
         matches: result.matches,
         truncated: result.truncated,

@@ -21,7 +21,7 @@ import {
   usageWithDelta,
   usageWithProviderContext,
 } from './transaction-primitives';
-import { modelToolResultJson } from './tool-transition-result';
+import { toolResultLedgerPayload } from './tool-transition-result';
 
 export const refreshProposedToolTransition = async (
   tx: RelationalDatabase,
@@ -118,7 +118,7 @@ export const rejectProposedToolTransition = async (
         id: randomUUID(),
         runId: row.id,
         kind: 'tool_result',
-        payload: { toolCallId: command.providerCallId, text: modelToolResultJson(row, safeResult) },
+        payload: toolResultLedgerPayload(row, safeResult, command.providerCallId),
       },
     ],
     command.now,

@@ -3,7 +3,7 @@ import { readArtifactByteRangeForAgent, readArtifactTextLinesForAgent } from '..
 import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
-import type { AgentTool, ToolInspection, ToolResult } from '../../capabilities/tool.types';
+import type { AgentTool, ToolInspection, ToolResult, ToolUserSummary } from '../../capabilities/tool.types';
 
 const record = (value: JsonValue): Record<string, JsonValue> => {
   if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');
@@ -41,9 +41,10 @@ const metadata = (artifact: {
   version: artifact.version,
 });
 
-const result = (summary: string, data: JsonValue, artifactId: string): ToolResult => ({
+const result = (summary: string, data: JsonValue, artifactId: string, userSummary?: ToolUserSummary): ToolResult => ({
   ok: true,
   summary,
+  ...(userSummary ? { userSummary } : {}),
   data,
   artifactRefs: [artifactId],
   truncated: false,
@@ -173,6 +174,10 @@ export const createArtifactReadTool = (artifacts: ArtifactService, cryptoHash: C
         `Artifact metadata: ${artifact.originalName} (${artifact.sizeBytes} bytes).`,
         metadata(artifact),
         artifact.id,
+        {
+          key: 'agent.conversation.toolSummary.artifactMetadata',
+          params: { name: artifact.originalName, bytes: artifact.sizeBytes },
+        },
       );
     }
     if (args.mode === 'text') {
@@ -195,6 +200,10 @@ export const createArtifactReadTool = (artifacts: ArtifactService, cryptoHash: C
           text: read.text,
         },
         read.artifact.id,
+        {
+          key: 'agent.conversation.toolSummary.artifactLinesRead',
+          params: { name: read.artifact.originalName, start: read.startLine, end: read.endLine },
+        },
       );
     }
     const read = await readArtifactByteRangeForAgent(
@@ -215,6 +224,10 @@ export const createArtifactReadTool = (artifacts: ArtifactService, cryptoHash: C
         data: read.bytes.toString('base64'),
       },
       read.artifact.id,
+      {
+        key: 'agent.conversation.toolSummary.artifactBytesRead',
+        params: { name: read.artifact.originalName, start: read.startByte, end: read.endByte },
+      },
     );
   },
 });

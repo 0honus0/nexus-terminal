@@ -4,7 +4,7 @@
   import type { AgentLedgerEntryDto } from '../api/agent-api';
   import AgentMessageBody from './AgentMessageBody.vue';
   const props = defineProps<{ entry: AgentLedgerEntryDto; relatedToolName?: string }>();
-  const { t } = useI18n();
+  const { t, te } = useI18n();
   const emit = defineEmits<{ layoutChange: [] }>();
   const root = ref<HTMLElement | null>(null);
   let resizeObserver: ResizeObserver | null = null;
@@ -88,6 +88,29 @@
     // Keep unstructured output in the disclosure, never present a JSON dump as a summary.
     return null;
   });
+  // §1.8: the backend sends a localization projection beside the model-facing summary; the
+  // model only ever reads `summary`, so this is the only place user-visible tool copy is built.
+  const localizedToolSummary = computed(() => {
+    const summary = record(payload.value?.userSummary);
+    const key = summary?.key;
+    if (typeof key !== 'string' || !key.startsWith('agent.') || !te(key)) return null;
+    const params = record(summary?.params);
+    const resolved: Record<string, string | number> = {};
+    for (const [name, value] of Object.entries(params ?? {})) {
+      if (typeof value === 'number') {
+        resolved[name] = value;
+        continue;
+      }
+      if (typeof value !== 'string') continue;
+      if (!name.endsWith('Key')) {
+        resolved[name] = value;
+        continue;
+      }
+      resolved[name] = te(value) ? t(value) : (value.split('.').pop() ?? value);
+    }
+    const rendered = t(key, resolved);
+    return rendered === key ? null : rendered;
+  });
   const toolName = computed(() => {
     const value = props.relatedToolName || payload.value?.toolName || toolResult.value?.toolName;
     return typeof value === 'string' ? value : '';
@@ -97,24 +120,12 @@
     const value = toolResult.value?.errorCode;
     return typeof value === 'string' && value ? value : '';
   });
-  const friendlyFailureCodes = [
-    'RESOURCE_QUARANTINED',
-    'RECONCILIATION_REQUIRED',
-    'LEASE_CONFLICT',
-    'LEASE_LOST',
-    'APPROVAL_STALE',
-    'MUTATION_ALREADY_CONFIRMED',
-    'ECONNREFUSED',
-    'ENOTFOUND',
-    'ETIMEDOUT',
-  ] as const;
   const visibleToolSummary = computed(() => {
-    const summary = toolSummary.value;
+    const summary = localizedToolSummary.value ?? toolSummary.value;
     const code = toolErrorCode.value;
     if (!failed.value || !code) return summary;
-    const friendly = friendlyFailureCodes.includes(code as (typeof friendlyFailureCodes)[number])
-      ? t(`agent.conversation.toolFailure.${code}`)
-      : '';
+    const friendlyKey = `agent.conversation.toolFailure.${code}`;
+    const friendly = te(friendlyKey) ? t(friendlyKey) : '';
     if (!friendly) return summary || code;
     if (!summary || summary === code || summary.endsWith(`: ${code}`) || summary.includes(`: ${code} `)) {
       return `${friendly} [${code}]`;

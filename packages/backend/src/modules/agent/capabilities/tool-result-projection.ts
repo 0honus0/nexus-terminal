@@ -130,11 +130,15 @@ const appendRefsWithinBudget = (
   return current;
 };
 
+// §1.8: `userSummary` is UI copy; the model only ever sees `summary`.
+const withoutUserSummary = ({ userSummary: _userSummary, ...rest }: ToolResult): ToolResult => rest;
+
 /**
  * Build the bounded ToolResult sent back to the model. The caller remains responsible for
  * persisting the unmodified ToolResult as execution evidence.
  */
-export const projectToolResult = (result: ToolResult, maxOutputBytes: number): ToolResult => {
+export const projectToolResult = (toolResult: ToolResult, maxOutputBytes: number): ToolResult => {
+  const result = withoutUserSummary(toolResult);
   const encoded = JSON.stringify(result);
   const originalBytes = Buffer.byteLength(encoded, 'utf8');
   if (originalBytes <= maxOutputBytes) return result;

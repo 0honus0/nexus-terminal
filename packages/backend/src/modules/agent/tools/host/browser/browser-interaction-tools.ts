@@ -86,7 +86,9 @@ export const createBrowserInteractionTools = (
       const settleMs = integer(args.settleMs, 250, 0, MAX_SETTLE_MS);
       if (action === 'navigate') {
         const state = await gateway.navigate(sessionId, string(args.url, MAX_URL_BYTES), { settleMs }, context.signal);
-        return result('Browser navigation completed.', state as unknown as JsonValue);
+        return result('Browser navigation completed.', state as unknown as JsonValue, {
+          key: 'agent.conversation.toolSummary.browserNavigationCompleted',
+        });
       }
       const snapshotId = string(args.snapshotId, MAX_ID_BYTES);
       const nodeRef = string(args.nodeRef, MAX_ID_BYTES);
@@ -101,7 +103,10 @@ export const createBrowserInteractionTools = (
               { settleMs },
               context.signal,
             );
-      return result(`Browser ${action} completed.`, state as unknown as JsonValue);
+      return result(`Browser ${action} completed.`, state as unknown as JsonValue, {
+        key: 'agent.conversation.toolSummary.browserActionCompleted',
+        params: { actionKey: `agent.conversation.toolSummary.labels.browserAction.${action}` },
+      });
     },
   })),
   {
@@ -157,7 +162,9 @@ export const createBrowserInteractionTools = (
         },
         context.signal,
       );
-      return result('Browser scroll completed.', state as unknown as JsonValue);
+      return result('Browser scroll completed.', state as unknown as JsonValue, {
+        key: 'agent.conversation.toolSummary.browserScrollCompleted',
+      });
     },
   },
   {
@@ -239,7 +246,9 @@ export const createBrowserInteractionTools = (
         },
         context.signal,
       );
-      return result('Browser key press completed.', state as unknown as JsonValue);
+      return result('Browser key press completed.', state as unknown as JsonValue, {
+        key: 'agent.conversation.toolSummary.browserKeyPressCompleted',
+      });
     },
   },
   {
@@ -283,7 +292,9 @@ export const createBrowserInteractionTools = (
         { settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS) },
         context.signal,
       );
-      return result('Browser back navigation completed.', state as unknown as JsonValue);
+      return result('Browser back navigation completed.', state as unknown as JsonValue, {
+        key: 'agent.conversation.toolSummary.browserBackCompleted',
+      });
     },
   },
   {
@@ -345,7 +356,9 @@ export const createBrowserInteractionTools = (
         { settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS) },
         context.signal,
       );
-      return result('Browser selection completed.', state as unknown as JsonValue);
+      return result('Browser selection completed.', state as unknown as JsonValue, {
+        key: 'agent.conversation.toolSummary.browserSelectionCompleted',
+      });
     },
   },
   {
@@ -395,7 +408,9 @@ export const createBrowserInteractionTools = (
         { mode, maxMillis: integer(args.maxMillis, 1000, 1, MAX_WAIT_MS) },
         context.signal,
       );
-      return result('Browser wait completed.', state as unknown as JsonValue);
+      return result('Browser wait completed.', state as unknown as JsonValue, {
+        key: 'agent.conversation.toolSummary.browserWaitCompleted',
+      });
     },
   },
 ];

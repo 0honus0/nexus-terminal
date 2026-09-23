@@ -349,6 +349,7 @@ export const cancelRunTransition = async (
         outcome: 'confirmed',
         errorCode: 'RUN_CANCELLED_BEFORE_TOOL_EXECUTION',
         summary: 'The Run was cancelled before this queued tool call could execute.',
+        userSummary: { key: 'agent.conversation.toolSummary.runCancelled' },
         artifactRefs: [],
         truncated: false,
         verification: {

@@ -14,6 +14,12 @@ import {
   type WorkspaceRuntimeService,
 } from '../../workspace-runtime/workspace-runtime.service';
 
+// §1.8: user-facing tool copy travels as an i18n key beside the model-facing English summary.
+const workspaceStateKey = (status: string): string => `agent.conversation.toolSummary.labels.workspaceState.${status}`;
+const commandStateKey = (status: string): string => `agent.conversation.toolSummary.labels.commandState.${status}`;
+const workspaceActionKey = (action: string): string =>
+  `agent.conversation.toolSummary.labels.workspaceAction.${action}`;
+
 const record = (value: JsonValue): Record<string, JsonValue> => {
   if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');
   return value as Record<string, JsonValue>;
@@ -216,6 +222,12 @@ export const createWorkspaceCreateTool = (
     return {
       ok: ready,
       summary: ready ? 'Workspace provisioned and ready.' : `Workspace is ${workspace.status}.`,
+      userSummary: ready
+        ? { key: 'agent.conversation.toolSummary.workspaceProvisioned' }
+        : {
+            key: 'agent.conversation.toolSummary.workspaceStatusIs',
+            params: { stateKey: workspaceStateKey(workspace.status) },
+          },
       data: {
         workspaceId: workspace.id,
         status: workspace.status,
@@ -331,6 +343,16 @@ export const createWorkspaceControlTool = (
       ok: command.status === 'succeeded',
       summary:
         command.status === 'succeeded' ? `Workspace ${action} confirmed.` : `Workspace ${action} is ${command.status}.`,
+      userSummary:
+        command.status === 'succeeded'
+          ? {
+              key: 'agent.conversation.toolSummary.workspaceActionConfirmed',
+              params: { actionKey: workspaceActionKey(action) },
+            }
+          : {
+              key: 'agent.conversation.toolSummary.workspaceActionPending',
+              params: { actionKey: workspaceActionKey(action), stateKey: commandStateKey(command.status) },
+            },
       data: { workspaceId, generation: command.generation, commandId: command.id, status: command.status },
       artifactRefs: [],
       truncated: false,
@@ -463,6 +485,16 @@ export const createWorkspaceSwitchToolVersionsTool = (
         switched.outcome === 'succeeded'
           ? `Workspace tool versions switched; generation is now ${switched.workspace.generation}.`
           : `Workspace tool version switch is ${switched.outcome}.`,
+      userSummary:
+        switched.outcome === 'succeeded'
+          ? {
+              key: 'agent.conversation.toolSummary.versionsSwitched',
+              params: { generation: switched.workspace.generation },
+            }
+          : {
+              key: 'agent.conversation.toolSummary.versionSwitchOutcome',
+              params: { stateKey: commandStateKey(switched.outcome) },
+            },
       data: {
         workspaceId,
         generation: switched.workspace.generation,

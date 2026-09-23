@@ -126,6 +126,10 @@ export const createPlanUpdateTool = (
     return {
       ok: true,
       summary: `Plan updated to revision ${plan.revision} with ${plan.items.length} item(s).`,
+      userSummary: {
+        key: 'agent.conversation.toolSummary.planUpdated',
+        params: { revision: plan.revision, items: plan.items.length },
+      },
       data: plan as unknown as JsonValue,
       artifactRefs: [],
       truncated: false,
