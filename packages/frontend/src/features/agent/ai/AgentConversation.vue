@@ -975,6 +975,20 @@
     }
   }
 
+  /*
+   * §7.2-a: in a short hub window the composer was the tallest block on screen
+   * (203px of a 380px window). Collapse it to two rows and tighten the footer
+   * padding so the transcript keeps a usable number of lines.
+   */
+  .agent-hub-window[data-hub-compact] .agent-composer-footer {
+    padding: 4px 8px 8px;
+  }
+
+  .agent-hub-window[data-hub-compact] #agent-composer {
+    min-height: 56px;
+    max-height: 96px;
+    padding: 8px 12px 4px;
+  }
   @container agent-composer (max-width: 520px) {
     .agent-composer-shell {
       border-radius: 12px;

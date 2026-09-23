@@ -22,7 +22,12 @@ interface AgentHubState {
 
 const DEFAULT_BOUNDS: AgentHubBounds = { x: 80, y: 16, width: 1180, height: 740 };
 const MIN_WIDTH = 560;
-const MIN_HEIGHT = 380;
+/*
+ * §7.2-a: at 380px the hub chrome (44px header + 40px surface bar) plus the
+ * composer left the transcript about 94px tall over CDP. 480 keeps two
+ * readable rows even before the short-window composer compaction kicks in.
+ */
+const MIN_HEIGHT = 480;
 
 const state = reactive<AgentHubState>({
   status: 'closed',

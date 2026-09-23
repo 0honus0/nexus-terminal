@@ -522,6 +522,12 @@
     };
   });
 
+  /*
+   * §7.2-a: the composer keeps three rows of height no matter how short the
+   * floating window gets. Below 560px the surface compacts it (see
+   * AgentConversation.vue) instead of letting it eat the transcript.
+   */
+  const hubCompact = computed(() => !state.maximized && state.bounds.height < 560);
   const handleResize = () => {
     const previousBounds = { ...state.bounds };
     agentWindowManager.clamp();
@@ -585,6 +591,7 @@
     tabindex="-1"
     class="agent-hub-window fixed z-50 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl transition-[box-shadow,transform] duration-150"
     :style="style"
+    :data-hub-compact="hubCompact ? '' : undefined"
     :aria-label="$t('agent.hub.title')"
     @keydown="handleHubKeydown"
     @wheel.stop
