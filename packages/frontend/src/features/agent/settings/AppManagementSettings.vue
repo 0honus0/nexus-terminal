@@ -511,12 +511,8 @@
       <div
         v-for="app in apps"
         :key="app.id"
-        class="overflow-hidden rounded-2xl border transition-all duration-200"
-        :class="
-          app.enabled
-            ? 'border-border bg-background shadow-xs hover:border-border-hover'
-            : 'border-border/80 bg-header/30 opacity-85'
-        "
+        class="overflow-hidden rounded-xl transition-colors duration-200"
+        :class="app.enabled ? 'bg-header/20 hover:bg-header/35' : 'bg-header/40 opacity-85'"
       >
         <!-- 主卡片顶层信息栏 -->
         <div class="p-4 sm:p-5">
@@ -722,11 +718,7 @@
 
           <!-- 按资源边界分组的能力授权矩阵 -->
           <div v-if="grantViews[app.id]" class="mt-4 space-y-4">
-            <div
-              v-for="cat in categoryGroups"
-              :key="cat.id"
-              class="rounded-xl border border-border bg-card p-3.5 shadow-2xs"
-            >
+            <div v-for="cat in categoryGroups" :key="cat.id" class="rounded-lg bg-header/25 p-3.5">
               <div class="flex items-center justify-between pb-2 mb-2.5 border-b border-border/60">
                 <div class="flex items-center gap-2 text-xs font-semibold text-foreground">
                   <i :class="cat.icon" class="text-primary text-[11px]" aria-hidden="true"></i>

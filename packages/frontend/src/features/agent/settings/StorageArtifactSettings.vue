@@ -84,25 +84,25 @@
     <div class="space-y-4 p-4 sm:p-5">
       <!-- 4 维存储指标总览卡片 -->
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
+        <div class="rounded-lg bg-header/25 p-3">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.used') }}</div>
           <div class="mt-1 font-mono text-sm font-semibold text-foreground">
             {{ formatQuantity(storage.totalBytes + storage.reservedBytes, 'bytes', quantityLabels) }}
           </div>
         </div>
-        <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
+        <div class="rounded-lg bg-header/25 p-3">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.reclaimable') }}</div>
           <div class="mt-1 font-mono text-sm font-semibold text-success">
             {{ formatQuantity(storage.reclaimableBytes, 'bytes', quantityLabels) }}
           </div>
         </div>
-        <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
+        <div class="rounded-lg bg-header/25 p-3">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.protected') }}</div>
           <div class="mt-1 font-mono text-sm font-semibold text-foreground">
             {{ formatQuantity(storage.protectedBytes + storage.retainedBytes, 'bytes', quantityLabels) }}
           </div>
         </div>
-        <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
+        <div class="rounded-lg bg-header/25 p-3">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.limit') }}</div>
           <div class="mt-1 font-mono text-sm font-semibold text-foreground">
             {{ formatQuantity(storage.limitBytes, 'bytes', quantityLabels) }}
@@ -111,7 +111,7 @@
       </div>
 
       <!-- 配额参数输入网格：支持 K、M、G 单位输入与实时换算 -->
-      <div class="rounded-xl border border-border/60 bg-background/50 p-4">
+      <div class="rounded-lg bg-header/25 p-4">
         <div class="flex items-center justify-between pb-3 mb-3 border-b border-border/40">
           <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.storage.quotaTitle') }}</span>
           <span class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.inputHelp') }}</span>

@@ -138,7 +138,7 @@
 
     <div class="space-y-4 p-4 sm:p-5">
       <div v-if="view && !loading" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <div v-for="field in fields" :key="field.key" class="rounded-lg border border-border/60 bg-background/60 p-3">
+        <div v-for="field in fields" :key="field.key" class="rounded-lg bg-header/25 p-3">
           <div class="flex items-start justify-between gap-2">
             <div>
               <div class="text-xs font-medium text-foreground">
@@ -170,7 +170,7 @@
           </div>
         </div>
 
-        <div class="rounded-lg border border-border/60 bg-background/60 p-3 md:col-span-2 xl:col-span-3">
+        <div class="rounded-lg bg-header/25 p-3 md:col-span-2 xl:col-span-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div class="text-xs font-medium text-foreground">
@@ -203,7 +203,7 @@
           </div>
         </div>
 
-        <div class="rounded-lg border border-border/60 bg-background/60 p-3 md:col-span-2 xl:col-span-3">
+        <div class="rounded-lg bg-header/25 p-3 md:col-span-2 xl:col-span-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div class="text-xs font-medium text-foreground">

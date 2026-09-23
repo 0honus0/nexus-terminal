@@ -238,7 +238,7 @@
     </div>
     <div class="space-y-4 p-4 sm:p-5">
       <div
-        class="flex items-start gap-2.5 rounded-lg border border-border/55 bg-header/30 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary"
+        class="flex items-start gap-2.5 rounded-lg bg-header/30 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary"
       >
         <i class="fa-solid fa-diagram-project mt-0.5 shrink-0 text-[10px] text-primary/75" aria-hidden="true"></i>
         <span>{{ $t('agent.settings.subagents.concurrencyHint') }}</span>
@@ -329,7 +329,7 @@
           <article
             v-for="(profile, index) in profileSettings.policy.profiles"
             :key="`${profile.id}:${index}`"
-            class="rounded-md border border-border bg-background p-4"
+            class="rounded-lg bg-header/25 p-4"
           >
             <div class="grid gap-3 lg:grid-cols-3">
               <label>

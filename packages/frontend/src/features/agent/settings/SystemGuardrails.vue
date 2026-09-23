@@ -27,9 +27,7 @@
     </div>
     <div class="p-4 sm:p-5">
       <dl class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div
-          class="rounded-xl border border-border bg-background/80 p-3.5 shadow-2xs transition-all hover:border-border-hover"
-        >
+        <div class="rounded-lg bg-header/25 p-3.5 transition-colors hover:bg-header/40">
           <dt class="flex items-center gap-1.5 text-xs text-text-secondary">
             <i class="fa-solid fa-layer-group text-[10px] text-primary" aria-hidden="true"></i>
             <span>{{ $t('agent.settings.guardrails.eventBatch') }}</span>
@@ -38,9 +36,7 @@
             {{ $t('agent.settings.guardrails.eventBatchValue') }}
           </dd>
         </div>
-        <div
-          class="rounded-xl border border-border bg-background/80 p-3.5 shadow-2xs transition-all hover:border-border-hover"
-        >
+        <div class="rounded-lg bg-header/25 p-3.5 transition-colors hover:bg-header/40">
           <dt class="flex items-center gap-1.5 text-xs text-text-secondary">
             <i class="fa-solid fa-clock-rotate-left text-[10px] text-primary" aria-hidden="true"></i>
             <span>{{ $t('agent.settings.guardrails.commitQueue') }}</span>
@@ -49,9 +45,7 @@
             {{ $t('agent.settings.guardrails.commitQueueValue') }}
           </dd>
         </div>
-        <div
-          class="rounded-xl border border-border bg-background/80 p-3.5 shadow-2xs transition-all hover:border-border-hover"
-        >
+        <div class="rounded-lg bg-header/25 p-3.5 transition-colors hover:bg-header/40">
           <dt class="flex items-center gap-1.5 text-xs text-text-secondary">
             <i class="fa-solid fa-heart-pulse text-[10px] text-primary" aria-hidden="true"></i>
             <span>{{ $t('agent.settings.guardrails.sseHeartbeat') }}</span>
@@ -60,9 +54,7 @@
             {{ $t('agent.settings.guardrails.sseHeartbeatValue') }}
           </dd>
         </div>
-        <div
-          class="rounded-xl border border-border bg-background/80 p-3.5 shadow-2xs transition-all hover:border-border-hover"
-        >
+        <div class="rounded-lg bg-header/25 p-3.5 transition-colors hover:bg-header/40">
           <dt class="flex items-center gap-1.5 text-xs text-text-secondary">
             <i class="fa-solid fa-bolt text-[10px] text-primary" aria-hidden="true"></i>
             <span>{{ $t('agent.settings.guardrails.transient') }}</span>

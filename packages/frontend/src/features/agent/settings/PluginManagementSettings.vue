@@ -358,7 +358,7 @@
 
         <p class="mt-2 text-xs text-text-secondary leading-relaxed">{{ $t('agent.settings.plugins.packageHint') }}</p>
 
-        <div class="mt-3 rounded-xl border border-border bg-card p-3.5 shadow-2xs">
+        <div class="mt-3 rounded-lg bg-header/25 p-3.5">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2">
               <span class="text-sm font-bold text-foreground">{{ candidate.plugin.manifest.displayName }}</span>
@@ -448,7 +448,7 @@
       </div>
 
       <!-- 仓库源管理与添加 -->
-      <div class="rounded-xl border border-border bg-header/25 p-3.5 sm:p-4 shadow-2xs">
+      <div class="rounded-lg bg-header/30 p-3.5 sm:p-4">
         <div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div class="flex items-center gap-2">
@@ -518,7 +518,7 @@
         <div
           v-for="source in catalogSources"
           :key="`${source.official ? 'official' : 'remote'}:${source.catalog.repositoryUrl}`"
-          class="rounded-xl border border-border bg-background/50 p-4 shadow-2xs transition-all"
+          class="rounded-lg bg-header/25 p-4 transition-colors"
         >
           <!-- 仓库源卡片头部标牌 -->
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
@@ -727,7 +727,7 @@
           <div
             v-for="installation in removedInstallations"
             :key="installation.appId"
-            class="rounded-xl border border-border/60 bg-card p-3"
+            class="rounded-lg bg-header/25 p-3"
           >
             <div class="flex flex-wrap items-center justify-between gap-3">
               <span class="font-mono text-xs text-foreground">{{ installation.appId }}</span>
@@ -819,11 +819,7 @@
           </div>
 
           <div class="mt-4 space-y-2">
-            <div
-              v-for="publisher in publishers"
-              :key="publisher.keyId"
-              class="rounded-xl border border-border bg-card p-3 shadow-2xs"
-            >
+            <div v-for="publisher in publishers" :key="publisher.keyId" class="rounded-lg bg-header/25 p-3">
               <div class="flex items-center justify-between gap-2">
                 <span class="min-w-0 truncate text-xs font-semibold text-foreground">{{ publisher.label }}</span>
                 <UiButton

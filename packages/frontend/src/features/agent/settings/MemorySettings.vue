@@ -311,11 +311,7 @@
       </div>
 
       <div v-else class="space-y-3">
-        <article
-          v-for="memory in memories"
-          :key="memory.id"
-          class="rounded-xl border border-border/70 bg-background p-3.5"
-        >
+        <article v-for="memory in memories" :key="memory.id" class="rounded-lg bg-header/25 p-3.5">
           <div class="flex flex-wrap items-start justify-between gap-2">
             <div class="flex items-center gap-2">
               <span

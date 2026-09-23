@@ -462,11 +462,11 @@
 <template>
   <section
     id="settings-panel-agent"
-    class="overflow-hidden rounded-xl border border-border bg-background shadow-sm"
+    class="rounded-xl border border-border bg-background shadow-sm"
     aria-labelledby="settings-agent-title"
   >
     <!-- 主卡片头部：包含全局概览微状态 -->
-    <header class="border-b border-border bg-header/40 px-5 py-4 sm:px-6">
+    <header class="rounded-t-xl border-b border-border bg-header/40 px-5 py-4 sm:px-6">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div class="flex items-center gap-2.5">
@@ -531,7 +531,7 @@
       <div class="flex flex-col">
         <!-- 3 大核心分类胶囊导航：居中对称、大气现代 -->
         <nav
-          class="flex shrink-0 flex-wrap justify-center gap-2 border-b border-border/60 bg-header/25 p-2.5 sm:px-6"
+          class="sticky top-0 z-20 flex shrink-0 flex-wrap justify-center gap-2 border-b border-border/60 bg-header/80 p-2.5 backdrop-blur-md sm:px-6"
           :aria-label="$t('agent.settings.navigation')"
         >
           <button
@@ -554,13 +554,13 @@
         </nav>
 
         <!-- 分区内容流：自然流动排版，无局部高度截断与双层滚动条 -->
-        <div class="space-y-6 p-4 sm:p-6">
+        <div class="agent-settings-flow p-4 sm:p-6">
           <!-- 1. 模型与预算（核心大本营） -->
           <section
             v-if="visitedGroups.has('models')"
             v-show="activeGroup === 'models'"
             id="agent-settings-models"
-            class="space-y-6"
+            class="agent-settings-group"
           >
             <!-- Agent 功能开关 -->
             <AgentFeatureSettings :settings="settings" :busy="featureControlBusy" @change="changeFeature" />
@@ -630,7 +630,7 @@
             v-if="visitedGroups.has('runtime')"
             v-show="activeGroup === 'runtime'"
             id="agent-settings-runtime"
-            class="space-y-6"
+            class="agent-settings-group"
           >
             <!-- 并发与性能 -->
             <PerformanceSettings
@@ -692,7 +692,7 @@
             v-if="visitedGroups.has('plugins')"
             v-show="activeGroup === 'plugins'"
             id="agent-settings-plugins"
-            class="space-y-6"
+            class="agent-settings-group"
           >
             <!-- Agent App 与能力授权 -->
             <AppManagementSettings :apps="apps" :busy="appContextBusy" @toggle="toggleApp" @refresh="load" />
@@ -760,7 +760,7 @@
     <template v-if="recommendedPlugin">
       <div class="space-y-4">
         <!-- 插件基础信息主卡片 -->
-        <div class="relative overflow-hidden rounded-xl border border-border/70 bg-header/40 p-4 transition-all">
+        <div class="relative overflow-hidden rounded-lg bg-header/25 p-4 transition-colors">
           <div class="flex items-start gap-3.5">
             <div
               class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 shadow-xs"
@@ -788,7 +788,7 @@
 
         <!-- 3 栏核心特性网格 -->
         <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-          <div class="flex items-start gap-2.5 rounded-xl border border-border/60 bg-card/60 p-3 shadow-2xs">
+          <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
             <div
               class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs"
             >
@@ -804,7 +804,7 @@
             </div>
           </div>
 
-          <div class="flex items-start gap-2.5 rounded-xl border border-border/60 bg-card/60 p-3 shadow-2xs">
+          <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
             <div
               class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success text-xs"
             >
@@ -820,7 +820,7 @@
             </div>
           </div>
 
-          <div class="flex items-start gap-2.5 rounded-xl border border-border/60 bg-card/60 p-3 shadow-2xs">
+          <div class="flex items-start gap-2.5 rounded-lg bg-header/20 p-3">
             <div
               class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs"
             >
@@ -838,7 +838,7 @@
         </div>
 
         <!-- 安全凭据与发布者来源（消除裸露长串） -->
-        <div class="rounded-xl border border-border/60 bg-header/20 p-3 text-xs">
+        <div class="rounded-lg bg-header/25 p-3 text-xs">
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2 font-medium text-foreground text-xs">
               <i class="fa-solid fa-certificate text-primary text-sm" aria-hidden="true"></i>
@@ -965,3 +965,29 @@
     </template>
   </BaseModal>
 </template>
+
+<style scoped>
+  /*
+   * 「一层卡片」：页面 → 分组卡 → 控件，中间不再叠框。
+   *
+   * Every settings module is its own component and brought its own card
+   * (border + radius + tint + shadow). Nested inside the panel card that made
+   * three or four visible frames around a single field, which is what the
+   * screenshot on a phone showed. The panel card stays as the one frame; the
+   * modules are merged into it as flat sections separated by hairlines, so the
+   * grouping is still obvious without another border.
+   *
+   * The overrides only reach *direct* children of a group, so a module's own
+   * internal chrome (header band, callouts, controls) is untouched.
+   */
+  .agent-settings-group > :deep(*) {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .agent-settings-group > :deep(*) + :deep(*) {
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  }
+</style>

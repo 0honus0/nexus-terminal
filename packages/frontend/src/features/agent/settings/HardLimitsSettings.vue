@@ -155,11 +155,7 @@
     </div>
 
     <div class="mt-4 space-y-3">
-      <section
-        v-for="group in fieldGroups"
-        :key="group.id"
-        class="rounded-xl border border-border/55 bg-background/45 p-3.5"
-      >
+      <section v-for="group in fieldGroups" :key="group.id" class="rounded-lg bg-header/25 p-3.5">
         <div class="mb-3">
           <h4 class="text-xs font-semibold text-foreground">
             {{ $t(`agent.settings.hardLimits.groups.${group.id}`) }}

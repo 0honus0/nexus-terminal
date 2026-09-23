@@ -312,7 +312,7 @@
 
       <template v-if="availability.available && catalog && storage">
         <div class="mt-5 grid gap-4 lg:grid-cols-2">
-          <div class="rounded-md border border-border p-4">
+          <div class="rounded-lg bg-header/25 p-4">
             <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.setupTitle') }}</h3>
             <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.workspaceRuntime.setupDescription') }}</p>
             <div class="mt-3 space-y-2">
@@ -343,7 +343,7 @@
             >
               {{ $t('agent.settings.workspaceRuntime.previewSetup') }}
             </UiButton>
-            <div v-if="setupPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
+            <div v-if="setupPreview" class="mt-3 rounded-lg bg-header/25 p-3 text-xs">
               <p>
                 {{
                   $t('agent.settings.workspaceRuntime.setupImpact', {
@@ -365,7 +365,7 @@
             </div>
           </div>
 
-          <div class="rounded-md border border-border p-4">
+          <div class="rounded-lg bg-header/25 p-4">
             <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.storageTitle') }}</h3>
             <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
               <div class="rounded bg-background p-2">
@@ -409,7 +409,7 @@
                 {{ $t('agent.settings.workspaceRuntime.previewReset') }}
               </UiButton>
             </div>
-            <div v-if="cleanupPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
+            <div v-if="cleanupPreview" class="mt-3 rounded-lg bg-header/25 p-3 text-xs">
               <p>
                 {{
                   $t('agent.settings.workspaceRuntime.cleanupImpact', {
@@ -431,7 +431,7 @@
                 {{ $t('agent.settings.workspaceRuntime.confirmCleanup') }}
               </UiButton>
             </div>
-            <div v-if="resetPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
+            <div v-if="resetPreview" class="mt-3 rounded-lg bg-header/25 p-3 text-xs">
               <p>{{ $t('agent.settings.workspaceRuntime.resetImpact') }}</p>
               <UiButton
                 appearance="solid"
@@ -447,7 +447,7 @@
           </div>
         </div>
 
-        <div class="mt-5 rounded-md border border-border p-4">
+        <div class="mt-5 rounded-lg bg-header/25 p-4">
           <div class="flex items-center justify-between gap-2">
             <div>
               <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.packsTitle') }}</h3>

@@ -80,11 +80,7 @@
         {{ $t('agent.settings.browserRuntime.empty') }}
       </p>
 
-      <article
-        v-for="(target, targetIndex) in targets"
-        :key="targetIndex"
-        class="mt-4 rounded border border-border p-4"
-      >
+      <article v-for="(target, targetIndex) in targets" :key="targetIndex" class="mt-4 rounded-lg bg-header/25 p-4">
         <div class="flex items-start justify-between gap-3">
           <label class="min-w-0 flex-1 text-xs text-text-secondary">
             {{ $t('agent.settings.browserRuntime.targetId') }}

@@ -227,9 +227,7 @@
 
     <div v-if="expanded" class="space-y-4 border-t border-border/60 p-4 sm:p-5">
       <!-- 强制安全边界说明 -->
-      <div
-        class="flex items-start gap-2.5 rounded-xl border border-border bg-background/80 p-3.5 shadow-2xs text-xs text-text-secondary leading-relaxed"
-      >
+      <div class="flex items-start gap-2.5 rounded-lg bg-header/25 p-3.5 text-xs text-text-secondary leading-relaxed">
         <i class="fa-solid fa-shield-halved text-sm text-primary/80 mt-0.5 shrink-0"></i>
         <span>{{ $t('agent.settings.safety.guardrails') }}</span>
       </div>
@@ -316,7 +314,7 @@
         <div
           v-for="connection in filteredConnections"
           :key="connection.id"
-          class="flex items-center justify-between gap-3 rounded-xl border p-3 transition-all cursor-pointer select-none"
+          class="flex items-center justify-between gap-3 rounded-lg bg-header/25 p-3 transition-colors cursor-pointer select-none"
           :class="
             selectedIds.has(connection.id)
               ? 'border-error/50 bg-error/10 shadow-xs ring-1 ring-error/30'

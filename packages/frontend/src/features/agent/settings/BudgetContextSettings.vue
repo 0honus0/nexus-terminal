@@ -300,11 +300,7 @@
       </div>
 
       <div class="space-y-4">
-        <div
-          v-for="group in fieldGroups"
-          :key="group.id"
-          class="rounded-xl border border-border/60 bg-background/50 p-3.5"
-        >
+        <div v-for="group in fieldGroups" :key="group.id" class="rounded-lg bg-header/25 p-3.5">
           <h4 class="mb-3 text-xs font-semibold tracking-wide text-foreground uppercase">
             {{ group.title }}
           </h4>

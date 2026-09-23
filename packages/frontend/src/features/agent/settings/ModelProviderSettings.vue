@@ -921,7 +921,7 @@
     <div class="space-y-4 p-4 sm:p-5">
       <div
         v-if="modelRegistryStatus"
-        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-header/20 px-3 py-2 text-[11px]"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-header/30 px-3 py-2 text-[11px]"
       >
         <div class="flex flex-wrap items-center gap-2 text-text-secondary">
           <span class="font-medium text-foreground">{{ $t('agent.settings.providers.registryTitle') }}</span>
@@ -963,7 +963,7 @@
 
       <!-- 默认模型选择微岛（现代定制无原生边框） -->
       <div
-        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-header/25 p-3.5 transition-all relative z-10"
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg bg-header/30 p-3.5 transition-all relative z-10"
       >
         <div class="flex items-center gap-2.5">
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -1025,7 +1025,7 @@
         </div>
       </div>
 
-      <div class="rounded-xl border border-border/70 bg-header/20 p-3.5">
+      <div class="rounded-lg bg-header/25 p-3.5">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <div class="text-xs font-semibold text-foreground">
@@ -1118,7 +1118,7 @@
           <li
             v-for="(row, index) in selectedFallbackRows"
             :key="row.key"
-            class="flex items-center gap-2.5 rounded-lg border border-border/70 bg-background/60 px-3 py-2"
+            class="flex items-center gap-2.5 rounded-lg bg-header/25 px-3 py-2"
           >
             <span
               class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] font-semibold text-primary"
@@ -1196,7 +1196,7 @@
           :key="provider.id"
           data-testid="agent-provider-card"
           :data-provider-id="provider.id"
-          class="rounded-xl border border-border/65 bg-background/60 shadow-2xs transition-all hover:border-border/90"
+          class="rounded-xl bg-header/20 transition-colors hover:bg-header/35"
         >
           <!-- 服务商顶行摘要 -->
           <div class="flex flex-wrap items-center justify-between gap-3 p-3.5">

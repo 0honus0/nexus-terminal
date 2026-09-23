@@ -66,7 +66,7 @@
     </div>
 
     <div class="grid gap-4 p-4 sm:p-5 md:grid-cols-2">
-      <div class="rounded-xl border border-border/60 bg-background/50 p-4">
+      <div class="rounded-lg bg-header/25 p-4">
         <label class="block">
           <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.performance.runtimes') }}</span>
           <p class="mt-0.5 mb-2 text-[11px] text-text-secondary">{{ $t('agent.settings.performance.runtimesHint') }}</p>
@@ -88,7 +88,7 @@
         </label>
       </div>
 
-      <div class="rounded-xl border border-border/60 bg-background/50 p-4">
+      <div class="rounded-lg bg-header/25 p-4">
         <label class="block">
           <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.performance.modelCalls') }}</span>
           <p class="mt-0.5 mb-2 text-[11px] text-text-secondary">
