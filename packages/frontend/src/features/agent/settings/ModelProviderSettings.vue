@@ -1051,7 +1051,6 @@
             align="end"
             placement="bottom"
             :offset="6"
-            density="comfortable"
             panel-class="w-[min(360px,calc(100vw-24px))] p-1.5"
             @open-change="handleFallbackPopoverChange"
           >

@@ -538,7 +538,7 @@
             v-for="group in groups"
             :key="group.id"
             type="button"
-            class="inline-flex min-h-9 items-center gap-2 rounded-xl px-4 py-1.5 text-xs font-medium transition-all focus-visible:outline-2 focus-visible:outline-primary"
+            class="inline-flex min-h-8 items-center gap-2 rounded-lg px-4 py-1.5 text-xs font-medium transition-all focus-visible:outline-2 focus-visible:outline-primary"
             :class="
               activeGroup === group.id
                 ? 'bg-primary text-white shadow-xs font-semibold'
