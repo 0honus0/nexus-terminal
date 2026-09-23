@@ -272,6 +272,10 @@
   // 「发送」与「停止」是两个独立的动作：发送按钮永远只发送，活动 Run 的停止
   // 由旁边独立的停止按钮承担，避免同一个按钮随草稿有无在两种语义间切换。
   const sendDisabled = computed(() => props.busy || !props.canSend || !hasDraft.value);
+  // 禁用时解释原因：空草稿提示先输入，其余（全局 busy / 当前不可发送）给出等待提示。
+  const sendDisabledHint = computed(() =>
+    hasDraft.value ? t('agent.conversation.sendBusyHint') : t('agent.conversation.sendEmptyHint'),
+  );
   const stopRun = (): void => {
     if (props.busy || cancelling.value) return;
     emit('cancel');
@@ -805,7 +809,7 @@
               <button
                 v-if="activeRun"
                 type="button"
-                class="agent-stop-button flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-error/45 bg-error/10 text-[11px] font-semibold text-error transition-all hover:bg-error/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                class="agent-stop-button flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-error/45 bg-error/10 text-[11px] font-semibold text-error transition-all hover:bg-error/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                 :aria-label="$t('agent.conversation.cancelRun')"
                 :title="$t('agent.conversation.cancelRun')"
                 :disabled="stopDisabled"
@@ -819,9 +823,9 @@
               </button>
               <button
                 type="button"
-                class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-20 disabled:bg-foreground/15 disabled:text-text-secondary disabled:shadow-none"
+                class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:border disabled:border-border/70 disabled:bg-foreground/[0.07] disabled:text-text-secondary disabled:opacity-50 disabled:shadow-none"
                 :aria-label="$t('agent.conversation.send')"
-                :title="$t('agent.conversation.send')"
+                :title="sendDisabled ? sendDisabledHint : $t('agent.conversation.send')"
                 :disabled="sendDisabled"
                 @click="send"
               >

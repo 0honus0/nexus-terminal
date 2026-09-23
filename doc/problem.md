@@ -75,6 +75,7 @@
 | P2                                    | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`），与主界面"图标+居中+引导按钮"的空态卡不是同一套语言                                                                                                                                                                                                                                                                     | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                        |
 | **P1 · ✅ 已关闭 2026-09-23**         | 设置区不再把后端原始原因码当"不可用原因"渲染：已知码（`runner_not_configured` / `runner_unavailable` / `runtime_not_configured`）映射成中/英/日文说明，未知码退回通用说明并把原始值放进 `title` 与「后端原因代码」行                                                                                                                                                                 | `settings/WorkspaceRuntimeSettings.vue`（见 §7.15-b）                                                         |
 | P2                                    | 禁用态主按钮 = 品牌色 + `opacity .5`，与可用态难以区分（保存/预览导入/卸载/立即更新长期如此），且不解释原因                                                                                                                                                                                                                                                                          | `features/agent/settings/**`（实测见 §7.13-e）                                                                |
+| **P2 · ✅ 已关闭 2026-09-23**         | 主操作（Composer 发送按钮）禁用态从「品牌色 + `opacity .2`」改为「中性填充 + 保留描边 + `opacity .5` + `title` 说明原因」，并把全仓禁用态不透明度收敛到单一值 `0.5`（原 20/25/35/40/45 五种）                                                                                                                                                                                        | `ai/AgentConversation.vue` 等 9 个文件（见 §7.17-c）                                                          |
 | **P1 · ✅ 已关闭 2026-09-23**         | 图标颜色：未分层的 `i/.fas/.far/.fab { color: var(--icon-color) }` 压过 `@layer utilities`，132 个带 `text-primary/success/warning/error/foreground` 的图标一律渲染成 `#666`（`!text-white` 是既有绕过写法）                                                                                                                                                                         | `app/styles/global.css:91-110`（见 §7.19）                                                                    |
 | **P1 · ✅ 已关闭 2026-09-23**         | 空态便当卡自动轮播已可中断：悬停/焦点暂停、手动分页后固定、`prefers-reduced-motion` 时彻底不轮播（hover 位移与脉冲也一起关掉）                                                                                                                                                                                                                                                       | `ai/AgentConversation.vue`（见 §2.6）                                                                         |
 
@@ -1519,7 +1520,7 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 配套的筛选是自绘下拉（`类型 / App / 状态`），搜索框、存储进度条、`清理可回收文件` 主按钮都很整齐（截图 `73-files-view`）。
 → 建议：把这一套空态/筛选器/主按钮规格**反向移植到设置区**，而不是反过来。
 
-**c) 发送按钮的禁用态几乎不可见（P2，实测）**
+**c) 发送按钮的禁用态几乎不可见（P2 · ✅ 已关闭 2026-09-23）**
 
 实测（composer 无草稿、无 active Run 时）：
 
@@ -1534,6 +1535,21 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 即"整个产品的主操作"在禁用时只剩 **20% 不透明度**，旁边的 token 徽标却是正常对比度 —— 视觉上像按钮消失了。
 而设置区的禁用主按钮又是 `opacity: 0.5`（§7.13-e），两处对"禁用"给出两种强度。
 建议：主操作禁用态统一为"填色降级 + 描边保留 + `title` 说明为什么不能点"（例如"请先输入内容"），而不是靠调透明度；并把 0.2 / 0.5 收敛成一个值（建议 ≥0.45 并保留边框）。
+
+> ✅ **2026-09-23 闭环**：Composer 发送按钮的禁用态改为「中性填充 + 保留描边」，并补上禁用原因 `title`；
+> 同时把全仓禁用态不透明度从 20/25/35/40/45 收敛到单一值 `0.5`。
+>
+> **真实 CDP 复验（`https://api.honus.top/`，Hub 窗口 1600×711）**
+>
+> | 状态             | `disabled` | `title`      | `opacity` | `background`                              | `border`                 | `color`            |
+> | ---------------- | ---------- | ------------ | --------- | ----------------------------------------- | ------------------------ | ------------------ |
+> | 空草稿           | `true`     | 请先输入内容 | `0.5`     | `oklab(0.321 … / 0.07)`（中性，非品牌色） | `1px oklab(0.845 …/0.7)` | `rgb(102,102,102)` |
+> | 有草稿           | `false`    | 发送         | `1`       | `rgb(160,108,213)`（primary）             | `0px`                    | `rgb(255,255,255)` |
+> | 清空后回到空草稿 | `true`     | 请先输入内容 | `0.5`     | 同空草稿                                  | 同空草稿                 | 同空草稿           |
+>
+> 截图：`/tmp/shots/cmp-1717c.png`（上=禁用，下=可用）。
+> 设置区实测：`button:disabled` 的 `opacity` 只有 `0.5`（6 个）与 `1`（1 个 Gen2 `ui-button--soft`，由 Gen2 自带禁用样式负责，非本次范围），不再出现 0.2/0.35/0.4。
+> 新增 i18n `agent.conversation.sendEmptyHint` / `sendBusyHint`（zh-CN / en-US / ja-JP），`pnpm lint:agent-i18n` 通过。
 
 ---
 

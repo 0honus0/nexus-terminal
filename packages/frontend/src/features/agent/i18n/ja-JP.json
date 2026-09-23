@@ -1030,6 +1030,8 @@
       "capabilityEvidence": "結果を検証",
       "sendHint": "Enter で送信",
       "sendHintNewline": "Shift+Enter で改行",
+      "sendEmptyHint": "先に入力してください",
+      "sendBusyHint": "前の操作が完了するまでお待ちください",
       "clarificationTitle": "追加情報が必要です",
       "clarificationHint": "同じタスクを続けるため、下で回答してください。選択肢を選ぶか、入力欄に直接回答できます。",
       "clarificationRecommended": "推奨",

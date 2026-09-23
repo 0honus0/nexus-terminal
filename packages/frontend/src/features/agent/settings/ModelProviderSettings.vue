@@ -1138,7 +1138,7 @@
             <div class="flex items-center gap-1 shrink-0">
               <button
                 type="button"
-                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-border-hover hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-border-hover hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 :disabled="busy || index === 0"
                 :aria-label="$t('agent.settings.providers.fallbackMoveUp')"
                 :title="$t('agent.settings.providers.fallbackMoveUp')"
@@ -1148,7 +1148,7 @@
               </button>
               <button
                 type="button"
-                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-border-hover hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-border-hover hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 :disabled="busy || index === selectedFallbackRows.length - 1"
                 :aria-label="$t('agent.settings.providers.fallbackMoveDown')"
                 :title="$t('agent.settings.providers.fallbackMoveDown')"
@@ -1158,7 +1158,7 @@
               </button>
               <button
                 type="button"
-                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-error/40 hover:text-error disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-error/40 hover:text-error disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 :disabled="busy"
                 :aria-label="$t('agent.settings.providers.fallbackRemove')"
                 :title="$t('agent.settings.providers.fallbackRemove')"

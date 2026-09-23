@@ -1567,7 +1567,7 @@
             <button
               v-if="currentThread"
               type="button"
-              class="agent-header-thread-delete hidden h-7.5 w-7.5 items-center justify-center rounded-lg border transition-all disabled:cursor-not-allowed disabled:opacity-35"
+              class="agent-header-thread-delete hidden h-7.5 w-7.5 items-center justify-center rounded-lg border transition-all disabled:cursor-not-allowed disabled:opacity-50"
               :class="
                 threadDeleteArmedId === currentThread.id
                   ? 'border-error/30 bg-error/10 text-error'
@@ -2294,7 +2294,7 @@
                       </div>
                       <button
                         type="button"
-                        class="grid h-6 w-[54px] shrink-0 grid-cols-3 items-center overflow-hidden rounded-md border border-border/65 bg-background/55 p-0.5 transition-colors disabled:cursor-default disabled:opacity-35"
+                        class="grid h-6 w-[54px] shrink-0 grid-cols-3 items-center overflow-hidden rounded-md border border-border/65 bg-background/55 p-0.5 transition-colors disabled:cursor-default disabled:opacity-50"
                         :disabled="modelSelectionLocked"
                         :aria-pressed="
                           connectionSelectionState === 'mixed' ? 'mixed' : connectionSelectionState === 'on'

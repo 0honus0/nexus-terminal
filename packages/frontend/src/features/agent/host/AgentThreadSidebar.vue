@@ -201,7 +201,7 @@
         <button
           v-if="threads.length"
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-lg transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+          class="flex h-7 w-7 items-center justify-center rounded-lg transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           :class="
             deleteAllThreadsArmed ? 'bg-error/10 text-error' : 'text-text-secondary hover:bg-error/10 hover:text-error'
           "
@@ -334,7 +334,7 @@
         </button>
         <button
           type="button"
-          class="absolute right-1 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-25"
+          class="absolute right-1 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
           :class="
             threadDeleteArmedId === thread.id
               ? 'bg-error/10 text-error opacity-100'

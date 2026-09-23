@@ -245,7 +245,7 @@
         <div v-if="filteredConnections.length > 0" class="flex items-center gap-2">
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-error/30 bg-error/5 px-2.5 py-1.5 text-xs font-medium text-error hover:bg-error/15 hover:border-error/50 transition-all cursor-pointer shadow-2xs disabled:opacity-40 active:scale-95"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-error/30 bg-error/5 px-2.5 py-1.5 text-xs font-medium text-error hover:bg-error/15 hover:border-error/50 transition-all cursor-pointer shadow-2xs disabled:opacity-50 active:scale-95"
             :disabled="busy || isAllFilteredBlocked"
             @click="blockAll"
           >
@@ -254,7 +254,7 @@
           </button>
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs disabled:opacity-40 active:scale-95"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs disabled:opacity-50 active:scale-95"
             :disabled="busy || isNoneFilteredBlocked"
             @click="allowAll"
           >

@@ -234,7 +234,7 @@
               <button
                 v-if="capabilityFieldHasBaseline('contextWindow')"
                 type="button"
-                class="text-primary hover:underline disabled:opacity-40"
+                class="text-primary hover:underline disabled:opacity-50"
                 :disabled="capabilityFieldIsDefault('contextWindow')"
                 @click="restoreCapabilityField('contextWindow')"
               >
@@ -263,7 +263,7 @@
               <button
                 v-if="capabilityFieldHasBaseline('maxOutputTokens')"
                 type="button"
-                class="text-primary hover:underline disabled:opacity-40"
+                class="text-primary hover:underline disabled:opacity-50"
                 :disabled="capabilityFieldIsDefault('maxOutputTokens')"
                 @click="restoreCapabilityField('maxOutputTokens')"
               >
@@ -301,7 +301,7 @@
               <button
                 v-if="capabilityFieldHasBaseline(field)"
                 type="button"
-                class="text-primary hover:underline disabled:opacity-40"
+                class="text-primary hover:underline disabled:opacity-50"
                 :disabled="capabilityFieldIsDefault(field)"
                 @click="restoreCapabilityField(field)"
               >

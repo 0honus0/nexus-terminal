@@ -582,7 +582,7 @@
             </div>
             <button
               type="button"
-              class="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.055] text-text-secondary transition-[background-color,color,transform] hover:bg-primary/10 hover:text-primary active:scale-95 disabled:opacity-40"
+              class="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.055] text-text-secondary transition-[background-color,color,transform] hover:bg-primary/10 hover:text-primary active:scale-95 disabled:opacity-50"
               :disabled="busy"
               :title="$t('agent.files.searchAction')"
               @click="load"
@@ -595,7 +595,7 @@
         <button
           v-if="hasFilters"
           type="button"
-          class="flex h-8 shrink-0 items-center gap-1.5 px-1 text-[11px] font-medium text-text-secondary transition-colors hover:text-foreground disabled:opacity-40"
+          class="flex h-8 shrink-0 items-center gap-1.5 px-1 text-[11px] font-medium text-text-secondary transition-colors hover:text-foreground disabled:opacity-50"
           :disabled="busy"
           @click="resetFilters"
         >
@@ -698,7 +698,7 @@
           <div class="flex items-center justify-end gap-0.5">
             <button
               type="button"
-              class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-35"
+              class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
               :disabled="busy || item.status !== 'ready'"
               :title="item.retained ? $t('agent.files.unretain') : $t('agent.files.retain')"
               @click="toggleRetain(item)"
@@ -707,7 +707,7 @@
             </button>
             <button
               type="button"
-              class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-error/10 hover:text-error disabled:opacity-35"
+              class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-error/10 hover:text-error disabled:opacity-50"
               :disabled="busy"
               :title="$t('agent.files.delete')"
               @click="requestDelete(item)"

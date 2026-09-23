@@ -1030,6 +1030,8 @@
       "capabilityEvidence": "Verified outcomes",
       "sendHint": "Enter to send",
       "sendHintNewline": "Shift+Enter for a newline",
+      "sendEmptyHint": "Type a message first",
+      "sendBusyHint": "Waiting for the current operation to finish",
       "clarificationTitle": "More information needed",
       "clarificationHint": "Reply below to continue this same run. Choose an option or type your answer in the composer.",
       "clarificationRecommended": "Recommended",
