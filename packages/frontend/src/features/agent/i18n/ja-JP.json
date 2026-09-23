@@ -864,6 +864,13 @@
       "controlPlane": "コントロールプレーン",
       "enabled": "有効",
       "disabled": "無効",
+      "disabledReason": {
+        "noChanges": "未保存の変更はありません",
+        "noPreviewChanges": "プレビューする変更がありません",
+        "incompleteForm": "必須項目を入力してください",
+        "selectionRequired": "取得元と対象を選択してください",
+        "repositoryRequired": "リポジトリの URL を入力してください"
+      },
       "groups": {
         "overview": "概要",
         "models": "モデルと予算",

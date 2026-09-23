@@ -153,6 +153,7 @@
           tone="primary"
           type="button"
           :disabled="busy || !isDirty || hasInvalidDraft"
+          :title="!isDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
           @click="save"
         >
           <i v-if="busy" class="fa-solid fa-circle-notch fa-spin text-xs"></i>

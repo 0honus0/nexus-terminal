@@ -246,6 +246,7 @@
           tone="primary"
           type="button"
           :disabled="busy || saving || loading || invalid || !dirty"
+          :title="!dirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
           @click="save"
         >
           {{ $t('common.save') }}

@@ -864,6 +864,13 @@
       "controlPlane": "Control plane",
       "enabled": "Enabled",
       "disabled": "Disabled",
+      "disabledReason": {
+        "noChanges": "No unsaved changes",
+        "noPreviewChanges": "No pending changes to preview",
+        "incompleteForm": "Fill in the required fields first",
+        "selectionRequired": "Choose a source and a target first",
+        "repositoryRequired": "Enter a repository URL first"
+      },
       "groups": {
         "overview": "Overview",
         "models": "Models & Budget",

@@ -312,6 +312,9 @@
         tone="primary"
         type="button"
         :disabled="disabled || !agentAvailable || !displayName.trim() || !endpoint.trim()"
+        :title="
+          !displayName.trim() || !endpoint.trim() ? $t('agent.settings.disabledReason.incompleteForm') : undefined
+        "
         @click="createIntegration"
       >
         {{ $t('agent.settings.mcpIntegrations.create') }}

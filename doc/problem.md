@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -75,7 +75,7 @@
 | P2                                    | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态，无粘性分区导航                                                                                                                                                                                                                                                                                            | `settings/**`（见 §7.15-c）                                                                                   |
 | P2                                    | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`），与主界面"图标+居中+引导按钮"的空态卡不是同一套语言                                                                                                                                                                                                                                                                      | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                        |
 | **P1 · ✅ 已关闭 2026-09-23**         | 设置区不再把后端原始原因码当"不可用原因"渲染：已知码（`runner_not_configured` / `runner_unavailable` / `runtime_not_configured`）映射成中/英/日文说明，未知码退回通用说明并把原始值放进 `title` 与「后端原因代码」行                                                                                                                                                                  | `settings/WorkspaceRuntimeSettings.vue`（见 §7.15-b）                                                         |
-| P2                                    | 禁用态主按钮**已改为中性填充**（§6.2 批 1/2：`保存` / `预览导入` / `卸载` 等实测 `bg rgb(243,244,246)` + 中性描边，不再是品牌色 × 0.5）；**仍开放**：部分禁用按钮未给出原因文案（`title` / 行内 hint）                                                                                                                                                                                | `features/agent/settings/**`（实测见 §7.13-e）                                                                |
+| **P2 · ✅ 已关闭 2026-09-23**         | 禁用态主按钮**已改为中性填充**（§6.2 批 1/2：`保存` / `预览导入` / `卸载` 等实测 `bg rgb(243,244,246)` + 中性描边，不再是品牌色 × 0.5）；**已补**：11 个稳态禁用按钮全部带原因 `title`（没有未保存的修改 / 没有待预览的改动 / 请先填写必填项 / 请先选择来源与目标 / 请先填写仓库地址，三语齐全）                                                                                      | `features/agent/settings/**`（实测见 §7.13-e）                                                                |
 | **P2 · ✅ 已关闭 2026-09-23**         | 主操作（Composer 发送按钮）禁用态从「品牌色 + `opacity .2`」改为「中性填充 + 保留描边 + `opacity .5` + `title` 说明原因」，并把全仓禁用态不透明度收敛到单一值 `0.5`（原 20/25/35/40/45 五种）                                                                                                                                                                                         | `ai/AgentConversation.vue` 等 9 个文件（见 §7.17-c）                                                          |
 | **P1 · ✅ 已关闭 2026-09-23**         | 图标颜色：未分层的 `i/.fas/.far/.fab { color: var(--icon-color) }` 压过 `@layer utilities`，132 个带 `text-primary/success/warning/error/foreground` 的图标一律渲染成 `#666`（`!text-white` 是既有绕过写法）                                                                                                                                                                          | `app/styles/global.css:91-110`（见 §7.19）                                                                    |
 | **P1 · ✅ 已关闭 2026-09-23**         | 空态便当卡自动轮播已可中断：悬停/焦点暂停、手动分页后固定、`prefers-reduced-motion` 时彻底不轮播（hover 位移与脉冲也一起关掉）                                                                                                                                                                                                                                                        | `ai/AgentConversation.vue`（见 §2.6）                                                                         |
@@ -1341,7 +1341,31 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 在浅色底上两者差异很小（看起来都像"淡紫的按钮"），用户无法判断"是按钮坏了、还是没改动所以不可点"。
 建议：禁用态改为**中性灰底 + 中性文字**（而不是降低品牌色透明度），并在按钮旁给出原因（"无改动可保存"），这也是 §6.6 规范里应该补的一条。
 
-**f) 同页控件字号/尺寸仍不统一（实测补充）**
+> ✅ **2026-09-23 闭环**
+>
+> - **中性填充**（§6.2 批 1/2）：`保存` / `预览导入` / `卸载` 等实测已是 `bg rgb(243,244,246)` + 中性描边 + `opacity 0.5`，不再保留品牌色。
+> - **补齐禁用原因**（本次）：修复前 11 个"稳态禁用"按钮里只有 `卸载` 有 `title`；现在全部带原因，三语齐全
+>   （新增 i18n `agent.settings.disabledReason.*`：`noChanges` / `noPreviewChanges` / `incompleteForm` / `selectionRequired` / `repositoryRequired`）。
+>
+> **CDP 复验（`https://api.honus.top/settings` → Agent，逐分组扫描 `button:disabled`）**
+>
+> | 按钮               | 分组 / 卡片               | 禁用条件                          | `title`（修复后）                   |
+> | ------------------ | ------------------------- | --------------------------------- | ----------------------------------- |
+> | `保存`             | 预算与上下文              | `!isDirty`                        | 没有未保存的修改                    |
+> | `保存`             | 执行与性能                | `!isDirty`                        | 没有未保存的修改                    |
+> | `保存`             | Plugin / App 独立执行预算 | `!dirty`                          | 没有未保存的修改                    |
+> | `保存`             | Artifact 与存储           | `!isDirty`                        | 没有未保存的修改                    |
+> | `预览变更`         | 执行步数限制              | `!canPreview`                     | 没有待预览的改动                    |
+> | `创建 Integration` | MCP 集成                  | 显示名称 / Endpoint 为空          | 请先填写必填项                      |
+> | `创建 Integration` | ACP 运行时                | 显示名称 / Profile 为空           | 请先填写必填项                      |
+> | `预览导入`         | Memory 审核与发布         | 来源 App / 记忆 / 目标 App 未选全 | 请先选择来源与目标                  |
+> | `添加仓库`         | 可安装 App 与 Skill       | 仓库地址为空                      | 请先填写仓库地址                    |
+> | `卸载`             | Agent App                 | 该 App 仍启用                     | 请先停用该 App 后再进行卸载（原有） |
+>
+> - 门禁：`all templates compile` + `vue-tsc --noEmit` exit 0 + `prettier --check` + `pnpm lint:agent-i18n`（`Agent i18n check passed`）。
+> - **同类未覆盖**：全局设置页（`features/preferences`，非 Agent 范围）的 `保存本组` 仍是禁用无原因；
+>   本环境也仍未渲染 `添加 App` / 目标列表等需要先选中对象的按钮（与 §7.15-b 同一类环境限制）。
+>   **f) 同页控件字号/尺寸仍不统一（实测补充）**
 
 - `<select>`：同一个「Agent」设置页里，运行与环境 tab 的 select 计算字号 **16px**（552×36），插件与安全 tab 的 3 个 select 是 **12px**（588×36 / 537×36）→ 同一组件两种字号。
 - `<input type="number">`：552×36 / fs 16px（受 §7.10 的 cascade 问题影响）。

@@ -358,6 +358,7 @@
         tone="primary"
         type="button"
         :disabled="busy || !isDirty || hasInvalidDraft"
+        :title="!isDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
         @click="save"
       >
         <i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>

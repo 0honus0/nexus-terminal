@@ -426,6 +426,11 @@
               tone="neutral"
               type="button"
               :disabled="disabled || !selectedAppId || !sourceAppId || !sourceMemoryId"
+              :title="
+                !selectedAppId || !sourceAppId || !sourceMemoryId
+                  ? $t('agent.settings.disabledReason.selectionRequired')
+                  : undefined
+              "
               @click="previewImport"
               class="w-full"
             >

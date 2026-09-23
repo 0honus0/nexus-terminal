@@ -121,7 +121,14 @@
       <span class="text-xs text-text-secondary">
         {{ isDirty ? $t('agent.settings.performance.unsavedChanges') : $t('agent.settings.performance.activeNotice') }}
       </span>
-      <UiButton appearance="solid" tone="primary" type="button" :disabled="busy || !isDirty || invalid" @click="save">
+      <UiButton
+        appearance="solid"
+        tone="primary"
+        type="button"
+        :disabled="busy || !isDirty || invalid"
+        :title="!isDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
+        @click="save"
+      >
         <i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>
         <span>{{ busy ? $t('agent.ui.working') : $t('common.save') }}</span>
       </UiButton>

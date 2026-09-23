@@ -146,6 +146,7 @@
         tone="primary"
         type="button"
         :disabled="!canPreview"
+        :title="!canPreview ? $t('agent.settings.disabledReason.noPreviewChanges') : undefined"
         @click="emit('preview', proposedChanges)"
       >
         <i class="fa-solid fa-shield-halved text-[10px]" aria-hidden="true"></i>

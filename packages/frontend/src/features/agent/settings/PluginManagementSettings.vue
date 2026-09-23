@@ -483,6 +483,7 @@
               tone="primary"
               type="button"
               :disabled="locked || !repositoryUrl.trim()"
+              :title="!repositoryUrl.trim() ? $t('agent.settings.disabledReason.repositoryRequired') : undefined"
               @click="addRepository"
             >
               {{ $t('agent.settings.plugins.addRepository') }}

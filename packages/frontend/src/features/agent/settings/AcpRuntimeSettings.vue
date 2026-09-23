@@ -320,6 +320,9 @@
               tone="primary"
               type="button"
               :disabled="disabled || !agentAvailable || !displayName.trim() || !profileId"
+              :title="
+                !displayName.trim() || !profileId ? $t('agent.settings.disabledReason.incompleteForm') : undefined
+              "
               @click="createIntegration"
             >
               {{ $t('agent.settings.acpRuntime.createIntegration') }}
