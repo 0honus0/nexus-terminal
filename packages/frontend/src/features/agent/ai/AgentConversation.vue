@@ -495,7 +495,7 @@
               </div>
             </button>
           </div>
-          <div class="mt-3 flex items-center justify-center gap-1.5">
+          <div class="mt-3 flex items-center justify-center gap-4">
             <button
               v-for="page in homePromptPageCount"
               :key="page"
@@ -866,6 +866,22 @@
   .agent-stop-button i,
   .agent-stop-button:hover i {
     color: var(--color-error);
+  }
+
+  /*
+   * §7.12：分页圆点的可视部分只有 6×6（当前页 16×6），按钮盒又正好贴着可视尺寸
+   * （`h-4` + `w-3/w-5` + `px-0`），实测命中区 = 12×16 / 20×16，远低于最小点击目标。
+   * 这里用一个透明伪元素把命中区向外扩到 28×32（当前页 36×32），布局与视觉都不变；
+   * 水平只扩 8px 是因为相邻圆点中心仅相距 18px，再往外扩就会盖住邻居的可视圆点。
+   */
+  .agent-home-pager-dot {
+    position: relative;
+  }
+
+  .agent-home-pager-dot::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
   }
 
   /*

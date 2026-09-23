@@ -59,7 +59,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | 设置区「Agent」页在英文界面下的硬编码中文：三个子页可见中文文本节点 **29 → 0**（数值+单位改由 `use-quantity-labels` 注入）                                                                                                                                                                                                                                                           | `features/agent/settings/**`（见 §6.5、§7.11、§7.14-c）                                                       |
 | **P1 · ✅ 已关闭 2026-09-23**         | 备用模型链已改为 `1..N` 有序列表 + 上移/下移/移除；Add 使用可搜索 Gen2 `UiPopover`，排除默认/已选并限制最多 8 项                                                                                                                                                                                                                                                                     | `settings/ModelProviderSettings.vue`（见 §7.11）                                                              |
 | P1                                    | 设置区按钮规格失控（实测）：`添加 Provider` 144×38 fs16 / `关闭 Agent` 109×40 fs16 / `立即更新` 77×28 fs11；同一服务商行 `模型与测试(6)` 144px、`更新模型` 107px、`停用` 54px、删除 28×28                                                                                                                                                                                            | 见 §7.11                                                                                                      |
-| P2                                    | 空态 pager 可点区域仅 **12×16px**（点 6×6），远低于 32px 触控标准                                                                                                                                                                                                                                                                                                                    | `ai/AgentConversation.vue:472-486`（实测见 §7.12）                                                            |
+| **P2 · ✅ 已关闭 2026-09-23**         | 空态 pager 命中区 **12×16 / 20×16 → 28×32 / 36×32**：透明伪元素外扩，可视圆点与布局不变；每个圆点独占互不重叠的命中格                                                                                                                                                                                                                                                                | `ai/AgentConversation.vue:472-486`（实测见 §7.12）                                                            |
 | **P1 · ✅ 已关闭 2026-09-23**         | 弹层已改为优先按 Hub 窗口 clamp，并限制 maxWidth/maxHeight、跟随 Hub resize；560px Hub 下附件弹层实测四边均在窗口内                                                                                                                                                                                                                                                                  | `files/AgentConfigPopover.vue`、`host/AgentAppSwitcher.vue`（见 §7.13-a）                                     |
 | **P0 · ✅ 已关闭 2026-09-23**         | Hub 键盘模态边界已修复并 CDP 复验：初始焦点进入 Hub、背景 inert、连续 35 次 Tab 0 次逃逸、Escape 关闭且焦点回 Launcher                                                                                                                                                                                                                                                               | `host/AgentHubWindow.vue`（见 §7.13-c）                                                                       |
 | P2                                    | 会话列表缩放（Ctrl+滚轮）**持久化在 localStorage 且无重置入口**，行标题用内联 `fontSize: 10.75×scale`、行高 JS 计算 → 绕过 token，实测 `1.3` 时字号 13.975px                                                                                                                                                                                                                         | `host/AgentThreadSidebar.vue:64/127/310`（见 §7.13-d）                                                        |
@@ -1003,6 +1003,7 @@ shadow-2xl ring-1 ring-border/20 outline-none
 1. **助手气泡没有填充**：`ai/ConversationMessage.vue:342` 是 `rounded-xl bg-card/45 ring-1 ring-inset ring-border/30`，`bg-card/45` 死类 → 助手回复变成"只有描边的白框"；而用户气泡 `bg-primary/[0.07]`（`:299`）有色。一强一弱，观感割裂，这是"主界面看起来很糙"最直接的原因之一。
 2. **空态 bento 卡片同样没填充**：`ai/AgentConversation.vue:434` 的卡片 + tone 类（`:127-152`）里 `via-card to-card` 全是死类，卡片只剩 `border-border/75` + hover 阴影；空态容器 `min-h-[460px]`（`:401`）在矮窗口会被裁。
 3. **空态自动轮播**：9s 自动翻页（`:66、163-166`）、4 页，pager 点击区实测 **12×16px**（`:472-486`，`h-4 w-3/w-5` + `px-0`，点本身只有 6×6）——既不可发现又远低于触控标准（详见 §7.12-3 实测截图）。建议改 1 页 4 卡或静态 + 显式翻页按钮（≥32px）。
+   ✅ **2026-09-23**：命中区已关闭（`28×32` / 当前页 `36×32`，每枚圆点独占一格，见 §7.12）；轮播按 §2.6 保留，但已改为可中断（悬停 / 焦点 / 手动分页 / `prefers-reduced-motion`）。
 4. **发送 / 取消二合一**：同一个按钮承担两种语义（`ai/AgentConversation.vue:765-783`），`hover:bg-primary-hover` 是死类 → 连 hover 反馈都没有；`disabled:opacity-20` 几乎看不见。
 5. **token 胶囊太小**：`text-[9.5px]`、`h-7`（`:757-764`），`title` 里塞的是英文 `input / output / cache / steps`，未 i18n。
 6. **消息列宽**：`max-w-3xl`（768px）在窄窗口下被会话列压缩，气泡贴边；同时弹层 `w-72` 几乎占满（见 §7.2）。
@@ -1062,13 +1063,13 @@ shadow-2xl ring-1 ring-border/20 outline-none
 | 5   | 减少 chrome：矮窗口压缩顶栏/composer，提高 `MIN_HEIGHT`                                                                                                   | §7.2                                                                             | P1   |
 | 6   | ✅ **已关闭 2026-09-23**：设置区默认模型最终迁到 Gen2 `UiCombobox`；选择/搜索/键盘/焦点统一由 Reka Combobox 承担，展开态与 glass panel 同宽同背景连续衔接 | `settings/ModelProviderSettings.vue`、`foundation/ui/UiCombobox.vue`             | P1   |
 | 7   | 窄窗口侧栏支持折叠；侧栏/任务栏/Hub 视图状态统一持久化                                                                                                    | `host/AgentAppSurface.vue:1543`、`host/window-manager.ts`                        | P2   |
-| 8   | 空态轮播改静态或显式翻页，pager 命中区 ≥32px                                                                                                              | `ai/AgentConversation.vue:429-486`                                               | P2   |
+| 8   | ✅ **已关闭 2026-09-23**：轮播按 §2.6 保留但改为可中断；pager 命中区 `12×16` → `28×32`（当前页 `36×32`），每个圆点独占一格                                | `ai/AgentConversation.vue:429-486`                                               | P2   |
 | 9   | Hub 顶栏毛玻璃被覆盖、窗口阴影写死浅色                                                                                                                    | `host/AgentHubWindow.vue:362、606-611、673-680`                                  | P2   |
 | 10  | 无效间距类 `py-0.2 / py-0.8 / py-1.8` 与死 CSS 清理                                                                                                       | settings/**、`host/AgentAppSurface.vue:2612/2648/2692`                           | P2   |
 | 11  | ✅ **已关闭 2026-09-23**：font/cursor reset 已放入 `@layer base`，Tailwind 字号 utility 恢复生效                                                          | `app/styles/global.css:27-46`（见 §7.10）                                        | P0   |
 | 12  | ✅ **已关闭 2026-09-23**：备用模型链已改为 `1..N` 有序列表 + 上移/下移/移除；Add 使用可搜索 Gen2 `UiPopover`，排除默认/已选并限制最多 8 项                | `settings/ModelProviderSettings.vue`（见 §7.11）                                 | P1   |
 | 13  | 设置区把「状态」画成按钮（默认模型 / 活跃 App / 沙箱）与「自动保存」绿胶囊，需要收敛成只读 badge 规格                                                     | §7.11                                                                            | P2   |
-| 14  | 空态 pager 命中区 12×16 → ≥32px；空态建议卡去掉自动轮播                                                                                                   | `ai/AgentConversation.vue:429-486`（实测见 §7.12）                               | P2   |
+| 14  | ✅ **已关闭 2026-09-23**：pager 命中区 `12×16 / 20×16` → `28×32 / 36×32`（伪元素外扩，视觉不变）；自动轮播按 §2.6 改为可中断而非移除                      | `ai/AgentConversation.vue:429-486`（实测见 §7.12）                               | P2   |
 
 ---
 
@@ -1211,6 +1212,14 @@ select {
 - 徽章 `智能协作工作台` 10px / 主标题 20px / 副标题 12px（`text-secondary/80`）+ 建议卡标题 13px、描述 12px（`text-secondary/75`）→ **对比度不足**（12px + 75% 灰）是最影响"精致度"的一条，浮窗弹层里同样的灰色只用在副标题且更短。
 - 建议卡：361×94、`rounded-2xl`、`border-border/75`、**无填充**（`bg-card` 死类 → §1.1/§7.1），右上角装饰箭头 `↗` 只有 40% 透明度；两卡描述换行不一致（一张 1 行、一张 2 行留孤儿"改"字）→ 卡片高度靠 `min-h` 撑，视觉不齐。
 - pager：4 个点，**可点区域 12×16（点本身 6×6）**，且 4 页会 9s 自动轮播（§2.6）——不可发现 + 低于触控标准 + 抢注意力，建议改静态或显式翻页按钮。
+
+> ✅ **2026-09-23 闭环（pager 命中区）**
+>
+> - **现象**：4 枚圆点的可点区域实测等于按钮盒本身——当前页 `20×16`、其余 `12×16`，而可视圆点只有 `16×6 / 6×6`（`elementFromPoint` 网格采样：从点中心向上下各 ~8px、向两侧 ~6px 就离开自身命中区）。
+> - **根因**：`ai/AgentConversation.vue` 的按钮是 `h-4` + `w-3/w-5` + `px-0`，既没有内边距也没有扩大命中区的伪元素，于是命中区 = 16px 高的可视盒。
+> - **改法**：`.agent-home-pager-dot` 增加 `position: relative` + 透明 `::after { inset: -8px }`（scoped 样式内说明），命中区外扩到 `28×32`（当前页 `36×32`）。可视圆点尺寸、按钮盒、容器高度与滚动溢出均不变。由于相邻圆点中心原本只相距 18px，同时把容器间距由 `gap-1.5`(6px) 调到 `gap-4`(16px)，让每枚圆点获得**互不重叠**的 ≥28px 命中格——否则后一枚的伪元素会盖住前一枚的可视圆点（实测过：6px 间距下中间圆点的独占区只有 18×32）。
+> - **CDP 验证**：外扩后逐点测量 `ownHit` = `36×32 / 28×32 / 28×32 / 28×32`，`centerOwned` 与 `dotFullyOwned` 全为 true；在"可视圆点右侧 +8px、上方 −10px"（旧 12/20 宽盒之外）真实点击 3 枚圆点，`aria-current` 依次切到 3 / 1 / 0 全部命中；两枚圆点正中间处归属明确（无死区）；`.agent-conversation-scroller` 的 `scrollWidth/clientWidth` 与外扩前一致（917 / 917，伪元素不产生滚动溢出）。
+
 - 位置本身**基本居中**（内容 y≈258-565，可视区 144-709：上留白 114px / 下留白 144px），上下略不对称但不是主要问题；真正拖观感的是上面的对比度不足与卡片无填充。
 
 **4) 任务栏（截图 `agent-hub-task-rail-zh.png`）**
