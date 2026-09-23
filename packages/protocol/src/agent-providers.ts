@@ -140,6 +140,11 @@ export interface AgentProviderTestResponseDto {
   errorCode?: string;
 }
 
+export interface AgentDiscoverEndpointModelsRequestDto {
+  baseUrl: string;
+  credential?: string;
+}
+
 export interface AgentDiscoveredProviderModelDto {
   id: string;
   ownedBy?: string;

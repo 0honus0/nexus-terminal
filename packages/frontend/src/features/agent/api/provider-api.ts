@@ -1,4 +1,5 @@
 import type {
+  AgentDiscoverEndpointModelsRequestDto,
   AgentDiscoveredProviderModelDto,
   AgentModelRegistryResolveQueryDto,
   AgentModelRegistryResolveResponseDto,
@@ -35,14 +36,19 @@ export const createProviderApi = () => ({
     const params: AgentModelRegistryResolveQueryDto = { modelId };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelopeDto<AgentModelRegistryResolveResponseDto>>('/agent/ai/model-registry/resolve', {
-          params,
-        })
+        await httpClient.get<AgentEnvelopeDto<AgentModelRegistryResolveResponseDto>>(
+          '/agent/ai/model-registry/resolve',
+          {
+            params,
+          },
+        )
       ).data,
     );
   },
   async modelRegistryStatus(): Promise<AgentModelRegistryStatusDto> {
-    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentModelRegistryStatusDto>>('/agent/ai/model-registry')).data);
+    return unwrap(
+      (await httpClient.get<AgentEnvelopeDto<AgentModelRegistryStatusDto>>('/agent/ai/model-registry')).data,
+    );
   },
   async refreshModelRegistry(): Promise<AgentModelRegistryStatusDto> {
     return unwrap(
@@ -59,11 +65,9 @@ export const createProviderApi = () => ({
     const input: AgentModelRegistryUpdateRequestDto = { autoUpdate };
     return unwrap(
       (
-        await httpClient.patch<AgentEnvelopeDto<AgentModelRegistryStatusDto>>(
-          '/agent/ai/model-registry',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.patch<AgentEnvelopeDto<AgentModelRegistryStatusDto>>('/agent/ai/model-registry', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
@@ -105,6 +109,19 @@ export const createProviderApi = () => ({
         await httpClient.post<AgentEnvelopeDto<AgentDiscoveredProviderModelDto[]>>(
           `/agent/ai/providers/${encodeURIComponent(providerId)}/discover-models`,
           {},
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async discoverEndpointModels(
+    input: AgentDiscoverEndpointModelsRequestDto,
+  ): Promise<AgentDiscoveredProviderModelDto[]> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelopeDto<AgentDiscoveredProviderModelDto[]>>(
+          '/agent/ai/providers/discover-endpoint-models',
+          input,
           { headers: await mutationHeaders() },
         )
       ).data,

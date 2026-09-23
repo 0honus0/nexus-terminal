@@ -38,6 +38,7 @@
       align?: 'start' | 'center' | 'end';
       panelClass?: string;
       name?: string;
+      hideIndicator?: boolean;
     }>(),
     {
       modelValue: null,
@@ -47,6 +48,7 @@
       invalid: false,
       align: 'start',
       panelClass: '',
+      hideIndicator: true,
     },
   );
 
@@ -101,13 +103,14 @@
           data-ui="select-panel"
           data-ui-gen="2"
           :data-density="props.density"
+          :data-hide-indicator="props.hideIndicator || undefined"
           position="popper"
           :align="props.align"
           :side-offset="6"
           :collision-padding="12"
           :avoid-collisions="true"
           class="ui-surface ui-radius--panel ui-select__panel glass-surface"
-          :class="props.panelClass"
+          :class="[{ 'ui-select__panel--no-indicator': props.hideIndicator }, props.panelClass]"
         >
           <SelectViewport class="ui-select__viewport">
             <SelectItem
@@ -118,7 +121,7 @@
               :text-value="option.label"
               class="ui-select__item ui-focusable"
             >
-              <span class="ui-select__item-indicator">
+              <span v-if="!props.hideIndicator" class="ui-select__item-indicator">
                 <SelectItemIndicator>
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                     <path

@@ -309,7 +309,7 @@
             <i class="fa-solid fa-store text-[9px]" aria-hidden="true"></i>
             <span>{{ $t('agent.settings.plugins.ecosystemBadge') }}</span>
           </span>
-          <UiInfoHint :text="$t('agent.settings.plugins.description')" />
+          <UiInfoHint :text="$t('agent.settings.plugins.remoteRepositoriesHint')" />
         </div>
       </div>
 
@@ -448,18 +448,13 @@
       </div>
 
       <!-- 仓库源管理与添加 -->
-      <div class="rounded-lg bg-header/30 p-3.5 sm:p-4">
+      <div class="rounded-xl border border-border bg-header/20 p-3.5 sm:p-4 shadow-2xs">
         <div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div class="flex items-center gap-2">
-              <i class="fa-solid fa-boxes-stacked text-xs text-primary" aria-hidden="true"></i>
-              <h4 class="text-xs font-semibold text-foreground">
-                {{ $t('agent.settings.plugins.remoteRepositories') }}
-              </h4>
-            </div>
-            <p class="mt-0.5 text-[11px] text-text-secondary">
-              {{ $t('agent.settings.plugins.remoteRepositoriesHint') }}
-            </p>
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-boxes-stacked text-xs text-primary" aria-hidden="true"></i>
+            <h4 class="text-xs font-semibold text-foreground">
+              {{ $t('agent.settings.plugins.remoteRepositories') }}
+            </h4>
           </div>
 
           <!-- 添加新仓库输入条：无紫色高亮、中性微质感；窄屏整条换行，输入框独占一行 -->
@@ -511,28 +506,26 @@
             </button>
           </div>
         </div>
-      </div>
 
-      <!-- 仓库源下的应用网格展示 (Marketplace Cards) -->
-      <div v-if="catalogSources.length" class="space-y-4">
-        <div
-          v-for="source in catalogSources"
-          :key="`${source.official ? 'official' : 'remote'}:${source.catalog.repositoryUrl}`"
-          class="rounded-lg bg-header/25 p-4 transition-colors"
-        >
-          <!-- 仓库源卡片头部标牌 -->
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-            <div class="flex flex-wrap items-center gap-2">
+        <!-- 仓库源下的应用网格展示 (Marketplace Cards) -->
+        <div v-if="catalogSources.length" class="mt-3.5 pt-3.5 border-t border-border space-y-3.5">
+          <div
+            v-for="source in catalogSources"
+            :key="`${source.official ? 'official' : 'remote'}:${source.catalog.repositoryUrl}`"
+            class="space-y-3"
+          >
+            <!-- 仓库源卡片头部标牌 -->
+            <div class="flex flex-wrap items-center justify-start gap-1.5 sm:gap-2.5 border-b border-border pb-2.5">
               <span
                 v-if="source.official"
-                class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary"
+                class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
               >
                 <i class="fa-solid fa-certificate text-[9px]"></i>
                 <span>{{ $t('agent.settings.plugins.officialRepository') }}</span>
               </span>
               <span
                 v-if="source.official"
-                class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2.5 py-0.5 text-[11px] font-medium text-success"
+                class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
               >
                 <i class="fa-solid fa-lock text-[9px]"></i>
                 <span>{{ $t('agent.settings.plugins.officialPublisherPinned') }}</span>
@@ -544,171 +537,176 @@
                 <i class="fa-solid fa-network-wired text-[9px]"></i>
                 <span>{{ $t('agent.settings.plugins.thirdPartyRepository') }}</span>
               </span>
+
+              <button
+                type="button"
+                class="inline-flex max-w-full items-center gap-1.5 font-mono text-[11px] text-text-secondary hover:text-foreground transition-colors cursor-pointer"
+                :title="source.catalog.repositoryUrl"
+                @click="copyCatalogUrl(source.catalog.repositoryUrl)"
+              >
+                <i
+                  :class="
+                    copiedSourceUrl === source.catalog.repositoryUrl
+                      ? 'fa-solid fa-check text-success'
+                      : 'fa-regular fa-copy'
+                  "
+                ></i>
+                <span class="max-w-[260px] sm:max-w-xl truncate">{{ source.catalog.repositoryUrl }}</span>
+              </button>
             </div>
 
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 font-mono text-[11px] text-text-secondary hover:text-foreground transition-colors cursor-pointer"
-              @click="copyCatalogUrl(source.catalog.repositoryUrl)"
-            >
-              <i
-                :class="
-                  copiedSourceUrl === source.catalog.repositoryUrl
-                    ? 'fa-solid fa-check text-success'
-                    : 'fa-regular fa-copy'
-                "
-              ></i>
-              <span class="max-w-[260px] truncate">{{ source.catalog.repositoryUrl }}</span>
-            </button>
-          </div>
-
-          <!-- 现代单列（1 列）低高度扩展应用卡片列表 -->
-          <div class="mt-3 grid grid-cols-1 gap-2.5">
-            <div
-              v-for="entry in source.catalog.packages"
-              :key="`${entry.appId}@${entry.version}`"
-              class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 sm:px-4 sm:py-3 shadow-2xs transition-all duration-200 hover:border-primary/50 hover:shadow-xs"
-            >
-              <!-- 左侧：图标 + 标题/版本/状态 + 单行描述 -->
-              <div class="flex items-center gap-3 min-w-0 flex-1">
-                <div
-                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
-                  :class="
-                    entry.appId === 'nexus.agent'
-                      ? 'bg-primary/15 text-primary ring-1 ring-primary/25'
-                      : entry.appId === 'nexus.fullstack'
-                        ? 'bg-success/15 text-success ring-1 ring-success/25'
-                        : 'bg-primary/10 text-primary ring-1 ring-primary/20'
-                  "
-                >
-                  <i
+            <!-- 现代单列（1 列）低高度扩展应用卡片列表 -->
+            <div class="mt-3 grid grid-cols-1 gap-2.5">
+              <div
+                v-for="entry in source.catalog.packages"
+                :key="`${entry.appId}@${entry.version}`"
+                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 sm:px-4 sm:py-3 shadow-2xs transition-all duration-200 hover:border-primary/50 hover:shadow-xs"
+              >
+                <!-- 左侧：图标 + 标题/版本/状态 + 单行描述 -->
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                  <div
+                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
                     :class="
                       entry.appId === 'nexus.agent'
-                        ? 'fa-solid fa-wand-magic-sparkles'
+                        ? 'bg-primary/15 text-primary ring-1 ring-primary/25'
                         : entry.appId === 'nexus.fullstack'
-                          ? 'fa-solid fa-layer-group'
-                          : 'fa-solid fa-puzzle-piece'
+                          ? 'bg-success/15 text-success ring-1 ring-success/25'
+                          : 'bg-primary/10 text-primary ring-1 ring-primary/20'
                     "
-                    aria-hidden="true"
-                  ></i>
-                </div>
-
-                <div class="min-w-0 flex-1">
-                  <!-- 上行：名称 + 版本 + 状态徽章 + appId -->
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-xs sm:text-sm font-bold text-foreground truncate">{{ entry.displayName }}</span>
-                    <span
-                      class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
-                    >
-                      v{{ entry.version }}
-                    </span>
-                    <span
-                      v-if="!entry.compatible"
-                      class="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
-                    >
-                      {{ $t('agent.settings.plugins.incompatible') }}
-                    </span>
-                    <span
-                      v-else-if="isInstalled(entry.appId)"
-                      class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
-                    >
-                      <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-                      <span>{{
-                        isInstalledAndEnabled(entry.appId)
-                          ? $t('agent.settings.plugins.stateEnabled')
-                          : $t('agent.settings.plugins.stateInstalled')
-                      }}</span>
-                    </span>
-                    <span v-else class="rounded-full bg-header px-2 py-0.5 text-[11px] font-medium text-text-secondary">
-                      {{ $t('agent.settings.plugins.stateNotInstalled') }}
-                    </span>
-                    <span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
-                      {{ entry.appId }}
-                    </span>
-                  </div>
-
-                  <!-- 下行：紧凑单行描述与不兼容警示 -->
-                  <div class="mt-0.5 flex items-center gap-2 text-xs text-text-secondary">
-                    <p
-                      class="truncate text-[11px] leading-relaxed max-w-md lg:max-w-xl"
-                      :title="
-                        entry.appId === 'nexus.agent'
-                          ? $t('agent.settings.plugins.summaryNexusAgent')
-                          : entry.appId === 'nexus.fullstack'
-                            ? $t('agent.settings.plugins.summaryNexusFullstack')
-                            : entry.description
-                      "
-                    >
-                      {{
-                        entry.appId === 'nexus.agent'
-                          ? $t('agent.settings.plugins.summaryNexusAgent')
-                          : entry.appId === 'nexus.fullstack'
-                            ? $t('agent.settings.plugins.summaryNexusFullstack')
-                            : entry.description
-                      }}
-                    </p>
-                    <span v-if="!entry.compatible" class="shrink-0 text-[11px] text-warning font-mono">
-                      {{
-                        $t('agent.settings.plugins.compatibilityShort', {
-                          min: entry.nexus.minVersion,
-                          max: entry.nexus.maxVersion,
-                        })
-                      }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 右侧：签名状态与操作按钮 -->
-              <div
-                class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border"
-              >
-                <span class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-secondary/70 font-mono">
-                  <i class="fa-solid fa-shield-check text-success text-[10px]"></i>
-                  <span>Ed25519</span>
-                </span>
-
-                <div class="flex items-center gap-1.5">
-                  <UiButton
-                    appearance="soft"
-                    tone="neutral"
-                    v-if="!source.official && !publisherTrusted(entry.publisherKeyId)"
-                    type="button"
-                    :disabled="
-                      locked || !source.catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
-                    "
-                    @click="
-                      trustRemotePublisher(
-                        source.catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
-                      )
-                    "
-                  >
-                    {{ $t('agent.settings.plugins.trustRemotePublisher') }}
-                  </UiButton>
-
-                  <UiButton
-                    type="button"
-                    :appearance="isInstalled(entry.appId) ? 'soft' : 'solid'"
-                    :tone="isInstalled(entry.appId) ? 'neutral' : 'primary'"
-                    :disabled="
-                      locked || !entry.compatible || (!source.official && !publisherTrusted(entry.publisherKeyId))
-                    "
-                    @click="prepareRemotePackage(source.catalog, entry, source.official)"
                   >
                     <i
                       :class="
-                        isInstalled(entry.appId)
-                          ? 'fa-solid fa-arrows-rotate text-[11px]'
-                          : 'fa-solid fa-download text-[11px]'
+                        entry.appId === 'nexus.agent'
+                          ? 'fa-solid fa-wand-magic-sparkles'
+                          : entry.appId === 'nexus.fullstack'
+                            ? 'fa-solid fa-layer-group'
+                            : 'fa-solid fa-puzzle-piece'
                       "
                       aria-hidden="true"
                     ></i>
-                    <span>{{
-                      isInstalled(entry.appId)
-                        ? $t('agent.settings.plugins.reverifyPackage')
-                        : $t('agent.settings.plugins.prepareRemote')
-                    }}</span>
-                  </UiButton>
+                  </div>
+
+                  <div class="min-w-0 flex-1">
+                    <!-- 上行：名称 + 版本 + 状态徽章 + appId -->
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="text-xs sm:text-sm font-bold text-foreground truncate">{{ entry.displayName }}</span>
+                      <span
+                        class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
+                      >
+                        v{{ entry.version }}
+                      </span>
+                      <span
+                        v-if="!entry.compatible"
+                        class="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
+                      >
+                        {{ $t('agent.settings.plugins.incompatible') }}
+                      </span>
+                      <span
+                        v-else-if="isInstalled(entry.appId)"
+                        class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
+                      >
+                        <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+                        <span>{{
+                          isInstalledAndEnabled(entry.appId)
+                            ? $t('agent.settings.plugins.stateEnabled')
+                            : $t('agent.settings.plugins.stateInstalled')
+                        }}</span>
+                      </span>
+                      <span
+                        v-else
+                        class="rounded-full bg-header px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                      >
+                        {{ $t('agent.settings.plugins.stateNotInstalled') }}
+                      </span>
+                      <span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
+                        {{ entry.appId }}
+                      </span>
+                    </div>
+
+                    <!-- 下行：紧凑单行描述与不兼容警示 -->
+                    <div class="mt-0.5 flex items-center gap-2 text-xs text-text-secondary">
+                      <p
+                        class="truncate text-[11px] leading-relaxed max-w-md lg:max-w-xl"
+                        :title="
+                          entry.appId === 'nexus.agent'
+                            ? $t('agent.settings.plugins.summaryNexusAgent')
+                            : entry.appId === 'nexus.fullstack'
+                              ? $t('agent.settings.plugins.summaryNexusFullstack')
+                              : entry.description
+                        "
+                      >
+                        {{
+                          entry.appId === 'nexus.agent'
+                            ? $t('agent.settings.plugins.summaryNexusAgent')
+                            : entry.appId === 'nexus.fullstack'
+                              ? $t('agent.settings.plugins.summaryNexusFullstack')
+                              : entry.description
+                        }}
+                      </p>
+                      <span v-if="!entry.compatible" class="shrink-0 text-[11px] text-warning font-mono">
+                        {{
+                          $t('agent.settings.plugins.compatibilityShort', {
+                            min: entry.nexus.minVersion,
+                            max: entry.nexus.maxVersion,
+                          })
+                        }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 右侧：签名状态与操作按钮 -->
+                <div
+                  class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border"
+                >
+                  <span class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-secondary/70 font-mono">
+                    <i class="fa-solid fa-shield-check text-success text-[10px]"></i>
+                    <span>Ed25519</span>
+                  </span>
+
+                  <div class="flex items-center gap-1.5">
+                    <UiButton
+                      appearance="soft"
+                      tone="neutral"
+                      v-if="!source.official && !publisherTrusted(entry.publisherKeyId)"
+                      type="button"
+                      :disabled="
+                        locked ||
+                        !source.catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
+                      "
+                      @click="
+                        trustRemotePublisher(
+                          source.catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
+                        )
+                      "
+                    >
+                      {{ $t('agent.settings.plugins.trustRemotePublisher') }}
+                    </UiButton>
+
+                    <UiButton
+                      type="button"
+                      :appearance="isInstalled(entry.appId) ? 'soft' : 'solid'"
+                      :tone="isInstalled(entry.appId) ? 'neutral' : 'primary'"
+                      :disabled="
+                        locked || !entry.compatible || (!source.official && !publisherTrusted(entry.publisherKeyId))
+                      "
+                      @click="prepareRemotePackage(source.catalog, entry, source.official)"
+                    >
+                      <i
+                        :class="
+                          isInstalled(entry.appId)
+                            ? 'fa-solid fa-arrows-rotate text-[11px]'
+                            : 'fa-solid fa-download text-[11px]'
+                        "
+                        aria-hidden="true"
+                      ></i>
+                      <span>{{
+                        isInstalled(entry.appId)
+                          ? $t('agent.settings.plugins.reverifyPackage')
+                          : $t('agent.settings.plugins.prepareRemote')
+                      }}</span>
+                    </UiButton>
+                  </div>
                 </div>
               </div>
             </div>

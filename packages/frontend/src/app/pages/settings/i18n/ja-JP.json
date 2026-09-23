@@ -30,6 +30,26 @@
       "about": "バージョン情報"
     },
     "loading": "読み込み中...",
-    "sectionsAriaLabel": "設定セクション"
+    "sectionsAriaLabel": "設定セクション",
+    "groups": {
+      "general": "基本設定",
+      "intelligence": "インテリジェンス",
+      "securityAndData": "セキュリティとデータ",
+      "systemInfo": "システム情報"
+    },
+    "descriptions": {
+      "workspace": "ターミナル、エディタ動作、クイックコマンド設定",
+      "system": "言語、タイムゾーン、ログレベル",
+      "appearance": "テーマカラー、ウィンドウ配色、外観スタイル",
+      "agent": "AI モデルプロバイダー、実行環境、スキルとセキュリティポリシー",
+      "security": "アカウント認証情報と 2 要素認証 (2FA)",
+      "ipControl": "ネットワークアクセス制御と IP フィルタリング",
+      "data": "永続データストレージとバックアップ管理",
+      "about": "バージョン情報、アップデート確認、オープンソースライセンス"
+    },
+    "mobile": {
+      "allSettings": "すべての設定",
+      "settingsOverview": "設定センター"
+    }
   }
 }

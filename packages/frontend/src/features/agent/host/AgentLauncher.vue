@@ -9,23 +9,21 @@
   const position = computed(() => agentWindowManager.state.launcherPosition);
 
   /*
-   * §2.8：这个 40px 圆钮以前是"按住即拖"（6px 阈值），单击与拖动共用同一条 pointer 流程 ——
-   * 想点开 Hub 的人会顺手把按钮拖走，而拖走之后除清 localStorage 外没有回到默认位置的入口。
-   * 现在拆成两条路径：**长按 320ms 才进入拖动**，普通点击只负责打开；拖动结束后提供一次性的
-   * 「重置位置」入口（右键还原作为兜底），默认位置由 window-manager 持有。
+   * 采用灵敏阈值拖拽（4px 判定）：
+   * - 原位轻点：不触发拖拽，释放时迅速呼出 Agent Hub；
+   * - 按下并移动：立即进入自由拖拽，按钮平滑跟随光标；
+   * - 拖出默认位置后：弹出轻量「重置位置」气泡；右键亦可快速还原。
    */
-  const HOLD_MS = 320;
-  const MOVE_CANCEL_PX = 10;
-  const RESET_VISIBLE_MS = 7000;
+  const DRAG_THRESHOLD_PX = 4;
+  const RESET_VISIBLE_MS = 6000;
 
   let pointerId: number | null = null;
-  let holdTimer: number | null = null;
-  let resetTimer: number | null = null;
   let originX = 0;
   let originY = 0;
   let startRight = 0;
   let startBottom = 0;
-  let moved = false;
+  let resetTimer: number | null = null;
+  let hasMoved = false;
 
   const dragging = ref(false);
   const resetVisible = ref(false);
@@ -35,6 +33,7 @@
     if (!summary) return 0;
     return summary.totalRunningRuns + summary.totalPendingApprovals + summary.totalPendingBudgetRequests;
   });
+
   const isDefaultPosition = computed(
     () =>
       position.value.right === agentWindowManager.defaultLauncherPosition.right &&
@@ -46,10 +45,6 @@
     bottom: Math.max(12, Math.min(bottom, Math.max(12, window.innerHeight - 72))),
   });
 
-  const clearHoldTimer = (): void => {
-    if (holdTimer !== null) window.clearTimeout(holdTimer);
-    holdTimer = null;
-  };
   const clearResetTimer = (): void => {
     if (resetTimer !== null) window.clearTimeout(resetTimer);
     resetTimer = null;
@@ -62,14 +57,9 @@
     originY = event.clientY;
     startRight = position.value.right;
     startBottom = position.value.bottom;
-    moved = false;
-    resetVisible.value = false;
+    hasMoved = false;
+    dragging.value = false;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    clearHoldTimer();
-    holdTimer = window.setTimeout(() => {
-      holdTimer = null;
-      dragging.value = true;
-    }, HOLD_MS);
   };
 
   const pointerMove = (event: PointerEvent) => {
@@ -77,26 +67,37 @@
     const dx = event.clientX - originX;
     const dy = event.clientY - originY;
     if (!dragging.value) {
-      // Before the long press completes this gesture is still a click: give up on it instead of
-      // dragging the button, which is exactly the accidental-move complaint in §2.8.
-      if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
-        moved = true;
-        clearHoldTimer();
+      if (Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
+        dragging.value = true;
+        hasMoved = true;
+        resetVisible.value = false;
+      } else {
+        return;
       }
-      return;
     }
-    moved = true;
+    hasMoved = true;
     agentWindowManager.setLauncherPosition(clamp(startRight - dx, startBottom - dy));
+  };
+
+  const handleClick = () => {
+    if (hasMoved || dragging.value || props.paused) return;
+    agentWindowManager.openHub({ restoreRecent: true });
   };
 
   const finish = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
     const target = event.currentTarget as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
+    if (target.hasPointerCapture(event.pointerId)) {
+      try {
+        target.releasePointerCapture(event.pointerId);
+      } catch {
+        // pointer capture already released
+      }
+    }
     pointerId = null;
-    clearHoldTimer();
     const wasDragging = dragging.value;
     dragging.value = false;
+
     if (wasDragging) {
       emit('layoutChange');
       if (!isDefaultPosition.value) {
@@ -109,16 +110,25 @@
       }
       return;
     }
-    if (moved) return;
-    if (!props.paused) agentWindowManager.openHub({ restoreRecent: true });
+
+    if (!hasMoved && !props.paused) {
+      agentWindowManager.openHub({ restoreRecent: true });
+    }
   };
 
   const cancel = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+      try {
+        target.releasePointerCapture(event.pointerId);
+      } catch {
+        // pointer capture already released
+      }
+    }
     pointerId = null;
-    clearHoldTimer();
     dragging.value = false;
-    moved = true;
+    hasMoved = true;
   };
 
   const resetPosition = (): void => {
@@ -141,7 +151,6 @@
   };
 
   onBeforeUnmount(() => {
-    clearHoldTimer();
     clearResetTimer();
   });
 </script>
@@ -151,22 +160,38 @@
     class="fixed z-30 flex items-center gap-2"
     :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }"
   >
-    <button
-      v-if="resetVisible"
-      type="button"
-      data-agent-launcher-reset
-      class="flex h-7 items-center gap-1.5 rounded-full border border-border/70 bg-card/95 px-2.5 text-[11px] font-medium text-text-secondary shadow-sm backdrop-blur transition-colors hover:bg-header hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-      :title="$t('agent.launcher.resetHint')"
-      @click="resetPosition"
+    <!-- 拖出默认位置后的快捷还原气泡 -->
+    <transition
+      enter-active-class="transition-all duration-200 ease-out"
+      enter-from-class="opacity-0 translate-x-2 scale-90"
+      enter-to-class="opacity-100 translate-x-0 scale-100"
+      leave-active-class="transition-all duration-150 ease-in"
+      leave-from-class="opacity-100 translate-x-0 scale-100"
+      leave-to-class="opacity-0 translate-x-2 scale-90"
     >
-      <i class="fa-solid fa-rotate-left text-[10px]" aria-hidden="true"></i>
-      <span>{{ $t('agent.launcher.reset') }}</span>
-    </button>
+      <button
+        v-if="resetVisible"
+        type="button"
+        data-agent-launcher-reset
+        class="flex h-8 items-center gap-1.5 rounded-xl border border-border/80 bg-card/90 px-3 text-xs font-medium text-text-secondary shadow-lg shadow-black/5 backdrop-blur-md transition-all hover:bg-header hover:text-foreground hover:border-border active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 cursor-pointer"
+        :title="$t('agent.launcher.resetHint')"
+        @click="resetPosition"
+      >
+        <i class="fa-solid fa-rotate-left text-[11px]" aria-hidden="true"></i>
+        <span>{{ $t('agent.launcher.reset') }}</span>
+      </button>
+    </transition>
+
+    <!-- 全局悬浮 Agent 呼出按钮（全新 Gen2 玻璃晶体质感） -->
     <button
       type="button"
       data-agent-launcher-trigger
-      class="relative flex h-10 w-10 touch-none select-none items-center justify-center rounded-full border border-primary/45 bg-primary text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-50"
-      :class="dragging ? 'scale-110 cursor-grabbing ring-2 ring-primary/40' : 'cursor-pointer hover:scale-105'"
+      class="group relative flex h-11 w-11 touch-none select-none items-center justify-center rounded-2xl border border-primary/30 bg-gradient-to-br from-primary via-primary/95 to-primary-hover/90 text-white shadow-lg shadow-primary/25 backdrop-blur-md ring-1 ring-white/20 transition-all duration-200 hover:shadow-xl hover:shadow-primary/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:cursor-not-allowed disabled:opacity-50"
+      :class="
+        dragging
+          ? 'scale-110 cursor-grabbing ring-2 ring-primary shadow-2xl rotate-3'
+          : 'cursor-pointer hover:scale-105 active:scale-95'
+      "
       :aria-label="$t('agent.launcher.open')"
       :title="`${$t('agent.launcher.open')} · ${$t('agent.launcher.dragHint')}`"
       :disabled="paused"
@@ -174,13 +199,26 @@
       @pointermove="pointerMove"
       @pointerup="finish"
       @pointercancel="cancel"
+      @click="handleClick"
       @contextmenu="onContextMenu"
       @keydown="keydown"
     >
-      <i class="fa-solid fa-wand-magic-sparkles text-sm" aria-hidden="true"></i>
+      <!-- 晶体顶层柔和高光 -->
+      <span
+        class="pointer-events-none absolute inset-x-1 top-0.5 h-3 rounded-t-xl bg-gradient-to-b from-white/25 to-transparent"
+        aria-hidden="true"
+      ></span>
+
+      <!-- 核心图标 -->
+      <i
+        class="fa-solid fa-wand-magic-sparkles text-base transition-transform duration-200 group-hover:scale-110 group-hover:rotate-6"
+        aria-hidden="true"
+      ></i>
+
+      <!-- 状态与任务数字指示徽标 -->
       <span
         v-if="badge > 0"
-        class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-1 text-[9px] font-bold leading-none text-white shadow-xs"
+        class="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-error px-1 text-[10px] font-bold leading-none text-white shadow-xs ring-2 ring-background"
       >
         {{ badge > 99 ? '99+' : badge }}
       </span>

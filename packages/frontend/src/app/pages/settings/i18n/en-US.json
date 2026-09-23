@@ -30,6 +30,26 @@
       "about": "About"
     },
     "loading": "Loading...",
-    "sectionsAriaLabel": "Settings sections"
+    "sectionsAriaLabel": "Settings sections",
+    "groups": {
+      "general": "General",
+      "intelligence": "Intelligence",
+      "securityAndData": "Security & Data",
+      "systemInfo": "System Info"
+    },
+    "descriptions": {
+      "workspace": "Terminal, editor behavior, and quick command preferences",
+      "system": "Language, timezone, and logging levels",
+      "appearance": "Theme colors, window tints, and appearance styling",
+      "agent": "AI model providers, runtime environments, skills, and safety policies",
+      "security": "Account credentials and two-factor authentication (2FA)",
+      "ipControl": "Network access control and IP filtering rules",
+      "data": "Persistent data storage and system snapshot backups",
+      "about": "Version information, update checks, and open-source licenses"
+    },
+    "mobile": {
+      "allSettings": "All Settings",
+      "settingsOverview": "Settings Overview"
+    }
   }
 }

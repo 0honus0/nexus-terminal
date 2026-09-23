@@ -158,6 +158,39 @@
 .ui-info-hint[data-tone='warning'] {
   color: var(--status-warning-color);
 }
+
+.ui-info-hint__panel {
+  z-index: 100;
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ui-text);
+  background-color: color-mix(in srgb, var(--card-bg-color) 92%, var(--app-bg-color));
+  border: 1px solid var(--glass-border-color);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-backdrop-filter);
+  backdrop-filter: var(--glass-backdrop-filter);
+  user-select: text;
+  word-break: break-word;
+  animation: ui-gen2-tooltip-fade var(--ui-motion-duration) var(--ui-motion-ease);
+}
+
+.ui-info-hint__arrow {
+  fill: color-mix(in srgb, var(--card-bg-color) 92%, var(--app-bg-color));
+}
+
+@keyframes ui-gen2-tooltip-fade {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
 /*
  * Empty states.
  *
@@ -325,14 +358,15 @@
 }
 
 .ui-button--solid {
-  border-color: color-mix(in srgb, var(--ui-tone-solid) 76%, var(--border-color));
+  border-color: transparent;
   background: var(--ui-tone-solid);
   color: var(--ui-tone-on-solid);
-  box-shadow: var(--ui-shadow-control);
+  box-shadow: 0 1px 2px 0 color-mix(in srgb, var(--text-color) 12%, transparent);
 }
 
 .ui-button--solid:not(:disabled):hover {
   background: color-mix(in srgb, var(--ui-tone-solid) 88%, var(--text-color));
+  box-shadow: 0 2px 4px 0 color-mix(in srgb, var(--text-color) 16%, transparent);
 }
 
 .ui-button--soft {
@@ -1087,6 +1121,14 @@
 .ui-select__panel[data-density='comfortable'] .ui-select__item {
   min-height: 38px;
   padding-block: 6px;
+}
+
+.ui-select__panel[data-hide-indicator] .ui-select__item,
+.ui-select__panel--no-indicator .ui-select__item,
+.ui-combobox__panel[data-hide-indicator] .ui-combobox__item,
+.ui-combobox__panel--no-indicator .ui-combobox__item {
+  grid-template-columns: minmax(0, 1fr);
+  padding-inline: 10px 12px;
 }
 
 .ui-select__item[data-highlighted] {

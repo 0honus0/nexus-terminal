@@ -206,6 +206,7 @@ export interface AgentProviderFacade {
   update(userId: number, providerId: string, expectedVersion: number, input: unknown): Promise<ProviderView>;
   remove(userId: number, providerId: string, expectedVersion: number): Promise<void>;
   discoverModels(userId: number, providerId: string): Promise<DiscoveredProviderModel[]>;
+  discoverEndpointModels(baseUrl: string, credential?: string): Promise<DiscoveredProviderModel[]>;
   test(userId: number, providerId: string, modelId: string): Promise<ProviderTestResult>;
 }
 

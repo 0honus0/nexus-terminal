@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton, UiInfoHint } from '@/foundation/ui';
+  import { UiBadge, UiButton, UiInfoHint } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { AgentSettingsDocumentDto, AgentSettingsViewDto } from '../api/agent-api';
@@ -217,32 +217,25 @@
     >
       <div class="flex items-center gap-1.5">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.budget.title') }}</h3>
-        <UiInfoHint :text="$t('agent.settings.budget.description')" />
+        <UiInfoHint :text="$t('agent.settings.budget.modelCapabilityNotice')" />
       </div>
       <div class="flex items-center gap-2">
-        <span
-          class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium"
-          :class="
-            activePreset === 'custom'
-              ? 'border-primary/40 bg-primary/10 text-primary'
-              : 'border-border/80 bg-background text-foreground'
-          "
+        <UiBadge
+          :tone="activePreset === 'custom' ? 'primary' : 'neutral'"
+          appearance="soft"
+          density="compact"
+          class="gap-1.5"
         >
           <i :class="activePresetMeta.icon" class="text-[10px]" aria-hidden="true"></i>
           <span>{{ activePresetMeta.label }}</span>
-        </span>
+        </UiBadge>
       </div>
     </div>
 
     <div class="space-y-5 p-4 sm:p-5">
-      <div class="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs leading-5 text-text-secondary">
-        <i class="fa-solid fa-circle-info mr-1.5 text-primary" aria-hidden="true"></i>
-        {{ $t('agent.settings.budget.modelCapabilityNotice') }}
-      </div>
       <div>
         <div class="mb-2 flex items-center justify-between">
           <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.budget.presetsTitle') }}</span>
-          <span class="text-[11px] text-text-secondary">{{ $t('agent.settings.budget.presetsHint') }}</span>
         </div>
         <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           <button
@@ -267,12 +260,9 @@
                   ></i>
                   <span class="text-xs font-semibold text-foreground">{{ preset.label }}</span>
                 </div>
-                <span
-                  v-if="preset.badge"
-                  class="rounded-full bg-primary/20 px-1.5 py-0.5 text-[11px] font-medium text-primary"
-                >
+                <UiBadge v-if="preset.badge" tone="primary" appearance="soft" density="compact">
                   {{ preset.badge }}
-                </span>
+                </UiBadge>
               </div>
               <p class="mt-1 text-[11px] leading-relaxed text-text-secondary">{{ preset.description }}</p>
             </div>

@@ -27,6 +27,7 @@ import type {
 } from '@nexus-terminal/protocol/agent-plugins';
 import type {
   AgentAvailableModelDto,
+  AgentDiscoverEndpointModelsRequestDto,
   AgentDiscoveredProviderModelDto,
   AgentModelRegistryResolveQueryDto,
   AgentModelRegistryResolveResponseDto,
@@ -1009,6 +1010,31 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       const input = providerCreateInput(request.body);
       const provider = await dependencies.providers.create(agentUserId(request), input);
       agentData(request, response, providerDto(provider), 201);
+    }),
+  );
+
+  router.post(
+    '/ai/providers/discover-endpoint-models',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (
+        !isRecord(request.body) ||
+        !hasOnlyKeys(request.body, ['baseUrl', 'credential']) ||
+        !nonEmptyString(request.body.baseUrl) ||
+        (request.body.credential !== undefined && typeof request.body.credential !== 'string')
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      const input: AgentDiscoverEndpointModelsRequestDto = {
+        baseUrl: request.body.baseUrl,
+        ...(typeof request.body.credential === 'string' && request.body.credential.trim()
+          ? { credential: request.body.credential.trim() }
+          : {}),
+      };
+      const payload: AgentDiscoveredProviderModelDto[] = (
+        await dependencies.providers.discoverEndpointModels(input.baseUrl, input.credential)
+      ).map(discoveredProviderModelDto);
+      agentData(request, response, payload);
     }),
   );
 

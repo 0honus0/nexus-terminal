@@ -30,6 +30,26 @@
       "about": "关于"
     },
     "loading": "加载中...",
-    "sectionsAriaLabel": "设置分类"
+    "sectionsAriaLabel": "设置分类",
+    "groups": {
+      "general": "基础配置",
+      "intelligence": "智能核心",
+      "securityAndData": "安全与数据",
+      "systemInfo": "系统信息"
+    },
+    "descriptions": {
+      "workspace": "终端、编辑器与快速指令行为偏好",
+      "system": "界面语言、系统时区与运行日志等级",
+      "appearance": "主题配色、窗口色彩与个性化外观",
+      "agent": "AI 模型服务商、执行环境、扩展技能与安全策略",
+      "security": "账号身份凭证与双因素身份验证 (2FA)",
+      "ipControl": "网络访问控制与来源 IP 地址过滤",
+      "data": "系统数据持久化存储与快照备份管理",
+      "about": "系统版本信息、更新检测与开源组件许可证"
+    },
+    "mobile": {
+      "allSettings": "所有设置",
+      "settingsOverview": "设置中心"
+    }
   }
 }

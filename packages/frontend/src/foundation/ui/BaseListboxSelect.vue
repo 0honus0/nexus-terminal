@@ -25,6 +25,7 @@
       align?: 'left' | 'center';
       triggerClass?: string;
       minWidth?: string;
+      hideIndicator?: boolean;
     }>(),
     {
       disabled: false,
@@ -36,6 +37,7 @@
       align: 'left',
       triggerClass: '',
       minWidth: undefined,
+      hideIndicator: true,
     },
   );
 
@@ -307,7 +309,7 @@
       >
         <span class="truncate pr-2 text-left">{{ option.label }}</span>
         <svg
-          v-if="option.value === model"
+          v-if="!props.hideIndicator && option.value === model"
           class="shrink-0 text-text-secondary"
           width="12"
           height="12"

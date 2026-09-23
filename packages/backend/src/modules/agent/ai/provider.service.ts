@@ -461,6 +461,63 @@ export class ProviderService {
     }
   }
 
+  async discoverEndpointModels(baseUrl: string, credential?: string): Promise<DiscoveredProviderModel[]> {
+    let url: URL;
+    try {
+      url = new URL(baseUrl);
+    } catch {
+      throw new Error('PROVIDER_ENDPOINT_INVALID');
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || url.search || url.hash || url.username || url.password) {
+      throw new Error('PROVIDER_ENDPOINT_INVALID');
+    }
+    const normalizedBaseUrl = url.toString().replace(/\/$/, '');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(new Error('PROVIDER_DISCOVERY_TIMEOUT')), 10_000);
+    logger.debug({ baseUrl: normalizedBaseUrl }, 'Agent endpoint model discovery started');
+    try {
+      const discovered = await this.languageModel.discoverEndpointModels(
+        normalizedBaseUrl,
+        credential?.trim() || undefined,
+        controller.signal,
+      );
+      const observedAt = this.clock.nowUnixSeconds();
+      const result = discovered.map((model) => {
+        const registryDefaults = resolveModelCapabilityDefaults(model.id);
+        const report = model.liveCapabilityReport
+          ? validateLiveCapabilityReport(model.liveCapabilityReport)
+          : undefined;
+        const observation = report
+          ? ({
+              modelId: model.id,
+              ...report,
+              updatedAt: observedAt,
+            } satisfies ProviderModelCapabilityObservation)
+          : undefined;
+        return {
+          id: model.id,
+          ...(model.ownedBy === undefined ? {} : { ownedBy: model.ownedBy }),
+          ...(model.createdAt === undefined ? {} : { createdAt: model.createdAt }),
+          ...(registryDefaults ? { registryDefaults } : {}),
+          ...(observation ? { providerCapabilities: observation } : {}),
+        };
+      });
+      logger.info(
+        { baseUrl: normalizedBaseUrl, discoveredModelCount: result.length },
+        'Agent endpoint model discovery completed',
+      );
+      return result;
+    } catch (error) {
+      logger.warn(
+        { baseUrl: normalizedBaseUrl, errorCode: logErrorCode(error, 'PROVIDER_DISCOVERY_FAILED') },
+        'Agent endpoint model discovery failed',
+      );
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async test(userId: number, providerId: string, modelId: string): Promise<ProviderTestResult> {
     const provider = await this.get(userId, providerId);
     const model = provider.models.find((candidate) => candidate.id === modelId);

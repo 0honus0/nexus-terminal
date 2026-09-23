@@ -12,7 +12,7 @@
 > 巨型 UI 文件拆分（§3.1；2026-09-23 已复核并**按约定延后**——该条无隐藏的用户可见缺陷，拆分需搬迁约 30 props + 15 emit，
 > 正确验收依赖 Provider CRUD / Run 详情两条主路径的逐控件回归，本环境 `runner_not_configured` 无法覆盖，详见 §3.1 的复核块）；**§3.5 的"i18n 死 key"已于本轮关闭**（§7.40：新增可达性门禁 + 清掉 75×3 条不可达文案，字典 1,467 → 1,392）；**"后端工具结果摘要英文硬编码" 本轮已关闭**，仅剩 `mcp-tools.ts`（远端不可信内容，刻意排除）、`execution-errors.ts` 前缀与 `command.reason` 三处非 UI 残余并入 §3.6 跟踪；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
-> **历史提交完整复核补充（2026-09-23）**：现已对 `b0d7b220..862a458` **66/66 个提交**逐个回看“改动文件 → 对应 Problem 闭环 → 当前 HEAD 实现”。首轮已确认 §7.41（创建会话失败重放无幂等 POST）与 §7.42（per-user 侧栏开关漏 reset）；完整复核又确认 / 提升 **9 条**开放项：§7.43（TaskRail 顺序 + 会话缩放仍跨账号共用）、§7.44（16/20px 操作命中区残留）、§7.45（对象型 dirty-state 受 key insertion order 影响）、§7.46（4 条 state-commit `userSummary` 放错层级）、§7.47（`cancelling` Run 仍可 Send）、§7.48（模型 option hint 被后续 commit 降回 9px）、§7.49（ACP 设置 toast/fallback 仍硬编码英文）、§7.50（§7.22 已知的跨 tab 配置刷新缺口仍在）、§7.51（Gen2 `foundation/ui/**` 仍没有正确 ESLint parser/rules 覆盖）。因此上文“§0 只剩 2 条开放项”只代表 §7.40 收口当时的快照；当前状态以 §7.41–§7.51 与 §7.52 的 66/66 矩阵为准。当前工作树另有未提交 Settings 重构，本轮按 committed HEAD 做历史归因，未把临时改动算进 66 commit。
+> **历史提交完整复核补充（2026-09-23）**：现已对 `b0d7b220..862a458` **66/66 个提交**逐个回看“改动文件 → 对应 Problem 闭环 → 当前 HEAD 实现”。首轮 / 第一遍完整复核确认 §7.41–§7.51；随后继续做跨切面反向审计（状态机、异步 generation、跨账号/session、持久化、i18n、a11y/命中区、Gen2 公共层、跨 tab、frontend/backend 契约、mutation commit boundary、分页、terminal、plugin/KeepAlive 生命周期、Plugin 安装链、Runner runtime/reconcile、Workspace checkpoint、SQLite migration 与 backup/restore），现已审计到 §7.115，其中确认 **62 条**新增开放项；§7.80 经跨组件复核已排除。新增高风险包括 Memory host refresh 静默覆盖候选草稿（§7.64）、Run 详情 approvals 旧响应回写（§7.65）、Plugin bridge/RPC outcome 缺口（§7.67–§7.68）、App Tab / version cache 泄漏（§7.73）、失败域共用 error slot（§7.75）、create 类 mutation 的 caller-stable identity 缺口（§7.78）、enabled-but-failed App 仍允许 Send（§7.81）、Settings optimistic conflict 不 reconcile（§7.82）、Provider 拉取模型旧请求跨 modal 污染（§7.83）、Provider “测试连接”提前持久化（§7.84）、Workspace restart 的 Runner Plugin 半失败状态（§7.85）、toolchain switch 的 delete unknown/failed 可把 workspace 长期留在 stopping（§7.86）、Host Runner 异常重启后的 detached child orphan（§7.87）、Plugin upgrade draining continuation 易失（§7.88）、runtime cleanup 可在 ACP/Terminal 尚未退出时删 workspace（§7.89）、checkpoint capture 不冻结 live Workspace writer（§7.90）、checkpoint restore 在目录 rename 中点崩溃后无法 startup reconcile（§7.91）、Terminal/ACP 外部 writer 可穿透 file patch 的 SHA precondition 并被静默覆盖（§7.92）、Workspace lifecycle 不等待 background job 真正退出就成功（§7.93），toolchain switch 可在旧 generation ACP/Terminal 仍存活时启动新 generation（§7.94），普通 restart 也会在旧 ACP/Terminal 未退出时重新激活 runtime/plugin（§7.95），手动 checkpoint resume 在 Workspace restore 失败后可留下已提交的新 Run、重试再建一个 Run（§7.96），同一 Workspace 的不同 lifecycle action 可用同一个 expectedVersion 并发通过（§7.97），全局 `/opt/nexus/packs/<family>/<version>` canonical symlink 会让不同 digest 的 frozen Workspace 互相改写长寿命进程的 toolchain 解析（§7.98），Safety Network 一次连接加载失败后即使共享 store 后来恢复仍会永久卡失败态（§7.99），Agent migration #23/#34 能把 partial schema 错标成“已完成迁移”（§7.100），“完整备份”遗漏全部 Agent/AI 表与权威 Artifact/Plugin 文件，恢复后形成跨时点混合状态（§7.101），backup 文件目录 swap 的 rollback/crash recovery 不能保证恢复前数据（§7.102），Memory import confirmation 与最终副作用不原子、unknown outcome 后可重复导入（§7.103），Root Scheduler 出队后 async preflight 失败会永久丢 Run（§7.104），Host durable event outbox 没有 retention、会按用户永久增长（§7.105），Plugin stage 没有 TTL/delete 生命周期、可永久累积大体积 staging 目录（§7.106），Artifact 上传 rename→ready commit 竞态可留下未计费 orphan blob（§7.107），AppStorage 只按 value bytes 计 quota、可被海量小值+长 key 绕过实际磁盘限制（§7.108），Backup export/import 缺一致性 snapshot 与全局串行化（§7.109），Plugin AppStorage 可直接改写 Host-owned Execution/Subagent Policy（§7.110），Manual checkpoint 缺 delete/retention、可长期锁住 Artifact quota（§7.111），Provider model discovery 的 response-size 限制在全量缓冲后才检查（§7.112），Plugin 成功 upgrade 后旧 immutable version 无 owner 仍永久留盘（§7.113），Plugin upgrade 在 quiesce 前 capture AppStorage、可静默覆盖并发写（§7.114），以及 Host durable event 的内存 wake 丢失后在线订阅不会自愈（§7.115）。因此任何早期“只剩 N 条开放项”的描述都只是当时快照；**当前新增开放项为 §7.53–§7.79、§7.81–§7.115；§7.80 明确标为排除项**。当前工作树另有未提交改动；涉及 dirty 文件的本轮结论均重新用 committed HEAD / 审计基线 `862a458` 取证，未把临时施工状态归因到 66 commit。
 
 复查规模（行数统计）：
 
@@ -31,85 +31,147 @@
 
 按「影响正确性/可直接复现」→「设计明显不合理」→「优化项」排序：
 
-| 级别                                      | 问题                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 关键位置                                                                                                     |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **P0 · ✅ 已关闭 2026-09-23**             | 设计 token 已补齐并接入 Tailwind：`--color-card / border-hover / primary-hover / warning-foreground` 均有真实规则；CDP `.bg-card` 计算背景为 `rgba(246,247,249,.92)`                                                                                                                                                                                                                                                                                                                                                                                                             | `app/styles/tokens.css`（见 §1.1）                                                                           |
-| **P0 · ✅ 已关闭 2026-09-23**             | `agent.ui.saveFailed` 已补齐 en-US / ja-JP / zh-CN 且保存失败路径真实引用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `settings/ModelProviderSettings.vue`、`i18n/*.json`（见 §1.2）                                               |
-| **P0 · ✅ 已关闭 2026-09-23**             | Agent Hub 模态边界已闭环：打开聚焦 Hub、背景 `#app.inert=true`、Tab/Shift+Tab 限制在 Hub 与 Hub-owned portal、Escape 关闭、关闭后焦点回 Launcher                                                                                                                                                                                                                                                                                                                                                                                                                                 | `host/AgentHubWindow.vue`（CDP 复验见 §7.13-c）                                                              |
-| **P0 · ✅ 已关闭 2026-09-23**             | 玻璃层已固化为唯一 `.glass-surface`：token-based 半透明 fill + blur(16px) + 弱边框/阴影；Gallery CDP 实测 alpha≈0.7544                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `app/styles/global.css`、`foundation/ui/UiPopover.vue`（见 §7.1）                                            |
-| **P1 · ✅ 已关闭 2026-09-23**             | **默认模型选择框「文字背景 ≠ 框背景」已关闭**：`UiCombobox` 输入框不再被全局未分层表单规则涂成纯白，trigger / panel / 输入区共用同一 glass fill                                                                                                                                                                                                                                                                                                                                                                                                                                  | `foundation/ui/uiGen2.css`（见 §7.18）                                                                       |
-| **✅ 已确认保留模态 2026-09-23**          | 「模态遮罩 + 浮动窗口」经产品确认是**有意设计**（背景不可交互，避免两边操作冲突；使用 Hub 时不需要同时看终端）；遮罩点击已收敛为真正 no-op，不再有 400ms「闪烁」                                                                                                                                                                                                                                                                                                                                                                                                                 | `host/AgentHubWindow.vue`（见 §2.1、§2.2）                                                                   |
-| **P1 · ✅ 已关闭 2026-09-23**             | **字号：实测推翻了"563 处 ≤11px 不可读"的整体判断**（181 处 ≤9px 里 95 处是图标；默认首屏只有 6 个 <11px 文本节点）。仍按"阅读文本 ≥11px"全量收敛：两轮共 33 文件 / 274 行，现 `<11px` 只剩图标字形与 5 个 14–16px 圆内计数/勾选，无任何阅读文字低于 11px                                                                                                                                                                                                                                                                                                                        | `features/agent/**`（见 §2.3）                                                                               |
-| **P1 · ✅ 已关闭 2026-09-23**             | **点击目标：** 关闭 App 标签 `16×16`→`24×24` 常显 + pointer；窄容器纯图标 Run 配置 `25px`→`28px`、字号 `10/10.5px`→`11px`；审批卡按钮追加 `min-h-8`（32px）                                                                                                                                                                                                                                                                                                                                                                                                                      | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`、`runtime/ApprovalCard.vue`（见 §2.4）                 |
-| **P1 · ✅ 已关闭 2026-09-23**             | 调色板类 **182 → 0**：新增 `info` 语义 token，其余收敛到 `success/warning/error/primary`；硬编码阴影 / Hub 窗口阴影 / 遮罩改为从 token 推导。CDP 证明改 theme 变量后计算色跟随                                                                                                                                                                                                                                                                                                                                                                                                   | `app/styles/tokens.css`、`features/appearance/config/default-theme.ts`、`features/agent/**`（见 §2.7）       |
-| **P1 · ✅ 已关闭 2026-09-23**             | 设置区控件风格分裂**已收口**：按钮档位（主/次/危险/图标四档 Gen2 `UiButton`，`32px / fs12 / r8`，§6.2 批 1/2）、原生 checkbox（27 处 → `UiCheckbox`，§7.20）、原生 `<select>`（22 处 → `UiSelect`，§7.32）、`QuantityInput` 单位命中区（18×20 → 24×24，§7.33）、添加/移除模型行的 11px 纯文字按钮（→ `UiButton` soft+compact，§7.34）全部闭环。**仍开放**：顶部 Tab 仍是 36px（跨页 chrome，按约定本轮不动）                                                                                                                                                                     | `features/agent/settings/**`（见 §6.2、§6.3、§7.20、§7.32–§7.34）                                            |
-| **P1 · ✅ 已关闭 2026-09-23**             | 设置区模板与能力清单里的硬编码中文（能力名称/描述、存储、插件、预算、数值单位）已全部接入词典；中英日三语键位对齐                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `features/agent/settings/**`（见 §6.5、§7.14-c）                                                             |
-| **P1 · ✅ 已关闭 2026-09-23**             | `bg-card` 族已恢复真实 surface；助手气泡改为有效 `bg-card`，TaskRail/空态卡继续使用已生效的 card token                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue`                             |
-| **P1 · ✅ 已关闭 2026-09-23**             | Composer 改为自身 container query + 单行 compact；560px Hub CDP 实测 controls `462/462`，无静默裁切，思考等级优先靠前                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.3）                                            |
-| **P1 · ✅ 已关闭 2026-09-23**             | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `ai/AgentConversation.vue`（见 §7.4）                                                                        |
-| **P1 · ✅ 已关闭 2026-09-23**             | 主界面三层 chrome 压扁消息区：`MIN_HEIGHT` 380 → 480，并在矮窗口下把 composer 压成两行；CDP 实测最小高度时会话区 **94 → 227px**（§7.2 列宽 / 体感已复核，见 §7.2-b、§7.2-f；停靠态折叠闪烁见 §7.2-g）                                                                                                                                                                                                                                                                                                                                                                            | `host/window-manager.ts`、`host/AgentHubWindow.vue`、`ai/AgentConversation.vue`（见 §7.2-a）                 |
-| **P2 · ✅ 已关闭 2026-09-23**             | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `features/agent/**`（见 §7.8）                                                                               |
-| **P1 · ✅ 已关闭 2026-09-23**             | 多处「不可发现 / 与产品整体不一致」的交互**已全部闭环**：会话列表 Ctrl+滚轮缩放（§7.13-d 面板化 + 重置）、任务栏卡片拖拽排序（§7.14-b 独立把手 + 方向键 + 恢复默认顺序）、Launcher 6px 阈值拖拽（§7.38 长按拖动 + 重置位置）、虚拟列表固定行高（§7.38 探针行实测）；§2.6 的空态轮播此前已关闭                                                                                                                                                                                                                                                                                    | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8 / §7.38）                     |
-| **P1 · ✅ 已关闭 2026-09-23**             | Composer 的 Send / Cancel Run 已拆成两个独立按钮（停止按钮图标-only + 错误色，运行中才出现）；`sendHint` 已渲染；空草稿按 Enter 不再误取消 Run                                                                                                                                                                                                                                                                                                                                                                                                                                   | `ai/AgentConversation.vue`（见 §2.5）                                                                        |
-| **P1 · ✅ 已关闭 2026-09-22**             | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation                                                                                                                                                                                                                                                                                                                                                                                                | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7）                                             |
-| **P1 · ✅ 已关闭 2026-09-22**             | **Nexus 前后端真实 transport contract 已统一到 `packages/protocol`**：HTTP / Workspace WS / Agent HTTP / Agent event WS / Agent terminal WS 均由 canonical DTO/event contract 单一来源约束，并已接入 transport architecture guard；当前 HEAD 收尾复核再次通过 guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build` 与 Agent scenario suite **71/71**                                                                                                                                                                                             | `packages/protocol/**`、`scripts/check-transport-contract-boundaries.mjs`（见 §3.2）                         |
-| **P1 · ✅ 已关闭 2026-09-22**             | **Agent scenario runner 已模块化并支持受控并发**：`runner.ts` 从 22k+ 行降至 258 行，当前 71 个独立 scenario 文件；默认按批次并发、仅显式 `SERIAL_SCENARIOS` 保持串行；当前扫描未发现通过 `readFileSync` 读取 `packages/*/src` 做 source-shape 架构断言                                                                                                                                                                                                                                                                                                                          | `tests/backend/agent-scenarios/**`（见 §3.6）                                                                |
-| **P2 · ✅ 已关闭 2026-09-23**             | 274/1148（约 24%）i18n key 已无引用，且三种语言各存一份 → **升级成常驻门禁并清零**：`scripts/check-agent-i18n.mjs` 新增"key 可达性"守卫（字面量 / 模板拼接前缀 / 后端构造的投影 key 都算可达），三语字典 1,467 → 1,392 个叶子 key，删除 75×3 条不可达文案；CDP 走完 20 个设置分区 0 处原始 key、0 条 intlify 告警（见 §3.5 / §7.40）                                                                                                                                                                                                                                             | `features/agent/i18n/*.json`                                                                                 |
-| **P2 · ✅ 基础门禁已关闭 2026-09-22**     | **Agent review 范围已接入 ESLint flat config**：`no-unused-vars` + Vue `v-if/v-for` 规则成为 error；首跑发现并清理 47 个真实 unused 符号。自定义 i18n / 设计 token 规则仍开放                                                                                                                                                                                                                                                                                                                                                                                                    | `eslint.config.mjs`、`package.json` scripts                                                                  |
-| **P2 · ⏸ 已评估 · 按约定延后 2026-09-23** | 巨型文件问题**仍主要集中在 UI**（2026-09-23 复核：UI TOP 为 `AgentAppSurface.vue` 2,915 / `ModelProviderSettings.vue` 2,201 / `AgentSettingsPanel.vue` 1,447；非 UI owner 均已拆完。**本轮不拆**：该条已无隐藏的用户可见缺陷，而按职责拆需要搬迁约 30 props + 15 emit，正确验收依赖 Provider CRUD 与 Run 详情两条主路径的逐控件回归，本环境 `runner_not_configured` 无法覆盖 ⇒ 风险高于收益）；非 UI owner 已完成一轮拆分：`agent-api.ts` 791 行、`runner-http.adapter.ts` 770 行、`native-agent-backend.ts` 722 行，原 1k+ 行 state-commit 聚合文件已拆为细分 transition owners | 见 §3.1                                                                                                      |
-| **P2 · ✅ 已关闭 2026-09-23**             | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里 → **「模型可见证据 / 用户可见摘要」拆分**：`ToolResult.userSummary` 在 `projectToolResult` 被剥离（模型侧零变化），ledger payload 旁路携带，`ConversationMessage.vue` 优先渲染、缺失回退原 `summary`（历史数据零迁移）；`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要全部接入，三语 `toolSummary.*`（72 句 + 39 标签）齐平；CDP 双语言实测通过                                                                                                                                                                  | `modules/agent/tools/host/*.ts`（见 §1.8 / §7.39）                                                           |
-| **P1 · ✅ 已关闭 2026-09-22**             | **历史 Run 的 `GET /runs/:id/approvals` 稳定 500（`AGENT_DURABLE_STATE_INVALID`）**：已由 migration #45 将 legacy `inspection_json.target.kind = "machine"` 规范化为 canonical SSH target；真实数据库副本验证 26 条 legacy tool call → 0、25 条受影响 approval 全部可解码                                                                                                                                                                                                                                                                                                        | `sqlite-migrations.ts` migration #45、`tests/backend/agent-scenarios/runner.ts`（见 §1.9）                   |
-| **P0 · ✅ 已关闭 2026-09-23**             | 全局 form font/cursor reset 已移入 `@layer base`；CDP 设置页 `text-xs` 按钮均恢复为 12px（旧实测为 16px）                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `app/styles/global.css:27-46`（见 §7.10）                                                                    |
-| **P1 · ✅ 已关闭 2026-09-23**             | 设置区「Agent」页在英文界面下的硬编码中文：三个子页可见中文文本节点 **29 → 0**（数值+单位改由 `use-quantity-labels` 注入）                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `features/agent/settings/**`（见 §6.5、§7.11、§7.14-c）                                                      |
-| **P1 · ✅ 已关闭 2026-09-23**             | 备用模型链已改为 `1..N` 有序列表 + 上移/下移/移除；Add 使用可搜索 Gen2 `UiPopover`，排除默认/已选并限制最多 8 项                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `settings/ModelProviderSettings.vue`（见 §7.11）                                                             |
-| **P1 · ✅ 已关闭 2026-09-23**             | 设置区按钮规格已收敛到四档：主操作 `solid/primary`、次操作 `soft/neutral`、危险 `soft/danger`、图标 `ghost/icon-only(28×28)`；实测动作按钮统一 `×32 fs12 r8`，禁用态为中性填充（旧值：`添加 Provider` 144×38 fs16、`立即更新` 77×28 fs11 r6、`模型与测试` 117×26、`添加配置档` 86×34 r6）                                                                                                                                                                                                                                                                                        | 见 §7.11                                                                                                     |
-| **P2 · ✅ 已关闭 2026-09-23**             | 空态 pager 命中区 **12×16 / 20×16 → 28×32 / 36×32**：透明伪元素外扩，可视圆点与布局不变；每个圆点独占互不重叠的命中格                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `ai/AgentConversation.vue:472-486`（实测见 §7.12）                                                           |
-| **P1 · ✅ 已关闭 2026-09-23**             | 弹层已改为优先按 Hub 窗口 clamp，并限制 maxWidth/maxHeight、跟随 Hub resize；560px Hub 下附件弹层实测四边均在窗口内                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `files/AgentConfigPopover.vue`、`host/AgentAppSwitcher.vue`（见 §7.13-a）                                    |
-| **P0 · ✅ 已关闭 2026-09-23**             | Hub 键盘模态边界已修复并 CDP 复验：初始焦点进入 Hub、背景 inert、连续 35 次 Tab 0 次逃逸、Escape 关闭且焦点回 Launcher                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `host/AgentHubWindow.vue`（见 §7.13-c）                                                                      |
-| **P2 · ✅ 已关闭 2026-09-23**             | 会话列表缩放（Ctrl+滚轮）现在有可见入口与重置：侧栏头部 `100%` 胶囊（点击展开 放大/缩小/重置为 100%，含边界禁用）；缩放系数改由根节点 `--agent-thread-scale` 驱动，内联 `font-size` 归零                                                                                                                                                                                                                                                                                                                                                                                         | `host/AgentThreadSidebar.vue:64/127/310`（见 §7.13-d）                                                       |
-| **P0 · ✅ 核心缺陷已关闭 2026-09-22**     | **Run 详情不再被单个辅助接口失败整体阻断**：`getRun` 成功即打开详情；checkpoints / approvals / subagents 独立 settled 回填，失败项仍走现有错误横幅。分区重试与错误本地化仍作为 UI 子项开放                                                                                                                                                                                                                                                                                                                                                                                       | `host/AgentAppSurface.vue`（见 §1.10）                                                                       |
-| **P0 · ✅ 已关闭 2026-09-23**             | **Composer 裁切已关闭**：container query 改为 composer 自身，工具条保持单行；560px Hub 实测 controls clientWidth=scrollWidth，无静默裁切                                                                                                                                                                                                                                                                                                                                                                                                                                         | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.14-a）                                         |
-| **P1 · ✅ 已关闭 2026-09-23**             | 任务栏 6 个「拖动排序」把手补上键盘路径：↑/↓ 与相邻可见卡片交换（`aria-keyshortcuts` + `title`），焦点跟随卡片                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `runtime/TaskRail.vue`（见 §7.14-b）                                                                         |
-| **P2 · ✅ 已关闭 2026-09-23**             | 任务栏：目标卡改用连接名（ID 退到 `title`）、Run 历史改为 8 条起步 + 「显示更早的 Run」增量展开、卡片顺序新增「重置卡片顺序」入口（顺序一致时隐藏）                                                                                                                                                                                                                                                                                                                                                                                                                              | `runtime/TaskRail.vue`（见 §7.14-b）                                                                         |
-| **P2 · ✅ 已关闭 2026-09-23**             | 审批卡：`risk` 枚举已本地化（新增 `agent.approvals.risk.*`）；「`审批状态：approved`」由 §1.4/§7.15-a 关闭（`status` 映射）；「剩余 300s」改为 `agent.approvals.expiresIn`（中/日文为「300 秒」）；「批准」按钮由 `bg-warning text-black` 改成品牌主色 `bg-primary text-white`                                                                                                                                                                                                                                                                                                   | `runtime/ApprovalCard.vue`（见 §7.14-b）                                                                     |
-| **P1 · ✅ 已关闭 2026-09-23**             | Hub 窗口几何补上键盘路径（标题栏/缩放热区方向键 16px、Shift 64px，`aria-keyshortcuts` + `tabindex`），并新增全局 `prefers-reduced-motion` 基线（未分层），Hub 内 60 个带过渡的元素降级为 0                                                                                                                                                                                                                                                                                                                                                                                       | `host/AgentHubWindow.vue`、`app/styles/global.css`（见 §2.10）                                               |
-| **P1 · ✅ 已关闭 2026-09-23**             | 前端 agent 区非注释硬编码中文 **116 行 → 0**：能力清单、会话用量、错误解释、存储/插件/预算文案全部走词典（中英日三语）                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `features/agent/**`（见 §7.14-c）                                                                            |
-| **P1 · ✅ 已关闭 2026-09-23**             | `zh-CN` 词典与 en-US 完全相同的 key 由 35 → 22、整句英文由 15 → 5（`ja` 49 → 31 / 20 → 5），剩 5 条是品牌与协议名（白名单）；枚举不再插进本地化句子（`审批状态：approved` / `当前状态：enabled` 走 `status` / `stateLabels` 映射）；新增 `pnpm lint:agent-i18n` 防回归                                                                                                                                                                                                                                                                                                           | `i18n/zh-CN.json`、`ApprovalCard.vue`、`AgentFeatureSettings.vue`（见 §7.15-a）                              |
-| **P1 · ✅ 已关闭 2026-09-23**             | 未本地化枚举/内部标识：Subagent 状态与失败模式、审批 `risk`、Workspace 命令 `action`/`status` 全部改为查表（新增 `agent.subagents.status/failureMode`、`agent.approvals.risk`、`workspaceRuntime.commandAction/commandState`）；原始值只保留在折叠的「规范化操作」调试区                                                                                                                                                                                                                                                                                                         | `runtime/SubagentCard.vue`、`runtime/ApprovalCard.vue`、`settings/WorkspaceRuntimeSettings.vue`（见 §1.4）   |
-| **P2 · ✅ 已关闭 2026-09-23**             | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态、无粘性分区导航 → 粘性分区导航与嵌套框收口（§7.25，3423px）、保存按钮按 dirty 分级（§7.31，无改动时降级为禁用 + 原因 `title`）、面板头摘要与信息密度收口（§7.29 / §7.30）                                                                                                                                                                                                                                                                                                                             | `settings/**`（见 §7.15-c）                                                                                  |
-| **P2 · ✅ 已关闭 2026-09-23**             | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`）→ 新增 Gen2 `UiEmptyState` 并在设置区 10 处接入（图标 + 标题 + 说明 + 可选动作，`dense` 档实测 950×38、卡片档 950×143，见 §7.28）                                                                                                                                                                                                                                                                                                                                                                                    | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                       |
-| **P1 · ✅ 已关闭 2026-09-23**             | 设置区不再把后端原始原因码当"不可用原因"渲染：已知码（`runner_not_configured` / `runner_unavailable` / `runtime_not_configured`）映射成中/英/日文说明，未知码退回通用说明并把原始值放进 `title` 与「后端原因代码」行                                                                                                                                                                                                                                                                                                                                                             | `settings/WorkspaceRuntimeSettings.vue`（见 §7.15-b）                                                        |
-| **P2 · ✅ 已关闭 2026-09-23**             | 禁用态主按钮**已改为中性填充**（§6.2 批 1/2：`保存` / `预览导入` / `卸载` 等实测 `bg rgb(243,244,246)` + 中性描边，不再是品牌色 × 0.5）；**已补**：11 个稳态禁用按钮全部带原因 `title`（没有未保存的修改 / 没有待预览的改动 / 请先填写必填项 / 请先选择来源与目标 / 请先填写仓库地址，三语齐全）                                                                                                                                                                                                                                                                                 | `features/agent/settings/**`（实测见 §7.13-e）                                                               |
-| **P1 · ✅ 已关闭 2026-09-23**             | Composer 配置弹层（模型 / 思考强度）**首帧位置错乱**：定位时面板仍是占位尺寸（`max-width:0`/`max-height:300`），首帧算到 `(470,472)` 等错位值、下一帧才跳到 `(426,667.5)`（上偏 195px）→ 改为测量前解除占位上限 + 未定位不绘制；App 切换器同源一并修（见 §7.26）                                                                                                                                                                                                                                                                                                                 | `files/AgentConfigPopover.vue`、`host/AgentAppSwitcher.vue`（见 §7.26）                                      |
-| **P1 · ✅ 已关闭 2026-09-23**             | Agent 设置区**嵌套框 3~4 层**：叶子控件往上数有 3 层带边框的祖先（面板卡 → 模块卡 → 模块内分组框）→ 收到 **1 层**（只留分组卡），模块间改用细分隔线、模块内分组框降级为无边框 inset；同轮把分组导航改成**粘性**（滚 807px 后停 y=0），`运行与环境` 全页 3625 → 3423px（见 §7.25）                                                                                                                                                                                                                                                                                                | `settings/AgentSettingsPanel.vue` + 14 个 `*Settings.vue`（见 §7.25）                                        |
-| **P1 · ✅ 已关闭 2026-09-23**             | Agent 的界面与设置里**提示性文字过多**：新增通用 `UiInfoHint`（`ⓘ`/`⚠` 悬浮说明），设置区 16 张卡的长句已全部收起 —— CDP 三组分区实测可见说明 **2145 → 1209 字（-43.6%）**，`ⓘ` 由 1 个增至 16 个；Hub 侧实测常驻版面已无长句，仅补了 2 处弹层头部说明                                                                                                                                                                                                                                                                                                                           | `foundation/ui/UiInfoHint.vue`、`features/agent/settings/**`（见 §7.24）                                     |
-| **P2 · ✅ 已关闭 2026-09-23**             | 主操作（Composer 发送按钮）禁用态从「品牌色 + `opacity .2`」改为「中性填充 + 保留描边 + `opacity .5` + `title` 说明原因」，并把全仓禁用态不透明度收敛到单一值 `0.5`（原 20/25/35/40/45 五种）                                                                                                                                                                                                                                                                                                                                                                                    | `ai/AgentConversation.vue` 等 9 个文件（见 §7.17-c）                                                         |
-| **P1 · ✅ 已关闭 2026-09-23**             | 图标颜色：未分层的 `i/.fas/.far/.fab { color: var(--icon-color) }` 压过 `@layer utilities`，132 个带 `text-primary/success/warning/error/foreground` 的图标一律渲染成 `#666`（`!text-white` 是既有绕过写法）                                                                                                                                                                                                                                                                                                                                                                     | `app/styles/global.css:91-110`（见 §7.19）                                                                   |
-| **P1 · ✅ 已关闭 2026-09-23**             | 空态便当卡自动轮播已可中断：悬停/焦点暂停、手动分页后固定、`prefers-reduced-motion` 时彻底不轮播（hover 位移与脉冲也一起关掉）                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `ai/AgentConversation.vue`（见 §2.6）                                                                        |
-| **P1 · ✅ 已关闭 2026-09-23**             | **Agent 设置区「17 个模块一条长流」的布局**：宽屏新增常驻左栏分区导航（3 分组 + 17 锚点，粘在全局顶栏下），点击跳转 + 滚动联动高亮；窄屏保留顶部胶囊。跨分组跳转落点误差 0px（修复前实停 1766 / 目标 2352）                                                                                                                                                                                                                                                                                                                                                                      | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
-| **P2 · ✅ 已关闭 2026-09-23**             | **设置区空态与主界面两套语言**：新增 Gen2 `UiEmptyState`（`dense` / 卡片两档），设置区 10 处空态统一（7 处行内 `950×38` + 3 处卡片 `950×143`）；`foundation/ui` 里首次有可复用的空态原语                                                                                                                                                                                                                                                                                                                                                                                         | `foundation/ui/UiEmptyState.vue`、`features/agent/settings/**`（见 §7.28）                                   |
-| **P2 · ✅ 已关闭 2026-09-23**             | 设置区面板头部三块摘要（默认模型 / 活跃 App / 沙箱）是「标签: 数值」小方块，读起来像调试输出：改为图标 + 标签/数值两行的无框统计（实测 3 项同行 `337×29`，414px 下折成两行仍 `337×29` 单行不换行溢出）                                                                                                                                                                                                                                                                                                                                                                           | `settings/AgentSettingsPanel.vue`（见 §7.29）                                                                |
-| **P2 · ✅ 已关闭 2026-09-23**             | **设置区 8 处独立「保存」按钮语义分级**（§7.15-c 收口）：原本 8 处全写死浅紫实心主按钮、无变更时只是 disabled， 现统一为「有未保存变更 → `solid`+`primary`；无变更 → `soft`+`neutral`+`disabled`+原因 `title`」， 并给 Browser / ACP / Subagent 三处**原本没有 dirty 概念**的按钮补上快照比对（实测 8 处全 `rgb(243,244,246)`， 改一个值后仅该模块转 `rgb(160,108,213)` 可用）                                                                                                                                                                                                   | `features/agent/settings/**`（见 §7.31）                                                                     |
-| **P1 · ✅ 已关闭 2026-09-23**             | **设置区 22 处原生 `<select>` 收敛到 Gen2 `UiSelect`**：原先 4 种规格并存（`h-6 text-[11px]` … `h-9 text-xs`）且展开是浏览器原生下拉， 现全部走 Reka listbox（玻璃面板 `z-index:85` / `blur(6px)`）；`UiSelect` 的 v-model 收窄为「可空进、非空出」， 新增 `NONE_OPTION` 哨兵（4 处「不选择」项）与 `pickOption()`（8 个窄联合字段）， CDP 实测三组共 10 处可见、残留原生 0、414px 无横向溢出，e2e 的 `selectOption` 断言同步改为 listbox 交互                                                                                                                                   | `features/agent/settings/**`、`foundation/ui/UiSelect.vue`、`tests/e2e/specs/agent/host.spec.ts`（见 §7.32） |
-| **P1 · ✅ 已关闭 2026-09-23**             | **`QuantityInput` 单位药丸命中区 `18×20` → `24×24`**：高度 `h-5` → `h-6` 并补 `min-w-6`， 输入框预留内边距 `pr-20` → `pr-24`（字节型有 3 枚药丸，旧值已压到边）；实测 10 枚药丸全部 `24×24`                                                                                                                                                                                                                                                                                                                                                                                      | `features/agent/settings/QuantityInput.vue`（见 §7.33）                                                      |
-| **P1 · ✅ 已关闭 2026-09-23**             | **模型列表的「取消添加 / 一键取消」收敛 + 补确认**（§6.3 / §6.7 收口）：11px 裸文字按钮 → Gen2 `UiButton` （`soft` + `compact`，可移除 `danger` / 不可移除 `neutral` + 原因 `title`，实测 11 个 `85×28`）；批量移除改为先弹确认 （实测文案含「将移除 newapi 下 10 个可移除模型；默认主力模型或首个基础模型会保留。」）。至此 §6.2 控件清单只剩跨页 chrome 的顶部 Tab 36px（按约定不动）                                                                                                                                                                                          | `settings/ModelProviderSettings.vue`（见 §7.34）                                                             |
-| **P2 · ✅ 已关闭 2026-09-23**             | **Workspace 运行时 5 处原生 `<select>` 同批收敛**（§7.32 遗留）：空值语义用 `NONE_OPTION` 承载， 工具版本项跟随 `pinnedVersion()` 条件展开；收敛后 `features/agent/**` 原生 `<select>` 计数 **0** （该批只有模板编译 + `vue-tsc`，环境 `runner_not_configured` 导致卡片不渲染，已显式记录）                                                                                                                                                                                                                                                                                      | `features/agent/runtime/Workspace{Create,Toolchain,ArtifactTransfer}*.vue`（见 §7.35）                       |
-| **P1 · ✅ 已关闭 2026-09-23**             | **TaskRail「最近事实」不再默认 dump JSON**（§2.9 收口）：改成一行一个字段的 `dl` 投影（长值截断 120 字符）， 原始 payload 折进二级 `<details>`（新增 `agent.tasks.rawPayload`）；本环境没有可打开的 Run 详情， 故只有模板编译 + `vue-tsc` 验证 + 「`JSON.stringify(entry.payload` 仅存在于二级折叠内」的静态确认                                                                                                                                                                                                                                                                 | `features/agent/runtime/TaskRail.vue`（见 §7.36）                                                            |
-| **P1 · ✅ 已关闭 2026-09-23**             | **设置区模块标题带的斑马纹与动作簇拥挤**：16 条 `bg-header/40` 灰底标题带统一去底色（`990×64` 实测）， 标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`；414px 下动作簇由右对齐改为整行下移左对齐 （末位控件距右缘 20 → 248px），同轮修掉插件仓库输入框 `min-w` 硬撑导致的窄屏横向溢出                                                                                                                                                                                                                                                                          | `settings/AgentSettingsPanel.vue`、`ModelProviderSettings.vue`、`PluginManagementSettings.vue`（见 §7.30）   |
-| **P1 · ✅ 已关闭 2026-09-23**             | **设置区粘性分组导航此前形同失效**：`sticky top-0` 恰好落在 56px 全局顶栏之下（z-30 盖住 z-20），滚起来就被吞掉；现已对齐 `top-14`，并让导航条压在自带 `z-20` 的模块之上（`z-index: 29`），移动端不再被内容穿透                                                                                                                                                                                                                                                                                                                                                                  | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
-| **P1 · ✅ 已关闭 2026-09-23**             | **`v-show` 在 Agent 设置面板上完全失效**：SFC 是 `section + BaseModal` 双根，父级 `v-show` 落到「非元素根」被 Vue 忽略——切到「工作区」等其它 Tab 后，整块 Agent 设置仍留在页面下方（实测 top 1852 / 高 1584）；已包一层无样式 div 收成单根                                                                                                                                                                                                                                                                                                                                       | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
-| **P2 · ✅ 已关闭 2026-09-23**             | `AppManagementSettings.vue` 用了 `<UiInfoHint>` 却漏 import，被当成未知元素渲染（`agent.settings.apps.description` 提示整条丢失 + Vue 运行时警告）；已补 import，实测 `data-ui="info-hint"` 正常输出                                                                                                                                                                                                                                                                                                                                                                             | `settings/AppManagementSettings.vue`（见 §7.27）                                                             |
-| **P1 · 🟠 开放 2026-09-23**               | **错误横幅仍有一条写路径直接重放原 mutation**：`createThread()` 失败后把「重试」绑定回同一个 `POST /threads`；该接口只有 CSRF header、没有 caller-stable `Idempotency-Key`，后端又为每次请求生成新 UUID。若服务端已提交但响应丢失，用户点击「重试」会创建第二条会话，和 §7.37 声明的“写失败只重新同步、不重放”不一致。                                                                                                                                                                                                                                                           | `host/AgentAppSurface.vue:902-916`、`api/agent-api.ts:364-374`（见 §7.41）                                   |
-| **P2 · 🟠 开放 2026-09-23**               | **侧栏 / TaskRail 的“按用户持久化”在账号切换时会串状态**：`30fa0ed` 把 `threadSidebarVisible` / `taskRailVisible` 写入每用户 localStorage，但 `agentWindowManager.reset()` 没重置这两个字段；登出 A 后若 B 没有已存布局，`restoreForUser(B)` 直接返回，B 会继承 A 的内存开关状态。                                                                                                                                                                                                                                                                                               | `host/window-manager.ts:161-218,258-268`、`host/AgentSurfaceHost.vue:191-211`（见 §7.42）                    |
-| **P2 · 🟠 开放 2026-09-23**               | **两类 UI 偏好仍跨账号共用**：TaskRail 顺序和线程列表缩放都使用全局 localStorage key；已有“重置”入口但没有 user scope，同一浏览器换账号会继承上一账号偏好。                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtime/TaskRail.vue`、`host/AgentThreadSidebar.vue`（见 §7.43）                                            |
-| **P1 · 🟠 开放 2026-09-23**               | **命中区 floor 未完全收口**：Hub resize 仍 16×16；插件仓库删除和 AppSwitcher 关闭仍 20×20。pager 的透明伪元素命中区仍正常，不在本条。                                                                                                                                                                                                                                                                                                                                                                                                                                            | `host/AgentHubWindow.vue`、`settings/PluginManagementSettings.vue`、`host/AgentAppSwitcher.vue`（见 §7.44）  |
-| **P2 · 🟠 开放 2026-09-23**               | **AppExecutionPolicy dirty-state 有 false positive**：对象 overrides 用 `JSON.stringify` 比较，关闭再恢复同一个 override 会改变 key 插入顺序，即使值完全一致也被判 dirty。                                                                                                                                                                                                                                                                                                                                                                                                       | `settings/AppExecutionPolicySettings.vue`（见 §7.45）                                                        |
-| **P1 · 🟠 开放 2026-09-23**               | **4 条 state-commit 工具失败摘要的 `userSummary` 层级错误**：被 stringify 进模型 `payload.text`，UI sibling 反而为空；用户继续看到英文，模型侧却看到 i18n key。                                                                                                                                                                                                                                                                                                                                                                                                                  | `infrastructure/agent/runtime/state-commit/{approval,input,run}-transitions.ts`（见 §7.46）                  |
-| **P1 · 🟠 开放 2026-09-23**               | **Run 处于 `cancelling` 时 Send 仍可点击**：前端把 cancelling 算作可追加输入的 nonTerminal，backend 明确返回 `RUN_NOT_ACCEPTING_INPUT`。                                                                                                                                                                                                                                                                                                                                                                                                                                         | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`、backend `input-transitions.ts`（见 §7.47）           |
-| **P1 · 🟠 开放 2026-09-23**               | **11px 阅读文字 floor 被后续 commit 回归**：模型选项说明 `modelOptionHint` 当前是 `text-[9px]`；全量非 icon 小文本扫描确认这一处仍在。                                                                                                                                                                                                                                                                                                                                                                                                                                           | `host/AgentAppSurface.vue`（见 §7.48）                                                                       |
-| **P2 · 🟠 开放 2026-09-23**               | **ACP 设置仍有用户可见英文硬编码**：create/update/profile update/delete 成功 toast + request failed fallback 在 zh-CN/ja-JP 下仍显示英文。                                                                                                                                                                                                                                                                                                                                                                                                                                       | `settings/AcpRuntimeSettings.vue`（见 §7.49）                                                                |
-| **P2 · 🟠 开放 2026-09-23**               | **Provider / Settings 写后刷新只覆盖同 tab**：跨标签页 BroadcastChannel 只刷新 host summary，不触发另一个 tab 的 run configuration reload；§7.22 正文已记录该缺口但总状态仍标关闭。                                                                                                                                                                                                                                                                                                                                                                                              | `host/AgentSurfaceHost.vue`、`host/agent-host-events.ts`、`settings/AgentSettingsPanel.vue`（见 §7.50）      |
-| **P2 · 🟠 开放 2026-09-23**               | **Gen2 `foundation/ui/**` 没有正确 ESLint 覆盖**：直接 lint `UiSelect.vue` 会报 TS parsing error；公共组件已进入大量 Agent 主路径，不能继续只靠模板编译 + vue-tsc。                                                                                                                                                                                                                                                                                                                                                                                                              | `eslint.config.mjs`、`packages/frontend/src/foundation/ui/**`（见 §7.51）                                    |
+| 级别                                      | 问题                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 关键位置                                                                                                                                             |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P0 · ✅ 已关闭 2026-09-23**             | 设计 token 已补齐并接入 Tailwind：`--color-card / border-hover / primary-hover / warning-foreground` 均有真实规则；CDP `.bg-card` 计算背景为 `rgba(246,247,249,.92)`                                                                                                                                                                                                                                                                                                                                                                                                             | `app/styles/tokens.css`（见 §1.1）                                                                                                                   |
+| **P0 · ✅ 已关闭 2026-09-23**             | `agent.ui.saveFailed` 已补齐 en-US / ja-JP / zh-CN 且保存失败路径真实引用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `settings/ModelProviderSettings.vue`、`i18n/*.json`（见 §1.2）                                                                                       |
+| **P0 · ✅ 已关闭 2026-09-23**             | Agent Hub 模态边界已闭环：打开聚焦 Hub、背景 `#app.inert=true`、Tab/Shift+Tab 限制在 Hub 与 Hub-owned portal、Escape 关闭、关闭后焦点回 Launcher                                                                                                                                                                                                                                                                                                                                                                                                                                 | `host/AgentHubWindow.vue`（CDP 复验见 §7.13-c）                                                                                                      |
+| **P0 · ✅ 已关闭 2026-09-23**             | 玻璃层已固化为唯一 `.glass-surface`：token-based 半透明 fill + blur(16px) + 弱边框/阴影；Gallery CDP 实测 alpha≈0.7544                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `app/styles/global.css`、`foundation/ui/UiPopover.vue`（见 §7.1）                                                                                    |
+| **P1 · ✅ 已关闭 2026-09-23**             | **默认模型选择框「文字背景 ≠ 框背景」已关闭**：`UiCombobox` 输入框不再被全局未分层表单规则涂成纯白，trigger / panel / 输入区共用同一 glass fill                                                                                                                                                                                                                                                                                                                                                                                                                                  | `foundation/ui/uiGen2.css`（见 §7.18）                                                                                                               |
+| **✅ 已确认保留模态 2026-09-23**          | 「模态遮罩 + 浮动窗口」经产品确认是**有意设计**（背景不可交互，避免两边操作冲突；使用 Hub 时不需要同时看终端）；遮罩点击已收敛为真正 no-op，不再有 400ms「闪烁」                                                                                                                                                                                                                                                                                                                                                                                                                 | `host/AgentHubWindow.vue`（见 §2.1、§2.2）                                                                                                           |
+| **P1 · ✅ 已关闭 2026-09-23**             | **字号：实测推翻了"563 处 ≤11px 不可读"的整体判断**（181 处 ≤9px 里 95 处是图标；默认首屏只有 6 个 <11px 文本节点）。仍按"阅读文本 ≥11px"全量收敛：两轮共 33 文件 / 274 行，现 `<11px` 只剩图标字形与 5 个 14–16px 圆内计数/勾选，无任何阅读文字低于 11px                                                                                                                                                                                                                                                                                                                        | `features/agent/**`（见 §2.3）                                                                                                                       |
+| **P1 · ✅ 已关闭 2026-09-23**             | **点击目标：** 关闭 App 标签 `16×16`→`24×24` 常显 + pointer；窄容器纯图标 Run 配置 `25px`→`28px`、字号 `10/10.5px`→`11px`；审批卡按钮追加 `min-h-8`（32px）                                                                                                                                                                                                                                                                                                                                                                                                                      | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`、`runtime/ApprovalCard.vue`（见 §2.4）                                                         |
+| **P1 · ✅ 已关闭 2026-09-23**             | 调色板类 **182 → 0**：新增 `info` 语义 token，其余收敛到 `success/warning/error/primary`；硬编码阴影 / Hub 窗口阴影 / 遮罩改为从 token 推导。CDP 证明改 theme 变量后计算色跟随                                                                                                                                                                                                                                                                                                                                                                                                   | `app/styles/tokens.css`、`features/appearance/config/default-theme.ts`、`features/agent/**`（见 §2.7）                                               |
+| **P1 · ✅ 已关闭 2026-09-23**             | 设置区控件风格分裂**已收口**：按钮档位（主/次/危险/图标四档 Gen2 `UiButton`，`32px / fs12 / r8`，§6.2 批 1/2）、原生 checkbox（27 处 → `UiCheckbox`，§7.20）、原生 `<select>`（22 处 → `UiSelect`，§7.32）、`QuantityInput` 单位命中区（18×20 → 24×24，§7.33）、添加/移除模型行的 11px 纯文字按钮（→ `UiButton` soft+compact，§7.34）全部闭环。**仍开放**：顶部 Tab 仍是 36px（跨页 chrome，按约定本轮不动）                                                                                                                                                                     | `features/agent/settings/**`（见 §6.2、§6.3、§7.20、§7.32–§7.34）                                                                                    |
+| **P1 · ✅ 已关闭 2026-09-23**             | 设置区模板与能力清单里的硬编码中文（能力名称/描述、存储、插件、预算、数值单位）已全部接入词典；中英日三语键位对齐                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `features/agent/settings/**`（见 §6.5、§7.14-c）                                                                                                     |
+| **P1 · ✅ 已关闭 2026-09-23**             | `bg-card` 族已恢复真实 surface；助手气泡改为有效 `bg-card`，TaskRail/空态卡继续使用已生效的 card token                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue`                                                                     |
+| **P1 · ✅ 已关闭 2026-09-23**             | Composer 改为自身 container query + 单行 compact；560px Hub CDP 实测 controls `462/462`，无静默裁切，思考等级优先靠前                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.3）                                                                                    |
+| **P1 · ✅ 已关闭 2026-09-23**             | 「回到最新」已移到 Composer 上方状态行右侧；token 状态同排左侧，仅真实 token>0 时显示                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `ai/AgentConversation.vue`（见 §7.4）                                                                                                                |
+| **P1 · ✅ 已关闭 2026-09-23**             | 主界面三层 chrome 压扁消息区：`MIN_HEIGHT` 380 → 480，并在矮窗口下把 composer 压成两行；CDP 实测最小高度时会话区 **94 → 227px**（§7.2 列宽 / 体感已复核，见 §7.2-b、§7.2-f；停靠态折叠闪烁见 §7.2-g）                                                                                                                                                                                                                                                                                                                                                                            | `host/window-manager.ts`、`host/AgentHubWindow.vue`、`ai/AgentConversation.vue`（见 §7.2-a）                                                         |
+| **P2 · ✅ 已关闭 2026-09-23**             | Agent 内无效 spacing utility 已清零；`py-0.2 / py-0.8 / py-1.8` 当前源码扫描残留 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `features/agent/**`（见 §7.8）                                                                                                                       |
+| **P1 · ✅ 已关闭 2026-09-23**             | 多处「不可发现 / 与产品整体不一致」的交互**已全部闭环**：会话列表 Ctrl+滚轮缩放（§7.13-d 面板化 + 重置）、任务栏卡片拖拽排序（§7.14-b 独立把手 + 方向键 + 恢复默认顺序）、Launcher 6px 阈值拖拽（§7.38 长按拖动 + 重置位置）、虚拟列表固定行高（§7.38 探针行实测）；§2.6 的空态轮播此前已关闭                                                                                                                                                                                                                                                                                    | `host/AgentThreadSidebar.vue:132-146`、`runtime/TaskRail.vue:107-160`（见 §2.8 / §7.38）                                                             |
+| **P1 · ✅ 已关闭 2026-09-23**             | Composer 的 Send / Cancel Run 已拆成两个独立按钮（停止按钮图标-only + 错误色，运行中才出现）；`sendHint` 已渲染；空草稿按 Enter 不再误取消 Run                                                                                                                                                                                                                                                                                                                                                                                                                                   | `ai/AgentConversation.vue`（见 §2.5）                                                                                                                |
+| **P1 · ✅ 已关闭 2026-09-22**             | **切换 App / Files 不再卸载 Agent surface，断线也不再清空已展示 partial text**：Hub 使用持续存在的 `<KeepAlive>`，真正结束 Run / 切线程 / 停止订阅时才清理 streaming presentation                                                                                                                                                                                                                                                                                                                                                                                                | `host/AgentHubWindow.vue`、`host/AgentAppSurface.vue`（见 §1.7）                                                                                     |
+| **P1 · ✅ 已关闭 2026-09-22**             | **Nexus 前后端真实 transport contract 已统一到 `packages/protocol`**：HTTP / Workspace WS / Agent HTTP / Agent event WS / Agent terminal WS 均由 canonical DTO/event contract 单一来源约束，并已接入 transport architecture guard；当前 HEAD 收尾复核再次通过 guard、Agent ESLint、Backend/Agent Runner typecheck、Frontend `vue-tsc + vite build` 与 Agent scenario suite **71/71**                                                                                                                                                                                             | `packages/protocol/**`、`scripts/check-transport-contract-boundaries.mjs`（见 §3.2）                                                                 |
+| **P1 · ✅ 已关闭 2026-09-22**             | **Agent scenario runner 已模块化并支持受控并发**：`runner.ts` 从 22k+ 行降至 258 行，当前 71 个独立 scenario 文件；默认按批次并发、仅显式 `SERIAL_SCENARIOS` 保持串行；当前扫描未发现通过 `readFileSync` 读取 `packages/*/src` 做 source-shape 架构断言                                                                                                                                                                                                                                                                                                                          | `tests/backend/agent-scenarios/**`（见 §3.6）                                                                                                        |
+| **P2 · ✅ 已关闭 2026-09-23**             | 274/1148（约 24%）i18n key 已无引用，且三种语言各存一份 → **升级成常驻门禁并清零**：`scripts/check-agent-i18n.mjs` 新增"key 可达性"守卫（字面量 / 模板拼接前缀 / 后端构造的投影 key 都算可达），三语字典 1,467 → 1,392 个叶子 key，删除 75×3 条不可达文案；CDP 走完 20 个设置分区 0 处原始 key、0 条 intlify 告警（见 §3.5 / §7.40）                                                                                                                                                                                                                                             | `features/agent/i18n/*.json`                                                                                                                         |
+| **P2 · ✅ 基础门禁已关闭 2026-09-22**     | **Agent review 范围已接入 ESLint flat config**：`no-unused-vars` + Vue `v-if/v-for` 规则成为 error；首跑发现并清理 47 个真实 unused 符号。自定义 i18n / 设计 token 规则仍开放                                                                                                                                                                                                                                                                                                                                                                                                    | `eslint.config.mjs`、`package.json` scripts                                                                                                          |
+| **P2 · ⏸ 已评估 · 按约定延后 2026-09-23** | 巨型文件问题**仍主要集中在 UI**（2026-09-23 复核：UI TOP 为 `AgentAppSurface.vue` 2,915 / `ModelProviderSettings.vue` 2,201 / `AgentSettingsPanel.vue` 1,447；非 UI owner 均已拆完。**本轮不拆**：该条已无隐藏的用户可见缺陷，而按职责拆需要搬迁约 30 props + 15 emit，正确验收依赖 Provider CRUD 与 Run 详情两条主路径的逐控件回归，本环境 `runner_not_configured` 无法覆盖 ⇒ 风险高于收益）；非 UI owner 已完成一轮拆分：`agent-api.ts` 791 行、`runner-http.adapter.ts` 770 行、`native-agent-backend.ts` 722 行，原 1k+ 行 state-commit 聚合文件已拆为细分 transition owners | 见 §3.1                                                                                                                                              |
+| **P2 · ✅ 已关闭 2026-09-23**             | 工具结果摘要为英文硬编码，直接展示在中文/日文 UI 里 → **「模型可见证据 / 用户可见摘要」拆分**：`ToolResult.userSummary` 在 `projectToolResult` 被剥离（模型侧零变化），ledger payload 旁路携带，`ConversationMessage.vue` 优先渲染、缺失回退原 `summary`（历史数据零迁移）；`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要全部接入，三语 `toolSummary.*`（72 句 + 39 标签）齐平；CDP 双语言实测通过                                                                                                                                                                  | `modules/agent/tools/host/*.ts`（见 §1.8 / §7.39）                                                                                                   |
+| **P1 · ✅ 已关闭 2026-09-22**             | **历史 Run 的 `GET /runs/:id/approvals` 稳定 500（`AGENT_DURABLE_STATE_INVALID`）**：已由 migration #45 将 legacy `inspection_json.target.kind = "machine"` 规范化为 canonical SSH target；真实数据库副本验证 26 条 legacy tool call → 0、25 条受影响 approval 全部可解码                                                                                                                                                                                                                                                                                                        | `sqlite-migrations.ts` migration #45、`tests/backend/agent-scenarios/runner.ts`（见 §1.9）                                                           |
+| **P0 · ✅ 已关闭 2026-09-23**             | 全局 form font/cursor reset 已移入 `@layer base`；CDP 设置页 `text-xs` 按钮均恢复为 12px（旧实测为 16px）                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `app/styles/global.css:27-46`（见 §7.10）                                                                                                            |
+| **P1 · ✅ 已关闭 2026-09-23**             | 设置区「Agent」页在英文界面下的硬编码中文：三个子页可见中文文本节点 **29 → 0**（数值+单位改由 `use-quantity-labels` 注入）                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `features/agent/settings/**`（见 §6.5、§7.11、§7.14-c）                                                                                              |
+| **P1 · ✅ 已关闭 2026-09-23**             | 备用模型链已改为 `1..N` 有序列表 + 上移/下移/移除；Add 使用可搜索 Gen2 `UiPopover`，排除默认/已选并限制最多 8 项                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `settings/ModelProviderSettings.vue`（见 §7.11）                                                                                                     |
+| **P1 · ✅ 已关闭 2026-09-23**             | 设置区按钮规格已收敛到四档：主操作 `solid/primary`、次操作 `soft/neutral`、危险 `soft/danger`、图标 `ghost/icon-only(28×28)`；实测动作按钮统一 `×32 fs12 r8`，禁用态为中性填充（旧值：`添加 Provider` 144×38 fs16、`立即更新` 77×28 fs11 r6、`模型与测试` 117×26、`添加配置档` 86×34 r6）                                                                                                                                                                                                                                                                                        | 见 §7.11                                                                                                                                             |
+| **P2 · ✅ 已关闭 2026-09-23**             | 空态 pager 命中区 **12×16 / 20×16 → 28×32 / 36×32**：透明伪元素外扩，可视圆点与布局不变；每个圆点独占互不重叠的命中格                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `ai/AgentConversation.vue:472-486`（实测见 §7.12）                                                                                                   |
+| **P1 · ✅ 已关闭 2026-09-23**             | 弹层已改为优先按 Hub 窗口 clamp，并限制 maxWidth/maxHeight、跟随 Hub resize；560px Hub 下附件弹层实测四边均在窗口内                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `files/AgentConfigPopover.vue`、`host/AgentAppSwitcher.vue`（见 §7.13-a）                                                                            |
+| **P0 · ✅ 已关闭 2026-09-23**             | Hub 键盘模态边界已修复并 CDP 复验：初始焦点进入 Hub、背景 inert、连续 35 次 Tab 0 次逃逸、Escape 关闭且焦点回 Launcher                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `host/AgentHubWindow.vue`（见 §7.13-c）                                                                                                              |
+| **P2 · ✅ 已关闭 2026-09-23**             | 会话列表缩放（Ctrl+滚轮）现在有可见入口与重置：侧栏头部 `100%` 胶囊（点击展开 放大/缩小/重置为 100%，含边界禁用）；缩放系数改由根节点 `--agent-thread-scale` 驱动，内联 `font-size` 归零                                                                                                                                                                                                                                                                                                                                                                                         | `host/AgentThreadSidebar.vue:64/127/310`（见 §7.13-d）                                                                                               |
+| **P0 · ✅ 核心缺陷已关闭 2026-09-22**     | **Run 详情不再被单个辅助接口失败整体阻断**：`getRun` 成功即打开详情；checkpoints / approvals / subagents 独立 settled 回填，失败项仍走现有错误横幅。分区重试与错误本地化仍作为 UI 子项开放                                                                                                                                                                                                                                                                                                                                                                                       | `host/AgentAppSurface.vue`（见 §1.10）                                                                                                               |
+| **P0 · ✅ 已关闭 2026-09-23**             | **Composer 裁切已关闭**：container query 改为 composer 自身，工具条保持单行；560px Hub 实测 controls clientWidth=scrollWidth，无静默裁切                                                                                                                                                                                                                                                                                                                                                                                                                                         | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`（见 §7.14-a）                                                                                 |
+| **P1 · ✅ 已关闭 2026-09-23**             | 任务栏 6 个「拖动排序」把手补上键盘路径：↑/↓ 与相邻可见卡片交换（`aria-keyshortcuts` + `title`），焦点跟随卡片                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `runtime/TaskRail.vue`（见 §7.14-b）                                                                                                                 |
+| **P2 · ✅ 已关闭 2026-09-23**             | 任务栏：目标卡改用连接名（ID 退到 `title`）、Run 历史改为 8 条起步 + 「显示更早的 Run」增量展开、卡片顺序新增「重置卡片顺序」入口（顺序一致时隐藏）                                                                                                                                                                                                                                                                                                                                                                                                                              | `runtime/TaskRail.vue`（见 §7.14-b）                                                                                                                 |
+| **P2 · ✅ 已关闭 2026-09-23**             | 审批卡：`risk` 枚举已本地化（新增 `agent.approvals.risk.*`）；「`审批状态：approved`」由 §1.4/§7.15-a 关闭（`status` 映射）；「剩余 300s」改为 `agent.approvals.expiresIn`（中/日文为「300 秒」）；「批准」按钮由 `bg-warning text-black` 改成品牌主色 `bg-primary text-white`                                                                                                                                                                                                                                                                                                   | `runtime/ApprovalCard.vue`（见 §7.14-b）                                                                                                             |
+| **P1 · ✅ 已关闭 2026-09-23**             | Hub 窗口几何补上键盘路径（标题栏/缩放热区方向键 16px、Shift 64px，`aria-keyshortcuts` + `tabindex`），并新增全局 `prefers-reduced-motion` 基线（未分层），Hub 内 60 个带过渡的元素降级为 0                                                                                                                                                                                                                                                                                                                                                                                       | `host/AgentHubWindow.vue`、`app/styles/global.css`（见 §2.10）                                                                                       |
+| **P1 · ✅ 已关闭 2026-09-23**             | 前端 agent 区非注释硬编码中文 **116 行 → 0**：能力清单、会话用量、错误解释、存储/插件/预算文案全部走词典（中英日三语）                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `features/agent/**`（见 §7.14-c）                                                                                                                    |
+| **P1 · ✅ 已关闭 2026-09-23**             | `zh-CN` 词典与 en-US 完全相同的 key 由 35 → 22、整句英文由 15 → 5（`ja` 49 → 31 / 20 → 5），剩 5 条是品牌与协议名（白名单）；枚举不再插进本地化句子（`审批状态：approved` / `当前状态：enabled` 走 `status` / `stateLabels` 映射）；新增 `pnpm lint:agent-i18n` 防回归                                                                                                                                                                                                                                                                                                           | `i18n/zh-CN.json`、`ApprovalCard.vue`、`AgentFeatureSettings.vue`（见 §7.15-a）                                                                      |
+| **P1 · ✅ 已关闭 2026-09-23**             | 未本地化枚举/内部标识：Subagent 状态与失败模式、审批 `risk`、Workspace 命令 `action`/`status` 全部改为查表（新增 `agent.subagents.status/failureMode`、`agent.approvals.risk`、`workspaceRuntime.commandAction/commandState`）；原始值只保留在折叠的「规范化操作」调试区                                                                                                                                                                                                                                                                                                         | `runtime/SubagentCard.vue`、`runtime/ApprovalCard.vue`、`settings/WorkspaceRuntimeSettings.vue`（见 §1.4）                                           |
+| **P2 · ✅ 已关闭 2026-09-23**             | 设置区「运行与环境」页实测 **3825px 高、8 个独立「保存」按钮**且多为禁用态、无粘性分区导航 → 粘性分区导航与嵌套框收口（§7.25，3423px）、保存按钮按 dirty 分级（§7.31，无改动时降级为禁用 + 原因 `title`）、面板头摘要与信息密度收口（§7.29 / §7.30）                                                                                                                                                                                                                                                                                                                             | `settings/**`（见 §7.15-c）                                                                                                                          |
+| **P2 · ✅ 已关闭 2026-09-23**             | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`）→ 新增 Gen2 `UiEmptyState` 并在设置区 10 处接入（图标 + 标题 + 说明 + 可选动作，`dense` 档实测 950×38、卡片档 950×143，见 §7.28）                                                                                                                                                                                                                                                                                                                                                                                    | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                                                               |
+| **P1 · ✅ 已关闭 2026-09-23**             | 设置区不再把后端原始原因码当"不可用原因"渲染：已知码（`runner_not_configured` / `runner_unavailable` / `runtime_not_configured`）映射成中/英/日文说明，未知码退回通用说明并把原始值放进 `title` 与「后端原因代码」行                                                                                                                                                                                                                                                                                                                                                             | `settings/WorkspaceRuntimeSettings.vue`（见 §7.15-b）                                                                                                |
+| **P2 · ✅ 已关闭 2026-09-23**             | 禁用态主按钮**已改为中性填充**（§6.2 批 1/2：`保存` / `预览导入` / `卸载` 等实测 `bg rgb(243,244,246)` + 中性描边，不再是品牌色 × 0.5）；**已补**：11 个稳态禁用按钮全部带原因 `title`（没有未保存的修改 / 没有待预览的改动 / 请先填写必填项 / 请先选择来源与目标 / 请先填写仓库地址，三语齐全）                                                                                                                                                                                                                                                                                 | `features/agent/settings/**`（实测见 §7.13-e）                                                                                                       |
+| **P1 · ✅ 已关闭 2026-09-23**             | Composer 配置弹层（模型 / 思考强度）**首帧位置错乱**：定位时面板仍是占位尺寸（`max-width:0`/`max-height:300`），首帧算到 `(470,472)` 等错位值、下一帧才跳到 `(426,667.5)`（上偏 195px）→ 改为测量前解除占位上限 + 未定位不绘制；App 切换器同源一并修（见 §7.26）                                                                                                                                                                                                                                                                                                                 | `files/AgentConfigPopover.vue`、`host/AgentAppSwitcher.vue`（见 §7.26）                                                                              |
+| **P1 · ✅ 已关闭 2026-09-23**             | Agent 设置区**嵌套框 3~4 层**：叶子控件往上数有 3 层带边框的祖先（面板卡 → 模块卡 → 模块内分组框）→ 收到 **1 层**（只留分组卡），模块间改用细分隔线、模块内分组框降级为无边框 inset；同轮把分组导航改成**粘性**（滚 807px 后停 y=0），`运行与环境` 全页 3625 → 3423px（见 §7.25）                                                                                                                                                                                                                                                                                                | `settings/AgentSettingsPanel.vue` + 14 个 `*Settings.vue`（见 §7.25）                                                                                |
+| **P1 · ✅ 已关闭 2026-09-23**             | Agent 的界面与设置里**提示性文字过多**：新增通用 `UiInfoHint`（`ⓘ`/`⚠` 悬浮说明），设置区 16 张卡的长句已全部收起 —— CDP 三组分区实测可见说明 **2145 → 1209 字（-43.6%）**，`ⓘ` 由 1 个增至 16 个；Hub 侧实测常驻版面已无长句，仅补了 2 处弹层头部说明                                                                                                                                                                                                                                                                                                                           | `foundation/ui/UiInfoHint.vue`、`features/agent/settings/**`（见 §7.24）                                                                             |
+| **P2 · ✅ 已关闭 2026-09-23**             | 主操作（Composer 发送按钮）禁用态从「品牌色 + `opacity .2`」改为「中性填充 + 保留描边 + `opacity .5` + `title` 说明原因」，并把全仓禁用态不透明度收敛到单一值 `0.5`（原 20/25/35/40/45 五种）                                                                                                                                                                                                                                                                                                                                                                                    | `ai/AgentConversation.vue` 等 9 个文件（见 §7.17-c）                                                                                                 |
+| **P1 · ✅ 已关闭 2026-09-23**             | 图标颜色：未分层的 `i/.fas/.far/.fab { color: var(--icon-color) }` 压过 `@layer utilities`，132 个带 `text-primary/success/warning/error/foreground` 的图标一律渲染成 `#666`（`!text-white` 是既有绕过写法）                                                                                                                                                                                                                                                                                                                                                                     | `app/styles/global.css:91-110`（见 §7.19）                                                                                                           |
+| **P1 · ✅ 已关闭 2026-09-23**             | 空态便当卡自动轮播已可中断：悬停/焦点暂停、手动分页后固定、`prefers-reduced-motion` 时彻底不轮播（hover 位移与脉冲也一起关掉）                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `ai/AgentConversation.vue`（见 §2.6）                                                                                                                |
+| **P1 · ✅ 已关闭 2026-09-23**             | **Agent 设置区「17 个模块一条长流」的布局**：宽屏新增常驻左栏分区导航（3 分组 + 17 锚点，粘在全局顶栏下），点击跳转 + 滚动联动高亮；窄屏保留顶部胶囊。跨分组跳转落点误差 0px（修复前实停 1766 / 目标 2352）                                                                                                                                                                                                                                                                                                                                                                      | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                                                        |
+| **P2 · ✅ 已关闭 2026-09-23**             | **设置区空态与主界面两套语言**：新增 Gen2 `UiEmptyState`（`dense` / 卡片两档），设置区 10 处空态统一（7 处行内 `950×38` + 3 处卡片 `950×143`）；`foundation/ui` 里首次有可复用的空态原语                                                                                                                                                                                                                                                                                                                                                                                         | `foundation/ui/UiEmptyState.vue`、`features/agent/settings/**`（见 §7.28）                                                                           |
+| **P2 · ✅ 已关闭 2026-09-23**             | 设置区面板头部三块摘要（默认模型 / 活跃 App / 沙箱）是「标签: 数值」小方块，读起来像调试输出：改为图标 + 标签/数值两行的无框统计（实测 3 项同行 `337×29`，414px 下折成两行仍 `337×29` 单行不换行溢出）                                                                                                                                                                                                                                                                                                                                                                           | `settings/AgentSettingsPanel.vue`（见 §7.29）                                                                                                        |
+| **P2 · ✅ 已关闭 2026-09-23**             | **设置区 8 处独立「保存」按钮语义分级**（§7.15-c 收口）：原本 8 处全写死浅紫实心主按钮、无变更时只是 disabled， 现统一为「有未保存变更 → `solid`+`primary`；无变更 → `soft`+`neutral`+`disabled`+原因 `title`」， 并给 Browser / ACP / Subagent 三处**原本没有 dirty 概念**的按钮补上快照比对（实测 8 处全 `rgb(243,244,246)`， 改一个值后仅该模块转 `rgb(160,108,213)` 可用）                                                                                                                                                                                                   | `features/agent/settings/**`（见 §7.31）                                                                                                             |
+| **P1 · ✅ 已关闭 2026-09-23**             | **设置区 22 处原生 `<select>` 收敛到 Gen2 `UiSelect`**：原先 4 种规格并存（`h-6 text-[11px]` … `h-9 text-xs`）且展开是浏览器原生下拉， 现全部走 Reka listbox（玻璃面板 `z-index:85` / `blur(6px)`）；`UiSelect` 的 v-model 收窄为「可空进、非空出」， 新增 `NONE_OPTION` 哨兵（4 处「不选择」项）与 `pickOption()`（8 个窄联合字段）， CDP 实测三组共 10 处可见、残留原生 0、414px 无横向溢出，e2e 的 `selectOption` 断言同步改为 listbox 交互                                                                                                                                   | `features/agent/settings/**`、`foundation/ui/UiSelect.vue`、`tests/e2e/specs/agent/host.spec.ts`（见 §7.32）                                         |
+| **P1 · ✅ 已关闭 2026-09-23**             | **`QuantityInput` 单位药丸命中区 `18×20` → `24×24`**：高度 `h-5` → `h-6` 并补 `min-w-6`， 输入框预留内边距 `pr-20` → `pr-24`（字节型有 3 枚药丸，旧值已压到边）；实测 10 枚药丸全部 `24×24`                                                                                                                                                                                                                                                                                                                                                                                      | `features/agent/settings/QuantityInput.vue`（见 §7.33）                                                                                              |
+| **P1 · ✅ 已关闭 2026-09-23**             | **模型列表的「取消添加 / 一键取消」收敛 + 补确认**（§6.3 / §6.7 收口）：11px 裸文字按钮 → Gen2 `UiButton` （`soft` + `compact`，可移除 `danger` / 不可移除 `neutral` + 原因 `title`，实测 11 个 `85×28`）；批量移除改为先弹确认 （实测文案含「将移除 newapi 下 10 个可移除模型；默认主力模型或首个基础模型会保留。」）。至此 §6.2 控件清单只剩跨页 chrome 的顶部 Tab 36px（按约定不动）                                                                                                                                                                                          | `settings/ModelProviderSettings.vue`（见 §7.34）                                                                                                     |
+| **P2 · ✅ 已关闭 2026-09-23**             | **Workspace 运行时 5 处原生 `<select>` 同批收敛**（§7.32 遗留）：空值语义用 `NONE_OPTION` 承载， 工具版本项跟随 `pinnedVersion()` 条件展开；收敛后 `features/agent/**` 原生 `<select>` 计数 **0** （该批只有模板编译 + `vue-tsc`，环境 `runner_not_configured` 导致卡片不渲染，已显式记录）                                                                                                                                                                                                                                                                                      | `features/agent/runtime/Workspace{Create,Toolchain,ArtifactTransfer}*.vue`（见 §7.35）                                                               |
+| **P1 · ✅ 已关闭 2026-09-23**             | **TaskRail「最近事实」不再默认 dump JSON**（§2.9 收口）：改成一行一个字段的 `dl` 投影（长值截断 120 字符）， 原始 payload 折进二级 `<details>`（新增 `agent.tasks.rawPayload`）；本环境没有可打开的 Run 详情， 故只有模板编译 + `vue-tsc` 验证 + 「`JSON.stringify(entry.payload` 仅存在于二级折叠内」的静态确认                                                                                                                                                                                                                                                                 | `features/agent/runtime/TaskRail.vue`（见 §7.36）                                                                                                    |
+| **P1 · ✅ 已关闭 2026-09-23**             | **设置区模块标题带的斑马纹与动作簇拥挤**：16 条 `bg-header/40` 灰底标题带统一去底色（`990×64` 实测）， 标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`；414px 下动作簇由右对齐改为整行下移左对齐 （末位控件距右缘 20 → 248px），同轮修掉插件仓库输入框 `min-w` 硬撑导致的窄屏横向溢出                                                                                                                                                                                                                                                                          | `settings/AgentSettingsPanel.vue`、`ModelProviderSettings.vue`、`PluginManagementSettings.vue`（见 §7.30）                                           |
+| **P1 · ✅ 已关闭 2026-09-23**             | **设置区粘性分组导航此前形同失效**：`sticky top-0` 恰好落在 56px 全局顶栏之下（z-30 盖住 z-20），滚起来就被吞掉；现已对齐 `top-14`，并让导航条压在自带 `z-20` 的模块之上（`z-index: 29`），移动端不再被内容穿透                                                                                                                                                                                                                                                                                                                                                                  | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                                                        |
+| **P1 · ✅ 已关闭 2026-09-23**             | **`v-show` 在 Agent 设置面板上完全失效**：SFC 是 `section + BaseModal` 双根，父级 `v-show` 落到「非元素根」被 Vue 忽略——切到「工作区」等其它 Tab 后，整块 Agent 设置仍留在页面下方（实测 top 1852 / 高 1584）；已包一层无样式 div 收成单根                                                                                                                                                                                                                                                                                                                                       | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                                                        |
+| **P2 · ✅ 已关闭 2026-09-23**             | `AppManagementSettings.vue` 用了 `<UiInfoHint>` 却漏 import，被当成未知元素渲染（`agent.settings.apps.description` 提示整条丢失 + Vue 运行时警告）；已补 import，实测 `data-ui="info-hint"` 正常输出                                                                                                                                                                                                                                                                                                                                                                             | `settings/AppManagementSettings.vue`（见 §7.27）                                                                                                     |
+| **P1 · 🟠 开放 2026-09-23**               | **错误横幅仍有一条写路径直接重放原 mutation**：`createThread()` 失败后把「重试」绑定回同一个 `POST /threads`；该接口只有 CSRF header、没有 caller-stable `Idempotency-Key`，后端又为每次请求生成新 UUID。若服务端已提交但响应丢失，用户点击「重试」会创建第二条会话，和 §7.37 声明的“写失败只重新同步、不重放”不一致。                                                                                                                                                                                                                                                           | `host/AgentAppSurface.vue:902-916`、`api/agent-api.ts:364-374`（见 §7.41）                                                                           |
+| **P2 · 🟠 开放 2026-09-23**               | **侧栏 / TaskRail 的“按用户持久化”在账号切换时会串状态**：`30fa0ed` 把 `threadSidebarVisible` / `taskRailVisible` 写入每用户 localStorage，但 `agentWindowManager.reset()` 没重置这两个字段；登出 A 后若 B 没有已存布局，`restoreForUser(B)` 直接返回，B 会继承 A 的内存开关状态。                                                                                                                                                                                                                                                                                               | `host/window-manager.ts:161-218,258-268`、`host/AgentSurfaceHost.vue:191-211`（见 §7.42）                                                            |
+| **P2 · 🟠 开放 2026-09-23**               | **两类 UI 偏好仍跨账号共用**：TaskRail 顺序和线程列表缩放都使用全局 localStorage key；已有“重置”入口但没有 user scope，同一浏览器换账号会继承上一账号偏好。                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtime/TaskRail.vue`、`host/AgentThreadSidebar.vue`（见 §7.43）                                                                                    |
+| **P1 · 🟠 开放 2026-09-23**               | **命中区 floor 未完全收口**：Hub resize 仍 16×16；插件仓库删除和 AppSwitcher 关闭仍 20×20。pager 的透明伪元素命中区仍正常，不在本条。                                                                                                                                                                                                                                                                                                                                                                                                                                            | `host/AgentHubWindow.vue`、`settings/PluginManagementSettings.vue`、`host/AgentAppSwitcher.vue`（见 §7.44）                                          |
+| **P2 · 🟠 开放 2026-09-23**               | **AppExecutionPolicy dirty-state 有 false positive**：对象 overrides 用 `JSON.stringify` 比较，关闭再恢复同一个 override 会改变 key 插入顺序，即使值完全一致也被判 dirty。                                                                                                                                                                                                                                                                                                                                                                                                       | `settings/AppExecutionPolicySettings.vue`（见 §7.45）                                                                                                |
+| **P1 · 🟠 开放 2026-09-23**               | **4 条 state-commit 工具失败摘要的 `userSummary` 层级错误**：被 stringify 进模型 `payload.text`，UI sibling 反而为空；用户继续看到英文，模型侧却看到 i18n key。                                                                                                                                                                                                                                                                                                                                                                                                                  | `infrastructure/agent/runtime/state-commit/{approval,input,run}-transitions.ts`（见 §7.46）                                                          |
+| **P1 · 🟠 开放 2026-09-23**               | **Run 处于 `cancelling` 时 Send 仍可点击**：前端把 cancelling 算作可追加输入的 nonTerminal，backend 明确返回 `RUN_NOT_ACCEPTING_INPUT`。                                                                                                                                                                                                                                                                                                                                                                                                                                         | `ai/AgentConversation.vue`、`host/AgentAppSurface.vue`、backend `input-transitions.ts`（见 §7.47）                                                   |
+| **P1 · 🟠 开放 2026-09-23**               | **11px 阅读文字 floor 被后续 commit 回归**：模型选项说明 `modelOptionHint` 当前是 `text-[9px]`；全量非 icon 小文本扫描确认这一处仍在。                                                                                                                                                                                                                                                                                                                                                                                                                                           | `host/AgentAppSurface.vue`（见 §7.48）                                                                                                               |
+| **P2 · 🟠 开放 2026-09-23**               | **源码英文 UI literal 仍有漏网**：ACP create/update/delete toast + fallback、Provider 测试 badge 的 `Tools`、App capability target 的 `Workspace` 都绕过 i18n。                                                                                                                                                                                                                                                                                                                                                                                                                  | `settings/AcpRuntimeSettings.vue`、`ModelProviderSettings.vue`、`AppManagementSettings.vue`（见 §7.49）                                              |
+| **P2 · 🟠 开放 2026-09-23**               | **Provider / Settings 写后刷新只覆盖同 tab**：跨标签页 BroadcastChannel 只刷新 host summary，不触发另一 tab 的 run configuration；AgentSettingsPanel 自身也不订阅跨 tab 事件，因此 apps/providers/settings/denylist 与 revision/version 全部 stale，后续 Save 还会撞 §7.82 conflict。                                                                                                                                                                                                                                                                                            | `host/AgentSurfaceHost.vue`、`host/agent-host-events.ts`、`settings/AgentSettingsPanel.vue`（见 §7.50）                                              |
+| **P2 · 🟠 开放 2026-09-23**               | **Gen2 `foundation/ui/**` 没有正确 ESLint 覆盖**：直接 lint `UiSelect.vue` 会报 TS parsing error；公共组件已进入大量 Agent 主路径，不能继续只靠模板编译 + vue-tsc。                                                                                                                                                                                                                                                                                                                                                                                                              | `eslint.config.mjs`、`packages/frontend/src/foundation/ui/**`（见 §7.51）                                                                            |
+| **P1 · 🟠 开放 2026-09-23**               | **per-App 设置 selector 存在旧响应跨写对象竞态**：Execution Policy / Subagent Profiles 快速从 App A 切到 B 时，没有 generation/appId guard；A 的 GET 若最后返回，会覆盖共享 draft/version，而 Save 使用当前 selector=B。两边 backend storage version 都是 per-app、初始常为 0，因此不一定冲突，可能真的把 A 的配置写进 B。                                                                                                                                                                                                                                                       | `settings/AppExecutionPolicySettings.vue`、`SubagentSettings.vue` + backend policy services（见 §7.53）                                              |
+| **P1 · 🟠 开放 2026-09-23**               | **共享父状态变化会吃掉其它卡片/其它 App 的未保存 draft**：8 个 settings 卡无条件 watch 全局 revision；App Management 还在任一 App version/stateVersion 变化时对所有 App reload grants，都会静默覆盖本地 dirty 草稿。                                                                                                                                                                                                                                                                                                                                                             | `settings/{BudgetContext,Performance,StorageArtifact,HardLimits,BrowserRuntime,AcpRuntime,Subagent,WorkspaceRuntime,AppManagement}*.vue`（见 §7.54） |
+| **P1 · 🟠 开放 2026-09-23**               | **authenticated=true 的 A→B 用户切换没有清 Agent surface/session**：`AgentSurfaceHost` 只在 unauthenticated 分支清 summary/window/session；同一组件内 userId 直接变化时会直接 restore B + refresh，A 的 summary / draft / thread / model session 可暂时或持续残留。                                                                                                                                                                                                                                                                                                              | `host/AgentSurfaceHost.vue`、`host/surface-session.ts`、`app/App.vue`（见 §7.55）                                                                    |
+| **P1 · 🟠 开放 2026-09-23**               | **Run configuration / authorization refresh 没有 generation**：并发 `loadRunConfiguration()` 可让旧 definitions/providers/settings/denylist 后回写，且 runtime catalog 是第二阶段 await，可能形成混合代际；卸载后普通 HTTP 也不会被 `facade.dispose()` 中止。                                                                                                                                                                                                                                                                                                                    | `host/AgentAppSurface.vue`、`runtime/run-facade.ts`（见 §7.56）                                                                                      |
+| **P2 · 🟠 开放 2026-09-23**               | **长说明 / 禁用原因实际是 title-only**：`UiInfoHint` 有 tabindex + aria-label，但没有可见 tooltip/popover；disabled `UiButton` 又不可键盘聚焦。鼠标 title / screen reader 有部分路径， sighted keyboard 与 touch 用户拿不到解释。                                                                                                                                                                                                                                                                                                                                                | `foundation/ui/UiInfoHint.vue`、`UiButton.vue`、Agent settings（见 §7.57）                                                                           |
+| **P2 · 🟠 开放 2026-09-23**               | **机器码仍能重新漏到 UI**：Execution Policy / Subagent 绕过 `formatAgentApiError` 直接显示 `cause.message`；ArtifactPicker 达到 10 个附件时更是直接把 `ARTIFACT_REF_LIMIT` 写进可见 error。                                                                                                                                                                                                                                                                                                                                                                                      | `settings/AppExecutionPolicySettings.vue`、`SubagentSettings.vue`、`files/ArtifactPicker.vue`（见 §7.58）                                            |
+| **P2 · 🟠 开放 2026-09-23**               | **Launcher 只在拖动/恢复时 clamp，viewport resize 不 clamp**：宽屏拖到很大的 `right` 后缩窄浏览器，40px launcher 可跑到左侧屏外；“重置位置”按钮跟 launcher 一起消失。                                                                                                                                                                                                                                                                                                                                                                                                            | `host/AgentLauncher.vue`、`host/window-manager.ts`（见 §7.59）                                                                                       |
+| **P2 · 🟠 开放 2026-09-23**               | **条件态 icon button / checkbox 漏可访问名 + label 结构错误**：线程搜索清空、API Key 显隐以及 3 个 Gen2 checkbox 没有 accessible name；Provider credential 与两个 capability 数字字段的 `<label>` 里还嵌了额外 button，形成多个 labelable descendant。                                                                                                                                                                                                                                                                                                                           | `host/AgentThreadSidebar.vue`、`settings/{ModelProvider,AppManagement,SafetyNetwork}Settings.vue`、`ModelCapabilityEditor.vue`（见 §7.60）           |
+| **P2 · 🟠 开放 2026-09-23**               | **Artifact 查询没有 request generation**：Library filter 可在 busy 中继续切并再次触发 `load()`；Picker 输入框 Enter 也能在 busy 时再次 load。旧查询后返回会覆盖新查询，列表与屏幕上的筛选条件不一致。                                                                                                                                                                                                                                                                                                                                                                            | `files/ArtifactLibraryView.vue`、`ArtifactPicker.vue`（见 §7.61）                                                                                    |
+| **P1 · 🟠 开放 2026-09-23**               | **权威 mutation 已提交后，辅助 refresh / health 失败仍被报告成主操作失败**：Settings/Provider、Hub runtime mutations、Workspace confirm 都有 commit 后继续 await 辅助读的路径。Provider create 可因此重复创建；User checkpoint 更明确：checkpoint 已插入后 list GET 失败会报“保存失败”，run.version 又不前进且 user checkpoint 无唯一约束，再点保存会插入第二条 checkpoint。                                                                                                                                                                                                     | `settings/AgentSettingsPanel.vue`、`host/AgentAppSurface.vue`、Workspace Runtime、backend Provider/Checkpoint services（见 §7.62）                   |
+| **P2 · 🟠 开放 2026-09-23**               | **MCP / ACP Integration 不跟随 `agentAvailable` 生命周期重新加载/清空**：两个组件只在 mount 时 load；Agent 后安装时列表保持空，Agent 被移除时旧 integrations 仍留在内存，已有条目的 toggle/delete/profile 控件也没把 `!agentAvailable` 纳入 disabled。                                                                                                                                                                                                                                                                                                                           | `settings/McpIntegrationSettings.vue`、`AcpRuntimeSettings.vue`（见 §7.63）                                                                          |
+| **P1 · 🟠 开放 2026-09-23**               | **Memory 权威刷新会静默覆盖候选草稿 / 导入选择**：`loadMemories()` 每次整份重建 textarea drafts；任意 app version/stateVersion 变化或 `memory.changed` 都会触发。source memory refresh 还无条件清 `sourceMemoryId/importPreview`。                                                                                                                                                                                                                                                                                                                                               | `settings/MemorySettings.vue`（见 §7.64）                                                                                                            |
+| **P1 · 🟠 开放 2026-09-23**               | **Run 详情 approval batch 是 detail refresh 中唯一缺 generation 的路径**：stream 事件与 approval mutation 可并发刷新，同一 Run 的第一轮慢 approvals 能在第二轮新状态提交后再把旧 approval/snapshot 覆盖回来。                                                                                                                                                                                                                                                                                                                                                                    | `host/AgentAppSurface.vue:1284-1292`（见 §7.65）                                                                                                     |
+| **P2 · 🟠 开放 2026-09-23**               | **Thread “加载更多”未进入 thread-list generation**：host event 可先刷新权威第一页，旧 cursor 的分页响应随后仍 append 并覆盖 nextCursor，能把已删除 thread 重新带回列表。                                                                                                                                                                                                                                                                                                                                                                                                         | `host/AgentAppSurface.vue:881-945`（见 §7.66）                                                                                                       |
+| **P1 · 🟠 开放 2026-09-23**               | **Plugin iframe bridge 首次 ready 后断开不会回传给宿主，也不会重建**：MessagePort `messageerror` / 协议违规 / iframe reload 会 close bridge，但 `PluginAppFrame.status` 仍永久为 `ready`。                                                                                                                                                                                                                                                                                                                                                                                       | `host/PluginAppFrame.vue`、`plugin-sdk/host-bridge.ts`（见 §7.67）                                                                                   |
+| **P1 · 🟠 开放 2026-09-23**               | **Plugin RPC timeout 会把仍在执行/可能已提交的 mutation 回报为 `HOST_RPC_TIMEOUT`**：agent dispatcher 根本不接 AbortSignal；thread/run create 等继续执行。backend RPC 虽 abort HTTP 等待，也不能证明 server 未提交，`intents.create` 每次生成新 UUID。插件重试可重复副作用。                                                                                                                                                                                                                                                                                                     | `plugin-sdk/host-bridge.ts`、`agent-dispatcher.ts`、backend `app-intent.service.ts`（见 §7.68）                                                      |
+| **P2 · 🟠 开放 2026-09-23**               | **两处设置型异步加载仍缺 generation**：Workspace Runtime availability 翻转时旧 catalog/storage 请求可回灌；Model Registry mount GET 可与用户 refresh/auto-update 并发并把新状态覆盖回旧状态。                                                                                                                                                                                                                                                                                                                                                                                    | `settings/WorkspaceRuntimeSettings.vue`、`ModelProviderSettings.vue`（见 §7.69）                                                                     |
+| **P2 · 🟠 开放 2026-09-23**               | **稳定枚举仍直接暴露内部值**：Run 详情 goalStatus / ledger kind、Workspace recipe/pack kind/status、Subagent message kind/status 都直接渲染 `in_progress`、`tool_result`、`supported`、`delivered` 等内部枚举；§7.40 甚至已把旧的 conversation kind 翻译 key 当“死 key”删掉。                                                                                                                                                                                                                                                                                                    | `runtime/TaskRail.vue`、`WorkspaceRuntimePanel.vue`、`MessageExchangePanel.vue`、`settings/WorkspaceRuntimeSettings.vue`（见 §7.70）                 |
+| **P2 · 🟠 开放 2026-09-23**               | **Agent UI 日期/数字格式不跟随应用当前语言**：多处直接调用无 locale 的 `toLocaleString()/toLocaleDateString()`，因此用户把 Nexus 切到 zh-CN/ja-JP 后，日期/千分位仍按浏览器/OS locale。ThreadSidebar 已有正确的 `Intl.DateTimeFormat(locale.value)` 对照。                                                                                                                                                                                                                                                                                                                       | Artifact/Memory/MCP/Provider/Subagent/Conversation/quantity-format 等（见 §7.71）                                                                    |
+| **P2 · 🟠 开放 2026-09-23**               | **Workspace Terminal 自然关闭后 UI 仍保持 opened，且 transport 机器码直接可见**：channel reconnect 耗尽/attach/protocol failure 会内部 finish，但父组件 `@closed` 只写 error，不清 channel/opened；必须手工“关闭→重新打开”。                                                                                                                                                                                                                                                                                                                                                     | `runtime/AgentWorkspaceTerminal.vue`、`agent-workspace-terminal-channel.ts`（见 §7.72）                                                              |
+| **P1 · 🟠 开放 2026-09-23**               | **App Tab / activeVersion 替换不淘汰 KeepAlive cache**：关闭标签或 v1→v2 升级后旧 Agent surface / Plugin iframe 仍缓存；旧 iframe bridge 还只按 appId 发 RPC，backend 无调用方 version，可把旧 v1 代码当当前 v2 App 执行 storage/intents/Agent RPC。                                                                                                                                                                                                                                                                                                                             | `host/AgentHubWindow.vue`、`PluginAppFrame.vue`、`plugin-sdk/{host-bridge,agent-dispatcher}.ts`、backend plugin data manager（见 §7.73）             |
+| **P2 · 🟠 开放 2026-09-23**               | **App Tab 关闭控件是原生 `<button>` 内嵌 `span role=button`**：嵌套交互语义非法，且伪按钮只实现 Enter、不实现 Space；全 Agent 的 `role=button` 扫描只有这一处。                                                                                                                                                                                                                                                                                                                                                                                                                  | `host/AgentHubWindow.vue:655-719`（见 §7.74）                                                                                                        |
+| **P1 · 🟠 开放 2026-09-23**               | **§7.37 的“失败域”仍共用一个 error slot，可被无关操作擦除**：config 与 threads 初始并发时，配置先失败后会被 `selectThread()/createThread()` 的 `clearError()` 清掉；其它 mutation/切线程也会无条件清除 stream/checkpoint/config 等失败及其 retry。                                                                                                                                                                                                                                                                                                                               | `host/AgentAppSurface.vue`（见 §7.75）                                                                                                               |
+| **P2 · 🟠 开放 2026-09-23**               | **Agent 4xx/409/422 的 backend 英文 message 系统性绕过 i18n**：error rules 当前至少 38 条英文固定 message；`formatAgentApiError()` 对 <500 的非机器码 message 原样返回，因此中/日 UI 会显示英文 validation/conflict/not-found 文案。                                                                                                                                                                                                                                                                                                                                             | frontend `agent-api-error.ts` + backend `agent-error-rules/**`（见 §7.76）                                                                           |
+| **P1 · 🟠 开放 2026-09-23**               | **Host 首次 summary 请求失败后没有自恢复**：`runHostStreamAsLeader()` 初始 refresh 返回 null 就直接结束，外层 coordination 不重试；单 tab 启动瞬间一次临时失败即可让 Hub/Launcher 缺失或保持旧 summary，直到其它偶发 host/local event。                                                                                                                                                                                                                                                                                                                                          | `host/AgentSurfaceHost.vue`（见 §7.77）                                                                                                              |
+| **P1 · 🟠 开放 2026-09-23**               | **create 类 mutation 的安全重试身份仍不完整**：Run backend 已支持同 key replay，但 frontend `createRun()` 每次调用都现场生成新 Idempotency-Key；MCP/ACP Integration 与 App Intent create 都没有 caller-stable key，backend 每次随机 UUID。commit 后响应丢失时再次提交可合法创建第二个 Run / Integration / Intent receipt，并重复派生 Artifact grants。                                                                                                                                                                                                                           | `api/agent-api.ts`、Integration/AppIntent create routes/services、backend state-commit（见 §7.78）                                                   |
+| **P1 · 🟠 开放 2026-09-23**               | **ACP Integration / Workspace Delete 仍是单击即执行的真实 destructive action**：ACP Integration 直接 SQL DELETE；Workspace Delete 会 abort jobs、dispose code intelligence 并 remove runtime。Provider / Run / Thread / Artifact 以及 MCP Integration 已有确认，只有这两类仍无确认。                                                                                                                                                                                                                                                                                             | `settings/AcpRuntimeSettings.vue`、`runtime/WorkspaceRuntimePanel.vue` + backend/runner（见 §7.79）                                                  |
+| **P1 · 🟠 开放 2026-09-23**               | **enabled 但 health=failed 的 App 仍被当作可发送 surface**：Hub/AppSwitcher 只按 `enabled` 纳入可用 App，AgentAppSurface 不接 health；definitions/model 仍能加载，`canSend` 可为 true，但 backend createRun 明确只接受 running/degraded，故 Send 会稳定得到 `AGENT_APP_DISABLED`。                                                                                                                                                                                                                                                                                               | `host/AgentHubWindow.vue`、`AgentAppSurface.vue`、backend `run.service.ts`（见 §7.81）                                                               |
+| **P2 · 🟠 开放 2026-09-23**               | **Settings optimistic conflict 后不 reconcile，后续操作继续拿 stale revision/version**：全局 settings/provider/denylist/hard-limit 都由同一 `execute()` catch 后只 toast；没有自动重取，也没有手动 Refresh。跨 tab/并发导致一次 409 后，同一 Save 会继续冲突，通常只能整页刷新。Memory 已有 conflict→reload 的正确对照。                                                                                                                                                                                                                                                         | `settings/AgentSettingsPanel.vue` + settings/provider/denylist APIs（见 §7.82）                                                                      |
+| **P1 · 🟠 开放 2026-09-23**               | **Provider “拉取模型”旧请求可跨 modal 实例回写下一次表单**：pull 期间 backdrop/Escape 仍可关闭；重新打开会重置 form/结果并把 `isPullingModels=false`，但旧请求没有 generation/URL snapshot guard，返回后会覆盖 `pulledModels` 并 `applyPulledModel()` 改写新表单 modelId/capabilities。                                                                                                                                                                                                                                                                                          | `settings/ModelProviderSettings.vue`（见 §7.83）                                                                                                     |
+| **P1 · 🟠 开放 2026-09-23**               | **Provider “测试连接”会先创建真实 Provider，再做 test；测试失败/取消也不会回滚**。一旦 `createdProviderId` 被设置，后续“确认”只关闭 modal；用户测试后再改 baseUrl/model/credential，这些修改不会保存。                                                                                                                                                                                                                                                                                                                                                                           | `settings/ModelProviderSettings.vue:testInModal()/submitModal()`（见 §7.84）                                                                         |
+| **P1 · 🟠 开放 2026-09-23**               | **Workspace restart 的 Runner Plugin 激活失败会留下“running 但插件实例缺失”的半失败状态**：restart 先把 runtime 状态写成 running，再 activate Runner plugins；activate 抛错只把 command 标 failed，不回滚 runtime/journal。Backend 对 failed restart 也保留原 running projection，且 Runner plugin 的 lifecycle.health 没有调用者，正常运行中不会自动纠正。                                                                                                                                                                                                                      | `agent-runner/controller/server.ts`、`plugin-runner-runtime.ts`、backend `workspace-runtime.service.ts`（见 §7.85）                                  |
+| **P2 · 🟠 开放 2026-09-23**               | **toolchain/version switch 的旧 generation delete 若 outcome unknown 后最终 failed/不可查询，会把 workspace 长期留在 `stopping`**：switch 特殊路径先持久化 stopping；立即 failed 才有本地 rollback。后续 reconcile 对 delete failed/unknown 没有原状态快照，generic projection 也不回滚；version switch 又只接受 ready/running/stopped。                                                                                                                                                                                                                                         | backend `workspace-runtime.service.ts:switchToolVersions()/reconcile()/syncWorkspaceStatus()`（见 §7.86）                                            |
+| **P1 · 🟠 开放 2026-09-23**               | **Host Runner 异常重启后 detached job / ACP / Runner Plugin 子进程可能变成孤儿并继续执行**：三类 child 都以独立 process group 启动；startup reconciler 只把 journal running command/job 标 unknown、重建 plugin instance map，不保存/扫描旧 PID/group，也不会回收旧进程。Host-native 部署没有容器 cgroup 兜底。                                                                                                                                                                                                                                                                  | `agent-runner/{managed-process,reconciler,job-runner,acp-process-runtime,plugin-runner-runtime}.ts`（见 §7.87）                                      |
+| **P1 · 🟠 开放 2026-09-23**               | **Plugin upgrade 的 draining continuation 是易失前端状态**：第一次升级遇到 active Runs 会持久化 `acceptNewRuns=false`，但“继续升级”所需 `candidate + stageId + drainingUpgradeVersion` 只在 `PluginManagementSettings` 内存 ref 中；刷新/离页后没有 stage/list/resume API 恢复，App 会继续返回 `AGENT_APP_DRAINING`，只能重新 stage/verify 同一包才能恢复。                                                                                                                                                                                                                      | backend `plugin-package-install-coordinator.ts` + frontend `PluginManagementSettings.vue`（见 §7.88）                                                |
+| **P1 · 🟠 开放 2026-09-23**               | **runtime cleanup 不等待 ACP/Terminal 子进程真正退出**：stop/delete 只对 ACP/Terminal 异步发 TERM/KILL，workspace 可立即变 stopped/deleted；cleanup preview 会立刻把这些状态纳入候选，而 Runner cleanup 只检查 active jobs、不知道 closing session。确认后可在旧 child 仍活着的 2–3 秒窗口直接删除整个 workspace 根目录，违背“active job/session 必须跳过”的 SRS。                                                                                                                                                                                                               | backend `workspace-runtime-management.service.ts`、Runner `{acp-process-runtime,workspace-terminal-runtime,cleanup-planner}.ts`（见 §7.89）          |
+| **P1 · 🟠 开放 2026-09-23**               | **Checkpoint capture 的 owner gate 不完整**：当前 Runner 的普通 active job 已有 `WorkspaceRuntimeEngine.jobs` guard；但 user checkpoint 不查询 durable job，Runner restart 后 `unknown` job 会因内存 Map 清空而被漏掉；Terminal / ACP 这类 live writer 从来不进该 Map，user/recovery checkpoint 都可在其写 Workspace 时打 archive。                                                                                                                                                                                                                                              | backend `checkpoint.service.ts` + Runner `workspace-runtime-engine.ts` / Terminal / ACP runtime（见 §7.90）                                          |
+| **P1 · 🟠 开放 2026-09-23**               | **Checkpoint restore 的目录切换只有进程内 finally 回滚，没有 crash recovery**：restore 先 rename `workRoot -> work-backup-*`，再 rename staging→workRoot；若 Runner 恰在两次 rename 之间退出，startup reconciler 只读 generation state，仍把 Workspace 判 ready，却不会扫描 backup/staging 或验证 workRoot，后续 Workspace 会以“ready 但工作目录丢失”继续运行。                                                                                                                                                                                                                  | Runner `workspace-checkpoint-archive.ts`、`workspace-runtime-engine.ts:reconcile()`、`reconciler.ts`（见 §7.91）                                     |
+| **P1 · 🟠 开放 2026-09-23**               | **Terminal / ACP 外部 writer 可穿透 Workspace file patch 的 SHA precondition，并被 confirmed mutation 静默覆盖**：Runner 的 write/move/delete/patch 只挡 active Workspace job；Terminal/ACP 不在该 owner gate。真实 `applyWorkspacePatch()` race 探针已复现：外部进程在最终 hash recheck 后改文件，patch 仍返回 `applied:true` 并覆盖外部内容，Backend 会把结果提交为 confirmed 而非 outcome-unknown。                                                                                                                                                                           | Runner `server.ts` + `workspace-coding-files.ts`、Backend governed file mutation（见 §7.92）                                                         |
+| **P1 · 🟠 开放 2026-09-23**               | **Workspace stop/restart/delete 只触发 background job abort，不等待子进程树真正退出就把 lifecycle command 标成功**：`abortJobs()` 立即清 Engine Map，JobRunner 的 TERM→KILL 可再持续约 2 秒；restart 已可重新 activate runtime/plugin，delete 已可标 deleted。真实 JobRunner 探针中 Abort 后 child 仍到 2107ms 才 SIGKILL close，违反 owner lifecycle 必须整组回收的 SRS。                                                                                                                                                                                                       | Runner `workspace-runtime-engine.ts` / `job-runner.ts` / `server.ts:workspaceAction()`（见 §7.93）                                                   |
+| **P1 · 🟠 开放 2026-09-23**               | **toolchain switch 可在旧 generation ACP/Terminal 子进程尚未退出时启动新 generation**：old-generation delete 的 `closeWorkspace()` 只异步 TERM/KILL，command 可先 succeeded；Backend 随即 reconfigure→provision(g+1)→start(g+1)。两代共享同一个持久 `/workspace/work`，旧 ACP/Terminal 可在 0–3 秒窗口继续写入新代工作区。                                                                                                                                                                                                                                                       | backend `workspace-runtime.service.ts:switchToolVersions()`、Runner `server.ts` / `{acp-process-runtime,workspace-terminal-runtime}.ts`（见 §7.94）  |
+| **P1 · 🟠 开放 2026-09-23**               | **普通 Workspace restart 同样不等待 ACP/Terminal 真正退出**：restart 先异步 close ACP/Terminal，再立即 `runtimeEngine.restart()`、重新 activate Runner Plugin 并保存 running。旧 session child 最多仍可存活 2–3 秒，与“已重启”的新 runtime/plugin 同时写同一 workRoot。                                                                                                                                                                                                                                                                                                          | Runner `server.ts:workspaceAction(restart)`、`{acp-process-runtime,workspace-terminal-runtime}.ts`（见 §7.95）                                       |
+| **P1 · 🟠 开放 2026-09-23**               | **手动 checkpoint resume 的 commit point 早于 Workspace restore，且前端每次重试换 Idempotency-Key**：Backend 先 durable `createRun`，再 restore workspace；restore 失败时新 Run 已存在但 ID 未返回。UI 只刷新 source run，再点“恢复”会生成新 key，合法再建一个 resumed Run。                                                                                                                                                                                                                                                                                                     | backend `checkpoint.service.ts:resume()`、frontend `agent-api.ts:resumeRun()` / `AgentAppSurface.vue`（见 §7.96）                                    |
+| **P1 · 🟠 开放 2026-09-23**               | **Workspace lifecycle 的 optimistic version 不是原子 claim**：两个 tab 可用同一个 `expectedVersion` 同时发不同 action；Backend 都通过读时校验并各自 dispatch，Runner 又无 per-workspace queue。命令完成后 projection 重新读取最新 version 再 CAS，因此两个 stale action 都可能成功，最终变成“最后完成者生效”。                                                                                                                                                                                                                                                                   | backend `workspace-runtime.service.ts:action()/dispatch()/syncWorkspaceStatus()`、Runner `server.ts:beginCommand()`（见 §7.97）                      |
+| **P1 · 🟠 开放 2026-09-23**               | **Toolchain freeze 可被全局 canonical symlink 串 Workspace / generation**：pack 内容按 `family/version/contentDigest` 共存，但执行 PATH 使用全局 `/opt/nexus/packs/<family>/<version>` symlink；每次 `prepareExecution()` 都会把它切到当前 digest。旧 Terminal/ACP/长 job 的 PATH 不变，却会在另一 Workspace activate 后解析到另一 digest，破坏 frozen toolchain。                                                                                                                                                                                                               | Runner `toolchain-store.ts:activate()`、`workspace-runtime-manager.ts:prepareExecution()`（见 §7.98）                                                |
+| **P2 · 🟠 开放 2026-09-23**               | **Safety Network 一次连接加载失败后会永久卡在假失败态**：组件 mount 时 `connectionsStore.load()` 失败就置 `connectionLoadFailed=true`，无 Retry/重置；即使 TaskRail/Connections 页面后来成功填充同一个共享 store，本组件也不会清失败标志，模板仍优先显示错误并遮住已恢复的数据。                                                                                                                                                                                                                                                                                                 | `settings/SafetyNetworkSettings.vue`、`features/connections/store/connections.store.ts`（见 §7.99）                                                  |
+| **P1 · 🟠 开放 2026-09-23**               | **Agent migration #23/#34 的 partial-schema 检测不完整**：#23 只检查 `source_model_step_id` 却一次添加 3 列 + index；#34 只检查 `kind` 却一次添加 2 列。若历史/灰度库已有第一列但缺后续列，migration 会直接 skip 并记录 id；反向 partial state 又会触发 `duplicate column name`，runner 仍吞错并记录 id，永久留下半迁移 schema。                                                                                                                                                                                                                                                 | `sqlite-migrations.ts:runMigrations()`、migration #23/#34（见 §7.100）                                                                               |
+| **P1 · 🟠 开放 2026-09-23**               | **“完整备份”完全遗漏 Agent/AI 持久数据**：snapshot 的 `TABLES` 白名单停在 `favorite_paths`，没有任何 `agent_*/ai_*` 表；文件白名单也只有 `background/custom_html_theme`，不含权威 `data/agent/artifacts` 与已安装 Plugin package。restore 只清/写同一旧白名单，因此导入成功后会形成“备份时点的传统设置/连接 + 目标实例现存 Agent 数据”的混合数据库，Provider/MCP/ACP credential 也无法随备份恢复。                                                                                                                                                                               | backup `sqlite-backup-snapshot.adapter.ts`、`BackupService`、Agent Artifact/Plugin stores（见 §7.101）                                               |
+| **P1 · 🟠 开放 2026-09-23**               | **Backup 文件目录 swap 的 rollback 在第二次 rename 失败时会漏掉当前目录，且进程崩溃无 startup recovery**：restore 先把 target rename 到 `.backup-previous-*`，再把 staged rename 为 target，但成功后才记录 swap；若第二步失败，当前目录不会被 rollback，外层 finally 还会删除 previousRoot。若进程在两次 rename / 文件切换与 DB transaction 之间退出，也没有启动恢复扫描。                                                                                                                                                                                                       | backup `sqlite-backup-snapshot.adapter.ts:swapStagedDirectories()/restore()`（见 §7.102）                                                            |
+| **P1 · 🟠 开放 2026-09-23**               | **Memory import 的 confirmation consume 与最终副作用不原子**：confirm 先 transactionally DELETE confirmation，随后另一个 transaction 才随机 ID 创建 published Memory。take 后 crash 会丢 confirmation；Memory 已 commit 但响应丢失时同 token 无法 replay，前端又不刷新列表，用户重新 Preview+Confirm 可合法生成第二条同源 Memory。                                                                                                                                                                                                                                               | `memory.service.ts:confirmImport()`、`sqlite-memory.repository.ts`、`MemorySettings.vue`（见 §7.103）                                                |
+| **P1 · 🟠 开放 2026-09-23**               | **Root Scheduler 出队后读取 settings 失败会永久丢 Run**：`nextQueued()` 已先 shift Run，随后 `settings.get()` 若瞬时抛错，`pump()` 只有 finally、没有 catch/requeue；Root scheduler 又没有 durable periodic runnable scan，导致 DB 仍为 `created/running`、实际 executor 已丢失。Subagent scheduler 因 durable 500ms poll 不受同型问题。                                                                                                                                                                                                                                         | `runtime/scheduling/scheduler.ts`、`bootstrap/agent/compose-agent.ts`（见 §7.104）                                                                   |
+| **P2 · 🟠 开放 2026-09-23**               | **`agent_host_events` 没有 ack/prune/compaction，会按用户永久增长**：Host WebSocket 只用客户端 cursor 做 replay，`drain()` 仅推进 session 内存 cursor；全仓没有 DELETE/TTL/low-watermark。高频 `summary.changed` 等事件长期累积，新设备/旧 cursor 还需分页重放全部历史。                                                                                                                                                                                                                                                                                                         | `events/host-event-outbox.ts`、`sqlite-run.repository.ts`、`websocket/agent-protocol.session.ts`（见 §7.105）                                        |
+| **P1 · 🟠 开放 2026-09-23**               | **Plugin stage 没有 TTL/delete 生命周期**：`agent_plugin_stages` 无 `expires_at`，repository 无 deleteStage；startup `reconcileStages()` 把全部历史 rows 都当 active。installed stage 永久留 DB row，verified/staged candidate 被用户换包/离页后还会永久保留 package tar + unpacked tree（单 stage 最多 50MB archive / 200MB expanded）。                                                                                                                                                                                                                                        | plugin `sqlite-plugin-install.repository.ts`、`tar-package-verifier.adapter.ts`、`PluginManagementSettings.vue`（见 §7.106）                         |
+| **P2 · 🟠 开放 2026-09-23**               | **Artifact 上传 rename→ready commit 之间并发 Delete 可留下永久 orphan blob**：writer 已把 tmp rename 到最终 object、DB 仍 staging；DELETE 会把 row 直接置 deleted/释放 quota，但只删 tmp、不删 object。随后 `finalizeReady()` 失败且 `renamed=true` 不清 object；maintenance 又不扫描 deleted rows/objectsRoot orphan。Library 对 staging 条目仍允许 Delete。                                                                                                                                                                                                                    | `artifacts/local-artifact-store.ts`、`files/ArtifactLibraryView.vue`（见 §7.107）                                                                    |
+| **P2 · 🟠 开放 2026-09-23**               | **AppStorage quota 可被大量小 value + 长 key 绕过实际磁盘限制**：16MB 总量只 `SUM(value_json bytes)`，key 最长 256B、没有 entry-count 上限，也不计 row/index 开销；value `0` 理论上可写约 1670 万条才碰 value quota，SQLite 可先膨胀到 GB。snapshot restore 同样只按 value bytes 校验。                                                                                                                                                                                                                                                                                          | `sqlite-app-storage.repository.ts`、Plugin Frontend/Backend storage SDK（见 §7.108）                                                                 |
+| **P1 · 🟠 开放 2026-09-23**               | **Backup export/import 缺一致性 snapshot 与全局串行化**：export 逐表独立 SELECT、最后再读文件，正常业务写入可生成跨时点甚至 FK-invalid 备份；import 无 mutex，两个正常 restore 可交叉 filesystem swap 与 DB transaction，最终得到“文件来自 B、DB 来自 A”的混合结果。                                                                                                                                                                                                                                                                                                             | `backup.service.ts`、`sqlite-backup-snapshot.adapter.ts`、settings backup routes（见 §7.109）                                                        |
+| **P1 · 🟠 开放 2026-09-23**               | **Plugin AppStorage 与 Host governance 共用裸 keyspace**：`agent.execution-policy.v1` / `subagent.profiles.v1` 直接存在 `agent_app_storage`，而 Plugin Frontend/Backend storage SDK 可对任意 key get/put/delete。插件可绕过 Settings 专用写入口改写/删除用户 App Policy，或写坏结构让 policy get 稳定失败；App grant/全局 hard limit 虽有二次兜底，但 Host-owned policy authority 已被暴露。                                                                                                                                                                                     | `agent-execution-policy.service.ts`、`subagent-policy.ts`、`plugin-data-manager.ts`、`sqlite-app-storage.repository.ts`（见 §7.110）                 |
+| **P2 · 🟠 开放 2026-09-23**               | **Manual checkpoint 没有 delete / retention / count 上限**：每次 Save 都随机生成 user checkpoint；带 Workspace 时还创建 archive + manifest Artifact。`role='checkpoint'` 会被 Artifact cleanup 无条件保护，而只有 recovery checkpoint 会 supersede 旧项；user checkpoint 无删除 API/TTL/数量上限，只能等整个 Run 删除后释放，长生命周期 Run 可持续吃满 Artifact quota。                                                                                                                                                                                                          | `checkpoint.service.ts`、`sqlite-checkpoint.repository.ts`、`workspace-checkpoint.service.ts`、`local-artifact-store.ts`（见 §7.111）                |
+| **P2 · 🟠 开放 2026-09-23**               | **Provider model discovery 的 1MB limit 在 `response.text()` 全量缓冲后才检查**：缺失/虚假 Content-Length 的 OpenAI-compatible endpoint 可先让 Backend 把任意大 body 读入内存，随后才收到 `PROVIDER_MODELS_RESPONSE_TOO_LARGE`。同仓 model registry 已有正确的 chunked bounded-reader，对照证明当前限制顺序失效。                                                                                                                                                                                                                                                                | `openai-provider.adapter.ts:fetchModelsFromEndpoint()`、`model-capability-registry.adapter.ts:readBoundedResponse()`（见 §7.112）                    |
+| **P2 · 🟠 开放 2026-09-23**               | **Plugin 成功 upgrade 不回收已无人安装的旧 immutable version**：installation 切到新版本后只清 stage，不对 oldVersion 做 `countInstalled/removeInstalled/status→removed`。旧 `agent_plugin_versions` 仍是 installed、完整 `versions/<old>` tree 永久保留且用户管理视图不可见；单版本允许展开 200MB，连续正常升级可持续吃磁盘。                                                                                                                                                                                                                                                    | `plugin-package-install-coordinator.ts`、`sqlite-plugin-install.repository.ts`、`tar-package-verifier.adapter.ts`（见 §7.113）                       |
+| **P1 · 🟠 开放 2026-09-23**               | **Plugin upgrade 在 quiesce 前 capture AppStorage，后续 full restore 可静默覆盖并发写**：upgrade 先 `data.capture()`，之后才 quiesce old Backend；旧 Frontend RPC 更一直放行到最终 installation 切版。期间成功的 `storage.put/delete` 会被 `restore()` 的 scope 全量 DELETE+INSERT 覆盖，升级与写入都可返回成功但数据丢失。                                                                                                                                                                                                                                                      | `plugin-package-install-coordinator.ts`、`plugin-data-manager.ts`、`sqlite-app-storage.repository.ts`（见 §7.114）                                   |
+| **P2 · 🟠 开放 2026-09-23**               | **Host durable event 已提交但 wake publication 失败时，在线订阅不会自愈**：`publishHostWake()` commit 后再查一次 `hostCursor()`；查询失败只 warn。Host WebSocket subscribe 初始 drain 后只靠内存 `onHostWake` 再 drain，没有 periodic high-water poll，因此 DB event 可已存在但在线 UI 无限期停旧状态，直到下一次 unrelated wake 或重连。 | `compose-agent.ts:publishHostWake()`、`agent-protocol.session.ts`、`event-hub.ts`（见 §7.115） |
 
 ---
 
@@ -2970,15 +3032,19 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 `8a3bc76` 的标题是 “finish the hit-target floor for 2.4”，`761a970` 又给 Hub resize 补了键盘几何，但当前 HEAD 仍存在可直接证明的小操作目标：
 
-| 位置                                             |             当前盒尺寸 | 说明                                                     |
-| ------------------------------------------------ | ---------------------: | -------------------------------------------------------- |
-| `host/AgentHubWindow.vue` 右下 resize            | **16×16**（`h-4 w-4`） | 方向键现已可用，但指针命中区仍是 §7.14-b 当时记录的 16px |
-| `settings/PluginManagementSettings.vue` 仓库删除 | **20×20**（`h-5 w-5`） | 真正的删除操作按钮                                       |
-| `host/AgentAppSwitcher.vue` 关闭                 | **20×20**（`h-5 w-5`） | 真正的关闭按钮                                           |
+| 位置                                              |      当前盒尺寸 / 形态 | 说明                                                                |
+| ------------------------------------------------- | ---------------------: | ------------------------------------------------------------------- |
+| `host/AgentHubWindow.vue` 右下 resize             | **16×16**（`h-4 w-4`） | 方向键现已可用，但指针命中区仍是 §7.14-b 当时记录的 16px            |
+| `settings/PluginManagementSettings.vue` 仓库删除  | **20×20**（`h-5 w-5`） | 真正的删除操作按钮                                                  |
+| `host/AgentAppSwitcher.vue` 关闭                  | **20×20**（`h-5 w-5`） | 真正的关闭按钮                                                      |
+| `ai/AgentConversation.vue` 错误横幅关闭           |     **无 h/w/padding** | 只有 x 图标，按钮盒基本跟图标尺寸走；有 `aria-label` 但指针目标极小 |
+| `settings/ModelProviderSettings.vue` URL 复制     |     **无 h/w/padding** | 只有约 11px copy/check 图标；有 `title`，但命中区仍极小             |
+| `settings/ModelProviderSettings.vue` API Key 显隐 |     **无 h/w/padding** | 只有约 12px eye 图标；同时缺可访问名，见 §7.60                      |
+| `host/AgentThreadSidebar.vue` 搜索清空            |     **无 h/w/padding** | 只有 11px x 图标；同时缺可访问名，见 §7.60                          |
 
 空态 pager **不属于本条**：它虽然按钮盒仍是 12/20×16，但 `.agent-home-pager-dot::after { inset: -8px }` 仍存在，独占命中格按 §7.12 的 28/36×32 设计保留。
 
-**建议修复**：可见尺寸不一定要变，但上述三个操作至少用 transparent pseudo hit-area 或 wrapper 把指针目标扩到 ≥24px（优先 28–32px）；resize 仍保留 separator + 方向键语义。
+**建议修复**：可见图标尺寸不一定要变，但上述操作统一用 Gen2 icon-button 或 transparent pseudo hit-area / wrapper，把真实指针目标扩到 ≥24px（优先 28–32px）；resize 仍保留 separator + 方向键语义。
 
 ---
 
@@ -3046,7 +3112,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.49 §7.14-c i18n 回看：ACP 设置仍直接显示英文 toast / fallback（P2 · 🟠 开放 2026-09-23）
+### 7.49 §7.14-c i18n 回看：源码中的英文 UI literal 仍有漏网（P2 · 🟠 开放 2026-09-23）
 
 当时的硬编码扫描主要以 CJK / 字典值为抓手，漏掉了**源码里的英文用户文案**。当前 `AcpRuntimeSettings.vue` 仍有：
 
@@ -3058,19 +3124,29 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 同目录 MCP Integration 的对应路径已经全部使用 `t('agent.settings.mcpIntegrations.*')`。所以在 zh-CN / ja-JP 下操作 ACP Integration 时，成功 toast 或未知错误 fallback 会直接显示英文。
 
-**建议修复**：把 5 条补进三语字典；i18n 门禁后续增加“用户反馈 API 的裸英文 literal”扫描，而不只查硬编码 CJK。
+第二遍英文 literal 扫描又确认两处遗漏：
+
+- `ModelProviderSettings.vue` 的测试结果能力 badge 仍直接写死 **`Tools`**；同一行的 Image / File badge 已经走 `$t(...)`，因此这不是产品名 / 协议名；
+- 同一文件的 Provider 拉取模型下拉把 registry owner 直接拼成 `owned by ${m.ownedBy}`，在 zh-CN / ja-JP 弹窗里仍会出现英文描述；
+- `AppManagementSettings.targetLabel()` 把 capability target `workspace` 直接显示成 **`Workspace`**（`SSH` 作为协议缩写可保留）；
+- `quantity-format.ts` 的 token 数量精确反馈直接拼接 `${parsed.toLocaleString()} Tokens`；同文件 bytes / seconds 已通过 label helper 本地化，只有 token 单位仍写死英文。
+
+这些都会在 zh-CN / ja-JP 界面里形成英文孤岛。
+
+**建议修复**：把 ACP 5 条、`Tools` badge、`owned by` 描述、`workspace` target label 与 token 单位一起补进三语字典/label helper；i18n 门禁后续增加“用户反馈 API / template text node / 返回 literal 的 label helper”扫描，而不只查硬编码 CJK。
 
 ---
 
-### 7.50 §7.22 已知残留提升：跨标签页修改 Provider / Settings，另一个 tab 的 Hub 不刷新运行配置（P2 · 🟠 开放 2026-09-23）
+### 7.50 §7.22 已知残留提升：跨标签页修改 Provider / Settings，另一个 tab 的 Hub 与 Settings 都不刷新（P2 · 🟠 开放 2026-09-23）
 
 §7.22 行 2142 已经记录“未覆盖：跨标签页仍不推送”，但顶部总状态把 §7.22 整体列为关闭。本轮复核当前代码后确认该缺口仍存在：
 
 - `configuration-changed` 只存在于进程内 `agentHostEvents`，设置写成功后只通知**当前 tab** 的 `AgentAppSurface`；
 - `AgentSurfaceHost` 的 BroadcastChannel 会向其它 tab 发送 `host.changed`，但接收端只刷新 host summary；没有转发 `configuration-changed`；
 - 因此 tab A 禁用 provider / 改模型配置后，tab B 已打开的 Hub 会继续持有旧的 definitions/providers/settings，直到自身重载 / 重挂 surface。
+- `AgentSettingsPanel` 自身也没有订阅 `agentHostEvents` 或 BroadcastChannel。tab B 若正停在 Agent Settings，tab A 改 provider/app/settings/denylist 后，B 的 `settings/apps/providers/denylist` 与 revision/version 全部保持旧值；后续 Save 还会继续携带 stale revision/version，进一步落入 §7.82 的持续 conflict。
 
-**建议修复**：给 BroadcastChannel 消息增加 sourceType=`configuration.changed`（或让后端 host event 提供同类 durable sourceType），另一 tab 收到后同时刷新 summary 与 run configuration。
+**建议修复**：给 BroadcastChannel / 后端 host event 增加可区分的 `configuration.changed / apps.changed / authorization.changed` 等 sourceType；另一 tab 收到后不仅刷新 host summary/run configuration，也要让 SettingsPanel 做 generation-safe authoritative reload。若本地卡片 dirty，必须和 §7.54 一样保留草稿、只更新 baseline/version，不能用“跨 tab 刷新”再制造草稿丢失。
 
 ---
 
@@ -3164,12 +3240,2009 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 **汇总**：
 
 - 66/66 均完成路径与当前实现反查；
-- 可证明需要重新打开 / 提升为开放项的 commit 关联见 §7.41–§7.51；
-- 表中 “✅” 的含义仅是“本轮没有找到达到可证明标准的新回归”，不是替代对应功能的完整 E2E；
+- 第一遍按 commit 的可证明开放项见 §7.41–§7.51；后续跨切面交叉审计已继续扩展到 §7.53–§7.114；
+- 表中 “✅” 只表示“逐 commit 第一遍没有找到达到可证明标准的新回归”，**不覆盖第二遍组合竞态 / 跨组件问题**，也不是替代完整 E2E；
 - `63ea08b` 在 committed HEAD 下仍有真实 `agent.settings.groups.plugins` 导航引用；当前工作树里出现的临时兼容引用属于**未提交设置重构**，本轮明确没有把它错误归因到历史 commit。
+
+### 7.53 per-App selector 的异步加载可把 App A 配置写到 App B（P1 · 🟠 开放 2026-09-23）
+
+第二遍按“selector → async load → shared draft → save”反查时，确认两处相同的跨对象竞态。
+
+**Execution Policy：**
+
+1. `AppExecutionPolicySettings.vue` 的 `watch(selectedAppId, load)` 直接发 `appExecutionPolicy(selectedAppId.value)`；
+2. 请求没有捕获 appId，也没有 generation；返回后无条件写共享 `view / draft`；
+3. selector 在 loading 时仍可继续切 App；
+4. Save 使用的是**当前** `selectedAppId.value`，但 payload/version 来自共享 `draft / view`。
+
+因此 GET(A) → 切 B → GET(B) → B 先回 → A 后回 时，画面 selector 已是 B，但 draft/version 会回退成 A。随后 Save 调用 `replaceAppExecutionPolicy(B, draftOfA, versionOfA)`。
+
+backend `agent-execution-policy.service.ts` 的 version 是**每个 app 独立 storage** 的 `stored?.version ?? 0`。A/B 都处于 version 0 很常见，所以这不是“必然被 optimistic conflict 挡住”的 UI 假象：版本恰好相同时，A 的 overrides 可以被成功写到 B。
+
+**Subagent Profiles 同样成立**：`SubagentSettings.loadProfiles()` 并发读取 selected App 的 subagent settings + grants，返回后无条件覆盖共享 `profileSettings / capabilityOptions / profileBaseline`；`saveProfiles()` 再用当前 selector 的 appId + 共享 profile/version。backend `subagent-policy.ts` 同样是 per-app version，初始值也是 0。
+
+项目里已有正确对照：`MemorySettings.loadMemories()` 会同时捕获 generation + appId + status，`AppManagementSettings.loadGrant(appId)` 也按 appId 维护 generation。
+
+**建议修复**：两处统一采用“captured appId + request generation”，只有仍为当前 selector 的最新请求才能提交；保存时把 loaded appId 与 draft/version 绑定，不要用当前 selector 拼接另一代响应。
 
 ---
 
+### 7.54 全局 settings revision 会静默覆盖其它卡片的未保存草稿（P1 · 🟠 开放 2026-09-23）
+
+Agent settings 的 `settings.revision` 是整份设置的全局 revision；但多个卡片把它当成“我的 section 已经被保存”的信号，只要 revision 变化就无条件从 props 重建本地 draft：
+
+- `BudgetContextSettings` → `syncFromProps()`；
+- `PerformanceSettings` → 重写 runtimes/modelCalls；
+- `StorageArtifactSettings` → 重建 storage draft；
+- `HardLimitsSettings` → `reset()`；
+- `BrowserRuntimeSettings` → `sync()`；
+- `AcpRuntimeSettings` → `syncProfiles()`；
+- `SubagentSettings` → 重建 global subagent draft；
+- `WorkspaceRuntimeSettings` → `syncSelection()`。
+
+同一类“共享父状态变化 → 无条件覆盖局部 dirty draft”还存在于 `AppManagementSettings`：它 watch **所有 App 的 `id@version#stateVersion` 拼串**，任一 App enabled/state/version 变化都会对**所有 App**调用 `loadGrant(app.id)`；而 `loadGrant()` 在请求成功后直接把 `drafts[appId]` 重置成服务端 grants，没有先看 `grantChanged(appId)`。因此用户正在编辑 App A 的 capability scope 时，只要切换 App B 的 enabled 状态，A 的未保存授权草稿也会被静默清掉。
+
+committed HEAD 的 `AgentSettingsPanel` 对访问过的分组使用 `v-if="visitedGroups.has(...)" + v-show`，即隐藏分组仍然保持挂载。于是可稳定出现：
+
+1. 用户在卡 A 改几个值，不保存；
+2. 切到同组或另一个已经访问过的卡 B 并保存；
+3. B 的 `patchSettings` 返回新全局 revision；
+4. A 的 revision watcher 立即把本地未保存 draft 覆盖掉，且没有确认 / dirty protection。
+
+这是**静默数据丢失**，不是仅仅保存按钮样式问题。
+
+**建议修复**：revision 更新时仅在本地 draft clean 时自动同步；dirty 时保留用户草稿并标记 remote baseline changed，或者引入 section-specific baseline/version / 自己保存成功后的显式 sync。
+
+---
+
+### 7.55 authenticated=true 下 userId A→B 时 Agent surface/session 不清理（P1 · 🟠 开放 2026-09-23）
+
+`AgentSurfaceHost.vue` 同时 watch `isAuthenticated + user.id`，但逻辑只有两支：
+
+- authenticated + userId：直接设置 `activeUserId=userId` → `restoreForUser` → refresh/start；
+- unauthenticated：才会 `summary=null`、`agentWindowManager.reset()`、`agentSurfaceSession.disposeSession()`。
+
+因此 **A→B 且两边始终 authenticated=true** 时不会走清理分支。
+
+这不是不可达理论路径：`App.vue` 自己就单独 watch `auth.user.id`，并在 `previousUserId !== userId` 且两者都非 null 时调用 `resetAuthenticatedUiState()`；说明产品明确考虑 true→true 的用户替换。与此同时 `<AgentSurfaceHost v-if="auth.isAuthenticated.value" />` 没有按 userId key，组件不会因此重建。
+
+影响：
+
+- B 的 summary 请求返回前，A 的 `summary` 仍可继续驱动 Hub/Launcher；
+- `surface-session.ts` 的 module-level Map 只按 appId 存 threadId / draft / model / reasoning / execution/approval mode / connections / environment；A/B 都有 `nexus.agent` 时会直接撞 key；
+- 旧 `AgentAppSurface` 的普通 HTTP 请求也不会因为 user 切换自动 abort（见 §7.56）。
+
+**建议修复**：显式识别 `activeUserId !== userId`，先持久化旧用户布局、停止旧 stream/请求 generation、清 summary/window/surface session，再 attach 新用户；或把 AgentSurfaceHost 直接 key 到 userId 并确保所有 in-flight 请求有 user generation guard。
+
+---
+
+### 7.56 AgentAppSurface 的 configuration / authorization refresh 缺 generation，旧响应可覆盖新状态（P1 · 🟠 开放 2026-09-23）
+
+项目其它刷新路径已经知道要防 stale response（`AgentSurfaceHost.refreshGeneration`、thread list generation、Memory generation），但 `AgentAppSurface` 两组关键刷新仍没有：
+
+**`loadRunConfiguration()`：**
+
+- 同时拉 definitions / providers / settings / connections / runtime availability / denylist；
+- 第一批 Promise.all 回来后立刻写多个 refs；
+- 然后**第二阶段**再 await workspace runtime catalog；
+- 最后用本轮局部 `settings` + 当时全局 `modelOptions` 计算并写 selected model/reasoning/environment，且同步写进 `agentSurfaceSession`。
+
+`configuration-changed` 每次设置写成功都会直接启动一轮新的 `loadRunConfiguration()`，没有串行化 / generation。两轮交叉时，旧轮可以最后覆盖新轮；第二阶段 catalog await 还允许出现“较新的 providers + 较旧 settings/default selection”这类混合代际。
+
+**Authorization 也有双 writer**：`loadRunConfiguration()` 写 `targetDenylist`，`refreshConnectionsAndAuthorization()` 在 focus / authorization event 时也写同一个 ref，两边都没有 generation。
+
+**卸载边界同样不完整**：`facade.dispose()` 只中止 run stream / snapshot refresh；`definitions/providers/settings/listThreads` 等普通 HTTP 都是直接 `agentApi` 调用。组件卸载 / session dispose 后，旧 configuration 请求仍可能完成并再次写 `agentSurfaceSession`。
+
+**建议修复**：configuration 与 authorization 分别引入 generation/AbortController；所有数据先拉进 locals（包含 runtime catalog），只有 app/user/generation 仍匹配时一次性 commit；unmount/user switch 时显式 invalidate generation。
+
+---
+
+### 7.57 UiInfoHint 与 disabled-reason 都是 title-only，键盘 / 触屏缺可见说明（P2 · 🟠 开放 2026-09-23）
+
+§7.24 把大量长说明迁入 `UiInfoHint` 后，组件当前实现是：
+
+- `span tabindex="0" role="note"`；
+- 文案只放在 `title` 与 `aria-label`；
+- CSS 的 hover / focus-visible **只改颜色和 focus ring**，没有 tooltip / popover / visible description。
+
+当前 Agent 有 **21 处** `<UiInfoHint>`。Screen reader 可以读 aria-label，鼠标用户可能看到浏览器原生 title，但**sighted keyboard 用户把焦点移到 ⓘ 后没有任何可见说明，touch 也没有稳定的 title 交互**。
+
+同类问题还出现在 §7.13-e / §7.31 的“禁用必须给理由”：理由全部放在 disabled button 自己的 `title`。Gen2 `UiButton` 最终渲染原生 `<button disabled>`，禁用按钮不进入正常 Tab 顺序，所以 keyboard-only 用户根本无法聚焦它读取原因。
+
+**建议修复**：`UiInfoHint` 做成真实 tooltip/popover，至少支持 hover + focus + click/tap；禁用原因放到可聚焦 wrapper/tooltip trigger 或邻接可见说明上，不要把可发现性押在 disabled element 的 native title。
+
+---
+
+### 7.58 两处设置错误处理绕过 formatAgentApiError，机器码重新漏到 UI（P2 · 🟠 开放 2026-09-23）
+
+§7.37 已明确建立边界：稳定机器码是 diagnostics，不是 UI copy；`agent-api-error.ts` 的 `formatAgentApiError()` 会过滤 SCREAMING_SNAKE 并退回本地化 fallback。
+
+但当前只有两类 settings 路径仍直接：
+
+`cause instanceof Error ? cause.message : '...FAILED'`
+
+- `AppExecutionPolicySettings.vue` 的 load / save；
+- `SubagentSettings.vue` 的 loadProfiles / saveProfiles。
+
+Agent HTTP client 会统一把请求异常转成 `AgentApiError`，所以这两处确实会把 `SETTINGS_VERSION_CONFLICT`、`SUBAGENT_MODEL_UNAVAILABLE` 等稳定 code/message 原样交给 toast，绕过已有过滤器。
+
+第二遍全 Agent 扫 `error.value = 'SCREAMING_SNAKE'` 又找到一个更直接的真阳性：`ArtifactPicker.toggle()` 在附件达到 10 个时直接执行 `error.value = 'ARTIFACT_REF_LIMIT'`，而 panel 模板原样渲染 `{{ error }}`。这条甚至不经过 HTTP/error formatter。
+
+后续 terminal 生命周期复核又确认一组直接透传：`agent-workspace-terminal-channel.ts` 会 emit `WORKSPACE_TERMINAL_PROTOCOL_INVALID / ATTACH_FAILED / RECONNECT_EXHAUSTED / INPUT_QUEUE_FULL` 等机器码；通用 `TerminalView` 只是原样转发，`AgentWorkspaceTerminal.vue` 再直接渲染字符串（见 §7.72）。
+
+**建议修复**：两处 settings 统一走 `formatAgentApiError(cause, t(...requestFailed))`；ArtifactPicker 与 Agent Workspace Terminal 的本地状态码统一映射到 i18n 文案，原始 code 只留日志/title/debug。
+
+---
+
+### 7.59 Launcher 在 viewport 缩小时不会重新 clamp，可直接跑到屏外（P2 · 🟠 开放 2026-09-23）
+
+Launcher 位置以 `{ right, bottom }` 保存：
+
+- 拖动时 `AgentLauncher.clamp()` 会按**当时 viewport**限制；
+- restore / `setLauncherPosition()` 也会 clamp；
+- 但窗口 resize 时 `AgentHubWindow.handleResize()` 只调用 `agentWindowManager.clamp()`，该函数只处理 Hub bounds，**没有重算 launcherPosition**。
+
+例如宽屏下把 launcher 拖到较大的 `right`（当时合法），随后把浏览器缩窄；CSS 仍按旧 right 定位，40px launcher 的 left 可以变成负数而完全不可见。“重置位置”按钮又和 launcher 同一个 fixed 容器，launcher 出屏后也无法点击它恢复。
+
+**建议修复**：给 window-manager 增加 `clampLauncherPosition()` 并在 viewport resize / restore 后统一调用；最好同时加窄屏→宽屏回归，确保用户偏好与可见性兼得。
+
+---
+
+### 7.60 条件态 icon button 漏可访问名，且三处 label 内嵌第二个 labelable control（P2 · 🟠 开放 2026-09-23）
+
+对全部 plain `<button>` 做“无 aria-label / title / 可见文字”的静态枚举后，先收敛到 **2 个 icon-button 真阳性**：
+
+1. `AgentThreadSidebar.vue` 搜索框的清空 x：icon 是 `aria-hidden`，button 无 `aria-label/title/text`；
+2. `ModelProviderSettings.vue` API Key 显示/隐藏 eye：button 同样无可访问名。
+
+随后把扫描范围扩到 Reka/Gen2 `role=checkbox`，又确认 **3 个 unnamed checkbox**：
+
+3. `AppManagementSettings.vue` capability grant 主复选框；
+4. 同文件 target scope（Workspace/SSH）复选框；
+5. `SafetyNetworkSettings.vue` 每条 Connection 的 block/allow 复选框。
+
+`UiCheckbox` 只是把 attrs 透传到 `CheckboxRoot`，不会自动从旁边 sibling 文本生成 accessible name；这三处既没有 `aria-label/aria-labelledby`，也不在 `<label>` 内，因此辅助技术只能得到“checkbox”角色而没有对象名。
+
+这也解释了为什么此前 CDP 的“未命名控件 0”不够强：当时只枚举了 `button/a[href]/[role=button]`，既没激活两个条件态 icon button，也**根本没有覆盖 `[role=checkbox]`**。
+
+另外还存在 3 处 HTML label 结构问题：
+
+- Provider credential 的 `<label>` 同时包住 password input 与 eye button；
+- `ModelCapabilityEditor` 的 contextWindow `<label>` 同时包 input 与“恢复默认” button；
+- maxOutputTokens 同样如此。
+
+一个 `label` 内不应同时包含它所标注的 control 之外的第二个 labelable control；应改为显式 `for/id`，让 action button 成为 sibling。
+
+**建议修复**：给两个 icon button 补动态本地化 accessible name（API Key 需区分“显示/隐藏”）；3 个 checkbox 用 `aria-label/aria-labelledby` 或真实 `<label for>` 绑定旁边的 capability/target/connection 名；三处复合表单改显式 label-target 关联。§7.44 同时补足 icon button 的指针命中区。
+
+---
+
+### 7.61 Artifact Library / Picker 查询缺 request generation，旧查询可覆盖新筛选（P2 · 🟠 开放 2026-09-23）
+
+**Artifact Library：**
+
+- `load()` 没有 `if (busy) return`，也没有 generation；
+- kind / app / retained 三个 select 的 `@update:model-value="load"` 在 busy 时仍可触发；
+- query input 在 busy 时也未禁用，Enter 同样可以再次 `load()`；
+- 每轮请求返回后无条件覆盖 `items / nextCursor / storage`。
+- `loadMore()` 也没有 generation：它发出旧 cursor 请求后，filter 控件在 `busy` 时仍可改变并触发新的 `load()`；如果新整页先完成、旧分页后完成，旧页会 append 到新筛选结果并覆盖 `nextCursor`；
+- `busy` 只是一个共享 boolean，两个并发请求任一 `finally` 都能先把它置回 false，并不能代替 request identity。
+
+所以快速切 “kind A → kind B” 时，两轮请求并发；B 先回、A 后回，界面 filter 已显示 B，但列表最后变回 A。
+
+**ArtifactPicker** 的按钮虽然 busy 时禁用，但 search input 没禁用，`@keydown.enter="load"` 仍可在 busy 中再次启动 load；请求同样没有 query snapshot generation guard。
+
+这不是分页去重能解决的问题：问题发生在**整页 replace** 的 load 路径，旧响应会成为最终 UI。
+
+**建议修复**：捕获 query/filter snapshot + generation，只有最新 generation 且当前 filter 仍匹配才提交；或者在 request 期间锁定所有会改变 query identity 的控件。
+
+---
+
+### 7.62 mutation 已成功后辅助 refresh / health 失败，会被误报为“写失败”（P1 · 🟠 开放 2026-09-23）
+
+第三层按“**authoritative commit boundary**”回看写路径时，确认 frontend 与 backend 都存在“持久化已经成功，但后续非权威工作失败，于是整个调用抛错”的模式。
+
+**Frontend SettingsPanel：**
+
+`patchSection()` 的顺序是：
+
+1. `settings.value = await agentApi.patchSettings(...)` —— 此时服务端写入已成功，且前端已经拿到新 revision；
+2. `storage.value = await agentApi.storage()` —— 只是辅助 refresh；
+3. 最后才 emit `host-changed` / `configuration-changed`。
+
+如果第 2 步 GET 失败，`execute()` 会把整个操作显示为失败，而且两个刷新事件都不发。用户看到“保存失败”，实际上 settings 已经提交。
+
+同类顺序还存在于 feature enable/disable、hard-limit confirm、Provider create/toggle/delete/discover 等路径。尤其 `createProvider()` 是先 POST 创建，再 `providers()` + `apps()` refresh；任何 refresh 失败都会让 caller 得到 `undefined` / error feedback，且 `execute()` 不会触发 provider 的 `configuration-changed`。用户若按失败提示重新创建，可能产生第二个 provider。
+
+Feature enable 还有一个更直接的 commit-boundary 错位：`PATCH /settings` 先持久化 `feature.enabled=true`，route 随即用当前 App lifecycle 计算 `availability`；Backend 明确定义 `enabling` 为合法过渡态。但 `AgentSettingsPanel.assertFeatureReady()` 只接受 `enabled/degraded`，所以 App 正在启动时，前端会在**设置已经提交成功**后主动抛出“启用失败”。此时服务端 feature flag 已为 true，UI 却按失败反馈，容易诱导重复操作；正确语义应是“已启用，App 正在启动/等待健康状态”，而不是回滚式失败。
+
+**Backend ProviderService 更深一层也有同样问题：**
+
+- `create()`：`repository.create(...)` 成功后才 await `onChanged(userId)`；
+- `update()`：`repository.update(...)` 成功后才 await `onChanged(userId)`；
+- `remove()`：`repository.remove(...)` 成功后才 await `onChanged(userId)`；
+- composition root 把 `onChanged` 绑定到 `lifecycle.refreshHealth(userId)`；
+- `refreshHealth()` 会调用 enabled App 的 `definition.health(scope)` 与 state CAS，明确是会抛错的异步工作；
+- ProviderService catch 后只记录 `PROVIDER_CHANGE_NOTIFICATION_FAILED`，随后**重新 throw**，因此 HTTP 可以在 provider 已持久化后返回失败。
+
+Provider create 由 backend 生成随机 UUID，没有 caller-stable idempotency key；所以这里与 §7.41 的 thread create 类似，但更确定：服务端代码本身就存在“commit 后再抛错”的路径，重试能够创建重复 provider。
+
+**同类 commit-boundary 还存在于主界面与 Workspace Runtime：**
+
+- `cancel()` / `increaseBudget()`：主 mutation 已返回新 Run，随后才并行 refresh ledger / approvals / background runs；任一辅助读取失败会进入 `recoverRuntimeFailure()`，把已成功 mutation 作为失败处理；
+- `resolveApproval()`：approval 已 resolve 后才 refresh Run / approvals / ledger / background / detail approvals，任一后处理失败都会落到同一 catch；
+- `saveCheckpoint()`：checkpoint 已创建后才 `listCheckpoints()`。这一条还有**真实重复对象后果**：backend 只校验当前 `run.version === expectedRunVersion`，保存 user checkpoint 本身不推进 run.version；checkpoint id 每次 `randomUUID()`，schema 也只对 recovery checkpoint 有 `run_id` 唯一索引。若首次 POST 已插入而后续 list GET 失败，UI 报“保存失败”，用户再次点保存仍携带同一合法 run.version，会插入第二条 user checkpoint；
+- `resumeCheckpoint()`：resume 已成功返回新 Run 后，仍继续 getRun + refresh ledger/approvals/background；后处理失败会把 resume 显示为失败；
+- `deleteRun()` 先删 Run，再拉 runs / approvals / ledger / background runs；后续任一 GET 失败会进入 mutation error，尽管 Run 已删；
+- `deleteThreadConversation()` 先删 thread，再 `selectFirstOrCreateThread()` + refresh background；若自动创建新 thread 或 refresh 失败，删除事实不会回滚；
+- `deleteAllConversations()` 先删除全部会话，再自动创建第一条空 thread；create 失败时 UI 会把整次“删除全部”显示成失败，但原会话已不可恢复；
+- `WorkspaceRuntimeSettings` 的 setup / uninstall / cleanup / reset / install-pack 等 confirm 路径先提交 command/mutation，再 await `settings()` / `loadDetails()`；辅助读取失败仍进入统一 `run()` catch。
+- `ArtifactLibraryView.toggleRetain()` 先完成 retain/unretain 并更新当前 item，随后才 await `storage()`；storage summary GET 失败会显示整次操作失败，虽然 retained 状态已经提交；
+- MCP / ACP integration 的多条 update/delete/credential 路径在 mutation 成功后继续 await `loadIntegrations()`；list GET 失败会落到同一 `run()` catch。MCP 删除已有 destructive confirm，但**确认强度并不能解决 commit 后 refresh 失败被误报**；
+- `PluginManagementSettings` trust/revoke publisher 在 mutation 成功后继续 await `refresh()`（publishers/installations/versions/catalogs）；任一后续读取失败同样会把已成功 trust/revoke 显示成失败。
+- Plugin backend 的普通 `install()` 也有 finalization commit-boundary：package 已移动到 immutable version、version/app state/installation 已写入后，最后才 `updateStage(expectedVersion)`；如果同一 stage 被并发 verify/操作推进了 version，`PLUGIN_STAGE_VERSION_CONFLICT` 会让 HTTP install 报失败，尽管 App 已经安装。upgrade 路径已显式 catch“active version commit 后 stage finalization 失败”并保留 reconciliation，但普通 install 没有同类保护。
+- backend `ApprovalService.resolve()` 也在 `stateCommit.resolveToolApproval()` durable commit 并触发 scheduler 后，才再次 `approvals.get(scope, approvalId)` 组装响应；这次辅助读若失败，HTTP 会把已经完成的批准/拒绝显示成失败。
+- Host `patchSettings()` 先 `settings.patch()` 持久化全局 `feature.enabled`，再逐 App `quiesceScope()` / `resumeScope()`；任一 App 生命周期失败都会把整个 PATCH 报成失败，但 settings revision/开关已经提交，前面已处理的 App 也不会回滚，可能留下“全局 disabled + 部分 runtime 尚未 quiesce”或相反的半完成状态；
+- `setAppEnabled()` 同样先由 `lifecycle.setEnabled()` 提交 App state，再做 `integrations.syncEnabled()` / `deactivate()`；Integration 后处理失败会把已完成的 enable/disable 报成失败。
+
+这里已有一个正确对照：`AppManagementSettings.confirmUninstall()` 把“卸载主 mutation”与可选的“删除插件数据”明确分开；后者失败只单独报 delete-data error，仍保留 uninstall success。说明产品层已经有“主提交成功 ≠ 后处理全成功”的正确语义模式。
+
+**建议修复**：
+
+- 明确 mutation commit point：权威写成功后，辅助 read/health/notification 失败不能把 mutation 重新标成失败；
+- frontend 将 post-write refresh 错误降级成“已保存，但刷新失败，正在重新同步”，并立即发必要的 invalidation event；
+- backend provider change notification 应 best-effort / durable outbox，或把失败转成“写成功 + health stale”状态，不应重新抛成 mutation failure；
+- 对 create 类 mutation 仍建议引入 caller-stable idempotency key。
+
+### 7.63 MCP / ACP Integration 不跟随 Agent availability 生命周期同步（P2 · 🟠 开放 2026-09-23）
+
+`McpIntegrationSettings` 与 `AcpRuntimeSettings` 都只在 `onMounted()` 调一次 `loadIntegrations()`，没有 watch `props.agentAvailable`。父层 committed HEAD 则一直稳定挂载这两个组件，只把 `apps.some(app.id === 'nexus.agent')` 作为 prop 传入，不会通过 key/v-if 重建组件。
+
+因此两个方向都会 stale：
+
+1. **mount 时 unavailable → 后来 available**：初次 load 直接清空 integrations 并 return；之后即使 Agent 安装/恢复，列表仍保持空，除非用户手动点 refresh；
+2. **mount 时 available → 后来 unavailable**：旧 integrations 不会被清。MCP/ACP 已有 integration 行里的 toggle/delete/profile/credential 等控件大多只看 `disabled = props.busy || localBusy`，没有把 `!agentAvailable` 纳入 disabled；页面一边显示“请先安装 Agent”，一边仍能操作旧条目并向已不存在/不可用的 App 发请求。
+
+另外 `loadIntegrations()` 自身也没有 generation；availability 变化与手动 refresh 交叉时旧响应仍可回写。
+
+**建议修复**：watch `agentAvailable`；false 时 invalidate generation + 清 integrations/loading，true 时自动 reload；已有 integration 行的 mutation controls 也统一包含 `!agentAvailable`。
+
+---
+
+### 7.64 Memory host refresh 会静默覆盖候选草稿与导入选择（P1 · 🟠 开放 2026-09-23）
+
+`MemorySettings` 的 request generation 做得正确，但“最新权威响应如何合并到本地编辑态”仍有数据丢失：
+
+- candidate memory 使用 textarea `v-model="drafts[memory.id]"`，是明确的未保存用户草稿；
+- `loadMemories()` 每次成功后都执行 `drafts = Object.fromEntries(next.map(...memory.content))`，无 dirty merge；
+- 该 load 不只来自用户主动刷新：watch `props.apps.map(id@version#stateVersion)` 会触发，`memory.changed` host event 对 selected app 也会触发；
+- 因此其它 App 的 stateVersion 变化、同 App 新增/更新另一条 memory，均可能把正在编辑的 candidate textarea 无提示恢复成服务端旧内容。
+
+导入区同样有无关刷新副作用：`loadSourceMemories()` 一进入就把 `sourceMemoryId='' / importPreview=null`；source app 的任意 `memory.changed` 都会清掉用户刚选好的来源 memory / preview，即使变化的是另一条记录。
+
+**建议修复**：按 memory id 维护 server baseline + dirty draft，刷新时只覆盖 clean 项；已 dirty 项标记 remote changed/conflict。source list refresh 保留仍存在的 selection，只有所选 memory 真消失/失效时才清 preview。
+
+---
+
+### 7.65 Run 详情 approval batch 刷新缺 generation，旧状态可回写（P1 · 🟠 开放 2026-09-23）
+
+`AgentAppSurface` 对 current approvals、detail subagents、detail open、ledger、checkpoints 都有 generation/run-id guard，但 `refreshDetailApprovalBatch(runId)` 是明显漏网：
+
+```
+const [next, snapshot] = await Promise.all([
+  facade.listApprovals(runId),
+  facade.getRun(runId),
+]);
+if (!detailVisible || detailSnapshot.id !== runId) return;
+detailApprovalBatch = next;
+detailSnapshot = snapshot;
+```
+
+同一个 Run 上它会从至少两条高频路径触发：
+
+- 每次 run stream durable event 后，只要详情打开就 refresh；
+- approval mutation 成功后的刷新。
+
+`facade.getRun(runId)` 虽按 runId 串行 snapshot refresh，但 `listApprovals(runId)` 是独立并发请求。可出现 R1 的 approvals 很慢、R2 的 approvals + snapshot 先完成并提交新状态，随后 R1 才结束并把旧 approval batch 与较旧 snapshot 再写回。详情里会短暂/持续重新出现已经解决的审批或旧 Run 状态。
+
+**建议修复**：给 detail approval batch 加独立 generation（或复用 detailOpenGeneration + per-run generation），在提交前同时校验 runId + generation；更好是把 approvals/snapshot 作为同一代 authoritative refresh commit。
+
+---
+
+### 7.66 Thread loadMore 不参与 thread-list generation，旧分页可把已删除 thread 带回来（P2 · 🟠 开放 2026-09-23）
+
+`refreshThreadListFromHost()` 已有 `threadListRefreshGeneration`，但 `loadMoreThreads()` 完全不使用该 generation：
+
+1. 用户滚到底部，以 cursor C 发起旧页请求；
+2. 期间其它 tab / host event 删除 thread，`refreshThreadListFromHost()` 拉到新的第一页并提交；
+3. 旧 cursor C 的请求随后返回；
+4. `loadMoreThreads()` 只按当前 items id 去重，然后直接 append page.items，并覆盖 `threadNextCursor`。
+
+若被删除 thread 不在新第一页的 known set 中，它会被旧页**重新带回 UI**；nextCursor 也可能退回旧分页链。
+
+**建议修复**：loadMore 捕获 `threadListRefreshGeneration + cursor`，任何 authoritative first-page refresh 都应 invalidate in-flight pagination；提交前再校验 cursor/generation。
+
+---
+
+### 7.67 Plugin frontend bridge 首次 ready 后断开，宿主仍永久显示 ready（P1 · 🟠 开放 2026-09-23）
+
+`PluginAppFrame` 只观察首次 handshake：
+
+1. 创建 `PluginFrontendHostBridge`；
+2. `await nextBridge.start()`；
+3. handshake 成功后 `status='ready'`；
+4. 之后没有 bridge lifecycle callback。
+
+但 bridge 在 ready 后仍可能主动 `close()`：`MessagePort.messageerror`、非法 nonce/protocol/sequence、超大消息等都会关闭 port；iframe 自身 reload/navigation 后旧 MessagePort 也失效。此时：
+
+- bridge 没有 `onClose/onDisconnected` 通知 `PluginAppFrame`；
+- `PluginAppFrame.status` 不会离开 `ready`；
+- window `message` listener 在首次连接成功时已移除，iframe reload 后的新 `nexus.plugin.ready` 也没人接；
+- 没有自动重新 `load()` / handshake。
+
+结果是 iframe 仍可见、宿主仍认为 ready，但 Plugin SDK 已永久断线，直到整个 App surface 被重挂。
+
+**建议修复**：bridge 暴露 post-handshake disconnect callback/state；宿主收到后进入 reconnecting/unavailable，并按 generation 重建 bridge；iframe load 事件也应触发安全的重新 handshake。
+
+---
+
+### 7.68 Plugin RPC timeout 会把仍在执行/可能已提交的 mutation 报成失败（P1 · 🟠 开放 2026-09-23）
+
+`PluginFrontendHostBridge.forward()` 为每个 RPC 建 `AbortController` + timeout，超时后向插件返回 `HOST_RPC_TIMEOUT`。但两类 mutation 都不满足“timeout = 未提交”：
+
+**Agent RPC 更明确：controller 根本没有传进 dispatcher。**
+
+`this.agent.dispatch(method, params)` 没有 signal 参数，dispatcher 中以下 mutation 会继续执行直到完成：
+
+- `agent.threads.create / rename`
+- `agent.runs.create / appendInput / cancel`
+- `agent.subagents.cancel`
+- `agent.approvals.resolve`
+
+若请求在 timeout 之后成功，`forward()` 只看到 `controller.signal.aborted`，丢掉成功结果并回 `HOST_RPC_TIMEOUT`。插件按“失败”重试时，create 类操作可产生重复副作用。
+
+**Backend RPC 也不能把 AbortSignal 当提交证明。** `pluginFrontendRpc()` 对 `storage.put/delete`、`intents.create/revoke` 等统一发 HTTP POST，并把 signal 交给 Axios。客户端 abort 只能停止等待，不能保证服务端 handler 没进入 commit point。其中 `AppIntentService.createConfirmed()` 每次调用直接 `id: randomUUID()` 写 receipt，没有 caller-stable idempotency key，所以 timeout 后重试能创建第二张 receipt。
+
+这与 §7.41 / §7.62 是同一“unknown mutation outcome”原则在 Plugin SDK 上的缺口。
+
+**建议修复**：区分 read 与 mutation RPC；mutation 超时不得返回普通“失败可重试”，应返回 outcome-unknown + reconcile token/idempotency key。create 类 RPC 使用 caller-stable request id；dispatcher 需要 signal 只用于可安全取消的读操作，不能把本地 abort 当作 server rollback。
+
+---
+
+### 7.69 Workspace Runtime / Model Registry 的设置型 async load 仍缺 generation（P2 · 🟠 开放 2026-09-23）
+
+第二遍继续按 async load 扫描，确认两处较小但真实的 stale-response 窗口：
+
+**WorkspaceRuntimeSettings.loadDetails()**
+
+- availability=false 时会清 `catalog/storage`；
+- availability=true 时开始 Promise.all 拉 catalog/storage；
+- watch availability 变化会再调用 loadDetails，但没有 generation；
+- 若 true(R1) → false(清空) → true(R2)，R2 先回、R1 后回，旧 catalog/storage 仍可覆盖新状态；
+- 单纯 true→false 时旧 R1 也会在隐藏区重新写回 stale refs，下一次 true 前存在错误缓存代际。
+
+`WorkspaceRuntimePanel.refresh()` 已经有 `refreshGeneration`，说明同项目正确模式现成存在。
+
+**ModelProviderSettings model registry**
+
+- onMounted 的 `loadModelRegistryStatus()` 不设置 `modelRegistryBusy`、没有 generation；
+- 用户可在初始 GET 未完成时点击 `refreshModelRegistry()`；
+- POST refresh 若先完成写入新 status，较早发出的 GET 仍可后到并把 `modelRegistryStatus` 覆盖回旧快照；
+- auto-update mutation 的失败回读也复用同一个无 generation loader。
+
+Backend persistence 还有同一状态 owner 的并发问题：`ModelCapabilityRegistryService.refresh()` 只用 `refreshPromise` 串行 refresh 自身，但 `setAutoUpdate()` 不进入这条链；两者都可并发调用 `store.save(this.state)`。`LocalModelCapabilityRegistryStore.save()` 又固定使用 `${file}.tmp-${process.pid}` 作为 temp path，同进程所有 save 共用一个临时文件。最小文件系统探针已复现：两次 write 同一 temp 后第一次 rename 成功，第二次 rename 稳定得到 `ENOENT`（最终文件内容取决于最后一次覆盖 temp 的 writer）。因此 Refresh 与 Auto-update toggle 并发时可出现“请求返回失败，但内存/磁盘状态实际已部分或完全变化”的 false-failure；store 层本身也没有序列号/mutex。
+
+**建议修复**：前端两处统一捕获 generation；mutation/refresh 成功后应 invalidate 旧 GET，只有最新请求可以提交 UI state。Backend Model Registry 同时需要统一 mutation queue/mutex；store temp 文件必须使用每次 save 唯一名称并在串行 owner 下提交，避免 `setAutoUpdate()` 与 refresh 互抢同一个 temp path。
+
+---
+
+### 7.70 Run / Workspace / Subagent 仍直接显示稳定内部枚举（P2 · 🟠 开放 2026-09-23）
+
+第三轮把所有模板里直接插值 `.status / .kind / .state / .mode / goalStatus` 的位置重新扫一遍，排除已经通过 `$t(...)` 映射的路径后，仍有一组明确的用户可见内部枚举：
+
+- `TaskRail.vue` Run 详情主指标直接显示 `detailSnapshot.goalStatus`。协议值为 `unknown | in_progress | satisfied | not_satisfied`，因此用户会看到 `in_progress / not_satisfied`；
+- 同一详情的“最近事实”头直接显示 `entry.kind`，协议值为 `user_input | assistant_message | tool_result | system_notice`；
+- `WorkspaceRuntimeSettings.vue` 直接显示 recipe `kind = shell/code/data/browser` 与 pack `status = supported/deprecated/unavailable`；
+- `WorkspaceRuntimePanel.vue` 直接显示 active workspace 的 profile kind；
+- `MessageExchangePanel.vue` 直接显示 subagent message `kind = request/reply/progress/evidence/completion` 与 `status = accepted/delivered/consumed/expired/rejected`。
+
+这与 §1.4 / §7.40 的“枚举不原样进用户句子”结论冲突。尤其 §7.40 删除死 key 时明确把旧的 `agent.conversation.kind.{user_input,tool_result,system_notice}` 列为不可达文案；当前 TaskRail 恰好仍在直接显示这组值，说明当时的可达性扫描只能回答“代码有没有引用 key”，不能回答“某稳定枚举是否还在裸显示”。
+
+Approval 的 `precondition.kind` 位于“操作证据”折叠里的技术证据行，本轮不强行要求翻译；本条只覆盖正常产品文案/状态展示。
+
+**建议修复**：为上述稳定 enum 建集中 translation map/helper；未知未来值可回退到 raw + 明确“技术状态”样式，已知值不要直接下划线英文。i18n 门禁可补一条“已声明协议 enum 在 template 直接插值”的定向守卫。
+
+---
+
+### 7.71 日期 / 数字格式使用浏览器 locale，而不是当前 UI locale（P2 · 🟠 开放 2026-09-23）
+
+Agent 已有应用级语言选择（zh-CN / en-US / ja-JP），但多处格式化完全绕过 vue-i18n 的 `locale`，直接调用无 locale 参数的原生格式化：
+
+- `ArtifactLibraryView.formatDate()` → `toLocaleDateString()`；
+- `MessageExchangePanel` message 时间 → `toLocaleString()`；
+- `ModelCapabilityEditor.formatCapabilityTimestamp()` → `toLocaleString()`；
+- `MemorySettings` 时间 → `toLocaleString()`；
+- `McpIntegrationSettings.formatTime()` → `toLocaleString()`；
+- `ModelProviderSettings.formatRegistryDate()` → `toLocaleDateString()`；
+- `AgentConversation / ConversationMessage` 数字 → `num.toLocaleString()`；
+- `quantity-format.ts` exact bytes / seconds / token / count → `parsed.toLocaleString()`。
+
+这些 API 不传 locale 时使用浏览器/OS locale。因此用户在英文系统浏览器里把 Nexus UI 切到日文，日期仍可能是英文式 month/day、数字分组仍按系统格式；反之亦然，形成“文案语言已切换、日期数字没切”的混合界面。
+
+项目里已有正确对照：`AgentThreadSidebar.vue` 从 `useI18n()` 取 `locale.value`，用 `new Intl.DateTimeFormat(locale.value, ...)` 构造 formatter。这说明应用并不是有意采用 browser locale。
+
+**建议修复**：集中提供 locale-aware date/number formatter（或 vue-i18n 的 datetime/number formatting），所有 Agent 用户可见日期/数量统一显式使用当前 UI locale；同时把 §7.49 的 `Tokens` literal 收进同一 quantity label 层。
+
+### 7.72 Workspace Terminal 自然关闭后仍保持“已打开”，且把 transport 机器码直接显示给用户（P2 · 🟠 开放 2026-09-23）
+
+Agent terminal channel 本身有最多 25 秒的异常断线重连；问题发生在它最终 `finish()` 以后。此时 channel 已 `closed=true / ready=false`，后续 `sendInput()` 直接 return，但父组件只做：
+
+```vue
+@error="error = $event" @closed="error = $event || ''"
+```
+
+没有同步 `channel=null / opened=false`。因此终端已经不可用时，UI 仍显示“关闭终端”，TerminalView 仍挂着 dead channel；用户必须先手工“关闭终端”再“打开终端”才能重建连接。
+
+同时 channel 的终态错误直接使用 `WORKSPACE_TERMINAL_PROTOCOL_INVALID / ATTACH_FAILED / RECONNECT_EXHAUSTED / INPUT_QUEUE_FULL` 等稳定机器码，通用 `TerminalView` 又原样转发，最终成为可见文案（并入 §7.58）。
+
+**建议修复**：父层收到 terminal close 时原子复位 `channel/opened` 并把 code 映射到 i18n；workspace 仍 running 时给明确“重新打开”动作。
+
+---
+
+### 7.73 App Tab “关闭”只移除可见标签，没有淘汰 KeepAlive cache（P1 · 🟠 开放 2026-09-23）
+
+§1.7 引入 `<KeepAlive>` 是合理的：**切换** App / Files 时要保留 partial streaming state。本条的问题是当前实现没有区分 switch 与 close。
+
+`closeAppTab(appId)` 只从 `openAppIds` 移除标签；主内容却由一个无 `include/exclude/max`、无显式 prune 的裸 `<KeepAlive>` 缓存。某 App 一旦访问过，视觉关闭标签不会删除其 cached instance。
+
+而 cleanup 都只在 unmount：
+
+- `AgentAppSurface`：run facade/stream、window focus listener、thread/authorization/configuration host-event subscriptions、ResizeObserver；
+- `AgentConversation`：interval 与 media-query listener；
+- `PluginAppFrame`：iframe bridge / MessagePort。
+
+全 `features/agent/host` 没有 `onDeactivated`，也没有 KeepAlive eviction。结果是用户已经“关闭”的 App 仍可能继续保持 Run WebSocket、host listeners、timer 或 plugin bridge。重新打开实际上是恢复旧 cache。
+
+`agentSurfaceSession.pauseDetail()/activateApp()` 也不能充当保护：它们只递增 `navigationGeneration`，但全仓没有任何 `currentGeneration()` consumer。
+
+第二遍继续核 key 语义后确认，这个泄漏不只发生在“关闭 Tab”：surface key 是 `${activeApp.id}@${activeApp.version}`，而 summary 的 `version` 映射自 backend `app.activeVersion`。插件/App 升级导致 activeVersion 从 v1→v2 时，KeepAlive 会创建新的 v2 instance，但旧 v1 cache 同样没有 eviction；旧 iframe bridge / run stream / listeners 仍可能存活。
+
+对 Plugin App 来说这还会变成**陈旧前端继续持有当前 App 权限**：
+
+- `PluginFrontendHostBridge` / `PluginAgentSdkDispatcher` 只保存 `appId`，不保存或提交 descriptor version；
+- backend `/:appId/frontend/rpc` 只根据 appId 查**当前** installation/state，确认当前 activeVersion 健康后执行 storage/intents；
+- 因此缓存里的旧 v1 iframe 在 v2 已激活后继续发 RPC 时，server 只能看到“appId 当前是 v2”，无法知道请求其实来自旧 v1 code；
+- host-side Agent RPC 更直接：旧 dispatcher 仍可用同一个 appId 调 threads/run/approval/subagent APIs。
+
+所以版本升级后的旧 cache 不只是资源泄漏，而是旧代码被继续当作当前 App 执行的 authority-staleness。
+
+**建议修复**：保留普通 switch 的 KeepAlive 语义，但 close **以及 activeVersion 替换**都必须 prune 对应旧 cache entry 或发送完整 dispose 信号；Plugin bridge/RPC 最好把 descriptor/active version 纳入 capability identity，backend 拒绝旧 version bridge。分别验证 active/inactive Agent App、Plugin App 关闭/升级后资源释放与旧 bridge 失效，而普通切换仍保留 partial text。
+
+---
+
+### 7.74 App Tab 把 role=button 嵌在原生 button 内，键盘语义不完整（P2 · 🟠 开放 2026-09-23）
+
+App tab 外层本身是原生 `<button @click="switchApp(app.id)">`，内部关闭控件却是：
+
+`<span role="button" tabindex="0" @click.stop ... @keydown.enter.stop ...>`
+
+这是可聚焦交互元素嵌套在原生 button 内，HTML / accessibility tree 语义不合法；而且这个伪 button 只实现 Enter，没有实现 button 应支持的 Space activation。
+
+全 `features/agent/**` 扫 `role="button"` 后当前只有这一处，属于孤立实现。
+
+**建议修复**：用非交互容器包住两个 sibling 原生 button：一个负责切换 tab，一个负责关闭；保留 stopPropagation，让原生 close button 自带 Enter/Space 语义。
+
+---
+
+### 7.75 “失败域”只有标签，没有独立错误状态；无关操作会把别的失败与 retry 一起清掉（P1 · 🟠 开放 2026-09-23）
+
+§7.37 把原来的 `error: string` 升级成 `message + domainKey + code + retry`，解决了“用户不知道哪一路失败”。但当前仍只有**一套** `error/errorDomainKey/errorCode/errorRetry` refs，所有失败域共享；`clearError()` 也不接 domain。
+
+初始 `load()` 已有确定竞态：
+
+1. `loadRunConfiguration()` 以未 await 的 `configurationPromise` 并行启动；
+2. 同时拉 threads；
+3. configuration 若先失败，`fail(...configuration)` 会显示“配置 · 请求失败”与重试；
+4. threads 成功后进入 `selectThread()`，第 842 行无条件 `clearError()`；
+5. 配置错误、code、retry 全部被抹掉，但 definitions/providers/settings 仍可能没有成功加载。
+
+无 thread 时走 `createThread()` 也会在入口 `clearError()`，结果相同。
+
+并且这不只影响初始化：select thread、create thread、reconciliation、runtime mutation、delete thread/delete all 等多个互不相干的操作都会无条件 `clearError()`。因此 stream/checkpoint/config 等失败可以被另一域的用户操作清除，§7.37 的 domain 目前只是**显示标签**，没有状态隔离。
+
+**建议修复**：错误状态按 domain 建 slot/map，成功/重试只清自己的 domain；若 UI 仍只显示一个横幅，可按优先级投影“当前最重要错误”，但不能让 unrelated success 销毁另一域的失败与 retry。初始 config/thread 两条并发路径应独立提交错误。
+
+---
+
+### 7.76 Agent API 的 4xx 英文 message 会系统性绕过当前 UI locale（P2 · 🟠 开放 2026-09-23）
+
+`formatAgentApiError(cause, fallback)` 当前规则是：
+
+- 5xx → 本地化 fallback；
+- message 是机器码 → fallback；
+- **其它 message → 原样返回 backend message**。
+
+§7.37 当时甚至用 `threadId must be a uuid` 做过对照，明确把“真实后端文案保留”视为成功。但 Agent backend 的 HTTP error rules 本身不是本地化资源：本轮扫描 `interfaces/http/agent/agent-error-rules/**` 得到 **38 条英文固定 message**，例如：
+
+- `Invalid Agent request.`
+- `Agent resource changed; refresh and retry.`
+- `Provider is unavailable.`
+- `Artifact storage quota is exhausted.`
+- `Workspace Runtime Runner is unavailable.`
+- `Remote Agent plugin repository is unavailable.`
+
+这些大量用于 400/404/409/410/413/422/429。于是 zh-CN / ja-JP 用户只要触发正常 validation/conflict/not-found 路径，frontend 多数 `formatAgentApiError()` 调用都会绕过词典 fallback，直接显示英文。
+
+这与 §7.49 的源码英文 literal 不同：即使前端源码完全无英文，运行时仍会被 API message 注入英文 UI。
+
+**建议修复**：UI 正文以稳定 `error.code` → i18n 映射为主；backend message 只作为诊断 detail/title/log。至少对已知 Agent error code 建集中翻译表，未知 4xx 回退调用方本地化 fallback，而不是默认信任英文 message 为用户 copy。
+
+---
+
+### 7.77 Host 首次 summary refresh 失败后 coordination 正常结束，不会自动恢复（P1 · 🟠 开放 2026-09-23）
+
+`AgentSurfaceHost.runHostStreamAsLeader()` 的启动顺序是：
+
+```
+const initial = await refresh('initial');
+if (!initial || aborted || generation changed) return;
+for await (const event of agentEvents.host(initial.eventCursor, ...)) { ... }
+```
+
+WebSocket transport 内部有指数退避重连，但**连接 WebSocket 之前的 summary GET 没有任何 retry**。一次临时 `/agent/summary` 失败就让 leader callback 正常 return；`start()` 外层 async 也正常结束，没有 schedule restart、focus retry 或 timer。
+
+auth attach 时虽然还额外 `void refresh('initial')` 一次，但这不是可靠兜底，反而是两轮并发 summary GET：较新的 stream-side refresh 一旦失败，会把较早请求标成 stale generation；即使较早请求稍后成功，也不会提交 `summary.value`。
+
+单 tab 下可出现：
+
+- `summary === null` → template 不渲染 AgentHubWindow / Launcher；
+- 或已有 summary 时继续显示旧 running/approval badge，但没有 host stream 更新；
+- 用户没有任何错误提示或“重新连接”入口。
+
+只有后续某个 local host-changed 等偶发事件再次调用 refresh 才可能恢复。
+
+**建议修复**：把 initial summary + host stream 放进同一可取消重连循环；summary GET 失败也按 transport 策略退避重试。去掉 auth attach 的重复 initial refresh，或让它与 stream startup 共用同一 generation/结果；需要有 stale/disconnected UI 状态而不是静默消失。
+
+---
+
+---
+
+### 7.78 create 类 mutation 没有 caller-stable identity，unknown outcome 后可重复创建 Run / Integration / App Intent（P1 · 🟠 开放 2026-09-23）
+
+继续按“服务端已经 commit，但客户端没收到响应”反查 create 类操作，目前确认三类还没有安全重试锚点。
+
+**Run create：backend 幂等正确，frontend 没保存 key。**
+
+backend 的 `createRunTransition()` 会按 `run.create + Idempotency-Key` 查 durable command；同 key + 同 request hash 可以 replay 已提交的原 Run。问题是 frontend `agentApi.createRun()` 每次调用都在 API wrapper 内部现场生成 `crypto.randomUUID()`，key 没绑定到一次 composer submission。
+
+如果 backend 已提交 Run、HTTP 响应在客户端拿到 `created.id` 前丢失：
+
+1. `run.value` 仍为空，runtime failure recovery 没有 targetRunId；
+2. “重新同步”回调同样没有 runId 可查询；
+3. composer 只有在 create 成功返回后才清空，因此原草稿仍在；
+4. 用户再次 Send 会拿到一个新 key，backend 会把它当全新 create command，合法创建第二个 Run。
+
+Slash command 的 create-goal 路径最终也走同一 `createNewRun()`。
+
+这不能泛化到 appendInput：append state-commit 在新 key 路径仍会先校验 `expectedRunVersion`；第一次若其实已经提交，第二次会被旧 version 挡成 conflict，随后可刷新权威状态。
+
+**MCP / ACP Integration create：连幂等 key 都没有。**
+
+`agentApi.createIntegration()` 只带普通 mutation headers；backend `IntegrationService.create()` 每次直接生成随机 UUID。数据库 `agent_integrations` 只有随机 id/scope 唯一约束，没有 `scope + kind + endpoint/profile` 业务去重。两个设置表单又都只在成功响应后才清空。
+
+因此 integration 已插入但响应丢失时，UI 会按失败处理并保留原表单；用户再次创建会得到第二条有效 Integration。
+
+**App Intent create：确认提交同样没有 request identity。**
+
+`POST /apps/:appId/plugin-intents` 的 body 只有 `receiverAppId / intentId / input / artifactRefs / confirmed`，不接受 `Idempotency-Key` 或 client request id。`AppIntentService.createConfirmed()` 每次调用都直接 `id: randomUUID()`；repository 在一个 transaction 里插入 receipt，并为每个 Artifact 再随机生成 grant id。schema 只有 `receipt.id` 与 `(receipt_id, artifact_id)` 唯一，没有“同一 confirmed submission”业务 identity。
+
+因此 receipt + grants 已 commit、HTTP 201 响应丢失时，调用方若按同一已确认 payload 重试，会得到第二个 receipt，并为同一 receiver/artifact 再创建一组 active grant。receiver 列表会出现重复 Intent，grant 的有效期也按第二次提交重新计算。
+
+**建议修复**：createRun 在 submission 层生成并持有 idempotency key，API 接受调用方 key；unknown outcome 用同一 key 重放。Integration / App Intent create 同样增加 caller-stable request/idempotency identity 与 replay/reconcile；Intent 的 durable command 应原子覆盖 receipt + artifact grants，而不是把“再提交一次”当默认恢复路径。
+
+---
+
+### 7.79 ACP Integration / Workspace 的 Delete 仍是单击即执行的不可逆/破坏性动作（P1 · 🟠 开放 2026-09-23）
+
+当前产品已经给多类 destructive action 加了明确确认：Provider 删除弹窗、Run 两段式删除、Thread / 全部会话 armed confirmation、Artifact 删除确认、插件卸载与 Workspace cleanup/uninstall preview-confirm。
+
+但两类同等级操作仍是**单击立即执行**：
+
+- ACP Integration 的 Delete 直接调用 `deleteIntegration()`；backend repository 执行真实 `DELETE FROM agent_integrations ...`，不是 soft-delete；
+- Workspace Runtime 的 Delete 直接调用 `workspaceAction(workspace, 'delete')`；Runner 会 abort workspace jobs、dispose code intelligence，再调用 runtime.remove；成功后 workspace 状态变成 `deleted`。
+
+MCP Integration 本轮重新核对后**不属于该问题**：`removeIntegration()` 已先调用 `feedback.confirm({ destructive: true })`，用户确认后才 DELETE。此前把 MCP 一并写进本条属于 grep 摘要阅读造成的误判，现已纠正。
+
+这不是 §6.7 已关闭的“按钮样式”问题，而是仍存在的 destructive-action 语义缺口：同一产品里用户删除 Provider / Artifact / MCP Integration 需要确认，删除 ACP Integration 或整个运行 workspace 却只需一次点击。
+
+Memory revoke / publisher revoke 本轮没有并入：publisher key 可以重新 trust 同一 key 恢复；Memory revoke 属于状态审查流，不与 SQL/runtime 删除混成一条。
+
+**建议修复**：ACP Integration 删除至少用与 MCP/Provider 相同的 destructive confirm 并展示 profile；Workspace Delete 用两段式或弹窗，并明确“会终止作业并移除运行环境”。确认 UI 必须在 busy/版本冲突时保持目标绑定，不要用当前 selection 临时解析。
+
+---
+
+### 7.80 排除：active App 失效时父层已经会修正 activeAppId（❌ 非缺陷，2026-09-23）
+
+初看 `AgentHubWindow` 时，summary watcher 只修剪 `openAppIds`、没有直接修改 `state.activeAppId`，看起来会在 active App 被禁用/卸载后落到“请选择 App”。
+
+跨组件继续回看后确认这是假阳性：所有写入 `AgentHubWindow` 的 summary 都来自 `AgentSurfaceHost.refresh()`，而该函数在 `summary.value = next` 后立即调用 `chooseDefaultApp(next)`。它会：
+
+- 取所有 enabled apps；
+- 若当前 active id 仍 enabled 则保留；
+- 否则优先切到 `nexus.agent`，再退到第一个 enabled App；
+- 没有 enabled App 时直接关闭 Hub。
+
+因此无论是运行中禁用/卸载，还是 `restoreForUser()` 恢复了一个后来失效的 recent App，父层 refresh 都会在同一 summary 处理链里修正 activeAppId。§7.80 不应作为开放问题保留。
+
+本条保留为**排除记录**，用于说明为什么只看 `AgentHubWindow` 会误判；后续不要重复开启。
+
+---
+
+### 7.81 enabled 但 health=failed 的 App 仍允许 Send，backend 会必然拒绝（P1 · 🟠 开放 2026-09-23）
+
+Hub 当前把“可用 App”等同于 `app.enabled`：
+
+- `AgentHubWindow.enabledApps` 和 `AgentAppSwitcher.candidateApps` 都只过滤 enabled；
+- `AgentSurfaceHost.chooseDefaultApp()` 同样只过滤 enabled，并优先选择 `nexus.agent`；因此即使另有 healthy/degraded App，也可能默认落到一个 enabled-but-failed 的 Agent App；
+- `AgentAppSurface` 只收到 appId/defaultApprovalMode，不收到 health；
+- definitions endpoint 会 `lifecycle.get(scope)` 后继续返回 registry/provider compatibility，不要求 observedState 为 running/degraded；
+- 因此 failed App 仍能拿到 definitions/provider，`canSend` 可以变成 true。
+
+backend `RunService.create()` 的契约却更严格：`desiredState !== enabled` 或 `observedState` 不属于 `running/degraded` 时，直接抛 `AGENT_APP_DISABLED`。
+
+结果是一个确定的“前端可点、后端必拒”窗口；而且当前 tab 本身没有 health failed 文案，用户主要看到的是发送后的错误。
+
+**建议修复**：把 App health/availability 传入 surface，历史 thread 仍可只读查看，但 create/append/需要运行态的 mutation 应按 running/degraded gating；failed 状态在 tab/surface 显示明确原因与恢复入口。前后端共用同一 `canExecuteApp` 语义，避免再出现 §7.47 同类契约错位。
+
+---
+
+### 7.82 Settings 的 optimistic conflict 只报错、不 reconcile；同一 tab 会持续使用 stale revision/version（P2 · 🟠 开放 2026-09-23）
+
+全局 Agent Settings 的写操作大量依赖 optimistic version：
+
+- `patchSettings(..., settings.revision)`；
+- Provider update/delete 使用 `provider.version`；
+- target denylist 使用 `denylist.revision`；
+- hard-limit confirm 使用 preview 的 `expectedVersion`。
+
+这些路径都包在 `AgentSettingsPanel.execute()` 里。当前 catch 只做 `notifyError(...)` 并返回 `undefined`，**不会重取 settings/providers/denylist，也不会更新 stale baseline**。
+
+因此跨 tab（§7.50）或其它并发写导致一次 `SETTINGS_VERSION_CONFLICT / PROVIDER_VERSION_CONFLICT / ...` 后，用户在当前 tab 再点同一个 Save / Toggle / Delete，仍会带旧 revision/version 再次冲突。Agent Settings 主面板没有手动 Refresh 按钮；通常只能整页刷新或碰巧触发其它会重取数据的操作。
+
+项目里已有正确对照：`MemorySettings.mutate()` 对 `MEMORY_VERSION_CONFLICT / MEMORY_REVIEW_STATE_INVALID / NOT_FOUND` 会立即 `loadMemories()`，说明“conflict 后回到权威状态”是已有模式。
+
+但这里不能简单在 conflict 时直接 `load()`：§7.54 已证明全局 revision 更新会让多个卡片 watcher 无条件重建 draft、吃掉其它未保存修改。正确恢复需要同时满足：
+
+1. 更新 authoritative baseline / revision；
+2. 保留本地 dirty draft；
+3. 明确告诉用户 remote state 已变化，并允许基于新 baseline 比较/重新提交；
+4. Provider / denylist 等对象型版本也要按对象刷新，而不是让整个设置页一起 reset。
+
+初始 `load()` 失败也没有 Retry 按钮，只显示 alert；这属于同一 recovery 设计薄弱点，但本条核心是“发生可预期 409 后当前 tab 仍永久持有 stale version”。
+
+**建议修复**：给 settings/provider/denylist 建 conflict-aware reconcile；把 server snapshot 与 local draft 分离，dirty draft 不被 revision watcher覆盖。至少提供明确 Refresh/Reload action，并在重取后展示哪些本地改动仍待保存。
+
+---
+
+### 7.83 Provider “拉取模型”请求可跨 modal 实例污染下一次新建表单（P1 · 🟠 开放 2026-09-23）
+
+第三轮用“async loader 写共享 ref，但没有 generation”机械扫描后，确认 Provider 新建弹窗还有一个跨 modal 的 stale-response 路径。
+
+`pullModelsFromEndpoint()`：
+
+- 开始时只设置 `isPullingModels=true`；
+- 请求返回后无条件写 `pulledModels`；
+- 若列表非空，还立即 `applyPulledModel(match)`，会改写 `form.modelId / contextWindow / maxOutputTokens / supports*`。
+
+而且不需要关闭弹窗也能触发：baseUrl / credential / modelId 输入在 `isPullingModels=true` 时仍可编辑。用户在 endpoint A 请求飞行时直接把表单改成 endpoint B，A 的旧响应返回后同样会覆盖当前 B 表单的 discovered model/capability。
+
+但 Modal 的关闭约束只看 `modalTesting`：
+
+- `closeModal()` 只有 `if (modalTesting.value) return`；
+- BaseModal 的 `close-on-backdrop / close-on-escape` 也只绑定 `!modalTesting`；
+- **拉取模型时 `isPullingModels=true` 并不会阻止关闭**。
+
+而 `openAddModal()` 会把整张 form、`pulledModels`、`selectedPulledModelKey`、`createdProviderId` 全部重置，并直接把 `isPullingModels=false`。因此可以稳定形成：
+
+1. Modal A 填 endpoint A，开始拉模型；
+2. 请求 A 尚未返回时按 Escape / backdrop 关闭；
+3. 立即重新打开 Modal B，填 endpoint B；因为 open 时把 busy 清零，甚至可以再发请求 B；
+4. 请求 A 最后返回；
+5. 旧响应 A 无任何 modal generation / captured baseUrl 校验，直接写进 B 的 `pulledModels`；
+6. `applyPulledModel()` 进一步把 B 的 modelId/capability 字段改成 endpoint A 的结果；
+7. 用户随后保存时，可能把“B 的 baseUrl + A 的模型能力/模型 id”组合提交成新 Provider。
+
+这比普通搜索结果 stale 更严重：旧请求不仅改列表，还会**主动改写下一次新建 Provider 的可保存字段**。
+
+同一组件的 `testInModal()` 在 `modalTesting=true` 时会禁止关闭，因此没有这个跨 modal 问题；风险集中在 pull/discovery 路径。
+
+**建议修复**：
+
+- 为 modal 增加 instance/request generation，open/close 都 invalidate；
+- `pullModelsFromEndpoint()` 捕获 `baseUrl + credential + modalGeneration`，只有当前 modal 仍打开且请求 identity 未变化时才能提交；
+- 或在 pull 期间禁止关闭并明确显示进行中，但 generation guard 仍建议保留；
+- 不要在 `openAddModal()` 中把一个仍有在途请求的 busy flag 直接清零而没有取消/invalidate 旧请求。
+
+---
+
+### 7.84 Provider “测试连接”不是无副作用测试：会先创建真实 Provider，失败/取消后仍保留，后续编辑也不再保存（P1 · 🟠 开放 2026-09-23）
+
+Provider 新建弹窗把“测试连接”和“保存并添加”展示成两个独立操作，但 `testInModal()` 在 Provider 尚未保存时并不是临时探测，而是：
+
+1. 先组装完整 create payload；
+2. 调用 `props.createProvider(payload)`；
+3. 成功返回后立刻写 `createdProviderId = saved.id`；
+4. **然后**才调用 `agentApi.testProvider(targetProviderId, form.modelId)`。
+
+因此 test endpoint 只能测试一个已经持久化的 Provider，带来两个用户不可见的副作用。
+
+**A. 测试失败 / 用户取消，Provider 仍已经存在**
+
+如果 create 成功、随后 test 失败：
+
+- modal 显示“测试失败”；
+- 但 Provider 已经由第 2 步真实写入；
+- `closeModal()` 只把 `modalOpen=false`，没有 delete/rollback；
+- “取消”按钮在测试完成后同样只是关闭 modal。
+
+用户把“测试失败→取消”理解为没有保存，实际设置列表里已经多了一条 Provider。
+
+**B. 一旦测试创建过 Provider，后续表单修改不会再保存**
+
+`submitModal()` 开头是：
+
+`if (createdProviderId.value) { modalOpen.value = false; return; }`
+
+所以 test 成功或失败后，只要 create 那一步成功过：
+
+- 用户可以继续修改 displayName / baseUrl / credential / protocol / modelId / capability 字段；
+- “保存并添加”按钮会变成“确认”；
+- 点击“确认”不会 update Provider，只会关弹窗；
+- 用户刚改的字段静默丢失，服务端仍保留**测试创建时**的旧值。
+
+这与 UI 呈现的“测试连接”和“保存”分离语义冲突，也让 §7.62 的 Provider create commit-boundary 风险更难理解：用户甚至不需要遇到网络失败，正常测试流程本身就已经提前跨过了 commit point。
+
+**建议修复**：
+
+- 最优方案是提供真正无副作用的 test endpoint，直接接受临时 Provider 配置/credential，不先 create；
+- 如果 backend 必须基于 persisted provider 测试，UI 必须明确“保存并测试”，并在失败/取消时提供回滚/保留选择；
+- `createdProviderId` 存在时若允许继续编辑，提交必须走 updateProvider；否则测试后应把表单锁成只读并明确“Provider 已保存”；
+- 增加 regression：test failure + cancel 不应静默留下 Provider；test success 后编辑字段再 confirm 必须与服务端最终值一致。
+
+---
+
+### 7.85 Workspace restart 在 Runner Plugin 激活失败后会保留“running”状态，但必需插件实例已经不存在（P1 · 🟠 开放 2026-09-23）
+
+第三轮转入 Runner runtime 生命周期后，确认 `restart` 与 `start` 的失败语义不对称。
+
+Runner 的 `workspaceAction()`：
+
+- `start`：先 `runtimeEngine.start()`，再 `pluginRunner.activateWorkspace()`；**如果 activate 失败，会 catch 并把 runtime stop 回去**；
+- `restart`：先关闭 ACP / Terminal / Browser，dispose 当前 Runner plugin，然后 `runtimeEngine.restart()`，最后 `pluginRunner.activateWorkspace()`；
+- restart 对最后一步没有 catch/rollback。
+
+而 `runtimeEngine.restart()` 最终会把 generation 的 runtime state 文件写成 `running`。如果某个 frozen Runner plugin 的 `activate()` 抛错：
+
+1. 旧 plugin instance 已被 dispose；
+2. runtime state 已经是 `running`；
+3. 新 plugin instance 在 activate 失败时会从 `PluginRunnerRuntime.instances` 删除并关闭；
+4. command catch 只执行 `journal.fail(commandId, error)`，**不会修改 workspace journal status**；
+5. workspace 原本通常就是 `running`，所以 Runner journal 仍显示 running；
+6. Backend `syncWorkspaceStatus()` 对非-provision 的 failed command 不把 workspace 改成 failed/stopped，因此 Backend projection 也继续显示 running。
+
+正常运行中也没有第二层自动纠正：Runner plugin protocol 虽定义 `lifecycle.health`，但全仓只有类型/worker handler，没有任何 `pluginRunner.request('lifecycle.health')` 调用者。只有 **Runner 整体重启**时 startup reconciler 会对 running workspace 再 activate plugins，失败后把 workspace journal 标成 failed。
+
+因此一次普通“重启工作区”失败后可以长期处于：
+
+- UI / Backend / Runner runtime：`running`；
+- frozen profile 所要求的 Runner plugin：没有 live instance。
+
+这会让“workspace running”失去“冻结 profile 已完整激活”的语义，后续依赖该 Runner plugin 的能力只能在实际使用时再失败。
+
+**建议修复**：
+
+- restart 与 start 使用同一原子失败语义：plugin activation 失败时至少把 runtime stop，并把 journal workspace 写成 stopped/failed；
+- 更稳妥地把 lifecycle transition 做成明确的 `restarting -> running/failed` 投影，而不是先写 running 再做 plugin activate；
+- Backend 对 lifecycle command failure 应在 reconcile 时读取 Runner workspace 实际状态/health，而不是对 restart failure 永远保留旧 running projection；
+- 如果保留 Runner plugin `lifecycle.health` 协议，就接入 workspace health/reconcile；否则删除死协议，避免产生虚假的健康保证；
+- 增加 regression：restart 时 runner plugin activate 抛错后，workspace 不能仍对外呈现 running。
+
+---
+
+### 7.86 toolchain switch 的 delete unknown/failed 可把 Workspace 长期留在 `stopping`（P2 · 🟠 开放 2026-09-23）
+
+Workspace toolchain/version switch 为了防止并发操作观察到“旧 generation 已删、稳定 workspace 暂时不存在”的中间态，会先：
+
+1. 用 optimistic version 把 workspace 从原来的 `ready/running/stopped` 写成 `stopping`；
+2. dispatch 旧 generation 的 `delete`；
+3. delete 成功后才把 generation +1 并 provision 新 profile。
+
+这个 reservation 设计本身合理，而且**同步拿到 delete=failed** 时有显式 rollback：用 `switching.version` 把状态恢复成原 `workspace.status`。
+
+缺口在 outcome unknown：
+
+- dispatch 发生 transport/等待异常时会把本地 command 标成 `unknown`，switch 直接返回 `outcome:'unknown'`，workspace 保持 `stopping`；
+- lifecycle sweep 会周期调用 `workspaceRuntime.reconcile()` 查询 Runner command；
+- 如果后来查询到 `succeeded`，generic `syncWorkspaceStatus()` 会按 delete 把 workspace 改成 `deleted`，后续可以继续人工处理；
+- **如果后来查询到 `failed`，generic projection 对 delete failed 什么都不做**；
+- 如果一直 query 不到，deadline 后 Backend 会把 command 固化为 `unknown + WORKSPACE_RECONCILIATION_REQUIRED`，projection 同样不改 workspace。
+
+此时原状态快照只存在于最初 `switchToolVersions()` 的局部变量，reconcile command 本身没有记录“rollback 应恢复 ready / running / stopped 哪一个”。所以后台已经没有足够信息自动恢复。
+
+影响：
+
+- workspace 长期显示 `stopping`；
+- `switchToolVersions()` 明确只接受 `ready/running/stopped`，因此不能再次尝试版本切换；
+- management 把 `stopping` 视为 active status，cleanup 也不会当普通可清理对象；
+- 当前 App 面板仍允许用户执行 Delete，因此不是绝对不可恢复；但恢复动作变成“删掉整个 Workspace”，而不是继续/回滚原 version switch。
+
+**建议修复**：
+
+- 将 version-switch reservation 的 `previousStatus` / transition intent 持久化到 command 或 workspace transition record；
+- reconcile 得到 delete failed 时按 frozen previousStatus rollback；
+- deadline 后若 outcome 真不可证明，显式投影为 `failed/reconciliation_required` 并提供恢复入口，不要无限保留 `stopping`；
+- 增加 delayed-failure / query-unavailable regression，覆盖“首个请求 outcome unknown、后台 reconcile 后 failed”的路径。
+
+---
+
+### 7.87 Host Runner 异常重启不会回收旧 detached job / ACP / Runner Plugin 进程树（P1 · 🟠 开放 2026-09-23）
+
+Runner 对正常 owner 生命周期的进程回收设计是正确的：Workspace job、ACP、Runner Plugin 都用 `detached: MANAGED_PROCESS_DETACHED` 创建独立 process group，正常 cancel/stop/delete 时通过 `signalManagedProcess()/terminateManagedProcess()` 对整个 group 发 TERM/KILL。
+
+缺口出现在 **Runner controller 自己异常退出 / 被单独重启**：
+
+- `JobRunner`、`AcpProcessRuntime`、`PluginRunnerRuntime` 创建的 child 在 Linux 上都是 detached process group；
+- active process/group 只保存在当前 Node 进程内的 Map/Set/ChildProcess handle，没有 durable PID/group owner record；
+- startup `Reconciler` 对旧 `running` command/job 只写 `unknown(..., 'controller_restarted_during_*')`；
+- 对 running workspace 会重新 `activateWorkspace()`，但新的 `PluginRunnerRuntime.instances` 是空 Map，无法识别或杀掉旧 Runner Plugin child；
+- reconciler 没有扫描旧 process group/session，也没有 owner marker/cgroup 可用于回收。
+
+这在 Docker Runner 中可能被容器生命周期间接兜底：容器主进程退出时 runtime 会终止整个容器进程集合，镜像还使用 tini 回收 zombie。但正式部署文档同时明确支持 **宿主 Host Runner**；Host 模式下单独重启 Node controller 没有这种 cgroup/container kill 保证。
+
+本轮还做了同宿主 Linux 语义探针：短命父 Node 用与 Runner 相同的 `detached:true` 启动 `sleep` child，父进程退出后检查 `/proc/<pid>`，结果为 **`alive_after_parent_exit=true`**；测试 process group 随后已显式 SIGKILL 清理。也就是说这不是理论推测，detached child 确实会越过父 Node 生命周期。
+
+影响包括：
+
+- workspace job 被 journal 标成 unknown，但原命令可能仍在后台继续写 Workspace；
+- ACP live session 在 Backend 已失联/按 restart fail-closed 处理后，旧 native agent process 仍可能继续执行自己的本地工作；
+- Runner Plugin 可能出现“旧实例仍活着 + 新 controller 又 activate 一个新实例”的双实例；
+- 后续 stop/delete 只能关闭**新 controller 已知**的 process handle，无法保证旧孤儿被回收。
+
+这直接违背 SRS-AGENT-010 的约束：**Workspace job、ACP 与 Runner Plugin 的子进程树必须随其 owner 生命周期整组回收**。
+
+**建议修复**：
+
+- Host Runner 使用 durable owner process supervision：例如每个 child group 写入受控 PID/PGID + process start identity，并在 startup reconcile 中安全验证后清理；
+- 更稳妥的是让 Runner 自身拥有专属 cgroup/systemd scope，并在 controller restart 前/启动时由 supervisor 清空旧 scope；
+- 不要只凭裸 PID 杀进程，必须防 PID reuse（记录 Linux starttime / cgroup / pidfd 等稳定身份）；
+- Docker 模式继续依赖容器边界也可以，但 Host 模式必须有等价 owner-lifetime 回收机制；
+- 增加故障注入 regression：启动长 job / ACP / Runner Plugin → SIGKILL Runner controller → 重启 → 旧 process group 不得继续存在，且 journal/reconcile 结果与实际进程状态一致。
+
+---
+
+### 7.88 Plugin upgrade 的 draining continuation 只存在前端内存；刷新后 App 会持久拒绝新 Run（P1 · 🟠 开放 2026-09-23）
+
+Plugin upgrade 在已有 active Run 时采用两阶段 drain，这个设计本身合理：
+
+1. backend 先把 App state 的 `acceptNewRuns` 从 true CAS 成 false；
+2. 若 `runningCount > 0`，返回 `{ state: 'draining', targetVersion, app, plugin }`，暂不切 activeVersion；
+3. 当前 Run 自然结束后，再次调用同一个 upgrade API；此时 `acceptNewRuns=false` 且 `runningCount=0`，才继续 quiesce / migrate / activate / switch version。
+
+前端也明确把按钮从“升级”改成“继续升级”，因此这里不是“缺少后台自动续跑”本身，而是**续跑身份没有持久 owner**。
+
+`PluginManagementSettings` 把 continuation 需要的两块关键状态都放在组件本地：
+
+- `candidate` 保存 verified package / `stage.id`；
+- `drainingUpgradeVersion` 保存第一次 drain 返回后的 App state version，供第二次 upgrade 当 expectedVersion。
+
+第一次请求返回 draining 后，只做：
+
+- `drainingUpgradeVersion = result.app.version`；
+- 保留当前 `candidate`；
+- 显示 notice，并把按钮改成“继续升级”。
+
+但这两者都只是 Vue ref。页面刷新、设置页卸载/重挂或浏览器会话丢失后：
+
+- `candidate=null`；
+- `drainingUpgradeVersion=null`；
+- `onMounted(refresh)` 只重拉 publishers / installations / versions / remote catalogs；
+- frontend/backend 都没有“列出当前用户 stage / pending upgrade / resume token”的 API；
+- App 的服务端 state 却仍然持久化为 `acceptNewRuns=false`。
+
+此后 createRun/checkpoint-resume 等路径会稳定抛 `AGENT_APP_DRAINING`。普通 App summary 也没有足够信息让 Plugin Management 自动重建原 stage continuation。用户实际能做的恢复是**重新获取/上传并 stage + verify 同一个目标包**，再用新的 candidate 调 upgrade；这是偶然可恢复，不是产品化 continuation。
+
+这意味着一个正常操作就能稳定制造“设置页一刷新，App 不再接受新 Run，但 UI 不知道待继续升级”的持久状态。
+
+Uninstall 也复用 backend draining 语义，但当前 UI 只允许对 disabled App 发起 uninstall；正常 disable 已先 quiesce active Run，因此本条重点是**enabled App 的 upgrade**，不把低概率的 uninstall drain 混进结论。
+
+**建议修复**：
+
+- 把 pending upgrade/drain intent 持久化到 backend（至少 appId、from/to version、stage identity/target package hash、开始时 state version），而不是只靠 Vue ref；
+- 提供 query/resume/cancel API；Settings mount 时能恢复“继续升级”状态；
+- cancel/drain-abandon 必须安全地把 `acceptNewRuns` 恢复为 true，前提是 activeVersion/transition identity 仍匹配；
+- stage cleanup 不得在 pending upgrade 存续期间误删 continuation 所需包；
+- 增加 regression：active Run → upgrade 返回 draining → reload Settings → Run 结束 → 仍能看到并完成/取消 pending upgrade，不能永久停在 `AGENT_APP_DRAINING`。
+
+---
+
+### 7.89 runtime cleanup 不等待 ACP / Terminal 子进程真正退出，就可删除整个 Workspace 根目录（P1 · 🟠 开放 2026-09-23）
+
+Runner cleanup 的规范要求是“preview 冻结集合 → confirm → Runner re-check”，并且执行时仍应跳过 **active job/session**。Jobs 这一半有实现：`CleanupPlanner.runtimeCleanup()` 会从 journal 收集 pending/running job 的 workspaceId，并跳过。
+
+但 ACP / Terminal session 没有进入这个 re-check：
+
+- `AcpProcessRuntime.closeWorkspace()` 调用 active process 的 `close()`；
+- `close()` 会**立刻**把 process 从 `active` Set 移除，然后只做 `void terminateManagedProcess(child)`；
+- `terminateManagedProcess()` 允许先等 2 秒 graceful exit，再 SIGKILL 后再等 1 秒；
+- `WorkspaceTerminalRuntime.closeWorkspace()` 同样立刻从 active Set 移除，发 TERM，并用 2 秒 timer 再 KILL；
+- 两类 close 都不是 awaitable，`workspaceAction(stop/delete)` 不会等待这些 child 真正退出；
+- Browser tunnel 的 close 也是 socket close，不是 cleanup planner 的可见 session ownership；Runner Plugin dispose 反而会 await `instance.close()`，因此本条主要针对 ACP / Terminal。
+
+随后 lifecycle command 可以立刻：
+
+- `runtimeEngine.stop()` / `remove()`；
+- journal workspace 保存为 `stopped` / `deleted`；
+- Backend projection 同步成非 active 状态。
+
+Backend 的 `previewRuntimeCleanup()` 使用：
+
+`!retained && !ACTIVE_WORKSPACE_STATUSES.has(status)`
+
+其中 active set 只包含 `creating/starting/running/stopping/deleting`，所以**刚刚变成 stopped/deleted/failed 的 workspace 会立即成为 cleanup candidate**，没有 session-drain 冷却期。
+
+Runner 收到 runtimeCleanup 后再次检查的也只有：
+
+- retained；
+- status 是 creating/running；
+- journal active jobs。
+
+它没有 ACP/Terminal live/closing session registry，也没有 owner PID/PGID drain barrier。
+
+因此可稳定形成：
+
+1. Workspace running，存在 ACP 或 Terminal child；
+2. 用户 Stop/Delete；
+3. Runner 发 TERM，但 child 仍可继续 0–3 秒；
+4. lifecycle command 已成功，workspace projection 变 stopped/deleted；
+5. 用户立即 preview + confirm Runtime Cleanup；
+6. Runner 认为可回收，直接 `rm -rf runtime/workspaces/<workspaceId>`；
+7. 旧 ACP/Terminal child 仍可能在该目录 / 其派生进程上继续运行，直到稍后 TERM/KILL 生效。
+
+这直接违背 SRS-AGENT-010 的“**Workspace job、ACP 与 Runner Plugin 的子进程树必须随 owner 生命周期整组回收**”以及 cleanup “active job/session 必须跳过”的语义。它也与 §7.87 不同：§7.87 是 controller 异常重启后的 orphan；本条在**正常 stop/delete + 立即 cleanup**路径就可触发。
+
+**建议修复**：
+
+- 让 ACP/Terminal `closeWorkspace()` 返回 Promise，并等待整组 process/session 真正退出后，lifecycle command 才能进入 stopped/deleted success；
+- 或为 Runner 暴露统一的 workspace live-owner registry，cleanup re-check 必须同时看到 jobs + ACP + Terminal + Browser + Runner Plugin 都为 0；
+- cleanup confirm 时再次检查“closing/draining owner”而不是只看 journal status；
+- child 终止超过 deadline 时应 quarantine/reconciliation_required，而不是继续删 workspace root；
+- 增加 regression：启动长 ACP/Terminal → Stop/Delete → 立刻 runtime cleanup confirm；在 child 完全退出前 Runner 必须返回 skipped/failed，不得删除 workspace root。
+
+---
+
+### 7.90 Checkpoint capture 的 owner gate 不完整：Terminal / ACP live writer 与 restart 后 unknown job 可绕过（P1 · 🟠 开放 2026-09-23）
+
+继续向下核 Runner Engine 后，先纠正本条一个早期判断：**正常、仍由当前 Runner controller 管理的 Workspace background job 不会与 checkpoint archive 并发。** `WorkspaceRuntimeEngine.openCheckpointArchive()` 会检查当前 `jobs.get(workspaceId,generation)`；只要其中还有 controller，就直接抛 `WORKSPACE_CHECKPOINT_NOT_SAFE`。而新 job 被接受后，`executeJob()` 在第一次 await 之前就把 controller 放入该 Map，因此普通 pending/running job 已有真实 gate。
+
+仍然成立的缺口有两类，而且都来自“安全门只看当前进程内 jobs Map”。
+
+**A. user checkpoint 丢掉 durable unknown job。**
+
+Recovery checkpoint 会调用 `liveBackgroundJobs()`：从 durable tool-call 记录还原 jobId，再向 Runner `queryJob()`，遇到 `pending / running / unknown` 或查询失败都 fail closed。User checkpoint 却直接：
+
+`const backgroundJobs = kind === 'recovery' ? await this.liveBackgroundJobs(scope, run.id) : [];`
+
+因此 user checkpoint 从不观察 durable job，manifest 固定写 `backgroundJobs=[]`。
+
+Runner controller 重启时，startup reconciler 会把原 `running` job 标成 `unknown`，但新的 `WorkspaceRuntimeEngine.jobs` 是空 Map。此时 archive gate 已无法看到这条 durable unknown job：
+
+- Docker Runner 即使已由容器生命周期杀掉旧 child，**job outcome 仍然未知**，按 recovery checkpoint 的既有语义本应拒绝建立新 safe point；
+- Host Runner 下还会叠加 §7.87：旧 detached job 可能仍在写 Workspace，而新 controller 的 jobs Map 完全不知道它。
+
+User checkpoint 此时仍可 capture，并把 unknown job 从 manifest 中抹掉；后续 manual resume 的 checkpoint validation 也没有 jobId 可再次查询。
+
+**B. Terminal / ACP live writer 从来不在 jobs Map。**
+
+Workspace Terminal shell 与 ACP native process 都以同一 Workspace 的 work directory 运行，能够修改 `/workspace/work`，但它们由各自 runtime 管理，不登记到 `WorkspaceRuntimeEngine.jobs`。因此即使 Runner 没有任何 background job：
+
+- Terminal 正在执行写文件命令时可以同时创建 archive；
+- ACP process 正在修改项目时也可以同时创建 archive；
+- recovery checkpoint 虽然检查 `liveBackgroundJobs()`，同样没有 Terminal/ACP quiesce barrier。
+
+`createWorkspaceCheckpointArchive()` 的 tar path/link/size 校验是正确的；问题不是 archive 结构安全，而是**多个文件可能取自 writer 的不同时间点，却被当成一致、可恢复的 Workspace safe point**。
+
+前端的“保存检查点”只看 `busy / cancelling / needsReconciliation`，也没有 Workspace owner/session 状态可用于阻止上述情况。
+
+**建议修复**：
+
+- user checkpoint 与 recovery checkpoint 都先检查 durable background job；`unknown` 必须 fail closed，不能写成空数组；
+- Runner 建统一的 Workspace live-owner registry / quiesce barrier，checkpoint capture 至少等待 jobs + ACP + Terminal（以及任何能写 core workRoot 的 owner）为 0；
+- archive capture 应在 Runner 内获得一个与 workspace mutation owner 互斥的 snapshot lease，而不是只看某一个内存 Map；
+- Host Runner restart 后，先解决 §7.87 的 orphan owner，再允许建立新的 checkpoint safe point；
+- 增加 regression：① Runner restart 后 journal job=unknown 时 user checkpoint 必须拒绝；② Terminal/ACP 持续交替写两个文件时 user/recovery checkpoint 都必须拒绝或先 quiesce。
+
+---
+
+### 7.91 Checkpoint restore 在目录 rename 中点崩溃后无法 startup reconcile，可留下“ready 但 workRoot 消失”的 Workspace（P1 · 🟠 开放 2026-09-23）
+
+Runner 的 checkpoint restore 对**正常异常**处理是认真做过的：
+
+- 先把上传 tar 写到 scratch；
+- validate archive path/type/size；
+- 解到 staging；
+- 切换时先 `rename(workRoot, backup)`；
+- 再 `rename(staging, workRoot)`；
+- 第二次 rename 抛错时，会把 backup rename 回 workRoot；
+- `finally` 也会在普通异常下清 archive/staging，并在 `workRoot` 不存在时尝试恢复 backup。
+
+问题是这些回滚全部依赖**同一个 Node 进程继续执行 catch/finally**。如果 Runner controller / 主机恰好在两个 rename 之间异常退出：
+
+1. 原 `workRoot` 已被原子 rename 成 `.control/checkpoints/work-backup-<token>`；
+2. staging 还没有 rename 到 `workRoot`；
+3. 进程直接消失，catch/finally 不会执行；
+4. generation 的 `.control/state` 完全没有变化，仍是 restore 前的 `ready`；
+5. journal 也没有“restore transition / backup token”持久事实。
+
+Runner startup `Reconciler` 只调用：
+
+`runtimeEngine.reconcile(workspace)`
+
+而 `WorkspaceRuntimeEngine.reconcile()` 只是读取 `runtime.status(workspaceId, generation)` 并把 `ready/running/stopped/deleted` 映射回 journal；**不会检查 `core/workspace/work` 是否存在，也不会扫描 `work-backup-*` / `restore-*` scratch**。
+
+因此上述 crash 后，重启会继续把 Workspace 保存成 `ready`，但真实：
+
+`runtime/workspaces/<workspaceId>/core/workspace/work`
+
+已经不存在。后续 job / terminal / file / code-intelligence 路径才会在实际访问时暴露 ENOENT/WORKSPACE_NOT_FOUND 类失败；系统没有自动选择“恢复 backup”或“完成 staging”的依据。
+
+这不是 tar traversal 问题：archive 校验与 symlink/path 限制本身是正确的。问题是**目录级事务没有 durable commit marker / startup recovery**。
+
+**建议修复**：
+
+- restore 切换前持久化一个小型 transaction record：workspaceId/generation/token/phase/original path/staging/backup；
+- startup reconcile 在普通 workspace 状态判断前处理未完成 restore：
+  - 只有 backup、无 workRoot → 恢复 backup 或按 phase 完成 staging；
+  - workRoot + backup 同时存在 → 根据 durable phase/hash 明确 finalize，不要静默删任一侧；
+- transaction 成功提交后再删除 backup/record；
+- 至少在 `reconcile()` 中把“state=ready 但 workRoot 不存在”判为 failed，而不是继续 ready；
+- 增加故障注入：在两次 rename 之间 SIGKILL Runner → restart → 必须自动恢复到旧 workRoot 或明确 failed/reconciliation_required，不能继续呈现 ready。
+
+---
+
+### 7.92 Terminal / ACP 外部 writer 可穿透 file patch 的 SHA precondition，并被 confirmed mutation 静默覆盖（P1 · 🟠 开放 2026-09-23）
+
+Workspace coding mutation 表面上已经有两层并发保护：
+
+- Backend governed mutation 有 resource lease 与 inspection 的 frozen SHA；
+- Runner 的 `write-file / move / delete / apply-patch` 路由在真正 mutation 前都会拒绝 `hasActiveWorkspaceJob(workspaceId,generation)`。
+
+但第二层只把 **Runner Workspace job** 当 writer。Workspace Terminal 与 ACP native process 都能直接在同一 `/workspace/work` 下写文件，却不登记到 `WorkspaceRuntimeEngine.jobs`，因此不会命中该 guard。
+
+`applyWorkspacePatch()` 自身也做了认真校验：
+
+1. prepare 阶段读取每个文件并核 `expectedFiles.sha256`；
+2. patch 全部准备完后，再次逐文件读取并核 `beforeSha256`；
+3. 然后才为所有文件创建 temp、写入、fsync；
+4. 最后逐个 `renameSync(temp,target)`。
+
+问题是第 2 步到第 4 步之间仍是 OS 级 TOCTOU。Node 主线程虽然同步执行，但 Terminal/ACP 是独立进程，可以在最终 recheck 之后、rename 之前修改目标文件。Runner 没有统一 live-writer lease，也没有文件系统 compare-and-swap primitive；最后 rename 会无条件覆盖这次外部修改。
+
+本轮做了只写 `/tmp` 的真实函数探针，直接调用仓库的 `applyWorkspacePatch()`：
+
+- 建 16 个约 4 MiB 的测试文件，让 patch 同时修改 16 个文件，从而形成可测量的 temp/fsync 窗口；
+- 基线整次约 **340 ms**；
+- 外部 Python 子进程在 20 ms / 200 ms 改最后一个文件时，都落在最终 hash recheck 之前，函数正确抛 `WORKSPACE_FILE_HASH_CONFLICT`；
+- 把外部写入推到 **280 ms** 后，修改发生在 final recheck 之后；
+- 结果为：`durationMs=343, applied=true, error=null, externalMarkerSurvived=false, finalStarts="NEW-15..."`。
+
+也就是说同一个 guard **既能证明早期并发被检测，也能证明 recheck 后的真实窗口可触发**。测试目录随后已删除。
+
+这两份 Runner 文件在审计基线 `862a458..HEAD` 没有代码变化，因此探针对应 66-commit 复核范围的当前实现。
+
+这一点和“multi-file rename 中途 I/O failure”不同：后者会抛异常，被 `ToolCallRunner.executeMutation()` 转成 `outcome:'unknown'` 并 quarantine；本条 race 中 Runner 正常返回 `applied:true`，`file_patch` 随即返回 confirmed ToolResult，Backend 会把 mutation **正常 settle 为 confirmed**。被 Terminal/ACP 写入的新内容已经丢失，却没有 conflict / reconciliation 信号。
+
+同一 owner blind spot 也存在于 write/move/delete 路由；其中 move 有 post-rename hash verification，部分 race 会转成 unknown，而 delete 在初次 hash check 后直接 `rmSync`，同样缺少与外部 writer 的统一互斥。本条以已动态复现的 multi-file patch 为确定证据，不扩大到未实测的每一种竞态。
+
+**建议修复**：
+
+- 把 Workspace mutation ownership 从“只看 active job”提升为统一 live-writer owner：jobs、Terminal、ACP 以及其它可直接写 core workRoot 的 runtime 都进入同一个 mutation/quiesce 协议；
+- governed file mutation 执行期间必须取得能阻止这些外部 writer 的 Workspace snapshot/mutation lease；仅重复 hash recheck 不能消除 OS 进程并发窗口；
+- 如果 Terminal/ACP 无法合作实现细粒度文件锁，至少在其 write-capable session/process 活跃时拒绝 governed file mutation，或先 quiesce 对应 owner；
+- confirmed 只能在冻结 precondition 从检查到 commit 都受保护时返回；无法保证时应 fail closed 为 conflict/unknown，而不是把最终 rename 当作成功证明；
+- 增加 race regression：外部 writer 在 final hash recheck 后、rename 前改目标文件，mutation 必须拒绝/unknown，绝不能 `applied:true` 后静默覆盖。
+
+---
+
+### 7.93 Workspace lifecycle 不等待 background job 真正退出；stop / restart / delete 可在旧进程树仍存活时成功（P1 · 🟠 开放 2026-09-23）
+
+Runner 对 Workspace background job 的取消机制本身会杀整个 process group，但 lifecycle owner 没有等待这个动作完成。
+
+`WorkspaceRuntimeEngine.stop()/restart()/remove()` 都先调用：
+
+`this.abortJobs(workspaceId, generation)`
+
+而 `abortJobs()` 的实现只是：
+
+- 对当前 Map 中每个 controller 调 `controller.abort()`；
+- **立即** `this.jobs.delete(key)`；
+- 不保存/await `JobRunner.run()` 返回的 Promise，也不等待 child `close`。
+
+`JobRunner` 收到 Abort 后会同步发 SIGTERM，但允许最多 2 秒 graceful window；超时才 SIGKILL，Promise 只有真正收到 `close` 后才 settle。与此同时 `workspaceAction()` 已继续执行：
+
+- stop：写 runtime state=stopped，journal 保存 stopped，command succeeded；
+- restart：写 runtime state=running，重新 activate Runner Plugin，journal 保存 running，command succeeded；
+- delete：删除 generation root，journal 保存 deleted，command succeeded。
+
+Backend 在发 stop/restart/delete 前也没有 durable job barrier；`workspaceInvalidated` hook 只关闭 Browser/Terminal，并不会等待 Runner job。
+
+本轮直接调用真实 `JobRunner` 做了无侵入探针：child 使用 shell trap 忽略 SIGTERM，100ms 后触发 Abort。结果：
+
+`elapsedMs=2107, exitCode=null, signal="SIGKILL", stdout="ready", timedOut=false`
+
+即 Abort 发出后，真实 child process group 还能存活约 2 秒；Runner lifecycle 当前不会等待这段时间。
+
+Server 的 `hasActiveWorkspaceJob()` 使用 journal，因此在 job 真正 close、journal 从 running 转终态之前，新的 Workspace job 与 file mutation 仍会被挡住，这是正确的；但仍有三个确定缺口：
+
+1. **restart owner overlap**：新 runtime / Runner Plugin 已重新 active，旧 background job 仍可能继续执行和写 core Workspace；
+2. **lifecycle 状态不真实**：API/command 已显示 stopped/running/deleted，但 owner 子进程树尚未完成回收；
+3. **Engine 内存 gate 提前消失**：`abortJobs()` 已删除 `WorkspaceRuntimeEngine.jobs`，因此只依赖该 Map 的 owner safety（例如 checkpoint capture，见 §7.90）会在 journal job 尚 running 时提前失去保护。
+
+这与 §7.87 不同：§7.87 是 Runner controller 异常重启后 detached child 彻底失去 owner；本条在**正常 lifecycle 命令**下就能稳定触发，而且 kill 最终通常会成功，但 command 成功边界提前了约 0–2 秒。
+
+**建议修复**：
+
+- `abortJobs()` 改成 async drain：触发 abort 后 await 对应 job Promise/process-group close，再从 live owner registry 移除；
+- stop/restart/delete 的 success commit point 必须在所有 background job 子进程树真正退出之后；
+- 超过 kill deadline 仍无法确认退出时，不得继续标 lifecycle succeeded；应进入 failed/reconciliation_required；
+- owner registry 与 journal 状态应在 child close 后一起收敛，不能先清 Engine Map；
+- 增加 regression：job trap SIGTERM → Stop/Restart/Delete；命令在约 2 秒 SIGKILL close 前不得 succeeded，Restart 不得在旧 job 存活时 activate 新 owner。
+
+---
+
+### 7.94 toolchain switch 可在旧 generation ACP / Terminal 仍存活时启动新 generation，旧代进程可继续写新代 workRoot（P1 · 🟠 开放 2026-09-23）
+
+继续沿 generation lifecycle 反查后，确认 §7.89 / §7.93 的“owner drain 不是 success barrier”会在 **toolchain/version switch** 上形成一个更具体的跨代污染窗口。
+
+Backend 的 `switchToolVersions()` 顺序是：
+
+1. 把稳定 workspace 状态 reservation 成 `stopping`；
+2. dispatch 旧 generation 的 `delete`；
+3. **只要 delete command 返回 succeeded**，立即把 generation +1 并更新 frozen profile；
+4. dispatch `provision(g+1)`；
+5. 如果旧 workspace 原本 running，再立即 `start(g+1)`。
+
+Runner 的 old-generation delete 则是：
+
+- `acpRuntime.closeWorkspace(workspaceId, generation)`；
+- `terminalRuntime.closeWorkspace(workspaceId, generation)`；
+- `browserTunnel.closeWorkspace(...)`；
+- await Runner Plugin dispose；
+- `runtimeEngine.remove(oldGeneration)`；
+- journal 保存 `deleted`，command succeeded。
+
+问题在前两步不是 drain barrier：
+
+- ACP `close()` 立即把 instance 从 active Set 移除，然后 `void terminateManagedProcess(child)`；
+- `terminateManagedProcess()` 允许约 2 秒 SIGTERM grace，再 SIGKILL 后继续等待；
+- Terminal close 同样立即移出 active Set / close socket，发 TERM 后用约 2 秒 timer 再 KILL；
+- `workspaceAction(delete)` 不 await ACP/Terminal 的真实 child close。
+
+而 Workspace 项目目录本来就是 workspace-scoped 持久目录：
+
+`runtime/workspaces/<workspaceId>/core/workspace/work`
+
+**不随 generation 重建**。generation 只冻结运行环境/toolchain。
+
+因此可稳定形成：
+
+1. generation N 正在 running，Terminal/ACP child 当前 cwd 位于持久 `/workspace/work`；
+2. 用户切换 toolchain；
+3. Runner 对旧 child 发 TERM，但它忽略/延迟退出；
+4. old-generation delete 已返回 succeeded；
+5. Backend 立即 provision/start generation N+1；
+6. 新代已经对外呈现 ready/running；
+7. 旧 generation child 仍可在后续 0–3 秒继续读写同一个 workRoot。
+
+后果：
+
+- generation freeze 只冻结 profile/toolchain，却没有冻结**writer ownership**；
+- 新 generation 的 job / Runner Plugin / checkpoint / governed file mutation 可以与旧代 ACP/Terminal 同时作用于同一项目树；
+- 旧代使用的是上一代环境/profile，但写入会直接成为新代可见文件状态，且没有“来自 stale generation”的标记；
+- 这不是单纯的 cleanup race：即使永远不执行 runtime cleanup，跨代 writer overlap 已经发生。
+
+§7.93 已证明 background job 也存在 restart owner overlap；本条补的是 **ACP/Terminal + toolchain generation switch**，它们不在 job journal/Engine jobs Map 里，因此不能靠 §7.93 当前的 job guard 自动覆盖。
+
+**建议修复**：
+
+- old-generation delete 的 succeeded commit point 必须等待 **所有** generation-owned writer 真正退出：jobs + ACP + Terminal + Runner Plugin（Browser socket 也应关闭确认）；
+- generation switch 在 owner drain 未确认前不得 reconfigure/provision N+1；
+- 建统一 `WorkspaceGenerationOwnerRegistry`，所有可写 core workRoot 的 runtime 都按 `workspaceId+generation` 注册/退出；
+- drain 超时进入 failed/reconciliation_required，不能把旧代 writer 留给新 generation；
+- 增加 regression：旧代 ACP/Terminal trap/忽略 SIGTERM → toolchain switch；N+1 在旧 child close 前不得 provision/start，且旧 child 不得在 N+1 ready 后继续修改 workRoot。
+
+---
+
+### 7.95 普通 Workspace restart 也不等待 ACP / Terminal 真正退出，旧 session 可与已重启 runtime 同时存活（P1 · 🟠 开放 2026-09-23）
+
+§7.94 是 toolchain switch 的跨 generation writer overlap；继续回看普通 `restart` 后，确认即使 **generation 不变化**，成功路径也存在同类 owner drain 提前。
+
+Runner `workspaceAction(restart)` 的顺序是：先 `acpRuntime.closeWorkspace()`、`terminalRuntime.closeWorkspace()`、关闭 Browser，await Runner Plugin dispose；随后直接 `runtimeEngine.restart()`、重新 `pluginRunner.activateWorkspace()`，最后把 journal 保存为 `running`。
+
+问题是 ACP / Terminal 的 close 都不是 drain barrier：ACP 会立刻从 active Set 移除，然后 `void terminateManagedProcess(child)`；Terminal 也先移出 active Set/关 socket，再发 TERM 并用 timer 延后 KILL。两者都可能再存活约 2–3 秒。
+
+因此普通 restart 可以在旧 ACP/Terminal child 仍活着时重新启动 runtime / Runner Plugin，并把 Workspace 对外标成 running。旧 child 与新的 owner 共享同一个持久 `runtime/workspaces/<workspaceId>/core/workspace/work`，仍可并发修改项目文件。
+
+这与 §7.93 的 background job restart overlap 是并列缺口：只把 `abortJobs()` 改成 awaitable 并不能处理 ACP/Terminal；也与 §7.94 不同，本条不需要 generation switch，普通“重启工作区”即可触发。
+
+**建议修复**：ACP/Terminal `closeWorkspace()` 返回可 await 的 drain Promise；restart 在所有 write-capable owner 真正 close 前不得 restart runtime、activate plugin 或 commit running；与 §7.93/§7.94 收敛成统一 Workspace owner-drain barrier，超时进入 failed/reconciliation_required，并补“旧 shell/ACP 忽略 SIGTERM → restart 不得提前成功”的 regression。
+
+---
+
+### 7.96 手动 checkpoint resume 先提交新 Run、后 restore Workspace；restore 失败后重试会因新幂等 key 再创建一个 Run（P1 · 🟠 开放 2026-09-23）
+
+Checkpoint resume 的 Backend 幂等机制本身可以 replay，但手动 UI 没有保留同一个恢复意图的 key，且 durable commit point 放在 Workspace restore 之前。
+
+`CheckpointService.resume()` 的顺序是：先完成 checkpoint/model/provider/definition/workspace manifest validation；随后调用 `stateCommit.createRun(...)` 创建新的 resumed Run；**只有 createRun 已 durable commit 后**，才根据新 Run 的 runtimeId 调 `workspaceCheckpoints.restore(...)`。如果 restore 抛错，方法直接失败退出，此时新 Run 已经存在，后续 source audit、approval supersede、`onCreated()` 尚未执行。
+
+前端 `agentApi.resumeRun()` 每次调用都现场生成 `crypto.randomUUID()` 作为 Idempotency-Key。`AgentAppSurface.resumeCheckpoint()` 失败时调用 `recoverRuntimeFailure(cause, snapshot.id)`，这里传的是**source Run id**；由于客户端从未拿到 `committed.run.id`，无法查询刚刚已经创建的新 Run。
+
+于是可形成：① source Run 点击“恢复为新 Run”；② Backend 已创建 resumed Run；③ Workspace restore 失败/连接中断；④ API 返回失败，UI 仍停在 source Run；⑤ 用户再次点击恢复；⑥ 前端生成新 key；⑦ Backend 把它当成新 create command，再创建第二个 resumed Run。
+
+自动 backend-restart recovery 不受同一问题影响：它把 `checkpoint.id` 作为稳定 idempotency key；失败后 retry 会 replay 同一个 resumed Run，再次尝试 restore。这说明正确恢复模式已经存在，缺口集中在手动 UI 的 key 生命周期。
+
+**建议修复**：手动 resume 在用户恢复意图层生成并持有稳定 key；restore outcome 未确认前重试必须复用同 key。更稳妥地把 resumed Run 的“created但workspace restore pending”做成 durable recovery phase，restore 失败时标 reconciliation_required/failed，而不是让 API 只抛错；前端也应能按 stable request key 查询/恢复已创建的新 Run。
+
+---
+
+### 7.97 Workspace lifecycle 的 expectedVersion 不是原子 claim；并发不同 action 可同时通过并由最后完成者覆盖（P1 · 🟠 开放 2026-09-23）
+
+继续反查 Workspace lifecycle 的 optimistic concurrency 后，确认当前 `expectedVersion` 只做**读时检查**，并没有在 dispatch 前原子占用该版本。
+
+Backend `action()` 的顺序是：
+
+1. `repository.getWorkspace()`；
+2. 比较 `workspace.version === expectedVersion`；
+3. 直接 `dispatch(...)` 创建 runtime command。
+
+这里没有 `UPDATE ... WHERE version=?` 把 Workspace 先推进 `starting/stopping/deleting`，也没有 lease/command epoch。不同 action 的 `operationHash` 不同，因此两个请求即使都基于同一个 version，也会各自创建命令。
+
+Runner 侧同样没有 per-workspace 串行器：`beginCommand()` 把每条 pending command 设成 running 后直接：
+
+`void this.executeWorkspaceCommand(command)`
+
+所以两个不同 lifecycle command 会真实并发执行 `workspaceAction()`。
+
+这在多 tab 下是可达的：tab A / B 都拿到 Workspace version `v`，一个发 `stop`，另一个发 `restart`（或 `start/delete` 等），两边的 Backend 请求可以在任一 projection 落库前同时读到 `v` 并通过校验。
+
+更关键的是 completion projection 并不会使用“命令创建时的 expectedVersion”做 CAS。`syncWorkspaceStatus()` 会：
+
+- 命令完成后重新 `getWorkspace()`；
+- 基于**此刻最新**的 `workspace.version` 计算 next status；
+- 调 `setWorkspaceStatus(..., workspace.version, next)`；
+- `STATE_CONFLICT` 还会被静默吞掉。
+
+因此 optimistic concurrency 实际退化成了**完成顺序语义**：
+
+- stop 先完成 → projection 把 `v` 改成 stopped / `v+1`；
+- restart 后完成 → 再读到 `v+1`，照样把它改回 running / `v+2`；
+- 两个请求最初明明都提交了同一个 stale `expectedVersion=v`，却都可以返回成功。
+
+Runner 的物理副作用同样会交叉：ACP/Terminal close、Plugin dispose/activate、runtime state 写入、background job abort 都没有单 workspace command barrier；这会放大 §7.93–§7.95 已确认的 owner-drain 窗口。
+
+这不是“用户连续点两次同一按钮”的重复请求：同 action + 同 payload 会被 operationHash replay；问题集中在**不同 action**，例如 Stop vs Restart、Restart vs Delete，或两个 tab 对同一旧状态作出不同决策。
+
+**建议修复**：
+
+- 在 Backend dispatch 前做原子 lifecycle claim：`UPDATE workspace SET status=<transitional>, version=version+1 WHERE id=? AND version=? AND status IN (...)`；claim 失败直接 `STATE_CONFLICT`；
+- command 记录绑定 claimed workspace version / lifecycle epoch，completion projection 只能提交到该 epoch，不能重新读最新 version 后“顺手继续”；
+- Runner 再增加 per-`workspaceId:generation` lifecycle queue / mutex 作为第二道防线，避免即使 Backend 重复 dispatch 也并行执行物理副作用；
+- 加双请求 regression：同 version 并发 `stop + restart`、`restart + delete`；最多一个 command 能取得 lifecycle claim，另一个必须 conflict，不能出现两个都 succeeded。
+
+---
+
+### 7.98 Toolchain 的全局 canonical symlink 会让不同 frozen digest 的 Workspace 互相改写 PATH 解析（P1 · 🟠 开放 2026-09-23）
+
+Runner 对 Toolchain Pack 的**存储身份**是 content-addressed 的：
+
+`<packsRoot>/<family>/<version>/<contentDigest>`
+
+Workspace metadata 也冻结完整 `familyId / versionId / contentDigest`，`prepareExecution()` 不会拿旧 Workspace 的 digest 重新对当前 catalog 做替换；这允许旧 generation 在 catalog revision 更新后继续使用已经安装的旧 digest。
+
+但进程实际执行时没有直接使用 digest path，而是每次 `prepareExecution()` 都先：
+
+`this.store.activate(pack)`
+
+`ToolchainStore.activate()` 把一个**全局共享** canonical symlink：
+
+`/opt/nexus/packs/<family>/<version>`
+
+切到当前 ref 的 content-addressed target。随后 job/ACP/Terminal 的 `PATH` 里加入的也是：
+
+`/opt/nexus/packs/<family>/<version>/bin`
+
+而不是冻结 digest 的真实目录。
+
+这与存储/cleanup 语义矛盾：
+
+- `ToolchainStore.path(ref)` 明确把 contentDigest 纳入路径；
+- cleanup / uninstall 的 in-use 判断也按精确 `family/version/contentDigest`；
+- 因此系统允许两个 Workspace 同时保留同 family/version 的不同 digest，例如 Runner 重启后 catalog 对同一 version 更新了内容，而旧 Workspace 继续引用旧 digest。
+
+此时任何另一个 Workspace 的 `prepareExecution()` 都会改写全局 canonical symlink。已经运行中的 Terminal / ACP / 长寿命 shell 虽然环境变量 `PATH` 字符串不变，但下一次按 PATH 查找 `node/python/go/...` 时会重新沿 symlink 解析，可能落到**另一 Workspace 的 digest**。
+
+本轮做了无侵入 `/tmp` 探针验证这一文件系统语义：
+
+- 长寿命 bash 的 PATH 固定为 `<canonical>/bin`；
+- 第一次 `nxprobe` 输出 `digest-one`；
+- 仅把 canonical symlink 从 d1 切到 d2，不改 shell 的 PATH；
+- 同一个 shell 第二次执行 `nxprobe` 输出 `digest-two`。
+
+因此这不是“新进程才会读新链接”的理论风险。
+
+影响：
+
+- Workspace generation 声称冻结的 toolchain contentDigest 不能真正约束长寿命执行环境；
+- 两个 Workspace/两代 generation 可以通过普通执行互相改写对方后续命令解析；
+- Terminal 用户在会话中先后执行同一命令，二者可能来自不同 digest，而 UI / metadata 仍显示原 frozen snapshot；
+- 如果同 versionId 的 pack 被重新构建/重签、行为发生变化，这会成为不可审计的环境漂移。
+
+**建议修复**：
+
+- Workspace execution PATH 直接使用 `ToolchainStore.path(ref)/bin` 的 digest-qualified 目录，不依赖全局 family/version canonical symlink；
+- canonical symlink 只可作为管理员/调试便利入口，不进入 frozen Workspace 的执行环境；
+- 如果某些工具内部硬编码 canonical prefix，需要为每个 workspace/generation 建独立 immutable view（例如 generation-scoped symlink tree），而不是全 Runner 共享一个 alias；
+- 加 regression：同时保留 same family/version + two digests，启动 Workspace A Terminal 后让 Workspace B activate 另一 digest；A 后续命令仍必须解析 A 的 digest。
+
+---
+
+### 7.99 Safety Network 一次连接加载失败后不会自恢复，共享 store 已恢复也仍永久显示失败态（P2 · 🟠 开放 2026-09-23）
+
+`SafetyNetworkSettings.vue` 只在 `onMounted()` 执行一次 `loadConnections()`：成功时设置 `connectionsResolved=true`，失败时设置 `connectionLoadFailed=true`。组件没有 Retry 按钮，也没有 watch `connectionsStore.loaded/connections` 来清这个本地失败标志。
+
+这不是单纯“首次 GET 失败要刷新页面”这么弱：连接数据来自全局 Pinia `connectionsStore`，其它页面/组件（ConnectionsView、TaskRail、Dashboard 等）随后都可能再次调用同一个 store 的 `load()/revalidate()` 并成功恢复 `items/loaded`。但 Safety Network 的本地 `connectionLoadFailed` 不会因此变回 false。
+
+模板顺序又是 `v-if=loadingConnections` → `v-else-if=connectionLoadFailed` → 正常列表，因此即使共享 store 已经有完整 connections，本卡片仍只显示 `connectionLoadFailed` 错误，denylist 连接选择器与 orphan-id 判定都继续被遮住；由于 Agent Settings 的访问分组使用 `v-show` 保持挂载，切分组再回来也不会重新触发 `onMounted()`。
+
+**建议修复**：失败态提供显式 Retry；更重要的是把失败状态绑定到 store 的实际 load generation/loaded 状态，后续共享 store 成功时自动清除本地 error 并设置 `connectionsResolved=true`。不要把一次 mount-time promise rejection 持久化成独立于权威 store 的永久 UI 状态。
+
+---
+
+### 7.100 Migration #23 / #34 只检查第一列，配合“duplicate column 视为成功”可把 partial schema 永久标成已迁移（P1 · 🟠 开放 2026-09-23）
+
+继续补审此前附录明确未覆盖的 SQLite 老库升级路径时，确认 migration runner 对**部分已应用 schema**的兼容策略存在确定缺口。
+
+Runner 的通用行为是：
+
+1. 每个 migration 开事务；
+2. 先执行可选 `check()`；
+3. `check=false` 时**跳过整段 SQL**；
+4. `db.exec(migration.sql)` 若抛错，只要 error message 含 `duplicate column name`，就把错误当成“可接受”并继续；
+5. 最后无条件写入 `migrations(id,...)` 并 commit。
+
+这个策略对“单列 ADD COLUMN”通常可工作，但 Agent 至少有两个 migration 在**一条 migration 里新增多列**，而 check 只看第一列。
+
+**Migration #23：**
+
+- check 只判断 `agent_tool_calls.source_model_step_id` 是否不存在；
+- SQL 实际依次新增：
+  - `source_model_step_id`
+  - `batch_index`
+  - `batch_size`
+  - 再创建 batch-lineage index。
+
+若数据库已经有 `source_model_step_id`，但缺 `batch_index/batch_size`，check 会直接返回 false；runner 跳过整段 SQL，却仍把 #23 记录成已完成。随后 #25 会直接引用 `batch_index/batch_size` 做 UPDATE，升级会在**更晚的 migration**才因缺列失败，错误归因也会被误导。
+
+反方向的 partial state 同样危险：若 `source_model_step_id` 缺失、但 `batch_index` 已存在，check=true；第一条 ALTER 成功，第二条因 duplicate column 抛错。通用 catch 吞掉 duplicate，**不会继续执行剩余 SQL**，却仍记录 #23。结果可能是 `batch_size` / index 缺失。
+
+**Migration #34：**
+
+- check 只判断 `agent_approvals.kind` 是否不存在；
+- SQL 实际新增 `kind` 和 `inspection_json` 两列。
+
+因此“kind 已有、inspection_json 缺失”会被直接 skip+record；“kind 缺失、inspection_json 已有”则会在第二条 ALTER duplicate 后被吞错+record。当前 approvals decode / HTTP 路径会读取 `inspection_json`，这种半迁移库不是纯 metadata 偏差，而会变成运行期查询/解码失败。
+
+这类 partial state 并非只能由手工破坏产生：代码已经专门保留了历史 migration ID、folded base schema 与 duplicate-column 容错，说明项目明确支持长期数据库 / schema drift；既然选择兼容 partial schema，check 与错误处理就必须按**完整 postcondition**判断，不能只看第一列。
+
+需要限定触发面：#23 与 #34 的 migration 和对应 current base-schema 列是在各自同一 commit（`8fe4d7b` / `bd6c714`）进入历史的，因此标准“上一正式 schema → 下一正式 schema”的线性升级不会自然只得到其中一列；本条主要针对项目已经主动兼容的长期/灰度/恢复型 schema drift，不应表述成所有正常升级必现。
+
+本轮同时排除了两个疑似 migration 问题：
+
+- #36 把旧 Subagent file capability 统一收紧到 workspace scope，是 `1aef733` 同次改造里明确的 `restrictTargets(..., ['workspace'])` 设计，不是 SSH scope 遗漏；
+- #43 的 legacy `workspace_job.data.status` 来自当时 `WorkspaceJobView.status`，历史集合与当前 semantic decoder 的 6 个状态一致，没有额外 timeout 枚举漂移。
+
+现有 migration regression 也没有覆盖该边界：`capability-grant-migration`、`legacy-machine-inspection-migration`、`durable-context-checkpoint` 都从**完整 legacy baseline**起步再跑到 current version，没有构造“multi-column migration 只存在部分列”的 fixture。
+
+**建议修复**：
+
+- 每个 multi-column migration 的 `check()` 检查**完整 postcondition**：全部列 / index / trigger 都存在才允许 skip；
+- 不要全局吞任意 `duplicate column name` 后把整条 migration 视为完成；应按 statement/postcondition 恢复，或把 migration 写成逐列条件式操作；
+- migration commit 前增加 `verify()` / schema assertion，#23 明确验证 3 列 + index，#34 验证 2 列；
+- 加 partial-schema regression：分别构造“只已有第一列”“只已有第二列/中间列”的 SQLite fixture，跑 migration 后必须得到完整当前 schema，且 migration id 只有在 postcondition 全满足后才能记录。
+
+---
+
+### 7.101 “完整备份”遗漏全部 Agent / AI 表与权威 Artifact / Plugin 文件，导入后形成跨时点混合状态（P1 · 🟠 开放 2026-09-23）
+
+继续审 Provider / Integration credential 的加密与备份边界时，确认 AES-GCM 与 backup envelope 本身没有明显密码学缺口，但发现更基础的覆盖问题：当前所谓 **full backup 根本没有把 Agent 持久数据纳入 snapshot**。
+
+`SqliteBackupSnapshotAdapter.TABLES` 目前只包含传统产品表：
+
+- settings / settings_migrations / notification_settings；
+- proxies / ssh_keys / connections；
+- tags / command_history / path_history / quick commands；
+- terminal themes / appearance / favorite paths。
+
+列表到 `favorite_paths` 就结束，**没有任何 `agent_*` 或 `ai_*` 表**。因此以下数据都不会进入 `.nexus-backup`：
+
+- Agent apps / grants / settings / denylist；
+- AI Providers（包括 Provider 配置与 credential revision）；
+- Threads / Runs / ledger / model attempts / tool calls / approvals / checkpoints；
+- Artifacts metadata / grants / quota；
+- MCP / ACP integrations 与 protected credential；
+- Subagent / Memory / mailbox / scheduler durable state；
+- Plugin publisher keys / stages / installed versions / installations；
+- Workspace runtime metadata / commands / confirmations；
+- App Intent receipts / artifact grants 等。
+
+restore 同样不是“先清整库再恢复”：`restoreTables()` 只对 **同一个 TABLES 白名单**做 reverse DELETE + forward INSERT。于是导入一个历史“完整备份”后：
+
+- settings / connections 等传统数据退回备份时点；
+- 目标实例原来已有的 Agent/AI 行**完全不动**；
+- API 仍返回“备份导入成功”。
+
+最终数据库是两个时间点的混合状态，而不是一个可恢复的一致性快照。跨实例导入同样会保留目标实例自己的 Agent 数据，而不是恢复来源实例的 Agent 状态。
+
+**这个混合状态还会直接错绑授权。** `connections.id` 是 AUTOINCREMENT 整数，而 Agent 的 SSH target grant 通过 `scope_json.targets.ssh.ids` 保存字符串化 connection id，`CapabilityRegistry.allows()` 只做 `selection.ids.includes(target.id)`；它不绑定 connection configuration hash。restore 会 DELETE 当前 `connections` 再按备份行的原 id INSERT，但不会恢复 `agent_app_grants`。因此目标实例原有的 grant（例如 ssh id `"5"`）会继续存在，并可能自动授权备份中 id=5 的另一台主机。反方向也有明确后果：`agent_target_denylist.connection_id` 对 `connections(id)` 使用 `ON DELETE CASCADE`，restore 删除当前 connections 时会把现有 Agent denylist 一并级联删除，而 backup 又不包含 denylist，恢复完成后硬 deny 规则直接消失。
+
+**文件层也同时遗漏权威 Agent 数据：**
+
+- `LocalArtifactStore` 把 Artifact 实体文件存到 `data/agent/artifacts/objects`，DB 的 `ai_artifacts.storage_key` 只负责指向这些 blob；
+- 已安装 Plugin 的 DB version/installation 记录依赖 `data/agent/plugins/<appId>/versions/<version>` 的 immutable package tree 与 `.nexus-package-hash`；目录缺失时 Skill/runtime 会直接判 `PLUGIN_INSTALL_CORRUPT`；
+- backup 的 `FILE_DIRECTORIES` 却只有 `background`、`custom_html_theme`，没有任何 `data/agent/**`；
+- `data/agent/model-capability-registry.json` 还保存 auto-update / cached snapshot，虽然更偏可重建状态，也同样不会进入备份。
+
+因此即使未来只把 Agent DB tables 加入 TABLES，而不同时纳入 Artifact / Plugin package 文件，也会得到“元数据存在、实体文件缺失”的损坏恢复结果。
+
+**这不是 ENCRYPTION_KEY 设计问题。** Backup codec 已把 data key 同时用 instance key 和用户密码派生 key包裹；跨实例可用密码解开。传统敏感列也会先解密进 envelope 内的 `__backup_plaintext`，restore 时再用目标实例 cipher 重加密。真正的问题是 Agent rows 根本没被 capture。等 Agent tables 纳入后，还必须把至少：
+
+- `ai_providers.protected_credential`
+- `agent_integrations.protected_credential`
+
+加入敏感列迁移逻辑，不能把来源实例 AES-GCM 密文原样写进目标实例。
+
+现有 E2E 也解释了为什么这条一直没被门禁抓住：
+
+- HTTP 用例名是 `full backup restores settings and connection data`，只创建/销毁/恢复一个 SSH connection 和普通 setting；
+- 它明确验证 connection credential 可在 restore 后继续 test，但**没有创建任何 Agent Provider / Integration / Thread / Artifact / Plugin**；
+- UI backup 用例只验证下载格式、文件选择上传、响应成功与页面仍登录，同样不验证 Agent roundtrip。
+
+**建议修复**：
+
+1. 明确 full backup 的持久化 ownership map，所有 canonical Agent/AI tables 纳入 snapshot；按 FK 依赖做 restore 的 reverse-delete / forward-insert；
+2. Agent sensitive columns 走与 connection/SSH key 相同的 plaintext-in-envelope → target-instance re-encrypt 路径；
+3. 把 `data/agent/artifacts`、已安装 `data/agent/plugins` 等 DB 依赖的权威文件纳入文件 snapshot，并校验 size/hash/path；cache 类文件可明确排除并在 restore 后重建；
+4. `beforeRestore/afterRestore` 增加 Agent runtime/session/cache invalidation 与 restore 后 reconciliation，不能只处理传统 SSH/workspace session；
+5. 增加真实 E2E：创建 Provider+credential、MCP/ACP integration、Thread/Run、Artifact blob、Plugin installation → export → 改坏/删除 → import → 验证数据与 secret、blob/package 都完整恢复；
+6. 增加跨实例 password restore fixture，证明 Agent credential 会用新实例 ENCRYPTION_KEY 重加密，而不是依赖来源实例 key。
+
+---
+
+### 7.102 Backup 文件目录 swap 的 rollback 漏掉“已移走但尚未登记”的当前目录，且崩溃后没有 startup recovery（P1 · 🟠 开放 2026-09-23）
+
+在 §7.101 之后继续审 restore 的原子性，确认当前文件目录切换存在一个**正常 I/O 异常即可触发**的数据丢失窗口，同时还缺崩溃恢复。
+
+`restore()` 的顺序是：
+
+1. 把备份文件内容写进 `.backup-restore-<uuid>`；
+2. `swapStagedDirectories()` 依次切换 `background`、`custom_html_theme`；
+3. 文件目录全部切完后，才进入数据库 `restoreTables()` transaction；
+4. 全部成功后删除 `.backup-previous-*` / staging。
+
+每个目录的 swap 代码却是：
+
+- 如果原 target 存在，先 `rename(target, previous)`；
+- 再 `rename(staged, target)`；
+- **两次 rename 都成功后**才 `swaps.push({ target, previous, hadPrevious })`。
+
+因此若第二次 rename 抛错（磁盘 / 权限 / filesystem I/O / 目标冲突等）：
+
+- 原目录已经从 target 移到 previous；
+- 当前目录还没被 push 到 `swaps`；
+- catch 的 `rollbackSwaps(swaps)` 只会恢复**前面已经完整切换过**的目录，不会恢复当前目录；
+- 错误继续抛到外层；
+- 外层 `finally` 又会 `rm(previousRoot, recursive=true)`；
+- 原目录副本随 previousRoot 被删除，target 保持缺失。
+
+所以这不是仅在 SIGKILL 时才存在的理论 crash window；**一个普通的第二次 rename failure 就可能让恢复前文件数据丢失。**
+
+另外即使修正 push 顺序，当前 restore 仍不是 crash-safe：
+
+- 文件目录 swap 发生在 DB transaction 之前；
+- 进程若在 `target→previous`、`staged→target`、或文件 swap 完成但 DB restore 尚未 commit 的任意时点退出，JS catch/finally 都不会执行；
+- 全仓只有该 adapter 引用 `.backup-restore-*` / `.backup-previous-*`，启动流程没有扫描/恢复这些目录；
+- 重启后可能得到“文件已经是备份时点、数据库仍是导入前时点”，或者 target 暂时缺失但 previous 仍遗留的状态。
+
+还有一个不需要进程崩溃的反向混合窗口：`restoreTables()` 的 database transaction 在返回时已经 commit；但随后删除 `previousRoot` / `stagingRoot` 仍位于同一个 inner `try`。如果这两个 cleanup `rm()` 任一抛错，catch 会调用 `rollbackSwaps(swaps)` 把文件恢复成**导入前版本**，数据库却已经无法回滚，最终得到“备份时点 DB + 导入前文件”的另一种混合状态。`rollbackSwaps()` 自己又会吞掉每个 `rm/rename` 的恢复异常，外层 finally 仍继续删除临时根目录，因此 rollback failure 也没有 durable evidence 可供下次启动修复。
+
+这与 §7.91 checkpoint restore 的 crash-consistency 问题同类，但影响的是产品级 full backup restore，而且当前正常错误路径本身就已经有 rollback bookkeeping bug。
+
+**建议修复**：
+
+- 在移动原 target **之前**建立 durable swap intent，或至少在第一步 rename 成功后立即记录当前 swap，使第二步失败能恢复；
+- 文件 restore 使用明确的 journal / transaction marker，记录每个 directory 的 `original/staged/committed` 状态并 fsync；
+- startup 在打开服务前扫描未完成 restore journal，按明确规则 roll forward / rollback，不能只依赖进程内 finally；
+- DB 与文件需要一个可恢复的两阶段协议：文件 staged → durable intent → DB transaction / swap → durable commit marker → 清理 previous；
+- fault-injection regression 覆盖：第一/第二个目录的 first rename、second rename、DB restore 前、DB commit 后、cleanup 前分别抛错/kill；最终必须得到完整“旧快照”或完整“新快照”，不能混合，也不能丢原目录。
+
+---
+
+### 7.103 Memory import 先消费 confirmation、再单独创建目标 Memory，unknown outcome 后既无法 replay 又可二次导入（P1 · 🟠 开放 2026-09-23）
+
+跨 App Memory import 使用 preview → confirm 的一次性 confirmation，但 confirmation 的消费和最终 published Memory 的创建不在同一 durable transaction。
+
+`confirmImport()` 当前顺序是：
+
+1. `takeImportConfirmation(scope, id)`；repository 在一个 transaction 里 SELECT 后立即 DELETE confirmation；
+2. 返回 service 后再检查 confirmation expiry、target intent、source Memory status/version/expiry；
+3. 最后另起 `importPublished()` transaction，用新的 `randomUUID()` 插入目标 `ai_memories` 并发 `memory.changed`。
+
+因此 confirmation 一旦被 take，就已经不可重放，而真正副作用尚未发生：
+
+- 进程在 take commit 后、`importPublished()` 前退出：confirmation 永久消失，目标 Memory 没创建；
+- source/target 校验在 take 后发现变化：confirmation 也已经被消费，用户只能重新 Preview；
+- `importPublished()` 已 commit、HTTP 响应在客户端收到前丢失：目标 Memory 已存在，但原 confirmation 已删除；重试同一 confirm 只会得到 `MEMORY_IMPORT_CONFIRMATION_NOT_FOUND`。
+
+前端又放大了最后一种 unknown outcome：
+
+- `MemorySettings.confirmImport()` 只有成功返回后才 `importPreview=null` 并 `loadMemories()`；
+- `mutate()` 的失败 recovery 只对 `MEMORY_VERSION_CONFLICT / MEMORY_REVIEW_STATE_INVALID / NOT_FOUND` 触发 `loadMemories()`，不识别 import-confirmation-not-found；
+- 因此响应丢失后 UI 仍保留旧 preview，却看不到已提交的新 Memory；
+- 用户随后重新 Preview → Confirm，会得到新 confirmation，并由 `importPublished()` 再生成一个随机 Memory id。
+
+`ai_memories` 只有随机 `id` 主键，没有 `(target app, source app, source memory id, source version)` 或 confirmation/submission identity 唯一约束，因此第二次导入会正常生成另一条 published Memory，而不是 replay/去重。
+
+这与 §7.78 的普通 create idempotency 缺口不同：这里产品已经设计了 confirmation token，却把 token 的“consume”提交点放在实际副作用之前，造成 confirmation 生命周期和 mutation commit point 分裂。
+
+**建议修复**：
+
+- 将 confirmation consume + source-version recheck + target Memory insert + `memory.changed` 放进同一个 DB transaction；
+- 或 confirmation 增加 `pending/completed + result_memory_id` durable 状态，同一个 confirmation 重放时返回原结果；
+- 目标 Memory 持久化来源 submission/confirmation identity，并对同一 import submission 做唯一约束；
+- frontend 对 import confirm 的 unknown/not-found 先刷新目标 memories，并按 source refs/confirmation result reconcile，再决定是否允许重新 Preview；
+- 加 fault-injection regression：take 后 crash、insert commit 后 response loss、audit failure、重复 confirm；最终只能是 0 或 1 条目标 Memory，不能静默复制。
+
+---
+
+### 7.104 Root Scheduler 在出队后读取 settings 失败会永久丢 Run，durable 状态仍停在 created/running（P1 · 🟠 开放 2026-09-23）
+
+`AgentScheduler` 与持久化的 Subagent scheduler 结构不同：Root scheduler 只维护内存队列，没有周期 durable runnable scan。
+
+`pump()` 当前顺序是：
+
+1. `nextQueued()` 先从对应 app queue `shift()` 出一个 Run；
+2. 随后 `await this.settings.get(next.run.userId)` 读取并发限制；
+3. 再根据 capacity 决定 `start()` 或 requeue。
+
+问题是整个 `pump()` 只有 `try/finally`，没有 catch/requeue。若第 2 步发生一次瞬时数据库/settings 读取异常：
+
+- Run 已经被 `shift()` 从队列移除；
+- `pump()` 直接 reject，`finally` 只把 `pumping=false`；
+- 没有把 `next` 放回队列；
+- `void this.pump()` 的调用方也没有 recovery callback。
+
+这个 Run 的 durable row 并没有同步失败：它仍可能是 `created` 或 `running`。Root scheduler 后续也没有像 Subagent scheduler 那样每 500ms 从 durable work 表重新扫描。
+
+同一丢队列路径还覆盖 Backend 外层异常恢复本身失败的情况。`NativeAgentBackend.execute()` 通常会 catch 执行异常并调用 `interruptUnexpectedRootExecution()` 把 Run durable 收口；但如果这次 recovery commit 自己因瞬时 DB/StateCommit 异常失败，异常会继续逃回 `AgentScheduler.start()` 的 catch。scheduler 此时只记录 `Agent scheduler run failed outside persisted harness`，随后从 `active` 删除 Run并 `pump()` 其它任务，同样**不会 requeue 当前 Run，也没有 durable scan**。因此“异常处理的持久化失败”也能留下 created/running 的假运行态。
+
+启动恢复同样不是兜底：`initialize()` 会先把所有非终态 Run 统一 interrupt，再只恢复 checkpoint 可恢复的 Run；正常运行期间没有定时“查询所有 created/running root runs 并 enqueue”的 sweep。因此除非后续恰好有另一个业务动作再次对**同一个 Run**调用 enqueue/signal，它会长期保持“数据库显示正在运行、实际上没有 executor”的假运行态。
+
+对照实现可以确认这不是 Subagent scheduler 的同类问题：Subagent scheduler 的 candidate 来自 durable `agent_scheduler_work`，有 500ms control poll；`settings.get()` 即使使当前 `pump()` 失败，work 尚未 claim，下一轮仍能重新发现。
+
+**建议修复**：
+
+- Root scheduler 不要在所有可能失败的 async preflight 之前永久 dequeue；至少在异常 catch 中 requeue 当前 Run；
+- 更稳妥的是给 Root scheduler 也建立 durable runnable claim / periodic scan，内存队列只做 wake hint；
+- `void pump()` 必须有统一 `.catch()` 日志与恢复策略，避免 unhandled rejection；
+- 增加 fault-injection regression：① enqueue created/running Run → `settings.get()` 单次抛错；② backend 执行抛错且 `interruptUnexpectedRootExecution()` 单次失败；两种情况下都不提供额外用户动作，下一轮必须自动再次执行/收口该 Run，不能永久停在假 running。
+
+---
+
+### 7.105 `agent_host_events` 没有 ack / prune / compaction，会按用户永久无界增长（P2 · 🟠 开放 2026-09-23）
+
+Host 事件使用独立的 durable outbox：每次 `appendHostEvent()` 都推进 `agent_host_cursors.next_sequence`，并向 `agent_host_events` 插入一行。
+
+当前读链路只有 cursor replay：
+
+- `/agent/summary` 只返回当前 host cursor；
+- `/ws/agent` subscribe 带客户端 cursor；
+- session `drain()` 反复调用 `readHostEvents(userId, cursor, 100)`；
+- 每成功发送一条，只更新当前 WebSocket subscription 的**内存 cursor**。
+
+全仓没有 `DELETE FROM agent_host_events`，也没有 host event ack、per-device low-watermark、TTL、max-row retention 或 snapshot compaction。客户端 unsubscribe / disconnect 也只释放内存 subscription。
+
+因此该表会随用户所有 Host 级变化永久累积。它不是低频审计表：Run 状态变化会分配 `summary.changed`，App / Memory / configuration 等产品事件也持续进入同一个序列。长期使用、自动化 Agent 或高频 Run 会持续放大数据库。
+
+这与 `agent_events` 不同：Run events 绑定 `run_id`，Run 删除时可跟随 durable Run 生命周期回收；Host events 是 user 级全局序列，没有自然 owner 删除点。
+
+无界历史还会影响新设备 / 丢失本地 cursor 的 replay：客户端从旧 cursor 重新订阅时，服务端会按 100 条分页一直重放全部历史，而当前协议没有“cursor 已过 retention，改用 fresh summary snapshot”的分支。
+
+**建议修复**：
+
+- 定义 Host event retention 协议，而不是简单物理 DELETE；
+- 推荐“最新 summary snapshot + bounded durable delta window”，只保证最近 N 条 / N 天可 replay；
+- 服务端保存 oldestAvailableCursor；客户端 cursor 早于 retention 时返回明确 `CURSOR_EXPIRED`，重新拉 `/agent/summary` 后从 high-water 继续；
+- 或做 per-user compacted outbox，只保留语义上仍有价值的最新 app/config/memory invalidation；
+- 加长期回归：连续生成大量 host events，执行 retention 后 DB 行数有上界，最新客户端能继续增量订阅，过旧 cursor 能通过 summary resync 恢复。
+
+---
+
+### 7.106 Plugin stage 没有 TTL / delete 生命周期，正常换包即可永久留下大体积 staging 目录与历史 stage 行（P1 · 🟠 开放 2026-09-23）
+
+Plugin package staging 的持久生命周期目前没有终点。
+
+`agent_plugin_stages` schema 只有 `created_at / updated_at / status / version`，没有 `expires_at`；repository 只有 create/get/list/update，没有 deleteStage。Coordinator 的 startup `reconcileStages()` 又把 `repository.listStages()` 返回的**所有历史 stage**都传给 verifier，作为“active stage”保留。
+
+这和 verifier 的目录清理语义组合后会形成两类泄漏：
+
+1. **安装完成的 DB 行永久增长。** install/upgrade 最后会把 stage 更新为 `status='installed'` 并 `discardStage()` 删除磁盘目录，但不会删除 stage row。每一次安装/升级都会永久新增一条 `agent_plugin_stages` 历史记录。
+2. **放弃的 staged/verified package 会永久占磁盘。** 前端 `preparePackage()` 开始新包时只 `candidate=null`，不会 discard 上一个 candidate 的 stage；用户验证 A、随后选择 B，A 的 DB stage 仍存在，因此 startup reconcile 也会把 A 视为 active，磁盘 staging 目录不会清。
+
+这个磁盘占用并不小：Verifier 允许单个 archive 最大 50 MB，展开树最大 200 MB；一个 verified stage 同时保留 package tar 与 unpacked tree。正常反复“选择包 → 验证 → 换包”即可累积数百 MB / GB 的孤儿 stage，而不需要异常请求或管理员权限。
+
+失败场景只解决了一半：如果 `repository.createStage()` 本身失败，coordinator 会 discard 刚写的目录；但**DB row 已成功建立之后**没有统一 TTL、cancel/discard endpoint 或 maintenance sweep。
+
+现有 UI 也没有显式“丢弃候选包”动作。离开设置页/刷新页面只丢失前端 `candidate/stageId`，反而让这条 stage 更难再清理。
+
+**建议修复**：
+
+- stage 增加 `expires_at` / terminal retention，并提供 repository delete / purgeExpired；
+- lifecycle sweep 或 plugin startup maintenance 只把未过期的 staged/verified/reconciliation stage 当 active，清理失联 DB rows 与目录；
+- installed/failed terminal stage 仅保留有限审计期，之后删除 row；
+- 前端换包、关闭 candidate、离页时 best-effort 调 discard，但后端 TTL 必须是最终兜底，不能依赖浏览器 cleanup；
+- 增加回归：连续验证多个接近上限的包但只安装最后一个，maintenance 后 staging 磁盘与 stage rows 应回落到有界数量。
+
+---
+
+### 7.107 Artifact 上传完成 rename 与 ready commit 之间可被并发 Delete，留下永久未计费 orphan blob（P2 · 🟠 开放 2026-09-23）
+
+`LocalArtifactStore.write()` 把 upload 从 tmp 切到最终 object 的顺序是：
+
+1. 写完/`fsync` 临时文件；
+2. `rename(tmpPath, objectPath)`，此时真实 blob 已位于 `data/agent/artifacts/objects/...`；
+3. `fsync` object directory；
+4. 最后才用 `finalizeReady()` transaction 把 `ai_artifacts.status` 从 `staging` 改为 `ready` 并把 reserved quota 转成 used quota。
+
+这段时间 DB row 仍是 `staging`。而 Artifact DELETE 对 staging 的处理是直接 `releaseStaging(row)` → row 变 `deleted` + 释放 reserved quota，只删除 `tmpPath`，**不会删除 `objectPath`**，也没有检查 `activeWrites`。
+
+因此跨 tab / 并发请求可以形成：
+
+1. 上传 writer 完成 `tmp → object` rename；
+2. 在 `finalizeReady()` 提交前，Library 对同一 staging Artifact 发 DELETE；
+3. DELETE transaction 把 row 终结为 `deleted` 并回收 quota；
+4. writer 的 `finalizeReady()` 因 row 已不再 staging 返回 false；
+5. writer 进入 catch，但 `renamed=true`，所以不会删除最终 object；
+6. DB 已没有任何 non-deleted row owner，quota 也不再计入这份文件，但 object blob 仍永久存在。
+
+现有 maintenance 不能收敛：
+
+- `reconcile()` 只扫描 `status IN ('staging','deleting')`；
+- `sweepExpired()` 只扫描 `ready/unavailable`；
+- 没有遍历 objectsRoot 查找“storage_key 无有效 DB owner”的 orphan scanner。
+
+这个竞态从正常 UI 可达：Artifact Library 明确展示 `staging` 状态，而 Delete 按钮只禁用 `busy`，不像 Retain 那样要求 `item.status === 'ready'`。另一个标签页/窗口可以在上传接近完成时删除 staging row。
+
+它不像普通响应丢失那样只影响 UI：留下的 blob 已脱离 DB/配额生命周期，重复触发会造成真实磁盘泄漏。
+
+**建议修复**：
+
+- staging delete 如果 `activeWrites.has(id)`，应拒绝/取消 writer 并等待它进入确定状态；
+- staging delete 无论 tmp/object 哪个边界，都按 storage_key 同时清理可能存在的 object；
+- 更稳妥的是把 `staging → ready` 与 filesystem finalize 设计成有 durable intermediate state（例如 `committing`），delete/reconcile 都能识别；
+- 增加 objectsRoot orphan maintenance：只在安全校验 DB ownership 后删除没有 canonical row 的 blob；
+- 加并发 fault-injection：在 rename 后、finalizeReady 前阻塞 writer，同时 DELETE；最终只能是 ready+blob 或 deleted+无 blob，不能 deleted+blob。
+
+---
+
+### 7.108 AppStorage 的 16MB quota 只统计 value bytes，不计 key / row / index 开销且没有 entry-count 上限（P2 · 🟠 开放 2026-09-23）
+
+`SqliteAppStorageRepository` 已经主动实现单 value 64KB、单 App 总量 16MB 的 quota，但总量计算只使用表里的 `bytes` 字段，而该字段仅等于 `Buffer.byteLength(JSON.stringify(value))`。
+
+因此以下成本完全不计入 quota：
+
+- key 本身，允许最多 256 bytes；
+- SQLite row / page / record header；
+- `(user_id, app_id, key)` 主键 / index 存储；
+- 每条记录的 version / updated_at 等列。
+
+同时没有最大 entry count。于是插件可以持续创建不同 key、使用极小 JSON value 来绕过“16MB 总量”的实际资源目标。例如 value `0` 序列化只有 1 byte，理论上可写约 1670 万条记录才达到 16MB `SUM(bytes)`；若 key 接近 256 bytes，仅 key payload 就已经是数 GB，尚未计算 SQLite/index 开销。
+
+这个入口不只存在于 Frontend SDK：Backend Plugin SDK 同样走同一个 AppStorage port，因此一个有 bug 或恶意的已安装 Plugin 可以长期写入大量小 key。单次 RPC 大小限制不能解决累计行数问题。
+
+`restore()` 的 snapshot 校验也复用 `snapshot.totalBytes`（value bytes）作为 16MB 边界，没有 entry-count / key-overhead 总预算，所以 Plugin upgrade migrate 返回大量小 entries 时同样能把巨大 row set 写回数据库。
+
+现有测试覆盖 storage.put、retained-data stats 和 `APP_STORAGE_QUOTA_EXCEEDED` error taxonomy，但没有覆盖 entry-count、长 key 或实际 DB footprint。
+
+**建议修复**：
+
+- 增加 per-App 最大 entry count；
+- quota 计费至少包含 key bytes，最好使用保守固定 row/index overhead（或单独同时限制 valueBytes / keyBytes / entries）；
+- snapshot restore 对 entries 数量、key bytes 总量做同一套限制；
+- stats/API 不要只展示 value bytes，至少明确其口径，避免用户看到“<16MB”但 DB 实际已膨胀数百 MB；
+- 增加 regression：大量 1-byte value + 256-byte unique keys 应在受控的 entry/key budget 处被拒绝。
+
+---
+
+### 7.109 Backup export 不是一致性 snapshot，import 也没有全局 restore 串行化（P1 · 🟠 开放 2026-09-23）
+
+继续审 Backup 的并发边界，确认 §7.101 / §7.102 之外还有一层独立问题：**export 不是一致性快照，import 也没有全局互斥。**
+
+**A. exportFull() 逐表 / 逐文件读取，没有同一 read transaction。**
+
+`SqliteBackupSnapshotAdapter.capture()` 当前只是：
+
+- 按 `TABLES` 顺序逐个 `captureTable(table)`；每次都是独立 `SELECT *`；
+- 全部表读完后，再递归读取 `background/custom_html_theme` 文件。
+
+期间没有 `database.transaction(...)` 包住所有表，也没有 product-wide quiesce / snapshot barrier。于是正常业务写入即可让一个备份同时包含多个时间点。
+
+一个确定的 FK 例子：`connections` 在 `connection_tags` 之前读取。若 export 已读完 `connections`，随后业务创建新 connection 并写入 tag association，等 export 后面读取 `connection_tags` 时会把这条 association 收进去，但 backup 的 `connections` 里没有对应 connection。这个备份文件本身就不是可恢复的 relational snapshot，import 时可能直接因 FK 失败。
+
+同样地，文件是在 DB 表之后读取；任何“DB 行先变、文件后变”或反方向的写入，都可能让 backup 里的 metadata 与文件内容来自不同时间点。
+
+**B. importFull() 没有 restore mutex / in-progress guard。**
+
+`BackupService.importFull()` 只是 `decode → beforeRestore → snapshots.restore → afterRestore`，HTTP `/backup/import` 也没有锁。两个并发 import A/B 会各自创建独立 `.backup-restore-*` / `.backup-previous-*`，但同时操作同一 target 目录与同一个 SQLite 数据库。
+
+例如可以形成：A 先把文件 swap 成备份 A；B 再把 A 的文件当成自己的 previous 并 swap 成备份 B；随后 B 的 DB transaction 先提交、A 的 DB transaction 后提交。最终文件来自 B，数据库来自 A。
+
+即使 SQLite 把两个 write transaction 串行化，也只保证**每个 DB transaction 内部**原子；它无法把 transaction 顺序绑定到前面已经完成的 filesystem swap 顺序。
+
+这与 §7.102 不同：§7.102 讨论单个 restore 的 rename/cleanup/crash recovery；本条在没有任何 I/O failure、没有进程崩溃时，仅靠两个正常并发请求或 export 期间的正常业务写入就可触发。
+
+**建议修复**：
+
+- export 使用真正一致的数据库 read snapshot，并定义文件一致性策略；更稳妥的是 product-wide read barrier / quiesce 后统一 capture；
+- 对 DB+文件 snapshot 引入 manifest revision / snapshot id，确保文件与数据库属于同一逻辑时点；
+- backup import 建立 process-wide restore mutex，第二个 import 明确返回 `BACKUP_RESTORE_IN_PROGRESS`；
+- export 与 import 之间也采用读写锁：restore 期间不能 capture，capture 建立 snapshot 期间不能开始 restore；
+- 加并发 regression：export 过程中创建 connection+tag、并发两个不同 backup import、export/import 交叠；结果必须是完整可恢复快照，不能出现 FK-invalid backup 或 DB/file 跨备份混合。
+
+---
+
+### 7.110 Plugin AppStorage 与 Host governance 共用裸 keyspace，插件可直接改写 Execution / Subagent Policy（P1 · 🟠 开放 2026-09-23）
+
+继续审 Plugin AppStorage owner 边界时，确认 Host 自己的治理状态与 Plugin SDK 暴露的“插件私有存储”共用了同一个 `{userId, appId, key}` keyspace，而且没有 reserved-key 隔离。
+
+Host 当前至少把两类策略直接存进 `agent_app_storage`：
+
+- `AgentExecutionPolicyService`：`agent.execution-policy.v1`；
+- `SubagentPolicyService`：`subagent.profiles.v1`。
+
+而 Plugin Frontend RPC 的 `storage.get / storage.put / storage.delete` 只校验 key 非空且 ≤256 bytes，随后直接调用同一个 `AppStoragePort`。Backend Plugin SDK 也复用同一 store；它只做 App lifecycle/storage access authorization，不区分 Host-owned key 与 Plugin-owned key。
+
+因此一个已启用 Plugin 可以：
+
+- `storage.get('agent.execution-policy.v1')` 读取 current value/version，再用正常 optimistic version 直接改写或删除用户在 Settings 中配置的 App Execution Policy；
+- `storage.put('subagent.profiles.v1', ...)` 直接改写 Subagent profiles、role、peerMessaging、mutationMode、profile maxSteps 等，而不经过 `replaceProfiles()` 的 Settings 写入口；
+- 写入结构非法值，让 `AgentExecutionPolicyService.get()` / `SubagentPolicyService.get()` 后续直接抛 `VALIDATION_FAILED`，使该 App 的 Settings / Run / delegation 路径进入稳定失败。
+
+需要限定影响边界：这不是“插件可以越过所有 Agent 安全限制”。当前仍有后续防线：
+
+- Execution Policy `get()` 会再次校验 global hard limits，超出 hard limit 的 override 会 fail closed；
+- Subagent create 会重新验证 Provider/version/model；
+- profile capabilities 会与 App grant、父 delegation grant 求交集；
+- Run 本身仍受 `run.budget.maxRunSteps` 等全局预算约束。
+
+但这些二次防线不能消除 owner 违约。插件仍能在 hard limit 内**自行提高/降低用户设置的 App 预算与行为策略**，或者直接删/破坏 Host policy；而 `doc/AGENT.md` 明确把 AppStorage 描述成 App 的内建私有状态服务，架构文档又明确 Subagent 创建/调度/capability delegation 由 Runtime/Tool policy 拥有。Host governance state 不应成为插件可任意读写的私有 key。
+
+这还会绕过专用 Settings service 的校验、日志与未来审计钩子：例如 `replaceProfiles()` 会检查 hard-limit/model 可用性，直接 `storage.put()` 不执行这些 write-time checks。
+
+**建议修复**：
+
+- 将 Host-owned state 移出 Plugin-visible AppStorage，或至少使用不可由 SDK 访问的 reserved namespace；
+- AppStorage SDK 在 get/put/delete 三条路径统一拒绝 Host-reserved keys/prefix，Backend Plugin SDK 同样执行；
+- policy repository 使用独立 typed table/port 会更清晰，避免后续新增 Host policy 再踩同一 keyspace；
+- 对现有数据库做兼容迁移，并在启动时检测/隔离被 Plugin 写坏的 reserved rows；
+- 加安全 regression：Plugin Frontend/Backend 对两个 reserved key 的 get/put/delete 全部被拒绝；Settings 专用 API 仍能正常读写；App grant / global hard limits 的现有二次防线保持不变。
+
+---
+
+### 7.111 Manual checkpoint 没有 delete / retention / count 上限，Workspace archive Artifact 会被 checkpoint link 永久保护（P2 · 🟠 开放 2026-09-23）
+
+继续审 checkpoint 的 create/idempotency/retention 后，确认 user checkpoint 与 recovery checkpoint 的生命周期不对称。
+
+`CheckpointService.save()` 每次手动保存都会直接调用 `saveCheckpoint(..., kind='user', force=true)`，并生成新的 `randomUUID()` checkpoint id。Frontend `saveCheckpoint()` 也不发送 `Idempotency-Key`，因此响应丢失后用户再次点击会正常再创建一个 checkpoint。
+
+更关键的是 user checkpoint 没有任何有界生命周期：
+
+- repository 对 `kind='recovery'` 会在保存新 recovery checkpoint 前删除旧 recovery rows，并通过 `cleanupCheckpointArtifactLinks()` 释放旧 checkpoint Artifact links；
+- user checkpoint 不走这段 supersede 逻辑；
+- repository 只有 `deleteRecovery()`，全仓没有 user checkpoint delete API / UI；
+- `CheckpointService.list()` 还把 repository limit **硬编码为 50**，HTTP/Frontend 没有 cursor/limit surface；因此第 51 条以后更老的 checkpoint 会从正常 API/UI 枚举里直接消失，但底层 row 与受保护 Artifact 继续存在；
+- 没有 per-Run max checkpoints、TTL、retention sweep 或“只保留最近 N 个”策略。
+
+每个带 Workspace 的 checkpoint 又不是小记录。`WorkspaceCheckpointService.capture()` 会：
+
+1. 从 Runner 打包 `/workspace/work` archive；
+2. 通过 ArtifactService 新建一个 archive Artifact；
+3. 再新建一个 manifest Artifact；
+4. 将二者加入 checkpoint snapshot / `agent_artifact_links(role='checkpoint')`。
+
+Artifact cleanup 明确把任何 `role='checkpoint'` link 视为永久 protection：`artifactProtectionReason()`、`storageSummary()`、`cleanupPreview()` 都无条件排除 checkpoint-linked Artifact，不管 Run 是否已经 terminal。只有删除整个 Run 时 `DELETE FROM agent_artifact_links WHERE run_id=?` 才统一释放这些 links。
+
+因此一个长期保留的 Run 可以通过正常 UI 反复“保存检查点”持续累积 checkpoint rows 与 archive/manifest Artifact，并把它们从普通 cleanup 中永久保护，直到整个 Run 被删除。若 Workspace 较大，很快会把用户 Artifact quota 吃满；而超过 50 条后，更老的 checkpoint 连常规 API/UI 都无法枚举，形成“**仍占 quota、仍被保护、但用户已看不到 owner**”的隐藏占用。
+
+这和 §7.90/§7.91 不同：前两条关注 checkpoint capture/restore 的一致性；本条是 user checkpoint 自身没有 retention / delete ownership。也和 §7.105/§7.106 同属有界持久化问题，但这里会直接锁住 Artifact quota。
+
+**建议修复**：
+
+- user checkpoint 增加显式 delete，并在同一 transaction 里删除 row + 释放只由该 checkpoint 持有的 Artifact links；list API 增加真正 cursor pagination，不能把 50 当永久可见上限；
+- 定义 per-Run / per-user checkpoint 数量或总字节上限，必要时提供自动 retention（例如最近 N 个 + pinned）；
+- save checkpoint 接受 caller-stable `Idempotency-Key`，response loss 重放返回原 checkpoint；
+- Artifact Storage 页面区分 checkpoint-protected bytes，并提供跳转/删除 owner 的操作；
+- 加 regression：长生命周期 Run 连续保存 >N 个带 Workspace archive 的 checkpoint，达到策略上限后必须拒绝/回收，且删除旧 checkpoint 后 quota 与 blob 都正确释放。
+
+---
+
+### 7.112 Provider model discovery 的 1MB response limit 在全量 `response.text()` 之后检查，无法限制真实内存峰值（P2 · 🟠 开放 2026-09-23）
+
+`OpenAiProviderAdapter.fetchModelsFromEndpoint()` 明确声明 `MAX_MODELS_RESPONSE_BYTES = 1MB`，并在响应头有可信 `Content-Length` 时提前拒绝超大响应。但对 chunked / 缺失 / 虚假 Content-Length 的正常 HTTP 响应，当前顺序是：
+
+1. `await fetch(...)`；
+2. 可选检查 `Content-Length`；
+3. `const text = await response.text()`；
+4. **整个 body 已经被 undici/Fetch 缓冲成 string 后**，才 `Buffer.byteLength(text) > 1MB` 并抛 `PROVIDER_MODELS_RESPONSE_TOO_LARGE`。
+
+因此这个 1MB 限制只限制“后续 JSON 解析的数据大小”，并不限制 Backend 在读取阶段的内存占用。一个已配置但异常/恶意的 OpenAI-compatible endpoint 可以不发送 Content-Length，持续发送远大于 1MB 的 body；Backend 会先完整缓冲，再发现超限。`discoverModels()` 虽有 10 秒 AbortController，但在高吞吐连接上 10 秒足以推送远高于预期上限的数据，并造成明显内存峰值甚至进程 OOM。
+
+这不是项目缺少可复用实现：同仓 `ModelsDevCapabilityRegistrySource` 的 `readBoundedResponse()` 已经使用 `response.body.getReader()` 按 chunk 累加 bytes，超过 `MODEL_REGISTRY_MAX_RESPONSE_BYTES` 立即 `reader.cancel()` 并停止读取。Provider discovery 没有复用同样的 bounded-reader 语义。
+
+影响边界需要限定：Provider endpoint 是用户/管理员配置的外部服务，且 SRS 明确不把 Provider transport 当 private-host/network sandbox，因此这不是 SSRF 边界问题；本条只针对**代码已声明的 response-size resource limit 实际无法在读取阶段生效**。
+
+**建议修复**：
+
+- 将 Provider `/models` 响应改为逐 chunk bounded read；累计超过 1MB 立即 cancel body 并抛 `PROVIDER_MODELS_RESPONSE_TOO_LARGE`；
+- `Content-Length` 继续作为 fast-fail，但不能替代流式计数；
+- decoder 直接从 bounded bytes 解码 UTF-8/JSON，避免先生成不受控大 string；
+- 增加 regression：无 Content-Length 的 chunked stream 连续输出 >1MB，reader 必须在越界 chunk 后立刻 cancel，测试观察到的累计读取量保持在 `limit + one chunk` 的有界范围；
+- 同步扫其它 Agent 外部 HTTP body，统一复用一个 bounded-response helper。
+
+---
+
+### 7.113 Plugin 成功 upgrade 不回收已无人安装的旧 immutable version，正常升级会永久累积 package tree（P2 · 🟠 开放 2026-09-23）
+
+继续审 Plugin version/package retention 时，确认成功 upgrade 与 uninstall 的 cleanup 语义不对称。
+
+upgrade 从 oldVersion 切到 nextVersion 成功后的流程是：
+
+1. quiesce/dispose old runtime；
+2. migrate AppStorage；
+3. activate/health-check new runtime；
+4. `activateInstallation(userId, appId, oldVersion, nextVersion, ...)` 把该用户 installation 切到新版本；
+5. finalize stage 并 `discardStage()`。
+
+之后**没有**对 `oldPlugin.version` 做 `countInstalled()`、`removeInstalled()` 或 `updateVersionStatus(...,'removed')`。
+
+对照 uninstall 路径，只有“当前版本最后一个 installation 被卸载”时才会：
+
+- `countInstalled(appId, version) === 0`；
+- `verifier.removeInstalled(appId, version)`；
+- version status → `removed`；
+- 从 runtime registry 移除 version。
+
+全仓 `removeInstalled()` 的实际调用也只有两处：upgrade **失败回滚时删除新 target 包**，以及 uninstall 当前版本；成功 upgrade 后的 old version 没有 cleanup 调用。
+
+这意味着单用户产品中每次成功升级后，旧版本 installation 已不存在，但：
+
+- `agent_plugin_versions` 旧 row 仍保持 installed；
+- `data/agent/plugins/<appId>/versions/<oldVersion>` 的 immutable tree 仍存在；
+- startup `initializeInstalledVersions()` 还会把所有 status=installed 的历史版本重新注册进 registry；
+- 用户侧 `listVersionsForUser()` 只 join 当前 installation，因此这些旧版本在普通管理视图中也不可见。
+
+Verifier 允许一个包展开到 200MB；installed tree 就是该 verified unpacked tree rename 到 `versions/<version>`。连续正常升级因此可永久累积多个接近该上限的旧 package，不需要异常请求或中断。
+
+当前也没有用户可见 rollback/downgrade 功能证明这些旧版本是有意保留的 rollback cache；upgrade failure 的 rollback 使用的是**切换提交前仍存在的 old tree**，并不要求成功升级后永久保留所有历史版本。
+
+**建议修复**：
+
+- upgrade commit 成功后，对 oldVersion 做 `countInstalled()`；为 0 时进入 best-effort/durable cleanup：remove package tree、version status→removed、runtime registry removeVersion；
+- 如果产品希望保留 rollback cache，必须显式定义数量/字节/时间上限，并在 UI/Storage summary 中可见，而不是无限保留；
+- startup reconciliation 扫描 `status='installed'` 但 `countInstalled=0` 的 orphan version，按策略回收/降级状态；
+- 加 regression：单用户连续升级 v1→v2→v3，最终只有当前版本（或明确策略允许的有限历史版本）保留磁盘 tree，旧 package bytes 有界。
+
+---
+
+### 7.114 Plugin upgrade 在 quiesce 之前 capture AppStorage，Frontend/Backend 并发写会被后续全量 restore 静默覆盖（P1 · 🟠 开放 2026-09-23）
+
+继续交叉审 Plugin upgrade 与 AppStorage authority 时，确认 storage migration 的 freeze 点放错了顺序，正常成功升级即可出现 lost update。
+
+当前 upgrade 在 active Runs drain 为 0 后的顺序是：
+
+1. `snapshot = data.capture(scope)`；
+2. `runtimeLifecycle.quiesce(scope, oldPlugin, ...)`；
+3. dispose old Backend runtime；
+4. `migrate(oldVersion, nextPlugin, snapshot)`；
+5. `data.restore(scope, migrated)`；
+6. activate / health-check new runtime；
+7. 最后 `activateInstallation()` 把 installation / App activeVersion 切到新版本。
+
+问题在第 1→2 步已经成立：**snapshot 在 old Backend Plugin 被 quiesce 之前创建。** old runtime 在 capture 返回后到 quiesce 完成前仍可通过 Backend Plugin SDK 对 AppStorage `put/delete`；这些写已经真实 commit 到 `agent_app_storage`，但 migration 输入仍是更早的 snapshot。
+
+Frontend 路径窗口更长。`PluginDataManager.frontendRpc()` 对 storage get/put/delete 的 gate 只要求：
+
+- installation 仍为 installed；
+- `state.activeVersion === installation.version`；
+- desired enabled；
+- observed running/degraded。
+
+upgrade 只先把 `acceptNewRuns=false`，并不会改变这些 Frontend gate。直到最后 `activateInstallation()` commit 前，旧 iframe 的 AppStorage RPC 仍会被 Host 接受。因此整个 capture → migrate → restore 窗口里 Frontend 都可能提交新 storage write。
+
+`SqliteAppStorageRepository.restore()` 又是严格的 full replacement：一个 transaction 先
+
+`DELETE FROM agent_app_storage WHERE user_id=? AND app_id=?`
+
+再按 snapshot entries 全量 INSERT，且保留 snapshot 内旧 version/updatedAt。它没有基于 capture revision 的 CAS，也不 merge 当前 rows。
+
+因此可形成确定 race：
+
+1. AppStorage key K=v1；
+2. upgrade capture 得到 K=v1；
+3. old Backend / Frontend 正常 `put(K,v2,expectedVersion=...)` 成功；
+4. migration 基于 v1 输出 v1'；
+5. restore 删除当前 K=v2，再插回 v1'；
+6. upgrade 成功返回，用户/插件刚刚确认成功的 v2 已静默丢失。
+
+即便先 quiesce Backend，也还不足以修复，因为 Frontend bridge 当前没有对应 draining/frozen storage gate；需要一个统一的 App mutation barrier。
+
+**建议修复**：
+
+- 在 storage capture 前先进入 durable `upgrading/draining` mutation barrier，阻止 Frontend/Backend AppStorage mutation 与 App Intent create；
+- quiesce old Backend runtime **完成后**再 capture；Frontend RPC 也必须看到该 barrier 并对 mutating method fail/retry；
+- capture/restore 增加 storage revision / snapshot generation，restore 只能在 scope revision 仍等于 capture revision 时提交，否则 abort/retry migration；
+- 更稳妥地把 migration 做成同一数据库 transaction 内的 typed transformation，避免全量 delete/insert 跨出 owner freeze；
+- regression：在 capture 后、quiesce 前以及 migrate 期间并发 `storage.put`，upgrade 要么序列化该写入并保留结果，要么明确拒绝；绝不能返回双方成功但静默覆盖其中一方。
+
+---
+
+### 7.115 Host durable event 已提交但 wake publication 失败时，在线订阅没有 periodic drain，会无限期停在旧状态（P2 · 🟠 开放 2026-09-23）
+
+继续审 Host durable outbox 时，确认 §7.105 之外还存在一个**已提交事件的在线可见性**缺口。
+
+Host mutation 的常见顺序是：
+
+1. repository / state-commit transaction 向 `agent_host_events` append durable event，并推进 host cursor；
+2. transaction commit；
+3. caller 再执行 `publishHostWake(userId)` 通知内存 EventHub。
+
+`publishHostWake()` 本身不是把已知 cursor 直接广播，而是额外异步执行一次 `runRepository.hostCursor(userId)`；这次查询失败时只：
+
+`logger.warn(..., 'Agent Host wake publication failed')`
+
+然后吞掉错误，不重试、不排队 durable wake。
+
+WebSocket Host subscription 的消费模型又完全依赖 wake：subscribe 时读取 high-water 并 `scheduleDrain()` 一次；此后只有 `eventHub.onHostWake(... => scheduleDrain())` 会触发下一次数据库读取。`AgentEventHub` 是纯内存 listener map，没有 durable queue / timer / periodic poll。
+
+因此可以形成：
+
+1. App/Provider/Memory/Plugin 等 mutation 已成功 commit，host event 也已写入 DB；
+2. commit 后那一次 `hostCursor()` 瞬时失败；
+3. API mutation 仍可成功返回，因为 wake failure 被吞掉；
+4. 已在线的 Host WebSocket subscription 不会再次查询 outbox；
+5. UI 保持旧 summary/app/version/config，直到**另一个 unrelated host wake**恰好发生，或 WebSocket 重连/重新 subscribe。
+
+durable event 本身没有丢，因此重连后能 replay；问题是在线 session 没有“DB 中 cursor 已推进但内存 wake 丢了”的自愈机制。对低频用户，如果后面没有其它 Host 事件，这个 stale window 没有时间上界。
+
+这也会放大 Plugin upgrade 等 versioned UI：例如 upgrade 已 durable 切到新 app version，但该次 Host wake 丢失时，当前 Hub 仍可能暂时保持旧 descriptor/version，直到下次 wake/reconnect。
+
+**建议修复**：
+
+- append host event 的 commit 结果直接携带 committed host cursor，由 caller 用该 cursor publish，避免 commit 后再做一个可失败的 cursor query；
+- wake 只应是 hint：Host subscription 增加低频 high-water poll / bounded retry，检测 durable cursor 已前进时主动 drain；
+- 或维护 durable/monotonic wake generation，使一次内存 publish 丢失也能在下一周期自愈；
+- 对 `publishHostWake` failure 做 retry/backoff，而不是 warn 后永久放弃；
+- regression：host event commit 后注入一次 `hostCursor()` failure，保持 WebSocket 不重连且没有第二个业务 mutation；客户端最终仍必须收到该 durable event。
+
+---
 ## 附录 A：核查方法与证据
 
 - **构建产物核对**（§1.1）：`packages/frontend/dist/assets/index-*.css` 中 `bg-header` 58 次、`bg-background` 27 次、`border-border` 32 次，而 `bg-card` / `border-hover` / `primary-hover` 为 **0** 次；`src/app/styles/tokens.css` 的 `@theme inline` 未定义 `--color-card`。
@@ -3220,12 +5293,22 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
   - 缩放对照：只改 `localStorage['nexus.agent.thread-list-scale.v1']`（1 与 1.3）后重新加载，读同一枚 span 的计算字号，用于区分"CSS 失效"与"运行时内联样式"。
 - **未做（第二轮仍然）**：未跑单测/E2E 套件；未做深色主题与窄窗口（<1040px 容器断点）的实测截图；未在真实 Run 执行中观察流式/取消/审批路径的后端行为；`.agent-config-verbose` 在 ≤1040/760/560 断点下的表现只做了代码阅读。
 
+**第三轮新增：跨切面静态深审（2026-09-23）**
+
+- **异步 / mutation 状态机**：从 selector generation、分页 cursor、modal 生命周期、optimistic revision、commit boundary、caller-stable idempotency、KeepAlive/stream/terminal/plugin bridge 生命周期、Runner process owner、Workspace checkpoint、durable queue/retention、Plugin upgrade storage/version 生命周期与 backup crash-consistency 反向扫描；已继续扩展到 §7.53–§7.114，并把 §7.80 经跨组件复核标成排除项。多处疑似问题在继续取证后被主动推翻（Memory preview selector、appendInput 重复提交、Workspace create duplicate、Host leader lock、Plugin iframe origin、Run delta replay、Runner Plugin workspace 跨 generation 目录复用、Mailbox send idempotency、Artifact staging TTL、Memory expiry physical purge、MCP retry restart revival 等）。
+- **Plugin package trust chain**：静态复核 `TarPluginPackageVerifier` 与 install coordinator：archive 只允许 file/directory、拒绝 linkpath/symlink/hardlink，限制 entry/单文件/展开体积；签名覆盖 raw `manifest.json + files.json`，payload 必须精确落在签名 file list 且逐文件 size/SHA-256 一致；frontend/backend/runner entry 必须在签名列表；install tree 最终只读。未发现 tar traversal / 未签名 payload 注入；普通 install 的“主提交后 stage finalization 冲突”已补入 §7.62。
+- **Runner 控制面 / session**：HTTP 与 WebSocket upgrade 共用 Bearer token + 显式 protocol version；Terminal 的 browser→Backend sessionId 会绑定 user/app/workspace/generation，Backend 保留 Runner socket 并做 bounded replay，stop/restart/delete 会跨 Backend/Runner 关闭 terminal/browser/ACP/plugin owner；Browser tunnel 对 frozen target id/revision 与 endpoint 全字段校验，并把 discovery 得到的 DevTools authority 钉回管理员配置 host。
+- **Workspace file boundary**：logical root 固定 `/workspace/work`，路径 normalize/containment、逐层 symlink 拒绝、目标 `O_NOFOLLOW`、write/move/delete SHA precondition、patch exact declared location + `fuzzFactor=0` 已核；Runner 路由会拒绝 active Workspace job，但该 guard **不包含 Terminal / ACP 外部 writer**，实际 TOCTOU 已动态复现并记录 §7.92。多文件 patch 的中途 I/O failure 仍会被上层统一归类 outcome unknown 并 quarantine，§7.92 的问题则是 race 后 Runner 正常返回 confirmed。
+- **Runner lifecycle/reconcile**：确认 restart 的 Runner Plugin activate 半失败状态（§7.85）、toolchain switch delete unknown→failed 后 `stopping` 无 rollback（§7.86）、Host Runner detached child orphan（§7.87）、ACP/Terminal drain 与 cleanup 的 owner 缺口（§7.89）、checkpoint live-writer / crash recovery（§7.90–§7.91）、normal lifecycle background-job drain（§7.93）与 toolchain switch 跨 generation writer overlap（§7.94）；同时排除 journal replay、普通 provision retry、Runner Plugin workspace 跨 generation 目录复用等候选。
+- **ownership/scope 机械复核**：对 Agent repository 外部资源 mutation 扫描“按 id 更新/删除但无 user/app scope”的候选；剩余命中均落在已绑定 Run/owner 的内部事务、lease owner 校验或内部 command lifecycle，未发现新的可由 HTTP resource id 跨 user/app 修改的路径。
+
 ## 附录 B：本次未覆盖 / 需要进一步确认
 
-- 后端运行期行为（真实 Provider/ACP/MCP/Browser 交互、并发与恢复路径）只做了静态阅读，未做动态验证。
-- `packages/agent-runner`（7,875 行）只做了结构扫读，未逐文件复查。
-- Plugin 签名/校验链路（`plugin-package-install-coordinator.ts` 等）未深入。
-- 数据迁移与历史数据兼容（`sqlite-migrations.ts`）**只复查到 §1.9 这一条**（迁移 #44 改了 result 语义、没改 inspection 的 `target.kind`）；其余 38 条迁移的正确性、以及"老库升级到当前版本"的完整路径未验证。
+- 后端运行期行为（真实 Provider/ACP/MCP/Browser 外部交互、网络中断、进程崩溃、并发故障注入）本轮仍以静态状态机复核为主，没有对这些真实外部系统做动态破坏性验证。
+- `packages/agent-runner` 已补做高风险链路深审：journal/idempotency、HTTP/WS Bearer + protocol gate、Workspace lifecycle/reconcile、Runner Plugin lifecycle、local Terminal reattach、Browser tunnel frozen-target binding、Workspace coding file/path/symlink/hash/patch 边界、cleanup；**仍未逐文件逐行审完全部 Runner 实现，也未做故障注入**。
+- Plugin 签名/校验/安装主链已补做静态深审：tar entry 类型与 path/size/count 限制、禁止 symlink/hardlink、manifest + files.json Ed25519 签名、payload exact file-list/hash、target entry、immutable install tree 与 verify→install 路径均已核；未做恶意 tar corpus / 并发 stage fuzz / 文件系统故障注入。
+- Backup/restore 已补做覆盖范围、secret re-encrypt、filesystem swap、并发/一致性 snapshot 审计：确认 Agent/AI 数据覆盖遗漏与 connection-scope 授权错绑（§7.101）、restore rollback/crash consistency（§7.102）、export/import 缺 snapshot/全局串行化（§7.109）。仍未做真实磁盘 fault-injection、双并发 import 动态复现或跨实例完整 Agent roundtrip。
+- 数据迁移与历史数据兼容已补做高风险静态深审：系统复核 Agent migration #21–#45 的 multi-column ADD、表重建、scope/semantic JSON 转换与 current-schema 启动顺序；确认 #23/#34 partial-schema 误判（§7.100），排除 #22 额外 FK、#36 Subagent SSH scope、#43 legacy status、#28 FTS 自定义函数注册顺序等候选。仍未用真实历史数据库逐版本跑完整升级矩阵，也未做 migration fault-injection。
 - 视觉结论已升级为实测（§7.10–§7.13），覆盖浅色 + 深色对照、1620×953 与 1200/740/560 三档窗口宽度；但**未测"最大化/最小化"、未在真实触屏设备上验证触控目标、也未做日文界面的 i18n 实测**（只做了中/英）。§7.1 的玻璃配方仍是建议值，需设计确认。
 - 未逐帧核对全部 agent 截图（只看了解析出的关键几张）；**第四轮已补审任务栏（TaskRail）与 Run 详情入口**（§7.14-b），但 Artifact library / 插件多实例 / checkpoint 恢复的**成功路径界面**、以及审批卡的**真实渲染态**（当前库里没有 `requested` 状态的审批可点，只能代码侧复查）仍未截图核对。
 - 设置区除「Agent」首屏之外的页面（运行与环境 / 插件与安全 / 子代理 / 记忆 / 存储 / 护栏…）本轮仍未逐页截图；只有 §7.14-c 的"硬编码文案行数"做了全目录统计。

@@ -244,70 +244,83 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
     private readonly secrets: ProviderSecretPort,
   ) {}
 
+  private async fetchModelsFromEndpoint(
+    baseUrl: string,
+    credential: string | undefined,
+    signal: AbortSignal,
+  ): Promise<DiscoveredProviderModel[]> {
+    let response: Response;
+    try {
+      response = await fetch(providerUrl(baseUrl, 'models'), {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+        },
+        signal,
+      });
+    } catch (error) {
+      throw mapProviderError(error, signal);
+    }
+    if (response.status === 401 || response.status === 403) throw new Error('PROVIDER_AUTH_FAILED');
+    if (!response.ok) throw providerHttpError(response.status, response.headers.get('retry-after'));
+    const declaredLength = Number(response.headers.get('content-length') ?? 0);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_MODELS_RESPONSE_BYTES) {
+      throw new Error('PROVIDER_MODELS_RESPONSE_TOO_LARGE');
+    }
+    const text = await response.text();
+    if (Buffer.byteLength(text, 'utf8') > MAX_MODELS_RESPONSE_BYTES) {
+      throw new Error('PROVIDER_MODELS_RESPONSE_TOO_LARGE');
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
+    }
+    const data = (payload as { data?: unknown }).data;
+    if (!Array.isArray(data)) throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
+    const discovered = new Map<string, DiscoveredProviderModel>();
+    for (const raw of data.slice(0, 1000)) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const record = raw as {
+        id?: unknown;
+        owned_by?: unknown;
+        created?: unknown;
+        nexus_capabilities?: unknown;
+      };
+      if (typeof record.id !== 'string' || !record.id.trim()) continue;
+      const id = record.id.trim();
+      const liveCapabilityReport = parseOpenAiCompatibleCapabilityMetadata(record.nexus_capabilities, baseUrl);
+      discovered.set(id, {
+        id,
+        ...(typeof record.owned_by === 'string' && record.owned_by.trim() ? { ownedBy: record.owned_by.trim() } : {}),
+        ...(Number.isSafeInteger(record.created) && (record.created as number) >= 0
+          ? { createdAt: record.created as number }
+          : {}),
+        ...(liveCapabilityReport ? { liveCapabilityReport } : {}),
+      });
+    }
+    return [...discovered.values()].sort((left, right) => left.id.localeCompare(right.id));
+  }
+
   async discoverModels(userId: number, providerId: string, signal: AbortSignal): Promise<DiscoveredProviderModel[]> {
     const provider = await this.providers.get(userId, providerId);
     if (!provider || !provider.enabled) throw new Error('PROVIDER_UNAVAILABLE');
-    return this.secrets.withCredential(userId, provider.id, provider.credentialRevision, async (credential) => {
-      let response: Response;
-      try {
-        response = await fetch(providerUrl(provider.baseUrl, 'models'), {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-            ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
-          },
-          signal,
-        });
-      } catch (error) {
-        throw mapProviderError(error, signal);
-      }
-      if (response.status === 401 || response.status === 403) throw new Error('PROVIDER_AUTH_FAILED');
-      if (!response.ok) throw providerHttpError(response.status, response.headers.get('retry-after'));
-      const declaredLength = Number(response.headers.get('content-length') ?? 0);
-      if (Number.isFinite(declaredLength) && declaredLength > MAX_MODELS_RESPONSE_BYTES) {
-        throw new Error('PROVIDER_MODELS_RESPONSE_TOO_LARGE');
-      }
-      const text = await response.text();
-      if (Buffer.byteLength(text, 'utf8') > MAX_MODELS_RESPONSE_BYTES) {
-        throw new Error('PROVIDER_MODELS_RESPONSE_TOO_LARGE');
-      }
-      let payload: unknown;
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
-      }
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
-      }
-      const data = (payload as { data?: unknown }).data;
-      if (!Array.isArray(data)) throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
-      const discovered = new Map<string, DiscoveredProviderModel>();
-      for (const raw of data.slice(0, 1000)) {
-        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
-        const record = raw as {
-          id?: unknown;
-          owned_by?: unknown;
-          created?: unknown;
-          nexus_capabilities?: unknown;
-        };
-        if (typeof record.id !== 'string' || !record.id.trim()) continue;
-        const id = record.id.trim();
-        const liveCapabilityReport = parseOpenAiCompatibleCapabilityMetadata(
-          record.nexus_capabilities,
-          provider.baseUrl,
-        );
-        discovered.set(id, {
-          id,
-          ...(typeof record.owned_by === 'string' && record.owned_by.trim() ? { ownedBy: record.owned_by.trim() } : {}),
-          ...(Number.isSafeInteger(record.created) && (record.created as number) >= 0
-            ? { createdAt: record.created as number }
-            : {}),
-          ...(liveCapabilityReport ? { liveCapabilityReport } : {}),
-        });
-      }
-      return [...discovered.values()].sort((left, right) => left.id.localeCompare(right.id));
-    });
+    return this.secrets.withCredential(userId, provider.id, provider.credentialRevision, async (credential) =>
+      this.fetchModelsFromEndpoint(provider.baseUrl, credential ?? undefined, signal),
+    );
+  }
+
+  async discoverEndpointModels(
+    baseUrl: string,
+    credential: string | undefined,
+    signal: AbortSignal,
+  ): Promise<DiscoveredProviderModel[]> {
+    return this.fetchModelsFromEndpoint(baseUrl, credential, signal);
   }
 
   async *stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {

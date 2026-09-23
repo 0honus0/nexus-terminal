@@ -5,12 +5,11 @@
     BaseModal,
     UiButton,
     UiCheckbox,
-    UiCombobox,
     UiEmptyState,
     UiInfoHint,
     UiPopover,
     UiSelect,
-    type UiComboboxOption,
+    type UiSelectOption,
   } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
@@ -20,6 +19,7 @@
     type AgentDiscoveredProviderModelDto,
     type AgentModelRegistryStatusDto,
     type AgentProviderCreateRequestDto,
+    type AgentProviderModelInputDto,
     type AgentProviderViewDto,
     type AgentModelCapabilityDefaultsDto,
   } from '../api/agent-api';
@@ -119,6 +119,13 @@
   const drawerOpen = reactive<Record<string, boolean>>({});
   const drawerLoading = reactive<Record<string, boolean>>({});
   const filterQueries = reactive<Record<string, string>>({});
+  const filterConfiguredQueries = reactive<Record<string, string>>({});
+
+  const filteredConfigured = (provider: AgentProviderViewDto) => {
+    const query = (filterConfiguredQueries[provider.id] || '').trim().toLowerCase();
+    if (!query) return provider.models;
+    return provider.models.filter((m) => m.id.toLowerCase().includes(query));
+  };
   const selectedDiscovered = reactive<Record<string, Record<string, boolean>>>({});
   const manualModelId = reactive<Record<string, string>>({});
   const isSavingModels = reactive<Record<string, boolean>>({});
@@ -154,6 +161,11 @@
   const protocolFromValue = (value: unknown): AgentProviderViewDto['protocol'] =>
     value === 'responses' ? 'responses' : 'chat-completions';
 
+  const protocolOptions = computed<UiSelectOption[]>(() => [
+    { value: 'chat-completions', label: t('agent.settings.providers.protocolChat') },
+    { value: 'responses', label: t('agent.settings.providers.protocolResponses') },
+  ]);
+
   const form = reactive({
     displayName: '',
     baseUrl: '',
@@ -167,6 +179,11 @@
     supportsFileInput: false,
   });
 
+  const isPullingModels = ref(false);
+  const pulledModels = ref<AgentDiscoveredProviderModelDto[]>([]);
+  const selectedPulledModelKey = ref<string | null>(null);
+  const importAllPulled = ref(false);
+
   const openAddModal = () => {
     form.displayName = '';
     form.baseUrl = '';
@@ -178,12 +195,70 @@
     form.supportsTools = true;
     form.supportsImageInput = false;
     form.supportsFileInput = false;
+    isPullingModels.value = false;
+    pulledModels.value = [];
+    selectedPulledModelKey.value = null;
+    importAllPulled.value = false;
     modalError.value = '';
     modalTestResult.value = null;
     createdProviderId.value = null;
     showApiKey.value = false;
     modalOpen.value = true;
   };
+
+  const applyPulledModel = (model: AgentDiscoveredProviderModelDto) => {
+    selectedPulledModelKey.value = model.id;
+    form.modelId = model.id;
+    const defaults = model.registryDefaults;
+    const caps = model.providerCapabilities?.capabilities;
+    form.contextWindow = caps?.contextWindow ?? defaults?.contextWindow ?? 128000;
+    form.maxOutputTokens = caps?.maxOutputTokens ?? defaults?.maxOutputTokens ?? 4096;
+    form.supportsTools = caps?.supportsTools ?? defaults?.supportsTools ?? true;
+    form.supportsImageInput = caps?.supportsImageInput ?? defaults?.supportsImageInput ?? false;
+    form.supportsFileInput = caps?.supportsFileInput ?? defaults?.supportsFileInput ?? false;
+  };
+
+  const pullModelsFromEndpoint = async () => {
+    if (!form.baseUrl.trim()) {
+      modalError.value = t('agent.settings.providers.fieldRequired', { field: t('agent.settings.providers.baseUrl') });
+      return;
+    }
+    modalError.value = '';
+    isPullingModels.value = true;
+    try {
+      const list = await agentApi.discoverEndpointModels({
+        baseUrl: form.baseUrl.trim(),
+        credential: form.credential.trim() || undefined,
+      });
+      pulledModels.value = list;
+      if (list.length > 0) {
+        operationFeedback.notifySuccess(t('agent.settings.providers.pullSuccess', { count: list.length }));
+        const match = list.find((m) => m.id === form.modelId.trim()) ?? list[0];
+        applyPulledModel(match);
+      } else {
+        operationFeedback.notifyInfo(t('agent.settings.providers.discoveryEmpty'));
+      }
+    } catch (cause) {
+      const errMsg = formatAgentApiError(cause, t('agent.settings.providers.pullFailed'));
+      modalError.value = errMsg;
+      operationFeedback.notifyError({ operation: 'pull-models', message: errMsg, cause });
+    } finally {
+      isPullingModels.value = false;
+    }
+  };
+
+  const onSelectPulledModel = (value: unknown) => {
+    const found = pulledModels.value.find((m) => m.id === value);
+    if (found) applyPulledModel(found);
+  };
+
+  const pulledModelOptions = computed<UiSelectOption[]>(() =>
+    pulledModels.value.map((m) => ({
+      value: m.id,
+      label: m.id,
+      description: m.ownedBy ? `owned by ${m.ownedBy}` : undefined,
+    })),
+  );
 
   const closeModal = () => {
     if (modalTesting.value) return;
@@ -251,22 +326,38 @@
 
       // 如果尚未保存，先通过 createProvider 建立服务商记录
       if (!targetProviderId) {
+        const modelsToCreate: AgentProviderModelInputDto[] =
+          importAllPulled.value && pulledModels.value.length > 0
+            ? pulledModels.value.map((m) => {
+                const defaults = m.registryDefaults;
+                const caps = m.providerCapabilities?.capabilities;
+                return {
+                  id: m.id,
+                  contextWindow: caps?.contextWindow ?? defaults?.contextWindow ?? 128000,
+                  maxOutputTokens: caps?.maxOutputTokens ?? defaults?.maxOutputTokens ?? 4096,
+                  supportsTools: caps?.supportsTools ?? defaults?.supportsTools ?? true,
+                  supportsImageInput: caps?.supportsImageInput ?? defaults?.supportsImageInput ?? false,
+                  supportsFileInput: caps?.supportsFileInput ?? defaults?.supportsFileInput ?? false,
+                };
+              })
+            : [
+                {
+                  id: form.modelId.trim(),
+                  contextWindow: form.contextWindow,
+                  maxOutputTokens: form.maxOutputTokens,
+                  supportsTools: form.supportsTools,
+                  supportsImageInput: form.supportsImageInput,
+                  supportsFileInput: form.supportsFileInput,
+                },
+              ];
+
         const payload: AgentProviderCreateRequestDto = {
           kind: 'openai-compatible',
           displayName: form.displayName.trim(),
           baseUrl: form.baseUrl.trim(),
           protocol: form.protocol,
           ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
-          models: [
-            {
-              id: form.modelId.trim(),
-              contextWindow: form.contextWindow,
-              maxOutputTokens: form.maxOutputTokens,
-              supportsTools: form.supportsTools,
-              supportsImageInput: form.supportsImageInput,
-              supportsFileInput: form.supportsFileInput,
-            },
-          ],
+          models: modelsToCreate,
           enabled: true,
         };
 
@@ -328,22 +419,38 @@
 
     modalTesting.value = true;
     try {
+      const modelsToCreate: AgentProviderModelInputDto[] =
+        importAllPulled.value && pulledModels.value.length > 0
+          ? pulledModels.value.map((m) => {
+              const defaults = m.registryDefaults;
+              const caps = m.providerCapabilities?.capabilities;
+              return {
+                id: m.id,
+                contextWindow: caps?.contextWindow ?? defaults?.contextWindow ?? 128000,
+                maxOutputTokens: caps?.maxOutputTokens ?? defaults?.maxOutputTokens ?? 4096,
+                supportsTools: caps?.supportsTools ?? defaults?.supportsTools ?? true,
+                supportsImageInput: caps?.supportsImageInput ?? defaults?.supportsImageInput ?? false,
+                supportsFileInput: caps?.supportsFileInput ?? defaults?.supportsFileInput ?? false,
+              };
+            })
+          : [
+              {
+                id: form.modelId.trim(),
+                contextWindow: form.contextWindow,
+                maxOutputTokens: form.maxOutputTokens,
+                supportsTools: form.supportsTools,
+                supportsImageInput: form.supportsImageInput,
+                supportsFileInput: form.supportsFileInput,
+              },
+            ];
+
       const payload: AgentProviderCreateRequestDto = {
         kind: 'openai-compatible',
         displayName: form.displayName.trim(),
         baseUrl: form.baseUrl.trim(),
         protocol: form.protocol,
         ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
-        models: [
-          {
-            id: form.modelId.trim(),
-            contextWindow: form.contextWindow,
-            maxOutputTokens: form.maxOutputTokens,
-            supportsTools: form.supportsTools,
-            supportsImageInput: form.supportsImageInput,
-            supportsFileInput: form.supportsFileInput,
-          },
-        ],
+        models: modelsToCreate,
         enabled: true,
       };
 
@@ -743,24 +850,16 @@
     }
   };
 
-  // 默认模型选择：统一 Gen2 Combobox，模型 ID 为主、渠道为次
-  const defaultModelComboboxOptions = computed<UiComboboxOption[]>(() =>
+  // 默认模型选择：统一 Select 下拉（禁用自由输入），模型 ID 为主、渠道为次
+  const defaultModelSelectOptions = computed<UiSelectOption[]>(() =>
     modelOptions.value.map((opt) => ({
       value: opt.key,
       label: opt.model.id,
       description: opt.provider.displayName,
-      keywords: opt.provider.displayName,
     })),
   );
 
-  const providerByModelKey = computed(() => new Map(modelOptions.value.map((opt) => [opt.key, opt.provider])));
-
-  const providerIconForKey = (key: string | number): string => {
-    const provider = providerByModelKey.value.get(String(key));
-    return provider ? providerIcon(provider) : 'fa-solid fa-cube text-text-secondary';
-  };
-
-  const selectDefaultModel = (value: string | number | null) => {
+  const selectDefaultModel = (value: unknown) => {
     const opt = modelOptions.value.find((item) => item.key === value);
     if (opt) emit('defaultModel', opt.provider.id, opt.model.id);
   };
@@ -866,13 +965,30 @@
 
   const copyText = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
       copiedUrl.value = text;
+      operationFeedback.notifySuccess(t("agent.settings.providers.copyUrlSuccess"));
       setTimeout(() => {
-        copiedUrl.value = null;
+        if (copiedUrl.value === text) {
+          copiedUrl.value = null;
+        }
       }, 1500);
     } catch {
-      // ignore
+      operationFeedback.notifyError({
+        operation: "copy-url",
+        message: t("agent.operations.requestFailed"),
+      });
     }
   };
 
@@ -979,59 +1095,29 @@
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <i class="fa-solid fa-robot text-sm" aria-hidden="true"></i>
           </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <div class="text-xs font-semibold text-foreground">{{ $t('agent.settings.providers.defaultModel') }}</div>
-              <span
-                class="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/25 px-2 py-0.5 text-[11px] font-medium text-success"
-              >
-                <i class="fa-solid fa-cloud-arrow-up text-[8px]"></i>
-                <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
-              </span>
-            </div>
-            <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.providers.defaultModelHint') }}</div>
+          <div class="flex items-center gap-2">
+            <div class="text-xs font-semibold text-foreground">{{ $t('agent.settings.providers.defaultModel') }}</div>
+            <span
+              class="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/25 px-2 py-0.5 text-[11px] font-medium text-success"
+            >
+              <i class="fa-solid fa-cloud-arrow-up text-[8px]"></i>
+              <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
+            </span>
           </div>
         </div>
 
         <div class="min-w-64 max-w-sm">
-          <UiCombobox
+          <UiSelect
             :model-value="defaultModelKey || null"
-            :options="defaultModelComboboxOptions"
+            :options="defaultModelSelectOptions"
             :disabled="busy || modelOptions.length === 0"
             :placeholder="$t('agent.settings.providers.chooseDefault')"
-            :search-placeholder="$t('agent.settings.providers.searchConfiguredModels')"
-            :empty-text="$t('agent.settings.providers.noMatchingModels')"
             :aria-label="$t('agent.settings.providers.defaultModel')"
             align="end"
             density="comfortable"
-            input-class="font-mono font-semibold"
+            panel-class="max-h-72"
             @update:model-value="selectDefaultModel"
-          >
-            <template #meta="{ selected }">
-              <span
-                v-if="selected"
-                class="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 bg-header/50 px-1.5 py-1 text-[11px] font-medium text-text-secondary"
-              >
-                <i :class="providerIconForKey(selected.value)" class="text-[11px] shrink-0"></i>
-                <span class="max-w-28 truncate">{{ selected.description }}</span>
-              </span>
-            </template>
-
-            <template #option="{ option }">
-              <div class="flex min-w-0 items-center justify-between gap-2">
-                <div class="flex min-w-0 items-center gap-2">
-                  <i :class="providerIconForKey(option.value)" class="text-xs shrink-0"></i>
-                  <span class="truncate font-mono text-xs font-semibold">{{ option.label }}</span>
-                </div>
-                <span
-                  v-if="option.description"
-                  class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[11px] text-text-secondary leading-none"
-                >
-                  {{ option.description }}
-                </span>
-              </div>
-            </template>
-          </UiCombobox>
+          />
         </div>
       </div>
 
@@ -1119,12 +1205,8 @@
           </UiPopover>
         </div>
 
-        <div class="mt-1.5 mb-3 text-[11px] text-text-secondary">
-          {{ $t('agent.settings.providers.fallbackHint') }}
-        </div>
-
         <!-- 已选备用模型：显式有序列表（1..N + 上移/下移/移除） -->
-        <ol v-if="selectedFallbackRows.length > 0" class="space-y-1.5">
+        <ol v-if="selectedFallbackRows.length > 0" class="mt-3 space-y-1.5">
           <li
             v-for="(row, index) in selectedFallbackRows"
             :key="row.key"
@@ -1192,7 +1274,7 @@
         <!-- 空态：紧凑信息提示，而非按钮云 -->
         <div
           v-else
-          class="flex items-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/40 px-3 py-2.5 text-[11px] text-text-secondary"
+          class="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/40 px-3 py-2.5 text-[11px] text-text-secondary"
         >
           <i class="fa-solid fa-layer-group text-text-secondary/80" aria-hidden="true"></i>
           <span>{{ $t('agent.settings.providers.fallbackEmpty') }}</span>
@@ -1206,132 +1288,121 @@
           :key="provider.id"
           data-testid="agent-provider-card"
           :data-provider-id="provider.id"
-          class="rounded-xl bg-header/20 transition-colors hover:bg-header/35"
+          class="rounded-xl border border-border/85 bg-card/60 transition-all hover:border-border hover:bg-card/85 shadow-2xs overflow-hidden"
         >
-          <!-- 服务商顶行摘要 -->
-          <div class="flex flex-wrap items-center justify-between gap-3 p-3.5">
-            <!-- 左侧核心身份 -->
-            <div class="flex items-center gap-3 min-w-0">
+          <!-- 服务商顶行摘要（紧凑单行） -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 px-3.5 py-2">
+            <!-- 左侧核心身份与配置元数据（单行紧凑排布：名称 + 协议下拉） -->
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
               <div
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-header/70 border border-border/60 text-foreground"
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 border border-primary/20 text-primary"
               >
-                <i :class="providerIcon(provider)" class="text-sm"></i>
+                <i :class="providerIcon(provider)" class="text-xs"></i>
               </div>
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-semibold text-sm text-foreground truncate">{{ provider.displayName }}</span>
+              <div class="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
+                <!-- 服务商名称（带清晰边界与复制反馈，点击复制 Base URL） -->
+                <button
+                  type="button"
+                  class="group inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-tight transition-all cursor-pointer select-none shrink-0 shadow-xs"
+                  :class="
+                    copiedUrl === provider.baseUrl
+                      ? 'border-success/70 bg-success/15 text-success'
+                      : 'border-border/90 bg-background/90 hover:bg-card text-foreground hover:border-primary/60 hover:text-primary'
+                  "
+                  :title="
+                    copiedUrl === provider.baseUrl
+                      ? $t('agent.settings.providers.copyUrlSuccess')
+                      : `${provider.baseUrl} · ${$t('agent.settings.providers.copyUrl')}`
+                  "
+                  @click="copyText(provider.baseUrl)"
+                >
+                  <span>{{ provider.displayName }}</span>
                   <span
-                    class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
-                    :class="
-                      provider.enabled
-                        ? 'bg-success/10 text-success  border border-success/20'
-                        : 'bg-header text-text-secondary border border-border/60'
-                    "
+                    v-if="copiedUrl === provider.baseUrl"
+                    class="text-[11px] font-medium inline-flex items-center gap-1 text-success"
                   >
-                    <span
-                      class="h-1.5 w-1.5 rounded-full"
-                      :class="provider.enabled ? 'bg-success' : 'bg-text-secondary'"
-                    ></span>
-                    {{
-                      provider.enabled
-                        ? $t('agent.settings.providers.enabled')
-                        : $t('agent.settings.providers.disabled')
-                    }}
+                    <i class="fa-solid fa-check text-[10px]" aria-hidden="true"></i>
+                    <span>{{ $t('agent.settings.providers.copyUrlSuccess') }}</span>
                   </span>
-                  <button
-                    type="button"
-                    class="rounded-md bg-header/60 border border-border/60 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
-                    :title="$t('agent.settings.providers.testModalTitle')"
-                    @click="openTestModal(provider)"
-                  >
-                    <i class="fa-solid fa-layer-group text-[9px] mr-1"></i>
-                    <span>{{ $t('agent.settings.providers.modelCount', { count: provider.models.length }) }}</span>
-                  </button>
-                  <span v-if="provider.hasCredential" class="inline-flex items-center gap-1 text-[11px] text-success">
-                    <i class="fa-solid fa-key text-[9px]"></i>
-                    <span>{{ $t('agent.settings.providers.credentialConfigured') }}</span>
-                  </span>
-                </div>
+                  <i
+                    v-else
+                    class="fa-regular fa-copy text-[10px] text-text-secondary/50 group-hover:text-primary transition-colors"
+                    aria-hidden="true"
+                  ></i>
+                </button>
 
-                <!-- 次级行：紧凑 URL 与快捷复制 -->
-                <div class="flex items-center gap-1.5 text-xs text-text-secondary/70 mt-1">
+                <!-- 协议选择器（按最长文本展示，紧凑不占过多空间） -->
+                <div class="w-[130px] shrink-0">
                   <UiSelect
                     density="compact"
-                    class="shrink-0"
+                    :hide-indicator="true"
+                    panel-class="!min-w-[130px]"
+                    class="w-full text-[11px]"
                     :aria-label="$t('agent.settings.providers.protocol')"
                     :disabled="busy"
                     :model-value="provider.protocol"
-                    :options="[
-                      { value: 'chat-completions', label: $t('agent.settings.providers.protocolChat') },
-                      { value: 'responses', label: $t('agent.settings.providers.protocolResponses') },
-                    ]"
+                    :options="protocolOptions"
                     @update:model-value="(value: unknown) => emit('protocol', provider, protocolFromValue(value))"
                   />
-                  <span class="font-mono text-[11px] truncate max-w-xs sm:max-w-md">{{ provider.baseUrl }}</span>
-                  <button
-                    type="button"
-                    class="hover:text-foreground transition-colors cursor-pointer"
-                    :title="
-                      copiedUrl === provider.baseUrl
-                        ? $t('agent.settings.providers.copyUrlSuccess')
-                        : $t('agent.settings.providers.copyUrl')
-                    "
-                    @click="copyText(provider.baseUrl)"
-                  >
-                    <i
-                      :class="copiedUrl === provider.baseUrl ? 'fa-solid fa-check text-success' : 'fa-regular fa-copy'"
-                      class="text-[11px]"
-                    ></i>
-                  </button>
                 </div>
               </div>
             </div>
 
-            <!-- 右侧操作工具条 -->
-            <div class="flex flex-wrap items-center justify-end gap-2.5 shrink-0">
-              <!-- 查看已配模型并进行连通测试弹窗入口 -->
+            <!-- 右侧操作工具条：模型与测试(仅图标) + 更新模型(仅图标) + 启动(绿色)/停用(红色) + 删除(仅图标) -->
+            <div
+              class="flex items-center justify-end gap-1.5 shrink-0 pt-2 sm:pt-0 border-t border-border/30 sm:border-0"
+            >
+              <!-- 模型与测试（仅图标） -->
               <UiButton
                 appearance="soft"
                 tone="neutral"
+                density="compact"
+                icon-only
                 type="button"
-                :title="$t('agent.settings.providers.testModalTitle')"
+                :title="$t('agent.settings.providers.testModalBtn', { count: provider.models.length })"
+                :aria-label="$t('agent.settings.providers.testModalBtn', { count: provider.models.length })"
                 :disabled="busy"
                 @click="openTestModal(provider)"
               >
                 <i class="fa-solid fa-vial text-xs text-primary" aria-hidden="true"></i>
-                <span class="hidden sm:inline">{{
-                  $t('agent.settings.providers.testModalBtn', { count: provider.models.length })
-                }}</span>
               </UiButton>
 
-              <!-- 更新模型（抽屉式同步） -->
+              <!-- 更新模型（抽屉式同步，仅图标） -->
               <UiButton
                 type="button"
                 appearance="soft"
+                density="compact"
+                icon-only
                 :tone="drawerOpen[provider.id] ? 'primary' : 'neutral'"
                 :title="$t('agent.settings.providers.discover')"
+                :aria-label="$t('agent.settings.providers.discover')"
                 :disabled="busy"
                 @click="toggleDrawer(provider)"
               >
                 <i
                   class="fa-solid fa-arrows-rotate text-xs"
                   :class="{ 'fa-spin': busy || drawerLoading[provider.id] }"
+                  aria-hidden="true"
                 ></i>
-                <span class="hidden sm:inline">{{ $t('agent.settings.providers.discover') }}</span>
               </UiButton>
 
-              <!-- 启停状态切换 -->
+              <!-- 启停状态切换：启动(绿色) / 停用(红色) -->
               <UiButton
                 type="button"
-                :appearance="provider.enabled ? 'soft' : 'solid'"
-                :tone="provider.enabled ? 'neutral' : 'primary'"
+                appearance="soft"
+                density="compact"
+                :tone="provider.enabled ? 'danger' : 'success'"
                 :disabled="busy"
+                class="text-xs font-medium"
+                :title="
+                  provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable')
+                "
                 @click="emit('toggle', provider, !provider.enabled)"
               >
                 {{ provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable') }}
               </UiButton>
 
-              <!-- 删除服务商 -->
+              <!-- 删除服务商（仅图标） -->
               <UiButton
                 type="button"
                 appearance="ghost"
@@ -1339,10 +1410,11 @@
                 icon-only
                 density="compact"
                 :title="$t('agent.settings.providers.deleteConfirm')"
+                :aria-label="$t('agent.settings.providers.deleteConfirm')"
                 :disabled="busy"
                 @click="deletingProvider = provider"
               >
-                <i class="fa-regular fa-trash-can text-xs"></i>
+                <i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
               </UiButton>
             </div>
           </div>
@@ -1352,62 +1424,6 @@
             v-if="drawerOpen[provider.id]"
             class="border-t border-border/50 bg-header/15 p-3.5 sm:p-4 transition-all"
           >
-            <!-- 抽屉顶部横栏 -->
-            <div class="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-border/50">
-              <div class="flex items-center gap-2">
-                <div class="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <i
-                    class="fa-solid fa-arrows-rotate text-xs"
-                    :class="{ 'fa-spin': busy || drawerLoading[provider.id] }"
-                  ></i>
-                </div>
-                <span class="text-xs font-bold text-foreground">{{ $t('agent.settings.providers.drawerTitle') }}</span>
-                <span
-                  class="rounded-md border border-border/70 bg-card px-2 py-0.5 text-[11px] font-mono text-text-secondary"
-                >
-                  {{ $t('agent.settings.providers.discoveredModels') }}: {{ availableDiscoveries(provider).length }}
-                </span>
-                <span
-                  class="rounded-md border border-border/70 bg-card px-2 py-0.5 text-[11px] font-mono text-text-secondary"
-                >
-                  {{ $t('agent.settings.providers.configuredModels') }}: {{ provider.models.length }}
-                </span>
-
-                <!-- 实时自动保存指示微胶囊 -->
-                <span
-                  v-if="isSavingModels[provider.id]"
-                  class="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/25 px-2 py-0.5 text-[11px] font-medium text-primary"
-                >
-                  <i class="fa-solid fa-circle-notch fa-spin text-[9px]"></i>
-                  <span>{{ $t('agent.settings.providers.saving') }}</span>
-                </span>
-                <span
-                  v-else
-                  class="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/25 px-2 py-0.5 text-[11px] font-medium text-success"
-                >
-                  <i class="fa-solid fa-cloud-arrow-up text-[9px]"></i>
-                  <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
-                </span>
-              </div>
-
-              <div class="flex items-center">
-                <UiButton
-                  appearance="soft"
-                  tone="neutral"
-                  type="button"
-                  :disabled="busy || drawerLoading[provider.id]"
-                  :title="$t('agent.settings.providers.discover')"
-                  @click="triggerDiscover(provider)"
-                >
-                  <i
-                    class="fa-solid fa-arrows-rotate text-xs"
-                    :class="{ 'fa-spin': busy || drawerLoading[provider.id] }"
-                  ></i>
-                  <span class="hidden sm:inline">{{ $t('agent.settings.providers.discover') }}</span>
-                </UiButton>
-              </div>
-            </div>
-
             <!-- 正在查询中的状态 -->
             <div v-if="!discoveries[provider.id] && (busy || drawerLoading[provider.id])" class="py-8 text-center">
               <i class="fa-solid fa-circle-notch fa-spin text-lg text-primary mb-2"></i>
@@ -1417,10 +1433,11 @@
             </div>
 
             <!-- 左右两栏策略布局：左侧【可添加模型】支持全选、多选、一键添加所有；右侧【已生效模型】支持单项及批量取消添加 -->
-            <div v-else class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-stretch">
               <!-- 左栏：可添加模型（支持多选、全选添加） -->
-              <div class="flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs">
-                <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-border/40">
+              <div class="flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs h-full">
+                <!-- 顶栏标题与批量动作（统一高度 min-h-8 pb-2.5） -->
+                <div class="flex items-center justify-between gap-2 min-h-8 pb-2.5 border-b border-border/40">
                   <div class="flex items-center gap-1.5">
                     <span class="text-xs font-semibold text-foreground">{{
                       $t('agent.settings.providers.discoveredModels')
@@ -1438,6 +1455,7 @@
                     <UiButton
                       appearance="solid"
                       tone="primary"
+                      density="compact"
                       v-if="selectedDiscoveredCount(provider) > 0"
                       type="button"
                       :disabled="busy"
@@ -1453,6 +1471,7 @@
                     <UiButton
                       appearance="soft"
                       tone="neutral"
+                      density="compact"
                       v-if="availableDiscoveries(provider).length > 0"
                       type="button"
                       :disabled="busy"
@@ -1465,9 +1484,12 @@
                   </div>
                 </div>
 
-                <!-- 搜索过滤与全选控制器 -->
-                <div v-if="availableDiscoveries(provider).length > 0" class="flex items-center gap-2 py-2">
-                  <label class="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none">
+                <!-- 搜索过滤与全选控制器（统一固定高度 h-9 my-1） -->
+                <div class="flex items-center gap-2 h-9 my-1">
+                  <label
+                    v-if="availableDiscoveries(provider).length > 0"
+                    class="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none shrink-0"
+                  >
                     <UiCheckbox
                       :model-value="isAllDiscoveredSelected(provider)"
                       @update:model-value="toggleSelectAllDiscovered(provider)"
@@ -1493,11 +1515,8 @@
                   </div>
                 </div>
 
-                <!-- 模型列表项 -->
-                <div
-                  v-if="filteredAvailable(provider).length > 0"
-                  class="max-h-56 overflow-y-auto space-y-1.5 pr-1 py-1"
-                >
+                <!-- 模型列表项（固定 h-60 滚动区域） -->
+                <div v-if="filteredAvailable(provider).length > 0" class="h-60 overflow-y-auto space-y-1.5 pr-1 py-1">
                   <div
                     v-for="model in filteredAvailable(provider)"
                     :key="model.id"
@@ -1531,7 +1550,7 @@
 
                 <div
                   v-else-if="availableDiscoveries(provider).length === 0"
-                  class="py-6 text-center text-xs text-text-secondary"
+                  class="h-60 flex flex-col items-center justify-center text-center text-xs text-text-secondary"
                 >
                   <div
                     class="flex h-8 w-8 items-center justify-center rounded-full bg-success/10 text-success mx-auto mb-1.5"
@@ -1541,13 +1560,13 @@
                   <p class="font-medium text-foreground">{{ $t('agent.settings.providers.allModelsConfigured') }}</p>
                 </div>
 
-                <div v-else class="py-6 text-center text-xs text-text-secondary">
+                <div v-else class="h-60 flex items-center justify-center text-center text-xs text-text-secondary">
                   {{ $t('agent.settings.providers.discoveryEmpty') }}
                 </div>
 
-                <!-- 底部极简手动增补条 -->
+                <!-- 底部极简手动增补条（统一高度 h-8 pt-2.5） -->
                 <div class="mt-auto pt-2.5 border-t border-border/40">
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1.5 h-8">
                     <input
                       v-model="manualModelId[provider.id]"
                       type="text"
@@ -1559,6 +1578,7 @@
                     <UiButton
                       appearance="soft"
                       tone="neutral"
+                      density="compact"
                       type="button"
                       :disabled="busy || !manualModelId[provider.id]?.trim()"
                       @click="addManualModel(provider)"
@@ -1571,8 +1591,9 @@
               </div>
 
               <!-- 右栏：已生效模型（支持取消已添加、多选批量取消） -->
-              <div class="flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs">
-                <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-border/40">
+              <div class="flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs h-full">
+                <!-- 顶栏标题与批量动作（统一高度 min-h-8 pb-2.5） -->
+                <div class="flex items-center justify-between gap-2 min-h-8 pb-2.5 border-b border-border/40">
                   <div class="flex items-center gap-1.5">
                     <span class="text-xs font-semibold text-foreground">{{
                       $t('agent.settings.providers.configuredModels')
@@ -1589,6 +1610,7 @@
                     <UiButton
                       appearance="soft"
                       tone="danger"
+                      density="compact"
                       v-if="removableConfiguredModels(provider).length > 0"
                       type="button"
                       data-testid="configured-models-remove-all"
@@ -1602,10 +1624,26 @@
                   </div>
                 </div>
 
-                <!-- 已生效模型列表 -->
-                <div class="max-h-64 overflow-y-auto space-y-1.5 pr-1 py-2">
+                <!-- 搜索过滤栏（统一固定高度 h-9 my-1） -->
+                <div class="flex items-center gap-2 h-9 my-1">
+                  <div class="relative flex-1">
+                    <input
+                      v-model="filterConfiguredQueries[provider.id]"
+                      type="text"
+                      data-no-highlight
+                      class="h-7 w-full rounded-lg border border-border/80 bg-background pl-6 pr-2 text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none"
+                      :placeholder="$t('agent.settings.providers.filterPlaceholder')"
+                    />
+                    <i
+                      class="fa-solid fa-magnifying-glass absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-text-secondary/60"
+                    ></i>
+                  </div>
+                </div>
+
+                <!-- 已生效模型列表（固定 h-60 滚动区域） -->
+                <div class="h-60 overflow-y-auto space-y-1.5 pr-1 py-1">
                   <div
-                    v-for="model in provider.models"
+                    v-for="model in filteredConfigured(provider)"
                     :key="model.id"
                     class="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-header/20 px-2.5 py-1.5 transition-all hover:bg-header/40"
                   >
@@ -1650,19 +1688,39 @@
                       <span>{{ $t('agent.settings.providers.removeModel') }}</span>
                     </UiButton>
                   </div>
+
+                  <div
+                    v-if="filteredConfigured(provider).length === 0"
+                    class="h-full flex items-center justify-center text-center text-xs text-text-secondary"
+                  >
+                    {{ $t('agent.settings.providers.noMatchingModel') }}
+                  </div>
+                </div>
+
+                <!-- 底部辅助信息条（统一高度 h-8 pt-2.5） -->
+                <div class="mt-auto pt-2.5 border-t border-border/40">
+                  <div class="flex items-center justify-between gap-2 h-8 text-xs text-text-secondary px-0.5">
+                    <span class="inline-flex items-center gap-1.5 truncate text-[11px]">
+                      <i class="fa-solid fa-star text-[10px] text-primary" aria-hidden="true"></i>
+                      <span>{{ $t('agent.settings.providers.defaultModel') }}:</span>
+                      <span class="font-mono font-medium text-foreground truncate">{{
+                        defaultModelId || provider.models[0]?.id
+                      }}</span>
+                    </span>
+                    <span class="shrink-0 text-[11px] font-mono text-text-secondary/80">
+                      {{ $t('agent.settings.providers.configuredModels') }} {{ provider.models.length }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 抽屉底部操作条（即时持久化说明与收起/关闭动作） -->
-            <div class="mt-3.5 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border/50">
+            <!-- 抽屉底部操作条（即时持久化说明） -->
+            <div class="mt-3.5 flex items-center justify-between gap-3 pt-3 border-t border-border/50">
               <div class="flex items-center gap-1.5 text-xs text-text-secondary">
                 <i class="fa-solid fa-cloud-check text-success text-xs"></i>
                 <span>{{ $t('agent.settings.providers.autoSaveHint') }}</span>
               </div>
-              <UiButton appearance="soft" tone="neutral" type="button" @click="drawerOpen[provider.id] = false">
-                {{ $t('common.close') }}
-              </UiButton>
             </div>
           </div>
         </article>
@@ -1834,6 +1892,53 @@
             </button>
           </div>
         </label>
+
+        <!-- 从接口直接拉取模型 -->
+        <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-header/25 border border-border/60">
+          <div class="flex items-center gap-2 text-xs text-text-secondary">
+            <i class="fa-solid fa-cloud-arrow-down text-primary" aria-hidden="true"></i>
+            <span v-if="pulledModels.length === 0">{{ $t('agent.settings.providers.pullModelsHint') }}</span>
+            <span v-else class="text-foreground font-medium">
+              {{ $t('agent.settings.providers.pullSuccess', { count: pulledModels.length }) }}
+            </span>
+          </div>
+          <UiButton
+            appearance="soft"
+            tone="primary"
+            size="sm"
+            type="button"
+            :disabled="isPullingModels || !form.baseUrl.trim()"
+            @click="pullModelsFromEndpoint"
+          >
+            <i v-if="!isPullingModels" class="fa-solid fa-rotate text-xs mr-1" aria-hidden="true"></i>
+            <i v-else class="fa-solid fa-circle-notch fa-spin text-xs mr-1" aria-hidden="true"></i>
+            <span>{{
+              isPullingModels ? $t('agent.settings.providers.pullingModels') : $t('agent.settings.providers.pullModels')
+            }}</span>
+          </UiButton>
+        </div>
+
+        <!-- 若已成功拉取模型，提供下拉选择与批量导入 -->
+        <div v-if="pulledModels.length > 0" class="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <i class="fa-solid fa-list-check text-primary text-[11px]" aria-hidden="true"></i>
+              {{ $t('agent.settings.providers.selectPulledModel') }}
+            </span>
+            <label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none">
+              <UiCheckbox v-model="importAllPulled" />
+              <span>{{ $t('agent.settings.providers.importAllPulled', { count: pulledModels.length }) }}</span>
+            </label>
+          </div>
+          <UiSelect
+            :model-value="selectedPulledModelKey"
+            :options="pulledModelOptions"
+            density="compact"
+            class="w-full"
+            panel-class="max-h-60"
+            @update:model-value="onSelectPulledModel"
+          />
+        </div>
 
         <!-- 初始模型配置 -->
         <div class="rounded-xl border border-border/60 bg-header/15 p-3 space-y-2.5">

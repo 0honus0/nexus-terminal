@@ -42,6 +42,7 @@
       name?: string;
       /** Allow text search once the option count grows past this size. */
       searchThreshold?: number;
+      hideIndicator?: boolean;
     }>(),
     {
       placeholder: '',
@@ -55,6 +56,7 @@
       inputClass: '',
       name: undefined,
       searchThreshold: 3,
+      hideIndicator: true,
     },
   );
 
@@ -169,13 +171,14 @@
         data-ui="combobox-panel"
         data-ui-gen="2"
         :data-density="props.density"
+        :data-hide-indicator="props.hideIndicator || undefined"
         position="popper"
         :align="props.align"
         :side-offset="0"
         :collision-padding="12"
         :avoid-collisions="true"
         class="ui-surface ui-radius--panel ui-combobox__panel glass-surface"
-        :class="props.panelClass"
+        :class="[{ 'ui-combobox__panel--no-indicator': props.hideIndicator }, props.panelClass]"
       >
         <ComboboxViewport class="ui-select__viewport ui-combobox__viewport">
           <ComboboxItem
@@ -186,7 +189,7 @@
             :disabled="option.disabled"
             class="ui-select__item ui-combobox__item ui-focusable"
           >
-            <span class="ui-select__item-indicator">
+            <span v-if="!props.hideIndicator" class="ui-select__item-indicator">
               <ComboboxItemIndicator>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                   <path
