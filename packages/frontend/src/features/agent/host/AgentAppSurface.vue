@@ -1721,7 +1721,7 @@
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
                       <span class="text-xs font-semibold">{{ $t('agent.operations.runModel') }}</span>
                     </div>
-                    <div class="max-h-64 space-y-1 overflow-y-auto">
+                    <div class="max-h-72 space-y-1 overflow-y-auto">
                       <button
                         v-for="option in modelOptions"
                         :key="option.key"
@@ -1729,9 +1729,9 @@
                         class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
                         :class="[
                           option.key === selectedModelKey
-                            ? 'border border-border/80 bg-card font-medium text-foreground shadow-xs'
-                            : 'border border-transparent text-text-secondary',
-                          option.compatible ? 'hover:bg-card/70' : 'cursor-not-allowed opacity-55',
+                            ? 'bg-primary/8 font-medium text-foreground'
+                            : 'text-text-secondary hover:bg-card/70',
+                          option.compatible ? '' : 'cursor-not-allowed opacity-55',
                         ]"
                         :disabled="busy || !option.compatible"
                         @click="
@@ -1740,11 +1740,11 @@
                         "
                       >
                         <span
-                          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border"
+                          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
                           :class="
                             option.key === selectedModelKey
-                              ? 'border-border/60 bg-header text-foreground'
-                              : 'border-transparent bg-header/60 text-text-secondary'
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-header text-text-secondary'
                           "
                         >
                           <i class="fa-solid fa-microchip text-[9px]" aria-hidden="true"></i>
@@ -1757,7 +1757,7 @@
                         </span>
                         <i
                           v-if="option.key === selectedModelKey"
-                          class="fa-solid fa-check text-[10px] text-foreground"
+                          class="fa-solid fa-check text-[10px] text-primary"
                           aria-hidden="true"
                         ></i>
                       </button>

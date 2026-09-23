@@ -8,7 +8,7 @@
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
 >
-> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
+> **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。每条闭环均带真实 CDP 实测数据 + 类型检查；下一条开放 P1 为设置区剩余的顶部 Tab 36px / `QuantityInput` 单位切换命中区 18×20 与主界面三层 chrome（§7.2）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
 复查规模（行数统计）：
 
@@ -1807,6 +1807,58 @@ Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
 **同源残留（下一轮）**：设置区仍有 **22 处原生 `<select>`**（对应 §7.15-f 的"input 16px / select 12px"差异）、
 **36px 的分组导航胶囊与顶部 Tab**、`QuantityInput` 的 `18×20` 单位切换命中区；`global.css` 里 `input/select/textarea`
 的表单规则仍未分层（§7.19 已记），Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
+
+---
+
+### 7.21 Hub 模型弹层回归：恢复「真毛玻璃」与无盒选项行（P1 回归 · ✅ 已关闭 2026-09-23）
+
+**现象（用户报告 + 修复前 CDP 实测：`https://api.honus.top/` → Hub 工具条「模型」弹层）**
+
+修复前（`b3e397a`）弹层是一个**近乎不透明的浅灰圆角盒**：面板 `background = color(srgb 0.9647 0.9686 0.9765 / 0.7544)`（75% 不透明），
+背后的对话内容几乎透不过来；选中行本身又是一个带描边 + 底色 + 投影的小盒子
+（`border 1px` + `rgba(246,247,249,.92)` + `shadow 0 1px 2px rgba(0,0,0,.05)`，高 52），列表高 256px。
+用户描述为"毛玻璃没了""选项一格一格的"。
+
+**根因（两层，都是 2026-09-23 凌晨那次改造的副作用）**
+
+1. `a2a9e94`（01:03）第一次补齐 `--color-card`（`rgb(246 247 249 / 92%)`）并新增 `.glass-surface`
+   （`global.css:193-203`，`color-mix(card 82%)` + `blur(16px)`）；`af405e9`（01:04）把弹层面板从
+   `border border-border/70 bg-card/95 backdrop-blur-md …` 换成 `.glass-surface`。在此之前 `--color-card` **未定义**，
+   `bg-card/95` 不产出任何 CSS → 面板实际是"纯 `backdrop-blur` + 1px 边框"的**真毛玻璃**；换成 `.glass-surface` 后
+   `color-mix(card 82%)` 把面板变成 75% 不透明的实色表面，毛玻璃感消失。
+2. 选中行的盒子来自 `413f2e9`（09-15 03:27，"refine current UI"）：选中行加了 `border-border/80 bg-card shadow-xs`，
+   未选中行是 `border-transparent`（1px 占位）——每个选项都带边框位，观感上就是"一格一格"。
+
+**改法**（只动两处 class，不新增样式）
+
+| 位置                                | 修复前                                                                  | 修复后                                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `files/AgentConfigPopover.vue` 面板 | `glass-surface`                                                         | `border border-border/70 backdrop-blur-md shadow-2xl ring-1 ring-border/20`                 |
+| `host/AgentAppSurface.vue` 选项行   | `rounded-xl … border border-border/80 bg-card … shadow-xs`              | `rounded-xl …` 无边框无底色，选中 `bg-primary/8`、未选中 `hover:bg-card/70`                 |
+| 行内图标 tile                       | `h-6 w-6` + `border`，选中 `border-border/60 bg-header text-foreground` | `h-7 w-7` 无边框，选中 `bg-primary/10 text-primary`，未选中 `bg-header text-text-secondary` |
+| 选中勾选                            | `text-foreground`                                                       | `text-primary`                                                                              |
+| 列表容器                            | `max-h-64`（256px）                                                     | `max-h-72`（288px，= 09-15 之前的原值）                                                     |
+
+- **刻意不写回 `bg-card/95`**：那个写法当年"看起来透明"只是因为 token 缺失；token 现已存在，写回反而是不透明实色。
+  要复现的是**观感**（纯 `backdrop-blur` + 细边框），所以面板保持无底色。
+- 未选中行的 `hover:bg-card/70` 与不可用项的 `cursor-not-allowed opacity-55` 保留，交互语义不变。
+
+**CDP 复验（同一个弹层，修复前 / 修复后由同一次探针分别读取）**
+
+| 指标                   | 修复前                                                      | 修复后                                                                  |
+| ---------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 面板 `background`      | `color(srgb .9647 .9686 .9765 / .7544)`                     | `rgba(0,0,0,0)`（纯 blur）                                              |
+| 面板 `backdrop-filter` | `blur(16px)`                                                | `blur(12px)`                                                            |
+| 面板边框               | `1px color(srgb .8 .8 .8 / .6)`                             | `1px oklab(0.845217 0.0000385046 0.0000169277 / .7)`                    |
+| 选中行                 | `border 1px` + `rgba(246,247,249,.92)` + `shadow-xs`，高 52 | `border 0px` + `oklab(.6297 .0917 -.1303 / .08)` + `shadow none`，高 50 |
+| 行内 tile              | `24×24` + 1px 边框，选中 `#f0f0f0` / `#333`                 | `28×28` 无边框，选中 `bg-primary/10` / `rgb(160,108,213)`               |
+| 列表                   | `max-height 256px`                                          | `max-height 288px` + `overflow-y auto`                                  |
+
+- 静态门禁：`all templates compile`（`@vue/compiler-sfc`）+ `vue-tsc --noEmit` exit 0 + `prettier --check` 通过；
+- 截图：`/tmp/shots/model-list-restored-2.png`、放大 `/tmp/shots/zoom-final.png`；
+- **未覆盖**：本环境只配置了 1 个模型（`gemini-3.8-flash-high`，`scrollHeight == clientHeight == 50`），
+  "可上下滚动"只能由 `max-height 288px + overflow-y auto` 推断，无法真实滚动验证；`shadow-2xl` / `ring-1`
+  在当前 oklab token 体系下 computed 值接近透明（既有现象，非本次引入）。
 
 ---
 

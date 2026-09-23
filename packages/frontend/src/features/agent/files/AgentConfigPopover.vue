@@ -187,7 +187,7 @@
         role="dialog"
         aria-modal="false"
         :aria-label="props.ariaLabel"
-        class="glass-surface fixed z-[60] max-w-[calc(100vw-24px)] overflow-y-auto rounded-2xl p-3 outline-none"
+        class="fixed z-[60] max-w-[calc(100vw-24px)] overflow-y-auto rounded-2xl border border-border/70 backdrop-blur-md p-3 shadow-2xl ring-1 ring-border/20 outline-none"
         :class="props.panelClass"
       >
         <slot name="panel" :close="close" /></div
