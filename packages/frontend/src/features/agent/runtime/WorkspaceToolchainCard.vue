@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
+  import { UiSelect } from '@/foundation/ui';
   import type { AgentWorkspaceDto, AgentWorkspaceRuntimeCatalogDto } from '../api/agent-api';
+  import { NONE_OPTION } from '../settings/pick-option';
 
   const props = defineProps<{
     workspace: AgentWorkspaceDto;
@@ -57,18 +59,19 @@
     <div class="mt-2 grid gap-2 sm:grid-cols-3">
       <label v-for="familyId in selectableFamilies" :key="familyId" class="text-[11px] text-text-secondary">
         {{ familyId }}
-        <select
-          v-model="draft[familyId]"
-          class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
+        <UiSelect
+          class="mt-1 w-full"
+          density="compact"
           :disabled="locked"
-        >
-          <option v-if="!pinnedVersion(familyId)" value="">
-            {{ $t('agent.workspaceRuntime.toolNotSelected') }}
-          </option>
-          <option v-for="pack in packsForFamily(familyId)" :key="pack.versionId" :value="pack.versionId">
-            {{ pack.versionId }}
-          </option>
-        </select>
+          :model-value="draft[familyId] || NONE_OPTION"
+          :options="[
+            ...(pinnedVersion(familyId)
+              ? []
+              : [{ value: NONE_OPTION, label: $t('agent.workspaceRuntime.toolNotSelected') }]),
+            ...packsForFamily(familyId).map((pack) => ({ value: pack.versionId, label: pack.versionId })),
+          ]"
+          @update:model-value="(value: unknown) => (draft[familyId] = value === NONE_OPTION ? '' : String(value))"
+        />
       </label>
     </div>
     <button

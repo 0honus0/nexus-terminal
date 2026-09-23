@@ -89,6 +89,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区 22 处原生 `<select>` 收敛到 Gen2 `UiSelect`**：原先 4 种规格并存（`h-6 text-[11px]` … `h-9 text-xs`）且展开是浏览器原生下拉， 现全部走 Reka listbox（玻璃面板 `z-index:85` / `blur(6px)`）；`UiSelect` 的 v-model 收窄为「可空进、非空出」， 新增 `NONE_OPTION` 哨兵（4 处「不选择」项）与 `pickOption()`（8 个窄联合字段）， CDP 实测三组共 10 处可见、残留原生 0、414px 无横向溢出，e2e 的 `selectOption` 断言同步改为 listbox 交互 | `features/agent/settings/**`、`foundation/ui/UiSelect.vue`、`tests/e2e/specs/agent/host.spec.ts`（见 §7.32） |
 | **P1 · ✅ 已关闭 2026-09-23**         | **`QuantityInput` 单位药丸命中区 `18×20` → `24×24`**：高度 `h-5` → `h-6` 并补 `min-w-6`， 输入框预留内边距 `pr-20` → `pr-24`（字节型有 3 枚药丸，旧值已压到边）；实测 10 枚药丸全部 `24×24`                                                                                                                                                                                                                                                    | `features/agent/settings/QuantityInput.vue`（见 §7.33）                                                      |
 | **P1 · ✅ 已关闭 2026-09-23**         | **模型列表的「取消添加 / 一键取消」收敛 + 补确认**（§6.3 / §6.7 收口）：11px 裸文字按钮 → Gen2 `UiButton` （`soft` + `compact`，可移除 `danger` / 不可移除 `neutral` + 原因 `title`，实测 11 个 `85×28`）；批量移除改为先弹确认 （实测文案含「将移除 newapi 下 10 个可移除模型；默认主力模型或首个基础模型会保留。」）。至此 §6.2 控件清单只剩跨页 chrome 的顶部 Tab 36px（按约定不动）                                                        | `settings/ModelProviderSettings.vue`（见 §7.34）                                                             |
+| **P2 · ✅ 已关闭 2026-09-23**         | **Workspace 运行时 5 处原生 `<select>` 同批收敛**（§7.32 遗留）：空值语义用 `NONE_OPTION` 承载， 工具版本项跟随 `pinnedVersion()` 条件展开；收敛后 `features/agent/**` 原生 `<select>` 计数 **0** （该批只有模板编译 + `vue-tsc`，环境 `runner_not_configured` 导致卡片不渲染，已显式记录）                                                                                                                                                    | `features/agent/runtime/Workspace{Create,Toolchain,ArtifactTransfer}*.vue`（见 §7.35）                       |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区模块标题带的斑马纹与动作簇拥挤**：16 条 `bg-header/40` 灰底标题带统一去底色（`990×64` 实测）， 标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`；414px 下动作簇由右对齐改为整行下移左对齐 （末位控件距右缘 20 → 248px），同轮修掉插件仓库输入框 `min-w` 硬撑导致的窄屏横向溢出                                                                                                                                        | `settings/AgentSettingsPanel.vue`、`ModelProviderSettings.vue`、`PluginManagementSettings.vue`（见 §7.30）   |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区粘性分组导航此前形同失效**：`sticky top-0` 恰好落在 56px 全局顶栏之下（z-30 盖住 z-20），滚起来就被吞掉；现已对齐 `top-14`，并让导航条压在自带 `z-20` 的模块之上（`z-index: 29`），移动端不再被内容穿透                                                                                                                                                                                                                                | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
 | **P1 · ✅ 已关闭 2026-09-23**         | **`v-show` 在 Agent 设置面板上完全失效**：SFC 是 `section + BaseModal` 双根，父级 `v-show` 落到「非元素根」被 Vue 忽略——切到「工作区」等其它 Tab 后，整块 Agent 设置仍留在页面下方（实测 top 1852 / 高 1584）；已包一层无样式 div 收成单根                                                                                                                                                                                                     | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
@@ -2553,6 +2554,25 @@ CDP 实测确实如此：三块是 `rounded-lg border border-border/70 bg-card/6
 **同条余项**：§6.2「设置区控件风格分裂」清单里，按钮三档（已闭环）、原生 checkbox（§7.20）、原生 `<select>`（§7.32）、
 `QuantityInput` 命中区（§7.33）、11px 纯文字按钮（本条）均已收口；**唯一保留项是顶部 Tab 的 36px 高度**——
 它属于跨页 chrome（工作区 / 系统 / 安全 / IP 管控…共用），按约定不在 Agent 设置范围内单独改。
+
+### 7.35 Workspace 运行时的 5 处原生 `<select>` 同批收敛（§7.32 遗留 · ✅ 已关闭 2026-09-23）
+
+**现象**：§7.32 收口设置区 22 处原生 `<select>` 时点名的同源残留 —— `features/agent/runtime/**` 还有 5 处：
+`WorkspaceCreateCard`（配方 / 浏览器目标 / 工具版本）、`WorkspaceToolchainCard`（工具版本）、
+`WorkspaceArtifactTransfer`（导入产物），全部是 `rounded px-2 py-1 text-xs` 的手写原生控件，
+和刚收敛完的设置区又形成新旧两套。
+
+**根因**：同 §7.32（有用的 Gen2 组件没人用）。
+
+**改法**：5 处全部换成 `UiSelect`。这批和设置区不同的地方是**它们的空值有语义**
+（"不选配方 / 不选浏览器目标 / 不选工具版本" 表示回到 None），Reka 不允许空字符串作为选项值，
+所以用 `NONE_OPTION` 哨兵承载"不选择"这一项、在 `@update:model-value` 里换回 `''`；
+`WorkspaceToolchainCard` 的"不选择"还要跟随 `pinnedVersion()`（已固定版本时不提供该选项），
+用条件展开保持原语义。
+
+**验证**：本环境 `runner_not_configured`（§7.15-b），Workspace 运行时的卡片不渲染，
+因此本轮**只有模板编译 + `vue-tsc --noEmit` + `eslint`**，没有 CDP 实测（与 §7.15-b / §7.20 同类环境限制，
+在此显式记录而不是含糊带过）。收敛后 `features/agent/**` 的原生 `<select>` 计数为 **0**。
 
 ---
 

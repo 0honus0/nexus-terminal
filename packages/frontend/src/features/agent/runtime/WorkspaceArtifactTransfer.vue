@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { ref, watch } from 'vue';
+  import { UiSelect } from '@/foundation/ui';
   import type { AgentArtifactRefDto } from '../api/agent-api';
+  import { NONE_OPTION } from '../settings/pick-option';
 
   const props = defineProps<{
     artifacts: AgentArtifactRefDto[];
@@ -64,12 +66,20 @@
     </form>
     <form class="rounded bg-background p-2" @submit.prevent="importArtifact">
       <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.importTitle') }}</div>
-      <select v-model="importArtifactId" class="mt-2 w-full rounded border border-border bg-card px-2 py-1 text-[11px]">
-        <option value="">{{ $t('agent.workspaceRuntime.selectArtifact') }}</option>
-        <option v-for="artifact in artifacts" :key="artifact.id" :value="artifact.id">
-          {{ artifact.originalName }} · {{ artifact.id }}
-        </option>
-      </select>
+      <UiSelect
+        class="mt-2 w-full"
+        density="compact"
+        :aria-label="$t('agent.workspaceRuntime.selectArtifact')"
+        :model-value="importArtifactId || NONE_OPTION"
+        :options="[
+          { value: NONE_OPTION, label: $t('agent.workspaceRuntime.selectArtifact') },
+          ...artifacts.map((artifact) => ({
+            value: artifact.id,
+            label: `${artifact.originalName} · ${artifact.id}`,
+          })),
+        ]"
+        @update:model-value="(value: unknown) => (importArtifactId = value === NONE_OPTION ? '' : String(value))"
+      />
       <input
         v-model.trim="importPath"
         class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[11px]"

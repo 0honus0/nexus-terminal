@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
+  import { UiSelect } from '@/foundation/ui';
   import type { AgentSettingsViewDto, AgentWorkspaceRuntimeCatalogDto } from '../api/agent-api';
+  import { NONE_OPTION } from '../settings/pick-option';
 
   interface RunnerCandidate {
     pluginId: string;
@@ -105,11 +107,12 @@
     <div class="grid gap-2 sm:grid-cols-2">
       <label class="text-[11px] text-text-secondary">
         {{ $t('agent.workspaceRuntime.recipe') }}
-        <select v-model="selectedRecipeId" class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs">
-          <option v-for="recipe in catalog.recipes" :key="recipe.id" :value="recipe.id">
-            {{ recipe.displayName }}
-          </option>
-        </select>
+        <UiSelect
+          v-model="selectedRecipeId"
+          class="mt-1 w-full"
+          density="compact"
+          :options="catalog.recipes.map((recipe) => ({ value: recipe.id, label: recipe.displayName }))"
+        />
       </label>
       <label class="flex items-end gap-2 pb-1 text-[11px]">
         <input v-model="retained" type="checkbox" />
@@ -119,13 +122,16 @@
 
     <label v-if="browserRecipe" class="mt-2 block text-[11px] text-text-secondary">
       {{ $t('agent.workspaceRuntime.browserTarget') }}
-      <select
-        v-model="selectedBrowserTargetId"
-        class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
-      >
-        <option value="">{{ $t('agent.workspaceRuntime.browserTargetNone') }}</option>
-        <option v-for="target in browserTargets" :key="target.id" :value="target.id">{{ target.id }}</option>
-      </select>
+      <UiSelect
+        class="mt-1 w-full"
+        density="compact"
+        :model-value="selectedBrowserTargetId || NONE_OPTION"
+        :options="[
+          { value: NONE_OPTION, label: $t('agent.workspaceRuntime.browserTargetNone') },
+          ...browserTargets.map((target) => ({ value: target.id, label: target.id })),
+        ]"
+        @update:model-value="(value: unknown) => (selectedBrowserTargetId = value === NONE_OPTION ? '' : String(value))"
+      />
       <span class="mt-1 block text-[11px]">{{ $t('agent.workspaceRuntime.browserTargetHint') }}</span>
     </label>
 
@@ -144,15 +150,18 @@
       <div class="mt-2 grid gap-2 sm:grid-cols-3">
         <label v-for="familyId in toolFamilies" :key="familyId" class="text-[11px] text-text-secondary">
           {{ familyId }}
-          <select
-            v-model="toolVersions[familyId]"
-            class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
-          >
-            <option value="">{{ $t('agent.workspaceRuntime.toolNotSelected') }}</option>
-            <option v-for="pack in packsForFamily(familyId)" :key="pack.versionId" :value="pack.versionId">
-              {{ pack.versionId }}
-            </option>
-          </select>
+          <UiSelect
+            class="mt-1 w-full"
+            density="compact"
+            :model-value="toolVersions[familyId] || NONE_OPTION"
+            :options="[
+              { value: NONE_OPTION, label: $t('agent.workspaceRuntime.toolNotSelected') },
+              ...packsForFamily(familyId).map((pack) => ({ value: pack.versionId, label: pack.versionId })),
+            ]"
+            @update:model-value="
+              (value: unknown) => (toolVersions[familyId] = value === NONE_OPTION ? '' : String(value))
+            "
+          />
         </label>
       </div>
     </div>
