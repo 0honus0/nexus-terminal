@@ -12,6 +12,8 @@
 > 巨型 UI 文件拆分（§3.1；2026-09-23 已复核并**按约定延后**——该条无隐藏的用户可见缺陷，拆分需搬迁约 30 props + 15 emit，
 > 正确验收依赖 Provider CRUD / Run 详情两条主路径的逐控件回归，本环境 `runner_not_configured` 无法覆盖，详见 §3.1 的复核块）；**§3.5 的"i18n 死 key"已于本轮关闭**（§7.40：新增可达性门禁 + 清掉 75×3 条不可达文案，字典 1,467 → 1,392）；**"后端工具结果摘要英文硬编码" 本轮已关闭**，仅剩 `mcp-tools.ts`（远端不可信内容，刻意排除）、`execution-errors.ts` 前缀与 `command.reason` 三处非 UI 残余并入 §3.6 跟踪；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
+> **历史提交复核补充（2026-09-23）**：在完成上述闭环后，又按 `b0d7b220..862a458` 的 66 个提交回看当天 UI 改动，确认重新开放 **2 条**可证明的正确性问题：§7.41（创建会话失败横幅会直接重放一个**无幂等键**的 POST，可能重复创建会话）与 §7.42（`30fa0ed` 新增的侧栏 / TaskRail 持久化字段未进入 `reset()`，同一 SPA 内切换账号时可继承上一账号的布局开关）。因此上文“§0 只剩 2 条开放项”仅代表 §7.40 收口当时的快照；**当前开放项应再加 §7.41 / §7.42**。本轮同时复核了 Launcher 长按拖动 / 虚拟列表量测、Gen2 `UiSelect` 空值哨兵、设置区 dirty-state 与锚点导航，未找到第三条达到可确认标准的新缺陷。
+
 复查规模（行数统计）：
 
 | 区域                            | 规模                                                                             |
@@ -97,6 +99,8 @@
 | **P1 · ✅ 已关闭 2026-09-23**             | **设置区粘性分组导航此前形同失效**：`sticky top-0` 恰好落在 56px 全局顶栏之下（z-30 盖住 z-20），滚起来就被吞掉；现已对齐 `top-14`，并让导航条压在自带 `z-20` 的模块之上（`z-index: 29`），移动端不再被内容穿透                                                                                                                                                                                                                                                                                                                                                                  | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
 | **P1 · ✅ 已关闭 2026-09-23**             | **`v-show` 在 Agent 设置面板上完全失效**：SFC 是 `section + BaseModal` 双根，父级 `v-show` 落到「非元素根」被 Vue 忽略——切到「工作区」等其它 Tab 后，整块 Agent 设置仍留在页面下方（实测 top 1852 / 高 1584）；已包一层无样式 div 收成单根                                                                                                                                                                                                                                                                                                                                       | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
 | **P2 · ✅ 已关闭 2026-09-23**             | `AppManagementSettings.vue` 用了 `<UiInfoHint>` 却漏 import，被当成未知元素渲染（`agent.settings.apps.description` 提示整条丢失 + Vue 运行时警告）；已补 import，实测 `data-ui="info-hint"` 正常输出                                                                                                                                                                                                                                                                                                                                                                             | `settings/AppManagementSettings.vue`（见 §7.27）                                                             |
+| **P1 · 🟠 开放 2026-09-23**               | **错误横幅仍有一条写路径直接重放原 mutation**：`createThread()` 失败后把「重试」绑定回同一个 `POST /threads`；该接口只有 CSRF header、没有 caller-stable `Idempotency-Key`，后端又为每次请求生成新 UUID。若服务端已提交但响应丢失，用户点击「重试」会创建第二条会话，和 §7.37 声明的“写失败只重新同步、不重放”不一致。                                                                                                                                                                                                                                                           | `host/AgentAppSurface.vue:902-916`、`api/agent-api.ts:364-374`（见 §7.41）                                   |
+| **P2 · 🟠 开放 2026-09-23**               | **侧栏 / TaskRail 的“按用户持久化”在账号切换时会串状态**：`30fa0ed` 把 `threadSidebarVisible` / `taskRailVisible` 写入每用户 localStorage，但 `agentWindowManager.reset()` 没重置这两个字段；登出 A 后若 B 没有已存布局，`restoreForUser(B)` 直接返回，B 会继承 A 的内存开关状态。                                                                                                                                                                                                                                                                                               | `host/window-manager.ts:161-218,258-268`、`host/AgentSurfaceHost.vue:191-211`（见 §7.42）                    |
 
 ---
 
@@ -2894,6 +2898,50 @@ CDP 实测确实如此：三块是 `rounded-lg border border-border/70 bg-card/6
 
 **门禁**：`node scripts/check-agent-i18n.mjs`（4 条守卫全绿）、`node scripts/check-transport-contract-boundaries.mjs`、`prettier --check`、
 backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后端）全部通过。
+
+---
+
+### 7.41 §7.37 回看：创建会话失败的「重试」会重放无幂等 POST（P1 · 🟠 开放 2026-09-23）
+
+本轮按历史 commit 回看 `441810d`（`fix(agent): give the error banner a failure domain and a retry action`）时，发现 §7.37 的“**读路径重试 / 写路径重新同步**”规则有一条漏网路径。
+
+**当前代码事实**：
+
+1. `host/AgentAppSurface.vue:902-916` 的 `createThread(title)` 在失败时调用 `fail(...)`，并把 `retry` 直接设成 `() => void createThread(title)`；没有使用其它 mutation 路径已经采用的 `retryLabelKey: 'agent.operations.resync'`。
+2. `api/agent-api.ts:364-374` 的 `createThread()` 发 `POST /apps/:appId/threads`，header 只有 `mutationHeaders()` 的 CSRF token，**没有 `Idempotency-Key`**。
+3. backend `conversation.service.ts` 的 `createThread()` 每次调用都会用 `randomUUID()` 生成新 thread id，也没有接收 caller-stable 幂等键。
+
+因此存在典型的 **unknown outcome** 窗口：服务端已经写入 thread，但响应在反代 / 网络 / 浏览器侧丢失或超时；前端把它显示成失败，用户随后点击「重试」会再次发一个新的 create 请求，得到第二个 thread。这里不能用“第一次抛错了”推导“第一次一定没提交”。
+
+这也使 §7.37 的关闭结论需要加限定：当前 Run mutation / 删除等路径已经用「重新同步」收敛，但**会话创建仍是直接重放写请求**。
+
+**建议修复**（二选一，优先前者）：
+
+- 给 thread create 引入 caller-stable `Idempotency-Key`，同一次用户意图在不确定结果后的显式 retry 继续复用同一个 key，backend repository/service 做 request-hash + replay；或
+- 不重放 create，按钮改成「重新同步」，重新拉 thread 列表并尝试识别刚创建的结果；若无法可靠识别，则明确提示结果不确定，而不是再创建一次。
+
+**本轮证据**：静态对照 `441810d` 后当前 HEAD；frontend `vue-tsc --noEmit` 通过。本条不依赖视觉主观判断，属于写操作语义 / 幂等性缺陷。
+
+---
+
+### 7.42 §7.2-c 回看：侧栏 / TaskRail 持久化字段漏进 reset，账号切换会继承上一用户布局（P2 · 🟠 开放 2026-09-23）
+
+历史 commit `30fa0ed`（`feat(agent): let the thread sidebar collapse and remember the layout`）新增了 `threadSidebarVisible` 与 `taskRailVisible` 两个持久化字段：它们进入 `AgentHubState`、`restoreForUser()` 与 `persistForUser()`，目标是**按 user id 保存**布局偏好。
+
+但 `host/window-manager.ts:258-268` 的 `reset()` 仍只重置 `status / bounds / maximized / activeAppId / recentAppIds / hubView / launcherPosition`，**没有把上述两个新字段还原为默认值**（线程侧栏 `true`、TaskRail `false`）。
+
+`host/AgentSurfaceHost.vue:191-211` 的认证切换顺序是：
+
+1. A 登出时先 `persistLayout('auth-ended')`；
+2. `activeUserId = null` 后调用 `agentWindowManager.reset()`；
+3. B 登录时调用 `restoreForUser(B)`；
+4. 如果 B 从未保存过布局，`restoreForUser()` 在 `!stored` 时直接 return。
+
+于是同一 SPA 生命周期内，B 会继续使用 reset 前残留在内存里的 `threadSidebarVisible / taskRailVisible`。这不是数据内容泄漏，但和“每用户布局 key”的隔离模型冲突，也会造成新账号第一次打开 Hub 的初始布局不可预测。
+
+**建议修复**：把所有有默认值、且会进入 per-user payload 的字段集中到一个 `defaultState()` / `resetLayoutPreferences()`，`reset()` 必须一次性恢复 `threadSidebarVisible=true`、`taskRailVisible=false`，避免以后新增字段再次漏 reset；补一条 A→logout→B（B 无 localStorage）回归。
+
+**本轮证据**：`git show 30fa0ed` 明确显示该提交新增了 state / restore / persist 三处字段但没有改 `reset()`；当前 HEAD 仍保持这一缺口。frontend `vue-tsc --noEmit` 通过。
 
 ---
 
