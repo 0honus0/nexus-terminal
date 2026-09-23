@@ -21,7 +21,8 @@
         "enabledSuccess": "Agent 已开启",
         "disabledSuccess": "Agent 已关闭",
         "enableFailed": "Agent 运行环境未就绪，请检查 App 健康状态后重试",
-        "disableFailed": "Agent 未能完全关闭，请刷新状态后重试"
+        "disableFailed": "Agent 未能完全关闭，请刷新状态后重试",
+        "schedulerHint": "调度器支持多应用委派与动态预算管控"
       },
       "onboarding": {
         "title": "安装 Nexus Agent 并启用 Agent",
@@ -260,7 +261,9 @@
         "limit": "当前生效 {effective} · 系统上限 {hard}",
         "sharedSlots": "Root + Subagent 共用执行槽位",
         "runtimesHint": "同一用户同时执行的 Agent 单元总数；Root Agent 和每个 Subagent 都各占 1 个槽位",
-        "modelCallsHint": "同时进行的模型 API 请求数；“自动”会跟随 Agent 执行并发，显式数值也不会超过执行并发"
+        "modelCallsHint": "同时进行的模型 API 请求数；“自动”会跟随 Agent 执行并发，显式数值也不会超过执行并发",
+        "unsavedChanges": "并发设置已更改，请点击保存",
+        "activeNotice": "当前并发设置正常生效中"
       },
       "budget": {
         "title": "预算与上下文",
@@ -293,7 +296,16 @@
           "maxRecallBytesHint": "记忆检索内容的最大字节限制"
         },
         "readyNotice": "当前配置已就绪，将在下一次 Run 执行时生效",
-        "modelCapabilityNotice": "模型单次上下文与最大输出直接使用 Provider/Registry 声明的物理能力；这里仅控制整个 Run 的总预算与工具资源。"
+        "modelCapabilityNotice": "模型单次上下文与最大输出直接使用 Provider/Registry 声明的物理能力；这里仅控制整个 Run 的总预算与工具资源。",
+        "groups": {
+          "steps": "执行步数保险丝",
+          "timeControl": "执行与超时控制",
+          "toolsData": "工具截断与上下文记忆"
+        },
+        "presetSteps": "{steps} 步 · {minutes} min",
+        "customTuning": "自定义微调",
+        "effective": "有效: {value}",
+        "unsavedChanges": "有尚未保存的预算变更"
       },
       "quantity": {
         "placeholderBytes": "例: 10M, 500K",
@@ -301,7 +313,15 @@
         "placeholderSeconds": "例: 30m, 1h",
         "placeholderNumber": "例: 50, 100",
         "invalidNumber": "请输入有效数字",
-        "invalidQuantity": "格式无效，支持数字或带单位"
+        "invalidQuantity": "格式无效，支持数字或带单位",
+        "unlimited": "不限",
+        "seconds": "{value} 秒",
+        "minutes": "{value} 分钟",
+        "hours": "{value} 小时",
+        "days": "{value} 天",
+        "invalidFormat": "无效格式",
+        "exactBytes": "{value} 字节",
+        "exactSeconds": "{value} 秒"
       },
       "storage": {
         "title": "Artifact 与存储",
@@ -420,7 +440,15 @@
         "loadingConnections": "正在获取系统连接列表...",
         "noSearchResults": "未找到与 “{query}” 匹配的连接目标",
         "reasonAudit": "（安全审计留痕必填）",
-        "commonReasons": "常用原因:"
+        "commonReasons": "常用原因:",
+        "reasonPresets": {
+          "production": "生产环境保护",
+          "compliance": "安全合规隔离",
+          "maintenance": "临时维护封禁",
+          "sandbox": "沙箱安全限制"
+        },
+        "defaultReason": "安全策略隔离限制",
+        "removeOrphanId": "点击移出黑名单"
       },
       "providers": {
         "title": "模型 Provider",
@@ -563,7 +591,8 @@
         "sseHeartbeat": "SSE 心跳",
         "sseHeartbeatValue": "15 秒",
         "transient": "瞬时事件",
-        "transientValue": "不持久化"
+        "transientValue": "不持久化",
+        "hardBoundary": "系统硬边界"
       },
       "subagents": {
         "title": "Subagent",
@@ -600,7 +629,12 @@
         "removeProfile": "移除配置档",
         "noProfiles": "此 App 尚未配置 Subagent 配置档。",
         "saveProfiles": "保存配置档",
-        "messageBytesPlaceholder": "例: 2M, 5M"
+        "messageBytesPlaceholder": "例: 2M, 5M",
+        "labels": {
+          "maxDelegationDepth": "最大委派深度",
+          "maxSubagentMessagesPerRun": "最大公开消息数/Run",
+          "maxSubagentMessageBytesPerRun": "最大公开消息字节/Run"
+        }
       },
       "browserRuntime": {
         "title": "浏览器运行时",
@@ -797,7 +831,8 @@
         "confirmImport": "确认导入",
         "importPreviewReady": "导入预览已生成。",
         "imported": "Memory 已导入。"
-      }
+      },
+      "modelNotSet": "未设置"
     },
     "launcher": {
       "open": "打开 Agent"

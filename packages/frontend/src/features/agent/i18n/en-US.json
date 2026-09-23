@@ -21,7 +21,8 @@
         "enabledSuccess": "Agent enabled",
         "disabledSuccess": "Agent disabled",
         "enableFailed": "The Agent runtime is not ready. Check the App health and try again",
-        "disableFailed": "The Agent did not fully disable. Refresh the state and try again"
+        "disableFailed": "The Agent did not fully disable. Refresh the state and try again",
+        "schedulerHint": "Scheduler delegates across apps with dynamic budget control"
       },
       "onboarding": {
         "title": "Enable Agent with Nexus Agent",
@@ -260,7 +261,9 @@
         "limit": "Effective {effective} · system limit {hard}",
         "sharedSlots": "Root + Subagent share execution slots",
         "runtimesHint": "Total Agent units executing concurrently for one user; the Root Agent and every Subagent each occupy one slot",
-        "modelCallsHint": "Concurrent model API requests; Auto follows Agent execution concurrency, and an explicit value can never exceed it"
+        "modelCallsHint": "Concurrent model API requests; Auto follows Agent execution concurrency, and an explicit value can never exceed it",
+        "unsavedChanges": "Concurrency changed, click save",
+        "activeNotice": "Current concurrency settings are in effect"
       },
       "budget": {
         "title": "Budget and context",
@@ -293,7 +296,16 @@
           "maxRecallBytesHint": "Maximum total bytes for recalled memories"
         },
         "readyNotice": "The current configuration is ready and will apply to the next Run.",
-        "modelCapabilityNotice": "Per-call context and output limits come directly from the Provider/Registry model capabilities. These settings only govern total Run and tool-resource budgets."
+        "modelCapabilityNotice": "Per-call context and output limits come directly from the Provider/Registry model capabilities. These settings only govern total Run and tool-resource budgets.",
+        "groups": {
+          "steps": "Execution step fuse",
+          "timeControl": "Execution and timeout control",
+          "toolsData": "Tool truncation and context recall"
+        },
+        "presetSteps": "{steps} steps · {minutes} min",
+        "customTuning": "Custom tuning",
+        "effective": "Effective: {value}",
+        "unsavedChanges": "Budget changes are not saved yet"
       },
       "quantity": {
         "placeholderBytes": "e.g. 10M, 500K",
@@ -301,7 +313,15 @@
         "placeholderSeconds": "e.g. 30m, 1h",
         "placeholderNumber": "e.g. 50, 100",
         "invalidNumber": "Enter a valid number",
-        "invalidQuantity": "Invalid format; use a number with an optional unit"
+        "invalidQuantity": "Invalid format; use a number with an optional unit",
+        "unlimited": "Unlimited",
+        "seconds": "{value} s",
+        "minutes": "{value} min",
+        "hours": "{value} h",
+        "days": "{value} d",
+        "invalidFormat": "Invalid format",
+        "exactBytes": "{value} bytes",
+        "exactSeconds": "{value} seconds"
       },
       "storage": {
         "title": "Artifacts and storage",
@@ -420,7 +440,15 @@
         "loadingConnections": "Loading system connections...",
         "noSearchResults": "No connection targets match “{query}”",
         "reasonAudit": "(required for security audit)",
-        "commonReasons": "Common reasons:"
+        "commonReasons": "Common reasons:",
+        "reasonPresets": {
+          "production": "Production isolation",
+          "compliance": "Security compliance isolation",
+          "maintenance": "Temporary maintenance block",
+          "sandbox": "Sandbox safety restriction"
+        },
+        "defaultReason": "Safety policy isolation",
+        "removeOrphanId": "Remove from denylist"
       },
       "providers": {
         "title": "Model providers",
@@ -563,7 +591,8 @@
         "sseHeartbeat": "SSE heartbeat",
         "sseHeartbeatValue": "15 seconds",
         "transient": "Transient events",
-        "transientValue": "Not durable"
+        "transientValue": "Not durable",
+        "hardBoundary": "System hard boundary"
       },
       "subagents": {
         "title": "Subagents",
@@ -600,7 +629,12 @@
         "removeProfile": "Remove profile",
         "noProfiles": "No Subagent profiles are configured for this App.",
         "saveProfiles": "Save profiles",
-        "messageBytesPlaceholder": "e.g. 2M, 5M"
+        "messageBytesPlaceholder": "e.g. 2M, 5M",
+        "labels": {
+          "maxDelegationDepth": "Max delegation depth",
+          "maxSubagentMessagesPerRun": "Max public messages / Run",
+          "maxSubagentMessageBytesPerRun": "Max public message bytes / Run"
+        }
       },
       "browserRuntime": {
         "title": "Browser Runtime",
@@ -797,7 +831,8 @@
         "confirmImport": "Confirm import",
         "importPreviewReady": "Import preview is ready.",
         "imported": "Memory imported."
-      }
+      },
+      "modelNotSet": "Not set"
     },
     "launcher": {
       "open": "Open Agent"

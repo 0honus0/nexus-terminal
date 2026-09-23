@@ -8,8 +8,10 @@
     areQuantitiesEquivalent,
     type QuantityType,
   } from './quantity-format';
+  import { useQuantityLabels } from './use-quantity-labels';
 
   const { t } = useI18n();
+  const quantityLabels = useQuantityLabels();
 
   const props = withDefaults(
     defineProps<{
@@ -79,7 +81,7 @@
 
   const feedback = computed(() => {
     if (!textValue.value.trim()) return null;
-    const result = getQuantityFeedback(textValue.value, props.type);
+    const result = getQuantityFeedback(textValue.value, props.type, quantityLabels.value);
     if (result.valid && result.value !== null && result.value < props.min) {
       return { ...result, valid: false };
     }

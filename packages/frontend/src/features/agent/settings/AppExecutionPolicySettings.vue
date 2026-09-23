@@ -10,9 +10,11 @@
   } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
   import { formatQuantity, type QuantityType } from './quantity-format';
+  import { useQuantityLabels } from './use-quantity-labels';
 
   const props = defineProps<{ apps: AgentAppSummaryDto[]; busy: boolean }>();
   const { t } = useI18n();
+  const quantityLabels = useQuantityLabels();
   const operationFeedback = useOperationFeedback('agent.settings.execution-policy');
   const selectedAppId = ref('');
   const view = ref<AgentExecutionPolicyViewDto | null>(null);
@@ -85,7 +87,7 @@
     if (!view.value) return '—';
     const value = view.value.effective[field.key];
     if (value === null) return '∞';
-    return formatQuantity(value, field.type);
+    return formatQuantity(value, field.type, quantityLabels.value);
   };
 
   const invalid = computed(() =>

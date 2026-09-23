@@ -1406,6 +1406,15 @@ Hub 根元素：role="dialog" aria-modal="true"             // 声明是模态
 会直接显示给用户的代表：`ai/ConversationMessage.vue:99-107`（9 条中文错误解释）、`:311-334`（`总消耗: N (输入: …, 输出: …)`）、`settings/quantity-format.ts`（`≈ 1 小时 (3,600 秒)` 这类"数值+单位"）、`settings/AppManagementSettings.vue:335-425`（能力名称/描述）、`settings/SubagentSettings.vue:217-221`（字段名）、`settings/AgentSettingsPanel.vue:104`（`'未设置'`）。
 → 与 §6.5 实测的"英文界面下 29 个可见中文文本节点"互相印证；**修复范围应按这 118 行评估**，而不是 38 行。
 
+> 🚧 **2026-09-23 进行中（第一批已提交）**：把"数值 + 单位"与小型设置面板的中文全部接入词典，
+> 新增 `agent.settings.quantity.*`（`use-quantity-labels.ts` 把 `formatQuantity` / `getQuantityFeedback`
+> 的文字部分接到当前语言）、`agent.settings.budget.groups/presetSteps/customTuning/effective/unsavedChanges`、
+> `agent.settings.performance.unsavedChanges/activeNotice`、`agent.settings.feature.schedulerHint`、
+> `agent.settings.guardrails.hardBoundary`、`agent.settings.modelNotSet`、`agent.settings.subagents.labels.*`、
+> `agent.settings.safety.reasonPresets.* / defaultReason / removeOrphanId`。
+> **CDP 实测（真实 `https://api.honus.top/settings` → Agent）**：切到 en-US 后，可见中文叶子文本节点由 **28 → 2**
+> （剩余 2 条在 `ModelProviderSettings.vue`，属下一批）；切回 zh-CN 后预设计数仍为 `25 步 · 10 min` / `自定义微调` / `执行步数保险丝`。
+
 **d) 一致性观察：作者知道要"模态"，但只做了一半（支撑 §7.13-c）**
 
 `host/AgentHubWindow.vue:22-56` 在 Hub 可见时会锁死 `documentElement/body` 的 `overflow` 与 `overscroll-behavior`（`lockBackgroundScroll`），

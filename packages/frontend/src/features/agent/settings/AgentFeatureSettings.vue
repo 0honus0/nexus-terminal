@@ -54,7 +54,7 @@
           <i class="fa-solid fa-circle-info text-xs text-primary" aria-hidden="true"></i>
           <span class="text-text-secondary">{{ $t('agent.settings.feature.state', { state: stateLabel }) }}</span>
         </div>
-        <div class="text-[11px] text-text-secondary">调度器支持多应用委派与动态预算管控</div>
+        <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.feature.schedulerHint') }}</div>
       </div>
     </div>
   </section>

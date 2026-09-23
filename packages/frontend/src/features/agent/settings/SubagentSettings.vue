@@ -215,11 +215,11 @@
     emit('save', draft.value);
   };
 
-  const subagentLabels: Record<string, string> = {
-    maxDelegationDepth: '最大委派深度',
-    maxSubagentMessagesPerRun: '最大公开消息数/Run',
-    maxSubagentMessageBytesPerRun: '最大公开消息字节/Run',
-  };
+  const subagentLabels = computed<Record<string, string>>(() => ({
+    maxDelegationDepth: t('agent.settings.subagents.labels.maxDelegationDepth'),
+    maxSubagentMessagesPerRun: t('agent.settings.subagents.labels.maxSubagentMessagesPerRun'),
+    maxSubagentMessageBytesPerRun: t('agent.settings.subagents.labels.maxSubagentMessageBytesPerRun'),
+  }));
 </script>
 
 <template>

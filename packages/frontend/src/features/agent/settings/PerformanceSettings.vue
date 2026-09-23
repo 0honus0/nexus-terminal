@@ -118,7 +118,7 @@
       class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-header/20 px-4 py-3 sm:px-5"
     >
       <span class="text-xs text-text-secondary">
-        {{ isDirty ? '并发设置已更改，请点击保存' : '当前并发设置正常生效中' }}
+        {{ isDirty ? $t('agent.settings.performance.unsavedChanges') : $t('agent.settings.performance.activeNotice') }}
       </span>
       <button
         type="button"

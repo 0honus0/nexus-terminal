@@ -10,10 +10,12 @@
     areQuantitiesEquivalent,
     type QuantityType,
   } from './quantity-format';
+  import { useQuantityLabels } from './use-quantity-labels';
 
   const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
   const { t } = useI18n();
+  const quantityLabels = useQuantityLabels();
 
   type PresetId = 'light' | 'balanced' | 'deep' | 'custom';
   type BudgetSettings = AgentSettingsDocumentDto['budget'];
@@ -188,23 +190,23 @@
     keys: BudgetKey[];
   }
 
-  const fieldGroups: FieldGroup[] = [
+  const fieldGroups = computed<FieldGroup[]>(() => [
     {
       id: 'tokens_steps',
-      title: '执行步数保险丝',
+      title: t('agent.settings.budget.groups.steps'),
       keys: ['maxRunSteps'],
     },
     {
       id: 'time_control',
-      title: '执行与超时控制',
+      title: t('agent.settings.budget.groups.timeControl'),
       keys: ['maxActiveExecutionSeconds', 'toolTimeoutSeconds'],
     },
     {
       id: 'tools_data',
-      title: '工具截断与上下文记忆',
+      title: t('agent.settings.budget.groups.toolsData'),
       keys: ['maxToolOutputBytes', 'maxRecallItems', 'maxRecallBytes'],
     },
-  ];
+  ]);
 </script>
 
 <template>
@@ -276,11 +278,15 @@
             <div
               class="mt-2.5 flex items-center justify-between border-t border-border/40 pt-1.5 text-[11px] text-text-secondary"
             >
-              <span v-if="preset.id !== 'custom'"
-                >{{ preset.values.maxRunSteps }} 步 ·
-                {{ Math.round(preset.values.maxActiveExecutionSeconds / 60) }} min</span
-              >
-              <span v-else>自定义微调</span>
+              <span v-if="preset.id !== 'custom'">
+                {{
+                  $t('agent.settings.budget.presetSteps', {
+                    steps: preset.values.maxRunSteps,
+                    minutes: Math.round(preset.values.maxActiveExecutionSeconds / 60),
+                  })
+                }}
+              </span>
+              <span v-else>{{ $t('agent.settings.budget.customTuning') }}</span>
               <span
                 class="text-primary opacity-0 transition-opacity group-hover:opacity-100"
                 :class="{ '!opacity-100': activePreset === preset.id }"
@@ -312,7 +318,15 @@
                     v-if="settings.requestedSettings.budget[key] !== settings.effectiveSettings.budget[key]"
                     class="text-[11px] text-warning"
                   >
-                    有效: {{ formatQuantity(settings.effectiveSettings.budget[key], getFieldType(key)) }}
+                    {{
+                      $t('agent.settings.budget.effective', {
+                        value: formatQuantity(
+                          settings.effectiveSettings.budget[key],
+                          getFieldType(key),
+                          quantityLabels,
+                        ),
+                      })
+                    }}
                   </span>
                 </div>
                 <p class="mb-1.5 text-[11px] text-text-secondary">
@@ -332,7 +346,7 @@
       <div class="text-xs text-text-secondary">
         <span v-if="isDirty" class="text-warning">
           <i class="fa-solid fa-circle-exclamation mr-1" aria-hidden="true"></i>
-          有尚未保存的预算变更
+          {{ $t('agent.settings.budget.unsavedChanges') }}
         </span>
         <span v-else class="text-text-secondary">
           {{ $t('agent.settings.budget.readyNotice') }}

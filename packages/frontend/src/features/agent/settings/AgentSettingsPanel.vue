@@ -112,7 +112,7 @@
 
   const enabledApps = computed(() => apps.value.filter((app) => app.enabled).length);
   const defaultModelName = computed(() => {
-    if (!settings.value?.requestedSettings.model.defaultModelId) return '未设置';
+    if (!settings.value?.requestedSettings.model.defaultModelId) return t('agent.settings.modelNotSet');
     return settings.value.requestedSettings.model.defaultModelId;
   });
 

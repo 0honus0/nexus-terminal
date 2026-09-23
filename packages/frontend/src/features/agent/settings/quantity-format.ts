@@ -1,6 +1,21 @@
 export type QuantityType = 'bytes' | 'tokens' | 'seconds' | 'number';
 
 /**
+ * §7.14-c：数量格式化只负责单位换算，文字部分由调用方注入，
+ * 这样同一个函数在 zh-CN / en-US / ja-JP 下都能输出本地化结果。
+ */
+export interface QuantityLabels {
+  unlimited: string;
+  seconds: (value: number) => string;
+  minutes: (value: number) => string;
+  hours: (value: number) => string;
+  days: (value: number) => string;
+  invalidFormat: string;
+  exactBytes: (value: string) => string;
+  exactSeconds: (value: string) => string;
+}
+
+/**
  * 将用户输入的带有 K, M, G, B 等单位的文本或数字解析为精确的数值。
  *
  * 规则：
@@ -105,8 +120,8 @@ export function parseQuantity(raw: string | number | null | undefined, type: Qua
 /**
  * 格式化数值为友好的人类可读简写（如 "10 MiB", "128k Tokens", "30 分钟"）
  */
-export function formatQuantity(value: number | null | undefined, type: QuantityType = 'bytes'): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '不限';
+export function formatQuantity(value: number | null | undefined, type: QuantityType, labels: QuantityLabels): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return labels.unlimited;
   if (value === 0) return type === 'bytes' ? '0 B' : '0';
 
   if (type === 'bytes') {
@@ -138,17 +153,10 @@ export function formatQuantity(value: number | null | undefined, type: QuantityT
   }
 
   if (type === 'seconds') {
-    if (value < 60) return `${value} 秒`;
-    if (value < 3600) {
-      const min = Math.round(value / 60);
-      return `${min} 分钟`;
-    }
-    if (value < 86400) {
-      const hr = Number((value / 3600).toFixed(1));
-      return `${hr} 小时`;
-    }
-    const days = Number((value / 86400).toFixed(1));
-    return `${days} 天`;
+    if (value < 60) return labels.seconds(value);
+    if (value < 3600) return labels.minutes(Math.round(value / 60));
+    if (value < 86400) return labels.hours(Number((value / 3600).toFixed(1)));
+    return labels.days(Number((value / 86400).toFixed(1)));
   }
 
   return String(value);
@@ -161,7 +169,8 @@ export function formatQuantity(value: number | null | undefined, type: QuantityT
  */
 export function getQuantityFeedback(
   raw: string | number,
-  type: QuantityType = 'bytes',
+  type: QuantityType,
+  labels: QuantityLabels,
 ): {
   valid: boolean;
   value: number | null;
@@ -173,19 +182,19 @@ export function getQuantityFeedback(
     return {
       valid: false,
       value: null,
-      readable: '无效格式',
+      readable: labels.invalidFormat,
       exact: '',
     };
   }
 
-  const readable = formatQuantity(parsed, type);
+  const readable = formatQuantity(parsed, type, labels);
   let exact = '';
   if (type === 'bytes') {
-    exact = `${parsed.toLocaleString()} 字节`;
+    exact = labels.exactBytes(parsed.toLocaleString());
   } else if (type === 'tokens') {
     exact = `${parsed.toLocaleString()} Tokens`;
   } else if (type === 'seconds') {
-    exact = `${parsed.toLocaleString()} 秒`;
+    exact = labels.exactSeconds(parsed.toLocaleString());
   } else {
     exact = `${parsed.toLocaleString()}`;
   }

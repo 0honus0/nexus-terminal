@@ -9,6 +9,9 @@
     toCompactQuantityString,
     type QuantityType,
   } from './quantity-format';
+  import { useQuantityLabels } from './use-quantity-labels';
+
+  const quantityLabels = useQuantityLabels();
 
   const props = defineProps<{
     settings: AgentSettingsViewDto;
@@ -118,13 +121,14 @@
   );
 
   const formatHardLimitValue = (key: string, value: number | null): string =>
-    formatQuantity(value, getFieldType(key as HardLimitKey));
+    formatQuantity(value, getFieldType(key as HardLimitKey), quantityLabels.value);
 
   const artifactUsage = computed(() =>
     props.preview
       ? formatQuantity(
           props.preview.impact.usage.artifactUsedBytes + props.preview.impact.usage.artifactReservedBytes,
           'bytes',
+          quantityLabels.value,
         )
       : '',
   );

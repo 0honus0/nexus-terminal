@@ -3,6 +3,9 @@
   import type { AgentSettingsViewDto, AgentArtifactStorageSummaryDto } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
   import { formatQuantity, type QuantityType } from './quantity-format';
+  import { useQuantityLabels } from './use-quantity-labels';
+
+  const quantityLabels = useQuantityLabels();
 
   const props = defineProps<{
     settings: AgentSettingsViewDto;
@@ -78,7 +81,7 @@
         <span class="rounded-full border border-border/80 bg-background px-2.5 py-0.5 text-xs text-text-secondary">
           当前占用
           <strong class="font-mono text-foreground">{{
-            formatQuantity(storage.totalBytes + storage.reservedBytes, 'bytes')
+            formatQuantity(storage.totalBytes + storage.reservedBytes, 'bytes', quantityLabels)
           }}</strong>
         </span>
       </div>
@@ -90,25 +93,25 @@
         <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.used') }}</div>
           <div class="mt-1 font-mono text-sm font-semibold text-foreground">
-            {{ formatQuantity(storage.totalBytes + storage.reservedBytes, 'bytes') }}
+            {{ formatQuantity(storage.totalBytes + storage.reservedBytes, 'bytes', quantityLabels) }}
           </div>
         </div>
         <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.reclaimable') }}</div>
           <div class="mt-1 font-mono text-sm font-semibold text-success">
-            {{ formatQuantity(storage.reclaimableBytes, 'bytes') }}
+            {{ formatQuantity(storage.reclaimableBytes, 'bytes', quantityLabels) }}
           </div>
         </div>
         <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.protected') }}</div>
           <div class="mt-1 font-mono text-sm font-semibold text-foreground">
-            {{ formatQuantity(storage.protectedBytes + storage.retainedBytes, 'bytes') }}
+            {{ formatQuantity(storage.protectedBytes + storage.retainedBytes, 'bytes', quantityLabels) }}
           </div>
         </div>
         <div class="rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
           <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.storage.limit') }}</div>
           <div class="mt-1 font-mono text-sm font-semibold text-foreground">
-            {{ formatQuantity(storage.limitBytes, 'bytes') }}
+            {{ formatQuantity(storage.limitBytes, 'bytes', quantityLabels) }}
           </div>
         </div>
       </div>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { useConnections, type ConnectionDto } from '@/features/connections/public';
   import type { AgentTargetDenylistViewDto } from '../api/agent-api';
 
   const props = defineProps<{ denylist: AgentTargetDenylistViewDto; busy: boolean }>();
   const emit = defineEmits<{ save: [connectionIds: number[], reason: string] }>();
+  const { t } = useI18n();
   const connectionsStore = useConnections();
   const loadingConnections = ref(false);
   const connectionsResolved = ref(connectionsStore.connections.value.length > 0);
@@ -42,7 +44,12 @@
   );
 
   // 快捷原因预设
-  const reasonPresets = ['生产环境保护', '安全合规隔离', '临时维护封禁', '沙箱安全限制'] as const;
+  const reasonPresets = computed(() => [
+    t('agent.settings.safety.reasonPresets.production'),
+    t('agent.settings.safety.reasonPresets.compliance'),
+    t('agent.settings.safety.reasonPresets.maintenance'),
+    t('agent.settings.safety.reasonPresets.sandbox'),
+  ]);
 
   const setPresetReason = (preset: string) => {
     reason.value = preset;
@@ -137,7 +144,7 @@
   // 保存安全黑名单
   const save = () => {
     const connectionIds = Array.from(selectedIds.value).sort((a, b) => a - b);
-    const finalReason = reason.value.trim() || '安全策略隔离限制';
+    const finalReason = reason.value.trim() || t('agent.settings.safety.defaultReason');
     emit('save', connectionIds, finalReason);
   };
 </script>
@@ -392,7 +399,7 @@
               :key="id"
               type="button"
               class="inline-flex items-center gap-1 rounded bg-warning/15 border border-warning/30 px-1.5 py-0.5 font-mono text-[11px] hover:bg-warning/25 cursor-pointer"
-              title="点击移出黑名单"
+              :title="$t('agent.settings.safety.removeOrphanId')"
               @click="removeOrphanId(id)"
             >
               <span>#{{ id }}</span>

@@ -21,7 +21,8 @@
         "enabledSuccess": "Agent を有効にしました",
         "disabledSuccess": "Agent を無効にしました",
         "enableFailed": "Agent ランタイムの準備ができていません。App の状態を確認して再試行してください",
-        "disableFailed": "Agent を完全に無効化できませんでした。状態を更新して再試行してください"
+        "disableFailed": "Agent を完全に無効化できませんでした。状態を更新して再試行してください",
+        "schedulerHint": "スケジューラはアプリ間委譲と動的な予算管理に対応します"
       },
       "onboarding": {
         "title": "Nexus Agent をインストールして Agent を有効化",
@@ -260,7 +261,9 @@
         "limit": "有効 {effective} · システム上限 {hard}",
         "sharedSlots": "Root + Subagent は実行スロットを共有",
         "runtimesHint": "1 ユーザーで同時実行する Agent 単位の合計数。Root Agent と各 Subagent がそれぞれ 1 スロットを使用します",
-        "modelCallsHint": "同時モデル API リクエスト数。「自動」は Agent 実行並列数に追従し、明示値も実行並列数を超えません"
+        "modelCallsHint": "同時モデル API リクエスト数。「自動」は Agent 実行並列数に追従し、明示値も実行並列数を超えません",
+        "unsavedChanges": "同時実行設定が変更されました。保存してください",
+        "activeNotice": "現在の同時実行設定は有効です"
       },
       "budget": {
         "title": "予算とコンテキスト",
@@ -293,7 +296,16 @@
           "maxRecallBytesHint": "想起テキストの最大バイト数制限"
         },
         "readyNotice": "現在の設定は準備済みで、次回の Run から適用されます。",
-        "modelCapabilityNotice": "1 回のコンテキストと最大出力は Provider/Registry の物理モデル能力をそのまま使用します。ここでは Run 全体とツール資源の予算だけを制御します。"
+        "modelCapabilityNotice": "1 回のコンテキストと最大出力は Provider/Registry の物理モデル能力をそのまま使用します。ここでは Run 全体とツール資源の予算だけを制御します。",
+        "groups": {
+          "steps": "実行ステップのヒューズ",
+          "timeControl": "実行とタイムアウト制御",
+          "toolsData": "ツール切り詰めとコンテキスト記憶"
+        },
+        "presetSteps": "{steps} ステップ · {minutes} min",
+        "customTuning": "カスタム調整",
+        "effective": "有効: {value}",
+        "unsavedChanges": "保存されていない予算変更があります"
       },
       "quantity": {
         "placeholderBytes": "例: 10M, 500K",
@@ -301,7 +313,15 @@
         "placeholderSeconds": "例: 30m, 1h",
         "placeholderNumber": "例: 50, 100",
         "invalidNumber": "有効な数値を入力してください",
-        "invalidQuantity": "形式が無効です。数値と任意の単位を使用してください"
+        "invalidQuantity": "形式が無効です。数値と任意の単位を使用してください",
+        "unlimited": "無制限",
+        "seconds": "{value} 秒",
+        "minutes": "{value} 分",
+        "hours": "{value} 時間",
+        "days": "{value} 日",
+        "invalidFormat": "無効な形式",
+        "exactBytes": "{value} バイト",
+        "exactSeconds": "{value} 秒"
       },
       "storage": {
         "title": "Artifact とストレージ",
@@ -420,7 +440,15 @@
         "loadingConnections": "システム接続を読み込み中...",
         "noSearchResults": "“{query}” に一致する接続ターゲットはありません",
         "reasonAudit": "（セキュリティ監査用・必須）",
-        "commonReasons": "よく使う理由:"
+        "commonReasons": "よく使う理由:",
+        "reasonPresets": {
+          "production": "本番環境の保護",
+          "compliance": "セキュリティコンプライアンス隔離",
+          "maintenance": "一時メンテナンス遮断",
+          "sandbox": "サンドボックス安全制限"
+        },
+        "defaultReason": "安全ポリシーによる隔離",
+        "removeOrphanId": "拒否リストから外す"
       },
       "providers": {
         "title": "モデル Provider",
@@ -563,7 +591,8 @@
         "sseHeartbeat": "SSE ハートビート",
         "sseHeartbeatValue": "15 秒",
         "transient": "一時イベント",
-        "transientValue": "永続化しない"
+        "transientValue": "永続化しない",
+        "hardBoundary": "システムのハード境界"
       },
       "subagents": {
         "title": "Subagent",
@@ -600,7 +629,12 @@
         "removeProfile": "プロファイルを削除",
         "noProfiles": "この App には Subagent プロファイルが設定されていません。",
         "saveProfiles": "プロファイルを保存",
-        "messageBytesPlaceholder": "例: 2M, 5M"
+        "messageBytesPlaceholder": "例: 2M, 5M",
+        "labels": {
+          "maxDelegationDepth": "最大委譲深度",
+          "maxSubagentMessagesPerRun": "最大公開メッセージ数 / Run",
+          "maxSubagentMessageBytesPerRun": "最大公開メッセージバイト / Run"
+        }
       },
       "browserRuntime": {
         "title": "ブラウザーランタイム",
@@ -797,7 +831,8 @@
         "confirmImport": "Import を確定",
         "importPreviewReady": "Import プレビューを作成しました。",
         "imported": "Memory を import しました。"
-      }
+      },
+      "modelNotSet": "未設定"
     },
     "launcher": {
       "open": "Agent を開く"
