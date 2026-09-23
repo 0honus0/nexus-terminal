@@ -7,6 +7,22 @@
 
 ---
 
+## ✅ 已解决：Model selection UX（默认模型 Combobox + 有序 fallback chain）
+
+| 项 | 结果 |
+| --- | --- |
+| 默认模型 | 新增 Gen2 `UiCombobox`（Reka Combobox）；model id 为主信息、provider 为 secondary badge；候选 >3 时同一输入框直接搜索 model/provider |
+| 一体化视觉 | trigger / dropdown 同宽、零间隔、展开时相接圆角归零；关闭态使用 Gen2 soft surface，展开态 trigger 与 panel 共用 glass fill / blur / border |
+| 键盘 / 焦点 | 真实 `ComboboxInput` 是唯一焦点入口；ArrowDown 打开、Escape 关闭并保持焦点，`role=combobox` / `aria-expanded` 由 Reka primitive 提供 |
+| 备用模型 | `fallbackModels` 保持真实有序语义；UI 按 `1..N` 显式排序，每行上移 / 下移 / 移除；Add 继续使用 Gen2 `UiPopover`，排除默认和已选模型，最多 8 项 |
+| i18n | fallback 标题、说明、计数、添加、搜索、上移/下移/移除、空态已补齐 en-US / ja-JP / zh-CN |
+
+- 真实 CDP（`https://api.honus.top/settings`）：Combobox anchor / panel 均为 256px（同次复验后响应布局为约 276px，仍保持 `widthDelta=0`）；展开接缝约 `-0.17px`，上下相接圆角均 `0px`。用户指出背景不一致后，展开态 trigger / panel 已统一为 `card 82% / alpha≈0.7544 / blur(16px)`，边框同为 60% token mix。
+- 当前真实设置保持 **默认模型未设置、fallback 1/8**；本轮只做展开 / Escape / 键盘 / 几何验收，没有选择默认模型、没有移除或重排真实 fallback。唯一候选已在 fallback 中，因此 Add 正确 disabled；搜索（>3）与 reorder 的运行时分支由源码 + type/build 门禁覆盖。
+- 最终门禁：三份 locale JSON parse、Prettier、Agent ESLint、`git diff --check`、frontend `vue-tsc --noEmit + vite build` 全部通过。Foundation 目录仍不在当前 Vue+TS ESLint 配置覆盖范围内，`UiCombobox.vue` 由 Prettier + vue-tsc + build 覆盖。
+
+---
+
 ## ✅ 已复核：陈旧 P0 / 样式根因条目同步关闭
 
 | 项              | 复验结果                                                                                                                          |
@@ -22,19 +38,18 @@
 
 ---
 
-## ✅ 已解决：设置区默认模型下拉统一到 Gen2 Popover
+## ✅ 已演进：设置区默认模型从手写下拉 → Gen2 Popover → Gen2 Combobox
 
 | 项       | 内容                                                                                     |
 | -------- | ---------------------------------------------------------------------------------------- |
-| 状态     | **已闭环 2026-09-23；静态/构建 + CDP 验收通过**                                          |
+| 状态     | **最终闭环 2026-09-23；静态/构建 + 真实 CDP 验收通过**                                   |
 | 对应问题 | `doc/problem.md` §7.6 / §7.9-6（设置区自绘下拉缺 Escape / 焦点 / Portal / 统一玻璃表面） |
 
-- `ModelProviderSettings` 删除手写 `document.click` + `absolute top-full` 下拉，默认模型选择改为 Gen2 `UiPopover`。
-- `UiPopover` 增加 `wrapperClass / triggerClass` 透传，设置页可保持 `w-full` trigger 与现有内容布局；若 Popover 已打开后 `disabled` 变为 true，会通过 guarded `applyOpen(false)` 自动收起并保持 `open-change` 一致。
-- 搜索与模型列表继续保留；空结果从硬编码中文改为 `agent.settings.providers.noMatchingModels`，en-US / ja-JP / zh-CN 已补齐。
-- 真实设置页当前无已配置模型，因此 trigger 按设计为 disabled；CDP 实测 `384×36`、13px、8px radius、`cursor:not-allowed`。
-- 同一 `UiPopover` 在 DEV Gallery CDP 实测：trigger 高 32px；玻璃 panel `322×202`，背景 alpha ≈ `0.7544`、`blur(16px)`、16px radius；Escape 关闭后焦点回 trigger。
-- 最终门禁：`git diff --check`、Prettier、Agent ESLint、frontend `vue-tsc --noEmit`、Vite production build 全部通过。Foundation 目录当前未接 Vue+TS ESLint parser，因此 `UiPopover.vue` 由 Prettier + `vue-tsc` + build 覆盖。
+- 第一阶段已删除手写 `document.click` + `absolute top-full` 下拉并迁到 Gen2 `UiPopover`，先解决定位 / Escape / focus restore / collision。
+- 最终方案按控件语义进一步拆分：**默认模型使用 Gen2 `UiCombobox`**（选择 + 搜索 + rich row）；**fallback Add 保留 Gen2 `UiPopover`**（临时添加动作）。
+- `UiCombobox` 由 Reka Combobox primitive 提供键盘、焦点、筛选与选中语义；展开时 trigger 与 glass panel 共用 fill / blur / border，并保持同宽连续表面。
+- `UiPopover` 的通用定位修复同时保留：Reka 外层负责 fixed + transform，内部 `.ui-popover__panel` 不再重复 `position: fixed`。
+- Foundation 目录当前仍未接 Vue+TS ESLint parser，因此新增 `UiCombobox.vue` 由 Prettier + `vue-tsc` + production build 覆盖。
 
 ---
 

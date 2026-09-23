@@ -53,7 +53,7 @@
 | **P1 · ✅ 已关闭 2026-09-22** | **历史 Run 的 `GET /runs/:id/approvals` 稳定 500（`AGENT_DURABLE_STATE_INVALID`）**：已由 migration #45 将 legacy `inspection_json.target.kind = "machine"` 规范化为 canonical SSH target；真实数据库副本验证 26 条 legacy tool call → 0、25 条受影响 approval 全部可解码 | `sqlite-migrations.ts` migration #45、`tests/backend/agent-scenarios/runner.ts`（见 §1.9） |
 | **P0 · ✅ 已关闭 2026-09-23** | 全局 form font/cursor reset 已移入 `@layer base`；CDP 设置页 `text-xs` 按钮均恢复为 12px（旧实测为 16px） | `app/styles/global.css:27-46`（见 §7.10） |
 | P1 | 设置区「Agent」页在**英文界面下仍有 29 处硬编码中文**（实测："6 个模型""已配密钥""执行步数保险丝""≈ 1 小时""(3,600 秒)"…） | `features/agent/settings/**`（见 §6.5、§7.11） |
-| P1 | 「备用模型链」把该 Provider 的**全部模型**平铺成按钮云：无顺序编号、无拖拽/移除、无搜索；"勾选顺序即生效顺序"却完全不可见 | `settings/ModelProviderSettings.vue:1062-1083`（见 §7.11） |
+| **P1 · ✅ 已关闭 2026-09-23** | 备用模型链已改为 `1..N` 有序列表 + 上移/下移/移除；Add 使用可搜索 Gen2 `UiPopover`，排除默认/已选并限制最多 8 项 | `settings/ModelProviderSettings.vue`（见 §7.11） |
 | P1 | 设置区按钮规格失控（实测）：`添加 Provider` 144×38 fs16 / `关闭 Agent` 109×40 fs16 / `立即更新` 77×28 fs11；同一服务商行 `模型与测试(6)` 144px、`更新模型` 107px、`停用` 54px、删除 28×28 | 见 §7.11 |
 | P2 | 空态 pager 可点区域仅 **12×16px**（点 6×6），远低于 32px 触控标准 | `ai/AgentConversation.vue:472-486`（实测见 §7.12） |
 | **P1 · ✅ 已关闭 2026-09-23** | 弹层已改为优先按 Hub 窗口 clamp，并限制 maxWidth/maxHeight、跟随 Hub resize；560px Hub 下附件弹层实测四边均在窗口内 | `files/AgentConfigPopover.vue`、`host/AgentAppSwitcher.vue`（见 §7.13-a） |
@@ -836,7 +836,7 @@ shadow-2xl ring-1 ring-border/20 outline-none
 
 结论：设置区**已经想要这套玻璃语言**，但缺"组件化、定位、键盘、行结构"四件事，只剩下"更小的圆角 + 不一样的间距"，于是看起来就是"粗版"。把设置区的下拉统一换成 `AgentConfigPopover`（或 §7.1 的 `glass-surface`）是性价比最高的一步。
 
-> ✅ **2026-09-23 闭环**：`ModelProviderSettings` 的默认模型选择器已删除手写 `absolute top-full` / document click 下拉，迁到 Gen2 `UiPopover`（Reka Popover primitive + canonical `.glass-surface`）；Escape / outside dismiss / focus restore / collision 由 Foundation 统一负责。空结果已改为三语 `agent.settings.providers.noMatchingModels`。真实设置页当前无已配置模型，trigger 按设计为 disabled，CDP 实测 `384×36`；同一 `UiPopover` 在 DEV Gallery 实测玻璃 panel `322×202`、alpha≈0.7544、`blur(16px)`、Escape 后焦点归还 trigger。
+> ✅ **2026-09-23 最终闭环**：默认模型已从中间态 Gen2 `UiPopover` 进一步升级为 Gen2 `UiCombobox`（Reka Combobox），选择 / 搜索 / rich row / keyboard focus 由同一控件语义承担；fallback 的「添加备用模型」继续使用 `UiPopover`，因为它是临时动作菜单。真实 CDP 验收：trigger / panel 同宽（`widthDelta=0`）、相接圆角为 `0px`、ArrowDown 打开 / Escape 关闭且焦点留在 combobox；用户指出背景断层后，展开态 trigger / panel 已统一为 canonical glass fill（alpha≈0.7544）+ `blur(16px)` + 同一 border recipe。
 
 ### 7.7 视觉佐证（`doc/imgs/e2e/agent-*.png`，2026-09-17 生成）
 
@@ -867,13 +867,13 @@ shadow-2xl ring-1 ring-border/20 outline-none
 | 3 | ✅ **已关闭 2026-09-23**：card token 生效，助手气泡/空态/TaskRail 均有真实 surface | `ai/ConversationMessage.vue`、`ai/AgentConversation.vue`、`runtime/TaskRail.vue` | P1 |
 | 4 | ✅ **已关闭 2026-09-23**：「回到最新」已进入 Composer 上方状态行右侧 | `ai/AgentConversation.vue` | P1 |
 | 5 | 减少 chrome：矮窗口压缩顶栏/composer，提高 `MIN_HEIGHT` | §7.2 | P1 |
-| 6 | ✅ **已关闭 2026-09-23**：设置区默认模型自绘下拉已迁到 Gen2 `UiPopover`，统一 Escape / 焦点归还 / Portal collision / glass surface | `settings/ModelProviderSettings.vue`、`foundation/ui/UiPopover.vue` | P1 |
+| 6 | ✅ **已关闭 2026-09-23**：设置区默认模型最终迁到 Gen2 `UiCombobox`；选择/搜索/键盘/焦点统一由 Reka Combobox 承担，展开态与 glass panel 同宽同背景连续衔接 | `settings/ModelProviderSettings.vue`、`foundation/ui/UiCombobox.vue` | P1 |
 | 7 | 窄窗口侧栏支持折叠；侧栏/任务栏/Hub 视图状态统一持久化 | `host/AgentAppSurface.vue:1543`、`host/window-manager.ts` | P2 |
 | 8 | 空态轮播改静态或显式翻页，pager 命中区 ≥32px | `ai/AgentConversation.vue:429-486` | P2 |
 | 9 | Hub 顶栏毛玻璃被覆盖、窗口阴影写死浅色 | `host/AgentHubWindow.vue:362、606-611、673-680` | P2 |
 | 10 | 无效间距类 `py-0.2 / py-0.8 / py-1.8` 与死 CSS 清理 | settings/**、`host/AgentAppSurface.vue:2612/2648/2692` | P2 |
 | 11 | ✅ **已关闭 2026-09-23**：font/cursor reset 已放入 `@layer base`，Tailwind 字号 utility 恢复生效 | `app/styles/global.css:27-46`（见 §7.10） | P0 |
-| 12 | 备用模型链改成"已选有序列表 + 可搜索的添加弹层"（复用 `AgentConfigPopover` 行结构），并把顺序显式画出来 | `settings/ModelProviderSettings.vue:1062-1083`（见 §7.11） | P1 |
+| 12 | ✅ **已关闭 2026-09-23**：备用模型链已改为 `1..N` 有序列表 + 上移/下移/移除；Add 使用可搜索 Gen2 `UiPopover`，排除默认/已选并限制最多 8 项 | `settings/ModelProviderSettings.vue`（见 §7.11） | P1 |
 | 13 | 设置区把「状态」画成按钮（默认模型 / 活跃 App / 沙箱）与「自动保存」绿胶囊，需要收敛成只读 badge 规格 | §7.11 | P2 |
 | 14 | 空态 pager 命中区 12×16 → ≥32px；空态建议卡去掉自动轮播 | `ai/AgentConversation.vue:429-486`（实测见 §7.12） | P2 |
 
@@ -982,6 +982,8 @@ select {
 - 说明文字写着"按顺序勾选备用模型"，但：**没有序号、没有拖拽、没有"上移/下移"、也没有单项移除**；选中态只靠 `border-primary/40 bg-primary/10 text-primary` 表达，实测当前**全部未选中**——用户看不出当前 fallback 链是什么、顺序如何。
 - 只在 Provider 卡里能改，且改完只能靠顶部一行提示确认；顺序即生效顺序，却无任何可视化。
 - 建议：改成"已选有序列表（1/2/3 + ✕ + 拖拽）"+「添加备用模型」按钮打开 `AgentConfigPopover`（复用 §6.1 的两行行结构 + 搜索）。
+
+> ✅ **2026-09-23 闭环**：已改为显式 `1..N` 有序 fallback 列表，每项提供上移 / 下移 / 移除；Add 使用 Gen2 `UiPopover`，候选排除默认模型与已选模型，最多 8 项，候选 >3 时可搜索。真实设置当前为 `1/8` 且只有一个已配置模型，所以 Add 按设计 disabled；为避免改写真实用户设置，本轮未执行 remove/reorder。
 
 **d) 顶部状态区把"状态"画成了按钮**
 

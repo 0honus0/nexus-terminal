@@ -11,3 +11,11 @@ export interface UiSelectOption {
   description?: string;
   disabled?: boolean;
 }
+
+export interface UiComboboxOption {
+  value: UiSelectValue;
+  label: string;
+  description?: string;
+  keywords?: string;
+  disabled?: boolean;
+}

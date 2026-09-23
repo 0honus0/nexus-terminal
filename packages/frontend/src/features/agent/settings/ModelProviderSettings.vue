@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiPopover } from '@/foundation/ui';
+  import { BaseModal, UiCombobox, UiPopover, type UiComboboxOption } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import {
@@ -733,35 +733,26 @@
     }
   };
 
-  // 默认模型下拉选择浮层状态
-  const defaultDropdownOpen = ref(false);
-  const defaultModelSearch = ref('');
+  // 默认模型选择：统一 Gen2 Combobox，模型 ID 为主、渠道为次
+  const defaultModelComboboxOptions = computed<UiComboboxOption[]>(() =>
+    modelOptions.value.map((opt) => ({
+      value: opt.key,
+      label: opt.model.id,
+      description: opt.provider.displayName,
+      keywords: opt.provider.displayName,
+    })),
+  );
 
-  const selectedDefaultOption = computed(() => {
-    if (!props.defaultProviderId || !props.defaultModelId) return null;
-    return (
-      modelOptions.value.find(
-        (opt) => opt.provider.id === props.defaultProviderId && opt.model.id === props.defaultModelId,
-      ) || null
-    );
-  });
+  const providerByModelKey = computed(() => new Map(modelOptions.value.map((opt) => [opt.key, opt.provider])));
 
-  const filteredDefaultModelOptions = computed(() => {
-    const q = defaultModelSearch.value.trim().toLowerCase();
-    if (!q) return modelOptions.value;
-    return modelOptions.value.filter(
-      (opt) => opt.model.id.toLowerCase().includes(q) || opt.provider.displayName.toLowerCase().includes(q),
-    );
-  });
-
-  const handleDefaultPopoverChange = (_open: boolean) => {
-    defaultModelSearch.value = '';
+  const providerIconForKey = (key: string | number): string => {
+    const provider = providerByModelKey.value.get(String(key));
+    return provider ? providerIcon(provider) : 'fa-solid fa-cube text-text-secondary';
   };
 
-  const selectDefaultOption = (opt: (typeof modelOptions.value)[number]) => {
-    emit('defaultModel', opt.provider.id, opt.model.id);
-    defaultDropdownOpen.value = false;
-    defaultModelSearch.value = '';
+  const selectDefaultModel = (value: string | number | null) => {
+    const opt = modelOptions.value.find((item) => item.key === value);
+    if (opt) emit('defaultModel', opt.provider.id, opt.model.id);
   };
 
   onMounted(() => {
@@ -781,28 +772,79 @@
       ),
   );
 
-  const validFallbackModels = computed(() => {
-    const configuredKeys = new Set(modelOptions.value.map((item) => item.key));
-    return props.fallbackModels.filter((item) => configuredKeys.has(`${item.providerId}\u0000${item.modelId}`));
-  });
-
-  const fallbackModelKeys = computed(
-    () => new Set(validFallbackModels.value.map((item) => `${item.providerId}\u0000${item.modelId}`)),
-  );
-  const toggleFallbackModel = (providerId: string, modelId: string) => {
-    const normalized = validFallbackModels.value;
-    const exists = normalized.some((item) => item.providerId === providerId && item.modelId === modelId);
-    emit(
-      'fallbackModels',
-      exists
-        ? normalized.filter((item) => item.providerId !== providerId || item.modelId !== modelId)
-        : [...normalized, { providerId, modelId }].slice(0, 8),
-    );
-  };
+  const MAX_FALLBACK_MODELS = 8;
 
   const defaultModelKey = computed(() =>
     props.defaultProviderId && props.defaultModelId ? `${props.defaultProviderId}\u0000${props.defaultModelId}` : '',
   );
+
+  const validFallbackModels = computed(() => {
+    const configuredKeys = new Set(modelOptions.value.map((item) => item.key));
+    return props.fallbackModels.filter(
+      (item) =>
+        configuredKeys.has(`${item.providerId}\u0000${item.modelId}`) &&
+        `${item.providerId}\u0000${item.modelId}` !== defaultModelKey.value,
+    );
+  });
+
+  // 已选备用模型行：附带 provider/model 详情，供有序列表渲染
+  const selectedFallbackRows = computed(() =>
+    validFallbackModels.value.map((item) => {
+      const key = `${item.providerId}\u0000${item.modelId}`;
+      const option = modelOptions.value.find((candidate) => candidate.key === key) ?? null;
+      return { key, providerId: item.providerId, modelId: item.modelId, option };
+    }),
+  );
+
+  const fallbackModelKeys = computed(() => new Set(selectedFallbackRows.value.map((row) => row.key)));
+
+  // 添加备用模型弹层：只列出已启用、非默认且未选中的候选项
+  const fallbackDropdownOpen = ref(false);
+  const fallbackSearch = ref('');
+
+  const fallbackOptions = computed(() =>
+    modelOptions.value.filter((item) => item.key !== defaultModelKey.value && !fallbackModelKeys.value.has(item.key)),
+  );
+
+  const filteredFallbackOptions = computed(() => {
+    const q = fallbackSearch.value.trim().toLowerCase();
+    if (!q) return fallbackOptions.value;
+    return fallbackOptions.value.filter(
+      (opt) => opt.model.id.toLowerCase().includes(q) || opt.provider.displayName.toLowerCase().includes(q),
+    );
+  });
+
+  const fallbackAtCapacity = computed(() => validFallbackModels.value.length >= MAX_FALLBACK_MODELS);
+
+  const handleFallbackPopoverChange = (_open: boolean) => {
+    fallbackSearch.value = '';
+  };
+
+  const addFallbackModel = (providerId: string, modelId: string) => {
+    const key = `${providerId}\u0000${modelId}`;
+    if (fallbackAtCapacity.value || fallbackModelKeys.value.has(key)) return;
+    emit('fallbackModels', [...validFallbackModels.value, { providerId, modelId }]);
+    fallbackDropdownOpen.value = false;
+    fallbackSearch.value = '';
+  };
+
+  const removeFallbackModel = (key: string) => {
+    emit(
+      'fallbackModels',
+      validFallbackModels.value.filter((item) => `${item.providerId}\u0000${item.modelId}` !== key),
+    );
+  };
+
+  const moveFallbackModel = (index: number, delta: number) => {
+    const current = validFallbackModels.value;
+    const target = index + delta;
+    if (target < 0 || target >= current.length) return;
+    const next = [...current];
+    const [moved] = next.splice(index, 1);
+    if (!moved) return;
+    next.splice(target, 0, moved);
+    emit('fallbackModels', next);
+  };
 
   const modelCount = computed(() => props.providers.reduce((total, p) => total + p.models.length, 0));
 
@@ -941,139 +983,200 @@
         </div>
 
         <div class="min-w-64 max-w-sm">
-          <!-- 默认模型现代触发器：优先显示模型 ID，渠道作为精致小微徽标排在后面 -->
-          <UiPopover
-            v-model:open="defaultDropdownOpen"
+          <UiCombobox
+            :model-value="defaultModelKey || null"
+            :options="defaultModelComboboxOptions"
             :disabled="busy || modelOptions.length === 0"
-            :ariaLabel="$t('agent.settings.providers.defaultModel')"
+            :placeholder="$t('agent.settings.providers.chooseDefault')"
+            :search-placeholder="$t('agent.settings.providers.searchConfiguredModels')"
+            :empty-text="$t('agent.settings.providers.noMatchingModels')"
+            :aria-label="$t('agent.settings.providers.defaultModel')"
+            align="end"
+            density="comfortable"
+            input-class="font-mono font-semibold"
+            @update:model-value="selectDefaultModel"
+          >
+            <template #meta="{ selected }">
+              <span
+                v-if="selected"
+                class="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 bg-header/50 px-1.5 py-1 text-[10px] font-medium text-text-secondary"
+              >
+                <i :class="providerIconForKey(selected.value)" class="text-[10px] shrink-0"></i>
+                <span class="max-w-28 truncate">{{ selected.description }}</span>
+              </span>
+            </template>
+
+            <template #option="{ option }">
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <div class="flex min-w-0 items-center gap-2">
+                  <i :class="providerIconForKey(option.value)" class="text-xs shrink-0"></i>
+                  <span class="truncate font-mono text-xs font-semibold">{{ option.label }}</span>
+                </div>
+                <span
+                  v-if="option.description"
+                  class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
+                >
+                  {{ option.description }}
+                </span>
+              </div>
+            </template>
+          </UiCombobox>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-border/70 bg-header/20 p-3.5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <div class="text-xs font-semibold text-foreground">
+              {{ $t('agent.settings.providers.fallbackTitle') }}
+            </div>
+            <span
+              class="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-medium text-text-secondary"
+            >
+              {{
+                $t('agent.settings.providers.fallbackCount', {
+                  count: selectedFallbackRows.length,
+                  max: MAX_FALLBACK_MODELS,
+                })
+              }}
+            </span>
+          </div>
+
+          <!-- 添加备用模型：复用 Gen2 UiPopover，仅列出可加入的候选项 -->
+          <UiPopover
+            v-model:open="fallbackDropdownOpen"
+            :disabled="busy || fallbackAtCapacity || fallbackOptions.length === 0"
+            :ariaLabel="$t('agent.settings.providers.fallbackAdd')"
             align="end"
             placement="bottom"
             :offset="6"
-            wrapper-class="w-full"
-            trigger-class="w-full justify-between overflow-hidden px-3 font-medium"
             density="comfortable"
-            trigger-appearance="soft"
-            trigger-tone="neutral"
             panel-class="w-[min(360px,calc(100vw-24px))] p-1.5"
-            @open-change="handleDefaultPopoverChange"
+            @open-change="handleFallbackPopoverChange"
           >
             <template #trigger="{ open }">
-              <div v-if="selectedDefaultOption" class="flex items-center gap-2 min-w-0 overflow-hidden">
-                <i :class="providerIcon(selectedDefaultOption.provider)" class="text-xs shrink-0"></i>
-                <!-- 优先大字显示模型 ID -->
-                <span class="font-mono text-xs font-semibold text-foreground truncate">
-                  {{ selectedDefaultOption.model.id }}
-                </span>
-                <!-- 渠道小巧精致徽标，视觉轻量优雅 -->
-                <span
-                  class="shrink-0 rounded-md border border-border/60 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium text-text-secondary leading-none"
-                >
-                  {{ selectedDefaultOption.provider.displayName }}
-                </span>
-              </div>
-              <div v-else class="text-xs text-text-secondary truncate">
-                {{ $t('agent.settings.providers.chooseDefault') }}
-              </div>
-              <i
-                class="fa-solid fa-chevron-down text-[10px] text-text-secondary transition-transform duration-200 shrink-0"
-                :class="{ 'rotate-180 text-foreground': open }"
-              ></i>
+              <span class="inline-flex items-center gap-1.5 text-xs">
+                <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+                <span>{{ $t('agent.settings.providers.fallbackAdd') }}</span>
+                <i
+                  class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200"
+                  :class="{ 'rotate-180': open }"
+                ></i>
+              </span>
             </template>
 
             <template #panel>
-              <!-- 搜索框（当选项多于 3 个时显示） -->
-              <div v-if="modelOptions.length > 3" class="relative mb-1.5 px-1 pt-1">
+              <!-- 搜索框（候选项多于 3 个时显示） -->
+              <div v-if="fallbackOptions.length > 3" class="relative mb-1.5 px-1 pt-1">
                 <i
                   class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary/70 pointer-events-none"
                 ></i>
                 <input
-                  v-model="defaultModelSearch"
+                  v-model="fallbackSearch"
                   type="text"
                   data-no-highlight
                   class="h-7.5 w-full rounded-lg border border-border/70 bg-header/30 pl-7 pr-2.5 text-xs text-foreground placeholder:text-text-secondary/60 outline-none focus:border-border-hover"
-                  :placeholder="$t('agent.settings.providers.searchConfiguredModels')"
+                  :placeholder="$t('agent.settings.providers.fallbackSearchPlaceholder')"
                   @click.stop
                 />
               </div>
 
-              <!-- 选项滚动列表 -->
+              <!-- 候选模型滚动列表 -->
               <div class="max-h-60 overflow-y-auto space-y-1 pr-0.5">
                 <button
-                  v-for="option in filteredDefaultModelOptions"
+                  v-for="option in filteredFallbackOptions"
                   :key="option.key"
                   type="button"
-                  class="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-all cursor-pointer"
-                  :class="
-                    defaultProviderId === option.provider.id && defaultModelId === option.model.id
-                      ? 'bg-primary/10 text-primary font-semibold border border-primary/20'
-                      : 'text-foreground hover:bg-header/60 border border-transparent'
-                  "
-                  @click="selectDefaultOption(option)"
+                  class="flex w-full items-center justify-between gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-left text-foreground transition-all cursor-pointer hover:bg-header/60"
+                  @click="addFallbackModel(option.provider.id, option.model.id)"
                 >
                   <div class="flex items-center gap-2 min-w-0 flex-1">
                     <i :class="providerIcon(option.provider)" class="text-xs shrink-0"></i>
-                    <!-- 优先突出模型 ID -->
-                    <span
-                      class="font-mono text-xs font-medium truncate"
-                      :class="{
-                        'font-bold': defaultProviderId === option.provider.id && defaultModelId === option.model.id,
-                      }"
-                    >
-                      {{ option.model.id }}
-                    </span>
+                    <span class="font-mono text-xs font-medium truncate">{{ option.model.id }}</span>
                   </div>
-
-                  <div class="flex items-center gap-1.5 shrink-0">
-                    <!-- 渠道小一点、好看一点 -->
-                    <span
-                      class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
-                      :class="{
-                        'border-primary/30 text-primary/80':
-                          defaultProviderId === option.provider.id && defaultModelId === option.model.id,
-                      }"
-                    >
-                      {{ option.provider.displayName }}
-                    </span>
-                    <i
-                      v-if="defaultProviderId === option.provider.id && defaultModelId === option.model.id"
-                      class="fa-solid fa-check text-xs text-primary ml-0.5"
-                    ></i>
-                  </div>
+                  <span
+                    class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
+                  >
+                    {{ option.provider.displayName }}
+                  </span>
                 </button>
 
-                <div
-                  v-if="filteredDefaultModelOptions.length === 0"
-                  class="py-4 text-center text-xs text-text-secondary"
-                >
+                <div v-if="filteredFallbackOptions.length === 0" class="py-4 text-center text-xs text-text-secondary">
                   {{ $t('agent.settings.providers.noMatchingModels') }}
                 </div>
               </div>
             </template>
           </UiPopover>
         </div>
-      </div>
 
-      <div class="rounded-xl border border-border/70 bg-header/20 p-3.5">
-        <div class="mb-2 text-xs font-semibold text-foreground">Fallback chain</div>
-        <div class="mb-3 text-[11px] text-text-secondary">
-          按顺序勾选备用模型；新 Run 会冻结兼容 route，运行中设置变更不会改写既有 Run。
+        <div class="mt-1.5 mb-3 text-[11px] text-text-secondary">
+          {{ $t('agent.settings.providers.fallbackHint') }}
         </div>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="option in modelOptions.filter((item) => item.key !== defaultModelKey)"
-            :key="`fallback-${option.key}`"
-            type="button"
-            class="rounded-lg border px-2.5 py-1.5 text-[11px] transition-all"
-            :class="
-              fallbackModelKeys.has(option.key)
-                ? 'border-primary/40 bg-primary/10 text-primary'
-                : 'border-border/70 text-text-secondary hover:text-foreground'
-            "
-            :disabled="busy"
-            @click="toggleFallbackModel(option.provider.id, option.model.id)"
+
+        <!-- 已选备用模型：显式有序列表（1..N + 上移/下移/移除） -->
+        <ol v-if="selectedFallbackRows.length > 0" class="space-y-1.5">
+          <li
+            v-for="(row, index) in selectedFallbackRows"
+            :key="row.key"
+            class="flex items-center gap-2.5 rounded-lg border border-border/70 bg-background/60 px-3 py-2"
           >
-            {{ option.model.id }} · {{ option.provider.displayName }}
-          </button>
+            <span
+              class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold text-primary"
+            >
+              {{ index + 1 }}
+            </span>
+            <i v-if="row.option" :class="providerIcon(row.option.provider)" class="text-xs shrink-0"></i>
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+              <span class="font-mono text-xs font-semibold text-foreground truncate">{{ row.modelId }}</span>
+              <span
+                v-if="row.option"
+                class="shrink-0 rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] text-text-secondary leading-none"
+              >
+                {{ row.option.provider.displayName }}
+              </span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-border-hover hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                :disabled="busy || index === 0"
+                :aria-label="$t('agent.settings.providers.fallbackMoveUp')"
+                :title="$t('agent.settings.providers.fallbackMoveUp')"
+                @click="moveFallbackModel(index, -1)"
+              >
+                <i class="fa-solid fa-arrow-up text-[10px]" aria-hidden="true"></i>
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-border-hover hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                :disabled="busy || index === selectedFallbackRows.length - 1"
+                :aria-label="$t('agent.settings.providers.fallbackMoveDown')"
+                :title="$t('agent.settings.providers.fallbackMoveDown')"
+                @click="moveFallbackModel(index, 1)"
+              >
+                <i class="fa-solid fa-arrow-down text-[10px]" aria-hidden="true"></i>
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-text-secondary transition-all hover:border-error/40 hover:text-error disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                :disabled="busy"
+                :aria-label="$t('agent.settings.providers.fallbackRemove')"
+                :title="$t('agent.settings.providers.fallbackRemove')"
+                @click="removeFallbackModel(row.key)"
+              >
+                <i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
+              </button>
+            </div>
+          </li>
+        </ol>
+
+        <!-- 空态：紧凑信息提示，而非按钮云 -->
+        <div
+          v-else
+          class="flex items-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/40 px-3 py-2.5 text-[11px] text-text-secondary"
+        >
+          <i class="fa-solid fa-layer-group text-text-secondary/80" aria-hidden="true"></i>
+          <span>{{ $t('agent.settings.providers.fallbackEmpty') }}</span>
         </div>
       </div>
 
