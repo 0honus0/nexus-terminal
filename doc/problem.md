@@ -74,6 +74,7 @@
 | P2                                    | 设置区空态是左对齐一行纯文本（`尚未配置 MCP Integration。`），与主界面"图标+居中+引导按钮"的空态卡不是同一套语言                                                                                                                                                                                                                                                                     | `settings/McpIntegrationSettings.vue` 等（见 §7.15-d）                                                        |
 | P1                                    | 设置区把后端原始原因码当"不可用原因"渲染（实测灰色的 `runtime_not_configured`），且这是唯一解释                                                                                                                                                                                                                                                                                      | `settings/WorkspaceRuntimeSettings.vue:270`（见 §7.15-b）                                                     |
 | P2                                    | 禁用态主按钮 = 品牌色 + `opacity .5`，与可用态难以区分（保存/预览导入/卸载/立即更新长期如此），且不解释原因                                                                                                                                                                                                                                                                          | `features/agent/settings/**`（实测见 §7.13-e）                                                                |
+| **P1 · ✅ 已关闭 2026-09-23**         | 图标颜色：未分层的 `i/.fas/.far/.fab { color: var(--icon-color) }` 压过 `@layer utilities`，132 个带 `text-primary/success/warning/error/foreground` 的图标一律渲染成 `#666`（`!text-white` 是既有绕过写法）                                                                                                                                                                         | `app/styles/global.css:91-110`（见 §7.19）                                                                    |
 
 ---
 
@@ -1502,6 +1503,45 @@ select {
 
 **同源风险（未在本轮改动）**：任何其它"Gen2 宿主里嵌原生 `input/textarea`"的组件若没有覆写 `--input-bg-color`，都会有同样的白框。
 本轮只修 combobox；后续新增 Gen2 控件时应把这条覆写写进组件规范（或把 `global.css` 的表单规则整体移入 `@layer base`，即 §7.10 建议的方向）。
+
+### 7.19 图标颜色：未分层的 `i / .fas / .far / .fab` 规则让 `text-*` 工具类集体失效（P1 · ✅ 已关闭 2026-09-23）
+
+> ✅ **2026-09-23 CDP 复验**：`global.css` 里的图标颜色规则已移入 `@layer base`。同一页面里 Hub composer 工具条实测：
+> `fa-bolt text-primary` → `rgb(160, 108, 213)`；`fa-play text-success` → `rgb(40, 167, 69)`；
+> `fa-shield-halved text-warning` → `rgb(255, 193, 7)`（修复前这三个都是 `rgb(102, 102, 102)`）。
+> `text-text-secondary` 图标仍为 `rgb(102, 102, 102)` —— `--icon-color` 本来就等于 `--text-color-secondary`，这部分**外观零变化**。
+> 影响面核对：全仓 `<i>` 共 527 个，带颜色 utility 的 132 个（`text-secondary` 64 个外观不变，
+> `primary` 47 / `success` 8 / `warning` 8 / `foreground` 5 / `error` 1 从灰变语义色，另有 10 个写的是 `!text-white` 本来就生效）。
+
+**现象**：Agent UI 里大量图标显式带着语义色（`text-primary` / `text-success` / `text-warning` / `text-error` / `text-foreground`），
+但真实渲染一律是 `#666`。§2.5 想把「批准策略 = 全授权」标成警示色时才发现：改 class 完全不生效。
+
+**根因**（与 §7.10 同一类，unlayered 压过 `@layer utilities`）：
+`packages/frontend/src/app/styles/global.css:91-110` 原来是**未分层**的普通规则：
+
+```css
+i,
+.fas,
+.far,
+.fab {
+  color: var(--icon-color);
+}
+button:hover i, /* … */ {
+  color: var(--icon-hover-color);
+}
+```
+
+未分层规则永远压过任何 `@layer` 内的规则（与权重无关），于是写在 `<i>` 上的 `text-primary` 等 Tailwind utility 全部作废；
+图标只能靠 `!important`（仓库里 10 处 `!text-white` 正是这么绕过去的）或 scoped 规则（如本轮新增的 `.agent-stop-button i`）救回来。
+
+**修法**：把这两条规则整体移入既有的 `@layer base` 块（保留 `--icon-color` 默认色与 hover 行为，但让显式 utility 生效）。
+没有改选择器、没有加 `!important`，改动只影响"本来就写着颜色 utility"的 69 个图标。
+
+**CDP 回归**：设置区 Agent 页 / 仪表盘 / 连接管理 / Hub 工具条四处截图对照，未见低对比或错色；
+`text-text-secondary` 图标（占多数）保持原色，视觉基线未变。
+
+**同源残留（本轮未动）**：`global.css` 里 `input/textarea/select` 的表单规则仍未分层（§7.18 已记录），
+Gen2 控件内嵌原生表单元素时仍需逐个覆写 token。
 
 ---
 

@@ -43,6 +43,35 @@ a {
   button:not(:disabled) {
     cursor: pointer;
   }
+
+  /*
+   * Same trap as the resets above: unlayered, these rules beat every Tailwind
+   * `text-*` utility on `<i>`/`.fa*` (e.g. `text-primary`, `text-warning`), so
+   * icon colors silently fell back to `--icon-color`. Inside `@layer base` the
+   * default color still applies, but an explicit utility now wins.
+   */
+  i,
+  .fas,
+  .far,
+  .fab {
+    color: var(--icon-color);
+    transition: color 0.2s ease;
+  }
+
+  a:hover i,
+  a:hover .fas,
+  a:hover .far,
+  a:hover .fab,
+  button:hover i,
+  button:hover .fas,
+  button:hover .far,
+  button:hover .fab,
+  .icon-interactive:hover i,
+  .icon-interactive:hover .fas,
+  .icon-interactive:hover .far,
+  .icon-interactive:hover .fab {
+    color: var(--icon-hover-color);
+  }
 }
 
 code,
@@ -84,29 +113,6 @@ textarea::placeholder {
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-color-secondary);
-}
-
-i,
-.fas,
-.far,
-.fab {
-  color: var(--icon-color);
-  transition: color 0.2s ease;
-}
-
-a:hover i,
-a:hover .fas,
-a:hover .far,
-a:hover .fab,
-button:hover i,
-button:hover .fas,
-button:hover .far,
-button:hover .fab,
-.icon-interactive:hover i,
-.icon-interactive:hover .fas,
-.icon-interactive:hover .far,
-.icon-interactive:hover .fab {
-  color: var(--icon-hover-color);
 }
 
 input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
