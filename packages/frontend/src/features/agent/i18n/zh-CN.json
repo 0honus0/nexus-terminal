@@ -1367,6 +1367,7 @@
       "goal": "目标",
       "runId": "Run ID",
       "recentFacts": "最近事实",
+      "rawPayload": "原始数据",
       "checkpoints": "检查点",
       "checkpointHint": "只保存事实：不会保存活跃 Lease、Token、容器或进程。",
       "saveCheckpoint": "保存检查点",

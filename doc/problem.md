@@ -90,6 +90,7 @@
 | **P1 · ✅ 已关闭 2026-09-23**         | **`QuantityInput` 单位药丸命中区 `18×20` → `24×24`**：高度 `h-5` → `h-6` 并补 `min-w-6`， 输入框预留内边距 `pr-20` → `pr-24`（字节型有 3 枚药丸，旧值已压到边）；实测 10 枚药丸全部 `24×24`                                                                                                                                                                                                                                                    | `features/agent/settings/QuantityInput.vue`（见 §7.33）                                                      |
 | **P1 · ✅ 已关闭 2026-09-23**         | **模型列表的「取消添加 / 一键取消」收敛 + 补确认**（§6.3 / §6.7 收口）：11px 裸文字按钮 → Gen2 `UiButton` （`soft` + `compact`，可移除 `danger` / 不可移除 `neutral` + 原因 `title`，实测 11 个 `85×28`）；批量移除改为先弹确认 （实测文案含「将移除 newapi 下 10 个可移除模型；默认主力模型或首个基础模型会保留。」）。至此 §6.2 控件清单只剩跨页 chrome 的顶部 Tab 36px（按约定不动）                                                        | `settings/ModelProviderSettings.vue`（见 §7.34）                                                             |
 | **P2 · ✅ 已关闭 2026-09-23**         | **Workspace 运行时 5 处原生 `<select>` 同批收敛**（§7.32 遗留）：空值语义用 `NONE_OPTION` 承载， 工具版本项跟随 `pinnedVersion()` 条件展开；收敛后 `features/agent/**` 原生 `<select>` 计数 **0** （该批只有模板编译 + `vue-tsc`，环境 `runner_not_configured` 导致卡片不渲染，已显式记录）                                                                                                                                                    | `features/agent/runtime/Workspace{Create,Toolchain,ArtifactTransfer}*.vue`（见 §7.35）                       |
+| **P1 · ✅ 已关闭 2026-09-23**         | **TaskRail「最近事实」不再默认 dump JSON**（§2.9 收口）：改成一行一个字段的 `dl` 投影（长值截断 120 字符）， 原始 payload 折进二级 `<details>`（新增 `agent.tasks.rawPayload`）；本环境没有可打开的 Run 详情， 故只有模板编译 + `vue-tsc` 验证 + 「`JSON.stringify(entry.payload` 仅存在于二级折叠内」的静态确认                                                                                                                               | `features/agent/runtime/TaskRail.vue`（见 §7.36）                                                            |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区模块标题带的斑马纹与动作簇拥挤**：16 条 `bg-header/40` 灰底标题带统一去底色（`990×64` 实测）， 标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`；414px 下动作簇由右对齐改为整行下移左对齐 （末位控件距右缘 20 → 248px），同轮修掉插件仓库输入框 `min-w` 硬撑导致的窄屏横向溢出                                                                                                                                        | `settings/AgentSettingsPanel.vue`、`ModelProviderSettings.vue`、`PluginManagementSettings.vue`（见 §7.30）   |
 | **P1 · ✅ 已关闭 2026-09-23**         | **设置区粘性分组导航此前形同失效**：`sticky top-0` 恰好落在 56px 全局顶栏之下（z-30 盖住 z-20），滚起来就被吞掉；现已对齐 `top-14`，并让导航条压在自带 `z-20` 的模块之上（`z-index: 29`），移动端不再被内容穿透                                                                                                                                                                                                                                | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
 | **P1 · ✅ 已关闭 2026-09-23**         | **`v-show` 在 Agent 设置面板上完全失效**：SFC 是 `section + BaseModal` 双根，父级 `v-show` 落到「非元素根」被 Vue 忽略——切到「工作区」等其它 Tab 后，整块 Agent 设置仍留在页面下方（实测 top 1852 / 高 1584）；已包一层无样式 div 收成单根                                                                                                                                                                                                     | `settings/AgentSettingsPanel.vue`（见 §7.27）                                                                |
@@ -2573,6 +2574,28 @@ CDP 实测确实如此：三块是 `rounded-lg border border-border/70 bg-card/6
 **验证**：本环境 `runner_not_configured`（§7.15-b），Workspace 运行时的卡片不渲染，
 因此本轮**只有模板编译 + `vue-tsc --noEmit` + `eslint`**，没有 CDP 实测（与 §7.15-b / §7.20 同类环境限制，
 在此显式记录而不是含糊带过）。收敛后 `features/agent/**` 的原生 `<select>` 计数为 **0**。
+
+### 7.36 TaskRail「最近事实」不再默认 dump JSON（§2.9 收口，P1 · ✅ 已关闭 2026-09-23）
+
+**现象（§2.9 原文）**：「最近事实」卡把 ledger 的原始 payload 用
+`JSON.stringify(entry.payload, null, 2)` + 等宽小字**直接铺在运行详情里** —— 对用户没有语义，
+属于调试视图（原文建议"仅开发者模式可见"）。
+
+**根因**：这一块是从后端 ledger 直接搬到 UI 的，中间没有任何"给人看"的投影层：
+一条事实本来就是 `{ key: value, … }` 结构，但 UI 只提供了"原始 JSON"这一种读法。
+
+**改法**（保留可排查性，但不把默认视图变成转储）：
+
+- 每条事实渲染成 **`dl` 投影**：一行一个字段（`dt` 等宽字段名 + `dd` 取值），长字符串/嵌套值截断到 120 字符加省略号；
+- 原始 JSON **折进二级 `<details>`**（新增词典 `agent.tasks.rawPayload` = 原始数据 / Raw payload / 生データ），
+  排查时一键展开，默认不再占据版面；
+- payload 不是对象（数组/标量）时回退成单行 `value` 投影，不会渲染空块。
+
+**验证**：本环境（`runner_not_configured` + 当前会话没有任何历史 Run，`#agent-task-rail` 实测只有
+「当前没有 Run。」）**无法打开 Run 详情**，`detail-snapshot` 恒为 `null`，因此「最近事实」卡在真实环境没有渲染实例 ——
+与 §7.15-b / §7.20 / §7.35 属同一类环境限制，本轮据此只有：
+模板编译、`vue-tsc --noEmit`、`eslint`、`prettier --check`、i18n 校验（三语齐平）；
+并静态确认 `JSON.stringify(entry.payload` 现在**只**出现在二级折叠的 `<pre>` 里（`TaskRail.vue:556`）。
 
 ---
 

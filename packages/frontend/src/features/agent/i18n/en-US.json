@@ -1367,6 +1367,7 @@
       "goal": "Goal",
       "runId": "Run ID",
       "recentFacts": "Recent facts",
+      "rawPayload": "Raw payload",
       "checkpoints": "Checkpoints",
       "checkpointHint": "Facts only: active leases, tokens, containers, and processes are never saved.",
       "saveCheckpoint": "Save checkpoint",

@@ -154,6 +154,25 @@
     if (id === 'history') return historyRuns.value.length > 0;
     return props.backgroundRuns.length > 0;
   };
+  // 最近事实（ledger 原始 payload）默认给人看的投影：一行一个字段，
+  // 原始 JSON 折进二级折叠，避免把运行详情页变成调试转储。
+  const compactFactValue = (value: unknown): string => {
+    if (value === null) return 'null';
+    if (typeof value === 'string') return value.length > 120 ? `${value.slice(0, 120)}…` : value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    const json = JSON.stringify(value) ?? String(value);
+    return json.length > 120 ? `${json.slice(0, 120)}…` : json;
+  };
+  const payloadFacts = (payload: unknown): Array<{ key: string; value: string }> => {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return [{ key: 'value', value: compactFactValue(payload) }];
+    }
+    return Object.entries(payload as Record<string, unknown>).map(([key, value]) => ({
+      key,
+      value: compactFactValue(value),
+    }));
+  };
+
   const visibleCards = computed<RailCard[]>({
     get: () => railCards.value.filter((card) => cardVisible(card.id)),
     set: (next) => {
@@ -518,9 +537,24 @@
             class="mt-2 rounded-lg bg-background/60 p-2"
           >
             <div class="text-[11px] text-text-secondary">#{{ entry.sequence }} · {{ entry.kind }}</div>
-            <pre
-              class="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug"
-              >{{ JSON.stringify(entry.payload, null, 2) }}</pre>
+            <dl class="mt-1 space-y-0.5">
+              <div
+                v-for="fact in payloadFacts(entry.payload)"
+                :key="fact.key"
+                class="flex gap-2 text-[11px] leading-snug"
+              >
+                <dt class="shrink-0 font-mono text-text-secondary">{{ fact.key }}</dt>
+                <dd class="min-w-0 flex-1 break-words text-foreground">{{ fact.value }}</dd>
+              </div>
+            </dl>
+            <details class="mt-1.5">
+              <summary class="cursor-pointer text-[11px] text-text-secondary">
+                {{ $t('agent.tasks.rawPayload') }}
+              </summary>
+              <pre
+                class="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug"
+                >{{ JSON.stringify(entry.payload, null, 2) }}</pre>
+            </details>
           </article>
         </details>
       </template>

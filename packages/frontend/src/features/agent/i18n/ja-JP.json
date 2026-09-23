@@ -1367,6 +1367,7 @@
       "goal": "ゴール",
       "runId": "Run ID",
       "recentFacts": "最近の事実",
+      "rawPayload": "生データ",
       "checkpoints": "チェックポイント",
       "checkpointHint": "事実のみ保存します。アクティブな Lease、Token、コンテナ、プロセスは保存しません。",
       "saveCheckpoint": "チェックポイントを保存",
