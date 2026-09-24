@@ -46,14 +46,21 @@ import {
 
 const workspaceKey = (workspaceId: string, generation: number): string => `${workspaceId}\u0000${generation}`;
 
+interface ActiveWorkspaceJob {
+  controller: AbortController;
+  done: Promise<void>;
+  finish(): void;
+}
+
 export class WorkspaceRuntimeEngine {
   private readonly runtime: WorkspaceRuntimeManager;
   private readonly codeIntelligence = new WorkspaceCodeIntelligence();
-  private readonly jobs = new Map<string, Set<AbortController>>();
-  private readonly jobControllers = new Map<string, AbortController>();
+  private readonly jobs = new Map<string, Set<ActiveWorkspaceJob>>();
+  private readonly jobControllers = new Map<string, ActiveWorkspaceJob>();
   private readonly workspaceWriters = new Map<string, number>();
   private readonly checkpointCaptures = new Set<string>();
   private readonly workspaceMutations = new Set<string>();
+  private readonly workspaceJobDrains = new Set<string>();
 
   constructor(runtimeRoot: string, store: ToolchainStore) {
     this.runtime = new WorkspaceRuntimeManager(runtimeRoot, store);
@@ -68,19 +75,18 @@ export class WorkspaceRuntimeEngine {
   }
 
   async stop(workspaceId: string, generation: number): Promise<void> {
-    this.abortJobs(workspaceId, generation);
-    this.runtime.stop(workspaceId, generation);
+    await this.drainJobs(workspaceId, generation, () => this.runtime.stop(workspaceId, generation));
   }
 
   async restart(workspaceId: string, generation: number): Promise<void> {
-    this.abortJobs(workspaceId, generation);
-    this.runtime.restart(workspaceId, generation);
+    await this.drainJobs(workspaceId, generation, () => this.runtime.restart(workspaceId, generation));
   }
 
   async remove(workspaceId: string, generation: number): Promise<void> {
-    this.abortJobs(workspaceId, generation);
-    this.codeIntelligence.dispose(workspaceKey(workspaceId, generation));
-    this.runtime.remove(workspaceId, generation);
+    await this.drainJobs(workspaceId, generation, () => {
+      this.codeIntelligence.dispose(workspaceKey(workspaceId, generation));
+      this.runtime.remove(workspaceId, generation);
+    });
   }
 
   acquireWorkspaceWriter(workspaceId: string, generation: number): () => void {
@@ -275,19 +281,25 @@ export class WorkspaceRuntimeEngine {
   }
 
   async executeJob(request: WorkspaceJobRequest): Promise<WorkspaceJobResult> {
-    const execution = this.runtime.prepareJob(request);
     const key = workspaceKey(request.workspaceId, request.generation);
+    if (this.workspaceJobDrains.has(key)) throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
+    const execution = this.runtime.prepareJob(request);
     if (this.checkpointCaptures.has(key)) throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     if (this.workspaceMutations.has(key)) throw new Error('WORKSPACE_WRITER_ACTIVE_CONFLICT');
     const controller = new AbortController();
     if (this.jobControllers.has(request.jobId)) throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
+    let resolveDone!: () => void;
+    const done = new Promise<void>((resolve) => {
+      resolveDone = resolve;
+    });
+    const activeJob: ActiveWorkspaceJob = { controller, done, finish: resolveDone };
     let active = this.jobs.get(key);
     if (!active) {
       active = new Set();
       this.jobs.set(key, active);
     }
-    active.add(controller);
-    this.jobControllers.set(request.jobId, controller);
+    active.add(activeJob);
+    this.jobControllers.set(request.jobId, activeJob);
     try {
       const result = await new JobRunner().run(execution.argv, execution.cwd, request.maxBytes, request.timeoutMs, {
         executable: execution.file,
@@ -298,15 +310,16 @@ export class WorkspaceRuntimeEngine {
       return result;
     } finally {
       this.jobControllers.delete(request.jobId);
-      active.delete(controller);
+      active.delete(activeJob);
+      activeJob.finish();
       if (active.size === 0) this.jobs.delete(key);
     }
   }
 
   cancelJob(jobId: string): boolean {
-    const controller = this.jobControllers.get(jobId);
-    if (!controller) return false;
-    controller.abort(new Error('WORKSPACE_JOB_CANCELLED'));
+    const activeJob = this.jobControllers.get(jobId);
+    if (!activeJob) return false;
+    activeJob.controller.abort(new Error('WORKSPACE_JOB_CANCELLED'));
     return true;
   }
 
@@ -382,10 +395,18 @@ export class WorkspaceRuntimeEngine {
     }
   }
 
-  private abortJobs(workspaceId: string, generation: number): void {
+  private async drainJobs(workspaceId: string, generation: number, commit: () => void): Promise<void> {
     const key = workspaceKey(workspaceId, generation);
-    for (const controller of this.jobs.get(key) ?? []) controller.abort();
-    this.jobs.delete(key);
+    if (this.workspaceJobDrains.has(key)) throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
+    this.workspaceJobDrains.add(key);
+    try {
+      const active = [...(this.jobs.get(key) ?? [])];
+      for (const job of active) job.controller.abort(new Error('WORKSPACE_JOB_CANCELLED'));
+      await Promise.all(active.map((job) => job.done));
+      commit();
+    } finally {
+      this.workspaceJobDrains.delete(key);
+    }
   }
 
   private codingWorkRoot(workspaceId: string, generation: number): string {
