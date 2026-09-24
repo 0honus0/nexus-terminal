@@ -22,6 +22,29 @@ const MAX_TOTAL_ARG_BYTES = 128 * 1024;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const MAX_TIMEOUT_MS = 5 * 60 * 1000;
 
+const completeUtf8Prefix = (value: Buffer): Buffer => {
+  if (value.byteLength === 0) return value;
+  let start = value.byteLength - 1;
+  while (start > 0 && (value[start]! & 0xc0) === 0x80 && value.byteLength - start < 4) start -= 1;
+  const lead = value[start]!;
+  const expected =
+    lead < 0x80
+      ? 1
+      : lead >= 0xc2 && lead <= 0xdf
+        ? 2
+        : lead >= 0xe0 && lead <= 0xef
+          ? 3
+          : lead >= 0xf0 && lead <= 0xf4
+            ? 4
+            : 1;
+  return expected > value.byteLength - start ? value.subarray(0, start) : value;
+};
+
+const decodeUtf8 = (chunks: readonly Buffer[]): string => {
+  if (chunks.length === 0) return '';
+  return completeUtf8Prefix(Buffer.concat(chunks)).toString('utf8');
+};
+
 export class JobRunner {
   run(
     argv: readonly string[],
@@ -66,8 +89,8 @@ export class JobRunner {
         },
       });
       registerManagedProcess(child, 'job', cwd);
-      let stdout = '';
-      let stderr = '';
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
       let truncated = false;
       let total = 0;
       let timedOut = false;
@@ -88,9 +111,10 @@ export class JobRunner {
         const accepted = chunk.subarray(0, remaining);
         total += accepted.byteLength;
         if (accepted.byteLength < chunk.byteLength) truncated = true;
-        const text = accepted.toString('utf8');
-        if (kind === 'out') stdout += text;
-        else stderr += text;
+        if (accepted.byteLength === 0) return;
+        const retained = Buffer.from(accepted);
+        if (kind === 'out') stdoutChunks.push(retained);
+        else stderrChunks.push(retained);
       };
 
       child.stdout.on('data', (chunk: Buffer) => append('out', chunk));
@@ -113,7 +137,14 @@ export class JobRunner {
         clearTimeout(timeout);
         if (killTimer) clearTimeout(killTimer);
         options.signal?.removeEventListener('abort', onAbort);
-        resolve({ exitCode, signal, stdout, stderr, truncated, timedOut });
+        resolve({
+          exitCode,
+          signal,
+          stdout: decodeUtf8(stdoutChunks),
+          stderr: decodeUtf8(stderrChunks),
+          truncated,
+          timedOut,
+        });
       });
 
       const timeout = setTimeout(() => {
