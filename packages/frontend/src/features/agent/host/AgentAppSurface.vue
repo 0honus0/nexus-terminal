@@ -905,8 +905,13 @@
     }
   };
 
+  const invalidateThreadPagination = (): number => {
+    threadListLoadingMore.value = false;
+    return ++threadListRefreshGeneration;
+  };
+
   const refreshThreadListFromHost = async (): Promise<void> => {
-    const requestGeneration = ++threadListRefreshGeneration;
+    const requestGeneration = invalidateThreadPagination();
     try {
       const requestedLimit = Math.min(THREAD_PAGE_MAX, Math.max(threadPageSize.value, threads.value.length));
       const page = await facade.listThreads(undefined, requestedLimit);
@@ -933,6 +938,7 @@
     try {
       const normalizedTitle = title?.trim();
       const thread = await facade.createThread(normalizedTitle || undefined);
+      invalidateThreadPagination();
       threads.value = [thread, ...threads.value.filter((item) => item.id !== thread.id)];
       threadSidebar.value?.resetScroll();
       await selectThread(thread);
@@ -955,19 +961,22 @@
   const loadMoreThreads = async (): Promise<void> => {
     const cursor = threadNextCursor.value;
     if (!cursor || threadListLoadingMore.value) return;
+    const requestGeneration = threadListRefreshGeneration;
     threadListLoadingMore.value = true;
     try {
       const page = await facade.listThreads(cursor, threadPageSize.value);
+      if (requestGeneration !== threadListRefreshGeneration || threadNextCursor.value !== cursor) return;
       const known = new Set(threads.value.map((thread) => thread.id));
       threads.value = [...threads.value, ...page.items.filter((thread) => !known.has(thread.id))];
       threadNextCursor.value = page.nextCursor;
     } catch (cause) {
+      if (requestGeneration !== threadListRefreshGeneration || threadNextCursor.value !== cursor) return;
       fail(cause, {
         domainKey: 'agent.operations.failureDomain.threads',
         retry: () => void loadMoreThreads(),
       });
     } finally {
-      threadListLoadingMore.value = false;
+      if (requestGeneration === threadListRefreshGeneration) threadListLoadingMore.value = false;
     }
   };
 
@@ -1041,6 +1050,7 @@
       });
     });
     try {
+      invalidateThreadPagination();
       const threadPage = await facade.listThreads(undefined, threadPageSize.value);
       threads.value = threadPage.items;
       threadNextCursor.value = threadPage.nextCursor;
@@ -1587,6 +1597,7 @@
   };
 
   const selectFirstOrCreateThread = async (): Promise<void> => {
+    invalidateThreadPagination();
     const page = await facade.listThreads(undefined, threadPageSize.value);
     threads.value = page.items;
     threadNextCursor.value = page.nextCursor;
@@ -1609,6 +1620,7 @@
     try {
       const deletingCurrent = currentThread.value?.id === thread.id;
       await facade.deleteThread(thread);
+      invalidateThreadPagination();
       threads.value = threads.value.filter((candidate) => candidate.id !== thread.id);
       if (detailSnapshot.value?.threadId === thread.id) closeRunDetail();
       if (deletingCurrent) {
@@ -1655,6 +1667,7 @@
     clearThreadDeleteArm();
     try {
       await facade.deleteAllThreads();
+      invalidateThreadPagination();
       closeRunDetail();
       resetDeletedThreadSelection();
       backgroundRuns.value = [];
