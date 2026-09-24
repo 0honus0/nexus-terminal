@@ -58,7 +58,7 @@
   };
 
   const explain = (cause: unknown): string =>
-    formatAgentApiError(cause, t('agent.settings.mcpIntegrations.requestFailed'));
+    formatAgentApiError(cause, t('agent.settings.mcpIntegrations.requestFailed'), t);
 
   const loadIntegrations = async (): Promise<void> => {
     const generation = ++integrationsGeneration;

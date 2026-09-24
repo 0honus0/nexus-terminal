@@ -78,7 +78,7 @@
   const refreshLocked = computed(() => Boolean(props.busy) || localBusy.value || loading.value);
   const locked = computed(() => refreshLocked.value || operationState.mutationBlocked.value);
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.workspaceRuntime.requestFailed'));
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.workspaceRuntime.requestFailed'), t);
 
   const refresh = async (preserveError = false): Promise<boolean> => {
     const current = ++refreshGeneration;

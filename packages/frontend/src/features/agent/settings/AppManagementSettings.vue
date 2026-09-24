@@ -31,7 +31,7 @@
   const expandedGrants = ref<Record<string, boolean>>({});
   const grantLoadGeneration = new Map<string, number>();
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
   type CapabilityId = AgentCapabilityGrantInputDto['capability'];
 
   const cloneSelection = (selection: AgentTargetGrantSelectionDto): AgentTargetGrantSelectionDto =>
@@ -331,7 +331,7 @@
         } catch (cause) {
           operationFeedback.notifyError({
             operation: 'delete-plugin-data',
-            message: formatAgentApiError(cause, t('agent.settings.apps.deleteDataFailed')),
+            message: formatAgentApiError(cause, t('agent.settings.apps.deleteDataFailed'), t),
             cause,
             context: { appId: app.id },
           });
@@ -344,7 +344,7 @@
     } catch (cause) {
       operationFeedback.notifyError({
         operation: 'uninstall-plugin',
-        message: formatAgentApiError(cause, t('agent.settings.apps.uninstallFailed')),
+        message: formatAgentApiError(cause, t('agent.settings.apps.uninstallFailed'), t),
         cause,
         context: { appId: app.id },
       });

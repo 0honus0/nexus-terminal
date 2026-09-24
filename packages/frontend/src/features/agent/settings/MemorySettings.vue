@@ -77,7 +77,7 @@
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.settings.memory.requestFailed'));
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.settings.memory.requestFailed'), t);
   const formatTime = (value: number | null): string =>
     value === null ? t('agent.settings.memory.never') : formatAgentDateTime(locale.value, new Date(value * 1000));
   const confidence = (value: number): string => `${Math.round(value * 100)}%`;

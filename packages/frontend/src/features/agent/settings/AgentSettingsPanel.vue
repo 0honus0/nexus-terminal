@@ -158,7 +158,7 @@
 
   const enabledApps = computed(() => apps.value.filter((app) => app.enabled).length);
 
-  const message = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+  const message = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 
   const load = async () => {
     loading.value = true;

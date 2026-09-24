@@ -94,7 +94,7 @@
     } catch (cause) {
       operationFeedback.notifyError({
         operation: 'refresh-model-registry',
-        message: formatAgentApiError(cause, t('agent.settings.providers.registryUpdateFailed')),
+        message: formatAgentApiError(cause, t('agent.settings.providers.registryUpdateFailed'), t),
         cause,
       });
       await loadModelRegistryStatus();
@@ -113,7 +113,7 @@
     } catch (cause) {
       operationFeedback.notifyError({
         operation: 'set-model-registry-auto-update',
-        message: formatAgentApiError(cause, t('agent.ui.saveFailed')),
+        message: formatAgentApiError(cause, t('agent.ui.saveFailed'), t),
         cause,
       });
       await loadModelRegistryStatus();
@@ -259,7 +259,7 @@
         operationFeedback.notifyInfo(t('agent.settings.providers.discoveryEmpty'));
       }
     } catch (cause) {
-      const errMsg = formatAgentApiError(cause, t('agent.settings.providers.pullFailed'));
+      const errMsg = formatAgentApiError(cause, t('agent.settings.providers.pullFailed'), t);
       modalError.value = errMsg;
       operationFeedback.notifyError({ operation: 'pull-models', message: errMsg, cause });
     } finally {
@@ -311,7 +311,7 @@
         });
       }
     } catch (cause) {
-      const errMsg = formatAgentApiError(cause, t('agent.ui.testFailed'));
+      const errMsg = formatAgentApiError(cause, t('agent.ui.testFailed'), t);
       testResults[key] = { state: 'error', message: errMsg };
       operationFeedback.notifyError({
         operation: 'test-model',
@@ -413,7 +413,7 @@
         }
       }
     } catch (cause) {
-      const errMsg = formatAgentApiError(cause, t('agent.settings.providers.testFailedMessage'));
+      const errMsg = formatAgentApiError(cause, t('agent.settings.providers.testFailedMessage'), t);
       modalTestResult.value = {
         ok: false,
         message: errMsg,
@@ -481,7 +481,7 @@
     } catch (cause) {
       operationFeedback.notifyError({
         operation: 'create-provider',
-        message: formatAgentApiError(cause, t('agent.ui.createFailed')),
+        message: formatAgentApiError(cause, t('agent.ui.createFailed'), t),
         cause,
       });
     } finally {
@@ -567,7 +567,7 @@
       operationFeedback.notifySuccess(successMsg ?? t('agent.ui.saved'));
       return true;
     } catch (cause) {
-      const errMsg = formatAgentApiError(cause, t('agent.ui.createFailed'));
+      const errMsg = formatAgentApiError(cause, t('agent.ui.createFailed'), t);
       operationFeedback.notifyError({
         operation: 'update-provider-models',
         message: errMsg,

@@ -61,7 +61,7 @@
     () => JSON.stringify(profiles.value) === JSON.stringify(draftProfilesFromProps()),
   );
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, 'ACP request failed.');
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 
   const loadIntegrations = async (): Promise<void> => {
     const generation = ++integrationsGeneration;

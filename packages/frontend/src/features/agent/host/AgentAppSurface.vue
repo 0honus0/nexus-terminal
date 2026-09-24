@@ -508,7 +508,7 @@
     );
   });
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 
   const applyFailure = (
     message: string,

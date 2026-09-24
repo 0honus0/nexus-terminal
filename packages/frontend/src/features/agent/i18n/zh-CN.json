@@ -1462,6 +1462,18 @@
       "loadMore": "加载更多",
       "limitReached": "最多可附加 {count} 个文件。"
     },
+    "apiErrors": {
+      "validation": "请求参数无效，请检查后重试。",
+      "notFound": "请求的 Agent 资源不存在。",
+      "conflict": "Agent 资源已发生变化，请刷新后重试。",
+      "unavailable": "该 Agent 资源当前不可用。",
+      "forbidden": "当前不允许执行此操作。",
+      "quota": "已达到配置的 Agent 限制。",
+      "tooLarge": "请求内容过大。",
+      "timeout": "Agent 请求超时。",
+      "authentication": "Agent 资源认证失败。",
+      "busy": "该 Agent 资源正忙，请稍后重试。"
+    },
     "enumLabels": {
       "technicalState": "技术状态：{value}",
       "goalStatus": {

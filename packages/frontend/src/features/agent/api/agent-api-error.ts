@@ -47,13 +47,43 @@ export const toAgentApiError = (cause: unknown): AgentApiError => {
   return new AgentApiError({ code: 'AGENT_REQUEST_FAILED', message: 'AGENT_REQUEST_FAILED' });
 };
 
-// Stable machine codes (AGENT_REQUEST_FAILED, RUN_VERSION_CONFLICT, ...) are diagnostics, not copy:
-// they belong in a title / log, never in the interface.
-const isMachineCode = (value: string): boolean => /^[A-Z][A-Z0-9_]{3,}$/.test(value);
+type AgentErrorTranslator = (key: string) => string;
 
-export const formatAgentApiError = (cause: unknown, fallback: string): string => {
+type AgentApiErrorCategory =
+  | 'validation'
+  | 'notFound'
+  | 'conflict'
+  | 'unavailable'
+  | 'forbidden'
+  | 'quota'
+  | 'tooLarge'
+  | 'timeout'
+  | 'authentication'
+  | 'busy';
+
+const classifyAgentApiError = (code: string): AgentApiErrorCategory | null => {
+  if (/(?:AUTH_FAILED|UNAUTHORIZED|CREDENTIAL_STALE)$/.test(code)) return 'authentication';
+  if (/(?:FORBIDDEN|DENIED|UNTRUSTED|NOT_AUTHORIZED)$/.test(code)) return 'forbidden';
+  if (/(?:QUOTA_EXCEEDED|LIMIT_EXCEEDED|BUDGET_EXCEEDED|HARD_LIMIT_EXCEEDED)$/.test(code)) return 'quota';
+  if (/(?:TOO_LARGE|PAYLOAD_TOO_LARGE|ARCHIVE_TOO_MANY_FILES)$/.test(code)) return 'tooLarge';
+  if (/(?:TIMEOUT|DEADLINE_EXCEEDED)$/.test(code)) return 'timeout';
+  if (/(?:BUSY|QUEUE_FULL|IN_PROGRESS)$/.test(code)) return 'busy';
+  if (/(?:NOT_FOUND|MISSING)$/.test(code)) return 'notFound';
+  if (/(?:CONFLICT|STALE|CHANGED|IMMUTABLE|ALREADY_|NO_CHANGE|RECONCILIATION_REQUIRED)$/.test(code)) return 'conflict';
+  if (/(?:UNAVAILABLE|DISABLED|NOT_READY|NOT_CONFIGURED|UNSUPPORTED)$/.test(code)) return 'unavailable';
+  if (
+    /(?:INVALID|VALIDATION_FAILED|REQUIRED|MISMATCH|UNSAFE|TOO_DEEP|DUPLICATE_PATH|SCHEMA_VERSION_UNSUPPORTED)$/.test(
+      code,
+    )
+  )
+    return 'validation';
+  return null;
+};
+
+export const formatAgentApiError = (cause: unknown, fallback: string, t?: AgentErrorTranslator): string => {
   const error = toAgentApiError(cause);
-  if (error.status !== undefined && error.status >= 500) return fallback;
-  if (error.message && !isMachineCode(error.message)) return error.message;
+  if (error.status === undefined) return error.message || fallback;
+  const category = classifyAgentApiError(error.code);
+  if (category && t) return t(`agent.apiErrors.${category}`);
   return fallback;
 };

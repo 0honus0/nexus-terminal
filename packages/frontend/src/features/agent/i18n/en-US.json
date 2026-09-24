@@ -1462,6 +1462,18 @@
       "loadMore": "Load more",
       "limitReached": "You can attach up to {count} files."
     },
+    "apiErrors": {
+      "validation": "The request is invalid. Check the values and try again.",
+      "notFound": "The requested Agent resource was not found.",
+      "conflict": "This Agent resource changed. Refresh and try again.",
+      "unavailable": "This Agent resource is currently unavailable.",
+      "forbidden": "This operation is not allowed.",
+      "quota": "The configured Agent limit has been reached.",
+      "tooLarge": "The request is too large.",
+      "timeout": "The Agent request timed out.",
+      "authentication": "Authentication failed for this Agent resource.",
+      "busy": "This Agent resource is busy. Try again shortly."
+    },
     "enumLabels": {
       "technicalState": "Technical status: {value}",
       "goalStatus": {

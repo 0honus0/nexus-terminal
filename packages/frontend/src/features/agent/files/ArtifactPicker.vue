@@ -23,7 +23,7 @@
   let queryGeneration = 0;
   const selectedIds = computed(() => new Set(props.modelValue.map((item) => item.id)));
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
   const queryKey = (): string => query.value.trim();
 
   const load = async (): Promise<void> => {

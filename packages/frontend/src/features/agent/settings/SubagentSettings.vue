@@ -18,7 +18,7 @@
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.subagents');
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 
   const props = defineProps<{
     settings: AgentSettingsViewDto;

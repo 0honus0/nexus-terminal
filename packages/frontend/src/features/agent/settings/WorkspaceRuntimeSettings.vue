@@ -92,7 +92,7 @@
   };
 
   const errorMessage = (cause: unknown): string =>
-    formatAgentApiError(cause, t('agent.settings.workspaceRuntime.requestFailed'));
+    formatAgentApiError(cause, t('agent.settings.workspaceRuntime.requestFailed'), t);
 
   const syncSelection = (): void => {
     selectionBaseline.value = [...requested.value.enabledRecipeIds];

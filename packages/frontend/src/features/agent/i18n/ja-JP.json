@@ -1462,6 +1462,18 @@
       "loadMore": "さらに読み込む",
       "limitReached": "添付できるファイルは最大 {count} 件です。"
     },
+    "apiErrors": {
+      "validation": "リクエスト内容が無効です。値を確認して再試行してください。",
+      "notFound": "要求された Agent リソースが見つかりません。",
+      "conflict": "Agent リソースが変更されています。更新して再試行してください。",
+      "unavailable": "この Agent リソースは現在利用できません。",
+      "forbidden": "この操作は許可されていません。",
+      "quota": "設定された Agent の上限に達しました。",
+      "tooLarge": "リクエストが大きすぎます。",
+      "timeout": "Agent リクエストがタイムアウトしました。",
+      "authentication": "Agent リソースの認証に失敗しました。",
+      "busy": "この Agent リソースは処理中です。しばらくしてから再試行してください。"
+    },
     "enumLabels": {
       "technicalState": "技術状態：{value}",
       "goalStatus": {

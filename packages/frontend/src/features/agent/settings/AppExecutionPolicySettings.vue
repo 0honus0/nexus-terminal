@@ -18,7 +18,7 @@
   const { t } = useI18n();
   const quantityLabels = useQuantityLabels();
   const operationFeedback = useOperationFeedback('agent.settings.execution-policy');
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
   const selectedAppId = ref('');
   const view = ref<AgentExecutionPolicyViewDto | null>(null);
   const draft = ref<AgentExecutionPolicyOverridesDto>({});

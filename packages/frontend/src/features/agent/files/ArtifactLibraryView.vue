@@ -103,7 +103,7 @@
     () => Boolean(query.value.trim()) || Boolean(appId.value) || retained.value !== 'all' || kind.value !== 'all',
   );
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 
   const filters = () => ({
     ...(query.value.trim() ? { q: query.value.trim() } : {}),
