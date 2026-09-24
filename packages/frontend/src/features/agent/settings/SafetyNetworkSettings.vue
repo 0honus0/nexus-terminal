@@ -10,7 +10,7 @@
   const { t } = useI18n();
   const connectionsStore = useConnections();
   const loadingConnections = ref(false);
-  const connectionsResolved = ref(connectionsStore.connections.value.length > 0);
+  const connectionsResolved = ref(connectionsStore.loaded.value);
   const connectionLoadFailed = ref(false);
   const searchQuery = ref('');
   const reason = ref('');
@@ -19,22 +19,34 @@
   const baselineIds = ref<Set<number>>(new Set());
   const baselineReason = ref('');
 
-  onMounted(async () => {
-    if (connectionsStore.connections.value.length) {
+  const loadConnections = async (force = false): Promise<void> => {
+    if (connectionsStore.loaded.value && !force) {
       connectionsResolved.value = true;
+      connectionLoadFailed.value = false;
       return;
     }
     loadingConnections.value = true;
     connectionLoadFailed.value = false;
     try {
-      await connectionsStore.load();
-      connectionsResolved.value = true;
+      await connectionsStore.load(force);
+      connectionsResolved.value = connectionsStore.loaded.value;
     } catch {
-      connectionLoadFailed.value = true;
+      connectionLoadFailed.value = !connectionsStore.loaded.value;
     } finally {
       loadingConnections.value = false;
     }
-  });
+  };
+
+  watch(
+    () => connectionsStore.loaded.value,
+    (loaded) => {
+      connectionsResolved.value = loaded;
+      if (loaded) connectionLoadFailed.value = false;
+    },
+    { immediate: true },
+  );
+
+  onMounted(() => void loadConnections());
 
   const draftMatchesRemote = (): boolean => {
     const remoteIds = new Set(props.denylist.list.map((entry) => entry.connectionId));
@@ -295,7 +307,17 @@
         v-else-if="connectionLoadFailed"
         class="rounded-xl border border-error/30 bg-error/5 p-4 text-center text-xs text-error"
       >
-        {{ $t('agent.settings.safety.connectionLoadFailed') }}
+        <div>{{ $t('agent.settings.safety.connectionLoadFailed') }}</div>
+        <UiButton
+          class="mt-3"
+          type="button"
+          appearance="soft"
+          tone="danger"
+          :disabled="loadingConnections"
+          @click="loadConnections(true)"
+        >
+          {{ $t('common.retry') }}
+        </UiButton>
       </div>
 
       <!-- 空态提示（系统无连接） -->
