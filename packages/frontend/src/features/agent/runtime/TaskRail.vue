@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import draggable from 'vuedraggable';
   import type {
     AgentApprovalViewDto,
@@ -16,6 +17,9 @@
   import SubagentTree from './SubagentTree.vue';
   import ApprovalTimeline from './ApprovalTimeline.vue';
   import { useConnections } from '@/features/connections/public';
+  import { formatAgentEnumLabel } from '../enum-labels';
+
+  const { t } = useI18n();
 
   const props = withDefaults(
     defineProps<{
@@ -370,7 +374,9 @@
             </div>
             <div class="rounded-lg border border-border/40 bg-background/50 p-2">
               <div class="text-text-secondary">{{ $t('agent.tasks.goal') }}</div>
-              <div class="mt-0.5 truncate font-medium text-foreground">{{ detailSnapshot.goalStatus }}</div>
+              <div class="mt-0.5 truncate font-medium text-foreground">
+                {{ formatAgentEnumLabel(t, 'goalStatus', detailSnapshot.goalStatus) }}
+              </div>
             </div>
           </div>
 
@@ -536,7 +542,9 @@
             :key="entry.id"
             class="mt-2 rounded-lg bg-background/60 p-2"
           >
-            <div class="text-[11px] text-text-secondary">#{{ entry.sequence }} · {{ entry.kind }}</div>
+            <div class="text-[11px] text-text-secondary">
+              #{{ entry.sequence }} · {{ formatAgentEnumLabel(t, 'ledgerKind', entry.kind) }}
+            </div>
             <dl class="mt-1 space-y-0.5">
               <div
                 v-for="fact in payloadFacts(entry.payload)"

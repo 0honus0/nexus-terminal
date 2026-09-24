@@ -13,6 +13,7 @@
     type AgentPluginVersionDto,
     type AgentWorkspaceRuntimeCatalogDto,
   } from '../api/agent-api';
+  import { formatAgentEnumLabel } from '../enum-labels';
   import WorkspaceArtifactTransfer from './WorkspaceArtifactTransfer.vue';
   import AgentWorkspaceTerminal from './AgentWorkspaceTerminal.vue';
   import WorkspaceCreateCard from './WorkspaceCreateCard.vue';
@@ -68,7 +69,7 @@
           key: `${workspace.id}::${target.pluginId}`,
           workspace,
           targetPluginId: target.pluginId,
-          label: `${target.pluginId} · ${workspace.profile.kind}`,
+          label: `${target.pluginId} · ${formatAgentEnumLabel(t, 'workspaceKind', workspace.profile.kind)}`,
         })),
       ),
   );
@@ -321,7 +322,10 @@
       <article class="rounded bg-background p-2">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div class="font-medium">{{ activeWorkspace.profile.kind }} · {{ activeWorkspace.profile.recipeId }}</div>
+            <div class="font-medium">
+              {{ formatAgentEnumLabel(t, 'workspaceKind', activeWorkspace.profile.kind) }} ·
+              {{ activeWorkspace.profile.recipeId }}
+            </div>
             <div class="mt-0.5 font-mono text-[11px] text-text-secondary">{{ activeWorkspace.id }}</div>
           </div>
           <span class="rounded bg-header px-1.5 py-0.5 text-[11px]">

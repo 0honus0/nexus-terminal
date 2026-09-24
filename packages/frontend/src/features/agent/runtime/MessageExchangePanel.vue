@@ -1,5 +1,9 @@
 <script setup lang="ts">
   import type { AgentSubagentMessageDto } from '../api/agent-api';
+  import { useI18n } from 'vue-i18n';
+  import { formatAgentEnumLabel } from '../enum-labels';
+
+  const { t } = useI18n();
 
   defineProps<{
     messages: AgentSubagentMessageDto[];
@@ -15,7 +19,10 @@
     <div v-else class="mt-2 space-y-2">
       <article v-for="message in messages" :key="message.id" class="rounded bg-background p-2">
         <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-secondary">
-          <span>#{{ message.recipientSequence }} · {{ message.kind }} · {{ message.status }}</span>
+          <span>
+            #{{ message.recipientSequence }} · {{ formatAgentEnumLabel(t, 'subagentMessageKind', message.kind) }} ·
+            {{ formatAgentEnumLabel(t, 'subagentMessageStatus', message.status) }}
+          </span>
           <span>{{ new Date(message.createdAt * 1000).toLocaleString() }}</span>
         </div>
         <div class="mt-1 break-all font-mono text-[11px] text-text-secondary">

@@ -1461,6 +1461,46 @@
       "loadMore": "Load more",
       "limitReached": "You can attach up to {count} files."
     },
+    "enumLabels": {
+      "technicalState": "Technical status: {value}",
+      "goalStatus": {
+        "unknown": "Unknown",
+        "in_progress": "In progress",
+        "satisfied": "Satisfied",
+        "not_satisfied": "Not satisfied"
+      },
+      "ledgerKind": {
+        "user_input": "User input",
+        "assistant_message": "Assistant message",
+        "tool_result": "Tool result",
+        "system_notice": "System notice"
+      },
+      "workspaceKind": {
+        "shell": "Shell",
+        "code": "Code",
+        "data": "Data",
+        "browser": "Browser"
+      },
+      "packStatus": {
+        "supported": "Supported",
+        "deprecated": "Deprecated",
+        "unavailable": "Unavailable"
+      },
+      "subagentMessageKind": {
+        "request": "Request",
+        "reply": "Reply",
+        "progress": "Progress",
+        "evidence": "Evidence",
+        "completion": "Completion"
+      },
+      "subagentMessageStatus": {
+        "accepted": "Accepted",
+        "delivered": "Delivered",
+        "consumed": "Consumed",
+        "expired": "Expired",
+        "rejected": "Rejected"
+      }
+    },
     "tasks": {
       "title": "Tasks",
       "dragCard": "Drag card to reorder",

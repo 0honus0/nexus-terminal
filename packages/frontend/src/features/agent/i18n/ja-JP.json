@@ -1461,6 +1461,46 @@
       "loadMore": "さらに読み込む",
       "limitReached": "添付できるファイルは最大 {count} 件です。"
     },
+    "enumLabels": {
+      "technicalState": "技術状態：{value}",
+      "goalStatus": {
+        "unknown": "不明",
+        "in_progress": "進行中",
+        "satisfied": "達成済み",
+        "not_satisfied": "未達成"
+      },
+      "ledgerKind": {
+        "user_input": "ユーザー入力",
+        "assistant_message": "アシスタントメッセージ",
+        "tool_result": "ツール結果",
+        "system_notice": "システム通知"
+      },
+      "workspaceKind": {
+        "shell": "シェル",
+        "code": "コード",
+        "data": "データ",
+        "browser": "ブラウザー"
+      },
+      "packStatus": {
+        "supported": "対応",
+        "deprecated": "非推奨",
+        "unavailable": "利用不可"
+      },
+      "subagentMessageKind": {
+        "request": "リクエスト",
+        "reply": "返信",
+        "progress": "進捗",
+        "evidence": "証拠",
+        "completion": "完了"
+      },
+      "subagentMessageStatus": {
+        "accepted": "受付済み",
+        "delivered": "配信済み",
+        "consumed": "消費済み",
+        "expired": "期限切れ",
+        "rejected": "拒否済み"
+      }
+    },
     "tasks": {
       "title": "タスク",
       "dragCard": "カードをドラッグして並べ替え",

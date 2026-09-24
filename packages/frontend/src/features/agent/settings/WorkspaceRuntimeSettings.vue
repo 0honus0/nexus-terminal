@@ -17,6 +17,7 @@
     type AgentWorkspaceRuntimeSetupPreviewDto,
     type AgentWorkspaceRuntimeStorageDto,
   } from '../api/agent-api';
+  import { formatAgentEnumLabel } from '../enum-labels';
 
   const props = defineProps<{
     availability: AgentWorkspaceRuntimeAvailabilityDto;
@@ -394,7 +395,9 @@
               />
               <span class="min-w-0 flex-1">
                 <span class="block text-xs font-semibold text-foreground">{{ recipe.displayName }}</span>
-                <span class="mt-0.5 block text-[11px] text-text-secondary">{{ recipe.kind }}</span>
+                <span class="mt-0.5 block text-[11px] text-text-secondary">
+                  {{ formatAgentEnumLabel(t, 'workspaceKind', recipe.kind) }}
+                </span>
               </span>
             </label>
           </div>
@@ -596,7 +599,8 @@
                 >
               </div>
               <p class="mt-1 text-[11px] text-text-secondary font-mono">
-                {{ formatBytes(pack.diskBytes) }} · <span class="capitalize">{{ pack.status }}</span>
+                {{ formatBytes(pack.diskBytes) }} ·
+                <span>{{ formatAgentEnumLabel(t, 'packStatus', pack.status) }}</span>
               </p>
             </div>
             <div class="flex flex-wrap gap-1.5">

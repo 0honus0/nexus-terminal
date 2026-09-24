@@ -1461,6 +1461,46 @@
       "loadMore": "加载更多",
       "limitReached": "最多可附加 {count} 个文件。"
     },
+    "enumLabels": {
+      "technicalState": "技术状态：{value}",
+      "goalStatus": {
+        "unknown": "未知",
+        "in_progress": "进行中",
+        "satisfied": "已满足",
+        "not_satisfied": "未满足"
+      },
+      "ledgerKind": {
+        "user_input": "用户输入",
+        "assistant_message": "助手消息",
+        "tool_result": "工具结果",
+        "system_notice": "系统通知"
+      },
+      "workspaceKind": {
+        "shell": "命令行",
+        "code": "代码",
+        "data": "数据",
+        "browser": "浏览器"
+      },
+      "packStatus": {
+        "supported": "支持",
+        "deprecated": "已弃用",
+        "unavailable": "不可用"
+      },
+      "subagentMessageKind": {
+        "request": "请求",
+        "reply": "回复",
+        "progress": "进度",
+        "evidence": "证据",
+        "completion": "完成"
+      },
+      "subagentMessageStatus": {
+        "accepted": "已接收",
+        "delivered": "已送达",
+        "consumed": "已消费",
+        "expired": "已过期",
+        "rejected": "已拒绝"
+      }
+    },
     "tasks": {
       "title": "任务",
       "dragCard": "拖动卡片排序",
