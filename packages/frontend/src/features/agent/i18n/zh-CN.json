@@ -1007,6 +1007,8 @@
         "rejected": "Memory 候选已拒绝。",
         "revoked": "已发布 Memory 已撤销。",
         "conflict": "此 Memory 已在其它位置发生变化，已重新加载权威版本。",
+        "draftConflict": "此 Memory 在本地草稿未保存期间发生了远端变化。你的草稿已保留。",
+        "useLatest": "使用最新版本",
         "importTitle": "跨 App Memory 导入",
         "importDescription": "从其它 App 选择仍有效的已发布 Memory，先预览冻结确认，再执行导入。",
         "sourceApp": "来源 App",

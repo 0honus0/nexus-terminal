@@ -23,6 +23,8 @@
   const status = ref<AgentMemoryStatusDto | 'all'>('all');
   const memories = shallowRef<AgentMemoryViewDto[]>([]);
   const drafts = ref<Record<string, string>>({});
+  const memoryBaselines = ref<Record<string, string>>({});
+  const draftConflicts = ref<Record<string, boolean>>({});
   const loading = ref(false);
   const localBusy = ref(false);
 
@@ -32,6 +34,7 @@
   const importPreview = shallowRef<AgentMemoryImportConfirmationDto | null>(null);
   const importLoading = ref(false);
   let memoriesGeneration = 0;
+  let draftsAppId = '';
   let sourceMemoriesGeneration = 0;
 
   const disabled = computed(() => props.busy || localBusy.value);
@@ -79,6 +82,14 @@
   const confidence = (value: number): string => `${Math.round(value * 100)}%`;
   const appName = (appId: string): string => props.apps.find((app) => app.id === appId)?.displayName ?? appId;
 
+  const draftDirty = (memoryId: string): boolean =>
+    drafts.value[memoryId] !== undefined && drafts.value[memoryId] !== memoryBaselines.value[memoryId];
+  const draftConflict = (memoryId: string): boolean => Boolean(draftConflicts.value[memoryId] && draftDirty(memoryId));
+  const useLatestDraft = (memory: AgentMemoryViewDto): void => {
+    drafts.value = { ...drafts.value, [memory.id]: memoryBaselines.value[memory.id] ?? memory.content };
+    draftConflicts.value = { ...draftConflicts.value, [memory.id]: false };
+  };
+
   const provenanceProjection = (memory: AgentMemoryViewDto): string[] => {
     const projection: string[] = [];
     if (memory.proposedByRuntimeId) projection.push(`runtime · ${memory.proposedByRuntimeId.slice(0, 32)}`);
@@ -109,16 +120,44 @@
     if (!appId) {
       memories.value = [];
       drafts.value = {};
+      memoryBaselines.value = {};
+      draftConflicts.value = {};
+      draftsAppId = '';
       loading.value = false;
       return;
+    }
+    if (draftsAppId !== appId) {
+      drafts.value = {};
+      memoryBaselines.value = {};
+      draftConflicts.value = {};
+      draftsAppId = appId;
     }
     loading.value = true;
     try {
       const next = await agentApi.memories(appId, requestedStatus, 100);
       if (generation !== memoriesGeneration || selectedAppId.value !== appId || status.value !== requestedStatus)
         return;
+      const nextDrafts = { ...drafts.value };
+      const nextBaselines = { ...memoryBaselines.value };
+      const nextConflicts = { ...draftConflicts.value };
+      for (const memory of next) {
+        const previousBaseline = memoryBaselines.value[memory.id];
+        const previousDraft = drafts.value[memory.id];
+        const wasDirty =
+          previousBaseline !== undefined && previousDraft !== undefined && previousDraft !== previousBaseline;
+        const serverChanged = previousBaseline !== undefined && previousBaseline !== memory.content;
+        nextBaselines[memory.id] = memory.content;
+        if (!wasDirty) {
+          nextDrafts[memory.id] = memory.content;
+          nextConflicts[memory.id] = false;
+        } else if (serverChanged) {
+          nextConflicts[memory.id] = true;
+        }
+      }
       memories.value = next;
-      drafts.value = Object.fromEntries(next.map((memory) => [memory.id, memory.content]));
+      drafts.value = nextDrafts;
+      memoryBaselines.value = nextBaselines;
+      draftConflicts.value = nextConflicts;
     } catch (cause) {
       if (generation !== memoriesGeneration || selectedAppId.value !== appId || status.value !== requestedStatus)
         return;
@@ -133,8 +172,6 @@
   const loadSourceMemories = async (): Promise<void> => {
     const generation = ++sourceMemoriesGeneration;
     const appId = sourceAppId.value;
-    sourceMemoryId.value = '';
-    importPreview.value = null;
     if (!appId) {
       sourceMemories.value = [];
       importLoading.value = false;
@@ -145,12 +182,27 @@
       const next = await agentApi.memories(appId, 'published', 100);
       if (generation !== sourceMemoriesGeneration || sourceAppId.value !== appId) return;
       const now = Math.floor(Date.now() / 1000);
-      sourceMemories.value = next.filter(
+      const filtered = next.filter(
         (memory) => memory.status === 'published' && (memory.expiresAt === null || memory.expiresAt > now),
       );
+      sourceMemories.value = filtered;
+      if (sourceMemoryId.value) {
+        const selectedSource = filtered.find((memory) => memory.id === sourceMemoryId.value) ?? null;
+        if (!selectedSource) {
+          sourceMemoryId.value = '';
+          importPreview.value = null;
+        } else if (
+          importPreview.value &&
+          (importPreview.value.sourceAppId !== appId ||
+            importPreview.value.sourceMemoryId !== selectedSource.id ||
+            importPreview.value.sourceVersion !== selectedSource.version ||
+            importPreview.value.expiresAt <= now)
+        ) {
+          importPreview.value = null;
+        }
+      }
     } catch (cause) {
       if (generation !== sourceMemoriesGeneration || sourceAppId.value !== appId) return;
-      sourceMemories.value = [];
       operationFeedback.notifyError({ operation: 'load-source-memories', message: explain(cause), cause });
     } finally {
       if (generation === sourceMemoriesGeneration && sourceAppId.value === appId) importLoading.value = false;
@@ -272,7 +324,13 @@
     void loadMemories();
   });
   watch(status, () => void loadMemories());
-  watch(sourceAppId, () => void loadSourceMemories());
+  watch(sourceAppId, (nextAppId, previousAppId) => {
+    if (nextAppId !== previousAppId) {
+      sourceMemoryId.value = '';
+      importPreview.value = null;
+    }
+    void loadSourceMemories();
+  });
 
   const onMemoryChanged = (payload: Record<string, unknown>): void => {
     if (typeof payload.appId !== 'string') return;
@@ -372,6 +430,15 @@
             class="mt-3 w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-xs leading-relaxed text-foreground"
             :disabled="disabled"
           ></textarea>
+          <div
+            v-if="memory.status === 'candidate' && draftConflict(memory.id)"
+            class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] text-warning"
+          >
+            <span>{{ $t('agent.settings.memory.draftConflict') }}</span>
+            <UiButton appearance="soft" tone="neutral" density="compact" type="button" :disabled="disabled" @click="useLatestDraft(memory)">
+              {{ $t('agent.settings.memory.useLatest') }}
+            </UiButton>
+          </div>
           <p v-else class="mt-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
             {{ memory.content }}
           </p>

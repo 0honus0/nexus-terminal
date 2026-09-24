@@ -1007,6 +1007,8 @@
         "rejected": "Memory 候補を却下しました。",
         "revoked": "公開済み Memory を取り消しました。",
         "conflict": "この Memory は別の場所で更新されています。正しい最新状態を再読み込みしました。",
+        "draftConflict": "未保存のローカル下書きがある間に、この Memory がリモートで更新されました。下書きは保持されています。",
+        "useLatest": "最新を使用",
         "importTitle": "App 間 Memory import",
         "importDescription": "別 App の有効な公開済み Memory を選び、固定された確認内容をプレビューしてから import します。",
         "sourceApp": "参照元 App",

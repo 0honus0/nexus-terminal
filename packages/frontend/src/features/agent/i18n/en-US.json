@@ -1007,6 +1007,8 @@
         "rejected": "Memory candidate rejected.",
         "revoked": "Published Memory revoked.",
         "conflict": "This Memory changed elsewhere. The authoritative version has been reloaded.",
+        "draftConflict": "This Memory changed remotely while your local draft was unsaved. Your draft was preserved.",
+        "useLatest": "Use latest",
         "importTitle": "Cross-App Memory import",
         "importDescription": "Choose a live published Memory from another App, preview its frozen confirmation, then import it.",
         "sourceApp": "Source App",
