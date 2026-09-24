@@ -14,6 +14,8 @@
   const summary = ref<AgentHostSummaryDto | null>(null);
   const HOST_STREAM_LOCK_NAME = 'nexus.agent.host-stream.v1';
   const HOST_EVENT_CHANNEL_NAME = 'nexus.agent.host-events.v1';
+  const HOST_REFRESH_RETRY_BASE_MS = 500;
+  const HOST_REFRESH_RETRY_MAX_MS = 10_000;
   const hostChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(HOST_EVENT_CHANNEL_NAME);
 
   let hostAbort: AbortController | null = null;
@@ -104,43 +106,74 @@
     }
   };
 
+  const waitForHostRefreshRetry = (attempt: number, signal: AbortSignal): Promise<void> =>
+    new Promise((resolve) => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+      const delay = Math.min(HOST_REFRESH_RETRY_MAX_MS, HOST_REFRESH_RETRY_BASE_MS * 2 ** Math.min(attempt, 5));
+      const onAbort = (): void => {
+        window.clearTimeout(timer);
+        resolve();
+      };
+      const timer = window.setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, delay);
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+
   const runHostStreamAsLeader = async (controller: AbortController, currentGeneration: number): Promise<void> => {
-    const initial = await refresh('initial');
-    if (!initial || controller.signal.aborted || currentGeneration !== generation) return;
-    logger.debug(
-      { userId: activeUserId, generation: currentGeneration, cursor: initial.eventCursor },
-      'Agent global surface event subscription starting as cross-tab leader',
-    );
-    for await (const event of agentEvents.host(initial.eventCursor, controller.signal)) {
+    let refreshAttempt = 0;
+    while (!controller.signal.aborted && currentGeneration === generation) {
+      const initial = await refresh('initial');
       if (controller.signal.aborted || currentGeneration !== generation) return;
+      if (!initial) {
+        refreshAttempt += 1;
+        logger.warn(
+          { userId: activeUserId, generation: currentGeneration, refreshAttempt },
+          'Agent global surface initial summary unavailable; retrying',
+        );
+        await waitForHostRefreshRetry(refreshAttempt, controller.signal);
+        continue;
+      }
       logger.debug(
-        {
-          userId: activeUserId,
-          generation: currentGeneration,
-          eventType: event.type,
-          sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
-          eventId: event.id,
-        },
-        'Agent global surface host event received',
+        { userId: activeUserId, generation: currentGeneration, cursor: initial.eventCursor },
+        'Agent global surface event subscription starting as cross-tab leader',
       );
-      if (event.type === 'host.changed' && event.sourceType === 'thread.changed') {
-        dispatchThreadChanged(event.payload);
+      for await (const event of agentEvents.host(initial.eventCursor, controller.signal)) {
+        if (controller.signal.aborted || currentGeneration !== generation) return;
+        logger.debug(
+          {
+            userId: activeUserId,
+            generation: currentGeneration,
+            eventType: event.type,
+            sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
+            eventId: event.id,
+          },
+          'Agent global surface host event received',
+        );
+        if (event.type === 'host.changed' && event.sourceType === 'thread.changed') {
+          dispatchThreadChanged(event.payload);
+        }
+        if (event.type === 'host.changed' && event.sourceType === 'authorization.changed') {
+          dispatchAuthorizationChanged(event.payload);
+        }
+        if (event.type === 'host.changed' && event.sourceType === 'memory.changed') {
+          dispatchMemoryChanged(event.payload);
+        }
+        await refresh('host-event');
+        if (activeUserId !== null) {
+          hostChannel?.postMessage({
+            type: 'host.changed',
+            userId: activeUserId,
+            sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
+            payload: event.type === 'host.changed' ? event.payload : undefined,
+          });
+        }
       }
-      if (event.type === 'host.changed' && event.sourceType === 'authorization.changed') {
-        dispatchAuthorizationChanged(event.payload);
-      }
-      if (event.type === 'host.changed' && event.sourceType === 'memory.changed') {
-        dispatchMemoryChanged(event.payload);
-      }
-      await refresh('host-event');
-      if (activeUserId !== null) {
-        hostChannel?.postMessage({
-          type: 'host.changed',
-          userId: activeUserId,
-          sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
-          payload: event.type === 'host.changed' ? event.payload : undefined,
-        });
-      }
+      return;
     }
   };
 
@@ -211,7 +244,6 @@
         activeUserId = userId;
         logger.debug({ userId }, 'Agent global surface attached to authenticated shell');
         agentWindowManager.restoreForUser(userId);
-        void refresh('initial');
         start();
         return;
       }
