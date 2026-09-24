@@ -679,6 +679,7 @@
             <ModelProviderSettings
               :providers="providers"
               :busy="providerBusy"
+              :settings-busy="settingsMutationBusy"
               :discoveries="discoveredModels"
               :default-provider-id="settings.requestedSettings.model.defaultProviderId"
               :default-model-id="settings.requestedSettings.model.defaultModelId"

@@ -42,6 +42,7 @@
     ) => Promise<AgentProviderViewDto | undefined>;
     providers: AgentProviderViewDto[];
     busy: boolean;
+    settingsBusy: boolean;
     discoveries: Record<string, AgentDiscoveredProviderModelDto[]>;
     defaultProviderId: string | null;
     defaultModelId: string | null;
@@ -850,12 +851,22 @@
 
   const optimisticDefaultModelKey = ref<string | null>(null);
 
+  const requestedDefaultModelKey = () =>
+    props.defaultProviderId && props.defaultModelId ? `${props.defaultProviderId}\u0000${props.defaultModelId}` : null;
+
   watch(
     () => [props.defaultProviderId, props.defaultModelId] as const,
     ([providerId, modelId]) => {
       optimisticDefaultModelKey.value = providerId && modelId ? `${providerId}\u0000${modelId}` : null;
     },
     { immediate: true },
+  );
+
+  watch(
+    () => props.settingsBusy,
+    (busy, previous) => {
+      if (previous && !busy) optimisticDefaultModelKey.value = requestedDefaultModelKey();
+    },
   );
 
   // 默认模型选择：统一 Select 下拉（禁用自由输入），模型 ID 为主、渠道为次
