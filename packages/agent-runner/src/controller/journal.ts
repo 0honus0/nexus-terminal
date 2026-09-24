@@ -20,6 +20,7 @@ const JOURNAL_COLLECTION_HIGH_WATER = 12_288;
 const MAX_JOURNAL_RECOVERY_COLLECTION_ITEMS = 32_768;
 const MAX_JOURNAL_STRING_BYTES = 64 * 1024;
 const MAX_WORKSPACE_JOB_OUTPUT_BYTES = 1024 * 1024;
+const CORRUPT_EVIDENCE_LIMIT = 4;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -247,12 +248,40 @@ const fsyncDirectory = (directory: string): void => {
   }
 };
 
+const corruptMarkerPath = (filePath: string): string => `${filePath}.corrupt-marker`;
+
+const pruneCorruptEvidence = (filePath: string): void => {
+  const directory = path.dirname(filePath);
+  const prefix = `${path.basename(filePath)}.corrupt.`;
+  let evidence: Array<{ path: string; mtimeMs: number }> = [];
+  try {
+    evidence = fs
+      .readdirSync(directory)
+      .filter((name) => name.startsWith(prefix))
+      .map((name) => {
+        const target = path.join(directory, name);
+        return { path: target, mtimeMs: fs.statSync(target).mtimeMs };
+      })
+      .sort((left, right) => right.mtimeMs - left.mtimeMs);
+  } catch {
+    return;
+  }
+  for (const stale of evidence.slice(CORRUPT_EVIDENCE_LIMIT)) {
+    try {
+      fs.rmSync(stale.path, { force: true });
+    } catch {
+      // Evidence retention is best-effort; never discard the newest preserved corruption.
+    }
+  }
+};
+
 export const payloadHash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export class RunnerJournal {
   private state: JournalState;
   constructor(private readonly filePath: string) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    if (fs.existsSync(corruptMarkerPath(filePath))) throw new Error('RUNNER_JOURNAL_INVALID');
     try {
       this.state = decodeJournalState(JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown);
     } catch (error) {
@@ -482,12 +511,18 @@ export class RunnerJournal {
 
   private quarantineCurrent(reason: 'schema-unsupported' | 'corrupt'): void {
     if (!fs.existsSync(this.filePath)) return;
-    const target = `${this.filePath}.${reason}.${Date.now()}-${process.pid}`;
+    const target = `${this.filePath}.${reason}.${Date.now()}-${process.pid}-${process.hrtime.bigint()}`;
+    fs.renameSync(this.filePath, target);
     if (reason === 'corrupt') {
-      fs.copyFileSync(this.filePath, target, fs.constants.COPYFILE_EXCL);
       fsyncFile(target);
-    } else {
-      fs.renameSync(this.filePath, target);
+      const marker = corruptMarkerPath(this.filePath);
+      fs.writeFileSync(
+        marker,
+        `${JSON.stringify({ schemaVersion: 1, evidenceFile: path.basename(target), recordedAt: Math.floor(Date.now() / 1000) })}\n`,
+        { mode: 0o600, flag: 'wx' },
+      );
+      fsyncFile(marker);
+      pruneCorruptEvidence(this.filePath);
     }
     fsyncDirectory(path.dirname(this.filePath));
     runnerLog(reason === 'corrupt' ? 'error' : 'warn', 'Agent Runner journal evidence preserved', {
