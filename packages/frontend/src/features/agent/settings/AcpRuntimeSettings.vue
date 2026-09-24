@@ -24,7 +24,15 @@
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.acp-runtime');
 
-  const profiles = ref<ProfileDraft[]>([]);
+  const draftProfilesFromProps = (): ProfileDraft[] =>
+    props.settings.requestedSettings.workspaceRuntime.acpProfiles.map((profile) => ({
+      id: profile.id,
+      argvText: JSON.stringify(profile.argv),
+      cwd: profile.cwd,
+    }));
+
+  const profileBaseline = ref<ProfileDraft[]>(draftProfilesFromProps());
+  const profiles = ref<ProfileDraft[]>(profileBaseline.value.map((profile) => ({ ...profile })));
   const integrations = ref<AgentIntegrationViewDto[]>([]);
   const localBusy = ref(false);
   const loading = ref(false);
@@ -42,12 +50,14 @@
   };
 
   const syncProfiles = (): void => {
-    profiles.value = props.settings.requestedSettings.workspaceRuntime.acpProfiles.map((profile) => ({
-      id: profile.id,
-      argvText: JSON.stringify(profile.argv),
-      cwd: profile.cwd,
-    }));
+    const next = draftProfilesFromProps();
+    profileBaseline.value = next.map((profile) => ({ ...profile }));
+    profiles.value = next;
   };
+  const profilesDirty = computed(() => JSON.stringify(profiles.value) !== JSON.stringify(profileBaseline.value));
+  const remoteMatchesProfiles = computed(
+    () => JSON.stringify(profiles.value) === JSON.stringify(draftProfilesFromProps()),
+  );
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'ACP request failed.');
 
@@ -314,7 +324,9 @@
 
   watch(
     () => props.settings.requestedSettings.workspaceRuntime.acpProfiles,
-    () => syncProfiles(),
+    () => {
+      if (!profilesDirty.value || remoteMatchesProfiles.value) syncProfiles();
+    },
     { immediate: true },
   );
 

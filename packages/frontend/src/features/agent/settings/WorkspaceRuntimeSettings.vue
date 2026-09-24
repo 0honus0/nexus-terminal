@@ -59,7 +59,8 @@
   const storage = ref<AgentWorkspaceRuntimeStorageDto | null>(null);
   const loading = ref(false);
   const localBusy = ref(false);
-  const selectedRecipeIds = ref<string[]>([]);
+  const selectionBaseline = ref<string[]>([...props.settings.requestedSettings.workspaceRuntime.enabledRecipeIds]);
+  const selectedRecipeIds = ref<string[]>([...selectionBaseline.value]);
   const setupPreview = ref<AgentWorkspaceRuntimeSetupPreviewDto | null>(null);
   const uninstallPreview = ref<AgentToolchainPackUninstallPreviewDto | null>(null);
   const cleanupPreview = ref<AgentWorkspaceRuntimeCleanupPreviewDto | null>(null);
@@ -68,6 +69,13 @@
 
   const disabled = computed(() => props.busy || localBusy.value);
   const requested = computed(() => props.settings.requestedSettings.workspaceRuntime);
+  const canonicalRecipeIds = (ids: readonly string[]): string => JSON.stringify([...ids].sort());
+  const selectionDirty = computed(
+    () => canonicalRecipeIds(selectedRecipeIds.value) !== canonicalRecipeIds(selectionBaseline.value),
+  );
+  const remoteMatchesSelection = computed(
+    () => canonicalRecipeIds(selectedRecipeIds.value) === canonicalRecipeIds(requested.value.enabledRecipeIds),
+  );
 
   const formatBytes = (bytes: number): string => {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -84,8 +92,9 @@
   const errorMessage = (cause: unknown): string =>
     formatAgentApiError(cause, t('agent.settings.workspaceRuntime.requestFailed'));
 
-  const syncSelection = () => {
-    selectedRecipeIds.value = [...requested.value.enabledRecipeIds];
+  const syncSelection = (): void => {
+    selectionBaseline.value = [...requested.value.enabledRecipeIds];
+    selectedRecipeIds.value = [...selectionBaseline.value];
   };
 
   const loadDetails = async () => {
@@ -259,7 +268,12 @@
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.resetComplete'));
     });
 
-  watch(() => props.settings.revision, syncSelection);
+  watch(
+    () => props.settings.revision,
+    () => {
+      if (!selectionDirty.value || remoteMatchesSelection.value) syncSelection();
+    },
+  );
   watch(() => props.availability.available, loadDetails);
   onMounted(() => {
     syncSelection();

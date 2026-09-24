@@ -61,17 +61,35 @@
   const grantFor = (appId: string, capability: CapabilityId): AgentCapabilityGrantInputDto | undefined =>
     (drafts.value[appId] ?? []).find((grant) => grant.capability === capability);
 
-  const loadGrant = async (appId: string): Promise<void> => {
+  const canonicalGrants = (grants: readonly AgentCapabilityGrantInputDto[]): string =>
+    JSON.stringify(
+      [...grants]
+        .map((grant) => cloneGrant(grant))
+        .sort((left, right) => left.capability.localeCompare(right.capability)),
+    );
+
+  const grantChanged = (appId: string): boolean => {
+    const view = grantViews.value[appId];
+    if (!view) return false;
+    return canonicalGrants(view.grants) !== canonicalGrants(drafts.value[appId] ?? []);
+  };
+
+  const loadGrant = async (appId: string, options: { forceDraftSync?: boolean } = {}): Promise<void> => {
     const generation = (grantLoadGeneration.get(appId) ?? 0) + 1;
     grantLoadGeneration.set(appId, generation);
     try {
       const view = await agentApi.appGrants(appId);
       if (grantLoadGeneration.get(appId) !== generation) return;
-      grantViews.value = { ...grantViews.value, [appId]: view };
-      drafts.value = {
-        ...drafts.value,
-        [appId]: view.grants.map((grant) => cloneGrant(grant)),
-      };
+      const currentDraft = drafts.value[appId] ?? [];
+      const draftMatchesView = canonicalGrants(currentDraft) === canonicalGrants(view.grants);
+      const preserveDraftAndBaseline = !options.forceDraftSync && grantChanged(appId) && !draftMatchesView;
+      if (!preserveDraftAndBaseline) {
+        grantViews.value = { ...grantViews.value, [appId]: view };
+        drafts.value = {
+          ...drafts.value,
+          [appId]: view.grants.map((grant) => cloneGrant(grant)),
+        };
+      }
       const next = { ...grantErrors.value };
       delete next[appId];
       grantErrors.value = next;
@@ -92,19 +110,6 @@
   );
 
   const checked = (appId: string, capability: CapabilityId): boolean => grantFor(appId, capability) !== undefined;
-
-  const canonicalGrants = (grants: readonly AgentCapabilityGrantInputDto[]): string =>
-    JSON.stringify(
-      [...grants]
-        .map((grant) => cloneGrant(grant))
-        .sort((left, right) => left.capability.localeCompare(right.capability)),
-    );
-
-  const grantChanged = (appId: string): boolean => {
-    const view = grantViews.value[appId];
-    if (!view) return false;
-    return canonicalGrants(view.grants) !== canonicalGrants(drafts.value[appId] ?? []);
-  };
 
   const toggleCapability = (appId: string, capability: CapabilityId, enabled: boolean): void => {
     const current = (drafts.value[appId] ?? []).filter((grant) => grant.capability !== capability).map(cloneGrant);
@@ -286,7 +291,7 @@
       emit('grantsUpdated', updated.app);
     } catch (cause) {
       operationFeedback.notifyError({ operation: 'save-grants', message: explain(cause), cause, context: { appId } });
-      await loadGrant(appId);
+      await loadGrant(appId, { forceDraftSync: true });
     } finally {
       grantBusy.value = { ...grantBusy.value, [appId]: false };
     }

@@ -5,8 +5,17 @@
 
   const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
-  const runtimes = ref(1);
-  const modelCalls = ref<string>('auto');
+  const baselineRuntimes = ref(props.settings.requestedSettings.performance.maxConcurrentRuntimes);
+  const baselineModelCalls = ref(String(props.settings.requestedSettings.performance.maxConcurrentModelCalls));
+  const runtimes = ref(baselineRuntimes.value);
+  const modelCalls = ref<string>(baselineModelCalls.value);
+
+  const syncFromProps = (): void => {
+    baselineRuntimes.value = props.settings.requestedSettings.performance.maxConcurrentRuntimes;
+    baselineModelCalls.value = String(props.settings.requestedSettings.performance.maxConcurrentModelCalls);
+    runtimes.value = baselineRuntimes.value;
+    modelCalls.value = baselineModelCalls.value;
+  };
 
   const modelCallOptions = computed(() =>
     Array.from({ length: props.settings.hardLimits.maxConcurrentModelCalls }, (_, index) => ({
@@ -15,20 +24,22 @@
     })),
   );
 
+  const isDirty = computed(
+    () => runtimes.value !== baselineRuntimes.value || modelCalls.value !== baselineModelCalls.value,
+  );
+  const remoteMatchesDraft = computed(
+    () =>
+      runtimes.value === props.settings.requestedSettings.performance.maxConcurrentRuntimes &&
+      modelCalls.value === String(props.settings.requestedSettings.performance.maxConcurrentModelCalls),
+  );
+
   watch(
     () => props.settings.revision,
     () => {
-      runtimes.value = props.settings.requestedSettings.performance.maxConcurrentRuntimes;
-      modelCalls.value = String(props.settings.requestedSettings.performance.maxConcurrentModelCalls);
+      if (!isDirty.value || remoteMatchesDraft.value) syncFromProps();
     },
     { immediate: true },
   );
-
-  const isDirty = computed(() => {
-    const currentRuntimes = props.settings.requestedSettings.performance.maxConcurrentRuntimes;
-    const currentCalls = String(props.settings.requestedSettings.performance.maxConcurrentModelCalls);
-    return runtimes.value !== currentRuntimes || modelCalls.value !== currentCalls;
-  });
 
   const invalid = computed(() => {
     if (

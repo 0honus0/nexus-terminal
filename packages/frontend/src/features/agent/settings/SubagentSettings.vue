@@ -25,7 +25,10 @@
     busy: boolean;
   }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
-  const draft = ref<Record<string, number | null>>({});
+  const globalLimitsBaseline = ref<Record<string, number | null>>({
+    ...props.settings.requestedSettings.subagents,
+  });
+  const draft = ref<Record<string, number | null>>({ ...globalLimitsBaseline.value });
   const selectedAppId = ref('');
   const profileSettings = ref<AgentSubagentSettingsViewDto | null>(null);
   const profileBaseline = ref('');
@@ -215,14 +218,6 @@
   };
 
   watch(
-    () => props.settings.revision,
-    () => {
-      draft.value = { ...props.settings.requestedSettings.subagents };
-    },
-    { immediate: true },
-  );
-
-  watch(
     () => props.apps.map((app) => app.id).join('\u0000'),
     () => {
       if (!props.apps.some((app) => app.id === selectedAppId.value)) selectedAppId.value = props.apps[0]?.id ?? '';
@@ -274,7 +269,21 @@
   };
 
   const isGlobalLimitsDirty = computed(
-    () => JSON.stringify(draft.value) !== JSON.stringify(props.settings.requestedSettings.subagents),
+    () => JSON.stringify(draft.value) !== JSON.stringify(globalLimitsBaseline.value),
+  );
+  const remoteMatchesGlobalLimits = computed(
+    () => JSON.stringify(draft.value) === JSON.stringify(props.settings.requestedSettings.subagents),
+  );
+
+  watch(
+    () => props.settings.revision,
+    () => {
+      if (!isGlobalLimitsDirty.value || remoteMatchesGlobalLimits.value) {
+        globalLimitsBaseline.value = { ...props.settings.requestedSettings.subagents };
+        draft.value = { ...globalLimitsBaseline.value };
+      }
+    },
+    { immediate: true },
   );
   const isProfilesDirty = computed(
     () =>

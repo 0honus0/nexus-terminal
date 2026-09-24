@@ -77,16 +77,20 @@
     },
   ];
 
-  const draft = ref<Record<string, string | number | null>>({});
-  const reset = () => {
-    draft.value = Object.fromEntries(
-      Object.entries(props.settings.hardLimits).map(([rawKey, value]) => {
+  const draftFromLimits = (limits: AgentHardLimitsDto): Record<string, string | number | null> =>
+    Object.fromEntries(
+      Object.entries(limits).map(([rawKey, value]) => {
         const key = rawKey as HardLimitKey;
         return [key, value === null ? '' : toCompactQuantityString(value, getFieldType(key))];
       }),
     );
+
+  const baseline = ref<AgentHardLimitsDto>({ ...props.settings.hardLimits });
+  const draft = ref<Record<string, string | number | null>>(draftFromLimits(baseline.value));
+  const reset = (): void => {
+    baseline.value = { ...props.settings.hardLimits };
+    draft.value = draftFromLimits(baseline.value);
   };
-  watch(() => props.settings.revision, reset, { immediate: true });
 
   const parsedDraftValue = (key: HardLimitKey): number | null => {
     const raw = draft.value[key] ?? '';
@@ -116,6 +120,27 @@
     }
     return result;
   });
+
+  const isDirty = computed(() =>
+    fieldGroups.some((group) =>
+      group.keys.some((key) => !areQuantitiesEquivalent(baseline.value[key], parsedDraftValue(key), getFieldType(key))),
+    ),
+  );
+  const remoteMatchesDraft = computed(() =>
+    fieldGroups.every((group) =>
+      group.keys.every((key) =>
+        areQuantitiesEquivalent(props.settings.hardLimits[key], parsedDraftValue(key), getFieldType(key)),
+      ),
+    ),
+  );
+
+  watch(
+    () => props.settings.revision,
+    () => {
+      if (!isDirty.value || remoteMatchesDraft.value) reset();
+    },
+    { immediate: true },
+  );
 
   const canPreview = computed(
     () => !hasInvalidDraft.value && Object.keys(proposedChanges.value).length > 0 && !props.busy,

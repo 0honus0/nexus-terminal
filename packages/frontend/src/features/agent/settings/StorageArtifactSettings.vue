@@ -16,17 +16,21 @@
     busy: boolean;
   }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
-  const draft = ref<Record<string, number | null>>({});
 
-  watch(
-    () => props.settings.revision,
-    () => {
-      draft.value = Object.fromEntries(
-        Object.entries(props.settings.requestedSettings.storage).map(([key, value]) => [key, Number(value)]),
-      );
-    },
-    { immediate: true },
-  );
+  const storageDraftFromProps = (): Record<string, number | null> =>
+    Object.fromEntries(
+      Object.entries(props.settings.requestedSettings.storage).map(([key, value]) => [key, Number(value)]),
+    ) as Record<string, number | null>;
+  const canonicalStorage = (value: Record<string, number | null>): string =>
+    JSON.stringify(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)));
+
+  const baseline = ref<Record<string, number | null>>(storageDraftFromProps());
+  const draft = ref<Record<string, number | null>>({ ...baseline.value });
+
+  const syncFromProps = (): void => {
+    baseline.value = storageDraftFromProps();
+    draft.value = { ...baseline.value };
+  };
 
   const storageFieldMeta = computed<
     Record<string, { label: string; hint: string; type: QuantityType; placeholder: string }>
@@ -46,13 +50,18 @@
     };
   });
 
-  const isDirty = computed(() => {
-    const original = props.settings.requestedSettings.storage;
-    return Object.entries(draft.value).some(([key, val]) => {
-      const origVal = (original as Record<string, number>)[key];
-      return origVal !== val;
-    });
-  });
+  const isDirty = computed(() => canonicalStorage(draft.value) !== canonicalStorage(baseline.value));
+  const remoteMatchesDraft = computed(
+    () => canonicalStorage(draft.value) === canonicalStorage(storageDraftFromProps()),
+  );
+
+  watch(
+    () => props.settings.revision,
+    () => {
+      if (!isDirty.value || remoteMatchesDraft.value) syncFromProps();
+    },
+    { immediate: true },
+  );
 
   const hasInvalidDraft = computed(() => Object.values(draft.value).some((value) => value === null || value < 1));
 

@@ -123,13 +123,13 @@
     maxRecallBytes: toCompactQuantityString(budget.maxRecallBytes, getFieldType('maxRecallBytes')),
   });
 
-  const draft = ref<BudgetDraft>(draftFromBudget(props.settings.requestedSettings.budget));
+  const baseline = ref<BudgetSettings>({ ...props.settings.requestedSettings.budget });
+  const draft = ref<BudgetDraft>(draftFromBudget(baseline.value));
 
-  const syncFromProps = () => {
-    draft.value = draftFromBudget(props.settings.requestedSettings.budget);
+  const syncFromProps = (): void => {
+    baseline.value = { ...props.settings.requestedSettings.budget };
+    draft.value = draftFromBudget(baseline.value);
   };
-
-  watch(() => props.settings.revision, syncFromProps, { immediate: true });
 
   const activePreset = computed<PresetId>(() => {
     for (const preset of presets.value) {
@@ -159,10 +159,20 @@
   };
 
   const isDirty = computed(() =>
-    budgetKeys.some(
-      (key) =>
-        !areQuantitiesEquivalent(props.settings.requestedSettings.budget[key], draft.value[key], getFieldType(key)),
+    budgetKeys.some((key) => !areQuantitiesEquivalent(baseline.value[key], draft.value[key], getFieldType(key))),
+  );
+  const remoteMatchesDraft = computed(() =>
+    budgetKeys.every((key) =>
+      areQuantitiesEquivalent(props.settings.requestedSettings.budget[key], draft.value[key], getFieldType(key)),
     ),
+  );
+
+  watch(
+    () => props.settings.revision,
+    () => {
+      if (!isDirty.value || remoteMatchesDraft.value) syncFromProps();
+    },
+    { immediate: true },
   );
 
   const hasInvalidDraft = computed(() =>

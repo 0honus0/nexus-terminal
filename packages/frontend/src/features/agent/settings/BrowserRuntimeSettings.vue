@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
-  import { reactive, ref, watch } from 'vue';
+  import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import { pickOption } from './pick-option';
@@ -15,8 +15,6 @@
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.browserRuntime');
 
-  const targets = ref<BrowserTarget[]>([]);
-
   const cloneTargets = (source: readonly BrowserTarget[]): BrowserTarget[] =>
     source.map((target) => ({
       ...target,
@@ -24,8 +22,16 @@
       allowedUrlPatterns: [...target.allowedUrlPatterns],
     }));
 
+  const baselineTargets = ref<BrowserTarget[]>(cloneTargets(props.settings.requestedSettings.browser.targets));
+  const targets = ref<BrowserTarget[]>(cloneTargets(baselineTargets.value));
+  const isDirty = computed(() => JSON.stringify(targets.value) !== JSON.stringify(baselineTargets.value));
+  const remoteMatchesDraft = computed(
+    () => JSON.stringify(targets.value) === JSON.stringify(props.settings.requestedSettings.browser.targets),
+  );
+
   const sync = (): void => {
-    targets.value = cloneTargets(props.settings.requestedSettings.browser.targets);
+    baselineTargets.value = cloneTargets(props.settings.requestedSettings.browser.targets);
+    targets.value = cloneTargets(baselineTargets.value);
   };
 
   const scopeOptions = [
@@ -196,7 +202,13 @@
     if (next) endpointForm.via = next;
   };
 
-  watch(() => props.settings.revision, sync, { immediate: true });
+  watch(
+    () => props.settings.revision,
+    () => {
+      if (!isDirty.value || remoteMatchesDraft.value) sync();
+    },
+    { immediate: true },
+  );
 </script>
 
 <template>
