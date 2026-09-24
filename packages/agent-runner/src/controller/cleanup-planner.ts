@@ -24,7 +24,17 @@ export class CleanupPlanner {
     const deleted: string[] = [],
       quarantined: string[] = [],
       skipped: string[] = [];
-    const activeStatuses = new Set(['creating', 'running']);
+    const activeProvisionWorkspaceIds = new Set(
+      this.journal
+        .commands()
+        .filter(
+          (command) =>
+            command.action === 'provision' &&
+            (command.status === 'pending' || command.status === 'running') &&
+            command.workspaceId,
+        )
+        .map((command) => command.workspaceId as string),
+    );
     const activeWorkspaceIds = new Set(
       this.journal
         .jobs()
@@ -37,7 +47,8 @@ export class CleanupPlanner {
       if (
         !workspace ||
         workspace.retained ||
-        activeStatuses.has(workspace.status) ||
+        workspace.status === 'running' ||
+        (workspace.status === 'creating' && activeProvisionWorkspaceIds.has(workspace.workspaceId)) ||
         activeWorkspaceIds.has(workspace.workspaceId)
       ) {
         skipped.push(workspaceId);

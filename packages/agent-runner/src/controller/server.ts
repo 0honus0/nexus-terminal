@@ -1411,10 +1411,42 @@ export class RunnerControllerServer {
         : null,
     };
     this.dependencies.journal.saveWorkspace(creating);
-    await this.dependencies.runtimeEngine.create(command);
-    const ready: WorkspaceRecord = { ...creating, status: 'ready' };
-    this.dependencies.pluginRunner.prepareWorkspace(ready);
-    this.dependencies.journal.saveWorkspace(ready);
+    try {
+      await this.dependencies.runtimeEngine.create(command);
+      const ready: WorkspaceRecord = { ...creating, status: 'ready' };
+      this.dependencies.pluginRunner.prepareWorkspace(ready);
+      this.dependencies.journal.saveWorkspace(ready);
+    } catch (error) {
+      let stateError: unknown = null;
+      try {
+        this.dependencies.journal.saveWorkspace({ ...creating, status: 'failed' });
+      } catch (candidate) {
+        stateError = candidate;
+        runnerLog('error', 'Agent Runner failed to persist failed provision owner state', {
+          workspaceId: command.workspaceId,
+          generation: command.generation,
+          errorCode: (candidate instanceof Error ? candidate.message : String(candidate)).slice(0, 200),
+        });
+      }
+      await this.dependencies.runtimeEngine.remove(command.workspaceId, command.generation).catch((cleanupError) => {
+        runnerLog('warn', 'Agent Runner failed to remove partial provision runtime', {
+          workspaceId: command.workspaceId,
+          generation: command.generation,
+          errorCode: (cleanupError instanceof Error ? cleanupError.message : String(cleanupError)).slice(0, 200),
+        });
+      });
+      try {
+        this.dependencies.pluginRunner.cleanupGeneration(command.workspaceId, command.generation);
+      } catch (cleanupError) {
+        runnerLog('warn', 'Agent Runner failed to remove partial provision Plugin HOME', {
+          workspaceId: command.workspaceId,
+          generation: command.generation,
+          errorCode: (cleanupError instanceof Error ? cleanupError.message : String(cleanupError)).slice(0, 200),
+        });
+      }
+      if (stateError) throw stateError;
+      throw error;
+    }
   }
 
   private async workspaceAction(command: WorkspaceLifecycleCommand): Promise<void> {
