@@ -36,6 +36,7 @@ export class Reconciler {
         this.journal.saveWorkspace({ ...workspace, status: 'failed' });
       }
     }
+    this.pluginRunner.reconcileHomes(this.journal.workspaces());
     for (const command of commands) {
       if (command.status === 'running') {
         interruptedCommands += 1;

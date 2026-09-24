@@ -1399,6 +1399,7 @@ export class RunnerControllerServer {
       this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
       await this.dependencies.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
+      this.dependencies.pluginRunner.cleanupGeneration(workspace.workspaceId, workspace.generation);
       this.save(workspace, 'deleted');
     } finally {
       releaseLifecycleDrain();

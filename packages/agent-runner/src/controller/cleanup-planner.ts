@@ -4,6 +4,7 @@ import type { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 import type { RunnerJournal } from './journal';
 import { runnerLog } from '../logging';
 import { ToolchainMutationCoordinator } from './toolchain-mutation-coordinator';
+import type { PluginRunnerRuntime } from './plugin-runner-runtime';
 
 export class CleanupPlanner {
   constructor(
@@ -11,6 +12,7 @@ export class CleanupPlanner {
     private readonly journal: RunnerJournal,
     private readonly runtimeEngine: WorkspaceRuntimeEngine,
     private readonly toolchainMutations = new ToolchainMutationCoordinator(),
+    private readonly pluginRunner?: PluginRunnerRuntime,
   ) {}
   async runtimeCleanup(
     workspaceIds: readonly string[],
@@ -42,6 +44,7 @@ export class CleanupPlanner {
         continue;
       }
       try {
+        if (this.pluginRunner) await this.pluginRunner.disposeWorkspace(workspace);
         await this.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
         fs.rmSync(path.join(this.root, 'runtime', 'generations', workspace.workspaceId), {
           recursive: true,
@@ -51,6 +54,12 @@ export class CleanupPlanner {
           recursive: true,
           force: true,
         });
+        if (this.pluginRunner) this.pluginRunner.cleanupWorkspace(workspace.workspaceId);
+        else
+          fs.rmSync(path.join(this.root, 'runtime', 'plugin-processes', workspace.workspaceId), {
+            recursive: true,
+            force: true,
+          });
         this.journal.deleteWorkspace(workspace.workspaceId);
         deleted.push(workspace.workspaceId);
       } catch (error) {

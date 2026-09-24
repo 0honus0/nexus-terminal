@@ -44,11 +44,11 @@ const main = async (): Promise<void> => {
   const toolchainMutations = new ToolchainMutationCoordinator();
   const installer = new PackInstaller(catalog, store, path.join(root, 'cache'), toolchainMutations);
   const storage = new SpaceReporter(root, journal, catalog, runtimeEngine);
-  const cleanup = new CleanupPlanner(root, journal, runtimeEngine, toolchainMutations);
   const pluginRunner = new PluginRunnerRuntime(
     path.join(root, 'runtime'),
     process.env.NEXUS_AGENT_PLUGIN_SOURCE_ROOT?.trim() || '',
   );
+  const cleanup = new CleanupPlanner(root, journal, runtimeEngine, toolchainMutations, pluginRunner);
   await new Reconciler(journal, runtimeEngine, pluginRunner).reconcile();
   const acpRuntime = new AcpProcessRuntime(journal, runtimeEngine);
   const terminalRuntime = new WorkspaceTerminalRuntime(journal, runtimeEngine);

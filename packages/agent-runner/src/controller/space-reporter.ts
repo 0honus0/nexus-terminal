@@ -49,7 +49,9 @@ export class SpaceReporter {
     const workspaces = this.journal.workspaces();
     const byWorkspace = workspaces.map((workspace) => ({
       workspaceId: workspace.workspaceId,
-      runtimeBytes: this.runtimeEngine.runtimeBytes(workspace.workspaceId, workspace.generation),
+      runtimeBytes:
+        this.runtimeEngine.runtimeBytes(workspace.workspaceId, workspace.generation) +
+        size(path.join(this.root, 'runtime', 'plugin-processes', workspace.workspaceId)),
       status: workspace.status,
     }));
     const runtimeReclaimableBytes = byWorkspace.reduce((total, item) => {

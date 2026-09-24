@@ -207,6 +207,75 @@ export class PluginRunnerRuntime {
     }
   }
 
+  cleanupGeneration(workspaceId: string, generation: number): void {
+    const workspaceRoot = path.join(this.runtimeRoot, 'plugin-processes', this.safe(workspaceId));
+    fs.rmSync(path.join(workspaceRoot, String(generation)), { recursive: true, force: true });
+    try {
+      if (fs.readdirSync(workspaceRoot).length === 0) fs.rmdirSync(workspaceRoot);
+    } catch {
+      // Already removed or still contains another owned generation.
+    }
+  }
+
+  cleanupWorkspace(workspaceId: string): void {
+    fs.rmSync(path.join(this.runtimeRoot, 'plugin-processes', this.safe(workspaceId)), {
+      recursive: true,
+      force: true,
+    });
+  }
+
+  workspaceHomeBytes(workspaceId: string): number {
+    const root = path.join(this.runtimeRoot, 'plugin-processes', this.safe(workspaceId));
+    let total = 0;
+    const stack = [root];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(current, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        const target = path.join(current, entry.name);
+        if (entry.isDirectory()) stack.push(target);
+        else if (entry.isFile()) {
+          try {
+            total += fs.statSync(target).size;
+          } catch {
+            // Concurrent cleanup may remove a file between readdir/stat.
+          }
+        }
+      }
+    }
+    return total;
+  }
+
+  reconcileHomes(workspaces: readonly WorkspaceRecord[]): void {
+    const root = path.join(this.runtimeRoot, 'plugin-processes');
+    fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+    const owners = new Map(
+      workspaces
+        .filter((workspace) => workspace.status !== 'deleted')
+        .map((workspace) => [workspace.workspaceId, workspace.generation] as const),
+    );
+    for (const workspaceEntry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!workspaceEntry.isDirectory()) continue;
+      const workspaceId = workspaceEntry.name;
+      const generation = owners.get(workspaceId);
+      const workspaceRoot = path.join(root, workspaceEntry.name);
+      if (generation === undefined) {
+        fs.rmSync(workspaceRoot, { recursive: true, force: true });
+        continue;
+      }
+      for (const generationEntry of fs.readdirSync(workspaceRoot, { withFileTypes: true })) {
+        if (!generationEntry.isDirectory() || generationEntry.name !== String(generation)) {
+          fs.rmSync(path.join(workspaceRoot, generationEntry.name), { recursive: true, force: true });
+        }
+      }
+    }
+  }
+
   openWorkspaceFileRead(
     workspaceId: string,
     generation: number,
