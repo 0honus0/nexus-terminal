@@ -11,6 +11,7 @@ import type {
 import type { AppIntentReceipt, AppIntentRepositoryPort } from './app-intent.repository.port';
 import { AppRegistryService } from './app-registry.service';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
+import { requestHash, requireIdempotencyKey } from '../runtime/runs/idempotency';
 
 const RECEIPT_TTL_SECONDS = 10 * 60;
 const MAX_INPUT_BYTES = 64 * 1024;
@@ -70,7 +71,11 @@ export class AppIntentService {
     private readonly clock: ClockPort,
   ) {}
 
-  async createConfirmed(scope: Scope, input: CreateAppIntentInput): Promise<AppIntentReceipt> {
+  async createConfirmed(
+    scope: Scope,
+    input: CreateAppIntentInput,
+    idempotencyKey?: string,
+  ): Promise<AppIntentReceipt> {
     const now = this.clock.nowUnixSeconds();
     await this.repository
       .purgeExpired(now, 100)
@@ -119,6 +124,29 @@ export class AppIntentService {
       artifactIds.push(ref.id);
     }
 
+    const receiptId = idempotencyKey ? requireIdempotencyKey(idempotencyKey) : randomUUID();
+    if (idempotencyKey) {
+      const existing = await this.repository.get(scope.userId, receiptId);
+      if (existing) {
+        const requestedHash = requestHash(1, {
+          receiverAppId: input.receiverAppId,
+          intentId: input.intentId,
+          input: input.input,
+          artifactIds,
+        });
+        const existingHash = requestHash(1, {
+          receiverAppId: existing.receiverAppId,
+          intentId: existing.intentId,
+          input: existing.input,
+          artifactIds: existing.artifactIds,
+        });
+        if (existing.senderAppId !== scope.appId || existingHash !== requestedHash) {
+          throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+        }
+        return existing;
+      }
+    }
+
     if (artifactIds.length > 0) {
       await Promise.all([
         this.requireGrant(scope, 'artifacts.read', 'APP_INTENT_SENDER_GRANT_DENIED'),
@@ -127,7 +155,7 @@ export class AppIntentService {
     }
 
     return this.repository.createConfirmed({
-      id: randomUUID(),
+      id: receiptId,
       userId: scope.userId,
       senderAppId: scope.appId,
       receiverAppId: input.receiverAppId,

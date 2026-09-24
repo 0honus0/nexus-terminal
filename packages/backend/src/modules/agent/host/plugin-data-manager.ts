@@ -1,5 +1,6 @@
 import { logger } from '../../../shared/logging/logger';
 import type { JsonValue, Scope } from '../agent.types';
+import { requireIdempotencyKey } from '../runtime/runs/idempotency';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
 import type { AppStoragePort, AppStorageRecord } from './app-storage.port';
 import type { AppStorageSnapshot, AppStorageSnapshotPort } from './app-storage-snapshot.port';
@@ -8,6 +9,7 @@ import type { PluginInstallRepositoryPort } from './plugin-install.repository.po
 import type { PluginFrontendRpcRequest, PluginInstallationView } from './plugin-install.types';
 
 const MAX_FRONTEND_RPC_BYTES = 64_000;
+const FRONTEND_MUTATION_METHODS = new Set(['storage.put', 'storage.delete', 'intents.create', 'intents.revoke']);
 
 const asRecord = (value: JsonValue, code = 'PLUGIN_FRONTEND_RPC_INVALID'): Record<string, JsonValue> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(code);
@@ -99,6 +101,9 @@ export class PluginDataManager {
     const installation = await this.repository.getInstallation(userId, appId);
     if (!installation || installation.status !== 'installed') throw new Error('PLUGIN_NOT_INSTALLED');
     const scope = { userId, appId };
+    const operationId =
+      request.operationId === undefined ? undefined : requireIdempotencyKey(request.operationId);
+    if (FRONTEND_MUTATION_METHODS.has(request.method) && !operationId) throw new Error('IDEMPOTENCY_KEY_INVALID');
     const state = await this.states.get(scope);
     if (
       !state ||
@@ -162,13 +167,17 @@ export class PluginDataManager {
         if (!Object.prototype.hasOwnProperty.call(params, 'input') || params.confirmed !== true) {
           throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
         }
-        return (await this.appIntents.createConfirmed(scope, {
-          receiverAppId: requireRpcString(params.receiverAppId),
-          intentId: requireRpcString(params.intentId),
-          input: params.input as JsonValue,
-          artifactRefs: requireIntentArtifactRefs(params.artifactRefs),
-          confirmed: true,
-        })) as unknown as JsonValue;
+        return (await this.appIntents.createConfirmed(
+          scope,
+          {
+            receiverAppId: requireRpcString(params.receiverAppId),
+            intentId: requireRpcString(params.intentId),
+            input: params.input as JsonValue,
+            artifactRefs: requireIntentArtifactRefs(params.artifactRefs),
+            confirmed: true,
+          },
+          operationId,
+        )) as unknown as JsonValue;
       }
       case 'intents.listReceived': {
         const params = asRecord(request.params);

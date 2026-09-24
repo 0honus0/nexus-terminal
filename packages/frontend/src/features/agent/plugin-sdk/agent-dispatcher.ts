@@ -78,7 +78,7 @@ export class PluginAgentSdkDispatcher {
     this.runFacade.start();
   }
 
-  async dispatch(method: PluginFrontendAgentRpcMethod, rawParams: unknown): Promise<unknown> {
+  async dispatch(method: PluginFrontendAgentRpcMethod, rawParams: unknown, operationId?: string): Promise<unknown> {
     switch (method) {
       case 'agent.definitions.list':
         emptyParams(rawParams);
@@ -94,7 +94,7 @@ export class PluginAgentSdkDispatcher {
       case 'agent.threads.create': {
         const params = record(rawParams);
         onlyKeys(params, ['title']);
-        return this.runFacade.createThread(optionalString(params.title, 4_096));
+        return this.runFacade.createThread(optionalString(params.title, 4_096), operationId);
       }
       case 'agent.threads.rename': {
         const params = record(rawParams);
@@ -151,7 +151,7 @@ export class PluginAgentSdkDispatcher {
           ...(params.reasoningEffort === undefined ? {} : { reasoningEffort: reasoningEffort(params.reasoningEffort) }),
           connectionIds: params.connectionIds === undefined ? [] : positiveIntegerArray(params.connectionIds),
           ...(params.initialGoal === undefined ? {} : { initialGoal: string(params.initialGoal, MAX_TEXT_BYTES) }),
-        });
+        }, operationId);
       }
       case 'agent.runs.appendInput': {
         const params = record(rawParams);
@@ -161,13 +161,14 @@ export class PluginAgentSdkDispatcher {
           run,
           string(params.text, MAX_TEXT_BYTES),
           params.artifactRefs === undefined ? [] : stringArray(params.artifactRefs),
+          operationId,
         );
         return null;
       }
       case 'agent.runs.cancel': {
         const params = record(rawParams);
         onlyKeys(params, ['runId']);
-        return this.runFacade.cancelRun(await this.runFacade.getRun(string(params.runId)));
+        return this.runFacade.cancelRun(await this.runFacade.getRun(string(params.runId)), operationId);
       }
       case 'agent.runs.subscribe': {
         const params = record(rawParams);
@@ -221,7 +222,7 @@ export class PluginAgentSdkDispatcher {
         const batch = await this.runFacade.listApprovals(runId);
         const approval = batch.items.find((candidate) => candidate.id === approvalId);
         if (!approval) throw new Error('PLUGIN_AGENT_APPROVAL_NOT_FOUND');
-        return this.runFacade.resolveApproval(approval, decision);
+        return this.runFacade.resolveApproval(approval, decision, undefined, operationId);
       }
     }
   }

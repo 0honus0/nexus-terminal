@@ -146,7 +146,11 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     agentRoute(async (request, response) => {
       const input = createRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const thread = await dependencies.conversations.createThread(scope, input.title);
+      const thread = await dependencies.conversations.createThread(
+        scope,
+        input.title,
+        request.header('idempotency-key') || undefined,
+      );
       agentData(request, response, threadDto(thread), 201);
     }),
   );

@@ -361,14 +361,19 @@ export const agentApi = {
       ).data,
     );
   },
-  async createThread(appId: string, title?: string): Promise<AgentThreadViewDto> {
+  async createThread(appId: string, title?: string, idempotencyKey?: string): Promise<AgentThreadViewDto> {
     const input: AgentThreadCreateRequestDto = title ? { title } : {};
     return unwrap(
       (
         await httpClient.post<AgentEnvelopeDto<AgentThreadViewDto>>(
           `/apps/${encodeURIComponent(appId)}/threads`,
           input,
-          { headers: await mutationHeaders() },
+          {
+            headers: {
+              ...(await mutationHeaders()),
+              ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+            },
+          },
         )
       ).data,
     );
@@ -633,6 +638,7 @@ export const agentApi = {
     approval: AgentApprovalViewDto,
     decision: 'approved' | 'denied',
     feedback?: string,
+    idempotencyKey: string = crypto.randomUUID(),
   ): Promise<AgentApprovalViewDto> {
     const fields: AgentApprovalResolveFieldsDto = {
       decision,
@@ -646,28 +652,38 @@ export const agentApi = {
         await httpClient.post<AgentEnvelopeDto<AgentApprovalViewDto>>(
           `/apps/${encodeURIComponent(appId)}/approvals/${encodeURIComponent(approval.id)}/resolve`,
           input,
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey } },
         )
       ).data,
     );
   },
-  async createRun(appId: string, fields: AgentCreateRunFieldsDto): Promise<AgentRunViewDto> {
+  async createRun(
+    appId: string,
+    fields: AgentCreateRunFieldsDto,
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<AgentRunViewDto> {
     const request: AgentCreateRunRequestDto = agentRuntimeRequest(fields);
     return unwrap(
       (
         await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(`/apps/${encodeURIComponent(appId)}/runs`, request, {
-          headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() },
+          headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey },
         })
       ).data,
     );
   },
-  async appendRunInput(appId: string, run: AgentRunViewDto, text: string, artifactRefs: string[] = []): Promise<void> {
+  async appendRunInput(
+    appId: string,
+    run: AgentRunViewDto,
+    text: string,
+    artifactRefs: string[] = [],
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<void> {
     const fields: AgentRunAppendInputFieldsDto = { text, artifactRefs, expectedVersion: run.version };
     const request: AgentRunAppendInputRequestDto = agentRuntimeRequest(fields);
     await httpClient.post<AgentEnvelopeDto<AgentRunAppendInputResponseDto>>(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/inputs`,
       request,
-      { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+      { headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey } },
     );
   },
   async interruptRun(appId: string, run: AgentRunViewDto, text: string): Promise<void> {
@@ -769,14 +785,18 @@ export const agentApi = {
       ).data,
     );
   },
-  async cancelRun(appId: string, run: AgentRunViewDto): Promise<AgentRunViewDto> {
+  async cancelRun(
+    appId: string,
+    run: AgentRunViewDto,
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<AgentRunViewDto> {
     const input: AgentExpectedVersionRequestDto = agentRuntimeRequest({ expectedVersion: run.version });
     return unwrap(
       (
         await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/cancel`,
           input,
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey } },
         )
       ).data,
     );

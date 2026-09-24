@@ -182,13 +182,16 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
     titleSource: ThreadTitleSource,
     now: number,
   ): Promise<ThreadView> {
-    await this.db.execute(
-      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, next_sequence, version, created_at, updated_at)
+    const inserted = await this.db.execute(
+      `INSERT OR IGNORE INTO ai_threads (id, user_id, app_id, title, title_source, next_sequence, version, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
       [id, scope.userId, scope.appId, title, titleSource, now, now],
     );
     const created = await this.getThread(scope, id);
     if (!created) throw new Error('NOT_FOUND');
+    if (inserted.changes === 0 && (created.title !== title || created.titleSource !== titleSource)) {
+      throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+    }
     return created;
   }
 

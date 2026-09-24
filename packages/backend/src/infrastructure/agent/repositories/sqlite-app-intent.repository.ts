@@ -42,7 +42,7 @@ export class SqliteAppIntentRepository implements AppIntentRepositoryPort {
   constructor(private readonly db: RelationalDatabase) {}
 
   async createConfirmed(receipt: AppIntentReceiptCreate): Promise<AppIntentReceipt> {
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       for (const artifactId of receipt.artifactIds) {
         const artifact = await tx.queryOne<{ user_id: number; app_id: string; status: string }>(
           'SELECT user_id,app_id,status FROM ai_artifacts WHERE id=?',
@@ -58,8 +58,8 @@ export class SqliteAppIntentRepository implements AppIntentRepositoryPort {
         }
       }
 
-      await tx.execute(
-        `INSERT INTO agent_app_intent_receipts(
+      const inserted = await tx.execute(
+        `INSERT OR IGNORE INTO agent_app_intent_receipts(
            id,user_id,sender_app_id,receiver_app_id,intent_id,schema_version,input_json,artifact_ids_json,
            created_at,expires_at,revoked_at
          ) VALUES(?,?,?,?,?,?,?,?,?,?,NULL)`,
@@ -77,6 +77,26 @@ export class SqliteAppIntentRepository implements AppIntentRepositoryPort {
         ],
       );
 
+      if (inserted.changes === 0) {
+        const row = await tx.queryOne<ReceiptRow>(
+          `SELECT ${RECEIPT_COLUMNS} FROM agent_app_intent_receipts WHERE id=? AND user_id=?`,
+          [receipt.id, receipt.userId],
+        );
+        if (!row) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+        const existing = mapReceipt(row);
+        if (
+          existing.senderAppId !== receipt.senderAppId ||
+          existing.receiverAppId !== receipt.receiverAppId ||
+          existing.intentId !== receipt.intentId ||
+          existing.schemaVersion !== receipt.schemaVersion ||
+          JSON.stringify(existing.input) !== JSON.stringify(receipt.input) ||
+          JSON.stringify(existing.artifactIds) !== JSON.stringify(receipt.artifactIds)
+        ) {
+          throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+        }
+        return existing;
+      }
+
       for (const artifactId of receipt.artifactIds) {
         await tx.execute(
           `INSERT INTO agent_app_intent_artifact_grants(
@@ -93,8 +113,8 @@ export class SqliteAppIntentRepository implements AppIntentRepositoryPort {
           ],
         );
       }
+      return receipt;
     });
-    return receipt;
   }
 
   async get(userId: number, receiptId: string): Promise<AppIntentReceipt | null> {

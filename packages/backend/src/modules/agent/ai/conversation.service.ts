@@ -16,6 +16,7 @@ import type {
 } from './conversation.repository.port';
 import type { ContextHistoryBoundary } from './context.types';
 import { THREAD_PLACEHOLDER_TITLE } from './thread-title';
+import { requireIdempotencyKey } from '../runtime/runs/idempotency';
 
 const normalizeTitle = (title: unknown): { title: string; source: ThreadTitleSource } => {
   if (title === undefined || title === null || title === '') {
@@ -45,7 +46,7 @@ export class ConversationService {
     private readonly lifecycle: AppLifecycleService,
   ) {}
 
-  async createThread(scope: Scope, title?: unknown): Promise<ThreadView> {
+  async createThread(scope: Scope, title?: unknown, idempotencyKey?: string): Promise<ThreadView> {
     const settings = await this.settings.get(scope.userId);
     if (!settings.effectiveSettings.feature.enabled) throw new Error('AGENT_DISABLED');
     const app = await this.lifecycle.get(scope);
@@ -53,7 +54,17 @@ export class ConversationService {
       throw new Error('AGENT_APP_DISABLED');
     const now = this.clock.nowUnixSeconds();
     const normalized = normalizeTitle(title);
-    const thread = await this.repository.createThread(scope, randomUUID(), normalized.title, normalized.source, now);
+    const threadId = idempotencyKey ? requireIdempotencyKey(idempotencyKey) : randomUUID();
+    if (idempotencyKey) {
+      const existing = await this.repository.getThread(scope, threadId);
+      if (existing) {
+        if (existing.title !== normalized.title || existing.titleSource !== normalized.source) {
+          throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+        }
+        return existing;
+      }
+    }
+    const thread = await this.repository.createThread(scope, threadId, normalized.title, normalized.source, now);
     logger.info(
       {
         userId: scope.userId,

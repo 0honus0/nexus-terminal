@@ -106,7 +106,7 @@ export const createAgentRunFacade = (appId: string) => {
     selectRun,
     dispose,
     listThreads: (before?: string, limit = 50) => agentApi.threads(appId, before, limit),
-    createThread: (title?: string) => agentApi.createThread(appId, title),
+    createThread: (title?: string, idempotencyKey?: string) => agentApi.createThread(appId, title, idempotencyKey),
     renameThread: (threadId: string, title: string, expectedVersion: number) =>
       agentApi.renameThread(appId, threadId, title, expectedVersion),
     deleteThread: (thread: Parameters<typeof agentApi.deleteThread>[1]) => agentApi.deleteThread(appId, thread),
@@ -130,12 +130,16 @@ export const createAgentRunFacade = (appId: string) => {
       agentApi.subagentMessages(appId, runId, delegationId, before),
     cancelSubagent: (runId: string, delegation: Parameters<typeof agentApi.cancelSubagent>[2]) =>
       agentApi.cancelSubagent(appId, runId, delegation),
-    resolveApproval: (approval: AgentApprovalViewDto, decision: 'approved' | 'denied', feedback?: string) =>
-      agentApi.resolveApproval(appId, approval, decision, feedback),
-    createRun: async (input: Parameters<typeof agentApi.createRun>[1]) =>
-      runStore.accept(await agentApi.createRun(appId, input)),
-    appendInput: (run: AgentRunViewDto, text: string, artifactRefs: string[] = []) =>
-      agentApi.appendRunInput(appId, currentRun(run), text, artifactRefs),
+    resolveApproval: (
+      approval: AgentApprovalViewDto,
+      decision: 'approved' | 'denied',
+      feedback?: string,
+      idempotencyKey?: string,
+    ) => agentApi.resolveApproval(appId, approval, decision, feedback, idempotencyKey),
+    createRun: async (input: Parameters<typeof agentApi.createRun>[1], idempotencyKey?: string) =>
+      runStore.accept(await agentApi.createRun(appId, input, idempotencyKey)),
+    appendInput: (run: AgentRunViewDto, text: string, artifactRefs: string[] = [], idempotencyKey?: string) =>
+      agentApi.appendRunInput(appId, currentRun(run), text, artifactRefs, idempotencyKey),
     interrupt: (run: AgentRunViewDto, text: string) => agentApi.interruptRun(appId, currentRun(run), text),
     setGoal: async (run: AgentRunViewDto, text: string) =>
       runStore.accept(await agentApi.setRunGoal(appId, currentRun(run), text)),
@@ -151,7 +155,8 @@ export const createAgentRunFacade = (appId: string) => {
     saveCheckpoint: (run: AgentRunViewDto) => agentApi.saveCheckpoint(appId, currentRun(run)),
     resumeRun: async (run: AgentRunViewDto, checkpointId: string) =>
       runStore.accept(await agentApi.resumeRun(appId, currentRun(run), checkpointId)),
-    cancelRun: async (run: AgentRunViewDto) => runStore.accept(await agentApi.cancelRun(appId, currentRun(run))),
+    cancelRun: async (run: AgentRunViewDto, idempotencyKey?: string) =>
+      runStore.accept(await agentApi.cancelRun(appId, currentRun(run), idempotencyKey)),
     deleteRun: (run: AgentRunViewDto) => agentApi.deleteRun(appId, currentRun(run)),
   };
 };

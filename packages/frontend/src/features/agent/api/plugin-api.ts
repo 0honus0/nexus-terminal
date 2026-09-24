@@ -239,9 +239,10 @@ export const createPluginApi = () => ({
     appId: string,
     method: AgentPluginFrontendRpcMethodDto,
     params: AgentPluginFrontendRpcRequestDto['params'],
+    operationId?: string,
     signal?: AbortSignal,
   ): Promise<AgentPluginFrontendRpcResponseDto> {
-    const input: AgentPluginFrontendRpcRequestDto = { method, params };
+    const input: AgentPluginFrontendRpcRequestDto = { method, params, ...(operationId ? { operationId } : {}) };
     return unwrap(
       (
         await httpClient.post<AgentEnvelopeDto<AgentPluginFrontendRpcResponseDto>>(

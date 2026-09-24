@@ -5,6 +5,7 @@ import {
   PLUGIN_FRONTEND_AGENT_RPC_METHODS,
   PLUGIN_FRONTEND_BACKEND_RPC_METHODS,
   PLUGIN_FRONTEND_BINARY_RPC_METHODS,
+  PLUGIN_FRONTEND_MUTATION_RPC_METHODS,
   PLUGIN_FRONTEND_PROTOCOL_VERSION,
   PLUGIN_FRONTEND_RPC_METHODS,
   PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES,
@@ -22,6 +23,8 @@ const allowedMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_RPC_METH
 const backendMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_BACKEND_RPC_METHODS);
 const agentMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_AGENT_RPC_METHODS);
 const binaryMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_BINARY_RPC_METHODS);
+const mutationMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_MUTATION_RPC_METHODS);
+const operationIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface PluginReadyMessage {
   type: 'nexus.plugin.ready';
@@ -70,14 +73,14 @@ const nonce = (): string => {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 };
 
-const errorResponse = (request: PluginRequestMessage, code: string) => ({
+const errorResponse = (request: PluginRequestMessage, code: string, operationId?: string) => ({
   type: 'nexus.plugin.response' as const,
   protocol: PROTOCOL_VERSION,
   nonce: request.nonce,
   seq: request.seq,
   id: request.id,
   ok: false,
-  error: { code },
+  error: { code, ...(operationId ? { operationId } : {}) },
 });
 
 export class PluginFrontendHostBridge {
@@ -213,6 +216,7 @@ export class PluginFrontendHostBridge {
       message.id.length <= 128 &&
       !this.pending.has(message.id) &&
       allowedMethods.has(message.method) &&
+      (!mutationMethods.has(message.method) || operationIdPattern.test(message.id)) &&
       serializedBytes(message.params) <= this.descriptor.maxMessageBytes
     );
   }
@@ -224,35 +228,76 @@ export class PluginFrontendHostBridge {
       return;
     }
     const controller = new AbortController();
+    const isMutation = mutationMethods.has(request.method);
     this.pending.set(request.id, controller);
-    const timer = window.setTimeout(() => controller.abort(), this.descriptor.requestTimeoutMs);
+    let timer: number | null = null;
     try {
-      let result: unknown;
-      let transfer: Transferable[] = [];
-      if (backendMethods.has(request.method)) {
-        result = await agentApi.pluginFrontendRpc(
-          this.appId,
-          request.method as PluginFrontendBackendRpcMethod,
-          request.params,
-          controller.signal,
-        );
-      } else if (agentMethods.has(request.method)) {
-        result = await this.agent.dispatch(request.method as PluginFrontendAgentRpcMethod, request.params);
-      } else if (binaryMethods.has(request.method)) {
-        const binary = await this.dispatchBinary(
-          request.method as PluginFrontendBinaryRpcMethod,
-          request.params,
-          controller.signal,
-        );
-        result = binary.result;
-        transfer = binary.transfer;
-      } else {
+      const execution = (async (): Promise<{ result: unknown; transfer: Transferable[] }> => {
+        if (backendMethods.has(request.method)) {
+          return {
+            result: await agentApi.pluginFrontendRpc(
+              this.appId,
+              request.method as PluginFrontendBackendRpcMethod,
+              request.params,
+              isMutation ? request.id : undefined,
+              controller.signal,
+            ),
+            transfer: [],
+          };
+        }
+        if (agentMethods.has(request.method)) {
+          return {
+            result: await this.agent.dispatch(
+              request.method as PluginFrontendAgentRpcMethod,
+              request.params,
+              isMutation ? request.id : undefined,
+            ),
+            transfer: [],
+          };
+        }
+        if (binaryMethods.has(request.method)) {
+          const binary = await this.dispatchBinary(
+            request.method as PluginFrontendBinaryRpcMethod,
+            request.params,
+            controller.signal,
+          );
+          return { result: binary.result, transfer: binary.transfer };
+        }
         throw new Error('PLUGIN_FRONTEND_RPC_METHOD_DENIED');
-      }
-      if (controller.signal.aborted) {
-        this.post(errorResponse(request, 'HOST_RPC_TIMEOUT'));
+      })().then(
+        (value) => ({ kind: 'result' as const, value }),
+        (cause: unknown) => ({ kind: 'error' as const, cause }),
+      );
+      const timeout = new Promise<{ kind: 'timeout' }>((resolve) => {
+        timer = window.setTimeout(() => {
+          resolve({ kind: 'timeout' });
+          controller.abort();
+        }, this.descriptor.requestTimeoutMs);
+      });
+      const outcome = await Promise.race([execution, timeout]);
+      if (outcome.kind === 'timeout') {
+        this.post(
+          errorResponse(
+            request,
+            isMutation ? 'HOST_RPC_OUTCOME_UNKNOWN' : 'HOST_RPC_TIMEOUT',
+            isMutation ? request.id : undefined,
+          ),
+        );
         return;
       }
+      if (outcome.kind === 'error') {
+        const cause = outcome.cause;
+        const apiError = toAgentApiError(cause);
+        const code =
+          cause instanceof Error && /^PLUGIN_[A-Z0-9_]+$/.test(cause.message)
+            ? cause.message
+            : /^APP_INTENT_[A-Z0-9_]+$/.test(apiError.code)
+              ? apiError.code
+              : 'HOST_RPC_FAILED';
+        this.post(errorResponse(request, code));
+        return;
+      }
+      const { result, transfer } = outcome.value;
       const response = {
         type: 'nexus.plugin.response' as const,
         protocol: PROTOCOL_VERSION,
@@ -267,18 +312,8 @@ export class PluginFrontendHostBridge {
       } else {
         this.post(response, transfer);
       }
-    } catch (cause) {
-      const apiError = toAgentApiError(cause);
-      const code = controller.signal.aborted
-        ? 'HOST_RPC_TIMEOUT'
-        : cause instanceof Error && /^PLUGIN_[A-Z0-9_]+$/.test(cause.message)
-          ? cause.message
-          : /^APP_INTENT_[A-Z0-9_]+$/.test(apiError.code)
-            ? apiError.code
-            : 'HOST_RPC_FAILED';
-      this.post(errorResponse(request, code));
     } finally {
-      window.clearTimeout(timer);
+      if (timer !== null) window.clearTimeout(timer);
       this.pending.delete(request.id);
     }
   }

@@ -203,6 +203,7 @@ export type AgentPluginFrontendRpcMethodDto =
 export interface AgentPluginFrontendRpcRequestDto {
   method: AgentPluginFrontendRpcMethodDto;
   params: AgentJsonValueDto;
+  operationId?: string;
 }
 
 export type AgentPluginFrontendRpcResponseDto = AgentJsonValueDto;

@@ -64,6 +64,7 @@ export interface PluginFrontendRpcRequest {
     | 'intents.revoke'
     | 'intents.artifacts.get';
   params: JsonValue;
+  operationId?: string;
 }
 
 export interface PluginInstallHooks {

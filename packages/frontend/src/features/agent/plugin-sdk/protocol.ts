@@ -34,6 +34,13 @@ export const PLUGIN_FRONTEND_BACKEND_RPC_METHODS = [
 
 export const PLUGIN_FRONTEND_BINARY_RPC_METHODS = ['intents.artifacts.readRange'] as const;
 
+export const PLUGIN_FRONTEND_BACKEND_MUTATION_RPC_METHODS = [
+  'storage.put',
+  'storage.delete',
+  'intents.create',
+  'intents.revoke',
+] as const;
+
 export const PLUGIN_FRONTEND_AGENT_RPC_METHODS = [
   'agent.definitions.list',
   'agent.providers.list',
@@ -53,6 +60,21 @@ export const PLUGIN_FRONTEND_AGENT_RPC_METHODS = [
   'agent.subagents.cancel',
   'agent.approvals.list',
   'agent.approvals.resolve',
+] as const;
+
+export const PLUGIN_FRONTEND_AGENT_MUTATION_RPC_METHODS = [
+  'agent.threads.create',
+  'agent.threads.rename',
+  'agent.runs.create',
+  'agent.runs.appendInput',
+  'agent.runs.cancel',
+  'agent.subagents.cancel',
+  'agent.approvals.resolve',
+] as const;
+
+export const PLUGIN_FRONTEND_MUTATION_RPC_METHODS = [
+  ...PLUGIN_FRONTEND_BACKEND_MUTATION_RPC_METHODS,
+  ...PLUGIN_FRONTEND_AGENT_MUTATION_RPC_METHODS,
 ] as const;
 
 export const PLUGIN_FRONTEND_RPC_METHODS = [
@@ -99,19 +121,27 @@ export interface PluginFrontendSdkV1 {
   };
   storage: {
     get(key: string): Promise<PluginFrontendStorageRecord | null>;
-    put(key: string, value: AgentJsonValueDto, expectedVersion: number | null): Promise<PluginFrontendStorageRecord>;
-    delete(key: string, expectedVersion: number): Promise<boolean>;
+    put(
+      key: string,
+      value: AgentJsonValueDto,
+      expectedVersion: number | null,
+      operationId?: string,
+    ): Promise<PluginFrontendStorageRecord>;
+    delete(key: string, expectedVersion: number, operationId?: string): Promise<boolean>;
   };
   intents: {
-    create(input: {
-      receiverAppId: string;
-      intentId: string;
-      input: AgentJsonValueDto;
-      artifactRefs?: Array<{ appId: string; id: string }>;
-      confirmed: true;
-    }): Promise<AgentAppIntentReceiptDto>;
+    create(
+      input: {
+        receiverAppId: string;
+        intentId: string;
+        input: AgentJsonValueDto;
+        artifactRefs?: Array<{ appId: string; id: string }>;
+        confirmed: true;
+      },
+      operationId?: string,
+    ): Promise<AgentAppIntentReceiptDto>;
     listReceived(limit?: number): Promise<AgentAppIntentReceiptDto[]>;
-    revoke(receiptId: string): Promise<void>;
+    revoke(receiptId: string, operationId?: string): Promise<void>;
     artifacts: {
       get(receiptId: string, artifactId: string): Promise<AgentAppIntentArtifactDto>;
       readRange(receiptId: string, artifactId: string, start: number, endInclusive: number): Promise<ArrayBuffer>;
@@ -126,36 +156,44 @@ export interface PluginFrontendSdkV1 {
     };
     threads: {
       list(before?: string): Promise<AgentThreadPageDto>;
-      create(title?: string): Promise<AgentThreadViewDto>;
-      rename(threadId: string, title: string, expectedVersion: number): Promise<AgentThreadViewDto>;
+      create(title?: string, operationId?: string): Promise<AgentThreadViewDto>;
+      rename(threadId: string, title: string, expectedVersion: number, operationId?: string): Promise<AgentThreadViewDto>;
       entries(threadId: string, before?: string): Promise<AgentLedgerPageDto>;
     };
     runs: {
       list(threadId?: string): Promise<AgentRunPageDto>;
       get(runId: string): Promise<AgentRunSnapshotDto>;
-      create(input: {
-        threadId: string;
-        text: string;
-        artifactRefs?: string[];
-        agentDefinitionId: string;
-        model: { providerId: string; modelId: string; configurationVersion: number };
-        reasoningEffort?: AgentReasoningEffortDto;
-        connectionIds?: number[];
-        initialGoal?: string;
-      }): Promise<AgentRunViewDto>;
-      appendInput(runId: string, text: string, artifactRefs?: string[]): Promise<void>;
-      cancel(runId: string): Promise<AgentRunViewDto>;
+      create(
+        input: {
+          threadId: string;
+          text: string;
+          artifactRefs?: string[];
+          agentDefinitionId: string;
+          model: { providerId: string; modelId: string; configurationVersion: number };
+          reasoningEffort?: AgentReasoningEffortDto;
+          connectionIds?: number[];
+          initialGoal?: string;
+        },
+        operationId?: string,
+      ): Promise<AgentRunViewDto>;
+      appendInput(runId: string, text: string, artifactRefs?: string[], operationId?: string): Promise<void>;
+      cancel(runId: string, operationId?: string): Promise<AgentRunViewDto>;
       subscribe(runId: string, cursor?: number): Promise<PluginFrontendRunSubscription>;
       unsubscribe(subscriptionId: string): Promise<void>;
     };
     subagents: {
       list(runId: string, before?: string): Promise<AgentSubagentPageDto>;
       messages(runId: string, delegationId: string, before?: string): Promise<AgentSubagentMessagePageDto>;
-      cancel(runId: string, delegationId: string): Promise<AgentSubagentViewDto>;
+      cancel(runId: string, delegationId: string, operationId?: string): Promise<AgentSubagentViewDto>;
     };
     approvals: {
       list(runId: string): Promise<AgentApprovalBatchViewModel>;
-      resolve(approvalId: string, runId: string, decision: 'approved' | 'denied'): Promise<AgentApprovalViewDto>;
+      resolve(
+        approvalId: string,
+        runId: string,
+        decision: 'approved' | 'denied',
+        operationId?: string,
+      ): Promise<AgentApprovalViewDto>;
     };
   };
 }

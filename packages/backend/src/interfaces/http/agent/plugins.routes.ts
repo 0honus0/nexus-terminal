@@ -252,7 +252,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     '/:appId/frontend/rpc',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['method', 'params']))
+      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['method', 'params', 'operationId']))
         throw new Error('VALIDATION_FAILED');
       if (
         ![
@@ -273,6 +273,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       const input: AgentPluginFrontendRpcRequestDto = {
         method: request.body.method as AgentPluginFrontendRpcRequestDto['method'],
         params: request.body.params,
+        ...(typeof request.body.operationId === 'string' ? { operationId: request.body.operationId } : {}),
       };
       const payload: AgentPluginFrontendRpcResponseDto = await plugins.frontendRpc(
         agentUserId(request),
