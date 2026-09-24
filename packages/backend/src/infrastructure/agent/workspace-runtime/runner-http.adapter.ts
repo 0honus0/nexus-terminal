@@ -85,6 +85,7 @@ import {
   decodeCatalog,
   decodeStorage,
   decodeCommandWireResponse,
+  decodeRunnerWorkspaceProjection,
   decodeWorkspaceJobView,
   decodeWrittenBytes,
   decodeProjectInstructionProjection,
@@ -200,6 +201,19 @@ export class RunnerHttpAdapter
     return commandResult(
       decodeCommandWireResponse(await this.get(`/v1/commands/${encodeURIComponent(commandId)}`, signal)),
     );
+  }
+
+  async workspaceStatus(workspaceId: string, generation: number, signal?: AbortSignal) {
+    if (!/^[A-Za-z0-9_.-]{1,128}$/.test(workspaceId) || !Number.isSafeInteger(generation) || generation < 1) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const projection = decodeRunnerWorkspaceProjection(
+      await this.get(`/v1/workspaces/${encodeURIComponent(workspaceId)}/status?generation=${generation}`, signal),
+    );
+    if (projection.workspaceId !== workspaceId || projection.generation !== generation) {
+      throw new Error('WORKSPACE_RUNTIME_PROTOCOL_INVALID');
+    }
+    return projection;
   }
 
   async projectInstructions(

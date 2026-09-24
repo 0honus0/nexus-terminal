@@ -37,9 +37,21 @@ export class Reconciler {
       }
     }
     this.pluginRunner.reconcileHomes(this.journal.workspaces());
+    const lifecyclePostconditions = new Map<string, string>([
+      ['provision', 'ready'],
+      ['start', 'running'],
+      ['restart', 'running'],
+      ['stop', 'stopped'],
+      ['delete', 'deleted'],
+    ]);
     for (const command of commands) {
-      if (command.status === 'running') {
-        interruptedCommands += 1;
+      if (command.status !== 'running') continue;
+      interruptedCommands += 1;
+      const expected = lifecyclePostconditions.get(command.action);
+      const workspace = command.workspaceId ? this.journal.workspace(command.workspaceId) : null;
+      if (expected && workspace?.status === expected) {
+        this.journal.succeed(command.commandId, { reconciled: true, workspaceStatus: expected });
+      } else {
         this.journal.unknown(command.commandId, 'controller_restarted_during_command');
       }
     }

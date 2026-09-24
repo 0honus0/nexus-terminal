@@ -4,6 +4,7 @@ import type { WorkspaceJobView } from '../../../modules/agent/workspace-runtime/
 import type {
   RunnerCommandResult,
   WorkspaceApplyPatchResult,
+  RunnerWorkspaceProjection,
   WorkspaceFileDeleteResult,
   WorkspaceFileListResult,
   WorkspaceFileMoveResult,
@@ -179,6 +180,18 @@ export const decodeCommandWireResponse = (value: unknown): RunnerCommandWireResp
     status: record.status as RunnerCommandResult['status'],
     ...(record.result === undefined ? {} : { result: record.result }),
     ...(record.error === undefined ? {} : { error: record.error }),
+  };
+};
+
+export const decodeRunnerWorkspaceProjection = (value: unknown): RunnerWorkspaceProjection => {
+  const record = recordValue(value);
+  if (!['creating', 'ready', 'running', 'stopped', 'deleted', 'failed'].includes(String(record.status))) {
+    throw protocolError();
+  }
+  return {
+    workspaceId: stringValue(record.workspaceId) as string,
+    generation: integerValue(record.generation, 1),
+    status: record.status as RunnerWorkspaceProjection['status'],
   };
 };
 

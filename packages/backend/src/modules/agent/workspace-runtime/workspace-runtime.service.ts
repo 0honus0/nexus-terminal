@@ -906,7 +906,18 @@ export class WorkspaceRuntimeService {
     if (lifecycleClaim && workspace.version !== lifecycleClaim.version) return;
 
     let next = workspace.status;
-    if (command.status === 'succeeded') {
+    if (
+      command.status === 'unknown' &&
+      !this.toolchainSwitchPreviousStatus(command) &&
+      ['provision', 'start', 'restart', 'stop', 'delete'].includes(command.action)
+    ) {
+      try {
+        const remote = await this.controller.workspaceStatus(workspace.id, workspace.generation);
+        next = remote.status;
+      } catch {
+        return;
+      }
+    } else if (command.status === 'succeeded') {
       next =
         command.action === 'provision'
           ? 'ready'

@@ -445,6 +445,21 @@ export class RunnerControllerServer {
         json(response, 200, await this.dependencies.storage.report());
         return;
       }
+      const workspaceStatusMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/status$/);
+      if (request.method === 'GET' && workspaceStatusMatch) {
+        const workspaceId = decodeURIComponent(workspaceStatusMatch[1]!);
+        const generation = Number(url.searchParams.get('generation'));
+        if (!Number.isSafeInteger(generation) || generation < 1) throw new Error('VALIDATION_FAILED');
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
+        if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        json(response, 200, {
+          workspaceId: workspace.workspaceId,
+          generation: workspace.generation,
+          status: workspace.status,
+        });
+        return;
+      }
       const projectInstructionsMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/project-instructions$/);
       if (request.method === 'POST' && projectInstructionsMatch) {
         const workspaceId = decodeURIComponent(projectInstructionsMatch[1]!);

@@ -20,6 +20,12 @@ export interface RunnerCommandResult {
   result: JsonValue | null;
 }
 
+export interface RunnerWorkspaceProjection {
+  workspaceId: string;
+  generation: number;
+  status: 'creating' | 'ready' | 'running' | 'stopped' | 'deleted' | 'failed';
+}
+
 export interface AgentWorkspaceReadHandle {
   sizeBytes: number;
   source: AsyncIterable<Uint8Array>;
@@ -265,6 +271,7 @@ export interface WorkspaceRuntimeControllerPort {
   storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView>;
   submit(command: RunnerCommandRequest, signal?: AbortSignal): Promise<RunnerCommandResult>;
   query(commandId: string, signal?: AbortSignal): Promise<RunnerCommandResult>;
+  workspaceStatus(workspaceId: string, generation: number, signal?: AbortSignal): Promise<RunnerWorkspaceProjection>;
   projectInstructions(
     workspaceId: string,
     generation: number,
