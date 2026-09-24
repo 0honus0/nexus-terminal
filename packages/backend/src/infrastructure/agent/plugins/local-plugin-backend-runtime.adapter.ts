@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Writable } from 'node:stream';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type { AppStoragePort } from '../../../modules/agent/host/app-storage.port';
 import type { AppStorageSnapshot } from '../../../modules/agent/host/app-storage-snapshot.port';
@@ -18,6 +19,9 @@ import {
 } from '../../../modules/agent/host/plugin-sdk.types';
 
 const MAX_PROTOCOL_BYTES = 20 * 1024 * 1024;
+const MAX_PROTOCOL_QUEUED_BYTES = 32 * 1024 * 1024;
+const MAX_PROTOCOL_QUEUED_FRAMES = 128;
+const MAX_PLUGIN_HOST_OPERATIONS = 32;
 const CONTROL_TIMEOUT_MS = 30_000;
 const PLUGIN_BACKEND_PROTOCOL_VERSION: typeof PluginBackendProtocolVersion = 1;
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -59,6 +63,91 @@ export class BoundedProtocolLineBuffer {
       return;
     }
     this.buffered = Buffer.concat([this.buffered, bytes], this.buffered.byteLength + bytes.byteLength);
+  }
+}
+
+export class BoundedProtocolWriter {
+  private tail: Promise<void> = Promise.resolve();
+  private queuedBytes = 0;
+  private queuedFrames = 0;
+
+  constructor(
+    private readonly writable: Writable,
+    private readonly maxQueuedBytes = MAX_PROTOCOL_QUEUED_BYTES,
+    private readonly maxQueuedFrames = MAX_PROTOCOL_QUEUED_FRAMES,
+  ) {}
+
+  write(encoded: string): Promise<void> {
+    const frame = Buffer.from(`${encoded}\n`, 'utf8');
+    if (frame.byteLength > MAX_PROTOCOL_BYTES + 1) {
+      return Promise.reject(new Error('PLUGIN_BACKEND_REQUEST_TOO_LARGE'));
+    }
+    if (this.queuedBytes + frame.byteLength > this.maxQueuedBytes || this.queuedFrames + 1 > this.maxQueuedFrames) {
+      return Promise.reject(new Error('PLUGIN_BACKEND_BACKPRESSURE_LIMIT'));
+    }
+    this.queuedBytes += frame.byteLength;
+    this.queuedFrames += 1;
+    const operation = this.tail
+      .catch(() => undefined)
+      .then(() => this.writeFrame(frame))
+      .finally(() => {
+        this.queuedBytes -= frame.byteLength;
+        this.queuedFrames -= 1;
+      });
+    this.tail = operation.catch(() => undefined);
+    return operation;
+  }
+
+  queued(): { bytes: number; frames: number } {
+    return { bytes: this.queuedBytes, frames: this.queuedFrames };
+  }
+
+  private writeFrame(frame: Buffer): Promise<void> {
+    if (!this.writable.writable || this.writable.destroyed) {
+      return Promise.reject(new Error('PLUGIN_BACKEND_NOT_RUNNING'));
+    }
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let callbackDone = false;
+      let drainDone = true;
+      const cleanup = () => {
+        this.writable.off('error', onError);
+        this.writable.off('close', onClose);
+        this.writable.off('drain', onDrain);
+      };
+      const finish = (error?: Error) => {
+        if (settled) return;
+        if (!error && (!callbackDone || !drainDone)) return;
+        settled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve();
+      };
+      const onError = (error: Error) => finish(error);
+      const onClose = () => finish(new Error('PLUGIN_BACKEND_NOT_RUNNING'));
+      const onDrain = () => {
+        drainDone = true;
+        finish();
+      };
+      this.writable.once('error', onError);
+      this.writable.once('close', onClose);
+      try {
+        const accepted = this.writable.write(frame, (error?: Error | null) => {
+          if (error) {
+            finish(error);
+            return;
+          }
+          callbackDone = true;
+          finish();
+        });
+        if (!accepted) {
+          drainDone = false;
+          this.writable.once('drain', onDrain);
+        }
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error('PLUGIN_BACKEND_NOT_RUNNING'));
+      }
+    });
   }
 }
 
@@ -258,6 +347,7 @@ class BackendPluginProcess {
   private readonly activeHostOperations = new Set<Promise<void>>();
   private closing = false;
   private readonly stdoutLines = new BoundedProtocolLineBuffer();
+  private readonly protocolWriter: BoundedProtocolWriter;
   private readyResolve!: () => void;
   private readyReject!: (error: Error) => void;
   readonly ready = new Promise<void>((resolve, reject) => {
@@ -273,6 +363,7 @@ class BackendPluginProcess {
     private readonly allowHostMutations: boolean,
     private readonly sdkVersion: string,
   ) {
+    this.protocolWriter = new BoundedProtocolWriter(child.stdin);
     child.stdout.on('data', (chunk: Buffer) => {
       try {
         for (const line of this.stdoutLines.push(chunk)) {
@@ -311,7 +402,7 @@ class BackendPluginProcess {
       }, CONTROL_TIMEOUT_MS);
       timer.unref?.();
       this.pending.set(requestId, { resolve, reject, timer });
-      this.child.stdin.write(`${encoded}\n`);
+      void this.protocolWriter.write(encoded).catch((error) => this.protocolFailure(error));
     });
   }
 
@@ -355,7 +446,7 @@ class BackendPluginProcess {
       return;
     }
     if (message.kind === 'storage.get' || message.kind === 'storage.put' || message.kind === 'storage.delete') {
-      await this.trackHostOperation(this.handleStorage(decodeStorageRequest(message)));
+      await this.trackHostOperation(() => this.handleStorage(decodeStorageRequest(message)));
       return;
     }
     if (
@@ -365,7 +456,7 @@ class BackendPluginProcess {
       message.kind === 'intent.artifact.get' ||
       message.kind === 'intent.artifact.read'
     ) {
-      await this.trackHostOperation(this.handleIntent(decodeIntentRequest(message)));
+      await this.trackHostOperation(() => this.handleIntent(decodeIntentRequest(message)));
       return;
     }
     this.failAll(new Error('PLUGIN_BACKEND_PROTOCOL_INVALID'));
@@ -404,28 +495,36 @@ class BackendPluginProcess {
         }
         value = await this.storage.delete(this.scope, message.key, message.expectedVersion);
       }
-      this.sendStorageResult(message.requestId, true, value);
+      await this.sendStorageResult(message.requestId, true, value);
     } catch (error) {
-      this.sendStorageResult(message.requestId, false, error instanceof Error ? error.message : 'APP_STORAGE_FAILED');
+      await this.sendStorageResult(
+        message.requestId,
+        false,
+        error instanceof Error ? error.message : 'APP_STORAGE_FAILED',
+      );
     }
   }
 
-  private async trackHostOperation(operation: Promise<void>): Promise<void> {
-    this.activeHostOperations.add(operation);
+  private async trackHostOperation(operation: () => Promise<void>): Promise<void> {
+    if (this.activeHostOperations.size >= MAX_PLUGIN_HOST_OPERATIONS) {
+      throw new Error('PLUGIN_BACKEND_HOST_OPERATION_LIMIT');
+    }
+    const active = operation();
+    this.activeHostOperations.add(active);
     try {
-      await operation;
+      await active;
     } finally {
-      this.activeHostOperations.delete(operation);
+      this.activeHostOperations.delete(active);
     }
   }
 
-  private sendStorageResult(requestId: number, ok: boolean, value: unknown): void {
+  private async sendStorageResult(requestId: number, ok: boolean, value: unknown): Promise<void> {
     const message = ok
       ? { kind: 'storage.result', requestId, ok: true, value }
       : { kind: 'storage.result', requestId, ok: false, error: String(value).slice(0, 1024) };
     const encoded = JSON.stringify(message);
     if (Buffer.byteLength(encoded, 'utf8') > MAX_PROTOCOL_BYTES) throw new Error('PLUGIN_BACKEND_RESPONSE_TOO_LARGE');
-    this.child.stdin.write(`${encoded}\n`);
+    await this.protocolWriter.write(encoded);
   }
 
   private async handleIntent(message: IntentRequest): Promise<void> {
@@ -478,19 +577,23 @@ class BackendPluginProcess {
           break;
         }
       }
-      this.sendIntentResult(message.requestId, true, value);
+      await this.sendIntentResult(message.requestId, true, value);
     } catch (error) {
-      this.sendIntentResult(message.requestId, false, error instanceof Error ? error.message : 'APP_INTENT_FAILED');
+      await this.sendIntentResult(
+        message.requestId,
+        false,
+        error instanceof Error ? error.message : 'APP_INTENT_FAILED',
+      );
     }
   }
 
-  private sendIntentResult(requestId: number, ok: boolean, value: unknown): void {
+  private async sendIntentResult(requestId: number, ok: boolean, value: unknown): Promise<void> {
     const message = ok
       ? { kind: 'intent.result', requestId, ok: true, value }
       : { kind: 'intent.result', requestId, ok: false, error: String(value).slice(0, 1024) };
     const encoded = JSON.stringify(message);
     if (Buffer.byteLength(encoded, 'utf8') > MAX_PROTOCOL_BYTES) throw new Error('PLUGIN_BACKEND_RESPONSE_TOO_LARGE');
-    this.child.stdin.write(`${encoded}\n`);
+    await this.protocolWriter.write(encoded);
   }
 
   private protocolFailure(error: unknown): void {
