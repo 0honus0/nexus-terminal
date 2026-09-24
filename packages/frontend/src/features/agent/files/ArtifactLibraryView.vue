@@ -10,12 +10,13 @@
     AgentArtifactStorageSummaryDto,
   } from '../api/agent-api';
   import { agentApi, formatAgentApiError, toAgentApiError } from '../api/agent-api';
+  import { formatAgentDate } from '../locale-format';
 
   type ArtifactFileKind = 'image' | 'document' | 'code' | 'archive' | 'media' | 'other';
   type ArtifactFileKindFilter = 'all' | ArtifactFileKind;
 
   const props = defineProps<{ apps: AgentAppSummaryDto[] }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const appOptions = computed<BaseListboxOption[]>(() => [
     { value: '', label: t('agent.files.allApps'), triggerLabel: t('agent.files.filterLabels.app') },
@@ -363,7 +364,7 @@
 
   const appName = (artifact: AgentArtifactRefDto): string => appNames.value.get(artifact.appId) ?? artifact.appId;
 
-  const formatDate = (value: number): string => new Date(value * 1000).toLocaleDateString();
+  const formatDate = (value: number): string => formatAgentDate(locale.value, new Date(value * 1000));
 
   const statusTone = (status: AgentArtifactRefDto['status']): string => {
     if (status === 'ready') return 'bg-success/10 text-success';

@@ -14,9 +14,10 @@
     type AgentMemoryStatusDto,
     type AgentMemoryViewDto,
   } from '../api/agent-api';
+  import { formatAgentDateTime } from '../locale-format';
 
   const props = defineProps<{ apps: AgentAppSummaryDto[]; busy: boolean }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.memory');
 
   const selectedAppId = ref('');
@@ -78,7 +79,7 @@
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.settings.memory.requestFailed'));
   const formatTime = (value: number | null): string =>
-    value === null ? t('agent.settings.memory.never') : new Date(value * 1000).toLocaleString();
+    value === null ? t('agent.settings.memory.never') : formatAgentDateTime(locale.value, new Date(value * 1000));
   const confidence = (value: number): string => `${Math.round(value * 100)}%`;
   const appName = (appId: string): string => props.apps.find((app) => app.id === appId)?.displayName ?? appId;
 
@@ -435,7 +436,14 @@
             class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] text-warning"
           >
             <span>{{ $t('agent.settings.memory.draftConflict') }}</span>
-            <UiButton appearance="soft" tone="neutral" density="compact" type="button" :disabled="disabled" @click="useLatestDraft(memory)">
+            <UiButton
+              appearance="soft"
+              tone="neutral"
+              density="compact"
+              type="button"
+              :disabled="disabled"
+              @click="useLatestDraft(memory)"
+            >
               {{ $t('agent.settings.memory.useLatest') }}
             </UiButton>
           </div>

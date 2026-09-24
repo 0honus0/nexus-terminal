@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { BaseModal, UiButton, UiCheckbox, UiSelect } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
+  import { formatAgentDateTime } from '../locale-format';
   import type { AgentProviderViewDto, AgentReasoningEffortDto } from '../api/agent-api';
   import { NONE_OPTION } from './pick-option';
 
@@ -22,7 +23,7 @@
     save: [model: AgentProviderModelDto];
   }>();
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.model-capabilities');
   const capabilityEditorId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const contextWindowInputId = `agent-model-context-window-${capabilityEditorId}`;
@@ -123,7 +124,8 @@
       : t('agent.settings.providers.registryDefault');
   };
 
-  const formatCapabilityTimestamp = (value: number): string => new Date(value * 1000).toLocaleString();
+  const formatCapabilityTimestamp = (value: number): string =>
+    formatAgentDateTime(locale.value, new Date(value * 1000));
 
   const reasoningBaseline = computed(
     () =>

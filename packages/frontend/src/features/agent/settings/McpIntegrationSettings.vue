@@ -9,10 +9,11 @@
     type AgentIntegrationViewDto,
     type AgentMcpIntegrationConfigurationDto,
   } from '../api/agent-api';
+  import { formatAgentTime } from '../locale-format';
 
   const DEFAULT_AGENT_APP_ID = 'nexus.agent';
   const props = defineProps<{ busy: boolean; agentAvailable: boolean }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const feedback = useFeedback();
   const operationFeedback = useOperationFeedback('agent.settings.mcp');
 
@@ -249,7 +250,7 @@
   const formatTime = (timestamp: number | null): string => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
-    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return Number.isNaN(date.getTime()) ? '—' : formatAgentTime(locale.value, date);
   };
 
   watch(

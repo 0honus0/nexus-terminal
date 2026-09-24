@@ -433,6 +433,7 @@
         "days": "{value} d",
         "invalidFormat": "Invalid format",
         "exactBytes": "{value} bytes",
+        "exactTokens": "{value} tokens",
         "exactSeconds": "{value} seconds"
       },
       "storage": {

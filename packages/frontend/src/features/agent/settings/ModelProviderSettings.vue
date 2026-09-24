@@ -12,6 +12,7 @@
     type UiSelectOption,
   } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
+  import { formatAgentDate } from '../locale-format';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import {
     agentApi,
@@ -56,7 +57,7 @@
     delete: [provider: AgentProviderViewDto];
   }>();
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.providers');
   const providerCredentialInputId = `agent-provider-credential-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
@@ -121,7 +122,7 @@
     }
   };
 
-  const formatRegistryDate = (value: number): string => new Date(value * 1000).toLocaleDateString();
+  const formatRegistryDate = (value: number): string => formatAgentDate(locale.value, new Date(value * 1000));
 
   // 模型库同步抽屉与批量策略状态
   const drawerOpen = reactive<Record<string, boolean>>({});

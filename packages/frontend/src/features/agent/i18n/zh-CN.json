@@ -433,6 +433,7 @@
         "days": "{value} 天",
         "invalidFormat": "无效格式",
         "exactBytes": "{value} 字节",
+        "exactTokens": "{value} Token",
         "exactSeconds": "{value} 秒"
       },
       "storage": {

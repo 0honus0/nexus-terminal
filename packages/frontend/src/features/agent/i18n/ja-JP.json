@@ -433,6 +433,7 @@
         "days": "{value} 日",
         "invalidFormat": "無効な形式",
         "exactBytes": "{value} バイト",
+        "exactTokens": "{value} トークン",
         "exactSeconds": "{value} 秒"
       },
       "storage": {

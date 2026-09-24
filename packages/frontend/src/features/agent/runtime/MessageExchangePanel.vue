@@ -2,8 +2,9 @@
   import type { AgentSubagentMessageDto } from '../api/agent-api';
   import { useI18n } from 'vue-i18n';
   import { formatAgentEnumLabel } from '../enum-labels';
+  import { formatAgentDateTime } from '../locale-format';
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   defineProps<{
     messages: AgentSubagentMessageDto[];
@@ -23,7 +24,7 @@
             #{{ message.recipientSequence }} · {{ formatAgentEnumLabel(t, 'subagentMessageKind', message.kind) }} ·
             {{ formatAgentEnumLabel(t, 'subagentMessageStatus', message.status) }}
           </span>
-          <span>{{ new Date(message.createdAt * 1000).toLocaleString() }}</span>
+          <span>{{ formatAgentDateTime(locale, new Date(message.createdAt * 1000)) }}</span>
         </div>
         <div class="mt-1 break-all font-mono text-[11px] text-text-secondary">
           {{ message.senderRuntimeId }} → {{ message.recipientRuntimeId }}

@@ -1,10 +1,11 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { formatAgentNumber } from '../locale-format';
   import type { AgentLedgerEntryDto } from '../api/agent-api';
   import AgentMessageBody from './AgentMessageBody.vue';
   const props = defineProps<{ entry: AgentLedgerEntryDto; relatedToolName?: string }>();
-  const { t, te } = useI18n();
+  const { t, te, locale } = useI18n();
   const emit = defineEmits<{ layoutChange: [] }>();
   const root = ref<HTMLElement | null>(null);
   let resizeObserver: ResizeObserver | null = null;
@@ -177,9 +178,13 @@
   });
 
   const formatTokens = (num: number): string => {
-    if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-    if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
-    return num.toLocaleString();
+    if (num >= 1_000_000) {
+      return `${formatAgentNumber(locale.value, num / 1_000_000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`;
+    }
+    if (num >= 1_000) {
+      return `${formatAgentNumber(locale.value, num / 1_000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
+    }
+    return formatAgentNumber(locale.value, num);
   };
 </script>
 

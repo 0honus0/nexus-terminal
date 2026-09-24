@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { formatAgentNumber } from '../locale-format';
   import type {
     AgentArtifactRefDto,
     AgentLedgerEntryDto,
@@ -49,7 +50,7 @@
     resolveReconciliation: [note: string];
   }>();
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const reconciliationNote = ref('');
   const reconciliationResourceReason = (reason: string): string =>
     reason === 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION' ? t('agent.operations.reconciliationLeaseFinalization') : reason;
@@ -340,9 +341,13 @@
   });
 
   const formatTokens = (num: number): string => {
-    if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-    if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
-    return num.toLocaleString();
+    if (num >= 1_000_000) {
+      return `${formatAgentNumber(locale.value, num / 1_000_000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`;
+    }
+    if (num >= 1_000) {
+      return `${formatAgentNumber(locale.value, num / 1_000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
+    }
+    return formatAgentNumber(locale.value, num);
   };
 
   const showRunTokens = computed(() => Boolean(props.run && totalRunTokens.value > 0));

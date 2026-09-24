@@ -1,3 +1,5 @@
+import { formatAgentNumber } from '../locale-format';
+
 export type QuantityType = 'bytes' | 'tokens' | 'seconds' | 'number';
 
 /**
@@ -5,13 +7,15 @@ export type QuantityType = 'bytes' | 'tokens' | 'seconds' | 'number';
  * 这样同一个函数在 zh-CN / en-US / ja-JP 下都能输出本地化结果。
  */
 export interface QuantityLabels {
+  locale: string;
   unlimited: string;
-  seconds: (value: number) => string;
-  minutes: (value: number) => string;
-  hours: (value: number) => string;
-  days: (value: number) => string;
+  seconds: (value: string) => string;
+  minutes: (value: string) => string;
+  hours: (value: string) => string;
+  days: (value: string) => string;
   invalidFormat: string;
   exactBytes: (value: string) => string;
+  exactTokens: (value: string) => string;
   exactSeconds: (value: string) => string;
 }
 
@@ -122,11 +126,11 @@ export function parseQuantity(raw: string | number | null | undefined, type: Qua
  */
 export function formatQuantity(value: number | null | undefined, type: QuantityType, labels: QuantityLabels): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return labels.unlimited;
-  if (value === 0) return type === 'bytes' ? '0 B' : '0';
+  if (value === 0) return type === 'bytes' ? '0 B' : formatAgentNumber(labels.locale, 0);
 
   if (type === 'bytes') {
     const absVal = Math.abs(value);
-    if (absVal < 1024) return `${value} B`;
+    if (absVal < 1024) return `${formatAgentNumber(labels.locale, value)} B`;
     const units = ['KiB', 'MiB', 'GiB', 'TiB'];
     let amount = absVal;
     let unitIdx = -1;
@@ -135,31 +139,39 @@ export function formatQuantity(value: number | null | undefined, type: QuantityT
       unitIdx++;
     }
     const formatted = amount >= 100 ? Math.round(amount) : Number(amount.toFixed(1));
-    return `${formatted} ${units[unitIdx]}`;
+    return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })} ${units[unitIdx]}`;
   }
 
   if (type === 'tokens') {
     const absVal = Math.abs(value);
-    if (absVal < 1000) return `${value}`;
+    if (absVal < 1000) return formatAgentNumber(labels.locale, value);
     if (absVal < 1000000 && absVal % 1024 === 0 && absVal <= 131072) {
-      return `${absVal / 1024}k`;
+      return `${formatAgentNumber(labels.locale, absVal / 1024)}k`;
     }
     if (absVal < 1000000) {
       const k = absVal / 1000;
-      return `${k >= 100 ? Math.round(k) : Number(k.toFixed(1))}k`;
+      const formatted = k >= 100 ? Math.round(k) : Number(k.toFixed(1));
+      return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })}k`;
     }
     const m = absVal / 1000000;
-    return `${m >= 100 ? Math.round(m) : Number(m.toFixed(1))}M`;
+    const formatted = m >= 100 ? Math.round(m) : Number(m.toFixed(1));
+    return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })}M`;
   }
 
   if (type === 'seconds') {
-    if (value < 60) return labels.seconds(value);
-    if (value < 3600) return labels.minutes(Math.round(value / 60));
-    if (value < 86400) return labels.hours(Number((value / 3600).toFixed(1)));
-    return labels.days(Number((value / 86400).toFixed(1)));
+    if (value < 60) return labels.seconds(formatAgentNumber(labels.locale, value));
+    if (value < 3600) return labels.minutes(formatAgentNumber(labels.locale, Math.round(value / 60)));
+    if (value < 86400) {
+      return labels.hours(
+        formatAgentNumber(labels.locale, Number((value / 3600).toFixed(1)), { maximumFractionDigits: 1 }),
+      );
+    }
+    return labels.days(
+      formatAgentNumber(labels.locale, Number((value / 86400).toFixed(1)), { maximumFractionDigits: 1 }),
+    );
   }
 
-  return String(value);
+  return formatAgentNumber(labels.locale, value);
 }
 
 /**
@@ -188,15 +200,16 @@ export function getQuantityFeedback(
   }
 
   const readable = formatQuantity(parsed, type, labels);
+  const formattedExact = formatAgentNumber(labels.locale, parsed);
   let exact = '';
   if (type === 'bytes') {
-    exact = labels.exactBytes(parsed.toLocaleString());
+    exact = labels.exactBytes(formattedExact);
   } else if (type === 'tokens') {
-    exact = `${parsed.toLocaleString()} Tokens`;
+    exact = labels.exactTokens(formattedExact);
   } else if (type === 'seconds') {
-    exact = labels.exactSeconds(parsed.toLocaleString());
+    exact = labels.exactSeconds(formattedExact);
   } else {
-    exact = `${parsed.toLocaleString()}`;
+    exact = formattedExact;
   }
 
   return {
