@@ -461,8 +461,16 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
     const now = Math.floor(Date.now() / 1000);
 
     if (row.status === 'staging') {
-      await this.releaseStaging(row);
-      await fs.rm(path.join(this.tmpRoot, `${row.storage_key}.part`), { force: true }).catch(() => undefined);
+      if (this.activeWrites.has(row.id)) throw new Error('ARTIFACT_UPLOAD_BUSY');
+      const marked = await this.db.execute(
+        `UPDATE ai_artifacts SET status = 'deleting', version = version + 1
+         WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND status = 'staging'`,
+        [row.id, row.user_id, row.app_id, row.version],
+      );
+      if (marked.changes !== 1) throw new Error('STATE_CONFLICT');
+      if (!(await this.finalizeDeleting({ ...row, status: 'deleting', version: row.version + 1 }, now))) {
+        throw new Error('STATE_CONFLICT');
+      }
       return;
     }
     if (row.status === 'deleted') return;
@@ -1022,6 +1030,14 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
         [now, row.id, row.user_id, row.app_id, row.version],
       );
       if (deleted.changes !== 1) return false;
+      if (row.reserved_bytes > 0) {
+        const reservedChanged = await tx.execute(
+          `UPDATE agent_quota_usage SET reserved_bytes = reserved_bytes - ?
+           WHERE scope_key = ? AND reserved_bytes >= ?`,
+          [row.reserved_bytes, quotaKey(row.user_id), row.reserved_bytes],
+        );
+        if (reservedChanged.changes !== 1) throw new Error('ARTIFACT_QUOTA_STATE_INVALID');
+      }
       if (row.size_bytes > 0) {
         const quotaChanged = await tx.execute(
           `UPDATE agent_quota_usage SET used_bytes = used_bytes - ?
