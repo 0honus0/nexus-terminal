@@ -334,13 +334,13 @@
           />
         </label>
       </div>
-      <div class="mt-4 flex justify-end">
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <UiInfoHint v-if="!isGlobalLimitsDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
         <UiButton
           :appearance="isGlobalLimitsDirty ? 'solid' : 'soft'"
           :tone="isGlobalLimitsDirty ? 'primary' : 'neutral'"
           type="button"
           :disabled="busy || invalidGlobalLimits || !isGlobalLimitsDirty"
-          :title="!isGlobalLimitsDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
           @click="saveGlobalLimits"
         >
           {{ $t('common.save') }}
@@ -534,13 +534,13 @@
           />
         </div>
 
-        <div class="mt-4 flex justify-end">
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <UiInfoHint v-if="!isProfilesDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
           <UiButton
             :appearance="isProfilesDirty ? 'solid' : 'soft'"
             :tone="isProfilesDirty ? 'primary' : 'neutral'"
             type="button"
             :disabled="profileBusy || !profileSettings || invalidProfileLimits || !isProfilesDirty"
-            :title="!isProfilesDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
             @click="saveProfiles"
           >
             {{ $t('agent.settings.subagents.saveProfiles') }}

@@ -136,17 +136,19 @@
       <span class="text-xs text-text-secondary">
         {{ isDirty ? $t('agent.settings.performance.unsavedChanges') : $t('agent.settings.performance.activeNotice') }}
       </span>
-      <UiButton
-        :appearance="isDirty ? 'solid' : 'soft'"
-        :tone="isDirty ? 'primary' : 'neutral'"
-        type="button"
-        :disabled="busy || !isDirty || invalid"
-        :title="!isDirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
-        @click="save"
-      >
-        <i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>
-        <span>{{ busy ? $t('agent.ui.working') : $t('common.save') }}</span>
-      </UiButton>
+      <div class="flex items-center gap-2">
+        <UiInfoHint v-if="!isDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
+        <UiButton
+          :appearance="isDirty ? 'solid' : 'soft'"
+          :tone="isDirty ? 'primary' : 'neutral'"
+          type="button"
+          :disabled="busy || !isDirty || invalid"
+          @click="save"
+        >
+          <i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>
+          <span>{{ busy ? $t('agent.ui.working') : $t('common.save') }}</span>
+        </UiButton>
+      </div>
     </div>
   </section>
 </template>

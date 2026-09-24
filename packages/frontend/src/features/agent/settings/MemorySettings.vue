@@ -442,19 +442,19 @@
               @update:model-value="(value: unknown) => setSourceMemoryId(value)"
             />
           </label>
-          <div class="flex items-end">
+          <div class="flex items-end gap-2">
+            <UiInfoHint
+              v-if="!selectedAppId || !sourceAppId || !sourceMemoryId"
+              :text="$t('agent.settings.disabledReason.selectionRequired')"
+              class="mb-1"
+            />
             <UiButton
               appearance="soft"
               tone="neutral"
               type="button"
               :disabled="disabled || !selectedAppId || !sourceAppId || !sourceMemoryId"
-              :title="
-                !selectedAppId || !sourceAppId || !sourceMemoryId
-                  ? $t('agent.settings.disabledReason.selectionRequired')
-                  : undefined
-              "
               @click="previewImport"
-              class="w-full"
+              class="min-w-0 flex-1"
             >
               {{ $t('agent.settings.memory.previewImport') }}
             </UiButton>

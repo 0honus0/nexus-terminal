@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiInfoHint } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import type { AgentHardLimitsDto, AgentSettingsViewDto, AgentHardLimitPreviewDto } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
@@ -166,17 +166,19 @@
       <p class="max-w-3xl text-xs leading-5 text-text-secondary">
         {{ $t('agent.settings.hardLimits.description') }}
       </p>
-      <UiButton
-        appearance="solid"
-        tone="primary"
-        type="button"
-        :disabled="!canPreview"
-        :title="!canPreview ? $t('agent.settings.disabledReason.noPreviewChanges') : undefined"
-        @click="emit('preview', proposedChanges)"
-      >
-        <i class="fa-solid fa-shield-halved text-[10px]" aria-hidden="true"></i>
-        {{ $t('agent.settings.hardLimits.review') }}
-      </UiButton>
+      <div class="flex items-center gap-2">
+        <UiInfoHint v-if="!canPreview" :text="$t('agent.settings.disabledReason.noPreviewChanges')" />
+        <UiButton
+          appearance="solid"
+          tone="primary"
+          type="button"
+          :disabled="!canPreview"
+          @click="emit('preview', proposedChanges)"
+        >
+          <i class="fa-solid fa-shield-halved text-[10px]" aria-hidden="true"></i>
+          {{ $t('agent.settings.hardLimits.review') }}
+        </UiButton>
+      </div>
     </div>
 
     <div class="mt-4 space-y-3">

@@ -585,12 +585,12 @@
                 :disabled="locked"
               />
             </div>
+            <UiInfoHint v-if="!repositoryUrl.trim()" :text="$t('agent.settings.disabledReason.repositoryRequired')" />
             <UiButton
               appearance="solid"
               tone="primary"
               type="button"
               :disabled="locked || !repositoryUrl.trim()"
-              :title="!repositoryUrl.trim() ? $t('agent.settings.disabledReason.repositoryRequired') : undefined"
               @click="addRepository"
             >
               {{ $t('agent.settings.plugins.addRepository') }}

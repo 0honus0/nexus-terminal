@@ -537,13 +537,13 @@
         </div>
       </div>
 
-      <div class="flex justify-end">
+      <div class="flex items-center justify-end gap-2">
+        <UiInfoHint v-if="!dirty" :text="$t('agent.settings.disabledReason.noChanges')" />
         <UiButton
           :appearance="dirty ? 'solid' : 'soft'"
           :tone="dirty ? 'primary' : 'neutral'"
           type="button"
           :disabled="busy || saving || loading || invalid || !dirty"
-          :title="!dirty ? $t('agent.settings.disabledReason.noChanges') : undefined"
           @click="save"
         >
           {{ $t('common.save') }}
