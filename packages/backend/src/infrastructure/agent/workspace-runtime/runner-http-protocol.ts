@@ -22,6 +22,7 @@ import type {
 } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 
 const MAX_PROTOCOL_COLLECTION_ITEMS = 4096;
+const MAX_STORAGE_WORKSPACES = 16_384;
 const MAX_PROTOCOL_STRING_BYTES = 16 * 1024;
 const MAX_WORKSPACE_JOB_OUTPUT_BYTES = 1024 * 1024;
 
@@ -121,8 +122,7 @@ export const decodeCatalog = (value: unknown): WorkspaceRuntimeCatalog => {
 export const decodeStorage = (value: unknown): WorkspaceRuntimeStorageView => {
   const record = recordValue(value);
   if (!Array.isArray(record.byPack) || record.byPack.length > MAX_PROTOCOL_COLLECTION_ITEMS) throw protocolError();
-  if (!Array.isArray(record.byWorkspace) || record.byWorkspace.length > MAX_PROTOCOL_COLLECTION_ITEMS)
-    throw protocolError();
+  if (!Array.isArray(record.byWorkspace) || record.byWorkspace.length > MAX_STORAGE_WORKSPACES) throw protocolError();
   const filesystem = recordValue(record.filesystem);
   return {
     stateBytes: integerValue(record.stateBytes),
