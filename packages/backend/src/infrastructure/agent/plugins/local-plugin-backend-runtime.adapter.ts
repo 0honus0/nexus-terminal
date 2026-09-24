@@ -275,7 +275,9 @@ class BackendPluginProcess {
   ) {
     child.stdout.on('data', (chunk: Buffer) => {
       try {
-        for (const line of this.stdoutLines.push(chunk)) void this.handleLine(line.toString('utf8'));
+        for (const line of this.stdoutLines.push(chunk)) {
+          void this.handleLine(line.toString('utf8')).catch((error) => this.protocolFailure(error));
+        }
       } catch (error) {
         this.failAll(error instanceof Error ? error : new Error('PLUGIN_BACKEND_RESPONSE_TOO_LARGE'));
         child.kill('SIGKILL');
@@ -489,6 +491,12 @@ class BackendPluginProcess {
     const encoded = JSON.stringify(message);
     if (Buffer.byteLength(encoded, 'utf8') > MAX_PROTOCOL_BYTES) throw new Error('PLUGIN_BACKEND_RESPONSE_TOO_LARGE');
     this.child.stdin.write(`${encoded}\n`);
+  }
+
+  private protocolFailure(error: unknown): void {
+    const message = (error instanceof Error ? error.message : String(error)).slice(0, 1024);
+    this.failAll(new Error(message || 'PLUGIN_BACKEND_PROTOCOL_INVALID'));
+    if (!this.child.killed) this.child.kill('SIGKILL');
   }
 
   private failAll(error: Error): void {
