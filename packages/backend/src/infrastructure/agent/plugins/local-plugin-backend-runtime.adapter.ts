@@ -216,6 +216,8 @@ class BackendPluginProcess {
     { resolve(value: unknown): void; reject(error: Error): void; timer: NodeJS.Timeout }
   >();
   private sequence = 0;
+  private readonly activeHostOperations = new Set<Promise<void>>();
+  private closing = false;
   private readyResolve!: () => void;
   private readyReject!: (error: Error) => void;
   readonly ready = new Promise<void>((resolve, reject) => {
@@ -228,6 +230,7 @@ class BackendPluginProcess {
     private readonly scope: Scope,
     private readonly storage: AppStoragePort,
     private readonly appIntents: AppIntentService,
+    private readonly allowHostMutations: boolean,
     private readonly sdkVersion: string,
   ) {
     const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
@@ -265,9 +268,11 @@ class BackendPluginProcess {
   }
 
   async close(): Promise<void> {
+    this.closing = true;
     if (!this.child.killed && this.child.stdin.writable) {
       await this.request('lifecycle.dispose').catch(() => undefined);
     }
+    await Promise.allSettled([...this.activeHostOperations]);
     this.child.kill('SIGTERM');
   }
 
@@ -302,7 +307,7 @@ class BackendPluginProcess {
       return;
     }
     if (message.kind === 'storage.get' || message.kind === 'storage.put' || message.kind === 'storage.delete') {
-      await this.handleStorage(decodeStorageRequest(message));
+      await this.trackHostOperation(this.handleStorage(decodeStorageRequest(message)));
       return;
     }
     if (
@@ -312,7 +317,7 @@ class BackendPluginProcess {
       message.kind === 'intent.artifact.get' ||
       message.kind === 'intent.artifact.read'
     ) {
-      await this.handleIntent(decodeIntentRequest(message));
+      await this.trackHostOperation(this.handleIntent(decodeIntentRequest(message)));
       return;
     }
     this.failAll(new Error('PLUGIN_BACKEND_PROTOCOL_INVALID'));
@@ -330,6 +335,9 @@ class BackendPluginProcess {
 
   private async handleStorage(message: StorageRequest): Promise<void> {
     try {
+      if (message.kind !== 'storage.get' && (!this.allowHostMutations || this.closing)) {
+        throw new Error('AGENT_APP_DRAINING');
+      }
       assertPluginOwnedAppStorageKey(message.key);
       let value: unknown;
       if (message.kind === 'storage.get') {
@@ -354,6 +362,15 @@ class BackendPluginProcess {
     }
   }
 
+  private async trackHostOperation(operation: Promise<void>): Promise<void> {
+    this.activeHostOperations.add(operation);
+    try {
+      await operation;
+    } finally {
+      this.activeHostOperations.delete(operation);
+    }
+  }
+
   private sendStorageResult(requestId: number, ok: boolean, value: unknown): void {
     const message = ok
       ? { kind: 'storage.result', requestId, ok: true, value }
@@ -365,6 +382,12 @@ class BackendPluginProcess {
 
   private async handleIntent(message: IntentRequest): Promise<void> {
     try {
+      if (
+        (message.kind === 'intent.create' || message.kind === 'intent.revoke') &&
+        (!this.allowHostMutations || this.closing)
+      ) {
+        throw new Error('AGENT_APP_DRAINING');
+      }
       let value: unknown;
       switch (message.kind) {
         case 'intent.create':
@@ -519,7 +542,7 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
     storage: AppStorageSnapshot,
   ): Promise<AppStorageSnapshot> {
     if (!plugin.backendEntry) return storage;
-    const instance = this.start(scope, plugin);
+    const instance = this.start(scope, plugin, false);
     try {
       await instance.ready;
       return (await instance.request('lifecycle.migrate', { fromVersion, storage })) as AppStorageSnapshot;
@@ -528,7 +551,7 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
     }
   }
 
-  private start(scope: Scope, plugin: PluginVersionRecord): BackendPluginProcess {
+  private start(scope: Scope, plugin: PluginVersionRecord, allowHostMutations = true): BackendPluginProcess {
     if (!plugin.backendEntry) throw new Error('PLUGIN_BACKEND_ENTRY_MISSING');
     const pluginRoot = path.resolve(
       this.dataDirectory,
@@ -563,6 +586,7 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
       { userId: scope.userId, appId: plugin.appId },
       this.storage,
       this.appIntents,
+      allowHostMutations,
       plugin.manifest.sdkVersion,
     );
   }

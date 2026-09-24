@@ -6,6 +6,7 @@ import { validateManifest } from './app-manifest-validator';
 import { AppRegistryService } from './app-registry.service';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
 import type { AppRecord, AppStatePatch, AppView } from './app.types';
+import type { AppStorageSnapshot } from './app-storage-snapshot.port';
 import type { AgentSettingsService } from './agent-settings.service';
 import type { PackageVerifierPort, VerifiedPluginPackage } from './package-verifier.port';
 import type { PluginPackageSourcePort } from './plugin-package-source.port';
@@ -481,13 +482,14 @@ export class PluginPackageInstallCoordinator {
       };
     }
 
-    const snapshot = await this.data.capture(scope);
+    let snapshot: AppStorageSnapshot | null = null;
     let updated: AppRecord;
     try {
       if (draining.desiredState === 'enabled') await this.runtimeLifecycle.quiesce(scope, oldPlugin, now + 10);
       await this.runtimeLifecycle.dispose(scope, oldPlugin);
-      const migrated = await this.runtimeLifecycle.migrate(scope, oldPlugin.version, nextPlugin, snapshot);
-      await this.data.restore(scope, migrated);
+      snapshot = await this.data.migrateStorage(scope, (captured) =>
+        this.runtimeLifecycle.migrate(scope, oldPlugin.version, nextPlugin, captured),
+      );
       if (draining.desiredState === 'enabled') await this.runtimeLifecycle.activate(scope, nextPlugin);
       await this.runtimeLifecycle.assertHealthy(scope, nextPlugin);
       const beforeSwitch = await this.states.get(scope);
@@ -517,14 +519,16 @@ export class PluginPackageInstallCoordinator {
         },
         'Agent plugin upgrade failed; rollback started',
       );
-      await this.data
-        .restore(scope, snapshot)
-        .catch((rollbackError) =>
-          logger.error(
-            { err: rollbackError, userId, appId, fromVersion: oldPlugin.version, targetVersion: nextPlugin.version },
-            'Agent plugin upgrade storage rollback failed',
-          ),
-        );
+      if (snapshot) {
+        await this.data
+          .restore(scope, snapshot)
+          .catch((rollbackError) =>
+            logger.error(
+              { err: rollbackError, userId, appId, fromVersion: oldPlugin.version, targetVersion: nextPlugin.version },
+              'Agent plugin upgrade storage rollback failed',
+            ),
+          );
+      }
       await this.runtimeLifecycle
         .dispose(scope, nextPlugin)
         .catch((rollbackError) =>

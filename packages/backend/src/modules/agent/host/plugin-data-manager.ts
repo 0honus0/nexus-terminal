@@ -63,6 +63,8 @@ const storageRecordJson = (record: AppStorageRecord | null): JsonValue =>
     : null;
 
 export class PluginDataManager {
+  private readonly mutationTails = new Map<string, Promise<void>>();
+
   constructor(
     private readonly repository: PluginInstallRepositoryPort,
     private readonly states: AppStateRepositoryPort,
@@ -75,16 +77,29 @@ export class PluginDataManager {
   }
 
   async restore(scope: Scope, snapshot: AppStorageSnapshot): Promise<void> {
-    const current = await this.storage.capture(scope);
-    await this.storage.restore(scope, mergePluginOwnedAppStorageSnapshot(current, snapshot));
+    await this.withMutationLock(scope, () => this.restoreUnlocked(scope, snapshot));
+  }
+
+  async migrateStorage(
+    scope: Scope,
+    transform: (snapshot: AppStorageSnapshot) => Promise<AppStorageSnapshot>,
+  ): Promise<AppStorageSnapshot> {
+    return this.withMutationLock(scope, async () => {
+      const snapshot = await this.capture(scope);
+      const migrated = await transform(snapshot);
+      await this.restoreUnlocked(scope, migrated);
+      return snapshot;
+    });
   }
 
   async deleteData(userId: number, appId: string): Promise<void> {
     const installation = await this.repository.getInstallation(userId, appId);
     if (!installation || installation.status !== 'removed') throw new Error('PLUGIN_MUST_BE_UNINSTALLED');
     const scope = { userId, appId };
-    const current = await this.storage.capture(scope);
-    await this.storage.restore(scope, hostOwnedAppStorageSnapshot(current));
+    await this.withMutationLock(scope, async () => {
+      const current = await this.storage.capture(scope);
+      await this.storage.restore(scope, hostOwnedAppStorageSnapshot(current));
+    });
     logger.info({ userId, appId }, 'Agent plugin retained data deleted');
   }
 
@@ -123,6 +138,12 @@ export class PluginDataManager {
     const plugin = await this.repository.getVersion(appId, installation.version);
     if (!plugin || plugin.status !== 'installed') throw new Error('PLUGIN_VERSION_NOT_FOUND');
 
+    const mutate = <T>(work: () => Promise<T>): Promise<T> =>
+      this.withMutationLock(scope, async () => {
+        await this.assertFrontendMutationAllowed(scope, request.version);
+        return work();
+      });
+
     switch (request.method) {
       case 'host.appInfo': {
         const params = asRecord(request.params);
@@ -149,12 +170,14 @@ export class PluginDataManager {
           throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
         }
         if (!Object.prototype.hasOwnProperty.call(params, 'value')) throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
-        return storageRecordJson(
-          await this.storage.put(
-            scope,
-            requireStorageKey(params.key),
-            params.value as JsonValue,
-            expectedVersion as number | null,
+        return mutate(async () =>
+          storageRecordJson(
+            await this.storage.put(
+              scope,
+              requireStorageKey(params.key),
+              params.value as JsonValue,
+              expectedVersion as number | null,
+            ),
           ),
         );
       }
@@ -164,9 +187,9 @@ export class PluginDataManager {
         if (!Number.isSafeInteger(params.expectedVersion) || (params.expectedVersion as number) < 1) {
           throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
         }
-        return {
+        return mutate(async () => ({
           deleted: await this.storage.delete(scope, requireStorageKey(params.key), params.expectedVersion as number),
-        };
+        }));
       }
       case 'intents.create': {
         const params = asRecord(request.params);
@@ -174,17 +197,20 @@ export class PluginDataManager {
         if (!Object.prototype.hasOwnProperty.call(params, 'input') || params.confirmed !== true) {
           throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
         }
-        return (await this.appIntents.createConfirmed(
-          scope,
-          {
-            receiverAppId: requireRpcString(params.receiverAppId),
-            intentId: requireRpcString(params.intentId),
-            input: params.input as JsonValue,
-            artifactRefs: requireIntentArtifactRefs(params.artifactRefs),
-            confirmed: true,
-          },
-          operationId,
-        )) as unknown as JsonValue;
+        return mutate(
+          async () =>
+            (await this.appIntents.createConfirmed(
+              scope,
+              {
+                receiverAppId: requireRpcString(params.receiverAppId),
+                intentId: requireRpcString(params.intentId),
+                input: params.input as JsonValue,
+                artifactRefs: requireIntentArtifactRefs(params.artifactRefs),
+                confirmed: true,
+              },
+              operationId,
+            )) as unknown as JsonValue,
+        );
       }
       case 'intents.listReceived': {
         const params = asRecord(request.params);
@@ -198,8 +224,10 @@ export class PluginDataManager {
       case 'intents.revoke': {
         const params = asRecord(request.params);
         requireOnlyKeys(params, ['receiptId']);
-        await this.appIntents.revoke(scope, requireRpcString(params.receiptId, 128));
-        return { revoked: true };
+        return mutate(async () => {
+          await this.appIntents.revoke(scope, requireRpcString(params.receiptId, 128));
+          return { revoked: true };
+        });
       }
       case 'intents.artifacts.get': {
         const params = asRecord(request.params);
@@ -212,6 +240,39 @@ export class PluginDataManager {
       }
       default:
         throw new Error('PLUGIN_FRONTEND_RPC_METHOD_DENIED');
+    }
+  }
+
+  private async restoreUnlocked(scope: Scope, snapshot: AppStorageSnapshot): Promise<void> {
+    const current = await this.storage.capture(scope);
+    await this.storage.restore(scope, mergePluginOwnedAppStorageSnapshot(current, snapshot));
+  }
+
+  private async assertFrontendMutationAllowed(scope: Scope, version: string): Promise<void> {
+    const state = await this.states.get(scope);
+    if (!state) throw new Error('AGENT_APP_DISABLED');
+    if (state.activeVersion !== version) throw new Error('PLUGIN_FRONTEND_VERSION_STALE');
+    if (state.desiredState !== 'enabled' || !['running', 'degraded'].includes(state.observedState)) {
+      throw new Error('AGENT_APP_DISABLED');
+    }
+    if (!state.acceptNewRuns) throw new Error('AGENT_APP_DRAINING');
+  }
+
+  private async withMutationLock<T>(scope: Scope, work: () => Promise<T>): Promise<T> {
+    const key = `${scope.userId}:${scope.appId}`;
+    const previous = this.mutationTails.get(key) ?? Promise.resolve();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.mutationTails.set(key, tail);
+    await previous;
+    try {
+      return await work();
+    } finally {
+      release();
+      if (this.mutationTails.get(key) === tail) this.mutationTails.delete(key);
     }
   }
 }
