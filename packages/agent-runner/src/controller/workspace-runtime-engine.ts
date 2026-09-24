@@ -53,6 +53,7 @@ export class WorkspaceRuntimeEngine {
   private readonly jobControllers = new Map<string, AbortController>();
   private readonly workspaceWriters = new Map<string, number>();
   private readonly checkpointCaptures = new Set<string>();
+  private readonly workspaceMutations = new Set<string>();
 
   constructor(runtimeRoot: string, store: ToolchainStore) {
     this.runtime = new WorkspaceRuntimeManager(runtimeRoot, store);
@@ -84,7 +85,9 @@ export class WorkspaceRuntimeEngine {
 
   acquireWorkspaceWriter(workspaceId: string, generation: number): () => void {
     const key = workspaceKey(workspaceId, generation);
-    if (this.checkpointCaptures.has(key)) throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
+    if (this.checkpointCaptures.has(key) || this.workspaceMutations.has(key)) {
+      throw new Error('WORKSPACE_WRITER_ACTIVE_CONFLICT');
+    }
     const status = this.runtime.status(workspaceId, generation);
     if (status !== 'running') throw new Error(status === 'deleted' ? 'WORKSPACE_NOT_FOUND' : 'WORKSPACE_NOT_RUNNING');
     this.workspaceWriters.set(key, (this.workspaceWriters.get(key) ?? 0) + 1);
@@ -137,7 +140,9 @@ export class WorkspaceRuntimeEngine {
     generation: number,
     request: RunnerWorkspaceFileWriteRequest,
   ): RunnerWorkspaceFileWriteResult {
-    return writeWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
+    return this.withWorkspaceMutation(workspaceId, generation, () =>
+      writeWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request),
+    );
   }
 
   listWorkspaceFiles(
@@ -153,7 +158,9 @@ export class WorkspaceRuntimeEngine {
     generation: number,
     request: RunnerWorkspaceFileMoveRequest,
   ): RunnerWorkspaceFileMoveResult {
-    return moveWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
+    return this.withWorkspaceMutation(workspaceId, generation, () =>
+      moveWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request),
+    );
   }
 
   deleteWorkspaceFile(
@@ -161,7 +168,9 @@ export class WorkspaceRuntimeEngine {
     generation: number,
     request: RunnerWorkspaceFileDeleteRequest,
   ): RunnerWorkspaceFileDeleteResult {
-    return deleteWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
+    return this.withWorkspaceMutation(workspaceId, generation, () =>
+      deleteWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request),
+    );
   }
 
   searchWorkspace(
@@ -201,7 +210,10 @@ export class WorkspaceRuntimeEngine {
     generation: number,
     request: RunnerWorkspaceApplyPatchRequest,
   ): RunnerWorkspaceApplyPatchResult {
-    return applyWorkspacePatch(this.codingWorkRoot(workspaceId, generation), request);
+    if (request.dryRun === true) return applyWorkspacePatch(this.codingWorkRoot(workspaceId, generation), request);
+    return this.withWorkspaceMutation(workspaceId, generation, () =>
+      applyWorkspacePatch(this.codingWorkRoot(workspaceId, generation), request),
+    );
   }
 
   async openCheckpointArchive(workspaceId: string, generation: number): Promise<WorkspaceCheckpointArchiveReadHandle> {
@@ -213,7 +225,8 @@ export class WorkspaceRuntimeEngine {
     if (
       (this.jobs.get(key)?.size ?? 0) > 0 ||
       (this.workspaceWriters.get(key) ?? 0) > 0 ||
-      this.checkpointCaptures.has(key)
+      this.checkpointCaptures.has(key) ||
+      this.workspaceMutations.has(key)
     ) {
       throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     }
@@ -242,7 +255,8 @@ export class WorkspaceRuntimeEngine {
     if (
       (this.jobs.get(key)?.size ?? 0) > 0 ||
       (this.workspaceWriters.get(key) ?? 0) > 0 ||
-      this.checkpointCaptures.has(key)
+      this.checkpointCaptures.has(key) ||
+      this.workspaceMutations.has(key)
     ) {
       throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     }
@@ -264,6 +278,7 @@ export class WorkspaceRuntimeEngine {
     const execution = this.runtime.prepareJob(request);
     const key = workspaceKey(request.workspaceId, request.generation);
     if (this.checkpointCaptures.has(key)) throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
+    if (this.workspaceMutations.has(key)) throw new Error('WORKSPACE_WRITER_ACTIVE_CONFLICT');
     const controller = new AbortController();
     if (this.jobControllers.has(request.jobId)) throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
     let active = this.jobs.get(key);
@@ -347,6 +362,24 @@ export class WorkspaceRuntimeEngine {
       }
     }
     return total;
+  }
+
+  private withWorkspaceMutation<T>(workspaceId: string, generation: number, operation: () => T): T {
+    const key = workspaceKey(workspaceId, generation);
+    if (
+      (this.jobs.get(key)?.size ?? 0) > 0 ||
+      (this.workspaceWriters.get(key) ?? 0) > 0 ||
+      this.checkpointCaptures.has(key) ||
+      this.workspaceMutations.has(key)
+    ) {
+      throw new Error('WORKSPACE_WRITER_ACTIVE_CONFLICT');
+    }
+    this.workspaceMutations.add(key);
+    try {
+      return operation();
+    } finally {
+      this.workspaceMutations.delete(key);
+    }
   }
 
   private abortJobs(workspaceId: string, generation: number): void {
