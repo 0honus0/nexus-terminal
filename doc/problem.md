@@ -5121,7 +5121,7 @@ composition root 在 `database.initialize()` 后、`agent.initialize()` 前调�
 
 ---
 
-### 7.104 Root Scheduler 在出队后读取 settings 失败会永久丢 Run，durable 状态仍停在 created/running（P1 · 🟠 开放 2026-09-23）
+### 7.104 Root Scheduler 在出队后读取 settings 失败会永久丢 Run，durable 状态仍停在 created/running（P1 · ✅ 已修复 2026-09-24）
 
 `AgentScheduler` 与持久化的 Subagent scheduler 结构不同：Root scheduler 只维护内存队列，没有周期 durable runnable scan。
 
@@ -5152,6 +5152,10 @@ composition root 在 `database.initialize()` 后、`agent.initialize()` 前调�
 - 更稳妥的是给 Root scheduler 也建立 durable runnable claim / periodic scan，内存队列只做 wake hint；
 - `void pump()` 必须有统一 `.catch()` 日志与恢复策略，避免 unhandled rejection；
 - 增加 fault-injection regression：① enqueue created/running Run → `settings.get()` 单次抛错；② backend 执行抛错且 `interruptUnexpectedRootExecution()` 单次失败；两种情况下都不提供额外用户动作，下一轮必须自动再次执行/收口该 Run，不能永久停在假 running。
+
+**修复（2026-09-24）**：`AgentScheduler` 现在把 dequeue 后的整个 preflight 放在 per-Run fault boundary 内；`runBlocked`、settings 读取、capacity 计算或 `start()` 前异常都不会丢掉候选 Run，而是进入自动 retry。retry 使用 100ms 起步、最大 5s 的指数退避并持续保留 Run，避免瞬时故障造成永久假 running，也避免持续故障形成 hot loop；cancel/quiesce 会清掉对应 retry timer，保持原有生命周期语义。所有外部 pump 触发统一经 `requestPump()` 收口 `.catch()`，不再留下裸 `void this.pump()` rejection。
+
+`start()` 的 outer catch 若收到 backend 未能 durable 收口而逃出的异常，会在 active bookkeeping 清理后自动保留同一 Run 重试；显式 abort（cancel/input/quiesce）不会走该异常 retry。新增 `tests/backend/agent-root-scheduler-retry.regression.ts` fault injection：首次 `settings.get()` 抛错后无需额外用户动作即可启动同一 Run；backend 首次抛出模拟 recovery commit transient failure 后会再次执行同一 Run；测试同时监听并锁定零 `unhandledRejection`。既有 `app-disable-scope` scenario 与 Backend TypeScript 也通过。
 
 ---
 

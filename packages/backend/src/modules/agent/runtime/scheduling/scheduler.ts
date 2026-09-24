@@ -9,7 +9,14 @@ interface QueuedRun {
   run: RunView;
 }
 
+interface ScheduledRetry {
+  run: RunView;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 const scopeKey = (scope: Scope): string => `${scope.userId}\u0000${scope.appId}`;
+const RETRY_BASE_DELAY_MS = 100;
+const RETRY_MAX_DELAY_MS = 5_000;
 
 export class AgentScheduler {
   private readonly queues = new Map<string, QueuedRun[]>();
@@ -17,6 +24,8 @@ export class AgentScheduler {
   private readonly active = new Map<string, { run: RunView; controller: AbortController; done: Promise<void> }>();
   private readonly activeByUser = new Map<number, number>();
   private readonly pausedScopes = new Set<string>();
+  private readonly retryAttempts = new Map<string, number>();
+  private readonly scheduledRetries = new Map<string, ScheduledRetry>();
   private appCursor = 0;
   private accepting = true;
   private pumping = false;
@@ -63,7 +72,7 @@ export class AgentScheduler {
       },
       'Agent scheduler enqueued run',
     );
-    void this.pump();
+    this.requestPump();
   }
 
   signalInput(run: RunView, reason: 'NEW_INPUT' | 'GOAL_UPDATED' = 'NEW_INPUT'): boolean {
@@ -75,6 +84,13 @@ export class AgentScheduler {
   }
 
   cancel(runId: string): boolean {
+    const retry = this.scheduledRetries.get(runId);
+    if (retry) {
+      clearTimeout(retry.timer);
+      this.scheduledRetries.delete(runId);
+      this.retryAttempts.delete(runId);
+      return true;
+    }
     const active = this.active.get(runId);
     if (active) {
       active.controller.abort(new Error('CANCELLED'));
@@ -92,6 +108,9 @@ export class AgentScheduler {
 
   async quiesce(deadlineUnixSeconds: number): Promise<void> {
     this.accepting = false;
+    for (const retry of this.scheduledRetries.values()) clearTimeout(retry.timer);
+    this.scheduledRetries.clear();
+    this.retryAttempts.clear();
     this.queues.clear();
     this.appOrder.length = 0;
     for (const active of this.active.values()) active.controller.abort(new Error('AGENT_QUIESCE'));
@@ -106,6 +125,12 @@ export class AgentScheduler {
 
   async quiesceScope(scope: Scope, deadlineUnixSeconds: number): Promise<void> {
     this.pausedScopes.add(scopeKey(scope));
+    for (const [runId, retry] of this.scheduledRetries) {
+      if (retry.run.userId !== scope.userId || retry.run.appId !== scope.appId) continue;
+      clearTimeout(retry.timer);
+      this.scheduledRetries.delete(runId);
+      this.retryAttempts.delete(runId);
+    }
     const queue = this.queues.get(scope.appId);
     if (queue) {
       const remaining = queue.filter((candidate) => candidate.run.userId !== scope.userId);
@@ -138,16 +163,16 @@ export class AgentScheduler {
 
   resumeScope(scope: Scope): void {
     this.pausedScopes.delete(scopeKey(scope));
-    void this.pump();
+    this.requestPump();
   }
 
   resume(): void {
     this.accepting = true;
-    void this.pump();
+    this.requestPump();
   }
 
   wake(): void {
-    void this.pump();
+    this.requestPump();
   }
 
   activeCountForUser(userId: number): number {
@@ -170,25 +195,29 @@ export class AgentScheduler {
       while (this.accepting) {
         const next = this.nextQueued();
         if (!next) break;
-        if (this.runBlocked(next.run.id)) {
-          this.requeueBack(next);
-          if (blockedSeen.has(next.run.id)) break;
-          blockedSeen.add(next.run.id);
-          continue;
+        try {
+          if (this.runBlocked(next.run.id)) {
+            this.requeueBack(next);
+            if (blockedSeen.has(next.run.id)) break;
+            blockedSeen.add(next.run.id);
+            continue;
+          }
+          const configured = await this.settings.get(next.run.userId);
+          const maxConcurrent = Math.max(
+            1,
+            Math.min(
+              configured.effectiveSettings.performance.maxConcurrentRuntimes,
+              configured.effectiveSettings.hardLimits.maxConcurrentRuntimes,
+            ),
+          );
+          if (this.activeCountForUser(next.run.userId) + this.externalActiveCount(next.run.userId) >= maxConcurrent) {
+            this.requeueFront(next);
+            break;
+          }
+          this.start(next.run);
+        } catch (error) {
+          this.scheduleRetry(next.run, 'preflight_failed', error);
         }
-        const configured = await this.settings.get(next.run.userId);
-        const maxConcurrent = Math.max(
-          1,
-          Math.min(
-            configured.effectiveSettings.performance.maxConcurrentRuntimes,
-            configured.effectiveSettings.hardLimits.maxConcurrentRuntimes,
-          ),
-        );
-        if (this.activeCountForUser(next.run.userId) + this.externalActiveCount(next.run.userId) >= maxConcurrent) {
-          this.requeueFront(next);
-          break;
-        }
-        this.start(next.run);
       }
     } finally {
       this.pumping = false;
@@ -212,6 +241,7 @@ export class AgentScheduler {
       'Agent scheduler started run',
     );
     const done = (async () => {
+      let retryError: unknown = null;
       try {
         for await (const signal of this.backend.execute(run, controller.signal)) {
           if (signal.type === 'durable') {
@@ -241,6 +271,7 @@ export class AgentScheduler {
           }
         }
       } catch (error) {
+        retryError = error;
         logger.error(
           { runId: run.id, threadId: run.threadId, appId: run.appId, userId: run.userId, err: error },
           'Agent scheduler run failed outside persisted harness',
@@ -265,7 +296,12 @@ export class AgentScheduler {
         );
         this.active.delete(run.id);
         this.decrementActiveUser(run.userId);
-        void this.pump();
+        if (retryError !== null && !controller.signal.aborted) {
+          this.scheduleRetry(run, 'execution_recovery_failed', retryError);
+        } else {
+          this.retryAttempts.delete(run.id);
+        }
+        this.requestPump();
       }
     })();
     this.incrementActiveUser(run.userId);
@@ -324,5 +360,51 @@ export class AgentScheduler {
       if (!this.appOrder.includes(value.run.appId)) this.appOrder.push(value.run.appId);
     }
     queue.push(value);
+  }
+
+  private requestPump(): void {
+    void this.pump().catch((error) => {
+      logger.error({ err: error }, 'Agent scheduler pump failed');
+    });
+  }
+
+  private scheduleRetry(run: RunView, reason: 'preflight_failed' | 'execution_recovery_failed', error: unknown): void {
+    if (
+      !this.accepting ||
+      this.pausedScopes.has(scopeKey({ userId: run.userId, appId: run.appId })) ||
+      !['created', 'running'].includes(run.status) ||
+      this.scheduledRetries.has(run.id)
+    ) {
+      return;
+    }
+    const attempt = (this.retryAttempts.get(run.id) ?? 0) + 1;
+    this.retryAttempts.set(run.id, attempt);
+    const delayMs = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** Math.min(attempt - 1, 6));
+    logger.warn(
+      {
+        err: error,
+        runId: run.id,
+        threadId: run.threadId,
+        appId: run.appId,
+        userId: run.userId,
+        reason,
+        attempt,
+        retryDelayMs: delayMs,
+      },
+      'Agent scheduler retained run for retry',
+    );
+    const timer = setTimeout(() => {
+      this.scheduledRetries.delete(run.id);
+      if (
+        !this.accepting ||
+        this.pausedScopes.has(scopeKey({ userId: run.userId, appId: run.appId })) ||
+        !['created', 'running'].includes(run.status)
+      ) {
+        return;
+      }
+      this.enqueue(run);
+    }, delayMs);
+    timer.unref?.();
+    this.scheduledRetries.set(run.id, { run, timer });
   }
 }
