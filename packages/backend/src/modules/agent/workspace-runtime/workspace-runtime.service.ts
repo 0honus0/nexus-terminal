@@ -848,7 +848,7 @@ export class WorkspaceRuntimeService {
               : command.action === 'delete'
                 ? 'deleted'
                 : workspace.status;
-    } else if (command.action === 'provision') {
+    } else if (command.action === 'provision' || (command.status === 'failed' && command.action === 'restart')) {
       next = 'failed';
     }
     if (next === workspace.status) return;

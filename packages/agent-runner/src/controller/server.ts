@@ -1347,8 +1347,15 @@ export class RunnerControllerServer {
       this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
       this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
-      await this.dependencies.runtimeEngine.restart(workspace.workspaceId, workspace.generation);
-      await this.dependencies.pluginRunner.activateWorkspace(workspace);
+      try {
+        await this.dependencies.runtimeEngine.restart(workspace.workspaceId, workspace.generation);
+        await this.dependencies.pluginRunner.activateWorkspace(workspace);
+      } catch (error) {
+        await this.dependencies.pluginRunner.disposeWorkspace(workspace).catch(() => undefined);
+        await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation).catch(() => undefined);
+        this.save(workspace, 'failed');
+        throw error;
+      }
       this.save(workspace, 'running');
       return;
     }
