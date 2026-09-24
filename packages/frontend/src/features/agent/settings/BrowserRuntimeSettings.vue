@@ -200,11 +200,11 @@
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-2xl border border-border/70 bg-card/25 shadow-xs transition-all">
+  <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition-all">
     <!-- 顶栏：标题、说明与添加目标按钮 -->
     <div
       class="flex flex-wrap items-center justify-between gap-3 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
-      :class="{ 'border-b border-border/60': targets.length > 0 }"
+      :class="{ 'border-b border-border': targets.length > 0 }"
     >
       <div class="flex items-center gap-2">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.browserRuntime.title') }}</h3>
@@ -366,7 +366,10 @@
         class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-header/25 hover:border-border-hover py-2.5 text-xs text-text-secondary hover:text-foreground transition-all duration-200 cursor-pointer select-none active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
         @click="openAddTargetModal"
       >
-        <i class="fa-solid fa-plus text-[10px] text-text-secondary/70 group-hover:text-foreground transition-colors" aria-hidden="true"></i>
+        <i
+          class="fa-solid fa-plus text-[10px] text-text-secondary/70 group-hover:text-foreground transition-colors"
+          aria-hidden="true"
+        ></i>
         <span class="font-medium">{{ $t('agent.settings.browserRuntime.addTarget') }}</span>
       </button>
     </div>

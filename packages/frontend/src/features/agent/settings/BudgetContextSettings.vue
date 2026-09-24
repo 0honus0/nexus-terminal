@@ -211,9 +211,9 @@
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-xl border border-border/70 bg-card/35">
+  <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
     >
       <div class="flex items-center gap-1.5">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.budget.title') }}</h3>
@@ -245,8 +245,8 @@
             class="group relative flex flex-col justify-between rounded-xl border p-3 text-left transition-all focus:outline-none"
             :class="
               activePreset === preset.id
-                ? 'border-primary bg-primary/10 shadow-sm ring-1 ring-primary/20'
-                : 'border-border/70 bg-background/70 hover:border-border hover:bg-header/50'
+                ? 'border-primary bg-primary/10 shadow-xs ring-1 ring-primary/30'
+                : 'border-border bg-background hover:border-primary/50 hover:bg-header/40 shadow-2xs'
             "
             @click="applyPreset(preset)"
           >
@@ -290,7 +290,11 @@
       </div>
 
       <div class="space-y-4">
-        <div v-for="group in fieldGroups" :key="group.id" class="rounded-lg bg-header/25 p-3.5">
+        <div
+          v-for="group in fieldGroups"
+          :key="group.id"
+          class="rounded-xl border border-border/80 bg-background/60 p-4 shadow-2xs"
+        >
           <h4 class="mb-3 text-xs font-semibold tracking-wide text-foreground uppercase">
             {{ group.title }}
           </h4>
@@ -328,7 +332,7 @@
     </div>
 
     <div
-      class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-header/20 px-4 py-3 sm:px-5"
+      class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3 sm:px-5"
     >
       <div class="text-xs text-text-secondary">
         <span v-if="isDirty" class="text-warning">

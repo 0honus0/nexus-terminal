@@ -44,12 +44,14 @@
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-    <h2 class="border-b border-border bg-header/50 px-6 py-4 text-lg font-semibold text-foreground">
+  <section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ t('settings.category.about') }}
     </h2>
     <div class="space-y-4 p-6">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-secondary">
+      <div
+        class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-text-secondary"
+      >
         <span class="font-medium">{{ t('settings.about.version') }}: {{ currentVersion }}</span>
         <span v-if="checking" class="ml-2 inline-block rounded-full bg-blue-500 px-2 py-0.5 text-xs text-white italic">
           {{ t('settings.about.checkingUpdate') }}

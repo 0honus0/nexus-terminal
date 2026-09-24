@@ -151,10 +151,10 @@
 </script>
 
 <template>
-  <section class="rounded-2xl border border-border/70 bg-card/25 shadow-xs transition-all">
+  <section class="rounded-2xl border border-border bg-card shadow-xs transition-all">
     <!-- 头部横栏与状态徽标 -->
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
     >
       <div>
         <div class="flex items-center gap-2.5">
@@ -225,7 +225,7 @@
       </div>
     </div>
 
-    <div v-if="expanded" class="space-y-4 border-t border-border/60 p-4 sm:p-5">
+    <div v-if="expanded" class="space-y-4 border-t border-border p-4 sm:p-5">
       <!-- 强制安全边界说明 -->
       <div class="flex items-start gap-2.5 rounded-lg bg-header/25 p-3.5 text-xs text-text-secondary leading-relaxed">
         <i class="fa-solid fa-shield-halved text-sm text-primary/80 mt-0.5 shrink-0"></i>

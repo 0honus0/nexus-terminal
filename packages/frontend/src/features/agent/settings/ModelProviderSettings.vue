@@ -1040,10 +1040,10 @@
 </script>
 
 <template>
-  <section class="relative z-20 rounded-2xl border border-border/70 bg-card/25 shadow-xs transition-all">
+  <section class="relative z-20 rounded-2xl border border-border bg-card shadow-xs transition-all">
     <!-- 头部工具栏与统计 -->
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
     >
       <div>
         <div class="flex items-center gap-2.5">
@@ -1058,14 +1058,7 @@
       </div>
 
       <!-- 添加服务商主按钮 -->
-      <UiButton
-        appearance="soft"
-        tone="neutral"
-        type="button"
-        :disabled="busy"
-        class="w-28"
-        @click="openAddModal"
-      >
+      <UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" class="w-28" @click="openAddModal">
         <span class="inline-flex items-center gap-1.5 text-xs">
           <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
           <span>{{ $t('agent.settings.providers.add') }}</span>
@@ -1076,7 +1069,7 @@
     <div class="space-y-4 p-4 sm:p-5">
       <div
         v-if="modelRegistryStatus"
-        class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-header/30 px-3 py-2 text-[11px]"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-background/60 px-3.5 py-2.5 text-xs shadow-2xs"
       >
         <div class="flex flex-wrap items-center gap-2 text-text-secondary">
           <span class="font-medium text-foreground">{{ $t('agent.settings.providers.registryTitle') }}</span>
@@ -1118,7 +1111,7 @@
 
       <!-- 默认模型选择微岛（现代定制无原生边框） -->
       <div
-        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg bg-header/30 p-3.5 transition-all relative z-10"
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/60 p-3.5 sm:p-4 transition-all relative z-10 shadow-2xs"
       >
         <div class="flex items-center gap-2.5 shrink-0">
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -1145,7 +1138,7 @@
         </div>
       </div>
 
-      <div class="rounded-lg bg-header/25 p-3.5">
+      <div class="rounded-xl border border-border/70 bg-background/60 p-3.5 sm:p-4 shadow-2xs">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <div class="text-xs font-semibold text-foreground">
@@ -1234,7 +1227,7 @@
           <li
             v-for="(row, index) in selectedFallbackRows"
             :key="row.key"
-            class="flex items-center gap-2.5 rounded-lg bg-header/25 px-3 py-2"
+            class="flex items-center gap-2.5 rounded-lg border border-border/70 bg-card px-3 py-2 shadow-2xs"
           >
             <span
               class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] font-semibold text-primary"
@@ -1295,7 +1288,6 @@
           </li>
         </ol>
 
-
         <!-- 空态：紧凑信息提示，而非按钮云 -->
         <div
           v-else
@@ -1313,8 +1305,8 @@
           :key="provider.id"
           data-testid="agent-provider-card"
           :data-provider-id="provider.id"
-          class="rounded-2xl border bg-card/80 transition-all hover:bg-card/95 shadow-2xs overflow-hidden"
-          :class="provider.enabled ? 'border-border/85 hover:border-primary/50' : 'border-border/60 opacity-80'"
+          class="rounded-2xl border bg-card transition-all hover:border-primary/60 shadow-xs overflow-hidden"
+          :class="provider.enabled ? 'border-border' : 'border-border/70 opacity-80'"
         >
           <!-- 服务商顶行摘要（主体鲜明、层级清晰） -->
           <div

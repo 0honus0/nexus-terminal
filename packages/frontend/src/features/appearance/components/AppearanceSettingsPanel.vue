@@ -59,16 +59,16 @@
 <template>
   <section
     data-testid="appearance-settings-panel"
-    class="overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+    class="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
   >
-    <h2 class="border-b border-border bg-header/50 px-6 py-4 text-lg font-semibold text-foreground">
+    <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ t('settings.category.appearance') }}
     </h2>
     <div class="space-y-6 p-6">
       <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
         {{ t('settings.appearance.loadFailed') }}
       </p>
-      <div>
+      <div class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.appearance.title') }}</h3>
         <p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.description') }}</p>
         <BaseButton variant="primary" @click="emit('customize')">
@@ -76,9 +76,7 @@
         </BaseButton>
       </div>
 
-      <hr class="border-border/50" />
-
-      <div>
+      <div class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs">
         <h3 class="mb-3 text-base font-semibold text-foreground">
           {{ t('settings.appearance.windowThemeColor.title') }}
         </h3>

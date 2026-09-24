@@ -155,7 +155,14 @@
   );
 
   const selectTab = (tab: SettingsTab) => {
-    active.value = tab;
+    if (active.value === tab) {
+      if (contentContainer.value) {
+        contentContainer.value.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      active.value = tab;
+    }
     mobileView.value = 'detail';
   };
 
@@ -193,9 +200,7 @@
           <h2 class="px-2 text-xs font-semibold text-text-secondary tracking-wide">
             {{ t(group.titleKey) }}
           </h2>
-          <div
-            class="overflow-hidden rounded-2xl border border-border/70 bg-card/60 backdrop-blur-md shadow-xs divide-y divide-border/40"
-          >
+          <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs divide-y divide-border">
             <button
               v-for="item in group.items"
               :key="item.value"
@@ -264,13 +269,13 @@
                 role="tab"
                 :aria-selected="active === item.value"
                 :aria-controls="`settings-panel-${item.value}`"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer"
                 :class="
                   active === item.value
-                    ? 'bg-primary text-white shadow-xs font-semibold'
-                    : 'bg-card/70 border border-border/60 text-text-secondary hover:text-foreground'
+                    ? 'border border-primary bg-primary text-white shadow-xs font-semibold'
+                    : 'border border-border bg-card text-foreground hover:bg-header'
                 "
-                @click="active = item.value"
+                @click="selectTab(item.value)"
               >
                 <i :class="item.icon" class="text-[11px]" aria-hidden="true"></i>
                 <span>{{ t(item.labelKey) }}</span>
@@ -282,28 +287,23 @@
         <!-- 桌面端左侧悬浮控制岛 (Desktop Vertically Centered Floating Island) -->
         <aside class="hidden lg:flex flex-col justify-center shrink-0 w-64 xl:w-72 h-full py-6 select-none">
           <div
-            class="rounded-2xl border border-border/30 bg-card/65 backdrop-blur-2xl p-3.5 xl:p-4 shadow-lg shadow-black/[0.03] dark:shadow-black/25 flex flex-col justify-between min-h-[560px] xl:min-h-[620px] max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-y-contain no-scrollbar"
+            class="rounded-2xl border border-border bg-card p-3.5 xl:p-4 shadow-md dark:shadow-xl flex flex-col justify-between min-h-[560px] xl:min-h-[620px] max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-y-contain no-scrollbar"
           >
             <div class="space-y-3.5 xl:space-y-4">
               <!-- 侧边栏头部 (Floating Dock Header) -->
-              <div class="flex items-center gap-2.5 px-2.5 pt-1 pb-3 border-b border-border/20">
-                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div class="flex items-center gap-2.5 px-2.5 pt-1 pb-3.5 border-b border-border">
+                <div
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary shadow-2xs"
+                >
                   <i class="fa-solid fa-sliders text-xs" aria-hidden="true"></i>
                 </div>
-                <div class="min-w-0">
-                  <h1 class="text-xs font-bold text-foreground leading-none">{{ t('settings.title') }}</h1>
-                  <p class="text-[10px] text-text-secondary mt-1 leading-none truncate">
-                    {{ t('settings.sectionsAriaLabel') }}
-                  </p>
-                </div>
+                <h1 class="text-sm font-bold text-foreground leading-none tracking-tight">{{ t('settings.title') }}</h1>
               </div>
 
               <!-- 分组导航 (Soft, breathable groups without harsh divider borders) -->
               <nav class="space-y-3.5 xl:space-y-4" role="tablist" :aria-label="t('settings.sectionsAriaLabel')">
                 <div v-for="group in tabGroups" :key="group.id" class="space-y-1">
-                  <div
-                    class="px-2.5 text-[10px] xl:text-[11px] font-semibold text-text-secondary/50 uppercase tracking-wider"
-                  >
+                  <div class="px-2.5 text-xs font-bold text-text-secondary uppercase tracking-wider">
                     {{ t(group.titleKey) }}
                   </div>
                   <div class="space-y-1">
@@ -314,20 +314,21 @@
                       role="tab"
                       :aria-selected="active === item.value"
                       :aria-controls="`settings-panel-${item.value}`"
-                      class="group relative flex w-full items-center justify-between rounded-xl px-3 py-2 xl:py-2.5 text-left text-xs font-medium transition-all duration-150 ease-out cursor-pointer"
+                      class="group relative flex w-full items-center justify-between rounded-xl px-2.5 py-2 xl:py-2.5 text-left text-xs transition-all duration-150 ease-out cursor-pointer"
                       :class="
                         active === item.value
-                          ? 'bg-primary text-white shadow-sm shadow-primary/25 font-semibold'
-                          : 'text-text-secondary hover:bg-muted/40 hover:text-foreground'
+                          ? 'border border-primary bg-primary text-white shadow-sm font-semibold'
+                          : 'border border-border/70 bg-background/50 hover:bg-header hover:border-border text-foreground hover:text-foreground shadow-2xs font-medium'
                       "
                       @click="selectTab(item.value)"
                     >
                       <div class="flex items-center gap-2.5 min-w-0">
-                        <i
-                          :class="[item.icon, active === item.value ? 'text-white' : item.iconColor]"
-                          class="w-4 text-center text-xs shrink-0"
-                          aria-hidden="true"
-                        ></i>
+                        <div
+                          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-colors"
+                          :class="active === item.value ? 'bg-white/20 text-white' : [item.iconBg, item.iconColor]"
+                        >
+                          <i :class="item.icon" class="text-xs" aria-hidden="true"></i>
+                        </div>
                         <span class="truncate">{{ t(item.labelKey) }}</span>
                       </div>
                       <span
@@ -345,13 +346,13 @@
 
             <!-- 底部状态指示 (Subtle Status & Version) -->
             <div
-              class="pt-3 px-2 border-t border-border/20 flex items-center justify-between text-[11px] text-text-secondary/50 select-none"
+              class="pt-3 px-2 border-t border-border flex items-center justify-between text-xs text-text-secondary select-none font-medium"
             >
               <span class="inline-flex items-center gap-1.5 font-medium">
-                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
-                <span class="text-[10px] tracking-wide text-text-secondary/70">Nexus Console</span>
+                <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+                <span class="text-xs tracking-wide text-text-secondary">Nexus Console</span>
               </span>
-              <span class="text-[10px] font-mono text-text-secondary/60">v{{ currentVersion }}</span>
+              <span class="text-xs font-mono text-text-secondary">v{{ currentVersion }}</span>
             </div>
           </div>
         </aside>
@@ -362,19 +363,19 @@
           class="min-w-0 flex-1 h-full min-h-0 overflow-y-auto overscroll-y-contain pt-1.5 pb-4 lg:py-6 pr-1 lg:pr-3 space-y-4 touch-pan-y"
         >
           <!-- 桌面端页面头部信息 (Seamless Borderless Header Banner) -->
-          <div class="hidden lg:flex items-center justify-between pb-3 border-b border-border/30">
+          <div class="hidden lg:flex items-center justify-between pb-3.5 border-b border-border">
             <div class="flex items-center gap-3">
               <div
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-xs"
                 :class="[currentTab.iconBg, currentTab.iconColor]"
               >
-                <i :class="currentTab.icon" class="text-sm" aria-hidden="true"></i>
+                <i :class="currentTab.icon" class="text-base" aria-hidden="true"></i>
               </div>
               <div>
                 <h2 class="text-base font-bold text-foreground leading-tight">
                   {{ t(currentTab.labelKey) }}
                 </h2>
-                <p class="text-xs text-text-secondary mt-0.5 leading-tight">
+                <p class="text-xs text-text-secondary mt-1 leading-tight">
                   {{ t(currentTab.descriptionKey) }}
                 </p>
               </div>

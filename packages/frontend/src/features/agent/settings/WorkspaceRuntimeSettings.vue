@@ -268,11 +268,11 @@
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-xl border border-border/70 bg-card/35">
+  <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
     <div
-      class="flex flex-wrap items-center justify-between gap-3 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
+      class="flex flex-wrap items-center justify-between gap-3 bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
       :class="{
-        'border-b border-border/60': availability.available && ((catalog && storage) || loading),
+        'border-b border-border': availability.available && ((catalog && storage) || loading),
       }"
     >
       <div class="flex items-center gap-1.5">
@@ -329,7 +329,7 @@
     <div v-else-if="availability.available && catalog && storage" class="space-y-4 p-4 sm:p-5">
       <div class="grid gap-4 lg:grid-cols-2">
         <!-- 初始化与 Profile -->
-        <div class="rounded-xl border border-border/70 bg-header/20 p-4 sm:p-5 shadow-2xs">
+        <div class="rounded-xl border border-border bg-background/60 p-4 sm:p-5 shadow-2xs">
           <div class="flex items-center gap-2">
             <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <i class="fa-solid fa-shapes text-xs" aria-hidden="true"></i>
@@ -392,7 +392,7 @@
         </div>
 
         <!-- Runner 存储 -->
-        <div class="rounded-xl border border-border/70 bg-header/20 p-4 sm:p-5 shadow-2xs">
+        <div class="rounded-xl border border-border bg-background/60 p-4 sm:p-5 shadow-2xs">
           <div class="flex items-center gap-2">
             <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <i class="fa-solid fa-hard-drive text-xs" aria-hidden="true"></i>
@@ -403,25 +403,25 @@
           </div>
 
           <div class="mt-3.5 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            <div class="rounded-lg border border-border/70 bg-card/70 p-2.5">
+            <div class="rounded-lg border border-border/80 bg-card p-2.5 shadow-2xs">
               <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.workspaceRuntime.stateBytes') }}</div>
               <div class="mt-1 font-mono text-xs font-semibold text-foreground">
                 {{ formatBytes(storage.stateBytes) }}
               </div>
             </div>
-            <div class="rounded-lg border border-border/70 bg-card/70 p-2.5">
+            <div class="rounded-lg border border-border/80 bg-card p-2.5 shadow-2xs">
               <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.workspaceRuntime.packBytes') }}</div>
               <div class="mt-1 font-mono text-xs font-semibold text-foreground">
                 {{ formatBytes(storage.packBytes) }}
               </div>
             </div>
-            <div class="rounded-lg border border-border/70 bg-card/70 p-2.5">
+            <div class="rounded-lg border border-border/80 bg-card p-2.5 shadow-2xs">
               <div class="text-[11px] text-text-secondary">{{ $t('agent.settings.workspaceRuntime.cacheBytes') }}</div>
               <div class="mt-1 font-mono text-xs font-semibold text-foreground">
                 {{ formatBytes(storage.cacheBytes) }}
               </div>
             </div>
-            <div class="rounded-lg border border-border/70 bg-card/70 p-2.5">
+            <div class="rounded-lg border border-border/80 bg-card p-2.5 shadow-2xs">
               <div class="text-[11px] text-text-secondary">
                 {{ $t('agent.settings.workspaceRuntime.runtimeBytes') }}
               </div>
@@ -429,7 +429,7 @@
                 {{ formatBytes(storage.runtimeBytes) }}
               </div>
             </div>
-            <div class="rounded-lg border border-border/70 bg-card/70 p-2.5 col-span-2 sm:col-span-1">
+            <div class="rounded-lg border border-border/80 bg-card p-2.5 shadow-2xs col-span-2 sm:col-span-1">
               <div class="text-[11px] text-text-secondary">
                 {{ $t('agent.settings.workspaceRuntime.quarantineBytes') }}
               </div>
@@ -505,7 +505,7 @@
       </div>
 
       <!-- 工具包 -->
-      <div class="rounded-xl border border-border/70 bg-header/20 p-4 sm:p-5 shadow-2xs">
+      <div class="rounded-xl border border-border bg-background/60 p-4 sm:p-5 shadow-2xs">
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">

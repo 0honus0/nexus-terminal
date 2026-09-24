@@ -629,7 +629,11 @@
             class="flex max-w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 shadow-2xs text-xs"
           >
             <i class="fa-solid fa-globe text-[10px] text-primary/70" aria-hidden="true"></i>
-            <span class="max-w-[24rem] truncate font-mono text-[11px] text-foreground">{{ repository.url }}</span>
+            <span
+              class="max-w-[24rem] sm:max-w-[36rem] truncate font-mono text-[11px] text-foreground"
+              :title="repository.url"
+              >{{ repository.url }}</span
+            >
             <button
               type="button"
               class="inline-flex h-5 w-5 items-center justify-center rounded text-text-secondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50 cursor-pointer"
@@ -653,15 +657,15 @@
             <div
               role="button"
               tabindex="0"
-              class="w-full flex items-center justify-between px-3.5 sm:px-4 py-2.5 sm:py-3 bg-header/40 hover:bg-header/70 transition-colors select-none cursor-pointer"
+              class="w-full flex flex-wrap items-center justify-between gap-2.5 px-3.5 sm:px-4 py-2.5 sm:py-3 bg-header/40 hover:bg-header/70 transition-colors select-none cursor-pointer"
               @click="toggleGroup(group.owner)"
               @keydown.enter.space.prevent="toggleGroup(group.owner)"
             >
-              <!-- 左侧：展开折叠指示 + 来源标识 (GitHub user) + 官方/第三方标签 + 插件数量 -->
-              <div class="flex items-center gap-2 sm:gap-2.5 min-w-0">
+              <!-- 左侧：展开折叠指示 + 来源标识 (GitHub user) + 官方/第三方标签 + 插件数量 + 来源链接（靠左排列，充裕展示空间） -->
+              <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
                 <i
                   :class="isGroupExpanded(group.owner) ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'"
-                  class="text-[11px] text-text-secondary w-3 text-center transition-transform"
+                  class="text-[11px] text-text-secondary w-3 text-center transition-transform shrink-0"
                   aria-hidden="true"
                 ></i>
                 <div
@@ -669,11 +673,11 @@
                 >
                   <i class="fa-brands fa-github text-xs" aria-hidden="true"></i>
                 </div>
-                <div class="flex items-baseline gap-1.5 min-w-0">
+                <div class="flex items-baseline gap-1.5 shrink-0">
                   <span class="text-xs text-text-secondary shrink-0"
                     >{{ $t('agent.settings.plugins.repositorySource') }}:</span
                   >
-                  <span class="text-xs sm:text-sm font-bold text-foreground font-mono truncate">{{ group.owner }}</span>
+                  <span class="text-xs sm:text-sm font-bold text-foreground font-mono">{{ group.owner }}</span>
                 </div>
                 <span
                   v-if="group.official"
@@ -694,16 +698,14 @@
                 >
                   {{ $t('agent.settings.plugins.pluginCount', { count: group.packages.length }) }}
                 </span>
-              </div>
 
-              <!-- 右侧：复制源链接与操作按钮 -->
-              <div class="flex items-center gap-1.5 shrink-0" @click.stop>
+                <!-- 仓库源链接：靠左放置在来源信息旁，边界明确，展示宽度充裕，点击复制 -->
                 <button
                   v-if="group.catalogs[0]?.catalog.repositoryUrl"
                   type="button"
-                  class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-mono text-text-secondary hover:bg-header hover:text-foreground transition-colors cursor-pointer"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-header/60 hover:bg-header hover:border-border hover:text-foreground px-2 py-1 text-[11px] font-mono text-text-secondary transition-colors cursor-pointer max-w-full"
                   :title="group.catalogs[0].catalog.repositoryUrl"
-                  @click="copyCatalogUrl(group.catalogs[0].catalog.repositoryUrl)"
+                  @click.stop="copyCatalogUrl(group.catalogs[0].catalog.repositoryUrl)"
                 >
                   <i
                     :class="
@@ -711,13 +713,19 @@
                         ? 'fa-solid fa-check text-success'
                         : 'fa-regular fa-copy'
                     "
-                    class="text-[11px]"
+                    class="text-[10px] shrink-0"
                     aria-hidden="true"
                   ></i>
-                  <span class="hidden md:inline max-w-[200px] truncate text-[10px]">{{
-                    group.catalogs[0].catalog.repositoryUrl
-                  }}</span>
+                  <span
+                    class="truncate max-w-[280px] sm:max-w-[420px] md:max-w-[620px] lg:max-w-[820px] text-[10px] sm:text-[11px]"
+                    >{{ group.catalogs[0].catalog.repositoryUrl }}</span
+                  >
                 </button>
+              </div>
+
+              <!-- 右侧：展开/折叠状态提示 -->
+              <div class="hidden md:flex items-center gap-1 text-[11px] text-text-secondary/60 shrink-0 select-none">
+                <span>{{ isGroupExpanded(group.owner) ? $t('common.collapse') : $t('common.expand') }}</span>
               </div>
             </div>
 

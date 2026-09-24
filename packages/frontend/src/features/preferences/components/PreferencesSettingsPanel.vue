@@ -140,11 +140,8 @@
 </script>
 
 <template>
-  <section
-    data-testid="preferences-settings"
-    class="overflow-hidden rounded-lg border border-border bg-background shadow-sm"
-  >
-    <h2 class="border-b border-border bg-header/50 px-6 py-4 text-lg font-semibold text-foreground">
+  <section data-testid="preferences-settings" class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ props.section === 'system' ? t('settings.category.system') : t('settings.workspace.title') }}
     </h2>
 
@@ -156,7 +153,10 @@
       <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
         {{ loadError }}
       </p>
-      <form class="space-y-4" @submit.prevent="savePatch('language', { language: form.language })">
+      <form
+        class="space-y-4 rounded-xl border border-border/80 bg-background p-4 sm:p-5 shadow-2xs"
+        @submit.prevent="savePatch('language', { language: form.language })"
+      >
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.language.title') }}</h3>
         <BaseFormField :label="t('settings.language.selectLabel')" for-id="languageSelect">
           <BaseSelect id="languageSelect" v-model="form.language" :disabled="savingSection !== null">
@@ -179,9 +179,10 @@
         </div>
       </form>
 
-      <hr class="border-border/50" />
-
-      <form class="space-y-4" @submit.prevent="savePatch('timezone', { timezone: form.timezone })">
+      <form
+        class="space-y-4 rounded-xl border border-border/80 bg-background p-4 sm:p-5 shadow-2xs"
+        @submit.prevent="savePatch('timezone', { timezone: form.timezone })"
+      >
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.timezone.title') }}</h3>
         <BaseFormField :label="t('settings.timezone.selectLabel')" for-id="timezoneSelect">
           <BaseSelect id="timezoneSelect" v-model="form.timezone" :disabled="savingSection !== null">
@@ -203,11 +204,9 @@
         </div>
       </form>
 
-      <hr class="border-border/50" />
-
       <form
         data-testid="logging-settings-form"
-        class="space-y-4"
+        class="space-y-4 rounded-xl border border-border/80 bg-background p-4 sm:p-5 shadow-2xs"
         @submit.prevent="
           savePatch('logging', { frontendLogLevel: form.frontendLogLevel, backendLogLevel: form.backendLogLevel })
         "
@@ -279,7 +278,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.popupFileManager.title') }}</h3>
@@ -314,7 +313,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.shareEditorTabs.title') }}</h3>
@@ -349,7 +348,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">
@@ -388,7 +387,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.commandInputSync.title') }}</h3>
@@ -423,7 +422,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">
@@ -460,7 +459,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">
@@ -497,7 +496,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content" data-testid="quick-command-search-display-setting">
         <h3 class="mb-3 text-base font-semibold text-foreground">
@@ -543,7 +542,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">
@@ -582,7 +581,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.terminalScrollback.title') }}</h3>
@@ -617,7 +616,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content" data-testid="spreadsheet-preview-pagination-setting">
         <h3 class="mb-3 text-base font-semibold text-foreground">
@@ -684,7 +683,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">
@@ -724,7 +723,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">
@@ -765,7 +764,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.dashboardResources.title') }}</h3>
@@ -844,7 +843,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.statusMonitorShowIp.title') }}</h3>
@@ -878,7 +877,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.statusMonitor.title') }}</h3>
@@ -917,7 +916,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.docker.title') }}</h3>
@@ -967,7 +966,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.workspace.layoutLockTitle') }}</h3>
@@ -992,7 +991,7 @@
         </form>
       </section>
 
-      <hr class="border-border/50" />
+      <hr class="border-border" />
 
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.workspace.navBarVisibleTitle') }}</h3>

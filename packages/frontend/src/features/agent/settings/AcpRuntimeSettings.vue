@@ -155,16 +155,10 @@
     return cwd === '/workspace' || cwd.startsWith('/workspace/');
   });
   const parsedModalArgv = computed(() => parseCommandToArgv(profileForm.commandInput));
-  const isArgvValid = computed(
-    () => parsedModalArgv.value.length >= 1 && parsedModalArgv.value.length <= 64,
-  );
+  const isArgvValid = computed(() => parsedModalArgv.value.length >= 1 && parsedModalArgv.value.length <= 64);
   const canSubmitProfile = computed(
     () =>
-      isProfileIdValid.value &&
-      !isProfileIdDuplicate.value &&
-      isCwdValid.value &&
-      isArgvValid.value &&
-      !disabled.value,
+      isProfileIdValid.value && !isProfileIdDuplicate.value && isCwdValid.value && isArgvValid.value && !disabled.value,
   );
 
   const openAddProfileModal = (): void => {
@@ -332,10 +326,10 @@
 <template>
   <div class="space-y-5">
     <!-- 模块 1：ACP 运行时 (配置档管理) -->
-    <section class="overflow-hidden rounded-2xl border border-border/70 bg-card/25 shadow-xs transition-all">
+    <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition-all">
       <div
         class="flex flex-wrap items-center justify-between gap-3 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
-        :class="{ 'border-b border-border/60': profiles.length > 0 }"
+        :class="{ 'border-b border-border': profiles.length > 0 }"
       >
         <div class="flex items-center gap-2">
           <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.acpRuntime.title') }}</h3>
@@ -399,7 +393,9 @@
               </div>
             </div>
 
-            <div class="flex items-center justify-end gap-1.5 shrink-0 pt-2 sm:pt-0 border-t border-border/40 sm:border-0">
+            <div
+              class="flex items-center justify-end gap-1.5 shrink-0 pt-2 sm:pt-0 border-t border-border/40 sm:border-0"
+            >
               <UiButton
                 appearance="ghost"
                 tone="danger"
@@ -424,17 +420,20 @@
           class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-primary/5 hover:border-primary/45 py-2.5 text-xs text-text-secondary hover:text-primary transition-all duration-200 cursor-pointer select-none active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
           @click="openAddProfileModal"
         >
-          <i class="fa-solid fa-plus text-[11px] text-primary/70 group-hover:text-primary transition-colors" aria-hidden="true"></i>
+          <i
+            class="fa-solid fa-plus text-[11px] text-primary/70 group-hover:text-primary transition-colors"
+            aria-hidden="true"
+          ></i>
           <span class="font-medium">{{ $t('agent.settings.acpRuntime.addProfile') }}</span>
         </button>
       </div>
     </section>
 
     <!-- 模块 2：ACP 集成 (ACP Integrations) -->
-    <section class="overflow-hidden rounded-2xl border border-border/70 bg-card/25 shadow-xs transition-all">
+    <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition-all">
       <div
         class="flex flex-wrap items-center justify-between gap-3 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
-        :class="{ 'border-b border-border/60': integrations.length > 0 }"
+        :class="{ 'border-b border-border': integrations.length > 0 }"
       >
         <div class="flex items-center gap-2">
           <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.acpRuntime.integrations') }}</h3>
@@ -531,7 +530,9 @@
             </div>
 
             <!-- 右侧操作区：配置档选择器、启用开关、删除按钮 -->
-            <div class="flex flex-wrap items-center justify-end gap-2 pt-2 lg:pt-0 border-t border-border/40 lg:border-0">
+            <div
+              class="flex flex-wrap items-center justify-end gap-2 pt-2 lg:pt-0 border-t border-border/40 lg:border-0"
+            >
               <UiSelect
                 density="compact"
                 :disabled="disabled"
@@ -573,7 +574,10 @@
           class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-primary/5 hover:border-primary/45 py-2.5 text-xs text-text-secondary hover:text-primary transition-all duration-200 cursor-pointer select-none active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
           @click="openAddIntegrationModal"
         >
-          <i class="fa-solid fa-plus text-[11px] text-primary/70 group-hover:text-primary transition-colors" aria-hidden="true"></i>
+          <i
+            class="fa-solid fa-plus text-[11px] text-primary/70 group-hover:text-primary transition-colors"
+            aria-hidden="true"
+          ></i>
           <span class="font-medium">{{ $t('agent.settings.acpRuntime.createIntegration') }}</span>
         </button>
       </div>
@@ -603,7 +607,10 @@
                 {{ $t('agent.settings.acpRuntime.profileId') }} <span class="text-error">*</span>
               </span>
               <div class="relative flex items-center">
-                <i class="fa-solid fa-fingerprint absolute left-3 text-text-secondary text-xs pointer-events-none" aria-hidden="true"></i>
+                <i
+                  class="fa-solid fa-fingerprint absolute left-3 text-text-secondary text-xs pointer-events-none"
+                  aria-hidden="true"
+                ></i>
                 <input
                   v-model="profileForm.id"
                   required
@@ -620,7 +627,10 @@
                 {{ $t('agent.settings.acpRuntime.cwd') }} <span class="text-error">*</span>
               </span>
               <div class="relative flex items-center">
-                <i class="fa-solid fa-folder-open absolute left-3 text-text-secondary text-xs pointer-events-none" aria-hidden="true"></i>
+                <i
+                  class="fa-solid fa-folder-open absolute left-3 text-text-secondary text-xs pointer-events-none"
+                  aria-hidden="true"
+                ></i>
                 <input
                   v-model="profileForm.cwd"
                   required
@@ -642,7 +652,10 @@
 
             <label class="block">
               <div class="relative flex items-center">
-                <i class="fa-solid fa-terminal absolute left-3 text-text-secondary text-xs pointer-events-none" aria-hidden="true"></i>
+                <i
+                  class="fa-solid fa-terminal absolute left-3 text-text-secondary text-xs pointer-events-none"
+                  aria-hidden="true"
+                ></i>
                 <input
                   v-model="profileForm.commandInput"
                   required
@@ -659,7 +672,10 @@
           </div>
         </div>
 
-        <div v-if="profileModalError" class="rounded-lg border border-error/30 bg-error/10 p-2.5 text-xs text-error flex items-center gap-2">
+        <div
+          v-if="profileModalError"
+          class="rounded-lg border border-error/30 bg-error/10 p-2.5 text-xs text-error flex items-center gap-2"
+        >
           <i class="fa-solid fa-triangle-exclamation shrink-0" aria-hidden="true"></i>
           <span>{{ profileModalError }}</span>
         </div>
@@ -667,7 +683,13 @@
 
       <template #footer>
         <div class="flex items-center justify-end gap-2">
-          <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled" @click="profileModalOpen = false">
+          <UiButton
+            appearance="soft"
+            tone="neutral"
+            type="button"
+            :disabled="disabled"
+            @click="profileModalOpen = false"
+          >
             {{ $t('common.cancel') }}
           </UiButton>
           <UiButton
@@ -708,7 +730,10 @@
                 {{ $t('agent.settings.acpRuntime.displayName') }} <span class="text-error">*</span>
               </span>
               <div class="relative flex items-center">
-                <i class="fa-solid fa-cube absolute left-3 text-text-secondary text-xs pointer-events-none" aria-hidden="true"></i>
+                <i
+                  class="fa-solid fa-cube absolute left-3 text-text-secondary text-xs pointer-events-none"
+                  aria-hidden="true"
+                ></i>
                 <input
                   v-model="integrationForm.displayName"
                   required
@@ -756,7 +781,13 @@
 
       <template #footer>
         <div class="flex items-center justify-end gap-2">
-          <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled" @click="integrationModalOpen = false">
+          <UiButton
+            appearance="soft"
+            tone="neutral"
+            type="button"
+            :disabled="disabled"
+            @click="integrationModalOpen = false"
+          >
             {{ $t('common.cancel') }}
           </UiButton>
           <UiButton

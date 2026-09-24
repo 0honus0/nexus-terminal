@@ -113,7 +113,11 @@
   const _legacyPluginGroupKey = 'agent.settings.groups.plugins';
 
   const selectGroup = (id: AgentSettingsGroupId): void => {
-    if (activeGroup.value === id) return;
+    if (activeGroup.value === id) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.querySelector('section[ref="contentContainer"]')?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     activeGroup.value = id;
     visitedGroups.add(id);
     loadError.value = '';
@@ -496,7 +500,7 @@
     <!-- 顶部状态与主控条 (Status & Master Switch Banner) -->
     <div
       v-if="settings"
-      class="rounded-xl border border-border/70 bg-card/60 backdrop-blur-sm px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2.5 sm:gap-3 shadow-2xs"
+      class="rounded-xl border border-border bg-card px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2.5 sm:gap-3 shadow-xs"
     >
       <!-- 左边两个靠左边：已启用状态 + 活跃 App 整体展示 -->
       <div class="flex items-center gap-2.5 min-w-0">
@@ -509,11 +513,13 @@
         </span>
 
         <span
-          class="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs text-text-secondary shadow-2xs shrink-0 select-none"
+          class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs text-text-secondary shadow-2xs shrink-0 select-none"
         >
           <span>{{ $t('agent.settings.summary.activeApps') }}</span>
           <span class="font-mono font-medium text-foreground tracking-wide">
-            <span :class="enabledApps > 0 ? 'text-primary font-semibold' : 'text-text-secondary'">{{ enabledApps }}</span>
+            <span :class="enabledApps > 0 ? 'text-primary font-semibold' : 'text-text-secondary'">{{
+              enabledApps
+            }}</span>
             <span class="text-text-secondary/50 mx-1">/</span>
             <span>{{ apps.length }}</span>
           </span>
@@ -556,28 +562,24 @@
         <!-- 核心维度导航 (唯一定级导航，占满整行均匀分布) -->
         <div class="w-full">
           <nav
-            class="grid grid-cols-4 gap-1 sm:gap-1.5 p-1 rounded-xl bg-card/60 border border-border/40 backdrop-blur-md shadow-2xs w-full"
+            class="grid grid-cols-4 gap-1.5 p-1.5 rounded-xl bg-card border border-border shadow-xs w-full"
             :aria-label="'agent.settings.navigation'"
           >
             <button
               v-for="group in groups"
               :key="group.id"
               type="button"
-              class="flex items-center justify-center gap-1 sm:gap-2 rounded-lg px-0.5 sm:px-3 py-1.5 sm:py-2 text-[10.5px] sm:text-xs font-medium transition-all cursor-pointer w-full text-center"
+              class="flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg px-1 sm:px-3 py-2 text-xs font-medium transition-all cursor-pointer w-full text-center"
               :class="
                 activeGroup === group.id
-                  ? 'bg-primary text-white shadow-2xs font-semibold'
-                  : 'text-text-secondary hover:bg-header/50 hover:text-foreground'
+                  ? 'border border-primary bg-primary text-white shadow-xs font-semibold'
+                  : 'border border-border/70 bg-background/60 hover:bg-header hover:border-border text-foreground hover:text-foreground font-medium shadow-2xs'
               "
               :aria-current="activeGroup === group.id ? 'page' : undefined"
               @click="selectGroup(group.id)"
             >
               <i
-                :class="[
-                  group.icon,
-                  'text-[10px] sm:text-xs shrink-0',
-                  activeGroup === group.id ? 'text-white' : 'text-primary/70',
-                ]"
+                :class="[group.icon, 'text-xs shrink-0', activeGroup === group.id ? 'text-white' : 'text-primary']"
                 aria-hidden="true"
               ></i>
               <span class="truncate">{{ $t(group.label) }}</span>

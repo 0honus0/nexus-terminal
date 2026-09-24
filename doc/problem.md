@@ -12,7 +12,7 @@
 > 巨型 UI 文件拆分（§3.1；2026-09-23 已复核并**按约定延后**——该条无隐藏的用户可见缺陷，拆分需搬迁约 30 props + 15 emit，
 > 正确验收依赖 Provider CRUD / Run 详情两条主路径的逐控件回归，本环境 `runner_not_configured` 无法覆盖，详见 §3.1 的复核块）；**§3.5 的"i18n 死 key"已于本轮关闭**（§7.40：新增可达性门禁 + 清掉 75×3 条不可达文案，字典 1,467 → 1,392）；**"后端工具结果摘要英文硬编码" 本轮已关闭**，仅剩 `mcp-tools.ts`（远端不可信内容，刻意排除）、`execution-errors.ts` 前缀与 `command.reason` 三处非 UI 残余并入 §3.6 跟踪；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
-> **历史提交完整复核补充（2026-09-23）**：现已对 `b0d7b220..862a458` **66/66 个提交**逐个回看“改动文件 → 对应 Problem 闭环 → 当前 HEAD 实现”。首轮 / 第一遍完整复核确认 §7.41–§7.51；随后继续做跨切面反向审计（状态机、异步 generation、跨账号/session、持久化、i18n、a11y/命中区、Gen2 公共层、跨 tab、frontend/backend 契约、mutation commit boundary、分页、terminal、plugin/KeepAlive 生命周期、Plugin 安装链、Runner runtime/reconcile、Workspace checkpoint、SQLite migration 与 backup/restore），现已审计到 §7.146，其中确认 **91 条**新增开放项；另有 §7.117 已在真实复现后当场修复并验证；§7.80 / §7.124 经跨组件或真实 caller 复核已排除。新增高风险包括 Memory host refresh 静默覆盖候选草稿（§7.64）、Run 详情 approvals 旧响应回写（§7.65）、Plugin bridge/RPC outcome 缺口（§7.67–§7.68）、App Tab / version cache 泄漏（§7.73）、失败域共用 error slot（§7.75）、create 类 mutation 的 caller-stable identity 缺口（§7.78）、enabled-but-failed App 仍允许 Send（§7.81）、Settings optimistic conflict 不 reconcile（§7.82）、Provider 拉取模型旧请求跨 modal 污染（§7.83）、Provider “测试连接”提前持久化（§7.84）、Workspace restart 的 Runner Plugin 半失败状态（§7.85）、toolchain switch 的 delete unknown/failed 可把 workspace 长期留在 stopping（§7.86）、Host Runner 异常重启后的 detached child orphan（§7.87）、Plugin upgrade draining continuation 易失（§7.88）、runtime cleanup 可在 ACP/Terminal 尚未退出时删 workspace（§7.89）、checkpoint capture 不冻结 live Workspace writer（§7.90）、checkpoint restore 在目录 rename 中点崩溃后无法 startup reconcile（§7.91）、Terminal/ACP 外部 writer 可穿透 file patch 的 SHA precondition 并被静默覆盖（§7.92）、Workspace lifecycle 不等待 background job 真正退出就成功（§7.93），toolchain switch 可在旧 generation ACP/Terminal 仍存活时启动新 generation（§7.94），普通 restart 也会在旧 ACP/Terminal 未退出时重新激活 runtime/plugin（§7.95），手动 checkpoint resume 在 Workspace restore 失败后可留下已提交的新 Run、重试再建一个 Run（§7.96），同一 Workspace 的不同 lifecycle action 可用同一个 expectedVersion 并发通过（§7.97），全局 `/opt/nexus/packs/<family>/<version>` canonical symlink 会让不同 digest 的 frozen Workspace 互相改写长寿命进程的 toolchain 解析（§7.98），Safety Network 一次连接加载失败后即使共享 store 后来恢复仍会永久卡失败态（§7.99），Agent migration #23/#34 能把 partial schema 错标成“已完成迁移”（§7.100），“完整备份”遗漏全部 Agent/AI 表与权威 Artifact/Plugin 文件，恢复后形成跨时点混合状态（§7.101），backup 文件目录 swap 的 rollback/crash recovery 不能保证恢复前数据（§7.102），Memory import confirmation 与最终副作用不原子、unknown outcome 后可重复导入（§7.103），Root Scheduler 出队后 async preflight 失败会永久丢 Run（§7.104），Host durable event outbox 没有 retention、会按用户永久增长（§7.105），Plugin stage 没有 TTL/delete 生命周期、可永久累积大体积 staging 目录（§7.106），Artifact 上传 rename→ready commit 竞态可留下未计费 orphan blob（§7.107），AppStorage 只按 value bytes 计 quota、可被海量小值+长 key 绕过实际磁盘限制（§7.108），Backup export/import 缺一致性 snapshot 与全局串行化（§7.109），Plugin AppStorage 可直接改写 Host-owned Execution/Subagent Policy（§7.110），Manual checkpoint 缺 delete/retention、可长期锁住 Artifact quota（§7.111），Provider model discovery 的 response-size 限制在全量缓冲后才检查（§7.112），Plugin 成功 upgrade 后旧 immutable version 无 owner 仍永久留盘（§7.113），Plugin upgrade 在 quiesce 前 capture AppStorage、可静默覆盖并发写（§7.114），Host durable event 的内存 wake 丢失后在线订阅不会自愈（§7.115），Backend Plugin child→Host protocol limit 在无换行 stdout 下无法约束父进程缓冲（§7.116），Runner journal unknown evidence 无 retention（§7.118）、builtin Toolchain command-scoped download cache 缺 owner 自动回收（§7.119），Runner admin pack install/uninstall 缺资源级串行化（§7.120），ACP WebSocket→child stdin 缺 aggregate backpressure（§7.121），Runner Plugin generation HOME 没有 cleanup owner（§7.122），Workspace Job output 在执行/wire/journal 三层上限不一致（§7.123），Workspace lifecycle durable postcondition 与 command unknown 缺权威重同步（§7.125）、JobRunner byte-budget 截断破坏 UTF-8（§7.126），Runner Toolchain install crash 可留下无 owner `.staging` 大树（§7.127），Runner `/storage` Workspace collection 与 Backend decoder 上限不一致（§7.128），corrupt Runner journal 在 supervisor restart loop 中会重复复制 forensic evidence、持续放大磁盘占用（§7.129），Runner terminal journal 写失败会把已成功副作用反写成 failed（§7.130），Project Instructions omission producer/decoder 上限不一致（§7.131），Workspace provision failure 会把 Runner owner 永久留在 creating、官方 cleanup 持续 skip（§7.132），Runner catalog 合法最大 collection 会被 Backend 独立 1MB transport cap 提前拒绝（§7.133），Backend Plugin async line handler 可把 malformed protocol 升级成主进程 unhandled rejection（§7.134），以及 Host→Plugin child response path 缺 aggregate backpressure（§7.135）；继续覆盖后续增量提交到当前 HEAD `af543606` 后，又确认默认模型 optimistic identity 丢 Provider（§7.136）、`a6371f9` 重新打开 Launcher 长按拖动闭环（§7.137）、Provider“导入全部”与 100-model hard cap 分叉（§7.138）、Settings `?tab=` 与 KeepAlive 路由状态脱节（§7.142）、隐藏 Settings 分组取消 lazy mount 后提前发起网络请求/错误（§7.143）、Agent tab 的 `aria-controls` 目标被重构删除（§7.144）、Settings ARIA tab 键盘模型历史缺口（§7.145）、`a6371f9` 用 dummy i18n literal 绕过 §7.40 dead-key 门禁（§7.146）。因此任何早期“只剩 N 条开放项”的描述都只是当时快照；**当前新增开放项为 §7.53–§7.79、§7.81–§7.116、§7.118–§7.123、§7.125–§7.146；§7.80 / §7.124 明确标为排除项，§7.117 已修复**。当前工作树另有未提交改动；涉及 dirty 文件的本轮结论均重新用 committed HEAD / 审计基线 `862a458` 取证，未把临时施工状态归因到 66 commit。
+> **历史提交完整复核补充（2026-09-23）**：`b0d7b220..862a458` 按 Git 左开区间语义的 **66/66 个提交**已逐个回看“改动文件 → 对应 Problem 闭环 → 当前 HEAD 实现”；收尾又把左边界 `b0d7b220` 本身单独补审，因此从 `b0d7b220`（含）到当前 HEAD `97560f1` 共 **73/73 个提交**已有明确 commit→Problem/纯文档结论。首轮 / 第一遍完整复核确认 §7.41–§7.51；随后继续做跨切面反向审计（状态机、异步 generation、跨账号/session、持久化、i18n、a11y/命中区、Gen2 公共层、跨 tab、frontend/backend 契约、mutation commit boundary、分页、terminal、plugin/KeepAlive 生命周期、Plugin 安装链、Runner runtime/reconcile、Workspace checkpoint、SQLite migration 与 backup/restore），现已审计到 §7.153，其中确认 **98 条**新增开放项；另有 §7.117 已在真实复现后当场修复并验证；§7.80 / §7.124 经跨组件或真实 caller 复核已排除。新增高风险包括 Memory host refresh 静默覆盖候选草稿（§7.64）、Run 详情 approvals 旧响应回写（§7.65）、Plugin bridge/RPC outcome 缺口（§7.67–§7.68）、App Tab / version cache 泄漏（§7.73）、失败域共用 error slot（§7.75）、create 类 mutation 的 caller-stable identity 缺口（§7.78）、enabled-but-failed App 仍允许 Send（§7.81）、Settings optimistic conflict 不 reconcile（§7.82）、Provider 拉取模型旧请求跨 modal 污染（§7.83）、Provider “测试连接”提前持久化（§7.84）、Workspace restart 的 Runner Plugin 半失败状态（§7.85）、toolchain switch 的 delete unknown/failed 可把 workspace 长期留在 stopping（§7.86）、Host Runner 异常重启后的 detached child orphan（§7.87）、Plugin upgrade draining continuation 易失（§7.88）、runtime cleanup 可在 ACP/Terminal 尚未退出时删 workspace（§7.89）、checkpoint capture 不冻结 live Workspace writer（§7.90）、checkpoint restore 在目录 rename 中点崩溃后无法 startup reconcile（§7.91）、Terminal/ACP 外部 writer 可穿透 file patch 的 SHA precondition 并被静默覆盖（§7.92）、Workspace lifecycle 不等待 background job 真正退出就成功（§7.93），toolchain switch 可在旧 generation ACP/Terminal 仍存活时启动新 generation（§7.94），普通 restart 也会在旧 ACP/Terminal 未退出时重新激活 runtime/plugin（§7.95），手动 checkpoint resume 在 Workspace restore 失败后可留下已提交的新 Run、重试再建一个 Run（§7.96），同一 Workspace 的不同 lifecycle action 可用同一个 expectedVersion 并发通过（§7.97），全局 `/opt/nexus/packs/<family>/<version>` canonical symlink 会让不同 digest 的 frozen Workspace 互相改写长寿命进程的 toolchain 解析（§7.98），Safety Network 一次连接加载失败后即使共享 store 后来恢复仍会永久卡失败态（§7.99），Agent migration #23/#34 能把 partial schema 错标成“已完成迁移”（§7.100），“完整备份”遗漏全部 Agent/AI 表与权威 Artifact/Plugin 文件，恢复后形成跨时点混合状态（§7.101），backup 文件目录 swap 的 rollback/crash recovery 不能保证恢复前数据（§7.102），Memory import confirmation 与最终副作用不原子、unknown outcome 后可重复导入（§7.103），Root Scheduler 出队后 async preflight 失败会永久丢 Run（§7.104），Host durable event outbox 没有 retention、会按用户永久增长（§7.105），Plugin stage 没有 TTL/delete 生命周期、可永久累积大体积 staging 目录（§7.106），Artifact 上传 rename→ready commit 竞态可留下未计费 orphan blob（§7.107），AppStorage 只按 value bytes 计 quota、可被海量小值+长 key 绕过实际磁盘限制（§7.108），Backup export/import 缺一致性 snapshot 与全局串行化（§7.109），Plugin AppStorage 可直接改写 Host-owned Execution/Subagent Policy（§7.110），Manual checkpoint 缺 delete/retention、可长期锁住 Artifact quota（§7.111），Provider model discovery 的 response-size 限制在全量缓冲后才检查（§7.112），Plugin 成功 upgrade 后旧 immutable version 无 owner 仍永久留盘（§7.113），Plugin upgrade 在 quiesce 前 capture AppStorage、可静默覆盖并发写（§7.114），Host durable event 的内存 wake 丢失后在线订阅不会自愈（§7.115），Backend Plugin child→Host protocol limit 在无换行 stdout 下无法约束父进程缓冲（§7.116），Runner journal unknown evidence 无 retention（§7.118）、builtin Toolchain command-scoped download cache 缺 owner 自动回收（§7.119），Runner admin pack install/uninstall 缺资源级串行化（§7.120），ACP WebSocket→child stdin 缺 aggregate backpressure（§7.121），Runner Plugin generation HOME 没有 cleanup owner（§7.122），Workspace Job output 在执行/wire/journal 三层上限不一致（§7.123），Workspace lifecycle durable postcondition 与 command unknown 缺权威重同步（§7.125）、JobRunner byte-budget 截断破坏 UTF-8（§7.126），Runner Toolchain install crash 可留下无 owner `.staging` 大树（§7.127），Runner `/storage` Workspace collection 与 Backend decoder 上限不一致（§7.128），corrupt Runner journal 在 supervisor restart loop 中会重复复制 forensic evidence、持续放大磁盘占用（§7.129），Runner terminal journal 写失败会把已成功副作用反写成 failed（§7.130），Project Instructions omission producer/decoder 上限不一致（§7.131），Workspace provision failure 会把 Runner owner 永久留在 creating、官方 cleanup 持续 skip（§7.132），Runner catalog 合法最大 collection 会被 Backend 独立 1MB transport cap 提前拒绝（§7.133），Backend Plugin async line handler 可把 malformed protocol 升级成主进程 unhandled rejection（§7.134），以及 Host→Plugin child response path 缺 aggregate backpressure（§7.135）；继续覆盖后续增量提交到当前 HEAD `97560f1` 后，又确认默认模型 optimistic identity 丢 Provider（§7.136）、`a6371f9` 重新打开 Launcher 长按拖动闭环（§7.137）、Provider“导入全部”与 100-model hard cap 分叉（§7.138）、Settings `?tab=` 与 KeepAlive 路由状态脱节（§7.142）、隐藏 Settings 分组取消 lazy mount 后提前发起网络请求/错误（§7.143）、Agent tab 的 `aria-controls` 目标被重构删除（§7.144）、Settings ARIA tab 键盘模型历史缺口（§7.145）、`a6371f9` 用 dummy i18n literal 绕过 §7.40 dead-key 门禁（§7.146）；`97560f1` 又确认 MCP 时间单位回归（§7.147）、子组件提前宣告 async 保存成功（§7.148）、Browser/ACP/MCP 既有配置编辑入口被移除（§7.149）、Plugin catalog 分组 provenance 错配（§7.150）、ACP command-string tokenizer 静默改写 argv（§7.151）；最终反向复核又确认移动端 Settings 总览副标题误接 Agent 文案（§7.152）与非默认 Provider 抽屉泄漏全局默认模型（§7.153）。因此任何早期“只剩 N 条开放项”的描述都只是当时快照；**当前新增开放项为 §7.53–§7.79、§7.81–§7.116、§7.118–§7.123、§7.125–§7.153；§7.80 / §7.124 明确标为排除项，§7.117 已修复**。`97560f1` 落地后一度 clean，但收尾审计期间工作树又出现并行的未提交 Settings UI 施工；本轮所有增量结论均重新以 committed HEAD `97560f1` / 对应 commit diff 取证，未把 dirty 状态归因到 commit。
 
 复查规模（行数统计）：
 
@@ -193,16 +193,23 @@
 | **P1 · 🟠 开放 2026-09-24**               | **Backend Plugin async line handler 无 Promise owner**：readline 用 `void handleLine()`；合法 JSON 但非法 lifecycle/storage/intent protocol 字段会让 decoder 抛错并形成 unhandled rejection，可把单个动态插件错误升级为 Backend 进程 fatal。                                                                                                                                                                                                                                                                                                                                     | `local-plugin-backend-runtime.adapter.ts:BackendPluginProcess.handleLine()`（见 §7.134）                                                             |
 | **P2 · 🟠 开放 2026-09-24**               | **Backend Plugin Host→child response path 忽略 stdin backpressure**：storage/intent/lifecycle response 都直接 `child.stdin.write()`，不看 false、不等 drain、无 aggregate queue/concurrency limit；插件停读 stdin 但持续发合法小请求时，可让主 Backend Writable queue 持续增长。                                                                                                                                                                                                                                                                                                 | `local-plugin-backend-runtime.adapter.ts:BackendPluginProcess`（见 §7.135）                                                                          |
 | **P1 · 🟠 开放 2026-09-24**               | **默认模型 optimistic identity 丢失 Provider 维度**：`af543606` 只缓存 `defaultModelId`，同名模型跨 Provider 时会把当前默认项解析成列表中第一个同 ID 模型；Provider 改变但 modelId 不变时 watcher 也不会重算，失败写入还不会 rollback。错误 key 同时参与 fallback 过滤，可隐藏错误候选并放出真实默认项。                                                                                                                                                                                                                                                                         | `settings/ModelProviderSettings.vue:optimisticDefaultModelId/defaultModelKey`（见 §7.136）                                                           |
-| **P1 · 🟠 重新打开 2026-09-24**           | **`a6371f9` 把 §7.38 已关闭并实测过的 Launcher“长按 320ms 才拖动”回退成 4px 位移即拖动**：轻微手抖再次会移动 44px Launcher，历史“快速移动不拖动”的闭环与当前 HEAD 不一致；`window-manager.ts` 甚至仍保留“explicit long press”旧注释。                                                                                                                                                                                                                                                                                                                                            | `host/AgentLauncher.vue`、`host/window-manager.ts`（见 §7.137）                                                                                      |
+| **P1 · 🟠 重新打开 2026-09-24**           | **Launcher §7.38 闭环被连续回退**：`a6371f9` 把已实测的“长按 320ms 才拖动”改回 4px 位移即拖动；`97560f1` 又删除拖动后出现的可见“重置位置”气泡，只剩右键 `contextmenu` 还原。轻微手抖再次可移动 Launcher，触屏/键盘用户也失去显式恢复入口。                                                                                                                                                                                                                                                                                                                                       | `host/AgentLauncher.vue`、`host/window-manager.ts`（见 §7.137）                                                                                      |
 | **P2 · 🟠 开放 2026-09-24**               | **Provider“导入全部/一键添加全部”与 Backend 100-model hard cap 不一致**：discovery 最多返回 1,000 个模型，前端会把全部 discovered models 直接用于 create/test/update；只要端点返回 >100 个，或现有模型 + 新模型 >100，UI 提供的合法操作就稳定得到 `VALIDATION_FAILED`。                                                                                                                                                                                                                                                                                                          | `openai-provider.adapter.ts`、`provider.service.ts`、`settings/ModelProviderSettings.vue`（见 §7.138）                                               |
-| **P2 · 🟠 开放 2026-09-24**               | **Runner coding projection 在主动截断后仍可声称结果完整**：`workspace_repo_map` 会在相关性排序前按路径顺序提前 break，后面的高相关文件根本不进入候选；symbol budget 耗尽也不必置 `truncated`。 `workspace_code_intel` 的 symbols/diagnostics/definition/references 都先裁到 `maxResults`，随后再用 `results.length > maxResults` 判断截断，计数上限触发时条件天然为 false。 | Runner `workspace-code-intelligence.ts` + Backend `workspace-coding-tools.ts`（见 §7.139） |
-| **P2 · 🟠 开放 2026-09-24**               | **MCP 的 10MB output limit 在底层 HTTP/SSE 完整解码之后才检查**：`SafeMcpFetch` 的 undici Agent 未配置 `maxResponseSize`；SDK 对 JSON 直接 `response.json()`，SSE 也先累积完整 event.data 再 `JSON.parse`；Nexus 到 `jsonValue()` 才 stringify 并检查 10MB。异常/恶意 MCP endpoint 可先让 Backend 接收/解析远超声明上限的数据。 | `safe-mcp-fetch.ts`、`mcp.adapter.ts`、`@modelcontextprotocol/client` transport（见 §7.140） |
-| **P1 · 🟠 开放 2026-09-24**               | **Provider version 推进会把已保存 Subagent Profile 的模型引用变成“隐藏且无法正常修复”的 stale ref**：Profile 冻结 `configurationVersion`，当前 UI 只渲染最新 Provider version；旧 allowed/default ref 不再显示选中。用户重新勾同名模型只会追加新版本 ref，隐藏旧 ref 仍留在数组，保存时 Backend 逐条校验并稳定报 `SUBAGENT_MODEL_UNAVAILABLE`。 | `settings/SubagentSettings.vue`、backend `subagent-policy.ts` / `subagent.service.ts`（见 §7.141） |
-| **P2 · 🟠 开放 2026-09-24**               | **Settings `?tab=` deep-link 与 KeepAlive 本地状态脱节**：`a6371f9` 只在 `onMounted` 读取一次 `route.query.tab`；`/settings` 又按 route name `Settings` 缓存。切本地 tab 不更新 URL，同页 query 变化/离开后返回也不会重跑 mount，因此地址栏可写 `?tab=agent` 而页面长期停在其它 section。 | `app/pages/settings/SettingsPage.vue`、`app/App.vue`、`app/router/index.ts`（见 §7.142） |
-| **P2 · 🟠 开放 2026-09-24**               | **Agent Settings 取消 lazy mount 后，未访问的隐藏分组也会立即发请求**：`a6371f9` 删除 `visitedGroups.has(...)` 的 template `v-if`，四组只剩 `v-show`。首次停在 Models 也会 mount Plugin/MCP/ACP/Workspace/Safety；Plugin 甚至请求 official + 全部 remote catalogs，失败会在当前模型页弹全局错误。 | `settings/AgentSettingsPanel.vue` + request-owning child settings（见 §7.143） |
-| **P2 · 🟠 开放 2026-09-24**               | **Agent Settings tab 的 `aria-controls` 指向不存在的 panel**：`a6371f9` 删除了 `AgentSettingsPanel` 根节点原有的 `id="settings-panel-agent"`，父页仍生成 `aria-controls="settings-panel-agent"`，但没有补 wrapper/id。 | `SettingsPage.vue`、`AgentSettingsPanel.vue`（见 §7.144） |
-| **P2 · 🟠 开放 2026-09-24**               | **Settings 导航声明为 ARIA tabs，却没有 tab widget 键盘模型**：历史 `413f2e99` 起就有 `role=tablist/tab`，当前 mobile/desktop 两套导航仍无方向键、roving tabindex、tabpanel 关系；desktop 纵向 rail 也未声明 vertical orientation。该历史提交早于 66-commit 审计起点。 | `app/pages/settings/SettingsPage.vue`（见 §7.145） |
-| **P2 · 🟠 开放 2026-09-24**               | **`a6371f9` 用无运行语义的 dummy literal 绕过 §7.40 i18n dead-key 门禁**：真实 Settings 分组已不再使用 `agent.settings.groups.plugins`，但源码新增未消费的 `_legacyPluginGroupKey` 保留该字面量；可达性脚本把任意源码 `agent.*` 字符串都算引用，因此三语死 key 仍能通过检查。 | `settings/AgentSettingsPanel.vue`、`scripts/check-agent-i18n.mjs`（见 §7.146） |
+| **P2 · 🟠 开放 2026-09-24**               | **Runner coding projection 在主动截断后仍可声称结果完整**：`workspace_repo_map` 会在相关性排序前按路径顺序提前 break，后面的高相关文件根本不进入候选；symbol budget 耗尽也不必置 `truncated`。 `workspace_code_intel` 的 symbols/diagnostics/definition/references 都先裁到 `maxResults`，随后再用 `results.length > maxResults` 判断截断，计数上限触发时条件天然为 false。                                                                                                                                                                                                      | Runner `workspace-code-intelligence.ts` + Backend `workspace-coding-tools.ts`（见 §7.139）                                                           |
+| **P2 · 🟠 开放 2026-09-24**               | **MCP 的 10MB output limit 在底层 HTTP/SSE 完整解码之后才检查**：`SafeMcpFetch` 的 undici Agent 未配置 `maxResponseSize`；SDK 对 JSON 直接 `response.json()`，SSE 也先累积完整 event.data 再 `JSON.parse`；Nexus 到 `jsonValue()` 才 stringify 并检查 10MB。异常/恶意 MCP endpoint 可先让 Backend 接收/解析远超声明上限的数据。                                                                                                                                                                                                                                                  | `safe-mcp-fetch.ts`、`mcp.adapter.ts`、`@modelcontextprotocol/client` transport（见 §7.140）                                                         |
+| **P1 · 🟠 开放 2026-09-24**               | **Provider version 推进会把已保存 Subagent Profile 的模型引用变成“隐藏且无法正常修复”的 stale ref**：Profile 冻结 `configurationVersion`，当前 UI 只渲染最新 Provider version；旧 allowed/default ref 不再显示选中。用户重新勾同名模型只会追加新版本 ref，隐藏旧 ref 仍留在数组，保存时 Backend 逐条校验并稳定报 `SUBAGENT_MODEL_UNAVAILABLE`。                                                                                                                                                                                                                                  | `settings/SubagentSettings.vue`、backend `subagent-policy.ts` / `subagent.service.ts`（见 §7.141）                                                   |
+| **P2 · 🟠 开放 2026-09-24**               | **Settings `?tab=` deep-link 与 KeepAlive 本地状态脱节**：`a6371f9` 只在 `onMounted` 读取一次 `route.query.tab`；`/settings` 又按 route name `Settings` 缓存。切本地 tab 不更新 URL，同页 query 变化/离开后返回也不会重跑 mount，因此地址栏可写 `?tab=agent` 而页面长期停在其它 section。                                                                                                                                                                                                                                                                                        | `app/pages/settings/SettingsPage.vue`、`app/App.vue`、`app/router/index.ts`（见 §7.142）                                                             |
+| **P2 · 🟠 开放 2026-09-24**               | **Agent Settings 取消 lazy mount 后，未访问的隐藏分组也会立即发请求**：`a6371f9` 删除 `visitedGroups.has(...)` 的 template `v-if`，四组只剩 `v-show`。首次停在 Models 也会 mount Plugin/MCP/ACP/Workspace/Safety；Plugin 甚至请求 official + 全部 remote catalogs，失败会在当前模型页弹全局错误。                                                                                                                                                                                                                                                                                | `settings/AgentSettingsPanel.vue` + request-owning child settings（见 §7.143）                                                                       |
+| **P2 · 🟠 开放 2026-09-24**               | **Agent Settings tab 的 `aria-controls` 指向不存在的 panel**：`a6371f9` 删除了 `AgentSettingsPanel` 根节点原有的 `id="settings-panel-agent"`，父页仍生成 `aria-controls="settings-panel-agent"`，但没有补 wrapper/id。                                                                                                                                                                                                                                                                                                                                                           | `SettingsPage.vue`、`AgentSettingsPanel.vue`（见 §7.144）                                                                                            |
+| **P2 · 🟠 开放 2026-09-24**               | **Settings 导航声明为 ARIA tabs，却没有 tab widget 键盘模型**：历史 `413f2e99` 起就有 `role=tablist/tab`，当前 mobile/desktop 两套导航仍无方向键、roving tabindex、tabpanel 关系；desktop 纵向 rail 也未声明 vertical orientation。该历史提交早于 66-commit 审计起点。                                                                                                                                                                                                                                                                                                           | `app/pages/settings/SettingsPage.vue`（见 §7.145）                                                                                                   |
+| **P2 · 🟠 开放 2026-09-24**               | **`a6371f9` 用无运行语义的 dummy literal 绕过 §7.40 i18n dead-key 门禁**：真实 Settings 分组已不再使用 `agent.settings.groups.plugins`，但源码新增未消费的 `_legacyPluginGroupKey` 保留该字面量；可达性脚本把任意源码 `agent.*` 字符串都算引用，因此三语死 key 仍能通过检查。                                                                                                                                                                                                                                                                                                    | `settings/AgentSettingsPanel.vue`、`scripts/check-agent-i18n.mjs`（见 §7.146）                                                                       |
+| **P2 · 🟠 开放 2026-09-24**               | **MCP 时间戳单位回归**：`97560f1` 把 Backend 的 Unix-seconds `lastAttemptAt/lastSuccessAt` 直接传给 `new Date(number)`，被当作毫秒后会显示到 1970 年附近。                                                                                                                                                                                                                                                                                                                                                                                                                       | `settings/McpIntegrationSettings.vue`（见 §7.147）                                                                                                   |
+| **P2 · 🟠 开放 2026-09-24**               | **Browser / ACP Profile / Model fallback 在父级 async patch 完成前就宣告保存成功**：Vue emit 不 await listener；失败时子组件仍 toast success、关 modal/保留本地 mutation，成功时还可能双 success。                                                                                                                                                                                                                                                                                                                                                                               | `BrowserRuntimeSettings.vue`、`AcpRuntimeSettings.vue`、`ModelProviderSettings.vue`、`AgentSettingsPanel.vue`（见 §7.148）                           |
+| **P1 · 🟠 开放 2026-09-24**               | **`97560f1` 删除三类既有配置编辑能力**：Browser Target/Endpoint、ACP Profile、MCP endpoint/trust 从可编辑控件变成只读卡片，只剩部分开关/删除/新增；普通修改被迫 delete/recreate。                                                                                                                                                                                                                                                                                                                                                                                                | `BrowserRuntimeSettings.vue`、`AcpRuntimeSettings.vue`、`McpIntegrationSettings.vue`（见 §7.149）                                                    |
+| **P2 · 🟠 开放 2026-09-24**               | **Plugin catalog 只按 URL path owner 分组导致 provenance 错配**：不同 host 的同名 owner 会合组，任一 source official 就让整组显示官方，而组头 URL 固定取第一条 catalog。                                                                                                                                                                                                                                                                                                                                                                                                         | `PluginManagementSettings.vue:extractGithubUser/groupedCatalogSources`（见 §7.150）                                                                  |
+| **P2 · 🟠 开放 2026-09-24**               | **ACP 新增 Profile 的 command-string tokenizer 会静默改写 argv**：正则切词不支持 shell escaping/相邻 quoted segment 合并，合法输入可持久化成错误参数数组。                                                                                                                                                                                                                                                                                                                                                                                                                       | `settings/AcpRuntimeSettings.vue:parseCommandToArgv()`（见 §7.151）                                                                                  |
+| **P2 · 🟠 开放 2026-09-24**               | **移动端 Settings 总览误用 Agent 专属副标题**：窄屏“所有设置”目录覆盖全部 Settings 类别，header 却固定渲染 `settings.descriptions.agent`；同一三语字典已有 `settings.mobile.settingsOverview` 但未接入。                                                                                                                                                                                                                                                                                                                                                                         | `app/pages/settings/SettingsPage.vue`（见 §7.152）                                                                                                   |
+| **P2 · 🟠 开放 2026-09-24**               | **非默认 Provider 抽屉显示别家的全局默认模型**：每张 Provider 卡底部都无条件渲染 `defaultModelId                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                                                                                                                                                      | provider.models[0]?.id`，不检查当前 provider 是否 default；多 Provider 时所有抽屉可显示同一个外部 model id。 | `settings/ModelProviderSettings.vue`（见 §7.153） |
 
 ---
 
@@ -3145,26 +3152,19 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ### 7.49 §7.14-c i18n 回看：源码中的英文 UI literal 仍有漏网（P2 · 🟠 开放 2026-09-23）
 
-当时的硬编码扫描主要以 CJK / 字典值为抓手，漏掉了**源码里的英文用户文案**。当前 `AcpRuntimeSettings.vue` 仍有：
+当时的硬编码扫描主要以 CJK / 字典值为抓手，漏掉了**源码里的英文用户文案**。`97560f1` 已把 ACP Integration 的 create/update/delete 成功 toast 改为 i18n key，但未知错误 fallback 仍保留 `formatAgentApiError(cause, 'ACP request failed.')`；同一提交又在 `BrowserRuntimeSettings.submitAddTarget()` 新增了 `ID "${id}" already exists.` 英文校验文案。也就是说 §7.49 仍开放，只是当前漏网点发生了变化。
 
-- `'ACP integration created.'`
-- `'ACP integration updated.'`
-- `'ACP integration profile updated.'`
-- `'ACP integration deleted.'`
-- `formatAgentApiError(cause, 'ACP request failed.')`
-
-同目录 MCP Integration 的对应路径已经全部使用 `t('agent.settings.mcpIntegrations.*')`。所以在 zh-CN / ja-JP 下操作 ACP Integration 时，成功 toast 或未知错误 fallback 会直接显示英文。
-
-第二遍英文 literal 扫描又确认两处遗漏：
+第二遍 literal / accessibility 文案扫描又确认多处遗漏：
 
 - `ModelProviderSettings.vue` 的测试结果能力 badge 仍直接写死 **`Tools`**；同一行的 Image / File badge 已经走 `$t(...)`，因此这不是产品名 / 协议名；
 - 同一文件的 Provider 拉取模型下拉把 registry owner 直接拼成 `owned by ${m.ownedBy}`，在 zh-CN / ja-JP 弹窗里仍会出现英文描述；
 - `AppManagementSettings.targetLabel()` 把 capability target `workspace` 直接显示成 **`Workspace`**（`SSH` 作为协议缩写可保留）；
 - `quantity-format.ts` 的 token 数量精确反馈直接拼接 `${parsed.toLocaleString()} Tokens`；同文件 bytes / seconds 已通过 label helper 本地化，只有 token 单位仍写死英文。
+- `AgentSettingsPanel.vue` 的二级分组 `<nav>` 写成 `:aria-label="'agent.settings.navigation'"`，没有调用 `t()`；三份 Agent locale 实际都已有 `settings.navigation` 翻译，因此屏幕阅读器会读出原始 dotted key，而不是本地化的分区名称。
 
 这些都会在 zh-CN / ja-JP 界面里形成英文孤岛。
 
-**建议修复**：把 ACP 5 条、`Tools` badge、`owned by` 描述、`workspace` target label 与 token 单位一起补进三语字典/label helper；i18n 门禁后续增加“用户反馈 API / template text node / 返回 literal 的 label helper”扫描，而不只查硬编码 CJK。
+**建议修复**：把当前 ACP error fallback、Browser duplicate-ID 校验、`Tools` badge、`owned by` 描述、`workspace` target label 与 token 单位一起补进三语字典/label helper，并把 Agent 子导航 `aria-label` 改成 `t('agent.settings.navigation')`；i18n 门禁后续增加“用户反馈 API / template text node / 返回 literal 的 label helper”扫描，而不只查硬编码 CJK。
 
 ---
 
@@ -3195,88 +3195,90 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.52 66/66 历史 commit 对照矩阵（2026-09-23）
+### 7.52 历史 commit 对照矩阵：`A..B` 66/66 + 左边界基线单独复核（2026-09-23）
 
-复核范围固定为 `b0d7b22..862a458`，`git rev-list --count` = **66**。判断基准是**committed HEAD + 当前未被其它未提交工作树改动覆盖的代码**；当前另有未提交的 Settings 重构，不计入这 66 个 commit 的责任归因。
+原复核范围写作 `b0d7b22..862a458`，`git rev-list --count` = **66**；注意 Git 的 `A..B` 语义**不包含左边界 A 本身**。收尾机械校验已把左边界 `b0d7b22` 也单独补审：它只修改 `doc/problem.md`（31+/29-），不含产品行为。故历史段若按“包含 `b0d7b22` 本身”统计为 **67/67**；再加 `862a458..97560f1` 的 6 个增量提交，当前从 `b0d7b22` 到 HEAD 共 **73/73** 都有 commit→Problem/无产品行为结论。判断基准始终是 committed HEAD；当前并行未提交 Settings 重构不计入 commit 责任归因。
 
-| Commit    | 主题                                                                                     | 复核结论                                                                                             |
-| --------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `a2a9e94` | feat(ui): add Gen2 foundation primitives                                                 | ⚠ 见 §7.51                                                                                           |
-| `af405e9` | fix(agent): close composer and popover layout issues                                     | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `80ff943` | fix(agent): enforce hub modal focus boundary                                             | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `191aba4` | fix(agent): close card and spacing utility gaps                                          | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `9b3f703` | fix(agent): restore hub focus after close                                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `48ecb85` | docs(agent): close verified UI regressions                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `770dc31` | fix(agent): unify model settings popover                                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `493b356` | docs(agent): close stale UI root causes                                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `663f26d` | feat(agent): unify model selection ux                                                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `54003ba` | docs(agent): consolidate ui closure status                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `e7442ee` | fix(agent): align default model combobox text background                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `2210d07` | fix(agent): make hub backdrop a true no-op                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `5364e2b` | fix(agent): raise real small text to an 11px floor                                       | ✅ 当时闭环成立；后续回归见 §7.48                                                                    |
-| `e4d86e2` | fix(agent): finish the 11px reading-text floor                                           | ✅ 当时闭环成立；后续回归见 §7.48                                                                    |
-| `8a3bc76` | fix(agent): finish the hit-target floor for 2.4                                          | ⚠ 见 §7.44                                                                                           |
-| `1e92d78` | fix(agent): route hardcoded palette through theme tokens                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `bdee90b` | fix(ui): let icon color utilities win over the global icon rule                          | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `d9c7ed4` | fix(agent): split composer send from run stop (2.5)                                      | ⚠ 见 §7.47                                                                                           |
-| `1ae8e43` | fix(agent): make the empty-state bento rotation interruptible (2.6)                      | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `d6293b9` | fix(agent): translate the untranslated dictionary entries (7.15-a)                       | ⚠ 见 §7.49                                                                                           |
-| `da1aa01` | fix(agent): explain workspace runtime unavailability (7.15-b)                            | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `05705b8` | fix(agent): localize the remaining raw enums (1.4)                                       | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `e66c4c1` | fix(agent): clean up the approval card details (7.14-b)                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `2959d36` | fix(agent): make the disabled send state readable (7.17-c)                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `761a970` | fix(agent): give the hub window keyboard geometry (2.10)                                 | ⚠ 键盘路径已修，16px 命中区仍在；见 §7.44                                                            |
-| `5986bfb` | i18n(agent): localize the settings numbers and small panels (7.14-c, part 1)             | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `e79cda3` | i18n(agent): finish the hardcoded text cleanup (7.14-c, part 2)                          | ⚠ 见 §7.49                                                                                           |
-| `ded8071` | fix(agent): make the task rail reachable without a pointer (7.14-b)                      | ⚠ 见 §7.43                                                                                           |
-| `9829d0d` | fix(agent): give the empty-state pager real hit targets (7.12)                           | ✅ 伪元素命中区仍在，闭环成立                                                                        |
-| `0a467b6` | fix(agent): make the thread-list zoom discoverable and resettable (7.13-d)               | ⚠ 见 §7.43                                                                                           |
-| `d81c7e0` | refactor(agent): converge the settings primary actions on the Gen2 button (6.2, batch 1) | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `7855cdc` | refactor(agent): converge the settings secondary, danger and icon actions (6.2, batch 2) | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `b3e397a` | refactor(agent): converge the settings checkboxes on the Gen2 control (6.3/6.7, batch 3) | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `d2056c5` | revert(agent): restore the true glass popover and box-free model options                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `3fddac2` | fix(agent): restore the 10px option hint in the hub model popover                        | ✅ 后续被 `8166c89` 改到 9px；见 §7.48                                                               |
-| `8166c89` | style(agent): shrink the hub model popover hint to 9px                                   | 🟠 直接重新引入 §2.3；见 §7.48                                                                       |
-| `64953ed` | fix(agent): refresh the open surface after provider and settings writes                  | ⚠ 同 tab 已修，跨 tab 残留；见 §7.50                                                                 |
-| `2b60702` | style(agent): lift the popover glass to 6px blur                                         | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `0a4b6c8` | refactor(ui): make the glass recipe a shared Gen2 surface                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `d7abf63` | fix(agent): explain why the steady-state settings buttons are disabled                   | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `2893c88` | feat(ui): add UiInfoHint and slim the Agent feature card                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `cb13a89` | refactor(agent): move card descriptions behind the shared info hint                      | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `ef21441` | refactor(agent): audit the hub hint text and fold the popover headers                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `f820e16` | fix(agent): stop the hub window from squeezing out the transcript                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `30fa0ed` | feat(agent): let the thread sidebar collapse and remember the layout                     | 🟠 见 §7.42                                                                                          |
-| `950a235` | feat(agent): double click the hub title bar to maximise                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `8516cc9` | style(agent): move the feature state pill next to its title                              | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `b9978f1` | fix(agent): animate the docked thread sidebar instead of snapping                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `833cb9b` | style(agent): align the settings group pills with the Gen2 control spec                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `81d0987` | refactor(agent): flatten the settings nesting to a single card                           | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `6b1d3f2` | fix(agent): place the composer popovers before they paint                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `308f653` | refactor(agent): give the settings panel a section rail on wide screens                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `5617668` | feat(ui): add a Gen2 empty-state primitive and adopt it in agent settings                | ✅ 功能闭环；lint 覆盖缺口统一见 §7.51                                                               |
-| `606c5c6` | style(agent): make the settings header summary read as stats, not debug output           | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `2128787` | style(agent): calm the settings header bands and action clusters                         | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `fb10342` | style(agent): let settings save buttons follow the dirty state                           | 🟠 见 §7.45                                                                                          |
-| `d6fcb42` | refactor(agent): move the settings dropdowns onto the Gen2 select                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `606fe71` | style(agent): give the quantity unit pills a 24px hit target                             | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `55fac86` | fix(agent): make the model removal buttons and batch confirm consistent                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `4d57ecd` | refactor(agent): finish the select migration in the workspace runtime                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `ddc887b` | fix(agent): stop dumping raw ledger payloads in the task rail                            | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `441810d` | fix(agent): give the error banner a failure domain and a retry action                    | 🟠 见 §7.41                                                                                          |
-| `3016ffb` | fix(agent): make the launcher drag deliberate and measure thread row height              | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `2564ec7` | fix(agent): localize tool-result summaries behind a user-only projection                 | 🟠 见 §7.46                                                                                          |
-| `63ea08b` | chore(agent): gate i18n dictionaries on key reachability                                 | ✅ committed HEAD 复核成立；未提交设置重构不计入历史归因                                             |
-| `862a458` | docs(agent): record the giant-file review decision with measurements                     | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
-| `06f5e0f` | fix(ssh): contain client socket errors                                                   | ⚠ 补强 direct/proxy/final client error owner；jump intermediate 遗漏见 §7.117，当前 dirty 已继续修复 |
-| `58c4d5e` | docs(agent): record ui regressions from history review                                   | 📝 纯文档提交；记录历史复核结论，不新增产品行为                                                      |
-| `2067c28` | docs(agent): complete 66-commit problem audit                                            | 📝 纯文档提交；完成 66/66 第一遍矩阵                                                                 |
-| `a6371f9` | feat(agent): optimize agent settings layout and clean up redundant hints                 | 🟠 endpoint discovery 关联 §7.83 / §7.138；Launcher 回归 §7.137；Settings deep-link §7.142；隐藏分组 eager mount §7.143；Agent panel `aria-controls` 回归 §7.144；i18n 门禁绕过 §7.146 |
-| `af54360` | feat(agent): optimize model select width, card boundaries and disable default popups     | 🟠 默认模型 optimistic identity 回归见 §7.136                                                        |
+| Commit    | 主题                                                                                     | 复核结论                                                                                                                                                                                                                                              |
+| --------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `b0d7b22` | docs(agent): close non-ui review items                                                   | 📝 左边界基线提交；仅 `doc/problem.md`（31+/29-），无产品代码行为；收尾机械校验补入以消除 `A..B` 左开区间歧义                                                                                                                                        |
+| `a2a9e94` | feat(ui): add Gen2 foundation primitives                                                 | ⚠ 见 §7.51                                                                                                                                                                                                                                            |
+| `af405e9` | fix(agent): close composer and popover layout issues                                     | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `80ff943` | fix(agent): enforce hub modal focus boundary                                             | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `191aba4` | fix(agent): close card and spacing utility gaps                                          | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `9b3f703` | fix(agent): restore hub focus after close                                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `48ecb85` | docs(agent): close verified UI regressions                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `770dc31` | fix(agent): unify model settings popover                                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `493b356` | docs(agent): close stale UI root causes                                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `663f26d` | feat(agent): unify model selection ux                                                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `54003ba` | docs(agent): consolidate ui closure status                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `e7442ee` | fix(agent): align default model combobox text background                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `2210d07` | fix(agent): make hub backdrop a true no-op                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `5364e2b` | fix(agent): raise real small text to an 11px floor                                       | ✅ 当时闭环成立；后续回归见 §7.48                                                                                                                                                                                                                     |
+| `e4d86e2` | fix(agent): finish the 11px reading-text floor                                           | ✅ 当时闭环成立；后续回归见 §7.48                                                                                                                                                                                                                     |
+| `8a3bc76` | fix(agent): finish the hit-target floor for 2.4                                          | ⚠ 见 §7.44                                                                                                                                                                                                                                            |
+| `1e92d78` | fix(agent): route hardcoded palette through theme tokens                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `bdee90b` | fix(ui): let icon color utilities win over the global icon rule                          | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `d9c7ed4` | fix(agent): split composer send from run stop (2.5)                                      | ⚠ 见 §7.47                                                                                                                                                                                                                                            |
+| `1ae8e43` | fix(agent): make the empty-state bento rotation interruptible (2.6)                      | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `d6293b9` | fix(agent): translate the untranslated dictionary entries (7.15-a)                       | ⚠ 见 §7.49                                                                                                                                                                                                                                            |
+| `da1aa01` | fix(agent): explain workspace runtime unavailability (7.15-b)                            | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `05705b8` | fix(agent): localize the remaining raw enums (1.4)                                       | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `e66c4c1` | fix(agent): clean up the approval card details (7.14-b)                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `2959d36` | fix(agent): make the disabled send state readable (7.17-c)                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `761a970` | fix(agent): give the hub window keyboard geometry (2.10)                                 | ⚠ 键盘路径已修，16px 命中区仍在；见 §7.44                                                                                                                                                                                                             |
+| `5986bfb` | i18n(agent): localize the settings numbers and small panels (7.14-c, part 1)             | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `e79cda3` | i18n(agent): finish the hardcoded text cleanup (7.14-c, part 2)                          | ⚠ 见 §7.49                                                                                                                                                                                                                                            |
+| `ded8071` | fix(agent): make the task rail reachable without a pointer (7.14-b)                      | ⚠ 见 §7.43                                                                                                                                                                                                                                            |
+| `9829d0d` | fix(agent): give the empty-state pager real hit targets (7.12)                           | ✅ 伪元素命中区仍在，闭环成立                                                                                                                                                                                                                         |
+| `0a467b6` | fix(agent): make the thread-list zoom discoverable and resettable (7.13-d)               | ⚠ 见 §7.43                                                                                                                                                                                                                                            |
+| `d81c7e0` | refactor(agent): converge the settings primary actions on the Gen2 button (6.2, batch 1) | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `7855cdc` | refactor(agent): converge the settings secondary, danger and icon actions (6.2, batch 2) | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `b3e397a` | refactor(agent): converge the settings checkboxes on the Gen2 control (6.3/6.7, batch 3) | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `d2056c5` | revert(agent): restore the true glass popover and box-free model options                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `3fddac2` | fix(agent): restore the 10px option hint in the hub model popover                        | ✅ 后续被 `8166c89` 改到 9px；见 §7.48                                                                                                                                                                                                                |
+| `8166c89` | style(agent): shrink the hub model popover hint to 9px                                   | 🟠 直接重新引入 §2.3；见 §7.48                                                                                                                                                                                                                        |
+| `64953ed` | fix(agent): refresh the open surface after provider and settings writes                  | ⚠ 同 tab 已修，跨 tab 残留；见 §7.50                                                                                                                                                                                                                  |
+| `2b60702` | style(agent): lift the popover glass to 6px blur                                         | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `0a4b6c8` | refactor(ui): make the glass recipe a shared Gen2 surface                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `d7abf63` | fix(agent): explain why the steady-state settings buttons are disabled                   | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `2893c88` | feat(ui): add UiInfoHint and slim the Agent feature card                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `cb13a89` | refactor(agent): move card descriptions behind the shared info hint                      | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `ef21441` | refactor(agent): audit the hub hint text and fold the popover headers                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `f820e16` | fix(agent): stop the hub window from squeezing out the transcript                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `30fa0ed` | feat(agent): let the thread sidebar collapse and remember the layout                     | 🟠 见 §7.42                                                                                                                                                                                                                                           |
+| `950a235` | feat(agent): double click the hub title bar to maximise                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `8516cc9` | style(agent): move the feature state pill next to its title                              | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `b9978f1` | fix(agent): animate the docked thread sidebar instead of snapping                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `833cb9b` | style(agent): align the settings group pills with the Gen2 control spec                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `81d0987` | refactor(agent): flatten the settings nesting to a single card                           | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `6b1d3f2` | fix(agent): place the composer popovers before they paint                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `308f653` | refactor(agent): give the settings panel a section rail on wide screens                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `5617668` | feat(ui): add a Gen2 empty-state primitive and adopt it in agent settings                | ✅ 功能闭环；lint 覆盖缺口统一见 §7.51                                                                                                                                                                                                                |
+| `606c5c6` | style(agent): make the settings header summary read as stats, not debug output           | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `2128787` | style(agent): calm the settings header bands and action clusters                         | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `fb10342` | style(agent): let settings save buttons follow the dirty state                           | 🟠 见 §7.45                                                                                                                                                                                                                                           |
+| `d6fcb42` | refactor(agent): move the settings dropdowns onto the Gen2 select                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `606fe71` | style(agent): give the quantity unit pills a 24px hit target                             | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `55fac86` | fix(agent): make the model removal buttons and batch confirm consistent                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `4d57ecd` | refactor(agent): finish the select migration in the workspace runtime                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `ddc887b` | fix(agent): stop dumping raw ledger payloads in the task rail                            | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `441810d` | fix(agent): give the error banner a failure domain and a retry action                    | 🟠 见 §7.41                                                                                                                                                                                                                                           |
+| `3016ffb` | fix(agent): make the launcher drag deliberate and measure thread row height              | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `2564ec7` | fix(agent): localize tool-result summaries behind a user-only projection                 | 🟠 见 §7.46                                                                                                                                                                                                                                           |
+| `63ea08b` | chore(agent): gate i18n dictionaries on key reachability                                 | ✅ committed HEAD 复核成立；未提交设置重构不计入历史归因                                                                                                                                                                                              |
+| `862a458` | docs(agent): record the giant-file review decision with measurements                     | ✅ 当前 HEAD 未发现新增可证明回归                                                                                                                                                                                                                     |
+| `06f5e0f` | fix(ssh): contain client socket errors                                                   | ⚠ 补强 direct/proxy/final client error owner；jump intermediate 遗漏见 §7.117，完整 ownership 修复已在 `97560f1` 提交                                                                                                                                 |
+| `58c4d5e` | docs(agent): record ui regressions from history review                                   | 📝 纯文档提交；记录历史复核结论，不新增产品行为                                                                                                                                                                                                       |
+| `2067c28` | docs(agent): complete 66-commit problem audit                                            | 📝 纯文档提交；完成 66/66 第一遍矩阵                                                                                                                                                                                                                  |
+| `a6371f9` | feat(agent): optimize agent settings layout and clean up redundant hints                 | 🟠 endpoint discovery 关联 §7.83 / §7.138；Launcher 回归 §7.137；Settings deep-link §7.142；隐藏分组 eager mount §7.143；Agent panel `aria-controls` 回归 §7.144；i18n 门禁绕过 §7.146；mobile 总览误文案 §7.152；Provider drawer 默认模型错配 §7.153 |
+| `af54360` | feat(agent): optimize model select width, card boundaries and disable default popups     | 🟠 默认模型 optimistic identity 回归见 §7.136                                                                                                                                                                                                         |
+| `97560f1` | feat(agent): optimize add button widths and responsive settings navigation               | ✅ 提交 §7.117 SSH/Runner/Browser listener ownership 修复；🟠 新回归见 §7.147–§7.151；同时继续扩大已重开 Launcher §7.137（删除可见 reset）；并保留 §7.136–§7.146 中尚未关闭项                                                                         |
 
 **汇总**：
 
-- 历史基线 66/66 均完成路径与当前实现反查；`862a458..af543606` 后续增量 5/5 也已完成 commit→Problem 对照；
-- 第一遍按 commit 的可证明开放项见 §7.41–§7.51；后续跨切面交叉审计与增量 commit 复核已继续扩展到 §7.53–§7.146；
+- `b0d7b22..862a458` 的 66/66（不含左边界）均完成路径与当前实现反查，左边界 `b0d7b22` 也已单独补审；`862a458..97560f1` 后续增量 6/6 已完成 commit→Problem 对照，因此 `b0d7b22`（含）到当前 HEAD 合计 **73/73** 有明确映射；
+- 第一遍按 commit 的可证明开放项见 §7.41–§7.51；后续跨切面交叉审计与增量 commit 复核已继续扩展到 §7.53–§7.153；
 - 表中 “✅” 只表示“逐 commit 第一遍没有找到达到可证明标准的新回归”，**不覆盖第二遍组合竞态 / 跨组件问题**，也不是替代完整 E2E；
 - `63ea08b` 当时建立的 §7.40 dead-key 门禁在其提交点成立；但 `a6371f9` 已删除真实 `agent.settings.groups.plugins` 导航 consumer，并用未消费的 `_legacyPluginGroupKey` 字面量让旧 key 继续通过可达性扫描，当前回归见 §7.146。
 
@@ -5377,6 +5379,8 @@ Backend Plugin 使用独立 Node child + stdio line protocol。Host 定义 `MAX_
 
 当前 WebCodex Runner 是 Node 22，项目声明 Node >=24，因此验证过程会出现 engine warning；TypeScript build 与 regression 本身均实际通过。
 
+上述完整 SSH / Runner Terminal / Browser listener ownership 修复已随 `97560f1` 提交进入 `dev`；§7.117 不再依赖 dirty 工作树。
+
 ---
 
 ### 7.118 Runner journal 永不回收 unknown command/job，长期重启后会撞 16,384 项上限并让 Runner 无法启动（P2 · 🟠 开放 2026-09-24）
@@ -6030,12 +6034,14 @@ Node Writable 的 `write()` 返回 false 只表示内部 queue 已超过 highWat
 
 因此当前 HEAD 又回到了比 §7.38 修复前 **6px 阈值还更敏感的 4px 阈值**。普通点击时轻微手抖就可能把 Launcher 拖离位置，历史文档里的“长按拖动”闭环与实际实现已经失真。旁证是 `window-manager.ts` 当前注释仍写着 “Dragging it away is now an explicit long press”，说明行为改回去了但契约/文档没有同步。
 
+`97560f1` 又进一步删除了 §7.38 同轮加入的可见“重置位置”气泡：`RESET_VISIBLE_MS`、`resetVisible`、reset timer 与 `data-agent-launcher-reset` 按钮整段被移除；拖动完成后不再出现可发现的恢复入口，当前只剩 `@contextmenu="onContextMenu"` 调 `resetLauncherPosition()`。因此此前“误拖后可发现恢复”的验收也再次失效：触屏设备没有这个显式入口，键盘用户也没有可聚焦的恢复按钮。
+
 本条不是重新争论 UX 偏好，而是对一个已经有明确验收标准、真实 probe 和“已关闭”状态的问题做 regression 记录。
 
 **建议修复**：
 
 - 恢复 §7.38 的 hold intent gate，或采用等价的“时间 + 位移意图”状态机；未满足拖动意图前不得改写持久化位置；
-- 继续保留当前“重置位置/右键还原”入口；
+- 恢复可见、键盘与触摸可达的“重置位置”入口；右键还原只能作为补充，不能作为唯一恢复路径；
 - 直接恢复/固化 §7.38 的 regression：down/up 可打开；<320ms 的 80×60 快速移动不得改变位置；>320ms 后拖动才更新位置；pointercancel 不落盘；
 - 修复后同步 `window-manager.ts` 与 Launcher 注释，避免“代码 4px、注释长按”的双契约。
 
@@ -6064,6 +6070,7 @@ Node Writable 的 `write()` 返回 false 只表示内部 queue 已超过 highWat
 ---
 
 ---
+
 ### 7.139 Runner coding projection 的 count/relevance 截断没有可靠暴露 `truncated`，Repo Map 还会在相关性排序前提前停止扫描（P2 · 🟠 开放 2026-09-24）
 
 继续逐文件审 `packages/agent-runner` 的 Workspace coding projection 时，确认 `workspace_repo_map` 与 `workspace_code_intel` 共用一个“结果有界，但完整性标志不可信”的契约缺口。它不改变 canonical Workspace 文件本身，但会让 Agent 把不完整的导航证据当成完整结果。
@@ -6100,6 +6107,7 @@ Node Writable 的 `write()` 返回 false 只表示内部 queue 已超过 highWat
 - regression：精确匹配文件排在第 `maxFiles+1` 个、101 references→maxResults 100、单文件 symbols > maxSymbols 三种场景都必须保留高相关结果并正确报告 truncation。
 
 ---
+
 ### 7.140 MCP HTTP/SSE response 没有 pre-decode 字节上限，10MB `MCP_OUTPUT_TOO_LARGE` 只能限制解码后的业务结果（P2 · 🟠 开放 2026-09-24）
 
 继续审 Backend 外部 integration transport 后，确认 MCP 虽声明 `MAX_OUTPUT_BYTES = 10MB`，但这个限制并没有约束实际网络读取/JSON 解析阶段。
@@ -6126,6 +6134,7 @@ Node Writable 的 `write()` 返回 false 只表示内部 queue 已超过 highWat
 - regression：无 Content-Length 的 >10MB JSON response、单个 >10MB SSE event 都必须在完整 body/event 被 materialize 前中止；合法小流继续正常工作。
 
 ---
+
 ### 7.141 Provider version 推进后 Subagent Profile 的旧模型 ref 在 UI 中消失，正常重选还会保留隐藏 stale ref，导致 Profile 无法保存/运行（P1 · 🟠 开放 2026-09-24）
 
 继续逐页复核 Subagent 设置与 Backend policy 契约后，确认 Profile 的 `ModelRef.configurationVersion` 冻结语义在 Provider 版本变化后缺少可见的 rebind / migration 路径，并且当前 UI 的精确 key 逻辑会把旧引用隐藏起来。
@@ -6286,6 +6295,200 @@ const _legacyPluginGroupKey = 'agent.settings.groups.plugins';
 - 强化可达性扫描：不要把任意源码字符串都当 caller，优先识别 `t/$t/translateOrRaw` 等真实翻译调用、模板绑定或显式受控的动态 prefix；
 - 至少在 lint 里区分“定义但未被代码消费的普通常量字符串”与真正 i18n lookup；若必须保留动态 key，用集中、可审计的 allowlist / prefix 声明，不要靠 dummy variable；
 - regression：加入一个只存在于未使用 const 的 `agent.*` key，检查必须失败；真实 `$t('agent.*')`、受控动态 prefix 仍必须通过。
+
+---
+
+### 7.147 `97560f1` 把 MCP Unix-seconds 时间戳当毫秒传给 Date，最近刷新时间会显示到 1970 年（P2 · 🟠 开放 2026-09-24）
+
+`McpIntegrationSettings.vue` 在 `97560f1` 中重写状态卡片时，把原来的：
+
+```ts
+new Date(value * 1000);
+```
+
+改成了：
+
+```ts
+new Date(timestamp);
+```
+
+但 Integration 时间字段的协议单位没有改变：Backend 仍以 `clock.nowUnixSeconds()` 写 `lastAttemptAt / lastSuccessAt`，同一 Agent 前端其它 Unix 时间字段也继续使用 `* 1000` 后再构造 `Date`。
+
+因此典型的当前 epoch（约 17 亿）会被浏览器解释成“17 亿毫秒自 1970-01-01 起”，MCP 卡片的“最近成功/最近尝试”会稳定落在 **1970 年 1 月附近**，而不是当前时间。无效日期 guard 无法发现这一点，因为该数值仍是合法毫秒时间戳。
+
+这与 §7.71 的 locale/format 展示问题不同：这里是时间单位错误，任何 locale 都会显示错误时刻。
+
+**建议修复**：
+
+- 明确 protocol DTO 的 epoch 单位，并恢复 `new Date(timestamp * 1000)`；更稳妥地使用共享 `fromUnixSeconds()/formatUnixSeconds()`；
+- 对 Integration / Run / Plugin 等 epoch 字段统一禁止直接 `new Date(number)`；
+- regression 固定输入一个已知 Unix-seconds 值，断言显示年份/小时与预期一致，并覆盖 `null`。
+
+---
+
+### 7.148 `97560f1` 多个 Settings 子组件把父级 async mutation 当成同步成功，失败时仍 toast“已保存”并保留未提交本地状态（P2 · 🟠 开放 2026-09-24）
+
+本次设置卡片重构新增了多条“子组件先改本地状态 → `emit(...)` → 立即成功提示/关弹窗”的路径，但 Vue emit 不会 await 父级 listener 的 Promise。
+
+已确认三组路径：
+
+- **Browser Runtime**：新增/删除 Target、添加/删除 Endpoint 都先写 `targets.value`，随后 `emit('save', ...)`，紧接着 `notifySuccess(targetCreated/targetDeleted/endpointAdded/endpointDeleted)`；新增 modal 还会立即关闭；
+- **ACP Profile**：新增/删除 Profile 先改 `profiles.value`，`emit('saveProfiles', ...)` 后立即成功提示，新增 modal 立即关闭；
+- **Model fallback**：`addFallbackModel()` 发出 `fallbackModels` 后又新增了一次 `saveNoticeFallback` success toast，而父级 `setFallbackModels()` 自己也异步 `patchSection()` 并在真正成功后提示。
+
+父级 Browser/ACP/Model 最终都进入 `AgentSettingsPanel.patchSection()`。该方法通过 `execute()` 调 Backend；validation、network、revision conflict 等任一失败都会在父级报错并返回，但**不会让子组件刚才的 emit 变成 rejected Promise**。
+
+稳定后果：
+
+1. Backend 拒绝 Browser/ACP 保存时，用户先看到“added/deleted and saved”，modal 已关闭，本地列表也已变化；
+2. authoritative settings revision 没推进，watcher 不会因为失败自动 rollback，本地与 Backend 可长期分叉；
+3. 成功路径又可能出现“子组件 success + 父级 patch success”的重复成功提示；
+4. Model fallback 至少会在真实 patch 完成前提前宣告成功，失败时形成 success/error 相互矛盾的反馈。
+
+这与 §7.82 不重复：§7.82 是 stale revision/conflict 后整个 Settings 不 reconcile；本条对**任意 mutation failure**都成立，根因是子组件把 fire-and-forget emit 当成了可确认的 commit boundary。
+
+**建议修复**：
+
+- 需要确认持久化结果的子组件不要用普通 emit 表达 async command；传入 `() => Promise<Result>` callback，或让父级完全拥有 optimistic state/toast/modal close；
+- 若保留 optimistic UI，失败必须 rollback 到 props authoritative snapshot；
+- success toast 只由真正 await Backend commit 的唯一一层发出；
+- regression：Browser add/delete、ACP profile add/delete、fallback add 分别注入 400/409/network failure，断言无 success toast、modal/本地状态可恢复；成功时只出现一次 success。
+
+---
+
+### 7.149 `97560f1` 设置卡片重构删除既有 Browser / ACP Profile / MCP 配置的编辑入口（P1 · 🟠 开放 2026-09-24）
+
+`97560f1` 不只是换布局，它把三类原本可修改的持久配置改成了只读展示，现有用户配置失去正常 update 路径。
+
+**Browser Runtime：**
+
+- 旧版既有 Target 可编辑 `id`、`allowedUrlPatterns`；
+- 旧版既有 Endpoint 可编辑 `url / scope / via / priority / allowPlaintext / verifyTls`；
+- 当前卡片只展示这些值，操作只剩“添加 Endpoint / 删除 Endpoint / 删除 Target”；模板里已没有任何 `v-model="target.*"` 或既有 Endpoint 编辑控件。
+
+**ACP Profile：**
+
+- 旧版既有 Profile 卡片有 `profile.id / argvText / cwd` 三个编辑字段和 Save；
+- 当前 Profile 卡片只读显示 id/cwd/argv，只剩删除；新增 modal 只创建新 Profile，没有 edit modal/action。
+
+**MCP Integration：**
+
+- 旧版有 `changeEndpoint()` 与 `toggleTrustAnnotations()`，现有 Integration 可以直接更新 endpoint / trustToolAnnotations；
+- 当前两个 update handler 已删除。已有 Integration 的 endpoint 只剩“复制链接”，trust 只剩 badge；仍能改 enabled/credential，但不能改 endpoint/trust。
+
+“删掉再重建”不是等价编辑：ACP Integration 持有 `profileId` 引用，删除 Profile 会制造引用缺口；Browser/MCP 删除也会丢失原对象 identity/version/credential 等上下文，并把普通配置调整升级成 destructive workflow。
+
+这是明确的功能回归，而不是 UI 密度偏好：同一 committed diff 删除了原本存在的 update controls / handlers。
+
+**建议修复**：
+
+- 为 Browser Target/Endpoint、ACP Profile、MCP Integration 恢复 Edit action/modal，复用现有 typed update API；
+- edit modal 必须以当前 authoritative object/version 初始化，成功后 reload/reconcile，失败不丢草稿；
+- Browser 至少覆盖 patterns 与完整 endpoint 字段；ACP Profile 覆盖 id/argv/cwd 并处理被 Integration 引用时的 rename/rebind；MCP 覆盖 endpoint/trust；
+- regression 从已有 persisted config 出发，逐字段修改并 reload，证明值真正持久化；同时保证 delete/recreate 不是唯一修改路径。
+
+---
+
+### 7.150 Plugin 仓库分组只按 URL path“owner”聚合，可把不同 host/source 合成同一个“官方仓库”头部（P2 · 🟠 开放 2026-09-24）
+
+`97560f1` 新增 Plugin catalog 分组时，`extractGithubUser(repositoryUrl)` 只提取 pathname 第一段作为 `owner`；`groupMap` 也只以这个 owner 字符串为 key，没有 host / repository URL / catalog identity。
+
+因此下列不同来源会被合并到同一个组：
+
+- `https://github.com/acme/catalog.json`
+- `https://gitlab.com/acme/catalog.json`
+- `https://plugins.example.com/acme/catalog.json`
+
+组合后的 UI 还会进一步错配 provenance：
+
+- 只要组内**任意** source 是 official，就执行 `group.official = true`，整个组头显示“官方仓库”；
+- 组头复制按钮/URL 固定使用 `group.catalogs[0].catalog.repositoryUrl`，不一定是让该组变成 official 的那条来源；
+- 包级 install/trust 操作仍携带各自真实 `catalog + official`，所以当前没有发现 publisher trust 的权限绕过；问题在于用户看到的仓库来源与官方身份可以与实际 package 来源不一致。
+
+最小复现：同时配置一个与官方 catalog pathname owner 相同、但 host 不同的 remote catalog。两者会合并；若 remote 排在第一条，组头可以同时出现“官方仓库”徽章和 remote URL，组内第三方 package 也被视觉归到官方来源下。
+
+在插件供应链 UI 中，provenance/official 标识属于安全决策信息，不能用可能碰撞的 display owner 代替 source identity。
+
+**建议修复**：
+
+- group key 至少使用 canonical `hostname + owner`，更稳妥直接用 repository/source id；owner 只作为展示字段；
+- official badge 必须绑定具体 catalog/source，不能用组内 OR 后覆盖整个混合组；
+- 多 catalog 真要合并时，每个 package/子组都展示真实来源；
+- regression 覆盖 GitHub/GitLab/自定义域同名 owner，以及“remote first + official later”顺序，断言来源 URL / official badge 不交叉污染。
+
+---
+
+### 7.151 `97560f1` ACP 新增 Profile 的“shell command string”正则 tokenizer 会静默改写 argv 语义（P2 · 🟠 开放 2026-09-24）
+
+`97560f1` 把 ACP Profile 新增流程从直接编辑 JSON `argv` 改成“启动命令与参数”输入框；三语提示允许 command string，英文明确写 **“Supports shell command string”**。但 `parseCommandToArgv()` 只用 `/[^\s"']+|"([^"]*)"|'([^']*)'/g` 切 token，不实现 shell 的反斜杠 escaping，也不会把相邻 quoted/unquoted segment 合并成同一个 word。
+
+用当前实现做纯函数探针已稳定复现：
+
+- `acp-agent --name foo\\ bar` → `["acp-agent","--name","foo\\","bar"]`，而 shell word 应是单一参数 `foo bar`；
+- `acp-agent --name foo" bar"baz` → `["acp-agent","--name","foo"," bar","baz"]`，而 shell word 应合并成 `foo barbaz`；
+- 带转义引号的 `"a\\\"b"` 也会被拆坏。
+
+这些结果仍满足当前 `isArgvValid` 的 1–64 token 检查，随后会被 `JSON.stringify(argv)` 持久化，并由 Runner 按错误 argv 启动 ACP 进程，所以不是单纯 placeholder 文案问题。旧版要求直接输入 JSON argv，没有这层有损 command-string 转换，因此该回归由 `97560f1` 新增。
+
+**建议修复**：
+
+- 最稳妥是保留 JSON argv 为 canonical，并把普通输入明确限定为“简单空白分隔”；遇到引号/反斜杠复杂语法时要求 JSON；
+- 若继续承诺 shell command string，则使用经过测试的 shell-word parser，只做 argv parsing，**不要**改成真正执行 shell，以免扩大命令注入面；
+- regression 覆盖 escaped space、单双引号、quoted/unquoted 拼接、escaped quote、空参数 `""` 与 JSON argv，断言最终持久化数组准确。
+
+---
+
+### 7.152 `a6371f9` 移动端 Settings 总览头部误用 Agent 专属描述，整页目录被说明成 AI 设置（P2 · 🟠 开放 2026-09-24）
+
+`a6371f9` 新增移动端 Settings catalog 后，目录页头部写成：
+
+```vue
+<h1>{{ t('settings.title') }}</h1>
+<p>{{ t('settings.descriptions.agent') }}</p>
+```
+
+但这个页面下面列的是 Workspace、System、Appearance、Agent、Security、IP Control、Data、About 等**全部 Settings 分组**。同一 Settings 三语字典已经提供专门的 `settings.mobile.settingsOverview`（en: `Settings Overview`、zh: `设置中心`、ja: `設定センター`），当前 committed HEAD `97560f1` 却没有在 `SettingsPage.vue` 使用该 key。
+
+因此窄屏打开“所有设置”目录时，页面标题虽然是 Settings，副标题却把整个目录解释为 Agent/AI 配置范围；其它七个设置类别与 header 说明直接冲突。
+
+这不是文案偏好：通用 overview key 已经存在，组件却稳定接到了具体 tab 的 description key。
+
+**建议修复**：
+
+- mobile catalog header 改用 `t('settings.mobile.settingsOverview')`，`settings.descriptions.agent` 只保留在 Agent item 自身；
+- regression 在 mobile menu 模式断言 header subtitle 使用 overview key，同时每个 item 仍使用自己的 `descriptionKey`；
+- 增加 Settings mobile catalog 的三语 snapshot/semantic regression，避免“key 存在但 caller 接错 key”。
+
+---
+
+### 7.153 `a6371f9` 每个 Provider 抽屉都显示全局 defaultModelId，非默认 Provider 会展示别家模型（P2 · 🟠 开放 2026-09-24）
+
+`a6371f9` 给每个 Provider 的展开抽屉新增底部状态条时，直接写了：
+
+```vue
+<span>{{ $t('agent.settings.providers.defaultModel') }}:</span>
+<span>{{ defaultModelId || provider.models[0]?.id }}</span>
+```
+
+这里的 `defaultModelId` 是**全局默认模型** prop，不属于当前循环中的 `provider`。表达式没有检查 `provider.id === defaultProviderId`，所以只要系统存在全局默认模型，所有 Provider 抽屉都会优先显示同一个 model id。
+
+最小复现：
+
+1. Provider A 有 `gpt-4o`，并设为全局默认 Provider/Model；
+2. Provider B 只有 `claude-3-5-sonnet`；
+3. 展开 Provider B 的配置抽屉；
+4. 底部仍显示“默认模型: `gpt-4o`”，即使 B 根本没有这个模型。
+
+多 Provider 环境下，这会把 Provider A 的状态伪装成 B 的配置事实。`provider.models[0]?.id` 只在**全局没有任何 defaultModelId** 时才会生效，不能修正非默认 Provider。
+
+这与 §7.136 不重复：§7.136 是 `af54360` 的 optimistic default selection 丢 Provider identity，影响默认项解析/切换/fallback 过滤；本条是 `a6371f9` 新增的 Provider drawer status footer 无条件消费全局 model id，即使不做 mutation 也会稳定显示错误数据。
+
+**建议修复**：
+
+- 只有 `provider.id === defaultProviderId` 时展示“默认模型”，并用完整 `providerId + modelId` identity；
+- 非默认 Provider 若需要 footer，展示真实局部事实，不要把 `provider.models[0]` 冒充“默认模型”；
+- 全局 default pair 指向当前 Provider 但 model 已不存在时显示 stale/missing 状态；
+- regression 覆盖两个 Provider 各自不同模型、同名模型、无全局默认模型三种情况。
 
 ---
 

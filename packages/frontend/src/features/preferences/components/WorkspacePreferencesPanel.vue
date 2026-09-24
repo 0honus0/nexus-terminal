@@ -201,13 +201,15 @@
         {{ loadError }}
       </p>
 
-      <form class="rounded-xl border border-border/70 bg-card/35" @submit.prevent="saveGroup('files', fileKeys)">
-        <div class="border-b border-border/60 px-4 py-3">
+      <form class="rounded-xl border border-border bg-card shadow-xs" @submit.prevent="saveGroup('files', fileKeys)">
+        <div class="border-b border-border bg-header/40 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.files') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.filesHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="min-w-0 rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label
               for="showPopupFileEditor"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -227,7 +229,9 @@
               <p class="mt-1 leading-5">{{ t('settings.popupEditor.description') }}</p>
             </details>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label
               for="showPopupFileManager"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -242,7 +246,9 @@
             </label>
             <p class="mt-2 text-xs leading-5 text-text-secondary">{{ t('settings.popupFileManager.description') }}</p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label
               for="shareFileEditorTabs"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -257,7 +263,9 @@
             </label>
             <p class="mt-2 text-xs leading-5 text-text-secondary">{{ t('settings.shareEditorTabs.description') }}</p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label
               for="fileManagerShowDeleteConfirmation"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -272,7 +280,7 @@
             </label>
           </div>
           <div
-            class="min-w-0 rounded-lg bg-background/70 p-3 lg:col-span-2"
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors lg:col-span-2"
             data-testid="spreadsheet-preview-pagination-setting"
           >
             <div class="mb-3 text-sm font-medium text-foreground">
@@ -315,7 +323,7 @@
             </p>
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3">
           <p class="min-h-4 text-xs" :class="groupMessages.files?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.files?.text }}
           </p>
@@ -330,13 +338,18 @@
         </div>
       </form>
 
-      <form class="rounded-xl border border-border/70 bg-card/35" @submit.prevent="saveGroup('commands', commandKeys)">
-        <div class="border-b border-border/60 px-4 py-3">
+      <form
+        class="rounded-xl border border-border bg-card shadow-xs"
+        @submit.prevent="saveGroup('commands', commandKeys)"
+      >
+        <div class="border-b border-border bg-header/40 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.commands') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.commandsHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label for="workspaceSidebarPersistent" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
                 id="workspaceSidebarPersistent"
@@ -347,7 +360,9 @@
             >
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.sidebarPersistentDescription') }}</p>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <BaseFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
               <BaseSelect
                 id="commandInputSyncTarget"
@@ -361,7 +376,9 @@
             </BaseFormField>
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.commandInputSync.description') }}</p>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label for="showConnectionTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
                 id="showConnectionTags"
@@ -372,7 +389,9 @@
             >
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.showConnectionTagsDescription') }}</p>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label for="showQuickCommandTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
                 id="showQuickCommandTags"
@@ -385,7 +404,10 @@
               {{ t('settings.workspace.showQuickCommandTagsDescription') }}
             </p>
           </div>
-          <div class="rounded-lg bg-background/70 p-3" data-testid="quick-command-search-display-setting">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            data-testid="quick-command-search-display-setting"
+          >
             <label
               for="quickCommandsCollapsibleSearch"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium"
@@ -401,7 +423,9 @@
               {{ t('settings.workspace.quickCommandsCollapsibleSearchDescription') }}
             </p>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label for="quickCommandsCompactMode" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
                 id="quickCommandsCompactMode"
@@ -414,7 +438,9 @@
               {{ t('settings.workspace.quickCommandsCompactModeDescription') }}
             </p>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <BaseFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
               <BaseInput
                 id="terminalScrollbackLimit"
@@ -428,7 +454,9 @@
             </BaseFormField>
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint') }}</p>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label for="terminalRightClickCopyPaste" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
                 id="terminalRightClickCopyPaste"
@@ -442,7 +470,7 @@
             </p>
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3">
           <p class="min-h-4 text-xs" :class="groupMessages.commands?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.commands?.text }}
           </p>
@@ -458,15 +486,17 @@
       </form>
 
       <form
-        class="rounded-xl border border-border/70 bg-card/35"
+        class="rounded-xl border border-border bg-card shadow-xs"
         @submit.prevent="saveGroup('monitoring', monitoringKeys)"
       >
-        <div class="border-b border-border/60 px-4 py-3">
+        <div class="border-b border-border bg-header/40 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.monitoring') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.monitoringHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <div class="space-y-2">
               <label for="dashboardShowLocalResources" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><BaseCheckbox
@@ -490,7 +520,9 @@
               >
             </div>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <BaseFormField
               :label="t('settings.dashboardResources.refreshIntervalLabel')"
               for-id="remoteHostRefreshIntervalSeconds"
@@ -504,7 +536,9 @@
                 :disabled="savingGroup !== null"
             /></BaseFormField>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <label for="showStatusMonitorIpAddress" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
                 id="showStatusMonitorIpAddress"
@@ -528,7 +562,9 @@
               /></BaseFormField>
             </div>
           </div>
-          <div class="rounded-lg bg-background/70 p-3">
+          <div
+            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+          >
             <BaseFormField :label="t('settings.docker.refreshIntervalLabel')" for-id="dockerStatusIntervalSeconds"
               ><BaseInput
                 id="dockerStatusIntervalSeconds"
@@ -549,7 +585,7 @@
             >
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3">
           <p class="min-h-4 text-xs" :class="groupMessages.monitoring?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.monitoring?.text }}
           </p>
@@ -563,8 +599,10 @@
         </div>
       </form>
 
-      <details class="rounded-xl border border-border/70 bg-card/35">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 select-none">
+      <details class="rounded-xl border border-border bg-card shadow-xs">
+        <summary
+          class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 select-none hover:bg-header/30 transition-colors"
+        >
           <span
             ><span class="block text-sm font-semibold text-foreground">{{
               t('settings.workspace.groups.advanced')
@@ -575,9 +613,11 @@
           >
           <i class="fa-solid fa-chevron-down shrink-0 text-xs text-text-secondary" aria-hidden="true"></i>
         </summary>
-        <form class="border-t border-border/60" @submit.prevent="saveGroup('layout', layoutKeys)">
+        <form class="border-t border-border" @submit.prevent="saveGroup('layout', layoutKeys)">
           <div class="grid gap-3 p-3 lg:grid-cols-2">
-            <div class="rounded-lg bg-background/70 p-3">
+            <div
+              class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            >
               <label for="layoutLocked" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><BaseCheckbox
                   id="layoutLocked"
@@ -588,7 +628,9 @@
               >
               <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.layoutLockDescription') }}</p>
             </div>
-            <div class="rounded-lg bg-background/70 p-3">
+            <div
+              class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            >
               <label for="navBarVisible" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><BaseCheckbox
                   id="navBarVisible"
@@ -600,7 +642,7 @@
               <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.navBarVisibleDescription') }}</p>
             </div>
           </div>
-          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3">
             <p class="min-h-4 text-xs" :class="groupMessages.layout?.success ? 'text-success' : 'text-error'">
               {{ groupMessages.layout?.text }}
             </p>

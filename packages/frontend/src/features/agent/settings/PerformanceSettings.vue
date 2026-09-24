@@ -54,9 +54,9 @@
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-xl border border-border/70 bg-card/35">
+  <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
     >
       <div class="flex items-center gap-1.5">
         <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.performance.title') }}</h3>
@@ -120,7 +120,7 @@
     </div>
 
     <div
-      class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-header/20 px-4 py-3 sm:px-5"
+      class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3 sm:px-5"
     >
       <span class="text-xs text-text-secondary">
         {{ isDirty ? $t('agent.settings.performance.unsavedChanges') : $t('agent.settings.performance.activeNotice') }}
