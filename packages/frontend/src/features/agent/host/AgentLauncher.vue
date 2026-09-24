@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import type { AgentHostSummaryDto } from '../api/agent-api';
   import { agentWindowManager } from './window-manager';
 
@@ -135,6 +135,20 @@
     event.preventDefault();
     agentWindowManager.openHub({ restoreRecent: true });
   };
+
+  const handleViewportResize = (): void => {
+    agentWindowManager.clampLauncherPosition();
+  };
+
+  onMounted(() => {
+    agentWindowManager.clampLauncherPosition();
+    window.addEventListener('resize', handleViewportResize);
+  });
+
+  onBeforeUnmount(() => {
+    clearDragTimer();
+    window.removeEventListener('resize', handleViewportResize);
+  });
 </script>
 
 <template>

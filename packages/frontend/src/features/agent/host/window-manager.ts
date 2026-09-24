@@ -34,6 +34,7 @@ const MIN_HEIGHT = 480;
 // §2.8: the launcher's home position. Dragging it away is now an explicit long press, and this
 // constant is what the "reset position" entry restores to (see AgentLauncher.vue).
 const DEFAULT_LAUNCHER_POSITION = { right: 22, bottom: 24 } as const;
+let preferredLauncherPosition: { right: number; bottom: number } = { ...DEFAULT_LAUNCHER_POSITION };
 
 const state = reactive<AgentHubState>({
   status: 'closed',
@@ -69,6 +70,14 @@ const clampBounds = (bounds: AgentHubBounds): AgentHubBounds => {
   const y = Math.min(Math.max(bounds.y, 0), Math.max(0, screen.height - height));
 
   return { x, y, width, height };
+};
+
+const clampLauncherPosition = (position: { right: number; bottom: number }): { right: number; bottom: number } => {
+  const screen = viewport();
+  return {
+    right: Math.max(12, Math.min(position.right, Math.max(12, screen.width - 72))),
+    bottom: Math.max(12, Math.min(position.bottom, Math.max(12, screen.height - 72))),
+  };
 };
 
 const storageKey = (userId: number): string => `nexus.agent.surface.v1.user.${userId}`;
@@ -149,11 +158,11 @@ export const agentWindowManager = {
   // restores — dragging is an explicit long press now, see AgentLauncher.vue.
   defaultLauncherPosition: { right: DEFAULT_LAUNCHER_POSITION.right, bottom: DEFAULT_LAUNCHER_POSITION.bottom },
   setLauncherPosition(position: { right: number; bottom: number }): void {
-    const screen = viewport();
-    state.launcherPosition = {
-      right: Math.max(12, Math.min(position.right, Math.max(12, screen.width - 72))),
-      bottom: Math.max(12, Math.min(position.bottom, Math.max(12, screen.height - 72))),
-    };
+    preferredLauncherPosition = { ...position };
+    state.launcherPosition = clampLauncherPosition(preferredLauncherPosition);
+  },
+  clampLauncherPosition(): void {
+    state.launcherPosition = clampLauncherPosition(preferredLauncherPosition);
   },
   resetLauncherPosition(): void {
     agentWindowManager.setLauncherPosition({ ...DEFAULT_LAUNCHER_POSITION });
@@ -200,7 +209,7 @@ export const agentWindowManager = {
         schemaVersion: 1,
         bounds: preferredBounds,
         maximized: state.maximized,
-        launcherPosition: state.launcherPosition,
+        launcherPosition: preferredLauncherPosition,
         recentAppIds: state.recentAppIds,
         hubView: state.hubView,
         threadSidebarVisible: state.threadSidebarVisible,
@@ -254,6 +263,7 @@ export const agentWindowManager = {
   },
   clamp(): void {
     state.bounds = clampBounds(preferredBounds);
+    state.launcherPosition = clampLauncherPosition(preferredLauncherPosition);
   },
   reset(): void {
     const previous = logContext();
@@ -264,7 +274,8 @@ export const agentWindowManager = {
     state.activeAppId = null;
     state.recentAppIds = [];
     state.hubView = 'conversation';
-    state.launcherPosition = { right: 22, bottom: 24 };
+    preferredLauncherPosition = { ...DEFAULT_LAUNCHER_POSITION };
+    state.launcherPosition = { ...preferredLauncherPosition };
     logger.debug({ previous, ...logContext() }, 'Agent floating window state reset');
   },
 };
