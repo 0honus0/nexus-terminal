@@ -217,6 +217,18 @@
     }
   };
 
+  const postCommitSync = async (operation: string, action: () => Promise<void>): Promise<void> => {
+    try {
+      await action();
+    } catch (cause) {
+      operationFeedback.notifyError({
+        operation: `${operation}-resync`,
+        message: t('agent.operations.postCommitSyncFailed'),
+        cause,
+      });
+    }
+  };
+
   const patchSection = (section: string, patch: Record<string, unknown>, success?: string) =>
     execute(
       `patch-${section}`,
@@ -224,24 +236,31 @@
       async () => {
         if (!settings.value) return;
         settings.value = await agentApi.patchSettings({ [section]: patch }, settings.value.revision);
-        storage.value = await agentApi.storage();
         agentHostEvents.emit('host-changed', undefined);
         agentHostEvents.emit('configuration-changed', undefined);
+        await postCommitSync(`patch-${section}`, async () => {
+          storage.value = await agentApi.storage();
+        });
       },
       success,
     );
 
   const runtimeReady = (state: AgentSettingsViewDto['availability']['state']): boolean =>
-    state === 'enabled' || state === 'degraded';
+    state === 'enabling' || state === 'enabled' || state === 'degraded';
 
   const assertAppReady = (app: AgentAppSummaryDto): void => {
     if (app.enabled && (app.health === 'healthy' || app.health === 'degraded')) return;
     throw new Error(app.healthReason || t('agent.settings.feature.enableFailed'));
   };
 
-  const assertFeatureReady = (view: AgentSettingsViewDto): void => {
+  const reportFeaturePostCommitState = (view: AgentSettingsViewDto): void => {
     if (runtimeReady(view.availability.state)) return;
-    throw new Error(view.availability.reason || t('agent.settings.feature.enableFailed'));
+    const cause = new Error(view.availability.reason || t('agent.settings.feature.enableFailed'));
+    operationFeedback.notifyError({
+      operation: 'enable-feature-health',
+      message: t('agent.operations.postCommitSyncFailed'),
+      cause,
+    });
   };
 
   const changeFeature = (enabled: boolean): void => {
@@ -252,10 +271,12 @@
         async () => {
           if (!settings.value) return;
           const updated = await agentApi.patchSettings({ feature: { enabled: false } }, settings.value.revision);
-          if (updated.availability.state !== 'disabled') throw new Error(t('agent.settings.feature.disableFailed'));
           settings.value = updated;
-          storage.value = await agentApi.storage();
           agentHostEvents.emit('host-changed', undefined);
+          agentHostEvents.emit('configuration-changed', undefined);
+          await postCommitSync('disable-feature', async () => {
+            storage.value = await agentApi.storage();
+          });
         },
         t('agent.settings.feature.disabledSuccess'),
       );
@@ -275,10 +296,13 @@
           }
           const updated = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
           settings.value = updated;
-          assertFeatureReady(updated);
-          storage.value = await agentApi.storage();
+          reportFeaturePostCommitState(updated);
           agentHostEvents.emit('host-changed', undefined);
+          agentHostEvents.emit('configuration-changed', undefined);
           operationFeedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
+          await postCommitSync('enable-feature', async () => {
+            storage.value = await agentApi.storage();
+          });
           return;
         }
         recommendedPlugin.value = recommendation;
@@ -310,11 +334,13 @@
         installProgress.value = 100;
         const updated = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
         settings.value = updated;
-        assertFeatureReady(updated);
-        storage.value = await agentApi.storage();
-        apps.value = await agentApi.apps();
+        reportFeaturePostCommitState(updated);
         agentHostEvents.emit('host-changed', undefined);
+        agentHostEvents.emit('configuration-changed', undefined);
         operationFeedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
+        await postCommitSync('install-recommended-plugin', async () => {
+          [storage.value, apps.value] = await Promise.all([agentApi.storage(), agentApi.apps()]);
+        });
         setTimeout(() => {
           onboardingVisible.value = false;
           recommendedPlugin.value = null;
@@ -357,7 +383,10 @@
     execute('confirm-hard-limits', ['settings-write'], async () => {
       settings.value = await agentApi.confirmHardLimits(confirmationId, expectedVersion);
       hardLimitPreview.value = null;
-      storage.value = await agentApi.storage();
+      agentHostEvents.emit('host-changed', undefined);
+      await postCommitSync('confirm-hard-limits', async () => {
+        storage.value = await agentApi.storage();
+      });
     });
 
   const createProvider = (input: AgentProviderCreateRequestDto, successMsg?: string) =>
@@ -366,8 +395,10 @@
       ['providers'],
       async () => {
         const created = await agentApi.createProvider(input);
-        providers.value = await agentApi.providers();
-        apps.value = await agentApi.apps();
+        providers.value = [created, ...providers.value.filter((candidate) => candidate.id !== created.id)];
+        await postCommitSync('create-provider', async () => {
+          [providers.value, apps.value] = await Promise.all([agentApi.providers(), agentApi.apps()]);
+        });
         return created;
       },
       successMsg,
@@ -377,7 +408,9 @@
     execute('toggle-provider', ['providers'], async () => {
       const updated = await agentApi.updateProvider(provider, { enabled });
       providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
-      apps.value = await agentApi.apps();
+      await postCommitSync('toggle-provider', async () => {
+        apps.value = await agentApi.apps();
+      });
     });
 
   const changeProviderProtocol = (provider: AgentProviderViewDto, protocol: AgentProviderViewDto['protocol']) =>
@@ -398,29 +431,32 @@
   const deleteProvider = (provider: AgentProviderViewDto) =>
     execute('delete-provider', ['providers', 'settings-write'], async () => {
       await agentApi.deleteProvider(provider.id, provider.version);
-      providers.value = await agentApi.providers();
-      if (settings.value) {
-        const currentModel = settings.value.requestedSettings.model;
-        const modelPatch: Record<string, unknown> = {};
-        const nextFallbackModels = currentModel.fallbackModels.filter(
-          (fallback) => fallback.providerId !== provider.id,
-        );
-        if (nextFallbackModels.length !== currentModel.fallbackModels.length) {
-          modelPatch.fallbackModels = nextFallbackModels;
+      providers.value = providers.value.filter((candidate) => candidate.id !== provider.id);
+      await postCommitSync('delete-provider', async () => {
+        providers.value = await agentApi.providers();
+        if (settings.value) {
+          const currentModel = settings.value.requestedSettings.model;
+          const modelPatch: Record<string, unknown> = {};
+          const nextFallbackModels = currentModel.fallbackModels.filter(
+            (fallback) => fallback.providerId !== provider.id,
+          );
+          if (nextFallbackModels.length !== currentModel.fallbackModels.length) {
+            modelPatch.fallbackModels = nextFallbackModels;
+          }
+          if (currentModel.defaultProviderId === provider.id) {
+            const fallbackProvider =
+              providers.value.find((candidate) => candidate.enabled && candidate.models.length > 0) ??
+              providers.value.find((candidate) => candidate.models.length > 0) ??
+              null;
+            modelPatch.defaultProviderId = fallbackProvider?.id ?? null;
+            modelPatch.defaultModelId = fallbackProvider?.models[0]?.id ?? null;
+          }
+          if (Object.keys(modelPatch).length > 0) {
+            settings.value = await agentApi.patchSettings({ model: modelPatch }, settings.value.revision);
+          }
         }
-        if (currentModel.defaultProviderId === provider.id) {
-          const fallbackProvider =
-            providers.value.find((candidate) => candidate.enabled && candidate.models.length > 0) ??
-            providers.value.find((candidate) => candidate.models.length > 0) ??
-            null;
-          modelPatch.defaultProviderId = fallbackProvider?.id ?? null;
-          modelPatch.defaultModelId = fallbackProvider?.models[0]?.id ?? null;
-        }
-        if (Object.keys(modelPatch).length > 0) {
-          settings.value = await agentApi.patchSettings({ model: modelPatch }, settings.value.revision);
-        }
-      }
-      apps.value = await agentApi.apps();
+        apps.value = await agentApi.apps();
+      });
       return true;
     });
 
@@ -443,7 +479,9 @@
           ...discoveredModels.value,
           [provider.id]: await agentApi.discoverProviderModels(provider.id),
         };
-        providers.value = await agentApi.providers();
+        await postCommitSync('discover-provider-models', async () => {
+          providers.value = await agentApi.providers();
+        });
       },
       null,
     );

@@ -659,13 +659,21 @@ export const composeAgent = ({
         const scope = { userId, appId };
         const updated = await lifecycle.setEnabled(scope, enabled, expectedVersion);
         if (enabled) {
-          scheduler.resumeScope(scope);
-          subagentScheduler?.resumeScope(scope);
-          scheduler.resume();
-          subagentScheduler?.resume();
-          await integrations.syncEnabled(scope);
+          try {
+            scheduler.resumeScope(scope);
+            subagentScheduler?.resumeScope(scope);
+            scheduler.resume();
+            subagentScheduler?.resume();
+            await integrations.syncEnabled(scope);
+          } catch (error) {
+            logger.warn({ err: error, ...scope }, 'Agent app enable post-commit runtime sync failed');
+          }
         } else {
-          await integrations.deactivate(scope);
+          try {
+            await integrations.deactivate(scope);
+          } catch (error) {
+            logger.warn({ err: error, ...scope }, 'Agent app disable post-commit integration deactivation failed');
+          }
         }
         return updated;
       },
@@ -716,17 +724,32 @@ export const composeAgent = ({
         if (before.effectiveSettings.feature.enabled && !updated.effectiveSettings.feature.enabled) {
           const deadline = systemClock.nowUnixSeconds() + 10;
           for (const definition of registry.list()) {
-            await lifecycle.quiesceScope({ userId, appId: definition.manifest.id }, deadline);
+            try {
+              await lifecycle.quiesceScope({ userId, appId: definition.manifest.id }, deadline);
+            } catch (error) {
+              logger.warn(
+                { err: error, userId, appId: definition.manifest.id },
+                'Agent feature disable post-commit quiesce failed',
+              );
+            }
           }
         } else if (!before.effectiveSettings.feature.enabled && updated.effectiveSettings.feature.enabled) {
           for (const definition of registry.list()) {
             const scope = { userId, appId: definition.manifest.id };
-            await lifecycle.resumeScope(scope);
-            scheduler.resumeScope(scope);
-            subagentScheduler?.resumeScope(scope);
+            try {
+              await lifecycle.resumeScope(scope);
+              scheduler.resumeScope(scope);
+              subagentScheduler?.resumeScope(scope);
+            } catch (error) {
+              logger.warn({ err: error, ...scope }, 'Agent feature enable post-commit resume failed');
+            }
           }
-          scheduler.resume();
-          subagentScheduler?.resume();
+          try {
+            scheduler.resume();
+            subagentScheduler?.resume();
+          } catch (error) {
+            logger.warn({ err: error, userId }, 'Agent feature enable post-commit scheduler resume failed');
+          }
         }
         return updated;
       },

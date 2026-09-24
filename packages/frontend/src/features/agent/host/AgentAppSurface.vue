@@ -695,6 +695,29 @@
     if (decision.phase === 'conflict' && next) runtimeOperation.succeed();
   };
 
+  const reportPostCommitSyncFailure = (
+    cause: unknown,
+    options: { domainKey: string; retry: () => void },
+  ): void => {
+    logger.warn({ err: cause, appId: props.appId }, 'Agent UI post-commit resync failed');
+    applyFailure(t('agent.operations.postCommitSyncFailed'), '', {
+      domainKey: options.domainKey,
+      retryLabelKey: 'agent.operations.resync',
+      retry: options.retry,
+    });
+  };
+
+  const postCommitSync = async (
+    action: () => Promise<void>,
+    options: { domainKey: string; retry: () => void },
+  ): Promise<void> => {
+    try {
+      await action();
+    } catch (cause) {
+      reportPostCommitSyncFailure(cause, options);
+    }
+  };
+
   const resolveReconciliation = async (note: string): Promise<void> => {
     const currentRun = run.value;
     const details = reconciliationDetails.value;
@@ -1244,8 +1267,14 @@
     try {
       run.value = await facade.cancelRun(run.value);
       rememberThreadRun(run.value);
-      await Promise.all([refreshLedger(), refreshApprovals(run.value.id), refreshBackgroundRuns()]);
       runtimeOperation.succeed();
+      await postCommitSync(
+        () => Promise.all([refreshLedger(), refreshApprovals(runId), refreshBackgroundRuns()]).then(() => undefined),
+        {
+          domainKey: 'agent.operations.failureDomain.run',
+          retry: () => void Promise.all([refreshLedger(), refreshApprovals(runId), refreshBackgroundRuns()]),
+        },
+      );
     } catch (cause) {
       await recoverRuntimeFailure(cause, runId);
     } finally {
@@ -1259,9 +1288,15 @@
     try {
       run.value = await facade.increaseBudget(run.value, increase);
       rememberThreadRun(run.value);
-      await Promise.all([refreshLedger(), refreshApprovals(run.value.id), refreshBackgroundRuns()]);
       if (run.value && nonTerminal.has(run.value.status)) startRunStream(run.value);
       runtimeOperation.succeed();
+      await postCommitSync(
+        () => Promise.all([refreshLedger(), refreshApprovals(runId), refreshBackgroundRuns()]).then(() => undefined),
+        {
+          domainKey: 'agent.operations.failureDomain.run',
+          retry: () => void Promise.all([refreshLedger(), refreshApprovals(runId), refreshBackgroundRuns()]),
+        },
+      );
     } catch (cause) {
       await recoverRuntimeFailure(cause, runId);
     } finally {
@@ -1277,17 +1312,26 @@
     if (approval.status !== 'requested' || !beginRuntimeMutation()) return;
     try {
       await facade.resolveApproval(approval, decision, feedback);
-      const next = await refreshRun(approval.runId);
-      await Promise.all([
-        refreshApprovals(approval.runId),
-        refreshLedger(),
-        refreshBackgroundRuns(),
-        ...(detailVisible.value && detailSnapshot.value?.id === approval.runId
-          ? [refreshDetailApprovalBatch(approval.runId)]
-          : []),
-      ]);
-      if (next && nonTerminal.has(next.status)) startRunStream(next);
       runtimeOperation.succeed();
+      await postCommitSync(
+        async () => {
+          const next = await refreshRun(approval.runId, 0, false);
+          if (!next) throw new Error('AGENT_POST_COMMIT_RESYNC_FAILED');
+          await Promise.all([
+            refreshApprovals(approval.runId),
+            refreshLedger(),
+            refreshBackgroundRuns(),
+            ...(detailVisible.value && detailSnapshot.value?.id === approval.runId
+              ? [refreshDetailApprovalBatch(approval.runId)]
+              : []),
+          ]);
+          if (nonTerminal.has(next.status)) startRunStream(next);
+        },
+        {
+          domainKey: 'agent.operations.failureDomain.approvals',
+          retry: () => void refreshRun(approval.runId),
+        },
+      );
     } catch (cause) {
       await recoverRuntimeFailure(cause, approval.runId);
     } finally {
@@ -1413,13 +1457,24 @@
   const saveCheckpoint = async (snapshot: AgentRunSnapshotDto | AgentRunViewDto): Promise<void> => {
     if (!beginRuntimeMutation()) return;
     try {
-      await facade.saveCheckpoint(snapshot as AgentRunSnapshotDto);
-      const cps = await facade.listCheckpoints(snapshot.id);
-      detailCheckpoints.value = cps;
+      const created = await facade.saveCheckpoint(snapshot as AgentRunSnapshotDto);
+      detailCheckpoints.value = [created, ...detailCheckpoints.value.filter((checkpoint) => checkpoint.id !== created.id)];
       if (run.value?.id === snapshot.id) {
-        currentRunCheckpoints.value = cps;
+        currentRunCheckpoints.value = [
+          created,
+          ...currentRunCheckpoints.value.filter((checkpoint) => checkpoint.id !== created.id),
+        ];
       }
       runtimeOperation.succeed();
+      const refreshCheckpoints = async (): Promise<void> => {
+        const cps = await facade.listCheckpoints(snapshot.id);
+        detailCheckpoints.value = cps;
+        if (run.value?.id === snapshot.id) currentRunCheckpoints.value = cps;
+      };
+      await postCommitSync(refreshCheckpoints, {
+        domainKey: 'agent.operations.failureDomain.checkpoints',
+        retry: () => void refreshCheckpoints(),
+      });
     } catch (cause) {
       await recoverRuntimeFailure(cause, snapshot.id);
     } finally {
@@ -1436,12 +1491,18 @@
       const resumed = await facade.resumeRun(snapshot, checkpoint.id);
       run.value = resumed;
       rememberThreadRun(resumed);
-      detailSnapshot.value = await facade.getRun(resumed.id);
+      detailSnapshot.value = null;
       detailCheckpoints.value = [];
       detailVisible.value = false;
-      await Promise.all([refreshLedger(), refreshApprovals(resumed.id), refreshBackgroundRuns()]);
       startRunStream(resumed);
       runtimeOperation.succeed();
+      await postCommitSync(
+        () => Promise.all([refreshLedger(), refreshApprovals(resumed.id), refreshBackgroundRuns()]).then(() => undefined),
+        {
+          domainKey: 'agent.operations.failureDomain.run',
+          retry: () => void refreshRun(resumed.id),
+        },
+      );
     } catch (cause) {
       await recoverRuntimeFailure(cause, snapshot.id);
     } finally {
@@ -1455,29 +1516,30 @@
       await facade.deleteRun(snapshot);
       if (detailSnapshot.value?.id === snapshot.id) closeRunDetail();
       if (currentThread.value?.id === snapshot.threadId) {
-        const page = await facade.listRuns(snapshot.threadId);
-        threadRuns.value = page.items;
+        threadRuns.value = threadRuns.value.filter((candidate) => candidate.id !== snapshot.id);
         if (run.value?.id === snapshot.id) {
           stopRunStream();
-          run.value = page.items.find((candidate) => nonTerminal.has(candidate.status)) ?? page.items[0] ?? null;
-          await refreshApprovals(run.value?.id);
+          run.value = threadRuns.value.find((candidate) => nonTerminal.has(candidate.status)) ?? threadRuns.value[0] ?? null;
+          approvalBatch.value = null;
           if (run.value && nonTerminal.has(run.value.status)) startRunStream(run.value);
         }
-        await refreshLedger();
       }
-      await refreshBackgroundRuns();
       runtimeOperation.succeed();
-    } catch (cause) {
-      fail(cause, {
-        domainKey: 'agent.operations.failureDomain.mutation',
-        retryLabelKey: 'agent.operations.resync',
-        retry: () => {
-          const thread = currentThread.value;
-          if (thread) void selectThread(thread, true);
-          else void refreshBackgroundRuns();
-        },
+      const resyncDeletedRun = async (): Promise<void> => {
+        if (currentThread.value?.id === snapshot.threadId) {
+          const page = await facade.listRuns(snapshot.threadId);
+          threadRuns.value = page.items;
+          await refreshApprovals(run.value?.id);
+          await refreshLedger();
+        }
+        await refreshBackgroundRuns();
+      };
+      await postCommitSync(resyncDeletedRun, {
+        domainKey: 'agent.operations.failureDomain.run',
+        retry: () => void resyncDeletedRun(),
       });
-      runtimeOperation.fail(cause);
+    } catch (cause) {
+      await recoverRuntimeFailure(cause, snapshot.id);
     } finally {
       finishRuntimeMutation();
     }
@@ -1536,10 +1598,15 @@
       if (deletingCurrent) {
         resetDeletedThreadSelection();
         clearComposer(true);
-        await selectFirstOrCreateThread();
       }
-      await refreshBackgroundRuns();
       runtimeOperation.succeed();
+      await postCommitSync(
+        async () => {
+          if (deletingCurrent) await selectFirstOrCreateThread();
+          await refreshBackgroundRuns();
+        },
+        { domainKey: 'agent.operations.failureDomain.threads', retry: () => void load() },
+      );
     } catch (cause) {
       fail(cause, {
         domainKey: 'agent.operations.failureDomain.threads',
@@ -1577,8 +1644,11 @@
       backgroundRuns.value = [];
       threadSidebar.value?.resetScroll();
       clearComposer(true);
-      await selectFirstOrCreateThread();
       runtimeOperation.succeed();
+      await postCommitSync(() => selectFirstOrCreateThread(), {
+        domainKey: 'agent.operations.failureDomain.threads',
+        retry: () => void load(),
+      });
     } catch (cause) {
       fail(cause, {
         domainKey: 'agent.operations.failureDomain.threads',

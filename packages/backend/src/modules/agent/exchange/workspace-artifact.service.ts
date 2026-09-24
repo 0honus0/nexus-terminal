@@ -85,7 +85,6 @@ export class WorkspaceArtifactService {
           },
           'Agent Workspace Artifact source close failed',
         );
-        throw error;
       }
     }
   }

@@ -1076,6 +1076,7 @@
       "reconciliationRequired": "A previous mutation or its resource/lease finalization still requires reconciliation. Verify the actual state before releasing the resource quarantine.",
       "restartRecoveryFailed": "Automatic recovery after the backend restart could not continue from its checkpoint: {reasons}",
       "requestFailed": "Request failed. Please try again.",
+      "postCommitSyncFailed": "The change was saved, but follow-up synchronization did not complete. Resync before repeating the action.",
       "failureDomain": {
         "threads": "Conversation list",
         "transcript": "Transcript",

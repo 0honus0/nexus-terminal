@@ -1076,6 +1076,7 @@
       "reconciliationRequired": "先前修改操作或其资源/Lease 收尾仍需要对账，请先核验实际状态，再解除资源隔离。",
       "restartRecoveryFailed": "Backend 重启后的自动恢复未能从恢复检查点继续：{reasons}",
       "requestFailed": "请求失败，请稍后重试。",
+      "postCommitSyncFailed": "更改已保存，但后续同步未完成。请先重新同步，不要重复执行该操作。",
       "failureDomain": {
         "threads": "会话列表",
         "transcript": "会话记录",

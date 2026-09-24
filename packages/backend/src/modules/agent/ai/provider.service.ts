@@ -328,7 +328,6 @@ export class ProviderService {
         },
         'Agent provider change notification failed after create',
       );
-      throw error;
     }
     logger.info(
       {
@@ -374,7 +373,6 @@ export class ProviderService {
         },
         'Agent provider change notification failed after update',
       );
-      throw error;
     }
     logger.info(
       {
@@ -398,7 +396,6 @@ export class ProviderService {
         { userId, providerId, expectedVersion, errorCode: logErrorCode(error, 'PROVIDER_CHANGE_NOTIFICATION_FAILED') },
         'Agent provider change notification failed after remove',
       );
-      throw error;
     }
     logger.info({ userId, providerId, expectedVersion }, 'Agent provider removed');
   }

@@ -320,16 +320,24 @@ export class PluginPackageInstallCoordinator {
         updatedAt: now,
       });
     }
-    stage = await this.repository.updateStage(userId, stageId, stage.versionNumber, {
-      publisherKeyId: verified.publisherKeyId,
-      appId: verified.manifest.id,
-      version: verified.manifest.version,
-      manifest: verified.manifest,
-      status: 'installed',
-      errorCode: null,
-      updatedAt: now,
-    });
-    await this.verifier.discardStage(stageId, stage.appId);
+    try {
+      stage = await this.repository.updateStage(userId, stageId, stage.versionNumber, {
+        publisherKeyId: verified.publisherKeyId,
+        appId: verified.manifest.id,
+        version: verified.manifest.version,
+        manifest: verified.manifest,
+        status: 'installed',
+        errorCode: null,
+        updatedAt: now,
+      });
+      await this.verifier.discardStage(stageId, stage.appId);
+    } catch (error) {
+      logger.warn(
+        { err: error, userId, stageId, appId: plugin.appId, version: plugin.version },
+        'Agent plugin install stage finalization failed after installation commit',
+      );
+      // Installation/app state is already authoritative. Preserve the stage for reconciliation instead of reporting install failure.
+    }
     logger.info(
       {
         userId,

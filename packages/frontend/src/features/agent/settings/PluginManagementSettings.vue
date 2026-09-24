@@ -251,10 +251,30 @@
     }
   };
 
+  const refreshAfterCommit = async (operation: string): Promise<void> => {
+    try {
+      await refresh();
+    } catch (cause) {
+      operationFeedback.notifyError({
+        operation: `${operation}-resync`,
+        message: t('agent.operations.postCommitSyncFailed'),
+        cause,
+      });
+    }
+  };
+
   const saveRepositories = async (repositories: { url: string }[]): Promise<void> => {
     const updated = await agentApi.patchSettings({ plugins: { repositories } }, props.settings.revision);
     emit('settingsUpdated', updated);
-    await loadRemoteCatalogs();
+    try {
+      await loadRemoteCatalogs();
+    } catch (cause) {
+      operationFeedback.notifyError({
+        operation: 'save-repositories-resync',
+        message: t('agent.operations.postCommitSyncFailed'),
+        cause,
+      });
+    }
   };
 
   const addRepository = (): void => {
@@ -282,8 +302,8 @@
   const trustRemotePublisher = (publisher: AgentRemotePluginPublisherDto): void => {
     void run('trust-remote-publisher', async () => {
       await agentApi.trustPluginPublisher(publisher.publicKeyPem, publisher.label);
-      await refresh();
       notifyNotice('PUBLISHER_TRUSTED');
+      await refreshAfterCommit('trust-remote-publisher');
     });
   };
 
@@ -310,16 +330,16 @@
       await agentApi.trustPluginPublisher(publisherPem.value, publisherLabel.value);
       publisherLabel.value = '';
       publisherPem.value = '';
-      await refresh();
       notifyNotice('PUBLISHER_TRUSTED');
+      await refreshAfterCommit('trust-publisher');
     });
   };
 
   const revokePublisher = (keyId: string): void => {
     void run('revoke-publisher', async () => {
       await agentApi.revokePluginPublisher(keyId);
-      await refresh();
       notifyNotice('PUBLISHER_REVOKED');
+      await refreshAfterCommit('revoke-publisher');
     });
   };
 
@@ -352,9 +372,9 @@
         await agentApi.installPlugin(current.stage.id);
         candidate.value = null;
         candidateArtifactName.value = '';
-        await refresh();
         emit('refresh');
         notifyNotice('PLUGIN_INSTALLED');
+        await refreshAfterCommit('install-plugin');
         return;
       }
       const app = appSummary(current.plugin.appId);
@@ -370,9 +390,9 @@
       drainingUpgradeVersion.value = null;
       candidate.value = null;
       candidateArtifactName.value = '';
-      await refresh();
       emit('refresh');
       notifyNotice('PLUGIN_UPGRADED');
+      await refreshAfterCommit('upgrade-plugin');
     });
   };
 
@@ -390,10 +410,10 @@
     if (pendingDataDeletionAppId.value !== installation.appId) return;
     void run('delete-plugin-data', async () => {
       await agentApi.deletePluginData(installation.appId, true);
-      await refresh();
       emit('refresh');
       pendingDataDeletionAppId.value = null;
       notifyNotice('PLUGIN_DATA_DELETED');
+      await refreshAfterCommit('delete-plugin-data');
     });
   };
 

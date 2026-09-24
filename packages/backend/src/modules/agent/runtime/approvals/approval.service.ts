@@ -72,6 +72,7 @@ export class ApprovalService {
       },
       'Agent approval resolution started',
     );
+    const decidedAt = this.clock.nowUnixSeconds();
     let committed: Awaited<ReturnType<ApprovalDecisionCommitPort['resolveToolApproval']>>;
     try {
       committed = await this.stateCommit.resolveToolApproval({
@@ -95,7 +96,7 @@ export class ApprovalService {
           expectedVersion,
           ...(feedback ? { feedback } : {}),
         }),
-        now: this.clock.nowUnixSeconds(),
+        now: decidedAt,
       });
     } catch (error) {
       try {
@@ -128,13 +129,49 @@ export class ApprovalService {
       );
       throw error;
     }
-    if (approval.kind === 'acp_permission') {
-      acpResolution?.finish(decision === 'approved' ? 'allow_once' : 'reject_once');
-    } else {
-      this.onResolved(committed.run);
+    try {
+      if (approval.kind === 'acp_permission') {
+        acpResolution?.finish(decision === 'approved' ? 'allow_once' : 'reject_once');
+      } else {
+        this.onResolved(committed.run);
+      }
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          userId: scope.userId,
+          appId: scope.appId,
+          runId: approval.runId,
+          approvalId,
+          approvalKind: approval.kind,
+        },
+        'Agent approval post-commit notification failed',
+      );
     }
-    const resolved = await this.approvals.get(scope, approvalId);
-    if (!resolved) throw new Error('NOT_FOUND');
+    const newlyResolved = approval.status === 'requested';
+    const fallbackResolved: ApprovalView = {
+      ...approval,
+      status: decision,
+      decidedByUserId: newlyResolved ? actorUserId : approval.decidedByUserId,
+      decidedAt: newlyResolved ? decidedAt : approval.decidedAt,
+      version: newlyResolved ? approval.version + 1 : approval.version,
+    };
+    let resolved = fallbackResolved;
+    try {
+      resolved = (await this.approvals.get(scope, approvalId)) ?? fallbackResolved;
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          userId: scope.userId,
+          appId: scope.appId,
+          runId: approval.runId,
+          approvalId,
+          approvalKind: approval.kind,
+        },
+        'Agent approval post-commit read failed; returning committed resolution',
+      );
+    }
     logger.info(
       {
         userId: scope.userId,

@@ -128,6 +128,18 @@
     }
   };
 
+  const postCommitSync = async (operation: string, action: () => Promise<void>): Promise<void> => {
+    try {
+      await action();
+    } catch (cause) {
+      operationFeedback.notifyError({
+        operation: `${operation}-resync`,
+        message: t('agent.operations.postCommitSyncFailed'),
+        cause,
+      });
+    }
+  };
+
   const refreshObserved = async () => {
     await loadDetails();
     if (lastCommand.value && ['pending', 'running'].includes(lastCommand.value.status)) {
@@ -159,9 +171,11 @@
         setupPreview.value.expectedVersion,
       );
       setupPreview.value = null;
-      emit('settingsUpdated', await agentApi.settings());
-      await loadDetails();
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.setupSubmitted'));
+      await postCommitSync('confirm-setup', async () => {
+        emit('settingsUpdated', await agentApi.settings());
+        await loadDetails();
+      });
     });
 
   const familyConfig = (pack: AgentToolchainCatalogPackDto) =>
@@ -221,9 +235,11 @@
         preview.expectedVersion,
       );
       uninstallPreview.value = null;
-      emit('settingsUpdated', await agentApi.settings());
-      await loadDetails();
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.uninstallSubmitted'));
+      await postCommitSync('confirm-uninstall', async () => {
+        emit('settingsUpdated', await agentApi.settings());
+        await loadDetails();
+      });
     });
 
   const previewRuntimeCleanup = () =>
@@ -263,9 +279,11 @@
         resetPreview.value.expectedVersion,
       );
       resetPreview.value = null;
-      emit('settingsUpdated', await agentApi.settings());
-      syncSelection();
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.resetComplete'));
+      await postCommitSync('confirm-reset', async () => {
+        emit('settingsUpdated', await agentApi.settings());
+        syncSelection();
+      });
     });
 
   watch(

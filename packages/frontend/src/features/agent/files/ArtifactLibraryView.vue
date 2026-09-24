@@ -170,7 +170,11 @@
     try {
       const updated = await agentApi.retainArtifact(artifact, !artifact.retained);
       items.value = items.value.map((item) => (item.id === updated.id ? updated : item));
-      storage.value = await agentApi.storage();
+      try {
+        storage.value = await agentApi.storage();
+      } catch {
+        error.value = t('agent.operations.postCommitSyncFailed');
+      }
     } catch (cause) {
       error.value = explain(cause);
     } finally {
