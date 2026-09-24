@@ -83,7 +83,7 @@ export const legacyMachineInspectionMigrationScenario = async () => {
       .get() as { count: number };
     assert.equal(legacyRows.count, 0, 'migration 45 must remove decodable legacy machine inspection targets');
     const version = db.prepare('SELECT MAX(id) AS version FROM migrations').get() as { version: number };
-    assert.equal(version.version, 45);
+    assert.equal(version.version, 46);
 
     return [
       { name: 'legacy_machine_inspections_migrated', value: 2, unit: 'rows' },

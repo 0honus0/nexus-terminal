@@ -296,7 +296,7 @@ export const durableContextCheckpointScenario = async () => {
       'migration 30 must create the Context checkpoint owner',
     );
     assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
-    assert.equal(migrationVersion?.version, 45, 'legacy databases must advance through migration 45');
+    assert.equal(migrationVersion?.version, 46, 'legacy databases must advance through migration 46');
   } finally {
     legacyDb.close();
     fs.rmSync(upgradeDirectory, { recursive: true, force: true });
@@ -310,6 +310,6 @@ export const durableContextCheckpointScenario = async () => {
     { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
     { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },
     { name: 'legacy_digest_tables', value: 0, unit: 'tables' },
-    { name: 'migration_version', value: 45, unit: 'version' },
+    { name: 'migration_version', value: 46, unit: 'version' },
   ];
 };
