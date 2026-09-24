@@ -5,6 +5,7 @@ import path from 'node:path';
 const WORK_LOGICAL_ROOT = '/workspace/work';
 const MAX_TARGET_DIRECTORIES = 8;
 const MAX_INSTRUCTION_FILES = 16;
+const MAX_OMISSION_DETAILS = 32;
 const MAX_SOURCE_FILE_BYTES = 64 * 1024;
 const MAX_CONTENT_BYTES_PER_FILE = 16 * 1024;
 const MAX_CONTENT_BYTES_TOTAL = 64 * 1024;
@@ -180,19 +181,22 @@ export const resolveProjectInstructions = (
   );
   const instructions: RunnerProjectInstruction[] = [];
   const omitted: RunnerProjectInstructionOmission[] = [];
+  const recordOmission = (item: RunnerProjectInstructionOmission): void => {
+    if (omitted.length < MAX_OMISSION_DETAILS) omitted.push(item);
+  };
   let remainingBytes = MAX_CONTENT_BYTES_TOTAL;
   for (const [directory, projectRoot] of orderedScopes) {
     if (instructions.length >= MAX_INSTRUCTION_FILES) {
       const candidate = directory + '/AGENTS.md';
       if (fs.existsSync(path.join(hostPathFor(resolvedRoot, directory), 'AGENTS.md'))) {
-        omitted.push({ path: candidate, reason: 'too_many_files' });
+        recordOmission({ path: candidate, reason: 'too_many_files' });
       }
       continue;
     }
     const item = readInstruction(resolvedRoot, directory, projectRoot, remainingBytes);
     if (!item) continue;
     if ('reason' in item) {
-      omitted.push(item);
+      recordOmission(item);
       continue;
     }
     instructions.push(item);
@@ -210,6 +214,7 @@ export const PROJECT_INSTRUCTION_LIMITS = {
   logicalRoot: WORK_LOGICAL_ROOT,
   maxTargetDirectories: MAX_TARGET_DIRECTORIES,
   maxInstructionFiles: MAX_INSTRUCTION_FILES,
+  maxOmissionDetails: MAX_OMISSION_DETAILS,
   maxSourceFileBytes: MAX_SOURCE_FILE_BYTES,
   maxContentBytesPerFile: MAX_CONTENT_BYTES_PER_FILE,
   maxContentBytesTotal: MAX_CONTENT_BYTES_TOTAL,
