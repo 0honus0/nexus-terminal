@@ -1332,45 +1332,55 @@ export class RunnerControllerServer {
       this.save(workspace, 'running');
       return;
     }
-    if (command.action === 'stop') {
-      await Promise.all([
-        this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
-        this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
-      ]);
-      this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
-      await this.dependencies.pluginRunner.quiesceWorkspace(workspace, Math.floor(Date.now() / 1000) + 10);
-      await this.dependencies.pluginRunner.disposeWorkspace(workspace);
-      await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation);
-      this.save(workspace, 'stopped');
-      return;
-    }
-    if (command.action === 'restart') {
-      await Promise.all([
-        this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
-        this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
-      ]);
-      this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
-      await this.dependencies.pluginRunner.disposeWorkspace(workspace);
-      try {
-        await this.dependencies.runtimeEngine.restart(workspace.workspaceId, workspace.generation);
-        await this.dependencies.pluginRunner.activateWorkspace(workspace);
-      } catch (error) {
-        await this.dependencies.pluginRunner.disposeWorkspace(workspace).catch(() => undefined);
-        await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation).catch(() => undefined);
-        this.save(workspace, 'failed');
-        throw error;
+    const releaseLifecycleDrain = this.dependencies.runtimeEngine.beginWorkspaceLifecycleDrain(
+      workspace.workspaceId,
+      workspace.generation,
+    );
+    try {
+      if (command.action === 'stop') {
+        await Promise.all([
+          this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+          this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+        ]);
+        this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
+        await this.dependencies.pluginRunner.quiesceWorkspace(workspace, Math.floor(Date.now() / 1000) + 10);
+        await this.dependencies.pluginRunner.disposeWorkspace(workspace);
+        await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation);
+        this.save(workspace, 'stopped');
+        return;
       }
-      this.save(workspace, 'running');
-      return;
+      if (command.action === 'restart') {
+        await Promise.all([
+          this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+          this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+        ]);
+        this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
+        await this.dependencies.pluginRunner.disposeWorkspace(workspace);
+        try {
+          await this.dependencies.runtimeEngine.restart(workspace.workspaceId, workspace.generation);
+          await this.dependencies.pluginRunner.activateWorkspace(workspace);
+        } catch (error) {
+          await this.dependencies.pluginRunner.disposeWorkspace(workspace).catch(() => undefined);
+          await this.dependencies.runtimeEngine
+            .stop(workspace.workspaceId, workspace.generation)
+            .catch(() => undefined);
+          this.save(workspace, 'failed');
+          throw error;
+        }
+        this.save(workspace, 'running');
+        return;
+      }
+      await Promise.all([
+        this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+        this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+      ]);
+      this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
+      await this.dependencies.pluginRunner.disposeWorkspace(workspace);
+      await this.dependencies.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
+      this.save(workspace, 'deleted');
+    } finally {
+      releaseLifecycleDrain();
     }
-    await Promise.all([
-      this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
-      this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
-    ]);
-    this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
-    await this.dependencies.pluginRunner.disposeWorkspace(workspace);
-    await this.dependencies.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
-    this.save(workspace, 'deleted');
   }
 
   private save(workspace: WorkspaceRecord, status: WorkspaceRecord['status']): void {

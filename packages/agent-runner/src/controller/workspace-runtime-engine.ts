@@ -61,6 +61,7 @@ export class WorkspaceRuntimeEngine {
   private readonly checkpointCaptures = new Set<string>();
   private readonly workspaceMutations = new Set<string>();
   private readonly workspaceJobDrains = new Set<string>();
+  private readonly workspaceLifecycleDrains = new Set<string>();
 
   constructor(runtimeRoot: string, store: ToolchainStore) {
     this.runtime = new WorkspaceRuntimeManager(runtimeRoot, store);
@@ -89,9 +90,25 @@ export class WorkspaceRuntimeEngine {
     });
   }
 
+  beginWorkspaceLifecycleDrain(workspaceId: string, generation: number): () => void {
+    const key = workspaceKey(workspaceId, generation);
+    if (this.workspaceLifecycleDrains.has(key)) throw new Error('WORKSPACE_LIFECYCLE_CONFLICT');
+    this.workspaceLifecycleDrains.add(key);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.workspaceLifecycleDrains.delete(key);
+    };
+  }
+
   acquireWorkspaceWriter(workspaceId: string, generation: number): () => void {
     const key = workspaceKey(workspaceId, generation);
-    if (this.checkpointCaptures.has(key) || this.workspaceMutations.has(key)) {
+    if (
+      this.checkpointCaptures.has(key) ||
+      this.workspaceMutations.has(key) ||
+      this.workspaceLifecycleDrains.has(key)
+    ) {
       throw new Error('WORKSPACE_WRITER_ACTIVE_CONFLICT');
     }
     const status = this.runtime.status(workspaceId, generation);
@@ -232,7 +249,8 @@ export class WorkspaceRuntimeEngine {
       (this.jobs.get(key)?.size ?? 0) > 0 ||
       (this.workspaceWriters.get(key) ?? 0) > 0 ||
       this.checkpointCaptures.has(key) ||
-      this.workspaceMutations.has(key)
+      this.workspaceMutations.has(key) ||
+      this.workspaceLifecycleDrains.has(key)
     ) {
       throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     }
@@ -262,7 +280,8 @@ export class WorkspaceRuntimeEngine {
       (this.jobs.get(key)?.size ?? 0) > 0 ||
       (this.workspaceWriters.get(key) ?? 0) > 0 ||
       this.checkpointCaptures.has(key) ||
-      this.workspaceMutations.has(key)
+      this.workspaceMutations.has(key) ||
+      this.workspaceLifecycleDrains.has(key)
     ) {
       throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     }
@@ -282,7 +301,9 @@ export class WorkspaceRuntimeEngine {
 
   async executeJob(request: WorkspaceJobRequest): Promise<WorkspaceJobResult> {
     const key = workspaceKey(request.workspaceId, request.generation);
-    if (this.workspaceJobDrains.has(key)) throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
+    if (this.workspaceJobDrains.has(key) || this.workspaceLifecycleDrains.has(key)) {
+      throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
+    }
     const execution = this.runtime.prepareJob(request);
     if (this.checkpointCaptures.has(key)) throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     if (this.workspaceMutations.has(key)) throw new Error('WORKSPACE_WRITER_ACTIVE_CONFLICT');
@@ -383,7 +404,8 @@ export class WorkspaceRuntimeEngine {
       (this.jobs.get(key)?.size ?? 0) > 0 ||
       (this.workspaceWriters.get(key) ?? 0) > 0 ||
       this.checkpointCaptures.has(key) ||
-      this.workspaceMutations.has(key)
+      this.workspaceMutations.has(key) ||
+      this.workspaceLifecycleDrains.has(key)
     ) {
       throw new Error('WORKSPACE_WRITER_ACTIVE_CONFLICT');
     }
