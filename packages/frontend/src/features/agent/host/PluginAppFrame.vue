@@ -10,6 +10,7 @@
   const status = ref<'loading' | 'connecting' | 'ready' | 'unavailable'>('loading');
   let bridge: PluginFrontendHostBridge | null = null;
   let generation = 0;
+  let suppressedFrameLoad: HTMLIFrameElement | null = null;
 
   const disposeBridge = (): void => {
     bridge?.close();
@@ -40,9 +41,16 @@
       if (current !== generation) return;
       const frame = iframe.value;
       if (!frame) throw new Error('PLUGIN_FRONTEND_FRAME_MISSING');
-      const nextBridge = new PluginFrontendHostBridge(frame, props.appId, next);
+      let nextBridge: PluginFrontendHostBridge;
+      nextBridge = new PluginFrontendHostBridge(frame, props.appId, next, () => {
+        if (current !== generation || bridge !== nextBridge) return;
+        queueMicrotask(() => {
+          if (current === generation && bridge === nextBridge) void load();
+        });
+      });
       bridge = nextBridge;
       const connected = nextBridge.start();
+      suppressedFrameLoad = frame;
       frame.src = next.url;
       await connected;
       if (current !== generation || bridge !== nextBridge) return;
@@ -53,6 +61,16 @@
       descriptor.value = null;
       status.value = 'unavailable';
     }
+  };
+
+  const onFrameLoad = (event: Event): void => {
+    const loadedFrame = event.currentTarget;
+    if (loadedFrame instanceof HTMLIFrameElement && suppressedFrameLoad === loadedFrame) {
+      suppressedFrameLoad = null;
+      return;
+    }
+    if (status.value !== 'ready' || !descriptor.value) return;
+    void load();
   };
 
   watch(
@@ -76,6 +94,7 @@
       sandbox="allow-scripts"
       referrerpolicy="no-referrer"
       :title="$t('agent.pluginFrontend.frameTitle')"
+      @load="onFrameLoad"
     ></iframe>
     <div
       v-if="status !== 'ready'"

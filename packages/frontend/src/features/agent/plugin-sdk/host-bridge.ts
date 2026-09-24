@@ -96,6 +96,7 @@ export class PluginFrontendHostBridge {
     private readonly iframe: HTMLIFrameElement,
     private readonly appId: string,
     private readonly descriptor: AgentPluginFrontendDescriptorDto,
+    private readonly onDisconnected?: () => void,
   ) {
     this.agent = new PluginAgentSdkDispatcher(appId, (event) => this.postRunEvent(event));
   }
@@ -114,7 +115,12 @@ export class PluginFrontendHostBridge {
   }
 
   close(): void {
+    this.closeInternal(false);
+  }
+
+  private closeInternal(notifyDisconnected: boolean): void {
     if (this.closed) return;
+    const wasConnected = this.connected;
     this.closed = true;
     window.removeEventListener('message', this.onWindowMessage);
     if (this.handshakeTimer !== null) window.clearTimeout(this.handshakeTimer);
@@ -124,9 +130,20 @@ export class PluginFrontendHostBridge {
     this.port = null;
     for (const controller of this.pending.values()) controller.abort();
     this.pending.clear();
-    if (!this.connected) this.rejectHandshake?.(new Error('PLUGIN_BRIDGE_CLOSED'));
+    if (!wasConnected) this.rejectHandshake?.(new Error('PLUGIN_BRIDGE_CLOSED'));
     this.resolveHandshake = null;
     this.rejectHandshake = null;
+    if (notifyDisconnected && wasConnected) {
+      try {
+        this.onDisconnected?.();
+      } catch {
+        // Lifecycle notification must not escape the transport shutdown path.
+      }
+    }
+  }
+
+  private disconnect(): void {
+    this.closeInternal(true);
   }
 
   private readonly onWindowMessage = (event: MessageEvent<unknown>): void => {
@@ -149,22 +166,22 @@ export class PluginFrontendHostBridge {
   };
 
   private readonly onPortError = (): void => {
-    this.close();
+    this.disconnect();
   };
 
   private readonly onPortMessage = (event: MessageEvent<unknown>): void => {
     if (this.closed || !this.port || serializedBytes(event.data) > this.descriptor.maxMessageBytes) {
-      this.close();
+      this.disconnect();
       return;
     }
     if (!isRecord(event.data) || event.data.protocol !== PROTOCOL_VERSION || event.data.nonce !== this.bridgeNonce) {
-      this.close();
+      this.disconnect();
       return;
     }
 
     if (!this.connected) {
       if (event.data.type !== 'nexus.plugin.ack' || event.data.seq !== 0) {
-        this.close();
+        this.disconnect();
         return;
       }
       this.connected = true;
@@ -180,7 +197,7 @@ export class PluginFrontendHostBridge {
     if (event.data.type !== 'nexus.plugin.request') return;
     const message = event.data as unknown as PluginPortMessage;
     if (!('method' in message) || !this.validRequest(message)) {
-      this.close();
+      this.disconnect();
       return;
     }
     this.lastSequence = message.seq;
@@ -321,7 +338,11 @@ export class PluginFrontendHostBridge {
       this.port &&
       serializedBytes(message) + transferBytes(transfer) <= this.descriptor.maxMessageBytes
     ) {
-      this.port.postMessage(message, transfer);
+      try {
+        this.port.postMessage(message, transfer);
+      } catch {
+        this.disconnect();
+      }
     }
   }
 
