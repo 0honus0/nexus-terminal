@@ -715,20 +715,15 @@
 
         <!-- App 标签组 (直接嵌入顶栏，消除二次横切) -->
         <div class="agent-app-tabstrip flex min-w-0 flex-1 self-stretch items-end overflow-x-auto scrollbar-none">
-          <button
+          <div
             v-for="app in displayedApps"
             :key="app.id"
-            type="button"
-            class="agent-app-tab group relative flex h-8 items-center gap-1.5 px-3 transition-colors duration-150 select-none no-drag"
+            class="agent-app-tab group relative flex h-8 items-center transition-colors duration-150 select-none no-drag"
             :class="
               app.id === state.activeAppId
                 ? 'agent-app-tab-active shrink-0 max-w-64 text-foreground'
                 : 'agent-app-tab-inactive shrink min-w-0 max-w-56 text-text-secondary hover:text-foreground'
             "
-            :aria-label="$t('agent.hub.switchToApp', { app: app.displayName })"
-            :title="app.displayName"
-            @pointerdown.stop
-            @click="switchApp(app.id)"
           >
             <span
               v-if="app.id === state.activeAppId"
@@ -739,47 +734,56 @@
               <span class="agent-app-tab-ear agent-app-tab-ear-right"></span>
             </span>
 
-            <!-- Chrome-style tab: text first, no leading app icon. -->
-            <!-- App 名称 -->
-            <span class="agent-app-name relative z-[1] min-w-0 flex-1 truncate text-left">{{ app.displayName }}</span>
+            <button
+              type="button"
+              class="relative z-[1] flex h-full min-w-0 flex-1 items-center gap-1.5 pl-3 text-left"
+              :class="displayedApps.length > 1 ? 'pr-1' : 'pr-3'"
+              :aria-label="$t('agent.hub.switchToApp', { app: app.displayName })"
+              :title="app.displayName"
+              @pointerdown.stop
+              @click="switchApp(app.id)"
+            >
+              <!-- Chrome-style tab: text first, no leading app icon. -->
+              <!-- App 名称 -->
+              <span class="agent-app-name min-w-0 flex-1 truncate">{{ app.displayName }}</span>
 
-            <!-- 运行状态指示徽标 -->
-            <span
-              v-if="app.runningRuns"
-              class="relative z-[1] shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-[11px] font-medium text-primary"
-              :title="$t('agent.hub.runningRuns')"
-            >
-              <i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.runningRuns }}
-            </span>
-            <span
-              v-if="app.pendingApprovals"
-              class="relative z-[1] shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
-              :title="$t('agent.hub.pendingApprovals')"
-            >
-              <i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingApprovals }}
-            </span>
-            <span
-              v-if="app.pendingBudgetRequests"
-              class="relative z-[1] shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
-              :title="$t('agent.hub.pendingBudget')"
-            >
-              <i class="fa-solid fa-coins mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingBudgetRequests }}
-            </span>
+              <!-- 运行状态指示徽标 -->
+              <span
+                v-if="app.runningRuns"
+                class="shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-[11px] font-medium text-primary"
+                :title="$t('agent.hub.runningRuns')"
+              >
+                <i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.runningRuns }}
+              </span>
+              <span
+                v-if="app.pendingApprovals"
+                class="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
+                :title="$t('agent.hub.pendingApprovals')"
+              >
+                <i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingApprovals }}
+              </span>
+              <span
+                v-if="app.pendingBudgetRequests"
+                class="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
+                :title="$t('agent.hub.pendingBudget')"
+              >
+                <i class="fa-solid fa-coins mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingBudgetRequests }}
+              </span>
+            </button>
 
-            <!-- 关闭 Tab 按钮 -->
-            <span
+            <!-- 关闭 Tab：与切换按钮并列，使用原生 button 的 Enter / Space 语义。 -->
+            <button
               v-if="displayedApps.length > 1"
-              role="button"
-              tabindex="0"
-              class="relative z-[1] -mr-1.5 ml-0.5 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-text-secondary/60 transition-all hover:bg-foreground/10 hover:text-foreground"
+              type="button"
+              class="relative z-[1] mr-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-secondary/60 transition-all hover:bg-foreground/10 hover:text-foreground"
               :title="$t('agent.hub.closeApp', { app: app.displayName })"
               :aria-label="$t('agent.hub.closeApp', { app: app.displayName })"
+              @pointerdown.stop
               @click.stop="closeAppTab(app.id, $event)"
-              @keydown.enter.stop="closeAppTab(app.id, $event)"
             >
               <i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
-            </span>
-          </button>
+            </button>
+          </div>
 
           <!-- 新建 App 按钮 -->
           <div class="flex shrink-0 items-center" @pointerdown.stop>
