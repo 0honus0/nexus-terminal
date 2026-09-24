@@ -460,6 +460,8 @@
     version: string;
     surface: 'agent' | 'custom';
     defaultApprovalMode: AgentAppSummaryDto['defaultApprovalMode'];
+    health: AgentAppSummaryDto['health'];
+    healthReason: string | null;
   };
   const residentAppSurfaces = ref<ResidentAppSurface[]>([]);
   const filesMounted = ref(state.hubView === 'files');
@@ -472,6 +474,8 @@
       version: app.version,
       surface: app.surface,
       defaultApprovalMode: app.defaultApprovalMode,
+      health: app.health,
+      healthReason: app.healthReason,
     };
   };
 
@@ -509,7 +513,14 @@
       ) {
         return [];
       }
-      return [{ ...resident, defaultApprovalMode: current.defaultApprovalMode }];
+      return [
+        {
+          ...resident,
+          defaultApprovalMode: current.defaultApprovalMode,
+          health: current.health,
+          healthReason: current.healthReason,
+        },
+      ];
     });
 
     if (state.hubView === 'files') {
@@ -528,7 +539,10 @@
   watch(
     () => [
       props.summary.apps
-        .map((app) => `${app.id}:${app.version}:${app.enabled ? 1 : 0}:${app.surface}:${app.defaultApprovalMode}`)
+        .map(
+          (app) =>
+            `${app.id}:${app.version}:${app.enabled ? 1 : 0}:${app.surface}:${app.defaultApprovalMode}:${app.health}:${app.healthReason ?? ''}`,
+        )
         .join('|'),
       openAppIds.value.join('|'),
       state.activeAppId,
@@ -900,6 +914,8 @@
           v-if="resident.surface === 'agent'"
           :app-id="resident.appId"
           :default-approval-mode="resident.defaultApprovalMode"
+          :app-health="resident.health"
+          :app-health-reason="resident.healthReason"
         />
         <PluginAppFrame v-else :app-id="resident.appId" :version="resident.version" />
       </div>

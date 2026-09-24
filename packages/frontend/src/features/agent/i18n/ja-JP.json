@@ -1080,6 +1080,8 @@
       "reconciliationRequired": "以前の変更操作またはそのリソース／Lease の最終処理に reconciliation が必要です。隔離を解除する前に実際の状態を確認してください。",
       "restartRecoveryFailed": "Backend 再起動後の自動復旧は復旧チェックポイントから続行できませんでした: {reasons}",
       "requestFailed": "リクエストに失敗しました。しばらくしてから再試行してください。",
+      "appUnavailable": "この Agent App は現在、新しい処理を実行できません。会話履歴は引き続き確認できます。",
+      "appUnavailableReason": "理由：{reason}",
       "postCommitSyncFailed": "変更は保存されましたが、後続の同期が完了しませんでした。同じ操作を繰り返す前に再同期してください。",
       "failureDomain": {
         "threads": "会話一覧",

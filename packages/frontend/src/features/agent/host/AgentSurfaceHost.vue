@@ -4,6 +4,7 @@
   import { useAuthSession } from '@/features/auth/public';
   import { agentApi, resetAgentCsrf, type AgentHostSummaryDto } from '../api/agent-api';
   import { agentEvents } from '../api/agent-events';
+  import { canExecuteAgentApp } from '../app-availability';
   import AgentHubWindow from './AgentHubWindow.vue';
   import AgentLauncher from './AgentLauncher.vue';
   import { agentHostEvents } from './agent-host-events';
@@ -41,9 +42,10 @@
       agentWindowManager.closeHub();
       return;
     }
+    const executable = enabled.filter(canExecuteAgentApp);
     const current = enabled.find((app) => app.id === agentWindowManager.state.activeAppId);
-    if (current) return;
-    const preferred = enabled.find((app) => app.id === 'nexus.agent') ?? enabled[0]!;
+    if (current && (canExecuteAgentApp(current) || executable.length === 0)) return;
+    const preferred = executable.find((app) => app.id === 'nexus.agent') ?? executable[0] ?? current ?? enabled[0]!;
     agentWindowManager.switchApp({ appId: preferred.id });
   };
 

@@ -11,6 +11,7 @@
   } from '../ai/conversation-command-executor';
   import { parseConversationSubmission } from '../ai/conversation-commands';
   import { agentApi, formatAgentApiError, toAgentApiError } from '../api/agent-api';
+  import { isAgentAppExecutableHealth, type AgentAppHealth } from '../app-availability';
   import type {
     AgentApprovalModeDto,
     AgentExecutionModeDto,
@@ -54,12 +55,18 @@
 
   const TaskRail = defineAsyncComponent(() => import('../runtime/TaskRail.vue'));
 
-  const props = defineProps<{ appId: string; defaultApprovalMode: AgentApprovalModeDto }>();
+  const props = defineProps<{
+    appId: string;
+    defaultApprovalMode: AgentApprovalModeDto;
+    appHealth: AgentAppHealth;
+    appHealthReason: string | null;
+  }>();
   const { t } = useI18n();
   const facade = createAgentRunFacade(props.appId);
   const connectionsStore = useConnections();
   facade.start();
   const runtimeOperation = createRuntimeOperationState();
+  const appExecutable = computed(() => isAgentAppExecutableHealth(props.appHealth));
   const threads = ref<AgentThreadViewDto[]>([]);
   const threadNextCursor = ref<string | null>(null);
   const threadListLoadingMore = ref(false);
@@ -496,6 +503,12 @@
   );
   const canSend = computed(() => {
     if (!currentThread.value || mutationLocked.value) return false;
+    if (!appExecutable.value) {
+      const submission = parseConversationSubmission(draft.value);
+      return (
+        submission.kind === 'invalid_command' || (submission.kind === 'command' && submission.command.kind === 'help')
+      );
+    }
     const submission = parseConversationSubmission(draft.value);
     if (submission.kind === 'invalid_command') return true;
     if (submission.kind === 'command') {
@@ -1293,6 +1306,7 @@
       );
       return;
     }
+    if (!appExecutable.value && !(submission.kind === 'command' && submission.command.kind === 'help')) return;
     if (submission.kind === 'command') {
       await executeSlashCommand(submission.command, selectedArtifacts);
       return;
@@ -2018,6 +2032,16 @@
           </div>
         </div>
         <div v-else class="relative h-full min-h-0">
+          <div
+            v-if="!appExecutable"
+            class="pointer-events-none absolute left-1/2 top-3 z-20 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning shadow-sm backdrop-blur-sm"
+            role="status"
+          >
+            <div class="font-medium">{{ $t('agent.operations.appUnavailable') }}</div>
+            <div v-if="appHealthReason" class="mt-0.5 break-words text-[11px] text-warning/80">
+              {{ $t('agent.operations.appUnavailableReason', { reason: appHealthReason }) }}
+            </div>
+          </div>
           <AgentConversation
             :app-id="appId"
             :error="error"
