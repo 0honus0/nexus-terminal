@@ -39,6 +39,7 @@ import {
 } from './workspace-code-intelligence';
 import {
   createWorkspaceCheckpointArchive,
+  recoverWorkspaceCheckpointRestore,
   restoreWorkspaceCheckpointArchive,
   type WorkspaceCheckpointArchiveReadHandle,
 } from './workspace-checkpoint-archive';
@@ -245,13 +246,18 @@ export class WorkspaceRuntimeEngine {
     ) {
       throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     }
-    await restoreWorkspaceCheckpointArchive(
-      path.join(this.runtime.coreWorkspaceRoot(workspaceId), 'work'),
-      path.join(this.runtime.workspaceRoot(workspaceId), '.control', 'checkpoints'),
-      source,
-      expectedBytes,
-    );
-    this.codeIntelligence.dispose(workspaceKey(workspaceId, generation));
+    this.checkpointCaptures.add(key);
+    try {
+      await restoreWorkspaceCheckpointArchive(
+        path.join(this.runtime.coreWorkspaceRoot(workspaceId), 'work'),
+        path.join(this.runtime.workspaceRoot(workspaceId), '.control', 'checkpoints'),
+        source,
+        expectedBytes,
+      );
+      this.codeIntelligence.dispose(key);
+    } finally {
+      this.checkpointCaptures.delete(key);
+    }
   }
 
   async executeJob(request: WorkspaceJobRequest): Promise<WorkspaceJobResult> {
@@ -294,9 +300,18 @@ export class WorkspaceRuntimeEngine {
   }
 
   async reconcile(record: WorkspaceRecord): Promise<WorkspaceRecord> {
+    const workRoot = path.join(this.runtime.coreWorkspaceRoot(record.workspaceId), 'work');
+    const scratchRoot = path.join(this.runtime.workspaceRoot(record.workspaceId), '.control', 'checkpoints');
+    try {
+      recoverWorkspaceCheckpointRestore(workRoot, scratchRoot);
+    } catch {
+      return { ...record, status: 'failed' };
+    }
     const state = await this.status(record.workspaceId, record.generation);
-    const mapped =
-      state === 'running'
+    const missingWorkRoot = ['ready', 'running', 'stopped'].includes(state) && !fs.existsSync(workRoot);
+    const mapped = missingWorkRoot
+      ? 'failed'
+      : state === 'running'
         ? 'running'
         : state === 'deleted'
           ? 'deleted'

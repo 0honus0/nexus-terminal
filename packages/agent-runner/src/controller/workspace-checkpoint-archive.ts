@@ -127,6 +127,66 @@ export const createWorkspaceCheckpointArchive = async (
   }
 };
 
+type WorkspaceCheckpointRestoreTransaction = {
+  version: 1;
+  token: string;
+  phase: 'prepared' | 'backup-moved';
+};
+
+const RESTORE_TRANSACTION_FILE = 'restore-transaction.json';
+
+const restoreTransactionPath = (scratchRoot: string): string => path.join(scratchRoot, RESTORE_TRANSACTION_FILE);
+
+const writeRestoreTransaction = (scratchRoot: string, transaction: WorkspaceCheckpointRestoreTransaction): void => {
+  fs.mkdirSync(scratchRoot, { recursive: true, mode: 0o700 });
+  const target = restoreTransactionPath(scratchRoot);
+  const temporary = `${target}.${process.pid}.tmp`;
+  const fd = fs.openSync(temporary, 'w', 0o600);
+  try {
+    fs.writeFileSync(fd, JSON.stringify(transaction));
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(temporary, target);
+};
+
+const readRestoreTransaction = (scratchRoot: string): WorkspaceCheckpointRestoreTransaction | null => {
+  const target = restoreTransactionPath(scratchRoot);
+  if (!fs.existsSync(target)) return null;
+  const parsed = JSON.parse(fs.readFileSync(target, 'utf8')) as Partial<WorkspaceCheckpointRestoreTransaction>;
+  if (
+    parsed.version !== 1 ||
+    typeof parsed.token !== 'string' ||
+    !/^[0-9a-f-]{36}$/i.test(parsed.token) ||
+    (parsed.phase !== 'prepared' && parsed.phase !== 'backup-moved')
+  ) {
+    throw new Error('WORKSPACE_CHECKPOINT_RESTORE_TRANSACTION_INVALID');
+  }
+  return parsed as WorkspaceCheckpointRestoreTransaction;
+};
+
+export const recoverWorkspaceCheckpointRestore = (workRoot: string, scratchRoot: string): boolean => {
+  const transaction = readRestoreTransaction(scratchRoot);
+  if (!transaction) return false;
+  const staging = path.join(scratchRoot, `restore-${transaction.token}`);
+  const archive = path.join(scratchRoot, `restore-${transaction.token}.tar`);
+  const backup = path.join(scratchRoot, `work-backup-${transaction.token}`);
+
+  if (fs.existsSync(backup)) {
+    if (fs.existsSync(workRoot)) fs.rmSync(workRoot, { recursive: true, force: true });
+    fs.renameSync(backup, workRoot);
+  } else if (!fs.existsSync(workRoot)) {
+    throw new Error('WORKSPACE_CHECKPOINT_RESTORE_RECOVERY_REQUIRED');
+  }
+
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.rmSync(archive, { force: true });
+  fs.rmSync(backup, { recursive: true, force: true });
+  fs.rmSync(restoreTransactionPath(scratchRoot), { force: true });
+  return true;
+};
+
 export const restoreWorkspaceCheckpointArchive = async (
   workRoot: string,
   scratchRoot: string,
@@ -181,19 +241,20 @@ export const restoreWorkspaceCheckpointArchive = async (
     });
 
     if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true, force: true });
+    writeRestoreTransaction(scratchRoot, { version: 1, token, phase: 'prepared' });
     fs.renameSync(workRoot, backup);
-    try {
-      fs.renameSync(staging, workRoot);
-    } catch (error) {
-      fs.renameSync(backup, workRoot);
-      throw error;
-    }
+    writeRestoreTransaction(scratchRoot, { version: 1, token, phase: 'backup-moved' });
+    fs.renameSync(staging, workRoot);
     fs.rmSync(backup, { recursive: true, force: true });
+    fs.rmSync(restoreTransactionPath(scratchRoot), { force: true });
   } finally {
     if (handle) await handle.close().catch(() => undefined);
-    fs.rmSync(archive, { force: true });
-    fs.rmSync(staging, { recursive: true, force: true });
-    if (fs.existsSync(backup) && !fs.existsSync(workRoot)) fs.renameSync(backup, workRoot);
-    fs.rmSync(backup, { recursive: true, force: true });
+    if (fs.existsSync(restoreTransactionPath(scratchRoot))) {
+      recoverWorkspaceCheckpointRestore(workRoot, scratchRoot);
+    } else {
+      fs.rmSync(archive, { force: true });
+      fs.rmSync(staging, { recursive: true, force: true });
+      fs.rmSync(backup, { recursive: true, force: true });
+    }
   }
 };
