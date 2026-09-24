@@ -36,6 +36,7 @@ import type { PluginRuntimeLifecycleCoordinator } from './plugin-runtime-lifecyc
 
 const MAX_PUBLISHER_LABEL_BYTES = 256;
 const SUPPORTED_PLUGIN_SDK_MAJOR = 1;
+const PLUGIN_STAGE_RETENTION_SECONDS = 24 * 60 * 60;
 
 export class PluginPackageInstallCoordinator {
   constructor(
@@ -82,6 +83,7 @@ export class PluginPackageInstallCoordinator {
   }
 
   async stage(userId: number, input: PluginStageInput): Promise<PluginStageRecord> {
+    await this.cleanupExpiredStages();
     const source = await this.packages.open(userId, input.artifactAppId, input.artifactId);
     const stageId = randomUUID();
     const staged = await this.verifier.stage({ stageId, sizeBytes: source.sizeBytes, source: source.source });
@@ -333,6 +335,7 @@ export class PluginPackageInstallCoordinator {
         updatedAt: now,
       });
       await this.verifier.discardStage(stageId, stage.appId);
+      await this.repository.deleteStage(userId, stageId);
     } catch (error) {
       logger.warn(
         { err: error, userId, stageId, appId: plugin.appId, version: plugin.version },
@@ -609,6 +612,7 @@ export class PluginPackageInstallCoordinator {
         updatedAt: this.clock.nowUnixSeconds(),
       });
       await this.verifier.discardStage(stage.id, appId);
+      await this.repository.deleteStage(userId, stageId);
     } catch (error) {
       logger.warn(
         { err: error, userId, appId, stageId, activeVersion: nextPlugin.version },
@@ -736,7 +740,7 @@ export class PluginPackageInstallCoordinator {
   }
 
   async reconcileStages(): Promise<void> {
-    const stages = await this.repository.listStages();
+    const stages = await this.cleanupExpiredStages();
     await this.verifier
       .reconcileStages(stages.map((stage) => ({ stageId: stage.id, appId: stage.appId })))
       .catch((error) =>
@@ -745,6 +749,40 @@ export class PluginPackageInstallCoordinator {
           'Agent plugin staged package reconciliation failed during startup',
         ),
       );
+  }
+
+  private async cleanupExpiredStages(): Promise<PluginStageRecord[]> {
+    const stages = await this.repository.listStages();
+    if (stages.length === 0) return stages;
+    const protectedStageIds = new Set<string>();
+    for (const userId of new Set(stages.map((stage) => stage.userId))) {
+      for (const pending of await this.repository.listPendingUpgrades(userId)) protectedStageIds.add(pending.stageId);
+    }
+    const cutoff = this.clock.nowUnixSeconds() - PLUGIN_STAGE_RETENTION_SECONDS;
+    const retained: PluginStageRecord[] = [];
+    for (const stage of stages) {
+      const terminal = stage.status === 'installed';
+      const expired = !protectedStageIds.has(stage.id) && stage.updatedAt <= cutoff;
+      if (!terminal && !expired) {
+        retained.push(stage);
+        continue;
+      }
+      try {
+        await this.verifier.discardStage(stage.id, stage.appId);
+        await this.repository.deleteStage(stage.userId, stage.id);
+        logger.info(
+          { userId: stage.userId, stageId: stage.id, appId: stage.appId, stageStatus: stage.status, expired },
+          'Agent plugin stage retention cleanup completed',
+        );
+      } catch (error) {
+        retained.push(stage);
+        logger.warn(
+          { err: error, userId: stage.userId, stageId: stage.id, appId: stage.appId, stageStatus: stage.status },
+          'Agent plugin stage retention cleanup failed; preserving stage for retry',
+        );
+      }
+    }
+    return retained;
   }
 
   listVersions(userId: number, appId?: string): Promise<PluginVersionRecord[]> {
@@ -795,6 +833,7 @@ export class PluginPackageInstallCoordinator {
     expectedPublisherKeyId?: string,
     validatedCatalog?: RemotePluginCatalog,
   ): Promise<PluginStageRecord> {
+    await this.cleanupExpiredStages();
     logger.debug(
       { userId, appId: input.appId, version: input.version, repositoryUrl: config.url },
       'Agent remote plugin staging started',

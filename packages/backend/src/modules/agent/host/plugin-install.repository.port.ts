@@ -77,6 +77,7 @@ export interface PluginInstallRepositoryPort {
   createStage(record: PluginStageRecord): Promise<void>;
   getStage(userId: number, stageId: string): Promise<PluginStageRecord | null>;
   listStages(): Promise<PluginStageRecord[]>;
+  deleteStage(userId: number, stageId: string): Promise<boolean>;
   updateStage(
     userId: number,
     stageId: string,

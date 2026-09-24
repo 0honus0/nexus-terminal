@@ -252,6 +252,11 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
     return rows.map(mapStage);
   }
 
+  async deleteStage(userId: number, stageId: string): Promise<boolean> {
+    const result = await this.db.execute('DELETE FROM agent_plugin_stages WHERE id=? AND user_id=?', [stageId, userId]);
+    return result.changes === 1;
+  }
+
   async updateStage(
     userId: number,
     stageId: string,
