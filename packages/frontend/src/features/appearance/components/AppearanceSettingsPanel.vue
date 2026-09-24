@@ -68,7 +68,7 @@
       <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
         {{ t('settings.appearance.loadFailed') }}
       </p>
-      <div class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs">
+      <div>
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.appearance.title') }}</h3>
         <p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.description') }}</p>
         <BaseButton variant="primary" @click="emit('customize')">
@@ -76,7 +76,9 @@
         </BaseButton>
       </div>
 
-      <div class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs">
+      <hr class="border-border/50" />
+
+      <div>
         <h3 class="mb-3 text-base font-semibold text-foreground">
           {{ t('settings.appearance.windowThemeColor.title') }}
         </h3>

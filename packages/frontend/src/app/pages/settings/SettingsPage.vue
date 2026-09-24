@@ -272,8 +272,8 @@
                 class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer"
                 :class="
                   active === item.value
-                    ? 'border border-primary bg-primary text-white shadow-xs font-semibold'
-                    : 'border border-border bg-card text-foreground hover:bg-header'
+                    ? 'border-b-2 border-primary bg-primary/10 text-primary font-semibold'
+                    : 'text-text-secondary hover:text-foreground hover:bg-header/60'
                 "
                 @click="selectTab(item.value)"
               >
@@ -303,10 +303,10 @@
               <!-- 分组导航 (Soft, breathable groups without harsh divider borders) -->
               <nav class="space-y-3.5 xl:space-y-4" role="tablist" :aria-label="t('settings.sectionsAriaLabel')">
                 <div v-for="group in tabGroups" :key="group.id" class="space-y-1">
-                  <div class="px-2.5 text-xs font-bold text-text-secondary uppercase tracking-wider">
+                  <div class="px-2.5 text-[11px] font-semibold text-text-secondary/70 uppercase tracking-wider">
                     {{ t(group.titleKey) }}
                   </div>
-                  <div class="space-y-1">
+                  <div class="space-y-0.5">
                     <button
                       v-for="item in group.items"
                       :key="item.value"
@@ -314,18 +314,25 @@
                       role="tab"
                       :aria-selected="active === item.value"
                       :aria-controls="`settings-panel-${item.value}`"
-                      class="group relative flex w-full items-center justify-between rounded-xl px-2.5 py-2 xl:py-2.5 text-left text-xs transition-all duration-150 ease-out cursor-pointer"
+                      class="group relative flex w-full items-center justify-between rounded-xl pl-3 pr-2.5 py-2 xl:py-2.5 text-left text-xs transition-all duration-150 ease-out cursor-pointer overflow-hidden"
                       :class="
                         active === item.value
-                          ? 'border border-primary bg-primary text-white shadow-sm font-semibold'
-                          : 'border border-border/70 bg-background/50 hover:bg-header hover:border-border text-foreground hover:text-foreground shadow-2xs font-medium'
+                          ? 'bg-primary/10 text-primary font-semibold'
+                          : 'text-text-secondary hover:text-foreground hover:bg-header/70 font-medium'
                       "
                       @click="selectTab(item.value)"
                     >
+                      <!-- 左侧高亮指示条 (Active Left Indicator) -->
+                      <span
+                        v-if="active === item.value"
+                        class="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary"
+                        aria-hidden="true"
+                      ></span>
+
                       <div class="flex items-center gap-2.5 min-w-0">
                         <div
                           class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-colors"
-                          :class="active === item.value ? 'bg-white/20 text-white' : [item.iconBg, item.iconColor]"
+                          :class="active === item.value ? 'bg-primary/20 text-primary' : [item.iconBg, item.iconColor]"
                         >
                           <i :class="item.icon" class="text-xs" aria-hidden="true"></i>
                         </div>
@@ -334,7 +341,7 @@
                       <span
                         v-if="item.badge"
                         class="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors"
-                        :class="active === item.value ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'"
+                        :class="active === item.value ? 'bg-primary text-white' : 'bg-primary/10 text-primary'"
                       >
                         {{ item.badge }}
                       </span>

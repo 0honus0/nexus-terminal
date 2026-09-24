@@ -153,10 +153,7 @@
       <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
         {{ loadError }}
       </p>
-      <form
-        class="space-y-4 rounded-xl border border-border/80 bg-background p-4 sm:p-5 shadow-2xs"
-        @submit.prevent="savePatch('language', { language: form.language })"
-      >
+      <form class="space-y-4" @submit.prevent="savePatch('language', { language: form.language })">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.language.title') }}</h3>
         <BaseFormField :label="t('settings.language.selectLabel')" for-id="languageSelect">
           <BaseSelect id="languageSelect" v-model="form.language" :disabled="savingSection !== null">
@@ -179,10 +176,9 @@
         </div>
       </form>
 
-      <form
-        class="space-y-4 rounded-xl border border-border/80 bg-background p-4 sm:p-5 shadow-2xs"
-        @submit.prevent="savePatch('timezone', { timezone: form.timezone })"
-      >
+      <hr class="border-border/50" />
+
+      <form class="space-y-4" @submit.prevent="savePatch('timezone', { timezone: form.timezone })">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.timezone.title') }}</h3>
         <BaseFormField :label="t('settings.timezone.selectLabel')" for-id="timezoneSelect">
           <BaseSelect id="timezoneSelect" v-model="form.timezone" :disabled="savingSection !== null">
@@ -204,9 +200,11 @@
         </div>
       </form>
 
+      <hr class="border-border/50" />
+
       <form
         data-testid="logging-settings-form"
-        class="space-y-4 rounded-xl border border-border/80 bg-background p-4 sm:p-5 shadow-2xs"
+        class="space-y-4"
         @submit.prevent="
           savePatch('logging', { frontendLogLevel: form.frontendLogLevel, backendLogLevel: form.backendLogLevel })
         "

@@ -17,18 +17,13 @@
       {{ $t('settings.category.security') }}
     </h2>
     <div class="space-y-6 p-6">
-      <div class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs">
-        <ChangePasswordPanel />
-      </div>
-      <div class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs">
-        <PasskeyPanel />
-      </div>
-      <div class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs">
-        <TwoFactorPanel :enabled="props.twoFactorEnabled ?? false" @changed="emit('authChanged')" />
-      </div>
-      <div class="rounded-xl border border-border/80 bg-background p-5 shadow-2xs">
-        <CaptchaPanel />
-      </div>
+      <ChangePasswordPanel />
+      <hr class="border-border/50" />
+      <PasskeyPanel />
+      <hr class="border-border/50" />
+      <TwoFactorPanel :enabled="props.twoFactorEnabled ?? false" @changed="emit('authChanged')" />
+      <hr class="border-border/50" />
+      <CaptchaPanel />
     </div>
   </div>
   <IpAccessPanel v-else />

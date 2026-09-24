@@ -208,7 +208,7 @@
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label
               for="showPopupFileEditor"
@@ -230,7 +230,7 @@
             </details>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label
               for="showPopupFileManager"
@@ -247,7 +247,7 @@
             <p class="mt-2 text-xs leading-5 text-text-secondary">{{ t('settings.popupFileManager.description') }}</p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label
               for="shareFileEditorTabs"
@@ -264,7 +264,7 @@
             <p class="mt-2 text-xs leading-5 text-text-secondary">{{ t('settings.shareEditorTabs.description') }}</p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label
               for="fileManagerShowDeleteConfirmation"
@@ -280,7 +280,7 @@
             </label>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors lg:col-span-2"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors lg:col-span-2"
             data-testid="spreadsheet-preview-pagination-setting"
           >
             <div class="mb-3 text-sm font-medium text-foreground">
@@ -348,7 +348,7 @@
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label for="workspaceSidebarPersistent" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
@@ -361,7 +361,7 @@
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.sidebarPersistentDescription') }}</p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <BaseFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
               <BaseSelect
@@ -377,7 +377,7 @@
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.commandInputSync.description') }}</p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label for="showConnectionTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
@@ -390,7 +390,7 @@
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.showConnectionTagsDescription') }}</p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label for="showQuickCommandTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
@@ -405,7 +405,7 @@
             </p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
             data-testid="quick-command-search-display-setting"
           >
             <label
@@ -424,7 +424,7 @@
             </p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label for="quickCommandsCompactMode" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
@@ -439,7 +439,7 @@
             </p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <BaseFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
               <BaseInput
@@ -455,7 +455,7 @@
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint') }}</p>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label for="terminalRightClickCopyPaste" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
@@ -495,7 +495,7 @@
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <div class="space-y-2">
               <label for="dashboardShowLocalResources" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
@@ -521,7 +521,7 @@
             </div>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <BaseFormField
               :label="t('settings.dashboardResources.refreshIntervalLabel')"
@@ -537,7 +537,7 @@
             /></BaseFormField>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <label for="showStatusMonitorIpAddress" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><BaseCheckbox
@@ -563,7 +563,7 @@
             </div>
           </div>
           <div
-            class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
           >
             <BaseFormField :label="t('settings.docker.refreshIntervalLabel')" for-id="dockerStatusIntervalSeconds"
               ><BaseInput
@@ -616,7 +616,7 @@
         <form class="border-t border-border" @submit.prevent="saveGroup('layout', layoutKeys)">
           <div class="grid gap-3 p-3 lg:grid-cols-2">
             <div
-              class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+              class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
             >
               <label for="layoutLocked" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><BaseCheckbox
@@ -629,7 +629,7 @@
               <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.layoutLockDescription') }}</p>
             </div>
             <div
-              class="min-w-0 rounded-lg border border-border/80 bg-background p-3.5 shadow-2xs hover:border-primary/40 transition-colors"
+              class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
             >
               <label for="navBarVisible" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><BaseCheckbox
