@@ -1452,7 +1452,8 @@
       "search": "搜索文件",
       "searchAction": "搜索",
       "upload": "上传",
-      "loadMore": "加载更多"
+      "loadMore": "加载更多",
+      "limitReached": "最多可附加 {count} 个文件。"
     },
     "tasks": {
       "title": "任务",

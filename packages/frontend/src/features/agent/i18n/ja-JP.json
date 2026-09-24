@@ -1452,7 +1452,8 @@
       "search": "ファイルを検索",
       "searchAction": "検索",
       "upload": "アップロード",
-      "loadMore": "さらに読み込む"
+      "loadMore": "さらに読み込む",
+      "limitReached": "添付できるファイルは最大 {count} 件です。"
     },
     "tasks": {
       "title": "タスク",

@@ -5,6 +5,7 @@
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
+    formatAgentApiError,
     type AgentAppSummaryDto,
     type AgentExecutionPolicyOverridesDto,
     type AgentExecutionPolicyViewDto,
@@ -17,6 +18,7 @@
   const { t } = useI18n();
   const quantityLabels = useQuantityLabels();
   const operationFeedback = useOperationFeedback('agent.settings.execution-policy');
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
   const selectedAppId = ref('');
   const view = ref<AgentExecutionPolicyViewDto | null>(null);
   const draft = ref<AgentExecutionPolicyOverridesDto>({});
@@ -150,7 +152,7 @@
       draft.value = clone(next.overrides);
     } catch (cause) {
       if (requestGeneration !== loadGeneration || selectedAppId.value !== appId) return;
-      const message = cause instanceof Error ? cause.message : 'AGENT_EXECUTION_POLICY_FAILED';
+      const message = explain(cause);
       operationFeedback.notifyError({ operation: 'load-policy', message, cause });
     } finally {
       if (requestGeneration === loadGeneration && selectedAppId.value === appId) loading.value = false;
@@ -212,7 +214,7 @@
       operationFeedback.notifySuccess(t('agent.ui.saved'));
     } catch (cause) {
       if (requestGeneration !== loadGeneration || selectedAppId.value !== appId || loadedAppId.value !== appId) return;
-      const message = cause instanceof Error ? cause.message : 'AGENT_EXECUTION_POLICY_FAILED';
+      const message = explain(cause);
       operationFeedback.notifyError({ operation: 'save-policy', message, cause });
       await load();
     } finally {

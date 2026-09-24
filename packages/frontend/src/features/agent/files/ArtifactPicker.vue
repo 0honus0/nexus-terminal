@@ -74,7 +74,7 @@
       return;
     }
     if (props.modelValue.length >= 10) {
-      error.value = 'ARTIFACT_REF_LIMIT';
+      error.value = t('agent.attachments.limitReached', { count: 10 });
       return;
     }
     emit('update:modelValue', [...props.modelValue, artifact]);

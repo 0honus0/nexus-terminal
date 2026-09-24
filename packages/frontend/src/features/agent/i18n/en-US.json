@@ -1452,7 +1452,8 @@
       "search": "Search files",
       "searchAction": "Search",
       "upload": "Upload",
-      "loadMore": "Load more"
+      "loadMore": "Load more",
+      "limitReached": "You can attach up to {count} files."
     },
     "tasks": {
       "title": "Tasks",

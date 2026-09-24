@@ -7,6 +7,7 @@
   import { pickOption } from './pick-option';
   import {
     agentApi,
+    formatAgentApiError,
     type AgentAppSummaryDto,
     type AgentProviderViewDto,
     type AgentSettingsViewDto,
@@ -17,6 +18,7 @@
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.subagents');
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
 
   const props = defineProps<{
     settings: AgentSettingsViewDto;
@@ -98,7 +100,7 @@
       profileBaseline.value = JSON.stringify(profileSettings.value.policy.profiles);
     } catch (cause) {
       if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
-      const message = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
+      const message = explain(cause);
       operationFeedback.notifyError({ operation: 'load-profiles', message, cause });
     } finally {
       if (requestGeneration === profileLoadGeneration && selectedAppId.value === appId) profileBusy.value = false;
@@ -210,7 +212,7 @@
     } catch (cause) {
       if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId || profileAppId.value !== appId)
         return;
-      const message = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
+      const message = explain(cause);
       operationFeedback.notifyError({ operation: 'save-profiles', message, cause });
     } finally {
       if (requestGeneration === profileLoadGeneration && selectedAppId.value === appId) profileBusy.value = false;
