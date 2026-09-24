@@ -209,6 +209,9 @@
   let detailSubagentsGeneration = 0;
   let detailOpenGeneration = 0;
   let subagentMessagesGeneration = 0;
+  let configurationGeneration = 0;
+  let authorizationGeneration = 0;
+  let surfaceDisposed = false;
   let threadDeleteArmTimer: number | null = null;
   let deleteAllThreadsArmTimer: number | null = null;
 
@@ -945,52 +948,63 @@
   };
 
   const loadRunConfiguration = async (): Promise<void> => {
-    const [nextDefinitions, nextProviders, settings, , runtimeAvailability, nextDenylist] = await Promise.all([
-      facade.definitions(),
-      facade.providers(),
-      facade.settings(),
-      connectionsStore.revalidate(0),
-      agentApi.workspaceRuntimeAvailability().catch(() => null),
-      agentApi.targetDenylist(),
-    ]);
-    definitions.value = nextDefinitions;
-    providers.value = nextProviders;
-    settingsView.value = settings;
-    targetDenylist.value = nextDenylist;
-    workspaceRuntimeAvailability.value = runtimeAvailability;
-    workspaceRuntimeCatalog.value = runtimeAvailability?.available
-      ? await agentApi.workspaceRuntimeCatalog().catch(() => null)
-      : null;
-    const restoredModelKey = agentSurfaceSession.restoreModelKey(props.appId);
-    const restoredModel = modelOptions.value.find(
-      (candidate) => candidate.key === restoredModelKey && candidate.compatible,
-    );
-    const preferredModel = modelOptions.value.find(
-      (candidate) =>
-        candidate.compatible &&
-        candidate.provider.id === settings.effectiveSettings.model.defaultProviderId &&
-        candidate.model.id === settings.effectiveSettings.model.defaultModelId,
-    );
-    const selectedModel =
-      restoredModel ?? preferredModel ?? modelOptions.value.find((candidate) => candidate.compatible) ?? null;
-    selectedModelKey.value = selectedModel?.key ?? '';
-    agentSurfaceSession.setModelKey(props.appId, selectedModel?.key);
-    const restoredReasoningEffort = agentSurfaceSession.restoreReasoningEffort(props.appId);
-    const allowedReasoningEfforts = selectedModel?.model.reasoningEfforts ?? [];
-    const initialReasoningEffort =
-      restoredReasoningEffort && allowedReasoningEfforts.includes(restoredReasoningEffort)
-        ? restoredReasoningEffort
-        : (selectedModel?.model.defaultReasoningEffort ?? null);
-    selectedReasoningEffort.value = initialReasoningEffort;
-    agentSurfaceSession.setReasoningEffort(props.appId, initialReasoningEffort ?? undefined);
-    const restoredEnvironmentId = agentSurfaceSession.restoreEnvironmentRecipeId(props.appId);
-    const selectedEnvironment =
-      enabledEnvironmentRecipes.value.find((recipe) => recipe.id === restoredEnvironmentId) ??
-      enabledEnvironmentRecipes.value[0] ??
-      null;
-    selectedEnvironmentRecipeId.value = selectedEnvironment?.id ?? '';
-    agentSurfaceSession.setEnvironmentRecipeId(props.appId, selectedEnvironment?.id);
-    hardLimits.value = settings.hardLimits;
+    const requestGeneration = ++configurationGeneration;
+    const authorizationRequestGeneration = ++authorizationGeneration;
+    try {
+      const [nextDefinitions, nextProviders, settings, , runtimeAvailability, nextDenylist] = await Promise.all([
+        facade.definitions(),
+        facade.providers(),
+        facade.settings(),
+        connectionsStore.revalidate(0),
+        agentApi.workspaceRuntimeAvailability().catch(() => null),
+        agentApi.targetDenylist(),
+      ]);
+      const runtimeCatalog = runtimeAvailability?.available
+        ? await agentApi.workspaceRuntimeCatalog().catch(() => null)
+        : null;
+      if (surfaceDisposed || requestGeneration !== configurationGeneration) return;
+
+      definitions.value = nextDefinitions;
+      providers.value = nextProviders;
+      settingsView.value = settings;
+      workspaceRuntimeAvailability.value = runtimeAvailability;
+      workspaceRuntimeCatalog.value = runtimeCatalog;
+      if (authorizationRequestGeneration === authorizationGeneration) targetDenylist.value = nextDenylist;
+
+      const restoredModelKey = agentSurfaceSession.restoreModelKey(props.appId);
+      const restoredModel = modelOptions.value.find(
+        (candidate) => candidate.key === restoredModelKey && candidate.compatible,
+      );
+      const preferredModel = modelOptions.value.find(
+        (candidate) =>
+          candidate.compatible &&
+          candidate.provider.id === settings.effectiveSettings.model.defaultProviderId &&
+          candidate.model.id === settings.effectiveSettings.model.defaultModelId,
+      );
+      const selectedModel =
+        restoredModel ?? preferredModel ?? modelOptions.value.find((candidate) => candidate.compatible) ?? null;
+      selectedModelKey.value = selectedModel?.key ?? '';
+      agentSurfaceSession.setModelKey(props.appId, selectedModel?.key);
+      const restoredReasoningEffort = agentSurfaceSession.restoreReasoningEffort(props.appId);
+      const allowedReasoningEfforts = selectedModel?.model.reasoningEfforts ?? [];
+      const initialReasoningEffort =
+        restoredReasoningEffort && allowedReasoningEfforts.includes(restoredReasoningEffort)
+          ? restoredReasoningEffort
+          : (selectedModel?.model.defaultReasoningEffort ?? null);
+      selectedReasoningEffort.value = initialReasoningEffort;
+      agentSurfaceSession.setReasoningEffort(props.appId, initialReasoningEffort ?? undefined);
+      const restoredEnvironmentId = agentSurfaceSession.restoreEnvironmentRecipeId(props.appId);
+      const selectedEnvironment =
+        enabledEnvironmentRecipes.value.find((recipe) => recipe.id === restoredEnvironmentId) ??
+        enabledEnvironmentRecipes.value[0] ??
+        null;
+      selectedEnvironmentRecipeId.value = selectedEnvironment?.id ?? '';
+      agentSurfaceSession.setEnvironmentRecipeId(props.appId, selectedEnvironment?.id);
+      hardLimits.value = settings.hardLimits;
+    } catch (cause) {
+      if (surfaceDisposed || requestGeneration !== configurationGeneration) return;
+      throw cause;
+    }
   };
 
   const load = async (): Promise<void> => {
@@ -1611,8 +1625,15 @@
   };
 
   const refreshConnectionsAndAuthorization = async (): Promise<void> => {
-    const [nextDenylist] = await Promise.all([agentApi.targetDenylist(), connectionsStore.revalidate(0)]);
-    targetDenylist.value = nextDenylist;
+    const requestGeneration = ++authorizationGeneration;
+    try {
+      const [nextDenylist] = await Promise.all([agentApi.targetDenylist(), connectionsStore.revalidate(0)]);
+      if (surfaceDisposed || requestGeneration !== authorizationGeneration) return;
+      targetDenylist.value = nextDenylist;
+    } catch (cause) {
+      if (surfaceDisposed || requestGeneration !== authorizationGeneration) return;
+      throw cause;
+    }
   };
 
   const refreshConnectionsOnFocus = (): void => {
@@ -1672,6 +1693,9 @@
     stopThreadChanged();
     stopAuthorizationChanged();
     stopConfigurationChanged();
+    surfaceDisposed = true;
+    configurationGeneration += 1;
+    authorizationGeneration += 1;
     facade.dispose();
     resetStreamingPresentation();
   });
