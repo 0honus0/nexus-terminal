@@ -4957,7 +4957,7 @@ Runner 的通用行为是：
 
 ---
 
-### 7.101 “完整备份”遗漏全部 Agent / AI 表与权威 Artifact / Plugin 文件，导入后形成跨时点混合状态（P1 · 🟠 开放 2026-09-23）
+### 7.101 “完整备份”遗漏全部 Agent / AI 表与权威 Artifact / Plugin 文件，导入后形成跨时点混合状态（P1 · ✅ 已修复 2026-09-24）
 
 继续审 Provider / Integration credential 的加密与备份边界时，确认 AES-GCM 与 backup envelope 本身没有明显密码学缺口，但发现更基础的覆盖问题：当前所谓 **full backup 根本没有把 Agent 持久数据纳入 snapshot**。
 
@@ -5020,6 +5020,10 @@ restore 同样不是“先清整库再恢复”：`restoreTables()` 只对 **同
 4. `beforeRestore/afterRestore` 增加 Agent runtime/session/cache invalidation 与 restore 后 reconciliation，不能只处理传统 SSH/workspace session；
 5. 增加真实 E2E：创建 Provider+credential、MCP/ACP integration、Thread/Run、Artifact blob、Plugin installation → export → 改坏/删除 → import → 验证数据与 secret、blob/package 都完整恢复；
 6. 增加跨实例 password restore fixture，证明 Agent credential 会用新实例 ENCRYPTION_KEY 重加密，而不是依赖来源实例 key。
+
+**修复（2026-09-24）**：`SqliteBackupSnapshotAdapter` 现在把 current schema 中全部 canonical `agent_*` / `ai_*` 持久表按 FK-safe 创建顺序纳入 full backup，restore 继续以 reverse-delete / forward-insert 恢复，因此目标实例原有 Agent 行会被清掉而不再与来源快照混合；`ai_providers.protected_credential` 与 `agent_integrations.protected_credential` 也进入既有 `__backup_plaintext` 路径，跨实例 restore 时由目标 `SecretCipher` 重加密。文件 ownership 同步扩到 `agent/artifacts/objects` 与 `agent/plugins`，而 `agent/model-capability-registry.json` 被明确作为可重建 cache 排除且 restore allowlist 会拒绝该路径。
+
+新增 `tests/backend/agent-full-backup.regression.ts`，使用两份真实 SQLite schema、两把不同 AES-GCM key 与两个临时 data directory 做 source capture → target restore：锁定旧 target Agent/Provider 行清除、Provider/Integration secret 目标 key 重加密、Artifact blob / Plugin immutable package tree roundtrip、旧目标文件移除、model capability cache 不进入快照且非法注入被拒绝。focused regression、Backend TypeScript、Prettier 与 `git diff --check` 均通过。
 
 ---
 

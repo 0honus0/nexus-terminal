@@ -7,7 +7,7 @@ import type { BackupFileEntry, BackupSnapshot } from '../../modules/backup/backu
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../shared/security/crypto.port';
 
-const TABLES = [
+const PRODUCT_TABLES = [
   'settings',
   'settings_migrations',
   'notification_settings',
@@ -25,11 +25,75 @@ const TABLES = [
   'appearance_settings',
   'favorite_paths',
 ] as const;
-const FILE_DIRECTORIES = ['background', 'custom_html_theme'] as const;
+
+// Keep this list in FK-safe creation order. Restore deletes it in reverse and inserts it forward.
+// User identity/auth tables intentionally remain outside full backup ownership; Agent rows restore
+// against the already-authenticated local Nexus user.
+const AGENT_TABLES = [
+  'agent_apps',
+  'agent_app_grants',
+  'agent_app_storage',
+  'agent_settings',
+  'agent_hard_limit_confirmations',
+  'agent_target_denylist',
+  'agent_target_denylist_meta',
+  'ai_providers',
+  'ai_artifacts',
+  'agent_quota_usage',
+  'ai_threads',
+  'agent_runs',
+  'agent_loop_guards',
+  'ai_thread_entries',
+  'agent_artifact_links',
+  'agent_artifact_grants',
+  'agent_artifact_cleanup_confirmations',
+  'ai_context_checkpoints',
+  'ai_memories',
+  'agent_runtimes',
+  'agent_steps',
+  'agent_model_attempts',
+  'agent_tool_calls',
+  'agent_input_requests',
+  'agent_events',
+  'agent_host_cursors',
+  'agent_host_events',
+  'agent_commands',
+  'agent_checkpoints',
+  'agent_approvals',
+  'agent_resource_fences',
+  'agent_leases',
+  'agent_resource_quarantine',
+  'agent_integrations',
+  'agent_delegations',
+  'agent_mailbox_cursors',
+  'agent_messages',
+  'agent_scheduler_work',
+  'agent_delegation_edges',
+  'agent_shared_facts',
+  'agent_publisher_keys',
+  'agent_plugin_stages',
+  'agent_plugin_pending_upgrades',
+  'agent_plugin_versions',
+  'agent_plugin_installations',
+  'agent_app_intent_receipts',
+  'agent_app_intent_artifact_grants',
+  'agent_memory_import_confirmations',
+  'agent_workspaces',
+  'agent_workspace_runtime_commands',
+  'agent_workspace_runtime_confirmations',
+] as const;
+
+const TABLES = [...PRODUCT_TABLES, ...AGENT_TABLES] as const;
+
+// Only authoritative file-backed product state belongs here. In particular,
+// agent/model-capability-registry.json is a rebuildable cache and is deliberately excluded.
+const FILE_DIRECTORIES = ['background', 'custom_html_theme', 'agent/artifacts/objects', 'agent/plugins'] as const;
 const SENSITIVE_COLUMNS: Record<string, readonly string[]> = {
   proxies: ['encrypted_password', 'encrypted_private_key', 'encrypted_passphrase'],
   ssh_keys: ['encrypted_private_key', 'encrypted_passphrase'],
   connections: ['encrypted_password', 'encrypted_private_key', 'encrypted_passphrase'],
+  ai_providers: ['protected_credential'],
+  agent_integrations: ['protected_credential'],
 };
 
 interface RestoreSwap {
@@ -168,7 +232,11 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
         const staged = path.join(stagingRoot, directory);
         const previous = path.join(previousRoot, directory);
         const hadPrevious = await this.exists(target);
-        if (hadPrevious) await rename(target, previous);
+        if (hadPrevious) {
+          await mkdir(path.dirname(previous), { recursive: true });
+          await rename(target, previous);
+        }
+        await mkdir(path.dirname(target), { recursive: true });
         await rename(staged, target);
         swaps.push({ directory, target, previous, hadPrevious });
       }
