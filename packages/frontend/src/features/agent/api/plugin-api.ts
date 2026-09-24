@@ -170,13 +170,17 @@ export const createPluginApi = () => ({
       ).data,
     );
   },
-  async createAppIntent(appId: string, input: AgentAppIntentCreateRequestDto): Promise<AgentAppIntentReceiptDto> {
+  async createAppIntent(
+    appId: string,
+    input: AgentAppIntentCreateRequestDto,
+    idempotencyKey: string,
+  ): Promise<AgentAppIntentReceiptDto> {
     return unwrap(
       (
         await httpClient.post<AgentEnvelopeDto<AgentAppIntentReceiptDto>>(
           `/agent/apps/${encodeURIComponent(appId)}/plugin-intents`,
           input,
-          { headers: await mutationHeaders() },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey } },
         )
       ).data,
     );

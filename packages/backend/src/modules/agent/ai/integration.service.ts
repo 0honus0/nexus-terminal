@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { logger } from '../../../shared/logging/logger';
 import type { ClockPort, Scope } from '../agent.types';
 import type { CryptoHashPort } from '../crypto-hash.port';
 import { hashOperation } from '../operation-hash';
 import type { AppLifecycleService } from '../host/app-lifecycle.service';
 import { isAgentUuid } from '../uuid';
+import { requireIdempotencyKey } from '../runtime/runs/idempotency';
 import type { IntegrationRepositoryPort } from './integration.repository.port';
 import type {
   AcpIntegrationConfiguration,
@@ -163,12 +163,12 @@ export class IntegrationService {
     return integration;
   }
 
-  async create(scope: Scope, raw: unknown): Promise<IntegrationManagementView> {
+  async create(scope: Scope, raw: unknown, idempotencyKey: string): Promise<IntegrationManagementView> {
     await this.lifecycle.get(scope);
     const parsed = await this.parseInput(raw, false);
     const now = this.clock.nowUnixSeconds();
     const created = await this.repository.create({
-      id: randomUUID(),
+      id: requireIdempotencyKey(idempotencyKey),
       scope,
       kind: parsed.kind,
       configuration: parsed.configuration,

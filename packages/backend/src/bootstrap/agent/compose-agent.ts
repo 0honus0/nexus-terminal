@@ -702,7 +702,7 @@ export const composeAgent = ({
         publishHostWake(userId);
         return { app: await lifecycle.get(scope), grants: await appGrants.list(scope) };
       },
-      createAppIntent: (scope, input) => appIntents.createConfirmed(scope, input),
+      createAppIntent: (scope, input, idempotencyKey) => appIntents.createConfirmed(scope, input, idempotencyKey),
       listReceivedAppIntents: (scope, limit) => appIntents.listReceived(scope, limit),
       revokeAppIntent: (scope, receiptId) => appIntents.revoke(scope, receiptId),
       getReceivedAppIntentArtifact: (scope, receiptId, artifactId) =>
@@ -796,7 +796,7 @@ export const composeAgent = ({
       integrations: {
         list: (scope, kind) => integrations.list(scope, kind),
         get: (scope, integrationId) => integrations.get(scope, integrationId),
-        create: (scope, input) => integrations.create(scope, input),
+        create: (scope, input, idempotencyKey) => integrations.create(scope, input, idempotencyKey),
         update: (scope, integrationId, expectedVersion, input) =>
           integrations.update(scope, integrationId, expectedVersion, input),
         remove: (scope, integrationId, expectedVersion) => integrations.remove(scope, integrationId, expectedVersion),

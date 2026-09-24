@@ -287,13 +287,17 @@ export const agentApi = {
       ).data,
     );
   },
-  async createIntegration(appId: string, input: AgentIntegrationCreateRequestDto): Promise<AgentIntegrationViewDto> {
+  async createIntegration(
+    appId: string,
+    input: AgentIntegrationCreateRequestDto,
+    idempotencyKey: string,
+  ): Promise<AgentIntegrationViewDto> {
     return unwrap(
       (
         await httpClient.post<AgentEnvelopeDto<AgentIntegrationViewDto>>(
           `/apps/${encodeURIComponent(appId)}/integrations`,
           input,
-          { headers: await mutationHeaders() },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey } },
         )
       ).data,
     );

@@ -129,7 +129,8 @@ const integrationInput = (value: unknown, updating: boolean): AgentIntegrationUp
   if (typeof body.enabled !== 'boolean') throw new Error('VALIDATION_FAILED');
   if (body.kind === 'mcp') {
     if (body.credential !== undefined && typeof body.credential !== 'string') throw new Error('VALIDATION_FAILED');
-    if (body.clearCredential !== undefined && typeof body.clearCredential !== 'boolean') throw new Error('VALIDATION_FAILED');
+    if (body.clearCredential !== undefined && typeof body.clearCredential !== 'boolean')
+      throw new Error('VALIDATION_FAILED');
     if (!updating && body.clearCredential === true) throw new Error('VALIDATION_FAILED');
     if (body.credential !== undefined && body.clearCredential === true) throw new Error('VALIDATION_FAILED');
     return {
@@ -176,7 +177,9 @@ export const createAppIntegrationsRouter = (dependencies: AppIntegrationsRouterD
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: param(request.params.appId) };
       const input: AgentIntegrationCreateRequestDto = integrationInput(request.body, false);
-      const created = await dependencies.integrations.create(scope, input);
+      const idempotencyKey = request.header('idempotency-key');
+      if (!idempotencyKey) throw new Error('IDEMPOTENCY_KEY_INVALID');
+      const created = await dependencies.integrations.create(scope, input, idempotencyKey);
       response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/integrations/${created.id}`);
       agentData(request, response, integrationDto(created), 201);
     }),

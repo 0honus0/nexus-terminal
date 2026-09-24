@@ -617,9 +617,12 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         artifactRefs,
         confirmed: true,
       };
+      const idempotencyKey = request.header('idempotency-key');
+      if (!idempotencyKey) throw new Error('IDEMPOTENCY_KEY_INVALID');
       const receipt = await dependencies.host.createAppIntent(
         { userId: agentUserId(request), appId: pathParam(request.params.appId) },
         input,
+        idempotencyKey,
       );
       agentData(request, response, appIntentReceiptDto(receipt), 201);
     }),

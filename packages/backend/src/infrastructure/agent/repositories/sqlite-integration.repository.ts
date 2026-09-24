@@ -102,8 +102,9 @@ export class SqliteIntegrationRepository implements IntegrationRepositoryPort, I
   }
 
   async create(record: IntegrationCreateRecord): Promise<IntegrationView> {
-    await this.db.execute(
-      `INSERT INTO agent_integrations
+    const configurationJson = JSON.stringify(record.configuration);
+    const inserted = await this.db.execute(
+      `INSERT OR IGNORE INTO agent_integrations
         (id, user_id, app_id, kind, configuration_json, protected_credential, credential_revision,
          schema_hash, enabled, version, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 1, NULL, ?, 1, ?, ?)`,
@@ -112,16 +113,30 @@ export class SqliteIntegrationRepository implements IntegrationRepositoryPort, I
         record.scope.userId,
         record.scope.appId,
         record.kind,
-        JSON.stringify(record.configuration),
+        configurationJson,
         record.credential === undefined ? null : this.cipher.encrypt(record.credential),
         record.enabled ? 1 : 0,
         record.createdAt,
         record.createdAt,
       ],
     );
-    const created = await this.get(record.scope, record.id);
-    if (!created) throw new Error('INTEGRATION_NOT_FOUND');
-    return created;
+    const row = await this.db.queryOne<IntegrationRow>(
+      `SELECT ${columns} FROM agent_integrations WHERE id = ? AND user_id = ? AND app_id = ?`,
+      [record.id, record.scope.userId, record.scope.appId],
+    );
+    if (!row) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+    if (inserted.changes === 0) {
+      const credential = row.protected_credential ? this.cipher.decrypt(row.protected_credential) : undefined;
+      if (
+        row.kind !== record.kind ||
+        row.configuration_json !== configurationJson ||
+        (row.enabled === 1) !== record.enabled ||
+        credential !== record.credential
+      ) {
+        throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+      }
+    }
+    return mapRow(row);
   }
 
   async update(

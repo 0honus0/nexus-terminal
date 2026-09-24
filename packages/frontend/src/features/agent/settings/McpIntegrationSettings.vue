@@ -35,6 +35,7 @@
     trustToolAnnotations: false,
     enabled: true,
   });
+  let pendingCreateIdentity: { fingerprint: string; idempotencyKey: string } | null = null;
 
   const copiedUrl = ref<string | null>(null);
   const copyEndpoint = async (url: string): Promise<void> => {
@@ -94,6 +95,7 @@
   };
 
   const openAddModal = (): void => {
+    pendingCreateIdentity = null;
     form.displayName = '';
     form.endpoint = '';
     form.credential = '';
@@ -105,6 +107,7 @@
   };
 
   const closeAddModal = (): void => {
+    pendingCreateIdentity = null;
     modalOpen.value = false;
     modalError.value = '';
   };
@@ -121,19 +124,25 @@
     localBusy.value = true;
     modalError.value = '';
     try {
-      await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, {
-        kind: 'mcp',
+      const input = {
+        kind: 'mcp' as const,
         configuration: {
           displayName: name,
-          transport: 'streamable-http',
+          transport: 'streamable-http' as const,
           endpoint: url,
           privateHostExceptions: [],
-          protocolVersion: '2026-07-28',
+          protocolVersion: '2026-07-28' as const,
           trustToolAnnotations: form.trustToolAnnotations,
         },
         enabled: form.enabled,
         ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
-      });
+      };
+      const fingerprint = JSON.stringify(input);
+      if (!pendingCreateIdentity || pendingCreateIdentity.fingerprint !== fingerprint) {
+        pendingCreateIdentity = { fingerprint, idempotencyKey: crypto.randomUUID() };
+      }
+      await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, input, pendingCreateIdentity.idempotencyKey);
+      pendingCreateIdentity = null;
       operationFeedback.notifySuccess(t('agent.settings.mcpIntegrations.created'));
       closeAddModal();
       await loadIntegrations();

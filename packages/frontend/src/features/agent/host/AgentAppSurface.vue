@@ -1134,6 +1134,16 @@
     return artifacts.map((artifact) => artifact.id);
   };
 
+  let pendingRunCreateIdentity: { fingerprint: string; idempotencyKey: string } | null = null;
+
+  const runCreateIdempotencyKey = (fields: Parameters<typeof facade.createRun>[0]): string => {
+    const fingerprint = JSON.stringify(fields);
+    if (!pendingRunCreateIdentity || pendingRunCreateIdentity.fingerprint !== fingerprint) {
+      pendingRunCreateIdentity = { fingerprint, idempotencyKey: crypto.randomUUID() };
+    }
+    return pendingRunCreateIdentity.idempotencyKey;
+  };
+
   const createNewRun = async (
     text: string,
     selectedArtifacts: AgentArtifactRefDto[] = [],
@@ -1169,7 +1179,7 @@
       run.value.plan.items.length > 0
         ? run.value.id
         : undefined;
-    const created = await facade.createRun({
+    const fields: Parameters<typeof facade.createRun>[0] = {
       threadId: thread.id,
       input: { text, artifactRefs },
       agentDefinitionId: definition.id,
@@ -1190,7 +1200,10 @@
           }
         : null,
       ...(initialGoal ? { initialGoal } : {}),
-    });
+    };
+    const idempotencyKey = runCreateIdempotencyKey(fields);
+    const created = await facade.createRun(fields, idempotencyKey);
+    if (pendingRunCreateIdentity?.idempotencyKey === idempotencyKey) pendingRunCreateIdentity = null;
     run.value = created;
     logger.info(
       {

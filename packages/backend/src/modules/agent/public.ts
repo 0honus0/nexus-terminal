@@ -155,7 +155,7 @@ export interface AgentHostFacade {
     overrides: unknown,
     expectedVersion: number,
   ): Promise<AgentExecutionPolicyView>;
-  createAppIntent(scope: Scope, input: CreateAppIntentInput): Promise<AppIntentReceipt>;
+  createAppIntent(scope: Scope, input: CreateAppIntentInput, idempotencyKey: string): Promise<AppIntentReceipt>;
   listReceivedAppIntents(scope: Scope, limit?: number): Promise<AppIntentReceipt[]>;
   revokeAppIntent(scope: Scope, receiptId: string): Promise<void>;
   getReceivedAppIntentArtifact(scope: Scope, receiptId: string, artifactId: string): Promise<AppIntentArtifactView>;
@@ -188,7 +188,7 @@ export interface AgentHostFacade {
 export interface AgentIntegrationFacade {
   list(scope: Scope, kind?: IntegrationKind): Promise<IntegrationManagementView[]>;
   get(scope: Scope, integrationId: string): Promise<IntegrationManagementView>;
-  create(scope: Scope, input: unknown): Promise<IntegrationManagementView>;
+  create(scope: Scope, input: unknown, idempotencyKey: string): Promise<IntegrationManagementView>;
   update(
     scope: Scope,
     integrationId: string,

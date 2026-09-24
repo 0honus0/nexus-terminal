@@ -250,8 +250,10 @@
     profileId: '',
     enabled: true,
   });
+  let pendingIntegrationCreateIdentity: { fingerprint: string; idempotencyKey: string } | null = null;
 
   const openAddIntegrationModal = (): void => {
+    pendingIntegrationCreateIdentity = null;
     integrationForm.displayName = '';
     integrationForm.profileId = configuredProfiles.value[0]?.id ?? '';
     integrationForm.enabled = true;
@@ -267,16 +269,22 @@
     await run(
       'create-integration',
       async () => {
-        await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, {
-          kind: 'acp',
+        const input = {
+          kind: 'acp' as const,
           configuration: {
             displayName: name,
-            transport: 'workspace-profile',
+            transport: 'workspace-profile' as const,
             profileId: pid,
-            protocolVersion: '1',
+            protocolVersion: '1' as const,
           },
           enabled: integrationForm.enabled,
-        });
+        };
+        const fingerprint = JSON.stringify(input);
+        if (!pendingIntegrationCreateIdentity || pendingIntegrationCreateIdentity.fingerprint !== fingerprint) {
+          pendingIntegrationCreateIdentity = { fingerprint, idempotencyKey: crypto.randomUUID() };
+        }
+        await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, input, pendingIntegrationCreateIdentity.idempotencyKey);
+        pendingIntegrationCreateIdentity = null;
         integrationModalOpen.value = false;
         await loadIntegrations();
       },
@@ -343,7 +351,6 @@
     },
     { immediate: true },
   );
-
 </script>
 
 <template>
