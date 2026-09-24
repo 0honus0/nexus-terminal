@@ -187,10 +187,27 @@
     logger.debug({ reason, userId: activeUserId }, 'Agent global surface layout persistence requested');
   };
 
+  const detachUserScopedState = (reason: string): void => {
+    const detachedUserId = activeUserId;
+    refreshGeneration += 1;
+    persistLayout(reason);
+    stop(reason);
+    summary.value = null;
+    resetAgentCsrf();
+    agentWindowManager.reset();
+    agentSurfaceSession.disposeSession();
+    logger.debug({ reason, userId: detachedUserId }, 'Agent global surface user-scoped state cleared');
+  };
+
   watch(
     () => [auth.isAuthenticated.value, auth.user.value?.id ?? null] as const,
     ([authenticated, userId]) => {
       if (authenticated && userId !== null) {
+        if (activeUserId !== null && activeUserId !== userId) {
+          const previousUserId = activeUserId;
+          detachUserScopedState('user-changed');
+          logger.info({ previousUserId, userId }, 'Agent global surface authenticated user changed');
+        }
         activeUserId = userId;
         logger.debug({ userId }, 'Agent global surface attached to authenticated shell');
         agentWindowManager.restoreForUser(userId);
@@ -198,14 +215,10 @@
         start();
         return;
       }
-      persistLayout('auth-ended');
-      logger.debug({ userId: activeUserId }, 'Agent global surface detached from authenticated shell');
+      const detachedUserId = activeUserId;
+      detachUserScopedState('auth-ended');
+      logger.debug({ userId: detachedUserId }, 'Agent global surface detached from authenticated shell');
       activeUserId = null;
-      stop('auth-ended');
-      summary.value = null;
-      resetAgentCsrf();
-      agentWindowManager.reset();
-      agentSurfaceSession.disposeSession();
     },
     { immediate: true },
   );
@@ -260,15 +273,12 @@
   document.addEventListener('visibilitychange', onVisibility);
 
   onBeforeUnmount(() => {
-    refreshGeneration += 1;
-    persistLayout('host-unmount');
+    detachUserScopedState('host-unmount');
+    activeUserId = null;
     document.removeEventListener('visibilitychange', onVisibility);
     stopLocalHostChanged();
     hostChannel?.removeEventListener('message', onHostBroadcast);
     hostChannel?.close();
-    stop('host-unmount');
-    agentWindowManager.reset();
-    agentSurfaceSession.disposeSession();
   });
 </script>
 
