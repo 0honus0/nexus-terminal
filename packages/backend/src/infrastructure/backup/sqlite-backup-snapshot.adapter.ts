@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { mkdir, open, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
-import type { Dirent } from 'node:fs';
 import type { BackupSnapshotPort } from '../../modules/backup/backup.port';
 import type { BackupFileEntry, BackupSnapshot } from '../../modules/backup/backup.types';
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
@@ -96,6 +95,17 @@ const SENSITIVE_COLUMNS: Record<string, readonly string[]> = {
   agent_integrations: ['protected_credential'],
 };
 
+const FILE_SNAPSHOT_ATTEMPTS = 3;
+
+interface BackupFileInventoryEntry {
+  absolutePath: string;
+  relativePath: string;
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  ino: number;
+}
+
 type RestoreSwapState = 'pending' | 'moving_original' | 'installing' | 'swapped';
 
 interface RestoreSwap {
@@ -125,11 +135,12 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
   ) {}
 
   async capture(): Promise<BackupSnapshot> {
-    const tables: Record<string, Record<string, unknown>[]> = {};
-    for (const table of TABLES) tables[table] = await this.captureTable(table);
-    const files: BackupFileEntry[] = [];
-    for (const directory of FILE_DIRECTORIES) await this.collectFiles(directory, files);
-    return { format: 'nexus-terminal-backup', version: 1, createdAt: new Date().toISOString(), tables, files };
+    return this.database.transaction(async (database) => {
+      const tables: Record<string, Record<string, unknown>[]> = {};
+      for (const table of TABLES) tables[table] = await this.captureTable(database, table);
+      const files = await this.captureStableFiles();
+      return { format: 'nexus-terminal-backup', version: 1, createdAt: new Date().toISOString(), tables, files };
+    });
   }
 
   async restore(
@@ -190,9 +201,9 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
     await this.abortUncommittedRestore(journal);
   }
 
-  private async captureTable(table: string): Promise<Record<string, unknown>[]> {
-    if (!(await this.tableExists(this.database, table))) return [];
-    const rows = await this.database.queryAll<Record<string, unknown>>(`SELECT * FROM ${quoteIdentifier(table)}`);
+  private async captureTable(database: RelationalDatabase, table: string): Promise<Record<string, unknown>[]> {
+    if (!(await this.tableExists(database, table))) return [];
+    const rows = await database.queryAll<Record<string, unknown>>(`SELECT * FROM ${quoteIdentifier(table)}`);
     const sensitive = SENSITIVE_COLUMNS[table] ?? [];
     if (!sensitive.length) return rows;
     return rows.map((source) => {
@@ -208,28 +219,81 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
     });
   }
 
-  private async collectFiles(directory: string, output: BackupFileEntry[]): Promise<void> {
-    const root = path.join(this.dataDirectory, directory);
-    let entries: Dirent[];
-    try {
-      entries = await readdir(root, { withFileTypes: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-      throw error;
+  private async captureStableFiles(): Promise<BackupFileEntry[]> {
+    for (let attempt = 0; attempt < FILE_SNAPSHOT_ATTEMPTS; attempt += 1) {
+      try {
+        const before = await this.fileInventory();
+        const files: BackupFileEntry[] = [];
+        for (const entry of before) {
+          const content = await readFile(entry.absolutePath);
+          if (content.byteLength !== entry.size) throw new Error('BACKUP_SNAPSHOT_FILES_CHANGED');
+          files.push({ path: entry.relativePath, contentBase64: content.toString('base64') });
+        }
+        const after = await this.fileInventory();
+        if (this.inventorySignature(before) === this.inventorySignature(after)) return files;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT' && (!(error instanceof Error) || error.message !== 'BACKUP_SNAPSHOT_FILES_CHANGED')) {
+          throw error;
+        }
+      }
     }
+    throw new Error('BACKUP_SNAPSHOT_FILES_UNSTABLE');
+  }
+
+  private async fileInventory(): Promise<BackupFileInventoryEntry[]> {
+    const output: BackupFileInventoryEntry[] = [];
     const walk = async (current: string): Promise<void> => {
-      for (const entry of await readdir(current, { withFileTypes: true })) {
-        const absolute = path.join(current, entry.name);
-        if (entry.isDirectory()) await walk(absolute);
-        else if (entry.isFile())
-          output.push({
-            path: path.relative(this.dataDirectory, absolute).split(path.sep).join('/'),
-            contentBase64: (await readFile(absolute)).toString('base64'),
-          });
+      let entries;
+      try {
+        entries = await readdir(current, { withFileTypes: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('BACKUP_SNAPSHOT_FILES_CHANGED');
+        throw error;
+      }
+      for (const entry of entries) {
+        const absolutePath = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          await walk(absolutePath);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        let metadata;
+        try {
+          metadata = await stat(absolutePath);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('BACKUP_SNAPSHOT_FILES_CHANGED');
+          throw error;
+        }
+        if (!metadata.isFile()) throw new Error('BACKUP_SNAPSHOT_FILES_CHANGED');
+        output.push({
+          absolutePath,
+          relativePath: path.relative(this.dataDirectory, absolutePath).split(path.sep).join('/'),
+          size: metadata.size,
+          mtimeMs: metadata.mtimeMs,
+          ctimeMs: metadata.ctimeMs,
+          ino: metadata.ino,
+        });
       }
     };
-    void entries;
-    await walk(root);
+    for (const directory of FILE_DIRECTORIES) {
+      const root = path.join(this.dataDirectory, directory);
+      try {
+        await stat(root);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw error;
+      }
+      await walk(root);
+    }
+    output.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+    return output;
+  }
+
+  private inventorySignature(entries: readonly BackupFileInventoryEntry[]): string {
+    return JSON.stringify(
+      entries.map((entry) => [entry.relativePath, entry.size, entry.mtimeMs, entry.ctimeMs, entry.ino]),
+    );
   }
 
   private validateSnapshot(snapshot: BackupSnapshot): void {

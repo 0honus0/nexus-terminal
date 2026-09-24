@@ -5,6 +5,8 @@ import type { BackupImportResult } from './backup.types';
 
 /** Owns backup authorization and the capture → codec / decode → restore application workflow. */
 export class BackupService {
+  private operationTail: Promise<void> = Promise.resolve();
+
   constructor(
     private readonly snapshots: BackupSnapshotPort,
     private readonly codec: BackupCodecPort,
@@ -17,14 +19,30 @@ export class BackupService {
     if (!password) throw new Error('请输入当前登录密码后再导出备份。');
     const user = await this.users.getStored(userId);
     if (!user || !(await this.hasher.compare(password, user.hashedPassword))) throw new Error('当前登录密码不正确。');
-    return this.codec.encode(await this.snapshots.capture(), password);
+    return this.runExclusive(async () => this.codec.encode(await this.snapshots.capture(), password));
   }
 
   async importFull(bytes: Uint8Array, password?: string): Promise<BackupImportResult> {
     const decoded = await this.codec.decode(bytes, password);
-    await this.hooks.beforeRestore?.();
-    const restored = await this.snapshots.restore(decoded.snapshot);
-    await this.hooks.afterRestore?.();
-    return { ...restored, usedPassword: decoded.usedPassword };
+    return this.runExclusive(async () => {
+      await this.hooks.beforeRestore?.();
+      const restored = await this.snapshots.restore(decoded.snapshot);
+      await this.hooks.afterRestore?.();
+      return { ...restored, usedPassword: decoded.usedPassword };
+    });
+  }
+
+  private async runExclusive<T>(work: () => Promise<T>): Promise<T> {
+    const previous = this.operationTail;
+    let release: () => void = () => undefined;
+    this.operationTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await work();
+    } finally {
+      release();
+    }
   }
 }
