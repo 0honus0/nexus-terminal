@@ -1577,13 +1577,30 @@
     }
   };
 
+  let pendingCheckpointResumeIdentity: { fingerprint: string; idempotencyKey: string } | null = null;
+
+  const checkpointResumeIdempotencyKey = (
+    snapshot: AgentRunSnapshotDto | AgentRunViewDto,
+    checkpoint: AgentCheckpointViewDto,
+  ): string => {
+    const fingerprint = JSON.stringify([snapshot.id, checkpoint.id, snapshot.version]);
+    if (!pendingCheckpointResumeIdentity || pendingCheckpointResumeIdentity.fingerprint !== fingerprint) {
+      pendingCheckpointResumeIdentity = { fingerprint, idempotencyKey: crypto.randomUUID() };
+    }
+    return pendingCheckpointResumeIdentity.idempotencyKey;
+  };
+
   const resumeCheckpoint = async (
     snapshot: AgentRunSnapshotDto | AgentRunViewDto,
     checkpoint: AgentCheckpointViewDto,
   ): Promise<void> => {
     if (!beginRuntimeMutation()) return;
+    const idempotencyKey = checkpointResumeIdempotencyKey(snapshot, checkpoint);
     try {
-      const resumed = await facade.resumeRun(snapshot, checkpoint.id);
+      const resumed = await facade.resumeRun(snapshot, checkpoint.id, idempotencyKey);
+      if (pendingCheckpointResumeIdentity?.idempotencyKey === idempotencyKey) {
+        pendingCheckpointResumeIdentity = null;
+      }
       run.value = resumed;
       rememberThreadRun(resumed);
       detailSnapshot.value = null;

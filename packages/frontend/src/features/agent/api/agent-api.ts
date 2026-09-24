@@ -776,7 +776,12 @@ export const agentApi = {
       ).data,
     );
   },
-  async resumeRun(appId: string, run: AgentRunViewDto, checkpointId: string): Promise<AgentRunViewDto> {
+  async resumeRun(
+    appId: string,
+    run: AgentRunViewDto,
+    checkpointId: string,
+    idempotencyKey: string,
+  ): Promise<AgentRunViewDto> {
     const fields: AgentRunResumeFieldsDto = { checkpointId, expectedVersion: run.version };
     const input: AgentRunResumeRequestDto = agentRuntimeRequest(fields);
     return unwrap(
@@ -784,7 +789,7 @@ export const agentApi = {
         await httpClient.post<AgentEnvelopeDto<AgentRunViewDto>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/resume`,
           input,
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey } },
         )
       ).data,
     );

@@ -153,8 +153,8 @@ export const createAgentRunFacade = (appId: string) => {
     increaseBudget: async (run: AgentRunViewDto, increase: Parameters<typeof agentApi.increaseRunBudget>[2]) =>
       runStore.accept(await agentApi.increaseRunBudget(appId, currentRun(run), increase)),
     saveCheckpoint: (run: AgentRunViewDto) => agentApi.saveCheckpoint(appId, currentRun(run)),
-    resumeRun: async (run: AgentRunViewDto, checkpointId: string) =>
-      runStore.accept(await agentApi.resumeRun(appId, currentRun(run), checkpointId)),
+    resumeRun: async (run: AgentRunViewDto, checkpointId: string, idempotencyKey: string) =>
+      runStore.accept(await agentApi.resumeRun(appId, currentRun(run), checkpointId, idempotencyKey)),
     cancelRun: async (run: AgentRunViewDto, idempotencyKey?: string) =>
       runStore.accept(await agentApi.cancelRun(appId, currentRun(run), idempotencyKey)),
     deleteRun: (run: AgentRunViewDto) => agentApi.deleteRun(appId, currentRun(run)),
