@@ -57,7 +57,6 @@
       summary.value = next;
       chooseDefaultApp(next);
       if (!next.featureEnabled) agentWindowManager.closeHub();
-      else if (previousFeatureEnabled === false) agentWindowManager.openHub({ restoreRecent: true });
       if (previousFeatureEnabled !== null && previousFeatureEnabled !== next.featureEnabled) {
         logger.info(
           { userId: activeUserId, previousFeatureEnabled, featureEnabled: next.featureEnabled },

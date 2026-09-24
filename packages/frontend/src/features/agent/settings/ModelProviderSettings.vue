@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref } from 'vue';
+  import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     BaseModal,
@@ -850,6 +850,16 @@
     }
   };
 
+  const optimisticDefaultModelId = ref<string | null>(null);
+
+  watch(
+    () => props.defaultModelId,
+    (val) => {
+      optimisticDefaultModelId.value = val ?? null;
+    },
+    { immediate: true },
+  );
+
   // 默认模型选择：统一 Select 下拉（禁用自由输入），模型 ID 为主、渠道为次
   const defaultModelSelectOptions = computed<UiSelectOption[]>(() =>
     modelOptions.value.map((opt) => ({
@@ -861,7 +871,10 @@
 
   const selectDefaultModel = (value: unknown) => {
     const opt = modelOptions.value.find((item) => item.key === value);
-    if (opt) emit('defaultModel', opt.provider.id, opt.model.id);
+    if (opt) {
+      optimisticDefaultModelId.value = opt.model.id;
+      emit('defaultModel', opt.provider.id, opt.model.id);
+    }
   };
 
   onMounted(() => {
@@ -883,9 +896,15 @@
 
   const MAX_FALLBACK_MODELS = 8;
 
-  const defaultModelKey = computed(() =>
-    props.defaultProviderId && props.defaultModelId ? `${props.defaultProviderId}\u0000${props.defaultModelId}` : '',
-  );
+  const defaultModelKey = computed(() => {
+    if (optimisticDefaultModelId.value) {
+      const opt = modelOptions.value.find((item) => item.model.id === optimisticDefaultModelId.value);
+      if (opt) return opt.key;
+    }
+    return props.defaultProviderId && props.defaultModelId
+      ? `${props.defaultProviderId}\u0000${props.defaultModelId}`
+      : '';
+  });
 
   const validFallbackModels = computed(() => {
     const configuredKeys = new Set(modelOptions.value.map((item) => item.key));
@@ -968,17 +987,17 @@
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
       } else {
-        const textarea = document.createElement("textarea");
+        const textarea = document.createElement('textarea');
         textarea.value = text;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
         document.body.appendChild(textarea);
         textarea.select();
-        document.execCommand("copy");
+        document.execCommand('copy');
         document.body.removeChild(textarea);
       }
       copiedUrl.value = text;
-      operationFeedback.notifySuccess(t("agent.settings.providers.copyUrlSuccess"));
+      operationFeedback.notifySuccess(t('agent.settings.providers.copyUrlSuccess'));
       setTimeout(() => {
         if (copiedUrl.value === text) {
           copiedUrl.value = null;
@@ -986,8 +1005,8 @@
       }, 1500);
     } catch {
       operationFeedback.notifyError({
-        operation: "copy-url",
-        message: t("agent.operations.requestFailed"),
+        operation: 'copy-url',
+        message: t('agent.operations.requestFailed'),
       });
     }
   };
@@ -1091,22 +1110,16 @@
       <div
         class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg bg-header/30 p-3.5 transition-all relative z-10"
       >
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-2.5 shrink-0">
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <i class="fa-solid fa-robot text-sm" aria-hidden="true"></i>
           </div>
-          <div class="flex items-center gap-2">
-            <div class="text-xs font-semibold text-foreground">{{ $t('agent.settings.providers.defaultModel') }}</div>
-            <span
-              class="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/25 px-2 py-0.5 text-[11px] font-medium text-success"
-            >
-              <i class="fa-solid fa-cloud-arrow-up text-[8px]"></i>
-              <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
-            </span>
+          <div class="text-xs font-semibold text-foreground whitespace-nowrap">
+            {{ $t('agent.settings.providers.defaultModel') }}
           </div>
         </div>
 
-        <div class="min-w-64 max-w-sm">
+        <div class="flex items-center justify-end min-w-0 flex-1">
           <UiSelect
             :model-value="defaultModelKey || null"
             :options="defaultModelSelectOptions"
@@ -1115,7 +1128,8 @@
             :aria-label="$t('agent.settings.providers.defaultModel')"
             align="end"
             density="comfortable"
-            panel-class="max-h-72"
+            class="default-model-select"
+            panel-class="max-h-72 min-w-64 max-w-[min(480px,calc(100vw-24px))]"
             @update:model-value="selectDefaultModel"
           />
         </div>
@@ -1288,10 +1302,10 @@
           :key="provider.id"
           data-testid="agent-provider-card"
           :data-provider-id="provider.id"
-          class="rounded-xl border border-border/85 bg-card/60 transition-all hover:border-border hover:bg-card/85 shadow-2xs overflow-hidden"
+          class="rounded-xl border border-border bg-card/75 transition-all hover:border-border-hover/80 hover:bg-card/90 shadow-2xs overflow-hidden"
         >
           <!-- 服务商顶行摘要（紧凑单行） -->
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 px-3.5 py-2">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 px-3.5 py-2.5">
             <!-- 左侧核心身份与配置元数据（单行紧凑排布：名称 + 协议下拉） -->
             <div class="flex items-center gap-2.5 min-w-0 flex-1">
               <div
@@ -1303,11 +1317,11 @@
                 <!-- 服务商名称（带清晰边界与复制反馈，点击复制 Base URL） -->
                 <button
                   type="button"
-                  class="group inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-tight transition-all cursor-pointer select-none shrink-0 shadow-xs"
+                  class="group inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-tight transition-all cursor-pointer select-none shrink-0 shadow-2xs"
                   :class="
                     copiedUrl === provider.baseUrl
-                      ? 'border-success/70 bg-success/15 text-success'
-                      : 'border-border/90 bg-background/90 hover:bg-card text-foreground hover:border-primary/60 hover:text-primary'
+                      ? 'border-success bg-success/15 text-success'
+                      : 'border-border bg-background hover:bg-card hover:border-primary/60 hover:text-primary text-foreground'
                   "
                   :title="
                     copiedUrl === provider.baseUrl
@@ -1436,8 +1450,8 @@
             <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-stretch">
               <!-- 左栏：可添加模型（支持多选、全选添加） -->
               <div class="flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs h-full">
-                <!-- 顶栏标题与批量动作（统一高度 min-h-8 pb-2.5） -->
-                <div class="flex items-center justify-between gap-2 min-h-8 pb-2.5 border-b border-border/40">
+                <!-- 顶栏标题与批量动作（统一高度 h-9 pb-2） -->
+                <div class="flex items-center justify-between gap-2 h-9 pb-2 border-b border-border/40 shrink-0">
                   <div class="flex items-center gap-1.5">
                     <span class="text-xs font-semibold text-foreground">{{
                       $t('agent.settings.providers.discoveredModels')
@@ -1485,7 +1499,7 @@
                 </div>
 
                 <!-- 搜索过滤与全选控制器（统一固定高度 h-9 my-1） -->
-                <div class="flex items-center gap-2 h-9 my-1">
+                <div class="flex items-center gap-2 h-9 my-1 shrink-0">
                   <label
                     v-if="availableDiscoveries(provider).length > 0"
                     class="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none shrink-0"
@@ -1516,7 +1530,7 @@
                 </div>
 
                 <!-- 模型列表项（固定 h-60 滚动区域） -->
-                <div v-if="filteredAvailable(provider).length > 0" class="h-60 overflow-y-auto space-y-1.5 pr-1 py-1">
+                <div v-if="filteredAvailable(provider).length > 0" class="h-60 overflow-y-auto space-y-1.5 pr-1.5 py-1">
                   <div
                     v-for="model in filteredAvailable(provider)"
                     :key="model.id"
@@ -1564,8 +1578,8 @@
                   {{ $t('agent.settings.providers.discoveryEmpty') }}
                 </div>
 
-                <!-- 底部极简手动增补条（统一高度 h-8 pt-2.5） -->
-                <div class="mt-auto pt-2.5 border-t border-border/40">
+                <!-- 底部极简手动增补条（统一高度 h-8 pt-2） -->
+                <div class="mt-auto pt-2 border-t border-border/40 shrink-0">
                   <div class="flex items-center gap-1.5 h-8">
                     <input
                       v-model="manualModelId[provider.id]"
@@ -1592,8 +1606,8 @@
 
               <!-- 右栏：已生效模型（支持取消已添加、多选批量取消） -->
               <div class="flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs h-full">
-                <!-- 顶栏标题与批量动作（统一高度 min-h-8 pb-2.5） -->
-                <div class="flex items-center justify-between gap-2 min-h-8 pb-2.5 border-b border-border/40">
+                <!-- 顶栏标题与批量动作（统一高度 h-9 pb-2） -->
+                <div class="flex items-center justify-between gap-2 h-9 pb-2 border-b border-border/40 shrink-0">
                   <div class="flex items-center gap-1.5">
                     <span class="text-xs font-semibold text-foreground">{{
                       $t('agent.settings.providers.configuredModels')
@@ -1625,7 +1639,7 @@
                 </div>
 
                 <!-- 搜索过滤栏（统一固定高度 h-9 my-1） -->
-                <div class="flex items-center gap-2 h-9 my-1">
+                <div class="flex items-center gap-2 h-9 my-1 shrink-0">
                   <div class="relative flex-1">
                     <input
                       v-model="filterConfiguredQueries[provider.id]"
@@ -1641,7 +1655,7 @@
                 </div>
 
                 <!-- 已生效模型列表（固定 h-60 滚动区域） -->
-                <div class="h-60 overflow-y-auto space-y-1.5 pr-1 py-1">
+                <div class="h-60 overflow-y-auto space-y-1.5 pr-1.5 py-1">
                   <div
                     v-for="model in filteredConfigured(provider)"
                     :key="model.id"
@@ -1697,8 +1711,8 @@
                   </div>
                 </div>
 
-                <!-- 底部辅助信息条（统一高度 h-8 pt-2.5） -->
-                <div class="mt-auto pt-2.5 border-t border-border/40">
+                <!-- 底部辅助信息条（统一高度 h-8 pt-2） -->
+                <div class="mt-auto pt-2 border-t border-border/40 shrink-0">
                   <div class="flex items-center justify-between gap-2 h-8 text-xs text-text-secondary px-0.5">
                     <span class="inline-flex items-center gap-1.5 truncate text-[11px]">
                       <i class="fa-solid fa-star text-[10px] text-primary" aria-hidden="true"></i>
@@ -1712,14 +1726,6 @@
                     </span>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <!-- 抽屉底部操作条（即时持久化说明） -->
-            <div class="mt-3.5 flex items-center justify-between gap-3 pt-3 border-t border-border/50">
-              <div class="flex items-center gap-1.5 text-xs text-text-secondary">
-                <i class="fa-solid fa-cloud-check text-success text-xs"></i>
-                <span>{{ $t('agent.settings.providers.autoSaveHint') }}</span>
               </div>
             </div>
           </div>
@@ -2091,17 +2097,8 @@
     <div v-if="currentTestModalProvider" class="space-y-4">
       <!-- 顶部概览与搜索栏 -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-2 flex-1 min-w-0">
-          <div class="text-xs text-text-secondary">
-            {{ $t('agent.settings.providers.testModalDesc') }}
-          </div>
-          <!-- 实时自动保存指示徽标 -->
-          <span
-            class="shrink-0 inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/25 px-2 py-0.5 text-[11px] font-medium text-success"
-          >
-            <i class="fa-solid fa-cloud-arrow-up text-[9px]"></i>
-            <span>{{ $t('agent.settings.providers.autoSaved') }}</span>
-          </span>
+        <div class="text-xs text-text-secondary flex-1 min-w-0">
+          {{ $t('agent.settings.providers.testModalDesc') }}
         </div>
 
         <!-- 搜索输入框 -->
@@ -2283,11 +2280,7 @@
     </div>
 
     <template #footer>
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-1.5 text-[11px] text-text-secondary">
-          <i class="fa-solid fa-cloud-check text-success text-xs"></i>
-          <span>{{ $t('agent.settings.providers.autoSaveHint') }}</span>
-        </div>
+      <div class="flex items-center justify-end">
         <UiButton appearance="soft" tone="neutral" type="button" @click="testModalOpen = false">
           {{ $t('common.close') }}
         </UiButton>
@@ -2304,3 +2297,38 @@
     @save="saveCapabilities"
   />
 </template>
+
+<style scoped>
+  .default-model-select {
+    display: inline-flex;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .default-model-select :deep(.ui-select__trigger) {
+    display: inline-flex;
+    width: auto;
+    max-width: 100%;
+    justify-content: flex-start;
+    gap: 4px;
+    padding-inline: 10px 8px !important;
+    transition:
+      width var(--ui-motion-duration) var(--ui-motion-ease),
+      background-color var(--ui-motion-duration) var(--ui-motion-ease),
+      border-color var(--ui-motion-duration) var(--ui-motion-ease),
+      color var(--ui-motion-duration) var(--ui-motion-ease),
+      box-shadow var(--ui-motion-duration) var(--ui-motion-ease);
+  }
+
+  .default-model-select :deep(.ui-select__value) {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    max-width: min(340px, calc(100vw - 160px));
+  }
+
+  .default-model-select :deep(.ui-select__icon) {
+    flex: none;
+    margin-left: 0;
+  }
+</style>
