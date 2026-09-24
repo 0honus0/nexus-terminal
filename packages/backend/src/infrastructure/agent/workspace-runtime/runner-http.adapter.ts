@@ -48,6 +48,7 @@ import type {
 } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
+const MAX_JOB_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_HOST_WORKSPACE_TRANSFER_BYTES = 256 * 1024 * 1024;
 const WORKSPACE_TRANSFER_TIMEOUT_MS = 120_000;
 const RUNNER_PROTOCOL_VERSION = '2026-09-13';
@@ -485,6 +486,7 @@ export class RunnerHttpAdapter
           `/v1/workspaces/${encodeURIComponent(grant.workspaceId)}/jobs`,
           { method: 'POST', body: request },
           signal,
+          { maxResponseBytes: MAX_JOB_RESPONSE_BYTES },
         ),
       );
     } catch (error) {
@@ -539,7 +541,9 @@ export class RunnerHttpAdapter
 
   async queryJob(jobId: string, signal?: AbortSignal): Promise<WorkspaceJobView> {
     if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
-    return decodeWorkspaceJobView(await this.get(`/v1/jobs/${encodeURIComponent(jobId)}`, signal));
+    return decodeWorkspaceJobView(
+      await this.get(`/v1/jobs/${encodeURIComponent(jobId)}`, signal, { maxResponseBytes: MAX_JOB_RESPONSE_BYTES }),
+    );
   }
 
   async waitJob(jobId: string, timeoutMs: number, signal?: AbortSignal): Promise<WorkspaceJobView> {
@@ -556,7 +560,7 @@ export class RunnerHttpAdapter
         `/v1/jobs/${encodeURIComponent(jobId)}/wait`,
         { method: 'POST', body: { timeoutMs } },
         signal,
-        { timeoutMs: timeoutMs + 5_000 },
+        { timeoutMs: timeoutMs + 5_000, maxResponseBytes: MAX_JOB_RESPONSE_BYTES },
       ),
     );
   }
@@ -566,6 +570,7 @@ export class RunnerHttpAdapter
     return decodeWorkspaceJobView(
       await this.request(`/v1/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST', body: {} }, signal, {
         timeoutMs: 10_000,
+        maxResponseBytes: MAX_JOB_RESPONSE_BYTES,
       }),
     );
   }
@@ -696,8 +701,12 @@ export class RunnerHttpAdapter
     }
   }
 
-  private get(pathname: string, signal?: AbortSignal): Promise<unknown> {
-    return this.request(pathname, { method: 'GET' }, signal);
+  private get(
+    pathname: string,
+    signal?: AbortSignal,
+    limits: { timeoutMs?: number; maxResponseBytes?: number } = {},
+  ): Promise<unknown> {
+    return this.request(pathname, { method: 'GET' }, signal, limits);
   }
 
   private async request(

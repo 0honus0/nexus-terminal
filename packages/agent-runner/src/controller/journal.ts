@@ -19,6 +19,7 @@ const MAX_JOURNAL_COLLECTION_ITEMS = 16_384;
 const JOURNAL_COLLECTION_HIGH_WATER = 12_288;
 const MAX_JOURNAL_RECOVERY_COLLECTION_ITEMS = 32_768;
 const MAX_JOURNAL_STRING_BYTES = 64 * 1024;
+const MAX_WORKSPACE_JOB_OUTPUT_BYTES = 1024 * 1024;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -34,6 +35,13 @@ const recordValue = (value: unknown): UnknownRecord => {
 const stringValue = (value: unknown, nullable = false): string | null => {
   if (nullable && value === null) return null;
   if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_JOURNAL_STRING_BYTES) return invalidJournal();
+  return value;
+};
+
+const jobOutputStringValue = (value: unknown): string => {
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_WORKSPACE_JOB_OUTPUT_BYTES) {
+    return invalidJournal();
+  }
   return value;
 };
 
@@ -155,8 +163,8 @@ const decodeJobResult = (value: unknown): WorkspaceJobResult => {
   return {
     exitCode: record.exitCode === null ? null : integerValue(record.exitCode),
     signal: stringValue(record.signal, true),
-    stdout: stringValue(record.stdout) as string,
-    stderr: stringValue(record.stderr) as string,
+    stdout: jobOutputStringValue(record.stdout),
+    stderr: jobOutputStringValue(record.stderr),
     truncated: booleanValue(record.truncated),
     timedOut: booleanValue(record.timedOut),
   };
@@ -323,6 +331,12 @@ export class RunnerJournal {
   }
 
   succeedJob(jobId: string, result: WorkspaceJobResult): void {
+    if (
+      Buffer.byteLength(result.stdout, 'utf8') + Buffer.byteLength(result.stderr, 'utf8') >
+      MAX_WORKSPACE_JOB_OUTPUT_BYTES
+    ) {
+      throw new Error('JOB_OUTPUT_LIMIT_INVALID');
+    }
     this.patchJob(jobId, {
       status: 'succeeded',
       result,

@@ -22,6 +22,7 @@ import type {
 
 const MAX_PROTOCOL_COLLECTION_ITEMS = 4096;
 const MAX_PROTOCOL_STRING_BYTES = 16 * 1024;
+const MAX_WORKSPACE_JOB_OUTPUT_BYTES = 1024 * 1024;
 
 const jsonValue = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value)) as JsonValue;
 
@@ -201,8 +202,8 @@ export const decodeWorkspaceJobView = (value: unknown): WorkspaceJobView => {
     result = {
       exitCode,
       signal: stringValue(rawResult.signal, true),
-      stdout: stringValue(rawResult.stdout) as string,
-      stderr: stringValue(rawResult.stderr) as string,
+      stdout: boundedStringValue(rawResult.stdout, MAX_WORKSPACE_JOB_OUTPUT_BYTES),
+      stderr: boundedStringValue(rawResult.stderr, MAX_WORKSPACE_JOB_OUTPUT_BYTES),
       truncated: booleanValue(rawResult.truncated),
       timedOut: booleanValue(rawResult.timedOut),
     };
