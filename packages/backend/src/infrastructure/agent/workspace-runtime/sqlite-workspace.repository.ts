@@ -49,6 +49,7 @@ interface CommandRow {
   operation_hash: string;
   generation: number;
   status: WorkspaceRuntimeCommandView['status'];
+  request_json: string;
   result_json: string | null;
   deadline_at: number;
   created_at: number;
@@ -58,7 +59,7 @@ interface CommandRow {
 const WORKSPACE_COLUMNS =
   'id,user_id,app_id,run_id,agent_runtime_id,retained,kind,recipe_id,recipe_revision,runtime_digest,catalog_revision,toolchain_json,runner_plugins_json,generation,status,acp_profiles_json,browser_target_json,retained_manifest_ref,version,last_active_at,created_at,updated_at';
 const COMMAND_COLUMNS =
-  'id,user_id,app_id,workspace_id,action,operation_hash,generation,status,result_json,deadline_at,created_at,completed_at';
+  'id,user_id,app_id,workspace_id,action,operation_hash,generation,status,request_json,result_json,deadline_at,created_at,completed_at';
 
 const workspaceView = (row: WorkspaceRow): AgentWorkspaceView => ({
   id: row.id,
@@ -96,6 +97,7 @@ const commandView = (row: CommandRow): WorkspaceRuntimeCommandView => ({
   operationHash: row.operation_hash,
   generation: row.generation,
   status: row.status,
+  request: parseDurableJsonValue(row.request_json),
   result: row.result_json ? parseDurableJsonValue(row.result_json) : null,
   deadlineAt: row.deadline_at,
   createdAt: row.created_at,

@@ -500,7 +500,7 @@ export class WorkspaceRuntimeService {
       'delete',
       workspaceId,
       workspace.generation,
-      { workspaceId },
+      { workspaceId, transition: { kind: 'toolchainSwitch', previousStatus: workspace.status } },
       false,
       true,
     );
@@ -832,6 +832,26 @@ export class WorkspaceRuntimeService {
     );
   }
 
+  private toolchainSwitchPreviousStatus(command: WorkspaceRuntimeCommandView): AgentWorkspaceView['status'] | null {
+    if (
+      command.action !== 'delete' ||
+      !command.request ||
+      typeof command.request !== 'object' ||
+      Array.isArray(command.request)
+    ) {
+      return null;
+    }
+    const transition = (command.request as Record<string, JsonValue>).transition;
+    if (!transition || typeof transition !== 'object' || Array.isArray(transition)) return null;
+    const record = transition as Record<string, JsonValue>;
+    if (record.kind !== 'toolchainSwitch') return null;
+    return record.previousStatus === 'ready' ||
+      record.previousStatus === 'running' ||
+      record.previousStatus === 'stopped'
+      ? record.previousStatus
+      : null;
+  }
+
   private async syncWorkspaceStatus(scope: Scope, command: WorkspaceRuntimeCommandView): Promise<void> {
     if (!command.workspaceId || !['succeeded', 'failed', 'unknown'].includes(command.status)) return;
     const workspace = await this.repository.getWorkspace(scope, command.workspaceId);
@@ -850,6 +870,19 @@ export class WorkspaceRuntimeService {
                 : workspace.status;
     } else if (command.action === 'provision' || (command.status === 'failed' && command.action === 'restart')) {
       next = 'failed';
+    } else {
+      const previousStatus = this.toolchainSwitchPreviousStatus(command);
+      if (previousStatus && command.status === 'failed') next = previousStatus;
+      else if (
+        previousStatus &&
+        command.status === 'unknown' &&
+        command.result &&
+        typeof command.result === 'object' &&
+        !Array.isArray(command.result) &&
+        (command.result as Record<string, JsonValue>).errorCode === 'WORKSPACE_RECONCILIATION_REQUIRED'
+      ) {
+        next = 'failed';
+      }
     }
     if (next === workspace.status) return;
     await this.repository

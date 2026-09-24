@@ -96,6 +96,7 @@ export interface WorkspaceRuntimeCommandView extends Scope {
   operationHash: string;
   generation: number;
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown';
+  request: JsonValue;
   result: JsonValue | null;
   deadlineAt: number;
   createdAt: number;
