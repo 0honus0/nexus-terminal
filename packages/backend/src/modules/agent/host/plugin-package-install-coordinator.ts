@@ -600,6 +600,7 @@ export class PluginPackageInstallCoordinator {
     }
 
     await this.repository.deletePendingUpgrade(userId, appId);
+    await this.cleanupUnreferencedInstalledVersion(oldPlugin, 'upgrade');
 
     try {
       stage = await this.repository.updateStage(userId, stageId, stage.versionNumber, {
@@ -715,28 +716,16 @@ export class PluginPackageInstallCoordinator {
       }
       throw error;
     }
-    if ((await this.repository.countInstalled(appId, plugin.version)) === 0) {
-      try {
-        await this.verifier.removeInstalled(appId, plugin.version);
-        await this.repository.updateVersionStatus(appId, plugin.version, 'removed', null, this.clock.nowUnixSeconds());
-        this.runtimeLifecycle.removeVersion(appId, plugin.version);
-      } catch (error) {
-        logger.warn(
-          { err: error, userId, appId, version: plugin.version },
-          'Agent plugin installed package cleanup failed after uninstall',
-        );
-        await this.repository
-          .updateVersionStatus(appId, plugin.version, 'failed', null, this.clock.nowUnixSeconds())
-          .catch((statusError) =>
-            logger.warn(
-              { err: statusError, userId, appId, version: plugin.version },
-              'Agent plugin uninstall cleanup could not persist failed package status',
-            ),
-          );
-      }
-    }
+    await this.cleanupUnreferencedInstalledVersion(plugin, 'uninstall');
     logger.info({ userId, appId, version: plugin.version }, 'Agent plugin uninstall completed');
     return { state: 'removed', app: this.runtimeLifecycle.appView(updated, plugin) };
+  }
+
+  async reconcileInstalledVersions(): Promise<void> {
+    for (const plugin of await this.repository.listVersions()) {
+      if (plugin.status !== 'installed') continue;
+      await this.cleanupUnreferencedInstalledVersion(plugin, 'startup');
+    }
   }
 
   async reconcileStages(): Promise<void> {
@@ -749,6 +738,43 @@ export class PluginPackageInstallCoordinator {
           'Agent plugin staged package reconciliation failed during startup',
         ),
       );
+  }
+
+  private async cleanupUnreferencedInstalledVersion(
+    plugin: PluginVersionRecord,
+    reason: 'upgrade' | 'uninstall' | 'startup',
+  ): Promise<void> {
+    let installedCount: number;
+    try {
+      installedCount = await this.repository.countInstalled(plugin.appId, plugin.version);
+    } catch (error) {
+      logger.warn(
+        { err: error, appId: plugin.appId, version: plugin.version, reason },
+        'Agent plugin package ownership reconciliation could not count installations',
+      );
+      return;
+    }
+    if (installedCount !== 0) return;
+    try {
+      await this.verifier.removeInstalled(plugin.appId, plugin.version);
+      await this.repository.updateVersionStatus(
+        plugin.appId,
+        plugin.version,
+        'removed',
+        null,
+        this.clock.nowUnixSeconds(),
+      );
+      this.runtimeLifecycle.removeVersion(plugin.appId, plugin.version);
+      logger.info(
+        { appId: plugin.appId, version: plugin.version, reason },
+        'Agent plugin unreferenced installed package removed',
+      );
+    } catch (error) {
+      logger.warn(
+        { err: error, appId: plugin.appId, version: plugin.version, reason },
+        'Agent plugin unreferenced installed package cleanup failed; preserving installed status for retry',
+      );
+    }
   }
 
   private async cleanupExpiredStages(): Promise<PluginStageRecord[]> {

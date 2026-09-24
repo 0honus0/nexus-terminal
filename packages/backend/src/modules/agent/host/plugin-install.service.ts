@@ -172,6 +172,7 @@ export class PluginInstallService {
 
   async initializeInstalledVersions(): Promise<void> {
     await this.packageInstall.reconcileStages();
+    await this.packageInstall.reconcileInstalledVersions();
     await this.runtimeLifecycle.initializeInstalledVersions();
   }
 

@@ -27,6 +27,26 @@ export class AppRegistryService {
     this.putVersion(definition);
   }
 
+  removeVersion(appId: string, version: string): void {
+    if (this.builtinDefinitions.get(appId)?.manifest.version === version) return;
+    const versions = this.versions.get(appId);
+    const removed = versions?.get(version);
+    if (!versions || !removed) return;
+    versions.delete(version);
+    if (versions.size === 0) this.versions.delete(appId);
+    const retainedIntentIds = new Set(
+      [
+        ...(this.builtinDefinitions.get(appId) ? [this.builtinDefinitions.get(appId)!] : []),
+        ...[...(this.versions.get(appId)?.values() ?? [])],
+      ].flatMap((definition) => definition.manifest.intents.map((intent) => intent.id)),
+    );
+    for (const intent of removed.manifest.intents) {
+      if (!retainedIntentIds.has(intent.id) && this.intentOwners.get(intent.id) === appId) {
+        this.intentOwners.delete(intent.id);
+      }
+    }
+  }
+
   get(appId: string, version?: string): AgentAppDefinition {
     const definition = version
       ? this.versions.get(appId)?.get(version)

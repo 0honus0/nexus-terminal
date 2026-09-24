@@ -30,6 +30,7 @@ export class PluginRuntimeLifecycleCoordinator {
   }
 
   removeVersion(appId: string, version: string): void {
+    this.registry.removeVersion(appId, version);
     this.hooks.versionRemoved(appId, version);
   }
 
