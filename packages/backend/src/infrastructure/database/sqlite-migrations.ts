@@ -20,11 +20,13 @@ CREATE TABLE IF NOT EXISTS migrations (
 // 注意：这里的迁移应该代表数据库模式从某个已知状态到下一个状态的变化。
 // 初始模式通常在 database.ts 中通过 schema.registry.ts 创建。
 // 这里的迁移应该从版本 1 开始，代表初始模式创建后的第一个变更。
-interface Migration {
+export interface SqliteMigration {
   id: number;
   name: string;
   sql: string; // 可以是多条 SQL 语句，用 ; 分隔。db.exec 会处理。
   check?: (db: Database) => Promise<boolean>; // 可选的前置检查函数
+  apply?: (db: Database) => Promise<void>; // partial-schema migration 可逐 statement 恢复
+  verify?: (db: Database) => Promise<boolean>; // 写 migrations 记录前的完整 postcondition
 }
 
 // 辅助函数：检查表是否存在
@@ -39,6 +41,11 @@ const columnExists = async (db: Database, tableName: string, columnName: string)
   return columns.some((column) => column.name === columnName);
 };
 
+const indexExists = async (db: Database, indexName: string): Promise<boolean> => {
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(indexName);
+  return Boolean(row);
+};
+
 // 辅助函数：获取表的创建 SQL
 const getTableCreateSQL = async (db: Database, tableName: string): Promise<string | null> => {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(tableName) as
@@ -46,7 +53,7 @@ const getTableCreateSQL = async (db: Database, tableName: string): Promise<strin
   return row?.sql ?? null;
 };
 
-const definedMigrations: Migration[] = [
+export const definedMigrations: SqliteMigration[] = [
   {
     id: 1,
     name: 'Add ssh_keys table and update connections table for SSH key management',
@@ -463,9 +470,46 @@ const definedMigrations: Migration[] = [
     id: 23,
     name: 'Track durable Agent tool-call batch lineage',
     check: async (db: Database): Promise<boolean> => {
-      const tableAlreadyExists = await tableExists(db, 'agent_tool_calls');
-      if (!tableAlreadyExists) return false;
-      return !(await columnExists(db, 'agent_tool_calls', 'source_model_step_id'));
+      if (!(await tableExists(db, 'agent_tool_calls'))) return false;
+      return !(
+        (await columnExists(db, 'agent_tool_calls', 'source_model_step_id')) &&
+        (await columnExists(db, 'agent_tool_calls', 'batch_index')) &&
+        (await columnExists(db, 'agent_tool_calls', 'batch_size')) &&
+        (await indexExists(db, 'agent_tool_call_batch_lineage'))
+      );
+    },
+    apply: async (db: Database): Promise<void> => {
+      if (!(await columnExists(db, 'agent_tool_calls', 'source_model_step_id'))) {
+        db.exec(`
+          ALTER TABLE agent_tool_calls
+            ADD COLUMN source_model_step_id TEXT REFERENCES agent_steps(id);
+        `);
+      }
+      if (!(await columnExists(db, 'agent_tool_calls', 'batch_index'))) {
+        db.exec(`
+          ALTER TABLE agent_tool_calls
+            ADD COLUMN batch_index INTEGER NOT NULL DEFAULT 0 CHECK(batch_index >= 0);
+        `);
+      }
+      if (!(await columnExists(db, 'agent_tool_calls', 'batch_size'))) {
+        db.exec(`
+          ALTER TABLE agent_tool_calls
+            ADD COLUMN batch_size INTEGER NOT NULL DEFAULT 1 CHECK(batch_size >= 1);
+        `);
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS agent_tool_call_batch_lineage
+          ON agent_tool_calls(run_id, agent_runtime_id, source_model_step_id, batch_index);
+      `);
+    },
+    verify: async (db: Database): Promise<boolean> => {
+      if (!(await tableExists(db, 'agent_tool_calls'))) return true;
+      return (
+        (await columnExists(db, 'agent_tool_calls', 'source_model_step_id')) &&
+        (await columnExists(db, 'agent_tool_calls', 'batch_index')) &&
+        (await columnExists(db, 'agent_tool_calls', 'batch_size')) &&
+        (await indexExists(db, 'agent_tool_call_batch_lineage'))
+      );
     },
     sql: `
             ALTER TABLE agent_tool_calls
@@ -701,7 +745,32 @@ const definedMigrations: Migration[] = [
     id: 34,
     name: 'Add ACP inner permission metadata to Agent approvals',
     check: async (db: Database): Promise<boolean> =>
-      (await tableExists(db, 'agent_approvals')) && !(await columnExists(db, 'agent_approvals', 'kind')),
+      (await tableExists(db, 'agent_approvals')) &&
+      (!(await columnExists(db, 'agent_approvals', 'kind')) ||
+        !(await columnExists(db, 'agent_approvals', 'inspection_json'))),
+    apply: async (db: Database): Promise<void> => {
+      if (!(await columnExists(db, 'agent_approvals', 'kind'))) {
+        db.exec(`
+          ALTER TABLE agent_approvals
+            ADD COLUMN kind TEXT NOT NULL DEFAULT 'tool'
+            CHECK(kind IN ('tool','acp_permission'));
+        `);
+      }
+      if (!(await columnExists(db, 'agent_approvals', 'inspection_json'))) {
+        db.exec(`
+          ALTER TABLE agent_approvals
+            ADD COLUMN inspection_json TEXT
+            CHECK(inspection_json IS NULL OR json_valid(inspection_json));
+        `);
+      }
+    },
+    verify: async (db: Database): Promise<boolean> => {
+      if (!(await tableExists(db, 'agent_approvals'))) return true;
+      return (
+        (await columnExists(db, 'agent_approvals', 'kind')) &&
+        (await columnExists(db, 'agent_approvals', 'inspection_json'))
+      );
+    },
     sql: `
             ALTER TABLE agent_approvals
               ADD COLUMN kind TEXT NOT NULL DEFAULT 'tool'
@@ -1191,18 +1260,26 @@ export const runMigrations = async (db: Database): Promise<void> => {
 
       if (needsSqlExecution) {
         logger.info(`[Migrations] 执行迁移 #${migration.id} 的 SQL...`);
-        try {
-          db.exec(migration.sql);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (message.includes('duplicate column name')) {
-            logger.warn(
-              `[Migrations] 迁移 #${migration.id} SQL 执行时出现 'duplicate column name' 错误，视为可接受并继续。`,
-            );
-          } else {
-            throw error;
+        if (migration.apply) {
+          await migration.apply(db);
+        } else {
+          try {
+            db.exec(migration.sql);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('duplicate column name')) {
+              logger.warn(
+                `[Migrations] 迁移 #${migration.id} SQL 执行时出现 'duplicate column name' 错误，视为可接受并继续。`,
+              );
+            } else {
+              throw error;
+            }
           }
         }
+      }
+
+      if (migration.verify && !(await migration.verify(db))) {
+        throw new Error(`MIGRATION_POSTCONDITION_FAILED:${migration.id}`);
       }
 
       logger.info(`[Migrations] 记录迁移 #${migration.id} 到 migrations 表...`);
