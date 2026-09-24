@@ -1032,7 +1032,9 @@
     },
     "launcher": {
       "open": "Open Agent",
-      "dragHint": "Press and hold to move · right-click to reset"
+      "dragHint": "Press and hold to move · right-click to reset",
+      "reset": "Reset position",
+      "resetHint": "Move the Agent launcher back to its default position"
     },
     "hub": {
       "title": "Agent",

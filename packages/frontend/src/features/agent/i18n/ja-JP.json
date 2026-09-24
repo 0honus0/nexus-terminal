@@ -1032,7 +1032,9 @@
     },
     "launcher": {
       "open": "Agent を開く",
-      "dragHint": "長押しで移動・右クリックで位置をリセット"
+      "dragHint": "長押しで移動・右クリックで位置をリセット",
+      "reset": "位置をリセット",
+      "resetHint": "Agent ランチャーを既定の位置に戻す"
     },
     "hub": {
       "title": "Agent",
