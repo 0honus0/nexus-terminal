@@ -66,7 +66,6 @@
   const modalTesting = ref(false);
   const modalError = ref('');
   const modalTestResult = ref<{ ok: boolean; latencyMs?: number; message?: string } | null>(null);
-  const createdProviderId = ref<string | null>(null);
   const showApiKey = ref(false);
   const copiedUrl = ref<string | null>(null);
   const modelRegistryStatus = ref<AgentModelRegistryStatusDto | null>(null);
@@ -225,7 +224,6 @@
     importAllPulled.value = false;
     modalError.value = '';
     modalTestResult.value = null;
-    createdProviderId.value = null;
     showApiKey.value = false;
     modalOpen.value = true;
   };
@@ -364,77 +362,21 @@
     }
 
     modalTesting.value = true;
+    const startedAt = performance.now();
     try {
-      let targetProviderId = createdProviderId.value;
-
-      // 如果尚未保存，先通过 createProvider 建立服务商记录
-      if (!targetProviderId) {
-        const modelsToCreate: AgentProviderModelInputDto[] =
-          importAllPulled.value && pulledModels.value.length > 0
-            ? pulledModels.value.map((m) => {
-                const defaults = m.registryDefaults;
-                const caps = m.providerCapabilities?.capabilities;
-                return {
-                  id: m.id,
-                  contextWindow: caps?.contextWindow ?? defaults?.contextWindow ?? 128000,
-                  maxOutputTokens: caps?.maxOutputTokens ?? defaults?.maxOutputTokens ?? 4096,
-                  supportsTools: caps?.supportsTools ?? defaults?.supportsTools ?? true,
-                  supportsImageInput: caps?.supportsImageInput ?? defaults?.supportsImageInput ?? false,
-                  supportsFileInput: caps?.supportsFileInput ?? defaults?.supportsFileInput ?? false,
-                };
-              })
-            : [
-                {
-                  id: form.modelId.trim(),
-                  contextWindow: form.contextWindow,
-                  maxOutputTokens: form.maxOutputTokens,
-                  supportsTools: form.supportsTools,
-                  supportsImageInput: form.supportsImageInput,
-                  supportsFileInput: form.supportsFileInput,
-                },
-              ];
-
-        const payload: AgentProviderCreateRequestDto = {
-          kind: 'openai-compatible',
-          displayName: form.displayName.trim(),
-          baseUrl: form.baseUrl.trim(),
-          protocol: form.protocol,
-          ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
-          models: modelsToCreate,
-          enabled: true,
-        };
-
-        const saved = await props.createProvider(payload);
-        if (!saved) return;
-
-        createdProviderId.value = saved.id;
-        targetProviderId = saved.id;
-      }
-
-      if (targetProviderId) {
-        const testRes = await agentApi.testProvider(targetProviderId, form.modelId.trim());
-        if (testRes.ok) {
-          const latencyText = `${testRes.latencyMs}ms`;
-          const successMsg = `${t('agent.settings.providers.testPassed')} (${latencyText})`;
-          modalTestResult.value = {
-            ok: true,
-            latencyMs: testRes.latencyMs,
-            message: successMsg,
-          };
-          operationFeedback.notifySuccess(`${form.displayName.trim() || form.modelId.trim()}: ${successMsg}`);
-        } else {
-          const failMsg = t('agent.settings.providers.testFailedMessage');
-          modalTestResult.value = {
-            ok: false,
-            message: failMsg,
-          };
-          operationFeedback.notifyError({
-            operation: 'test-new-provider',
-            message: `${form.displayName.trim() || form.modelId.trim()}: ${failMsg}`,
-            context: { modelId: form.modelId.trim() },
-          });
-        }
-      }
+      await agentApi.discoverEndpointModels({
+        baseUrl: form.baseUrl.trim(),
+        credential: form.credential.trim() || undefined,
+      });
+      const latencyMs = Math.max(0, Math.round(performance.now() - startedAt));
+      const latencyText = `${latencyMs}ms`;
+      const successMsg = `${t('agent.settings.providers.testPassed')} (${latencyText})`;
+      modalTestResult.value = {
+        ok: true,
+        latencyMs,
+        message: successMsg,
+      };
+      operationFeedback.notifySuccess(`${form.displayName.trim() || form.modelId.trim()}: ${successMsg}`);
     } catch (cause) {
       const errMsg = formatAgentApiError(cause, t('agent.settings.providers.testFailedMessage'), t);
       modalTestResult.value = {
@@ -449,11 +391,6 @@
 
   // 弹窗确认添加
   const submitModal = async () => {
-    if (createdProviderId.value) {
-      modalOpen.value = false;
-      return;
-    }
-
     modalError.value = '';
     if (!form.displayName.trim() || !form.baseUrl.trim() || !form.modelId.trim()) {
       modalError.value = t('agent.settings.providers.completeRequired');
@@ -2213,9 +2150,8 @@
             :disabled="modalTesting || busy || !form.displayName.trim() || !form.baseUrl.trim() || !form.modelId.trim()"
             @click="submitModal"
           >
-            <i v-if="createdProviderId" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
-            <i v-else class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-            <span>{{ createdProviderId ? $t('common.confirm') : $t('agent.settings.providers.saveAndAdd') }}</span>
+            <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
+            <span>{{ $t('agent.settings.providers.saveAndAdd') }}</span>
           </UiButton>
         </div>
       </div>
