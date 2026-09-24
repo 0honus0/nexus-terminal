@@ -237,8 +237,7 @@
         },
         "remoteRepositories": "插件仓库",
         "remoteRepositoriesHint": "Nexus 第一方 catalog 由 Host 固定发布者身份；额外仓库只负责插件发现，安装前仍必须显式信任其 Ed25519 发布者。",
-        "officialRepository": "Nexus 第一方 catalog",
-        "officialPublisherPinned": "发布者已由 Host 固定 pin",
+        "officialRepository": "官方仓库",
         "refreshRemote": "刷新仓库",
         "repositoryUrl": "仓库 catalog URL",
         "addRepository": "添加仓库",
@@ -250,7 +249,7 @@
         "ecosystemBadge": "扩展生态与仓库",
         "signatureVerified": "签名验真通过",
         "skillCount": "Skills: {count} 个",
-        "thirdPartyRepository": "第三方扩展仓库",
+        "thirdPartyRepository": "第三方仓库",
         "stateEnabled": "已启用",
         "stateInstalled": "已安装",
         "stateNotInstalled": "未安装",
@@ -258,7 +257,14 @@
         "summaryNexusFullstack": "全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证。",
         "compatibilityShort": "(兼容要求: Nexus {min}~{max})",
         "reverifyPackage": "重新校验包",
-        "publisherCount": "{count} 个密钥"
+        "publisherCount": "{count} 个密钥",
+        "repositorySource": "仓库来源",
+        "repositoryPlugins": "仓库插件",
+        "pluginCount": "{count} 个插件",
+        "searchPlaceholder": "搜索插件名称、描述或 ID...",
+        "searchEmpty": "未找到匹配的插件",
+        "clearSearch": "清除搜索",
+        "copied": "已复制"
       },
       "hardLimits": {
         "title": "硬性限制",
@@ -516,7 +522,6 @@
         "cancel": "取消",
         "commandStatus": "最近命令：{action} · {status}",
         "reasonUnknown": "Workspace 运行时当前不可用，后端未提供进一步说明。",
-        "reasonCode": "后端原因代码",
         "reason": {
           "runner_not_configured": "尚未配置 Workspace Runner（缺少地址或访问令牌），Workspace 运行时不可用。",
           "runner_unavailable": "无法连接 Workspace Runner，Workspace 运行时暂不可用。",
@@ -716,7 +721,9 @@
         "pullSuccess": "成功获取 {count} 个模型",
         "pullFailed": "拉取模型失败",
         "selectPulledModel": "从拉取到的模型中选择",
-        "importAllPulled": "导入所有拉取的模型 ({count})"
+        "importAllPulled": "导入所有拉取的模型 ({count})",
+        "modelCount": "{count} 个模型",
+        "description": "配置 OpenAI-compatible 模型服务商与接入端点。凭据单独安全保存，不会明文泄露。"
       },
       "guardrails": {
         "title": "系统保护边界",
@@ -774,9 +781,9 @@
         }
       },
       "browserRuntime": {
-        "title": "浏览器运行时",
+        "title": "CDP",
         "description": "配置由 Backend 单份 BrowserRuntime 使用的 CDP 目标。endpoint 的网络位置（scope）与访问路径（via）彼此独立；via=runner 仅使用 Runner 作为网络隧道。",
-        "addTarget": "添加浏览器目标",
+        "addTarget": "添加目标",
         "empty": "尚未配置浏览器目标。无需 Runner 的外部 CDP 可直接配置 via=backend。",
         "targetId": "目标 ID",
         "remove": "删除目标",
@@ -795,7 +802,14 @@
         "scopeDocker": "Docker 网络",
         "scopeExternal": "外部网络",
         "viaBackend": "Backend 直连",
-        "viaRunner": "通过 Runner 隧道"
+        "viaRunner": "通过 Runner 隧道",
+        "modalTitle": "添加 CDP 目标",
+        "modalDescription": "配置由 Backend BrowserRuntime 访问的 CDP 浏览器实例与端点。",
+        "modalEndpointTitle": "添加 CDP 端点",
+        "targetCreated": "CDP 目标已添加并保存。",
+        "targetDeleted": "CDP 目标已删除并保存。",
+        "endpointAdded": "CDP 端点已添加并保存。",
+        "endpointDeleted": "CDP 端点已删除并保存。"
       },
       "mcpIntegrations": {
         "title": "MCP 集成",
@@ -808,7 +822,7 @@
         "credential": "Credential（可选）",
         "enabled": "启用",
         "trustAnnotations": "信任 Server Tool annotations",
-        "create": "创建 Integration",
+        "create": "添加集成",
         "loading": "正在加载 MCP Integrations…",
         "empty": "尚未配置 MCP Integration。",
         "replaceCredential": "替换 Credential",
@@ -832,12 +846,15 @@
           "refreshing": "刷新中",
           "ready": "就绪",
           "error": "错误"
-        }
+        },
+        "modalTitle": "添加 MCP 集成",
+        "modalDescription": "连接外部 Model Context Protocol (MCP) 服务端点并配置工具权限。",
+        "mcpEndpointHint": "支持 SSE 或 Streamable HTTP 端点"
       },
       "acpRuntime": {
-        "title": "ACP 运行时",
+        "title": "ACP",
         "description": "配置 Workspace 内可启动的 ACP 进程 Profile，以及 Nexus Agent 可调用的 ACP Integration。ACP 进程绑定冻结的 Workspace generation/runtime profile，但在单用户 native Runner 中不再声明只读挂载或网络沙箱。",
-        "addProfile": "添加 Profile",
+        "addProfile": "添加配置",
         "profiles": "工作区 ACP 配置档",
         "profilesHint": "argv 使用 JSON 字符串数组；cwd 必须位于 /workspace。保存 Profile 后，创建 Workspace 时可选择并冻结到 generation。",
         "noProfiles": "尚未配置 ACP Profile。",
@@ -853,12 +870,25 @@
         "integrationProfile": "工作区配置档",
         "selectProfile": "选择 Profile",
         "enabled": "启用",
-        "createIntegration": "创建 Integration",
+        "createIntegration": "添加集成",
         "saveProfileFirst": "请先保存至少一个 ACP Profile，再创建 Integration。",
         "installAgentFirst": "请先安装 Nexus Agent Plugin，再管理 ACP Integration；Workspace ACP Profile 可以提前配置。",
         "loading": "正在加载 ACP Integrations…",
         "noIntegrations": "尚未配置 ACP Integration。",
-        "deleteIntegration": "删除"
+        "deleteIntegration": "删除",
+        "modalProfileTitle": "添加 ACP 配置档",
+        "modalProfileDescription": "定义在 Workspace 环境中启动 ACP 代理进程的执行参数与目录。",
+        "modalIntegrationTitle": "添加 ACP 集成",
+        "modalIntegrationDescription": "创建 Nexus Agent 逻辑入口并绑定对应工作区 ACP 配置档。",
+        "profileCreated": "ACP 配置档已添加并保存。",
+        "profileDeleted": "ACP 配置档已删除并保存。",
+        "profileIdHint": "以小写字母开头，仅允许小写字母、数字、点、减号与下划线",
+        "profileIdDuplicate": "该 Profile ID 已存在",
+        "cwdHint": "必须为 /workspace 或其子目录",
+        "argvCommand": "启动命令与参数",
+        "argvHint": "支持直接输入命令行（如 acp-agent --port 8000）或 JSON 数组",
+        "argvPlaceholder": "例如 acp-agent --port 8000 或 [\"acp-agent\"]",
+        "integrationEnabledHint": "创建后立即允许 Nexus Agent 调用此 ACP 运行时"
       },
       "navigation": "Agent 设置分区",
       "controlPlane": "控制面",
@@ -936,7 +966,19 @@
         "profile": {
           "normal": "Normal（推荐）",
           "extended": "Extended"
-        }
+        },
+        "profileDesc": {
+          "normal": "保留更多上下文安全余量，降低被截断或超限风险",
+          "extended": "使用更多模型物理窗口，容纳更大单次多轮上下文"
+        },
+        "compactionDesc": {
+          "aggressive": "提前压缩旧历史，最大化剩余可用空间",
+          "balanced": "兼顾执行性能与历史留存（推荐）",
+          "conservative": "尽量完整保留上下文，逼近硬限制时才紧缩"
+        },
+        "customOverride": "自定义覆盖",
+        "activeInherited": "继承全局",
+        "clickToOverride": "点击即可覆盖为该策略"
       },
       "memory": {
         "title": "Memory 审核与发布",
@@ -980,9 +1022,7 @@
     },
     "launcher": {
       "open": "打开 Agent",
-      "dragHint": "长按可拖动，右键还原位置",
-      "reset": "重置位置",
-      "resetHint": "还原到右下角默认位置"
+      "dragHint": "长按可拖动，右键还原位置"
     },
     "hub": {
       "title": "Agent",

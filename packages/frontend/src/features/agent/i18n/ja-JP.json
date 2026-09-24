@@ -237,8 +237,7 @@
         },
         "remoteRepositories": "プラグインリポジトリ",
         "remoteRepositoriesHint": "Nexus の first-party catalog は Host が発行者を固定します。追加リポジトリは検出のみを提供し、インストール前に Ed25519 発行者を明示的に信頼する必要があります。",
-        "officialRepository": "Nexus 公式カタログ",
-        "officialPublisherPinned": "発行者は Host により固定済み",
+        "officialRepository": "公式リポジトリ",
         "refreshRemote": "リポジトリを更新",
         "repositoryUrl": "リポジトリ catalog URL",
         "addRepository": "リポジトリを追加",
@@ -258,7 +257,14 @@
         "summaryNexusFullstack": "フルスタック納品スイート。マイクロサービス運用、複雑な依存関係の結合検証、デプロイ検証に対応します。",
         "compatibilityShort": "(要件: Nexus {min}〜{max})",
         "reverifyPackage": "パッケージを再検証",
-        "publisherCount": "{count} 件の鍵"
+        "publisherCount": "{count} 件の鍵",
+        "repositorySource": "リポジトリソース",
+        "repositoryPlugins": "リポジトリプラグイン",
+        "pluginCount": "{count} 個のプラグイン",
+        "searchPlaceholder": "プラグイン名、説明、または ID を検索...",
+        "searchEmpty": "一致するプラグインが見つかりません",
+        "clearSearch": "検索をクリア",
+        "copied": "コピーしました"
       },
       "hardLimits": {
         "title": "ハードリミット",
@@ -516,7 +522,6 @@
         "cancel": "キャンセル",
         "commandStatus": "最新コマンド：{action} · {status}",
         "reasonUnknown": "Workspace ランタイムは現在利用できません。バックエンドからの詳細情報はありません。",
-        "reasonCode": "バックエンドの原因コード",
         "reason": {
           "runner_not_configured": "Workspace Runner が未設定です（アドレスまたはトークンがありません）。Workspace ランタイムは利用できません。",
           "runner_unavailable": "Workspace Runner に接続できません。Workspace ランタイムは一時的に利用できません。",
@@ -716,7 +721,9 @@
         "pullSuccess": "{count} 件のモデルを取得しました",
         "pullFailed": "モデル一覧の取得に失敗しました",
         "selectPulledModel": "取得したモデルから選択",
-        "importAllPulled": "取得した全モデルをインポート ({count})"
+        "importAllPulled": "取得した全モデルをインポート ({count})",
+        "modelCount": "{count} 件のモデル",
+        "description": "OpenAI-compatible Provider と接続エンドポイントを設定します。認証情報は別管理され、平文で漏洩することはありません。"
       },
       "guardrails": {
         "title": "システムガードレール",
@@ -774,9 +781,9 @@
         }
       },
       "browserRuntime": {
-        "title": "ブラウザーランタイム",
+        "title": "CDP",
         "description": "Backend の単一 BrowserRuntime が使用する CDP ターゲットを設定します。endpoint のネットワーク scope と到達経路 via は独立し、via=runner の場合 Runner はネットワークトンネルとしてのみ使用されます。",
-        "addTarget": "ブラウザーターゲットを追加",
+        "addTarget": "ターゲット追加",
         "empty": "ブラウザーターゲットは未設定です。Backend から到達できる外部 CDP は via=backend で Runner なしでも利用できます。",
         "targetId": "ターゲット ID",
         "remove": "ターゲットを削除",
@@ -795,7 +802,14 @@
         "scopeDocker": "Docker ネットワーク",
         "scopeExternal": "外部ネットワーク",
         "viaBackend": "Backend から直接接続",
-        "viaRunner": "Runner トンネル経由"
+        "viaRunner": "Runner トンネル経由",
+        "modalTitle": "CDP ターゲットを追加",
+        "modalDescription": "Backend BrowserRuntime がアクセスする CDP ブラウザターゲットとエンドポイントを設定します。",
+        "modalEndpointTitle": "CDP エンドポイントを追加",
+        "targetCreated": "CDP ターゲットを追加・保存しました。",
+        "targetDeleted": "CDP ターゲットを削除・保存しました。",
+        "endpointAdded": "CDP エンドポイントが追加され、保存されました。",
+        "endpointDeleted": "CDP エンドポイントが削除され、保存されました。"
       },
       "mcpIntegrations": {
         "title": "MCP 連携",
@@ -808,7 +822,7 @@
         "credential": "Credential（任意）",
         "enabled": "有効",
         "trustAnnotations": "Server Tool annotations を信頼",
-        "create": "Integration を作成",
+        "create": "統合を追加",
         "loading": "MCP Integrations を読み込み中…",
         "empty": "MCP Integration は未設定です。",
         "replaceCredential": "Credential を置換",
@@ -832,12 +846,15 @@
           "refreshing": "Refreshing",
           "ready": "Ready",
           "error": "Error"
-        }
+        },
+        "modalTitle": "MCP 連携を追加",
+        "modalDescription": "外部 Model Context Protocol (MCP) サービスエンドポイントとツール権限を設定します。",
+        "mcpEndpointHint": "SSE または Streamable HTTP エンドポイントに対応"
       },
       "acpRuntime": {
-        "title": "ACP ランタイム",
+        "title": "ACP",
         "description": "Workspace 内で起動できる ACP プロセス Profile と、Nexus Agent が呼び出す ACP Integration を設定します。ACP プロセスは凍結済み Workspace generation/runtime profile に固定されますが、単一ユーザー native Runner ではプロセス単位の読み取り専用・ネットワーク sandbox を保証しません。",
-        "addProfile": "Profile を追加",
+        "addProfile": "プロファイル追加",
         "profiles": "ワークスペース ACP プロファイル",
         "profilesHint": "argv は JSON 文字列配列、cwd は /workspace 配下である必要があります。保存した Profile は Workspace generation 作成時に選択して固定できます。",
         "noProfiles": "ACP Profile は未設定です。",
@@ -853,12 +870,25 @@
         "integrationProfile": "ワークスペースプロファイル",
         "selectProfile": "Profile を選択",
         "enabled": "有効",
-        "createIntegration": "Integration を作成",
+        "createIntegration": "統合を追加",
         "saveProfileFirst": "Integration を作成する前に ACP Profile を 1 件以上保存してください。",
         "installAgentFirst": "ACP Integration を管理する前に Nexus Agent Plugin をインストールしてください。Workspace ACP Profile は先に設定できます。",
         "loading": "ACP Integrations を読み込み中…",
         "noIntegrations": "ACP Integration は未設定です。",
-        "deleteIntegration": "削除"
+        "deleteIntegration": "削除",
+        "modalProfileTitle": "ACP プロファイルを追加",
+        "modalProfileDescription": "Workspace 環境で ACP エージェントプロセスを起動するための実行引数とディレクトリを定義します。",
+        "modalIntegrationTitle": "ACP 連携を追加",
+        "modalIntegrationDescription": "Nexus Agent のエントリポイントを作成し、保存された Workspace ACP プロファイルにバインドします。",
+        "profileCreated": "ACP プロファイルが追加され、保存されました。",
+        "profileDeleted": "ACP プロファイルが削除され、保存されました。",
+        "profileIdHint": "英小文字で始まり、英小文字・数字・ドット・ハイフン・アンダースコアを使用可能",
+        "profileIdDuplicate": "この Profile ID は既に存在します",
+        "cwdHint": "/workspace またはそのサブディレクトリである必要があります",
+        "argvCommand": "起動コマンドと引数",
+        "argvHint": "コマンド文字列（例: acp-agent --port 8000）または JSON 配列を入力",
+        "argvPlaceholder": "例: acp-agent --port 8000 または [\"acp-agent\"]",
+        "integrationEnabledHint": "作成後すぐに Nexus Agent からこの ACP ランタイムの呼び出しを許可します"
       },
       "navigation": "Agent 設定セクション",
       "controlPlane": "コントロールプレーン",
@@ -936,7 +966,19 @@
         "profile": {
           "normal": "Normal（推奨）",
           "extended": "Extended"
-        }
+        },
+        "profileDesc": {
+          "normal": "コンテキストの安全余量を多く確保し、切り詰めや上限超過のリスクを低減します",
+          "extended": "モデルの物理 window を広く活用し、より大きなコンテキストを収容します"
+        },
+        "compactionDesc": {
+          "aggressive": "古い履歴を早期に圧縮し、利用可能な空き容量を最大化します",
+          "balanced": "実行パフォーマンスと履歴保持のバランスを取ります（推奨）",
+          "conservative": "ハードリミットに近づくまで履歴を可能な限り保持します"
+        },
+        "customOverride": "カスタム設定中",
+        "activeInherited": "グローバル継承",
+        "clickToOverride": "クリックしてこの設定でオーバーライド"
       },
       "memory": {
         "title": "Memory のレビューと公開",
@@ -980,9 +1022,7 @@
     },
     "launcher": {
       "open": "Agent を開く",
-      "dragHint": "長押しで移動・右クリックで位置をリセット",
-      "reset": "位置をリセット",
-      "resetHint": "右下の既定位置に戻します"
+      "dragHint": "長押しで移動・右クリックで位置をリセット"
     },
     "hub": {
       "title": "Agent",

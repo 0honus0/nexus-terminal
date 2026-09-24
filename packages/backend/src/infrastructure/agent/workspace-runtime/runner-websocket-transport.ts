@@ -7,6 +7,7 @@ import type {
   BrowserMessageTransport,
   BrowserTunnelPort,
 } from '../../../modules/agent/ai/integrations.types';
+import { invokeListenerSafely } from '../../../shared/events/safe-event-dispatch';
 
 const MAX_WEBSOCKET_FRAME_BYTES = 256 * 1024;
 const MAX_WEBSOCKET_BUFFER_BYTES = 1024 * 1024;
@@ -144,7 +145,7 @@ export class RunnerWebSocketTransport implements AcpTransportPort, BrowserTunnel
     const emitClose = () => {
       if (closed) return;
       closed = true;
-      for (const listener of closeListeners) listener();
+      for (const listener of closeListeners) invokeListenerSafely(listener);
       closeListeners.clear();
       messageListeners.clear();
     };
@@ -155,7 +156,7 @@ export class RunnerWebSocketTransport implements AcpTransportPort, BrowserTunnel
         return;
       }
       const message = Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data as ArrayBuffer).toString('utf8');
-      for (const listener of messageListeners) listener(message);
+      for (const listener of messageListeners) invokeListenerSafely(listener, message);
     });
     socket.once('close', emitClose);
     socket.once('error', emitClose);

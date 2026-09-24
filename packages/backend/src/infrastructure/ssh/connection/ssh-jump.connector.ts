@@ -1,6 +1,6 @@
 import { Client, type ClientChannel, type ConnectConfig } from 'ssh2';
 import type { ResolvedJumpHost, ResolvedSshConnection } from '../../../platform/connection/ssh-connection';
-import { connectSshClient, createConnectConfig } from './ssh-client.connector';
+import { connectSshClient, createConnectConfig, SshClientRoute } from './ssh-client.connector';
 
 const forward = (client: Client, host: string, port: number): Promise<ClientChannel> =>
   new Promise((resolve, reject) => {
@@ -30,41 +30,33 @@ export const connectViaJumpChain = async (
   connection: ResolvedSshConnection,
   timeoutMs: number,
   signal?: AbortSignal,
-): Promise<Client> => {
+): Promise<SshClientRoute> => {
   if (signal?.aborted) throw new DOMException('SSH jump connection aborted before start.', 'AbortError');
   const jumpChain = connection.jumpChain;
   if (!jumpChain?.length) {
     throw new Error(`Connection ${connection.displayName} is configured for jump routing without jump hosts.`);
   }
 
-  const intermediateClients: Client[] = [];
+  const route = new SshClientRoute(`SSH ${connection.displayName} (${connection.connectionId}, jump)`);
   let previousStream: ClientChannel | undefined;
-  const cleanupIntermediates = () => {
-    for (const client of intermediateClients.splice(0)) {
-      try {
-        client.end();
-      } catch {
-        /* best effort */
-      }
-    }
-  };
 
   try {
     for (let index = 0; index < jumpChain.length; index += 1) {
       const hop = jumpChain[index];
-      const client = new Client();
-      await connectSshClient(client, {
+      const connected = await connectSshClient(new Client(), {
         config: buildHopConfig(hop, previousStream, timeoutMs),
         label: `SSH jump ${index + 1} ${hop.host}:${hop.port}`,
         signal,
       });
-      intermediateClients.push(client);
+      route.addIntermediate(connected);
+      route.assertOpen();
 
       const next =
         index === jumpChain.length - 1
           ? { host: connection.host, port: connection.port }
           : { host: jumpChain[index + 1].host, port: jumpChain[index + 1].port };
-      previousStream = await forward(client, next.host, next.port);
+      previousStream = await forward(connected.client, next.host, next.port);
+      route.assertOpen();
       if (signal?.aborted) {
         previousStream.destroy();
         throw new DOMException('SSH jump connection aborted.', 'AbortError');
@@ -73,21 +65,22 @@ export const connectViaJumpChain = async (
 
     if (!previousStream)
       throw new Error(`Jump chain for ${connection.displayName} produced no stream to the final target.`);
-    const finalClient = new Client();
-    await connectSshClient(finalClient, {
+
+    const finalClient = await connectSshClient(new Client(), {
       config: { ...createConnectConfig(connection, timeoutMs), sock: previousStream },
       label: `SSH ${connection.displayName} (${connection.connectionId}, jump-final)`,
       signal,
     });
-    finalClient.once('close', cleanupIntermediates);
-    return finalClient;
+    route.setPrimary(finalClient);
+    route.assertOpen();
+    return route;
   } catch (error) {
     try {
       previousStream?.destroy();
     } catch {
       /* best effort */
     }
-    cleanupIntermediates();
-    throw error;
+    await route.close();
+    throw route.failure ?? error;
   }
 };

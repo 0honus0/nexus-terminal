@@ -237,8 +237,7 @@
         },
         "remoteRepositories": "Plugin repositories",
         "remoteRepositoriesHint": "The Nexus first-party catalog is pinned by the Host. Additional repositories provide discovery only and require an explicitly trusted Ed25519 publisher before installation.",
-        "officialRepository": "Nexus first-party catalog",
-        "officialPublisherPinned": "Publisher pinned by Host",
+        "officialRepository": "Official repository",
         "refreshRemote": "Refresh repositories",
         "repositoryUrl": "Repository catalog URL",
         "addRepository": "Add repository",
@@ -250,7 +249,7 @@
         "ecosystemBadge": "Ecosystem and registries",
         "signatureVerified": "Signature verified",
         "skillCount": "Skills: {count}",
-        "thirdPartyRepository": "Third-party registry",
+        "thirdPartyRepository": "Third-party repository",
         "stateEnabled": "Enabled",
         "stateInstalled": "Installed",
         "stateNotInstalled": "Not installed",
@@ -258,7 +257,14 @@
         "summaryNexusFullstack": "Full-stack delivery suite covering microservice governance, complex dependency integration and deployment verification.",
         "compatibilityShort": "(requires Nexus {min}–{max})",
         "reverifyPackage": "Verify package again",
-        "publisherCount": "{count} keys"
+        "publisherCount": "{count} keys",
+        "repositorySource": "Source",
+        "repositoryPlugins": "Repository Plugins",
+        "pluginCount": "{count} plugins",
+        "searchPlaceholder": "Search plugin by name, description, or ID...",
+        "searchEmpty": "No matching plugins found",
+        "clearSearch": "Clear search",
+        "copied": "Copied"
       },
       "hardLimits": {
         "title": "Hard Limits",
@@ -516,7 +522,6 @@
         "cancel": "Cancel",
         "commandStatus": "Last command: {action} · {status}",
         "reasonUnknown": "The Workspace runtime is currently unavailable; the backend did not provide a further explanation.",
-        "reasonCode": "Backend reason code",
         "reason": {
           "runner_not_configured": "The Workspace Runner is not configured (missing address or token), so the Workspace runtime is unavailable.",
           "runner_unavailable": "The Workspace Runner cannot be reached; the Workspace runtime is temporarily unavailable.",
@@ -716,7 +721,9 @@
         "pullSuccess": "Successfully pulled {count} models",
         "pullFailed": "Failed to pull models",
         "selectPulledModel": "Choose from pulled models",
-        "importAllPulled": "Import all pulled models ({count})"
+        "importAllPulled": "Import all pulled models ({count})",
+        "modelCount": "{count} models",
+        "description": "Configure OpenAI-compatible providers. Credentials are stored separately and are never returned by the API."
       },
       "guardrails": {
         "title": "System guardrails",
@@ -774,9 +781,9 @@
         }
       },
       "browserRuntime": {
-        "title": "Browser Runtime",
+        "title": "CDP",
         "description": "Configure CDP targets used by the single Backend BrowserRuntime. Endpoint network scope and reachability path are independent; via=runner uses Runner only as a network tunnel.",
-        "addTarget": "Add browser target",
+        "addTarget": "Add target",
         "empty": "No browser targets configured. External CDP reachable by Backend can work without Runner using via=backend.",
         "targetId": "Target ID",
         "remove": "Remove target",
@@ -795,7 +802,14 @@
         "scopeDocker": "Docker network",
         "scopeExternal": "External network",
         "viaBackend": "Direct from Backend",
-        "viaRunner": "Through Runner tunnel"
+        "viaRunner": "Through Runner tunnel",
+        "modalTitle": "Add CDP Target",
+        "modalDescription": "Configure a CDP browser target and endpoint accessed by Backend BrowserRuntime.",
+        "modalEndpointTitle": "Add CDP Endpoint",
+        "targetCreated": "CDP target added and saved.",
+        "targetDeleted": "CDP target deleted and saved.",
+        "endpointAdded": "CDP endpoint added and saved.",
+        "endpointDeleted": "CDP endpoint deleted and saved."
       },
       "mcpIntegrations": {
         "title": "MCP Integrations",
@@ -808,7 +822,7 @@
         "credential": "Credential (optional)",
         "enabled": "Enabled",
         "trustAnnotations": "Trust server tool annotations",
-        "create": "Create integration",
+        "create": "Add integration",
         "loading": "Loading MCP integrations…",
         "empty": "No MCP integrations configured.",
         "replaceCredential": "Replace credential",
@@ -832,10 +846,13 @@
           "refreshing": "Refreshing",
           "ready": "Ready",
           "error": "Error"
-        }
+        },
+        "modalTitle": "Add MCP Integration",
+        "modalDescription": "Connect an external Model Context Protocol (MCP) service endpoint and configure tool permissions.",
+        "mcpEndpointHint": "Supports SSE or Streamable HTTP endpoints"
       },
       "acpRuntime": {
-        "title": "ACP Runtime",
+        "title": "ACP",
         "description": "Configure ACP process profiles that may run inside Workspaces and ACP integrations exposed to Nexus Agent. ACP processes are bound to the frozen Workspace generation/runtime profile; the single-user native Runner does not claim per-process read-only or network sandboxing.",
         "addProfile": "Add profile",
         "profiles": "Workspace ACP Profiles",
@@ -853,12 +870,25 @@
         "integrationProfile": "Workspace Profile",
         "selectProfile": "Select profile",
         "enabled": "Enabled",
-        "createIntegration": "Create integration",
+        "createIntegration": "Add integration",
         "saveProfileFirst": "Save at least one ACP profile before creating an integration.",
         "installAgentFirst": "Install the Nexus Agent plugin before managing ACP integrations. Workspace ACP profiles can still be configured in advance.",
         "loading": "Loading ACP integrations…",
         "noIntegrations": "No ACP integrations configured.",
-        "deleteIntegration": "Delete"
+        "deleteIntegration": "Delete",
+        "modalProfileTitle": "Add ACP Profile",
+        "modalProfileDescription": "Define execution arguments and working directory to launch an ACP agent process in the Workspace.",
+        "modalIntegrationTitle": "Add ACP Integration",
+        "modalIntegrationDescription": "Create a Nexus Agent entry point bound to a saved Workspace ACP profile.",
+        "profileCreated": "ACP profile added and saved.",
+        "profileDeleted": "ACP profile deleted and saved.",
+        "profileIdHint": "Starts with lowercase letter; allows lowercase letters, numbers, dot, dash, and underscore",
+        "profileIdDuplicate": "This Profile ID already exists",
+        "cwdHint": "Must be /workspace or a subdirectory",
+        "argvCommand": "Launch Command & Arguments",
+        "argvHint": "Supports shell command string (e.g. acp-agent --port 8000) or JSON array",
+        "argvPlaceholder": "e.g. acp-agent --port 8000 or [\"acp-agent\"]",
+        "integrationEnabledHint": "Allow Nexus Agent to call this ACP runtime immediately upon creation"
       },
       "navigation": "Agent settings sections",
       "controlPlane": "Control plane",
@@ -936,7 +966,19 @@
         "profile": {
           "normal": "Normal (recommended)",
           "extended": "Extended"
-        }
+        },
+        "profileDesc": {
+          "normal": "Preserves more safety headroom to minimize truncation and overflow risks",
+          "extended": "Uses more of the model window to accommodate larger multi-turn context"
+        },
+        "compactionDesc": {
+          "aggressive": "Compacts earlier history proactively to maximize free space",
+          "balanced": "Balances runtime performance and history retention (recommended)",
+          "conservative": "Retains context as long as possible until hard limits are approached"
+        },
+        "customOverride": "Custom override",
+        "activeInherited": "Inherited default",
+        "clickToOverride": "Click to override with this profile"
       },
       "memory": {
         "title": "Memory review & publishing",
@@ -980,9 +1022,7 @@
     },
     "launcher": {
       "open": "Open Agent",
-      "dragHint": "Press and hold to move · right-click to reset",
-      "reset": "Reset position",
-      "resetHint": "Restore the default bottom-right position"
+      "dragHint": "Press and hold to move · right-click to reset"
     },
     "hub": {
       "title": "Agent",

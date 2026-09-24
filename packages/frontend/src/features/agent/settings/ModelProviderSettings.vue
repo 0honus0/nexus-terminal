@@ -954,6 +954,7 @@
     emit('fallbackModels', [...validFallbackModels.value, { providerId, modelId }]);
     fallbackDropdownOpen.value = false;
     fallbackSearch.value = '';
+    operationFeedback.notifySuccess(t('agent.settings.providers.saveNoticeFallback'));
   };
 
   const removeFallbackModel = (key: string) => {
@@ -1057,9 +1058,18 @@
       </div>
 
       <!-- 添加服务商主按钮 -->
-      <UiButton appearance="solid" tone="primary" type="button" :disabled="busy" @click="openAddModal">
-        <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-        <span>{{ $t('agent.settings.providers.add') }}</span>
+      <UiButton
+        appearance="soft"
+        tone="neutral"
+        type="button"
+        :disabled="busy"
+        class="w-28"
+        @click="openAddModal"
+      >
+        <span class="inline-flex items-center gap-1.5 text-xs">
+          <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+          <span>{{ $t('agent.settings.providers.add') }}</span>
+        </span>
       </UiButton>
     </div>
 
@@ -1285,6 +1295,7 @@
           </li>
         </ol>
 
+
         <!-- 空态：紧凑信息提示，而非按钮云 -->
         <div
           v-else
@@ -1302,70 +1313,113 @@
           :key="provider.id"
           data-testid="agent-provider-card"
           :data-provider-id="provider.id"
-          class="rounded-xl border border-border bg-card/75 transition-all hover:border-border-hover/80 hover:bg-card/90 shadow-2xs overflow-hidden"
+          class="rounded-2xl border bg-card/80 transition-all hover:bg-card/95 shadow-2xs overflow-hidden"
+          :class="provider.enabled ? 'border-border/85 hover:border-primary/50' : 'border-border/60 opacity-80'"
         >
-          <!-- 服务商顶行摘要（紧凑单行） -->
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 px-3.5 py-2.5">
-            <!-- 左侧核心身份与配置元数据（单行紧凑排布：名称 + 协议下拉） -->
-            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+          <!-- 服务商顶行摘要（主体鲜明、层级清晰） -->
+          <div
+            class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 px-4 py-3.5 transition-colors"
+            :class="{ 'border-b border-border/50 bg-header/25': drawerOpen[provider.id] }"
+          >
+            <!-- 左侧核心身份：服务商主体（加大字号、独立区块、突出 newapi 主体）、状态、模型数与 URL -->
+            <div class="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+              <!-- 服务商图标 Avatar（精致微渐变双层质感） -->
               <div
-                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 border border-primary/20 text-primary"
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 border border-primary/25 text-primary shadow-2xs"
               >
-                <i :class="providerIcon(provider)" class="text-xs"></i>
+                <i :class="providerIcon(provider)" class="text-sm"></i>
               </div>
-              <div class="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                <!-- 服务商名称（带清晰边界与复制反馈，点击复制 Base URL） -->
-                <button
-                  type="button"
-                  class="group inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-tight transition-all cursor-pointer select-none shrink-0 shadow-2xs"
-                  :class="
-                    copiedUrl === provider.baseUrl
-                      ? 'border-success bg-success/15 text-success'
-                      : 'border-border bg-background hover:bg-card hover:border-primary/60 hover:text-primary text-foreground'
-                  "
-                  :title="
-                    copiedUrl === provider.baseUrl
-                      ? $t('agent.settings.providers.copyUrlSuccess')
-                      : `${provider.baseUrl} · ${$t('agent.settings.providers.copyUrl')}`
-                  "
-                  @click="copyText(provider.baseUrl)"
-                >
-                  <span>{{ provider.displayName }}</span>
-                  <span
-                    v-if="copiedUrl === provider.baseUrl"
-                    class="text-[11px] font-medium inline-flex items-center gap-1 text-success"
-                  >
-                    <i class="fa-solid fa-check text-[10px]" aria-hidden="true"></i>
-                    <span>{{ $t('agent.settings.providers.copyUrlSuccess') }}</span>
-                  </span>
-                  <i
-                    v-else
-                    class="fa-regular fa-copy text-[10px] text-text-secondary/50 group-hover:text-primary transition-colors"
-                    aria-hidden="true"
-                  ></i>
-                </button>
 
-                <!-- 协议选择器（按最长文本展示，紧凑不占过多空间） -->
-                <div class="w-[130px] shrink-0">
-                  <UiSelect
-                    density="compact"
-                    :hide-indicator="true"
-                    panel-class="!min-w-[130px]"
-                    class="w-full text-[11px]"
-                    :aria-label="$t('agent.settings.providers.protocol')"
-                    :disabled="busy"
-                    :model-value="provider.protocol"
-                    :options="protocolOptions"
-                    @update:model-value="(value: unknown) => emit('protocol', provider, protocolFromValue(value))"
-                  />
+              <!-- 服务商核心主体信息列 -->
+              <div class="min-w-0 flex-1 space-y-1.5">
+                <!-- 第一行：Provider 名称主体（大字号、突出外围明显边界）、启用状态徽标、模型数量 -->
+                <div class="flex flex-wrap items-center gap-2">
+                  <span
+                    class="inline-flex items-center rounded-xl border border-border/90 bg-background/90 px-3 py-1 text-sm sm:text-base font-bold tracking-tight text-foreground shadow-2xs"
+                  >
+                    {{ provider.displayName }}
+                  </span>
+
+                  <!-- 状态徽标：已启用 / 已停用 -->
+                  <span
+                    class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-all"
+                    :class="
+                      provider.enabled
+                        ? 'border-success/30 bg-success/10 text-success'
+                        : 'border-border/70 bg-background/80 text-text-secondary'
+                    "
+                  >
+                    <span
+                      class="h-1.5 w-1.5 rounded-full"
+                      :class="provider.enabled ? 'bg-success' : 'bg-text-secondary/70'"
+                    ></span>
+                    <span>{{
+                      provider.enabled
+                        ? $t('agent.settings.providers.enabled')
+                        : $t('agent.settings.providers.disabled')
+                    }}</span>
+                  </span>
+
+                  <!-- 模型数量徽标 -->
+                  <span
+                    class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2.5 py-0.5 text-[11px] font-mono font-medium text-text-secondary"
+                  >
+                    <i class="fa-solid fa-cube text-[10px] text-text-secondary/60" aria-hidden="true"></i>
+                    <span>{{ $t('agent.settings.providers.modelCount', { count: provider.models.length }) }}</span>
+                  </span>
+                </div>
+
+                <!-- 第二行：Base URL 地址（带链接图标、单行截断与点击复制） -->
+                <div class="flex flex-wrap items-center gap-2.5 text-xs text-text-secondary">
+                  <button
+                    type="button"
+                    class="group/url inline-flex items-center gap-1.5 font-mono text-[11px] text-text-secondary hover:text-foreground transition-colors cursor-pointer select-none"
+                    :title="
+                      copiedUrl === provider.baseUrl
+                        ? $t('agent.settings.providers.copyUrlSuccess')
+                        : `${provider.baseUrl} · ${$t('agent.settings.providers.copyUrl')}`
+                    "
+                    @click="copyText(provider.baseUrl)"
+                  >
+                    <i
+                      class="fa-solid fa-link text-[10px] text-text-secondary/60 group-hover/url:text-primary transition-colors shrink-0"
+                      aria-hidden="true"
+                    ></i>
+                    <span class="max-w-[280px] sm:max-w-[420px] truncate">{{ provider.baseUrl }}</span>
+                    <i
+                      v-if="copiedUrl === provider.baseUrl"
+                      class="fa-solid fa-check text-[10px] text-success"
+                      aria-hidden="true"
+                    ></i>
+                    <i
+                      v-else
+                      class="fa-regular fa-copy text-[10px] text-text-secondary/40 group-hover/url:text-primary transition-colors"
+                      aria-hidden="true"
+                    ></i>
+                  </button>
                 </div>
               </div>
             </div>
 
-            <!-- 右侧操作工具条：模型与测试(仅图标) + 更新模型(仅图标) + 启动(绿色)/停用(红色) + 删除(仅图标) -->
+            <!-- 右侧操作工具条：协议下拉 + 模型与测试(仅图标) + 更新模型(仅图标) + 启动/停用(仅图标) + 删除(仅图标) -->
             <div
-              class="flex items-center justify-end gap-1.5 shrink-0 pt-2 sm:pt-0 border-t border-border/30 sm:border-0"
+              class="flex items-center justify-end gap-1.5 shrink-0 pt-2.5 lg:pt-0 border-t border-border/40 lg:border-0"
             >
+              <!-- 协议选择器（紧凑排布） -->
+              <div class="w-[136px] shrink-0">
+                <UiSelect
+                  density="compact"
+                  :hide-indicator="true"
+                  panel-class="!min-w-[136px]"
+                  class="w-full text-[11px]"
+                  :aria-label="$t('agent.settings.providers.protocol')"
+                  :disabled="busy"
+                  :model-value="provider.protocol"
+                  :options="protocolOptions"
+                  @update:model-value="(value: unknown) => emit('protocol', provider, protocolFromValue(value))"
+                />
+              </div>
+
               <!-- 模型与测试（仅图标） -->
               <UiButton
                 appearance="soft"
@@ -1400,20 +1454,27 @@
                 ></i>
               </UiButton>
 
-              <!-- 启停状态切换：启动(绿色) / 停用(红色) -->
+              <!-- 启停状态切换（仅图标）：启动(绿色) / 停用(红色) -->
               <UiButton
                 type="button"
                 appearance="soft"
                 density="compact"
+                icon-only
                 :tone="provider.enabled ? 'danger' : 'success'"
                 :disabled="busy"
-                class="text-xs font-medium"
                 :title="
+                  provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable')
+                "
+                :aria-label="
                   provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable')
                 "
                 @click="emit('toggle', provider, !provider.enabled)"
               >
-                {{ provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable') }}
+                <i
+                  :class="provider.enabled ? 'fa-solid fa-power-off' : 'fa-solid fa-play'"
+                  class="text-xs"
+                  aria-hidden="true"
+                ></i>
               </UiButton>
 
               <!-- 删除服务商（仅图标） -->
@@ -1550,15 +1611,20 @@
                       </span>
                     </label>
 
-                    <button
+                    <UiButton
+                      class="shrink-0"
+                      appearance="soft"
+                      density="compact"
+                      icon-only
+                      tone="neutral"
                       type="button"
-                      class="shrink-0 inline-flex items-center gap-1 rounded-md border border-border/70 bg-card px-2 py-0.5 text-[11px] font-medium text-text-secondary hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
                       :disabled="busy"
+                      :title="$t('agent.settings.providers.discoveryAdd')"
+                      :aria-label="$t('agent.settings.providers.discoveryAdd')"
                       @click="addSingleDiscovered(provider, model.id)"
                     >
-                      <i class="fa-solid fa-plus text-[9px]"></i>
-                      <span>{{ $t('agent.settings.providers.discoveryAdd') }}</span>
-                    </button>
+                      <i class="fa-solid fa-plus text-[10px] text-primary" aria-hidden="true"></i>
+                    </UiButton>
                   </div>
                 </div>
 
@@ -1672,11 +1738,12 @@
                       </span>
                     </div>
 
-                    <!-- 单项取消添加 -->
+                    <!-- 单项取消添加（仅图标） -->
                     <UiButton
                       class="shrink-0"
                       appearance="soft"
                       density="compact"
+                      icon-only
                       :tone="
                         provider.models.length <= 1 ||
                         (provider.id === defaultProviderId && model.id === defaultModelId)
@@ -1696,10 +1763,16 @@
                             ? $t('agent.settings.providers.cannotRemoveDefault')
                             : $t('agent.settings.providers.removeModel')
                       "
+                      :aria-label="
+                        provider.models.length <= 1
+                          ? $t('agent.settings.providers.atLeastOneModel')
+                          : provider.id === defaultProviderId && model.id === defaultModelId
+                            ? $t('agent.settings.providers.cannotRemoveDefault')
+                            : $t('agent.settings.providers.removeModel')
+                      "
                       @click="removeConfiguredModel(provider, model.id)"
                     >
                       <i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
-                      <span>{{ $t('agent.settings.providers.removeModel') }}</span>
                     </UiButton>
                   </div>
 
@@ -1740,9 +1813,11 @@
         :description="$t('agent.settings.providers.emptyHint')"
       >
         <template #action>
-          <UiButton appearance="solid" tone="primary" type="button" @click="openAddModal">
-            <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-            <span>{{ $t('agent.settings.providers.add') }}</span>
+          <UiButton appearance="soft" tone="neutral" type="button" @click="openAddModal">
+            <span class="inline-flex items-center gap-1.5 text-xs">
+              <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+              <span>{{ $t('agent.settings.providers.add') }}</span>
+            </span>
           </UiButton>
         </template>
       </UiEmptyState>
@@ -2077,7 +2152,8 @@
             :disabled="modalTesting || busy || !form.displayName.trim() || !form.baseUrl.trim() || !form.modelId.trim()"
             @click="submitModal"
           >
-            <i v-if="createdProviderId" class="fa-solid fa-check text-xs"></i>
+            <i v-if="createdProviderId" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
+            <i v-else class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
             <span>{{ createdProviderId ? $t('common.confirm') : $t('agent.settings.providers.saveAndAdd') }}</span>
           </UiButton>
         </div>

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { ClientChannel } from 'ssh2';
 import type { RemoteShellSession } from '../../../platform/execution/remote-execution.port';
+import { emitSshEventSafely, invokeSshListenerSafely } from '../ssh-event-dispatch';
 
 export class SshShellSessionAdapter implements RemoteShellSession {
   private readonly events = new EventEmitter();
@@ -8,16 +9,16 @@ export class SshShellSessionAdapter implements RemoteShellSession {
 
   constructor(private readonly channel: ClientChannel) {
     channel.on('data', (data: Buffer | string) =>
-      this.events.emit('data', Buffer.isBuffer(data) ? data : Buffer.from(data)),
+      emitSshEventSafely(this.events, 'data', Buffer.isBuffer(data) ? data : Buffer.from(data)),
     );
     channel.stderr.on('data', (data: Buffer | string) =>
-      this.events.emit('stderr', Buffer.isBuffer(data) ? data : Buffer.from(data)),
+      emitSshEventSafely(this.events, 'stderr', Buffer.isBuffer(data) ? data : Buffer.from(data)),
     );
-    channel.on('error', (error: Error) => this.events.emit('shell-error', error));
+    channel.on('error', (error: Error) => emitSshEventSafely(this.events, 'shell-error', error));
     channel.on('close', () => {
       if (!this.open) return;
       this.open = false;
-      this.events.emit('close');
+      emitSshEventSafely(this.events, 'close');
     });
   }
 
@@ -52,8 +53,9 @@ export class SshShellSessionAdapter implements RemoteShellSession {
   }
 
   onDrain(listener: () => void): () => void {
-    this.channel.on('drain', listener);
-    return () => this.channel.off('drain', listener);
+    const wrapped = () => invokeSshListenerSafely(listener);
+    this.channel.on('drain', wrapped);
+    return () => this.channel.off('drain', wrapped);
   }
 
   onData(listener: (data: Uint8Array) => void): () => void {

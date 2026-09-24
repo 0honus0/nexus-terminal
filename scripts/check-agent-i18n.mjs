@@ -37,6 +37,7 @@ const BRAND_TERMS = new Set([
   'agent.settings.providers.modelPlaceholder',
   'agent.settings.providers.fallbackCount',
   'agent.settings.browserRuntime.title',
+  'agent.settings.acpRuntime.title',
   'agent.settings.mcpIntegrations.endpoint',
   'agent.settings.acpRuntime.profileId',
   'agent.settings.guardrails.eventBatchValue',

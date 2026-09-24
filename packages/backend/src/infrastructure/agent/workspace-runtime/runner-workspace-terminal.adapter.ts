@@ -6,6 +6,7 @@ import type {
   WorkspaceRuntimeInteractiveSessionRequest,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
 import { RunnerWebSocketDuplex } from './runner-websocket-duplex';
+import { emitEventSafely, invokeListenerSafely } from '../../../shared/events/safe-event-dispatch';
 
 const ALLOWED_SIGNALS = new Set(['INT', 'TERM', 'HUP', 'QUIT', 'KILL', 'USR1', 'USR2']);
 
@@ -22,6 +23,7 @@ interface RunnerTerminalTunnel {
 class RunnerWorkspaceTerminalSession implements WorkspaceRuntimeInteractiveSession {
   private readonly events = new EventEmitter();
   private closed = false;
+  private errorEmitted = false;
 
   constructor(
     readonly workspaceId: string,
@@ -30,11 +32,9 @@ class RunnerWorkspaceTerminalSession implements WorkspaceRuntimeInteractiveSessi
     private readonly tunnel: RunnerWebSocketDuplex,
   ) {
     socket.once('close', () => this.finish());
-    socket.once('error', (error) => this.events.emit('error', error));
+    socket.once('error', (error) => this.reportError(error));
     tunnel.once('close', () => this.finish());
-    tunnel.once('error', (error) =>
-      this.events.emit('error', error instanceof Error ? error : new Error(String(error))),
-    );
+    tunnel.once('error', (error) => this.reportError(error instanceof Error ? error : new Error(String(error))));
   }
 
   get isOpen(): boolean {
@@ -67,12 +67,13 @@ class RunnerWorkspaceTerminalSession implements WorkspaceRuntimeInteractiveSessi
   }
 
   onDrain(listener: () => void): () => void {
-    this.tunnel.on('drain', listener);
-    return () => this.tunnel.off('drain', listener);
+    const wrapped = () => invokeListenerSafely(listener);
+    this.tunnel.on('drain', wrapped);
+    return () => this.tunnel.off('drain', wrapped);
   }
 
   onData(listener: (data: Uint8Array) => void): () => void {
-    const next = (data: Buffer) => listener(data);
+    const next = (data: Buffer) => invokeListenerSafely(listener, data);
     this.tunnel.on('data', next);
     return () => this.tunnel.off('data', next);
   }
@@ -88,8 +89,8 @@ class RunnerWorkspaceTerminalSession implements WorkspaceRuntimeInteractiveSessi
   }
 
   onError(listener: (error: Error) => void): () => void {
-    this.events.on('error', listener);
-    return () => this.events.off('error', listener);
+    this.events.on('session-error', listener);
+    return () => this.events.off('session-error', listener);
   }
 
   async close(): Promise<void> {
@@ -102,10 +103,16 @@ class RunnerWorkspaceTerminalSession implements WorkspaceRuntimeInteractiveSessi
     this.finish();
   }
 
+  private reportError(error: Error): void {
+    if (this.errorEmitted || this.closed) return;
+    this.errorEmitted = true;
+    emitEventSafely(this.events, 'session-error', error);
+  }
+
   private finish(): void {
     if (this.closed) return;
     this.closed = true;
-    this.events.emit('close');
+    emitEventSafely(this.events, 'close');
     this.events.removeAllListeners();
   }
 }

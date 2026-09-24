@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref } from 'vue';
+  import { computed, ref } from 'vue';
   import type { AgentHostSummaryDto } from '../api/agent-api';
   import { agentWindowManager } from './window-manager';
 
@@ -12,21 +12,18 @@
    * 采用灵敏阈值拖拽（4px 判定）：
    * - 原位轻点：不触发拖拽，释放时迅速呼出 Agent Hub；
    * - 按下并移动：立即进入自由拖拽，按钮平滑跟随光标；
-   * - 拖出默认位置后：弹出轻量「重置位置」气泡；右键亦可快速还原。
+   * - 右键亦可快速还原到默认位置。
    */
   const DRAG_THRESHOLD_PX = 4;
-  const RESET_VISIBLE_MS = 6000;
 
   let pointerId: number | null = null;
   let originX = 0;
   let originY = 0;
   let startRight = 0;
   let startBottom = 0;
-  let resetTimer: number | null = null;
   let hasMoved = false;
 
   const dragging = ref(false);
-  const resetVisible = ref(false);
 
   const badge = computed(() => {
     const summary = props.summary;
@@ -44,11 +41,6 @@
     right: Math.max(12, Math.min(right, Math.max(12, window.innerWidth - 72))),
     bottom: Math.max(12, Math.min(bottom, Math.max(12, window.innerHeight - 72))),
   });
-
-  const clearResetTimer = (): void => {
-    if (resetTimer !== null) window.clearTimeout(resetTimer);
-    resetTimer = null;
-  };
 
   const pointerDown = (event: PointerEvent) => {
     if (props.paused || event.button !== 0) return;
@@ -70,7 +62,6 @@
       if (Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
         dragging.value = true;
         hasMoved = true;
-        resetVisible.value = false;
       } else {
         return;
       }
@@ -100,14 +91,6 @@
 
     if (wasDragging) {
       emit('layoutChange');
-      if (!isDefaultPosition.value) {
-        clearResetTimer();
-        resetVisible.value = true;
-        resetTimer = window.setTimeout(() => {
-          resetTimer = null;
-          resetVisible.value = false;
-        }, RESET_VISIBLE_MS);
-      }
       return;
     }
 
@@ -133,8 +116,6 @@
 
   const resetPosition = (): void => {
     if (isDefaultPosition.value) return;
-    clearResetTimer();
-    resetVisible.value = false;
     agentWindowManager.resetLauncherPosition();
     emit('layoutChange');
   };
@@ -149,47 +130,18 @@
     event.preventDefault();
     agentWindowManager.openHub({ restoreRecent: true });
   };
-
-  onBeforeUnmount(() => {
-    clearResetTimer();
-  });
 </script>
 
 <template>
-  <div
-    class="fixed z-30 flex items-center gap-2"
-    :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }"
-  >
-    <!-- 拖出默认位置后的快捷还原气泡 -->
-    <transition
-      enter-active-class="transition-all duration-200 ease-out"
-      enter-from-class="opacity-0 translate-x-2 scale-90"
-      enter-to-class="opacity-100 translate-x-0 scale-100"
-      leave-active-class="transition-all duration-150 ease-in"
-      leave-from-class="opacity-100 translate-x-0 scale-100"
-      leave-to-class="opacity-0 translate-x-2 scale-90"
-    >
-      <button
-        v-if="resetVisible"
-        type="button"
-        data-agent-launcher-reset
-        class="flex h-8 items-center gap-1.5 rounded-xl border border-border/80 bg-card/90 px-3 text-xs font-medium text-text-secondary shadow-lg shadow-black/5 backdrop-blur-md transition-all hover:bg-header hover:text-foreground hover:border-border active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 cursor-pointer"
-        :title="$t('agent.launcher.resetHint')"
-        @click="resetPosition"
-      >
-        <i class="fa-solid fa-rotate-left text-[11px]" aria-hidden="true"></i>
-        <span>{{ $t('agent.launcher.reset') }}</span>
-      </button>
-    </transition>
-
-    <!-- 全局悬浮 Agent 呼出按钮（全新 Gen2 玻璃晶体质感） -->
+  <div class="fixed z-30 flex items-center" :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }">
+    <!-- 全局悬浮 Agent 呼出按钮（圆形微质感中性毛玻璃，非通体紫色，精致 AI 星芒矢量图标） -->
     <button
       type="button"
       data-agent-launcher-trigger
-      class="group relative flex h-11 w-11 touch-none select-none items-center justify-center rounded-2xl border border-primary/30 bg-gradient-to-br from-primary via-primary/95 to-primary-hover/90 text-white shadow-lg shadow-primary/25 backdrop-blur-md ring-1 ring-white/20 transition-all duration-200 hover:shadow-xl hover:shadow-primary/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:cursor-not-allowed disabled:opacity-50"
+      class="group relative flex h-11 w-11 touch-none select-none items-center justify-center rounded-full border border-border/80 bg-card/92 text-foreground shadow-[0_4px_20px_rgba(0,0,0,0.12)] backdrop-blur-xl ring-1 ring-white/20 dark:ring-white/8 transition-all duration-200 hover:border-primary/50 hover:shadow-[0_6px_24px_color-mix(in_srgb,var(--color-primary)_22%,transparent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:cursor-not-allowed disabled:opacity-50"
       :class="
         dragging
-          ? 'scale-110 cursor-grabbing ring-2 ring-primary shadow-2xl rotate-3'
+          ? 'scale-110 cursor-grabbing ring-2 ring-primary/60 shadow-2xl rotate-3'
           : 'cursor-pointer hover:scale-105 active:scale-95'
       "
       :aria-label="$t('agent.launcher.open')"
@@ -203,17 +155,65 @@
       @contextmenu="onContextMenu"
       @keydown="keydown"
     >
-      <!-- 晶体顶层柔和高光 -->
+      <!-- 内部微弱径向漫射光晕 -->
       <span
-        class="pointer-events-none absolute inset-x-1 top-0.5 h-3 rounded-t-xl bg-gradient-to-b from-white/25 to-transparent"
+        class="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_35%,color-mix(in_srgb,var(--color-primary)_12%,transparent)_0%,transparent_70%)] opacity-80 group-hover:opacity-100 transition-opacity"
+        aria-hidden="true"
+      ></span>
+      <!-- 顶层晶体微弧光切面 -->
+      <span
+        class="pointer-events-none absolute inset-x-2.5 top-0.5 h-2 rounded-t-full bg-gradient-to-b from-white/35 dark:from-white/15 to-transparent"
         aria-hidden="true"
       ></span>
 
-      <!-- 核心图标 -->
-      <i
-        class="fa-solid fa-wand-magic-sparkles text-base transition-transform duration-200 group-hover:scale-110 group-hover:rotate-6"
-        aria-hidden="true"
-      ></i>
+      <!-- 核心图标：高精度精致 AI 智能星芒（告别粗硬魔法棒，呈现极具未来感的晶体微光） -->
+      <div class="relative flex items-center justify-center pointer-events-none">
+        <span
+          class="absolute inset-0 rounded-full bg-primary/20 blur-[5px] transition-all duration-300 group-hover:bg-primary/35 group-hover:blur-[7px]"
+          aria-hidden="true"
+        ></span>
+        <svg
+          class="relative h-5 w-5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient
+              id="nexus-agent-launcher-core-grad"
+              x1="2"
+              y1="2"
+              x2="20"
+              y2="21"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop offset="0%" stop-color="var(--color-primary, #a855f7)" />
+              <stop offset="100%" stop-color="#38bdf8" />
+            </linearGradient>
+            <linearGradient
+              id="nexus-agent-launcher-sparkle-grad"
+              x1="14"
+              y1="2"
+              x2="22"
+              y2="10"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop offset="0%" stop-color="#38bdf8" />
+              <stop offset="100%" stop-color="var(--color-primary, #a855f7)" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M10 2.5C10 7.47 5.97 11.5 1 11.5C5.97 11.5 10 15.53 10 20.5C10 15.53 14.03 11.5 19 11.5C14.03 11.5 10 7.47 10 2.5Z"
+            fill="url(#nexus-agent-launcher-core-grad)"
+          />
+          <path
+            d="M18.5 2.5C18.5 4.71 16.71 6.5 14.5 6.5C16.71 6.5 18.5 8.29 18.5 10.5C18.5 8.29 20.29 6.5 22.5 6.5C20.29 6.5 18.5 4.71 18.5 2.5Z"
+            fill="url(#nexus-agent-launcher-sparkle-grad)"
+          />
+          <circle cx="4.5" cy="18.5" r="1.1" fill="#38bdf8" opacity="0.85" />
+        </svg>
+      </div>
 
       <!-- 状态与任务数字指示徽标 -->
       <span

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { logger } from '../../../shared/logging/logger';
+import { invokeListenerSafely } from '../../../shared/events/safe-event-dispatch';
 import type { Scope } from '../agent.types';
 import type { AppCapabilityBroker } from '../host/app-capability-broker';
 import type { AppLifecycleService } from '../host/app-lifecycle.service';
@@ -124,23 +125,23 @@ class TerminalAttachment implements WorkspaceRuntimeTerminalAttachment {
   }
 
   deliverDrain(): void {
-    if (!this.detached) for (const listener of this.drainListeners) listener();
+    if (!this.detached) for (const listener of this.drainListeners) invokeListenerSafely(listener);
   }
   deliver(kind: 'data' | 'stderr', data: Uint8Array): boolean {
     if (this.detached) return false;
     const listeners = kind === 'data' ? this.dataListeners : this.stderrListeners;
     if (listeners.size === 0) return false;
-    for (const listener of listeners) listener(data);
+    for (const listener of listeners) invokeListenerSafely(listener, data);
     return true;
   }
   deliverClose(): void {
     if (this.detached) return;
     this.detached = true;
-    for (const listener of this.closeListeners) listener();
+    for (const listener of this.closeListeners) invokeListenerSafely(listener);
     this.clearListeners();
   }
   deliverError(error: Error): void {
-    if (!this.detached) for (const listener of this.errorListeners) listener(error);
+    if (!this.detached) for (const listener of this.errorListeners) invokeListenerSafely(listener, error);
   }
 
   private clearListeners(): void {

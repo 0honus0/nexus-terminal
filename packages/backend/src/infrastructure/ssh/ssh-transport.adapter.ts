@@ -6,7 +6,7 @@ import type {
   RemoteExecutionTransport,
   RemoteExecutionTransportFactory,
 } from '../../platform/execution/remote-execution.port';
-import { connectSshClient, createConnectConfig } from './connection/ssh-client.connector';
+import { connectSshClient, createConnectConfig, SshClientRoute } from './connection/ssh-client.connector';
 import { connectViaJumpChain } from './connection/ssh-jump.connector';
 import { connectViaProxy } from './connection/ssh-proxy.connector';
 import { SshExecutionTransportAdapter } from './execution/ssh-execution-transport.adapter';
@@ -22,15 +22,15 @@ export class SshTransportAdapter implements RemoteExecutionTransportFactory {
 
   async connect(connection: ResolvedSshConnection, options: SshConnectOptions = {}): Promise<RemoteExecutionTransport> {
     const connectStartedAt = runtimePerformanceMetrics.operationStarted();
+    let route: SshClientRoute | undefined;
     try {
       const timeoutMs = options.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
       const signal = options.signal;
-      let client: Client;
 
       if (connection.route === 'jump' && connection.jumpChain?.length) {
-        client = await connectViaJumpChain(connection, timeoutMs, signal);
+        route = await connectViaJumpChain(connection, timeoutMs, signal);
       } else if (connection.route === 'proxy' && connection.proxy) {
-        client = await connectViaProxy(connection, timeoutMs, signal);
+        route = await connectViaProxy(connection, timeoutMs, signal);
       } else {
         if (connection.route === 'jump') {
           logger.warn(
@@ -43,14 +43,21 @@ export class SshTransportAdapter implements RemoteExecutionTransportFactory {
             'SSH proxy route has no proxy details; falling back to direct connection',
           );
         }
-        client = new Client();
-        await connectSshClient(client, {
+
+        route = new SshClientRoute(`SSH ${connection.displayName} (${connection.connectionId}, direct)`);
+        const connected = await connectSshClient(new Client(), {
           config: createConnectConfig(connection, timeoutMs),
           label: `SSH ${connection.displayName} (${connection.connectionId}, direct)`,
           signal,
         });
+        route.setPrimary(connected);
+        route.assertOpen();
       }
 
+      const transport = new SshExecutionTransportAdapter(connection.connectionId, route);
+      if (!transport.isOpen) {
+        throw route.failure ?? new Error(`SSH route for ${connection.displayName} closed during transport handoff.`);
+      }
       if (connectStartedAt !== 0n) {
         runtimePerformanceMetrics.recordSshConnect(connectStartedAt, true);
       }
@@ -66,8 +73,9 @@ export class SshTransportAdapter implements RemoteExecutionTransportFactory {
         });
       }
 
-      return new SshExecutionTransportAdapter(connection.connectionId, client);
+      return transport;
     } catch (error) {
+      await route?.close().catch(() => undefined);
       if (connectStartedAt !== 0n) {
         runtimePerformanceMetrics.recordSshConnect(connectStartedAt, false);
       }

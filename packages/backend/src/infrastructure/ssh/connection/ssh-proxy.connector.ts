@@ -3,7 +3,7 @@ import net from 'node:net';
 import { Client, type ConnectConfig } from 'ssh2';
 import { SocksClient, type SocksClientOptions } from 'socks';
 import type { ResolvedSshConnection, ResolvedSshProxy } from '../../../platform/connection/ssh-connection';
-import { connectSshClient, createConnectConfig } from './ssh-client.connector';
+import { connectSshClient, createConnectConfig, SshClientRoute } from './ssh-client.connector';
 
 const abortError = (): DOMException => new DOMException('SSH proxy connection aborted.', 'AbortError');
 
@@ -129,7 +129,7 @@ export const connectViaProxy = async (
   connection: ResolvedSshConnection,
   timeoutMs: number,
   signal?: AbortSignal,
-): Promise<Client> => {
+): Promise<SshClientRoute> => {
   const proxy = connection.proxy;
   if (!proxy)
     throw new Error(`Connection ${connection.displayName} is configured for proxy routing without proxy details.`);
@@ -139,7 +139,7 @@ export const connectViaProxy = async (
       ? await openSocksTunnel(connection.host, connection.port, proxy, timeoutMs, signal)
       : await openHttpTunnel(connection.host, connection.port, proxy, timeoutMs, signal);
 
-  const client = new Client();
+  const route = new SshClientRoute(`SSH ${connection.displayName} (${connection.connectionId}, proxy)`);
   const config: ConnectConfig = {
     ...createConnectConfig(connection, timeoutMs),
     host: connection.host,
@@ -147,13 +147,17 @@ export const connectViaProxy = async (
     sock: socket,
   };
   try {
-    return await connectSshClient(client, {
+    const connected = await connectSshClient(new Client(), {
       config,
       label: `SSH ${connection.displayName} (${connection.connectionId}, proxy)`,
       signal,
     });
+    route.setPrimary(connected);
+    route.assertOpen();
+    return route;
   } catch (error) {
     socket.destroy();
-    throw error;
+    await route.close();
+    throw route.failure ?? error;
   }
 };

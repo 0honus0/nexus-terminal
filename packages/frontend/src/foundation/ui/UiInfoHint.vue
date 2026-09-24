@@ -34,7 +34,6 @@
           data-ui-gen="2"
           class="ui-info-hint"
           :data-tone="props.tone"
-          :title="props.text"
           :aria-label="props.label || props.text"
           tabindex="0"
           role="button"

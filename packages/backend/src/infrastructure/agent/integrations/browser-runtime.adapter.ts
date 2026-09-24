@@ -27,6 +27,7 @@ import type {
   BrowserTargetSnapshot,
   BrowserTunnelPort,
 } from '../../../modules/agent/ai/integrations.types';
+import { invokeListenerSafely } from '../../../shared/events/safe-event-dispatch';
 
 const DEFAULT_MAX_NODES = 2_000;
 const DEFAULT_MAX_BYTES = 64 * 1024;
@@ -401,7 +402,7 @@ class DirectBrowserMessageTransport implements BrowserMessageTransport {
         void this.close();
         return;
       }
-      for (const listener of this.messageListeners) listener(message);
+      for (const listener of this.messageListeners) invokeListenerSafely(listener, message);
     });
     socket.once('close', () => this.markClosed());
     socket.once('error', () => this.markClosed());
@@ -473,7 +474,7 @@ class DirectBrowserMessageTransport implements BrowserMessageTransport {
   }
 
   private emitClose(): void {
-    for (const listener of this.closeListeners) listener();
+    for (const listener of this.closeListeners) invokeListenerSafely(listener);
     this.closeListeners.clear();
     this.messageListeners.clear();
   }

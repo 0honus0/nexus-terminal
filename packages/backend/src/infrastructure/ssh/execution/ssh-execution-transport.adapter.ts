@@ -16,6 +16,8 @@ import { SshCommandSessionAdapter } from './ssh-command-session.adapter';
 import { SshShellSessionAdapter } from './ssh-shell-session.adapter';
 import { SshSftpChannelPool } from '../filesystem/ssh-sftp-channel-pool';
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
+import { SshClientRoute } from '../connection/ssh-client.connector';
+import { emitSshEventSafely, invokeSshListenerSafely } from '../ssh-event-dispatch';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
@@ -25,19 +27,22 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
   private readonly commandSessions = new Set<SshCommandSessionAdapter>();
   private readonly shellSessions = new Set<SshShellSessionAdapter>();
   private open = true;
+  private closeEmitted = false;
+  private lastErrorValue?: Error;
+  private readonly client: Client;
   private readonly sftpPool: SshSftpChannelPool;
 
   constructor(
     public readonly connectionId: number,
-    private readonly client: Client,
+    private readonly route: SshClientRoute,
   ) {
-    this.sftpPool = new SshSftpChannelPool(client);
-    client.on('error', (error: Error) => this.events.emit('transport-error', error));
-    client.on('close', () => {
-      if (this.open) runtimePerformanceMetrics.recordSshDisconnect();
-      this.open = false;
-      this.events.emit('close');
+    this.client = route.client;
+    this.sftpPool = new SshSftpChannelPool(this.client);
+    route.onError((error) => {
+      this.lastErrorValue = error;
+      emitSshEventSafely(this.events, 'transport-error', error);
     });
+    route.onClose(() => this.handleRouteClose());
   }
 
   get isOpen(): boolean {
@@ -109,42 +114,64 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
   }
 
   onClose(listener: () => void): () => void {
+    if (this.closeEmitted) {
+      let active = true;
+      queueMicrotask(() => active && invokeSshListenerSafely(listener));
+      return () => {
+        active = false;
+      };
+    }
     this.events.on('close', listener);
     return () => this.events.off('close', listener);
   }
 
   onError(listener: (error: Error) => void): () => void {
+    if (this.lastErrorValue) {
+      const error = this.lastErrorValue;
+      let active = true;
+      queueMicrotask(() => active && invokeSshListenerSafely(listener, error));
+      return () => {
+        active = false;
+      };
+    }
     this.events.on('transport-error', listener);
     return () => this.events.off('transport-error', listener);
   }
 
   async close(): Promise<void> {
-    if (!this.open) return;
+    if (this.open) {
+      this.open = false;
+      this.closeOwnedChannels();
+    }
+    await this.route.close();
+    this.emitCloseOnce();
+  }
+
+  private handleRouteClose(): void {
+    if (this.open) runtimePerformanceMetrics.recordSshDisconnect();
     this.open = false;
+    this.closeOwnedChannels();
+    this.emitCloseOnce();
+  }
+
+  private closeOwnedChannels(): void {
     this.sftpPool.closeAll();
-    for (const session of this.commandSessions) session.destroy();
+    for (const session of this.commandSessions) {
+      try {
+        session.destroy();
+      } catch {
+        // One misbehaving channel must not abort transport-wide teardown.
+      }
+    }
     this.commandSessions.clear();
     for (const shell of this.shellSessions) shell.close();
     this.shellSessions.clear();
+  }
 
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        this.client.removeListener('close', finish);
-        resolve();
-      };
-      const timeout = setTimeout(finish, 1000);
-      timeout.unref?.();
-      this.client.once('close', finish);
-      try {
-        this.client.end();
-      } catch {
-        finish();
-      }
-    });
+  private emitCloseOnce(): void {
+    if (this.closeEmitted) return;
+    this.closeEmitted = true;
+    emitSshEventSafely(this.events, 'close');
   }
 
   private assertOpen(): void {

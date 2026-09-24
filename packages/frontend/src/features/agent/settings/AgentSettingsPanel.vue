@@ -492,11 +492,11 @@
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-3 sm:space-y-4">
     <!-- 顶部状态与主控条 (Status & Master Switch Banner) -->
     <div
       v-if="settings"
-      class="rounded-xl border border-border/70 bg-card/60 backdrop-blur-sm px-4 py-3 flex items-center justify-between gap-3 shadow-2xs"
+      class="rounded-xl border border-border/70 bg-card/60 backdrop-blur-sm px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2.5 sm:gap-3 shadow-2xs"
     >
       <!-- 左边两个靠左边：已启用状态 + 活跃 App 整体展示 -->
       <div class="flex items-center gap-2.5 min-w-0">
@@ -552,7 +552,7 @@
 
     <!-- 主配置区域：简约清晰的二级子项分解结构 -->
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
-      <div class="space-y-4">
+      <div class="space-y-3 sm:space-y-4">
         <!-- 核心维度导航 (唯一定级导航，占满整行均匀分布) -->
         <div class="w-full">
           <nav

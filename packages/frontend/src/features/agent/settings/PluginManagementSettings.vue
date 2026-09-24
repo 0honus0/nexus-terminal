@@ -48,6 +48,111 @@
     ...(officialCatalog.value ? [{ catalog: officialCatalog.value, official: true as const }] : []),
     ...remoteCatalogs.value.map((catalog) => ({ catalog, official: false as const })),
   ]);
+
+  interface PluginSourcePackageItem {
+    package: AgentRemotePluginPackageDto;
+    catalog: AgentRemotePluginCatalogDto;
+    official: boolean;
+  }
+
+  interface PluginSourceGroup {
+    owner: string;
+    official: boolean;
+    catalogs: Array<{ catalog: AgentRemotePluginCatalogDto; official: boolean }>;
+    packages: PluginSourcePackageItem[];
+  }
+
+  const searchQuery = ref('');
+  const collapsedGroups = ref<Set<string>>(new Set());
+
+  const extractGithubUser = (rawUrl: string): string => {
+    try {
+      const url = new URL(rawUrl);
+      const parts = url.pathname.split('/').filter(Boolean);
+      const host = url.hostname.toLowerCase();
+      if (host.includes('github') || host.includes('gitlab') || host.includes('gitee')) {
+        if (parts.length > 0 && parts[0] && parts[0] !== 'catalog.json') {
+          return parts[0];
+        }
+      }
+      if (parts.length > 1 && parts[0] !== 'catalog.json') {
+        return parts[0];
+      }
+      return url.hostname;
+    } catch {
+      return rawUrl;
+    }
+  };
+
+  const groupedCatalogSources = computed<PluginSourceGroup[]>(() => {
+    const groups: PluginSourceGroup[] = [];
+    const groupMap = new Map<string, PluginSourceGroup>();
+
+    for (const source of catalogSources.value) {
+      const owner = extractGithubUser(source.catalog.repositoryUrl);
+      let group = groupMap.get(owner);
+      if (!group) {
+        group = {
+          owner,
+          official: source.official,
+          catalogs: [],
+          packages: [],
+        };
+        groupMap.set(owner, group);
+        groups.push(group);
+      } else if (source.official) {
+        group.official = true;
+      }
+      group.catalogs.push(source);
+      for (const entry of source.catalog.packages) {
+        group.packages.push({
+          package: entry,
+          catalog: source.catalog,
+          official: source.official,
+        });
+      }
+    }
+    return groups;
+  });
+
+  const totalPluginCount = computed(() => groupedCatalogSources.value.reduce((acc, g) => acc + g.packages.length, 0));
+
+  const filteredCatalogGroups = computed<PluginSourceGroup[]>(() => {
+    const query = searchQuery.value.trim().toLowerCase();
+    if (!query) return groupedCatalogSources.value;
+
+    return groupedCatalogSources.value
+      .map((group) => {
+        const ownerMatches = group.owner.toLowerCase().includes(query);
+        const filteredPackages = group.packages.filter((item) => {
+          if (ownerMatches) return true;
+          const nameMatch = item.package.displayName?.toLowerCase().includes(query);
+          const idMatch = item.package.appId?.toLowerCase().includes(query);
+          const descMatch = item.package.description?.toLowerCase().includes(query);
+          return Boolean(nameMatch || idMatch || descMatch);
+        });
+        return {
+          ...group,
+          packages: filteredPackages,
+        };
+      })
+      .filter((group) => group.packages.length > 0);
+  });
+
+  const isGroupExpanded = (owner: string): boolean => {
+    if (searchQuery.value.trim()) return true;
+    return !collapsedGroups.value.has(owner);
+  };
+
+  const toggleGroup = (owner: string): void => {
+    const next = new Set(collapsedGroups.value);
+    if (next.has(owner)) {
+      next.delete(owner);
+    } else {
+      next.add(owner);
+    }
+    collapsedGroups.value = next;
+  };
   const noticeMessage = (notice: string): string => {
     switch (notice) {
       case 'PUBLISHER_TRUSTED':
@@ -90,6 +195,7 @@
     try {
       await navigator.clipboard.writeText(url);
       copiedSourceUrl.value = url;
+      operationFeedback.notifySuccess(t('agent.settings.plugins.copied'));
       setTimeout(() => {
         copiedSourceUrl.value = null;
       }, 1800);
@@ -455,6 +561,12 @@
             <h4 class="text-xs font-semibold text-foreground">
               {{ $t('agent.settings.plugins.remoteRepositories') }}
             </h4>
+            <span
+              v-if="totalPluginCount > 0"
+              class="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary"
+            >
+              {{ totalPluginCount }}
+            </span>
           </div>
 
           <!-- 添加新仓库输入条：无紫色高亮、中性微质感；窄屏整条换行，输入框独占一行 -->
@@ -486,6 +598,29 @@
           </div>
         </div>
 
+        <!-- 搜索输入框 -->
+        <div class="mt-3 relative w-full">
+          <i
+            class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary"
+            aria-hidden="true"
+          ></i>
+          <input
+            v-model="searchQuery"
+            type="text"
+            data-no-highlight
+            class="h-8.5 w-full rounded-lg border border-border bg-background pl-8 pr-8 shadow-2xs text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none transition-all"
+            :placeholder="$t('agent.settings.plugins.searchPlaceholder')"
+          />
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-foreground text-xs cursor-pointer p-0.5"
+            @click="searchQuery = ''"
+          >
+            <i class="fa-solid fa-circle-xmark"></i>
+          </button>
+        </div>
+
         <!-- 自定义配置的第三方仓库列表 -->
         <div v-if="configuredRepositories.length" class="mt-3 flex flex-wrap gap-2 pt-3 border-t border-border">
           <div
@@ -507,210 +642,278 @@
           </div>
         </div>
 
-        <!-- 仓库源下的应用网格展示 (Marketplace Cards) -->
-        <div v-if="catalogSources.length" class="mt-3.5 pt-3.5 border-t border-border space-y-3.5">
+        <!-- 仓库来源（固定截取 github user）可展开 + 仓库插件列表 -->
+        <div v-if="filteredCatalogGroups.length" class="mt-3.5 pt-3.5 border-t border-border space-y-3">
           <div
-            v-for="source in catalogSources"
-            :key="`${source.official ? 'official' : 'remote'}:${source.catalog.repositoryUrl}`"
-            class="space-y-3"
+            v-for="group in filteredCatalogGroups"
+            :key="group.owner"
+            class="rounded-xl border border-border bg-card shadow-2xs overflow-hidden transition-all duration-200"
           >
-            <!-- 仓库源卡片头部标牌 -->
-            <div class="flex flex-wrap items-center justify-start gap-1.5 sm:gap-2.5 border-b border-border pb-2.5">
-              <span
-                v-if="source.official"
-                class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
-              >
-                <i class="fa-solid fa-certificate text-[9px]"></i>
-                <span>{{ $t('agent.settings.plugins.officialRepository') }}</span>
-              </span>
-              <span
-                v-if="source.official"
-                class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
-              >
-                <i class="fa-solid fa-lock text-[9px]"></i>
-                <span>{{ $t('agent.settings.plugins.officialPublisherPinned') }}</span>
-              </span>
-              <span
-                v-else
-                class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[11px] font-medium text-text-secondary"
-              >
-                <i class="fa-solid fa-network-wired text-[9px]"></i>
-                <span>{{ $t('agent.settings.plugins.thirdPartyRepository') }}</span>
-              </span>
-
-              <button
-                type="button"
-                class="inline-flex max-w-full items-center gap-1.5 font-mono text-[11px] text-text-secondary hover:text-foreground transition-colors cursor-pointer"
-                :title="source.catalog.repositoryUrl"
-                @click="copyCatalogUrl(source.catalog.repositoryUrl)"
-              >
+            <!-- 仓库来源头部：可展开/折叠 -->
+            <div
+              role="button"
+              tabindex="0"
+              class="w-full flex items-center justify-between px-3.5 sm:px-4 py-2.5 sm:py-3 bg-header/40 hover:bg-header/70 transition-colors select-none cursor-pointer"
+              @click="toggleGroup(group.owner)"
+              @keydown.enter.space.prevent="toggleGroup(group.owner)"
+            >
+              <!-- 左侧：展开折叠指示 + 来源标识 (GitHub user) + 官方/第三方标签 + 插件数量 -->
+              <div class="flex items-center gap-2 sm:gap-2.5 min-w-0">
                 <i
-                  :class="
-                    copiedSourceUrl === source.catalog.repositoryUrl
-                      ? 'fa-solid fa-check text-success'
-                      : 'fa-regular fa-copy'
-                  "
+                  :class="isGroupExpanded(group.owner) ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'"
+                  class="text-[11px] text-text-secondary w-3 text-center transition-transform"
+                  aria-hidden="true"
                 ></i>
-                <span class="max-w-[260px] sm:max-w-xl truncate">{{ source.catalog.repositoryUrl }}</span>
-              </button>
+                <div
+                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-header/80 text-foreground/80 border border-border/60"
+                >
+                  <i class="fa-brands fa-github text-xs" aria-hidden="true"></i>
+                </div>
+                <div class="flex items-baseline gap-1.5 min-w-0">
+                  <span class="text-xs text-text-secondary shrink-0"
+                    >{{ $t('agent.settings.plugins.repositorySource') }}:</span
+                  >
+                  <span class="text-xs sm:text-sm font-bold text-foreground font-mono truncate">{{ group.owner }}</span>
+                </div>
+                <span
+                  v-if="group.official"
+                  class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary shrink-0"
+                >
+                  <i class="fa-solid fa-certificate text-[8px]" aria-hidden="true"></i>
+                  <span>{{ $t('agent.settings.plugins.officialRepository') }}</span>
+                </span>
+                <span
+                  v-else
+                  class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[10px] font-medium text-text-secondary shrink-0"
+                >
+                  <i class="fa-solid fa-network-wired text-[8px]" aria-hidden="true"></i>
+                  <span>{{ $t('agent.settings.plugins.thirdPartyRepository') }}</span>
+                </span>
+                <span
+                  class="hidden xs:inline-flex rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] font-mono text-text-secondary shrink-0"
+                >
+                  {{ $t('agent.settings.plugins.pluginCount', { count: group.packages.length }) }}
+                </span>
+              </div>
+
+              <!-- 右侧：复制源链接与操作按钮 -->
+              <div class="flex items-center gap-1.5 shrink-0" @click.stop>
+                <button
+                  v-if="group.catalogs[0]?.catalog.repositoryUrl"
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-mono text-text-secondary hover:bg-header hover:text-foreground transition-colors cursor-pointer"
+                  :title="group.catalogs[0].catalog.repositoryUrl"
+                  @click="copyCatalogUrl(group.catalogs[0].catalog.repositoryUrl)"
+                >
+                  <i
+                    :class="
+                      copiedSourceUrl === group.catalogs[0].catalog.repositoryUrl
+                        ? 'fa-solid fa-check text-success'
+                        : 'fa-regular fa-copy'
+                    "
+                    class="text-[11px]"
+                    aria-hidden="true"
+                  ></i>
+                  <span class="hidden md:inline max-w-[200px] truncate text-[10px]">{{
+                    group.catalogs[0].catalog.repositoryUrl
+                  }}</span>
+                </button>
+              </div>
             </div>
 
-            <!-- 现代单列（1 列）低高度扩展应用卡片列表 -->
-            <div class="mt-3 grid grid-cols-1 gap-2.5">
-              <div
-                v-for="entry in source.catalog.packages"
-                :key="`${entry.appId}@${entry.version}`"
-                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 sm:px-4 sm:py-3 shadow-2xs transition-all duration-200 hover:border-primary/50 hover:shadow-xs"
-              >
-                <!-- 左侧：图标 + 标题/版本/状态 + 单行描述 -->
-                <div class="flex items-center gap-3 min-w-0 flex-1">
-                  <div
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
-                    :class="
-                      entry.appId === 'nexus.agent'
-                        ? 'bg-primary/15 text-primary ring-1 ring-primary/25'
-                        : entry.appId === 'nexus.fullstack'
-                          ? 'bg-success/15 text-success ring-1 ring-success/25'
-                          : 'bg-primary/10 text-primary ring-1 ring-primary/20'
-                    "
-                  >
-                    <i
+            <!-- 展开后的仓库插件列表 -->
+            <div
+              v-if="isGroupExpanded(group.owner)"
+              class="p-3 sm:p-4 space-y-2.5 border-t border-border bg-background/40"
+            >
+              <div class="flex items-center justify-between px-1 text-xs text-text-secondary font-medium">
+                <div class="flex items-center gap-1.5">
+                  <i class="fa-solid fa-puzzle-piece text-[10px] text-primary" aria-hidden="true"></i>
+                  <span>{{ $t('agent.settings.plugins.repositoryPlugins') }}</span>
+                </div>
+                <span class="font-mono text-[11px]">{{
+                  $t('agent.settings.plugins.pluginCount', { count: group.packages.length })
+                }}</span>
+              </div>
+
+              <!-- 插件列表网格 -->
+              <div class="grid grid-cols-1 gap-2.5">
+                <div
+                  v-for="{ package: entry, catalog, official } in group.packages"
+                  :key="`${entry.appId}@${entry.version}`"
+                  class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 sm:px-4 sm:py-3 shadow-2xs transition-all duration-200 hover:border-primary/50 hover:shadow-xs"
+                >
+                  <!-- 左侧：图标 + 标题/版本/状态 + 单行描述 -->
+                  <div class="flex items-center gap-3 min-w-0 flex-1">
+                    <div
+                      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
                       :class="
                         entry.appId === 'nexus.agent'
-                          ? 'fa-solid fa-wand-magic-sparkles'
+                          ? 'bg-primary/15 text-primary ring-1 ring-primary/25'
                           : entry.appId === 'nexus.fullstack'
-                            ? 'fa-solid fa-layer-group'
-                            : 'fa-solid fa-puzzle-piece'
+                            ? 'bg-success/15 text-success ring-1 ring-success/25'
+                            : 'bg-primary/10 text-primary ring-1 ring-primary/20'
                       "
-                      aria-hidden="true"
-                    ></i>
-                  </div>
-
-                  <div class="min-w-0 flex-1">
-                    <!-- 上行：名称 + 版本 + 状态徽章 + appId -->
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="text-xs sm:text-sm font-bold text-foreground truncate">{{ entry.displayName }}</span>
-                      <span
-                        class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
-                      >
-                        v{{ entry.version }}
-                      </span>
-                      <span
-                        v-if="!entry.compatible"
-                        class="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
-                      >
-                        {{ $t('agent.settings.plugins.incompatible') }}
-                      </span>
-                      <span
-                        v-else-if="isInstalled(entry.appId)"
-                        class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
-                      >
-                        <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-                        <span>{{
-                          isInstalledAndEnabled(entry.appId)
-                            ? $t('agent.settings.plugins.stateEnabled')
-                            : $t('agent.settings.plugins.stateInstalled')
-                        }}</span>
-                      </span>
-                      <span
-                        v-else
-                        class="rounded-full bg-header px-2 py-0.5 text-[11px] font-medium text-text-secondary"
-                      >
-                        {{ $t('agent.settings.plugins.stateNotInstalled') }}
-                      </span>
-                      <span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
-                        {{ entry.appId }}
-                      </span>
-                    </div>
-
-                    <!-- 下行：紧凑单行描述与不兼容警示 -->
-                    <div class="mt-0.5 flex items-center gap-2 text-xs text-text-secondary">
-                      <p
-                        class="truncate text-[11px] leading-relaxed max-w-md lg:max-w-xl"
-                        :title="
-                          entry.appId === 'nexus.agent'
-                            ? $t('agent.settings.plugins.summaryNexusAgent')
-                            : entry.appId === 'nexus.fullstack'
-                              ? $t('agent.settings.plugins.summaryNexusFullstack')
-                              : entry.description
-                        "
-                      >
-                        {{
-                          entry.appId === 'nexus.agent'
-                            ? $t('agent.settings.plugins.summaryNexusAgent')
-                            : entry.appId === 'nexus.fullstack'
-                              ? $t('agent.settings.plugins.summaryNexusFullstack')
-                              : entry.description
-                        }}
-                      </p>
-                      <span v-if="!entry.compatible" class="shrink-0 text-[11px] text-warning font-mono">
-                        {{
-                          $t('agent.settings.plugins.compatibilityShort', {
-                            min: entry.nexus.minVersion,
-                            max: entry.nexus.maxVersion,
-                          })
-                        }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 右侧：签名状态与操作按钮 -->
-                <div
-                  class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border"
-                >
-                  <span class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-secondary/70 font-mono">
-                    <i class="fa-solid fa-shield-check text-success text-[10px]"></i>
-                    <span>Ed25519</span>
-                  </span>
-
-                  <div class="flex items-center gap-1.5">
-                    <UiButton
-                      appearance="soft"
-                      tone="neutral"
-                      v-if="!source.official && !publisherTrusted(entry.publisherKeyId)"
-                      type="button"
-                      :disabled="
-                        locked ||
-                        !source.catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
-                      "
-                      @click="
-                        trustRemotePublisher(
-                          source.catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
-                        )
-                      "
-                    >
-                      {{ $t('agent.settings.plugins.trustRemotePublisher') }}
-                    </UiButton>
-
-                    <UiButton
-                      type="button"
-                      :appearance="isInstalled(entry.appId) ? 'soft' : 'solid'"
-                      :tone="isInstalled(entry.appId) ? 'neutral' : 'primary'"
-                      :disabled="
-                        locked || !entry.compatible || (!source.official && !publisherTrusted(entry.publisherKeyId))
-                      "
-                      @click="prepareRemotePackage(source.catalog, entry, source.official)"
                     >
                       <i
                         :class="
-                          isInstalled(entry.appId)
-                            ? 'fa-solid fa-arrows-rotate text-[11px]'
-                            : 'fa-solid fa-download text-[11px]'
+                          entry.appId === 'nexus.agent'
+                            ? 'fa-solid fa-wand-magic-sparkles'
+                            : entry.appId === 'nexus.fullstack'
+                              ? 'fa-solid fa-layer-group'
+                              : 'fa-solid fa-puzzle-piece'
                         "
                         aria-hidden="true"
                       ></i>
-                      <span>{{
-                        isInstalled(entry.appId)
-                          ? $t('agent.settings.plugins.reverifyPackage')
-                          : $t('agent.settings.plugins.prepareRemote')
-                      }}</span>
-                    </UiButton>
+                    </div>
+
+                    <div class="min-w-0 flex-1">
+                      <!-- 上行：名称 + 版本 + 状态徽章 + appId -->
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs sm:text-sm font-bold text-foreground truncate">{{
+                          entry.displayName
+                        }}</span>
+                        <span
+                          class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
+                        >
+                          v{{ entry.version }}
+                        </span>
+                        <span
+                          v-if="!entry.compatible"
+                          class="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
+                        >
+                          {{ $t('agent.settings.plugins.incompatible') }}
+                        </span>
+                        <span
+                          v-else-if="isInstalled(entry.appId)"
+                          class="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
+                        >
+                          <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+                          <span>{{
+                            isInstalledAndEnabled(entry.appId)
+                              ? $t('agent.settings.plugins.stateEnabled')
+                              : $t('agent.settings.plugins.stateInstalled')
+                          }}</span>
+                        </span>
+                        <span
+                          v-else
+                          class="rounded-full bg-header px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                        >
+                          {{ $t('agent.settings.plugins.stateNotInstalled') }}
+                        </span>
+                        <span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
+                          {{ entry.appId }}
+                        </span>
+                      </div>
+
+                      <!-- 下行：紧凑单行描述与不兼容警示 -->
+                      <div class="mt-0.5 flex items-center gap-2 text-xs text-text-secondary">
+                        <p
+                          class="truncate text-[11px] leading-relaxed max-w-md lg:max-w-xl"
+                          :title="
+                            entry.appId === 'nexus.agent'
+                              ? $t('agent.settings.plugins.summaryNexusAgent')
+                              : entry.appId === 'nexus.fullstack'
+                                ? $t('agent.settings.plugins.summaryNexusFullstack')
+                                : entry.description
+                          "
+                        >
+                          {{
+                            entry.appId === 'nexus.agent'
+                              ? $t('agent.settings.plugins.summaryNexusAgent')
+                              : entry.appId === 'nexus.fullstack'
+                                ? $t('agent.settings.plugins.summaryNexusFullstack')
+                                : entry.description
+                          }}
+                        </p>
+                        <span v-if="!entry.compatible" class="shrink-0 text-[11px] text-warning font-mono">
+                          {{
+                            $t('agent.settings.plugins.compatibilityShort', {
+                              min: entry.nexus.minVersion,
+                              max: entry.nexus.maxVersion,
+                            })
+                          }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 右侧：签名状态与操作按钮 -->
+                  <div
+                    class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border"
+                  >
+                    <span class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-secondary/70 font-mono">
+                      <i class="fa-solid fa-shield-check text-success text-[10px]"></i>
+                      <span>Ed25519</span>
+                    </span>
+
+                    <div class="flex items-center gap-1.5">
+                      <UiButton
+                        appearance="soft"
+                        tone="neutral"
+                        v-if="!official && !publisherTrusted(entry.publisherKeyId)"
+                        type="button"
+                        :disabled="
+                          locked || !catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
+                        "
+                        @click="
+                          trustRemotePublisher(
+                            catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
+                          )
+                        "
+                      >
+                        {{ $t('agent.settings.plugins.trustRemotePublisher') }}
+                      </UiButton>
+
+                      <UiButton
+                        type="button"
+                        :appearance="isInstalled(entry.appId) ? 'soft' : 'solid'"
+                        :tone="isInstalled(entry.appId) ? 'neutral' : 'primary'"
+                        :disabled="
+                          locked || !entry.compatible || (!official && !publisherTrusted(entry.publisherKeyId))
+                        "
+                        @click="prepareRemotePackage(catalog, entry, official)"
+                      >
+                        <i
+                          :class="
+                            isInstalled(entry.appId)
+                              ? 'fa-solid fa-arrows-rotate text-[11px]'
+                              : 'fa-solid fa-download text-[11px]'
+                          "
+                          aria-hidden="true"
+                        ></i>
+                        <span>{{
+                          isInstalled(entry.appId)
+                            ? $t('agent.settings.plugins.reverifyPackage')
+                            : $t('agent.settings.plugins.prepareRemote')
+                        }}</span>
+                      </UiButton>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- 搜索无结果时 -->
+        <div
+          v-else-if="catalogSources.length > 0 && searchQuery"
+          class="mt-3.5 pt-6 pb-6 text-center border-t border-border"
+        >
+          <div
+            class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-header/60 text-text-secondary mb-2"
+          >
+            <i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i>
+          </div>
+          <p class="text-xs text-text-secondary">{{ $t('agent.settings.plugins.searchEmpty') }}</p>
+          <button
+            type="button"
+            class="mt-2 text-xs text-primary hover:underline cursor-pointer"
+            @click="searchQuery = ''"
+          >
+            {{ $t('agent.settings.plugins.clearSearch') }}
+          </button>
         </div>
       </div>
 

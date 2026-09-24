@@ -5,6 +5,7 @@ import type {
   CommandSessionStatus,
   RemoteCommandSession,
 } from '../../../platform/execution/remote-execution.port';
+import { emitSshEventSafely, invokeSshListenerSafely } from '../ssh-event-dispatch';
 
 export class SshCommandSessionAdapter implements RemoteCommandSession {
   readonly startedAt = Date.now();
@@ -27,21 +28,20 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
     if (!Number.isInteger(maxOutputBytes) || maxOutputBytes <= 0) {
       throw new Error('maxOutputBytes must be a positive integer.');
     }
-    this.events.on('error', () => undefined);
     channel.on('data', (data: Buffer | string) => {
       const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data);
       this.stdoutBuffer = this.appendBounded(this.stdoutBuffer, chunk);
-      this.events.emit('stdout', chunk);
+      emitSshEventSafely(this.events, 'stdout', chunk);
     });
     channel.stderr.on('data', (data: Buffer | string) => {
       const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data);
       this.stderrBuffer = this.appendBounded(this.stderrBuffer, chunk);
-      this.events.emit('stderr', chunk);
+      emitSshEventSafely(this.events, 'stderr', chunk);
     });
     channel.on('error', (error: Error) => {
       if (!this.settled) this.statusValue = 'failed';
       this.errorValue = error;
-      this.events.emit('error', error);
+      emitSshEventSafely(this.events, 'session-error', error);
     });
     channel.on('close', (exitCode: number | null, signal?: string | null) => {
       if (this.settled) return;
@@ -49,7 +49,7 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
       this.exitCodeValue = exitCode;
       this.signalValue = signal;
       if (this.statusValue === 'running') this.statusValue = exitCode === 0 ? 'completed' : 'failed';
-      this.events.emit('close', { exitCode, signal });
+      emitSshEventSafely(this.events, 'close', { exitCode, signal });
     });
   }
 
@@ -97,7 +97,7 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
       let active = true;
       // Preserve live event ordering for late subscribers: a stored error must be able to reject
       // before the terminal close callback resolves the same operation.
-      queueMicrotask(() => queueMicrotask(() => active && listener(event)));
+      queueMicrotask(() => queueMicrotask(() => active && invokeSshListenerSafely(listener, event)));
       return () => {
         active = false;
       };
@@ -110,13 +110,13 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
     if (this.errorValue) {
       const error = this.errorValue;
       let active = true;
-      queueMicrotask(() => active && listener(error));
+      queueMicrotask(() => active && invokeSshListenerSafely(listener, error));
       return () => {
         active = false;
       };
     }
-    this.events.on('error', listener);
-    return () => this.events.off('error', listener);
+    this.events.on('session-error', listener);
+    return () => this.events.off('session-error', listener);
   }
 
   async terminate(options?: { signal?: string; graceMs?: number; forceMs?: number }): Promise<void> {
@@ -135,11 +135,11 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
         if (closeTimer) clearTimeout(closeTimer);
         if (forceTimer) clearTimeout(forceTimer);
         this.events.off('close', finish);
-        this.events.off('error', finish);
+        this.events.off('session-error', finish);
         resolve();
       };
       this.events.once('close', finish);
-      this.events.once('error', finish);
+      this.events.once('session-error', finish);
       try {
         this.signal(signal);
       } catch {
@@ -158,7 +158,13 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
       forceTimer = setTimeout(() => {
         if (finished) return;
         if (!this.settled) this.statusValue = 'terminated';
-        if (!this.channel.destroyed) this.channel.destroy();
+        if (!this.channel.destroyed) {
+          try {
+            this.channel.destroy();
+          } catch {
+            // Teardown is best effort; completion must still settle.
+          }
+        }
         finish();
       }, forceMs);
       forceTimer.unref?.();
@@ -167,7 +173,13 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
 
   destroy(): void {
     if (!this.settled) this.statusValue = 'terminated';
-    if (!this.channel.destroyed) this.channel.destroy();
+    if (!this.channel.destroyed) {
+      try {
+        this.channel.destroy();
+      } catch {
+        // Teardown is best effort.
+      }
+    }
   }
 
   private appendBounded(current: Buffer<ArrayBufferLike>, chunk: Buffer<ArrayBufferLike>): Buffer<ArrayBufferLike> {

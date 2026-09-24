@@ -12,7 +12,7 @@
 > 巨型 UI 文件拆分（§3.1；2026-09-23 已复核并**按约定延后**——该条无隐藏的用户可见缺陷，拆分需搬迁约 30 props + 15 emit，
 > 正确验收依赖 Provider CRUD / Run 详情两条主路径的逐控件回归，本环境 `runner_not_configured` 无法覆盖，详见 §3.1 的复核块）；**§3.5 的"i18n 死 key"已于本轮关闭**（§7.40：新增可达性门禁 + 清掉 75×3 条不可达文案，字典 1,467 → 1,392）；**"后端工具结果摘要英文硬编码" 本轮已关闭**，仅剩 `mcp-tools.ts`（远端不可信内容，刻意排除）、`execution-errors.ts` 前缀与 `command.reason` 三处非 UI 残余并入 §3.6 跟踪；主界面骨架 §7.2 已整节关闭（最小高度、侧栏折叠、状态持久化、列宽复核、顶栏双击）。本文件现在作为唯一进度/问题状态来源，原 `doc/progress.md` 不再维护。
 
-> **历史提交完整复核补充（2026-09-23）**：现已对 `b0d7b220..862a458` **66/66 个提交**逐个回看“改动文件 → 对应 Problem 闭环 → 当前 HEAD 实现”。首轮 / 第一遍完整复核确认 §7.41–§7.51；随后继续做跨切面反向审计（状态机、异步 generation、跨账号/session、持久化、i18n、a11y/命中区、Gen2 公共层、跨 tab、frontend/backend 契约、mutation commit boundary、分页、terminal、plugin/KeepAlive 生命周期、Plugin 安装链、Runner runtime/reconcile、Workspace checkpoint、SQLite migration 与 backup/restore），现已审计到 §7.115，其中确认 **62 条**新增开放项；§7.80 经跨组件复核已排除。新增高风险包括 Memory host refresh 静默覆盖候选草稿（§7.64）、Run 详情 approvals 旧响应回写（§7.65）、Plugin bridge/RPC outcome 缺口（§7.67–§7.68）、App Tab / version cache 泄漏（§7.73）、失败域共用 error slot（§7.75）、create 类 mutation 的 caller-stable identity 缺口（§7.78）、enabled-but-failed App 仍允许 Send（§7.81）、Settings optimistic conflict 不 reconcile（§7.82）、Provider 拉取模型旧请求跨 modal 污染（§7.83）、Provider “测试连接”提前持久化（§7.84）、Workspace restart 的 Runner Plugin 半失败状态（§7.85）、toolchain switch 的 delete unknown/failed 可把 workspace 长期留在 stopping（§7.86）、Host Runner 异常重启后的 detached child orphan（§7.87）、Plugin upgrade draining continuation 易失（§7.88）、runtime cleanup 可在 ACP/Terminal 尚未退出时删 workspace（§7.89）、checkpoint capture 不冻结 live Workspace writer（§7.90）、checkpoint restore 在目录 rename 中点崩溃后无法 startup reconcile（§7.91）、Terminal/ACP 外部 writer 可穿透 file patch 的 SHA precondition 并被静默覆盖（§7.92）、Workspace lifecycle 不等待 background job 真正退出就成功（§7.93），toolchain switch 可在旧 generation ACP/Terminal 仍存活时启动新 generation（§7.94），普通 restart 也会在旧 ACP/Terminal 未退出时重新激活 runtime/plugin（§7.95），手动 checkpoint resume 在 Workspace restore 失败后可留下已提交的新 Run、重试再建一个 Run（§7.96），同一 Workspace 的不同 lifecycle action 可用同一个 expectedVersion 并发通过（§7.97），全局 `/opt/nexus/packs/<family>/<version>` canonical symlink 会让不同 digest 的 frozen Workspace 互相改写长寿命进程的 toolchain 解析（§7.98），Safety Network 一次连接加载失败后即使共享 store 后来恢复仍会永久卡失败态（§7.99），Agent migration #23/#34 能把 partial schema 错标成“已完成迁移”（§7.100），“完整备份”遗漏全部 Agent/AI 表与权威 Artifact/Plugin 文件，恢复后形成跨时点混合状态（§7.101），backup 文件目录 swap 的 rollback/crash recovery 不能保证恢复前数据（§7.102），Memory import confirmation 与最终副作用不原子、unknown outcome 后可重复导入（§7.103），Root Scheduler 出队后 async preflight 失败会永久丢 Run（§7.104），Host durable event outbox 没有 retention、会按用户永久增长（§7.105），Plugin stage 没有 TTL/delete 生命周期、可永久累积大体积 staging 目录（§7.106），Artifact 上传 rename→ready commit 竞态可留下未计费 orphan blob（§7.107），AppStorage 只按 value bytes 计 quota、可被海量小值+长 key 绕过实际磁盘限制（§7.108），Backup export/import 缺一致性 snapshot 与全局串行化（§7.109），Plugin AppStorage 可直接改写 Host-owned Execution/Subagent Policy（§7.110），Manual checkpoint 缺 delete/retention、可长期锁住 Artifact quota（§7.111），Provider model discovery 的 response-size 限制在全量缓冲后才检查（§7.112），Plugin 成功 upgrade 后旧 immutable version 无 owner 仍永久留盘（§7.113），Plugin upgrade 在 quiesce 前 capture AppStorage、可静默覆盖并发写（§7.114），以及 Host durable event 的内存 wake 丢失后在线订阅不会自愈（§7.115）。因此任何早期“只剩 N 条开放项”的描述都只是当时快照；**当前新增开放项为 §7.53–§7.79、§7.81–§7.115；§7.80 明确标为排除项**。当前工作树另有未提交改动；涉及 dirty 文件的本轮结论均重新用 committed HEAD / 审计基线 `862a458` 取证，未把临时施工状态归因到 66 commit。
+> **历史提交完整复核补充（2026-09-23）**：现已对 `b0d7b220..862a458` **66/66 个提交**逐个回看“改动文件 → 对应 Problem 闭环 → 当前 HEAD 实现”。首轮 / 第一遍完整复核确认 §7.41–§7.51；随后继续做跨切面反向审计（状态机、异步 generation、跨账号/session、持久化、i18n、a11y/命中区、Gen2 公共层、跨 tab、frontend/backend 契约、mutation commit boundary、分页、terminal、plugin/KeepAlive 生命周期、Plugin 安装链、Runner runtime/reconcile、Workspace checkpoint、SQLite migration 与 backup/restore），现已审计到 §7.146，其中确认 **91 条**新增开放项；另有 §7.117 已在真实复现后当场修复并验证；§7.80 / §7.124 经跨组件或真实 caller 复核已排除。新增高风险包括 Memory host refresh 静默覆盖候选草稿（§7.64）、Run 详情 approvals 旧响应回写（§7.65）、Plugin bridge/RPC outcome 缺口（§7.67–§7.68）、App Tab / version cache 泄漏（§7.73）、失败域共用 error slot（§7.75）、create 类 mutation 的 caller-stable identity 缺口（§7.78）、enabled-but-failed App 仍允许 Send（§7.81）、Settings optimistic conflict 不 reconcile（§7.82）、Provider 拉取模型旧请求跨 modal 污染（§7.83）、Provider “测试连接”提前持久化（§7.84）、Workspace restart 的 Runner Plugin 半失败状态（§7.85）、toolchain switch 的 delete unknown/failed 可把 workspace 长期留在 stopping（§7.86）、Host Runner 异常重启后的 detached child orphan（§7.87）、Plugin upgrade draining continuation 易失（§7.88）、runtime cleanup 可在 ACP/Terminal 尚未退出时删 workspace（§7.89）、checkpoint capture 不冻结 live Workspace writer（§7.90）、checkpoint restore 在目录 rename 中点崩溃后无法 startup reconcile（§7.91）、Terminal/ACP 外部 writer 可穿透 file patch 的 SHA precondition 并被静默覆盖（§7.92）、Workspace lifecycle 不等待 background job 真正退出就成功（§7.93），toolchain switch 可在旧 generation ACP/Terminal 仍存活时启动新 generation（§7.94），普通 restart 也会在旧 ACP/Terminal 未退出时重新激活 runtime/plugin（§7.95），手动 checkpoint resume 在 Workspace restore 失败后可留下已提交的新 Run、重试再建一个 Run（§7.96），同一 Workspace 的不同 lifecycle action 可用同一个 expectedVersion 并发通过（§7.97），全局 `/opt/nexus/packs/<family>/<version>` canonical symlink 会让不同 digest 的 frozen Workspace 互相改写长寿命进程的 toolchain 解析（§7.98），Safety Network 一次连接加载失败后即使共享 store 后来恢复仍会永久卡失败态（§7.99），Agent migration #23/#34 能把 partial schema 错标成“已完成迁移”（§7.100），“完整备份”遗漏全部 Agent/AI 表与权威 Artifact/Plugin 文件，恢复后形成跨时点混合状态（§7.101），backup 文件目录 swap 的 rollback/crash recovery 不能保证恢复前数据（§7.102），Memory import confirmation 与最终副作用不原子、unknown outcome 后可重复导入（§7.103），Root Scheduler 出队后 async preflight 失败会永久丢 Run（§7.104），Host durable event outbox 没有 retention、会按用户永久增长（§7.105），Plugin stage 没有 TTL/delete 生命周期、可永久累积大体积 staging 目录（§7.106），Artifact 上传 rename→ready commit 竞态可留下未计费 orphan blob（§7.107），AppStorage 只按 value bytes 计 quota、可被海量小值+长 key 绕过实际磁盘限制（§7.108），Backup export/import 缺一致性 snapshot 与全局串行化（§7.109），Plugin AppStorage 可直接改写 Host-owned Execution/Subagent Policy（§7.110），Manual checkpoint 缺 delete/retention、可长期锁住 Artifact quota（§7.111），Provider model discovery 的 response-size 限制在全量缓冲后才检查（§7.112），Plugin 成功 upgrade 后旧 immutable version 无 owner 仍永久留盘（§7.113），Plugin upgrade 在 quiesce 前 capture AppStorage、可静默覆盖并发写（§7.114），Host durable event 的内存 wake 丢失后在线订阅不会自愈（§7.115），Backend Plugin child→Host protocol limit 在无换行 stdout 下无法约束父进程缓冲（§7.116），Runner journal unknown evidence 无 retention（§7.118）、builtin Toolchain command-scoped download cache 缺 owner 自动回收（§7.119），Runner admin pack install/uninstall 缺资源级串行化（§7.120），ACP WebSocket→child stdin 缺 aggregate backpressure（§7.121），Runner Plugin generation HOME 没有 cleanup owner（§7.122），Workspace Job output 在执行/wire/journal 三层上限不一致（§7.123），Workspace lifecycle durable postcondition 与 command unknown 缺权威重同步（§7.125）、JobRunner byte-budget 截断破坏 UTF-8（§7.126），Runner Toolchain install crash 可留下无 owner `.staging` 大树（§7.127），Runner `/storage` Workspace collection 与 Backend decoder 上限不一致（§7.128），corrupt Runner journal 在 supervisor restart loop 中会重复复制 forensic evidence、持续放大磁盘占用（§7.129），Runner terminal journal 写失败会把已成功副作用反写成 failed（§7.130），Project Instructions omission producer/decoder 上限不一致（§7.131），Workspace provision failure 会把 Runner owner 永久留在 creating、官方 cleanup 持续 skip（§7.132），Runner catalog 合法最大 collection 会被 Backend 独立 1MB transport cap 提前拒绝（§7.133），Backend Plugin async line handler 可把 malformed protocol 升级成主进程 unhandled rejection（§7.134），以及 Host→Plugin child response path 缺 aggregate backpressure（§7.135）；继续覆盖后续增量提交到当前 HEAD `af543606` 后，又确认默认模型 optimistic identity 丢 Provider（§7.136）、`a6371f9` 重新打开 Launcher 长按拖动闭环（§7.137）、Provider“导入全部”与 100-model hard cap 分叉（§7.138）、Settings `?tab=` 与 KeepAlive 路由状态脱节（§7.142）、隐藏 Settings 分组取消 lazy mount 后提前发起网络请求/错误（§7.143）、Agent tab 的 `aria-controls` 目标被重构删除（§7.144）、Settings ARIA tab 键盘模型历史缺口（§7.145）、`a6371f9` 用 dummy i18n literal 绕过 §7.40 dead-key 门禁（§7.146）。因此任何早期“只剩 N 条开放项”的描述都只是当时快照；**当前新增开放项为 §7.53–§7.79、§7.81–§7.116、§7.118–§7.123、§7.125–§7.146；§7.80 / §7.124 明确标为排除项，§7.117 已修复**。当前工作树另有未提交改动；涉及 dirty 文件的本轮结论均重新用 committed HEAD / 审计基线 `862a458` 取证，未把临时施工状态归因到 66 commit。
 
 复查规模（行数统计）：
 
@@ -171,7 +171,38 @@
 | **P2 · 🟠 开放 2026-09-23**               | **Provider model discovery 的 1MB limit 在 `response.text()` 全量缓冲后才检查**：缺失/虚假 Content-Length 的 OpenAI-compatible endpoint 可先让 Backend 把任意大 body 读入内存，随后才收到 `PROVIDER_MODELS_RESPONSE_TOO_LARGE`。同仓 model registry 已有正确的 chunked bounded-reader，对照证明当前限制顺序失效。                                                                                                                                                                                                                                                                | `openai-provider.adapter.ts:fetchModelsFromEndpoint()`、`model-capability-registry.adapter.ts:readBoundedResponse()`（见 §7.112）                    |
 | **P2 · 🟠 开放 2026-09-23**               | **Plugin 成功 upgrade 不回收已无人安装的旧 immutable version**：installation 切到新版本后只清 stage，不对 oldVersion 做 `countInstalled/removeInstalled/status→removed`。旧 `agent_plugin_versions` 仍是 installed、完整 `versions/<old>` tree 永久保留且用户管理视图不可见；单版本允许展开 200MB，连续正常升级可持续吃磁盘。                                                                                                                                                                                                                                                    | `plugin-package-install-coordinator.ts`、`sqlite-plugin-install.repository.ts`、`tar-package-verifier.adapter.ts`（见 §7.113）                       |
 | **P1 · 🟠 开放 2026-09-23**               | **Plugin upgrade 在 quiesce 前 capture AppStorage，后续 full restore 可静默覆盖并发写**：upgrade 先 `data.capture()`，之后才 quiesce old Backend；旧 Frontend RPC 更一直放行到最终 installation 切版。期间成功的 `storage.put/delete` 会被 `restore()` 的 scope 全量 DELETE+INSERT 覆盖，升级与写入都可返回成功但数据丢失。                                                                                                                                                                                                                                                      | `plugin-package-install-coordinator.ts`、`plugin-data-manager.ts`、`sqlite-app-storage.repository.ts`（见 §7.114）                                   |
-| **P2 · 🟠 开放 2026-09-23**               | **Host durable event 已提交但 wake publication 失败时，在线订阅不会自愈**：`publishHostWake()` commit 后再查一次 `hostCursor()`；查询失败只 warn。Host WebSocket subscribe 初始 drain 后只靠内存 `onHostWake` 再 drain，没有 periodic high-water poll，因此 DB event 可已存在但在线 UI 无限期停旧状态，直到下一次 unrelated wake 或重连。 | `compose-agent.ts:publishHostWake()`、`agent-protocol.session.ts`、`event-hub.ts`（见 §7.115） |
+| **P2 · 🟠 开放 2026-09-23**               | **Host durable event 已提交但 wake publication 失败时，在线订阅不会自愈**：`publishHostWake()` commit 后再查一次 `hostCursor()`；查询失败只 warn。Host WebSocket subscribe 初始 drain 后只靠内存 `onHostWake` 再 drain，没有 periodic high-water poll，因此 DB event 可已存在但在线 UI 无限期停旧状态，直到下一次 unrelated wake 或重连。                                                                                                                                                                                                                                        | `compose-agent.ts:publishHostWake()`、`agent-protocol.session.ts`、`event-hub.ts`（见 §7.115）                                                       |
+| **P2 · 🟠 开放 2026-09-23**               | **Backend Plugin child→Host 的 20MB protocol limit 在 `readline` 收齐整行后才检查**：插件可持续写无换行 stdout，让主 Backend 先无界累积 line buffer，之后才触发 `PLUGIN_BACKEND_RESPONSE_TOO_LARGE`。Host→child 与 stderr 都有真正的 pre-write/rolling bound，只有 child stdout 会把动态插件的内存压力转移到 Host。                                                                                                                                                                                                                                                              | `local-plugin-backend-runtime.adapter.ts:BackendPluginProcess`（见 §7.116）                                                                          |
+| **P1 · ✅ 已修复 2026-09-24**             | **Jump SSH 中间 hop 的 keepalive timeout 会触发 Backend uncaughtException**：握手 helper 在 ready 后移除临时 `error` listener，direct/proxy final client 后续会被 transport 接管，但 jump intermediate client 无长期 owner。现已统一为 `ConnectedSshClient + SshClientRoute` 全链 ownership；任一 hop error/close 会关闭整条 route 并传播正常 transport failure，不再杀 Backend。                                                                                                                                                                                                | SSH `ssh-client.connector.ts` / `ssh-jump.connector.ts` / `ssh-transport.adapter.ts` / regression（见 §7.117）                                       |
+| **P2 · 🟠 开放 2026-09-24**               | **Runner journal 的 unknown command/job 永不回收**：startup 会把重启时的 running command/job 标 unknown，但 `compact()` 只裁 succeeded/failed/cancelled；全仓无 unknown delete/reconcile。长期重启可让 commands/jobs 单调增长，最终超过 decoder 的 16,384 项硬上限，下一次启动直接 `RUNNER_JOURNAL_INVALID`。                                                                                                                                                                                                                                                                    | `agent-runner/controller/{journal,reconciler}.ts`（见 §7.118）                                                                                       |
+| **P2 · 🟠 开放 2026-09-24**               | **Runner builtin Toolchain 的 command-scoped download cache 缺 owner 自动回收**：`cachedArchive()` 每次按 `download/<commandId>` 复制完整 builtin tar，成功/失败/uninstall/startup 都不按 command 清理；旧 commandId 后续不会复用。只有另行触发全局 `cacheCleanup` 才会整棵回收，单 archive 上限 512MB，正常安装流可在两次 cleanup 之间持续积累。                                                                                                                                                                                                                                | `agent-runner/controller/{pack-installer,cleanup-planner}.ts`（见 §7.119）                                                                           |
+| **P1 · 🟠 开放 2026-09-24**               | **Runner admin packInstall / packUninstall 缺 per-pack 串行化**：同一 pack 的互斥 admin command 可并发执行并都记 succeeded，最终 filesystem 状态只服从最后落盘者；cacheCleanup 也可与 active install 交叉删除工作目录。                                                                                                                                                                                                                                                                                                                                                          | `agent-runner/controller/{server,pack-installer,cleanup-planner}.ts`（见 §7.120）                                                                    |
+| **P2 · 🟠 开放 2026-09-24**               | **ACP WebSocket→child stdin 缺 backpressure**：单帧虽限制 256KB，但 message handler 忽略 `stdin.write()` false，不 pause socket；child 停读时合法 frame 可持续堆进 Writable queue。                                                                                                                                                                                                                                                                                                                                                                                              | `agent-runner/controller/acp-process-runtime.ts`（见 §7.121）                                                                                        |
+| **P2 · 🟠 开放 2026-09-24**               | **Runner Plugin generation HOME 没有 cleanup owner**：`runtime/plugin-processes/<workspace>/<generation>/<plugin>` 在 process dispose/delete/runtimeCleanup 后都不删除，generation switch 会持续累积且按 Workspace reclaimable bytes 无法归因。                                                                                                                                                                                                                                                                                                                                  | `agent-runner/controller/plugin-runner-runtime.ts`、runtime cleanup/space accounting（见 §7.122）                                                    |
+| **P1 · 🟠 开放 2026-09-24**               | **Workspace Job output contract 三层不一致**：执行允许 1MB、Backend wire 只解 16KB、Runner journal 只解 64KB；普通成功 Job 可立即变成 Backend protocol invalid，>64KB 还会让下次 Runner restart 读坏自己 journal。                                                                                                                                                                                                                                                                                                                                                               | Runner `job-runner/journal` + Backend `runner-http-protocol.ts`（见 §7.123）                                                                         |
+| **❌ 排除 2026-09-24**                    | **`terminateManagedProcess()` helper 单独只等 leader，但真实 ACP / Runner Plugin caller 会在 child `exit` 时对整个 detached group 补 SIGKILL**：探针能复现 helper 单独返回时 grandchild 仍活，但产品 caller 在 leader `close` 前已经 force-kill group；剩余短 drain 窗口并入 §7.94/§7.95，不计独立缺陷。                                                                                                                                                                                                                                                                         | `agent-runner/{managed-process,acp-process-runtime,plugin-runner-runtime}.ts`（见 §7.124）                                                           |
+| **P1 · 🟠 开放 2026-09-24**               | **Workspace lifecycle 的 durable postcondition 与 command unknown 没有权威重同步**：provision/start/stop/delete 都可能先把真实 Workspace 落到 ready/running/stopped/deleted，之后才标 command succeeded；Runner 若在两者之间重启，command 被改成 unknown。Backend 没有 Runner workspace-status query：provision unknown 会被错误写成 failed，其它 lifecycle unknown 保留旧 projection，形成长期 Backend/Runner 状态分叉。                                                                                                                                                        | Runner `server.ts` / `reconciler.ts` + Backend `workspace-runtime.service.ts:syncWorkspaceStatus()`（见 §7.125）                                     |
+| **P2 · 🟠 开放 2026-09-24**               | **JobRunner 的 byte-budget 截断会破坏 UTF-8**：stdout/stderr 每个 Buffer chunk 独立 `toString('utf8')`，且先按 raw byte `subarray()`；多字节字符跨 chunk 或被 budget 截半时会静默变 `�`。真实探针：只输出 `中`，`maxBytes=1/2` 均得到 `�`，只有 3 bytes 正常。                                                                                                                                                                                                                                                                                                                   | Runner `worker/job-runner.ts`（见 §7.126）                                                                                                           |
+| **P2 · 🟠 开放 2026-09-24**               | **Runner Toolchain install 的 `.staging/<commandId>-...` 缺 startup / owner cleanup**：正常 catch/commit 会清 staging，但进程在 extract/materialize→commit 之间退出会留下完整 unpacked tree；startup、reconcile、cacheCleanup 都不回收。单 pack expanded 上限 1GB，SpaceReporter 只把它计入 `packBytes`，不进 `byPack/reclaimableBytes`，形成隐藏不可回收占用。                                                                                                                                                                                                                  | `agent-runner/controller/{pack-installer,toolchain-store,space-reporter,reconciler}.ts`（见 §7.127）                                                 |
+| **P2 · 🟠 开放 2026-09-24**               | **Runner `/storage` 的合法 Workspace collection 上限高于 Backend decoder**：journal 允许 16,384 Workspace，SpaceReporter 会全部放进 `byWorkspace`；Backend `decodeStorage()` 只收 4,096。真实 decoder 探针：4096 条约 244KB PASS，4097 条约 245KB 直接 `WORKSPACE_RUNTIME_PROTOCOL_INVALID`，与 1MB body cap 无关。                                                                                                                                                                                                                                                              | Runner `space-reporter/journal` + Backend `runner-http-protocol.ts`（见 §7.128）                                                                     |
+| **P2 · 🟠 开放 2026-09-24**               | **Corrupt Runner journal 会在每次 startup 都复制一份完整 `.corrupt.*` evidence 后再次退出**：主坏 journal 不移走、不做 digest 去重/retention。真实探针连续构造两次得到两份 evidence；在 supervisor restart loop 下可持续复制整份 journal、放大磁盘故障。                                                                                                                                                                                                                                                                                                                         | `agent-runner/controller/journal.ts:quarantineCurrent()/constructor`（见 §7.129）                                                                    |
+| **P1 · 🟠 开放 2026-09-24**               | **Runner terminal journal 写失败可把已成功副作用反写成 `failed`**：`execute*()` 把 side effect + `journal.succeed()` 放在同一 try，succeed flush 抛错后 catch 无条件 `journal.fail()`；真实探针仅让 success rename 瞬时失败一次，重开 journal 最终就是 `failed`。若 fail flush 也失败，`void execute*()` 还会留下无 owner rejection。                                                                                                                                                                                                                                            | Runner `server.ts` + `journal.ts`（见 §7.130）                                                                                                       |
+| **P2 · 🟠 开放 2026-09-24**               | **Project Instructions producer 可产生 >32 条 omission，但 Backend decoder 只允许 32**：深层目录中前 16 个 `AGENTS.md` 收为 instruction，后续每级仍继续记录 `too_many_files`。真实探针 50 层得到 16 instructions + 35 omissions、body 仅 11.7KB，却被 Backend 判 `WORKSPACE_RUNTIME_PROTOCOL_INVALID`。                                                                                                                                                                                                                                                                          | Runner `project-instructions.ts` + Backend `runner-http-protocol.ts`（见 §7.131）                                                                    |
+| **P2 · 🟠 开放 2026-09-24**               | **Workspace provision 失败可把 Runner workspace 永久留在 `creating`**：Runner 先 `saveWorkspace(creating)` 再建 runtime，失败 catch 只标 command failed；Backend 同步成 failed 后会把它纳入 cleanup，但 Runner CleanupPlanner 把 creating 当 active 永远 skip，普通 lifecycle 又无法操作 failed workspace。只有重启 Runner 的 startup reconcile 才能解锁。                                                                                                                                                                                                                       | Runner `server.ts:provision()` / `cleanup-planner.ts` + Backend workspace projection（见 §7.132）                                                    |
+| **P2 · 🟠 开放 2026-09-24**               | **Runner catalog/Backend decoder 都允许 4,096 packs，但 HTTP adapter 默认只收 1MB**：真实合法 catalog 探针 4,096 packs 在 Runner load 与 Backend decode 都 PASS，wire JSON 约 3.40MB；`catalog()` 未设 route-specific cap，会在 decode 前被通用 1MB transport 限制拒绝。                                                                                                                                                                                                                                                                                                         | Runner `workspace-runtime-catalog/server` + Backend `runner-http.adapter.ts` / protocol decoder（见 §7.133）                                         |
+| **P1 · 🟠 开放 2026-09-24**               | **Backend Plugin async line handler 无 Promise owner**：readline 用 `void handleLine()`；合法 JSON 但非法 lifecycle/storage/intent protocol 字段会让 decoder 抛错并形成 unhandled rejection，可把单个动态插件错误升级为 Backend 进程 fatal。                                                                                                                                                                                                                                                                                                                                     | `local-plugin-backend-runtime.adapter.ts:BackendPluginProcess.handleLine()`（见 §7.134）                                                             |
+| **P2 · 🟠 开放 2026-09-24**               | **Backend Plugin Host→child response path 忽略 stdin backpressure**：storage/intent/lifecycle response 都直接 `child.stdin.write()`，不看 false、不等 drain、无 aggregate queue/concurrency limit；插件停读 stdin 但持续发合法小请求时，可让主 Backend Writable queue 持续增长。                                                                                                                                                                                                                                                                                                 | `local-plugin-backend-runtime.adapter.ts:BackendPluginProcess`（见 §7.135）                                                                          |
+| **P1 · 🟠 开放 2026-09-24**               | **默认模型 optimistic identity 丢失 Provider 维度**：`af543606` 只缓存 `defaultModelId`，同名模型跨 Provider 时会把当前默认项解析成列表中第一个同 ID 模型；Provider 改变但 modelId 不变时 watcher 也不会重算，失败写入还不会 rollback。错误 key 同时参与 fallback 过滤，可隐藏错误候选并放出真实默认项。                                                                                                                                                                                                                                                                         | `settings/ModelProviderSettings.vue:optimisticDefaultModelId/defaultModelKey`（见 §7.136）                                                           |
+| **P1 · 🟠 重新打开 2026-09-24**           | **`a6371f9` 把 §7.38 已关闭并实测过的 Launcher“长按 320ms 才拖动”回退成 4px 位移即拖动**：轻微手抖再次会移动 44px Launcher，历史“快速移动不拖动”的闭环与当前 HEAD 不一致；`window-manager.ts` 甚至仍保留“explicit long press”旧注释。                                                                                                                                                                                                                                                                                                                                            | `host/AgentLauncher.vue`、`host/window-manager.ts`（见 §7.137）                                                                                      |
+| **P2 · 🟠 开放 2026-09-24**               | **Provider“导入全部/一键添加全部”与 Backend 100-model hard cap 不一致**：discovery 最多返回 1,000 个模型，前端会把全部 discovered models 直接用于 create/test/update；只要端点返回 >100 个，或现有模型 + 新模型 >100，UI 提供的合法操作就稳定得到 `VALIDATION_FAILED`。                                                                                                                                                                                                                                                                                                          | `openai-provider.adapter.ts`、`provider.service.ts`、`settings/ModelProviderSettings.vue`（见 §7.138）                                               |
+| **P2 · 🟠 开放 2026-09-24**               | **Runner coding projection 在主动截断后仍可声称结果完整**：`workspace_repo_map` 会在相关性排序前按路径顺序提前 break，后面的高相关文件根本不进入候选；symbol budget 耗尽也不必置 `truncated`。 `workspace_code_intel` 的 symbols/diagnostics/definition/references 都先裁到 `maxResults`，随后再用 `results.length > maxResults` 判断截断，计数上限触发时条件天然为 false。 | Runner `workspace-code-intelligence.ts` + Backend `workspace-coding-tools.ts`（见 §7.139） |
+| **P2 · 🟠 开放 2026-09-24**               | **MCP 的 10MB output limit 在底层 HTTP/SSE 完整解码之后才检查**：`SafeMcpFetch` 的 undici Agent 未配置 `maxResponseSize`；SDK 对 JSON 直接 `response.json()`，SSE 也先累积完整 event.data 再 `JSON.parse`；Nexus 到 `jsonValue()` 才 stringify 并检查 10MB。异常/恶意 MCP endpoint 可先让 Backend 接收/解析远超声明上限的数据。 | `safe-mcp-fetch.ts`、`mcp.adapter.ts`、`@modelcontextprotocol/client` transport（见 §7.140） |
+| **P1 · 🟠 开放 2026-09-24**               | **Provider version 推进会把已保存 Subagent Profile 的模型引用变成“隐藏且无法正常修复”的 stale ref**：Profile 冻结 `configurationVersion`，当前 UI 只渲染最新 Provider version；旧 allowed/default ref 不再显示选中。用户重新勾同名模型只会追加新版本 ref，隐藏旧 ref 仍留在数组，保存时 Backend 逐条校验并稳定报 `SUBAGENT_MODEL_UNAVAILABLE`。 | `settings/SubagentSettings.vue`、backend `subagent-policy.ts` / `subagent.service.ts`（见 §7.141） |
+| **P2 · 🟠 开放 2026-09-24**               | **Settings `?tab=` deep-link 与 KeepAlive 本地状态脱节**：`a6371f9` 只在 `onMounted` 读取一次 `route.query.tab`；`/settings` 又按 route name `Settings` 缓存。切本地 tab 不更新 URL，同页 query 变化/离开后返回也不会重跑 mount，因此地址栏可写 `?tab=agent` 而页面长期停在其它 section。 | `app/pages/settings/SettingsPage.vue`、`app/App.vue`、`app/router/index.ts`（见 §7.142） |
+| **P2 · 🟠 开放 2026-09-24**               | **Agent Settings 取消 lazy mount 后，未访问的隐藏分组也会立即发请求**：`a6371f9` 删除 `visitedGroups.has(...)` 的 template `v-if`，四组只剩 `v-show`。首次停在 Models 也会 mount Plugin/MCP/ACP/Workspace/Safety；Plugin 甚至请求 official + 全部 remote catalogs，失败会在当前模型页弹全局错误。 | `settings/AgentSettingsPanel.vue` + request-owning child settings（见 §7.143） |
+| **P2 · 🟠 开放 2026-09-24**               | **Agent Settings tab 的 `aria-controls` 指向不存在的 panel**：`a6371f9` 删除了 `AgentSettingsPanel` 根节点原有的 `id="settings-panel-agent"`，父页仍生成 `aria-controls="settings-panel-agent"`，但没有补 wrapper/id。 | `SettingsPage.vue`、`AgentSettingsPanel.vue`（见 §7.144） |
+| **P2 · 🟠 开放 2026-09-24**               | **Settings 导航声明为 ARIA tabs，却没有 tab widget 键盘模型**：历史 `413f2e99` 起就有 `role=tablist/tab`，当前 mobile/desktop 两套导航仍无方向键、roving tabindex、tabpanel 关系；desktop 纵向 rail 也未声明 vertical orientation。该历史提交早于 66-commit 审计起点。 | `app/pages/settings/SettingsPage.vue`（见 §7.145） |
+| **P2 · 🟠 开放 2026-09-24**               | **`a6371f9` 用无运行语义的 dummy literal 绕过 §7.40 i18n dead-key 门禁**：真实 Settings 分组已不再使用 `agent.settings.groups.plugins`，但源码新增未消费的 `_legacyPluginGroupKey` 保留该字面量；可达性脚本把任意源码 `agent.*` 字符串都算引用，因此三语死 key 仍能通过检查。 | `settings/AgentSettingsPanel.vue`、`scripts/check-agent-i18n.mjs`（见 §7.146） |
 
 ---
 
@@ -3168,81 +3199,86 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 复核范围固定为 `b0d7b22..862a458`，`git rev-list --count` = **66**。判断基准是**committed HEAD + 当前未被其它未提交工作树改动覆盖的代码**；当前另有未提交的 Settings 重构，不计入这 66 个 commit 的责任归因。
 
-| Commit    | 主题                                                                                     | 复核结论                                                 |
-| --------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `a2a9e94` | feat(ui): add Gen2 foundation primitives                                                 | ⚠ 见 §7.51                                               |
-| `af405e9` | fix(agent): close composer and popover layout issues                                     | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `80ff943` | fix(agent): enforce hub modal focus boundary                                             | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `191aba4` | fix(agent): close card and spacing utility gaps                                          | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `9b3f703` | fix(agent): restore hub focus after close                                                | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `48ecb85` | docs(agent): close verified UI regressions                                               | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `770dc31` | fix(agent): unify model settings popover                                                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `493b356` | docs(agent): close stale UI root causes                                                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `663f26d` | feat(agent): unify model selection ux                                                    | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `54003ba` | docs(agent): consolidate ui closure status                                               | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `e7442ee` | fix(agent): align default model combobox text background                                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `2210d07` | fix(agent): make hub backdrop a true no-op                                               | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `5364e2b` | fix(agent): raise real small text to an 11px floor                                       | ✅ 当时闭环成立；后续回归见 §7.48                        |
-| `e4d86e2` | fix(agent): finish the 11px reading-text floor                                           | ✅ 当时闭环成立；后续回归见 §7.48                        |
-| `8a3bc76` | fix(agent): finish the hit-target floor for 2.4                                          | ⚠ 见 §7.44                                               |
-| `1e92d78` | fix(agent): route hardcoded palette through theme tokens                                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `bdee90b` | fix(ui): let icon color utilities win over the global icon rule                          | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `d9c7ed4` | fix(agent): split composer send from run stop (2.5)                                      | ⚠ 见 §7.47                                               |
-| `1ae8e43` | fix(agent): make the empty-state bento rotation interruptible (2.6)                      | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `d6293b9` | fix(agent): translate the untranslated dictionary entries (7.15-a)                       | ⚠ 见 §7.49                                               |
-| `da1aa01` | fix(agent): explain workspace runtime unavailability (7.15-b)                            | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `05705b8` | fix(agent): localize the remaining raw enums (1.4)                                       | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `e66c4c1` | fix(agent): clean up the approval card details (7.14-b)                                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `2959d36` | fix(agent): make the disabled send state readable (7.17-c)                               | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `761a970` | fix(agent): give the hub window keyboard geometry (2.10)                                 | ⚠ 键盘路径已修，16px 命中区仍在；见 §7.44                |
-| `5986bfb` | i18n(agent): localize the settings numbers and small panels (7.14-c, part 1)             | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `e79cda3` | i18n(agent): finish the hardcoded text cleanup (7.14-c, part 2)                          | ⚠ 见 §7.49                                               |
-| `ded8071` | fix(agent): make the task rail reachable without a pointer (7.14-b)                      | ⚠ 见 §7.43                                               |
-| `9829d0d` | fix(agent): give the empty-state pager real hit targets (7.12)                           | ✅ 伪元素命中区仍在，闭环成立                            |
-| `0a467b6` | fix(agent): make the thread-list zoom discoverable and resettable (7.13-d)               | ⚠ 见 §7.43                                               |
-| `d81c7e0` | refactor(agent): converge the settings primary actions on the Gen2 button (6.2, batch 1) | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `7855cdc` | refactor(agent): converge the settings secondary, danger and icon actions (6.2, batch 2) | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `b3e397a` | refactor(agent): converge the settings checkboxes on the Gen2 control (6.3/6.7, batch 3) | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `d2056c5` | revert(agent): restore the true glass popover and box-free model options                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `3fddac2` | fix(agent): restore the 10px option hint in the hub model popover                        | ✅ 后续被 `8166c89` 改到 9px；见 §7.48                   |
-| `8166c89` | style(agent): shrink the hub model popover hint to 9px                                   | 🟠 直接重新引入 §2.3；见 §7.48                           |
-| `64953ed` | fix(agent): refresh the open surface after provider and settings writes                  | ⚠ 同 tab 已修，跨 tab 残留；见 §7.50                     |
-| `2b60702` | style(agent): lift the popover glass to 6px blur                                         | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `0a4b6c8` | refactor(ui): make the glass recipe a shared Gen2 surface                                | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `d7abf63` | fix(agent): explain why the steady-state settings buttons are disabled                   | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `2893c88` | feat(ui): add UiInfoHint and slim the Agent feature card                                 | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `cb13a89` | refactor(agent): move card descriptions behind the shared info hint                      | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `ef21441` | refactor(agent): audit the hub hint text and fold the popover headers                    | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `f820e16` | fix(agent): stop the hub window from squeezing out the transcript                        | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `30fa0ed` | feat(agent): let the thread sidebar collapse and remember the layout                     | 🟠 见 §7.42                                              |
-| `950a235` | feat(agent): double click the hub title bar to maximise                                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `8516cc9` | style(agent): move the feature state pill next to its title                              | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `b9978f1` | fix(agent): animate the docked thread sidebar instead of snapping                        | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `833cb9b` | style(agent): align the settings group pills with the Gen2 control spec                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `81d0987` | refactor(agent): flatten the settings nesting to a single card                           | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `6b1d3f2` | fix(agent): place the composer popovers before they paint                                | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `308f653` | refactor(agent): give the settings panel a section rail on wide screens                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `5617668` | feat(ui): add a Gen2 empty-state primitive and adopt it in agent settings                | ✅ 功能闭环；lint 覆盖缺口统一见 §7.51                   |
-| `606c5c6` | style(agent): make the settings header summary read as stats, not debug output           | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `2128787` | style(agent): calm the settings header bands and action clusters                         | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `fb10342` | style(agent): let settings save buttons follow the dirty state                           | 🟠 见 §7.45                                              |
-| `d6fcb42` | refactor(agent): move the settings dropdowns onto the Gen2 select                        | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `606fe71` | style(agent): give the quantity unit pills a 24px hit target                             | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `55fac86` | fix(agent): make the model removal buttons and batch confirm consistent                  | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `4d57ecd` | refactor(agent): finish the select migration in the workspace runtime                    | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `ddc887b` | fix(agent): stop dumping raw ledger payloads in the task rail                            | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `441810d` | fix(agent): give the error banner a failure domain and a retry action                    | 🟠 见 §7.41                                              |
-| `3016ffb` | fix(agent): make the launcher drag deliberate and measure thread row height              | ✅ 当前 HEAD 未发现新增可证明回归                        |
-| `2564ec7` | fix(agent): localize tool-result summaries behind a user-only projection                 | 🟠 见 §7.46                                              |
-| `63ea08b` | chore(agent): gate i18n dictionaries on key reachability                                 | ✅ committed HEAD 复核成立；未提交设置重构不计入历史归因 |
-| `862a458` | docs(agent): record the giant-file review decision with measurements                     | ✅ 当前 HEAD 未发现新增可证明回归                        |
+| Commit    | 主题                                                                                     | 复核结论                                                                                             |
+| --------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `a2a9e94` | feat(ui): add Gen2 foundation primitives                                                 | ⚠ 见 §7.51                                                                                           |
+| `af405e9` | fix(agent): close composer and popover layout issues                                     | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `80ff943` | fix(agent): enforce hub modal focus boundary                                             | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `191aba4` | fix(agent): close card and spacing utility gaps                                          | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `9b3f703` | fix(agent): restore hub focus after close                                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `48ecb85` | docs(agent): close verified UI regressions                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `770dc31` | fix(agent): unify model settings popover                                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `493b356` | docs(agent): close stale UI root causes                                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `663f26d` | feat(agent): unify model selection ux                                                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `54003ba` | docs(agent): consolidate ui closure status                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `e7442ee` | fix(agent): align default model combobox text background                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `2210d07` | fix(agent): make hub backdrop a true no-op                                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `5364e2b` | fix(agent): raise real small text to an 11px floor                                       | ✅ 当时闭环成立；后续回归见 §7.48                                                                    |
+| `e4d86e2` | fix(agent): finish the 11px reading-text floor                                           | ✅ 当时闭环成立；后续回归见 §7.48                                                                    |
+| `8a3bc76` | fix(agent): finish the hit-target floor for 2.4                                          | ⚠ 见 §7.44                                                                                           |
+| `1e92d78` | fix(agent): route hardcoded palette through theme tokens                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `bdee90b` | fix(ui): let icon color utilities win over the global icon rule                          | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `d9c7ed4` | fix(agent): split composer send from run stop (2.5)                                      | ⚠ 见 §7.47                                                                                           |
+| `1ae8e43` | fix(agent): make the empty-state bento rotation interruptible (2.6)                      | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `d6293b9` | fix(agent): translate the untranslated dictionary entries (7.15-a)                       | ⚠ 见 §7.49                                                                                           |
+| `da1aa01` | fix(agent): explain workspace runtime unavailability (7.15-b)                            | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `05705b8` | fix(agent): localize the remaining raw enums (1.4)                                       | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `e66c4c1` | fix(agent): clean up the approval card details (7.14-b)                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `2959d36` | fix(agent): make the disabled send state readable (7.17-c)                               | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `761a970` | fix(agent): give the hub window keyboard geometry (2.10)                                 | ⚠ 键盘路径已修，16px 命中区仍在；见 §7.44                                                            |
+| `5986bfb` | i18n(agent): localize the settings numbers and small panels (7.14-c, part 1)             | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `e79cda3` | i18n(agent): finish the hardcoded text cleanup (7.14-c, part 2)                          | ⚠ 见 §7.49                                                                                           |
+| `ded8071` | fix(agent): make the task rail reachable without a pointer (7.14-b)                      | ⚠ 见 §7.43                                                                                           |
+| `9829d0d` | fix(agent): give the empty-state pager real hit targets (7.12)                           | ✅ 伪元素命中区仍在，闭环成立                                                                        |
+| `0a467b6` | fix(agent): make the thread-list zoom discoverable and resettable (7.13-d)               | ⚠ 见 §7.43                                                                                           |
+| `d81c7e0` | refactor(agent): converge the settings primary actions on the Gen2 button (6.2, batch 1) | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `7855cdc` | refactor(agent): converge the settings secondary, danger and icon actions (6.2, batch 2) | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `b3e397a` | refactor(agent): converge the settings checkboxes on the Gen2 control (6.3/6.7, batch 3) | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `d2056c5` | revert(agent): restore the true glass popover and box-free model options                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `3fddac2` | fix(agent): restore the 10px option hint in the hub model popover                        | ✅ 后续被 `8166c89` 改到 9px；见 §7.48                                                               |
+| `8166c89` | style(agent): shrink the hub model popover hint to 9px                                   | 🟠 直接重新引入 §2.3；见 §7.48                                                                       |
+| `64953ed` | fix(agent): refresh the open surface after provider and settings writes                  | ⚠ 同 tab 已修，跨 tab 残留；见 §7.50                                                                 |
+| `2b60702` | style(agent): lift the popover glass to 6px blur                                         | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `0a4b6c8` | refactor(ui): make the glass recipe a shared Gen2 surface                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `d7abf63` | fix(agent): explain why the steady-state settings buttons are disabled                   | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `2893c88` | feat(ui): add UiInfoHint and slim the Agent feature card                                 | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `cb13a89` | refactor(agent): move card descriptions behind the shared info hint                      | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `ef21441` | refactor(agent): audit the hub hint text and fold the popover headers                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `f820e16` | fix(agent): stop the hub window from squeezing out the transcript                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `30fa0ed` | feat(agent): let the thread sidebar collapse and remember the layout                     | 🟠 见 §7.42                                                                                          |
+| `950a235` | feat(agent): double click the hub title bar to maximise                                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `8516cc9` | style(agent): move the feature state pill next to its title                              | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `b9978f1` | fix(agent): animate the docked thread sidebar instead of snapping                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `833cb9b` | style(agent): align the settings group pills with the Gen2 control spec                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `81d0987` | refactor(agent): flatten the settings nesting to a single card                           | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `6b1d3f2` | fix(agent): place the composer popovers before they paint                                | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `308f653` | refactor(agent): give the settings panel a section rail on wide screens                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `5617668` | feat(ui): add a Gen2 empty-state primitive and adopt it in agent settings                | ✅ 功能闭环；lint 覆盖缺口统一见 §7.51                                                               |
+| `606c5c6` | style(agent): make the settings header summary read as stats, not debug output           | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `2128787` | style(agent): calm the settings header bands and action clusters                         | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `fb10342` | style(agent): let settings save buttons follow the dirty state                           | 🟠 见 §7.45                                                                                          |
+| `d6fcb42` | refactor(agent): move the settings dropdowns onto the Gen2 select                        | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `606fe71` | style(agent): give the quantity unit pills a 24px hit target                             | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `55fac86` | fix(agent): make the model removal buttons and batch confirm consistent                  | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `4d57ecd` | refactor(agent): finish the select migration in the workspace runtime                    | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `ddc887b` | fix(agent): stop dumping raw ledger payloads in the task rail                            | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `441810d` | fix(agent): give the error banner a failure domain and a retry action                    | 🟠 见 §7.41                                                                                          |
+| `3016ffb` | fix(agent): make the launcher drag deliberate and measure thread row height              | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `2564ec7` | fix(agent): localize tool-result summaries behind a user-only projection                 | 🟠 见 §7.46                                                                                          |
+| `63ea08b` | chore(agent): gate i18n dictionaries on key reachability                                 | ✅ committed HEAD 复核成立；未提交设置重构不计入历史归因                                             |
+| `862a458` | docs(agent): record the giant-file review decision with measurements                     | ✅ 当前 HEAD 未发现新增可证明回归                                                                    |
+| `06f5e0f` | fix(ssh): contain client socket errors                                                   | ⚠ 补强 direct/proxy/final client error owner；jump intermediate 遗漏见 §7.117，当前 dirty 已继续修复 |
+| `58c4d5e` | docs(agent): record ui regressions from history review                                   | 📝 纯文档提交；记录历史复核结论，不新增产品行为                                                      |
+| `2067c28` | docs(agent): complete 66-commit problem audit                                            | 📝 纯文档提交；完成 66/66 第一遍矩阵                                                                 |
+| `a6371f9` | feat(agent): optimize agent settings layout and clean up redundant hints                 | 🟠 endpoint discovery 关联 §7.83 / §7.138；Launcher 回归 §7.137；Settings deep-link §7.142；隐藏分组 eager mount §7.143；Agent panel `aria-controls` 回归 §7.144；i18n 门禁绕过 §7.146 |
+| `af54360` | feat(agent): optimize model select width, card boundaries and disable default popups     | 🟠 默认模型 optimistic identity 回归见 §7.136                                                        |
 
 **汇总**：
 
-- 66/66 均完成路径与当前实现反查；
-- 第一遍按 commit 的可证明开放项见 §7.41–§7.51；后续跨切面交叉审计已继续扩展到 §7.53–§7.114；
+- 历史基线 66/66 均完成路径与当前实现反查；`862a458..af543606` 后续增量 5/5 也已完成 commit→Problem 对照；
+- 第一遍按 commit 的可证明开放项见 §7.41–§7.51；后续跨切面交叉审计与增量 commit 复核已继续扩展到 §7.53–§7.146；
 - 表中 “✅” 只表示“逐 commit 第一遍没有找到达到可证明标准的新回归”，**不覆盖第二遍组合竞态 / 跨组件问题**，也不是替代完整 E2E；
-- `63ea08b` 在 committed HEAD 下仍有真实 `agent.settings.groups.plugins` 导航引用；当前工作树里出现的临时兼容引用属于**未提交设置重构**，本轮明确没有把它错误归因到历史 commit。
+- `63ea08b` 当时建立的 §7.40 dead-key 门禁在其提交点成立；但 `a6371f9` 已删除真实 `agent.settings.groups.plugins` 导航 consumer，并用未消费的 `_legacyPluginGroupKey` 字面量让旧 key 继续通过可达性扫描，当前回归见 §7.146。
 
 ### 7.53 per-App selector 的异步加载可把 App A 配置写到 App B（P1 · 🟠 开放 2026-09-23）
 
@@ -3282,7 +3318,7 @@ Agent settings 的 `settings.revision` 是整份设置的全局 revision；但�
 
 同一类“共享父状态变化 → 无条件覆盖局部 dirty draft”还存在于 `AppManagementSettings`：它 watch **所有 App 的 `id@version#stateVersion` 拼串**，任一 App enabled/state/version 变化都会对**所有 App**调用 `loadGrant(app.id)`；而 `loadGrant()` 在请求成功后直接把 `drafts[appId]` 重置成服务端 grants，没有先看 `grantChanged(appId)`。因此用户正在编辑 App A 的 capability scope 时，只要切换 App B 的 enabled 状态，A 的未保存授权草稿也会被静默清掉。
 
-committed HEAD 的 `AgentSettingsPanel` 对访问过的分组使用 `v-if="visitedGroups.has(...)" + v-show`，即隐藏分组仍然保持挂载。于是可稳定出现：
+committed HEAD 经 `a6371f9` 后已移除 `visitedGroups` 的惰性挂载门槛，四个分组都常驻，只用 `v-show` 切可见性；因此隐藏卡片从首次进入 Agent Settings 起就保持挂载。于是可稳定出现：
 
 1. 用户在卡 A 改几个值，不保存；
 2. 切到同组或另一个已经访问过的卡 B 并保存；
@@ -3484,6 +3520,7 @@ Provider create 由 backend 生成随机 UUID，没有 caller-stable idempotency
 - backend `ApprovalService.resolve()` 也在 `stateCommit.resolveToolApproval()` durable commit 并触发 scheduler 后，才再次 `approvals.get(scope, approvalId)` 组装响应；这次辅助读若失败，HTTP 会把已经完成的批准/拒绝显示成失败。
 - Host `patchSettings()` 先 `settings.patch()` 持久化全局 `feature.enabled`，再逐 App `quiesceScope()` / `resumeScope()`；任一 App 生命周期失败都会把整个 PATCH 报成失败，但 settings revision/开关已经提交，前面已处理的 App 也不会回滚，可能留下“全局 disabled + 部分 runtime 尚未 quiesce”或相反的半完成状态；
 - `setAppEnabled()` 同样先由 `lifecycle.setEnabled()` 提交 App state，再做 `integrations.syncEnabled()` / `deactivate()`；Integration 后处理失败会把已完成的 enable/disable 报成失败。
+- Workspace Artifact export 还有同一 commit-boundary：`WorkspaceArtifactService.export()` 在 `artifacts.write()` 返回后，Artifact 已经进入 ready/权威存储；但 `finally` 仍 await `read.close()`，close 失败会记录 `WORKSPACE_ARTIFACT_READ_CLOSE_FAILED` 后**重新 throw**。于是“Artifact 已成功创建 + source close 失败”会让 HTTP 报整个 export 失败；该 export 没有 caller-stable request identity，用户按失败重试会再创建一份 Artifact。
 
 这里已有一个正确对照：`AppManagementSettings.confirmUninstall()` 把“卸载主 mutation”与可选的“删除插件数据”明确分开；后者失败只单独报 delete-data error，仍保留 uninstall success。说明产品层已经有“主提交成功 ≠ 后处理全成功”的正确语义模式。
 
@@ -4096,6 +4133,7 @@ Runner 对正常 owner 生命周期的进程回收设计是正确的：Workspace
 - startup `Reconciler` 对旧 `running` command/job 只写 `unknown(..., 'controller_restarted_during_*')`；
 - 对 running workspace 会重新 `activateWorkspace()`，但新的 `PluginRunnerRuntime.instances` 是空 Map，无法识别或杀掉旧 Runner Plugin child；
 - reconciler 没有扫描旧 process group/session，也没有 owner marker/cgroup 可用于回收。
+- `agent-runner/src/index.ts` 还没有任何 SIGTERM / SIGINT / beforeExit shutdown handler；应用层连正常 service stop 都不会主动 await ACP / Terminal / Runner Plugin / job drain。Docker/systemd 若采用整容器/cgroup kill 可以外部兜底，但 Host 部署的安全性因此完全依赖 supervisor 配置，而不是 Runner 自身生命周期协议。
 
 这在 Docker Runner 中可能被容器生命周期间接兜底：容器主进程退出时 runtime 会终止整个容器进程集合，镜像还使用 tini 回收 zombie。但正式部署文档同时明确支持 **宿主 Host Runner**；Host 模式下单独重启 Node controller 没有这种 cgroup/container kill 保证。
 
@@ -4114,9 +4152,10 @@ Runner 对正常 owner 生命周期的进程回收设计是正确的：Workspace
 
 - Host Runner 使用 durable owner process supervision：例如每个 child group 写入受控 PID/PGID + process start identity，并在 startup reconcile 中安全验证后清理；
 - 更稳妥的是让 Runner 自身拥有专属 cgroup/systemd scope，并在 controller restart 前/启动时由 supervisor 清空旧 scope；
+- 增加显式 SIGTERM/SIGINT graceful shutdown：停止接新请求，close/drain terminal/browser/ACP/plugin/job owner，达到 deadline 后整组 KILL，再退出 controller；
 - 不要只凭裸 PID 杀进程，必须防 PID reuse（记录 Linux starttime / cgroup / pidfd 等稳定身份）；
 - Docker 模式继续依赖容器边界也可以，但 Host 模式必须有等价 owner-lifetime 回收机制；
-- 增加故障注入 regression：启动长 job / ACP / Runner Plugin → SIGKILL Runner controller → 重启 → 旧 process group 不得继续存在，且 journal/reconcile 结果与实际进程状态一致。
+- 增加两类故障注入 regression：① 启动长 job / ACP / Runner Plugin → SIGTERM Runner → 在 deadline 内 owner 全部退出；② SIGKILL Runner controller → 重启 → startup/supervisor 回收旧 process group，且 journal/reconcile 结果与实际进程状态一致。
 
 ---
 
@@ -4570,6 +4609,8 @@ Workspace metadata 也冻结完整 `familyId / versionId / contentDigest`，`pre
 
 此时任何另一个 Workspace 的 `prepareExecution()` 都会改写全局 canonical symlink。已经运行中的 Terminal / ACP / 长寿命 shell 虽然环境变量 `PATH` 字符串不变，但下一次按 PATH 查找 `node/python/go/...` 时会重新沿 symlink 解析，可能落到**另一 Workspace 的 digest**。
 
+同一个 alias 还有 crash-consistency 缺口：`activate()` 先创建 temporary symlink，随后对现有 canonical 执行 `rmSync(canonical)`，最后才 `renameSync(temporary, canonical)`。这不是原子 replace；Runner 若恰在 rm 与 rename 之间退出，canonical path 会直接缺失。由于旧 Terminal/ACP/job 的 PATH 也引用这个 alias，它们下一次解析 tool binary 会立即失败，直到某个后续 `prepareExecution()/activate()` 再次重建链接。
+
 本轮做了无侵入 `/tmp` 探针验证这一文件系统语义：
 
 - 长寿命 bash 的 PATH 固定为 `<canonical>/bin`；
@@ -4590,6 +4631,7 @@ Workspace metadata 也冻结完整 `familyId / versionId / contentDigest`，`pre
 
 - Workspace execution PATH 直接使用 `ToolchainStore.path(ref)/bin` 的 digest-qualified 目录，不依赖全局 family/version canonical symlink；
 - canonical symlink 只可作为管理员/调试便利入口，不进入 frozen Workspace 的执行环境；
+- 若仍保留 canonical alias，更新至少必须使用 filesystem atomic replace，禁止 `rm → rename` 暴露 missing-path crash window；
 - 如果某些工具内部硬编码 canonical prefix，需要为每个 workspace/generation 建独立 immutable view（例如 generation-scoped symlink tree），而不是全 Runner 共享一个 alias；
 - 加 regression：同时保留 same family/version + two digests，启动 Workspace A Terminal 后让 Workspace B activate 另一 digest；A 后续命令仍必须解析 A 的 digest。
 
@@ -5243,6 +5285,1010 @@ durable event 本身没有丢，因此重连后能 replay；问题是在线 sess
 - regression：host event commit 后注入一次 `hostCursor()` failure，保持 WebSocket 不重连且没有第二个业务 mutation；客户端最终仍必须收到该 durable event。
 
 ---
+
+### 7.116 Backend Plugin child→Host 的 20MB protocol limit 在 `readline` 收齐整行后才检查，无换行 stdout 可把内存压力转移到主 Backend（P2 · 🟠 开放 2026-09-23）
+
+Backend Plugin 使用独立 Node child + stdio line protocol。Host 定义 `MAX_PROTOCOL_BYTES = 20MB`，表面上对 protocol frame 做了大小保护，但 child→Host 方向的检查发生得太晚。
+
+`BackendPluginProcess` 当前是：
+
+1. `readline.createInterface({ input: child.stdout, crlfDelay: Infinity })`；
+2. 等 `line` event；
+3. `handleLine(line)` 里才 `Buffer.byteLength(line) > MAX_PROTOCOL_BYTES`；
+4. 超限后 `failAll()` + SIGKILL child。
+
+`readline` 必须先在父进程内接收/拼出完整行才会触发 `line`。因此插件只要向 stdout 持续写一个**没有换行**的超大 frame，Host 就会先把该数据累计进 readline buffer；20MB 检查在 frame 已经完整进入父进程内存后才有机会执行。
+
+这个不对称在同一 adapter 里很明显：
+
+- Host→child lifecycle request 在 `child.stdin.write()` **之前**先检查 encoded bytes；
+- Host 对 storage/intent response 回 child 也会在写 stdout 前检查；
+- child stderr 由 Host 逐 chunk 接收，但只保留最后 8KB；
+- 只有 child stdout 的 inbound frame 依赖 post-line 检查。
+
+当前测试搜索也没有看到针对“无换行持续 stdout”的 bounded-reader regression；现有 `PLUGIN_BACKEND_RESPONSE_TOO_LARGE` 只能在完整 line 已经形成后生效。
+
+影响边界需要限定：已安装 Backend Plugin 并不是 OS CPU/RAM sandbox，插件自己的 child 本就可能自耗资源；本条不是新的 privilege escape。问题在于产品**特意把动态 Backend code 放进独立 child**，却允许该 child 通过 protocol pipe 让主 Backend 代为无界缓冲，削弱了故障隔离和 `MAX_PROTOCOL_BYTES` 的资源保护语义。
+
+**建议修复**：
+
+- 不用无界 `readline` 作为不可信 child frame parser；直接消费 stdout chunks，维护 bounded frame buffer，累计超过 20MB 且尚无换行时立即 destroy/kill child；
+- 每次只解析完整 bounded line，并对剩余 bytes 保留同样上限；
+- 将 stdout 总吞吐/空闲超时也纳入 child runtime 资源策略，避免高频小 frame 造成另一种 flood；
+- regression：child 连续写 >20MB 无换行 payload，Host 应在 buffer 达到 `limit + one chunk` 前后立即 kill child，主进程内存不得随完整 payload 线性增长。
+
+---
+
+### 7.117 Jump SSH 中间 hop 的 keepalive timeout 可冒成 uncaughtException 杀死整个 Backend（P1 · ✅ 已修复 2026-09-24）
+
+线上日志已给出确定复现：
+
+- `2026-09-23T16:53:54.153Z`，`ssh2/lib/client.js:720` 抛出 `Error: Keepalive timeout`，`level='client-timeout'`；
+- Backend 把它记录为 `Uncaught exception / Backend fatal error`；
+- 紧接着挂起当前 Workspace、输出 `Closing all connections and exiting...`，容器重新启动。
+
+根因不是 §7.87 的 Runner orphan，也不是 dev watcher。SSH connection helper 在握手阶段临时监听 `error`，但 `ready` 后会移除该 listener。direct / proxy 的最终 client 随后会被 `SshExecutionTransportAdapter` 接管，因此有长期 error owner；**jump route 的 intermediate `ssh2 Client` 则只保存在 connector 局部数组里，没有任何长期 `error` owner**。所有 hop 都启用了 `keepaliveInterval=5000 / keepaliveCountMax=10`，所以任一跳板约 50 秒无响应就会由 ssh2 发 `Keepalive timeout`；Node 对无 listener 的特殊 `'error'` event 直接抛 uncaughtException，杀死整个 Backend。
+
+之前 `06f5e0f fix(ssh): contain client socket errors` 只把 final transport/shell 内部转发事件从特殊 `'error'` 改成 `transport-error/shell-error`，没有覆盖 jump intermediate client 生命周期，因此本次不是旧修复回归，而是旧修复覆盖面不完整。
+
+本轮已做完整 ownership 修复，而不是加空 listener：
+
+- 引入 `ConnectedSshClient`：raw `ssh2 Client` 在 `connect()` 前就安装永久 error/close owner，并保留 `lastError/isClosed`，消除 `ready → transport handoff` 空窗；
+- 引入 `SshClientRoute`：统一拥有 direct / proxy / jump 的整条 client chain；
+- jump 每个 intermediate hop 与 final client 都加入同一路由，任一 hop error/close 会把 route 标失败并反向级联 `end()` 全链；
+- `SshExecutionTransportAdapter` 改为持有 route，而不是单个 raw client；route failure 统一映射为正常 transport error/close，SFTP/command/shell owner 一起收敛；
+- handoff 后若 route 已在竞态中关闭，`SshTransportAdapter.connect()` fail closed，不返回“看似成功但已死亡”的 transport；
+- `SshExecutionTransportAdapter` 现在缓存 terminal transport error/close；即使 route 在 `ExecutionSession` / Workspace owner 注册 listener 之前就失败，late `onError/onClose` 也会异步 replay，避免 ready→attach→subscribe 的第二个观察空窗；
+- safe-dispatch 被提升为 Backend shared 基础设施，SSH Route / Transport / Command / Shell 与 Runner Workspace Terminal 共用同一条事件隔离规则；业务 listener 即使自己 throw，也只影响该订阅者，不会沿 ssh2/ws/Node EventEmitter 调用栈升级成 Backend uncaught；
+- Command session 不再依赖 EventEmitter 特殊 `'error'` 语义，内部错误事件改为普通 `session-error`，teardown 的 `destroy()` 也做 best-effort 隔离；Shell 的 `data/stderr/error/close/drain` 转发全部走 safe-dispatch。
+- 同类扫描还发现 `RunnerWorkspaceTerminalSession` 会把 WebSocket/Duplex error 再 emit 成内部特殊 `'error'`；现已改成普通 `session-error`，socket+tunnel 双错误只上报一次，Terminal 的 `data/drain/error/close` consumer 也全部 safe-dispatch，消除同一类未订阅/consumer-throw fatal。
+- 同轮继续扫 Browser transport：Direct Browser WebSocket 与 Runner Browser tunnel 原本都直接执行 `message/close` consumer；现已统一改用 shared `invokeListenerSafely`。Puppeteer/CDP consumer 即使自身 throw，也不会沿 `ws` callback 栈升级成 Backend uncaught。
+
+新增/扩展 `tests/backend/ssh-error-events.regression.ts`：
+
+- direct raw client error 不得逃成 EventEmitter uncaught；
+- observed error 仍能到达 transport subscriber；
+- jump intermediate `Keepalive timeout` 必须传播到 logical transport、同时关闭 intermediate + final client；
+- ready 后、route handoff 前发生 raw error，后续 adopt 必须识别旧 error 并拒绝开放 route。
+- 直接调用 `connectSshClient()`：ready 后临时 connect listener 已移除，再触发 `Keepalive timeout`，永久 raw-client owner 仍必须接住并保存 `lastError`；
+- transport 在业务 owner 订阅前已经失败时，late `onError/onClose` 必须 replay 既有 failure/closed 状态；
+- transport / command / shell subscriber 自身抛异常不得反弹进 raw ssh2 event stack；
+- route 已关闭后的 late socket error 继续被 raw-client guard 吸收，但不得再制造新的 transport fault。
+
+新增 `tests/backend/runner-terminal-error-events.regression.ts`：
+
+- Terminal socket error 在没有业务 `onError` subscriber 时不得成为 uncaught；
+- Terminal error/data/close subscriber 自己 throw 必须被基础设施隔离；
+- 原 SSH regression 继续同时通过，证明 shared safe-dispatch 没破坏既有 route ownership。
+
+新增 `tests/backend/browser-transport-listener-isolation.regression.ts`：
+
+- 本地真实 WebSocket tunnel 注册两个 message / close consumer；第一个故意 throw，第二个仍必须收到事件；
+- regression PASS，证明 Browser transport 也遵守“consumer fault 不能反向炸宿主 event stack”的统一规则。
+
+验证：
+
+- `pnpm --filter @nexus-terminal/backend build`：PASS；
+- `pnpm --filter @nexus-terminal/backend exec tsx ../../tests/backend/ssh-error-events.regression.ts`：PASS；
+- `pnpm --filter @nexus-terminal/backend exec tsx ../../tests/backend/runner-terminal-error-events.regression.ts`：PASS；
+- `pnpm --filter @nexus-terminal/backend exec tsx ../../tests/backend/browser-transport-listener-isolation.regression.ts`：PASS；
+- `pnpm --filter @nexus-terminal/backend exec tsc --noEmit`：PASS；
+- SSH/Problem 相关 `git diff --check`：PASS。
+
+当前 WebCodex Runner 是 Node 22，项目声明 Node >=24，因此验证过程会出现 engine warning；TypeScript build 与 regression 本身均实际通过。
+
+---
+
+### 7.118 Runner journal 永不回收 unknown command/job，长期重启后会撞 16,384 项上限并让 Runner 无法启动（P2 · 🟠 开放 2026-09-24）
+
+`RunnerJournal.compact()` 只清理 terminal command 的 `succeeded/failed` 与 terminal job 的 `succeeded/failed/cancelled`，明确不清 `unknown`。与此同时 startup reconciler 会把 controller 重启时仍为 `running` 的 command/job 永久改成 `unknown`。
+
+全仓没有 unknown command/job 的 delete API、unknown→reconciled/terminal 状态迁移、age/count retention，cleanup planner 也不会回收这些 evidence。
+
+但 journal decoder 对 `commands` / `jobs` 各自设置 `MAX_JOURNAL_COLLECTION_ITEMS = 16_384`。某一 collection 超过上限后，下一次启动 `decodeRecordCollection()` 会直接判 `JOURNAL_STATE_INVALID`；constructor 保存 `.corrupt.*` evidence 后抛 `RUNNER_JOURNAL_INVALID`，Runner 无法继续启动。
+
+因此长期不稳定环境会形成单调累积：running command/job 遇重启 → startup 标 unknown → compact 保留 → 重复发生 → 主 journal 最终超过 decoder hard limit。
+
+这与 §7.87 不同：§7.87 是旧 child process orphan；本条即使旧进程被外部 cgroup/systemd 正确回收，journal evidence 本身仍会无限积累并最终破坏 Runner startup。
+
+**建议修复**：
+
+- unknown 增加 durable reconciliation lifecycle（例如 reconciled/expired evidence）；
+- Backend 已完成对应 reconciliation/quarantine 后，老 unknown 按 age/count 有界裁剪；
+- collection hard limit 前增加 watermark/预警与主动归档；
+- 需要长期 forensic evidence 时写入独立归档，而不是继续占主启动 journal；
+- regression：构造 >16k historical unknown + 少量 active state，归档/compact 后主 journal 仍可启动，recent/active evidence 不丢。
+
+---
+
+### 7.119 Runner builtin Toolchain 的 command-scoped download cache 缺 owner 自动回收，正常安装流会持续积累大 archive（P2 · 🟠 开放 2026-09-24）
+
+继续审 Runner pack installer 的本地持久目录后，确认 builtin pack 的 download cache 实际上是一次性安装临时副本，却没有任何 owner cleanup。
+
+`PackInstaller.cachedArchive()` 对每次 install command 都创建：
+
+`<cacheRoot>/download/<commandId>/<family>-<version>-<arch>.tar`
+
+流程会从 catalog-bound builtin source copy 一份 archive 到该目录，校验 size / sha256、fsync 后再用于 `tar.t` / `tar.x`。同一次 `ensure()` 的 dependency pack 会共用 commandId，但下一次安装使用新的 commandId，因此旧目录不会被后续请求复用。
+
+成功安装后的 cleanup 只处理：
+
+- `ToolchainStore.commit()` 将 staging tree rename 到 content-addressed installed path；
+- `discardStaging()` 删除 `.staging/<commandId>-...`。
+
+正常 install/failure 路径**都不删除 `cacheRoot/download/<commandId>`**；`uninstall()` 也只删除 installed pack tree / canonical link，startup 没有针对 command cache 的 sweep/TTL。需要限定的是：Runner 的显式 `cacheCleanup()` 会直接删除整个 `root/cache`，而 `PackInstaller.cacheRoot` 正是 `root/cache`，所以这些副本并非绝对不可回收；问题是它们没有跟所属 command 自动收口，只能等另一次全局 cache cleanup 顺带清掉。
+
+这不是一个有复用价值的 content-addressed cache：key 是 caller commandId，不是 digest；旧 command directory 永远不会命中未来 `cachedArchive()`。因此它本质上是 transient verification copy 在 owner command 完成后继续滞留，直到另一次全局 cache cleanup。
+
+资源上限也不小：`MAX_ARCHIVE_BYTES = 512MB`。连续安装不同 builtin packs，或 uninstall 后用新 commandId 重装同一 pack，都可以重复留下完整 archive 副本；在没有另行执行全局 cache cleanup 的时间窗口内，download bytes 会单调增长，而且 SpaceReporter 只把它汇总为 `cacheBytes`，无法定位到已经结束的 command owner。
+
+**建议修复**：
+
+- 将 command-scoped archive 视为临时文件：一次 `ensure()` 完成后在 `finally` 删除整个 `download/<commandId>`；
+- 若确实需要共享 cache，改成 digest-addressed cache，并定义总字节/年龄 LRU，而不是按 commandId 永久保留；
+- startup 清理遗留 command-scoped cache，避免异常中断留下垃圾；
+- Storage/space reporter 应计入 toolchain cache bytes；
+- regression：install → uninstall → reinstall 同一 builtin pack 多次，cacheRoot 总占用必须保持有界，且每次失败/成功后 command-scoped目录均被回收。
+
+---
+
+### 7.120 Runner admin packInstall / packUninstall 没有 per-pack 串行化，互斥命令可同时成功且最终状态只服从最后落盘者（P1 · 🟠 开放 2026-09-24）
+
+继续审 Runner admin command 调度时，确认 Workspace lifecycle 的并发问题（§7.97）之外，Toolchain admin mutation 也没有资源级互斥。
+
+Runner 的 `beginAdminCommand()` 对 `cacheCleanup / runtimeCleanup / packInstall / packUninstall` 都采用同一模式：journal `begin()` → pending→running → `void this.executeAdminCommand(...)`，不等待其它 admin command，也没有 per-pack / per-cache queue、mutex 或 lease。
+
+Backend 侧同样允许独立请求：`installPack()` 直接提交 `packInstall`；confirmed uninstall 在 revision/candidate recheck 后提交独立 `packUninstall`。command dedupe 的 `operationHash` 包含 action/payload，所以 install 与 uninstall 是两条不同 durable command。
+
+同一 pack 可形成确定 race：
+
+1. `packInstall(P)` 正在 copy/hash/validate/extract；
+2. `packUninstall(P)` 此时执行，若 journal 没有 active Workspace 引用 P，`installer.uninstall(P)` 会完成并把 command 记 `succeeded`；
+3. 第一个 install 随后 `store.commit()` + `store.activate()`，也记 `succeeded`；
+4. 最终 P 是 installed，但 uninstall command 也永久显示 succeeded。
+
+反过来，uninstall 若落在 install commit 之后、install journal succeed 之前，两条命令也都可 succeeded，而最终磁盘是 uninstalled。结果只取决于最后一次 filesystem mutation。
+
+`cacheCleanup` 也与 installer 没有共享 barrier：它会直接删 `root/cache`，而 pack install 同时使用 `root/cache/download` / `root/cache/mise`，可在正常安装中途删掉工作目录。
+
+这与 §7.97 不同：§7.97 是 Backend Workspace lifecycle optimistic-version 竞态；本条是 Runner admin plane 自身缺资源串行化。
+
+**建议修复**：
+
+- 以 `(familyId, versionId, contentDigest)` 为 resource key 串行 packInstall/packUninstall；
+- `cacheCleanup` 与任何 active pack install/uninstall 使用全局 cache/install barrier；
+- `packUninstall` 的 in-use recheck 与 remove 放进同一资源锁；
+- command succeeded 前验证 final installed state 与该 command postcondition 一致；
+- regression：同 pack install/uninstall、install+cacheCleanup 交错执行，必须得到明确 serialization/conflict，禁止互斥命令都 succeeded。
+
+---
+
+### 7.121 ACP WebSocket → child stdin 忽略 Writable backpressure，合法 256KB 帧可把 Runner 内存队列持续堆高（P2 · 🟠 开放 2026-09-24）
+
+Runner 的 ACP transport 有单帧大小限制，但输入方向没有总量/backpressure 控制。
+
+`AcpProcessRuntime` 的 WebSocket server 设置 `maxPayload = 256KB`，message handler 也再次检查 `bytes.byteLength <= MAX_FRAME_BYTES`。但通过校验后直接：
+
+`child.stdin.write(bytes);`
+
+完全忽略 Node Writable 的 boolean 返回值，也没有监听 `child.stdin 'drain'` 去 pause/resume WebSocket。
+
+因此只要 ACP child 暂停读取、处理速度低于上游输入，连续合法 binary frame 就会不断进入 `child.stdin` 的内部 write queue。`maxPayload` 只限制**单帧**，并不限制累计 queued bytes；WebSocket 仍会继续派发后续 message，Runner 内存可持续增长。
+
+同仓 Terminal runtime 已经实现了正确对照：
+
+- `if (!child.stdin.write(bytes)) websocket.pause()`；
+- `child.stdin.on('drain', () => websocket.resume())`。
+
+说明这个差异不是 Node/ws 无法做 backpressure，而是 ACP 路径遗漏了同一层流控。ACP 输出方向已有 `websocket.bufferedAmount > 1MB` 保护，只有输入方向缺口。
+
+**建议修复**：
+
+- ACP binary input 与 Terminal 一样，在 `stdin.write()` 返回 false 时 pause WebSocket，`drain` 后再 resume；
+- close/error/child exit 时确保不会把 paused socket 错误 resume；
+- 可再加明确的 queued-input byte/time deadline，child 长期不 drain 时主动关闭 ACP session；
+- regression：用不读取 stdin 的 fake ACP child，连续发送合法帧；超过 Writable highWaterMark 后 WebSocket 必须 pause，内存队列保持有界，drain 后才恢复。
+
+---
+
+### 7.122 Runner Plugin 的 generation HOME 不属于任何 cleanup owner，Workspace runtime cleanup 后仍永久残留（P2 · 🟠 开放 2026-09-24）
+
+`PluginRunnerRuntime.start()` 会为每个 `(workspaceId, generation, pluginId)` 创建独立 HOME：
+
+`runtime/plugin-processes/<workspaceId>/<generation>/<pluginId>`
+
+并通过 `HOME` 环境变量交给 Runner Plugin。插件可以把正常运行期 cache/config/state 写进该目录。
+
+但生命周期没有对应 owner cleanup：
+
+- `disposeWorkspace()` 只关闭 child process，不删除 HOME；
+- stop/restart 继续保留 HOME 可以解释为同 generation 复用；
+- delete 也只 dispose process + `runtimeEngine.remove()` generation；
+- confirmed `runtimeCleanup()` 只删除 `runtime/generations/<workspaceId>` 与 `runtime/workspaces/<workspaceId>`，没有删除 `runtime/plugin-processes/<workspaceId>`；
+- 全仓 `plugin-processes` 只有创建点，没有 rm/sweep/startup reconciliation。
+
+因此 generation 切换会不断创建新的 HOME；即使 Workspace 已 delete 并执行了产品提供的 runtime cleanup，旧 Plugin HOME 仍留在 Runner managed root。
+
+Space accounting 还会掩盖这个 owner 漏口：`SpaceReporter.runtimeBytes` 对整个 `root/runtime` 求和，所以总数包含 plugin-processes；但 `runtimeEngine.runtimeBytes(workspace)` 只统计 generationRoot + workspaceRoot，`runtimeReclaimableBytes/byWorkspace` 不包含 Plugin HOME。用户会看到 runtime 总空间仍占用，却无法从 Workspace cleanup preview 归因/回收这部分 bytes。
+
+Runner Plugin 不是 OS sandbox，因此本条不是权限逃逸；问题是 Runner 自己分配的 HOME 没有跟 Workspace/generation owner 生命周期闭合。
+
+**建议修复**：
+
+- PluginRunnerRuntime 提供 workspace/generation HOME cleanup，并在 generation delete/runtimeCleanup 的 durable owner 流程中调用；
+- runtimeCleanup 删除整个 `runtime/plugin-processes/<workspaceId>`，但必须在 Plugin process 确认退出后执行；
+- `runtimeEngine.runtimeBytes()/SpaceReporter.byWorkspace` 把对应 Plugin HOME 纳入可回收字节；
+- startup 扫描 journal 不再拥有的 plugin-process HOME，按安全策略回收/隔离；
+- regression：多次 generation switch + delete + runtimeCleanup 后，旧 generation plugin HOME 不得残留，总/按 Workspace reclaimable bytes 必须一致。
+
+---
+
+### 7.123 Workspace Job 允许 1MB 输出，但 Backend protocol 只解 16KB、Runner journal 只解 64KB，正常成功 Job 可立即不可读并在下次重启阻断 Runner（P1 · 🟠 开放 2026-09-24）
+
+继续对齐 Runner wire/journal/resource bounds 时，确认同一个 Workspace Job result 在三个层面使用了互相矛盾的字符串上限。
+
+**执行层允许的范围：**
+
+- Runner `beginWorkspaceJob()` 接受 `input.maxBytes <= 1MB`；
+- `JobRunner` 自身 `MAX_OUTPUT_BYTES = 1MB`，默认 maxBytes 还是 256KB；
+- stdout/stderr 共用这个 byte budget，结果会原样写进 `WorkspaceJobResult`；
+- `journal.succeedJob()` 随后把完整 result 持久化。
+
+**Backend wire decoder 只允许 16KB：**
+
+`runner-http-protocol.ts` 的通用 `MAX_PROTOCOL_STRING_BYTES = 16KB`，而 `decodeWorkspaceJobView()` 对 `result.stdout` / `result.stderr` 直接调用该 `stringValue()`，没有使用 Job 请求中的 maxBytes，也没有专门的较大 bound。
+
+因此一个完全合法、例如 stdout=32KB 的成功 Job：Runner 会接受、执行、持久化并从 HTTP 返回；Backend 在 status/wait/cancel decode 时却会报 `WORKSPACE_RUNTIME_PROTOCOL_INVALID`。后面的 `jobControlResult(maxOutputBytes)` 虽然本来有 UTF-8 tail truncation，但根本到不了那一层。
+
+**Runner 自己的 journal decoder又是 64KB：**
+
+`journal.ts` 的 `MAX_JOURNAL_STRING_BYTES = 64KB`，`decodeJobResult()` 对 stdout/stderr 同样用通用 `stringValue()`。所以合法输出若 >64KB：
+
+1. 当前 Runner 进程可以正常完成并 `succeedJob()`，journal JSON 也能成功写盘；
+2. 当前进程内 Map 仍能继续使用这个 Job；
+3. 下一次 Runner 启动 `decodeJournalState()` 读取自己刚写的 result；
+4. stdout/stderr 超 64KB → `invalidJournal()` → 主 journal 被判坏并抛 `RUNNER_JOURNAL_INVALID`。
+
+这不是恶意输入才可触发：默认 Job output budget 256KB 已经同时高于 16KB 与 64KB。普通构建/测试命令打印几十 KB 日志就足够进入故障区。
+
+**建议修复**：
+
+- 定义一份共享 Workspace Job result contract，Runner request bound、journal decoder、Backend wire decoder 使用同一上限；
+- 更合理的是 journal/wire 不持久化整段大 stdout/stderr：按统一 max result bytes 截断，或把大输出写 Artifact，仅在 durable record 保存 bounded tail + artifact ref；
+- `succeedJob()` 在写 journal 前就验证/normalize 到 decoder 可重新读取的 canonical form，保证 writer 永远不会写出 reader 拒绝的状态；
+- Backend decoder 的 output bound 必须和协议声明一致，不能在 Tool 层 truncation 之前先拒绝合法 Runner result；
+- regression 至少覆盖 32KB、128KB、1MB 三档：完成后 status/wait 可解码，Runner restart 可重放，超策略上限时必须在写 journal 前明确 truncation/reject，而不是把坏状态持久化。
+
+---
+
+### 7.124 排除：`terminateManagedProcess()` 单独只等 leader，但 ACP / Runner Plugin 的真实 exit handler 会对 detached group 补 SIGKILL（❌ 非独立缺陷，2026-09-24）
+
+逐文件复核 `managed-process.ts` 时曾发现一个看似严重的 helper contract 缺口：`terminateManagedProcess()` 对整个 process group 发 SIGTERM，但 graceful wait 只观察 leader child 的 `close`。本轮 Linux 探针直接调用 helper，构造“leader 收 TERM 立即退出、同 group grandchild 忽略 TERM”，得到：
+
+`{"elapsedMs":1,"leaderExited":true,"grandchildAlive":true}`
+
+这证明**孤立看 helper**，它返回时并不保证 process group 已经消失。但继续检查两个真实 caller 后，最初的 P1 产品结论被推翻：
+
+- `AcpProcessRuntime` 注册 `child.on('exit', ...)`，leader 一退出就同步调用 `signalManagedProcess(child, 'SIGKILL')`，再次按负 PGID 对整个 detached group 强杀；
+- `RunnerPluginProcess` 同样在 `child.once('exit', ...)` 中先 `signalManagedProcess(child, 'SIGKILL')`，再 fail pending lifecycle；
+- Node 的 `exit` event 先于 `close`，而 `terminateManagedProcess()` 的 `waitForExit()` 等的是 `close`，因此真实 caller 在 helper 因 leader close 返回之前，已经向残留 group 发出 SIGKILL。
+
+所以“leader 退出后 stubborn grandchild 可无限存活、正常 Plugin dispose 误报完成”这一结论不成立，不应新增独立 P1。
+
+仍然存在的较窄事实是：当前代码没有**等待 SIGKILL 后整个 PGID 确认消失**，因此 force-kill dispatch 与下一代 owner activate 之间理论上仍有一个很短的进程消亡窗口。但 ACP 本来就有 §7.94/§7.95 的非 await drain/跨 generation overlap；把 group-liveness wait 纳入统一 owner drain 应作为那些条目的修复细节，而不是再计一个独立问题。
+
+探针 finally 已显式 SIGKILL 测试 process group / grandchild，不留测试残留。
+
+---
+
+### 7.125 Workspace lifecycle 的 durable postcondition 与 command unknown 没有权威重同步，Runner 重启可让 Backend / Runner 状态永久分叉（P1 · 🟠 开放 2026-09-24）
+
+继续对齐 Runner command outcome 与 Backend Workspace projection 时，确认问题不只存在于 provision；所有会“先改变真实 Workspace，再最后标 command succeeded”的 lifecycle action，都缺一个 authoritative postcondition reconcile。
+
+Runner 的 durable 顺序有共同模式：
+
+- **provision**：`journal workspace=creating` → runtime create/state=ready → plugin workspace prepare → `journal workspace=ready` → 最后 command succeeded；
+- **start**：runtime state=running → Runner Plugin activate → `journal workspace=running` → 最后 command succeeded；
+- **stop**：关闭 session/plugin → runtime state=stopped → `journal workspace=stopped` → 最后 command succeeded；
+- **delete**：关闭 owner → 删除 generation root → `journal workspace=deleted` → 最后 command succeeded。
+
+因此每个 action 都存在“真实 postcondition 已经落盘，但 command 仍是 running”的 crash window。Runner controller 若在这个窗口重启：
+
+1. startup `Reconciler` 会先从 runtime state 把 Runner journal Workspace 收敛到真实 `ready/running/stopped/deleted`；
+2. 随后把仍为 running 的 command 改成 `unknown(controller_restarted_during_command)`；
+3. Backend 只能 query command，没有 Runner workspace status/projection query。
+
+Backend `syncWorkspaceStatus()` 对这个 unknown 的处理又分成两类，但都错误：
+
+- provision：`unknown` 与 `failed` 被等价处理，直接把本地 Workspace 写成 `failed`；
+- start/stop/restart/delete：unknown 完全不修改 Workspace projection，继续保留 action 前的旧状态。
+
+于是至少会形成：
+
+- Runner ready / Backend failed（provision）；
+- Runner running / Backend ready|stopped（start）；
+- Runner stopped / Backend running（stop）；
+- Runner deleted / Backend ready|running|stopped（delete）。
+
+remote command 已 durable unknown，后续 reconcile 反复得到的仍是 unknown；Backend 又没有读取 Runner `journal.workspace` / runtime state 的 API，因此这些分叉没有自动修复路径。尤其 delete 分叉会让 Backend 继续把已在 Runner 删除的 Workspace 当 active，后续操作稳定失败；provision 分叉则把真实 ready Workspace 当 failed 排除，用户可能重建第二个 Workspace。
+
+这与 §7.85 不同：§7.85 是 restart 的 Runner Plugin activate 失败后 Runner 自己留下 running 半状态；本条是**真实 Runner Workspace 已经处于正确 postcondition，但 command outcome 因 crash 变 unknown，Backend 缺 authoritative state reconcile 而投影错误**。也与 §7.86 不同，后者是 toolchain switch 的 Backend `stopping` continuation 问题。
+
+**建议修复**：
+
+- Runner 为 workspace 暴露 generation-bound authoritative projection/status query，至少返回 `(workspaceId,generation,status)`；
+- startup reconcile 对 interrupted lifecycle command 根据真实 Workspace postcondition判断：postcondition 已成立时将 command reconcile 为 succeeded，而不是一律 unknown；
+- Backend `syncWorkspaceStatus()` 不得把 provision unknown 直接等价成 failed，也不能对其它 lifecycle unknown 永久保持旧 projection；unknown 必须进入 reconciliation_required 并核 Runner authoritative state；
+- 更彻底地把 Workspace postcondition 与 command terminal outcome做成一个可恢复状态机/事务日志，startup 可从 postcondition完成 command；
+- regression：分别在 provision ready、start running、stop stopped、delete generation removed 之后且 command succeed 之前注入 Runner restart；重启后 Backend/Runner 必须收敛到同一 Workspace status，command 也必须明确 succeeded/reconciled，禁止 unknown + stale projection。
+
+---
+
+### 7.126 JobRunner 按原始 byte budget 截断后逐 chunk `toString('utf8')`，会把合法多字节输出静默改成 `�`（P2 · 🟠 开放 2026-09-24）
+
+继续审 Workspace Job output contract 时，确认除了 §7.123 的执行/wire/journal 上限不一致，Runner 自身的 UTF-8 截断语义也不正确。
+
+`JobRunner.append()` 当前是：
+
+1. 根据剩余 byte budget 对原始 `Buffer` 做 `chunk.subarray(0, remaining)`；
+2. 直接对这个 accepted chunk 调 `accepted.toString('utf8')`；
+3. 将解码后的 string 拼到 `stdout/stderr`。
+
+这有两个正常路径都能触发的问题：
+
+- 一个 UTF-8 code point 如果跨 Node pipe 的两个 `data` chunk，两个 chunk 会被分别解码，半个字符会变 replacement character；
+- 即使 chunk 本身完整，只要 `maxBytes` 恰好截在一个多字节字符中间，`subarray()` 后的非法 UTF-8 也会被 `toString('utf8')` 静默替换成 `�`。
+
+本轮直接调用真实 `JobRunner` 做了无侵入探针，只输出一个中文字符 `中`（UTF-8 3 bytes）：
+
+- `maxBytes=1` → `stdout='�'`, `utf8Bytes=3`, `truncated=true`；
+- `maxBytes=2` → `stdout='�'`, `utf8Bytes=3`, `truncated=true`；
+- `maxBytes=3` → `stdout='中'`, `utf8Bytes=3`, `truncated=false`。
+
+因此当前 byte limit 不仅会破坏用户可见日志文本，还会出现“输入只接受 1/2 bytes，结果 string 再编码却占 3 bytes”的语义反转；后续 journal/wire 再按 UTF-8 byteLength 做限制时，观察到的大小也不再等于 JobRunner 原始 budget。
+
+这与 §7.123 不重复：§7.123 是三层最大尺寸契约不一致，会导致 protocol invalid / restart journal invalid；本条在远低于那些上限时就能发生，是 byte→text decoding/truncation 本身的数据正确性问题。
+
+**建议修复**：
+
+- stdout/stderr 用增量 `TextDecoder` / `StringDecoder` 维护跨 chunk UTF-8 state，不能逐 chunk 独立 `toString()`；
+- 达到 byte budget 时只输出最后一个完整 code point 前缀；未完整的尾字节丢弃并置 `truncated=true`，不要生成 replacement character；
+- 明确定义 budget 是 raw bytes 还是 encoded result bytes，并让 JobRunner / journal / wire 共用同一 helper；
+- regression 覆盖：单个 3-byte/4-byte 字符在 1/2/3/4 byte 边界、字符跨两个 pipe chunk、stdout+stderr 共用 budget，以及截断后重新 `Buffer.byteLength(result,'utf8')` 不得超出约定。
+
+---
+
+### 7.127 Runner Toolchain install 的 `.staging/<commandId>-...` 缺 startup / owner cleanup，安装中断可留下最高约 1GB 的不可归因 orphan tree（P2 · 🟠 开放 2026-09-24）
+
+继续审 PackInstaller / ToolchainStore 的 filesystem owner 生命周期时，确认 §7.119 之外还有一类不在 `cacheRoot` 的 crash orphan。
+
+每次 builtin / mise 安装都会先构造 command-scoped staging path：
+
+`<runnerRoot>/packs/.staging/<commandId>-<family>-<version>-<digest-prefix>`
+
+正常路径的生命周期是闭合的：
+
+- install 开始前会 `rmSync(staging, recursive)` 清同 commandId 的旧目录；
+- builtin extract 或 mise materialize 失败时 catch 会 `discardStaging(staging)`；
+- 成功时 `ToolchainStore.commit()` 把 staging rename 到 content-addressed installed path，mise 路径随后再 discard 外层 staging。
+
+但如果 Runner 在 **extract / materialize / relocate / verify / lockAndSyncTree / commit 之间直接退出**，JavaScript finally/catch 不会运行，`.staging` tree 会留在 `packs` 下。startup 只构造 `ToolchainStore` 并 `mkdir .staging`，没有 sweep；`Reconciler` 只处理 journal/workspace；`cacheCleanup()` 只删除 `<runnerRoot>/cache`，不会碰 `<runnerRoot>/packs/.staging`。
+
+这个 orphan 也很难被未来请求自然复用：path key 包含 commandId。Runner restart 后原 running command 会被 §7.118 所述流程改成 unknown；Backend 正常 reconcile/query 不会重放原 command，后续新的 install command 通常使用新的 commandId，因此旧 staging owner 不会再次命中其“install 开始前 rm”逻辑。
+
+资源上限并不小：builtin archive 最多 512MB，expanded tree 上限 `MAX_EXPANDED_BYTES = 1GB`；mise materialized tree 也会在该 staging 目录里经历完整校验。一次 install crash 因而可留下接近 GB 级的残留。
+
+`SpaceReporter` 还会把这个状态变成隐藏占用：
+
+- `packBytes = size(root/packs)` 会把 `.staging` 全部算进总 Pack 空间；
+- `byPack` 只遍历 catalog 的正式 content-addressed installed path，不会列 staging owner；
+- `reclaimableBytes` 只包含 `cacheBytes + runtimeReclaimableBytes`，不包含 staging pack bytes；
+- 因此用户能看到 Pack 总空间变大，却没有对应 pack 条目，也没有产品 cleanup 动作可以回收。
+
+这与 §7.119 不同：§7.119 是**正常成功/失败安装也会留下** `cache/download/<commandId>` archive，但还能被显式全局 cacheCleanup 回收；本条只需一次 Runner 中断即可留下更大的 unpacked staging tree，而且当前没有任何 cleanup surface。
+
+**建议修复**：
+
+- ToolchainStore startup 扫描 `.staging`，只保留能证明仍由 active/running install command 拥有的目录；其余按 age + journal owner 安全删除；
+- PackInstaller 的 command lifecycle 增加 durable staging ownership，command terminal 后 finally 删除所有 command-scoped staging；
+- Runner startup 将 unknown install command 与 staging 做 reconciliation：已 commit 的 pack 收敛 succeeded，未 commit 的 staging 回收后收敛 failed/unknown evidence；
+- `SpaceReporter` 增加 stagingBytes / orphanPackBytes，并把可安全删除的 staging 纳入 reclaimable bytes；
+- regression：在 extract 中段、manifest verify 后、fsync 后、commit 前分别注入 process exit；重启后 `.staging` 必须被正确回收或恢复，Pack 总空间不能出现无 owner 的永久增长。
+
+---
+
+### 7.128 Runner `/storage` 可合法返回 4,097+ Workspace，但 Backend decoder 硬限 4,096，长期实例会把 Storage 管理面解码成 protocol invalid（P2 · 🟠 开放 2026-09-24）
+
+继续对齐 Runner HTTP response 总量 / collection contract 时，确认 Workspace storage surface 的生产者与消费者使用了不同集合上限。
+
+Runner `SpaceReporter.report()` 直接：
+
+`const workspaces = journal.workspaces();`
+
+随后为**全部** journal Workspace 生成 `byWorkspace`。Runner journal 的 decoder 对 `workspaces` collection 允许 `MAX_JOURNAL_COLLECTION_ITEMS = 16_384`；Workspace 没有另一个产品级总数 hard limit。deleted / failed Workspace 只有用户实际执行 runtime cleanup、`journal.deleteWorkspace()` 后才会从 journal 消失。
+
+Backend `runner-http-protocol.ts` 却把所有协议 collection 共用：
+
+`MAX_PROTOCOL_COLLECTION_ITEMS = 4096`
+
+`decodeStorage()` 在解析具体 row 之前先检查：
+
+`record.byWorkspace.length > 4096 → WORKSPACE_RUNTIME_PROTOCOL_INVALID`
+
+因此 Runner 自己完全合法的 journal 状态可以生成 Backend 永远无法消费的 `/v1/storage` response。
+
+本轮直接调用真实 `decodeStorage()` 做 synthetic contract probe，使用最小合法 storage shape：
+
+- 4,096 workspace rows → `PASS`，JSON body 约 **244,825 bytes**；
+- 4,097 workspace rows → `FAIL WORKSPACE_RUNTIME_PROTOCOL_INVALID`，JSON body约 **244,885 bytes**。
+
+所以这个失败与 Backend HTTP 默认 1MB body cap 无关；在远低于 1MB 时就能稳定触发，根因就是 collection bound mismatch。
+
+达到该状态后 Runner 自身仍可启动、Workspace 仍可运行，只有 Backend `storage()` / Settings Storage 管理面开始稳定失败；用户反而更难看到并执行 cleanup，从而不利于把 journal/workspace 数量降回 4096 以下。
+
+同轮还看到 `/catalog` 与其它管理 response 共用 Backend 默认 1MB transport cap；Runner catalog 虽与 Backend decoder 都允许最多 4,096 packs，但合法长 metadata 可能先撞 transport size。该点应在统一 response contract 时一起校正，但本条确定证据只计 `/storage` collection mismatch。
+
+**建议修复**：
+
+- Runner/Backend 为每个 response DTO 共享同一 collection limits，而不是 journal=16k、wire=4k 各自定义；
+- `/storage` 不应一次返回全部历史 Workspace：增加 cursor pagination / summary aggregate，byWorkspace 按页读取；
+- deleted/failed Workspace 的 runtime cleanup / journal retention 应有明确生命周期，避免管理历史无限推高 response cardinality；
+- Backend HTTP `maxResponseBytes` 应由 DTO/分页 contract 推导，不能再与 decoder 数量上限独立漂移；
+- regression：构造 4,096 / 4,097 / >10k workspace journal，Storage API 均应通过分页稳定读取，不得因合法 Runner state 返回 protocol invalid。
+
+---
+
+### 7.129 Runner 遇到 corrupt journal 时每次启动都会复制一份完整 `.corrupt.*` evidence 后再次退出，supervisor restart loop 可持续放大磁盘占用（P2 · 🟠 开放 2026-09-24）
+
+`RunnerJournal` constructor 对非 ENOENT / 非 schema-upgrade 的 journal decode failure 会：
+
+1. `quarantineCurrent('corrupt')`；
+2. `copyFileSync(journal.json, journal.json.corrupt.<timestamp>-<pid>)`；
+3. fsync evidence；
+4. **保留原始坏 `journal.json` 不动**；
+5. 抛 `RUNNER_JOURNAL_INVALID`，Runner startup 失败。
+
+因此如果 systemd / Docker / process supervisor 配置自动 restart，下一次启动仍读取完全相同的坏主 journal，再复制一份新的 evidence，再退出；没有“已保存 evidence”标记、digest 去重、数量/字节上限或 rename-away。
+
+本轮用 `/tmp` 真实 `RunnerJournal` 做了无侵入探针：同一坏 journal 连续构造两次，结果为：
+
+- attempt 1 → `RUNNER_JOURNAL_INVALID`，生成 `journal.json.corrupt.<t1>-<pid>`；
+- attempt 2 → `RUNNER_JOURNAL_INVALID`，又生成 `journal.json.corrupt.<t2>-<pid>`；
+- 原 `journal.json` 仍存在；目录最终同时包含主坏文件 + 两份完整 evidence。
+
+临时探针目录随后已删除。
+
+这个放大器不只依赖手工损坏：§7.118 的 collection hard-limit、§7.123 的 writer/reader Job output mismatch 都可能让一个原本由 Runner 自己写出的 journal 在下一次启动进入 `JOURNAL_STATE_INVALID`。一旦 supervisor 自动重启，Runner 已经不可用的故障会进一步演化为持续磁盘写入；journal 越大，每次 restart 的 copy 成本越高。
+
+schema unsupported 路径反而采用 `renameSync`，只保留一次旧文件后创建新 journal，不会发生同样的重复 copy；说明 corrupt 路径缺少一次性 quarantine ownership。
+
+**建议修复**：
+
+- corrupt journal 首次失败时 atomic rename 到唯一 evidence path，主路径写入一个小的 fail-closed marker / recovery state，而不是每次 copy 原文件；
+- 或按 content digest 去重 evidence，同一坏内容最多保留一份；
+- evidence 定义数量/总字节 retention，避免不同 corruption 事件长期无限积累；
+- startup error 明确区分 `evidence already preserved`，supervisor restart 不应再次复制；
+- regression：同一 corrupt journal 连续启动 N 次，evidence 数量/总字节必须保持有界；同时保留至少一份完整 forensic evidence。
+
+---
+
+### 7.130 Runner 副作用完成后 terminal journal 写失败可被 catch 反写成 `failed`，把真实成功的 destructive/admin/lifecycle 操作持久化为失败（P1 · 🟠 开放 2026-09-24）
+
+继续审 Runner command/job 的 durable commit boundary 时，确认 `executeWorkspaceJob()` / `executeWorkspaceCommand()` / `executeAdminCommand()` 都把“业务副作用”和“写 terminal journal 状态”放在同一个 try/catch 里：
+
+- try 内先执行真实 Job / Workspace lifecycle / pack install-uninstall / runtime cleanup；
+- 副作用返回成功后调用 `journal.succeed*()`；
+- **只要 `journal.succeed*()` 自己因为 filesystem I/O 抛错，也会进入同一个 catch**；
+- catch 随后无条件调用 `journal.fail*()`。
+
+`RunnerJournal.patchCommand/patchJob()` 又是先修改内存 state，再 `flush()`：
+
+`this.state.commands[id] = { ...current, ...patch }; this.flush();`
+
+所以 terminal success flush 失败时，内存已经先变成 `succeeded`；catch 再 patch `failed`，第二次 flush 如果恢复正常，就会把真实已成功副作用永久记录成 failed。
+
+本轮用 `/tmp` 真实 `RunnerJournal` 做了无侵入探针：先 begin+running 一个 `packInstall` command，仅让第一次 terminal `renameSync(temp,journal)` 模拟一次 transient `EIO`：
+
+`{"succeedError":"simulated transient rename failure","afterSucceed":"succeeded","failError":"","afterFail":"failed","reopened":"failed"}`
+
+这证明错误不是理论分支：一次成功副作用后的 terminal-record 瞬时写失败，现有 catch 结构可以让重开的 durable journal 明确显示 `failed`。
+
+对不同 command 的影响都很危险：
+
+- `packInstall` 已把 pack commit/activate，但 command durable failed；调用方可再次 install / 与 uninstall 交错；
+- `runtimeCleanup` 已删除 Workspace runtime / journal workspace，command 却 failed；Backend 不会应用 succeeded cleanup projection；
+- Workspace start/stop/delete/provision 已完成真实 postcondition，却被 command failed，进一步放大 §7.125 的 Backend/Runner projection 分叉；
+- Workspace Job child 已执行完成、结果已知，但 `succeedJob()` flush 失败后可被 `failJob()` 覆盖成 failed，丢掉真实 result。
+
+还有第二层 failure：`begin*()` 用 `void this.execute...()` 启动这些 async executor，没有外层 `.catch()`。若 success flush 失败后 catch 内的 `journal.fail*()` 也因持续 I/O 故障再次抛错，executor Promise 会直接 reject 且没有 owner；现代 Node 默认 unhandled rejection 可升级为进程级故障。即使 supervisor 重启，磁盘上最后 durable state 仍可能只是 `running`，再进入 §7.118/§7.125 的 unknown reconciliation。
+
+这与 §7.125 不重复：§7.125 是**进程在真实 postcondition 与 command succeed 之间重启**；本条不需要进程重启，只要 terminal journal commit 出现一次可恢复 I/O failure，就能主动把成功副作用写成 failed。
+
+**建议修复**：
+
+- 把业务执行错误与 terminal journal commit 错误分开：副作用返回成功后，`succeed()` 写失败绝不能进入业务 `fail()` 分支；
+- terminal durable write 失败应进入 `outcome_unknown / reconciliation_required`，保留真实 postcondition/result evidence，不能伪造 failed；
+- RunnerJournal mutation 改成 copy-on-write：先构造 next state、durably flush/rename 成功后再替换内存 state，避免 flush 抛错后内存先越过 durable commit point；
+- 所有 `void execute*()` 都必须带统一顶层 `.catch()`，记录 fatal executor persistence failure并进入 fail-closed/reconciliation 状态，禁止无 owner rejection；
+- 对 Workspace lifecycle/admin side effect 增加 authoritative postcondition reconcile，与 §7.125 一并让 startup 可以补写 terminal outcome；
+- regression：副作用成功后分别在 journal temp write / fsync / rename / parent fsync 注入一次和持续 I/O failure；不得把成功操作记录成 failed，且不得产生 unhandled rejection。
+
+---
+
+### 7.131 Project Instructions 可合法产生 >32 条 omission，但 Backend decoder 只允许 32，深层 `AGENTS.md` 链会被误判 protocol invalid（P2 · 🟠 开放 2026-09-24）
+
+继续对齐 Runner producer / Backend consumer 的集合上限时，确认 Project Instructions surface 还有一处比 §7.128 更容易达到的 contract drift。
+
+Runner `resolveProjectInstructions()` 的设计是：
+
+- 最多返回 `MAX_INSTRUCTION_FILES = 16` 个真正的 instruction；
+- targetDirectory 最多 8 个，但单个 logical path 最长 4096；
+- 对 project root → target 的每一级目录都检查 `AGENTS.md`；
+- 当已经收满 16 个 instruction 后，后续每发现一个 `AGENTS.md` 就继续 `omitted.push({ reason:'too_many_files' })`。
+
+因此 `omitted` 数量并没有 32 的 producer 上限；深层 monorepo / generated tree 完全可以返回几十到上百条 omission。
+
+Backend `decodeProjectInstructionProjection()` 却要求：
+
+`record.instructions.length <= 16`
+
+`record.omitted.length <= 32`
+
+超过 32 条 omission 直接 `WORKSPACE_RUNTIME_PROTOCOL_INVALID`。
+
+本轮用 `/tmp` 构造一个 `.git` project root + 50 层子目录，每层都放合法 `AGENTS.md`，目标指向最深层，直接调用真实 Runner resolver 再送入真实 Backend decoder：
+
+`{"instructions":16,"omitted":35,"decoded":"FAIL:WORKSPACE_RUNTIME_PROTOCOL_INVALID","bytes":11716}`
+
+整个 response 只有约 11.7KB，远低于该 route 的 256KB response cap；失败完全来自 collection contract mismatch，而不是总量限制。探针目录随后已删除。
+
+这会让 Project Instructions 在最需要“告诉模型哪些文件因为数量限制被省略”的深层项目里反而整体失败，调用方拿不到前 16 个本来完全合法的 instruction，也拿不到 omission evidence。
+
+这与 §7.128 同属 producer/consumer limit drift，但触发 surface 与修复 contract 独立：§7.128 是长期 Workspace storage cardinality；本条是单个普通项目目录结构即可触发。
+
+**建议修复**：
+
+- Project Instructions 的 limits 定义移动到共享 protocol contract，Runner producer / Backend decoder 引用同一常量；
+- 更好的输出语义是 omission 本身也做 bounded aggregate：例如最多 N 条详细 omission + `omittedCount/truncated`，而不是无限累积；
+- decoder 必须接受 producer 所有合法输出，不能让“截断证据”自身把整个 response 变 invalid；
+- regression：16 instruction + 0/32/33/100 omission 均按共享策略稳定解码；超策略时只截 omission detail，不丢已收集的 instruction。
+
+---
+
+### 7.132 Workspace provision 失败可把 Runner workspace 永久留在 `creating`，Backend 已标 `failed` 但 runtime cleanup 仍会被 Runner 持续 skip（P2 · 🟠 开放 2026-09-24）
+
+继续反查 Workspace filesystem / journal commit 顺序时，确认 provision 的普通失败路径没有收口 Runner workspace owner state。
+
+Runner `provision()` 当前顺序是：
+
+1. toolchain `installer.ensure()`；
+2. 构造 `WorkspaceRecord(status='creating')`；
+3. **先** `journal.saveWorkspace(creating)`；
+4. `runtimeEngine.create(command)` 创建 generation/workspace/profile 目录并依次写 metadata + state=ready；
+5. `pluginRunner.prepareWorkspace(ready)`；
+6. 最后才 `journal.saveWorkspace(ready)`。
+
+`executeWorkspaceCommand()` 外层 catch 只把 command `journal.fail(commandId, error)`，**不会把 workspace journal 从 creating 改成 failed，也不会 rollback 已创建的目录**。
+
+因此只要第 4/5 步发生普通异常（例如 mkdir/write/fsync/permission/ENOSPC，或 Plugin workspace prepare I/O failure），就会得到：
+
+- Runner command = failed；
+- Runner journal workspace = creating；
+- filesystem 可能已经有部分 generation / persistent workspace / toolchain profile 内容；
+- Backend `syncWorkspaceStatus()` 对 failed provision 明确把本地 Workspace 改成 `failed`。
+
+随后两个控制面会发生长期分叉：
+
+- Backend Runtime Cleanup preview 把 failed、non-retained Workspace 视为 candidate；
+- Runner `CleanupPlanner.runtimeCleanup()` 却把 `creating` 和 `running` 都列入 `activeStatuses`，所以同一个 workspaceId 每次都只返回 `skipped`；
+- Backend `requireLiveWorkspace()` 又把 failed 当 NOT_FOUND，普通 start/stop/restart/delete 都无法再作为恢复动作。
+
+当前只有 Runner **整体重启**时 `Reconciler.reconcile()` 才会根据 generation state 重新映射 creating workspace：缺 state/半创建目录会变 failed，之后 cleanup 才可能成功。正常运行中没有 periodic reconcile，所以“重启 Runner”成为唯一隐式恢复机制。
+
+这与 §7.125 不同：§7.125 是真实 postcondition 已完成、command terminal outcome 因重启变 unknown；本条是 provision 自己明确 failed，Backend 也知道 failed，但 Runner owner journal 留在 pre-operation `creating`，导致官方 cleanup path 自相矛盾。
+
+**建议修复**：
+
+- provision failure catch 必须执行 workspace-level rollback/reconcile：未达到 ready 时把 Runner workspace durable 标 failed，并清理可证明只属于本次 generation 的 partial runtime；
+- `runtimeEngine.create()` 建议采用 staging generation + atomic commit，避免 metadata/state 多步写留下半目录；
+- CleanupPlanner 对 command 已 terminal failed 的 `creating` workspace 不应永久视作 active；应结合 active command/job owner 证明后安全清理；
+- Backend/Runner 暴露 authoritative workspace status/reconcile surface，与 §7.125 统一处理 projection drift；
+- regression：在 generation mkdir 后、metadata write 后、state write 前、plugin workspace prepare 时分别注入失败；command failed 后无需重启 Runner，runtime cleanup 必须能回收 partial owner，Backend/Runner 状态最终一致。
+
+---
+
+### 7.133 Runner catalog 与 Backend decoder 都允许 4,096 packs，但 HTTP adapter 默认只收 1MB，合法 catalog 会在 decode 前被 transport 拒绝（P2 · 🟠 开放 2026-09-24）
+
+继续对齐 Runner management response 的 collection / byte limits 时，确认 `/v1/catalog` 存在第三套彼此独立的上限。
+
+Runner `WorkspaceRuntimeCatalog` 允许：
+
+- `MAX_CATALOG_PACKS = 4096`；
+- 单个 catalog string 最多 16KB；
+- 每个 pack 可带 displayName、digest/downloadRef map、capabilities、dependencies、architectures 等 metadata。
+
+Backend `decodeCatalog()` 同样允许最多 4,096 packs，字符串上限也是 16KB；从 DTO decoder 角度，这个规模是合法的。
+
+但 `RunnerHttpAdapter.catalog()` 直接调用：
+
+`decodeCatalog(await this.get('/v1/catalog', signal))`
+
+没有给 `get()` 传 route-specific response limit，因此落到通用 `MAX_RESPONSE_BYTES = 1MB`。HTTP adapter 会在 decoder 前读取 body 并对超过 1MB 的 response 抛 `WORKSPACE_RUNTIME_RESPONSE_TOO_LARGE`。
+
+本轮用临时合法 catalog 做真实 producer/consumer contract probe：生成 4,096 个 pack，每个只使用约 320B displayName 和很小的其它字段；
+
+- Runner `WorkspaceRuntimeCatalog.load()` → PASS，`runnerPacks=4096`；
+- 构造成 `/catalog` wire shape 后 JSON body = **3,399,500 bytes**；
+- Backend `decodeCatalog(wire)` → **PASS**；
+- 但 Backend HTTP 默认 cap = **1,048,576 bytes**。
+
+因此生产者、DTO decoder 都认为 response 合法，只有 transport 自己会提前拒绝。该探针使用的 metadata 远低于单字段 16KB 上限，所以不需要极端 catalog 才能超过 1MB。
+
+这与 §7.128 不同：§7.128 是 `/storage` 的 collection 数量上限不一致；本条的 collection 上限完全一致，错误来自**第三套未由 DTO contract 推导的 transport byte cap**。
+
+**建议修复**：
+
+- catalog surface 明确定义可传输总量；优先增加分页/版本化按需查询，而不是一次返回全部 4,096 pack metadata；
+- 若仍保留单 response，Backend `maxResponseBytes` 必须从共享 catalog contract 推导，并与 Runner 最大合法 serialization 做静态/测试校验；
+- catalog string/collection limits 与 HTTP byte limit 放入同一 shared protocol module，禁止三处独立常量继续漂移；
+- regression：构造接近最大合法 catalog，Runner serialize → HTTP bounded read → Backend decode 全链必须成功；超过共享 contract 时由 producer 明确分页/truncate/reject，不能由 consumer transport 意外拒绝。
+
+---
+
+### 7.134 Backend Plugin 的 async line handler 无 Promise owner，合法 JSON 但非法 protocol frame 可把插件错误升级成 Backend unhandled rejection（P1 · 🟠 开放 2026-09-24）
+
+`BackendPluginProcess` 用 readline 消费 child stdout：
+
+`lines.on('line', (line) => void this.handleLine(line));`
+
+但 `handleLine()` 是 async，外层既不 await 也不 `.catch()`。它只有最外层 JSON.parse 自己做了 try/catch；后续 decoder 并非全部被包住。
+
+例如一个很小的 JSON frame：
+
+`{"kind":"lifecycle.result","requestId":1,"ok":"not-a-boolean"}`
+
+会先通过 `protocolRecord()`，随后进入 lifecycle 分支并直接调用 `decodeLifecycleResult(message)`。该 decoder 会抛 `PLUGIN_BACKEND_PROTOCOL_INVALID`；异常变成 rejected `handleLine()` Promise，而 readline callback 已经用 `void` 丢掉这个 Promise。
+
+storage / intent 分支也有相同结构：`decodeStorageRequest()` / `decodeIntentRequest()` 在进入各自 handler 前就可能 throw，同样越过内部业务 try/catch。
+
+这意味着动态 Backend Plugin 不需要超长 stdout 或破坏 JSON parser，只需要发送一个字段不合法但 framing/JSON 都正常的 protocol line，就可以把“插件协议错误”升级成 Host Backend 的 unhandled rejection。现代 Node 默认 unhandled rejection 可进程级终止，因此这是和 §7.117 SSH keepalive 同类的 error-ownership 破口。
+
+这与 §7.116 不重复：§7.116 是 readline **收齐无换行超长 frame 后才检查 size**导致内存峰值；本条 frame 可以非常小，问题是 async decoder failure 没有生命周期 owner。
+
+**建议修复**：
+
+- readline callback 必须显式 `void this.handleLine(line).catch(error => this.protocolFailure(error))`；
+- `protocolFailure` 统一 fail pending request、kill child、记录 bounded error，绝不能让 plugin-originated rejection 逃出 process owner；
+- `handleLine()` 最外层再设一个统一 decoder boundary，任何 protocol decode/response-send 错误都转换为 plugin process failure；
+- 对 child stdin response 也复用带 backpressure/error ownership 的 writer，不让 EPIPE/close 形成第二个 rejected line handler；
+- regression：malformed lifecycle/storage/intent frame、child stdin close、decoder throw 均只能杀该 plugin instance，Backend 进程保持存活。
+
+---
+
+### 7.135 Backend Plugin Host→child response path 忽略 stdin backpressure，插件停读 stdin 时合法小请求可让主 Backend Writable queue 无界增长（P2 · 🟠 开放 2026-09-24）
+
+继续复核 Backend Plugin IPC 的反向数据流后，确认 child→Host 与 Host→child 两边都有独立的资源隔离缺口。
+
+插件可以从 stdout 连续发送 `storage.get/put/delete`、`intent.*` 等 Host RPC。`readline` 的 `line` callback 使用 async `handleLine()`，但 EventEmitter 不会等待上一条处理完成，因此多条请求可以并发进入 Host storage / AppIntent service。
+
+Host 返回结果时：
+
+- `sendStorageResult()` → `this.child.stdin.write(encoded + '\n')`；
+- `sendIntentResult()` → 同样直接 `child.stdin.write(...)`；
+- Host 发 lifecycle request 的 `request()` 也直接 `this.child.stdin.write(...)`。
+
+这些路径都只对**单条 encoded frame**做 `MAX_PROTOCOL_BYTES = 20MB` 检查，没有检查 `Writable.write()` 返回值，也没有等待 `drain`、限制 `writableLength` 或暂停 child stdout。
+
+Node Writable 的 `write()` 返回 false 只表示内部 queue 已超过 highWaterMark，并不会自动阻止调用者继续 write；如果 child 进程停止读取 stdin，但仍持续向 stdout 写很多合法小请求，Host 会继续处理并把响应追加到 `child.stdin` queue。于是动态插件可以把自己的“不读 stdin”反压转化为主 Backend heap/stream buffer 增长。
+
+这与 §7.116 不重复：§7.116 是 child→Host **单个无换行 frame**让 readline 先无界聚合；本条是 Host→child **大量合法 bounded frame 的 aggregate queue**。也与 §7.134 不同：本条不需要 malformed protocol，只需不消费 response。
+
+**建议修复**：
+
+- 所有 Host→child frame 统一走一个串行 bounded writer；`write()` false 时 await `drain`，close/error 时 reject；
+- writer 设置 aggregate queued-byte / pending-frame 上限，超过即 fail plugin instance，而不是继续让 Backend 缓冲；
+- child stdout request ingestion 与 response writer 做联合 backpressure：response queue 高水位时暂停 stdout/readline，drain 后恢复；
+- 限制 plugin-originated Host RPC 并发数，避免大量 async storage/intent 请求同时占内存；
+- regression：child 持续发小 storage.get request 但不读取 stdin，Host queue 必须保持有界并最终 kill/throttle plugin，Backend RSS 不随请求数线性增长。
+
+---
+
+### 7.136 `af543606` 默认模型 optimistic state 只缓存 modelId，跨 Provider 同名模型会解析/过滤到错误 Provider（P1 · 🟠 开放 2026-09-24）
+
+继续按“commit → Problem 闭环 → 当前 HEAD”复核 `af543606` 时，确认这次为默认模型下拉加入的 optimistic 回显把模型身份从 `(providerId, modelId)` 降成了单独的 `modelId`。
+
+当前 `ModelProviderSettings.vue` 的关键链路是：
+
+- `optimisticDefaultModelId` 只保存 model id；`selectDefaultModel()` 选中后也只写 `opt.model.id`；
+- `defaultModelKey` 一旦存在 optimistic id，就执行 `modelOptions.find(item => item.model.id === optimisticDefaultModelId)`，直接取**第一个同 id 模型**，不再校验 Provider；
+- watcher 只监听 `props.defaultModelId`。如果从 Provider A 的 `gpt-4o` 切到 Provider B 的 `gpt-4o`，服务端返回后 Provider 已改变但 modelId 没变，watcher 不会触发；
+- 父级 `patchSection()` 在 mutation 失败时只统一 toast 并返回，没有通知子组件 rollback optimistic 值；
+- `validFallbackModels` / `fallbackOptions` 又复用了这个错误的 `defaultModelKey` 做排除，因此问题不只是一行标签显示错：它可能排除错误 Provider 的同名模型，同时把真实默认 Provider/model 暴露成 fallback 候选。
+
+最小复现不依赖真实模型调用：配置两个 enabled Provider A/B，并让二者都包含同一个 model id（例如 `gpt-4o`）。当服务端默认值是 `B/gpt-4o` 时，当前 UI 会按 `modelOptions` 顺序命中第一个 `gpt-4o`；如果 A 排在前面，页面首帧就显示 A。再做 A→B 且 modelId 不变的切换，Provider 维度仍不会进入 optimistic/watch identity。
+
+这与 §7.82 不重复：§7.82 是跨 tab/version conflict 后整个 Settings 不 reconcile stale revision；本条即使没有 409、单 tab、请求完全成功也能由**同名 model id**稳定触发，是 `af543606` 新引入的局部 identity regression。
+
+**建议修复**：
+
+- optimistic state 保存完整 `{ providerId, modelId }` 或已经存在的复合 key `${providerId}\0${modelId}`，禁止仅按 modelId 做 `find`；
+- watcher 同时观察 `defaultProviderId + defaultModelId`，服务端 props 收敛后清掉/同步 optimistic state；
+- mutation 失败时显式 rollback 到 props，而不是继续保留未提交的 optimistic key；
+- regression 至少覆盖：两个 Provider 同名模型的首屏解析、同 modelId 跨 Provider 切换、保存失败 rollback、fallback 候选始终排除真正的默认复合 key。
+
+---
+
+### 7.137 `a6371f9` 重新打开 §7.38：Launcher 从“长按 320ms 才拖动”回退为 4px 位移即拖动（P1 · 🟠 重新打开 2026-09-24）
+
+§7.38 已经把 Launcher 原先“6px 位移阈值拖拽”明确判为误触问题，并在真实 CDP 探针里验证：**快速移动 <320ms、80×60px 时位置不变且 Hub 不打开；只有长按 320ms 后才进入拖动**。该条因此标为已关闭。
+
+但后续 `a6371f9` 在“设置布局/提示清理”提交中同时修改了 `AgentLauncher.vue`，直接删除 `HOLD_MS = 320` 与长按 timer，改为：
+
+- `DRAG_THRESHOLD_PX = 4`；
+- pointer down 后只要 `Math.hypot(dx, dy) >= 4` 就立即 `dragging=true`；
+- 同一 pointer move 马上调用 `setLauncherPosition(...)`。
+
+因此当前 HEAD 又回到了比 §7.38 修复前 **6px 阈值还更敏感的 4px 阈值**。普通点击时轻微手抖就可能把 Launcher 拖离位置，历史文档里的“长按拖动”闭环与实际实现已经失真。旁证是 `window-manager.ts` 当前注释仍写着 “Dragging it away is now an explicit long press”，说明行为改回去了但契约/文档没有同步。
+
+本条不是重新争论 UX 偏好，而是对一个已经有明确验收标准、真实 probe 和“已关闭”状态的问题做 regression 记录。
+
+**建议修复**：
+
+- 恢复 §7.38 的 hold intent gate，或采用等价的“时间 + 位移意图”状态机；未满足拖动意图前不得改写持久化位置；
+- 继续保留当前“重置位置/右键还原”入口；
+- 直接恢复/固化 §7.38 的 regression：down/up 可打开；<320ms 的 80×60 快速移动不得改变位置；>320ms 后拖动才更新位置；pointercancel 不落盘；
+- 修复后同步 `window-manager.ts` 与 Launcher 注释，避免“代码 4px、注释长按”的双契约。
+
+---
+
+### 7.138 Provider discovery 最多返回 1,000 模型，但“导入全部/一键添加全部”会越过 100-model 持久化上限（P2 · 🟠 开放 2026-09-24）
+
+`a6371f9` 新增未落库 endpoint model discovery 后，拉取端与保存端出现了确定的数量契约分叉：
+
+- `OpenAiProviderAdapter.fetchModelsFromEndpoint()` 对 provider `data` 使用 `slice(0, 1000)`，所以一次 discovery 合法返回最多 1,000 个去重模型；
+- 添加 Provider 弹窗在 `importAllPulled=true` 时直接对 **全部** `pulledModels.map(...)`，同一数组既用于测试连接前的 create，也用于最终 submit；
+- 已有 Provider 的“添加所有模型”同样把 `availableDiscoveries(provider)` 全部拼到 `[...provider.models, ...newModels]` 再 update；
+- Backend `validateProviderInput()` 则明确要求 `raw.models.length <= 100`，超过直接抛 `VALIDATION_FAILED`。
+
+因此只要一个 OpenAI-compatible endpoint 正常返回 101–1,000 个不同模型，UI 就会展示“导入全部（N）/添加所有模型”这一合法操作，但 create/test/update 必然被 Backend 拒绝。已有 Provider 更早触发：例如已配置 90 个模型、discovery 再发现 11 个新模型，“添加所有”就会构造 101 个模型并失败。
+
+这与 §7.112 不重复：§7.112 讨论的是 `response.text()` 在 1MB resource limit 之前全量缓冲造成的内存上限失效；本条讨论的是**成功解析后的模型数量与持久化业务上限不一致**，即使响应很小、网络完全正常也可稳定复现。
+
+**建议修复**：
+
+- 把 `MAX_PROVIDER_MODELS = 100` 提升为共享协议/领域常量，Frontend 与 Backend 使用同一约束；
+- 新 Provider 的“导入全部”最多允许 100 个；已有 Provider 按 `100 - provider.models.length` 计算剩余槽位；
+- 若 discovery 超过剩余容量，UI 必须明确显示“发现 N 个 / 可添加 M 个”，并要求筛选/选择，而不是发送注定失败的 payload；
+- regression：endpoint 返回 101 和 1,000 个模型时，前端不得提交 >100；已有 90 + 新 11 时不得提交 101；恰好 100 必须可成功通过 Backend validation。
+
+---
+
+---
+### 7.139 Runner coding projection 的 count/relevance 截断没有可靠暴露 `truncated`，Repo Map 还会在相关性排序前提前停止扫描（P2 · 🟠 开放 2026-09-24）
+
+继续逐文件审 `packages/agent-runner` 的 Workspace coding projection 时，确认 `workspace_repo_map` 与 `workspace_code_intel` 共用一个“结果有界，但完整性标志不可信”的契约缺口。它不改变 canonical Workspace 文件本身，但会让 Agent 把不完整的导航证据当成完整结果。
+
+**Repo Map 有两个独立触发面：**
+
+1. `repoMap()` 先按 `logical.localeCompare()` 的路径字典序遍历 index；每个文件收 symbols 后递减全局 `symbolBudget`。一旦 `symbolBudget <= 0 && candidates.length >= maxFiles` 就直接 `break`；
+2. **相关性排序发生在这个 break 之后**。因此当前面已有 `maxFiles` 个普通文件并耗尽 symbol budget 时，路径排序更靠后的精确 query match 根本不会进入 candidates；
+3. 返回的 `truncated` 却只看 `entry.scanTruncated || candidates.length > maxFiles || bounded.truncated`。如果恰好在 `candidates.length === maxFiles` 时 break，后面还有未扫描文件，`candidates.length > maxFiles` 仍为 false；
+4. 即使只看单个文件，`collectSymbols(..., symbolBudget)` 因 maxSymbols 停止后也没有把“symbol 列表被预算裁掉”传播到 repo-map 的 `truncated`。
+
+这使 `workspace_repo_map(query=...)` 可能同时满足“没有扫描后面的更相关文件”与“`truncated=false`”。Backend host tool 又把这个布尔值直接作为 `ToolResult.truncated` 返回给模型。
+
+**Code Intel 同类但更机械：**
+
+- symbols：`collectSymbols(..., maxResults)` 已先裁；
+- diagnostics：先 `diagnostics.slice(0, maxResults)`；
+- definition：结果先 `.slice(0, maxResults)`；
+- references：循环在 `references.length >= maxResults` 时停止；
+- 最后统一写成 `truncated: bounded.truncated || results.length > request.maxResults`。
+
+由于 `results` 在进入最后判断前已经不可能超过 `maxResults`，**纯 count limit 截断时 `results.length > maxResults` 基本天然为 false**。例如实际 101 条 references、请求 `maxResults=100`，返回恰好 100 条且 output-byte budget 未触发时会报告 `truncated=false`。
+
+这与 §7.131/§7.133 不重复：那两条是 Runner producer 与 Backend decoder / HTTP body 的**上限契约不一致导致整个合法响应被拒绝**；本条是响应成功返回，但 completeness metadata 错误，且 repo-map 的提前 break 还能改变相关性选择本身。
+
+`doc/AGENT.md` 明确把 Repo Map / Code Intelligence 定义为 bounded navigation projection，并要求 mutation 前再做 canonical read；因此这里不把它定成 canonical 数据损坏，但它会直接误导模型的代码定位、诊断与“是否还需要继续查找”的决策。
+
+**建议修复**：
+
+- Repo Map 遍历时不要因为 `maxFiles`/symbol budget 在相关性排序前停止发现候选；至少先完成轻量 relevance scan，再对 top-K 做 symbols；
+- 所有 count budget 使用“多取 1 条”或显式 `hasMore`，只要因为 `maxFiles/maxSymbols/maxResults` 停止就置 `truncated=true`；
+- `collectSymbols` 返回 `{symbols,truncated}`，不要只返回裁后的数组；
+- Code Intel 的 diagnostics/definition/references 同样按 `limit+1` 探测，而不是裁完再比较长度；
+- regression：精确匹配文件排在第 `maxFiles+1` 个、101 references→maxResults 100、单文件 symbols > maxSymbols 三种场景都必须保留高相关结果并正确报告 truncation。
+
+---
+### 7.140 MCP HTTP/SSE response 没有 pre-decode 字节上限，10MB `MCP_OUTPUT_TOO_LARGE` 只能限制解码后的业务结果（P2 · 🟠 开放 2026-09-24）
+
+继续审 Backend 外部 integration transport 后，确认 MCP 虽声明 `MAX_OUTPUT_BYTES = 10MB`，但这个限制并没有约束实际网络读取/JSON 解析阶段。
+
+当前链路：
+
+- `SafeMcpFetch` 为每个请求创建独立 undici `Agent`，固定单连接并做 DNS pinning、禁止 redirect，但 **没有配置 `maxResponseSize`**；
+- MCP SDK 的 Streamable HTTP transport 在 `application/json` 响应上直接执行 `await response.json()`，整个 response body 会先被 undici/Fetch 读入并 JSON decode；
+- SSE 路径使用 `TextDecoderStream → EventSourceParserStream`，得到完整 `event.data` 后才 `JSON.parse(event.data)`，同样没有 Nexus-owned per-event byte ceiling；
+- 直到 `McpAdapter` 拿到已经构造好的 JS object 后，`jsonValue()` 才再次 `JSON.stringify(value)` 并用 `Buffer.byteLength(...) > 10MB` 抛 `MCP_OUTPUT_TOO_LARGE`。
+
+因此这个 10MB 常量只限制“最终允许进入 Nexus JsonValue 的序列化尺寸”，不能阻止一个已配置但异常/恶意的 MCP endpoint 先发送远大于 10MB 的 JSON body 或单个 SSE event。请求有 60s timeout，但高吞吐连接仍可以在超时前制造远高于业务上限的 Backend heap / parser 内存峰值。
+
+列表接口还有同一顺序问题：`listTools/listResources/listPrompts` 的数量限制（256 / 2048 / 512）也都是 SDK 已完整解码结果后才检查，不能作为 wire resource bound。
+
+这与 §7.112 不重复：§7.112 是 OpenAI-compatible Provider `/models` 自己声明的 1MB limit 在 `response.text()` 后才检查；本条是独立的 MCP Streamable HTTP/SSE transport，且底层 SDK 同时存在 JSON body 与 SSE event 两种无 pre-decode 上限路径。
+
+**建议修复**：
+
+- 在 `SafeMcpFetch` 的 undici dispatcher 配置 transport-level `maxResponseSize`，并给协议握手/错误响应与普通 RPC 选择明确上限；
+- 对 SSE 再增加**单 event**与累计 pending bytes 上限，不能只依赖 HTTP response 总量（长寿命 SSE 本身可以持续）；
+- 若 SDK 暂不暴露 event ceiling，包装/替换其 stream parser，在 JSON parse 前按 UTF-8 bytes fail closed；
+- 保留 `jsonValue()` 作为第二层业务投影限制，但不要把它当 wire memory bound；
+- regression：无 Content-Length 的 >10MB JSON response、单个 >10MB SSE event 都必须在完整 body/event 被 materialize 前中止；合法小流继续正常工作。
+
+---
+### 7.141 Provider version 推进后 Subagent Profile 的旧模型 ref 在 UI 中消失，正常重选还会保留隐藏 stale ref，导致 Profile 无法保存/运行（P1 · 🟠 开放 2026-09-24）
+
+继续逐页复核 Subagent 设置与 Backend policy 契约后，确认 Profile 的 `ModelRef.configurationVersion` 冻结语义在 Provider 版本变化后缺少可见的 rebind / migration 路径，并且当前 UI 的精确 key 逻辑会把旧引用隐藏起来。
+
+**Frontend 当前行为：**
+
+- `modelOptions` 只由**当前 enabled Provider**生成，key 是 `providerId\0modelId\0provider.version`，ref 也写当前 `configurationVersion=provider.version`；
+- 已保存 Profile 的 `defaultModel / allowedModels` 原样带旧版本；`modelKey()` 同样把 `configurationVersion` 纳入 identity；
+- default select 与 allowed checkbox 都按完整 key 精确匹配。Provider 从 v1 变 v2 后，旧 `P/model@v1` 在 UI 中不再命中任何 option：默认选择看起来为空/失配，allowed checkbox 也全部显示未选；
+- 用户再勾同一个 `P/model` 时，`toggleAllowedModel()` 只判断“当前 v2 key 是否存在”，于是会**追加** `P/model@v2`，不会删除隐藏的 `P/model@v1`；
+- `setDefaultModel()` 也只会把 default 改成 v2，并在 allowed 中追加 v2；同样没有清理 v1；
+- `saveProfiles()` 最终把整个 `allowedModels` 数组送回 Backend，所以用户通过正常控件重选后，payload 仍同时含隐藏的旧 v1 ref。
+
+**Backend 是严格 fail-closed：**
+
+- `SubagentPolicyService.replaceProfiles()` 对每一个 `profile.allowedModels` 调 `assertModel()`；
+- `assertModel()` 明确要求 Provider enabled 且 `provider.version === model.configurationVersion`，否则抛 `SUBAGENT_MODEL_UNAVAILABLE`；
+- 新 delegation 的 `SubagentService.create()` 也要求同一版本一致，已有 delegation 的 model-step executor 同样按冻结版本检查；
+- Provider repository 普通 update 会 `version = version + 1`，因此不仅换模型，display name / endpoint / enabled 等正常 Provider 更新也会推进版本。
+
+所以最小复现是：保存一个 Profile，allowed/default 为 `P/m@v1` → 对 Provider P 做一次正常 update 得到 v2 → 打开 Subagent 设置。旧模型在 UI 中不显示为已选；重新选择当前 `P/m@v2` 后保存，隐藏的 `P/m@v1` 仍在 `allowedModels`，Backend 继续拒绝。用户没有普通的单项入口删除这个 stale ref，只能删掉/重建整个 Profile 或依赖未来专门迁移逻辑。
+
+这里不把 Backend 的版本冻结本身判为错误：`configurationVersion` 作为 fail-closed model binding 是合理安全机制。问题是**持久 Profile 也使用这个冻结引用，却没有“stale 可见 + 显式 rebind”的生命周期**，并且 UI 正常重选会制造“新旧版本并存、旧项不可见”的不可修复草稿。
+
+这与 §7.53 不重复：§7.53 是快速切 App 的旧响应把 A 的 Profile draft/version 写到 B；本条单 App、无并发请求即可由 Provider version 正常推进稳定触发。
+
+**建议修复**：
+
+- load Profile 时按 `providerId + modelId` 识别 stale generation，明确显示“Provider 配置已更新，需要重新绑定”，不要让旧 ref 静默消失；
+- rebind 必须是显式动作：若版本冻结有安全含义，不应静默迁移；用户确认后原子地把 default 与 allowed 中同一 `providerId+modelId` 的旧版本替换成当前版本；
+- `toggleAllowedModel/setDefaultModel` 在加入当前版本前，应去重/替换同一 provider+model 的其它 configurationVersion，避免隐藏 stale ref 残留；
+- Save 前对 stale refs 做本地 preflight，并给可操作的 rebind UI，而不是只显示 Backend 机器错误；
+- regression：保存 v1 profile → Provider update 到 v2 → UI 必须显示 stale；执行 rebind 后 payload 只剩 v2；保存通过且后续 delegation 可创建。
+
+### 7.142 Settings `?tab=` deep-link 只在 mount 时读取，与 route-name KeepAlive 缓存脱节（P2 · 🟠 开放 2026-09-24）
+
+`a6371f9` 为新的 Settings 导航增加了 `/settings?tab=<section>` 深链入口，但当前实现只在组件首次 mount 时消费 query；同一页面又被全局按 route name 做 KeepAlive，因此 URL 与实际选中分区会稳定失同步。
+
+**当前链路：**
+
+- `SettingsPage.vue` 的 `onMounted()` 读取一次 `route.query.tab`，合法时才写 `active.value`；没有 watch `route.query.tab`，也没有 `onActivated` 重新同步；
+- `selectTab()` 只修改本地 `active` / `mobileView`，不会 `router.replace()` 更新 query；
+- Router 把 `/settings` 标记为 `meta.keepAlive=true`；
+- `App.vue` 的缓存实例 key 固定为 `String(route.name)`，即 `Settings`。query 从 `?tab=agent` 变为其它值，或离开后再返回同一个 URL，都不会因为 query 变化创建新 Settings 实例。
+
+因此可以稳定复现两种失配：
+
+1. 首次打开 `/settings?tab=agent`，页面正确进入 Agent；随后在页面内切到 Workspace。URL 仍保留 `?tab=agent`，当前内容却已经是 Workspace；
+2. 此时离开 Settings，再导航回 `/settings?tab=agent`。KeepAlive 恢复原实例，`onMounted` 不会再执行，页面仍停在 Workspace；同理，在 Settings 已激活时只改变 `route.query.tab` 也不会更新 `active`。
+
+结果是新增的 deep-link 语义对浏览器返回/前进、重复导航、复制当前 URL 与未来任何 `router.push({ name: 'Settings', query: { tab: ... } })` caller 都不可靠；地址栏声明的 section 与用户实际看到的 section 可以长期不一致。
+
+这不是普通“记住上次 tab”的产品偏好：代码已经把 `tab` 暴露为路由状态并在首次加载时赋予导航语义，KeepAlive 后却不再遵守同一个路由状态，属于同一公开状态源内部不一致。
+
+**建议修复**：
+
+- 用 `watch(() => route.query.tab, ... , { immediate: true })`（或等价 route update hook）统一处理首次进入与后续 query 变化；
+- 若产品希望 URL 始终表示当前 section，`selectTab()` 同步 `router.replace({ query: { ...route.query, tab } })`，并做好双向同步防循环；
+- KeepAlive 的 `onActivated` 至少要再次 reconcile 当前 route 与本地 active，不能只依赖 mount；
+- regression：首次 `?tab=agent`、同页 query agent→security、切本地 tab 后 URL、一度离开再返回相同 `?tab=agent`、浏览器 back/forward 五条路径都应保证 URL 与 active section 一致。
+
+---
+
+### 7.143 Agent Settings 取消 visitedGroups lazy mount 后，未访问的隐藏分组也会立即发起网络请求并弹全局错误（P2 · 🟠 开放 2026-09-24）
+
+`a6371f9` 把 Agent Settings 从旧的三组卡片重排为四个 `v-show` 分组时，保留了 `visitedGroups` 状态，却删除了模板里所有 `v-if="visitedGroups.has(...)"`。结果不是“访问过的分组继续保活”，而是父级首次拿到 settings 后，**四个分组的全部子组件都会立即 mount**，即使用户一直停在默认的“模型与预算”。
+
+**提交前后差异：**
+
+- `862a458` 中 runtime / plugins 等分组都有 `v-if="visitedGroups.has(...)" + v-show`，只有首次进入该分组后才挂载；
+- `a6371f9` 后模板只剩 `v-show="activeGroup === ..."`；`visitedGroups` 仍在 `selectGroup()` 里维护，但已经没有 template consumer；
+- 因此隐藏的 Tools / Runtime / Safety 子树与 Models 同时创建，所有子组件 `onMounted` 副作用都会执行。
+
+这会产生真实的隐藏 I/O，而不只是额外渲染：
+
+- `PluginManagementSettings` mount 后直接 `refresh()`，并继续请求 official catalog + **每一个配置的 remote repository**；任何 catalog 失败都会通过 `operationFeedback.notifyError({ operation: 'load-catalogs', ... })` 发全局错误；
+- `McpIntegrationSettings` mount 后请求 MCP integrations，失败同样发全局错误；
+- `WorkspaceRuntimeSettings` mount 后并发请求 runtime catalog + storage，失败发全局错误；
+- `AcpRuntimeSettings` mount 后请求 ACP integrations；
+- `SafetyNetworkSettings` mount 时如果共享 connection store 为空，会主动 `connectionsStore.load()`。
+
+最小复现：给 Plugin Settings 配一个当前不可达的 remote repository → 新开 Settings > Agent，**不要离开默认 Models 分组** → 隐藏的 PluginManagementSettings 仍会请求该仓库，并可能在模型页上弹出插件仓库加载错误。MCP / Workspace 等请求也会在未访问相应分组时提前发生。
+
+这与 §7.54 不重复：§7.54 讨论“**已经挂载**的隐藏卡片”在全局 revision 变化后覆盖未保存草稿；本条是 `a6371f9` 新取消 lazy mount 后，“**从未访问过**的分组”也被强制挂载并产生网络/错误副作用。
+
+**建议修复**：
+
+- 恢复 `v-if="visitedGroups.has(group)" + v-show` 的“首次访问才 mount、之后保活”语义，按新的 models/tools/runtime/safety 四组实现；
+- 或把每组包成独立 lazy component，确保未访问组不会创建其请求型子组件；
+- regression：首次进入 Agent/Models 时断言 Plugin/MCP/ACP/Workspace/Connections loader 为 0 次；首次进入对应分组时各自只触发一次；离开再返回仍保留该组状态且不重复初始化；
+- 额外验证隐藏 remote catalog 失败不会在用户未进入 Tools/Plugins 时产生全局错误提示。
+
+---
+
+### 7.144 `a6371f9` 删除 Agent panel 的 DOM id，Settings tab 的 `aria-controls` 现在指向不存在的目标（P2 · 🟠 开放 2026-09-24）
+
+Settings 页的两套导航都会给 Agent tab 输出 `aria-controls="settings-panel-agent"`：mobile pills 与 desktop rail 都使用 `:aria-controls="`settings-panel-${item.value}`"`。其它 Settings panel 由父页显式提供对应 id，但 Agent 依赖 `AgentSettingsPanel` 自己的根 id。
+
+`862a458 → a6371f9` 的 committed diff 明确把：
+
+`<section id="settings-panel-agent" ...>`
+
+改成了：
+
+`<div class="space-y-4">`
+
+而 `SettingsPage.vue` 当前只渲染 `<AgentSettingsPanel v-if="visited.has('agent')" v-show="active === 'agent'" />`，没有把 id 传给子组件。当前 `packages/frontend/src` 搜索也没有任何静态 `settings-panel-agent` target。
+
+因此 Agent tab 暴露了一个不可解析的 accessibility relationship：辅助技术看到“此 tab 控制 settings-panel-agent”，DOM 里却没有该 panel。这个缺口是 `a6371f9` Settings 重构直接引入的，与纯视觉布局无关。
+
+**建议修复**：给 Agent panel 恢复稳定的 `id="settings-panel-agent"`（最好同时补标准 `role="tabpanel"` / `aria-labelledby`），或由 SettingsPage 用统一 wrapper 持有所有 panel id；加 DOM regression，遍历每个 `[role=tab][aria-controls]` 并断言目标 id 唯一存在。
+
+---
+
+### 7.145 Settings 页面把导航声明为 ARIA tabs，却没有 tab widget 的键盘/焦点模型（P2 · 🟠 开放 2026-09-24）
+
+继续从 a11y 反向扫描后确认，这是一个**历史遗留而非 `a6371f9` 首次引入**的问题：`413f2e99` 已经给旧 Settings 导航加了 `role="tablist"/"tab"`，而该提交早于本轮 66-commit 审计起点 `b0d7b220`。所以本条补的是此前矩阵范围之外的当前缺口，不把责任错误归给后续增量提交。
+
+当前 `SettingsPage.vue` 又把同一模式复制成两套响应式导航：
+
+- mobile 横向 pills：`role="tablist"` + 每个 button `role="tab"`；
+- desktop 纵向 rail：同样 `role="tablist"` + `role="tab"`，但没有声明 vertical orientation；
+- 全文件没有 tab 导航所需的方向键处理，也没有 roving `tabindex`；所有原生 button 默认都进入顺序 Tab 链；
+- panel 容器没有统一的 `role="tabpanel"` / `aria-labelledby` 关系。
+
+实际键盘行为因此仍是“按 Tab 逐个经过 8 个 tab button，方向键不切换”，与代码声明的 composite tab widget 语义不一致；desktop rail 视觉上是纵向导航，但 tablist 默认方向语义也未同步。
+
+**建议修复**二选一：
+
+1. 如果它真的是 tab widget：只让 active tab `tabindex=0`、其余 `-1`，实现对应方向键 + Home/End，desktop 标 `aria-orientation="vertical"`，并给 panel 补 `role="tabpanel"` / `aria-labelledby`；
+2. 如果产品只需要普通 Settings 导航：移除 tablist/tab 角色，使用 `nav` + button/link 的原生键盘语义，不伪装成复合 tab 控件。
+
+regression 至少覆盖 mobile/desktop 两种布局：Tab 只进入一次 composite、方向键可移动 active/focus（若保留 tab pattern），每个 `aria-controls` 都有真实 panel target。
+
+---
+
+### 7.146 `a6371f9` 用无运行语义的假 i18n 引用绕过 §7.40 dead-key 可达性门禁（P2 · 🟠 开放 2026-09-24）
+
+继续逐文件复核 `a6371f9` 时，发现这次 Settings 分组从旧的 `plugins` 重构为 `tools / safety` 后，没有真正删除旧翻译 key，而是新增了一条没有任何运行 consumer 的源码字面量：
+
+```ts
+const _legacyPluginGroupKey = 'agent.settings.groups.plugins';
+```
+
+当前 committed HEAD 的事实闭环是：
+
+- `groups` 真正渲染的分组 key 已经是 `agent.settings.groups.models / extensions / runtime / safety`，不再使用 `groups.plugins`；
+- 全 `packages/frontend/src` 搜索 `agent.settings.groups.plugins` 只有上面这一条 `_legacyPluginGroupKey`，变量自身也没有任何 consumer；
+- en-US / ja-JP / zh-CN 三份字典仍各保留 `agent.settings.groups.plugins`；
+- §7.40 新增的 `check-agent-i18n.mjs` 会扫描所有源码中的 `['"`](agent\.[A-Za-z0-9_.-]+)['"`]` 字面量并放进 `referencedLiterals`，随后只要 `referencedLiterals.has(key)` 就认为该 key reachable；
+- 因此这个无运行语义的常量恰好会让真正已经死亡的 locale key 通过“不可达 key”门禁。
+
+这不是普通“多留了一个翻译”的清理问题，而是**门禁被伪引用规避**：§7.40 的目的就是让死 key 不再靠人工记忆存活；如果任何重构都能塞一个未使用字符串常量让检查通过，门禁就无法证明“key 有真实 caller”。当前 §7.52 里原先“committed HEAD 仍有真实导航引用”的判断也因此已经失效——当前 HEAD 只有这个 dummy literal。
+
+**建议修复**：
+
+- 删除 `_legacyPluginGroupKey` 与三语 `agent.settings.groups.plugins` 死 key；
+- 强化可达性扫描：不要把任意源码字符串都当 caller，优先识别 `t/$t/translateOrRaw` 等真实翻译调用、模板绑定或显式受控的动态 prefix；
+- 至少在 lint 里区分“定义但未被代码消费的普通常量字符串”与真正 i18n lookup；若必须保留动态 key，用集中、可审计的 allowlist / prefix 声明，不要靠 dummy variable；
+- regression：加入一个只存在于未使用 const 的 `agent.*` key，检查必须失败；真实 `$t('agent.*')`、受控动态 prefix 仍必须通过。
+
+---
+
 ## 附录 A：核查方法与证据
 
 - **构建产物核对**（§1.1）：`packages/frontend/dist/assets/index-*.css` 中 `bg-header` 58 次、`bg-background` 27 次、`border-border` 32 次，而 `bg-card` / `border-hover` / `primary-hover` 为 **0** 次；`src/app/styles/tokens.css` 的 `@theme inline` 未定义 `--color-card`。
