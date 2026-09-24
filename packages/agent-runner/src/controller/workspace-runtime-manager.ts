@@ -207,9 +207,7 @@ export class WorkspaceRuntimeManager {
     const profile = this.toolchainProfileRoot(metadata.workspaceId, metadata.toolchainFingerprint);
     const packBins: string[] = [];
     for (const pack of metadata.toolchain) {
-      if (!this.store.installed(pack)) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
-      this.store.activate(pack);
-      const target = this.store.canonicalPath(pack);
+      const target = this.store.executionPath(pack);
       if (fs.existsSync(path.join(target, 'bin'))) packBins.push(path.join(target, 'bin'));
     }
 

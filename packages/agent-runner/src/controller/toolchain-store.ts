@@ -30,21 +30,93 @@ const decodeInstallMarker = (value: unknown): InstallMarker => {
 };
 
 const markerName = '.nexus-install.json';
-const canonicalRoot = '/opt/nexus/packs';
+const runtimeViewMarkerName = '.nexus-runtime-view.json';
+const MAX_RELOCATABLE_TEXT_BYTES = 8 * 1024 * 1024;
 
-const removeManagedTree = (target: string): void => {
-  if (!fs.existsSync(target)) return;
-  const makeWritable = (current: string): void => {
+interface RuntimeViewMarker {
+  schemaVersion: 1;
+  contentDigest: string;
+  executionPath: string;
+}
+
+const makeTreeWritable = (root: string): void => {
+  if (!fs.existsSync(root)) return;
+  const visit = (current: string): void => {
     const stat = fs.lstatSync(current);
     if (stat.isSymbolicLink()) return;
     if (stat.isDirectory()) {
       fs.chmodSync(current, 0o700);
-      for (const name of fs.readdirSync(current)) makeWritable(path.join(current, name));
+      for (const name of fs.readdirSync(current)) visit(path.join(current, name));
       return;
     }
-    if (stat.isFile()) fs.chmodSync(current, 0o600);
+    if (stat.isFile()) fs.chmodSync(current, 0o600 | (stat.mode & 0o111));
   };
-  makeWritable(target);
+  visit(root);
+};
+
+const lockTree = (root: string): void => {
+  const visit = (current: string): void => {
+    const stat = fs.lstatSync(current);
+    if (stat.isSymbolicLink()) return;
+    if (stat.isDirectory()) {
+      for (const name of fs.readdirSync(current)) visit(path.join(current, name));
+      fs.chmodSync(current, 0o555);
+      return;
+    }
+    if (!stat.isFile()) throw new Error('WORKSPACE_TOOLCHAIN_TREE_UNSAFE');
+    fs.chmodSync(current, stat.mode & 0o111 ? 0o555 : 0o444);
+  };
+  visit(root);
+};
+
+const assertSafeSymlink = (root: string, linkPath: string): void => {
+  const target = fs.readlinkSync(linkPath);
+  if (!target || path.isAbsolute(target) || target.includes('\0')) {
+    throw new Error('WORKSPACE_TOOLCHAIN_SYMLINK_UNSAFE');
+  }
+  const resolved = path.resolve(path.dirname(linkPath), target);
+  const rootResolved = path.resolve(root);
+  if (resolved !== rootResolved && !resolved.startsWith(`${rootResolved}${path.sep}`)) {
+    throw new Error('WORKSPACE_TOOLCHAIN_SYMLINK_UNSAFE');
+  }
+};
+
+const relocateRuntimeTree = (root: string, sourcePrefix: string, targetPrefix: string): void => {
+  const sourceBytes = Buffer.from(sourcePrefix);
+  const visit = (current: string): void => {
+    for (const name of fs.readdirSync(current)) {
+      const target = path.join(current, name);
+      const stat = fs.lstatSync(target);
+      if (stat.isSymbolicLink()) {
+        assertSafeSymlink(root, target);
+        continue;
+      }
+      if (stat.isDirectory()) {
+        visit(target);
+        continue;
+      }
+      if (!stat.isFile()) throw new Error('WORKSPACE_TOOLCHAIN_TREE_UNSAFE');
+      const value = fs.readFileSync(target);
+      if (value.indexOf(sourceBytes) < 0) continue;
+      const decoded = value.toString('utf8');
+      if (
+        value.length > MAX_RELOCATABLE_TEXT_BYTES ||
+        value.includes(0) ||
+        !Buffer.from(decoded, 'utf8').equals(value)
+      ) {
+        throw new Error('WORKSPACE_TOOLCHAIN_NOT_RELOCATABLE');
+      }
+      fs.writeFileSync(target, decoded.split(sourcePrefix).join(targetPrefix), { mode: stat.mode & 0o777 });
+    }
+  };
+  visit(root);
+};
+
+const canonicalRoot = '/opt/nexus/packs';
+
+const removeManagedTree = (target: string): void => {
+  if (!fs.existsSync(target)) return;
+  makeTreeWritable(target);
   fs.rmSync(target, { recursive: true, force: true });
 };
 
@@ -52,6 +124,7 @@ export class ToolchainStore {
   constructor(private readonly packsRoot: string) {
     fs.mkdirSync(packsRoot, { recursive: true });
     fs.mkdirSync(path.join(packsRoot, '.staging'), { recursive: true });
+    fs.mkdirSync(path.join(packsRoot, '.runtime'), { recursive: true });
   }
 
   path(ref: ToolchainPackRef): string {
@@ -65,6 +138,44 @@ export class ToolchainStore {
 
   canonicalPath(ref: Pick<ToolchainPackRef, 'familyId' | 'versionId'>): string {
     return path.join(canonicalRoot, safeSegment(ref.familyId), safeSegment(ref.versionId));
+  }
+
+  executionPath(ref: ToolchainPackRef): string {
+    if (!this.installed(ref)) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
+    const target = path.join(
+      this.packsRoot,
+      '.runtime',
+      safeSegment(ref.familyId),
+      safeSegment(ref.versionId),
+      safeSegment(ref.contentDigest.replace(/^sha256:/, '')),
+    );
+    const markerPath = path.join(target, runtimeViewMarkerName);
+    try {
+      const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8')) as Partial<RuntimeViewMarker>;
+      if (
+        marker.schemaVersion === 1 &&
+        marker.contentDigest === ref.contentDigest &&
+        marker.executionPath === target &&
+        (fs.statSync(target).mode & 0o200) === 0
+      ) {
+        return target;
+      }
+    } catch {
+      // Missing or incomplete runtime views are rebuilt from the verified immutable source pack.
+    }
+
+    removeManagedTree(target);
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o755 });
+    const staging = `${target}.staging`;
+    removeManagedTree(staging);
+    fs.cpSync(this.path(ref), staging, { recursive: true, dereference: false, force: false, errorOnExist: true });
+    makeTreeWritable(staging);
+    relocateRuntimeTree(staging, this.canonicalPath(ref), target);
+    const marker: RuntimeViewMarker = { schemaVersion: 1, contentDigest: ref.contentDigest, executionPath: target };
+    fs.writeFileSync(path.join(staging, runtimeViewMarkerName), `${JSON.stringify(marker)}\n`, { mode: 0o600 });
+    lockTree(staging);
+    fs.renameSync(staging, target);
+    return target;
   }
 
   activate(ref: ToolchainPackRef): void {
@@ -81,7 +192,6 @@ export class ToolchainStore {
         fs.rmSync(temporary, { force: true });
         throw new Error('WORKSPACE_TOOLCHAIN_CANONICAL_PATH_CONFLICT');
       }
-      fs.rmSync(canonical, { force: true });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         fs.rmSync(temporary, { force: true });
@@ -145,6 +255,15 @@ export class ToolchainStore {
 
   remove(ref: ToolchainPackRef): void {
     const target = this.path(ref);
+    const runtimeView = path.join(
+      this.packsRoot,
+      '.runtime',
+      safeSegment(ref.familyId),
+      safeSegment(ref.versionId),
+      safeSegment(ref.contentDigest.replace(/^sha256:/, '')),
+    );
+    removeManagedTree(runtimeView);
+    removeManagedTree(`${runtimeView}.staging`);
     const canonical = this.canonicalPath(ref);
     try {
       if (fs.lstatSync(canonical).isSymbolicLink() && fs.realpathSync(canonical) === fs.realpathSync(target)) {
