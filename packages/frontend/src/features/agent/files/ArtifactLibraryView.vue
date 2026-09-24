@@ -80,6 +80,7 @@
   const error = ref('');
   const notice = ref('');
   const deleteNotice = ref('');
+  let queryGeneration = 0;
 
   const bytes = (value: number): string => {
     if (value < 1024) return `${value} B`;
@@ -110,34 +111,47 @@
     ...(kind.value === 'all' ? {} : { kind: kind.value }),
   });
 
+  const filterKey = (): string => JSON.stringify(filters());
+
   const load = async (): Promise<void> => {
+    const generation = ++queryGeneration;
+    const requestFilters = filters();
+    const requestFilterKey = JSON.stringify(requestFilters);
     busy.value = true;
     error.value = '';
     try {
-      const [page, nextStorage] = await Promise.all([agentApi.files(filters()), agentApi.storage()]);
+      const [page, nextStorage] = await Promise.all([agentApi.files(requestFilters), agentApi.storage()]);
+      if (generation !== queryGeneration || requestFilterKey !== filterKey()) return;
       items.value = page.items;
       nextCursor.value = page.nextCursor;
       storage.value = nextStorage;
       cleanupPreview.value = null;
     } catch (cause) {
+      if (generation !== queryGeneration || requestFilterKey !== filterKey()) return;
       error.value = explain(cause);
     } finally {
-      busy.value = false;
+      if (generation === queryGeneration) busy.value = false;
     }
   };
 
   const loadMore = async (): Promise<void> => {
-    if (!nextCursor.value || busy.value) return;
+    const cursor = nextCursor.value;
+    if (!cursor || busy.value) return;
+    const generation = queryGeneration;
+    const requestFilters = filters();
+    const requestFilterKey = JSON.stringify(requestFilters);
     busy.value = true;
     try {
-      const page = await agentApi.files({ ...filters(), before: nextCursor.value });
+      const page = await agentApi.files({ ...requestFilters, before: cursor });
+      if (generation !== queryGeneration || requestFilterKey !== filterKey() || cursor !== nextCursor.value) return;
       const known = new Set(items.value.map((item) => item.id));
       items.value.push(...page.items.filter((item) => !known.has(item.id)));
       nextCursor.value = page.nextCursor;
     } catch (cause) {
+      if (generation !== queryGeneration || requestFilterKey !== filterKey()) return;
       error.value = explain(cause);
     } finally {
-      busy.value = false;
+      if (generation === queryGeneration) busy.value = false;
     }
   };
 

@@ -20,39 +20,50 @@
   const busy = ref(false);
   const error = ref('');
   const input = ref<HTMLInputElement | null>(null);
+  let queryGeneration = 0;
   const selectedIds = computed(() => new Set(props.modelValue.map((item) => item.id)));
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'));
+  const queryKey = (): string => query.value.trim();
 
   const load = async (): Promise<void> => {
+    const generation = ++queryGeneration;
+    const requestQuery = queryKey();
     busy.value = true;
     error.value = '';
     try {
-      const page = await agentApi.files(query.value.trim() ? { q: query.value.trim() } : {});
+      const page = await agentApi.files(requestQuery ? { q: requestQuery } : {});
+      if (generation !== queryGeneration || requestQuery !== queryKey()) return;
       items.value = page.items.filter((item) => item.status === 'ready');
       nextCursor.value = page.nextCursor;
     } catch (cause) {
+      if (generation !== queryGeneration || requestQuery !== queryKey()) return;
       error.value = explain(cause);
     } finally {
-      busy.value = false;
+      if (generation === queryGeneration) busy.value = false;
     }
   };
 
   const loadMore = async (): Promise<void> => {
-    if (!nextCursor.value || busy.value) return;
+    const cursor = nextCursor.value;
+    if (!cursor || busy.value) return;
+    const generation = queryGeneration;
+    const requestQuery = queryKey();
     busy.value = true;
     try {
       const page = await agentApi.files({
-        ...(query.value.trim() ? { q: query.value.trim() } : {}),
-        before: nextCursor.value,
+        ...(requestQuery ? { q: requestQuery } : {}),
+        before: cursor,
       });
+      if (generation !== queryGeneration || requestQuery !== queryKey() || cursor !== nextCursor.value) return;
       const known = new Set(items.value.map((item) => item.id));
       items.value.push(...page.items.filter((item) => item.status === 'ready' && !known.has(item.id)));
       nextCursor.value = page.nextCursor;
     } catch (cause) {
+      if (generation !== queryGeneration || requestQuery !== queryKey()) return;
       error.value = explain(cause);
     } finally {
-      busy.value = false;
+      if (generation === queryGeneration) busy.value = false;
     }
   };
 
