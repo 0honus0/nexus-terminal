@@ -39,6 +39,13 @@
   import { agentHostEvents } from './agent-host-events';
   import { agentWindowManager } from './window-manager';
   import { agentSurfaceSession } from './surface-session';
+  import {
+    clearAgentSurfaceFailure,
+    clearAgentSurfaceFailures,
+    latestAgentSurfaceFailure,
+    upsertAgentSurfaceFailure,
+    type AgentSurfaceFailure,
+  } from './agent-surface-failures';
   import AgentThreadSidebar from './AgentThreadSidebar.vue';
   import AgentConfigPopover from '../files/AgentConfigPopover.vue';
   import ApprovalCard from '../runtime/ApprovalCard.vue';
@@ -110,11 +117,27 @@
     'agent.operations.failureDomain.approvals',
     DETAIL_FAILURE_DOMAIN,
   ] as const;
+  const THREAD_CONTEXT_FAILURE_DOMAINS = [
+    'agent.operations.failureDomain.transcript',
+    'agent.operations.failureDomain.stream',
+    'agent.operations.failureDomain.run',
+    'agent.operations.failureDomain.checkpoints',
+    'agent.operations.failureDomain.approvals',
+    DETAIL_FAILURE_DOMAIN,
+    'agent.operations.failureDomain.mutation',
+  ] as const;
+  const LOAD_FAILURE_DOMAINS = [
+    'agent.operations.failureDomain.configuration',
+    'agent.operations.failureDomain.threads',
+    ...THREAD_CONTEXT_FAILURE_DOMAINS,
+  ] as const;
 
-  const error = ref('');
-  const errorDomainKey = ref('');
-  const errorCode = ref('');
-  const errorRetry = shallowRef<AgentSurfaceRetry | null>(null);
+  const errorSlots = shallowRef<AgentSurfaceFailure<AgentSurfaceRetry>[]>([]);
+  const currentError = computed(() => latestAgentSurfaceFailure(errorSlots.value));
+  const error = computed(() => currentError.value?.message ?? '');
+  const errorDomainKey = computed(() => currentError.value?.domainKey ?? '');
+  const errorCode = computed(() => currentError.value?.code ?? '');
+  const errorRetry = computed(() => currentError.value?.retry ?? null);
   let currentRunCheckpointsGeneration = 0;
 
   const refreshCurrentCheckpoints = async (): Promise<void> => {
@@ -128,6 +151,7 @@
       const checkpoints = await facade.listCheckpoints(runId);
       if (requestGeneration !== currentRunCheckpointsGeneration || run.value?.id !== runId) return;
       currentRunCheckpoints.value = checkpoints;
+      clearError('agent.operations.failureDomain.checkpoints');
     } catch (cause) {
       if (requestGeneration !== currentRunCheckpointsGeneration || run.value?.id !== runId) return;
       currentRunCheckpoints.value = [];
@@ -491,32 +515,40 @@
     code: string,
     options: { domainKey: string; retry?: () => void; retryLabelKey?: string },
   ): void => {
-    error.value = message;
-    errorDomainKey.value = options.domainKey;
-    errorCode.value = code === 'AGENT_REQUEST_FAILED' ? '' : code;
-    errorRetry.value = options.retry
+    const retry = options.retry
       ? { labelKey: options.retryLabelKey ?? 'agent.operations.retry', run: options.retry }
       : null;
+    errorSlots.value = upsertAgentSurfaceFailure(errorSlots.value, {
+      domainKey: options.domainKey,
+      message,
+      code: code === 'AGENT_REQUEST_FAILED' ? '' : code,
+      retry,
+    });
   };
 
   const fail = (cause: unknown, options: { domainKey: string; retry?: () => void; retryLabelKey?: string }): void => {
     applyFailure(explain(cause), toAgentApiError(cause).code, options);
   };
 
-  const clearError = (): void => {
-    error.value = '';
-    errorDomainKey.value = '';
-    errorCode.value = '';
-    errorRetry.value = null;
+  const clearError = (domainKey: string): void => {
+    errorSlots.value = clearAgentSurfaceFailure(errorSlots.value, domainKey);
+  };
+  const clearErrors = (domainKeys: readonly string[]): void => {
+    errorSlots.value = clearAgentSurfaceFailures(errorSlots.value, domainKeys);
+  };
+  const clearCurrentError = (): void => {
+    const domainKey = currentError.value?.domainKey;
+    if (domainKey) clearError(domainKey);
   };
 
   const errorDomainLabel = computed(() => (errorDomainKey.value ? t(errorDomainKey.value) : ''));
   const errorRetryLabel = computed(() => (errorRetry.value ? t(errorRetry.value.labelKey) : ''));
 
   const retryFailedOperation = (): void => {
-    const retry = errorRetry.value;
-    clearError();
-    retry?.run();
+    const failure = currentError.value;
+    if (!failure) return;
+    clearError(failure.domainKey);
+    failure.retry?.run();
   };
 
   const rememberThreadRun = (candidate: AgentRunViewDto): void => {
@@ -601,6 +633,7 @@
       const details = await facade.getReconciliation(runId);
       if (requestGeneration !== reconciliationGeneration || run.value?.id !== runId) return;
       reconciliationDetails.value = details.required ? details : null;
+      clearError('agent.operations.failureDomain.run');
     } catch (cause) {
       if (requestGeneration !== reconciliationGeneration || run.value?.id !== runId) return;
       reconciliationDetails.value = null;
@@ -621,6 +654,7 @@
       if (currentThread.value?.id !== snapshot.threadId || (run.value !== null && run.value.id !== runId)) return null;
       run.value = snapshot;
       rememberThreadRun(snapshot);
+      clearError('agent.operations.failureDomain.run');
       if (snapshot.needsReconciliation) {
         runtimeOperation.markReconciling('RECONCILIATION_REQUIRED', t('agent.operations.reconciliationRequired'));
         await refreshReconciliation(snapshot.id);
@@ -654,6 +688,7 @@
       const next = await facade.listApprovals(runId);
       if (requestGeneration !== approvalsGeneration || run.value?.id !== runId) return;
       approvalBatch.value = next;
+      clearError('agent.operations.failureDomain.approvals');
     } catch {
       if (requestGeneration !== approvalsGeneration || run.value?.id !== runId) return;
     }
@@ -696,10 +731,7 @@
     if (decision.phase === 'conflict' && next) runtimeOperation.succeed();
   };
 
-  const reportPostCommitSyncFailure = (
-    cause: unknown,
-    options: { domainKey: string; retry: () => void },
-  ): void => {
+  const reportPostCommitSyncFailure = (cause: unknown, options: { domainKey: string; retry: () => void }): void => {
     logger.warn({ err: cause, appId: props.appId }, 'Agent UI post-commit resync failed');
     applyFailure(t('agent.operations.postCommitSyncFailed'), '', {
       domainKey: options.domainKey,
@@ -714,6 +746,7 @@
   ): Promise<void> => {
     try {
       await action();
+      clearError(options.domainKey);
     } catch (cause) {
       reportPostCommitSyncFailure(cause, options);
     }
@@ -726,7 +759,7 @@
     if (!currentRun?.needsReconciliation || !details?.required || !normalizedNote || reconciliationBusy.value) return;
 
     reconciliationBusy.value = true;
-    clearError();
+    clearError('agent.operations.failureDomain.mutation');
     try {
       const resolved = await facade.resolveReconciliation(currentRun, details, normalizedNote);
       if (run.value?.id !== resolved.id) return;
@@ -749,6 +782,7 @@
 
   const startRunStream = (initial: AgentRunViewDto): void => {
     resetStreamingPresentation();
+    clearError('agent.operations.failureDomain.stream');
     logger.debug(
       {
         appId: props.appId,
@@ -866,7 +900,7 @@
     threadRuns.value = [];
     approvalBatch.value = null;
     nextCursor.value = null;
-    clearError();
+    clearErrors(THREAD_CONTEXT_FAILURE_DOMAINS);
     runtimeOperation.succeed();
     commandResult.value = null;
     agentSurfaceSession.setThread(props.appId, thread.id);
@@ -934,7 +968,7 @@
   const createThread = async (title?: string): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
-    clearError();
+    clearError('agent.operations.failureDomain.threads');
     try {
       const normalizedTitle = title?.trim();
       const thread = await facade.createThread(normalizedTitle || undefined);
@@ -969,6 +1003,7 @@
       const known = new Set(threads.value.map((thread) => thread.id));
       threads.value = [...threads.value, ...page.items.filter((thread) => !known.has(thread.id))];
       threadNextCursor.value = page.nextCursor;
+      clearError('agent.operations.failureDomain.threads');
     } catch (cause) {
       if (requestGeneration !== threadListRefreshGeneration || threadNextCursor.value !== cursor) return;
       fail(cause, {
@@ -1034,6 +1069,7 @@
       selectedEnvironmentRecipeId.value = selectedEnvironment?.id ?? '';
       agentSurfaceSession.setEnvironmentRecipeId(props.appId, selectedEnvironment?.id);
       hardLimits.value = settings.hardLimits;
+      clearError('agent.operations.failureDomain.configuration');
     } catch (cause) {
       if (surfaceDisposed || requestGeneration !== configurationGeneration) return;
       throw cause;
@@ -1042,7 +1078,7 @@
 
   const load = async (): Promise<void> => {
     loading.value = true;
-    clearError();
+    clearErrors(LOAD_FAILURE_DOMAINS);
     const configurationPromise = loadRunConfiguration().catch((cause) => {
       fail(cause, {
         domainKey: 'agent.operations.failureDomain.configuration',
@@ -1073,7 +1109,7 @@
     if (mutationLocked.value) return false;
     busy.value = true;
     runtimeOperation.beginMutation();
-    clearError();
+    clearError('agent.operations.failureDomain.mutation');
     return true;
   };
 
@@ -1354,11 +1390,7 @@
     const requestGeneration = ++detailApprovalGeneration;
     try {
       const [next, snapshot] = await Promise.all([facade.listApprovals(runId), facade.getRun(runId)]);
-      if (
-        requestGeneration !== detailApprovalGeneration ||
-        !detailVisible.value ||
-        detailSnapshot.value?.id !== runId
-      )
+      if (requestGeneration !== detailApprovalGeneration || !detailVisible.value || detailSnapshot.value?.id !== runId)
         return;
       detailApprovalBatch.value = next;
       detailSnapshot.value = snapshot;
@@ -1434,6 +1466,7 @@
       const snapshot = await facade.getRun(candidate.id);
       if (requestGeneration !== detailOpenGeneration) return;
       detailSnapshot.value = snapshot;
+      clearError(DETAIL_FAILURE_DOMAIN);
       detailCheckpoints.value = [];
       detailApprovalBatch.value = null;
       detailSubagents.value = [];
@@ -1443,19 +1476,25 @@
 
       const [checkpoints, detailApprovals, subagents] = await auxiliary;
       if (requestGeneration !== detailOpenGeneration || detailSnapshot.value?.id !== candidate.id) return;
-      if (checkpoints.status === 'fulfilled') detailCheckpoints.value = checkpoints.value;
+      if (checkpoints.status === 'fulfilled') {
+        detailCheckpoints.value = checkpoints.value;
+        clearError('agent.operations.failureDomain.checkpoints');
+      }
       if (detailApprovals.status === 'fulfilled' && approvalGeneration === detailApprovalGeneration) {
         detailApprovalBatch.value = detailApprovals.value;
+        clearError('agent.operations.failureDomain.approvals');
       }
-      if (subagents.status === 'fulfilled') detailSubagents.value = subagents.value.items;
+      if (subagents.status === 'fulfilled') {
+        detailSubagents.value = subagents.value.items;
+        clearError(DETAIL_FAILURE_DOMAIN);
+      }
       const auxiliaryResults = [
         checkpoints,
         approvalGeneration === detailApprovalGeneration ? detailApprovals : null,
         subagents,
       ];
       const failureIndex = auxiliaryResults.findIndex((result) => result?.status === 'rejected');
-      const failure =
-        failureIndex < 0 ? null : (auxiliaryResults[failureIndex] as PromiseRejectedResult | null);
+      const failure = failureIndex < 0 ? null : (auxiliaryResults[failureIndex] as PromiseRejectedResult | null);
       if (failure) {
         fail(failure.reason, {
           domainKey: DETAIL_AUXILIARY_FAILURE_DOMAINS[failureIndex] ?? DETAIL_FAILURE_DOMAIN,
@@ -1484,7 +1523,10 @@
     if (!beginRuntimeMutation()) return;
     try {
       const created = await facade.saveCheckpoint(snapshot as AgentRunSnapshotDto);
-      detailCheckpoints.value = [created, ...detailCheckpoints.value.filter((checkpoint) => checkpoint.id !== created.id)];
+      detailCheckpoints.value = [
+        created,
+        ...detailCheckpoints.value.filter((checkpoint) => checkpoint.id !== created.id),
+      ];
       if (run.value?.id === snapshot.id) {
         currentRunCheckpoints.value = [
           created,
@@ -1523,7 +1565,8 @@
       startRunStream(resumed);
       runtimeOperation.succeed();
       await postCommitSync(
-        () => Promise.all([refreshLedger(), refreshApprovals(resumed.id), refreshBackgroundRuns()]).then(() => undefined),
+        () =>
+          Promise.all([refreshLedger(), refreshApprovals(resumed.id), refreshBackgroundRuns()]).then(() => undefined),
         {
           domainKey: 'agent.operations.failureDomain.run',
           retry: () => void refreshRun(resumed.id),
@@ -1545,7 +1588,8 @@
         threadRuns.value = threadRuns.value.filter((candidate) => candidate.id !== snapshot.id);
         if (run.value?.id === snapshot.id) {
           stopRunStream();
-          run.value = threadRuns.value.find((candidate) => nonTerminal.has(candidate.status)) ?? threadRuns.value[0] ?? null;
+          run.value =
+            threadRuns.value.find((candidate) => nonTerminal.has(candidate.status)) ?? threadRuns.value[0] ?? null;
           approvalBatch.value = null;
           if (run.value && nonTerminal.has(run.value.status)) startRunStream(run.value);
         }
@@ -1615,7 +1659,7 @@
   const deleteThreadConversation = async (thread: AgentThreadViewDto): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
-    clearError();
+    clearError('agent.operations.failureDomain.threads');
     clearThreadDeleteArm();
     try {
       const deletingCurrent = currentThread.value?.id === thread.id;
@@ -1662,7 +1706,7 @@
   const deleteAllConversations = async (): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
-    clearError();
+    clearError('agent.operations.failureDomain.threads');
     clearDeleteAllThreadsArm();
     clearThreadDeleteArm();
     try {
@@ -1971,7 +2015,7 @@
             :reconciliation="run?.needsReconciliation === true || runtimeOperation.phase.value === 'reconciling'"
             :reconciliation-details="reconciliationDetails"
             :reconciliation-busy="reconciliationBusy"
-            @dismiss-error="clearError()"
+            @dismiss-error="clearCurrentError"
             @retry-error="retryFailedOperation"
             :entries="entries"
             :next-cursor="nextCursor"
