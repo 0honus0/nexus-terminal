@@ -22,7 +22,7 @@ type AllowedSignal = 'SIGINT' | 'SIGTERM' | 'SIGHUP' | 'SIGQUIT' | 'SIGKILL' | '
 interface ActiveTerminal {
   workspaceId: string;
   generation: number;
-  close(): void;
+  close(): Promise<void>;
 }
 
 interface TerminalControl {
@@ -168,16 +168,19 @@ export class WorkspaceTerminalRuntime {
     );
   }
 
-  closeWorkspace(workspaceId: string, generation?: number): void {
-    for (const terminal of [...this.active]) {
-      if (terminal.workspaceId === workspaceId && (generation === undefined || terminal.generation === generation)) {
-        terminal.close();
-      }
-    }
+  async closeWorkspace(workspaceId: string, generation?: number): Promise<void> {
+    await Promise.all(
+      [...this.active]
+        .filter(
+          (terminal) =>
+            terminal.workspaceId === workspaceId && (generation === undefined || terminal.generation === generation),
+        )
+        .map((terminal) => terminal.close()),
+    );
   }
 
   closeAll(): void {
-    for (const terminal of [...this.active]) terminal.close();
+    for (const terminal of [...this.active]) void terminal.close().catch(() => undefined);
   }
 
   private attach(
@@ -211,6 +214,8 @@ export class WorkspaceTerminalRuntime {
     let closing = false;
     let finished = false;
     let killTimer: NodeJS.Timeout | null = null;
+    let closePromise: Promise<void> | null = null;
+    let resolveClose: (() => void) | null = null;
     const cleanup = (): void => fs.rmSync(sessionRoot, { recursive: true, force: true });
 
     let terminalSessionId: number | null = null;
@@ -327,9 +332,20 @@ export class WorkspaceTerminalRuntime {
       workspaceId,
       generation,
       close: () => {
-        if (closing || finished) return;
+        if (closePromise) return closePromise;
+        if (finished) return Promise.resolve();
         closing = true;
-        this.active.delete(active);
+        closePromise = new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error('WORKSPACE_OWNER_DRAIN_TIMEOUT')),
+            TERMINATE_GRACE_MS + 1_500,
+          );
+          timeout.unref?.();
+          resolveClose = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+        });
         signalSessionSoon('SIGTERM');
         child.kill('SIGTERM');
         killTimer = setTimeout(() => {
@@ -341,6 +357,7 @@ export class WorkspaceTerminalRuntime {
         if (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING) {
           websocket.close(1001, 'WORKSPACE_TERMINAL_CLOSED');
         }
+        return closePromise;
       },
     };
     this.active.add(active);
@@ -350,7 +367,7 @@ export class WorkspaceTerminalRuntime {
       if (isBinary) {
         const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
         if (bytes.byteLength > MAX_FRAME_BYTES || !child.stdin.writable) {
-          active.close();
+          void active.close().catch(() => undefined);
           return;
         }
         if (!child.stdin.write(bytes)) websocket.pause();
@@ -359,13 +376,13 @@ export class WorkspaceTerminalRuntime {
       const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
       if (Buffer.byteLength(text) > MAX_CONTROL_BYTES) {
         websocket.close(1008, 'WORKSPACE_TERMINAL_CONTROL_INVALID');
-        active.close();
+        void active.close().catch(() => undefined);
         return;
       }
       try {
         const message = decodeTerminalControl(JSON.parse(text) as unknown);
         if (message.type === 'close') {
-          active.close();
+          void active.close().catch(() => undefined);
           return;
         }
         if (message.type === 'resize') {
@@ -386,19 +403,19 @@ export class WorkspaceTerminalRuntime {
         throw new Error('VALIDATION_FAILED');
       } catch {
         websocket.close(1008, 'WORKSPACE_TERMINAL_CONTROL_INVALID');
-        active.close();
+        void active.close().catch(() => undefined);
       }
     });
 
     child.stdin.on('drain', () => websocket.resume());
-    websocket.on('close', () => active.close());
-    websocket.on('error', () => active.close());
+    websocket.on('close', () => void active.close().catch(() => undefined));
+    websocket.on('error', () => void active.close().catch(() => undefined));
 
     child.stdout.on('data', (chunk: Buffer) => {
       if (closing || finished || websocket.readyState !== WebSocket.OPEN) return;
       if (websocket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) {
         websocket.close(1013, 'WORKSPACE_TERMINAL_OUTPUT_BACKPRESSURE');
-        active.close();
+        void active.close().catch(() => undefined);
         return;
       }
       websocket.send(chunk, { binary: true });
@@ -411,7 +428,7 @@ export class WorkspaceTerminalRuntime {
         errorCode: error.message,
       });
       if (websocket.readyState === WebSocket.OPEN) websocket.close(1011, 'WORKSPACE_TERMINAL_PROCESS_FAILED');
-      active.close();
+      void active.close().catch(() => undefined);
     });
     child.once('close', (code, signal) => {
       if (finished) return;
@@ -420,6 +437,8 @@ export class WorkspaceTerminalRuntime {
       finished = true;
       this.active.delete(active);
       if (killTimer) clearTimeout(killTimer);
+      resolveClose?.();
+      resolveClose = null;
       cleanup();
       runnerLog('debug', 'Workspace terminal process exited', {
         workspaceId,

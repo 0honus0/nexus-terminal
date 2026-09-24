@@ -162,5 +162,5 @@ export const terminateManagedProcess = async (child: ChildProcess, graceMs = 2_0
 
   const forcedExit = waitForExit(child, 1_000);
   signalManagedProcess(child, 'SIGKILL');
-  await forcedExit;
+  if (!(await forcedExit)) throw new Error('MANAGED_PROCESS_TERMINATION_TIMEOUT');
 };

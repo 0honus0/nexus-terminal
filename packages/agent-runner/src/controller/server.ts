@@ -1333,8 +1333,10 @@ export class RunnerControllerServer {
       return;
     }
     if (command.action === 'stop') {
-      this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
-      this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+      await Promise.all([
+        this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+        this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+      ]);
       this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.quiesceWorkspace(workspace, Math.floor(Date.now() / 1000) + 10);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
@@ -1343,8 +1345,10 @@ export class RunnerControllerServer {
       return;
     }
     if (command.action === 'restart') {
-      this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
-      this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+      await Promise.all([
+        this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+        this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+      ]);
       this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
       try {
@@ -1359,8 +1363,10 @@ export class RunnerControllerServer {
       this.save(workspace, 'running');
       return;
     }
-    this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
-    this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+    await Promise.all([
+      this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+      this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
+    ]);
     this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
     await this.dependencies.pluginRunner.disposeWorkspace(workspace);
     await this.dependencies.runtimeEngine.remove(workspace.workspaceId, workspace.generation);

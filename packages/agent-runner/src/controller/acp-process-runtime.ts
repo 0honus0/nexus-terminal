@@ -19,7 +19,7 @@ const MAX_STDERR_LOG_BYTES = 4 * 1024;
 interface ActiveProcess {
   workspaceId: string;
   generation: number;
-  close(): void;
+  close(): Promise<void>;
 }
 
 export class AcpProcessRuntime {
@@ -50,15 +50,19 @@ export class AcpProcessRuntime {
     );
   }
 
-  closeWorkspace(workspaceId: string, generation?: number): void {
-    for (const process of [...this.active]) {
-      if (process.workspaceId === workspaceId && (generation === undefined || process.generation === generation))
-        process.close();
-    }
+  async closeWorkspace(workspaceId: string, generation?: number): Promise<void> {
+    await Promise.all(
+      [...this.active]
+        .filter(
+          (process) =>
+            process.workspaceId === workspaceId && (generation === undefined || process.generation === generation),
+        )
+        .map((process) => process.close()),
+    );
   }
 
   closeAll(): void {
-    for (const process of [...this.active]) process.close();
+    for (const process of [...this.active]) void process.close().catch(() => undefined);
   }
 
   private attach(
@@ -76,16 +80,19 @@ export class AcpProcessRuntime {
     registerManagedProcess(child, 'acp', `${workspaceId}:${generation}`);
     let stderrTail = '';
     let closed = false;
+    let closePromise: Promise<void> | null = null;
     const active: ActiveProcess = {
       workspaceId,
       generation,
       close: () => {
-        if (closed) return;
+        if (closePromise) return closePromise;
         closed = true;
-        this.active.delete(active);
-        void terminateManagedProcess(child);
         if (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING)
           websocket.close(1001);
+        closePromise = terminateManagedProcess(child).then(() => {
+          this.active.delete(active);
+        });
+        return closePromise;
       },
     };
     this.active.add(active);
@@ -97,19 +104,19 @@ export class AcpProcessRuntime {
       }
       const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
       if (bytes.byteLength > MAX_FRAME_BYTES || !child.stdin.writable) {
-        active.close();
+        void active.close().catch(() => undefined);
         return;
       }
       child.stdin.write(bytes);
     });
-    websocket.on('close', () => active.close());
-    websocket.on('error', () => active.close());
+    websocket.on('close', () => void active.close().catch(() => undefined));
+    websocket.on('error', () => void active.close().catch(() => undefined));
 
     child.stdout.on('data', (chunk: Buffer) => {
       if (closed || websocket.readyState !== WebSocket.OPEN) return;
       if (websocket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) {
         websocket.close(1013, 'ACP_BACKPRESSURE');
-        active.close();
+        void active.close().catch(() => undefined);
         return;
       }
       websocket.send(chunk, { binary: true });
@@ -128,7 +135,7 @@ export class AcpProcessRuntime {
         stderrTail: stderrTail || undefined,
       });
       if (websocket.readyState === WebSocket.OPEN) websocket.close(1011, 'ACP_PROCESS_FAILED');
-      active.close();
+      void active.close().catch(() => undefined);
     });
     child.on('exit', (code, signal) => {
       signalManagedProcess(child, 'SIGKILL');
