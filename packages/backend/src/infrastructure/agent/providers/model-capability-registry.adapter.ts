@@ -13,6 +13,7 @@ import {
   parseModelsDevRegistry,
   validateModelCapabilityRegistrySnapshot,
 } from '../../../modules/agent/ai/model-capability-registry-source';
+import { readBoundedResponse } from './bounded-response';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -65,30 +66,6 @@ export class LocalModelCapabilityRegistryStore implements ModelCapabilityRegistr
   }
 }
 
-const readBoundedResponse = async (response: Response): Promise<Uint8Array> => {
-  if (!response.body) return new Uint8Array();
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const item = await reader.read();
-    if (item.done) break;
-    total += item.value.byteLength;
-    if (total > MODEL_REGISTRY_MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      throw new Error('MODEL_REGISTRY_RESPONSE_TOO_LARGE');
-    }
-    chunks.push(item.value);
-  }
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return merged;
-};
-
 export class ModelsDevCapabilityRegistrySource implements ModelCapabilityRegistrySourcePort {
   async fetch(sourceRevision: string | null): Promise<ModelCapabilityRegistryFetchResult> {
     const controller = new AbortController();
@@ -106,7 +83,11 @@ export class ModelsDevCapabilityRegistrySource implements ModelCapabilityRegistr
         return { state: 'not-modified', sourceRevision: response.headers.get('etag') ?? sourceRevision };
       }
       if (!response.ok) throw new Error(`MODEL_REGISTRY_HTTP_${response.status}`);
-      const bytes = await readBoundedResponse(response);
+      const bytes = await readBoundedResponse(
+        response,
+        MODEL_REGISTRY_MAX_RESPONSE_BYTES,
+        'MODEL_REGISTRY_RESPONSE_TOO_LARGE',
+      );
       let raw: unknown;
       try {
         raw = JSON.parse(new TextDecoder().decode(bytes)) as unknown;

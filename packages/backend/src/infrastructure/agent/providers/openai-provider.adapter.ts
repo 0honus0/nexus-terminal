@@ -17,6 +17,7 @@ import {
   OpenAiResponsesContinuationCollector,
 } from './openai-provider-continuation';
 import { parseOpenAiCompatibleCapabilityMetadata } from './openai-provider-capability-metadata';
+import { readBoundedResponse } from './bounded-response';
 
 const MAX_MODELS_RESPONSE_BYTES = 1024 * 1024;
 const MAX_TOOL_ARGUMENT_BYTES = 32 * 1024;
@@ -268,13 +269,10 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
     if (Number.isFinite(declaredLength) && declaredLength > MAX_MODELS_RESPONSE_BYTES) {
       throw new Error('PROVIDER_MODELS_RESPONSE_TOO_LARGE');
     }
-    const text = await response.text();
-    if (Buffer.byteLength(text, 'utf8') > MAX_MODELS_RESPONSE_BYTES) {
-      throw new Error('PROVIDER_MODELS_RESPONSE_TOO_LARGE');
-    }
+    const bytes = await readBoundedResponse(response, MAX_MODELS_RESPONSE_BYTES, 'PROVIDER_MODELS_RESPONSE_TOO_LARGE');
     let payload: unknown;
     try {
-      payload = JSON.parse(text);
+      payload = JSON.parse(new TextDecoder().decode(bytes));
     } catch {
       throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
     }
