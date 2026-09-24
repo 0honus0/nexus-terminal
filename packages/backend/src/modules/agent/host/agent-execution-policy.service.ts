@@ -3,6 +3,7 @@ import { logger } from '../../../shared/logging/logger';
 import type { Scope } from '../agent.types';
 import type { AgentSettingsService, AgentSettingsView } from './agent-settings.service';
 import type { AppStoragePort } from './app-storage.port';
+import { AGENT_EXECUTION_POLICY_STORAGE_KEY } from './app-storage-ownership';
 
 export type ContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
 
@@ -38,7 +39,6 @@ export interface AgentExecutionPolicyView {
   version: number;
 }
 
-const STORAGE_KEY = 'agent.execution-policy.v1';
 const modes = new Set<ContextCompactionMode>(['aggressive', 'balanced', 'conservative']);
 const contextProfiles = new Set<AgentContextProfile>(['normal', 'extended']);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -132,7 +132,7 @@ export class AgentExecutionPolicyService {
 
   async get(scope: Scope): Promise<AgentExecutionPolicyView> {
     const [stored, settings] = await Promise.all([
-      this.storage.get(scope, STORAGE_KEY),
+      this.storage.get(scope, AGENT_EXECUTION_POLICY_STORAGE_KEY),
       this.settings.get(scope.userId),
     ]);
     const rawOverrides = stored
@@ -156,11 +156,11 @@ export class AgentExecutionPolicyService {
     const overrides = parseOverrides(raw);
     const settings = await this.settings.get(scope.userId);
     assertWithinHardLimits(overrides, settings);
-    const current = await this.storage.get(scope, STORAGE_KEY);
+    const current = await this.storage.get(scope, AGENT_EXECUTION_POLICY_STORAGE_KEY);
     if ((current?.version ?? 0) !== expectedVersion) throw new Error('SETTINGS_VERSION_CONFLICT');
     const stored = await this.storage.put(
       scope,
-      STORAGE_KEY,
+      AGENT_EXECUTION_POLICY_STORAGE_KEY,
       { schemaVersion: 1, overrides: overrides as unknown as import('../agent.types').JsonValue },
       current?.version ?? null,
     );

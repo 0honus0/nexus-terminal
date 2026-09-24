@@ -14,6 +14,11 @@ export const pluginErrorRules: readonly AgentErrorRule[] = [
     ],
     rawCode(400, 'Invalid Agent plugin request.'),
   ),
+  onCodes(['APP_STORAGE_KEY_RESERVED'], {
+    status: 403,
+    code: 'APP_STORAGE_KEY_RESERVED',
+    message: 'Plugin App storage key is reserved for Nexus Host state.',
+  }),
   onCodes(['APP_STORAGE_NOT_FOUND'], {
     status: 404,
     code: 'NOT_FOUND',

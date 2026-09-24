@@ -3,6 +3,12 @@ import type { JsonValue, Scope } from '../agent.types';
 import { requireIdempotencyKey } from '../runtime/runs/idempotency';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
 import type { AppStoragePort, AppStorageRecord } from './app-storage.port';
+import {
+  assertPluginOwnedAppStorageKey,
+  hostOwnedAppStorageSnapshot,
+  mergePluginOwnedAppStorageSnapshot,
+  pluginOwnedAppStorageSnapshot,
+} from './app-storage-ownership';
 import type { AppStorageSnapshot, AppStorageSnapshotPort } from './app-storage-snapshot.port';
 import type { AppIntentService } from './app-intent.service';
 import type { PluginInstallRepositoryPort } from './plugin-install.repository.port';
@@ -25,6 +31,7 @@ const requireStorageKey = (value: JsonValue | undefined): string => {
   if (typeof value !== 'string' || value.length < 1 || Buffer.byteLength(value, 'utf8') > 256) {
     throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
   }
+  assertPluginOwnedAppStorageKey(value);
   return value;
 };
 
@@ -63,18 +70,21 @@ export class PluginDataManager {
     private readonly appIntents: AppIntentService,
   ) {}
 
-  capture(scope: Scope): Promise<AppStorageSnapshot> {
-    return this.storage.capture(scope);
+  async capture(scope: Scope): Promise<AppStorageSnapshot> {
+    return pluginOwnedAppStorageSnapshot(await this.storage.capture(scope));
   }
 
-  restore(scope: Scope, snapshot: AppStorageSnapshot): Promise<void> {
-    return this.storage.restore(scope, snapshot);
+  async restore(scope: Scope, snapshot: AppStorageSnapshot): Promise<void> {
+    const current = await this.storage.capture(scope);
+    await this.storage.restore(scope, mergePluginOwnedAppStorageSnapshot(current, snapshot));
   }
 
   async deleteData(userId: number, appId: string): Promise<void> {
     const installation = await this.repository.getInstallation(userId, appId);
     if (!installation || installation.status !== 'removed') throw new Error('PLUGIN_MUST_BE_UNINSTALLED');
-    await this.storage.clear({ userId, appId });
+    const scope = { userId, appId };
+    const current = await this.storage.capture(scope);
+    await this.storage.restore(scope, hostOwnedAppStorageSnapshot(current));
     logger.info({ userId, appId }, 'Agent plugin retained data deleted');
   }
 
@@ -85,11 +95,11 @@ export class PluginDataManager {
         if (installation.status !== 'removed') {
           return { ...installation, retainedDataEntries: 0, retainedDataBytes: 0 };
         }
-        const stats = await this.storage.stats({ userId, appId: installation.appId });
+        const snapshot = await this.capture({ userId, appId: installation.appId });
         return {
           ...installation,
-          retainedDataEntries: stats.entryCount,
-          retainedDataBytes: stats.totalBytes,
+          retainedDataEntries: snapshot.entries.length,
+          retainedDataBytes: snapshot.totalBytes,
         };
       }),
     );

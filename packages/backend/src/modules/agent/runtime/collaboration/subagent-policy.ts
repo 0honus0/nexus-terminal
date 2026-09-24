@@ -3,6 +3,7 @@ import type { ModelRef } from '../../ai/model.types';
 import type { ProviderService } from '../../ai/provider.service';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import type { AppStoragePort } from '../../host/app-storage.port';
+import { SUBAGENT_PROFILES_STORAGE_KEY } from '../../host/app-storage-ownership';
 import { AGENT_CAPABILITIES, type AgentCapability } from '../../host/app.types';
 import type {
   PeerMessaging,
@@ -13,7 +14,6 @@ import type {
 } from './subagent.types';
 import { builtInSubagentProfileTemplates } from './subagent-profile-templates';
 
-const STORAGE_KEY = 'subagent.profiles.v1';
 const MAX_PROFILES = 32;
 const MAX_PROFILE_MODELS = 16;
 const MAX_PROFILE_CAPABILITIES = AGENT_CAPABILITIES.length;
@@ -123,7 +123,7 @@ export class SubagentPolicyService {
 
   async get(scope: Scope): Promise<SubagentSettingsView> {
     const [stored, settings] = await Promise.all([
-      this.storage.get(scope, STORAGE_KEY),
+      this.storage.get(scope, SUBAGENT_PROFILES_STORAGE_KEY),
       this.settings.get(scope.userId),
     ]);
     const profiles = stored ? parseProfiles(stored.value) : [];
@@ -149,11 +149,11 @@ export class SubagentPolicyService {
       }
       for (const model of profile.allowedModels) await this.assertModel(scope.userId, model);
     }
-    const current = await this.storage.get(scope, STORAGE_KEY);
+    const current = await this.storage.get(scope, SUBAGENT_PROFILES_STORAGE_KEY);
     if ((current?.version ?? 0) !== expectedVersion) throw new Error('SETTINGS_VERSION_CONFLICT');
     const stored = await this.storage.put(
       scope,
-      STORAGE_KEY,
+      SUBAGENT_PROFILES_STORAGE_KEY,
       { profiles: profiles as unknown as import('../../agent.types').JsonValue[] },
       current?.version ?? null,
     );

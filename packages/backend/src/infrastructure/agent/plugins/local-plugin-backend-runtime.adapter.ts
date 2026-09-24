@@ -5,6 +5,7 @@ import readline from 'node:readline';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type { AppStoragePort } from '../../../modules/agent/host/app-storage.port';
 import type { AppStorageSnapshot } from '../../../modules/agent/host/app-storage-snapshot.port';
+import { assertPluginOwnedAppStorageKey } from '../../../modules/agent/host/app-storage-ownership';
 import type { AppIntentService } from '../../../modules/agent/host/app-intent.service';
 import type {
   PluginBackendRuntimeHealth,
@@ -329,6 +330,7 @@ class BackendPluginProcess {
 
   private async handleStorage(message: StorageRequest): Promise<void> {
     try {
+      assertPluginOwnedAppStorageKey(message.key);
       let value: unknown;
       if (message.kind === 'storage.get') {
         value = await this.storage.get(this.scope, message.key);
