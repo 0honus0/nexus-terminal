@@ -281,7 +281,9 @@ export class PackInstaller {
     private readonly store: ToolchainStore,
     private readonly cacheRoot: string,
   ) {
-    fs.mkdirSync(path.join(cacheRoot, 'download'), { recursive: true });
+    const downloadRoot = path.join(cacheRoot, 'download');
+    fs.rmSync(downloadRoot, { recursive: true, force: true });
+    fs.mkdirSync(downloadRoot, { recursive: true, mode: 0o700 });
     fs.mkdirSync(path.join(cacheRoot, 'mise'), { recursive: true });
   }
 
@@ -297,15 +299,19 @@ export class PackInstaller {
   }
 
   async ensure(refs: readonly ToolchainPackRef[], commandId: string = randomUUID()): Promise<void> {
-    const expanded = this.expandDependencies(refs);
-    for (const ref of expanded) {
-      const pack = this.catalog.pack(ref.familyId, ref.versionId);
-      const expected = pack.contentDigestByArch[process.arch];
-      if (!expected || expected !== ref.contentDigest || !/^sha256:[a-f0-9]{64}$/.test(expected)) {
-        throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+    try {
+      const expanded = this.expandDependencies(refs);
+      for (const ref of expanded) {
+        const pack = this.catalog.pack(ref.familyId, ref.versionId);
+        const expected = pack.contentDigestByArch[process.arch];
+        if (!expected || expected !== ref.contentDigest || !/^sha256:[a-f0-9]{64}$/.test(expected)) {
+          throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+        }
+        if (!this.store.installed(ref)) await this.installOne(pack, ref, commandId);
+        this.store.activate(ref);
       }
-      if (!this.store.installed(ref)) await this.installOne(pack, ref, commandId);
-      this.store.activate(ref);
+    } finally {
+      fs.rmSync(this.commandDownloadDirectory(commandId), { recursive: true, force: true });
     }
   }
 
@@ -354,8 +360,12 @@ export class PackInstaller {
     return source;
   }
 
+  private commandDownloadDirectory(commandId: string): string {
+    return path.join(this.cacheRoot, 'download', safeSegment(commandId));
+  }
+
   private async cachedArchive(pack: CatalogPack, ref: ToolchainPackRef, commandId: string): Promise<string> {
-    const directory = path.join(this.cacheRoot, 'download', safeSegment(commandId));
+    const directory = this.commandDownloadDirectory(commandId);
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     const archive = path.join(
       directory,
