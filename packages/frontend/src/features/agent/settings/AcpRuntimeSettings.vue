@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
-  import { computed, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -37,6 +37,8 @@
   const localBusy = ref(false);
   const loading = ref(false);
   const disabled = computed(() => props.busy || localBusy.value);
+  const integrationDisabled = computed(() => disabled.value || !props.agentAvailable);
+  let integrationsGeneration = 0;
   const configuredProfiles = computed(() => props.settings.effectiveSettings.workspaceRuntime.acpProfiles);
   const profileOptions = computed(() =>
     configuredProfiles.value.map((profile) => ({ value: profile.id, label: profile.id })),
@@ -62,6 +64,7 @@
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'ACP request failed.');
 
   const loadIntegrations = async (): Promise<void> => {
+    const generation = ++integrationsGeneration;
     if (!props.agentAvailable) {
       integrations.value = [];
       loading.value = false;
@@ -69,16 +72,19 @@
     }
     loading.value = true;
     try {
-      integrations.value = await agentApi.integrations(DEFAULT_AGENT_APP_ID, 'acp');
+      const next = await agentApi.integrations(DEFAULT_AGENT_APP_ID, 'acp');
+      if (generation !== integrationsGeneration || !props.agentAvailable) return;
+      integrations.value = next;
     } catch (cause) {
+      if (generation !== integrationsGeneration || !props.agentAvailable) return;
       operationFeedback.notifyError({ operation: 'load-integrations', message: explain(cause), cause });
     } finally {
-      loading.value = false;
+      if (generation === integrationsGeneration) loading.value = false;
     }
   };
 
   const run = async (operation: string, action: () => Promise<void>, success = ''): Promise<void> => {
-    if (disabled.value) return;
+    if (integrationDisabled.value) return;
     localBusy.value = true;
     try {
       await action();
@@ -330,9 +336,14 @@
     { immediate: true },
   );
 
-  onMounted(() => {
-    void loadIntegrations();
-  });
+  watch(
+    () => props.agentAvailable,
+    () => {
+      void loadIntegrations();
+    },
+    { immediate: true },
+  );
+
 </script>
 
 <template>
@@ -464,7 +475,7 @@
             density="default"
             icon-only
             type="button"
-            :disabled="disabled || loading || !agentAvailable"
+            :disabled="integrationDisabled || loading"
             :title="$t('agent.settings.acpRuntime.refresh')"
             :aria-label="$t('agent.settings.acpRuntime.refresh')"
             @click="loadIntegrations"
@@ -475,7 +486,7 @@
             appearance="soft"
             tone="neutral"
             type="button"
-            :disabled="disabled || !agentAvailable || configuredProfiles.length === 0"
+            :disabled="integrationDisabled || configuredProfiles.length === 0"
             :title="configuredProfiles.length === 0 ? $t('agent.settings.acpRuntime.saveProfileFirst') : undefined"
             class="w-[88px]"
             @click="openAddIntegrationModal"
@@ -547,7 +558,7 @@
             >
               <UiSelect
                 density="compact"
-                :disabled="disabled"
+                :disabled="integrationDisabled"
                 :model-value="acpConfiguration(integration).profileId"
                 :options="profileOptions"
                 class="w-36"
@@ -558,7 +569,7 @@
               >
                 <UiCheckbox
                   :model-value="integration.enabled"
-                  :disabled="disabled"
+                  :disabled="integrationDisabled"
                   @update:model-value="(value: boolean) => toggleIntegration(integration, value)"
                 />
               </div>
@@ -568,7 +579,7 @@
                 density="compact"
                 icon-only
                 type="button"
-                :disabled="disabled"
+                :disabled="integrationDisabled"
                 :title="$t('agent.settings.acpRuntime.deleteIntegration')"
                 :aria-label="$t('agent.settings.acpRuntime.deleteIntegration')"
                 @click="removeIntegration(integration)"
@@ -582,7 +593,7 @@
         <!-- 底部轻量新增按钮 -->
         <button
           type="button"
-          :disabled="disabled || !agentAvailable || configuredProfiles.length === 0"
+          :disabled="integrationDisabled || configuredProfiles.length === 0"
           class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-primary/5 hover:border-primary/45 py-2.5 text-xs text-text-secondary hover:text-primary transition-all duration-200 cursor-pointer select-none active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
           @click="openAddIntegrationModal"
         >
@@ -806,7 +817,7 @@
             appearance="solid"
             tone="primary"
             type="button"
-            :disabled="disabled || !integrationForm.displayName.trim() || !integrationForm.profileId.trim()"
+            :disabled="integrationDisabled || !integrationForm.displayName.trim() || !integrationForm.profileId.trim()"
             @click="submitAddIntegration"
           >
             <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>

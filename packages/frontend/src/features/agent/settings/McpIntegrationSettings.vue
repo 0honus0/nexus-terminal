@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { BaseModal, UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
-  import { computed, onMounted, reactive, ref } from 'vue';
+  import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -20,7 +20,8 @@
   const credentialDrafts = reactive<Record<string, string>>({});
   const localBusy = ref(false);
   const loading = ref(false);
-  const disabled = computed(() => props.busy || localBusy.value);
+  const disabled = computed(() => props.busy || localBusy.value || !props.agentAvailable);
+  let integrationsGeneration = 0;
 
   // 模态弹窗状态
   const modalOpen = ref(false);
@@ -59,6 +60,7 @@
     formatAgentApiError(cause, t('agent.settings.mcpIntegrations.requestFailed'));
 
   const loadIntegrations = async (): Promise<void> => {
+    const generation = ++integrationsGeneration;
     if (!props.agentAvailable) {
       integrations.value = [];
       loading.value = false;
@@ -66,11 +68,14 @@
     }
     loading.value = true;
     try {
-      integrations.value = await agentApi.integrations(DEFAULT_AGENT_APP_ID, 'mcp');
+      const next = await agentApi.integrations(DEFAULT_AGENT_APP_ID, 'mcp');
+      if (generation !== integrationsGeneration || !props.agentAvailable) return;
+      integrations.value = next;
     } catch (cause) {
+      if (generation !== integrationsGeneration || !props.agentAvailable) return;
       operationFeedback.notifyError({ operation: 'load-integrations', message: explain(cause), cause });
     } finally {
-      loading.value = false;
+      if (generation === integrationsGeneration) loading.value = false;
     }
   };
 
@@ -104,6 +109,7 @@
   };
 
   const submitAddModal = async (): Promise<void> => {
+    if (disabled.value) return;
     const name = form.displayName.trim();
     const url = form.endpoint.trim();
     if (!name || !url) {
@@ -246,9 +252,13 @@
     return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  onMounted(() => {
-    void loadIntegrations();
-  });
+  watch(
+    () => props.agentAvailable,
+    () => {
+      void loadIntegrations();
+    },
+    { immediate: true },
+  );
 </script>
 
 <template>
@@ -623,7 +633,7 @@
             appearance="solid"
             tone="primary"
             type="button"
-            :disabled="localBusy || !form.displayName.trim() || !form.endpoint.trim()"
+            :disabled="disabled || !form.displayName.trim() || !form.endpoint.trim()"
             @click="submitAddModal"
           >
             <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
