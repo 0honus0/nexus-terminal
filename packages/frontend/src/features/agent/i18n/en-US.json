@@ -661,6 +661,7 @@
         "saving": "Saving to server...",
         "saveAndClose": "Save & close",
         "saveNoticeAdded": "Successfully added {count} models and saved",
+        "modelLimitReached": "A provider can keep at most {max} models. {count} model(s) were not added.",
         "saveNoticeRemoved": "Successfully removed model and saved",
         "saveNoticeDefault": "Default model updated and saved",
         "saveNoticeFallback": "Fallback chain updated and saved",

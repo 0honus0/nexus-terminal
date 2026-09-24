@@ -661,6 +661,7 @@
         "saving": "サーバーに保存中...",
         "saveAndClose": "保存して閉じる",
         "saveNoticeAdded": "{count} 個のモデルを追加し保存しました",
+        "modelLimitReached": "1 つの Provider に保存できるモデルは最大 {max} 件です。{count} 件は追加されませんでした。",
         "saveNoticeRemoved": "モデルを削除し保存しました",
         "saveNoticeDefault": "デフォルトモデルを更新し保存しました",
         "saveNoticeFallback": "フォールバックチェーンを更新し保存しました",

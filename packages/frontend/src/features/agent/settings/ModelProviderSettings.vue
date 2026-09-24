@@ -120,6 +120,7 @@
   const drawerLoading = reactive<Record<string, boolean>>({});
   const filterQueries = reactive<Record<string, string>>({});
   const filterConfiguredQueries = reactive<Record<string, string>>({});
+  const MAX_PROVIDER_MODELS = 100;
 
   const filteredConfigured = (provider: AgentProviderViewDto) => {
     const query = (filterConfiguredQueries[provider.id] || '').trim().toLowerCase();
@@ -129,6 +130,16 @@
   const selectedDiscovered = reactive<Record<string, Record<string, boolean>>>({});
   const manualModelId = reactive<Record<string, string>>({});
   const isSavingModels = reactive<Record<string, boolean>>({});
+
+  const remainingModelCapacity = (provider: AgentProviderViewDto): number =>
+    Math.max(0, MAX_PROVIDER_MODELS - provider.models.length);
+
+  const notifyModelCapacity = (skipped: number): void => {
+    if (skipped <= 0) return;
+    operationFeedback.notifyInfo(
+      t('agent.settings.providers.modelLimitReached', { max: MAX_PROVIDER_MODELS, count: skipped }),
+    );
+  };
 
   // 删除确认
   const deletingProvider = ref<AgentProviderViewDto | null>(null);
@@ -665,6 +676,10 @@
     const provider = capabilityEditorProvider.value;
     const editor = capabilityEditor.value;
     if (!provider || !editor) return;
+    if (editor.mode === 'add' && remainingModelCapacity(provider) <= 0) {
+      notifyModelCapacity(1);
+      return;
+    }
     const next =
       editor.mode === 'add'
         ? [...provider.models, model]
@@ -691,16 +706,19 @@
     isSavingModels[provider.id] = true;
     try {
       const resolvedModels = available.map((model) => discoveredModelConfig(provider, model.id));
-      const newModels = resolvedModels.filter(
+      const resolved = resolvedModels.filter(
         (model): model is AgentProviderViewDto['models'][number] => model !== null,
       );
+      const capacity = remainingModelCapacity(provider);
+      const newModels = resolved.slice(0, capacity);
+      notifyModelCapacity(Math.max(0, resolved.length - newModels.length));
       if (newModels.length > 0) {
         const noticeAdded = t('agent.settings.providers.saveNoticeAdded', { count: newModels.length });
         const saved = await updateModels(provider, [...provider.models, ...newModels], noticeAdded);
         if (!saved) return;
         selectedDiscovered[provider.id] = {};
       }
-      const needsReview = resolvedModels.length - newModels.length;
+      const needsReview = resolvedModels.filter((model) => model === null).length;
       if (needsReview > 0) {
         operationFeedback.notifyError({
           operation: 'resolve-model-capabilities',
@@ -721,16 +739,19 @@
     isSavingModels[provider.id] = true;
     try {
       const resolvedModels = selectedIds.map((id) => discoveredModelConfig(provider, id));
-      const newModels = resolvedModels.filter(
+      const resolved = resolvedModels.filter(
         (model): model is AgentProviderViewDto['models'][number] => model !== null,
       );
+      const capacity = remainingModelCapacity(provider);
+      const newModels = resolved.slice(0, capacity);
+      notifyModelCapacity(Math.max(0, resolved.length - newModels.length));
       if (newModels.length > 0) {
         const noticeSelected = t('agent.settings.providers.saveNoticeAdded', { count: newModels.length });
         const saved = await updateModels(provider, [...provider.models, ...newModels], noticeSelected);
         if (!saved) return;
         selectedDiscovered[provider.id] = {};
       }
-      const needsReview = resolvedModels.length - newModels.length;
+      const needsReview = resolvedModels.filter((model) => model === null).length;
       if (needsReview > 0) {
         operationFeedback.notifyError({
           operation: 'resolve-model-capabilities',
@@ -745,6 +766,10 @@
 
   // 单项快捷添加
   const addSingleDiscovered = async (provider: AgentProviderViewDto, modelId: string): Promise<void> => {
+    if (remainingModelCapacity(provider) <= 0) {
+      notifyModelCapacity(1);
+      return;
+    }
     isSavingModels[provider.id] = true;
     try {
       let newModel = discoveredModelConfig(provider, modelId);
@@ -830,6 +855,10 @@
       manualModelId[provider.id] = '';
       return;
     }
+    if (remainingModelCapacity(provider) <= 0) {
+      notifyModelCapacity(1);
+      return;
+    }
     isSavingModels[provider.id] = true;
     try {
       let newModel = discoveredModelConfig(provider, id);
@@ -850,12 +879,12 @@
     }
   };
 
-  const optimisticDefaultModelId = ref<string | null>(null);
+  const optimisticDefaultModelKey = ref<string | null>(null);
 
   watch(
-    () => props.defaultModelId,
-    (val) => {
-      optimisticDefaultModelId.value = val ?? null;
+    () => [props.defaultProviderId, props.defaultModelId] as const,
+    ([providerId, modelId]) => {
+      optimisticDefaultModelKey.value = providerId && modelId ? `${providerId}\u0000${modelId}` : null;
     },
     { immediate: true },
   );
@@ -872,7 +901,7 @@
   const selectDefaultModel = (value: unknown) => {
     const opt = modelOptions.value.find((item) => item.key === value);
     if (opt) {
-      optimisticDefaultModelId.value = opt.model.id;
+      optimisticDefaultModelKey.value = opt.key;
       emit('defaultModel', opt.provider.id, opt.model.id);
     }
   };
@@ -897,8 +926,8 @@
   const MAX_FALLBACK_MODELS = 8;
 
   const defaultModelKey = computed(() => {
-    if (optimisticDefaultModelId.value) {
-      const opt = modelOptions.value.find((item) => item.model.id === optimisticDefaultModelId.value);
+    if (optimisticDefaultModelKey.value) {
+      const opt = modelOptions.value.find((item) => item.key === optimisticDefaultModelKey.value);
       if (opt) return opt.key;
     }
     return props.defaultProviderId && props.defaultModelId

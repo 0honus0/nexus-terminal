@@ -559,33 +559,28 @@
     <!-- 主配置区域：简约清晰的二级子项分解结构 -->
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
       <div class="space-y-3 sm:space-y-4">
-        <!-- 核心维度导航 (唯一定级导航，占满整行均匀分布) -->
-        <div class="w-full">
-          <nav
-            class="grid grid-cols-4 gap-1.5 p-1.5 rounded-xl bg-card border border-border shadow-xs w-full"
-            :aria-label="'agent.settings.navigation'"
+        <!-- 核心维度导航 (4 个子项直接平铺展示，外部不再套层) -->
+        <nav class="grid grid-cols-4 gap-2 sm:gap-2.5 w-full" :aria-label="'agent.settings.navigation'">
+          <button
+            v-for="group in groups"
+            :key="group.id"
+            type="button"
+            class="flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-1.5 sm:px-3 py-2 sm:py-2.5 text-xs font-medium transition-all cursor-pointer w-full text-center"
+            :class="
+              activeGroup === group.id
+                ? 'border border-primary bg-primary text-white shadow-xs font-semibold'
+                : 'border border-border bg-card hover:bg-header hover:border-border-hover text-foreground font-medium shadow-2xs'
+            "
+            :aria-current="activeGroup === group.id ? 'page' : undefined"
+            @click="selectGroup(group.id)"
           >
-            <button
-              v-for="group in groups"
-              :key="group.id"
-              type="button"
-              class="flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg px-1 sm:px-3 py-2 text-xs font-medium transition-all cursor-pointer w-full text-center"
-              :class="
-                activeGroup === group.id
-                  ? 'border border-primary bg-primary text-white shadow-xs font-semibold'
-                  : 'border border-border/70 bg-background/60 hover:bg-header hover:border-border text-foreground hover:text-foreground font-medium shadow-2xs'
-              "
-              :aria-current="activeGroup === group.id ? 'page' : undefined"
-              @click="selectGroup(group.id)"
-            >
-              <i
-                :class="[group.icon, 'text-xs shrink-0', activeGroup === group.id ? 'text-white' : 'text-primary']"
-                aria-hidden="true"
-              ></i>
-              <span class="truncate">{{ $t(group.label) }}</span>
-            </button>
-          </nav>
-        </div>
+            <i
+              :class="[group.icon, 'text-xs shrink-0', activeGroup === group.id ? 'text-white' : 'text-primary']"
+              aria-hidden="true"
+            ></i>
+            <span class="truncate">{{ $t(group.label) }}</span>
+          </button>
+        </nav>
 
         <!-- 对应维度的卡片流 (直接平铺展示，干净利落) -->
         <div class="transition-all duration-200">

@@ -661,6 +661,7 @@
         "saving": "正在保存到服务端...",
         "saveAndClose": "保存并关闭",
         "saveNoticeAdded": "已成功添加 {count} 个模型并保存至服务端",
+        "modelLimitReached": "每个 Provider 最多保存 {max} 个模型，本次有 {count} 个模型未添加。",
         "saveNoticeRemoved": "已成功移除模型并保存至服务端",
         "saveNoticeDefault": "默认主力模型已更新并保存",
         "saveNoticeFallback": "备用模型链已更新并保存",
