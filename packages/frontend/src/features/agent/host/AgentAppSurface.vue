@@ -206,6 +206,7 @@
   let approvalsGeneration = 0;
   let reconciliationGeneration = 0;
   let backgroundGeneration = 0;
+  let detailApprovalGeneration = 0;
   let detailSubagentsGeneration = 0;
   let detailOpenGeneration = 0;
   let subagentMessagesGeneration = 0;
@@ -1340,9 +1341,15 @@
   };
 
   const refreshDetailApprovalBatch = async (runId: string): Promise<void> => {
+    const requestGeneration = ++detailApprovalGeneration;
     try {
       const [next, snapshot] = await Promise.all([facade.listApprovals(runId), facade.getRun(runId)]);
-      if (!detailVisible.value || detailSnapshot.value?.id !== runId) return;
+      if (
+        requestGeneration !== detailApprovalGeneration ||
+        !detailVisible.value ||
+        detailSnapshot.value?.id !== runId
+      )
+        return;
       detailApprovalBatch.value = next;
       detailSnapshot.value = snapshot;
     } catch {
@@ -1405,6 +1412,7 @@
 
   const openRunDetail = async (candidate: AgentRunViewDto): Promise<void> => {
     const requestGeneration = ++detailOpenGeneration;
+    const approvalGeneration = ++detailApprovalGeneration;
     detailSubagentsGeneration += 1;
     subagentMessagesGeneration += 1;
     const auxiliary = Promise.allSettled([
@@ -1426,11 +1434,18 @@
       const [checkpoints, detailApprovals, subagents] = await auxiliary;
       if (requestGeneration !== detailOpenGeneration || detailSnapshot.value?.id !== candidate.id) return;
       if (checkpoints.status === 'fulfilled') detailCheckpoints.value = checkpoints.value;
-      if (detailApprovals.status === 'fulfilled') detailApprovalBatch.value = detailApprovals.value;
+      if (detailApprovals.status === 'fulfilled' && approvalGeneration === detailApprovalGeneration) {
+        detailApprovalBatch.value = detailApprovals.value;
+      }
       if (subagents.status === 'fulfilled') detailSubagents.value = subagents.value.items;
-      const auxiliaryResults = [checkpoints, detailApprovals, subagents];
-      const failureIndex = auxiliaryResults.findIndex((result) => result.status === 'rejected');
-      const failure = failureIndex < 0 ? null : (auxiliaryResults[failureIndex] as PromiseRejectedResult);
+      const auxiliaryResults = [
+        checkpoints,
+        approvalGeneration === detailApprovalGeneration ? detailApprovals : null,
+        subagents,
+      ];
+      const failureIndex = auxiliaryResults.findIndex((result) => result?.status === 'rejected');
+      const failure =
+        failureIndex < 0 ? null : (auxiliaryResults[failureIndex] as PromiseRejectedResult | null);
       if (failure) {
         fail(failure.reason, {
           domainKey: DETAIL_AUXILIARY_FAILURE_DOMAINS[failureIndex] ?? DETAIL_FAILURE_DOMAIN,
@@ -1448,6 +1463,7 @@
 
   const closeRunDetail = (): void => {
     detailOpenGeneration += 1;
+    detailApprovalGeneration += 1;
     detailSubagentsGeneration += 1;
     subagentMessagesGeneration += 1;
     detailVisible.value = false;
