@@ -93,6 +93,7 @@ export class AcpProcessRuntime {
     let stderrTail = '';
     let closed = false;
     let closePromise: Promise<void> | null = null;
+    let inputPaused = false;
     let writerReleased = false;
     const releaseOwnership = (): void => {
       if (writerReleased) return;
@@ -126,10 +127,19 @@ export class AcpProcessRuntime {
         void active.close().catch(() => undefined);
         return;
       }
-      child.stdin.write(bytes);
+      if (!child.stdin.write(bytes)) {
+        inputPaused = true;
+        websocket.pause();
+      }
     });
     websocket.on('close', () => void active.close().catch(() => undefined));
     websocket.on('error', () => void active.close().catch(() => undefined));
+
+    child.stdin.on('drain', () => {
+      if (!inputPaused) return;
+      inputPaused = false;
+      if (!closed && child.stdin.writable && websocket.readyState === WebSocket.OPEN) websocket.resume();
+    });
 
     child.stdout.on('data', (chunk: Buffer) => {
       if (closed || websocket.readyState !== WebSocket.OPEN) return;
