@@ -26,6 +26,7 @@ import type {
   WorkspaceProfileView,
   WorkspaceRuntimeCatalog,
   WorkspaceRuntimeCommandView,
+  WorkspaceStatus,
   WorkspaceToolchainSwitchView,
 } from './workspace-runtime.types';
 
@@ -421,15 +422,40 @@ export class WorkspaceRuntimeService {
     ) {
       throw new Error('PLUGIN_RUNNER_PROTOCOL_VERSION_UNSUPPORTED');
     }
-    const command = await this.dispatch(
+    const transitionStatus: WorkspaceStatus =
+      action === 'start' ? 'starting' : action === 'delete' ? 'deleting' : 'stopping';
+    const claimed = await this.repository.setWorkspaceStatus(
       scope,
-      action,
       workspaceId,
-      workspace.generation,
-      { workspaceId },
-      true,
-      waitForTerminal,
+      expectedVersion,
+      transitionStatus,
+      this.now(),
     );
+    let command: WorkspaceRuntimeCommandView;
+    try {
+      command = await this.dispatch(
+        scope,
+        action,
+        workspaceId,
+        workspace.generation,
+        {
+          workspaceId,
+          lifecycleClaim: {
+            version: claimed.version,
+            previousStatus: workspace.status,
+          },
+        },
+        true,
+        waitForTerminal,
+      );
+    } catch (error) {
+      await this.repository
+        .setWorkspaceStatus(scope, workspaceId, claimed.version, workspace.status, this.now())
+        .catch((rollbackError) => {
+          if (!(rollbackError instanceof Error) || rollbackError.message !== 'STATE_CONFLICT') throw rollbackError;
+        });
+      throw error;
+    }
     logger.debug(
       {
         userId: scope.userId,
@@ -852,10 +878,33 @@ export class WorkspaceRuntimeService {
       : null;
   }
 
+  private lifecycleClaim(
+    command: WorkspaceRuntimeCommandView,
+  ): { version: number; previousStatus: WorkspaceStatus } | null {
+    if (!command.request || typeof command.request !== 'object' || Array.isArray(command.request)) return null;
+    const raw = (command.request as Record<string, JsonValue>).lifecycleClaim;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const claim = raw as Record<string, JsonValue>;
+    const previousStatus = claim.previousStatus;
+    if (
+      !Number.isSafeInteger(claim.version) ||
+      typeof previousStatus !== 'string' ||
+      !['creating', 'ready', 'starting', 'running', 'stopping', 'stopped', 'deleting', 'deleted', 'failed'].includes(
+        previousStatus,
+      )
+    ) {
+      return null;
+    }
+    return { version: Number(claim.version), previousStatus: previousStatus as WorkspaceStatus };
+  }
+
   private async syncWorkspaceStatus(scope: Scope, command: WorkspaceRuntimeCommandView): Promise<void> {
     if (!command.workspaceId || !['succeeded', 'failed', 'unknown'].includes(command.status)) return;
     const workspace = await this.repository.getWorkspace(scope, command.workspaceId);
     if (!workspace || workspace.generation !== command.generation) return;
+    const lifecycleClaim = this.lifecycleClaim(command);
+    if (lifecycleClaim && workspace.version !== lifecycleClaim.version) return;
+
     let next = workspace.status;
     if (command.status === 'succeeded') {
       next =
@@ -871,7 +920,7 @@ export class WorkspaceRuntimeService {
     } else if (command.action === 'provision' || (command.status === 'failed' && command.action === 'restart')) {
       next = 'failed';
     } else {
-      const previousStatus = this.toolchainSwitchPreviousStatus(command);
+      const previousStatus = lifecycleClaim?.previousStatus ?? this.toolchainSwitchPreviousStatus(command);
       if (previousStatus && command.status === 'failed') next = previousStatus;
       else if (
         previousStatus &&
@@ -886,7 +935,7 @@ export class WorkspaceRuntimeService {
     }
     if (next === workspace.status) return;
     await this.repository
-      .setWorkspaceStatus(scope, workspace.id, workspace.version, next, this.now())
+      .setWorkspaceStatus(scope, workspace.id, lifecycleClaim?.version ?? workspace.version, next, this.now())
       .catch((error) => {
         if (!(error instanceof Error) || error.message !== 'STATE_CONFLICT') throw error;
       });

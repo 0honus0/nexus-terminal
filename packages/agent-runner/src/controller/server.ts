@@ -1321,22 +1321,24 @@ export class RunnerControllerServer {
   private async workspaceAction(command: WorkspaceLifecycleCommand): Promise<void> {
     const workspace = this.dependencies.journal.workspace(command.workspaceId);
     if (!workspace || workspace.generation !== command.generation) throw new Error('WORKSPACE_NOT_FOUND');
-    if (command.action === 'start') {
-      await this.dependencies.runtimeEngine.start(workspace.workspaceId, workspace.generation);
-      try {
-        await this.dependencies.pluginRunner.activateWorkspace(workspace);
-      } catch (error) {
-        await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation).catch(() => undefined);
-        throw error;
-      }
-      this.save(workspace, 'running');
-      return;
-    }
     const releaseLifecycleDrain = this.dependencies.runtimeEngine.beginWorkspaceLifecycleDrain(
       workspace.workspaceId,
       workspace.generation,
     );
     try {
+      if (command.action === 'start') {
+        await this.dependencies.runtimeEngine.start(workspace.workspaceId, workspace.generation);
+        try {
+          await this.dependencies.pluginRunner.activateWorkspace(workspace);
+        } catch (error) {
+          await this.dependencies.runtimeEngine
+            .stop(workspace.workspaceId, workspace.generation)
+            .catch(() => undefined);
+          throw error;
+        }
+        this.save(workspace, 'running');
+        return;
+      }
       if (command.action === 'stop') {
         await Promise.all([
           this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),

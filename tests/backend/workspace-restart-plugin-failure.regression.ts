@@ -32,6 +32,7 @@ const main = async (): Promise<void> => {
       token: 'restart-token',
       journal,
       runtimeEngine: {
+        beginWorkspaceLifecycleDrain: () => () => undefined,
         restart: async () => {
           restartCalls += 1;
         },
