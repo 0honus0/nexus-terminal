@@ -22,6 +22,8 @@
   const draft = ref<AgentExecutionPolicyOverridesDto>({});
   const loading = ref(false);
   const saving = ref(false);
+  const loadedAppId = ref('');
+  let loadGeneration = 0;
 
   const appOptions = computed(() => props.apps.map((app) => ({ value: app.id, label: app.displayName })));
 
@@ -125,21 +127,33 @@
     JSON.parse(JSON.stringify(value)) as AgentExecutionPolicyOverridesDto;
 
   const load = async (): Promise<void> => {
-    if (!selectedAppId.value) {
+    const requestGeneration = ++loadGeneration;
+    const appId = selectedAppId.value;
+    if (!appId) {
+      loadedAppId.value = '';
       view.value = null;
       draft.value = {};
+      loading.value = false;
       return;
+    }
+    if (loadedAppId.value !== appId) {
+      loadedAppId.value = '';
+      view.value = null;
+      draft.value = {};
     }
     loading.value = true;
     try {
-      const next = await agentApi.appExecutionPolicy(selectedAppId.value);
+      const next = await agentApi.appExecutionPolicy(appId);
+      if (requestGeneration !== loadGeneration || selectedAppId.value !== appId) return;
+      loadedAppId.value = appId;
       view.value = next;
       draft.value = clone(next.overrides);
     } catch (cause) {
+      if (requestGeneration !== loadGeneration || selectedAppId.value !== appId) return;
       const message = cause instanceof Error ? cause.message : 'AGENT_EXECUTION_POLICY_FAILED';
       operationFeedback.notifyError({ operation: 'load-policy', message, cause });
     } finally {
-      loading.value = false;
+      if (requestGeneration === loadGeneration && selectedAppId.value === appId) loading.value = false;
     }
   };
 
@@ -184,14 +198,20 @@
   const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(view.value?.overrides ?? {}));
 
   const save = async (): Promise<void> => {
-    if (!view.value || !selectedAppId.value || invalid.value || saving.value) return;
+    const appId = loadedAppId.value;
+    if (!view.value || !appId || selectedAppId.value !== appId || invalid.value || saving.value) return;
+    const requestGeneration = loadGeneration;
+    const overrides = clone(draft.value);
+    const expectedVersion = view.value.version;
     saving.value = true;
     try {
-      const next = await agentApi.replaceAppExecutionPolicy(selectedAppId.value, draft.value, view.value.version);
+      const next = await agentApi.replaceAppExecutionPolicy(appId, overrides, expectedVersion);
+      if (requestGeneration !== loadGeneration || selectedAppId.value !== appId || loadedAppId.value !== appId) return;
       view.value = next;
       draft.value = clone(next.overrides);
       operationFeedback.notifySuccess(t('agent.ui.saved'));
     } catch (cause) {
+      if (requestGeneration !== loadGeneration || selectedAppId.value !== appId || loadedAppId.value !== appId) return;
       const message = cause instanceof Error ? cause.message : 'AGENT_EXECUTION_POLICY_FAILED';
       operationFeedback.notifyError({ operation: 'save-policy', message, cause });
       await load();

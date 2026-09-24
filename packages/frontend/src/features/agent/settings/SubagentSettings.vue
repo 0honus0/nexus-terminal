@@ -30,6 +30,8 @@
   const profileSettings = ref<AgentSubagentSettingsViewDto | null>(null);
   const profileBaseline = ref('');
   const profileBusy = ref(false);
+  const profileAppId = ref('');
+  let profileLoadGeneration = 0;
   const selectedTemplateId = ref<AgentSubagentProfileTemplateDto['id']>('explore');
 
   type CapabilityId = AgentSubagentProfileDto['capabilities'][number];
@@ -64,28 +66,39 @@
     JSON.parse(JSON.stringify(profiles)) as AgentSubagentProfileDto[];
 
   const loadProfiles = async (): Promise<void> => {
-    if (!selectedAppId.value) {
+    const requestGeneration = ++profileLoadGeneration;
+    const appId = selectedAppId.value;
+    if (!appId) {
+      profileAppId.value = '';
       profileSettings.value = null;
       profileBaseline.value = '';
+      capabilityOptions.value = [];
+      profileBusy.value = false;
       return;
+    }
+    if (profileAppId.value !== appId) {
+      profileAppId.value = '';
+      profileSettings.value = null;
+      profileBaseline.value = '';
+      capabilityOptions.value = [];
     }
     profileBusy.value = true;
     try {
-      const [loaded, grantView] = await Promise.all([
-        agentApi.subagentSettings(selectedAppId.value),
-        agentApi.appGrants(selectedAppId.value),
-      ]);
+      const [loaded, grantView] = await Promise.all([agentApi.subagentSettings(appId), agentApi.appGrants(appId)]);
+      if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
       capabilityOptions.value = grantView.grants.map((grant) => grant.capability);
       profileSettings.value = {
         ...loaded,
         policy: { ...loaded.policy, profiles: cloneProfiles(loaded.policy.profiles) },
       };
+      profileAppId.value = appId;
       profileBaseline.value = JSON.stringify(profileSettings.value.policy.profiles);
     } catch (cause) {
+      if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
       const message = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
       operationFeedback.notifyError({ operation: 'load-profiles', message, cause });
     } finally {
-      profileBusy.value = false;
+      if (requestGeneration === profileLoadGeneration && selectedAppId.value === appId) profileBusy.value = false;
     }
   };
 
@@ -168,14 +181,23 @@
   };
 
   const saveProfiles = async (): Promise<void> => {
-    if (!profileSettings.value || !selectedAppId.value || profileBusy.value || invalidProfileLimits.value) return;
+    const appId = profileAppId.value;
+    if (
+      !profileSettings.value ||
+      !appId ||
+      selectedAppId.value !== appId ||
+      profileBusy.value ||
+      invalidProfileLimits.value
+    )
+      return;
+    const requestGeneration = profileLoadGeneration;
+    const profiles = cloneProfiles(profileSettings.value.policy.profiles);
+    const expectedVersion = profileSettings.value.version;
     profileBusy.value = true;
     try {
-      const updated = await agentApi.replaceSubagentProfiles(
-        selectedAppId.value,
-        profileSettings.value.policy.profiles,
-        profileSettings.value.version,
-      );
+      const updated = await agentApi.replaceSubagentProfiles(appId, profiles, expectedVersion);
+      if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId || profileAppId.value !== appId)
+        return;
       profileSettings.value = {
         ...updated,
         policy: { ...updated.policy, profiles: cloneProfiles(updated.policy.profiles) },
@@ -183,10 +205,12 @@
       profileBaseline.value = JSON.stringify(profileSettings.value.policy.profiles);
       operationFeedback.notifySuccess(t('agent.ui.saved'));
     } catch (cause) {
+      if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId || profileAppId.value !== appId)
+        return;
       const message = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
       operationFeedback.notifyError({ operation: 'save-profiles', message, cause });
     } finally {
-      profileBusy.value = false;
+      if (requestGeneration === profileLoadGeneration && selectedAppId.value === appId) profileBusy.value = false;
     }
   };
 
