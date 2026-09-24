@@ -5080,7 +5080,7 @@ composition root 在 `database.initialize()` 后、`agent.initialize()` 前调�
 
 ---
 
-### 7.103 Memory import 先消费 confirmation、再单独创建目标 Memory，unknown outcome 后既无法 replay 又可二次导入（P1 · 🟠 开放 2026-09-23）
+### 7.103 Memory import 先消费 confirmation、再单独创建目标 Memory，unknown outcome 后既无法 replay 又可二次导入（P1 · ✅ 已修复 2026-09-24）
 
 跨 App Memory import 使用 preview → confirm 的一次性 confirmation，但 confirmation 的消费和最终 published Memory 的创建不在同一 durable transaction。
 
@@ -5114,6 +5114,10 @@ composition root 在 `database.initialize()` 后、`agent.initialize()` 前调�
 - 目标 Memory 持久化来源 submission/confirmation identity，并对同一 import submission 做唯一约束；
 - frontend 对 import confirm 的 unknown/not-found 先刷新目标 memories，并按 source refs/confirmation result reconcile，再决定是否允许重新 Preview；
 - 加 fault-injection regression：take 后 crash、insert commit 后 response loss、audit failure、重复 confirm；最终只能是 0 或 1 条目标 Memory，不能静默复制。
+
+**修复（2026-09-24）**：Memory import 的 commit point 已下沉到 `SqliteMemoryRepository.confirmImport()` 单一 transaction：同一事务内读取 confirmation、检查 expiry、重新读取并校验 source Memory 的 published/version/expiry、以 confirmation 派生的稳定目标 id 插入 published Memory、追加 `memory.changed`，最后消费 confirmation。任一步失败都会整体 rollback，source 变化或暂时错误不再提前烧掉 token。
+
+目标 Memory 的 `sourceRefs` 现在持久化 `importConfirmationId`，目标 id 固定为 `memory-import:<confirmationId>`；因此 insert 已 commit 但响应丢失时，重放同一 confirmation 会从 durable target row 直接返回同一结果，而不是 `NOT_FOUND` 或生成第二个随机 Memory。replay 不重复发 audit/hook。`memory-product-closure` scenario 已改为并发两次 confirm 都成功但返回同一 id，并额外断言目标表只有一条对应 published Memory；focused scenario 与 Backend TypeScript 均通过。
 
 ---
 

@@ -1,5 +1,6 @@
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type {
+  MemoryImportCommitResult,
   MemoryImportConfirmation,
   MemoryRepositoryPort,
   MemoryReviewAction,
@@ -57,18 +58,6 @@ const mapMemory = (row: MemoryRow): MemoryView => ({
   version: row.version,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
-});
-
-const mapConfirmation = (row: ConfirmationRow): MemoryImportConfirmation => ({
-  id: row.id,
-  userId: row.user_id,
-  appId: row.target_app_id,
-  sourceAppId: row.source_app_id,
-  sourceMemoryId: row.source_memory_id,
-  sourceVersion: row.source_version,
-  snapshot: parseDurableJsonValue(row.snapshot_json),
-  createdAt: row.created_at,
-  expiresAt: row.expires_at,
 });
 
 export class SqliteMemoryRepository implements MemoryRepositoryPort {
@@ -136,51 +125,6 @@ export class SqliteMemoryRepository implements MemoryRepositoryPort {
         record.scope.userId,
         'memory.changed',
         { appId: record.scope.appId, memoryId: record.id, status: memory.status, action: 'proposed' },
-        record.now,
-      );
-      return memory;
-    });
-  }
-
-  async importPublished(record: {
-    id: string;
-    scope: Scope;
-    content: string;
-    sourceRefs: JsonValue;
-    confidence: number;
-    expiresAt: number | null;
-    now: number;
-  }): Promise<MemoryView> {
-    return this.db.transaction(async (tx) => {
-      await tx.execute(
-        `INSERT INTO ai_memories
-          (id, user_id, app_id, content, source_refs_json, confidence, status, expires_at,
-           proposed_by_runtime_id, review_action, reviewed_at, version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'published', ?, NULL, 'publish', ?, 1, ?, ?)`,
-        [
-          record.id,
-          record.scope.userId,
-          record.scope.appId,
-          record.content,
-          JSON.stringify(record.sourceRefs),
-          record.confidence,
-          record.expiresAt,
-          record.now,
-          record.now,
-          record.now,
-        ],
-      );
-      const created = await tx.queryOne<MemoryRow>(
-        `SELECT ${MEMORY_COLUMNS} FROM ai_memories WHERE id = ? AND user_id = ? AND app_id = ?`,
-        [record.id, record.scope.userId, record.scope.appId],
-      );
-      if (!created) throw new Error('MEMORY_NOT_FOUND');
-      const memory = mapMemory(created);
-      await appendHostEvent(
-        tx,
-        record.scope.userId,
-        'memory.changed',
-        { appId: record.scope.appId, memoryId: record.id, status: memory.status, action: 'imported' },
         record.now,
       );
       return memory;
@@ -263,21 +207,112 @@ export class SqliteMemoryRepository implements MemoryRepositoryPort {
     );
   }
 
-  async takeImportConfirmation(scope: Scope, confirmationId: string): Promise<MemoryImportConfirmation | null> {
+  async confirmImport(record: {
+    scope: Scope;
+    confirmationId: string;
+    memoryId: string;
+    now: number;
+  }): Promise<MemoryImportCommitResult> {
     return this.db.transaction(async (tx) => {
+      const existing = await tx.queryOne<MemoryRow>(
+        `SELECT ${MEMORY_COLUMNS} FROM ai_memories WHERE id = ? AND user_id = ? AND app_id = ?`,
+        [record.memoryId, record.scope.userId, record.scope.appId],
+      );
+      if (existing) {
+        const memory = mapMemory(existing);
+        const refs =
+          memory.sourceRefs && typeof memory.sourceRefs === 'object' && !Array.isArray(memory.sourceRefs)
+            ? (memory.sourceRefs as Record<string, JsonValue>)
+            : null;
+        if (
+          refs?.kind !== 'cross_app_import' ||
+          refs.importConfirmationId !== record.confirmationId ||
+          typeof refs.sourceAppId !== 'string' ||
+          typeof refs.sourceMemoryId !== 'string'
+        ) {
+          throw new Error('MEMORY_IMPORT_RESULT_CONFLICT');
+        }
+        return {
+          memory,
+          sourceAppId: refs.sourceAppId,
+          sourceMemoryId: refs.sourceMemoryId,
+          replayed: true,
+        };
+      }
+
       const row = await tx.queryOne<ConfirmationRow>(
         `SELECT id, user_id, source_app_id, source_memory_id, target_app_id, source_version,
                 snapshot_json, created_at, expires_at
          FROM agent_memory_import_confirmations
          WHERE id = ? AND user_id = ? AND target_app_id = ?`,
-        [confirmationId, scope.userId, scope.appId],
+        [record.confirmationId, record.scope.userId, record.scope.appId],
       );
-      if (!row) return null;
+      if (!row) throw new Error('MEMORY_IMPORT_CONFIRMATION_NOT_FOUND');
+      if (row.expires_at <= record.now) throw new Error('MEMORY_IMPORT_CONFIRMATION_EXPIRED');
+
+      const sourceRow = await tx.queryOne<MemoryRow>(
+        `SELECT ${MEMORY_COLUMNS} FROM ai_memories WHERE id = ? AND user_id = ? AND app_id = ?`,
+        [row.source_memory_id, record.scope.userId, row.source_app_id],
+      );
+      if (
+        !sourceRow ||
+        sourceRow.status !== 'published' ||
+        sourceRow.version !== row.source_version ||
+        (sourceRow.expires_at !== null && sourceRow.expires_at <= record.now)
+      ) {
+        throw new Error('MEMORY_IMPORT_SOURCE_CHANGED');
+      }
+      const source = mapMemory(sourceRow);
+      const sourceRefs: JsonValue = {
+        kind: 'cross_app_import',
+        importConfirmationId: record.confirmationId,
+        sourceAppId: row.source_app_id,
+        sourceMemoryId: source.id,
+        sourceVersion: source.version,
+        sourceRefs: source.sourceRefs,
+      };
+      await tx.execute(
+        `INSERT INTO ai_memories
+          (id, user_id, app_id, content, source_refs_json, confidence, status, expires_at,
+           proposed_by_runtime_id, review_action, reviewed_at, version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'published', ?, NULL, 'publish', ?, 1, ?, ?)`,
+        [
+          record.memoryId,
+          record.scope.userId,
+          record.scope.appId,
+          source.content,
+          JSON.stringify(sourceRefs),
+          source.confidence,
+          source.expiresAt,
+          record.now,
+          record.now,
+          record.now,
+        ],
+      );
       const deleted = await tx.execute(
         'DELETE FROM agent_memory_import_confirmations WHERE id = ? AND user_id = ? AND target_app_id = ?',
-        [confirmationId, scope.userId, scope.appId],
+        [record.confirmationId, record.scope.userId, record.scope.appId],
       );
-      return deleted.changes === 1 ? mapConfirmation(row) : null;
+      if (deleted.changes !== 1) throw new Error('MEMORY_IMPORT_CONFIRMATION_CONFLICT');
+      const created = await tx.queryOne<MemoryRow>(
+        `SELECT ${MEMORY_COLUMNS} FROM ai_memories WHERE id = ? AND user_id = ? AND app_id = ?`,
+        [record.memoryId, record.scope.userId, record.scope.appId],
+      );
+      if (!created) throw new Error('MEMORY_NOT_FOUND');
+      const memory = mapMemory(created);
+      await appendHostEvent(
+        tx,
+        record.scope.userId,
+        'memory.changed',
+        { appId: record.scope.appId, memoryId: record.memoryId, status: memory.status, action: 'imported' },
+        record.now,
+      );
+      return {
+        memory,
+        sourceAppId: row.source_app_id,
+        sourceMemoryId: row.source_memory_id,
+        replayed: false,
+      };
     });
   }
 

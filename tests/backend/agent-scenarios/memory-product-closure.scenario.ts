@@ -240,15 +240,21 @@ export const memoryProductClosureScenario = async () => {
     ]);
     assert.equal(
       oneShotResults.filter((result) => result.status === 'fulfilled').length,
-      1,
-      'A Memory import confirmation must be atomically consumed and succeed at most once',
+      2,
+      'A replay after an unknown confirmation outcome must reconcile to the committed import',
     );
+    const oneShotIds = oneShotResults
+      .filter(
+        (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof memories.confirmImport>>> =>
+          result.status === 'fulfilled',
+      )
+      .map((result) => result.value.id);
+    assert.equal(new Set(oneShotIds).size, 1, 'Import confirmation replay must return the same target Memory id');
+    const oneShotRows = await memoryRepository.list(targetScope, 'published', 200);
     assert.equal(
-      oneShotResults.filter(
-        (result) => result.status === 'rejected' && /MEMORY_IMPORT_CONFIRMATION_NOT_FOUND/.test(String(result.reason)),
-      ).length,
+      oneShotRows.filter((memory) => memory.id === oneShotIds[0]).length,
       1,
-      'Concurrent reuse of an already-consumed Memory import confirmation must fail closed',
+      'Import confirmation replay must not create a duplicate target Memory',
     );
 
     const expirySourceCandidate = await memories.propose(sourceScope, {
@@ -279,7 +285,7 @@ export const memoryProductClosureScenario = async () => {
     return [
       { name: 'memory_recall_state_cases', value: 5, unit: 'cases' },
       { name: 'memory_import_fail_closed_cases', value: 4, unit: 'cases' },
-      { name: 'memory_import_one_shot_confirmations', value: 1, unit: 'confirmations' },
+      { name: 'memory_import_idempotent_confirmations', value: 1, unit: 'confirmations' },
       { name: 'memory_notification_owners', value: 1, unit: 'bridges' },
       { name: 'memory_notification_content_leaks', value: 0, unit: 'fields' },
     ];

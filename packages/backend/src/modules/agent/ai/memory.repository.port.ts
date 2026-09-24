@@ -28,6 +28,13 @@ export interface MemoryImportConfirmation extends Scope {
   expiresAt: number;
 }
 
+export interface MemoryImportCommitResult {
+  memory: MemoryView;
+  sourceAppId: string;
+  sourceMemoryId: string;
+  replayed: boolean;
+}
+
 export interface MemoryRepositoryPort {
   get(scope: Scope, id: string): Promise<MemoryView | null>;
   getOwned(userId: number, appId: string, id: string): Promise<MemoryView | null>;
@@ -42,15 +49,6 @@ export interface MemoryRepositoryPort {
     proposedByRuntimeId: string | null;
     now: number;
   }): Promise<MemoryView>;
-  importPublished(record: {
-    id: string;
-    scope: Scope;
-    content: string;
-    sourceRefs: JsonValue;
-    confidence: number;
-    expiresAt: number | null;
-    now: number;
-  }): Promise<MemoryView>;
   review(record: {
     scope: Scope;
     id: string;
@@ -60,6 +58,11 @@ export interface MemoryRepositoryPort {
     now: number;
   }): Promise<MemoryView>;
   saveImportConfirmation(record: MemoryImportConfirmation): Promise<void>;
-  takeImportConfirmation(scope: Scope, confirmationId: string): Promise<MemoryImportConfirmation | null>;
+  confirmImport(record: {
+    scope: Scope;
+    confirmationId: string;
+    memoryId: string;
+    now: number;
+  }): Promise<MemoryImportCommitResult>;
   deleteExpiredImportConfirmations(now: number): Promise<number>;
 }

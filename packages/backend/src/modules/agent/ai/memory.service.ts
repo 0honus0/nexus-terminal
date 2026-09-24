@@ -251,42 +251,21 @@ export class MemoryService {
   async confirmImport(scope: Scope, confirmationId: string): Promise<MemoryView> {
     if (!nonEmpty(confirmationId, 128)) throw new Error('VALIDATION_FAILED');
     const now = this.clock.nowUnixSeconds();
-    const confirmation = await this.repository.takeImportConfirmation(scope, confirmationId);
-    if (!confirmation) throw new Error('MEMORY_IMPORT_CONFIRMATION_NOT_FOUND');
-    if (confirmation.expiresAt <= now) {
-      throw new Error('MEMORY_IMPORT_CONFIRMATION_EXPIRED');
-    }
     const target = this.registry.get(scope.appId);
     if (!target.manifest.intents.some((intent) => intent.id === IMPORT_INTENT)) throw new Error('APP_INTENT_DENIED');
-    const source = await this.repository.getOwned(scope.userId, confirmation.sourceAppId, confirmation.sourceMemoryId);
-    if (
-      !source ||
-      source.status !== 'published' ||
-      source.version !== confirmation.sourceVersion ||
-      (source.expiresAt !== null && source.expiresAt <= now)
-    ) {
-      throw new Error('MEMORY_IMPORT_SOURCE_CHANGED');
-    }
-    const memory = await this.repository.importPublished({
-      id: randomUUID(),
+    const result = await this.repository.confirmImport({
       scope,
-      content: source.content,
-      sourceRefs: {
-        kind: 'cross_app_import',
-        sourceAppId: confirmation.sourceAppId,
-        sourceMemoryId: source.id,
-        sourceVersion: source.version,
-        sourceRefs: source.sourceRefs,
-      },
-      confidence: source.confidence,
-      expiresAt: source.expiresAt,
+      confirmationId,
+      memoryId: `memory-import:${confirmationId}`,
       now,
     });
+    const memory = result.memory;
+    if (result.replayed) return memory;
     await this.audit
       .logAction('AGENT_MEMORY_IMPORTED', {
         userId: scope.userId,
-        sourceAppId: confirmation.sourceAppId,
-        sourceMemoryId: confirmation.sourceMemoryId,
+        sourceAppId: result.sourceAppId,
+        sourceMemoryId: result.sourceMemoryId,
         targetAppId: scope.appId,
         memoryId: memory.id,
       })
@@ -296,8 +275,8 @@ export class MemoryService {
             err: error,
             errorCode: logErrorCode(error, 'AGENT_MEMORY_AUDIT_FAILED'),
             userId: scope.userId,
-            sourceAppId: confirmation.sourceAppId,
-            sourceMemoryId: confirmation.sourceMemoryId,
+            sourceAppId: result.sourceAppId,
+            sourceMemoryId: result.sourceMemoryId,
             appId: scope.appId,
             memoryId: memory.id,
             action: 'imported',
@@ -323,8 +302,8 @@ export class MemoryService {
         userId: scope.userId,
         appId: scope.appId,
         memoryId: memory.id,
-        sourceAppId: confirmation.sourceAppId,
-        sourceMemoryId: confirmation.sourceMemoryId,
+        sourceAppId: result.sourceAppId,
+        sourceMemoryId: result.sourceMemoryId,
       },
       'Agent Memory imported',
     );
