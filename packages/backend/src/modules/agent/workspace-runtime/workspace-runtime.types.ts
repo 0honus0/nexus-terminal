@@ -61,6 +61,7 @@ export interface WorkspaceRuntimeCatalog {
 export interface WorkspaceRuntimeStorageView {
   stateBytes: number;
   packBytes: number;
+  stagingPackBytes: number;
   cacheBytes: number;
   runtimeBytes: number;
   quarantineBytes: number;

@@ -43,6 +43,7 @@ export class SpaceReporter {
     const stat = fs.statfsSync(this.root);
     const stateBytes = size(path.join(this.root, 'state'));
     const packBytes = size(path.join(this.root, 'packs'));
+    const stagingPackBytes = size(path.join(this.root, 'packs', '.staging'));
     const cacheBytes = size(path.join(this.root, 'cache'));
     const runtimeBytes = size(path.join(this.root, 'runtime'));
     const quarantineBytes = size(path.join(this.root, 'quarantine'));
@@ -88,6 +89,7 @@ export class SpaceReporter {
     return {
       stateBytes,
       packBytes,
+      stagingPackBytes,
       cacheBytes,
       runtimeBytes,
       quarantineBytes,

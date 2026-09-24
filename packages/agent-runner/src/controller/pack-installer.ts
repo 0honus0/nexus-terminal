@@ -316,6 +316,7 @@ export class PackInstaller {
           this.store.activate(ref);
         }
       } finally {
+        this.store.discardCommandStaging(commandId);
         fs.rmSync(this.commandDownloadDirectory(commandId), { recursive: true, force: true });
       }
     });

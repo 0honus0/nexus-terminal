@@ -123,7 +123,9 @@ const removeManagedTree = (target: string): void => {
 export class ToolchainStore {
   constructor(private readonly packsRoot: string) {
     fs.mkdirSync(packsRoot, { recursive: true });
-    fs.mkdirSync(path.join(packsRoot, '.staging'), { recursive: true });
+    const stagingRoot = path.join(packsRoot, '.staging');
+    removeManagedTree(stagingRoot);
+    fs.mkdirSync(stagingRoot, { recursive: true, mode: 0o700 });
     fs.mkdirSync(path.join(packsRoot, '.runtime'), { recursive: true });
   }
 
@@ -251,6 +253,28 @@ export class ToolchainStore {
       throw new Error('WORKSPACE_TOOLCHAIN_REF_INVALID');
     }
     removeManagedTree(resolved);
+  }
+
+  discardCommandStaging(commandId: string): number {
+    const stagingRoot = path.join(this.packsRoot, '.staging');
+    const prefix = `${safeSegment(commandId)}-`;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(stagingRoot, { withFileTypes: true });
+    } catch {
+      return 0;
+    }
+    let removed = 0;
+    for (const entry of entries) {
+      if (!entry.name.startsWith(prefix)) continue;
+      try {
+        removeManagedTree(path.join(stagingRoot, entry.name));
+        removed += 1;
+      } catch {
+        // Startup sweep is the durable fallback for a transient terminal cleanup failure.
+      }
+    }
+    return removed;
   }
 
   remove(ref: ToolchainPackRef): void {

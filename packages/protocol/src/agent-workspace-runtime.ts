@@ -44,6 +44,7 @@ export interface AgentWorkspaceRuntimeCatalogDto {
 export interface AgentWorkspaceRuntimeStorageDto {
   stateBytes: number;
   packBytes: number;
+  stagingPackBytes: number;
   cacheBytes: number;
   runtimeBytes: number;
   quarantineBytes: number;
@@ -54,15 +55,7 @@ export interface AgentWorkspaceRuntimeStorageDto {
 }
 
 export type AgentWorkspaceStatusDto =
-  | 'creating'
-  | 'ready'
-  | 'starting'
-  | 'running'
-  | 'stopping'
-  | 'stopped'
-  | 'deleting'
-  | 'deleted'
-  | 'failed';
+  'creating' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'deleting' | 'deleted' | 'failed';
 
 export interface AgentWorkspaceDto {
   id: string;

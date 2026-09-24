@@ -64,6 +64,7 @@ export const workspaceRuntimeCatalogDto = (value: Catalog): AgentWorkspaceRuntim
 export const workspaceRuntimeStorageDto = (value: Storage): AgentWorkspaceRuntimeStorageDto => ({
   stateBytes: value.stateBytes,
   packBytes: value.packBytes,
+  stagingPackBytes: value.stagingPackBytes,
   cacheBytes: value.cacheBytes,
   runtimeBytes: value.runtimeBytes,
   quarantineBytes: value.quarantineBytes,
@@ -111,9 +112,7 @@ export const workspaceToolchainSwitchDto = (value: ToolchainSwitch): AgentWorksp
   commands: value.commands.map(workspaceRuntimeCommandDto),
 });
 
-export const workspaceArtifactImportResultDto = (
-  value: ArtifactImport,
-): AgentWorkspaceArtifactImportResultDto => ({
+export const workspaceArtifactImportResultDto = (value: ArtifactImport): AgentWorkspaceArtifactImportResultDto => ({
   artifact: artifactDto(value.artifact),
   workspaceId: value.workspaceId,
   targetPluginId: value.targetPluginId,
@@ -121,9 +120,7 @@ export const workspaceArtifactImportResultDto = (
   writtenBytes: value.writtenBytes,
 });
 
-export const workspaceRuntimeSetupPreviewDto = (
-  value: SetupPreview,
-): AgentWorkspaceRuntimeSetupPreviewDto => ({
+export const workspaceRuntimeSetupPreviewDto = (value: SetupPreview): AgentWorkspaceRuntimeSetupPreviewDto => ({
   confirmationId: value.confirmationId,
   expectedVersion: value.expectedVersion,
   catalogRevision: value.catalogRevision,
@@ -149,9 +146,7 @@ export const toolchainPackUninstallPreviewDto = (
   expiresAt: value.expiresAt,
 });
 
-export const workspaceRuntimeCleanupPreviewDto = (
-  value: CleanupPreview,
-): AgentWorkspaceRuntimeCleanupPreviewDto => ({
+export const workspaceRuntimeCleanupPreviewDto = (value: CleanupPreview): AgentWorkspaceRuntimeCleanupPreviewDto => ({
   confirmationId: value.confirmationId,
   expectedVersion: value.expectedVersion,
   catalogRevision: value.catalogRevision,

@@ -127,6 +127,7 @@ export const decodeStorage = (value: unknown): WorkspaceRuntimeStorageView => {
   return {
     stateBytes: integerValue(record.stateBytes),
     packBytes: integerValue(record.packBytes),
+    stagingPackBytes: integerValue(record.stagingPackBytes),
     cacheBytes: integerValue(record.cacheBytes),
     runtimeBytes: integerValue(record.runtimeBytes),
     quarantineBytes: integerValue(record.quarantineBytes),
