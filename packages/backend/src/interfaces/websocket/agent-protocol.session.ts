@@ -14,6 +14,7 @@ const MAX_BUFFERED_BYTES = 1024 * 1024;
 const MAX_SUBSCRIPTIONS = 16;
 const SAFE_SUBSCRIPTION_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 const MAX_IDENTIFIER_LENGTH = 128;
+const HOST_DURABLE_POLL_INTERVAL_MS = 2_000;
 
 interface AgentProtocolTelemetry {
   replayLag(lag: number): void;
@@ -29,6 +30,10 @@ interface AgentProtocolDependencies {
 
 interface AgentProtocolContext {
   userId: number;
+}
+
+interface AgentProtocolSessionOptions {
+  hostPollIntervalMs?: number;
 }
 
 type AgentSubscriptionTarget =
@@ -47,6 +52,7 @@ interface AgentSubscription {
   drainRequested: boolean;
   closed: boolean;
   unsubscribeWake: () => void;
+  durablePollTimer?: NodeJS.Timeout;
   unsubscribeTransient?: () => void;
 }
 
@@ -117,6 +123,7 @@ export class AgentProtocolSession {
     private readonly socket: WebSocket,
     private readonly context: AgentProtocolContext,
     private readonly dependencies: AgentProtocolDependencies,
+    private readonly options: AgentProtocolSessionOptions = {},
   ) {}
 
   async handleMessage(data: RawData, isBinary: boolean): Promise<void> {
@@ -197,6 +204,9 @@ export class AgentProtocolSession {
       subscription.unsubscribeWake = this.dependencies.events.onHostWake(this.context.userId, () =>
         this.scheduleDrain(subscription),
       );
+      const pollIntervalMs = this.options.hostPollIntervalMs ?? HOST_DURABLE_POLL_INTERVAL_MS;
+      subscription.durablePollTimer = setInterval(() => this.pollHostDurableCursor(subscription), pollIntervalMs);
+      subscription.durablePollTimer.unref?.();
     } else {
       subscription.unsubscribeWake = this.dependencies.events.onRunWake(target.runId, () =>
         this.scheduleDrain(subscription),
@@ -264,6 +274,23 @@ export class AgentProtocolSession {
     });
   }
 
+  private pollHostDurableCursor(subscription: AgentSubscription): void {
+    if (this.closed || subscription.closed || subscription.target.kind !== 'host') return;
+    void this.dependencies.events
+      .hostCursor(this.context.userId)
+      .then((highWater) => {
+        if (!subscription.closed && !this.closed && highWater > subscription.cursor) {
+          this.scheduleDrain(subscription);
+        }
+      })
+      .catch((error) =>
+        logger.warn(
+          { err: error, subscriptionId: subscription.id, userId: this.context.userId },
+          'Agent Host durable cursor poll failed',
+        ),
+      );
+  }
+
   private scheduleDrain(subscription: AgentSubscription): void {
     if (this.closed || subscription.closed) return;
     subscription.drainRequested = true;
@@ -325,6 +352,7 @@ export class AgentProtocolSession {
     if (subscription.closed) return;
     subscription.closed = true;
     subscription.unsubscribeWake();
+    if (subscription.durablePollTimer) clearInterval(subscription.durablePollTimer);
     subscription.unsubscribeTransient?.();
   }
 
