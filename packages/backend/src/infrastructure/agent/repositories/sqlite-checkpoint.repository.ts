@@ -332,6 +332,8 @@ const mapRow = (row: CheckpointRow): CheckpointView => ({
   createdAt: row.created_at,
 });
 
+const USER_CHECKPOINT_RETENTION = 32;
+
 export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
   constructor(private readonly db: RelationalDatabase) {}
 
@@ -566,7 +568,31 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
           [artifactId, run.id, command.now],
         );
       }
-      await cleanupCheckpointArtifactLinks(tx, run.id, [...supersededRecoveryArtifactRefs]);
+      const supersededUserArtifactRefs = new Set<string>();
+      if (kind === 'user') {
+        const supersededUsers = await tx.queryAll<{ id: string; snapshot_json: string }>(
+          `SELECT id,snapshot_json FROM agent_checkpoints
+           WHERE run_id=? AND kind='user'
+           ORDER BY created_at DESC,rowid DESC
+           LIMIT -1 OFFSET ?`,
+          [run.id, USER_CHECKPOINT_RETENTION],
+        );
+        for (const row of supersededUsers) {
+          const previous = decodeCheckpointSnapshot(row.snapshot_json);
+          for (const artifactId of checkpointArtifactRefs(previous)) supersededUserArtifactRefs.add(artifactId);
+        }
+        if (supersededUsers.length > 0) {
+          const ids = supersededUsers.map((row) => row.id);
+          await tx.execute(
+            `DELETE FROM agent_checkpoints WHERE run_id=? AND kind='user' AND id IN (${ids.map(() => '?').join(',')})`,
+            [run.id, ...ids],
+          );
+        }
+      }
+      await cleanupCheckpointArtifactLinks(tx, run.id, [
+        ...supersededRecoveryArtifactRefs,
+        ...supersededUserArtifactRefs,
+      ]);
       const row = await tx.queryOne<CheckpointRow>(
         `SELECT id,run_id,kind,schema_version,ledger_through,event_through,snapshot_json,created_at
          FROM agent_checkpoints WHERE id=?`,
@@ -623,6 +649,21 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         checkpointId,
         runId,
       ]);
+      await cleanupCheckpointArtifactLinks(tx, runId, released);
+    });
+  }
+
+  async deleteUser(scope: { userId: number; appId: string }, runId: string, checkpointId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const row = await tx.queryOne<CheckpointRow>(
+        `SELECT c.id,c.run_id,c.kind,c.schema_version,c.ledger_through,c.event_through,c.snapshot_json,c.created_at
+         FROM agent_checkpoints c JOIN agent_runs r ON r.id=c.run_id
+         WHERE c.id=? AND c.run_id=? AND c.kind='user' AND r.user_id=? AND r.app_id=?`,
+        [checkpointId, runId, scope.userId, scope.appId],
+      );
+      if (!row) return;
+      const released = checkpointArtifactRefs(decodeCheckpointSnapshot(row.snapshot_json));
+      await tx.execute(`DELETE FROM agent_checkpoints WHERE id=? AND run_id=? AND kind='user'`, [checkpointId, runId]);
       await cleanupCheckpointArtifactLinks(tx, runId, released);
     });
   }

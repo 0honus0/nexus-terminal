@@ -863,6 +863,7 @@ export const composeAgent = ({
           runs.resolveReconciliation(scope, runId, expectedVersion, note, resources),
         listCheckpoints: (scope, runId) => checkpoints.list(scope, runId),
         saveCheckpoint: (scope, runId, expectedVersion) => checkpoints.save(scope, runId, expectedVersion),
+        deleteCheckpoint: (scope, runId, checkpointId) => checkpoints.deleteUser(scope, runId, checkpointId),
         resume: (scope, runId, checkpointId, expectedVersion, idempotencyKey) =>
           checkpoints.resume(scope, runId, checkpointId, expectedVersion, idempotencyKey),
         delete: (scope, runId, expectedVersion, idempotencyKey) =>

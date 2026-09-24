@@ -96,7 +96,11 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         ...(before === undefined ? {} : { before }),
       };
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, runPageDto(await dependencies.runs.list(scope, query.threadId, query.limit, query.before)));
+      agentData(
+        request,
+        response,
+        runPageDto(await dependencies.runs.list(scope, query.threadId, query.limit, query.before)),
+      );
     }),
   );
 
@@ -127,7 +131,11 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/reconciliation',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, reconciliationDto(await dependencies.runs.reconciliation(scope, pathParam(request.params.runId))));
+      agentData(
+        request,
+        response,
+        reconciliationDto(await dependencies.runs.reconciliation(scope, pathParam(request.params.runId))),
+      );
     }),
   );
 
@@ -169,7 +177,11 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/checkpoints',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, (await dependencies.runs.listCheckpoints(scope, pathParam(request.params.runId))).map(checkpointDto));
+      agentData(
+        request,
+        response,
+        (await dependencies.runs.listCheckpoints(scope, pathParam(request.params.runId))).map(checkpointDto),
+      );
     }),
   );
 
@@ -200,6 +212,18 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${encodeURIComponent(checkpoint.runId)}`,
       );
       agentData(request, response, checkpointDto(checkpoint), 201);
+    }),
+  );
+
+  router.delete(
+    '/runs/:runId/checkpoints/:checkpointId',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      const runId = pathParam(request.params.runId);
+      const checkpointId = pathParam(request.params.checkpointId);
+      await dependencies.runs.deleteCheckpoint(scope, runId, checkpointId);
+      agentData(request, response, { checkpointId, deleted: true });
     }),
   );
 
@@ -271,7 +295,11 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/pending-inputs',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, pendingInputsDto(await dependencies.runs.pendingInputs(scope, pathParam(request.params.runId))));
+      agentData(
+        request,
+        response,
+        pendingInputsDto(await dependencies.runs.pendingInputs(scope, pathParam(request.params.runId))),
+      );
     }),
   );
 
@@ -435,7 +463,9 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       agentData(
         request,
         response,
-        workspaceRuntimeCommandDto(await dependencies.workspaceRuntime.getCommand(scope, pathParam(request.params.commandId))),
+        workspaceRuntimeCommandDto(
+          await dependencies.workspaceRuntime.getCommand(scope, pathParam(request.params.commandId)),
+        ),
       );
     }),
   );

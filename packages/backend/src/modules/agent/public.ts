@@ -373,6 +373,7 @@ export interface AgentRunFacade {
   ): Promise<RunView>;
   listCheckpoints(scope: Scope, runId: string): Promise<CheckpointView[]>;
   saveCheckpoint(scope: Scope, runId: string, expectedVersion: number): Promise<CheckpointView>;
+  deleteCheckpoint(scope: Scope, runId: string, checkpointId: string): Promise<void>;
   resume(
     scope: Scope,
     runId: string,

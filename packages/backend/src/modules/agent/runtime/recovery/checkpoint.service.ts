@@ -270,6 +270,11 @@ export class CheckpointService {
     return this.checkpoints.list(scope, runId, 50);
   }
 
+  async deleteUser(scope: Scope, runId: string, checkpointId: string): Promise<void> {
+    if (!isAgentUuid(runId) || !isAgentUuid(checkpointId)) throw new Error('VALIDATION_FAILED');
+    await this.checkpoints.deleteUser(scope, runId, checkpointId);
+  }
+
   async validate(
     scope: Scope,
     runId: string,

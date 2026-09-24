@@ -124,6 +124,7 @@ export interface CheckpointRepositoryPort {
   list(scope: Scope, runId: string, limit?: number): Promise<CheckpointView[]>;
   latestRecovery(scope: Scope, runId: string): Promise<CheckpointView | null>;
   deleteRecovery(scope: Scope, runId: string, checkpointId: string): Promise<void>;
+  deleteUser(scope: Scope, runId: string, checkpointId: string): Promise<void>;
   runBackgroundJobs(scope: Scope, runId: string): Promise<CheckpointRunBackgroundJob[]>;
   missingArtifactRefs(scope: Scope, checkpointId: string): Promise<string[]>;
   recoveryHazards(scope: Scope, checkpointId: string): Promise<CheckpointRecoveryHazards>;

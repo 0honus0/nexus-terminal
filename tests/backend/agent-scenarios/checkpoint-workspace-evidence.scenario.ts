@@ -350,7 +350,8 @@ export const checkpointWorkspaceEvidenceScenario = async () => {
 
     const runVersion = await db.queryOne<{ version: number }>('SELECT version FROM agent_runs WHERE id=?', [runId]);
     assert.ok(runVersion);
-    const durableCheckpoint = await new SqliteCheckpointRepository(db).save({
+    const checkpointRepository = new SqliteCheckpointRepository(db);
+    const durableCheckpoint = await checkpointRepository.save({
       scope: scenarioScope,
       checkpointId: randomUUID(),
       kind: 'user',
@@ -515,12 +516,71 @@ export const checkpointWorkspaceEvidenceScenario = async () => {
       'checkpoint snapshot must reject symlinks instead of capturing host/runtime escape edges',
     );
 
+    for (let index = 0; index < 32; index += 1) {
+      await checkpointRepository.save({
+        scope: scenarioScope,
+        checkpointId: randomUUID(),
+        kind: 'user',
+        runId,
+        expectedRunVersion: runVersion!.version,
+        definitionVersion: '1.0.0',
+        activeModel: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+        workspaceCaptures: [],
+        workspaceReference: {
+          manifestArtifactIds: [captures[0]!.manifestArtifactId],
+          artifactRefs: [...captures[0]!.artifactRefs],
+        },
+        backgroundJobs: [],
+        now: now + 10 + index,
+      });
+    }
+    const retainedUsers = await checkpointRepository.list(scenarioScope, runId, 50);
+    assert.equal(
+      retainedUsers.filter((checkpoint) => checkpoint.kind === 'user').length,
+      32,
+      'user checkpoint retention must cap each Run at 32 entries',
+    );
+    assert.equal(
+      retainedUsers.some((checkpoint) => checkpoint.id === durableCheckpoint.id),
+      false,
+      'the 33rd user checkpoint must evict the oldest owner instead of hiding it past list limit',
+    );
+    for (const checkpoint of retainedUsers.filter((candidate) => candidate.kind === 'user')) {
+      await checkpointRepository.deleteUser(scenarioScope, runId, checkpoint.id);
+    }
+    const remainingUsers = await db.queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM agent_checkpoints WHERE run_id=? AND kind='user'",
+      [runId],
+    );
+    assert.equal(remainingUsers?.count, 0, 'explicit user-checkpoint delete must remove the durable owner');
+    const releasedCheckpointLinks = await db.queryOne<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM agent_artifact_links
+       WHERE run_id=? AND role='checkpoint' AND artifact_id IN (?,?)`,
+      [runId, captures[0]!.artifactRefs[0], captures[0]!.artifactRefs[1]],
+    );
+    assert.equal(
+      releasedCheckpointLinks?.count,
+      0,
+      'deleting the last checkpoint owner must release archive/manifest protection links',
+    );
+    const releasedManifest = await db.queryOne<{ retained_manifest_ref: string | null }>(
+      'SELECT retained_manifest_ref FROM agent_workspaces WHERE id=?',
+      [workspaceId],
+    );
+    assert.equal(
+      releasedManifest?.retained_manifest_ref,
+      null,
+      'deleting the last checkpoint owner must release the Workspace retained manifest owner',
+    );
+
     return [
       { name: 'checkpoint_tool_evidence_links', value: evidenceLink?.count ?? 0, unit: 'links' },
       { name: 'workspace_checkpoint_manifest_artifacts', value: captures[0]!.artifactRefs.length, unit: 'artifacts' },
       { name: 'workspace_checkpoint_protected_artifacts', value: checkpointLinks?.count ?? 0, unit: 'artifacts' },
       { name: 'workspace_checkpoint_roundtrips', value: 2, unit: 'cases' },
       { name: 'workspace_checkpoint_owner_takeovers', value: 0, unit: 'cases' },
+      { name: 'workspace_checkpoint_user_retention_limit', value: 32, unit: 'checkpoints' },
+      { name: 'workspace_checkpoint_user_delete_releases', value: 2, unit: 'artifacts' },
       { name: 'workspace_checkpoint_unsafe_symlink_rejections', value: 1, unit: 'cases' },
     ];
   } finally {
