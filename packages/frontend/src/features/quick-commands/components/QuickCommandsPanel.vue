@@ -281,7 +281,9 @@
     data-testid="quick-commands-view"
     class="quick-commands-root flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
   >
-    <div class="quick-commands-controls flex shrink-0 items-center gap-2 bg-background p-2">
+    <div
+      class="quick-commands-controls flex shrink-0 items-center gap-2 border-b border-border/40 bg-background/80 px-2 py-1.5"
+    >
       <button
         v-if="collapsibleSearch && !searchExpanded"
         data-testid="quick-command-search-toggle"
@@ -402,56 +404,80 @@
           v-for="group in groups"
           :key="group.id ?? 'untagged'"
           :data-testid="`quick-command-group-${group.id ?? 'untagged'}`"
-          class="mb-1 last:mb-0"
+          class="quick-command-group-card mb-2.5 last:mb-0 overflow-hidden rounded-xl border border-border/60 bg-card/40 shadow-2xs transition-all duration-200 hover:border-border/80"
         >
+          <!-- 组头：协调统一的高度（38px），带卡片背景、折叠箭头动画、分类图标徽章、标题及数量胶囊 -->
           <div
             data-testid="quick-command-group-header"
-            class="quick-command-group-header group flex select-none items-center rounded-md font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
-            :class="compact ? 'quick-command-group-header--compact' : ''"
+            class="quick-command-group-header group flex select-none items-center justify-between bg-card/90 dark:bg-card/60 px-3 py-2 font-semibold text-foreground transition-all duration-150 hover:bg-header/70 cursor-pointer"
+            :class="[
+              compact ? 'quick-command-group-header--compact' : '',
+              expanded[group.name] !== false ? 'border-b border-border/40' : '',
+            ]"
             @click="store.toggle(group.name)"
           >
-            <button
-              type="button"
-              class="mr-2 flex w-4 shrink-0 items-center justify-center text-text-secondary group-hover:text-foreground"
-              :aria-expanded="expanded[group.name] !== false"
-              @click.stop="store.toggle(group.name)"
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+              <button
+                type="button"
+                class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-secondary/70 transition-colors group-hover:text-foreground cursor-pointer"
+                :aria-expanded="expanded[group.name] !== false"
+                @click.stop="store.toggle(group.name)"
+              >
+                <i
+                  class="fas fa-chevron-down text-[10px] transition-transform duration-200"
+                  :class="{ '-rotate-90': expanded[group.name] === false }"
+                  aria-hidden="true"
+                ></i>
+              </button>
+              <span
+                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15"
+              >
+                <i class="fas fa-layer-group text-[11px]" aria-hidden="true"></i>
+              </span>
+              <BaseInput
+                v-if="editingTagId === (group.id ?? 'untagged')"
+                v-model="tagDraft"
+                data-testid="quick-command-group-rename-input"
+                class="min-w-0 flex-1 h-6 text-xs"
+                autofocus
+                :placeholder="
+                  group.id === null ? t('quickCommands.tags.createFromUntagged') : t('quickCommands.tags.renameHint')
+                "
+                @click.stop
+                @keyup.enter.stop="finishTagEdit(group)"
+                @keyup.esc.stop="cancelTagEdit"
+                @blur="finishTagEdit(group)"
+              />
+              <button
+                v-else
+                type="button"
+                data-testid="quick-command-group-name"
+                class="min-w-0 shrink truncate text-left text-xs font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer"
+                :title="t('quickCommands.tags.clickToEditTag')"
+                @click.stop="startTagEdit(group)"
+              >
+                {{ group.id === null ? t('quickCommands.untagged') : group.name }}
+              </button>
+            </div>
+
+            <!-- 右侧：数量胶囊徽章 -->
+            <span
+              class="quick-command-group-badge flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-foreground/6 px-1.5 font-mono text-[10px] font-semibold text-text-secondary/80 border border-border/20 transition-colors group-hover:bg-foreground/10 group-hover:text-foreground"
             >
-              <i
-                :class="['fas', expanded[group.name] === false ? 'fa-chevron-right' : 'fa-chevron-down']"
-                aria-hidden="true"
-              ></i>
-            </button>
-            <BaseInput
-              v-if="editingTagId === (group.id ?? 'untagged')"
-              v-model="tagDraft"
-              data-testid="quick-command-group-rename-input"
-              class="min-w-0 flex-1"
-              autofocus
-              :placeholder="
-                group.id === null ? t('quickCommands.tags.createFromUntagged') : t('quickCommands.tags.renameHint')
-              "
-              @click.stop
-              @keyup.enter.stop="finishTagEdit(group)"
-              @keyup.esc.stop="cancelTagEdit"
-              @blur="finishTagEdit(group)"
-            />
-            <button
-              v-else
-              type="button"
-              data-testid="quick-command-group-name"
-              class="max-w-[calc(100%-3rem)] min-w-0 shrink truncate text-left text-sm hover:underline"
-              :title="t('quickCommands.tags.clickToEditTag')"
-              @click.stop="startTagEdit(group)"
-            >
-              {{ group.id === null ? t('quickCommands.untagged') : group.name }}
-            </button>
+              {{ group.commands.length }}
+            </span>
           </div>
-          <ul v-show="expanded[group.name] !== false" class="quick-command-group-list m-0 list-none p-0 pl-3">
+
+          <!-- 指令条目列表 -->
+          <ul
+            v-show="expanded[group.name] !== false"
+            class="quick-command-group-list m-0 list-none p-1.5 space-y-1 bg-background/20"
+          >
             <li
               v-for="command in group.commands"
               :key="command.id"
               :data-command-id="command.id"
-              class="quick-command-row group mb-1 flex cursor-pointer select-none items-center rounded-md transition-colors duration-150 hover:bg-primary/10"
+              class="quick-command-row group flex cursor-pointer select-none items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 transition-all duration-150 hover:bg-primary/10 active:bg-primary/15"
               :class="[
                 compact ? 'quick-command-row--compact' : '',
                 selectedId === command.id ? 'bg-primary/20 font-medium' : '',
@@ -459,38 +485,81 @@
               @click="run(command)"
               @contextmenu.prevent="openContext($event, command)"
             >
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <i
+                  class="fas fa-terminal text-[10px] text-text-secondary/50 group-hover:text-primary transition-colors shrink-0"
+                  aria-hidden="true"
+                ></i>
+                <span
+                  data-testid="quick-command-execute"
+                  class="quick-command-display-text truncate text-xs font-medium text-foreground group-hover:text-foreground"
+                  :title="displayText(command)"
+                >
+                  {{ displayText(command) }}
+                </span>
+                <span
+                  v-if="secondaryText(command)"
+                  class="quick-command-subtext hidden sm:inline truncate text-[10px] font-mono text-text-secondary/50 shrink-0"
+                  :title="secondaryText(command)"
+                >
+                  ({{ secondaryText(command) }})
+                </span>
+              </div>
               <span
-                data-testid="quick-command-execute"
-                class="quick-command-display-text min-w-0 flex-1 truncate text-sm font-medium"
-                :title="displayText(command)"
-                >{{ displayText(command) }}</span
+                class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-secondary/40 opacity-0 group-hover:opacity-100 group-hover:text-primary group-hover:bg-primary/10 transition-all text-[9px]"
+                :title="t('quickCommands.form.execute')"
               >
+                <i class="fas fa-play" aria-hidden="true"></i>
+              </span>
             </li>
           </ul>
         </section>
       </template>
 
-      <ul v-else class="m-0 list-none p-0">
-        <li
-          v-for="command in flat"
-          :key="command.id"
-          :data-command-id="command.id"
-          class="quick-command-row group mb-1 flex cursor-pointer select-none items-center rounded-md transition-colors duration-150 hover:bg-primary/10"
-          :class="[
-            compact ? 'quick-command-row--compact' : '',
-            selectedId === command.id ? 'bg-primary/20 font-medium' : '',
-          ]"
-          @click="run(command)"
-          @contextmenu.prevent="openContext($event, command)"
-        >
-          <span
-            data-testid="quick-command-execute"
-            class="quick-command-display-text min-w-0 flex-1 truncate text-sm font-medium"
-            :title="displayText(command)"
-            >{{ displayText(command) }}</span
+      <!-- 扁平列表（未分组视图） -->
+      <div v-else class="overflow-hidden rounded-xl border border-border/60 bg-card/25 shadow-2xs">
+        <ul class="m-0 list-none p-1.5 space-y-1">
+          <li
+            v-for="command in flat"
+            :key="command.id"
+            :data-command-id="command.id"
+            class="quick-command-row group flex cursor-pointer select-none items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 transition-all duration-150 hover:bg-primary/10 active:bg-primary/15"
+            :class="[
+              compact ? 'quick-command-row--compact' : '',
+              selectedId === command.id ? 'bg-primary/20 font-medium' : '',
+            ]"
+            @click="run(command)"
+            @contextmenu.prevent="openContext($event, command)"
           >
-        </li>
-      </ul>
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+              <i
+                class="fas fa-terminal text-[10px] text-text-secondary/50 group-hover:text-primary transition-colors shrink-0"
+                aria-hidden="true"
+              ></i>
+              <span
+                data-testid="quick-command-execute"
+                class="quick-command-display-text truncate text-xs font-medium text-foreground group-hover:text-foreground"
+                :title="displayText(command)"
+              >
+                {{ displayText(command) }}
+              </span>
+              <span
+                v-if="secondaryText(command)"
+                class="quick-command-subtext hidden sm:inline truncate text-[10px] font-mono text-text-secondary/50 shrink-0"
+                :title="secondaryText(command)"
+              >
+                ({{ secondaryText(command) }})
+              </span>
+            </div>
+            <span
+              class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-secondary/40 opacity-0 group-hover:opacity-100 group-hover:text-primary group-hover:bg-primary/10 transition-all text-[9px]"
+              :title="t('quickCommands.form.execute')"
+            >
+              <i class="fas fa-play" aria-hidden="true"></i>
+            </span>
+          </li>
+        </ul>
+      </div>
     </div>
 
     <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="200" @close="context = null">
@@ -539,7 +608,6 @@
   .quick-commands-controls {
     justify-content: center;
     gap: clamp(0.2rem, 1.25cqi, 0.5rem);
-    padding: clamp(0.35rem, 1.8cqi, 0.5rem);
   }
   .quick-commands-controls,
   .quick-command-list-area,
@@ -549,51 +617,46 @@
   }
   .quick-command-group-header {
     min-width: 0;
-    padding: calc(var(--quick-row-scale) * 0.46rem) 0.2rem;
-    font-size: calc(0.9rem * max(0.85, var(--quick-row-scale) * 0.6 + 0.4));
+    min-height: calc(var(--quick-row-scale) * 2.375rem);
+    font-size: calc(0.85rem * max(0.9, var(--quick-row-scale) * 0.5 + 0.5));
     line-height: 1.25;
   }
   .quick-command-group-header--compact {
-    padding-block: calc(var(--quick-row-scale) * 0.22rem);
+    min-height: calc(var(--quick-row-scale) * 1.875rem);
+    padding-block: calc(var(--quick-row-scale) * 0.25rem);
   }
   .quick-command-row {
-    padding: calc(var(--quick-row-scale) * 0.625rem) calc(var(--quick-row-scale) * 0.75rem);
+    min-height: calc(var(--quick-row-scale) * 1.875rem);
+    padding: calc(var(--quick-row-scale) * 0.35rem) calc(var(--quick-row-scale) * 0.6rem);
   }
   .quick-command-row--compact {
-    padding-block: calc(var(--quick-row-scale) * 0.1rem);
+    min-height: calc(var(--quick-row-scale) * 1.5rem);
+    padding-block: calc(var(--quick-row-scale) * 0.15rem);
   }
   .quick-command-display-text {
     min-width: 0;
   }
   @container quick-commands-pane (max-width: 340px) {
     .quick-commands-controls {
-      gap: clamp(0.18rem, 1cqi, 0.3rem);
-      padding: 0.4rem;
+      gap: 0.25rem;
+      padding: 0.35rem 0.4rem;
     }
     .quick-commands-search {
-      padding-inline: 0.55rem;
+      padding-inline: 0.5rem;
+      font-size: 0.75rem;
+      height: 1.75rem;
     }
     .quick-command-list-area {
-      padding: 0.1rem 0.3rem 0.3rem;
-    }
-    .quick-command-group-list {
-      padding-left: 0.2rem;
+      padding: 0.35rem 0.35rem;
     }
     .quick-command-group-header {
-      padding-block: clamp(0.12rem, calc(var(--quick-row-scale) * 0.18rem), 0.3rem);
-      padding-inline: 0.1rem;
-      font-size: 0.86rem;
-    }
-    .quick-command-group-header--compact {
-      padding-block: clamp(0.06rem, calc(var(--quick-row-scale) * 0.1rem), 0.18rem);
+      padding-inline: 0.5rem;
     }
     .quick-command-row {
-      padding-left: 0.45rem;
-      padding-right: 0.35rem;
+      padding-inline: 0.45rem;
     }
-    .quick-command-display-text {
-      font-size: 0.875rem;
-      line-height: 1.25rem;
+    .quick-command-subtext {
+      display: none;
     }
   }
   @container quick-commands-pane (max-width: 240px) {
@@ -609,35 +672,30 @@
       flex-wrap: nowrap;
       align-items: center;
     }
-    .quick-command-display-text {
-      width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 0.875rem;
-      line-height: 1.25rem;
-    }
   }
   .quick-control {
     display: flex;
-    width: clamp(1.45rem, 8.5cqi, 2rem);
-    height: clamp(1.45rem, 8.5cqi, 2rem);
-    flex: 0 1 clamp(1.45rem, 8.5cqi, 2rem);
+    width: clamp(1.6rem, 8.5cqi, 1.875rem);
+    height: clamp(1.6rem, 8.5cqi, 1.875rem);
+    flex: 0 0 clamp(1.6rem, 8.5cqi, 1.875rem);
     align-items: center;
     justify-content: center;
-    border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
     border-radius: 0.5rem;
     color: var(--text-color-secondary);
     transition:
       background-color 0.15s ease,
+      border-color 0.15s ease,
       color 0.15s ease;
+    cursor: pointer;
   }
   .quick-control i {
-    font-size: clamp(0.72rem, 3.6cqi, 0.9rem);
+    font-size: clamp(0.72rem, 3.5cqi, 0.825rem);
   }
   .quick-control:hover {
-    background: var(--border-color);
+    background: var(--header-bg-color);
     color: var(--text-color);
+    border-color: var(--border-color);
   }
   .quick-control--primary {
     border-color: transparent;

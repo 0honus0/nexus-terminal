@@ -132,12 +132,13 @@
     formatStatusMemoryPair(used, total) ?? t('statusMonitor.notAvailable');
   const swap = (used?: number, total?: number) => formatStatusSwapPair(used, total) ?? t('statusMonitor.notAvailable');
   const disk = (used?: number, total?: number) => formatStatusDiskPair(used, total) ?? t('statusMonitor.notAvailable');
-  const rateParts = (value?: number) => {
-    const formatted = formatStatusRate(value);
-    const index = formatted.indexOf(' ');
-    return index < 0
-      ? { value: formatted, unit: '' }
-      : { value: formatted.slice(0, index), unit: formatted.slice(index + 1) };
+  const compactRate = (bytesPerSecond?: number): string => {
+    if (bytesPerSecond === undefined || !Number.isFinite(bytesPerSecond)) return '0B';
+    const value = Math.max(0, bytesPerSecond);
+    if (value < 1024) return `${Math.round(value)}B`;
+    if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)}K`;
+    if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)}M`;
+    return `${(value / 1024 ** 3).toFixed(1)}G`;
   };
 
   const metrics = computed<
@@ -147,21 +148,38 @@
       percent: number;
       displayPercent: string;
       detail: string;
-      compactDetail: string;
+      tooltip: string;
       color: string;
       icon: Component;
     }>
   >(() => {
     const status = monitor.current.value;
+    const cpuLoad = status?.loadAvg?.length ? `${t('statusMonitor.load')} ${status.loadAvg[0].toFixed(2)}` : '';
+    const cpuDetail =
+      cpuLoad ||
+      (status?.cpuModel
+        ? status.cpuModel.length > 20
+          ? `${status.cpuModel.slice(0, 18)}...`
+          : status.cpuModel.trim()
+        : '');
+    const cpuTooltip = [
+      status?.cpuModel?.trim(),
+      status?.loadAvg?.length
+        ? `${t('statusMonitor.load')}: ${status.loadAvg.map((l) => l.toFixed(2)).join(', ')}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
     return [
       {
         key: 'cpu',
         name: metricName('cpu'),
         percent: normalizedPercent(status?.cpuPercent),
         displayPercent: percent(status?.cpuPercent),
-        detail: '',
-        compactDetail: status?.cpuModel?.trim() || t('statusMonitor.notAvailable'),
-        color: '#42a5ff',
+        detail: cpuDetail,
+        tooltip: cpuTooltip || `${metricName('cpu')} ${percent(status?.cpuPercent)}`,
+        color: '#3b82f6',
         icon: CpuIcon,
       },
       {
@@ -170,8 +188,8 @@
         percent: normalizedPercent(status?.memPercent),
         displayPercent: percent(status?.memPercent),
         detail: memory(status?.memUsed, status?.memTotal),
-        compactDetail: memory(status?.memUsed, status?.memTotal),
-        color: '#36d982',
+        tooltip: `${metricName('memory')} ${memory(status?.memUsed, status?.memTotal)} (${percent(status?.memPercent)})`,
+        color: '#10b981',
         icon: MemoryIcon,
       },
       {
@@ -180,8 +198,8 @@
         percent: normalizedPercent(status?.swapPercent),
         displayPercent: percent(status?.swapPercent),
         detail: swap(status?.swapUsed, status?.swapTotal),
-        compactDetail: swap(status?.swapUsed, status?.swapTotal),
-        color: '#a66cff',
+        tooltip: `${metricName('swap')} ${swap(status?.swapUsed, status?.swapTotal)} (${percent(status?.swapPercent)})`,
+        color: '#8b5cf6',
         icon: SwapIcon,
       },
       {
@@ -190,8 +208,8 @@
         percent: normalizedPercent(status?.diskPercent),
         displayPercent: percent(status?.diskPercent),
         detail: disk(status?.diskUsed, status?.diskTotal),
-        compactDetail: disk(status?.diskUsed, status?.diskTotal),
-        color: '#ff814a',
+        tooltip: `${metricName('disk')} ${disk(status?.diskUsed, status?.diskTotal)} (${percent(status?.diskPercent)})`,
+        color: '#f59e0b',
         icon: DiskIcon,
       },
     ];
@@ -199,7 +217,7 @@
 
   const selectedMetricColor = computed(
     () =>
-      ({ cpu: '#42a5ff', memory: '#36d982', swap: '#a66cff', disk: '#ff814a', network: '#36d982' })[
+      ({ cpu: '#3b82f6', memory: '#10b981', swap: '#8b5cf6', disk: '#f59e0b', network: '#10b981' })[
         selectedMetric.value ?? 'cpu'
       ],
   );
@@ -245,100 +263,85 @@
             </button>
             <span v-else class="live-state"><i></i>{{ t('statusMonitor.online') }}</span>
           </span>
-
-          <span class="auto-summary" aria-hidden="true">
-            <span class="summary-row summary-resources">
-              <span class="summary-metric summary-cpu"
-                ><b>{{ metricName('cpu') }}</b
-                ><span class="summary-percent">{{ percent(monitor.current.value.cpuPercent) }}</span></span
-              >
-              <i class="summary-separator">·</i>
-              <span class="summary-metric summary-memory"
-                ><b>{{ metricName('memory') }}</b
-                ><span class="summary-percent">{{ percent(monitor.current.value.memPercent) }}</span></span
-              >
-              <i class="summary-separator">·</i>
-              <span class="summary-metric summary-disk"
-                ><b>{{ metricName('disk') }}</b
-                ><span class="summary-percent">{{ percent(monitor.current.value.diskPercent) }}</span></span
-              >
-            </span>
-            <span class="summary-row summary-network">
-              <span class="rate-up">
-                <UploadIcon />
-                <span class="rate-value">{{ rateParts(monitor.current.value.netTxRate).value }}</span>
-                <span class="rate-unit">{{ rateParts(monitor.current.value.netTxRate).unit }}</span>
-              </span>
-              <span class="rate-down">
-                <DownloadIcon />
-                <span class="rate-value">{{ rateParts(monitor.current.value.netRxRate).value }}</span>
-                <span class="rate-unit">{{ rateParts(monitor.current.value.netRxRate).unit }}</span>
-              </span>
-            </span>
-          </span>
         </header>
 
-        <div class="monitor-content">
-          <div class="metric-grid">
+        <div class="monitor-content" :class="{ 'has-history': Boolean(selectedMetric) }">
+          <div class="metric-list">
             <button
               v-for="metric in metrics"
               :key="metric.key"
               type="button"
-              class="metric-card"
+              class="metric-card group"
               :class="[{ selected: selectedMetric === metric.key }, `metric-${metric.key}`]"
               :style="{ '--metric-accent': metric.color, '--metric-value': `${metric.percent}%` }"
               :aria-label="`${metric.name} ${metric.displayPercent}`"
+              :title="metric.tooltip"
               @click="selectMetric(metric.key)"
             >
-              <span v-if="metric.key === 'cpu'" class="cpu-water" aria-hidden="true">
-                <span class="cpu-water-fill">
-                  <svg class="cpu-wave" viewBox="0 0 240 12" preserveAspectRatio="none">
-                    <path
-                      d="M0 6 C14 3 24 9 40 6 S66 3 82 6 S108 9 124 6 S150 3 166 6 S192 9 208 6 S234 3 240 6 L240 12 L0 12 Z"
-                    />
-                  </svg>
-                  <svg class="cpu-wave cpu-wave-two" viewBox="0 0 240 14" preserveAspectRatio="none" aria-hidden="true">
-                    <path
-                      d="M0 7 C16 11 30 3 48 7 S76 12 92 7 S118 2 136 7 S162 12 180 7 S206 3 224 7 S238 11 240 7 L240 14 L0 14 Z"
-                    />
-                  </svg>
-                  <i class="cpu-bubble bubble-one"></i>
-                  <i class="cpu-bubble bubble-two"></i>
-                  <i class="cpu-bubble bubble-three"></i>
-                </span>
-              </span>
-              <span class="metric-top">
-                <span class="metric-identity">
+              <div class="metric-top">
+                <div class="metric-identity">
                   <span class="small-icon"><component :is="metric.icon" /></span>
                   <span class="metric-name">{{ metric.name }}</span>
-                </span>
+                </div>
+                <span v-if="metric.detail" class="metric-detail" :title="metric.tooltip">{{ metric.detail }}</span>
+              </div>
+              <div class="metric-bottom">
+                <div class="metric-progress" aria-hidden="true">
+                  <i :style="{ width: `${metric.percent}%` }"></i>
+                </div>
                 <strong class="metric-percent">{{ metric.displayPercent }}</strong>
-              </span>
-              <span v-if="metric.detail" class="metric-detail metric-detail-full">{{ metric.detail }}</span>
-              <span v-if="metric.compactDetail" class="metric-detail metric-detail-compact">{{
-                metric.compactDetail
-              }}</span>
-              <span v-if="metric.key !== 'cpu'" class="metric-progress" aria-hidden="true"><i></i></span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              class="metric-card network-card group"
+              :class="{ selected: selectedMetric === 'network' }"
+              :style="{ '--metric-accent': '#10b981' }"
+              :aria-label="`${t('statusMonitor.networkLabel')} ↓ ${formatStatusRate(monitor.current.value.netRxRate)} ↑ ${formatStatusRate(monitor.current.value.netTxRate)}`"
+              :title="`${t('statusMonitor.networkLabel')}${monitor.current.value.netInterface ? ` (${monitor.current.value.netInterface})` : ''}: ↓ ${formatStatusRate(monitor.current.value.netRxRate)} ↑ ${formatStatusRate(monitor.current.value.netTxRate)}`"
+              @click="selectMetric('network')"
+            >
+              <div class="metric-top">
+                <div class="metric-identity">
+                  <span class="small-icon network-icon"><i class="fas fa-network-wired text-[10px]"></i></span>
+                  <span class="metric-name">{{ t('statusMonitor.networkLabel') }}</span>
+                </div>
+                <span
+                  v-if="monitor.current.value.netInterface"
+                  class="metric-detail network-iface"
+                >{{ monitor.current.value.netInterface }}</span>
+                <div class="network-history-rates">
+                  <span class="rate-down"
+                    >↓ <span class="rate-full">{{ formatStatusRate(monitor.current.value.netRxRate) }}</span
+                    ><span class="rate-compact">{{ compactRate(monitor.current.value.netRxRate) }}</span></span
+                  >
+                  <span class="rate-up"
+                    >↑ <span class="rate-full">{{ formatStatusRate(monitor.current.value.netTxRate) }}</span
+                    ><span class="rate-compact">{{ compactRate(monitor.current.value.netTxRate) }}</span></span
+                  >
+                </div>
+              </div>
+              <div class="metric-bottom network-bottom">
+                <div
+                  class="network-pill rate-down"
+                  :title="`${t('statusMonitor.networkDownload')}: ${formatStatusRate(monitor.current.value.netRxRate)}`"
+                >
+                  <DownloadIcon />
+                  <span class="rate-val rate-full">{{ formatStatusRate(monitor.current.value.netRxRate) }}</span>
+                  <span class="rate-val rate-compact">{{ compactRate(monitor.current.value.netRxRate) }}</span>
+                </div>
+                <div
+                  class="network-pill rate-up"
+                  :title="`${t('statusMonitor.networkUpload')}: ${formatStatusRate(monitor.current.value.netTxRate)}`"
+                >
+                  <UploadIcon />
+                  <span class="rate-val rate-full">{{ formatStatusRate(monitor.current.value.netTxRate) }}</span>
+                  <span class="rate-val rate-compact">{{ compactRate(monitor.current.value.netTxRate) }}</span>
+                </div>
+              </div>
             </button>
           </div>
-
-          <button
-            type="button"
-            class="network-card"
-            :class="{ selected: selectedMetric === 'network' }"
-            @click="selectMetric('network')"
-          >
-            <span class="network-title">
-              <span>{{ t('statusMonitor.networkLabel') }}</span>
-              <small>{{ monitor.current.value.netInterface || t('statusMonitor.networkInterfaceFallback') }}</small>
-            </span>
-            <span class="network-rate rate-down"
-              ><DownloadIcon /><b>{{ formatStatusRate(monitor.current.value.netRxRate) }}</b></span
-            >
-            <span class="network-rate rate-up"
-              ><UploadIcon /><b>{{ formatStatusRate(monitor.current.value.netTxRate) }}</b></span
-            >
-          </button>
 
           <section v-if="selectedMetric" class="history-card" :style="{ '--history-accent': selectedMetricColor }">
             <header class="history-header">
@@ -380,15 +383,16 @@
   .status-surface {
     --status-text: var(--text-color);
     --status-muted: var(--text-color-secondary);
-    --status-border: color-mix(in srgb, var(--border-color) 72%, transparent);
-    --status-surface: color-mix(in srgb, var(--header-bg-color) 62%, var(--app-bg-color));
-    --status-surface-soft: color-mix(in srgb, var(--header-bg-color) 34%, var(--app-bg-color));
+    --status-border: color-mix(in srgb, var(--border-color) 60%, transparent);
+    --status-surface: color-mix(in srgb, var(--header-bg-color) 40%, var(--card-bg-color));
+    --status-surface-soft: color-mix(in srgb, var(--header-bg-color) 20%, var(--card-bg-color));
     min-width: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: stretch;
     overflow: hidden;
-    padding: 0.42rem;
+    padding: 0.35rem;
     color: var(--text-color);
     background: var(--app-bg-color);
     font-size: 0.84rem;
@@ -414,22 +418,16 @@
   .monitor-panel {
     width: 100%;
     height: 100%;
-    max-height: none;
+    max-height: 100%;
     min-height: 0;
     display: flex;
     flex-direction: column;
     margin: 0;
     border: 1px solid var(--status-border);
-    border-radius: 0.86rem;
+    border-radius: 0.75rem;
     overflow: hidden;
-    background: linear-gradient(
-      180deg,
-      var(--status-surface-soft),
-      color-mix(in srgb, var(--app-bg-color) 96%, transparent)
-    );
-    box-shadow:
-      0 14px 36px rgba(0, 0, 0, 0.12),
-      inset 0 1px 0 color-mix(in srgb, var(--text-color) 5%, transparent);
+    background: var(--card-bg-color);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   }
 
   .monitor-header {
@@ -439,8 +437,9 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.52rem 0.7rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
+    padding: 0.45rem 0.65rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
+    background: color-mix(in srgb, var(--header-bg-color) 40%, var(--card-bg-color));
   }
   .header-main {
     min-width: 0;
@@ -451,8 +450,9 @@
   .header-main > strong {
     min-width: 0;
     overflow: hidden;
-    font-size: 1rem;
-    font-weight: 700;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-color);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -461,13 +461,13 @@
     max-width: min(10rem, 52cqw);
     display: inline-flex;
     align-items: center;
-    gap: 0.32rem;
-    padding: 0.14rem 0.5rem;
-    border: 1px solid rgba(52, 223, 125, 0.22);
+    gap: 0.3rem;
+    padding: 0.1rem 0.42rem;
+    border: 1px solid rgba(16, 185, 129, 0.22);
     border-radius: 999px;
-    color: #34df7d;
-    background: rgba(52, 223, 125, 0.08);
-    font-size: 0.74rem;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.08);
+    font-size: 0.66rem;
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -477,86 +477,80 @@
     cursor: pointer;
     transition:
       border-color 0.15s ease,
-      background 0.15s ease,
-      transform 0.15s ease;
+      background 0.15s ease;
   }
   button.live-state:hover {
-    border-color: rgba(52, 223, 125, 0.45);
-    background: rgba(52, 223, 125, 0.14);
-  }
-  button.live-state:active {
-    transform: scale(0.97);
+    border-color: rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.14);
   }
   .live-state i {
-    width: 0.34rem;
-    height: 0.34rem;
+    width: 0.32rem;
+    height: 0.32rem;
     flex: none;
     border-radius: 50%;
-    background: currentColor;
-    box-shadow: 0 0 6px currentColor;
-  }
-  .auto-summary {
-    display: none;
-  }
-  .summary-row b {
-    font-weight: 760;
-  }
-  .summary-cpu b {
-    color: #42a5ff;
-  }
-  .summary-memory b {
-    color: #36d982;
-  }
-  .summary-disk b {
-    color: #ff814a;
+    background: #10b981;
   }
 
   .monitor-content {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-height: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 0.54rem;
+    padding: 0.38rem;
+    gap: 0.35rem;
   }
 
-  .metric-grid {
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-  }
-  .metric-card {
-    position: relative;
-    min-width: 0;
+  /* When no history chart is open, metric-list flexibly fills the entire height */
+  .monitor-content:not(.has-history) .metric-list {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 0.3rem;
-    padding: 0.5rem 0.55rem;
-    border: 1px solid var(--status-border);
-    border-radius: 0.68rem;
+    gap: clamp(0.32rem, 1.2cqh, 0.58rem);
+  }
+
+  .monitor-content:not(.has-history) .metric-card {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(0.12rem, 0.6cqh, 0.35rem);
+    padding: clamp(0.22rem, 0.8cqh, 0.55rem) clamp(0.32rem, 1.5cqw, 0.55rem);
+  }
+
+  .metric-card {
+    position: relative;
+    min-width: 0;
+    border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+    border-radius: 0.55rem;
     color: inherit;
-    background: var(--status-surface-soft);
+    background: color-mix(in srgb, var(--header-bg-color) 20%, var(--card-bg-color));
     text-align: left;
     cursor: pointer;
     overflow: hidden;
     transition:
-      transform 0.15s ease,
       border-color 0.15s ease,
-      background 0.15s ease;
+      background 0.15s ease,
+      box-shadow 0.15s ease;
   }
   .metric-card:hover {
-    transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--metric-accent) 48%, transparent);
-    background: var(--status-surface);
+    border-color: color-mix(in srgb, var(--border-color) 85%, transparent);
+    background: color-mix(in srgb, var(--header-bg-color) 45%, var(--card-bg-color));
   }
   .metric-card.selected {
-    border-color: color-mix(in srgb, var(--metric-accent) 62%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--metric-accent) 12%, transparent);
+    border-color: var(--link-active-color);
+    background: color-mix(in srgb, var(--link-active-color) 8%, var(--card-bg-color));
+    box-shadow: inset 0 0 0 1px var(--link-active-color);
   }
+
+  /* Metric Card Row 1: Top Identity & Capacity/Detail */
   .metric-top {
     position: relative;
     z-index: 1;
@@ -568,265 +562,253 @@
   }
   .metric-identity {
     min-width: 0;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 0.38rem;
+    gap: 0.35rem;
   }
   .small-icon {
-    width: 1.6rem;
-    height: 1.6rem;
-    flex: 0 0 1.6rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: 0 0 1.25rem;
     display: grid;
     place-items: center;
-    border: 1px solid color-mix(in srgb, var(--metric-accent) 26%, transparent);
-    border-radius: 0.5rem;
+    border-radius: 0.3rem;
     color: var(--metric-accent);
-    background: color-mix(in srgb, var(--metric-accent) 10%, transparent);
+    background: color-mix(in srgb, var(--metric-accent) 12%, transparent);
   }
   .small-icon svg {
-    width: 0.92rem;
-    height: 0.92rem;
+    width: 0.78rem;
+    height: 0.78rem;
   }
   .metric-name {
-    min-width: 0;
-    overflow: hidden;
+    flex-shrink: 0;
     color: var(--status-text);
-    font-size: 0.84rem;
-    font-weight: 700;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .metric-percent {
-    flex: none;
-    margin-left: auto;
-    color: var(--metric-accent);
-    font-size: 1.12rem;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
+    font-size: 0.78rem;
+    font-weight: 600;
     white-space: nowrap;
   }
   .metric-detail {
-    position: relative;
-    z-index: 1;
-    flex-shrink: 0;
-    width: 100%;
     min-width: 0;
     overflow: hidden;
     color: var(--status-muted);
-    font-size: 0.78rem;
-    font-weight: 600;
-    line-height: 1.2;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
     text-align: right;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .metric-detail-compact {
-    display: none;
-  }
-  .metric-progress {
+
+  /* Metric Card Row 2: Bottom Progress Bar & Percentage */
+  .metric-bottom {
     position: relative;
     z-index: 1;
-    flex-shrink: 0;
-    height: 0.24rem;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .metric-progress {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 0.38rem;
     overflow: hidden;
     border-radius: 999px;
-    background: rgba(148, 163, 184, 0.14);
+    background: color-mix(in srgb, var(--text-color) 8%, transparent);
   }
   .metric-progress i {
     display: block;
-    width: var(--metric-value);
     height: 100%;
     border-radius: inherit;
     background: var(--metric-accent);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--metric-accent) 52%, transparent);
-    transition: width 0.5s ease;
+    transition: width 0.35s ease;
   }
-
-  .cpu-water {
-    position: absolute;
-    z-index: 0;
-    inset: 0;
-    overflow: hidden;
-    border-radius: inherit;
-    pointer-events: none;
-  }
-  .cpu-water-fill {
-    --cpu-water-color: color-mix(in srgb, var(--metric-accent) 30%, var(--app-bg-color) 70%);
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    height: clamp(0%, var(--metric-value), 100%);
-    max-height: 100%;
-    min-height: 0;
-    background: var(--cpu-water-color);
-    transition: height 1.4s ease-in-out;
-    will-change: height;
-  }
-  .cpu-wave {
-    position: absolute;
-    z-index: 2;
-    top: -6px;
-    left: -100%;
-    width: 200%;
-    height: 12px;
-    color: var(--cpu-water-color);
-    animation: waterWaveFlow 6s linear infinite;
-  }
-  .cpu-wave path {
-    fill: currentColor;
-    transform-origin: center;
-    animation: waterWaveBob 3.8s linear infinite;
-  }
-  .cpu-wave-two {
-    display: none;
-  }
-  .cpu-bubble {
-    position: absolute;
-    z-index: 3;
-    bottom: 5%;
-    width: 3px;
-    height: 3px;
-    border: 1px solid color-mix(in srgb, var(--metric-accent) 55%, var(--text-color) 10%);
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--metric-accent) 13%, transparent);
-    box-shadow:
-      inset 0 0 2px rgba(255, 255, 255, 0.18),
-      0 0 3px color-mix(in srgb, var(--metric-accent) 18%, transparent);
-    opacity: 0;
-    animation: bubbleRise 5.2s ease-in infinite;
-  }
-  .bubble-one {
-    left: 22%;
-    animation-delay: -0.8s;
-  }
-  .bubble-two {
-    left: 58%;
-    width: 4px;
-    height: 4px;
-    animation-delay: -2.5s;
-    animation-duration: 6.1s;
-  }
-  .bubble-three {
-    left: 78%;
-    width: 2px;
-    height: 2px;
-    animation-delay: -3.4s;
-    animation-duration: 4.6s;
-  }
-  @keyframes waterWaveFlow {
-    to {
-      transform: translateX(50%);
-    }
-  }
-  @keyframes waterWaveBob {
-    0%,
-    100% {
-      transform: translateY(0) scaleY(1);
-    }
-    38% {
-      transform: translateY(-2px) scaleY(1.08);
-    }
-    62% {
-      transform: translateY(1px) scaleY(0.9);
-    }
-  }
-  @keyframes bubbleRise {
-    0% {
-      bottom: 4%;
-      transform: translate3d(0, 1px, 0) scale(0.72);
-      opacity: 0;
-    }
-    16% {
-      opacity: 0.52;
-    }
-    72% {
-      opacity: 0.3;
-    }
-    100% {
-      bottom: calc(100% - 4px);
-      transform: translate3d(3px, 0, 0) scale(1.05);
-      opacity: 0;
-    }
-  }
-
-  .network-card {
-    width: 100%;
-    min-width: 0;
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.52rem 0.6rem;
-    border: 1px solid var(--status-border);
-    border-radius: 0.68rem;
-    color: inherit;
-    background: var(--status-surface-soft);
-    text-align: left;
-    cursor: pointer;
-    transition: border-color 0.15s ease;
-  }
-  .network-card:hover {
-    border-color: rgba(54, 217, 130, 0.42);
-  }
-  .network-card.selected {
-    border-color: rgba(54, 217, 130, 0.55);
-    box-shadow: inset 0 0 0 1px rgba(54, 217, 130, 0.09);
-  }
-  .network-title {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 0.34rem;
+  .metric-percent {
+    flex: 0 0 3.4rem;
+    text-align: right;
+    font-family: var(--font-mono);
     font-size: 0.82rem;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--status-text);
+    line-height: 1;
     white-space: nowrap;
   }
-  .network-title small {
-    max-width: 4.4rem;
-    overflow: hidden;
-    padding: 0.12rem 0.4rem;
-    border: 1px solid var(--status-border);
-    border-radius: 999px;
-    color: var(--status-muted);
-    background: var(--status-surface);
-    font-size: 0.62rem;
-    font-weight: 600;
-    text-overflow: ellipsis;
+
+  /* Network Card specific styling */
+  .network-icon {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.12);
   }
-  .network-rate {
-    min-width: 0;
-    display: inline-flex;
+  .network-iface {
+    overflow: hidden;
+    color: var(--status-muted);
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .network-history-rates {
+    display: none;
     align-items: center;
-    gap: 0.24rem;
-    font-size: 0.72rem;
-    font-weight: 700;
+    gap: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .network-rate svg {
-    width: 0.8rem;
-    height: 0.8rem;
+  .has-history .network-history-rates {
+    display: inline-flex;
+    white-space: nowrap;
+  }
+  .has-history .network-history-rates span {
+    white-space: nowrap;
+  }
+  .has-history .network-card .metric-top {
+    justify-content: space-between;
+  }
+  .monitor-content:not(.has-history) .network-card {
+    flex: 1.14 1 0;
+    padding: clamp(0.24rem, 0.8cqh, 0.38rem) clamp(0.48rem, 2cqw, 0.65rem);
+    gap: clamp(0.14rem, 0.5cqh, 0.24rem);
+  }
+  .monitor-content:not(.has-history) .network-card .small-icon {
+    width: 1.18rem;
+    height: 1.18rem;
+    flex: 0 0 1.18rem;
+  }
+  .network-bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.34rem;
+    width: 100%;
+  }
+  .rate-compact {
+    display: none;
+  }
+  .network-pill {
+    min-width: 0;
+    height: 1.05rem;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.18rem;
+    padding: 0 0.28rem;
+    border-radius: 0.28rem;
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .network-pill svg {
+    width: 0.64rem;
+    height: 0.64rem;
     flex: none;
   }
   .rate-down {
-    color: #35db81;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.18);
   }
   .rate-up {
-    color: #ff814a;
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.18);
+  }
+  .rate-val {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* History trend mode styling */
+  .has-history .metric-list {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.22rem;
+  }
+  .has-history .metric-card {
+    min-height: 1.7rem;
+    height: 1.7rem;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.45rem;
+  }
+  .has-history .metric-top {
+    min-width: 0;
+    flex: 1 1 auto;
+    width: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.28rem;
+  }
+  .has-history .metric-identity {
+    gap: 0.28rem;
+  }
+  .has-history .small-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 1.15rem;
+    border-radius: 0.25rem;
+  }
+  .has-history .small-icon svg {
+    width: 0.7rem;
+    height: 0.7rem;
+  }
+  .has-history .metric-name {
+    font-size: 0.72rem;
+  }
+  .has-history .metric-detail,
+  .has-history .metric-progress {
+    display: none;
+  }
+  .has-history .metric-bottom {
+    flex: 0 0 auto;
+    width: auto;
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  .has-history .metric-percent {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    text-align: right;
+  }
+  .has-history .network-card {
+    grid-column: span 2;
+  }
+  .has-history .network-top {
+    width: 100%;
+  }
+  .has-history .network-bottom {
+    display: none;
   }
 
   .history-card {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 0.54rem 0.52rem 0.36rem;
-    border: 1px solid var(--status-border);
-    border-radius: 0.68rem;
-    background: var(--status-surface-soft);
+    padding: 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+    border-radius: 0.55rem;
+    background: color-mix(in srgb, var(--header-bg-color) 20%, var(--card-bg-color));
   }
   .history-header {
     min-width: 0;
@@ -834,12 +816,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.4rem;
-    padding: 0 0.1rem 0.4rem;
+    padding: 0 0.1rem 0.35rem;
   }
   .history-header > strong {
     min-width: 0;
     overflow: hidden;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
+    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -847,18 +830,18 @@
     flex: none;
     display: inline-flex;
     gap: 0.1rem;
-    padding: 0.14rem;
-    border-radius: 0.5rem;
+    padding: 0.12rem;
+    border-radius: 0.4rem;
     background: color-mix(in srgb, var(--border-color) 18%, transparent);
   }
   .range-tabs button {
     min-width: 0;
-    padding: 0.22rem 0.3rem;
+    padding: 0.18rem 0.28rem;
     border: 0;
-    border-radius: 0.38rem;
+    border-radius: 0.3rem;
     color: var(--status-muted);
     background: transparent;
-    font-size: 0.66rem;
+    font-size: 0.64rem;
     line-height: 1;
     white-space: nowrap;
     cursor: pointer;
@@ -872,344 +855,430 @@
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--history-accent) 28%, transparent);
   }
 
-  .status-surface:not(.has-history) .metric-grid {
-    flex: 1 1 auto;
-    min-height: 0;
-    grid-auto-rows: minmax(0, 1fr);
-    align-content: stretch;
-  }
-  .status-surface:not(.has-history) .metric-card {
-    min-height: 0;
-    height: 100%;
-  }
-  .has-history .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: auto;
-    gap: 0.24rem;
-  }
-  .has-history .metric-card {
-    min-height: 1.7rem;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.4rem;
-    padding: 0.16rem 0.3rem;
-    border-radius: 0.5rem;
-  }
-  .has-history .metric-top {
-    flex: 1;
-  }
-  .has-history .metric-identity {
-    gap: 0.3rem;
-  }
-  .has-history .small-icon,
-  .has-history .metric-detail,
-  .has-history .metric-progress,
-  .has-history .cpu-water {
-    display: none;
-  }
-  .has-history .metric-name,
-  .has-history .metric-percent {
-    font-size: 0.68rem;
-  }
-  .has-history .network-card {
-    padding: 0.28rem 0.4rem;
-    gap: 0.3rem;
-  }
-  .has-history .network-title small {
-    display: none;
-  }
-  .has-history .history-card {
-    flex: 1 1 0;
-    min-height: 0;
-  }
-
   @container status-pane (min-width: 301px) and (min-height: 460px) {
     .status-surface {
-      padding: 0.5rem;
+      padding: 0.45rem;
     }
     .monitor-header {
-      padding: 0.58rem 0.74rem;
+      padding: 0.5rem 0.65rem;
     }
     .monitor-content {
-      padding: 0.6rem;
-      gap: 0.56rem;
+      padding: 0.45rem;
+      gap: 0.4rem;
     }
-    .metric-card {
-      padding: 0.58rem 0.62rem;
-      gap: 0.36rem;
+    .monitor-content:not(.has-history) .metric-card {
+      padding: 0.48rem 0.65rem;
     }
     .metric-percent {
-      font-size: 1.26rem;
+      font-size: 0.88rem;
+      flex-basis: 3.6rem;
     }
     .small-icon {
-      width: 1.8rem;
-      height: 1.8rem;
-      flex-basis: 1.8rem;
+      width: 1.4rem;
+      height: 1.4rem;
+      flex-basis: 1.4rem;
     }
     .small-icon svg {
-      width: 1.02rem;
-      height: 1.02rem;
+      width: 0.85rem;
+      height: 0.85rem;
     }
     .metric-name {
-      font-size: 0.9rem;
-    }
-    .metric-progress {
-      height: 0.3rem;
-    }
-    .network-card {
-      padding: 0.6rem 0.68rem;
+      font-size: 0.82rem;
     }
     .history-card {
-      padding: 0.6rem 0.58rem 0.4rem;
+      padding: 0.5rem 0.5rem 0.35rem;
     }
   }
 
-  @container status-pane (max-width: 300px) {
-    .status-surface {
-      padding: 0.28rem;
+  @container status-pane (max-width: 220px) {
+    .rate-full {
+      display: none;
     }
-    .monitor-header {
-      padding: 0.4rem 0.5rem;
-    }
-    .header-main > strong {
-      font-size: 0.86rem;
-    }
-    .live-state {
-      padding: 0.1rem 0.36rem;
-      font-size: 0.66rem;
-    }
-    .monitor-content {
-      padding: 0.36rem;
-      gap: 0.34rem;
-    }
-    .metric-grid {
-      gap: 0.34rem;
-    }
-    .metric-card {
-      padding: 0.4rem 0.44rem;
-      gap: 0.22rem;
-    }
-    .small-icon {
-      width: 1.42rem;
-      height: 1.42rem;
-      flex-basis: 1.42rem;
-      border-radius: 0.44rem;
-    }
-    .small-icon svg {
-      width: 0.82rem;
-      height: 0.82rem;
-    }
-    .metric-name {
-      font-size: 0.74rem;
+    .rate-compact {
+      display: inline;
     }
     .metric-percent {
-      font-size: 0.94rem;
+      flex-basis: 2.9rem;
+      font-size: 0.76rem;
     }
-    .metric-detail-full {
+    .metric-detail {
       display: none;
     }
-    .metric-detail-compact {
-      display: block;
-      font-size: 0.62rem;
-    }
-    .network-card {
-      grid-template-columns: minmax(0, 1fr) minmax(0, auto);
-      column-gap: 0.24rem;
-      row-gap: 0.06rem;
-      padding: 0.24rem 0.48rem;
-    }
-    .network-title {
-      grid-column: 1 / -1;
-    }
-    .network-rate {
-      font-size: 0.62rem;
-    }
-    .network-rate.rate-up {
-      justify-self: end;
-    }
-    .history-header {
-      display: grid;
-      grid-template-columns: 1fr;
-    }
-    .range-tabs {
-      width: 100%;
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-
-  @container status-pane (max-width: 175px) {
-    .status-surface:not(.has-history) .metric-grid {
-      grid-template-columns: 1fr;
-    }
-    .network-card {
-      grid-template-columns: minmax(0, 1fr);
-      row-gap: 0.08rem;
-      padding-block: 0.2rem;
-    }
-    .network-title,
-    .network-rate,
-    .network-rate.rate-up {
-      grid-column: 1;
-      justify-self: center;
-    }
-    .network-title small {
-      display: none;
-    }
-  }
-
-  @container status-pane (max-height: 300px) {
-    .history-header .range-tabs {
-      display: none;
-    }
-    .status-surface .metric-detail-full,
-    .status-surface .metric-detail-compact {
-      display: none;
-    }
-  }
-
-  @container status-pane (max-height: 235px) {
-    .monitor-header {
-      flex: 1 1 auto;
-      min-height: 0;
-      flex-direction: column;
-      align-items: stretch;
-      justify-content: flex-start;
-      gap: 0.24rem;
-    }
-    .header-main {
-      flex: 0 0 auto;
-    }
-    .auto-summary {
-      flex: 1 1 auto;
-      min-height: 0;
-      display: grid;
-      grid-template-rows: repeat(2, minmax(0, 1fr));
-      align-content: stretch;
+    .monitor-content:not(.has-history) .network-card {
+      padding: 0.26rem 0.52rem 0.35rem;
       gap: 0.2rem;
-      padding: 0.26rem 0.5rem 0.4rem;
-      color: var(--status-muted);
     }
-    .monitor-content {
-      display: none;
-    }
-    .summary-row {
-      min-width: 0;
-      width: 100%;
-      min-height: 1.9rem;
-      align-items: center;
-      white-space: nowrap;
-      font-size: clamp(0.78rem, 6.2cqw, 0.94rem);
-      line-height: 1.35;
-    }
-    .summary-resources {
-      display: flex;
-      justify-content: center;
-      gap: clamp(0.18rem, 2cqw, 0.36rem);
-    }
-    .summary-metric {
-      min-width: 0;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: clamp(0.22rem, 2cqw, 0.42rem);
-    }
-    .summary-percent {
-      color: var(--status-text);
-      font-variant-numeric: tabular-nums;
-    }
-    .summary-separator {
-      align-self: center;
-      color: rgba(148, 163, 184, 0.58);
-      font-style: normal;
-    }
-    .summary-network {
-      width: min(100%, 15rem);
-      justify-self: center;
-      display: grid;
-      grid-template-columns: auto auto;
-      justify-content: center;
-      column-gap: 0.32rem;
-    }
-    .summary-network > span {
-      display: grid;
-      grid-template-columns: 0.88rem auto auto;
-      align-items: center;
-      column-gap: 0.12rem;
-    }
-    .summary-network svg {
-      width: 0.88rem;
-      height: 0.88rem;
-    }
-    .summary-network .rate-value {
-      color: var(--status-text);
-      font-variant-numeric: tabular-nums;
-    }
-    .summary-network .rate-unit {
-      font-weight: 700;
-    }
-  }
-
-  @container status-pane (max-width: 180px) and (max-height: 235px) {
-    .auto-summary {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-evenly;
-      padding-inline: 0.24rem;
-    }
-    .summary-resources,
-    .summary-network {
-      width: min(100%, 5.2rem);
-      align-self: center;
-      display: grid;
-      grid-template-columns: 1fr;
-      row-gap: 0.2rem;
-    }
-    .summary-separator {
-      display: none;
-    }
-    .summary-metric {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 2.35rem;
+    .network-bottom {
       gap: 0.28rem;
     }
-    .summary-metric b {
-      justify-self: start;
+    .network-pill {
+      font-size: 0.62rem;
+      height: 1.05rem;
+      padding: 0 0.24rem;
+      gap: 0.16rem;
     }
-    .summary-percent {
-      justify-self: end;
-      text-align: right;
-    }
-    .summary-network > span {
-      grid-template-columns: 0.82rem minmax(0, 1fr) max-content;
+    .network-pill svg {
+      width: 0.6rem;
+      height: 0.6rem;
     }
   }
 
-  @container status-pane (max-height: 130px) {
-    .status-surface {
-      padding: 0.16rem;
-    }
+  @container status-pane (max-width: 190px) {
     .monitor-header {
-      padding: 0.2rem 0.38rem;
+      padding: 0.32rem 0.42rem;
+      gap: 0.25rem;
+    }
+    .header-main {
+      gap: 0.25rem;
     }
     .header-main > strong {
       font-size: 0.76rem;
     }
     .live-state {
-      gap: 0.22rem;
-      font-size: 0.62rem;
+      padding: 0.06rem 0.26rem;
+      font-size: 0.6rem;
+      gap: 0.2rem;
     }
-    .auto-summary {
-      gap: 0.06rem;
-      padding: 0.12rem 0.34rem 0.2rem;
+    .network-iface {
+      display: none;
     }
-    .summary-row {
-      font-size: clamp(0.6rem, 5.5cqw, 0.72rem);
-      line-height: 1.1;
+    .metric-percent {
+      flex-basis: 2.6rem;
+      font-size: 0.72rem;
+    }
+    .small-icon {
+      width: 1.15rem;
+      height: 1.15rem;
+      flex-basis: 1.15rem;
+    }
+    .small-icon svg {
+      width: 0.7rem;
+      height: 0.7rem;
+    }
+    .monitor-content:not(.has-history) .network-card {
+      padding: 0.26rem 0.5rem 0.35rem;
+      gap: 0.18rem;
+    }
+    .network-bottom {
+      gap: 0.25rem;
+    }
+    .network-pill {
+      font-size: 0.6rem;
+      height: 1.02rem;
+      padding: 0 0.22rem;
+      gap: 0.14rem;
+    }
+    .network-pill svg {
+      width: 0.56rem;
+      height: 0.56rem;
+    }
+  }
+  @container status-pane (max-height: 300px) {
+    .history-header .range-tabs {
+      display: none;
     }
   }
 
+  @container status-pane (max-height: 250px) {
+    .status-surface {
+      padding: 0.18rem 0.24rem;
+    }
+    .monitor-header {
+      flex: 0 0 auto;
+      padding: 0.1rem 0.35rem;
+      min-height: 0;
+    }
+    .header-main > strong {
+      font-size: 0.76rem;
+    }
+    .live-state {
+      padding: 0.04rem 0.24rem;
+      font-size: 0.58rem;
+    }
+    .monitor-content {
+      padding: 0.06rem 0.16rem;
+      gap: 0;
+      overflow-y: hidden;
+    }
+    .monitor-content:not(.has-history) .metric-list {
+      flex: 1 1 0;
+      min-height: 0;
+      gap: clamp(0.06rem, 0.6cqh, 0.22rem);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .monitor-content:not(.has-history) .metric-card {
+      flex: 1 1 0;
+      min-height: 0;
+      max-height: 2.2rem;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      padding: clamp(0.04rem, 0.3cqh, 0.16rem) clamp(0.24rem, 1.2cqw, 0.42rem);
+      gap: 0.35rem;
+      border-radius: 0.38rem;
+    }
+    .monitor-content:not(.has-history) .metric-top {
+      flex: 0 0 3.6rem;
+      width: 3.6rem;
+      gap: 0.25rem;
+    }
+    .monitor-content:not(.has-history) .metric-identity {
+      gap: 0.25rem;
+    }
+    .monitor-content:not(.has-history) .small-icon {
+      width: 1.05rem;
+      height: 1.05rem;
+      flex: 0 0 1.05rem;
+      border-radius: 0.25rem;
+    }
+    .monitor-content:not(.has-history) .small-icon svg {
+      width: 0.65rem;
+      height: 0.65rem;
+    }
+    .monitor-content:not(.has-history) .metric-name {
+      font-size: 0.72rem;
+    }
+    .monitor-content:not(.has-history) .metric-detail {
+      display: none;
+    }
+    .monitor-content:not(.has-history) .metric-bottom:not(.network-bottom) {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .monitor-content:not(.has-history) .metric-progress {
+      flex: 1 1 auto;
+      min-width: 1.5rem;
+      height: 0.26rem;
+    }
+    .monitor-content:not(.has-history) .metric-percent {
+      flex: 0 0 2.7rem;
+      font-size: 0.74rem;
+    }
+    .monitor-content:not(.has-history) .network-card .metric-top {
+      flex: 0 0 3.6rem;
+      width: 3.6rem;
+    }
+    .monitor-content:not(.has-history) .network-bottom {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.25rem;
+      width: auto;
+    }
+    .monitor-content:not(.has-history) .network-pill {
+      font-size: 0.62rem;
+      padding: 0.05rem 0.24rem;
+      gap: 0.18rem;
+    }
+    .monitor-content:not(.has-history) .network-iface {
+      display: none;
+    }
+    .has-history .metric-card {
+      min-height: 1.45rem;
+      height: 1.45rem;
+      padding: 0.1rem 0.35rem;
+    }
+  }
+
+  @container status-pane (max-height: 155px) {
+    .status-surface {
+      padding: 0.12rem 0.16rem;
+    }
+    .monitor-header {
+      padding: 0.06rem 0.28rem;
+    }
+    .header-main > strong {
+      font-size: 0.7rem;
+    }
+    .live-state {
+      padding: 0.02rem 0.2rem;
+      font-size: 0.56rem;
+    }
+    .monitor-content {
+      padding: 0.04rem 0.1rem;
+    }
+    .monitor-content:not(.has-history) .metric-list {
+      gap: 0.06rem;
+    }
+    .monitor-content:not(.has-history) .metric-card {
+      padding: 0.02rem 0.22rem;
+      border-radius: 0.28rem;
+    }
+    .monitor-content:not(.has-history) .metric-top,
+    .monitor-content:not(.has-history) .network-card .metric-top {
+      flex: 0 0 3.3rem;
+      width: 3.3rem;
+    }
+    .monitor-content:not(.has-history) .small-icon {
+      width: 0.92rem;
+      height: 0.92rem;
+      flex: 0 0 0.92rem;
+    }
+    .monitor-content:not(.has-history) .small-icon svg {
+      width: 0.55rem;
+      height: 0.55rem;
+    }
+    .monitor-content:not(.has-history) .metric-name {
+      font-size: 0.66rem;
+    }
+    .monitor-content:not(.has-history) .metric-progress {
+      height: 0.2rem;
+    }
+    .monitor-content:not(.has-history) .metric-percent {
+      flex: 0 0 2.4rem;
+      font-size: 0.68rem;
+    }
+    .monitor-content:not(.has-history) .network-pill {
+      font-size: 0.56rem;
+      padding: 0.02rem 0.16rem;
+      gap: 0.12rem;
+    }
+  }
+
+  @container status-pane (max-height: 120px) {
+    .status-surface {
+      padding: 0.08rem 0.12rem;
+    }
+    .monitor-header {
+      padding: 0.03rem 0.22rem;
+    }
+    .header-main > strong {
+      font-size: 0.66rem;
+    }
+    .live-state {
+      font-size: 0.52rem;
+      padding: 0.01rem 0.16rem;
+    }
+    .monitor-content {
+      overflow-y: auto;
+    }
+    .monitor-content:not(.has-history) .metric-list {
+      gap: 0.04rem;
+    }
+    .monitor-content:not(.has-history) .metric-card {
+      padding: 0.01rem 0.18rem;
+    }
+    .monitor-content:not(.has-history) .metric-top,
+    .monitor-content:not(.has-history) .network-card .metric-top {
+      flex: 0 0 3rem;
+      width: 3rem;
+    }
+    .monitor-content:not(.has-history) .small-icon {
+      width: 0.8rem;
+      height: 0.8rem;
+      flex: 0 0 0.8rem;
+    }
+    .monitor-content:not(.has-history) .small-icon svg {
+      width: 0.48rem;
+      height: 0.48rem;
+    }
+    .monitor-content:not(.has-history) .metric-name {
+      font-size: 0.62rem;
+    }
+    .monitor-content:not(.has-history) .metric-progress {
+      height: 0.16rem;
+    }
+    .monitor-content:not(.has-history) .metric-percent {
+      flex: 0 0 2.2rem;
+      font-size: 0.62rem;
+    }
+    .monitor-content:not(.has-history) .network-pill {
+      font-size: 0.5rem;
+      padding: 0.01rem 0.12rem;
+    }
+  }
+
+  @container status-pane (min-width: 500px) and (max-height: 220px) {
+    .status-surface {
+      padding: 0.22rem 0.35rem;
+    }
+    .monitor-header {
+      padding: 0.12rem 0.35rem;
+    }
+    .monitor-content {
+      overflow-y: hidden;
+    }
+    .monitor-content:not(.has-history) .metric-list {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.32rem;
+      height: 100%;
+    }
+    .monitor-content:not(.has-history) .metric-card {
+      flex-direction: column;
+      justify-content: center;
+      padding: 0.24rem 0.42rem;
+      gap: 0.22rem;
+      height: 100%;
+      max-height: none;
+    }
+    .monitor-content:not(.has-history) .metric-top {
+      width: 100%;
+      flex: 0 0 auto;
+      justify-content: space-between;
+    }
+    .monitor-content:not(.has-history) .metric-detail {
+      display: inline;
+    }
+    .monitor-content:not(.has-history) .metric-bottom:not(.network-bottom) {
+      width: 100%;
+      flex: 0 0 auto;
+      gap: 0.35rem;
+    }
+    .monitor-content:not(.has-history) .network-card .metric-top {
+      width: 100%;
+      flex: 0 0 auto;
+    }
+    .monitor-content:not(.has-history) .network-bottom {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.2rem;
+    }
+    .monitor-content:not(.has-history) .network-pill {
+      font-size: 0.6rem;
+      padding: 0.04rem 0.14rem;
+    }
+  }
+
+  @container status-pane (max-width: 220px) and (max-height: 250px) {
+    .monitor-content:not(.has-history) .metric-top,
+    .monitor-content:not(.has-history) .network-card .metric-top {
+      flex: 0 0 3.2rem;
+      width: 3.2rem;
+    }
+    .monitor-content:not(.has-history) .metric-percent {
+      flex: 0 0 2.4rem;
+      font-size: 0.7rem;
+    }
+  }
+
+  @container status-pane (max-width: 190px) and (max-height: 250px) {
+    .monitor-content:not(.has-history) .metric-top,
+    .monitor-content:not(.has-history) .network-card .metric-top {
+      flex: 0 0 2.9rem;
+      width: 2.9rem;
+    }
+    .monitor-content:not(.has-history) .metric-percent {
+      flex: 0 0 2.2rem;
+      font-size: 0.66rem;
+    }
+    .monitor-content:not(.has-history) .small-icon {
+      width: 0.95rem;
+      height: 0.95rem;
+      flex: 0 0 0.95rem;
+    }
+    .monitor-content:not(.has-history) .small-icon svg {
+      width: 0.58rem;
+      height: 0.58rem;
+    }
+  }
   @media (pointer: coarse) {
     .status-touch-target {
       min-height: 44px;

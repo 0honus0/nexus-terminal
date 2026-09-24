@@ -1,7 +1,7 @@
-export const formatStatusPercent = (value?: number): string | null => {
+export const formatStatusPercent = (value?: number, fixed = true): string | null => {
   if (value === undefined || !Number.isFinite(value)) return null;
   const bounded = Math.min(100, Math.max(0, value));
-  return `${Number.isInteger(bounded) ? bounded.toFixed(0) : bounded.toFixed(1)}%`;
+  return `${fixed ? bounded.toFixed(1) : Number.isInteger(bounded) ? bounded.toFixed(0) : bounded.toFixed(1)}%`;
 };
 
 export const formatStatusMemoryPair = (usedMiB?: number, totalMiB?: number): string | null => {

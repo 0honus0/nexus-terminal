@@ -33,7 +33,7 @@
     "diskPercentLabel": "磁盘使用率 (%)",
     "networkDownload": "下载",
     "networkUpload": "上传",
-    "minutes": "{count} 分钟",
+    "minutes": "{count}分",
     "trend": {
       "cpu": "CPU 趋势",
       "memory": "内存趋势",
@@ -44,6 +44,7 @@
     "online": "在线",
     "networkInterfaceFallback": "网卡",
     "historyRange": "历史时间范围",
-    "copyIpError": "复制 IP 失败"
+    "copyIpError": "复制 IP 失败",
+    "load": "负载"
   }
 }
