@@ -50,6 +50,7 @@ import type {
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_JOB_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_STORAGE_RESPONSE_BYTES = 8 * 1024 * 1024;
+const MAX_CATALOG_RESPONSE_BYTES = 8 * 1024 * 1024;
 const MAX_HOST_WORKSPACE_TRANSFER_BYTES = 256 * 1024 * 1024;
 const WORKSPACE_TRANSFER_TIMEOUT_MS = 120_000;
 const RUNNER_PROTOCOL_VERSION = '2026-09-13';
@@ -165,7 +166,7 @@ export class RunnerHttpAdapter
   }
 
   async catalog(signal?: AbortSignal): Promise<WorkspaceRuntimeCatalog> {
-    return decodeCatalog(await this.get('/v1/catalog', signal));
+    return decodeCatalog(await this.get('/v1/catalog', signal, { maxResponseBytes: MAX_CATALOG_RESPONSE_BYTES }));
   }
 
   async storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView> {
