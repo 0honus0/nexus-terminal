@@ -16,6 +16,8 @@
   const reason = ref('');
   const selectedIds = ref<Set<number>>(new Set());
   const expanded = ref(false);
+  const baselineIds = ref<Set<number>>(new Set());
+  const baselineReason = ref('');
 
   onMounted(async () => {
     if (connectionsStore.connections.value.length) {
@@ -34,12 +36,32 @@
     }
   });
 
-  // 与父级安全黑名单同步
+  const draftMatchesRemote = (): boolean => {
+    const remoteIds = new Set(props.denylist.list.map((entry) => entry.connectionId));
+    if (selectedIds.value.size !== remoteIds.size || reason.value !== (props.denylist.list[0]?.reason || ''))
+      return false;
+    for (const id of selectedIds.value) if (!remoteIds.has(id)) return false;
+    return true;
+  };
+
+  const syncDenylist = (): void => {
+    baselineIds.value = new Set(props.denylist.list.map((entry) => entry.connectionId));
+    baselineReason.value = props.denylist.list[0]?.reason || '';
+    selectedIds.value = new Set(baselineIds.value);
+    reason.value = baselineReason.value;
+  };
+
+  const isDirty = computed(() => {
+    if (reason.value !== baselineReason.value || selectedIds.value.size !== baselineIds.value.size) return true;
+    for (const id of selectedIds.value) if (!baselineIds.value.has(id)) return true;
+    return false;
+  });
+
+  // 与父级安全黑名单同步；远端 revision 更新时保留未保存草稿。
   watch(
     () => props.denylist.revision,
     () => {
-      selectedIds.value = new Set(props.denylist.list.map((entry) => entry.connectionId));
-      reason.value = props.denylist.list[0]?.reason || '';
+      if (!isDirty.value || draftMatchesRemote()) syncDenylist();
     },
     { immediate: true },
   );
@@ -111,16 +133,6 @@
   const isNoneFilteredBlocked = computed(() => {
     if (!filteredConnections.value.length) return true;
     return filteredConnections.value.every((c) => !selectedIds.value.has(c.id));
-  });
-
-  // 判定是否发生实质变更
-  const isDirty = computed(() => {
-    const initial = new Set(props.denylist.list.map((e) => e.connectionId));
-    if (initial.size !== selectedIds.value.size) return true;
-    for (const id of selectedIds.value) {
-      if (!initial.has(id)) return true;
-    }
-    return false;
   });
 
   // 获取连接图标

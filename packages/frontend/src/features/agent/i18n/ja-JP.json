@@ -1025,7 +1025,9 @@
         "importPreviewReady": "Import プレビューを作成しました。",
         "imported": "Memory を import しました。"
       },
-      "modelNotSet": "未設定"
+      "modelNotSet": "未設定",
+      "conflictReloaded": "この設定は別の場所で変更されました。サーバーの最新状態を再読み込みし、可能な場合は未保存のローカル編集を保持しました。",
+      "conflictReloadFailed": "この設定は別の場所で変更されましたが、サーバーの最新状態を再読み込みできませんでした。"
     },
     "launcher": {
       "open": "Agent を開く",

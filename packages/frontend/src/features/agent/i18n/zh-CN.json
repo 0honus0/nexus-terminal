@@ -1025,7 +1025,9 @@
         "importPreviewReady": "导入预览已生成。",
         "imported": "Memory 已导入。"
       },
-      "modelNotSet": "未设置"
+      "modelNotSet": "未设置",
+      "conflictReloaded": "该设置已在其他位置发生变化。已重新加载服务器最新版本，并在适用时保留本地未保存修改。",
+      "conflictReloadFailed": "该设置已在其他位置发生变化，但未能重新加载服务器最新版本。"
     },
     "launcher": {
       "open": "打开 Agent",

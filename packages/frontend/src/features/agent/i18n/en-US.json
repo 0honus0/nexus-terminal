@@ -1025,7 +1025,9 @@
         "importPreviewReady": "Import preview is ready.",
         "imported": "Memory imported."
       },
-      "modelNotSet": "Not set"
+      "modelNotSet": "Not set",
+      "conflictReloaded": "This setting changed elsewhere. The latest server version was reloaded; unsaved local edits were preserved where applicable.",
+      "conflictReloadFailed": "This setting changed elsewhere, but the latest server version could not be reloaded."
     },
     "launcher": {
       "open": "Open Agent",

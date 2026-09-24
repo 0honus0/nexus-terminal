@@ -8,6 +8,7 @@
   import {
     agentApi,
     formatAgentApiError,
+    toAgentApiError,
     type AgentAppSummaryDto,
     type AgentDiscoveredProviderModelDto,
     type AgentHardLimitsDto,
@@ -187,6 +188,51 @@
     }
   };
 
+  const reconcileConflict = async (locks: readonly SettingsOperationLock[]): Promise<boolean> => {
+    const tasks: Promise<void>[] = [];
+    if (locks.includes('settings-write')) {
+      tasks.push(
+        agentApi.settings().then((next) => {
+          settings.value = next;
+          hardLimitPreview.value = null;
+        }),
+      );
+    }
+    if (locks.includes('providers')) {
+      tasks.push(
+        agentApi.providers().then((next) => {
+          providers.value = next;
+        }),
+      );
+    }
+    if (locks.includes('apps')) {
+      tasks.push(
+        agentApi.apps().then((next) => {
+          apps.value = next;
+        }),
+      );
+    }
+    if (locks.includes('denylist')) {
+      tasks.push(
+        agentApi.targetDenylist().then((next) => {
+          denylist.value = next;
+        }),
+      );
+    }
+    if (tasks.length === 0) return false;
+    try {
+      await Promise.all(tasks);
+      return true;
+    } catch (cause) {
+      operationFeedback.notifyError({
+        operation: 'reconcile-conflict',
+        message: t('agent.settings.conflictReloadFailed'),
+        cause,
+      });
+      return false;
+    }
+  };
+
   const execute = async <T = void,>(
     operation: string,
     locks: readonly SettingsOperationLock[],
@@ -210,7 +256,13 @@
       if (success !== null) operationFeedback.notifySuccess(success ?? t('agent.ui.saved'));
       return result;
     } catch (cause) {
-      operationFeedback.notifyError({ operation, message: message(cause), cause });
+      const error = toAgentApiError(cause);
+      const reconciled = error.status === 409 ? await reconcileConflict(locks) : false;
+      operationFeedback.notifyError({
+        operation,
+        message: reconciled ? t('agent.settings.conflictReloaded') : message(cause),
+        cause,
+      });
       return undefined;
     } finally {
       for (const lock of locks) activeOperationLocks.delete(lock);
