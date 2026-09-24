@@ -50,6 +50,8 @@ export class WorkspaceRuntimeEngine {
   private readonly codeIntelligence = new WorkspaceCodeIntelligence();
   private readonly jobs = new Map<string, Set<AbortController>>();
   private readonly jobControllers = new Map<string, AbortController>();
+  private readonly workspaceWriters = new Map<string, number>();
+  private readonly checkpointCaptures = new Set<string>();
 
   constructor(runtimeRoot: string, store: ToolchainStore) {
     this.runtime = new WorkspaceRuntimeManager(runtimeRoot, store);
@@ -77,6 +79,22 @@ export class WorkspaceRuntimeEngine {
     this.abortJobs(workspaceId, generation);
     this.codeIntelligence.dispose(workspaceKey(workspaceId, generation));
     this.runtime.remove(workspaceId, generation);
+  }
+
+  acquireWorkspaceWriter(workspaceId: string, generation: number): () => void {
+    const key = workspaceKey(workspaceId, generation);
+    if (this.checkpointCaptures.has(key)) throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
+    const status = this.runtime.status(workspaceId, generation);
+    if (status !== 'running') throw new Error(status === 'deleted' ? 'WORKSPACE_NOT_FOUND' : 'WORKSPACE_NOT_RUNNING');
+    this.workspaceWriters.set(key, (this.workspaceWriters.get(key) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const next = (this.workspaceWriters.get(key) ?? 1) - 1;
+      if (next <= 0) this.workspaceWriters.delete(key);
+      else this.workspaceWriters.set(key, next);
+    };
   }
 
   prepareAcpProcess(workspaceId: string, generation: number, argv: readonly string[], cwd: string) {
@@ -190,13 +208,23 @@ export class WorkspaceRuntimeEngine {
     if (!['ready', 'running', 'stopped'].includes(status)) {
       throw new Error(status === 'deleted' ? 'WORKSPACE_NOT_FOUND' : 'WORKSPACE_CHECKPOINT_NOT_SAFE');
     }
-    if ((this.jobs.get(workspaceKey(workspaceId, generation))?.size ?? 0) > 0) {
+    const key = workspaceKey(workspaceId, generation);
+    if (
+      (this.jobs.get(key)?.size ?? 0) > 0 ||
+      (this.workspaceWriters.get(key) ?? 0) > 0 ||
+      this.checkpointCaptures.has(key)
+    ) {
       throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     }
-    return createWorkspaceCheckpointArchive(
-      path.join(this.runtime.coreWorkspaceRoot(workspaceId), 'work'),
-      path.join(this.runtime.workspaceRoot(workspaceId), '.control', 'checkpoints'),
-    );
+    this.checkpointCaptures.add(key);
+    try {
+      return await createWorkspaceCheckpointArchive(
+        path.join(this.runtime.coreWorkspaceRoot(workspaceId), 'work'),
+        path.join(this.runtime.workspaceRoot(workspaceId), '.control', 'checkpoints'),
+      );
+    } finally {
+      this.checkpointCaptures.delete(key);
+    }
   }
 
   async restoreCheckpointArchive(
@@ -209,7 +237,12 @@ export class WorkspaceRuntimeEngine {
     if (status !== 'ready') {
       throw new Error(status === 'deleted' ? 'WORKSPACE_NOT_FOUND' : 'WORKSPACE_CHECKPOINT_RESTORE_NOT_READY');
     }
-    if ((this.jobs.get(workspaceKey(workspaceId, generation))?.size ?? 0) > 0) {
+    const key = workspaceKey(workspaceId, generation);
+    if (
+      (this.jobs.get(key)?.size ?? 0) > 0 ||
+      (this.workspaceWriters.get(key) ?? 0) > 0 ||
+      this.checkpointCaptures.has(key)
+    ) {
       throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     }
     await restoreWorkspaceCheckpointArchive(
@@ -224,6 +257,7 @@ export class WorkspaceRuntimeEngine {
   async executeJob(request: WorkspaceJobRequest): Promise<WorkspaceJobResult> {
     const execution = this.runtime.prepareJob(request);
     const key = workspaceKey(request.workspaceId, request.generation);
+    if (this.checkpointCaptures.has(key)) throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
     const controller = new AbortController();
     if (this.jobControllers.has(request.jobId)) throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
     let active = this.jobs.get(key);

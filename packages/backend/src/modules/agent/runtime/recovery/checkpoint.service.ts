@@ -171,7 +171,7 @@ export class CheckpointService {
       throw new Error('CHECKPOINT_MODEL_ROUTE_INVALID');
     }
 
-    const backgroundJobs = kind === 'recovery' ? await this.liveBackgroundJobs(scope, run.id) : [];
+    const backgroundJobs = await this.liveBackgroundJobs(scope, run.id);
     let workspaceCaptures = [] as Awaited<ReturnType<WorkspaceCheckpointService['capture']>>;
     let workspaceReference:
       | {

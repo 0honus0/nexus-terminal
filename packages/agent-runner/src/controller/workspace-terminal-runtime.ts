@@ -163,9 +163,15 @@ export class WorkspaceTerminalRuntime {
     if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
     this.validateViewport(columns, rows);
     const execution = this.runtime.prepareTerminalProcess(workspaceId, generation);
-    this.server.handleUpgrade(request, socket, head, (websocket) =>
-      this.attach(websocket, execution, workspaceId, generation, columns, rows),
-    );
+    const releaseWriter = this.runtime.acquireWorkspaceWriter(workspaceId, generation);
+    try {
+      this.server.handleUpgrade(request, socket, head, (websocket) =>
+        this.attach(websocket, execution, workspaceId, generation, columns, rows, releaseWriter),
+      );
+    } catch (error) {
+      releaseWriter();
+      throw error;
+    }
   }
 
   async closeWorkspace(workspaceId: string, generation?: number): Promise<void> {
@@ -190,6 +196,7 @@ export class WorkspaceTerminalRuntime {
     generation: number,
     columns: number,
     rows: number,
+    releaseWriter: () => void,
   ): void {
     const sessionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-terminal-'));
     const wrapper = path.join(sessionRoot, 'shell.sh');
@@ -216,6 +223,12 @@ export class WorkspaceTerminalRuntime {
     let killTimer: NodeJS.Timeout | null = null;
     let closePromise: Promise<void> | null = null;
     let resolveClose: (() => void) | null = null;
+    let writerReleased = false;
+    const releaseOwnership = (): void => {
+      if (writerReleased) return;
+      writerReleased = true;
+      releaseWriter();
+    };
     const cleanup = (): void => fs.rmSync(sessionRoot, { recursive: true, force: true });
 
     let terminalSessionId: number | null = null;
@@ -439,6 +452,7 @@ export class WorkspaceTerminalRuntime {
       if (killTimer) clearTimeout(killTimer);
       resolveClose?.();
       resolveClose = null;
+      releaseOwnership();
       cleanup();
       runnerLog('debug', 'Workspace terminal process exited', {
         workspaceId,

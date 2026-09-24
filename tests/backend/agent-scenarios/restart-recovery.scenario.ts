@@ -464,20 +464,10 @@ export const restartRecoveryScenario = async () => {
     await db.execute('UPDATE agent_runs SET next_event_sequence=2 WHERE id=?', [jobRunId]);
     const jobRunWithActiveBackground = await runRepository.snapshot(scope, jobRunId);
     assert.ok(jobRunWithActiveBackground);
-    const manualCheckpointWithActiveBackground = await recoveryService.save(
-      scope,
-      jobRunId,
-      jobRunWithActiveBackground.version,
-    );
-    assert.equal(
-      manualCheckpointWithActiveBackground.kind,
-      'user',
-      'manual checkpoints must remain saveable while a durable background job is running',
-    );
-    assert.deepEqual(
-      manualCheckpointWithActiveBackground.snapshot.recoveryManifest?.backgroundJobs ?? [],
-      [],
-      'restart-only background-job recovery state must not pollute the manual checkpoint contract',
+    await assert.rejects(
+      () => recoveryService.save(scope, jobRunId, jobRunWithActiveBackground.version),
+      /CHECKPOINT_BACKGROUND_JOB_UNRESOLVED/,
+      'manual checkpoints must fail closed while a durable background job is unresolved',
     );
 
     const staleInputRunId = randomUUID();

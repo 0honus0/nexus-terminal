@@ -45,9 +45,15 @@ export class AcpProcessRuntime {
     const profile = workspace.acpProfiles.find((candidate) => candidate.id === profileId);
     if (!profile) throw new Error('ACP_PROFILE_NOT_FOUND');
     const execution = this.runtime.prepareAcpProcess(workspaceId, generation, profile.argv, profile.cwd);
-    this.server.handleUpgrade(request, socket, head, (websocket) =>
-      this.attach(websocket, execution, workspaceId, generation),
-    );
+    const releaseWriter = this.runtime.acquireWorkspaceWriter(workspaceId, generation);
+    try {
+      this.server.handleUpgrade(request, socket, head, (websocket) =>
+        this.attach(websocket, execution, workspaceId, generation, releaseWriter),
+      );
+    } catch (error) {
+      releaseWriter();
+      throw error;
+    }
   }
 
   async closeWorkspace(workspaceId: string, generation?: number): Promise<void> {
@@ -70,6 +76,7 @@ export class AcpProcessRuntime {
     execution: { file: string; argv: string[]; cwd: string; env: NodeJS.ProcessEnv },
     workspaceId: string,
     generation: number,
+    releaseWriter: () => void,
   ): void {
     const child = spawn(execution.file, execution.argv, {
       cwd: execution.cwd,
@@ -77,10 +84,21 @@ export class AcpProcessRuntime {
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: MANAGED_PROCESS_DETACHED,
     });
-    registerManagedProcess(child, 'acp', `${workspaceId}:${generation}`);
+    try {
+      registerManagedProcess(child, 'acp', `${workspaceId}:${generation}`);
+    } catch (error) {
+      releaseWriter();
+      throw error;
+    }
     let stderrTail = '';
     let closed = false;
     let closePromise: Promise<void> | null = null;
+    let writerReleased = false;
+    const releaseOwnership = (): void => {
+      if (writerReleased) return;
+      writerReleased = true;
+      releaseWriter();
+    };
     const active: ActiveProcess = {
       workspaceId,
       generation,
@@ -91,6 +109,7 @@ export class AcpProcessRuntime {
           websocket.close(1001);
         closePromise = terminateManagedProcess(child).then(() => {
           this.active.delete(active);
+          releaseOwnership();
         });
         return closePromise;
       },
@@ -142,6 +161,7 @@ export class AcpProcessRuntime {
       if (closed) return;
       closed = true;
       this.active.delete(active);
+      releaseOwnership();
       runnerLog(code === 0 ? 'debug' : 'warn', 'ACP process exited', {
         workspaceId,
         generation,
