@@ -758,6 +758,7 @@
                   <UiCheckbox
                     class="mt-0.5"
                     :model-value="checked(app.id, capability)"
+                    :aria-label="getCapabilityMeta(capability).name"
                     :disabled="busy || grantBusy[app.id]"
                     @update:model-value="(value: boolean) => onCapabilityChange(app.id, capability, value)"
                   />
@@ -788,6 +789,7 @@
                           <UiCheckbox
                             density="compact"
                             :model-value="targetEnabled(app.id, capability, target)"
+                            :aria-label="targetLabel(target)"
                             :disabled="busy || grantBusy[app.id]"
                             @update:model-value="
                               (value: boolean) => onTargetEnabledChange(app.id, capability, target, value)

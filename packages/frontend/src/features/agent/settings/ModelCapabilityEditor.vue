@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, reactive, watch } from 'vue';
+  import { computed, reactive, useId, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseModal, UiButton, UiCheckbox, UiSelect } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
@@ -24,6 +24,9 @@
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.model-capabilities');
+  const capabilityEditorId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const contextWindowInputId = `agent-model-context-window-${capabilityEditorId}`;
+  const maxOutputTokensInputId = `agent-model-max-output-${capabilityEditorId}`;
   const capabilityEditorProvider = computed(() => props.provider);
   const capabilityEditorModel = computed(() => props.model);
   const reasoningEffortOptions: AgentReasoningEffortDto[] = [
@@ -238,9 +241,11 @@
       </div>
 
       <div class="space-y-3">
-        <label class="block">
+        <div class="block">
           <div class="mb-1 flex items-center justify-between gap-2">
-            <span class="text-xs font-medium text-foreground">{{ $t('agent.settings.providers.contextWindow') }}</span>
+            <label :for="contextWindowInputId" class="text-xs font-medium text-foreground">{{
+              $t('agent.settings.providers.contextWindow')
+            }}</label>
             <div class="flex items-center gap-2 text-[11px]">
               <span :class="capabilityFieldIsDefault('contextWindow') ? 'text-primary' : 'text-text-secondary'">
                 {{ capabilitySourceLabel('contextWindow') }}
@@ -257,19 +262,20 @@
             </div>
           </div>
           <input
+            :id="contextWindowInputId"
             v-model.number="capabilityForm.contextWindow"
             type="number"
             min="2"
             data-no-highlight
             class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 font-mono text-xs text-foreground outline-none focus:border-border-hover"
           />
-        </label>
+        </div>
 
-        <label class="block">
+        <div class="block">
           <div class="mb-1 flex items-center justify-between gap-2">
-            <span class="text-xs font-medium text-foreground">{{
+            <label :for="maxOutputTokensInputId" class="text-xs font-medium text-foreground">{{
               $t('agent.settings.providers.maxOutputTokens')
-            }}</span>
+            }}</label>
             <div class="flex items-center gap-2 text-[11px]">
               <span :class="capabilityFieldIsDefault('maxOutputTokens') ? 'text-primary' : 'text-text-secondary'">
                 {{ capabilitySourceLabel('maxOutputTokens') }}
@@ -286,13 +292,14 @@
             </div>
           </div>
           <input
+            :id="maxOutputTokensInputId"
             v-model.number="capabilityForm.maxOutputTokens"
             type="number"
             min="1"
             data-no-highlight
             class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 font-mono text-xs text-foreground outline-none focus:border-border-hover"
           />
-        </label>
+        </div>
 
         <div
           v-for="field in ['supportsTools', 'supportsImageInput', 'supportsFileInput'] as const"

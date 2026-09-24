@@ -349,6 +349,7 @@
         <button
           v-if="query"
           type="button"
+          :aria-label="$t('agent.operations.clearSearch')"
           class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-text-secondary hover:text-foreground"
           @click="query = ''"
         >

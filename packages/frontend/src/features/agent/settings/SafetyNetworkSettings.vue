@@ -325,6 +325,7 @@
               class="shrink-0"
               tone="danger"
               :model-value="selectedIds.has(connection.id)"
+              :aria-label="connection.name || connection.host"
               @click.stop="toggleConnection(connection.id)"
             />
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, onMounted, reactive, ref, useId, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     BaseModal,
@@ -58,6 +58,7 @@
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.providers');
+  const providerCredentialInputId = `agent-provider-credential-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
   // 添加服务商弹窗状态与表单
   const modalOpen = ref(false);
@@ -1971,13 +1972,14 @@
         </label>
 
         <!-- API Key 凭据 -->
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium text-foreground">{{
+        <div class="block">
+          <label :for="providerCredentialInputId" class="mb-1 block text-xs font-medium text-foreground">{{
             $t('agent.settings.providers.credential')
-          }}</span>
+          }}</label>
           <div class="relative flex items-center">
             <i class="fa-solid fa-key absolute left-3 text-text-secondary text-xs pointer-events-none"></i>
             <input
+              :id="providerCredentialInputId"
               v-model="form.credential"
               :type="showApiKey ? 'text' : 'password'"
               autocomplete="new-password"
@@ -1988,12 +1990,19 @@
             <button
               type="button"
               class="absolute right-2.5 text-text-secondary hover:text-foreground transition-colors cursor-pointer"
+              :aria-label="
+                $t(showApiKey ? 'agent.settings.providers.hideCredential' : 'agent.settings.providers.showCredential')
+              "
               @click="showApiKey = !showApiKey"
             >
-              <i :class="showApiKey ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="text-xs"></i>
+              <i
+                :class="showApiKey ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"
+                class="text-xs"
+                aria-hidden="true"
+              ></i>
             </button>
           </div>
-        </label>
+        </div>
 
         <!-- 从接口直接拉取模型 -->
         <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-header/25 border border-border/60">
