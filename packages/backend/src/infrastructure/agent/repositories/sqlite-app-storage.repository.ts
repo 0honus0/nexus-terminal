@@ -9,6 +9,11 @@ import { parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 const MAX_VALUE_BYTES = 64 * 1024;
 const MAX_APP_BYTES = 16 * 1024 * 1024;
+const MAX_APP_ENTRIES = 4096;
+const APP_STORAGE_ENTRY_OVERHEAD_BYTES = 128;
+
+const chargedBytes = (key: string, valueBytes: number): number =>
+  Buffer.byteLength(key, 'utf8') + valueBytes + APP_STORAGE_ENTRY_OVERHEAD_BYTES;
 
 interface StorageRow {
   key: string;
@@ -62,13 +67,20 @@ export class SqliteAppStorageRepository implements AppStoragePort, AppStorageSna
         throw new Error('APP_STORAGE_VERSION_CONFLICT');
       }
 
-      const usage = await tx.queryOne<{ total: number }>(
-        `SELECT COALESCE(SUM(bytes), 0) AS total FROM agent_app_storage
+      const usage = await tx.queryOne<{ entry_count: number; charged_total: number }>(
+        `SELECT COUNT(*) AS entry_count,
+                COALESCE(SUM(bytes + length(CAST(key AS BLOB)) + ${APP_STORAGE_ENTRY_OVERHEAD_BYTES}), 0)
+                  AS charged_total
+         FROM agent_app_storage
          WHERE user_id = ? AND app_id = ?`,
         [scope.userId, scope.appId],
       );
-      const nextTotal = (usage?.total ?? 0) - (current?.bytes ?? 0) + bytes;
-      if (nextTotal > MAX_APP_BYTES) throw new Error('APP_STORAGE_QUOTA_EXCEEDED');
+      const nextEntryCount = (usage?.entry_count ?? 0) + (current ? 0 : 1);
+      const nextChargedTotal =
+        (usage?.charged_total ?? 0) - (current ? chargedBytes(key, current.bytes) : 0) + chargedBytes(key, bytes);
+      if (nextEntryCount > MAX_APP_ENTRIES || nextChargedTotal > MAX_APP_BYTES) {
+        throw new Error('APP_STORAGE_QUOTA_EXCEEDED');
+      }
 
       const now = Math.floor(Date.now() / 1000);
       if (!current) {
@@ -125,26 +137,42 @@ export class SqliteAppStorageRepository implements AppStoragePort, AppStorageSna
   }
 
   async restore(scope: Scope, snapshot: AppStorageSnapshot): Promise<void> {
-    if (
-      snapshot.totalBytes > MAX_APP_BYTES ||
-      snapshot.entries.reduce((total, entry) => total + entry.bytes, 0) !== snapshot.totalBytes
-    ) {
+    if (snapshot.entries.length > MAX_APP_ENTRIES || snapshot.totalBytes > MAX_APP_BYTES) {
       throw new Error('APP_STORAGE_SNAPSHOT_INVALID');
     }
+    const seenKeys = new Set<string>();
+    const prepared: Array<{ entry: AppStorageSnapshot['entries'][number]; serialized: string; bytes: number }> = [];
+    let totalBytes = 0;
+    let totalChargedBytes = 0;
+    for (const entry of snapshot.entries) {
+      try {
+        validateKey(entry.key);
+      } catch {
+        throw new Error('APP_STORAGE_SNAPSHOT_INVALID');
+      }
+      if (seenKeys.has(entry.key)) throw new Error('APP_STORAGE_SNAPSHOT_INVALID');
+      seenKeys.add(entry.key);
+      const serialized = JSON.stringify(entry.value);
+      const bytes = Buffer.byteLength(serialized, 'utf8');
+      if (
+        bytes !== entry.bytes ||
+        bytes > MAX_VALUE_BYTES ||
+        !Number.isSafeInteger(entry.version) ||
+        entry.version < 1 ||
+        !Number.isSafeInteger(entry.updatedAt)
+      ) {
+        throw new Error('APP_STORAGE_SNAPSHOT_INVALID');
+      }
+      totalBytes += bytes;
+      totalChargedBytes += chargedBytes(entry.key, bytes);
+      if (totalChargedBytes > MAX_APP_BYTES) throw new Error('APP_STORAGE_SNAPSHOT_INVALID');
+      prepared.push({ entry, serialized, bytes });
+    }
+    if (totalBytes !== snapshot.totalBytes) throw new Error('APP_STORAGE_SNAPSHOT_INVALID');
+
     await this.db.transaction(async (tx) => {
       await tx.execute('DELETE FROM agent_app_storage WHERE user_id=? AND app_id=?', [scope.userId, scope.appId]);
-      for (const entry of snapshot.entries) {
-        validateKey(entry.key);
-        const serialized = JSON.stringify(entry.value);
-        const bytes = Buffer.byteLength(serialized, 'utf8');
-        if (
-          bytes !== entry.bytes ||
-          bytes > MAX_VALUE_BYTES ||
-          !Number.isSafeInteger(entry.version) ||
-          entry.version < 1
-        ) {
-          throw new Error('APP_STORAGE_SNAPSHOT_INVALID');
-        }
+      for (const { entry, serialized, bytes } of prepared) {
         await tx.execute(
           `INSERT INTO agent_app_storage(user_id,app_id,key,value_json,bytes,version,updated_at)
            VALUES(?,?,?,?,?,?,?)`,
