@@ -1,8 +1,5 @@
 import type { AgentJsonValueDto } from './agent-common.js';
-import type {
-  AgentApprovalModeDto,
-  AgentCapabilityDto,
-} from './agent-host.js';
+import type { AgentApprovalModeDto, AgentCapabilityDto } from './agent-host.js';
 import type { AgentModelCapabilityDto } from './agent-providers.js';
 
 export interface AgentPluginPublisherKeyDto {
@@ -201,6 +198,7 @@ export type AgentPluginFrontendRpcMethodDto =
   | 'intents.artifacts.get';
 
 export interface AgentPluginFrontendRpcRequestDto {
+  version: string;
   method: AgentPluginFrontendRpcMethodDto;
   params: AgentJsonValueDto;
   operationId?: string;

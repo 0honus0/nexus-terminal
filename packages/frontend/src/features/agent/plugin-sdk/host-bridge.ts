@@ -237,6 +237,7 @@ export class PluginFrontendHostBridge {
           return {
             result: await agentApi.pluginFrontendRpc(
               this.appId,
+              this.descriptor.version,
               request.method as PluginFrontendBackendRpcMethod,
               request.params,
               isMutation ? request.id : undefined,
@@ -246,6 +247,8 @@ export class PluginFrontendHostBridge {
           };
         }
         if (agentMethods.has(request.method)) {
+          await this.assertDescriptorVersion(controller.signal);
+          if (this.closed) throw new Error('PLUGIN_BRIDGE_CLOSED');
           return {
             result: await this.agent.dispatch(
               request.method as PluginFrontendAgentRpcMethod,
@@ -256,6 +259,8 @@ export class PluginFrontendHostBridge {
           };
         }
         if (binaryMethods.has(request.method)) {
+          await this.assertDescriptorVersion(controller.signal);
+          if (this.closed) throw new Error('PLUGIN_BRIDGE_CLOSED');
           const binary = await this.dispatchBinary(
             request.method as PluginFrontendBinaryRpcMethod,
             request.params,
@@ -291,10 +296,11 @@ export class PluginFrontendHostBridge {
         const code =
           cause instanceof Error && /^PLUGIN_[A-Z0-9_]+$/.test(cause.message)
             ? cause.message
-            : /^APP_INTENT_[A-Z0-9_]+$/.test(apiError.code)
+            : /^(?:APP_INTENT_|PLUGIN_FRONTEND_)[A-Z0-9_]+$/.test(apiError.code)
               ? apiError.code
               : 'HOST_RPC_FAILED';
         this.post(errorResponse(request, code));
+        if (code === 'PLUGIN_FRONTEND_VERSION_STALE') this.disconnect();
         return;
       }
       const { result, transfer } = outcome.value;
@@ -316,6 +322,10 @@ export class PluginFrontendHostBridge {
       if (timer !== null) window.clearTimeout(timer);
       this.pending.delete(request.id);
     }
+  }
+
+  private async assertDescriptorVersion(signal: AbortSignal): Promise<void> {
+    await agentApi.pluginFrontendRpc(this.appId, this.descriptor.version, 'host.appInfo', {}, undefined, signal);
   }
 
   private async dispatchBinary(

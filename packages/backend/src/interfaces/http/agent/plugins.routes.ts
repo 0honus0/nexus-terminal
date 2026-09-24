@@ -47,11 +47,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     '/publishers',
     agentRoute(async (request, response) => {
       const keys = await plugins.listPublisherKeys(agentUserId(request));
-      agentData(
-        request,
-        response,
-        keys.map(pluginPublisherDto),
-      );
+      agentData(request, response, keys.map(pluginPublisherDto));
     }),
   );
 
@@ -94,7 +90,11 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     agentRoute(async (request, response) => {
       const appId = queryString(request.query.appId);
       const query: AgentPluginVersionsQueryDto = appId === undefined ? {} : { appId };
-      agentData(request, response, (await plugins.listVersions(agentUserId(request), query.appId)).map(pluginVersionDto));
+      agentData(
+        request,
+        response,
+        (await plugins.listVersions(agentUserId(request), query.appId)).map(pluginVersionDto),
+      );
     }),
   );
 
@@ -120,12 +120,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
         request,
         response,
         pluginStageDto(
-          await plugins.stageOfficial(
-            agentUserId(request),
-            input.appId,
-            input.version,
-            AbortSignal.timeout(120_000),
-          ),
+          await plugins.stageOfficial(agentUserId(request), input.appId, input.version, AbortSignal.timeout(120_000)),
         ),
         201,
       );
@@ -232,7 +227,12 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
         throw new Error('VALIDATION_FAILED');
       }
       const input: AgentPluginStageIdRequestDto = { stageId: request.body.stageId };
-      agentData(request, response, pluginInstallResultDto(await plugins.install(agentUserId(request), input.stageId)), 201);
+      agentData(
+        request,
+        response,
+        pluginInstallResultDto(await plugins.install(agentUserId(request), input.stageId)),
+        201,
+      );
     }),
   );
 
@@ -252,9 +252,10 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     '/:appId/frontend/rpc',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['method', 'params', 'operationId']))
+      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['version', 'method', 'params', 'operationId']))
         throw new Error('VALIDATION_FAILED');
       if (
+        !nonEmptyString(request.body.version) ||
         ![
           'host.appInfo',
           'storage.get',
@@ -271,6 +272,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
         throw new Error('VALIDATION_FAILED');
       }
       const input: AgentPluginFrontendRpcRequestDto = {
+        version: request.body.version,
         method: request.body.method as AgentPluginFrontendRpcRequestDto['method'],
         params: request.body.params,
         ...(typeof request.body.operationId === 'string' ? { operationId: request.body.operationId } : {}),

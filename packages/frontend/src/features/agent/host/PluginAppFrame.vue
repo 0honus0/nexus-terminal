@@ -4,7 +4,7 @@
   import { PluginFrontendHostBridge } from '../plugin-sdk/host-bridge';
   import { PLUGIN_FRONTEND_PROTOCOL_VERSION } from '../plugin-sdk/protocol';
 
-  const props = defineProps<{ appId: string }>();
+  const props = defineProps<{ appId: string; version: string }>();
   const iframe = ref<HTMLIFrameElement | null>(null);
   const descriptor = ref<AgentPluginFrontendDescriptorDto | null>(null);
   const status = ref<'loading' | 'connecting' | 'ready' | 'unavailable'>('loading');
@@ -27,6 +27,7 @@
       if (current !== generation) return;
       if (
         next.appId !== props.appId ||
+        next.version !== props.version ||
         next.sandbox !== 'allow-scripts' ||
         next.protocolVersion !== PLUGIN_FRONTEND_PROTOCOL_VERSION ||
         !next.sdkVersion ||
@@ -74,7 +75,7 @@
   };
 
   watch(
-    () => props.appId,
+    () => [props.appId, props.version] as const,
     () => void load(),
     { immediate: true },
   );

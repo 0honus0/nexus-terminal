@@ -100,17 +100,14 @@ export class PluginDataManager {
     if (Buffer.byteLength(encoded, 'utf8') > MAX_FRONTEND_RPC_BYTES) throw new Error('PLUGIN_FRONTEND_RPC_TOO_LARGE');
     const installation = await this.repository.getInstallation(userId, appId);
     if (!installation || installation.status !== 'installed') throw new Error('PLUGIN_NOT_INSTALLED');
+    if (request.version !== installation.version) throw new Error('PLUGIN_FRONTEND_VERSION_STALE');
     const scope = { userId, appId };
-    const operationId =
-      request.operationId === undefined ? undefined : requireIdempotencyKey(request.operationId);
+    const operationId = request.operationId === undefined ? undefined : requireIdempotencyKey(request.operationId);
     if (FRONTEND_MUTATION_METHODS.has(request.method) && !operationId) throw new Error('IDEMPOTENCY_KEY_INVALID');
     const state = await this.states.get(scope);
-    if (
-      !state ||
-      state.activeVersion !== installation.version ||
-      state.desiredState !== 'enabled' ||
-      !['running', 'degraded'].includes(state.observedState)
-    ) {
+    if (!state) throw new Error('AGENT_APP_DISABLED');
+    if (state.activeVersion !== request.version) throw new Error('PLUGIN_FRONTEND_VERSION_STALE');
+    if (state.desiredState !== 'enabled' || !['running', 'degraded'].includes(state.observedState)) {
       throw new Error('AGENT_APP_DISABLED');
     }
     const plugin = await this.repository.getVersion(appId, installation.version);

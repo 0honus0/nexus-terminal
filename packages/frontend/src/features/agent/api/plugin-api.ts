@@ -32,17 +32,17 @@ import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 
 export const createPluginApi = () => ({
   async pluginPublishers(): Promise<AgentPluginPublisherKeyDto[]> {
-    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentPluginPublisherKeyDto[]>>('/agent/plugins/publishers')).data);
+    return unwrap(
+      (await httpClient.get<AgentEnvelopeDto<AgentPluginPublisherKeyDto[]>>('/agent/plugins/publishers')).data,
+    );
   },
   async trustPluginPublisher(publicKeyPem: string, label: string): Promise<AgentPluginPublisherKeyDto> {
     const input: AgentPluginTrustPublisherRequestDto = { publicKeyPem, label };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentPluginPublisherKeyDto>>(
-          '/agent/plugins/publishers',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentPluginPublisherKeyDto>>('/agent/plugins/publishers', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
@@ -52,7 +52,9 @@ export const createPluginApi = () => ({
     });
   },
   async pluginInstallations(): Promise<AgentPluginInstallationDto[]> {
-    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentPluginInstallationDto[]>>('/agent/plugins/installations')).data);
+    return unwrap(
+      (await httpClient.get<AgentEnvelopeDto<AgentPluginInstallationDto[]>>('/agent/plugins/installations')).data,
+    );
   },
   async pluginVersions(appId?: string): Promise<AgentPluginVersionDto[]> {
     const params: AgentPluginVersionsQueryDto | undefined = appId ? { appId } : undefined;
@@ -65,17 +67,17 @@ export const createPluginApi = () => ({
     );
   },
   async officialPluginCatalog(): Promise<AgentRemotePluginCatalogDto> {
-    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentRemotePluginCatalogDto>>('/agent/plugins/official/catalog')).data);
+    return unwrap(
+      (await httpClient.get<AgentEnvelopeDto<AgentRemotePluginCatalogDto>>('/agent/plugins/official/catalog')).data,
+    );
   },
   async stageOfficialPlugin(appId: string, version: string): Promise<AgentPluginStageDto> {
     const input: AgentPluginOfficialStageRequestDto = { appId, version };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>(
-          '/agent/plugins/official/stage',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>('/agent/plugins/official/stage', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
@@ -93,11 +95,9 @@ export const createPluginApi = () => ({
     const input: AgentPluginRemoteStageRequestDto = { repositoryUrl, appId, version };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>(
-          '/agent/plugins/remote/stage',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>('/agent/plugins/remote/stage', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
@@ -105,11 +105,9 @@ export const createPluginApi = () => ({
     const input: AgentPluginArtifactStageRequestDto = { artifactRef: { appId: artifact.appId, id: artifact.id } };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>(
-          '/agent/plugins/stage',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentPluginStageDto>>('/agent/plugins/stage', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
@@ -117,11 +115,9 @@ export const createPluginApi = () => ({
     const input: AgentPluginStageIdRequestDto = { stageId };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentPluginVerifyResultDto>>(
-          '/agent/plugins/verify',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentPluginVerifyResultDto>>('/agent/plugins/verify', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },
@@ -161,11 +157,9 @@ export const createPluginApi = () => ({
   },
   async deletePluginData(appId: string, confirmed: true): Promise<void> {
     const input: AgentPluginDeleteDataRequestDto = { confirmed };
-    await httpClient.post(
-      `/agent/plugins/${encodeURIComponent(appId)}/delete-data`,
-      input,
-      { headers: await mutationHeaders() },
-    );
+    await httpClient.post(`/agent/plugins/${encodeURIComponent(appId)}/delete-data`, input, {
+      headers: await mutationHeaders(),
+    });
   },
   async pluginFrontend(appId: string): Promise<AgentPluginFrontendDescriptorDto> {
     return unwrap(
@@ -237,12 +231,18 @@ export const createPluginApi = () => ({
   },
   async pluginFrontendRpc(
     appId: string,
+    version: string,
     method: AgentPluginFrontendRpcMethodDto,
     params: AgentPluginFrontendRpcRequestDto['params'],
     operationId?: string,
     signal?: AbortSignal,
   ): Promise<AgentPluginFrontendRpcResponseDto> {
-    const input: AgentPluginFrontendRpcRequestDto = { method, params, ...(operationId ? { operationId } : {}) };
+    const input: AgentPluginFrontendRpcRequestDto = {
+      version,
+      method,
+      params,
+      ...(operationId ? { operationId } : {}),
+    };
     return unwrap(
       (
         await httpClient.post<AgentEnvelopeDto<AgentPluginFrontendRpcResponseDto>>(

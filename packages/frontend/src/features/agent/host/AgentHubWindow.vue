@@ -455,6 +455,25 @@
   };
 
   const openAppIds = ref<string[]>([]);
+  type ResidentAppSurface = {
+    appId: string;
+    version: string;
+    surface: 'agent' | 'custom';
+    defaultApprovalMode: AgentAppSummaryDto['defaultApprovalMode'];
+  };
+  const residentAppSurfaces = ref<ResidentAppSurface[]>([]);
+  const filesMounted = ref(state.hubView === 'files');
+  const residentKey = (surface: Pick<ResidentAppSurface, 'appId' | 'version'>): string =>
+    `${surface.appId}@${surface.version}`;
+  const toResidentSurface = (app: AgentAppSummaryDto): ResidentAppSurface | null => {
+    if (!app.enabled || (app.surface !== 'agent' && app.surface !== 'custom')) return null;
+    return {
+      appId: app.id,
+      version: app.version,
+      surface: app.surface,
+      defaultApprovalMode: app.defaultApprovalMode,
+    };
+  };
 
   watch(
     () => [props.summary.apps, state.activeAppId] as const,
@@ -473,6 +492,49 @@
         openAppIds.value = [availableIds[0]];
       }
     },
+    { immediate: true },
+  );
+
+  const syncResidentSurfaces = (): void => {
+    const appsById = new Map(props.summary.apps.map((app) => [app.id, app]));
+    const openIds = new Set(openAppIds.value);
+    residentAppSurfaces.value = residentAppSurfaces.value.flatMap((resident) => {
+      const current = appsById.get(resident.appId);
+      if (
+        !current ||
+        !openIds.has(resident.appId) ||
+        !current.enabled ||
+        current.version !== resident.version ||
+        current.surface !== resident.surface
+      ) {
+        return [];
+      }
+      return [{ ...resident, defaultApprovalMode: current.defaultApprovalMode }];
+    });
+
+    if (state.hubView === 'files') {
+      filesMounted.value = true;
+      return;
+    }
+    if (!state.activeAppId || !openIds.has(state.activeAppId)) return;
+    const current = appsById.get(state.activeAppId);
+    const next = current ? toResidentSurface(current) : null;
+    if (!next) return;
+    if (!residentAppSurfaces.value.some((resident) => residentKey(resident) === residentKey(next))) {
+      residentAppSurfaces.value = [...residentAppSurfaces.value, next];
+    }
+  };
+
+  watch(
+    () => [
+      props.summary.apps
+        .map((app) => `${app.id}:${app.version}:${app.enabled ? 1 : 0}:${app.surface}:${app.defaultApprovalMode}`)
+        .join('|'),
+      openAppIds.value.join('|'),
+      state.activeAppId,
+      state.hubView,
+    ],
+    syncResidentSurfaces,
     { immediate: true },
   );
 
@@ -502,6 +564,7 @@
     if (index === -1) return;
     const remaining = openAppIds.value.filter((id) => id !== appId);
     openAppIds.value = remaining;
+    residentAppSurfaces.value = residentAppSurfaces.value.filter((resident) => resident.appId !== appId);
     if (state.activeAppId === appId) {
       const nextIndex = Math.min(index, remaining.length - 1);
       const nextId = remaining[nextIndex];
@@ -820,20 +883,22 @@
     </header>
 
     <div class="min-h-0 flex-1 bg-background">
-      <KeepAlive>
-        <ArtifactLibraryView v-if="state.hubView === 'files'" :apps="summary.apps" />
+      <ArtifactLibraryView v-if="filesMounted" v-show="state.hubView === 'files'" :apps="summary.apps" />
+      <div
+        v-for="resident in residentAppSurfaces"
+        :key="residentKey(resident)"
+        v-show="
+          state.hubView !== 'files' && state.activeAppId === resident.appId && activeApp?.version === resident.version
+        "
+        class="h-full min-h-0"
+      >
         <AgentAppSurface
-          v-else-if="activeApp?.surface === 'agent'"
-          :key="`${activeApp.id}@${activeApp.version}`"
-          :app-id="activeApp.id"
-          :default-approval-mode="activeApp.defaultApprovalMode"
+          v-if="resident.surface === 'agent'"
+          :app-id="resident.appId"
+          :default-approval-mode="resident.defaultApprovalMode"
         />
-        <PluginAppFrame
-          v-else-if="activeApp?.surface === 'custom'"
-          :key="`${activeApp.id}@${activeApp.version}`"
-          :app-id="activeApp.id"
-        />
-      </KeepAlive>
+        <PluginAppFrame v-else :app-id="resident.appId" :version="resident.version" />
+      </div>
       <div
         v-if="state.hubView !== 'files' && activeApp && !['agent', 'custom'].includes(activeApp.surface)"
         class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary"

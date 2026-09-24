@@ -54,6 +54,7 @@ export interface PluginFrontendDescriptor {
 }
 
 export interface PluginFrontendRpcRequest {
+  version: string;
   method:
     | 'host.appInfo'
     | 'storage.get'
