@@ -1638,6 +1638,15 @@
       "localTerminalHint": "Open a direct PTY terminal for this Workspace generation.",
       "openTerminal": "Open terminal",
       "closeTerminal": "Close terminal",
+      "terminalClosed": "Terminal closed. Reopen it to start a new terminal connection.",
+      "terminalError": {
+        "protocolInvalid": "The terminal connection returned an invalid protocol message. Reopen the terminal to retry.",
+        "attachFailed": "The terminal could not attach to this Workspace. Reopen it to retry.",
+        "reconnectExhausted": "The terminal connection could not be restored. Reopen it to retry.",
+        "inputQueueFull": "Terminal input is temporarily backed up. Wait for the connection to recover before sending more input.",
+        "sessionChanged": "The terminal session changed while reconnecting. Reopen the terminal.",
+        "generic": "The terminal connection failed. Reopen it to retry."
+      },
       "browserTarget": "Browser target",
       "browserTargetNone": "No binding (standalone remains available)",
       "browserTargetHint": "When selected, the target configuration is frozen into this Workspace generation.",

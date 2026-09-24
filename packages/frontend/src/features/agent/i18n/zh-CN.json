@@ -1638,6 +1638,15 @@
       "localTerminalHint": "为此 Workspace generation 打开 direct PTY 终端。",
       "openTerminal": "打开终端",
       "closeTerminal": "关闭终端",
+      "terminalClosed": "终端连接已关闭。可重新打开终端建立新的连接。",
+      "terminalError": {
+        "protocolInvalid": "终端连接返回了无效的协议消息。请重新打开终端后重试。",
+        "attachFailed": "终端无法连接到当前 Workspace。请重新打开终端后重试。",
+        "reconnectExhausted": "终端连接无法恢复。请重新打开终端后重试。",
+        "inputQueueFull": "终端输入暂时积压。请等待连接恢复后再继续输入。",
+        "sessionChanged": "重连期间终端会话已发生变化。请重新打开终端。",
+        "generic": "终端连接失败。请重新打开终端后重试。"
+      },
       "browserTarget": "浏览器目标",
       "browserTargetNone": "不绑定（仍可 standalone 使用）",
       "browserTargetHint": "选择后会把目标配置冻结到该 Workspace generation。",

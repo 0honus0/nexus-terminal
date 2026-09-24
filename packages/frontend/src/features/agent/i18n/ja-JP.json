@@ -1638,6 +1638,15 @@
       "localTerminalHint": "この Workspace generation の direct PTY terminal を開きます。",
       "openTerminal": "ターミナルを開く",
       "closeTerminal": "ターミナルを閉じる",
+      "terminalClosed": "ターミナル接続が閉じられました。ターミナルを開き直すと新しい接続を開始できます。",
+      "terminalError": {
+        "protocolInvalid": "ターミナル接続から無効なプロトコルメッセージが返されました。ターミナルを開き直して再試行してください。",
+        "attachFailed": "この Workspace にターミナルを接続できませんでした。ターミナルを開き直して再試行してください。",
+        "reconnectExhausted": "ターミナル接続を復旧できませんでした。ターミナルを開き直して再試行してください。",
+        "inputQueueFull": "ターミナル入力が一時的に滞留しています。接続が復旧してから入力を続けてください。",
+        "sessionChanged": "再接続中にターミナルセッションが変更されました。ターミナルを開き直してください。",
+        "generic": "ターミナル接続に失敗しました。ターミナルを開き直して再試行してください。"
+      },
       "browserTarget": "ブラウザーターゲット",
       "browserTargetNone": "バインドなし（standalone は利用可能）",
       "browserTargetHint": "選択するとターゲット設定がこの Workspace generation に固定されます。",

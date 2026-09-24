@@ -111,7 +111,7 @@ export const createAgentWorkspaceTerminalChannel = (input: {
             return;
           }
           if (sessionId && sessionId !== message.sessionId) {
-            finish('WORKSPACE_TERMINAL_SESSION_CHANGED', 'WORKSPACE_TERMINAL_PROTOCOL_INVALID');
+            finish('WORKSPACE_TERMINAL_SESSION_CHANGED', 'WORKSPACE_TERMINAL_SESSION_CHANGED');
             next.close(1008, 'Workspace terminal session changed');
             return;
           }
@@ -121,7 +121,8 @@ export const createAgentWorkspaceTerminalChannel = (input: {
           reconnectStartedAt = 0;
           flush();
         } catch {
-          emitError('WORKSPACE_TERMINAL_PROTOCOL_INVALID');
+          finish('WORKSPACE_TERMINAL_PROTOCOL_INVALID', 'WORKSPACE_TERMINAL_PROTOCOL_INVALID');
+          next.close(1008, 'Workspace terminal protocol invalid');
         }
         return;
       }
