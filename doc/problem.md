@@ -5027,7 +5027,7 @@ restore 同样不是“先清整库再恢复”：`restoreTables()` 只对 **同
 
 ---
 
-### 7.102 Backup 文件目录 swap 的 rollback 漏掉“已移走但尚未登记”的当前目录，且崩溃后没有 startup recovery（P1 · 🟠 开放 2026-09-23）
+### 7.102 Backup 文件目录 swap 的 rollback 漏掉“已移走但尚未登记”的当前目录，且崩溃后没有 startup recovery（P1 · ✅ 已修复 2026-09-24）
 
 在 §7.101 之后继续审 restore 的原子性，确认当前文件目录切换存在一个**正常 I/O 异常即可触发**的数据丢失窗口，同时还缺崩溃恢复。
 
@@ -5073,6 +5073,10 @@ restore 同样不是“先清整库再恢复”：`restoreTables()` 只对 **同
 - startup 在打开服务前扫描未完成 restore journal，按明确规则 roll forward / rollback，不能只依赖进程内 finally；
 - DB 与文件需要一个可恢复的两阶段协议：文件 staged → durable intent → DB transaction / swap → durable commit marker → 清理 previous；
 - fault-injection regression 覆盖：第一/第二个目录的 first rename、second rename、DB restore 前、DB commit 后、cleanup 前分别抛错/kill；最终必须得到完整“旧快照”或完整“新快照”，不能混合，也不能丢原目录。
+
+**修复（2026-09-24）**：full backup restore 现在使用 data directory 内的 durable `.backup-restore-journal.json` 记录每个文件 ownership root 的 `pending → moving_original → installing → swapped` 状态，并在每个破坏性 rename 前先持久化 intent。DB restore transaction 的最后一步会原子写入独立的 `nexus_backup_restore_state` commit token：启动恢复若看不到 token 就 rollback 到旧文件，看见同一 token 则只 roll forward 清理，彻底移除了“DB 已 commit 后 cleanup 失败又 rollback 文件”的反向混合路径。journal/文件写入与关键目录 rename 都增加 fsync，rollback 不再吞恢复错误；恢复失败会保留 journal/evidence，而不是继续删除 previous。
+
+composition root 在 `database.initialize()` 后、`agent.initialize()` 前调用 `recoverInterruptedRestore()`，所以 Agent/runtime owner 不会先读到半恢复状态。新增 `tests/backend/backup-restore-journal-recovery.regression.ts` 直接构造“原 target 已移到 previous、第二次 rename 尚未完成”和“DB commit token 已落盘但 cleanup 未完成”两种 crash fixture，分别证明 startup rollback 保留旧快照、roll-forward 保留新快照；同时重跑 7.101 full-backup regression 与 Backend TypeScript 均通过。
 
 ---
 

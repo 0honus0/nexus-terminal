@@ -377,8 +377,9 @@ export const createCompositionRoot = (
     serverStatus,
     settings,
   );
+  const backupSnapshots = new SqliteBackupSnapshotAdapter(database, cipher, config.dataDirectory);
   const backup = new BackupService(
-    new SqliteBackupSnapshotAdapter(database, cipher, config.dataDirectory),
+    backupSnapshots,
     new NexusBackupCodecAdapter(config.encryptionKeyHex),
     user,
     passwordHasher,
@@ -506,6 +507,7 @@ export const createCompositionRoot = (
     agent,
     initialize: async () => {
       await database.initialize();
+      await backupSnapshots.recoverInterruptedRestore();
       await agent.initialize();
       await settings.ensureDefaults();
       await terminalThemes.initialize(presetTerminalThemes);

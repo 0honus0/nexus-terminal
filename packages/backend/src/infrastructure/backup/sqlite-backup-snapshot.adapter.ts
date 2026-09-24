@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import type { BackupSnapshotPort } from '../../modules/backup/backup.port';
 import type { BackupFileEntry, BackupSnapshot } from '../../modules/backup/backup.types';
@@ -96,13 +96,24 @@ const SENSITIVE_COLUMNS: Record<string, readonly string[]> = {
   agent_integrations: ['protected_credential'],
 };
 
+type RestoreSwapState = 'pending' | 'moving_original' | 'installing' | 'swapped';
+
 interface RestoreSwap {
   directory: string;
-  target: string;
-  previous: string;
   hadPrevious: boolean;
+  state: RestoreSwapState;
 }
 
+interface RestoreJournal {
+  version: 1;
+  restoreId: string;
+  stagingDirectory: string;
+  previousDirectory: string;
+  swaps: RestoreSwap[];
+}
+
+const RESTORE_JOURNAL = '.backup-restore-journal.json';
+const RESTORE_STATE_TABLE = 'nexus_backup_restore_state';
 const quoteIdentifier = (value: string): string => `"${value.replace(/"/g, '""')}"`;
 
 /** Captures/restores the Nexus product data set. Raw SQL/file layout never escapes this adapter. */
@@ -125,26 +136,58 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
     snapshot: BackupSnapshot,
   ): Promise<{ restoredTables: number; restoredRows: number; restoredFiles: number }> {
     this.validateSnapshot(snapshot);
-    const stagingRoot = path.join(this.dataDirectory, `.backup-restore-${randomUUID()}`);
-    const previousRoot = path.join(this.dataDirectory, `.backup-previous-${randomUUID()}`);
+    await this.recoverInterruptedRestore();
+    const restoreId = randomUUID();
+    const stagingDirectory = `.backup-restore-${restoreId}`;
+    const previousDirectory = `.backup-previous-${restoreId}`;
+    const stagingRoot = path.join(this.dataDirectory, stagingDirectory);
+    const previousRoot = path.join(this.dataDirectory, previousDirectory);
     await mkdir(stagingRoot, { recursive: true });
     await mkdir(previousRoot, { recursive: true });
+    await this.stageFiles(snapshot.files, stagingRoot);
+    await this.ensureRestoreStateTable();
+    const journal: RestoreJournal = {
+      version: 1,
+      restoreId,
+      stagingDirectory,
+      previousDirectory,
+      swaps: await Promise.all(
+        FILE_DIRECTORIES.map(async (directory) => ({
+          directory,
+          hadPrevious: await this.exists(path.join(this.dataDirectory, directory)),
+          state: 'pending' as const,
+        })),
+      ),
+    };
+    await this.writeRestoreJournal(journal);
+    let databaseCommitted = false;
     try {
-      await this.stageFiles(snapshot.files, stagingRoot);
-      const swaps = await this.swapStagedDirectories(stagingRoot, previousRoot);
-      try {
-        const databaseResult = await this.restoreTables(snapshot.tables);
-        await rm(previousRoot, { recursive: true, force: true });
-        await rm(stagingRoot, { recursive: true, force: true });
-        return { ...databaseResult, restoredFiles: snapshot.files.length };
-      } catch (error) {
-        await this.rollbackSwaps(swaps);
-        throw error;
-      }
-    } finally {
-      await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
-      await rm(previousRoot, { recursive: true, force: true }).catch(() => undefined);
+      await this.swapStagedDirectories(journal);
+      const databaseResult = await this.restoreTables(snapshot.tables, restoreId);
+      databaseCommitted = true;
+      // Once the database transaction commits, rolling files back would create a mixed snapshot.
+      // Cleanup is recoverable from the durable journal, so a cleanup error must not undo the restore.
+      await this.finalizeCommittedRestore(journal).catch(() => undefined);
+      return { ...databaseResult, restoredFiles: snapshot.files.length };
+    } catch (error) {
+      if (!databaseCommitted) await this.abortUncommittedRestore(journal);
+      throw error;
     }
+  }
+
+  /** Reconciles an interrupted restore before any Agent/runtime owner starts reading restored state. */
+  async recoverInterruptedRestore(): Promise<void> {
+    const journal = await this.readRestoreJournal();
+    if (!journal) return;
+    await this.ensureRestoreStateTable();
+    const marker = await this.database.queryOne<{ restore_id: string }>(
+      `SELECT restore_id FROM ${RESTORE_STATE_TABLE} WHERE id=1`,
+    );
+    if (marker?.restore_id === journal.restoreId) {
+      await this.finalizeCommittedRestore(journal);
+      return;
+    }
+    await this.abortUncommittedRestore(journal);
   }
 
   private async captureTable(table: string): Promise<Record<string, unknown>[]> {
@@ -220,42 +263,65 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
       const relative = this.safeRelativeFilePath(file.path);
       const target = path.join(stagingRoot, ...relative.split('/'));
       await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, Buffer.from(file.contentBase64, 'base64'));
-    }
-  }
-
-  private async swapStagedDirectories(stagingRoot: string, previousRoot: string): Promise<RestoreSwap[]> {
-    const swaps: RestoreSwap[] = [];
-    try {
-      for (const directory of FILE_DIRECTORIES) {
-        const target = path.join(this.dataDirectory, directory);
-        const staged = path.join(stagingRoot, directory);
-        const previous = path.join(previousRoot, directory);
-        const hadPrevious = await this.exists(target);
-        if (hadPrevious) {
-          await mkdir(path.dirname(previous), { recursive: true });
-          await rename(target, previous);
-        }
-        await mkdir(path.dirname(target), { recursive: true });
-        await rename(staged, target);
-        swaps.push({ directory, target, previous, hadPrevious });
+      const handle = await open(target, 'w');
+      try {
+        await handle.writeFile(Buffer.from(file.contentBase64, 'base64'));
+        await handle.sync();
+      } finally {
+        await handle.close();
       }
-      return swaps;
-    } catch (error) {
-      await this.rollbackSwaps(swaps);
-      throw error;
+    }
+    await this.fsyncDirectory(stagingRoot);
+  }
+
+  private async swapStagedDirectories(journal: RestoreJournal): Promise<void> {
+    const stagingRoot = path.join(this.dataDirectory, journal.stagingDirectory);
+    const previousRoot = path.join(this.dataDirectory, journal.previousDirectory);
+    for (const swap of journal.swaps) {
+      const target = path.join(this.dataDirectory, swap.directory);
+      const staged = path.join(stagingRoot, swap.directory);
+      const previous = path.join(previousRoot, swap.directory);
+      if (swap.hadPrevious) {
+        swap.state = 'moving_original';
+        await this.writeRestoreJournal(journal);
+        await mkdir(path.dirname(previous), { recursive: true });
+        await rename(target, previous);
+        await this.fsyncDirectory(path.dirname(target));
+        await this.fsyncDirectory(path.dirname(previous));
+      }
+      swap.state = 'installing';
+      await this.writeRestoreJournal(journal);
+      await mkdir(path.dirname(target), { recursive: true });
+      await rename(staged, target);
+      await this.fsyncDirectory(path.dirname(target));
+      swap.state = 'swapped';
+      await this.writeRestoreJournal(journal);
     }
   }
 
-  private async rollbackSwaps(swaps: readonly RestoreSwap[]): Promise<void> {
-    for (const swap of [...swaps].reverse()) {
-      await rm(swap.target, { recursive: true, force: true }).catch(() => undefined);
-      if (swap.hadPrevious) await rename(swap.previous, swap.target).catch(() => undefined);
+  private async rollbackSwaps(journal: RestoreJournal): Promise<void> {
+    const previousRoot = path.join(this.dataDirectory, journal.previousDirectory);
+    for (const swap of [...journal.swaps].reverse()) {
+      if (swap.state === 'pending') continue;
+      const target = path.join(this.dataDirectory, swap.directory);
+      const previous = path.join(previousRoot, swap.directory);
+      if (swap.hadPrevious) {
+        if (await this.exists(previous)) {
+          await rm(target, { recursive: true, force: true });
+          await mkdir(path.dirname(target), { recursive: true });
+          await rename(previous, target);
+          await this.fsyncDirectory(path.dirname(target));
+        }
+      } else if (swap.state === 'installing' || swap.state === 'swapped') {
+        await rm(target, { recursive: true, force: true });
+        await this.fsyncDirectory(path.dirname(target));
+      }
     }
   }
 
   private async restoreTables(
     tables: Record<string, Record<string, unknown>[]>,
+    restoreId: string,
   ): Promise<{ restoredTables: number; restoredRows: number }> {
     return this.database.transaction(async (database) => {
       let restoredTables = 0,
@@ -282,8 +348,105 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
         }
         restoredTables += 1;
       }
+      await database.execute(
+        `INSERT INTO ${RESTORE_STATE_TABLE} (id, restore_id) VALUES (1, ?)
+         ON CONFLICT(id) DO UPDATE SET restore_id=excluded.restore_id`,
+        [restoreId],
+      );
       return { restoredTables, restoredRows };
     });
+  }
+
+  private async ensureRestoreStateTable(): Promise<void> {
+    await this.database.execute(
+      `CREATE TABLE IF NOT EXISTS ${RESTORE_STATE_TABLE} (
+         id INTEGER PRIMARY KEY CHECK(id=1),
+         restore_id TEXT NOT NULL
+       )`,
+    );
+  }
+
+  private async abortUncommittedRestore(journal: RestoreJournal): Promise<void> {
+    await this.rollbackSwaps(journal);
+    await rm(path.join(this.dataDirectory, journal.stagingDirectory), { recursive: true, force: true });
+    await rm(path.join(this.dataDirectory, journal.previousDirectory), { recursive: true, force: true });
+    await rm(this.restoreJournalPath(), { force: true });
+    await this.database.execute(`DELETE FROM ${RESTORE_STATE_TABLE} WHERE id=1 AND restore_id=?`, [journal.restoreId]);
+  }
+
+  private async finalizeCommittedRestore(journal: RestoreJournal): Promise<void> {
+    await rm(path.join(this.dataDirectory, journal.previousDirectory), { recursive: true, force: true });
+    await rm(path.join(this.dataDirectory, journal.stagingDirectory), { recursive: true, force: true });
+    await rm(this.restoreJournalPath(), { force: true });
+    await this.database.execute(`DELETE FROM ${RESTORE_STATE_TABLE} WHERE id=1 AND restore_id=?`, [journal.restoreId]);
+  }
+
+  private restoreJournalPath(): string {
+    return path.join(this.dataDirectory, RESTORE_JOURNAL);
+  }
+
+  private async writeRestoreJournal(journal: RestoreJournal): Promise<void> {
+    const target = this.restoreJournalPath();
+    const temporary = `${target}.tmp`;
+    const handle = await open(temporary, 'w', 0o600);
+    try {
+      await handle.writeFile(JSON.stringify(journal), 'utf8');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, target);
+    await this.fsyncDirectory(this.dataDirectory);
+  }
+
+  private async readRestoreJournal(): Promise<RestoreJournal | null> {
+    let raw: string;
+    try {
+      raw = await readFile(this.restoreJournalPath(), 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(raw) as unknown;
+    } catch {
+      throw new Error('BACKUP_RESTORE_JOURNAL_INVALID');
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('BACKUP_RESTORE_JOURNAL_INVALID');
+    const record = value as Partial<RestoreJournal>;
+    if (
+      record.version !== 1 ||
+      typeof record.restoreId !== 'string' ||
+      record.stagingDirectory !== `.backup-restore-${record.restoreId}` ||
+      record.previousDirectory !== `.backup-previous-${record.restoreId}` ||
+      !Array.isArray(record.swaps) ||
+      record.swaps.length !== FILE_DIRECTORIES.length
+    ) {
+      throw new Error('BACKUP_RESTORE_JOURNAL_INVALID');
+    }
+    const allowedStates = new Set<RestoreSwapState>(['pending', 'moving_original', 'installing', 'swapped']);
+    for (let index = 0; index < FILE_DIRECTORIES.length; index += 1) {
+      const swap = record.swaps[index];
+      if (
+        !swap ||
+        swap.directory !== FILE_DIRECTORIES[index] ||
+        typeof swap.hadPrevious !== 'boolean' ||
+        !allowedStates.has(swap.state)
+      ) {
+        throw new Error('BACKUP_RESTORE_JOURNAL_INVALID');
+      }
+    }
+    return record as RestoreJournal;
+  }
+
+  private async fsyncDirectory(directory: string): Promise<void> {
+    const handle = await open(directory, 'r');
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
   }
 
   private prepareRow(table: string, source: Record<string, unknown>): Record<string, unknown> {
