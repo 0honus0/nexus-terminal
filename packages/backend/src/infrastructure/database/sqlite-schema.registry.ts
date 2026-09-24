@@ -74,6 +74,7 @@ export const sqliteTableDefinitions: readonly SqliteTableDefinition[] = [
   { name: 'agent_memory_import_confirmations', sql: schema.createAgentMemoryImportConfirmationsTableSQL },
   { name: 'agent_publisher_keys', sql: schema.createAgentPublisherKeysTableSQL },
   { name: 'agent_plugin_stages', sql: schema.createAgentPluginStagesTableSQL },
+  { name: 'agent_plugin_pending_upgrades', sql: schema.createAgentPluginPendingUpgradesTableSQL },
   { name: 'agent_plugin_versions', sql: schema.createAgentPluginVersionsTableSQL },
   { name: 'agent_plugin_installations', sql: schema.createAgentPluginInstallationsTableSQL },
   { name: 'agent_app_intent_receipts', sql: schema.createAgentAppIntentReceiptsTableSQL },

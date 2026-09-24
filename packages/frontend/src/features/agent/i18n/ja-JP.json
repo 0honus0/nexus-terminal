@@ -215,6 +215,7 @@
         "install": "インストール",
         "upgrade": "アップグレード",
         "continueUpgrade": "アップグレードを続行",
+        "cancelUpgrade": "アップグレードをキャンセル",
         "installed": "インストール済みプラグイン",
         "noneInstalled": "インストール済みのプラグインはありません。",
         "uninstall": "アンインストール",

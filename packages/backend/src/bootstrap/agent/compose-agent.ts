@@ -782,6 +782,9 @@ export const composeAgent = ({
       stageRemote: (userId, input, signal) => plugins.stageRemote(userId, input, signal),
       verify: (userId, stageId) => plugins.verify(userId, stageId),
       install: (userId, stageId) => plugins.install(userId, stageId),
+      listPendingUpgrades: (userId) => plugins.listPendingUpgrades(userId),
+      cancelPendingUpgrade: (userId, appId, expectedVersion) =>
+        plugins.cancelPendingUpgrade(userId, appId, expectedVersion),
       upgrade: (userId, appId, stageId, expectedVersion) => plugins.upgrade(userId, appId, stageId, expectedVersion),
       uninstall: (userId, appId, expectedVersion) => plugins.uninstall(userId, appId, expectedVersion),
       deleteData: (userId, appId) => plugins.deleteData(userId, appId),

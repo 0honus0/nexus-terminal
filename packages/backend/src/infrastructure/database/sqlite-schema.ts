@@ -1087,6 +1087,24 @@ CREATE TABLE IF NOT EXISTS agent_plugin_stages (
 CREATE INDEX IF NOT EXISTS agent_plugin_stages_user ON agent_plugin_stages(user_id, created_at DESC, id DESC);
 `;
 
+export const createAgentPluginPendingUpgradesTableSQL = `
+CREATE TABLE IF NOT EXISTS agent_plugin_pending_upgrades (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    app_id TEXT NOT NULL,
+    stage_id TEXT NOT NULL,
+    from_version TEXT NOT NULL,
+    target_version TEXT NOT NULL,
+    package_hash TEXT NOT NULL,
+    app_state_version INTEGER NOT NULL CHECK(app_state_version > 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(user_id, app_id),
+    FOREIGN KEY(user_id, app_id) REFERENCES agent_apps(user_id, app_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS agent_plugin_pending_upgrades_user
+ON agent_plugin_pending_upgrades(user_id, updated_at DESC, app_id);
+`;
+
 export const createAgentPluginVersionsTableSQL = `
 CREATE TABLE IF NOT EXISTS agent_plugin_versions (
     app_id TEXT NOT NULL,

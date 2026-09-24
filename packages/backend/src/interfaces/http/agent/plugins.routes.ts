@@ -1,5 +1,6 @@
 import type {
   AgentPluginArtifactStageRequestDto,
+  AgentPluginCancelUpgradeRequestDto,
   AgentPluginDeleteDataRequestDto,
   AgentPluginDeleteDataResponseDto,
   AgentPluginFrontendRpcRequestDto,
@@ -19,8 +20,10 @@ import type { AgentPluginFacade } from '../../../modules/agent/public';
 import { agentData, agentError, agentRoute } from './agent-http';
 import {
   pluginFrontendDescriptorDto,
+  pluginAppStateDto,
   pluginInstallResultDto,
   pluginInstallationDto,
+  pluginPendingUpgradeDto,
   pluginPublisherDto,
   pluginStageDto,
   pluginUninstallResultDto,
@@ -283,6 +286,35 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
         input,
       );
       agentData(request, response, payload);
+    }),
+  );
+
+  router.get(
+    '/pending-upgrades',
+    agentRoute(async (request, response) => {
+      const pending = await plugins.listPendingUpgrades(agentUserId(request));
+      agentData(request, response, pending.map(pluginPendingUpgradeDto));
+    }),
+  );
+
+  router.post(
+    '/:appId/upgrade/cancel',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (
+        !isRecord(request.body) ||
+        !hasOnlyKeys(request.body, ['expectedVersion']) ||
+        !positiveInteger(request.body.expectedVersion)
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      const input: AgentPluginCancelUpgradeRequestDto = { expectedVersion: request.body.expectedVersion };
+      const app = await plugins.cancelPendingUpgrade(
+        agentUserId(request),
+        pathParam(request.params.appId),
+        input.expectedVersion,
+      );
+      agentData(request, response, pluginAppStateDto(app));
     }),
   );
 

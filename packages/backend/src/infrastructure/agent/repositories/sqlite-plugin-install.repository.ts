@@ -3,6 +3,7 @@ import { appendHostEvent, appChangedPayload } from '../events/host-event-outbox'
 import type {
   PluginInstallRepositoryPort,
   PluginInstallationRecord,
+  PluginPendingUpgradeRecord,
   PluginStageRecord,
   PluginStageStatus,
   PluginVersionRecord,
@@ -285,6 +286,96 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
     const updated = await this.getStage(userId, stageId);
     if (!updated) throw new Error('PLUGIN_STAGE_NOT_FOUND');
     return updated;
+  }
+
+  async getPendingUpgrade(userId: number, appId: string): Promise<PluginPendingUpgradeRecord | null> {
+    const row = await this.db.queryOne<{
+      user_id: number;
+      app_id: string;
+      stage_id: string;
+      from_version: string;
+      target_version: string;
+      package_hash: string;
+      app_state_version: number;
+      created_at: number;
+      updated_at: number;
+    }>(
+      `SELECT user_id,app_id,stage_id,from_version,target_version,package_hash,app_state_version,created_at,updated_at
+       FROM agent_plugin_pending_upgrades WHERE user_id=? AND app_id=?`,
+      [userId, appId],
+    );
+    return row
+      ? {
+          userId: row.user_id,
+          appId: row.app_id,
+          stageId: row.stage_id,
+          fromVersion: row.from_version,
+          targetVersion: row.target_version,
+          packageHash: row.package_hash,
+          appStateVersion: row.app_state_version,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }
+      : null;
+  }
+
+  async listPendingUpgrades(userId: number): Promise<PluginPendingUpgradeRecord[]> {
+    const rows = await this.db.queryAll<{
+      user_id: number;
+      app_id: string;
+      stage_id: string;
+      from_version: string;
+      target_version: string;
+      package_hash: string;
+      app_state_version: number;
+      created_at: number;
+      updated_at: number;
+    }>(
+      `SELECT user_id,app_id,stage_id,from_version,target_version,package_hash,app_state_version,created_at,updated_at
+       FROM agent_plugin_pending_upgrades WHERE user_id=? ORDER BY updated_at DESC,app_id`,
+      [userId],
+    );
+    return rows.map((row) => ({
+      userId: row.user_id,
+      appId: row.app_id,
+      stageId: row.stage_id,
+      fromVersion: row.from_version,
+      targetVersion: row.target_version,
+      packageHash: row.package_hash,
+      appStateVersion: row.app_state_version,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  async upsertPendingUpgrade(record: PluginPendingUpgradeRecord): Promise<void> {
+    await this.db.execute(
+      `INSERT INTO agent_plugin_pending_upgrades
+        (user_id,app_id,stage_id,from_version,target_version,package_hash,app_state_version,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(user_id,app_id) DO UPDATE SET
+         stage_id=excluded.stage_id,
+         from_version=excluded.from_version,
+         target_version=excluded.target_version,
+         package_hash=excluded.package_hash,
+         app_state_version=excluded.app_state_version,
+         updated_at=excluded.updated_at`,
+      [
+        record.userId,
+        record.appId,
+        record.stageId,
+        record.fromVersion,
+        record.targetVersion,
+        record.packageHash,
+        record.appStateVersion,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    );
+  }
+
+  async deletePendingUpgrade(userId: number, appId: string): Promise<void> {
+    await this.db.execute('DELETE FROM agent_plugin_pending_upgrades WHERE user_id=? AND app_id=?', [userId, appId]);
   }
 
   async upsertVersion(record: PluginVersionRecord): Promise<void> {

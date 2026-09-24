@@ -218,6 +218,20 @@ export interface AgentPluginUpgradeResultDto {
   plugin: AgentPluginVersionDto;
 }
 
+export interface AgentPluginPendingUpgradeDto {
+  appId: string;
+  fromVersion: string;
+  targetVersion: string;
+  expectedVersion: number;
+  stage: AgentPluginStageDto;
+  plugin: AgentPluginVersionDto;
+  app: AgentPluginAppStateDto;
+}
+
+export interface AgentPluginCancelUpgradeRequestDto {
+  expectedVersion: number;
+}
+
 export interface AgentPluginUninstallRequestDto {
   deleteData: false;
   expectedVersion: number;

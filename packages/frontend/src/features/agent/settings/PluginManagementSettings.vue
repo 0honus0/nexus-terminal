@@ -9,6 +9,7 @@
     type AgentAppSummaryDto,
     type AgentSettingsViewDto,
     type AgentPluginInstallationDto,
+    type AgentPluginPendingUpgradeDto,
     type AgentPluginPublisherKeyDto,
     type AgentPluginVerifyResultDto,
     type AgentPluginVersionDto,
@@ -37,6 +38,7 @@
   const localBusy = ref(false);
   const packageInput = ref<HTMLInputElement | null>(null);
   const drainingUpgradeVersion = ref<number | null>(null);
+  const pendingUpgrades = ref<AgentPluginPendingUpgradeDto[]>([]);
   const pendingDataDeletionAppId = ref<string | null>(null);
   const copiedSourceUrl = ref<string | null>(null);
   // showAdvancedMaintenance removed
@@ -228,14 +230,26 @@
   };
 
   const refresh = async (): Promise<void> => {
-    const [nextPublishers, nextInstallations, nextVersions] = await Promise.all([
+    const [nextPublishers, nextInstallations, nextVersions, nextPendingUpgrades] = await Promise.all([
       agentApi.pluginPublishers(),
       agentApi.pluginInstallations(),
       agentApi.pluginVersions(),
+      agentApi.pendingPluginUpgrades(),
     ]);
     publishers.value = nextPublishers;
     installations.value = nextInstallations;
     versions.value = nextVersions;
+    pendingUpgrades.value = nextPendingUpgrades;
+    const recovered =
+      nextPendingUpgrades.find((pending) => pending.appId === candidate.value?.plugin.appId) ??
+      (candidate.value ? null : (nextPendingUpgrades[0] ?? null));
+    if (recovered) {
+      candidate.value = { stage: recovered.stage, plugin: recovered.plugin };
+      candidateArtifactName.value = `${recovered.appId}@${recovered.targetVersion}`;
+      drainingUpgradeVersion.value = recovered.expectedVersion;
+    } else if (drainingUpgradeVersion.value !== null) {
+      drainingUpgradeVersion.value = null;
+    }
     await loadRemoteCatalogs();
   };
 
@@ -393,6 +407,21 @@
       emit('refresh');
       notifyNotice('PLUGIN_UPGRADED');
       await refreshAfterCommit('upgrade-plugin');
+    });
+  };
+
+  const cancelDrainingUpgrade = (): void => {
+    const current = candidate.value;
+    const expectedVersion = drainingUpgradeVersion.value;
+    if (!current || expectedVersion === null) return;
+    void run('cancel-upgrade', async () => {
+      await agentApi.cancelPluginUpgrade(current.plugin.appId, expectedVersion);
+      pendingUpgrades.value = pendingUpgrades.value.filter((pending) => pending.appId !== current.plugin.appId);
+      drainingUpgradeVersion.value = null;
+      candidate.value = null;
+      candidateArtifactName.value = '';
+      emit('refresh');
+      await refreshAfterCommit('cancel-upgrade');
     });
   };
 
@@ -557,6 +586,16 @@
               {{ candidateArtifactName }}
             </span>
             <span v-else></span>
+            <UiButton
+              v-if="drainingUpgradeVersion"
+              appearance="ghost"
+              tone="neutral"
+              type="button"
+              :disabled="locked"
+              @click="cancelDrainingUpgrade"
+            >
+              {{ $t('agent.settings.plugins.cancelUpgrade') }}
+            </UiButton>
             <UiButton appearance="solid" tone="primary" type="button" :disabled="locked" @click="applyCandidate">
               <i class="fa-solid fa-download text-xs" aria-hidden="true"></i>
               <span>

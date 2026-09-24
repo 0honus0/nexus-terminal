@@ -215,6 +215,7 @@
         "install": "安装",
         "upgrade": "升级",
         "continueUpgrade": "继续升级",
+        "cancelUpgrade": "取消升级",
         "installed": "已安装插件",
         "noneInstalled": "当前没有已安装的可安装插件。",
         "uninstall": "卸载",

@@ -12,6 +12,9 @@ import type {
   AgentPluginFrontendRpcResponseDto,
   AgentPluginInstallationDto,
   AgentPluginInstallResultDto,
+  AgentPluginAppStateDto,
+  AgentPluginCancelUpgradeRequestDto,
+  AgentPluginPendingUpgradeDto,
   AgentPluginOfficialStageRequestDto,
   AgentPluginPublisherKeyDto,
   AgentPluginRemoteCatalogQueryDto,
@@ -54,6 +57,11 @@ export const createPluginApi = () => ({
   async pluginInstallations(): Promise<AgentPluginInstallationDto[]> {
     return unwrap(
       (await httpClient.get<AgentEnvelopeDto<AgentPluginInstallationDto[]>>('/agent/plugins/installations')).data,
+    );
+  },
+  async pendingPluginUpgrades(): Promise<AgentPluginPendingUpgradeDto[]> {
+    return unwrap(
+      (await httpClient.get<AgentEnvelopeDto<AgentPluginPendingUpgradeDto[]>>('/agent/plugins/pending-upgrades')).data,
     );
   },
   async pluginVersions(appId?: string): Promise<AgentPluginVersionDto[]> {
@@ -137,6 +145,18 @@ export const createPluginApi = () => ({
       (
         await httpClient.post<AgentEnvelopeDto<AgentPluginUpgradeResultDto>>(
           `/agent/plugins/${encodeURIComponent(appId)}/upgrade`,
+          input,
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async cancelPluginUpgrade(appId: string, expectedVersion: number): Promise<AgentPluginAppStateDto> {
+    const input: AgentPluginCancelUpgradeRequestDto = { expectedVersion };
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelopeDto<AgentPluginAppStateDto>>(
+          `/agent/plugins/${encodeURIComponent(appId)}/upgrade/cancel`,
           input,
           { headers: await mutationHeaders() },
         )

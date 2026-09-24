@@ -6,6 +6,7 @@ import type {
   AgentPluginInstallResultDto,
   AgentPluginInstallationDto,
   AgentPluginManifestDto,
+  AgentPluginPendingUpgradeDto,
   AgentPluginPublisherKeyDto,
   AgentPluginStageDto,
   AgentPluginUninstallResultDto,
@@ -22,6 +23,7 @@ type Version = Awaited<ReturnType<AgentPluginFacade['listVersions']>>[number];
 type Stage = Awaited<ReturnType<AgentPluginFacade['stage']>>;
 type Catalog = Awaited<ReturnType<AgentPluginFacade['officialCatalog']>>;
 type InstallResult = Awaited<ReturnType<AgentPluginFacade['install']>>;
+type PendingUpgrade = Awaited<ReturnType<AgentPluginFacade['listPendingUpgrades']>>[number];
 type UpgradeResult = Awaited<ReturnType<AgentPluginFacade['upgrade']>>;
 type UninstallResult = Awaited<ReturnType<AgentPluginFacade['uninstall']>>;
 type FrontendDescriptor = NonNullable<Awaited<ReturnType<AgentPluginFacade['frontendDescriptor']>>>;
@@ -183,14 +185,22 @@ export const pluginUpgradeResultDto = (result: UpgradeResult): AgentPluginUpgrad
   plugin: pluginVersionDto(result.plugin),
 });
 
+export const pluginPendingUpgradeDto = (pending: PendingUpgrade): AgentPluginPendingUpgradeDto => ({
+  appId: pending.appId,
+  fromVersion: pending.fromVersion,
+  targetVersion: pending.targetVersion,
+  expectedVersion: pending.appStateVersion,
+  stage: pluginStageDto(pending.stage),
+  plugin: pluginVersionDto(pending.plugin),
+  app: pluginAppStateDto(pending.app),
+});
+
 export const pluginUninstallResultDto = (result: UninstallResult): AgentPluginUninstallResultDto => ({
   state: result.state,
   app: pluginAppStateDto(result.app),
 });
 
-export const pluginFrontendDescriptorDto = (
-  descriptor: FrontendDescriptor,
-): AgentPluginFrontendDescriptorDto => ({
+export const pluginFrontendDescriptorDto = (descriptor: FrontendDescriptor): AgentPluginFrontendDescriptorDto => ({
   appId: descriptor.appId,
   version: descriptor.version,
   sdkVersion: descriptor.sdkVersion,

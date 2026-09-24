@@ -215,6 +215,7 @@
         "install": "Install",
         "upgrade": "Upgrade",
         "continueUpgrade": "Continue upgrade",
+        "cancelUpgrade": "Cancel upgrade",
         "installed": "Installed plugins",
         "noneInstalled": "No installable plugins are currently installed.",
         "uninstall": "Uninstall",

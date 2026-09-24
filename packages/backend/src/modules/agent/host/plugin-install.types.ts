@@ -1,6 +1,7 @@
 import type { JsonValue } from '../agent.types';
 import type {
   PluginInstallationRecord,
+  PluginPendingUpgradeRecord,
   PluginStageRecord,
   PluginVersionRecord,
 } from './plugin-install.repository.port';
@@ -31,6 +32,12 @@ export interface PluginUpgradeResult {
   app: AppView;
   plugin: PluginVersionRecord;
 }
+export interface PluginPendingUpgradeView extends PluginPendingUpgradeRecord {
+  stage: PluginStageRecord;
+  plugin: PluginVersionRecord;
+  app: AppView;
+}
+
 
 export interface PluginUninstallResult {
   state: 'draining' | 'removed';

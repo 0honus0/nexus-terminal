@@ -33,6 +33,18 @@ export interface PluginStageRecord {
   versionNumber: number;
 }
 
+export interface PluginPendingUpgradeRecord {
+  userId: number;
+  appId: string;
+  stageId: string;
+  fromVersion: string;
+  targetVersion: string;
+  packageHash: string;
+  appStateVersion: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface PluginInstallationRecord {
   userId: number;
   appId: string;
@@ -76,6 +88,10 @@ export interface PluginInstallRepositoryPort {
       >
     >,
   ): Promise<PluginStageRecord>;
+  getPendingUpgrade(userId: number, appId: string): Promise<PluginPendingUpgradeRecord | null>;
+  listPendingUpgrades(userId: number): Promise<PluginPendingUpgradeRecord[]>;
+  upsertPendingUpgrade(record: PluginPendingUpgradeRecord): Promise<void>;
+  deletePendingUpgrade(userId: number, appId: string): Promise<void>;
   upsertVersion(record: PluginVersionRecord): Promise<void>;
   getVersion(appId: string, version: string): Promise<PluginVersionRecord | null>;
   listVersions(appId?: string): Promise<PluginVersionRecord[]>;

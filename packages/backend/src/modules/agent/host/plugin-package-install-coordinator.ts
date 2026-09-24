@@ -5,19 +5,21 @@ import type { ClockPort, Scope } from '../agent.types';
 import { validateManifest } from './app-manifest-validator';
 import { AppRegistryService } from './app-registry.service';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
-import type { AppRecord, AppStatePatch } from './app.types';
+import type { AppRecord, AppStatePatch, AppView } from './app.types';
 import type { AgentSettingsService } from './agent-settings.service';
 import type { PackageVerifierPort, VerifiedPluginPackage } from './package-verifier.port';
 import type { PluginPackageSourcePort } from './plugin-package-source.port';
 import type { PluginDataManager } from './plugin-data-manager';
 import type {
   PluginInstallRepositoryPort,
+  PluginPendingUpgradeRecord,
   PluginStageRecord,
   PluginVersionRecord,
   TrustedPublisherKey,
 } from './plugin-install.repository.port';
 import type {
   PluginInstallResult,
+  PluginPendingUpgradeView,
   PluginStageInput,
   PluginUninstallResult,
   PluginUpgradeResult,
@@ -352,6 +354,53 @@ export class PluginPackageInstallCoordinator {
     return { stage, plugin, app: this.runtimeLifecycle.appView(current, plugin) };
   }
 
+  async listPendingUpgrades(userId: number): Promise<PluginPendingUpgradeView[]> {
+    const records = await this.repository.listPendingUpgrades(userId);
+    const views: PluginPendingUpgradeView[] = [];
+    for (const record of records) {
+      const scope = { userId, appId: record.appId };
+      const [stage, plugin, state] = await Promise.all([
+        this.repository.getStage(userId, record.stageId),
+        this.repository.getVersion(record.appId, record.targetVersion),
+        this.states.get(scope),
+      ]);
+      if (state?.activeVersion === record.targetVersion) {
+        await this.repository.deletePendingUpgrade(userId, record.appId);
+        continue;
+      }
+      if (!stage || !plugin || !state || state.activeVersion !== record.fromVersion) continue;
+      views.push({
+        ...record,
+        appStateVersion: state.version,
+        stage,
+        plugin,
+        app: this.runtimeLifecycle.appView(
+          state,
+          (await this.repository.getVersion(record.appId, record.fromVersion)) ?? plugin,
+        ),
+      });
+    }
+    return views;
+  }
+
+  async cancelPendingUpgrade(userId: number, appId: string, expectedVersion: number): Promise<AppView> {
+    const pending = await this.repository.getPendingUpgrade(userId, appId);
+    if (!pending) throw new Error('PLUGIN_UPGRADE_NOT_PENDING');
+    const scope = { userId, appId };
+    const state = await this.states.get(scope);
+    if (!state) throw new Error('AGENT_APP_NOT_FOUND');
+    if (state.version !== expectedVersion) throw new Error('APP_STATE_VERSION_CONFLICT');
+    if (state.activeVersion !== pending.fromVersion) throw new Error('PLUGIN_INSTALLATION_STATE_CONFLICT');
+    const restored = state.acceptNewRuns
+      ? state
+      : await this.compareAndSetState(scope, state.version, { acceptNewRuns: true });
+    const plugin = await this.repository.getVersion(appId, pending.fromVersion);
+    if (!plugin) throw new Error('PLUGIN_VERSION_NOT_FOUND');
+    await this.repository.deletePendingUpgrade(userId, appId);
+    this.onHostStateCommitted(userId);
+    return this.runtimeLifecycle.appView(restored, plugin);
+  }
+
   async upgrade(userId: number, appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult> {
     logger.debug({ userId, appId, stageId, expectedVersion }, 'Agent plugin upgrade started');
     if (this.registry.isBuiltin(appId)) throw new Error('PLUGIN_APP_ID_RESERVED');
@@ -368,6 +417,16 @@ export class PluginPackageInstallCoordinator {
     if (state.version !== expectedVersion) throw new Error('APP_STATE_VERSION_CONFLICT');
     if (installation.version !== state.activeVersion) throw new Error('PLUGIN_INSTALLATION_STATE_CONFLICT');
     if (verified.manifest.version === state.activeVersion) throw new Error('PLUGIN_VERSION_ALREADY_ACTIVE');
+    const pending = await this.repository.getPendingUpgrade(userId, appId);
+    if (
+      pending &&
+      (pending.stageId !== stageId ||
+        pending.fromVersion !== state.activeVersion ||
+        pending.targetVersion !== verified.manifest.version ||
+        pending.packageHash !== verified.packageHash)
+    ) {
+      throw new Error('PLUGIN_UPGRADE_IN_PROGRESS');
+    }
     const oldPlugin = await this.repository.getVersion(appId, state.activeVersion);
     if (!oldPlugin || oldPlugin.status === 'removed') throw new Error('PLUGIN_VERSION_NOT_FOUND');
 
@@ -377,9 +436,29 @@ export class PluginPackageInstallCoordinator {
     await this.repository.upsertVersion(nextPlugin);
     this.runtimeLifecycle.registerVersion(nextPlugin);
 
+    const pendingUpgrade: PluginPendingUpgradeRecord = {
+      userId,
+      appId,
+      stageId,
+      fromVersion: oldPlugin.version,
+      targetVersion: nextPlugin.version,
+      packageHash: nextPlugin.packageHash,
+      appStateVersion: state.version,
+      createdAt: pending?.createdAt ?? now,
+      updatedAt: now,
+    };
+    await this.repository.upsertPendingUpgrade(pendingUpgrade);
+
     const draining = state.acceptNewRuns
       ? await this.compareAndSetState(scope, state.version, { acceptNewRuns: false })
       : state;
+    if (draining.version !== pendingUpgrade.appStateVersion) {
+      await this.repository.upsertPendingUpgrade({
+        ...pendingUpgrade,
+        appStateVersion: draining.version,
+        updatedAt: this.clock.nowUnixSeconds(),
+      });
+    }
     if (draining.runningCount > 0) {
       logger.info(
         {
@@ -506,8 +585,18 @@ export class PluginPackageInstallCoordinator {
             ),
           );
       }
+      await this.repository
+        .deletePendingUpgrade(userId, appId)
+        .catch((pendingError) =>
+          logger.warn(
+            { err: pendingError, userId, appId, targetVersion: nextPlugin.version },
+            'Agent plugin upgrade rollback could not clear pending continuation',
+          ),
+        );
       throw error;
     }
+
+    await this.repository.deletePendingUpgrade(userId, appId);
 
     try {
       stage = await this.repository.updateStage(userId, stageId, stage.versionNumber, {

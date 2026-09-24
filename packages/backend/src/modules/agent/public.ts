@@ -101,6 +101,7 @@ import type {
 } from './host/plugin-install.repository.port';
 import type {
   PluginInstallResult,
+  PluginPendingUpgradeView,
   PluginInstallationView,
   PluginStageInput,
   RemotePluginStageInput,
@@ -128,6 +129,8 @@ export interface AgentPluginFacade {
   stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord>;
   verify(userId: number, stageId: string): Promise<{ stage: PluginStageRecord; plugin: PluginVersionRecord }>;
   install(userId: number, stageId: string): Promise<PluginInstallResult>;
+  listPendingUpgrades(userId: number): Promise<PluginPendingUpgradeView[]>;
+  cancelPendingUpgrade(userId: number, appId: string, expectedVersion: number): Promise<AppView>;
   upgrade(userId: number, appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult>;
   uninstall(userId: number, appId: string, expectedVersion: number): Promise<PluginUninstallResult>;
   deleteData(userId: number, appId: string): Promise<void>;

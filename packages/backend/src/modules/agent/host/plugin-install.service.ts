@@ -23,6 +23,7 @@ import {
   type PluginInstallationView,
   type PluginInstallHooks,
   type PluginInstallResult,
+  type PluginPendingUpgradeView,
   type PluginStageInput,
   type PluginUninstallResult,
   type PluginUpgradeResult,
@@ -40,6 +41,7 @@ export type {
   PluginInstallHooks,
   PluginInstallResult,
   PluginStageInput,
+  PluginPendingUpgradeView,
   PluginUninstallResult,
   PluginUpgradeResult,
   RemotePluginStageInput,
@@ -138,6 +140,14 @@ export class PluginInstallService {
 
   install(userId: number, stageId: string): Promise<PluginInstallResult> {
     return this.packageInstall.install(userId, stageId);
+  }
+
+  listPendingUpgrades(userId: number) {
+    return this.packageInstall.listPendingUpgrades(userId);
+  }
+
+  cancelPendingUpgrade(userId: number, appId: string, expectedVersion: number) {
+    return this.packageInstall.cancelPendingUpgrade(userId, appId, expectedVersion);
   }
 
   upgrade(userId: number, appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult> {
