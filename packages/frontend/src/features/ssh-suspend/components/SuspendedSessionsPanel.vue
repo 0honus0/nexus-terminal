@@ -130,185 +130,250 @@
       exportingId.value = null;
     }
   };
+
+  const getStatusLabel = (session: SuspendedSessionDto): string => {
+    if (session.status !== 'active') return t('suspendedSshSessions.status.disconnected');
+    if (session.ownershipState === 'attached') return t('suspendedSshSessions.status.attached');
+    if (session.ownershipState === 'resuming') return t('suspendedSshSessions.status.resuming');
+    return t('suspendedSshSessions.status.hanging');
+  };
+
+  const formatTime = (isoString?: string | number): string => {
+    if (!isoString) return '';
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
 </script>
 
 <template>
   <section
     data-testid="suspended-sessions-view"
-    class="suspended-sessions-panel flex h-full min-h-0 flex-col p-2"
+    class="suspended-sessions-panel flex h-full min-h-0 flex-col"
     role="region"
     :aria-label="t('suspendedSshSessions.modalTitle')"
   >
-    <div class="view-header mb-2">
+    <!-- 紧凑搜索栏 -->
+    <div class="view-header mb-2 shrink-0">
       <div class="relative w-full">
-        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-          <i class="fas fa-search text-text-secondary" aria-hidden="true"></i>
+        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-text-secondary/60">
+          <i class="fas fa-search text-[10px]" aria-hidden="true"></i>
         </span>
         <input
           v-model="data.search.value"
           type="text"
           :placeholder="t('suspendedSshSessions.searchPlaceholder')"
-          class="suspended-session-search w-full rounded-lg border border-border/50 bg-input px-10 py-1.5 text-center text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          class="suspended-session-search h-7 w-full rounded-lg border border-border/80 bg-input/40 pl-7 pr-7 text-xs text-foreground placeholder:text-text-secondary/50 transition-colors focus:border-primary focus:bg-background focus:outline-none"
         />
+        <button
+          v-if="data.search.value"
+          type="button"
+          class="absolute inset-y-0 right-0 flex items-center pr-2 text-text-secondary/60 hover:text-foreground cursor-pointer"
+          @click="data.search.value = ''"
+        >
+          <i class="fas fa-times-circle text-[10px]" aria-hidden="true"></i>
+        </button>
       </div>
     </div>
 
+    <!-- 列表容器 -->
     <div class="session-list-container min-h-0 flex-1 overflow-y-auto">
       <div
         v-if="data.loading.value && !filteredMarked.length"
-        class="suspended-session-loading p-4 text-center text-text-secondary"
+        class="suspended-session-loading flex flex-col items-center justify-center py-6 text-center text-text-secondary"
       >
-        <i class="fas fa-spinner fa-spin text-2xl" aria-hidden="true"></i>
-        <p class="mt-2">{{ t('suspendedSshSessions.loading') }}</p>
+        <i class="fas fa-spinner fa-spin text-base text-primary" aria-hidden="true"></i>
+        <p class="mt-1.5 text-xs">{{ t('suspendedSshSessions.loading') }}</p>
       </div>
-      <p v-else-if="data.error.value" class="px-3 py-2 text-sm text-error">{{ data.error.value }}</p>
-      <p v-else-if="!hasResults" class="suspended-session-empty p-4 text-center text-text-secondary">
-        {{ t('suspendedSshSessions.noResults') }}
+      <p v-else-if="data.error.value" class="rounded-lg border border-error/20 bg-error/5 p-2 text-xs text-error">
+        {{ data.error.value }}
       </p>
+      <div
+        v-else-if="!hasResults"
+        class="suspended-session-empty flex flex-col items-center justify-center py-6 px-3 text-center"
+      >
+        <i class="fas fa-inbox text-base text-text-secondary/40 mb-1" aria-hidden="true"></i>
+        <p class="text-xs font-medium text-foreground">{{ t('suspendedSshSessions.noResults') }}</p>
+      </div>
 
-      <ul v-else class="m-0 list-none p-0">
+      <!-- 紧凑小卡片列表 -->
+      <ul v-else class="m-0 list-none p-0 space-y-1.5">
+        <!-- 待关闭标记的会话 (Marked Sessions) -->
         <li
-          v-for="session in filteredMarked"
+          v-for="(session, index) in filteredMarked"
           :key="`marked-${session.workspaceId}`"
           :data-testid="`marked-suspended-session-${session.workspaceId}`"
-          class="session-item mb-2 rounded-md border border-border/70 bg-background p-3"
+          class="session-card group rounded-lg border border-border/80 bg-card/60 p-2.5 shadow-2xs hover:border-primary/40 hover:bg-card transition-all"
         >
-          <div class="session-row flex items-center justify-between">
-            <div class="session-info mr-2 min-w-0 flex-1">
-              <div class="session-title flex items-center text-lg font-bold">
-                <span class="session-name">{{ session.connectionName }}</span>
-                <span class="status-badge status-marked">{{ t('suspendedSshSessions.status.marked') }}</span>
-              </div>
-              <div class="session-meta mt-1 text-xs text-text-secondary">
-                {{ t('suspendedSshSessions.label.markedAt') }}: {{ new Date(session.markedAt).toLocaleString() }}
-              </div>
+          <!-- 顶行：左侧序号、图标与标题，右侧时间与状态徽章 -->
+          <div class="session-row-top flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0 flex-1">
+              <span
+                class="session-seq flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-blue-500/10 px-1 font-mono text-[10px] font-semibold text-blue-500"
+              >
+                #{{ index + 1 }}
+              </span>
+              <i class="fas fa-bookmark text-[9px] text-blue-500 shrink-0" aria-hidden="true"></i>
+              <span class="session-name font-semibold text-xs text-foreground truncate">{{
+                session.connectionName
+              }}</span>
             </div>
-            <div class="session-status-actions flex flex-col items-end">
-              <div class="actions mt-1 flex flex-col gap-2">
-                <button
-                  v-if="props.canResume"
-                  type="button"
-                  class="session-action action-resume"
-                  :title="t('suspendedSshSessions.action.resume')"
-                  :aria-label="t('suspendedSshSessions.action.resume')"
-                  @click="emit('resumeMarked', session.workspaceId)"
-                >
-                  <i class="fas fa-play action-icon" aria-hidden="true"></i>
-                  <span class="button-session-text">{{ t('suspendedSshSessions.action.resume') }}</span>
-                </button>
-                <button
-                  type="button"
-                  class="session-action action-remove"
-                  :title="t('tabs.contextMenu.unmarkForSuspend')"
-                  :aria-label="t('tabs.contextMenu.unmarkForSuspend')"
-                  @click="emit('unmark', session.workspaceId)"
-                >
-                  <i class="fas fa-undo action-icon" aria-hidden="true"></i>
-                  <span class="button-session-text">{{ t('tabs.contextMenu.unmarkForSuspend') }}</span>
-                </button>
-              </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span
+                class="session-time text-[10px] font-mono text-text-secondary/60"
+                :title="new Date(session.markedAt).toLocaleString()"
+              >
+                {{ formatTime(session.markedAt) }}
+              </span>
+              <span class="status-badge status-marked shrink-0">
+                <span class="status-dot"></span>
+                <span>{{ t('suspendedSshSessions.status.marked') }}</span>
+              </span>
             </div>
+          </div>
+
+          <!-- 底行：居中均匀分布的操作按钮 -->
+          <div class="session-actions mt-2 flex items-center justify-center gap-2">
+            <button
+              v-if="props.canResume"
+              type="button"
+              class="session-action action-resume flex-1 justify-center"
+              :title="t('suspendedSshSessions.action.resume')"
+              :aria-label="t('suspendedSshSessions.action.resume')"
+              @click="emit('resumeMarked', session.workspaceId)"
+            >
+              <i class="fas fa-play text-[8px]" aria-hidden="true"></i>
+              <span class="button-session-text">{{ t('suspendedSshSessions.action.resume') }}</span>
+            </button>
+            <button
+              type="button"
+              class="session-action action-export flex-1 justify-center"
+              :title="t('tabs.contextMenu.unmarkForSuspend')"
+              :aria-label="t('tabs.contextMenu.unmarkForSuspend')"
+              @click="emit('unmark', session.workspaceId)"
+            >
+              <i class="fas fa-undo text-[9px]" aria-hidden="true"></i>
+              <span class="button-session-text">{{ t('tabs.contextMenu.unmarkForSuspend') }}</span>
+            </button>
           </div>
         </li>
 
+        <!-- 挂起的会话小卡片 (Suspended Sessions) -->
         <li
-          v-for="session in data.filtered.value"
+          v-for="(session, index) in data.filtered.value"
           :key="session.id"
           :data-testid="`suspended-session-${session.id}`"
           :data-suspend-id="session.id"
-          class="session-item mb-2 rounded-md border border-border/70 bg-background p-3"
-          :class="{ 'opacity-60': session.status !== 'active' }"
+          class="session-card group rounded-lg border border-border/80 bg-card/60 p-2.5 shadow-2xs hover:border-primary/40 hover:bg-card transition-all"
+          :class="{ 'opacity-75': session.status !== 'active' }"
         >
-          <div class="session-row flex items-center justify-between">
-            <div class="session-info mr-2 min-w-0 flex-1">
-              <div class="session-title flex items-center text-lg font-bold">
-                <input
-                  v-if="editingId === session.id"
-                  v-model="editingName"
-                  type="text"
-                  autofocus
-                  class="min-w-0 flex-1 rounded-md border border-primary bg-background px-1 py-0.5 text-lg font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  @blur="finishRename(session)"
-                  @keyup.enter.prevent="finishRename(session)"
-                  @keyup.esc.prevent="cancelRename"
-                />
-                <button
-                  v-else
-                  type="button"
-                  class="session-name min-w-0 text-left font-bold hover:text-primary disabled:cursor-default disabled:hover:text-inherit"
-                  :disabled="Boolean(renamingId)"
-                  :title="t('suspendedSshSessions.tooltip.editName')"
-                  @click="startRename(session)"
-                >
-                  {{ session.customName || session.connectionName }}
-                </button>
+          <!-- 顶行：左侧序号、图标与标题，右侧紧凑时间与状态徽章（不额外多占一行） -->
+          <div class="session-row-top flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0 flex-1">
+              <span
+                class="session-seq flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-primary/10 px-1 font-mono text-[10px] font-semibold text-primary"
+              >
+                #{{ (filteredMarked.length || 0) + index + 1 }}
+              </span>
+              <i class="fas fa-terminal text-[9px] text-primary/70 shrink-0" aria-hidden="true"></i>
+
+              <input
+                v-if="editingId === session.id"
+                v-model="editingName"
+                type="text"
+                autofocus
+                class="h-5 min-w-0 flex-1 rounded border border-primary bg-background px-1.5 text-xs font-semibold text-foreground focus:outline-none"
+                @blur="finishRename(session)"
+                @keyup.enter.prevent="finishRename(session)"
+                @keyup.esc.prevent="cancelRename"
+              />
+              <button
+                v-else
+                type="button"
+                class="session-name min-w-0 text-left font-semibold text-xs text-foreground hover:text-primary transition-colors inline-flex items-center gap-1 cursor-pointer truncate disabled:cursor-default"
+                :disabled="Boolean(renamingId)"
+                :title="t('suspendedSshSessions.tooltip.editName')"
+                @click="startRename(session)"
+              >
+                <span class="truncate">{{ session.customName || session.connectionName }}</span>
+                <!-- 若有自定义名称且与底层连接不同，才显示连接名副标，杜绝同一名字出现两次 -->
                 <span
-                  class="status-badge"
-                  :class="session.status === 'active' ? 'status-active' : 'status-disconnected'"
+                  v-if="session.customName && session.customName !== session.connectionName"
+                  class="font-normal text-text-secondary/70 text-[10px] shrink-0"
                 >
-                  {{
-                    t(
-                      session.status !== 'active'
-                        ? 'suspendedSshSessions.status.disconnected'
-                        : session.ownershipState === 'attached'
-                          ? 'suspendedSshSessions.status.attached'
-                          : session.ownershipState === 'resuming'
-                            ? 'suspendedSshSessions.status.resuming'
-                            : 'suspendedSshSessions.status.hanging',
-                    )
-                  }}
+                  ({{ session.connectionName }})
                 </span>
-              </div>
-              <div class="session-meta text-sm text-text-secondary">
-                {{ t('suspendedSshSessions.label.originalConnection') }}: {{ session.connectionName }}
-              </div>
-              <div class="session-meta mt-1 text-xs text-text-secondary">
-                {{ t('suspendedSshSessions.label.suspendedAt') }}: {{ new Date(session.suspendedAt).toLocaleString() }}
-              </div>
-              <div v-if="session.disconnectedAt" class="session-meta mt-1 text-xs text-orange-500">
-                {{
-                  t('suspendedSshSessions.disconnectedAt', { time: new Date(session.disconnectedAt).toLocaleString() })
-                }}
-              </div>
+                <i
+                  class="fas fa-pen text-[8px] text-text-secondary/40 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity"
+                  aria-hidden="true"
+                ></i>
+              </button>
             </div>
 
-            <div class="session-status-actions flex flex-col items-end">
-              <div class="actions mt-1 flex flex-col gap-2">
-                <button
-                  v-if="session.status === 'active' && props.canResume"
-                  type="button"
-                  class="session-action action-resume"
-                  :title="t('suspendedSshSessions.action.resume')"
-                  :aria-label="t('suspendedSshSessions.action.resume')"
-                  @click="emit('resume', session)"
-                >
-                  <i class="fas fa-play action-icon" aria-hidden="true"></i>
-                  <span class="button-session-text">{{ t('suspendedSshSessions.action.resume') }}</span>
-                </button>
-                <button
-                  type="button"
-                  class="session-action action-remove"
-                  :disabled="removingId === session.id"
-                  :title="t('suspendedSshSessions.action.remove')"
-                  :aria-label="t('suspendedSshSessions.action.remove')"
-                  @click="remove(session)"
-                >
-                  <i class="fas fa-trash-alt action-icon" aria-hidden="true"></i>
-                  <span class="button-session-text">{{ t('suspendedSshSessions.action.remove') }}</span>
-                </button>
-                <button
-                  type="button"
-                  class="session-action action-export"
-                  :disabled="exportingId === session.id"
-                  :title="t('suspendedSshSessions.action.exportLog')"
-                  :aria-label="t('suspendedSshSessions.action.exportLog')"
-                  @click="exportLog(session)"
-                >
-                  <i class="fas fa-download action-icon" aria-hidden="true"></i>
-                  <span class="button-session-text">{{ t('suspendedSshSessions.action.exportLog') }}</span>
-                </button>
-              </div>
+            <!-- 右侧：紧凑时间 + 状态徽章 -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span
+                class="session-time text-[10px] font-mono text-text-secondary/60"
+                :title="new Date(session.suspendedAt).toLocaleString()"
+              >
+                {{ formatTime(session.suspendedAt) }}
+              </span>
+              <span
+                class="status-badge shrink-0"
+                :class="session.status === 'active' ? 'status-active' : 'status-disconnected'"
+              >
+                <span class="status-dot"></span>
+                <span>{{ getStatusLabel(session) }}</span>
+              </span>
             </div>
+          </div>
+
+          <!-- 底行：操作按钮组居中并均匀分布（flex-1 铺满，不再偏向右侧） -->
+          <div class="session-actions mt-2 flex items-center justify-center gap-2">
+            <button
+              v-if="session.status === 'active' && props.canResume"
+              type="button"
+              class="session-action action-resume flex-1 justify-center"
+              :title="t('suspendedSshSessions.action.resume')"
+              :aria-label="t('suspendedSshSessions.action.resume')"
+              @click="emit('resume', session)"
+            >
+              <i class="fas fa-play text-[8px]" aria-hidden="true"></i>
+              <span class="button-session-text">{{ t('suspendedSshSessions.action.resume') }}</span>
+            </button>
+            <button
+              type="button"
+              class="session-action action-export flex-1 justify-center"
+              :disabled="exportingId === session.id"
+              :title="t('suspendedSshSessions.action.exportLog')"
+              :aria-label="t('suspendedSshSessions.action.exportLog')"
+              @click="exportLog(session)"
+            >
+              <i
+                :class="exportingId === session.id ? 'fas fa-spinner fa-spin' : 'fas fa-download'"
+                class="text-[9px]"
+                aria-hidden="true"
+              ></i>
+              <span class="button-session-text">{{ t('suspendedSshSessions.action.exportLog') }}</span>
+            </button>
+            <button
+              type="button"
+              class="session-action action-remove flex-1 justify-center"
+              :disabled="removingId === session.id"
+              :title="t('suspendedSshSessions.action.remove')"
+              :aria-label="t('suspendedSshSessions.action.remove')"
+              @click="remove(session)"
+            >
+              <i
+                :class="removingId === session.id ? 'fas fa-spinner fa-spin' : 'fas fa-trash-alt'"
+                class="text-[9px]"
+                aria-hidden="true"
+              ></i>
+              <span class="button-session-text">{{ t('suspendedSshSessions.action.remove') }}</span>
+            </button>
           </div>
         </li>
       </ul>
@@ -318,256 +383,119 @@
 
 <style scoped>
   .suspended-sessions-panel {
-    container-type: size;
+    container-type: inline-size;
     container-name: suspended-sessions-view-pane;
     font-family: var(--font-family-sans-serif);
   }
 
-  .session-item {
-    transition: background-color 0.2s ease-in-out;
-  }
-  .session-item:hover {
-    background: color-mix(in srgb, var(--header-bg-color) 45%, var(--app-bg-color));
-  }
-
-  .session-title {
-    min-width: 0;
-  }
-  .session-name {
-    min-width: 0;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    white-space: normal;
-  }
-  .session-meta {
-    min-width: 0;
-    overflow-wrap: anywhere;
+  .session-card {
+    transition: all 0.15s ease-in-out;
   }
 
   .status-badge {
-    flex: none;
-    margin-left: 0.5rem;
-    padding: 0.125rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.08rem 0.4rem;
+    border-radius: 9999px;
+    font-size: 0.625rem;
+    font-weight: 500;
     white-space: nowrap;
+    line-height: 1.25;
+  }
+  .status-dot {
+    width: 0.3125rem;
+    height: 0.3125rem;
+    border-radius: 9999px;
+    background: currentColor;
   }
   .status-active {
-    color: #166534;
-    background: #dcfce7;
+    color: rgb(22 163 74);
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.2);
   }
   .status-marked {
-    color: #1d4ed8;
-    background: #dbeafe;
+    color: rgb(37 99 235);
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
   }
   .status-disconnected {
-    color: #a16207;
-    background: #fef3c7;
+    color: rgb(217 119 6);
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.2);
   }
 
+  /* 规整统一的操作按钮体系 */
   .session-action {
-    min-height: 2rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.375rem 0.75rem;
-    border: 0;
+    gap: 0.25rem;
+    height: 1.5rem;
+    padding: 0 0.45rem;
     border-radius: 0.375rem;
-    color: white;
-    font-size: 0.875rem;
+    font-size: 0.6875rem;
     font-weight: 500;
-    line-height: 1.25rem;
-    transition:
-      background 0.15s ease,
-      opacity 0.15s ease;
+    transition: all 0.12s ease;
+    cursor: pointer;
+    white-space: nowrap;
   }
   .session-action:disabled {
     cursor: not-allowed;
     opacity: 0.5;
   }
   .action-resume {
-    color: var(--button-text-color, white);
+    color: white;
     background: var(--button-bg-color, var(--link-active-color));
+    border: 1px solid transparent;
   }
   .action-resume:hover:not(:disabled) {
-    background: var(--button-hover-bg-color, color-mix(in srgb, var(--link-active-color) 82%, black));
-  }
-  .action-remove {
-    background: #dc2626;
-  }
-  .action-remove:hover:not(:disabled) {
-    background: #b91c1c;
+    background: var(--button-hover-bg-color, color-mix(in srgb, var(--link-active-color) 85%, black));
   }
   .action-export {
-    color: var(--button-text-color, white);
-    background: #2563eb;
+    color: var(--text-color, #4b5563);
+    background: var(--header-bg-color, #f3f4f6);
+    border: 1px solid var(--border-color, #e5e7eb);
   }
   .action-export:hover:not(:disabled) {
-    background: #1d4ed8;
+    color: var(--link-active-color, #2563eb);
+    border-color: var(--link-active-color, #2563eb);
+    background: rgba(37, 99, 235, 0.05);
   }
-  .action-icon {
-    margin-right: 0.375rem;
-    color: currentColor;
+  .action-remove {
+    color: var(--text-color, #4b5563);
+    background: var(--header-bg-color, #f3f4f6);
+    border: 1px solid var(--border-color, #e5e7eb);
+  }
+  .action-remove:hover:not(:disabled) {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.25);
   }
 
-  @container suspended-sessions-view-pane (max-width: 420px) {
-    .session-row {
-      display: flex;
-      flex-flow: row wrap;
-      align-items: center;
-      gap: 0.5rem;
+  /* 窄屏自适应 (<= 320px)：适度缩小按钮高度与内边距，时间隐藏防挤压 */
+  @container suspended-sessions-view-pane (max-width: 320px) {
+    .session-time {
+      display: none;
     }
-    .session-info {
-      min-width: 8.5rem;
-      flex: 1 1 8.5rem;
-      margin-right: 0;
-      text-align: left;
+    .session-action {
+      height: 1.375rem;
+      padding: 0 0.25rem;
+      font-size: 0.625rem;
     }
-    .session-title {
-      flex-flow: row wrap;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 0.25rem 0.375rem;
-      text-align: left;
-    }
-    .session-name {
-      width: auto;
-      max-width: 100%;
-      flex: 0 1 auto;
-      text-align: left;
-      overflow-wrap: break-word;
-      word-break: normal;
-    }
-    .session-title > input {
-      width: 100%;
-      flex: 1 1 100%;
-      text-align: left;
-    }
-    .status-badge {
-      margin-top: 0;
-      margin-left: 0;
-    }
+  }
+
+  /* 极窄模式 (<= 240px)：按钮纯图标化 */
+  @container suspended-sessions-view-pane (max-width: 240px) {
     .button-session-text {
       display: none;
     }
-    .session-status-actions {
-      flex: 0 0 auto;
-      align-items: flex-end;
-    }
-    .session-status-actions .actions {
-      width: auto;
-      margin-top: 0;
-      flex-direction: row;
-      flex-wrap: nowrap;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 0.375rem;
-    }
-    .action-icon {
-      display: flex;
-      width: 1em;
-      height: 1em;
-      align-items: center;
-      justify-content: center;
-      margin-right: 0;
-      line-height: 1;
-    }
     .session-action {
-      width: 1.75rem;
-      height: 1.75rem;
-      min-width: 1.75rem;
-      min-height: 1.75rem;
-      flex: 0 0 1.75rem;
-      padding: 0;
-      font-size: 0.75rem;
-      line-height: 1;
-    }
-  }
-
-  @container suspended-sessions-view-pane (max-width: 260px) {
-    .session-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0.375rem;
-    }
-    .session-info {
-      width: 100%;
       min-width: 0;
-      text-align: center;
-    }
-    .session-title {
-      justify-content: center;
-      text-align: center;
-    }
-    .session-name,
-    .session-title > input {
-      text-align: center;
-    }
-    .session-status-actions {
-      justify-self: center;
-      align-items: center;
-    }
-    .session-status-actions .actions {
-      justify-content: center;
-      gap: 0.5rem;
-    }
-  }
-
-  @container suspended-sessions-view-pane (max-height: 280px) {
-    .view-header {
-      margin-bottom: 0.35rem;
-    }
-    .suspended-session-search {
-      padding-top: 0.25rem;
-      padding-bottom: 0.25rem;
-      padding-right: 2rem;
-      padding-left: 2rem;
-      font-size: 0.75rem;
-      line-height: 1rem;
-    }
-    .view-header span {
-      padding-left: 0.65rem;
-    }
-    .suspended-session-loading,
-    .suspended-session-empty {
-      padding: 0.5rem 0.75rem;
-      font-size: 0.75rem;
-      line-height: 1.25rem;
-    }
-    .suspended-session-loading i {
-      font-size: 1rem;
-    }
-    .suspended-session-loading p {
-      margin-top: 0.25rem;
-    }
-    .session-item {
-      margin-bottom: 0.35rem;
-      padding: 0.5rem;
-    }
-    .session-title {
-      font-size: 0.875rem;
-      line-height: 1.2;
-    }
-    .status-badge {
-      margin-left: 0.35rem;
-      padding: 0.0625rem 0.35rem;
-      font-size: 0.65rem;
-    }
-    .session-action {
-      min-height: 1.75rem;
-      padding: 0.25rem 0.5rem;
-      font-size: 0.75rem;
-      line-height: 1rem;
-    }
-  }
-
-  @container suspended-sessions-view-pane (max-width: 420px) and (max-height: 280px) {
-    .status-badge {
-      margin-left: 0;
-    }
-    .session-action {
       padding: 0;
+    }
+    .session-action i {
+      margin: 0 !important;
     }
   }
 </style>

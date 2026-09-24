@@ -8,8 +8,7 @@
 
   const position = computed(() => agentWindowManager.state.launcherPosition);
 
-  const LONG_PRESS_MS = 320;
-  const DRAG_SLOP_PX = 6;
+  const DRAG_THRESHOLD_PX = 4;
 
   let pointerId: number | null = null;
   let originX = 0;
@@ -17,15 +16,8 @@
   let startRight = 0;
   let startBottom = 0;
   let hasMoved = false;
-  let dragTimer: ReturnType<typeof setTimeout> | null = null;
 
   const dragging = ref(false);
-
-  const clearDragTimer = (): void => {
-    if (dragTimer === null) return;
-    clearTimeout(dragTimer);
-    dragTimer = null;
-  };
 
   const badge = computed(() => {
     const summary = props.summary;
@@ -53,28 +45,25 @@
     startBottom = position.value.bottom;
     hasMoved = false;
     dragging.value = false;
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    clearDragTimer();
-    dragTimer = setTimeout(() => {
-      dragTimer = null;
-      if (pointerId !== event.pointerId || hasMoved || props.paused) return;
-      dragging.value = true;
-      hasMoved = true;
-    }, LONG_PRESS_MS);
+    try {
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
   };
 
   const pointerMove = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
     const dx = event.clientX - originX;
     const dy = event.clientY - originY;
-    if (!dragging.value) {
-      if (Math.hypot(dx, dy) >= DRAG_SLOP_PX) {
+    if (!hasMoved) {
+      if (Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
         hasMoved = true;
-        clearDragTimer();
+        dragging.value = true;
+      } else {
+        return;
       }
-      return;
     }
-    hasMoved = true;
     agentWindowManager.setLauncherPosition(clamp(startRight - dx, startBottom - dy));
   };
 
@@ -85,7 +74,6 @@
 
   const finish = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
-    clearDragTimer();
     const target = event.currentTarget as HTMLElement;
     if (target.hasPointerCapture(event.pointerId)) {
       try {
@@ -105,7 +93,6 @@
 
   const cancel = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
-    clearDragTimer();
     const target = event.currentTarget as HTMLElement;
     if (target.hasPointerCapture(event.pointerId)) {
       try {
@@ -146,7 +133,6 @@
   });
 
   onBeforeUnmount(() => {
-    clearDragTimer();
     window.removeEventListener('resize', handleViewportResize);
   });
 </script>

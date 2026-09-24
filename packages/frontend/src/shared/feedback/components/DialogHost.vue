@@ -32,24 +32,39 @@
     :focus-on-open="true"
     :restore-focus="true"
     backdrop-trigger="mousedown"
-    panel-class="max-w-md flex flex-col p-5"
+    panel-class="max-w-[340px] w-full flex flex-col p-4 rounded-xl border border-border bg-background shadow-xl"
     role="dialog"
     :aria-modal="true"
     :aria-labelledby="titleId"
     @close="closeFromBackdrop"
   >
-    <h3 :id="titleId" class="mb-4 shrink-0 text-center text-xl font-semibold">
-      {{ title }}
-    </h3>
-    <div class="mb-6 min-w-0 flex-grow text-sm">
-      <p class="break-words whitespace-pre-wrap text-center text-text-secondary">{{ store.state.message }}</p>
+    <div class="flex items-start gap-3">
+      <!-- 紧凑状态图标 -->
+      <div
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+        :class="store.state.destructive ? 'bg-error/10 text-error' : 'bg-primary/10 text-primary'"
+      >
+        <i
+          :class="store.state.destructive ? 'fas fa-exclamation-triangle text-xs' : 'fas fa-question-circle text-xs'"
+          aria-hidden="true"
+        ></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <h3 :id="titleId" class="text-sm font-semibold text-foreground leading-snug">
+          {{ title }}
+        </h3>
+        <p class="mt-1 text-xs text-text-secondary leading-relaxed break-words whitespace-pre-wrap">
+          {{ store.state.message }}
+        </p>
+      </div>
     </div>
-    <div class="flex shrink-0 justify-end gap-3">
+
+    <div class="mt-4 flex items-center justify-end gap-2">
       <button
         v-if="store.state.kind === 'confirm'"
         type="button"
         :disabled="store.state.loading"
-        class="rounded-md border border-border/50 bg-background px-4 py-2 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        class="h-7 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-header hover:border-border/80 disabled:opacity-50 cursor-pointer"
         @click="store.cancel"
       >
         {{ cancelText }}
@@ -57,11 +72,15 @@
       <button
         type="button"
         :disabled="store.state.loading"
-        class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-        :class="store.state.destructive ? 'bg-error hover:opacity-90' : 'bg-primary hover:bg-button-hover'"
+        class="h-7 inline-flex items-center justify-center rounded-lg px-3 text-xs font-medium text-white transition-opacity disabled:opacity-50 cursor-pointer"
+        :class="store.state.destructive ? 'bg-error hover:opacity-90' : 'bg-primary hover:opacity-90'"
         @click="store.accept"
       >
-        <i v-if="store.state.loading" class="fas fa-spinner fa-spin mr-3 !text-white" aria-hidden="true"></i>
+        <i
+          v-if="store.state.loading"
+          class="fas fa-spinner fa-spin mr-1.5 !text-white text-[10px]"
+          aria-hidden="true"
+        ></i>
         {{ primaryText }}
       </button>
     </div>
