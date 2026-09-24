@@ -3,12 +3,14 @@ import path from 'node:path';
 import type { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 import type { RunnerJournal } from './journal';
 import { runnerLog } from '../logging';
+import { ToolchainMutationCoordinator } from './toolchain-mutation-coordinator';
 
 export class CleanupPlanner {
   constructor(
     private readonly root: string,
     private readonly journal: RunnerJournal,
     private readonly runtimeEngine: WorkspaceRuntimeEngine,
+    private readonly toolchainMutations = new ToolchainMutationCoordinator(),
   ) {}
   async runtimeCleanup(
     workspaceIds: readonly string[],
@@ -82,12 +84,14 @@ export class CleanupPlanner {
     });
     return { deleted, quarantined, skipped };
   }
-  cacheCleanup(): { cleared: true } {
-    const cache = path.join(this.root, 'cache');
-    runnerLog('info', 'Agent Runner cache cleanup started');
-    fs.rmSync(cache, { recursive: true, force: true });
-    fs.mkdirSync(cache, { recursive: true });
-    runnerLog('info', 'Agent Runner cache cleanup finished');
-    return { cleared: true };
+  async cacheCleanup(): Promise<{ cleared: true }> {
+    return this.toolchainMutations.run(() => {
+      const cache = path.join(this.root, 'cache');
+      runnerLog('info', 'Agent Runner cache cleanup started');
+      fs.rmSync(cache, { recursive: true, force: true });
+      fs.mkdirSync(cache, { recursive: true });
+      runnerLog('info', 'Agent Runner cache cleanup finished');
+      return { cleared: true };
+    });
   }
 }

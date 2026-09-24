@@ -13,6 +13,7 @@ import { PluginRunnerRuntime } from './controller/plugin-runner-runtime';
 import { AcpProcessRuntime } from './controller/acp-process-runtime';
 import { WorkspaceTerminalRuntime } from './controller/workspace-terminal-runtime';
 import { BrowserTunnelRuntime } from './controller/browser-tunnel-runtime';
+import { ToolchainMutationCoordinator } from './controller/toolchain-mutation-coordinator';
 import { runnerLog } from './logging';
 import { initializeManagedProcessRegistry, terminateAllManagedProcesses } from './managed-process';
 
@@ -40,9 +41,10 @@ const main = async (): Promise<void> => {
   const journal = new RunnerJournal(path.join(root, 'state', 'journal.json'));
   const store = new ToolchainStore(path.join(root, 'packs'));
   const runtimeEngine = new WorkspaceRuntimeEngine(path.join(root, 'runtime'), store);
-  const installer = new PackInstaller(catalog, store, path.join(root, 'cache'));
+  const toolchainMutations = new ToolchainMutationCoordinator();
+  const installer = new PackInstaller(catalog, store, path.join(root, 'cache'), toolchainMutations);
   const storage = new SpaceReporter(root, journal, catalog, runtimeEngine);
-  const cleanup = new CleanupPlanner(root, journal, runtimeEngine);
+  const cleanup = new CleanupPlanner(root, journal, runtimeEngine, toolchainMutations);
   const pluginRunner = new PluginRunnerRuntime(
     path.join(root, 'runtime'),
     process.env.NEXUS_AGENT_PLUGIN_SOURCE_ROOT?.trim() || '',

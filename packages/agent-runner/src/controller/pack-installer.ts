@@ -9,6 +9,7 @@ import semver from 'semver';
 import type { CatalogPack, ToolchainPackRef } from '../types';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { ToolchainStore } from './toolchain-store';
+import { ToolchainMutationCoordinator } from './toolchain-mutation-coordinator';
 
 const RUNNER_API_VERSION = '1.0.0';
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
@@ -280,6 +281,7 @@ export class PackInstaller {
     private readonly catalog: WorkspaceRuntimeCatalog,
     private readonly store: ToolchainStore,
     private readonly cacheRoot: string,
+    private readonly mutations = new ToolchainMutationCoordinator(),
   ) {
     const downloadRoot = path.join(cacheRoot, 'download');
     fs.rmSync(downloadRoot, { recursive: true, force: true });
@@ -292,27 +294,31 @@ export class PackInstaller {
   }
 
   async uninstall(ref: ToolchainPackRef): Promise<void> {
-    const pack = this.catalog.pack(ref.familyId, ref.versionId);
-    const expected = pack.contentDigestByArch[process.arch];
-    if (!expected || expected !== ref.contentDigest) throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
-    this.store.remove(ref);
+    await this.mutations.run(() => {
+      const pack = this.catalog.pack(ref.familyId, ref.versionId);
+      const expected = pack.contentDigestByArch[process.arch];
+      if (!expected || expected !== ref.contentDigest) throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+      this.store.remove(ref);
+    });
   }
 
   async ensure(refs: readonly ToolchainPackRef[], commandId: string = randomUUID()): Promise<void> {
-    try {
-      const expanded = this.expandDependencies(refs);
-      for (const ref of expanded) {
-        const pack = this.catalog.pack(ref.familyId, ref.versionId);
-        const expected = pack.contentDigestByArch[process.arch];
-        if (!expected || expected !== ref.contentDigest || !/^sha256:[a-f0-9]{64}$/.test(expected)) {
-          throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+    await this.mutations.run(async () => {
+      try {
+        const expanded = this.expandDependencies(refs);
+        for (const ref of expanded) {
+          const pack = this.catalog.pack(ref.familyId, ref.versionId);
+          const expected = pack.contentDigestByArch[process.arch];
+          if (!expected || expected !== ref.contentDigest || !/^sha256:[a-f0-9]{64}$/.test(expected)) {
+            throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+          }
+          if (!this.store.installed(ref)) await this.installOne(pack, ref, commandId);
+          this.store.activate(ref);
         }
-        if (!this.store.installed(ref)) await this.installOne(pack, ref, commandId);
-        this.store.activate(ref);
+      } finally {
+        fs.rmSync(this.commandDownloadDirectory(commandId), { recursive: true, force: true });
       }
-    } finally {
-      fs.rmSync(this.commandDownloadDirectory(commandId), { recursive: true, force: true });
-    }
+    });
   }
 
   private expandDependencies(refs: readonly ToolchainPackRef[]): ToolchainPackRef[] {

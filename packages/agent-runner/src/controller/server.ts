@@ -260,6 +260,7 @@ export interface RunnerControllerDependencies {
 }
 
 export class RunnerControllerServer {
+  private toolchainAdminActive = false;
   constructor(private readonly dependencies: RunnerControllerDependencies) {}
 
   createServer(): http.Server {
@@ -1117,29 +1118,38 @@ export class RunnerControllerServer {
     const commandId = String(command.commandId);
     try {
       let result: unknown;
-      if (action === 'cacheCleanup') result = this.dependencies.cleanup.cacheCleanup();
-      else if (action === 'runtimeCleanup') {
+      if (action === 'runtimeCleanup') {
         result = await this.dependencies.cleanup.runtimeCleanup(command.workspaceIds as string[]);
-      } else if (action === 'packInstall') {
-        const packs = command.packs as never[];
-        await this.dependencies.installer.ensure(packs, commandId);
-        result = { installed: packs.length };
       } else {
-        const ref = command.pack as { familyId: string; versionId: string; contentDigest: string };
-        const inUse = this.dependencies.journal
-          .workspaces()
-          .filter((workspace) => !['deleted', 'failed'].includes(workspace.status))
-          .some((workspace) =>
-            workspace.toolchain.some(
-              (candidate) =>
-                candidate.familyId === ref.familyId &&
-                candidate.versionId === ref.versionId &&
-                candidate.contentDigest === ref.contentDigest,
-            ),
-          );
-        if (inUse) throw new Error('WORKSPACE_TOOLCHAIN_IN_USE');
-        await this.dependencies.installer.uninstall(ref);
-        result = { uninstalled: true };
+        result = await this.withToolchainAdminCommand(async () => {
+          if (action === 'cacheCleanup') return this.dependencies.cleanup.cacheCleanup();
+          if (action === 'packInstall') {
+            const packs = command.packs as Array<{ familyId: string; versionId: string; contentDigest: string }>;
+            await this.dependencies.installer.ensure(packs, commandId);
+            if (packs.some((ref) => !this.dependencies.installer.installed(ref))) {
+              throw new Error('WORKSPACE_TOOLCHAIN_POSTCONDITION_FAILED');
+            }
+            return { installed: packs.length };
+          }
+          const ref = command.pack as { familyId: string; versionId: string; contentDigest: string };
+          const inUse = this.dependencies.journal
+            .workspaces()
+            .filter((workspace) => !['deleted', 'failed'].includes(workspace.status))
+            .some((workspace) =>
+              workspace.toolchain.some(
+                (candidate) =>
+                  candidate.familyId === ref.familyId &&
+                  candidate.versionId === ref.versionId &&
+                  candidate.contentDigest === ref.contentDigest,
+              ),
+            );
+          if (inUse) throw new Error('WORKSPACE_TOOLCHAIN_IN_USE');
+          await this.dependencies.installer.uninstall(ref);
+          if (this.dependencies.installer.installed(ref)) {
+            throw new Error('WORKSPACE_TOOLCHAIN_POSTCONDITION_FAILED');
+          }
+          return { uninstalled: true };
+        });
       }
       this.dependencies.journal.succeed(commandId, result);
       const cleanupResult =
@@ -1161,6 +1171,16 @@ export class RunnerControllerServer {
       const message = error instanceof Error ? error.message : String(error);
       this.dependencies.journal.fail(commandId, message);
       runnerLog('warn', 'Agent Runner admin command failed', { commandId, action, errorCode: message.slice(0, 200) });
+    }
+  }
+
+  private async withToolchainAdminCommand<T>(work: () => Promise<T>): Promise<T> {
+    if (this.toolchainAdminActive) throw new Error('RUNNER_TOOLCHAIN_MUTATION_BUSY');
+    this.toolchainAdminActive = true;
+    try {
+      return await work();
+    } finally {
+      this.toolchainAdminActive = false;
     }
   }
 
