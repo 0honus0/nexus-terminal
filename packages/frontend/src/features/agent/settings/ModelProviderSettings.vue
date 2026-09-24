@@ -203,8 +203,12 @@
   const pulledModels = ref<AgentDiscoveredProviderModelDto[]>([]);
   const selectedPulledModelKey = ref<string | null>(null);
   const importAllPulled = ref(false);
+  let modalGeneration = 0;
+  let pullGeneration = 0;
 
   const openAddModal = () => {
+    modalGeneration += 1;
+    pullGeneration += 1;
     form.displayName = '';
     form.baseUrl = '';
     form.protocol = 'chat-completions';
@@ -245,25 +249,41 @@
     }
     modalError.value = '';
     isPullingModels.value = true;
+    const requestModalGeneration = modalGeneration;
+    const requestGeneration = ++pullGeneration;
+    const requestBaseUrl = form.baseUrl.trim();
+    const requestCredential = form.credential.trim();
+    const requestModelId = form.modelId.trim();
+    const isCurrentRequest = (): boolean =>
+      modalOpen.value &&
+      requestModalGeneration === modalGeneration &&
+      requestGeneration === pullGeneration &&
+      form.baseUrl.trim() === requestBaseUrl &&
+      form.credential.trim() === requestCredential &&
+      form.modelId.trim() === requestModelId;
     try {
       const list = await agentApi.discoverEndpointModels({
-        baseUrl: form.baseUrl.trim(),
-        credential: form.credential.trim() || undefined,
+        baseUrl: requestBaseUrl,
+        credential: requestCredential || undefined,
       });
+      if (!isCurrentRequest()) return;
       pulledModels.value = list;
       if (list.length > 0) {
         operationFeedback.notifySuccess(t('agent.settings.providers.pullSuccess', { count: list.length }));
-        const match = list.find((m) => m.id === form.modelId.trim()) ?? list[0];
+        const match = list.find((m) => m.id === requestModelId) ?? list[0];
         applyPulledModel(match);
       } else {
         operationFeedback.notifyInfo(t('agent.settings.providers.discoveryEmpty'));
       }
     } catch (cause) {
+      if (!isCurrentRequest()) return;
       const errMsg = formatAgentApiError(cause, t('agent.settings.providers.pullFailed'), t);
       modalError.value = errMsg;
       operationFeedback.notifyError({ operation: 'pull-models', message: errMsg, cause });
     } finally {
-      isPullingModels.value = false;
+      if (requestModalGeneration === modalGeneration && requestGeneration === pullGeneration) {
+        isPullingModels.value = false;
+      }
     }
   };
 
@@ -282,6 +302,9 @@
 
   const closeModal = () => {
     if (modalTesting.value) return;
+    modalGeneration += 1;
+    pullGeneration += 1;
+    isPullingModels.value = false;
     modalOpen.value = false;
   };
 
