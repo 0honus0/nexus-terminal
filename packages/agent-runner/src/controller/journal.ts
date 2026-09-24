@@ -16,6 +16,8 @@ const empty = (): JournalState => ({ schemaVersion: 4, commands: {}, workspaces:
 const TERMINAL_HISTORY_LIMIT = 4096;
 const TERMINAL_HISTORY_MIN_AGE_SECONDS = 24 * 60 * 60;
 const MAX_JOURNAL_COLLECTION_ITEMS = 16_384;
+const JOURNAL_COLLECTION_HIGH_WATER = 12_288;
+const MAX_JOURNAL_RECOVERY_COLLECTION_ITEMS = 32_768;
 const MAX_JOURNAL_STRING_BYTES = 64 * 1024;
 
 type UnknownRecord = Record<string, unknown>;
@@ -181,10 +183,11 @@ const decodeRecordCollection = <T>(
   value: unknown,
   decode: (entry: unknown) => T,
   id: (entry: T) => string,
+  maxItems = MAX_JOURNAL_COLLECTION_ITEMS,
 ): Record<string, T> => {
   const record = recordValue(value);
   const entries = Object.entries(record);
-  if (entries.length > MAX_JOURNAL_COLLECTION_ITEMS) return invalidJournal();
+  if (entries.length > maxItems) return invalidJournal();
   const decoded: Record<string, T> = {};
   for (const [key, raw] of entries) {
     const entry = decode(raw);
@@ -199,9 +202,19 @@ const decodeJournalState = (value: unknown): JournalState => {
   if (record.schemaVersion !== 4) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
   return {
     schemaVersion: 4,
-    commands: decodeRecordCollection(record.commands, decodeCommandRecord, (entry) => entry.commandId),
+    commands: decodeRecordCollection(
+      record.commands,
+      decodeCommandRecord,
+      (entry) => entry.commandId,
+      MAX_JOURNAL_RECOVERY_COLLECTION_ITEMS,
+    ),
     workspaces: decodeRecordCollection(record.workspaces, decodeWorkspaceRecord, (entry) => entry.workspaceId),
-    jobs: decodeRecordCollection(record.jobs, decodeJobRecord, (entry) => entry.jobId),
+    jobs: decodeRecordCollection(
+      record.jobs,
+      decodeJobRecord,
+      (entry) => entry.jobId,
+      MAX_JOURNAL_RECOVERY_COLLECTION_ITEMS,
+    ),
   };
 };
 
@@ -248,6 +261,14 @@ export class RunnerJournal {
         throw new Error('RUNNER_JOURNAL_INVALID');
       }
     }
+    this.compact();
+    if (
+      Object.keys(this.state.commands).length > MAX_JOURNAL_COLLECTION_ITEMS ||
+      Object.keys(this.state.jobs).length > MAX_JOURNAL_COLLECTION_ITEMS
+    ) {
+      this.quarantineCurrent('corrupt');
+      throw new Error('RUNNER_JOURNAL_INVALID');
+    }
   }
 
   command(id: string): CommandRecord | null {
@@ -280,6 +301,7 @@ export class RunnerJournal {
       if (existing.payloadHash !== hash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
       return existing;
     }
+    this.ensureCollectionCapacity(this.state.jobs);
     const record: JobRecord = {
       jobId,
       payloadHash: hash,
@@ -339,6 +361,7 @@ export class RunnerJournal {
       if (existing.payloadHash !== hash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
       return existing;
     }
+    this.ensureCollectionCapacity(this.state.commands);
     const now = Math.floor(Date.now() / 1000);
     const record: CommandRecord = {
       commandId,
@@ -406,11 +429,20 @@ export class RunnerJournal {
       for (const [id, value] of terminal.slice(TERMINAL_HISTORY_LIMIT)) {
         if (value.completedAt! <= now - TERMINAL_HISTORY_MIN_AGE_SECONDS) delete values[id];
       }
+      let remaining = Object.keys(values).length;
+      if (remaining <= JOURNAL_COLLECTION_HIGH_WATER) return;
+      const oldestTerminal = [...terminal].reverse();
+      for (const [id] of oldestTerminal) {
+        if (!(id in values)) continue;
+        if (remaining <= JOURNAL_COLLECTION_HIGH_WATER) break;
+        delete values[id];
+        remaining -= 1;
+      }
     };
     const commandCount = Object.keys(this.state.commands).length;
     const jobCount = Object.keys(this.state.jobs).length;
-    prune(this.state.commands, new Set(['succeeded', 'failed']));
-    prune(this.state.jobs, new Set(['succeeded', 'failed', 'cancelled']));
+    prune(this.state.commands, new Set(['succeeded', 'failed', 'unknown']));
+    prune(this.state.jobs, new Set(['succeeded', 'failed', 'cancelled', 'unknown']));
     const nextCommandCount = Object.keys(this.state.commands).length;
     const nextJobCount = Object.keys(this.state.jobs).length;
     if (commandCount !== nextCommandCount || jobCount !== nextJobCount) {
@@ -421,6 +453,16 @@ export class RunnerJournal {
         remainingCommandCount: nextCommandCount,
         remainingJobCount: nextJobCount,
       });
+    }
+  }
+
+  private ensureCollectionCapacity<T extends { status: string; completedAt: number | null; createdAt: number }>(
+    values: Record<string, T>,
+  ): void {
+    if (Object.keys(values).length < MAX_JOURNAL_COLLECTION_ITEMS) return;
+    this.compact();
+    if (Object.keys(values).length >= MAX_JOURNAL_COLLECTION_ITEMS) {
+      throw new Error('RUNNER_JOURNAL_CAPACITY_EXCEEDED');
     }
   }
 
