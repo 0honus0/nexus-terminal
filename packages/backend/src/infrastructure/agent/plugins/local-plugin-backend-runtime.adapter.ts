@@ -1,7 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import readline from 'node:readline';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type { AppStoragePort } from '../../../modules/agent/host/app-storage.port';
 import type { AppStorageSnapshot } from '../../../modules/agent/host/app-storage-snapshot.port';
@@ -22,6 +21,46 @@ const MAX_PROTOCOL_BYTES = 20 * 1024 * 1024;
 const CONTROL_TIMEOUT_MS = 30_000;
 const PLUGIN_BACKEND_PROTOCOL_VERSION: typeof PluginBackendProtocolVersion = 1;
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
+
+export class BoundedProtocolLineBuffer {
+  private buffered = Buffer.alloc(0);
+
+  constructor(private readonly maxBytes = MAX_PROTOCOL_BYTES) {}
+
+  push(chunk: Buffer): Buffer[] {
+    const lines: Buffer[] = [];
+    let offset = 0;
+    while (offset < chunk.byteLength) {
+      const newline = chunk.indexOf(0x0a, offset);
+      if (newline < 0) {
+        this.append(chunk.subarray(offset));
+        break;
+      }
+      this.append(chunk.subarray(offset, newline));
+      const line = this.buffered;
+      this.buffered = Buffer.alloc(0);
+      lines.push(line.byteLength > 0 && line[line.byteLength - 1] === 0x0d ? line.subarray(0, -1) : line);
+      offset = newline + 1;
+    }
+    return lines;
+  }
+
+  bufferedBytes(): number {
+    return this.buffered.byteLength;
+  }
+
+  private append(bytes: Buffer): void {
+    if (bytes.byteLength === 0) return;
+    if (this.buffered.byteLength + bytes.byteLength > this.maxBytes) {
+      throw new Error('PLUGIN_BACKEND_RESPONSE_TOO_LARGE');
+    }
+    if (this.buffered.byteLength === 0) {
+      this.buffered = Buffer.from(bytes);
+      return;
+    }
+    this.buffered = Buffer.concat([this.buffered, bytes], this.buffered.byteLength + bytes.byteLength);
+  }
+}
 
 type StorageRequest =
   | { kind: 'storage.get'; requestId: number; key: string }
@@ -218,6 +257,7 @@ class BackendPluginProcess {
   private sequence = 0;
   private readonly activeHostOperations = new Set<Promise<void>>();
   private closing = false;
+  private readonly stdoutLines = new BoundedProtocolLineBuffer();
   private readyResolve!: () => void;
   private readyReject!: (error: Error) => void;
   readonly ready = new Promise<void>((resolve, reject) => {
@@ -233,8 +273,14 @@ class BackendPluginProcess {
     private readonly allowHostMutations: boolean,
     private readonly sdkVersion: string,
   ) {
-    const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
-    lines.on('line', (line) => void this.handleLine(line));
+    child.stdout.on('data', (chunk: Buffer) => {
+      try {
+        for (const line of this.stdoutLines.push(chunk)) void this.handleLine(line.toString('utf8'));
+      } catch (error) {
+        this.failAll(error instanceof Error ? error : new Error('PLUGIN_BACKEND_RESPONSE_TOO_LARGE'));
+        child.kill('SIGKILL');
+      }
+    });
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = `${stderr}${chunk.toString('utf8')}`.slice(-8192);
