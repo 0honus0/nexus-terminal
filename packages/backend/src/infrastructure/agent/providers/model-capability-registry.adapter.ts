@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
@@ -58,7 +59,7 @@ export class LocalModelCapabilityRegistryStore implements ModelCapabilityRegistr
 
   async save(state: ModelCapabilityRegistryPersistedState): Promise<void> {
     await mkdir(path.dirname(this.file), { recursive: true });
-    const temp = `${this.file}.tmp-${process.pid}`;
+    const temp = `${this.file}.tmp-${process.pid}-${randomUUID()}`;
     await writeFile(temp, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     await rename(temp, this.file);
   }

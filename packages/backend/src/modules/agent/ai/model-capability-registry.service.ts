@@ -45,6 +45,7 @@ export class ModelCapabilityRegistryService {
   private initialized = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private refreshPromise: Promise<ModelCapabilityRegistryStatus> | null = null;
+  private mutationTail: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly store: ModelCapabilityRegistryStorePort,
@@ -102,20 +103,31 @@ export class ModelCapabilityRegistryService {
     };
   }
 
-  async setAutoUpdate(enabled: boolean): Promise<ModelCapabilityRegistryStatus> {
-    this.state = { ...this.state, autoUpdate: enabled };
-    await this.store.save(this.state);
-    logger.info({ enabled }, 'Agent model capability registry auto update changed');
-    if (enabled) void this.refreshIfDue();
-    return this.status();
+  setAutoUpdate(enabled: boolean): Promise<ModelCapabilityRegistryStatus> {
+    return this.enqueueMutation(async () => {
+      this.state = { ...this.state, autoUpdate: enabled };
+      await this.store.save(this.state);
+      logger.info({ enabled }, 'Agent model capability registry auto update changed');
+      if (enabled) void this.refreshIfDue();
+      return this.status();
+    });
   }
 
   refresh(): Promise<ModelCapabilityRegistryStatus> {
     if (this.refreshPromise) return this.refreshPromise;
-    this.refreshPromise = this.refreshInternal().finally(() => {
+    this.refreshPromise = this.enqueueMutation(() => this.refreshInternal()).finally(() => {
       this.refreshPromise = null;
     });
     return this.refreshPromise;
+  }
+
+  private enqueueMutation<T>(action: () => Promise<T>): Promise<T> {
+    const result = this.mutationTail.then(action);
+    this.mutationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   private async refreshIfDue(): Promise<void> {

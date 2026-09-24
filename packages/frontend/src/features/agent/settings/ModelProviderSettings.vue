@@ -70,10 +70,13 @@
   const copiedUrl = ref<string | null>(null);
   const modelRegistryStatus = ref<AgentModelRegistryStatusDto | null>(null);
   const modelRegistryBusy = ref(false);
+  let modelRegistryGeneration = 0;
 
   const loadModelRegistryStatus = async (): Promise<void> => {
+    const generation = ++modelRegistryGeneration;
     try {
-      modelRegistryStatus.value = await agentApi.modelRegistryStatus();
+      const status = await agentApi.modelRegistryStatus();
+      if (generation === modelRegistryGeneration) modelRegistryStatus.value = status;
     } catch {
       // Supplemental status only; provider management still works with the built-in snapshot.
     }
@@ -82,8 +85,10 @@
   const refreshModelRegistry = async (): Promise<void> => {
     if (modelRegistryBusy.value) return;
     modelRegistryBusy.value = true;
+    const generation = ++modelRegistryGeneration;
     try {
-      modelRegistryStatus.value = await agentApi.refreshModelRegistry();
+      const status = await agentApi.refreshModelRegistry();
+      if (generation === modelRegistryGeneration) modelRegistryStatus.value = status;
       operationFeedback.notifySuccess(t('agent.settings.providers.registryUpdated'));
     } catch (cause) {
       operationFeedback.notifyError({
@@ -100,8 +105,10 @@
   const setModelRegistryAutoUpdate = async (enabled: boolean): Promise<void> => {
     if (modelRegistryBusy.value) return;
     modelRegistryBusy.value = true;
+    const generation = ++modelRegistryGeneration;
     try {
-      modelRegistryStatus.value = await agentApi.setModelRegistryAutoUpdate(enabled);
+      const status = await agentApi.setModelRegistryAutoUpdate(enabled);
+      if (generation === modelRegistryGeneration) modelRegistryStatus.value = status;
     } catch (cause) {
       operationFeedback.notifyError({
         operation: 'set-model-registry-auto-update',

@@ -100,9 +100,58 @@ export const modelCapabilityRegistrySyncScenario = async () => {
     installRuntimeModelCapabilityRegistry(null);
   }
 
+  class BlockingRegistrySource implements ModelCapabilityRegistrySourcePort {
+    entered: (() => void) | null = null;
+    release: (() => void) | null = null;
+
+    async fetch(): Promise<ModelCapabilityRegistryFetchResult> {
+      this.entered?.();
+      await new Promise<void>((resolve) => {
+        this.release = resolve;
+      });
+      return { state: 'updated', snapshot: structuredClone(snapshot) };
+    }
+  }
+
+  const serializedStore = new MemoryRegistryStore();
+  const blockingSource = new BlockingRegistrySource();
+  const serializedRegistry = new ModelCapabilityRegistryService(serializedStore, blockingSource, clock);
+  try {
+    await serializedRegistry.initialize();
+    let fetchEnteredResolve!: () => void;
+    const fetchEntered = new Promise<void>((resolve) => {
+      fetchEnteredResolve = resolve;
+    });
+    blockingSource.entered = fetchEnteredResolve;
+    const refresh = serializedRegistry.refresh();
+    await fetchEntered;
+
+    let toggleSettled = false;
+    const toggle = serializedRegistry.setAutoUpdate(true).finally(() => {
+      toggleSettled = true;
+    });
+    await Promise.resolve();
+    assert.equal(toggleSettled, false, 'auto-update mutation must wait behind an in-flight registry refresh');
+    assert.equal(
+      serializedStore.state?.autoUpdate,
+      false,
+      'queued auto-update must not persist before refresh completes',
+    );
+
+    blockingSource.release?.();
+    await refresh;
+    const toggled = await toggle;
+    assert.equal(toggled.autoUpdate, true);
+    assert.equal(serializedStore.state?.autoUpdate, true);
+  } finally {
+    serializedRegistry.dispose();
+    installRuntimeModelCapabilityRegistry(null);
+  }
+
   return [
     { name: 'synced_model_identifiers', value: Object.keys(snapshot.entries).length, unit: 'models' },
     { name: 'manual_refresh_calls', value: source.calls, unit: 'calls' },
+    { name: 'registry_mutations_serialized', value: 1, unit: 'boolean' },
     { name: 'update_failure_preserved_snapshot', value: 1, unit: 'boolean' },
   ];
 };

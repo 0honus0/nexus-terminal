@@ -66,6 +66,7 @@
   const cleanupPreview = ref<AgentWorkspaceRuntimeCleanupPreviewDto | null>(null);
   const resetPreview = ref<AgentWorkspaceRuntimeSettingsResetPreviewDto | null>(null);
   const lastCommand = ref<AgentWorkspaceRuntimeCommandDto | null>(null);
+  let detailsGeneration = 0;
 
   const disabled = computed(() => props.busy || localBusy.value);
   const requested = computed(() => props.settings.requestedSettings.workspaceRuntime);
@@ -98,21 +99,27 @@
   };
 
   const loadDetails = async () => {
+    const generation = ++detailsGeneration;
     if (!props.availability.available) {
       catalog.value = null;
       storage.value = null;
+      loading.value = false;
       return;
     }
     loading.value = true;
     try {
-      [catalog.value, storage.value] = await Promise.all([
+      const [nextCatalog, nextStorage] = await Promise.all([
         agentApi.workspaceRuntimeCatalog(),
         agentApi.workspaceRuntimeStorage(),
       ]);
+      if (generation !== detailsGeneration || !props.availability.available) return;
+      catalog.value = nextCatalog;
+      storage.value = nextStorage;
     } catch (cause) {
+      if (generation !== detailsGeneration) return;
       operationFeedback.notifyError({ operation: 'load-details', message: errorMessage(cause), cause });
     } finally {
-      loading.value = false;
+      if (generation === detailsGeneration) loading.value = false;
     }
   };
 
