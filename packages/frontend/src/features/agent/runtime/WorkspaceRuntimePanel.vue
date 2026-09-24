@@ -2,6 +2,7 @@
   import { UiInfoHint } from '@/foundation/ui';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     formatAgentApiError,
@@ -22,6 +23,7 @@
 
   const props = defineProps<{ appId: string; runId: string; busy?: boolean }>();
   const { t } = useI18n();
+  const feedback = useFeedback();
 
   const catalog = ref<AgentWorkspaceRuntimeCatalogDto | null>(null);
   const workspaceList = ref<AgentWorkspaceDto[]>([]);
@@ -171,6 +173,17 @@
       await agentApi.workspaceAction(props.appId, workspace, action);
       await refresh();
     }, t('agent.workspaceRuntime.actionSubmitted'));
+  };
+
+  const deleteWorkspace = async (workspace: AgentWorkspaceDto): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: t('agent.workspaceRuntime.confirmDeleteTitle'),
+      message: t('agent.workspaceRuntime.confirmDeleteWorkspace', { id: workspace.id }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
+    });
+    if (!confirmed) return;
+    workspaceAction(workspace, 'delete');
   };
 
   const switchToolVersions = (workspace: AgentWorkspaceDto, changes: Record<string, string>): void => {
@@ -407,7 +420,7 @@
             type="button"
             class="rounded border border-error/40 px-2 py-1 text-[11px] text-error"
             :disabled="locked"
-            @click="workspaceAction(activeWorkspace, 'delete')"
+            @click="deleteWorkspace(activeWorkspace)"
           >
             {{ $t('agent.workspaceRuntime.delete') }}
           </button>

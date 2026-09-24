@@ -2,7 +2,7 @@
   import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useOperationFeedback } from '@/shared/feedback/public';
+  import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     formatAgentApiError,
@@ -22,6 +22,7 @@
   const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean; agentAvailable: boolean }>();
   const emit = defineEmits<{ saveProfiles: [profiles: Profile[]] }>();
   const { t } = useI18n();
+  const feedback = useFeedback();
   const operationFeedback = useOperationFeedback('agent.settings.acp-runtime');
 
   const draftProfilesFromProps = (): ProfileDraft[] =>
@@ -325,7 +326,18 @@
     );
   };
 
-  const removeIntegration = (integration: AgentIntegrationViewDto): void => {
+  const removeIntegration = async (integration: AgentIntegrationViewDto): Promise<void> => {
+    const configuration = acpConfiguration(integration);
+    const confirmed = await feedback.confirm({
+      title: t('agent.settings.acpRuntime.deleteIntegration'),
+      message: t('agent.settings.acpRuntime.confirmDeleteIntegration', {
+        name: configuration.displayName,
+        profile: configuration.profileId,
+      }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
+    });
+    if (!confirmed) return;
     void run(
       'remove-integration',
       async () => {
