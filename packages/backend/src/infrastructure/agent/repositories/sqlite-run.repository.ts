@@ -5,6 +5,7 @@ import {
   type AgentHostEventTypeDto,
 } from '@nexus-terminal/protocol/agent-events';
 import type {
+  HostCursorWindow,
   PendingRunInputPage,
   HostEvent,
   PendingUserInputRequest,
@@ -325,6 +326,9 @@ export class SqliteRunRepository
     if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
       throw new Error('VALIDATION_FAILED');
     }
+    const window = await this.hostCursorWindow(userId);
+    if (after < window.oldestAvailableCursor) throw new Error('CURSOR_EXPIRED');
+    if (after > window.highWater) throw new Error('CURSOR_AHEAD');
     const rows = await this.db.queryAll<HostEventRow>(
       `SELECT user_id, sequence, type, payload_json, occurred_at
        FROM agent_host_events WHERE user_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`,
@@ -340,11 +344,18 @@ export class SqliteRunRepository
   }
 
   async hostCursor(userId: number): Promise<number> {
-    const row = await this.db.queryOne<{ next_sequence: number }>(
-      'SELECT next_sequence FROM agent_host_cursors WHERE user_id = ?',
+    return (await this.hostCursorWindow(userId)).highWater;
+  }
+
+  async hostCursorWindow(userId: number): Promise<HostCursorWindow> {
+    const row = await this.db.queryOne<{ next_sequence: number; oldest_cursor: number }>(
+      'SELECT next_sequence, oldest_cursor FROM agent_host_cursors WHERE user_id = ?',
       [userId],
     );
-    return (row?.next_sequence ?? 1) - 1;
+    return {
+      oldestAvailableCursor: row?.oldest_cursor ?? 0,
+      highWater: (row?.next_sequence ?? 1) - 1,
+    };
   }
 
   async rootRuntimeId(scope: Scope, runId: string): Promise<string> {

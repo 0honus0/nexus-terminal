@@ -172,7 +172,9 @@ export class AgentProtocolSession {
     let highWater: number;
     if (channel === 'host') {
       target = { kind: 'host' };
-      highWater = await this.dependencies.events.hostCursor(this.context.userId);
+      const window = await this.dependencies.events.hostCursorWindow(this.context.userId);
+      if (cursor < window.oldestAvailableCursor) throw new Error('CURSOR_EXPIRED');
+      highWater = window.highWater;
     } else {
       const { appId, runId } = payload;
       const snapshot = await this.dependencies.runs.get({ userId: this.context.userId, appId }, runId);
@@ -248,10 +250,7 @@ export class AgentProtocolSession {
     this.scheduleDrain(subscription);
   }
 
-  private unsubscribe(
-    requestId: string | undefined,
-    payload: AgentWsUnsubscribeMessageDto['payload'],
-  ): void {
+  private unsubscribe(requestId: string | undefined, payload: AgentWsUnsubscribeMessageDto['payload']): void {
     const { subscriptionId } = payload;
     const subscription = this.subscriptions.get(subscriptionId);
     if (subscription) {

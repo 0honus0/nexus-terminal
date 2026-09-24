@@ -785,7 +785,8 @@ CREATE INDEX IF NOT EXISTS agent_events_page ON agent_events(run_id, sequence);
 export const createAgentHostEventsTableSQL = `
 CREATE TABLE IF NOT EXISTS agent_host_cursors (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    next_sequence INTEGER NOT NULL DEFAULT 1 CHECK(next_sequence >= 1)
+    next_sequence INTEGER NOT NULL DEFAULT 1 CHECK(next_sequence >= 1),
+    oldest_cursor INTEGER NOT NULL DEFAULT 0 CHECK(oldest_cursor >= 0)
 );
 CREATE TABLE IF NOT EXISTS agent_host_events (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

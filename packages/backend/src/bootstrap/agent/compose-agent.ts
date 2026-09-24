@@ -895,6 +895,7 @@ export const composeAgent = ({
         readRun: (scope, runId, after, limit) => runRepository.readEvents(scope, runId, after, limit),
         readHost: (userId, after, limit) => runRepository.readHostEvents(userId, after, limit),
         hostCursor: (userId) => runRepository.hostCursor(userId),
+        hostCursorWindow: (userId) => runRepository.hostCursorWindow(userId),
         onRunWake: (runId, listener) => eventHub.onRunWake(runId, listener),
         onHostWake: (userId, listener) => eventHub.onHostWake(userId, listener),
         onTransient: (runId, listener) => eventHub.onTransient(runId, listener),

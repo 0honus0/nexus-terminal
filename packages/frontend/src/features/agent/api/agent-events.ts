@@ -8,6 +8,8 @@ import {
   type AgentWsSubscriptionRequestDto,
   type AgentWsUnsubscribeMessageDto,
 } from '@nexus-terminal/protocol/agent-events';
+import type { AgentEnvelopeDto } from '@nexus-terminal/protocol/agent-common';
+import type { AgentHostSummaryDto } from '@nexus-terminal/protocol/agent-host';
 import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
 import type { AgentRunStatusDto } from './agent-api';
@@ -465,10 +467,7 @@ const parseWireEvent = (
 ): AgentStreamEvent | null => {
   if (!isRecord(payload) || payload.subscriptionId !== subscriptionId) return null;
   const eventType = payload.eventType;
-  if (
-    (payload.durability !== 'durable' && payload.durability !== 'ephemeral') ||
-    typeof eventType !== 'string'
-  ) {
+  if ((payload.durability !== 'durable' && payload.durability !== 'ephemeral') || typeof eventType !== 'string') {
     throw new Error('AGENT_WS_PROTOCOL_ERROR');
   }
   const event = payload;
@@ -724,10 +723,7 @@ async function* connectOnce(
 const RETRY_BASE_MS = 400;
 const RETRY_MAX_MS = 8_000;
 
-const requestWithCursor = (
-  request: AgentWsSubscriptionRequestDto,
-  cursor: number,
-): AgentWsSubscriptionRequestDto =>
+const requestWithCursor = (request: AgentWsSubscriptionRequestDto, cursor: number): AgentWsSubscriptionRequestDto =>
   request.channel === 'host'
     ? { channel: 'host', cursor }
     : { channel: 'run', appId: request.appId, runId: request.runId, cursor };
@@ -744,6 +740,11 @@ const assertActiveSession = async (): Promise<void> => {
   } catch (cause) {
     if (cause instanceof AgentApiError && cause.status === 401) throw new Error('AGENT_WS_AUTH_REQUIRED');
   }
+};
+
+const hostResyncCursor = async (): Promise<number> => {
+  const response = await agentHttpClient.get<AgentEnvelopeDto<AgentHostSummaryDto>>('/agent/summary');
+  return response.data.data.eventCursor;
 };
 
 const retryableTransportError = (cause: unknown): boolean =>
@@ -811,6 +812,31 @@ async function* connect(request: AgentWsSubscriptionRequestDto, signal: AbortSig
       if (signal.aborted) return;
     } catch (cause) {
       if (signal.aborted) return;
+      if (request.channel === 'host' && cause instanceof Error && cause.message === 'CURSOR_EXPIRED') {
+        const expiredCursor = cursor;
+        try {
+          cursor = await hostResyncCursor();
+          retryAttempt = 0;
+          logger.warn(
+            { ...subscriptionContext(request), expiredCursor, resyncCursor: cursor },
+            'Agent Host event cursor expired; resynchronized from current summary',
+          );
+          yield { type: 'transport.disconnected', payload: null };
+          continue;
+        } catch (resyncCause) {
+          if (signal.aborted) return;
+          if (resyncCause instanceof AgentApiError && resyncCause.status === 401) {
+            throw new Error('AGENT_WS_AUTH_REQUIRED');
+          }
+          logger.warn(
+            { ...subscriptionContext(request), expiredCursor, retryAttempt, err: resyncCause },
+            'Agent Host event cursor resync failed; scheduling retry',
+          );
+          await waitForReconnect(retryAttempt, signal);
+          retryAttempt += 1;
+          continue;
+        }
+      }
       if (!retryableTransportError(cause)) {
         logger.warn({ ...subscriptionContext(request), cursor, err: cause }, 'Agent event stream failed permanently');
         throw cause;

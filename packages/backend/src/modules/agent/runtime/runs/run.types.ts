@@ -229,6 +229,11 @@ export interface HostEvent {
   occurredAt: number;
 }
 
+export interface HostCursorWindow {
+  oldestAvailableCursor: number;
+  highWater: number;
+}
+
 export interface RunTerminalIssue {
   eventType: string;
   errorCode: string | null;

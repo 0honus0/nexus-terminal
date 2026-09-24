@@ -1,6 +1,7 @@
 import type { JsonValue, Scope } from '../../agent.types';
 import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type {
+  HostCursorWindow,
   HostEvent,
   PendingRunInputPage,
   RunEvent,
@@ -75,6 +76,7 @@ export interface RunEventReaderPort {
 
 export interface HostCursorReaderPort {
   hostCursor(userId: number): Promise<number>;
+  hostCursorWindow(userId: number): Promise<HostCursorWindow>;
 }
 
 export interface RunExecutionReaderPort extends RunSnapshotReaderPort, RunInputReaderPort {

@@ -66,6 +66,7 @@ import type { TransientRunEvent } from './runtime/events/event.types';
 import type { RunPage } from './runtime/runs/run.repository.port';
 import type {
   CreateRunCommand,
+  HostCursorWindow,
   HostEvent,
   PendingRunInputPage,
   RunBudgetIncrease,
@@ -386,6 +387,7 @@ export interface AgentEventFacade {
   readRun(scope: Scope, runId: string, after: number, limit: number): Promise<RunEvent[]>;
   readHost(userId: number, after: number, limit: number): Promise<HostEvent[]>;
   hostCursor(userId: number): Promise<number>;
+  hostCursorWindow(userId: number): Promise<HostCursorWindow>;
   onRunWake(runId: string, listener: (cursor: number) => void): () => void;
   onHostWake(userId: number, listener: (cursor: number) => void): () => void;
   onTransient(runId: string, listener: (event: TransientRunEvent) => void): () => void;
