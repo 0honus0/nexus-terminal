@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { MANAGED_PROCESS_DETACHED, signalManagedProcess } from '../managed-process';
+import { MANAGED_PROCESS_DETACHED, registerManagedProcess, signalManagedProcess } from '../managed-process';
 
 export interface JobResult {
   exitCode: number | null;
@@ -65,6 +65,7 @@ export class JobRunner {
           LANG: process.env.LANG ?? 'C.UTF-8',
         },
       });
+      registerManagedProcess(child, 'job', cwd);
       let stdout = '';
       let stderr = '';
       let truncated = false;

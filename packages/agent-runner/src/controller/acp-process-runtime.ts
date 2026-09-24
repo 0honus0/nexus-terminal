@@ -1,5 +1,10 @@
 import { spawn } from 'node:child_process';
-import { MANAGED_PROCESS_DETACHED, signalManagedProcess, terminateManagedProcess } from '../managed-process';
+import {
+  MANAGED_PROCESS_DETACHED,
+  registerManagedProcess,
+  signalManagedProcess,
+  terminateManagedProcess,
+} from '../managed-process';
 import { runnerLog } from '../logging';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
@@ -68,6 +73,7 @@ export class AcpProcessRuntime {
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: MANAGED_PROCESS_DETACHED,
     });
+    registerManagedProcess(child, 'acp', `${workspaceId}:${generation}`);
     let stderrTail = '';
     let closed = false;
     const active: ActiveProcess = {

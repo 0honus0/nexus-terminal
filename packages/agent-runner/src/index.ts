@@ -14,6 +14,7 @@ import { AcpProcessRuntime } from './controller/acp-process-runtime';
 import { WorkspaceTerminalRuntime } from './controller/workspace-terminal-runtime';
 import { BrowserTunnelRuntime } from './controller/browser-tunnel-runtime';
 import { runnerLog } from './logging';
+import { initializeManagedProcessRegistry, terminateAllManagedProcesses } from './managed-process';
 
 const runnerToken = (value: string | undefined): string => {
   const token = value?.trim();
@@ -28,6 +29,12 @@ const main = async (): Promise<void> => {
   }
   const catalogFile = process.env.NEXUS_AGENT_CATALOG?.trim() || '/app/catalog/catalog.json';
   const token = runnerToken(process.env.NEXUS_AGENT_RUNNER_TOKEN);
+  const reapedManagedProcesses = initializeManagedProcessRegistry(root);
+  if (reapedManagedProcesses > 0) {
+    runnerLog('warn', 'Agent Runner reaped stale managed process groups from prior controller', {
+      reapedManagedProcesses,
+    });
+  }
   const catalog = new WorkspaceRuntimeCatalog(catalogFile);
   runnerLog('info', 'Agent Runner starting', { runtimeMode: 'native', isolation: 'logical' });
   const journal = new RunnerJournal(path.join(root, 'state', 'journal.json'));
@@ -60,6 +67,28 @@ const main = async (): Promise<void> => {
   const port = Number(process.env.PORT || 8790);
   const host = process.env.NEXUS_AGENT_RUNNER_HOST?.trim() || '127.0.0.1';
   server.listen(port, host, () => runnerLog('info', 'Agent Runner controller listening', { host, port }));
+
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    runnerLog('info', 'Agent Runner graceful shutdown started', { signal });
+    acpRuntime.closeAll();
+    terminalRuntime.closeAll();
+    browserTunnel.closeAll();
+    server.closeAllConnections?.();
+    await terminateAllManagedProcesses();
+    await new Promise<void>((resolve) => {
+      if (!server.listening) {
+        resolve();
+        return;
+      }
+      server.close(() => resolve());
+    });
+    runnerLog('info', 'Agent Runner graceful shutdown completed', { signal });
+  };
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+  process.once('SIGINT', () => void shutdown('SIGINT'));
 };
 
 void main().catch((error) => {

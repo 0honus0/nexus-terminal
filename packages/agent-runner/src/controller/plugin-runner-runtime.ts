@@ -1,5 +1,10 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { MANAGED_PROCESS_DETACHED, signalManagedProcess, terminateManagedProcess } from '../managed-process';
+import {
+  MANAGED_PROCESS_DETACHED,
+  registerManagedProcess,
+  signalManagedProcess,
+  terminateManagedProcess,
+} from '../managed-process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { valid as validSemver } from 'semver';
@@ -264,6 +269,7 @@ export class PluginRunnerRuntime {
         NEXUS_PLUGIN_WORKSPACE_ROOT: pluginWorkspaceRoot,
       },
     });
+    registerManagedProcess(child, 'plugin', `${workspace.workspaceId}:${workspace.generation}:${target.pluginId}`);
     return new RunnerPluginProcess(child, target.sdkVersion, target.protocolVersion);
   }
 
