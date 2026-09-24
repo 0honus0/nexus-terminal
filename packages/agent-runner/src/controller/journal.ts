@@ -338,7 +338,7 @@ export class RunnerJournal {
       if (existing.payloadHash !== hash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
       return existing;
     }
-    this.ensureCollectionCapacity(this.state.jobs);
+    this.ensureCollectionCapacity('jobs');
     const record: JobRecord = {
       jobId,
       payloadHash: hash,
@@ -350,8 +350,7 @@ export class RunnerJournal {
       createdAt: Math.floor(Date.now() / 1000),
       completedAt: null,
     };
-    this.state.jobs[jobId] = record;
-    this.flush();
+    this.commitState({ ...this.state, jobs: { ...this.state.jobs, [jobId]: record } });
     return record;
   }
 
@@ -404,7 +403,7 @@ export class RunnerJournal {
       if (existing.payloadHash !== hash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
       return existing;
     }
-    this.ensureCollectionCapacity(this.state.commands);
+    this.ensureCollectionCapacity('commands');
     const now = Math.floor(Date.now() / 1000);
     const record: CommandRecord = {
       commandId,
@@ -417,8 +416,7 @@ export class RunnerJournal {
       createdAt: now,
       completedAt: null,
     };
-    this.state.commands[commandId] = record;
-    this.flush();
+    this.commitState({ ...this.state, commands: { ...this.state.commands, [commandId]: record } });
     return record;
   }
 
@@ -452,13 +450,13 @@ export class RunnerJournal {
   }
 
   saveWorkspace(record: WorkspaceRecord): void {
-    this.state.workspaces[record.workspaceId] = record;
-    this.flush();
+    this.commitState({ ...this.state, workspaces: { ...this.state.workspaces, [record.workspaceId]: record } });
   }
 
   deleteWorkspace(id: string): void {
-    delete this.state.workspaces[id];
-    this.flush();
+    const workspaces = { ...this.state.workspaces };
+    delete workspaces[id];
+    this.commitState({ ...this.state, workspaces });
   }
 
   compact(now = Math.floor(Date.now() / 1000)): void {
@@ -482,14 +480,16 @@ export class RunnerJournal {
         remaining -= 1;
       }
     };
-    const commandCount = Object.keys(this.state.commands).length;
-    const jobCount = Object.keys(this.state.jobs).length;
-    prune(this.state.commands, new Set(['succeeded', 'failed', 'unknown']));
-    prune(this.state.jobs, new Set(['succeeded', 'failed', 'cancelled', 'unknown']));
-    const nextCommandCount = Object.keys(this.state.commands).length;
-    const nextJobCount = Object.keys(this.state.jobs).length;
+    const commands = { ...this.state.commands };
+    const jobs = { ...this.state.jobs };
+    const commandCount = Object.keys(commands).length;
+    const jobCount = Object.keys(jobs).length;
+    prune(commands, new Set(['succeeded', 'failed', 'unknown']));
+    prune(jobs, new Set(['succeeded', 'failed', 'cancelled', 'unknown']));
+    const nextCommandCount = Object.keys(commands).length;
+    const nextJobCount = Object.keys(jobs).length;
     if (commandCount !== nextCommandCount || jobCount !== nextJobCount) {
-      this.flush();
+      this.commitState({ ...this.state, commands, jobs });
       runnerLog('debug', 'Agent Runner journal compacted', {
         prunedCommandCount: commandCount - nextCommandCount,
         prunedJobCount: jobCount - nextJobCount,
@@ -499,12 +499,10 @@ export class RunnerJournal {
     }
   }
 
-  private ensureCollectionCapacity<T extends { status: string; completedAt: number | null; createdAt: number }>(
-    values: Record<string, T>,
-  ): void {
-    if (Object.keys(values).length < MAX_JOURNAL_COLLECTION_ITEMS) return;
+  private ensureCollectionCapacity(kind: 'commands' | 'jobs'): void {
+    if (Object.keys(this.state[kind]).length < MAX_JOURNAL_COLLECTION_ITEMS) return;
     this.compact();
-    if (Object.keys(values).length >= MAX_JOURNAL_COLLECTION_ITEMS) {
+    if (Object.keys(this.state[kind]).length >= MAX_JOURNAL_COLLECTION_ITEMS) {
       throw new Error('RUNNER_JOURNAL_CAPACITY_EXCEEDED');
     }
   }
@@ -534,21 +532,30 @@ export class RunnerJournal {
   private patchJob(id: string, patch: Partial<JobRecord>): void {
     const current = this.state.jobs[id];
     if (!current) throw new Error('JOB_NOT_FOUND');
-    this.state.jobs[id] = { ...current, ...patch };
-    this.flush();
+    const jobs = { ...this.state.jobs, [id]: { ...current, ...patch } };
+    this.commitState({ ...this.state, jobs });
   }
 
   private patchCommand(id: string, patch: Partial<CommandRecord>): void {
     const current = this.state.commands[id];
     if (!current) throw new Error('COMMAND_NOT_FOUND');
-    this.state.commands[id] = { ...current, ...patch };
-    this.flush();
+    const commands = { ...this.state.commands, [id]: { ...current, ...patch } };
+    this.commitState({ ...this.state, commands });
+  }
+
+  private commitState(nextState: JournalState): void {
+    this.flushState(nextState);
+    this.state = nextState;
   }
 
   private flush(): void {
+    this.flushState(this.state);
+  }
+
+  private flushState(state: JournalState): void {
     const temp = `${this.filePath}.tmp`;
     try {
-      fs.writeFileSync(temp, JSON.stringify(this.state), { mode: 0o600 });
+      fs.writeFileSync(temp, JSON.stringify(state), { mode: 0o600 });
       fsyncFile(temp);
       fs.renameSync(temp, this.filePath);
       fsyncDirectory(path.dirname(this.filePath));

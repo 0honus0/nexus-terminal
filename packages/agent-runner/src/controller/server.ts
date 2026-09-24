@@ -985,25 +985,25 @@ export class RunnerControllerServer {
     });
     if (job.status === 'pending') {
       this.dependencies.journal.runningJob(request.jobId);
-      void this.executeWorkspaceJob(request);
+      void this.executeWorkspaceJob(request).catch((error) =>
+        this.logExecutorPersistenceFailure('workspace-job', request.jobId, error),
+      );
     }
     return this.dependencies.journal.job(request.jobId)!;
   }
 
   private async executeWorkspaceJob(request: WorkspaceJobRequest): Promise<void> {
+    let result;
     try {
-      const result = await this.dependencies.runtimeEngine.executeJob(request);
-      this.dependencies.journal.succeedJob(request.jobId, result);
-      runnerLog('debug', 'Agent Runner Workspace job completed', {
-        jobId: request.jobId,
-        workspaceId: request.workspaceId,
-        generation: request.generation,
-        exitCode: result.exitCode,
-      });
+      result = await this.dependencies.runtimeEngine.executeJob(request);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message === 'WORKSPACE_JOB_CANCELLED') this.dependencies.journal.cancelJob(request.jobId, message);
-      else this.dependencies.journal.failJob(request.jobId, message);
+      try {
+        if (message === 'WORKSPACE_JOB_CANCELLED') this.dependencies.journal.cancelJob(request.jobId, message);
+        else this.dependencies.journal.failJob(request.jobId, message);
+      } catch (persistenceError) {
+        this.markJobOutcomeUnknown(request.jobId, persistenceError);
+      }
       runnerLog(
         message === 'WORKSPACE_JOB_CANCELLED' ? 'info' : 'warn',
         'Agent Runner Workspace job finished unsuccessfully',
@@ -1014,7 +1014,20 @@ export class RunnerControllerServer {
           errorCode: message.slice(0, 200),
         },
       );
+      return;
     }
+    try {
+      this.dependencies.journal.succeedJob(request.jobId, result);
+    } catch (persistenceError) {
+      this.markJobOutcomeUnknown(request.jobId, persistenceError);
+      return;
+    }
+    runnerLog('debug', 'Agent Runner Workspace job completed', {
+      jobId: request.jobId,
+      workspaceId: request.workspaceId,
+      generation: request.generation,
+      exitCode: result.exitCode,
+    });
   }
 
   private async waitWorkspaceJob(jobId: string, timeoutMs: number) {
@@ -1080,7 +1093,9 @@ export class RunnerControllerServer {
     });
     if (existing.status === 'pending') {
       this.dependencies.journal.running(command.commandId);
-      void this.executeWorkspaceCommand(command);
+      void this.executeWorkspaceCommand(command).catch((error) =>
+        this.logExecutorPersistenceFailure('workspace-command', command.commandId, error),
+      );
     }
     return this.dependencies.journal.command(command.commandId)!;
   }
@@ -1089,16 +1104,13 @@ export class RunnerControllerServer {
     try {
       if (command.action === 'provision') await this.provision(command);
       else await this.workspaceAction(command);
-      this.dependencies.journal.succeed(command.commandId, null);
-      runnerLog('debug', 'Agent Runner Workspace command completed', {
-        commandId: command.commandId,
-        action: command.action,
-        workspaceId: command.workspaceId,
-        generation: command.generation,
-      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.dependencies.journal.fail(command.commandId, message);
+      try {
+        this.dependencies.journal.fail(command.commandId, message);
+      } catch (persistenceError) {
+        this.markCommandOutcomeUnknown(command.commandId, persistenceError);
+      }
       runnerLog('warn', 'Agent Runner Workspace command failed', {
         commandId: command.commandId,
         action: command.action,
@@ -1106,7 +1118,20 @@ export class RunnerControllerServer {
         generation: command.generation,
         errorCode: message.slice(0, 200),
       });
+      return;
     }
+    try {
+      this.dependencies.journal.succeed(command.commandId, null);
+    } catch (persistenceError) {
+      this.markCommandOutcomeUnknown(command.commandId, persistenceError);
+      return;
+    }
+    runnerLog('debug', 'Agent Runner Workspace command completed', {
+      commandId: command.commandId,
+      action: command.action,
+      workspaceId: command.workspaceId,
+      generation: command.generation,
+    });
   }
 
   private beginAdminCommand(
@@ -1121,7 +1146,9 @@ export class RunnerControllerServer {
     runnerLog('debug', 'Agent Runner admin command accepted', { commandId, action, replayed: priorCommand !== null });
     if (existing.status === 'pending') {
       this.dependencies.journal.running(commandId);
-      void this.executeAdminCommand(command, action);
+      void this.executeAdminCommand(command, action).catch((error) =>
+        this.logExecutorPersistenceFailure('admin-command', commandId, error),
+      );
     }
     return this.dependencies.journal.command(commandId)!;
   }
@@ -1131,8 +1158,8 @@ export class RunnerControllerServer {
     action: 'cacheCleanup' | 'runtimeCleanup' | 'packInstall' | 'packUninstall',
   ): Promise<void> {
     const commandId = String(command.commandId);
+    let result: unknown;
     try {
-      let result: unknown;
       if (action === 'runtimeCleanup') {
         result = await this.dependencies.cleanup.runtimeCleanup(command.workspaceIds as string[]);
       } else {
@@ -1166,27 +1193,64 @@ export class RunnerControllerServer {
           return { uninstalled: true };
         });
       }
-      this.dependencies.journal.succeed(commandId, result);
-      const cleanupResult =
-        action === 'runtimeCleanup' && result && typeof result === 'object' && !Array.isArray(result)
-          ? (result as { deleted?: unknown[]; skipped?: unknown[]; quarantined?: unknown[] })
-          : null;
-      runnerLog('info', 'Agent Runner admin command completed', {
-        commandId,
-        action,
-        ...(cleanupResult
-          ? {
-              deletedWorkspaceCount: cleanupResult.deleted?.length ?? 0,
-              skippedWorkspaceCount: cleanupResult.skipped?.length ?? 0,
-              quarantinedWorkspaceCount: cleanupResult.quarantined?.length ?? 0,
-            }
-          : {}),
-      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.dependencies.journal.fail(commandId, message);
+      try {
+        this.dependencies.journal.fail(commandId, message);
+      } catch (persistenceError) {
+        this.markCommandOutcomeUnknown(commandId, persistenceError);
+      }
       runnerLog('warn', 'Agent Runner admin command failed', { commandId, action, errorCode: message.slice(0, 200) });
+      return;
     }
+
+    try {
+      this.dependencies.journal.succeed(commandId, result);
+    } catch (persistenceError) {
+      this.markCommandOutcomeUnknown(commandId, persistenceError);
+      return;
+    }
+    const cleanupResult =
+      action === 'runtimeCleanup' && result && typeof result === 'object' && !Array.isArray(result)
+        ? (result as { deleted?: unknown[]; skipped?: unknown[]; quarantined?: unknown[] })
+        : null;
+    runnerLog('info', 'Agent Runner admin command completed', {
+      commandId,
+      action,
+      ...(cleanupResult
+        ? {
+            deletedWorkspaceCount: cleanupResult.deleted?.length ?? 0,
+            skippedWorkspaceCount: cleanupResult.skipped?.length ?? 0,
+            quarantinedWorkspaceCount: cleanupResult.quarantined?.length ?? 0,
+          }
+        : {}),
+    });
+  }
+
+  private markCommandOutcomeUnknown(commandId: string, persistenceError: unknown): void {
+    const errorCode = persistenceError instanceof Error ? persistenceError.message : String(persistenceError);
+    this.dependencies.journal.unknown(commandId, 'RUNNER_TERMINAL_PERSISTENCE_FAILED');
+    runnerLog('error', 'Agent Runner command terminal outcome persistence failed', {
+      commandId,
+      errorCode: errorCode.slice(0, 200),
+    });
+  }
+
+  private markJobOutcomeUnknown(jobId: string, persistenceError: unknown): void {
+    const errorCode = persistenceError instanceof Error ? persistenceError.message : String(persistenceError);
+    this.dependencies.journal.unknownJob(jobId, 'RUNNER_TERMINAL_PERSISTENCE_FAILED');
+    runnerLog('error', 'Agent Runner Job terminal outcome persistence failed', {
+      jobId,
+      errorCode: errorCode.slice(0, 200),
+    });
+  }
+
+  private logExecutorPersistenceFailure(kind: string, id: string, error: unknown): void {
+    runnerLog('error', 'Agent Runner executor persistence failure', {
+      kind,
+      id,
+      errorCode: (error instanceof Error ? error.message : String(error)).slice(0, 200),
+    });
   }
 
   private async withToolchainAdminCommand<T>(work: () => Promise<T>): Promise<T> {
