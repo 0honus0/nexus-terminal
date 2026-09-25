@@ -6,12 +6,12 @@
     "specs/agent/host.spec.ts",
     "specs/agent/preset-plugin.spec.ts",
     "specs/agent/provider.spec.ts",
-    "specs/ui/batch-connection-edit.spec.ts",
+    "specs/auth/setup-login.spec.ts",
     "specs/ui/connection-create.spec.ts",
+    "specs/ui/login-passkey-surface.spec.ts",
     "specs/ssh/connection-edit-delete.spec.ts",
     "specs/ssh/connection-list-search.spec.ts",
     "specs/ssh/connection.spec.ts",
-    "specs/ssh/reconnect-ui.spec.ts",
-    "specs/ssh/suspend-resume.spec.ts"
+    "specs/ssh/reconnect-ui.spec.ts"
   ]
 }

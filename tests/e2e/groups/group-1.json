@@ -3,7 +3,7 @@
   "group": 1,
   "workers": 8,
   "specs": [
-    "specs/auth/setup-login.spec.ts",
-    "specs/ui/login-captcha-surface.spec.ts"
+    "specs/ui/login-captcha-surface.spec.ts",
+    "specs/ssh/suspend-resume.spec.ts"
   ]
 }

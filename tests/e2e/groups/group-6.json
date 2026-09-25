@@ -12,6 +12,7 @@
     "specs/ui/backup-ui.spec.ts",
     "specs/ui/connection-non-ssh-bulk.spec.ts",
     "specs/ui/custom-terminal-theme.spec.ts",
+    "specs/websocket/authenticated-session.spec.ts",
     "specs/ssh/sftp-download.spec.ts",
     "specs/ssh/status-history-time-axis.spec.ts"
   ]

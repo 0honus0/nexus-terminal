@@ -4,12 +4,12 @@
   "workers": 8,
   "specs": [
     "specs/ui/audit-log-filtering.spec.ts",
-    "specs/ui/login-passkey-surface.spec.ts",
+    "specs/ui/batch-connection-edit.spec.ts",
+    "specs/ssh/command-history-management.spec.ts",
+    "specs/ssh/quick-command-collapsible-search.spec.ts",
+    "specs/ssh/quick-command-management.spec.ts",
+    "specs/ssh/quick-command-tags-variables.spec.ts",
     "specs/ssh/file-manager-navigation.spec.ts",
-    "specs/ssh/file-preview-editor.spec.ts",
-    "specs/ssh/docker-manager-ui.spec.ts",
-    "specs/ssh/protocol.spec.ts",
-    "specs/ssh/status-docker-protocol.spec.ts",
-    "specs/ssh/upload-protocol.spec.ts"
+    "specs/ssh/file-preview-editor.spec.ts"
   ]
 }
