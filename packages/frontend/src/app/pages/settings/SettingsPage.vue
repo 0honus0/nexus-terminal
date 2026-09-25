@@ -237,7 +237,7 @@
       <div v-if="mobileView === 'menu'" class="space-y-6 lg:hidden py-4 sm:py-6" data-testid="settings-mobile-catalog">
         <header class="px-1">
           <h1 class="text-xl font-bold tracking-tight text-foreground">{{ t('settings.title') }}</h1>
-          <p class="mt-1 text-xs text-text-secondary">{{ t('settings.descriptions.agent') }}</p>
+          <p class="mt-1 text-xs text-text-secondary">{{ t('settings.mobile.settingsOverview') }}</p>
         </header>
 
         <div v-for="group in tabGroups" :key="group.id" class="space-y-2">
