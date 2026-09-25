@@ -198,6 +198,14 @@ test('file previews and text editor protect historical file-opening regressions'
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
+  const [longLineFixture, largeTextFixture] = await Promise.all([
+    fetch(`${E2E_SSH.controlUrl}/fixture?name=long-line-e2e.txt&size=8192`, { method: 'POST' }),
+    fetch(`${E2E_SSH.controlUrl}/fixture?name=large-editor-e2e.txt&variant=large-text&size=${3 * 1024 * 1024}`, {
+      method: 'POST',
+    }),
+  ]);
+  expect(longLineFixture.ok).toBeTruthy();
+  expect(largeTextFixture.ok).toBeTruthy();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
@@ -221,6 +229,20 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect.poll(async () => await viewLines.innerText()).toContain('plain-no-extension');
     await expectOverlayToCoverWorkspaceRail(page, 'document-popup', 1000);
     await captureFunctionalScreenshot(page, 'file-manager-editor.png', { viewport: { width: 1440, height: 900 } });
+  });
+
+  await step('desktop text editor exposes Monaco search from the editor toolbar', async () => {
+    const editor = editorView(page);
+    const searchButton = editor.getByTestId('file-editor-search');
+    await expect(searchButton).toBeVisible();
+    await searchButton.click();
+    const findWidget = editor.locator('.monaco-editor .find-widget');
+    await expect(findWidget).toBeVisible();
+    const findInput = findWidget.getByRole('textbox').first();
+    await findInput.fill('plain-no-extension');
+    await expect(findInput).toHaveValue('plain-no-extension');
+    await page.keyboard.press('Escape');
+    await expect(findWidget).toBeHidden();
   });
 
   await step('editor popup resize keeps Monaco visible and usable', async () => {
@@ -337,6 +359,32 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect
       .poll(async () => (await viewLines.innerText()).replace(/\u00a0/g, ' '), { timeout: 15_000 })
       .toContain('created outside Nexus for refresh verification');
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
+  });
+
+  await step('long logical lines soft-wrap without inventing extra file line numbers', async () => {
+    await row(page, 'long-line-e2e.txt').dblclick();
+    const editor = editorView(page);
+    await expect(editor).toBeVisible();
+    const monaco = editor.getByTestId('monaco-editor');
+    await expect(monaco).toHaveAttribute('data-word-wrap', 'on');
+    await expect.poll(async () => monaco.locator('.view-lines .view-line').count()).toBeGreaterThan(1);
+    const renderedLineNumbers = (await monaco.locator('.margin-view-overlays .line-numbers').allTextContents())
+      .map((value) => value.trim())
+      .filter(Boolean);
+    expect(renderedLineNumbers).toEqual(['1']);
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
+  });
+
+  await slowStep('large text opens in lightweight editor mode without the duplicate raw-file payload', async () => {
+    await row(page, 'large-editor-e2e.txt').dblclick();
+    const editor = editorView(page);
+    await expect(editor).toBeVisible({ timeout: 20_000 });
+    const monaco = editor.getByTestId('monaco-editor');
+    await expect(monaco).toHaveAttribute('data-large-file', 'true');
+    await expect
+      .poll(async () => await monaco.locator('.view-lines').innerText(), { timeout: 20_000 })
+      .toContain('large-file-performance-line');
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
 

@@ -6,6 +6,7 @@ import {
   type E2eWebSocket,
   openWorkspaceSession,
   requestWorkspace,
+  requestWorkspaceBinary,
   waitForFilesystemReady,
   waitForJson,
 } from '../../support/ws';
@@ -28,11 +29,8 @@ async function createConnection(request: APIRequestContext, name: string): Promi
 }
 
 async function readRemoteFile(socket: E2eWebSocket, remotePath: string): Promise<string> {
-  const response = await requestWorkspace<{ content: string }>(socket, 'filesystem.readText', {
-    path: remotePath,
-    encoding: 'utf-8',
-  });
-  return response.content;
+  const response = await requestWorkspaceBinary(socket, 'filesystem.readBinary', { path: remotePath });
+  return response.bytes.toString('utf8');
 }
 
 async function runTransfer(

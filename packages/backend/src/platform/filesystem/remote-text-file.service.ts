@@ -1,35 +1,12 @@
 import { finished } from 'node:stream/promises';
 import * as iconv from 'iconv-lite';
-import * as jschardet from 'jschardet';
 import type { RemoteFileSystem } from './remote-filesystem';
 import type { RemoteFileEntry } from './file-entry';
 import { toRemoteFileEntry } from './file-entry';
 
-export interface RemoteTextFileReadResult {
-  rawContent: Uint8Array;
-  content: string;
-  encodingUsed: string;
-}
-
 const normalizeEncoding = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export class RemoteTextFileService {
-  async read(
-    filesystem: RemoteFileSystem,
-    remotePath: string,
-    requestedEncoding?: string,
-  ): Promise<RemoteTextFileReadResult> {
-    const stream = await filesystem.openRead(remotePath);
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    const data = Buffer.concat(chunks);
-    const encodingUsed = requestedEncoding
-      ? this.resolveRequestedEncoding(requestedEncoding)
-      : this.detectEncoding(data);
-    const content = iconv.decode(data, encodingUsed);
-    return { rawContent: data, content, encodingUsed };
-  }
-
   async write(
     filesystem: RemoteFileSystem,
     remotePath: string,
@@ -64,26 +41,6 @@ export class RemoteTextFileService {
     return iconv.encodingExists(normalized) ? normalized : 'utf-8';
   }
 
-  private detectEncoding(data: Buffer): string {
-    if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) return 'utf-8';
-    if (data.length >= 2 && data[0] === 0xff && data[1] === 0xfe) return 'utf16le';
-    if (data.length >= 2 && data[0] === 0xfe && data[1] === 0xff) return 'utf16be';
-
-    const detection = jschardet.detect(data);
-    let detected = normalizeEncoding(detection.encoding || 'utf-8');
-    if (detected === 'windows1252') detected = 'cp1252';
-    if (detected === 'gb2312') detected = 'gbk';
-    if (detected === 'utf8' || detected === 'ascii') return 'utf-8';
-    if (['gbk', 'gb2312', 'gb18030', 'big5', 'euctw'].includes(detected)) return 'gb18030';
-    if ((detection.confidence || 0) < 0.9) {
-      try {
-        if (!iconv.decode(data, 'gb18030').includes('\uFFFD')) return 'gb18030';
-      } catch {
-        /* fall back to the detector-supported encoding or UTF-8 below */
-      }
-    }
-    return iconv.encodingExists(detected) ? detected : 'utf-8';
-  }
   private encodeContent(content: string, encoding: string): Buffer {
     const contentWithoutBom = content.startsWith('\uFEFF') ? content.slice(1) : content;
     const encoded = iconv.encode(contentWithoutBom, encoding);

@@ -13,10 +13,10 @@
     "test:agent-scenarios": "tsx ../../tests/backend/agent-scenarios/runner.ts"
   },
   "dependencies": {
-    "@nexus-terminal/protocol": "workspace:*",
     "@agentclientprotocol/sdk": "1.4.0",
     "@ai-sdk/openai": "^4.0.66",
     "@modelcontextprotocol/client": "2.0.0",
+    "@nexus-terminal/protocol": "workspace:*",
     "@simplewebauthn/server": "^14.0.1",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
@@ -33,7 +33,6 @@
     "i18next": "^26.4.2",
     "iconv-lite": "^0.7.3",
     "ipaddr.js": "^2.5.0",
-    "jschardet": "^3.1.4",
     "multer": "^2.3.0",
     "nodemailer": "^10.0.1",
     "pino": "catalog:",

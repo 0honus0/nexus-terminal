@@ -1287,6 +1287,11 @@ const controlServer = http.createServer(async (req, res) => {
           `${Array.from({ length: lineCount }, (_, index) => `zoom-line-${index + 1}`).join('\n')}\n`,
           'utf8',
         );
+      } else if (variant === 'large-text') {
+        const targetSize = size || 3 * 1024 * 1024;
+        const line = 'large-file-performance-line-0123456789-abcdefghijklmnopqrstuvwxyz\n';
+        const content = line.repeat(Math.ceil(targetSize / line.length)).slice(0, targetSize);
+        await fsp.writeFile(path.join(rootDir, name), content, 'utf8');
       } else if (size > 0) {
         await fsp.writeFile(path.join(rootDir, name), Buffer.alloc(size, 0x5a));
       } else {

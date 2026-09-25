@@ -24,5 +24,4 @@ export type {
   WorkspaceRemoteFileEntryDto,
   WorkspaceRemoteFileMetadataDto,
   ResolvedRemotePath,
-  RemoteTextFile,
 } from './model/filesystem';

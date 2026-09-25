@@ -51,6 +51,7 @@
     "docx-preview": "0.4.0",
     "dompurify": "catalog:",
     "guacamole-common-js": "^1.5.0",
+    "jschardet": "^3.1.4",
     "marked": "^18.0.12",
     "monaco-editor": "^0.56.0",
     "pdfjs-dist": "^6.3.289",

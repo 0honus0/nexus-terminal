@@ -5,8 +5,10 @@
   import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
   import { focusRegistry } from '@/shared/focus/public';
   import { useFeedback } from '@/shared/feedback/public';
-  const MonacoEditor = defineAsyncComponent(() => import('./MonacoEditor.vue'));
-  const CodeMirrorMobileEditor = defineAsyncComponent(() => import('./CodeMirrorMobileEditor.vue'));
+  const loadMonacoEditor = () => import('./MonacoEditor.vue');
+  const loadCodeMirrorMobileEditor = () => import('./CodeMirrorMobileEditor.vue');
+  const MonacoEditor = defineAsyncComponent(loadMonacoEditor);
+  const CodeMirrorMobileEditor = defineAsyncComponent(loadCodeMirrorMobileEditor);
   import { createFileEditorSession, type FileEditorSessionController } from '../composables/useFileEditorSession';
   import type { FileDocumentPort } from '../ports/file-document-port';
   import type { EditorLineEnding } from '../model/editor';
@@ -75,11 +77,13 @@
   const root = ref<HTMLElement | null>(null);
   const encodingSelect = ref<HTMLSelectElement | null>(null);
   const mobileEditor = ref<{ focus?: () => void; openSearch?: () => void } | null>(null);
-  const desktopEditor = ref<{ focus?: () => void } | null>(null);
+  const desktopEditor = ref<{ focus?: () => void; openSearch?: () => void } | null>(null);
   const context = ref<{ id: string; x: number; y: number } | null>(null);
   let unregisterFocus: (() => void) | undefined;
 
+  const LARGE_FILE_CHARACTER_THRESHOLD = 2 * 1024 * 1024;
   const content = computed({ get: () => session.active.value?.content ?? '', set: (value) => session.update(value) });
+  const largeFile = computed(() => content.value.length >= LARGE_FILE_CHARACTER_THRESHOLD);
   const selectedEncoding = computed(() => session.active.value?.encoding ?? 'utf-8');
   const currentLineEnding = computed<EditorLineEnding>(() => {
     const value = session.active.value?.content ?? '';
@@ -104,6 +108,10 @@
   const save = () => session.save();
   const triggerSave = (): void => {
     void save().catch(() => undefined);
+  };
+  const openSearch = (): void => {
+    if (device.isMobile.value) mobileEditor.value?.openSearch?.();
+    else desktopEditor.value?.openSearch?.();
   };
 
   const confirmDiscardIfDirty = async (): Promise<boolean> => {
@@ -182,8 +190,11 @@
     });
   };
 
-  const open = (path: string) =>
-    session.open(path, { scopeId: props.scopeId, scopeLabel: props.scopeLabel, port: props.port });
+  const open = (path: string) => {
+    if (device.isMobile.value) void loadCodeMirrorMobileEditor().catch(() => undefined);
+    else void loadMonacoEditor().catch(() => undefined);
+    return session.open(path, { scopeId: props.scopeId, scopeLabel: props.scopeLabel, port: props.port });
+  };
   const openContext = (event: MouseEvent, id: string) => {
     event.preventDefault();
     context.value = { id, x: event.clientX, y: event.clientY };
@@ -308,13 +319,12 @@
         >
 
         <button
-          v-if="device.isMobile.value"
           data-testid="file-editor-search"
           type="button"
           class="search-btn"
           :title="t('fileManager.preview.search')"
           :aria-label="t('fileManager.preview.search')"
-          @click="mobileEditor?.openSearch?.()"
+          @click="openSearch"
         >
           <i class="fas fa-search" aria-hidden="true"></i>
         </button>
@@ -375,12 +385,14 @@
       <template v-else-if="session.active.value">
         <CodeMirrorMobileEditor
           v-if="device.isMobile.value"
+          :key="session.active.value.id"
           ref="mobileEditor"
           v-model="content"
           class="editor-instance"
           :path="session.active.value.path"
           :font-size="mobileFontSize"
           :font-family="fontFamily"
+          :large-file="largeFile"
           :scroll-top="session.active.value.scrollTop"
           :scroll-left="session.active.value.scrollLeft"
           @request-save="triggerSave"
@@ -396,6 +408,7 @@
           :path="session.active.value.path"
           :font-size="fontSize"
           :font-family="fontFamily"
+          :large-file="largeFile"
           :initial-scroll-top="session.active.value.scrollTop"
           :initial-scroll-left="session.active.value.scrollLeft"
           @request-save="triggerSave"

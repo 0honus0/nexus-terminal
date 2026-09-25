@@ -3,3 +3,4 @@ export { createFileEditorSession, useFileEditorSession } from './composables/use
 export type { FileEditorSessionController, FileEditorOpenContext } from './composables/useFileEditorSession';
 export type { FileDocumentPort } from './ports/file-document-port';
 export type { EditorDocument, EditorLineEnding, EditorSaveState, LoadedEditorDocument } from './model/editor';
+export { decodeEditorDocument } from './model/editorEncoding';

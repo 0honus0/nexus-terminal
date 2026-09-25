@@ -20,8 +20,6 @@ import type {
   WorkspaceFilesystemListResponseDto,
   WorkspaceFilesystemPathRequestDto,
   WorkspaceFilesystemReadBinaryResponseDto,
-  WorkspaceFilesystemReadTextRequestDto,
-  WorkspaceFilesystemReadTextResponseDto,
   WorkspaceFilesystemRealpathResponseDto,
   WorkspaceFilesystemRemoveRequestDto,
   WorkspaceFilesystemRenameRequestDto,
@@ -521,8 +519,6 @@ export class WorkspaceProtocolSession {
         return this.filesystemSearch(payload);
       case 'filesystem.stat':
         return this.filesystemStat(payload);
-      case 'filesystem.readText':
-        return this.filesystemReadText(payload);
       case 'filesystem.readBinary':
         return this.filesystemReadBinary(payload);
       case 'filesystem.writeText':
@@ -695,24 +691,6 @@ export class WorkspaceProtocolSession {
   private async filesystemStat(payload: JsonRecord): Promise<WorkspaceRemoteFileEntryDto> {
     const request: WorkspaceFilesystemPathRequestDto = { path: this.requirePath(payload.path) };
     return remoteFileEntryDto(await this.dependencies.filesystem.stat(this.requireWorkspace(), request.path));
-  }
-
-  private async filesystemReadText(payload: JsonRecord) {
-    const path = this.requirePath(payload.path);
-    const encoding = stringValue(payload.encoding);
-    if (payload.encoding !== undefined && encoding === undefined)
-      throw new Error('Filesystem encoding must be a string.');
-    const request: WorkspaceFilesystemReadTextRequestDto = {
-      path,
-      ...(encoding === undefined ? {} : { encoding }),
-    };
-    const result = await this.dependencies.filesystem.readFile(this.requireWorkspace(), request.path, request.encoding);
-    const response: WorkspaceFilesystemReadTextResponseDto = {
-      path: request.path,
-      content: result.content,
-      encoding: result.encodingUsed,
-    };
-    return new WorkspaceBinaryResponse(response, singleBinaryChunk(result.rawContent));
   }
 
   private async filesystemReadBinary(payload: JsonRecord) {

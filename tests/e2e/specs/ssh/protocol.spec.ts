@@ -7,6 +7,7 @@ import {
   type E2eWebSocket,
   openWorkspaceSession,
   requestWorkspace,
+  requestWorkspaceBinary,
   sendJson,
   waitForBinaryBytes,
   waitForBinaryText,
@@ -42,12 +43,7 @@ const runArchive = async (
 };
 
 const readRemoteText = async (socket: E2eWebSocket, path: string): Promise<string> =>
-  (
-    await requestWorkspace<{ content: string }>(socket, 'filesystem.readText', {
-      path,
-      encoding: 'utf-8',
-    })
-  ).content;
+  (await requestWorkspaceBinary(socket, 'filesystem.readBinary', { path })).bytes.toString('utf8');
 
 const rootFileNames = async (socket: E2eWebSocket): Promise<string[]> =>
   (
@@ -291,11 +287,10 @@ test('same-workspace move treats a missing destination path as available', async
       );
       await completed;
 
-      const destination = await requestWorkspace<{ content: string }>(workspace.socket, 'filesystem.readText', {
+      const destination = await requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', {
         path: '/folder-seed/move-source.txt',
-        encoding: 'utf-8',
       });
-      expect(destination.content).toContain('move-me');
+      expect(destination.bytes.toString('utf8')).toContain('move-me');
 
       const root = await requestWorkspace<{ entries: Array<{ name: string }> }>(workspace.socket, 'filesystem.list', {
         path: '/',

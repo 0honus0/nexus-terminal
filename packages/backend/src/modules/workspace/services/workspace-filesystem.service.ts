@@ -15,10 +15,7 @@ import type { MutationGuardPort } from '../../../platform/operations/mutation-gu
 import type { RemoteFileSearchService } from '../../../platform/filesystem/remote-file-search.service';
 import type { RemoteFileSystem } from '../../../platform/filesystem/remote-filesystem';
 import { normalizeAbsoluteRemotePath } from '../../../platform/filesystem/remote-path';
-import type {
-  RemoteTextFileReadResult,
-  RemoteTextFileService,
-} from '../../../platform/filesystem/remote-text-file.service';
+import type { RemoteTextFileService } from '../../../platform/filesystem/remote-text-file.service';
 import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceSession } from '../workspace-session';
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
@@ -73,10 +70,6 @@ export class WorkspaceFilesystemService {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
     const normalized = this.absolute(remotePath);
     return toRemoteFileEntry(normalized, await fs.metadata(normalized, { followSymbolicLinks }));
-  }
-  async readFile(workspaceId: string, remotePath: string, encoding?: string): Promise<RemoteTextFileReadResult> {
-    const fs = await this.filesystem(this.sessions.require(workspaceId));
-    return this.textFiles.read(fs, this.absolute(remotePath), encoding);
   }
   async openBinaryRead(workspaceId: string, remotePath: string) {
     const fs = await this.filesystem(this.sessions.require(workspaceId));

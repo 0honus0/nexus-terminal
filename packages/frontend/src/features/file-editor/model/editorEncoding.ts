@@ -1,5 +1,7 @@
 export const normalizeEditorEncoding = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+const ENCODING_DETECTION_SAMPLE_BYTES = 256 * 1024;
+
 const CANONICAL_EDITOR_ENCODINGS: Record<string, string> = {
   utf8: 'utf-8',
   utf16le: 'utf-16le',
@@ -51,17 +53,57 @@ const loadEditorCodec = () =>
     Buffer: buffer.Buffer,
   })));
 
-const encodeUtf16 = (content: string, littleEndian: boolean): Uint8Array => {
-  const bytes = new Uint8Array(content.length * 2 + 2);
-  bytes[0] = littleEndian ? 0xff : 0xfe;
-  bytes[1] = littleEndian ? 0xfe : 0xff;
-  for (let index = 0; index < content.length; index += 1) {
-    const code = content.charCodeAt(index);
-    const offset = index * 2 + 2;
-    bytes[offset] = littleEndian ? code & 0xff : code >>> 8;
-    bytes[offset + 1] = littleEndian ? code >>> 8 : code & 0xff;
+const encodingDetectionSample = (rawContent: Uint8Array): Uint8Array => {
+  if (rawContent.byteLength <= ENCODING_DETECTION_SAMPLE_BYTES) return rawContent;
+  const windowSize = Math.floor(ENCODING_DETECTION_SAMPLE_BYTES / 3);
+  const middleStart = Math.max(0, Math.floor((rawContent.byteLength - windowSize) / 2));
+  const sample = new Uint8Array(windowSize * 3);
+  sample.set(rawContent.subarray(0, windowSize), 0);
+  sample.set(rawContent.subarray(middleStart, middleStart + windowSize), windowSize);
+  sample.set(rawContent.subarray(rawContent.byteLength - windowSize), windowSize * 2);
+  return sample;
+};
+
+export const detectEditorEncoding = async (rawContent: Uint8Array): Promise<string> => {
+  if (rawContent.byteLength >= 3 && rawContent[0] === 0xef && rawContent[1] === 0xbb && rawContent[2] === 0xbf)
+    return 'utf-8';
+  if (rawContent.byteLength >= 2 && rawContent[0] === 0xff && rawContent[1] === 0xfe) return 'utf-16le';
+  if (rawContent.byteLength >= 2 && rawContent[0] === 0xfe && rawContent[1] === 0xff) return 'utf-16be';
+
+  const sample = encodingDetectionSample(rawContent);
+  if (!sample.includes(0)) {
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(sample);
+      return 'utf-8';
+    } catch {
+      // Non-UTF-8 content falls through to the broader detector.
+    }
   }
-  return bytes;
+  const [jschardet, { iconv, Buffer }] = await Promise.all([import('jschardet'), loadEditorCodec()]);
+  const detection = jschardet.detect(Buffer.from(sample).toString('latin1'));
+  let detected = normalizeEditorEncoding(detection.encoding || 'utf-8');
+  if (detected === 'windows1252') detected = 'cp1252';
+  if (detected === 'gb2312') detected = 'gbk';
+  if (detected === 'utf8' || detected === 'ascii') return 'utf-8';
+  if (['gbk', 'gb2312', 'gb18030', 'big5', 'euctw'].includes(detected)) return 'gb18030';
+  if ((detection.confidence || 0) < 0.9) {
+    try {
+      if (!iconv.decode(Buffer.from(sample), 'gb18030').includes('\uFFFD')) return 'gb18030';
+    } catch {
+      // Fall back to the detector-supported encoding or UTF-8 below.
+    }
+  }
+  return canonicalEditorEncoding(iconv.encodingExists(detected) ? detected : 'utf-8');
+};
+
+export const decodeEditorDocument = async (
+  rawContent: Uint8Array,
+  requestedEncoding?: string,
+): Promise<{ content: string; encoding: string }> => {
+  const encoding = requestedEncoding
+    ? canonicalEditorEncoding(requestedEncoding)
+    : await detectEditorEncoding(rawContent);
+  return { content: await decodeEditorRawContent(rawContent, encoding), encoding };
 };
 
 export const decodeEditorRawContent = async (rawContent: Uint8Array, encoding: string): Promise<string> => {
@@ -76,17 +118,4 @@ export const decodeEditorRawContent = async (rawContent: Uint8Array, encoding: s
   const bytes = Buffer.from(rawContent);
   if (iconv.encodingExists(normalized)) return iconv.decode(bytes, normalized);
   return new TextDecoder('utf-8').decode(bytes);
-};
-
-export const encodeEditorContent = async (content: string, encoding: string): Promise<Uint8Array> => {
-  const normalized = normalizeEditorEncoding(encoding);
-  const contentWithoutBom = content.startsWith('\uFEFF') ? content.slice(1) : content;
-  if (normalized === 'utf8') return new TextEncoder().encode(contentWithoutBom);
-  if (normalized === 'utf16le') return encodeUtf16(contentWithoutBom, true);
-  if (normalized === 'utf16be') return encodeUtf16(contentWithoutBom, false);
-
-  const { iconv, Buffer } = await loadEditorCodec();
-  const encodingName = iconv.encodingExists(normalized) ? normalized : 'utf8';
-  const encoded = Buffer.from(iconv.encode(contentWithoutBom, encodingName));
-  return new Uint8Array(encoded.buffer, encoded.byteOffset, encoded.byteLength).slice();
 };

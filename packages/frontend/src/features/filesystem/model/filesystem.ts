@@ -14,12 +14,6 @@ export interface ResolvedRemotePath {
   targetType: 'file' | 'directory' | 'other';
 }
 
-export interface RemoteTextFile {
-  path: string;
-  content: string;
-  encoding: string;
-  rawContent: Uint8Array;
-}
 export type FilesystemMutation =
   | { type: 'create-directory'; path: string }
   | { type: 'create-file'; path: string; content?: string }

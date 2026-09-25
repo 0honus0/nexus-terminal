@@ -18,11 +18,10 @@ import type {
   FilesystemChannel,
   FilesystemDownloadPort,
   WorkspaceRemoteFileEntryDto,
-  RemoteTextFile,
   ResolvedRemotePath,
   TerminalDirectoryPort,
 } from '@/features/filesystem/public';
-import type { FileDocumentPort, LoadedEditorDocument } from '@/features/file-editor/public';
+import { decodeEditorDocument, type FileDocumentPort, type LoadedEditorDocument } from '@/features/file-editor/public';
 import type { FilePreviewSource } from '@/features/file-preview/public';
 import type { WorkspaceStatusSampleDto, StatusChannel } from '@/features/status-monitor/public';
 import type { SshSuspendChannel } from '@/features/ssh-suspend/public';
@@ -155,17 +154,9 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
   search: (path, query): Promise<WorkspaceFilesystemSearchResponseDto> =>
     socket.request('filesystem.search', { path, query }),
   stat: (path): Promise<WorkspaceRemoteFileEntryDto> => socket.request('filesystem.stat', { path }),
-  async readText(path, encoding): Promise<RemoteTextFile> {
-    const { data: result, bytes } = await socket.requestBinary('filesystem.readText', {
-      path,
-      ...(encoding ? { encoding } : {}),
-    });
-    return {
-      path: result.path,
-      content: result.content,
-      encoding: result.encoding,
-      rawContent: bytes,
-    };
+  async readBinary(path) {
+    const { data, bytes } = await socket.requestBinary('filesystem.readBinary', { path });
+    return { path: data.path, bytes };
   },
   async writeText(path, content, encoding) {
     await socket.request('filesystem.writeText', { path, content, ...(encoding ? { encoding } : {}) });
@@ -299,12 +290,12 @@ export const createFilesystemDownloadPort = (workspaceId: string, connectionId: 
 
 export const createFileDocumentPort = (filesystem: FilesystemChannel): FileDocumentPort => ({
   async load(path, encoding): Promise<LoadedEditorDocument> {
-    const file = await filesystem.readText(path, encoding);
+    const file = await filesystem.readBinary(path);
+    const decoded = await decodeEditorDocument(file.bytes, encoding);
     return {
       path: file.path,
-      content: file.content,
-      encoding: file.encoding,
-      rawContent: file.rawContent,
+      content: decoded.content,
+      encoding: decoded.encoding,
     };
   },
   save: (path, content, encoding) => filesystem.writeText(path, content, encoding),

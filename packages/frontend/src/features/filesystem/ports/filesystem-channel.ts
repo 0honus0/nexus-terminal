@@ -2,14 +2,13 @@ import type {
   WorkspaceFilesystemListResponseDto,
   WorkspaceFilesystemSearchResponseDto,
   WorkspaceRemoteFileEntryDto,
-  RemoteTextFile,
   ResolvedRemotePath,
 } from '../model/filesystem';
 export interface FilesystemChannel {
   listDirectory(path: string): Promise<WorkspaceFilesystemListResponseDto>;
   search(path: string, query: string): Promise<WorkspaceFilesystemSearchResponseDto>;
   stat(path: string): Promise<WorkspaceRemoteFileEntryDto>;
-  readText(path: string, encoding?: string): Promise<RemoteTextFile>;
+  readBinary(path: string): Promise<{ path: string; bytes: Uint8Array }>;
   writeText(path: string, content: string, encoding?: string): Promise<void>;
   createDirectory(path: string): Promise<void>;
   createFile(path: string, content?: string): Promise<void>;

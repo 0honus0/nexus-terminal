@@ -141,12 +141,14 @@
       fontSize?: number;
       fontFamily?: string;
       readOnly?: boolean;
+      largeFile?: boolean;
       scrollTop?: number;
       scrollLeft?: number;
     }>(),
     {
       fontSize: 16,
       readOnly: false,
+      largeFile: false,
     },
   );
   const emit = defineEmits<{
@@ -211,7 +213,7 @@
   onMounted(async () => {
     mounted = true;
     const initialPath = props.path;
-    const initialLanguage = await loadLanguageExtension(initialPath);
+    const initialLanguage = props.largeFile ? [] : await loadLanguageExtension(initialPath);
     if (!mounted || !root.value) return;
     view = new EditorView({
       state: EditorState.create({
@@ -222,19 +224,24 @@
           editableCompartment.of(EditorView.editable.of(!props.readOnly)),
           vscodeDark,
           lineNumbers(),
-          foldGutter(),
+          EditorView.lineWrapping,
+          ...(props.largeFile ? [] : [foldGutter()]),
           drawSelection(),
           dropCursor(),
           EditorState.allowMultipleSelections.of(true),
           history(),
-          indentOnInput(),
-          bracketMatching(),
-          highlightActiveLine(),
-          closeBrackets(),
-          autocompletion(),
+          ...(props.largeFile
+            ? []
+            : [
+                indentOnInput(),
+                bracketMatching(),
+                highlightActiveLine(),
+                closeBrackets(),
+                autocompletion(),
+                highlightSelectionMatches(),
+                syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+              ]),
           search(),
-          highlightSelectionMatches(),
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           keymap.of([
             ...closeBracketsKeymap,
             { key: 'Mod-/', run: toggleEditorComment },
@@ -267,7 +274,7 @@
 
     if (props.path !== initialPath) {
       const generation = ++languageGeneration;
-      const extension = await loadLanguageExtension(props.path);
+      const extension = props.largeFile ? [] : await loadLanguageExtension(props.path);
       if (!view || generation !== languageGeneration) return;
       view.dispatch({ effects: languageCompartment.reconfigure(extension) });
     }
@@ -287,7 +294,7 @@
     async (path) => {
       if (!view) return;
       const generation = ++languageGeneration;
-      const extension = await loadLanguageExtension(path);
+      const extension = props.largeFile ? [] : await loadLanguageExtension(path);
       if (!view || generation !== languageGeneration) return;
       view.dispatch({ effects: languageCompartment.reconfigure(extension) });
     },
@@ -335,7 +342,12 @@
 </script>
 
 <template>
-  <div ref="root" class="codemirror-mobile-editor-container"></div>
+  <div
+    ref="root"
+    class="codemirror-mobile-editor-container"
+    :data-large-file="largeFile ? 'true' : 'false'"
+    data-word-wrap="on"
+  ></div>
 </template>
 
 <style scoped>

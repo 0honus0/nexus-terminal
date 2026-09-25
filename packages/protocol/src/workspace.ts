@@ -179,17 +179,6 @@ export interface WorkspaceFilesystemSearchResponseDto {
   truncated: boolean;
 }
 
-export interface WorkspaceFilesystemReadTextRequestDto {
-  path: string;
-  encoding?: string;
-}
-
-export interface WorkspaceFilesystemReadTextResponseDto {
-  path: string;
-  content: string;
-  encoding: string;
-}
-
 export interface WorkspaceFilesystemReadBinaryResponseDto {
   path: string;
 }
@@ -235,7 +224,6 @@ export interface WorkspaceFilesystemRequestMapDto {
   'filesystem.list': WorkspaceFilesystemPathRequestDto;
   'filesystem.search': WorkspaceFilesystemSearchRequestDto;
   'filesystem.stat': WorkspaceFilesystemPathRequestDto;
-  'filesystem.readText': WorkspaceFilesystemReadTextRequestDto;
   'filesystem.readBinary': WorkspaceFilesystemPathRequestDto;
   'filesystem.writeText': WorkspaceFilesystemWriteTextRequestDto;
   'filesystem.createDirectory': WorkspaceFilesystemPathRequestDto;
@@ -250,7 +238,6 @@ export interface WorkspaceFilesystemResponseMapDto {
   'filesystem.list': WorkspaceFilesystemListResponseDto;
   'filesystem.search': WorkspaceFilesystemSearchResponseDto;
   'filesystem.stat': WorkspaceRemoteFileEntryDto;
-  'filesystem.readText': WorkspaceFilesystemReadTextResponseDto;
   'filesystem.readBinary': WorkspaceFilesystemReadBinaryResponseDto;
   'filesystem.writeText': null;
   'filesystem.createDirectory': null;

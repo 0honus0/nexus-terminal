@@ -3,6 +3,7 @@
   // Register before the first editor.create() snapshots Monaco's standalone service collection.
   import 'monaco-editor/platform/actionWidget/browser/actionWidget';
   import 'monaco-editor/editor/contrib/comment/browser/comment';
+  import 'monaco-editor/editor/contrib/find/browser/findController';
   import * as monaco from 'monaco-editor/editor/editor.api';
   import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
   import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
@@ -236,10 +237,11 @@
       fontSize?: number;
       fontFamily?: string;
       readOnly?: boolean;
+      largeFile?: boolean;
       initialScrollTop?: number;
       initialScrollLeft?: number;
     }>(),
-    { fontSize: 14, readOnly: false },
+    { fontSize: 14, readOnly: false, largeFile: false },
   );
   const emit = defineEmits<{
     'update:modelValue': [value: string];
@@ -271,7 +273,11 @@
     getWorker: (_workerId: string, label: string) => (label === 'json' ? new JsonWorker() : new EditorWorker()),
   };
   onMounted(() => {
-    model = monaco.editor.createModel(props.modelValue, undefined, modelUriForPath(props.path));
+    model = monaco.editor.createModel(
+      props.modelValue,
+      props.largeFile ? 'plaintext' : undefined,
+      modelUriForPath(props.path),
+    );
     editor = monaco.editor.create(root.value!, {
       model,
       automaticLayout: false,
@@ -279,7 +285,18 @@
       fontFamily: props.fontFamily,
       theme: 'vs-dark',
       readOnly: props.readOnly,
-      minimap: { enabled: true },
+      wordWrap: 'on',
+      wrappingIndent: 'same',
+      wrappingStrategy: 'simple',
+      stopRenderingLineAfter: -1,
+      largeFileOptimizations: true,
+      maxTokenizationLineLength: 20_000,
+      minimap: { enabled: !props.largeFile },
+      folding: !props.largeFile,
+      wordBasedSuggestions: props.largeFile ? 'off' : 'currentDocument',
+      'semanticHighlighting.enabled': !props.largeFile,
+      stickyScroll: { enabled: !props.largeFile },
+      bracketPairColorization: { enabled: !props.largeFile },
       scrollBeyondLastLine: false,
     });
     editor.onDidChangeModelContent(() => {
@@ -340,8 +357,18 @@
     },
   );
   watch(
-    () => [props.fontFamily, props.readOnly] as const,
-    ([fontFamily, readOnly]) => editor?.updateOptions({ fontFamily, readOnly }),
+    () => [props.fontFamily, props.readOnly, props.largeFile] as const,
+    ([fontFamily, readOnly, largeFile]) =>
+      editor?.updateOptions({
+        fontFamily,
+        readOnly,
+        minimap: { enabled: !largeFile },
+        folding: !largeFile,
+        wordBasedSuggestions: largeFile ? 'off' : 'currentDocument',
+        'semanticHighlighting.enabled': !largeFile,
+        stickyScroll: { enabled: !largeFile },
+        bracketPairColorization: { enabled: !largeFile },
+      }),
   );
 
   onBeforeUnmount(() => {
@@ -358,12 +385,20 @@
   });
   defineExpose({
     focus: focusEditor,
+    openSearch: () => editor?.getAction('actions.find')?.run(),
     toggleComment: () => (editor ? toggleEditorComment(editor) : Promise.resolve(false)),
   });
 </script>
 
 <template>
-  <div ref="root" data-testid="monaco-editor" class="monaco-editor-container" @click="focusEditor"></div>
+  <div
+    ref="root"
+    data-testid="monaco-editor"
+    class="monaco-editor-container"
+    :data-large-file="largeFile ? 'true' : 'false'"
+    data-word-wrap="on"
+    @click="focusEditor"
+  ></div>
 </template>
 
 <style scoped>

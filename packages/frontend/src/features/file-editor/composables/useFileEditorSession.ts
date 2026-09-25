@@ -1,7 +1,7 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import type { FileDocumentPort } from '../ports/file-document-port';
 import type { EditorDocument, EditorLineEnding } from '../model/editor';
-import { canonicalEditorEncoding, decodeEditorRawContent, encodeEditorContent } from '../model/editorEncoding';
+import { canonicalEditorEncoding } from '../model/editorEncoding';
 
 export interface FileEditorOpenContext {
   scopeId?: string;
@@ -75,7 +75,6 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
         name: path.split('/').pop() || path,
         content: loaded.content,
         originalContent: loaded.content,
-        rawContent: loaded.rawContent,
         encoding: canonicalEditorEncoding(loaded.encoding),
         dirty: false,
         saveState: 'idle',
@@ -118,9 +117,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     doc.saveState = 'saving';
     doc.error = undefined;
     try {
-      const rawContent = await encodeEditorContent(contentToSave, encodingToSave);
       await port.save(doc.path, contentToSave, encodingToSave);
-      doc.rawContent = rawContent;
       doc.originalContent = contentToSave;
       doc.dirty = doc.content !== contentToSave;
       doc.saveState = doc.dirty ? 'idle' : 'saved';
@@ -145,7 +142,6 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
       const loaded = await port.load(doc.path);
       doc.content = loaded.content;
       doc.originalContent = loaded.content;
-      doc.rawContent = loaded.rawContent;
       doc.encoding = canonicalEditorEncoding(loaded.encoding);
       doc.dirty = false;
       doc.saveState = 'idle';
@@ -161,12 +157,15 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     const doc = tabs.value.find((item) => item.id === id);
     if (!doc || !encoding || doc.encoding === encoding) return;
     if (savingDocuments.has(doc.id)) return;
+    const port = ports.get(doc.id) ?? defaultPort;
+    if (!port) throw new Error('The source session for this file is no longer available.');
     beginLoading();
     doc.error = undefined;
     try {
-      doc.content = await decodeEditorRawContent(doc.rawContent, encoding);
-      doc.originalContent = doc.content;
-      doc.encoding = encoding;
+      const loaded = await port.load(doc.path, encoding);
+      doc.content = loaded.content;
+      doc.originalContent = loaded.content;
+      doc.encoding = canonicalEditorEncoding(loaded.encoding);
       doc.dirty = false;
       doc.saveState = 'idle';
     } catch (cause) {
