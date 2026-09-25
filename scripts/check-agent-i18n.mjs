@@ -17,6 +17,60 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 
+const stripNonRuntimeComments = (text) => {
+  let inBlockComment = false;
+  let inHtmlComment = false;
+  return text
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (inBlockComment) {
+        if (trimmed.includes('*/')) inBlockComment = false;
+        return '';
+      }
+      if (inHtmlComment) {
+        if (trimmed.includes('-->')) inHtmlComment = false;
+        return '';
+      }
+      if (trimmed.startsWith('/*')) {
+        if (!trimmed.includes('*/')) inBlockComment = true;
+        return '';
+      }
+      if (trimmed.startsWith('<!--')) {
+        if (!trimmed.includes('-->')) inHtmlComment = true;
+        return '';
+      }
+      if (trimmed.startsWith('//') || trimmed.startsWith('*')) return '';
+      return line;
+    })
+    .join('\n');
+};
+
+const escapeRegExp = (value) => value.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+
+const scrubUnusedSimpleBindings = (text) =>
+  text.replace(
+    /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(['"])(agent\.[A-Za-z0-9_.-]+)\2\s*;?/g,
+    (declaration, identifier) => {
+      const occurrences = text.match(new RegExp(`\\b${escapeRegExp(identifier)}\\b`, 'g'))?.length ?? 0;
+      return occurrences <= 1 ? '' : declaration;
+    },
+  );
+
+export const collectAgentI18nReferences = (sourceText) => {
+  const text = scrubUnusedSimpleBindings(stripNonRuntimeComments(sourceText));
+  const literals = new Set();
+  const prefixes = new Set();
+
+  for (const match of text.matchAll(/['"`](agent\.[A-Za-z0-9_.-]+)['"`]/g)) literals.add(match[1]);
+  for (const match of text.matchAll(/`(agent\.[A-Za-z0-9_.-]*)\$\{/g)) {
+    prefixes.add(match[1].replace(/\.$/, ''));
+  }
+  for (const match of text.matchAll(/['"`](agent\.[A-Za-z0-9_.]*)\*/g)) prefixes.add(match[1]);
+
+  return { literals, prefixes };
+};
+
 const here = dirname(fileURLToPath(import.meta.url));
 const agentDir = resolve(here, '../packages/frontend/src/features/agent');
 const localeDir = join(agentDir, 'i18n');
@@ -43,7 +97,6 @@ const BRAND_TERMS = new Set([
   'agent.settings.guardrails.eventBatchValue',
   'agent.settings.guardrails.commitQueueValue',
   'agent.workspaceRuntime.targetSource',
-  'agent.tasks.runId',
 ]);
 
 const flatten = (value, prefix = '') => {
@@ -131,16 +184,15 @@ for (const file of sourceFiles) {
 }
 
 /*
- * §3.5 / §7.40: a key is reachable when some source file names it (or names a
- * parent/child of it) as a string literal, or when a template literal builds it
- * from a literal prefix. Anything left over is unreachable copy.
+ * §3.5 / §7.40: reachability is derived only from runtime source, never tests or
+ * this checker itself. Runtime maps and dynamic prefixes remain supported, while
+ * an unconsumed simple const/let `agent.*` binding is scrubbed before scanning so
+ * a dummy literal cannot keep dead locale copy alive.
  */
 const REFERENCE_ROOTS = [
   resolve(here, '../packages/frontend/src'),
   resolve(here, '../packages/backend/src'),
   resolve(here, '../packages/agent-runner/src'),
-  resolve(here, '../tests'),
-  resolve(here, '../scripts'),
 ];
 
 const referenceFiles = [];
@@ -157,13 +209,9 @@ for (const root of REFERENCE_ROOTS) collectReferences(root);
 const referencedLiterals = new Set();
 const referencedPrefixes = new Set();
 for (const file of referenceFiles) {
-  const text = readFileSync(file, 'utf8');
-  for (const match of text.matchAll(/['"`](agent\.[A-Za-z0-9_.-]+)['"`]/g)) referencedLiterals.add(match[1]);
-  for (const match of text.matchAll(/['"`](agent\.[A-Za-z0-9_.-]+)\.\$\{/g)) referencedPrefixes.add(match[1]);
-  for (const match of text.matchAll(/`(agent\.[A-Za-z0-9_.-]*)\$\{/g)) {
-    referencedPrefixes.add(match[1].replace(/\.$/, ''));
-  }
-  for (const match of text.matchAll(/['"`](agent\.[A-Za-z0-9_.]*)\*/g)) referencedPrefixes.add(match[1]);
+  const references = collectAgentI18nReferences(readFileSync(file, 'utf8'));
+  for (const literal of references.literals) referencedLiterals.add(literal);
+  for (const prefix of references.prefixes) referencedPrefixes.add(prefix);
 }
 // A literal that is a strict prefix of dictionary keys but is not itself a key
 // is a runtime-built lookahead: `translateOrRaw('agent.settings.x', value)` and

@@ -920,8 +920,7 @@
         "storage": "Files and storage",
         "extensions": "Apps and extensions",
         "safety": "Safety and system",
-        "runtime": "Runtime & Environments",
-        "plugins": "Plugins & Security"
+        "runtime": "Runtime & Environments"
       },
       "groupDescriptions": {
         "overview": "Feature state, installed Agent apps, app activity, and capability grants.",
@@ -1573,7 +1572,6 @@
       "empty": "No run is selected.",
       "background": "Other active conversations",
       "goal": "Goal",
-      "runId": "Run ID",
       "recentFacts": "Recent facts",
       "rawPayload": "Raw payload",
       "checkpoints": "Checkpoints",

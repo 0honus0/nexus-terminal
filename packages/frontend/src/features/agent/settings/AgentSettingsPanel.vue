@@ -111,7 +111,6 @@
 
   const activeGroup = ref<AgentSettingsGroupId>('models');
   const visitedGroups = reactive(new Set<AgentSettingsGroupId>(['models']));
-  const _legacyPluginGroupKey = 'agent.settings.groups.plugins';
 
   const selectGroup = (id: AgentSettingsGroupId): void => {
     if (activeGroup.value === id) {
@@ -650,7 +649,7 @@
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
       <div class="space-y-3 sm:space-y-4">
         <!-- 核心维度导航 (4 个子项直接平铺展示，外部不再套层) -->
-        <nav class="grid grid-cols-4 gap-2 sm:gap-2.5 w-full" :aria-label="'agent.settings.navigation'">
+        <nav class="grid grid-cols-4 gap-2 sm:gap-2.5 w-full" :aria-label="$t('agent.settings.navigation')">
           <button
             v-for="group in groups"
             :key="group.id"

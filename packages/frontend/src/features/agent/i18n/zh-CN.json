@@ -920,8 +920,7 @@
         "storage": "文件与存储",
         "extensions": "App 与扩展",
         "safety": "安全与系统",
-        "runtime": "运行与环境",
-        "plugins": "插件与安全"
+        "runtime": "运行与环境"
       },
       "groupDescriptions": {
         "overview": "查看功能状态、Agent App、活动情况与能力授权。",
@@ -1573,7 +1572,6 @@
       "empty": "当前没有 Run。",
       "background": "其他正在运行的会话",
       "goal": "目标",
-      "runId": "Run ID",
       "recentFacts": "最近事实",
       "rawPayload": "原始数据",
       "checkpoints": "检查点",

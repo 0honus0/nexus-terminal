@@ -920,8 +920,7 @@
         "storage": "ファイルとストレージ",
         "extensions": "App と拡張",
         "safety": "安全とシステム",
-        "runtime": "実行と環境",
-        "plugins": "プラグインとセキュリティ"
+        "runtime": "実行と環境"
       },
       "groupDescriptions": {
         "overview": "機能状態、Agent App、アクティビティ、Capability grant を確認します。",
@@ -1573,7 +1572,6 @@
       "empty": "Run が選択されていません。",
       "background": "他の実行中の会話",
       "goal": "ゴール",
-      "runId": "Run ID",
       "recentFacts": "最近の事実",
       "rawPayload": "生データ",
       "checkpoints": "チェックポイント",
