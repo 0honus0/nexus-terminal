@@ -3,13 +3,15 @@
   "group": 3,
   "workers": 8,
   "specs": [
-    "specs/mobile/dashboard-mobile.spec.ts",
-    "specs/mobile/ssh-workspace.spec.ts",
-    "specs/mobile/suspend-resume-ui.spec.ts",
-    "specs/mobile/terminal-touch.spec.ts",
-    "specs/mobile/touch-advanced.spec.ts",
-    "specs/mobile/touch-workflows.spec.ts",
     "specs/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "specs/ssh/progress-display-archive.spec.ts"
+    "specs/ui/notification-delivery.spec.ts",
+    "specs/ui/notification-settings.spec.ts",
+    "specs/ui/proxy-management.spec.ts",
+    "specs/ui/system-settings.spec.ts",
+    "specs/ui/theme-switching.spec.ts",
+    "specs/ssh/connection-edit-delete.spec.ts",
+    "specs/ssh/connection-list-search.spec.ts",
+    "specs/ssh/connection.spec.ts",
+    "specs/ssh/reconnect-ui.spec.ts"
   ]
 }

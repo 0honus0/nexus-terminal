@@ -7,14 +7,7 @@
     "specs/ui/backup-ui.spec.ts",
     "specs/ui/connection-non-ssh-bulk.spec.ts",
     "specs/ui/custom-terminal-theme.spec.ts",
-    "specs/ssh/connection-edit-delete.spec.ts",
-    "specs/ssh/connection-list-search.spec.ts",
-    "specs/ssh/connection.spec.ts",
-    "specs/ssh/reconnect-ui.spec.ts",
-    "specs/ssh/progress-display-archive-cancel.spec.ts",
-    "specs/ssh/panel-wheel-scaling.spec.ts",
-    "specs/ssh/terminal-protocol.spec.ts",
-    "specs/ssh/terminal-tools-ui.spec.ts",
-    "specs/ssh/terminal-ui.spec.ts"
+    "specs/ssh/file-manager-navigation.spec.ts",
+    "specs/ssh/file-preview-editor.spec.ts"
   ]
 }
