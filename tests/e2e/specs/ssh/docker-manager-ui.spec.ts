@@ -439,10 +439,8 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         const row = element.querySelector<HTMLTableRowElement>(
           'tr[data-filename]:not([data-filename=".."]):not([data-filename=""])',
         );
-        const typeCell = row?.querySelector<HTMLElement>('.file-row-type');
-        const icon = typeCell?.querySelector<HTMLElement>('i');
-        const name = row?.querySelector<HTMLElement>('.file-row-name button');
-        const sizeCell = row?.querySelector<HTMLElement>('.file-row-meta');
+        const icon = row?.querySelector<HTMLElement>('.file-row-icon');
+        const name = row?.querySelector<HTMLElement>('.file-row-name-button');
         const iconBox = icon?.getBoundingClientRect();
         const nameBox = name?.getBoundingClientRect();
         return {
@@ -450,18 +448,15 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           listClientWidth: list?.clientWidth ?? 0,
           listScrollWidth: list?.scrollWidth ?? 0,
           iconNameGap: iconBox && nameBox ? nameBox.left - iconBox.right : null,
-          typeWidth: typeCell?.getBoundingClientRect().width ?? 0,
-          metadataVisible: sizeCell
-            ? getComputedStyle(sizeCell).display !== 'none' && getComputedStyle(sizeCell).visibility !== 'hidden'
-            : null,
+          metadataCellCount:
+            row?.querySelectorAll<HTMLElement>('.file-row-permissions, .file-row-modified').length ?? 0,
         };
       });
       expect(narrowMetrics.rootWidth).toBeLessThanOrEqual(360);
       expect(narrowMetrics.listScrollWidth).toBeLessThanOrEqual(narrowMetrics.listClientWidth + 1);
       expect(narrowMetrics.iconNameGap).not.toBeNull();
       expect(narrowMetrics.iconNameGap as number).toBeLessThanOrEqual(12);
-      expect(narrowMetrics.typeWidth).toBeLessThanOrEqual(36);
-      expect(narrowMetrics.metadataVisible).toBe(false);
+      expect(narrowMetrics.metadataCellCount).toBe(0);
       const pathMetrics = await fileManager.evaluate((element) => {
         const toolbar = element.querySelector<HTMLElement>('.file-manager-toolbar')!;
         const actions = element.querySelector<HTMLElement>('.file-manager-actions')!;
