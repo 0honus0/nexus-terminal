@@ -101,7 +101,7 @@
       "versionId": "3.13.15",
       "displayName": "Python 3.13.15",
       "contentDigestByArch": {
-        "x64": "sha256:eadeb2faa2a25c82c73ab30f96490663e5a0278d8fa83f0a3783c617a7ad5e93"
+        "x64": "sha256:c20642525cb2142b352f127e5a925875b82a0187ae56b3e6b9802374871ff7d7"
       },
       "downloadRefByArch": {
         "x64": "mise://2026.9.5/python/3.13.15"

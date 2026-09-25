@@ -163,6 +163,8 @@ const server = http.createServer(async (request, response) => {
 
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const serializedMessages = JSON.stringify(messages);
+  const latestUserMessage = [...messages].reverse().find((message) => message?.role === 'user');
+  const latestUserText = JSON.stringify(latestUserMessage?.content ?? '');
   const markerOccurrences = (marker) => serializedMessages.split(marker).length - 1;
   if (markerOccurrences('E2E_GOAL_UPDATE_HOLD') > 1 || markerOccurrences('E2E_INTERRUPT_HOLD') > 1) {
     response.writeHead(422, { 'Content-Type': 'application/json' });
@@ -324,7 +326,7 @@ const server = http.createServer(async (request, response) => {
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'plan_update');
   const failRun = serializedMessages.includes('E2E_FAIL_RUN');
   const holdForGoalUpdate =
-    serializedMessages.includes('E2E_GOAL_UPDATE_HOLD') && !serializedMessages.includes('[Current goal]');
+    latestUserText.includes('E2E_GOAL_UPDATE_HOLD') && !serializedMessages.includes('[Current goal]');
   const holdForInterrupt =
     serializedMessages.includes('E2E_INTERRUPT_HOLD') && !serializedMessages.includes('E2E_INTERRUPT_RESUME');
 

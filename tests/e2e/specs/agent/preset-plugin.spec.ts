@@ -1376,9 +1376,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     expect(threadRunsResponse.ok(), await threadRunsResponse.text()).toBeTruthy();
     const threadRunPage = (await threadRunsResponse.json()) as Envelope<{ items: RunView[] }>;
     const terminalRunStatuses = ['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'];
-    const activeRun = threadRunPage.data.items.find(
-      (candidate) => !terminalRunStatuses.includes(candidate.status),
-    );
+    const activeRun = threadRunPage.data.items.find((candidate) => !terminalRunStatuses.includes(candidate.status));
     if (activeRun) {
       const cancelled = await context.request.post(`/api/v1/apps/nexus.agent/runs/${activeRun.id}/cancel`, {
         headers: { 'X-Nexus-CSRF': await csrfToken(context.request), 'Idempotency-Key': randomUUID() },
