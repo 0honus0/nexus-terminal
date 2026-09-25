@@ -56,7 +56,17 @@
     maxStepsPerEvent: 3,
     stopImmediatePropagation: true,
   });
-  const rowStyle = computed(() => ({ '--quick-row-scale': localScale.value }));
+  const rowStyle = computed(() => {
+    const scale = localScale.value;
+    return {
+      '--quick-row-scale': scale,
+      '--quick-row-min-height': `${scale * 1.875}rem`,
+      '--quick-row-padding-block': `${Math.max(0.1, scale * 0.5 - 0.15)}rem`,
+      '--quick-row-padding-inline': `${scale * 0.6}rem`,
+      '--quick-row-compact-min-height': `${scale * 1.5}rem`,
+      '--quick-row-compact-padding-block': `${Math.max(0.05, scale * 0.3 - 0.15)}rem`,
+    };
+  });
 
   watch(
     () => props.rowScale,
@@ -626,12 +636,13 @@
     padding-block: calc(var(--quick-row-scale) * 0.25rem);
   }
   .quick-command-row {
-    min-height: calc(var(--quick-row-scale) * 1.875rem);
-    padding: max(0.1rem, calc(var(--quick-row-scale) * 0.5rem - 0.15rem)) calc(var(--quick-row-scale) * 0.6rem);
+    min-height: var(--quick-row-min-height);
+    padding-block: var(--quick-row-padding-block);
+    padding-inline: var(--quick-row-padding-inline);
   }
   .quick-command-row--compact {
-    min-height: calc(var(--quick-row-scale) * 1.5rem);
-    padding-block: max(0.05rem, calc(var(--quick-row-scale) * 0.3rem - 0.15rem));
+    min-height: var(--quick-row-compact-min-height);
+    padding-block: var(--quick-row-compact-padding-block);
   }
   .quick-command-display-text {
     min-width: 0;

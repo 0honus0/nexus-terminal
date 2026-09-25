@@ -11,14 +11,16 @@ assert.equal(
   0,
   'template utility padding must not override scale-owned Quick Commands row padding',
 );
-
+assert(source.includes("'--quick-row-min-height': `${scale * 1.875}rem`"));
+assert(source.includes("'--quick-row-padding-block': `${Math.max(0.1, scale * 0.5 - 0.15)}rem`"));
+assert(source.includes("'--quick-row-compact-min-height': `${scale * 1.5}rem`"));
+assert(source.includes('min-height: var(--quick-row-min-height);'));
+assert(source.includes('padding-block: var(--quick-row-padding-block);'));
+assert(source.includes('min-height: var(--quick-row-compact-min-height);'));
+const rowRule = source.match(/\.quick-command-row\s*\{([^}]*)\}/s)?.[1] ?? '';
 assert(
-  source.includes('padding: max(0.1rem, calc(var(--quick-row-scale) * 0.5rem - 0.15rem))'),
-  'normal Quick Commands rows must convert a 0.12 scale step into a visible vertical padding change',
-);
-assert(
-  source.includes('padding-block: max(0.05rem, calc(var(--quick-row-scale) * 0.3rem - 0.15rem));'),
-  'compact Quick Commands rows must keep bounded but responsive vertical scaling',
+  !rowRule.includes('calc(var(--quick-row-scale)'),
+  'row geometry must not depend on browser support for CSS number-by-length multiplication',
 );
 
 process.stdout.write('Quick Commands row scale regression: PASS\n');
