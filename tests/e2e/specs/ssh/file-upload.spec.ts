@@ -343,7 +343,7 @@ test('folder upload into an existing directory overwrites only conflicting files
   await expect(conflictModal).toBeHidden();
 
   await expect(fileManagerRow(page, folderName)).toBeVisible({ timeout: 30_000 });
-  await expect(fileManagerRow(page, folderName).locator('td.file-row-type .fa-folder').first()).toBeVisible();
+  await expect(fileManagerRow(page, folderName).locator('.file-row-icon.fa-folder').first()).toBeVisible();
   await fileManagerRow(page, folderName).dblclick();
   await expect(fileManagerRow(page, 'new-from-local.txt')).toBeVisible({ timeout: 30_000 });
   await expect.poll(() => readRemoteText(page, '01-first.bin'), { timeout: 30_000 }).toBe(replacement);

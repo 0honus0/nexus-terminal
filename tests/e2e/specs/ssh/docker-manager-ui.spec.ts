@@ -512,8 +512,8 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       const toolbarInnerWidth =
         pathMetrics.toolbarWidth - pathMetrics.toolbarPaddingLeft - pathMetrics.toolbarPaddingRight;
       expect(Math.abs(pathMetrics.actionsWidth - toolbarInnerWidth)).toBeLessThan(2);
-      expect(pathMetrics.actionsJustify).toBe('flex-start');
-      expect(pathMetrics.actionsWrap).toBe('wrap');
+      expect(pathMetrics.actionsJustify).toBe('space-between');
+      expect(pathMetrics.actionsWrap).toBe('nowrap');
       expect(pathMetrics.rowEdgeGaps.length).toBeGreaterThan(0);
       for (const row of pathMetrics.rowEdgeGaps.filter((entry) => entry.count > 1)) {
         expect(Math.abs(row.left)).toBeLessThan(2);

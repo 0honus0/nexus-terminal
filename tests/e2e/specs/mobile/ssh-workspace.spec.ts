@@ -79,7 +79,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     await expect(modal).toBeVisible();
     await expect.poll(() => countStatusControls('status.start'), { timeout: 15_000 }).toBeGreaterThan(startsBeforeOpen);
     const monitor = modal.getByTestId('status-monitor');
-    await expect(monitor).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
+    await expect(monitor.locator('.metric-cpu')).toHaveAttribute('title', /Nexus Virtual CPU/, { timeout: 15_000 });
     await expect(monitor).toContainText('CPU');
     await expect(monitor.getByText('Online', { exact: true })).toBeVisible();
     await expect(monitor.getByText('127.0.0.1', { exact: true })).toHaveCount(0);
@@ -118,7 +118,13 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     await expect
       .poll(() => countStatusControls('status.start'), { timeout: 15_000 })
       .toBeGreaterThan(startsBeforeReopen);
-    await expect(modal.getByTestId('status-monitor')).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
+    await expect(modal.getByTestId('status-monitor').locator('.metric-cpu')).toHaveAttribute(
+      'title',
+      /Nexus Virtual CPU/,
+      {
+        timeout: 15_000,
+      },
+    );
     await modal.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(modal).toBeHidden();
   });
@@ -126,47 +132,39 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
   await slowStep('long press on a remote file opens the touch context menu', async () => {
     await openConnectedFileManager(page);
     const file = fileManagerRow(page, 'seed.txt');
-    await expect(file.locator('.file-row-type')).toBeHidden();
-    await expect(file.locator('.file-row-name-mobile-icon')).toBeVisible();
-    await expect(file.locator('.file-row-name-button')).toHaveCSS('justify-content', 'flex-start');
-    await expect(file.locator('.file-row-compact-meta')).toHaveCSS('justify-content', 'flex-end');
-    await expect(file.locator('.file-row-compact-size')).toBeHidden();
+    await expect(file.locator('.file-row-icon')).toBeVisible();
+    await expect(file.locator('.file-row-name-button')).toBeVisible();
     const compactGeometry = await file.evaluate((row) => {
+      const icon = row.querySelector<HTMLElement>('.file-row-icon')?.getBoundingClientRect();
       const name = row.querySelector<HTMLElement>('.file-row-name-button')?.getBoundingClientRect();
-      const time = row.querySelector<HTMLElement>('.file-row-compact-meta')?.getBoundingClientRect();
-      if (!name || !time) return null;
+      if (!icon || !name) return null;
       return {
-        nameLeft: name.left,
+        rowRight: row.getBoundingClientRect().right,
+        iconNameGap: name.left - icon.right,
         nameRight: name.right,
-        timeLeft: time.left,
-        timeRight: time.right,
-        timeWidth: time.width,
       };
     });
     expect(compactGeometry).toBeTruthy();
-    expect(compactGeometry!.nameRight).toBeLessThanOrEqual(compactGeometry!.timeLeft + 0.5);
-    expect(compactGeometry!.timeWidth).toBeGreaterThanOrEqual(123);
-    expect(compactGeometry!.timeWidth).toBeLessThanOrEqual(125);
+    expect(compactGeometry!.iconNameGap).toBeGreaterThanOrEqual(0);
+    expect(compactGeometry!.iconNameGap).toBeLessThanOrEqual(12);
+    expect(compactGeometry!.nameRight).toBeLessThanOrEqual(compactGeometry!.rowRight + 1);
 
     const longNameRow = activeFileManagerList(page).locator(`tr[data-filename="${MOBILE_LONG_FILENAME}"]`).first();
     await expect(longNameRow).toBeVisible();
     const longNameGeometry = await longNameRow.evaluate((row) => {
       const label = row.querySelector<HTMLElement>('.file-row-name-label');
       const name = row.querySelector<HTMLElement>('.file-row-name-button')?.getBoundingClientRect();
-      const time = row.querySelector<HTMLElement>('.file-row-compact-meta')?.getBoundingClientRect();
-      if (!label || !name || !time) return null;
+      if (!label || !name) return null;
       return {
         labelClientWidth: label.clientWidth,
         labelScrollWidth: label.scrollWidth,
+        rowRight: row.getBoundingClientRect().right,
         nameRight: name.right,
-        timeLeft: time.left,
-        timeWidth: time.width,
       };
     });
     expect(longNameGeometry).toBeTruthy();
     expect(longNameGeometry!.labelScrollWidth).toBeGreaterThan(longNameGeometry!.labelClientWidth);
-    expect(longNameGeometry!.nameRight).toBeLessThanOrEqual(longNameGeometry!.timeLeft + 0.5);
-    expect(Math.abs(longNameGeometry!.timeWidth - compactGeometry!.timeWidth)).toBeLessThanOrEqual(0.5);
+    expect(longNameGeometry!.nameRight).toBeLessThanOrEqual(longNameGeometry!.rowRight + 1);
     await captureFunctionalScreenshot(page, 'mobile-file-manager.png');
     const box = await file.boundingBox();
     expect(box).toBeTruthy();

@@ -270,56 +270,56 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     expect(descending.indexOf('seed.txt')).toBeLessThan(descending.indexOf('copy-source.txt'));
   });
 
-  await step('narrow file-manager layout prioritizes filenames and stacks secondary metadata', async () => {
-    await page.setViewportSize({ width: 600, height: 780 });
-    const seed = row(page, 'seed.txt');
-    const cells = seed.locator('td');
-    await expect(seed).toBeVisible();
-    await expect(seed.locator('.file-row-compact-meta')).toBeHidden();
-    await expect(cells.nth(2)).toBeVisible();
-    await expect(cells.nth(3)).toBeHidden();
-    await expect(cells.nth(4)).toBeVisible();
+  await step('narrow file-manager layout follows container-width columns without horizontal overflow', async () => {
+    const assertResponsiveColumns = async () => {
+      const fileManager = manager(page);
+      const seed = row(page, 'seed.txt');
+      await expect(seed).toBeVisible();
+      await expect(seed.locator('.file-row-name')).toBeVisible();
 
-    const intermediateLayout = await activeFileManagerList(page).evaluate((element) => {
-      const listRect = element.getBoundingClientRect();
-      const modifiedRect = element
-        .querySelector<HTMLTableCellElement>('thead th:nth-child(5)')!
-        .getBoundingClientRect();
-      return {
+      const layout = await activeFileManagerList(page).evaluate((element) => ({
         clientWidth: element.clientWidth,
         scrollWidth: element.scrollWidth,
-        modifiedWidth: modifiedRect.width,
-        modifiedRightGap: listRect.left + element.clientWidth - modifiedRect.right,
-      };
-    });
-    expect(intermediateLayout.scrollWidth).toBeLessThanOrEqual(intermediateLayout.clientWidth + 1);
-    expect(intermediateLayout.modifiedWidth).toBeGreaterThan(80);
-    expect(Math.abs(intermediateLayout.modifiedRightGap)).toBeLessThanOrEqual(1.5);
+      }));
+      expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+      await expect(seed.locator('.file-row-permissions')).toHaveCount(layout.clientWidth >= 400 ? 1 : 0);
+      await expect(seed.locator('.file-row-modified')).toHaveCount(layout.clientWidth >= 260 ? 1 : 0);
+      await expect(fileManager.locator('.file-table-header-permissions')).toHaveCount(
+        layout.clientWidth >= 400 ? 1 : 0,
+      );
+      await expect(fileManager.locator('.file-table-header-modified')).toHaveCount(layout.clientWidth >= 260 ? 1 : 0);
+      return layout;
+    };
+
+    await page.setViewportSize({ width: 600, height: 780 });
+    const intermediateLayout = await assertResponsiveColumns();
+    if (intermediateLayout.clientWidth >= 260) {
+      const modifiedMetrics = await activeFileManagerList(page).evaluate((element) => {
+        const listRect = element.getBoundingClientRect();
+        const modified = element.querySelector<HTMLTableCellElement>('.file-table-header-modified');
+        const modifiedRect = modified?.getBoundingClientRect();
+        return modifiedRect
+          ? {
+              width: modifiedRect.width,
+              rightGap: listRect.left + element.clientWidth - modifiedRect.right,
+            }
+          : null;
+      });
+      expect(modifiedMetrics).toBeTruthy();
+      expect(modifiedMetrics!.width).toBeGreaterThanOrEqual(80);
+      expect(Math.abs(modifiedMetrics!.rightGap)).toBeLessThanOrEqual(1.5);
+    }
 
     await page.setViewportSize({ width: 500, height: 780 });
-    await expect(seed.locator('.file-row-compact-meta')).toBeVisible();
-    await expect(seed.locator('.file-row-compact-meta')).toContainText(/B/);
-    await expect(seed.locator('.file-row-compact-meta')).toContainText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
-    await expect(cells.nth(2)).toBeHidden();
-    await expect(cells.nth(3)).toBeHidden();
-    await expect(cells.nth(4)).toBeHidden();
-
-    const compactLayout = await activeFileManagerList(page).evaluate((element) => ({
-      clientWidth: element.clientWidth,
-      scrollWidth: element.scrollWidth,
-    }));
-    expect(compactLayout.scrollWidth).toBeLessThanOrEqual(compactLayout.clientWidth + 1);
+    await assertResponsiveColumns();
 
     await page.setViewportSize({ width: 1440, height: 900 });
     // The desktop popup owns a persisted size. Expanding only the browser viewport must not be
-    // treated as if the popup itself was resized. Reopen it so the saved wide geometry is restored,
-    // then verify the File Manager switches back from its compact container presentation.
+    // treated as if the popup itself was resized. Reopen it so the saved wide geometry is restored.
     await closeConnectedFileManager(page);
     await reopenConnectedFileManager(page);
-    await expect(seed.locator('.file-row-compact-meta')).toBeHidden();
-    await expect(cells.nth(2)).toBeVisible();
-    await expect(cells.nth(3)).toBeVisible();
-    await expect(cells.nth(4)).toBeVisible();
+    const wideLayout = await assertResponsiveColumns();
+    expect(wideLayout.clientWidth).toBeGreaterThanOrEqual(400);
   });
 
   await step('Typing an absolute path navigates directly to the remote directory', async () => {
