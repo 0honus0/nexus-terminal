@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /*
- * Guards the Agent i18n surface against three defects recorded in doc/problem.md:
- *   1. §7.15-a: a locale silently missing the English dictionary's keys;
- *   2. §7.15-a: `zh-CN` / `ja-JP` keeping an English sentence verbatim (e.g.
+ * Guards the Agent i18n surface against four recurring defects:
+ *   1. a locale silently missing the English dictionary's keys;
+ *   2. `zh-CN` / `ja-JP` keeping an English sentence verbatim (e.g.
  *      "Denylist revision {revision}" shown inside a Chinese UI);
- *   3. §7.14-c: user-facing Chinese hardcoded in the component sources, which
- *      leaks into the English/Japanese UI.
- *   4. §3.5: dictionary keys that no source file can ever resolve, which keep
- *      three locales worth of dead copy alive (see §7.40).
+ *   3. user-facing Chinese hardcoded in component sources, leaking into the
+ *      English/Japanese UI;
+ *   4. dictionary keys that no source file can ever resolve, keeping three
+ *      locales worth of dead copy alive.
  *
  * Anything that is genuinely untranslatable (brand, protocol, URL/sample
  * values, pure placeholders) belongs in BRAND_TERMS below, and any source line

@@ -3025,8 +3025,8 @@
   /*
    * Keep the line box tall enough for CJK ink. A `line-height: 1` box combined
    * with `truncate` (overflow: hidden) on the inner label clipped the bottom of
-   * Chinese glyphs; this is an unlayered scoped rule, so the `leading-*`
-   * utility on the element could never win (see doc/problem.md §7.10).
+   * Chinese glyphs. This scoped rule intentionally owns the line-height instead
+   * of relying on a layered `leading-*` utility that cannot override it.
    */
   .agent-config-summary {
     font-size: 11px;

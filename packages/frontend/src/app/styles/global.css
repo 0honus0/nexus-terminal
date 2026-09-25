@@ -190,7 +190,7 @@ button.bg-error .fab {
    * surface: Agent popovers (files/AgentConfigPopover.vue), Gen2 popover /
    * combobox / select / dialog and the UI gallery samples. Components opt in
    * with the class; nothing repeats fill / blur / border / shadow by hand.
-   * See doc/problem.md 7.21 and 7.23.
+   * Keep this recipe centralized so component-specific glass styles cannot drift.
    */
   :root {
     --glass-fill: transparent;
