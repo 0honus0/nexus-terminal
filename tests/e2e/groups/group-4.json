@@ -6,15 +6,12 @@
     "specs/agent/host.spec.ts",
     "specs/agent/preset-plugin.spec.ts",
     "specs/agent/provider.spec.ts",
+    "specs/auth/setup-login.spec.ts",
     "specs/ui/batch-connection-edit.spec.ts",
     "specs/ui/connection-create.spec.ts",
-    "specs/ui/captcha-settings.spec.ts",
-    "specs/ui/change-password.spec.ts",
-    "specs/ui/ip-blacklist-settings.spec.ts",
-    "specs/ui/ip-whitelist-settings.spec.ts",
-    "specs/ui/protected-navigation.spec.ts",
-    "specs/ui/ssh-key-management.spec.ts",
-    "specs/websocket/authenticated-session.spec.ts",
-    "specs/ssh/suspend-resume.spec.ts"
+    "specs/ssh/connection-edit-delete.spec.ts",
+    "specs/ssh/connection-list-search.spec.ts",
+    "specs/ssh/connection.spec.ts",
+    "specs/ssh/reconnect-ui.spec.ts"
   ]
 }

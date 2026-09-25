@@ -3,10 +3,13 @@
   "group": 6,
   "workers": 8,
   "specs": [
-    "specs/auth/setup-login.spec.ts",
     "specs/ui/backup-ui.spec.ts",
     "specs/ui/connection-non-ssh-bulk.spec.ts",
     "specs/ui/custom-terminal-theme.spec.ts",
+    "specs/ssh/command-history-management.spec.ts",
+    "specs/ssh/quick-command-collapsible-search.spec.ts",
+    "specs/ssh/quick-command-management.spec.ts",
+    "specs/ssh/quick-command-tags-variables.spec.ts",
     "specs/ssh/file-manager-navigation.spec.ts",
     "specs/ssh/file-preview-editor.spec.ts"
   ]
