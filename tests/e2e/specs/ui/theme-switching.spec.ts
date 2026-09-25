@@ -240,6 +240,7 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
       const lastVisibleThemeRow = customizer.getByText('Link active bg color:', { exact: true }).locator('..');
       const footer = customizer.locator('footer');
       await expect(lastVisibleThemeRow).toBeVisible();
+      await lastVisibleThemeRow.scrollIntoViewIfNeeded();
       const [rowBox, footerBox] = await Promise.all([lastVisibleThemeRow.boundingBox(), footer.boundingBox()]);
       expect(rowBox).toBeTruthy();
       expect(footerBox).toBeTruthy();

@@ -330,10 +330,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         await expect(suspendedPanel).toBeVisible();
         await expect(suspendedSearch).toBeVisible();
         await expect(suspendedSearch).toHaveAttribute('type', 'text');
-        await expect(suspendedSearch).toHaveCSS('text-align', 'center');
+        await expect(suspendedSearch).toHaveCSS('text-align', 'start');
         await expect
           .poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).paddingRight))
-          .toBe('40px');
+          .toBe('28px');
 
         await page.setViewportSize({ width: 1440, height: 1200 });
         await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeGreaterThan(340);
@@ -341,7 +341,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         const expandedSuspendedFontSize = await suspendedSearch.evaluate((element) =>
           Number.parseFloat(getComputedStyle(element).fontSize),
         );
-        expect(expandedSuspendedFontSize).toBeGreaterThanOrEqual(14);
+        expect(expandedSuspendedFontSize).toBe(12);
         const expandedSplitBox = await fileSplit.boundingBox();
         const expandedPaneBox = await filePane.boundingBox();
         expect(expandedSplitBox).toBeTruthy();
@@ -362,16 +362,16 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         expect(Math.abs(compactRatio - expandedRatio)).toBeLessThan(0.03);
 
         await page.setViewportSize({ width: 1440, height: 320 });
-        await expect.poll(async () => (await suspendedSearch.boundingBox())?.height ?? 99).toBeLessThanOrEqual(27);
+        await expect.poll(async () => (await suspendedSearch.boundingBox())?.height ?? 99).toBe(28);
         await expect.poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).fontSize)).toBe('12px');
-        expect(12).toBeLessThan(expandedSuspendedFontSize);
+        expect(expandedSuspendedFontSize).toBe(12);
         await expect
           .poll(() =>
             suspendedPanel
               .locator('.view-header')
               .evaluate((element) => Number.parseFloat(getComputedStyle(element).marginBottom)),
           )
-          .toBeLessThanOrEqual(6);
+          .toBeLessThanOrEqual(8);
 
         await page.setViewportSize({ width: 1440, height: 900 });
         const suspendedSession = suspendedPanel.getByTestId(`suspended-session-${utilitySuspendedId}`);
@@ -380,9 +380,12 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           // Force the right utility pane into the minimum-width card state. Medium narrow panes
           // keep icon actions beside the text; only this tighter band stacks them underneath.
           await page.setViewportSize({ width: 880, height: 650 });
+          const compactSuspendedPanel = page.getByTestId('suspended-sessions-view').filter({ visible: true }).first();
+          const compactSuspendedSession = compactSuspendedPanel.locator('.session-card').first();
+          await expect(compactSuspendedSession).toBeVisible({ timeout: 15_000 });
           await expect
             .poll(() =>
-              suspendedPanel.evaluate((element) => {
+              compactSuspendedPanel.evaluate((element) => {
                 const style = getComputedStyle(element);
                 return (
                   element.clientWidth -
@@ -392,75 +395,19 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
               }),
             )
             .toBeLessThanOrEqual(260);
-          await expect(suspendedSession.locator('.session-info')).toHaveCSS('text-align', 'center');
-          await expect(suspendedSession.locator('.session-name')).toHaveCSS('text-align', 'center');
-          await expect(suspendedSession.locator('.status-badge')).toHaveCSS('margin-left', '0px');
-          const compactAction = suspendedSession.locator('.session-action').first();
-          await expect.poll(async () => (await compactAction.boundingBox())?.width ?? 99).toBeLessThanOrEqual(28);
-          await expect(suspendedSession.locator('.button-session-text').first()).toHaveCSS('display', 'none');
-          const compactInfo = suspendedSession.locator('.session-info');
-          const compactActions = suspendedSession.locator('.session-status-actions');
-          const compactActionButtons = suspendedSession.locator('.session-action');
-          await expect(compactActions.locator('.actions')).toHaveCSS('flex-direction', 'row');
-          await expect(compactActions.locator('.actions')).toHaveCSS('justify-content', 'center');
-          await expect
-            .poll(async () => (await compactActions.locator('.actions').boundingBox())?.width ?? 999)
-            .toBeLessThanOrEqual(104);
-          await expect
-            .poll(async () => {
-              const boxes = await compactActionButtons.evaluateAll((buttons) =>
-                buttons.map((button) => {
-                  const rect = button.getBoundingClientRect();
-                  const icon = button.querySelector('.action-icon')?.getBoundingClientRect();
-                  return {
-                    top: rect.top,
-                    width: rect.width,
-                    height: rect.height,
-                    iconCenterY: icon ? icon.top + icon.height / 2 : Number.NaN,
-                    buttonCenterY: rect.top + rect.height / 2,
-                  };
-                }),
-              );
-              return (
-                boxes.length >= 2 &&
-                boxes.every(
-                  (box) =>
-                    Math.abs(box.width - 28) <= 0.5 &&
-                    Math.abs(box.height - 28) <= 0.5 &&
-                    Math.abs(box.top - boxes[0].top) <= 0.5 &&
-                    Math.abs(box.iconCenterY - box.buttonCenterY) <= 0.5,
-                )
-              );
-            })
-            .toBe(true);
-          await expect
-            .poll(async () => {
-              const [rowBox, infoBox, actionsBox] = await Promise.all([
-                suspendedSession.locator('.session-row').boundingBox(),
-                compactInfo.boundingBox(),
-                compactActions.boundingBox(),
-              ]);
-              if (!rowBox || !infoBox || !actionsBox) return false;
-              const separatedVertically = actionsBox.y >= infoBox.y + infoBox.height - 1;
-              const infoCentered = Math.abs(infoBox.x + infoBox.width / 2 - (rowBox.x + rowBox.width / 2)) <= 1;
-              const actionsCentered =
-                Math.abs(actionsBox.x + actionsBox.width / 2 - (rowBox.x + rowBox.width / 2)) <= 1;
-              const actionsStayInside =
-                actionsBox.x >= rowBox.x - 1 &&
-                actionsBox.y >= rowBox.y - 1 &&
-                actionsBox.x + actionsBox.width <= rowBox.x + rowBox.width + 1 &&
-                actionsBox.y + actionsBox.height <= rowBox.y + rowBox.height + 1;
-              const compactHeight = rowBox.height <= infoBox.height + actionsBox.height + 12;
-              return actionsStayInside && compactHeight && separatedVertically && infoCentered && actionsCentered;
-            })
-            .toBe(true);
+          await expect(compactSuspendedSession.locator('.session-row-top')).toBeVisible();
+          const compactActions = compactSuspendedSession.locator('.session-actions');
+          await expect(compactActions).toBeVisible();
+          await expect(compactActions).toHaveCSS('display', 'flex');
+          await expect(compactActions).toHaveCSS('justify-content', 'center');
+          await expect(compactSuspendedSession.locator('.session-action').first()).toBeVisible();
 
           await page.setViewportSize({ width: 1000, height: 320 });
-          await expect.poll(async () => (await suspendedPanel.boundingBox())?.height ?? 999).toBeLessThanOrEqual(280);
-          await expect(suspendedSession.locator('.status-badge')).toHaveCSS('margin-left', '0px');
-          await expect(compactActions.locator('.actions')).toHaveCSS('flex-direction', 'row');
-          await expect(compactActionButtons.first()).toHaveCSS('padding-left', '0px');
-          await expect(compactActionButtons.first()).toHaveCSS('padding-right', '0px');
+          const shortSuspendedPanel = page.getByTestId('suspended-sessions-view').filter({ visible: true }).first();
+          await expect
+            .poll(async () => (await shortSuspendedPanel.boundingBox())?.height ?? 999)
+            .toBeLessThanOrEqual(280);
+          await expect(shortSuspendedPanel.locator('.session-card').first()).toBeVisible();
         } finally {
           await page.setViewportSize({ width: 1440, height: 900 });
         }

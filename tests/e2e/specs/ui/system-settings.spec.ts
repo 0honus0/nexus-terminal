@@ -22,7 +22,7 @@ test('system settings persist timezone and language changes through the UI', asy
 
   try {
     await page.goto('/settings');
-    await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
+    await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
     await expect(page.locator('#settings-panel-system')).toBeVisible();
     await expect(page.locator('#languageSelect')).toBeVisible();
     await expect(page.locator('#timezoneSelect')).toBeVisible();
@@ -63,7 +63,7 @@ test('system settings persist timezone and language changes through the UI', asy
 
     await step('both values survive a full settings page reload', async () => {
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
+      await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
       await expect(page.locator('#settings-panel-system')).toBeVisible();
       await expect(page.locator('#timezoneSelect')).toHaveValue(TARGET_TIMEZONE);
       await expect(page.locator('#languageSelect')).toHaveValue(TARGET_LANGUAGE);
@@ -337,7 +337,7 @@ test('system settings persist frontend and backend log levels through the UI', a
 
   try {
     await page.goto('/settings');
-    await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
+    await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
     const frontend = page.locator('#frontendLogLevelSelect');
     const backend = page.locator('#backendLogLevelSelect');
     const form = page.getByTestId('logging-settings-form');
@@ -357,7 +357,7 @@ test('system settings persist frontend and backend log levels through the UI', a
     expect(await persisted.json()).toMatchObject({ frontendLogLevel: 'debug', backendLogLevel: 'debug' });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
+    await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
     await expect(page.locator('#frontendLogLevelSelect')).toHaveValue('debug');
     await expect(page.locator('#backendLogLevelSelect')).toHaveValue('debug');
 
