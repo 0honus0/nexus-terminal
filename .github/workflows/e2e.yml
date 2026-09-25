@@ -453,6 +453,7 @@ jobs:
       - name: Run E2E group ${{ matrix.group }} of ${{ needs.environment.outputs.workers }}
         id: e2e
         timeout-minutes: 16
+        continue-on-error: true
         run: node tests/e2e/support/groups.mjs run --workers "$E2E_GROUP_WORKERS" --group "${{ matrix.group }}"
 
       - name: Upload inline functional screenshots
@@ -493,6 +494,13 @@ jobs:
             tests/e2e/playwright-report/
             tests/e2e/test-results/
           if-no-files-found: ignore
+
+      - name: Fail E2E group after collecting all results
+        if: ${{ always() && steps.e2e.outcome != 'success' }}
+        shell: bash
+        run: |
+          echo "::error::E2E group ${{ matrix.group }} finished with outcome: ${{ steps.e2e.outcome }}"
+          exit 1
 
   screenshots-commit:
     name: Commit functional screenshots

@@ -55,6 +55,8 @@ const backendEnv: Record<string, string> = {
 export default defineConfig({
   testDir: './specs',
   fullyParallel: false,
+  // Run the full selected suite even when earlier tests fail; CI reports failure only after all results are collected.
+  maxFailures: 0,
   workers: 1,
   retries: isCI ? 1 : 0,
   globalTimeout: isCI ? 15 * 60_000 : 0,
