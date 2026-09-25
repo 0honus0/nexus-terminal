@@ -371,6 +371,13 @@ test('Ctrl+C interrupts a long-running terminal output stream', async ({ page, c
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
+  let streamedBytes = 0;
+  page.on('websocket', (socket) => {
+    if (new URL(socket.url()).pathname !== '/ws/workspace') return;
+    socket.on('framereceived', ({ payload }) => {
+      if (typeof payload !== 'string') streamedBytes += payload.byteLength;
+    });
+  });
   await connectTestSshFromConnectionsPage(page, connectionId);
 
   const terminal = page.getByTestId('terminal');
@@ -380,7 +387,7 @@ test('Ctrl+C interrupts a long-running terminal output stream', async ({ page, c
     'INTERRUPT_FINISHED=no; i=0; while [ $i -lt 100000 ]; do printf \'INTERRUPT_STREAM_%06d\\n\' "$i"; i=$((i+1)); if [ $((i%100)) -eq 0 ]; then if IFS= read -r -n 1 -t 0.01 key && [ "$key" = $\'\\003\' ]; then printf \'INTERRUPT_ACK\\n\'; break; fi; fi; done; if [ "$i" -ge 100000 ]; then INTERRUPT_FINISHED=yes; fi',
   );
   await commandInput.press('Enter');
-  await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('INTERRUPT_STREAM_');
+  await expect.poll(() => streamedBytes, { timeout: 15_000 }).toBeGreaterThan(256 * 1024);
 
   await terminal.locator('textarea').focus();
   await page.keyboard.press('Control+c');
