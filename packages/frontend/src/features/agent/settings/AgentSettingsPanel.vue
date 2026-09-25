@@ -675,7 +675,7 @@
         <!-- 对应维度的卡片流 (直接平铺展示，干净利落) -->
         <div class="transition-all duration-200">
           <!-- 1. 模型与预算 -->
-          <div v-show="activeGroup === 'models'" class="space-y-5">
+          <div v-if="visitedGroups.has('models')" v-show="activeGroup === 'models'" class="space-y-5">
             <ModelProviderSettings
               :providers="providers"
               :busy="providerBusy"
@@ -710,7 +710,7 @@
           </div>
 
           <!-- 2. 工具与扩展 -->
-          <div v-show="activeGroup === 'tools'" class="space-y-5">
+          <div v-if="visitedGroups.has('tools')" v-show="activeGroup === 'tools'" class="space-y-5">
             <AppManagementSettings :apps="apps" :busy="appContextBusy" @toggle="toggleApp" @refresh="load" />
             <McpIntegrationSettings
               :busy="appContextBusy"
@@ -727,7 +727,7 @@
           </div>
 
           <!-- 3. 运行与环境 -->
-          <div v-show="activeGroup === 'runtime'" class="space-y-5">
+          <div v-if="visitedGroups.has('runtime')" v-show="activeGroup === 'runtime'" class="space-y-5">
             <PerformanceSettings
               :settings="settings"
               :busy="settingsMutationBusy"
@@ -759,7 +759,7 @@
           </div>
 
           <!-- 4. 智能协同与安全 -->
-          <div v-show="activeGroup === 'safety'" class="space-y-5">
+          <div v-if="visitedGroups.has('safety')" v-show="activeGroup === 'safety'" class="space-y-5">
             <MemorySettings :apps="apps" :busy="appContextBusy" />
             <SubagentSettings
               :settings="settings"
