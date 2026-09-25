@@ -10,6 +10,7 @@
     type AgentIntegrationViewDto,
     type AgentSettingsViewDto,
   } from '../api/agent-api';
+  import { parseAcpCommandToArgv } from './acp-command-argv';
 
   type Profile = AgentSettingsViewDto['requestedSettings']['workspaceRuntime']['acpProfiles'][number];
   interface ProfileDraft {
@@ -129,35 +130,6 @@
     return normalized;
   };
 
-  const parseCommandToArgv = (cmd: string): string[] => {
-    const trimmed = cmd.trim();
-    if (!trimmed) return [];
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
-          return parsed;
-        }
-      } catch {
-        // Fall back to shell command tokenizer below
-      }
-    }
-
-    const tokens: string[] = [];
-    const regex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(trimmed)) !== null) {
-      if (match[1] !== undefined) {
-        tokens.push(match[1]);
-      } else if (match[2] !== undefined) {
-        tokens.push(match[2]);
-      } else if (match[0] !== undefined) {
-        tokens.push(match[0]);
-      }
-    }
-    return tokens;
-  };
-
   // 模态弹窗 1：添加配置档 (Profile)
   const profileModalOpen = ref(false);
   const profileModalError = ref('');
@@ -179,8 +151,10 @@
     const cwd = profileForm.cwd.trim();
     return cwd === '/workspace' || cwd.startsWith('/workspace/');
   });
-  const parsedModalArgv = computed(() => parseCommandToArgv(profileForm.commandInput));
-  const isArgvValid = computed(() => parsedModalArgv.value.length >= 1 && parsedModalArgv.value.length <= 64);
+  const parsedModalArgv = computed(() => parseAcpCommandToArgv(profileForm.commandInput));
+  const isArgvValid = computed(
+    () => parsedModalArgv.value !== null && parsedModalArgv.value.length >= 1 && parsedModalArgv.value.length <= 64,
+  );
   const canSubmitProfile = computed(
     () =>
       isProfileIdValid.value && !isProfileIdDuplicate.value && isCwdValid.value && isArgvValid.value && !disabled.value,
@@ -218,7 +192,7 @@
     const cwd = profileForm.cwd.trim();
     const argv = parsedModalArgv.value;
 
-    if (!id || !cwd || argv.length === 0) {
+    if (!id || !cwd || !argv || argv.length === 0) {
       profileModalError.value = t('agent.settings.disabledReason.incompleteForm');
       return;
     }

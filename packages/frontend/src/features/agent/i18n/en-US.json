@@ -897,7 +897,7 @@
         "profileIdDuplicate": "This Profile ID already exists",
         "cwdHint": "Must be /workspace or a subdirectory",
         "argvCommand": "Launch Command & Arguments",
-        "argvHint": "Supports shell command string (e.g. acp-agent --port 8000) or JSON array",
+        "argvHint": "Accepts shell-style quoting and escaping for argv only (no shell expansion), or a JSON string array",
         "argvPlaceholder": "e.g. acp-agent --port 8000 or [\"acp-agent\"]",
         "integrationEnabledHint": "Allow Nexus Agent to call this ACP runtime immediately upon creation"
       },

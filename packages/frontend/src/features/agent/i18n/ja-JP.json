@@ -897,7 +897,7 @@
         "profileIdDuplicate": "この Profile ID は既に存在します",
         "cwdHint": "/workspace またはそのサブディレクトリである必要があります",
         "argvCommand": "起動コマンドと引数",
-        "argvHint": "コマンド文字列（例: acp-agent --port 8000）または JSON 配列を入力",
+        "argvHint": "argv 用の shell 風クォートとエスケープ（shell 展開は実行しません）、または JSON 文字列配列を入力",
         "argvPlaceholder": "例: acp-agent --port 8000 または [\"acp-agent\"]",
         "integrationEnabledHint": "作成後すぐに Nexus Agent からこの ACP ランタイムの呼び出しを許可します"
       },

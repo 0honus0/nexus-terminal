@@ -897,7 +897,7 @@
         "profileIdDuplicate": "该 Profile ID 已存在",
         "cwdHint": "必须为 /workspace 或其子目录",
         "argvCommand": "启动命令与参数",
-        "argvHint": "支持直接输入命令行（如 acp-agent --port 8000）或 JSON 数组",
+        "argvHint": "支持用于 argv 的类 shell 引号与转义（不会执行 shell 展开），也可输入 JSON 字符串数组",
         "argvPlaceholder": "例如 acp-agent --port 8000 或 [\"acp-agent\"]",
         "integrationEnabledHint": "创建后立即允许 Nexus Agent 调用此 ACP 运行时"
       },
