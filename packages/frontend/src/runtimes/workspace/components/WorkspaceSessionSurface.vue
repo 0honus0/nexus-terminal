@@ -223,6 +223,8 @@
     onOutput: (handler) => runtimeTerminalChannel.onOutput(handler),
     onClose: (handler) => runtimeTerminalChannel.onClose(handler),
     onError: (handler) => runtimeTerminalChannel.onError(handler),
+    onResumeComplete: (handler) => runtimeTerminalChannel.onResumeComplete?.(handler) ?? (() => undefined),
+    completeResume: () => runtimeTerminalChannel.completeResume?.(),
     // This wrapper changes input presentation only. Preserve the optional suspended-output
     // capabilities so TerminalView can lazily page older history after a resume.
     setPreviousOutputAvailable: (available) => runtimeTerminalChannel.setPreviousOutputAvailable?.(available),

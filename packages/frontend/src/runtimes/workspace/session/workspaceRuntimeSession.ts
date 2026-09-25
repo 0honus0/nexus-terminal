@@ -272,6 +272,7 @@ export class WorkspaceRuntimeSession {
       this.adapters.terminal.setPreviousOutputAvailable?.(Boolean(result.historyAvailable));
       await this.adapters.workspaceConnected();
       if (!this.socket.connected) throw new Error('Workspace connection closed during terminal activation.');
+      this.adapters.terminal.completeResume?.();
       this.hasConnected.value = true;
       this.reconnectAttempt = 0;
       this.markedForSuspend.value = true;

@@ -170,6 +170,19 @@ test('mobile resumed terminal loads older suspended output when dragged downward
     )
     .toBeTruthy();
 
+  let historyRequests = 0;
+  page.on('websocket', (socket) => {
+    if (new URL(socket.url()).pathname !== '/ws/workspace') return;
+    socket.on('framesent', (event) => {
+      if (typeof event.payload !== 'string') return;
+      try {
+        if ((JSON.parse(event.payload) as { type?: string }).type === 'suspend.history.previous') historyRequests += 1;
+      } catch {
+        return;
+      }
+    });
+  });
+
   await page.goto('/workspace');
   const manager = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
   const hanging = manager.getByTestId(`suspended-session-${suspended!.id}`);
@@ -185,6 +198,7 @@ test('mobile resumed terminal loads older suspended output when dragged downward
   await expect(terminal).toBeVisible({ timeout: 30_000 });
   await expect.poll(async () => rows.innerText(), { timeout: 20_000 }).toContain(tailMarker);
   await expect(rows).not.toContainText(earlyMarker);
+  expect(historyRequests).toBe(0);
 
   // Native touch scrolling moves terminal content with the finger, so dragging downward navigates
   // toward older output. The first gesture can land on the currently loaded history boundary while
@@ -195,6 +209,7 @@ test('mobile resumed terminal loads older suspended output when dragged downward
     await page.waitForTimeout(250);
   }
   await expect.poll(async () => rows.innerText(), { timeout: 20_000 }).toContain(earlyMarker);
+  expect(historyRequests).toBeGreaterThan(0);
 
   const resumedTab = page
     .getByTestId('terminal-tab-bar')

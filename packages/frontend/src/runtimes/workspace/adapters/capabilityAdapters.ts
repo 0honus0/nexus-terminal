@@ -48,6 +48,8 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
   const buffered: Uint8Array[] = [];
   let bufferedBytes = 0;
   let previousOutputAvailable = false;
+  let resumeCompletePending = false;
+  const resumeCompleteHandlers = new Set<() => void>();
   let historyLoad: Promise<{ data: Uint8Array; hasMore: boolean } | null> | null = null;
   const maxBufferedBytes = 4 * 1024 * 1024;
 
@@ -83,6 +85,21 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       for (const data of buffered.splice(0)) handler({ data });
       bufferedBytes = 0;
       return () => outputHandlers.delete(handler);
+    },
+    onResumeComplete(handler) {
+      resumeCompleteHandlers.add(handler);
+      if (resumeCompletePending) {
+        resumeCompletePending = false;
+        handler();
+      }
+      return () => resumeCompleteHandlers.delete(handler);
+    },
+    completeResume() {
+      if (!resumeCompleteHandlers.size) {
+        resumeCompletePending = true;
+        return;
+      }
+      for (const handler of resumeCompleteHandlers) handler();
     },
     onClose(handler) {
       const stopTransport = socket.onClose(handler);

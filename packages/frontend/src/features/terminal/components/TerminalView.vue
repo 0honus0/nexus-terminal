@@ -902,9 +902,12 @@
     outputFrame = undefined;
     outputTimer = undefined;
   };
-  const flushPendingOutput = (): void => {
+  const flushPendingOutput = (showLatest = false): void => {
     clearOutputSchedule();
-    if (!terminal || !pendingOutput.length) return;
+    if (!terminal || !pendingOutput.length) {
+      if (showLatest) terminal?.write('', () => terminal?.scrollToBottom());
+      return;
+    }
     const batch = new Uint8Array(pendingOutputBytes);
     let offset = 0;
     for (const chunk of pendingOutput) {
@@ -913,12 +916,12 @@
     }
     pendingOutput = [];
     pendingOutputBytes = 0;
-    terminal.write(batch);
+    terminal.write(batch, showLatest ? () => terminal?.scrollToBottom() : undefined);
   };
   const scheduleOutputFlush = (): void => {
     if (outputFrame !== undefined || outputTimer !== undefined) return;
-    if (props.active) outputFrame = window.requestAnimationFrame(flushPendingOutput);
-    else outputTimer = window.setTimeout(flushPendingOutput, INACTIVE_OUTPUT_BATCH_MS);
+    if (props.active) outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
+    else outputTimer = window.setTimeout(() => flushPendingOutput(), INACTIVE_OUTPUT_BATCH_MS);
   };
   const handleTerminalOutput = ({ data }: { data: string | Uint8Array }): void => {
     activatePagedHistoryMode();
@@ -1014,6 +1017,7 @@
         void props.channel.sendInput(data);
       }).dispose,
       props.channel.onOutput(handleTerminalOutput),
+      props.channel.onResumeComplete?.(() => flushPendingOutput(true)) ?? (() => undefined),
       props.channel.onClose((reason) => {
         prepareForTransportReset();
         emit('closed', reason);
@@ -1032,7 +1036,7 @@
           activatePagedHistoryMode();
           if (historyBrowsing && movedDown && viewportY >= terminal!.buffer.active.baseY - historyLoadThreshold()) {
             void restoreLatestOutput();
-          } else if (movedUp && viewportY <= historyLoadThreshold()) {
+          } else if (historyBrowsing && movedUp && viewportY <= historyLoadThreshold()) {
             void loadPreviousOutput();
           }
         }
