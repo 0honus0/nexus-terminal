@@ -115,6 +115,80 @@ async function captureWorkspaceEvidence(page: Page, testInfo: TestInfo, name: 'b
   expect(metrics.tabScroller?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
 }
 
+test('initial SSH failure rolls back its provisional tab without automatic retry', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+
+  const name = `E2E Initial Failure ${Date.now()}`;
+  const create = await context.request.post('/api/v1/connections', {
+    data: {
+      name,
+      type: 'SSH',
+      host: '127.0.0.1',
+      port: 1,
+      username: 'e2e',
+      authMethod: 'password',
+      password: 'invalid-for-unreachable-port',
+    },
+  });
+  expect(create.status()).toBe(201);
+  const connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
+
+  await page.addInitScript(() => {
+    const state = window as typeof window & { __e2eMaxWorkspaceTabs?: number };
+    const sample = () => {
+      const count = document.querySelectorAll('[data-testid="terminal-tab-bar"] [role="tab"]').length;
+      state.__e2eMaxWorkspaceTabs = Math.max(state.__e2eMaxWorkspaceTabs ?? 0, count);
+    };
+    state.__e2eMaxWorkspaceTabs = 0;
+    const observer = new MutationObserver(sample);
+    const start = () => {
+      sample();
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    };
+    if (document.documentElement) start();
+    else document.addEventListener('DOMContentLoaded', start, { once: true });
+  });
+
+  const workspaceConnectIds: string[] = [];
+  page.on('websocket', (socket) => {
+    if (new URL(socket.url()).pathname !== '/ws/workspace') return;
+    socket.on('framesent', (event) => {
+      if (typeof event.payload !== 'string') return;
+      try {
+        const message = JSON.parse(event.payload) as { type?: string; payload?: { workspaceId?: string } };
+        if (message.type === 'workspace.connect' && message.payload?.workspaceId) {
+          workspaceConnectIds.push(message.payload.workspaceId);
+        }
+      } catch {
+        // Ignore non-JSON frames.
+      }
+    });
+  });
+
+  try {
+    await page.goto(`/workspace?connectionId=${connectionId}`);
+    await expect.poll(() => workspaceConnectIds.length, { timeout: 15_000 }).toBe(1);
+
+    const tabs = page.getByTestId('terminal-tab-bar').getByRole('tab');
+    await expect(tabs).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByTestId('no-session-placeholder')).toBeVisible();
+
+    expect(
+      await page.evaluate(
+        () => (window as typeof window & { __e2eMaxWorkspaceTabs?: number }).__e2eMaxWorkspaceTabs ?? 0,
+      ),
+    ).toBe(0);
+
+    const failedWorkspaceId = workspaceConnectIds[0]!;
+    await page.waitForTimeout(3_000);
+    expect(workspaceConnectIds).toEqual([failedWorkspaceId]);
+  } finally {
+    const remove = await context.request.delete(`/api/v1/connections/${connectionId}`);
+    expect([200, 204, 404]).toContain(remove.status());
+  }
+});
+
 test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);

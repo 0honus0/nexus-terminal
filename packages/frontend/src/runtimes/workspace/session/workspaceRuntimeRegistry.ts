@@ -189,14 +189,18 @@ export const workspaceRuntimeRegistry = {
 
   async open(connection: ConnectionDto, viewport?: WorkspaceTerminalViewportDto): Promise<WorkspaceRuntimeSession> {
     if (connection.type !== 'SSH') throw new Error('Only SSH connections can open a Workspace session.');
-    const session = add(
-      new WorkspaceRuntimeSession(connection, { onSuspendedAutoTerminated: handleSuspendedAutoTerminated }),
-    );
+    const session = new WorkspaceRuntimeSession(connection, {
+      onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
+    });
     try {
       await session.connect(viewport);
-      return session;
+      // Initial connection is provisional: only publish the runtime after the backend has confirmed
+      // the Workspace binding. Terminal output received before mount is buffered by the channel.
+      return add(session);
     } catch (error) {
-      // Keep ordinary failed tabs visible so the user can inspect the error or retry explicitly.
+      // Failed initial connections are not sessions. Dispose cancels any reconnect timer that a
+      // terminal/transport failure may have scheduled before connect() rejected.
+      session.dispose('Initial Workspace connection failed');
       throw error;
     }
   },
