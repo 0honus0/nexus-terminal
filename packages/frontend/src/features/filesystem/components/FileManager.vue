@@ -379,6 +379,7 @@
       sql: 'fas fa-database',
       db: 'fas fa-database',
       sqlite: 'fas fa-database',
+      sqlite3: 'fas fa-database',
       txt: 'fas fa-file-alt',
       text: 'fas fa-file-alt',
       log: 'fas fa-file-alt',

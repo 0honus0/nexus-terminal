@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const e2eRoot = path.resolve(__dirname, '..');
@@ -496,6 +497,38 @@ async function writeUnicodePathZipFixture(destination, unicodeName) {
   await fsp.writeFile(destination, Buffer.concat([localRecord, centralRecord, endOfCentralDirectory]));
 }
 
+function writeSqlitePreviewFixture(destination) {
+  const database = new DatabaseSync(destination);
+  try {
+    database.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        city TEXT,
+        active INTEGER NOT NULL
+      );
+      INSERT INTO users (id, name, email, city, active) VALUES
+        (1, 'Alice', 'alice@example.com', 'London', 1),
+        (2, 'Bob', 'bob@example.com', 'Seattle', 1),
+        (3, 'Carol', 'carol@example.com', 'Shenzhen', 0),
+        (4, 'Dora', 'dora@example.net', 'Tokyo', 1);
+
+      CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY,
+        action TEXT NOT NULL,
+        details TEXT
+      );
+      INSERT INTO audit_log (id, action, details) VALUES
+        (1, 'login', 'Alice signed in'),
+        (2, 'update', 'Carol changed profile'),
+        (3, 'logout', 'Bob signed out');
+    `);
+  } finally {
+    database.close();
+  }
+}
+
 async function resetRoot() {
   dockerContainerPresent = true;
   dockerContainerState = 'running';
@@ -547,6 +580,7 @@ async function resetRoot() {
   await writeDocxFixture(path.join(rootDir, 'preview.docx'));
   await writePdfFixture(path.join(rootDir, 'preview.pdf'));
   await writePdfFixture(path.join(rootDir, 'folder-seed', 'second-preview.pdf'));
+  writeSqlitePreviewFixture(path.join(rootDir, 'preview.db'));
   await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
   await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
   await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);

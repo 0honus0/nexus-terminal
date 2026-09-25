@@ -21,6 +21,11 @@
     loadingComponent: BaseSpinner,
     delay: 120,
   });
+  const DatabasePreview = defineAsyncComponent({
+    loader: () => import('./DatabasePreview.vue'),
+    loadingComponent: BaseSpinner,
+    delay: 120,
+  });
   const DocxPreview = defineAsyncComponent({
     loader: () => import('./DocxPreview.vue'),
     loadingComponent: BaseSpinner,
@@ -152,6 +157,13 @@
             :active="preview.activeId.value === tab.id"
             :rows-per-page="spreadsheetRowsPerPage"
             :max-columns="spreadsheetMaxColumns"
+            @close="emit('hide')"
+          />
+          <DatabasePreview
+            v-else-if="tab.kind === 'database'"
+            :file="tab.file"
+            :session="preview"
+            :active="preview.activeId.value === tab.id"
             @close="emit('hide')"
           />
           <DocxPreview

@@ -83,6 +83,8 @@ const expectOverlayToCoverWorkspaceRail = async (
 };
 
 async function openConnectionFromWorkspacePicker(page: Page, connectionId: number): Promise<void> {
+  const tabs = page.getByTestId('terminal-tab-bar').getByRole('tab');
+  const previousTabCount = await tabs.count();
   await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
   const picker = page.getByRole('heading', { name: 'Select server to connect', exact: true });
   await expect(picker).toBeVisible();
@@ -90,7 +92,16 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
   await expect(connection).toBeVisible();
   await connection.click();
   await expect(picker).toBeHidden();
-  await expect(page.locator('[data-testid="command-input"]:visible')).toBeEnabled({ timeout: 20_000 });
+
+  // Initial Workspace connections are provisional and are only published after the backend
+  // confirms the SSH binding. The previous active session remains usable while that happens.
+  await expect(tabs).toHaveCount(previousTabCount + 1, { timeout: 20_000 });
+  await expect(page.getByTestId('terminal-tab-bar').getByRole('tab', { selected: true })).toHaveAttribute(
+    'data-session-state',
+    'connected',
+    { timeout: 20_000 },
+  );
+  await expect(page.locator('[data-testid="command-input"]:visible')).toBeEnabled();
 }
 
 async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {
@@ -124,7 +135,11 @@ for (const shared of [true, false] as const) {
     const peerName = `E2E Editor ${shared ? 'Shared' : 'Scoped'} Peer`;
 
     const removePeer = async (): Promise<void> => {
-      const list = await context.request.get('/api/v1/connections');
+      let list = await context.request.get('/api/v1/connections');
+      for (let attempt = 0; attempt < 2 && !list.ok(); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        list = await context.request.get('/api/v1/connections');
+      }
       expect(list.ok()).toBeTruthy();
       const connections = (await list.json()) as Array<{ id: number; name?: string }>;
       for (const connection of connections.filter((item) => item.name === peerName)) {
@@ -193,6 +208,48 @@ for (const shared of [true, false] as const) {
     }
   });
 }
+
+test('SQLite database preview browses tables and searches the active table', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  await row(page, 'preview.db').dblclick();
+  const dialog = previewView(page);
+  const database = dialog.getByTestId('database-preview');
+  await expect(database).toBeVisible({ timeout: 20_000 });
+
+  const tableTabs = database.getByRole('tablist', { name: 'Database tables', exact: true });
+  await expect(tableTabs.getByRole('tab', { name: 'audit_log', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(database.getByTestId('database-data-row')).toHaveCount(3);
+  await expect(database).toContainText('Alice signed in');
+
+  await tableTabs.getByRole('tab', { name: 'users', exact: true }).click();
+  await expect(database.getByTestId('database-data-row')).toHaveCount(4);
+  await expect(database).toContainText('alice@example.com');
+  await expect(database).toContainText('Shenzhen');
+
+  await dialog.getByTestId('preview-search-toggle').click();
+  const search = previewSearchInput(dialog);
+  await search.fill('example.com');
+  await expect(previewSearchCount(dialog, '1/3')).toBeVisible();
+  await expect(database.getByTestId('database-data-row')).toHaveCount(3);
+  await expect(database.locator('.database-search-match')).toHaveCount(3);
+
+  await dialog.getByTestId('preview-search-next').click();
+  await expect(previewSearchCount(dialog, '2/3')).toBeVisible();
+
+  await tableTabs.getByRole('tab', { name: 'audit_log', exact: true }).click();
+  await expect(database.getByTestId('database-data-row')).toHaveCount(0);
+
+  await search.fill('Carol');
+  await expect(previewSearchCount(dialog, '1/1')).toBeVisible();
+  await expect(database.getByTestId('database-data-row')).toHaveCount(1);
+  await expect(database).toContainText('Carol changed profile');
+});
 
 test('file previews and text editor protect historical file-opening regressions', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);

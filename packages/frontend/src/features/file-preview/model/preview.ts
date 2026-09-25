@@ -1,4 +1,4 @@
-export type PreviewKind = 'image' | 'markdown' | 'pdf' | 'spreadsheet' | 'docx' | 'unsupported';
+export type PreviewKind = 'image' | 'markdown' | 'pdf' | 'spreadsheet' | 'database' | 'docx' | 'unsupported';
 
 export interface PreviewFile {
   path: string;
