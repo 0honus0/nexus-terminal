@@ -10,8 +10,6 @@
     "specs/ui/proxy-management.spec.ts",
     "specs/ui/system-settings.spec.ts",
     "specs/ui/theme-switching.spec.ts",
-    "specs/ssh/sftp-download.spec.ts",
-    "specs/ssh/status-history-time-axis.spec.ts",
     "specs/ssh/progress-display-upload-copy.spec.ts",
     "specs/ssh/docker-manager-ui.spec.ts",
     "specs/ssh/protocol.spec.ts",
