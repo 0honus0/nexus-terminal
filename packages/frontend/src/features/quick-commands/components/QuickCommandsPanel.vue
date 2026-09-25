@@ -627,11 +627,11 @@
   }
   .quick-command-row {
     min-height: calc(var(--quick-row-scale) * 1.875rem);
-    padding: calc(var(--quick-row-scale) * 0.35rem) calc(var(--quick-row-scale) * 0.6rem);
+    padding: max(0.1rem, calc(var(--quick-row-scale) * 0.5rem - 0.15rem)) calc(var(--quick-row-scale) * 0.6rem);
   }
   .quick-command-row--compact {
     min-height: calc(var(--quick-row-scale) * 1.5rem);
-    padding-block: calc(var(--quick-row-scale) * 0.15rem);
+    padding-block: max(0.05rem, calc(var(--quick-row-scale) * 0.3rem - 0.15rem));
   }
   .quick-command-display-text {
     min-width: 0;

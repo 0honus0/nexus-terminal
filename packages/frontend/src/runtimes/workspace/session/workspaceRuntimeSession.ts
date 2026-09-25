@@ -110,6 +110,7 @@ export class WorkspaceRuntimeSession {
         this.markCapabilitiesDisconnected();
         this.state.value = 'error';
         this.statusMessage.value = message;
+        this.scheduleReconnect();
       }),
       this.socket.on('terminal.closed', () => {
         if (this.closing) return;

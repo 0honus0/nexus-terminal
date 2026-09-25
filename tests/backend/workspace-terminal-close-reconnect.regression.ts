@@ -6,6 +6,16 @@ const source = fs.readFileSync(
   'utf8',
 );
 
+const terminalErrorStart = source.indexOf("this.socket.on('terminal.error'");
+assert(terminalErrorStart >= 0, 'terminal.error handler must exist');
+const terminalErrorEnd = source.indexOf("this.socket.on('terminal.closed'", terminalErrorStart);
+assert(terminalErrorEnd > terminalErrorStart, 'terminal.error handler boundary must remain detectable');
+const terminalErrorHandler = source.slice(terminalErrorStart, terminalErrorEnd);
+assert(
+  terminalErrorHandler.includes('this.scheduleReconnect();'),
+  'terminal.error must schedule reconnect because SSH outages can fail before terminal.closed is emitted',
+);
+
 const terminalClosedStart = source.indexOf("this.socket.on('terminal.closed'");
 assert(terminalClosedStart >= 0, 'terminal.closed handler must exist');
 const terminalClosedEnd = source.indexOf("this.socket.on('protocol.error'", terminalClosedStart);
