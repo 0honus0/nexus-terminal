@@ -1,7 +1,7 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, onActivated, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRoute } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
   import { AgentSettingsPanel } from '@/features/agent/public';
   import { BackupSettingsPanel } from '@/features/backup/public';
@@ -23,6 +23,7 @@
 
   const { t } = useI18n();
   const route = useRoute();
+  const router = useRouter();
   const auth = useAuthSession();
   const appearance = useAppearance();
   const active = ref<SettingsTab>('workspace');
@@ -150,6 +151,17 @@
 
   const allTabs = computed<TabItem[]>(() => tabGroups.value.flatMap((g) => g.items));
 
+  const syncRouteTab = (): void => {
+    const raw = Array.isArray(route.query.tab) ? route.query.tab[0] : route.query.tab;
+    const next =
+      typeof raw === 'string' && allTabs.value.some((item) => item.value === raw) ? (raw as SettingsTab) : 'workspace';
+    if (active.value !== next) active.value = next;
+    mobileView.value = 'detail';
+  };
+
+  watch(() => route.query.tab, syncRouteTab, { immediate: true });
+  onActivated(syncRouteTab);
+
   const currentTab = computed<TabItem>(
     () => allTabs.value.find((item) => item.value === active.value) ?? allTabs.value[0],
   );
@@ -164,19 +176,15 @@
       active.value = tab;
     }
     mobileView.value = 'detail';
+    const currentQueryTab = Array.isArray(route.query.tab) ? route.query.tab[0] : route.query.tab;
+    if (currentQueryTab !== tab) {
+      void router.replace({ query: { ...route.query, tab } }).catch(() => undefined);
+    }
   };
 
   const handlePreferencesSaved = (preferences: PreferencesDto) => {
     setLocale(preferences.language);
   };
-
-  onMounted(() => {
-    const tabQuery = route.query.tab as SettingsTab | undefined;
-    if (tabQuery && allTabs.value.some((t) => t.value === tabQuery)) {
-      active.value = tabQuery;
-      mobileView.value = 'detail';
-    }
-  });
 </script>
 
 <template>
