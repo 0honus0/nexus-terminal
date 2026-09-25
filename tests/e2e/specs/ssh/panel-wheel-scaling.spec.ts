@@ -243,9 +243,12 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
       expect(beforeRowBox).toBeTruthy();
       await ctrlWheel(list, 100);
       await expect.poll(() => readScale(list, 'data-row-scale')).toBeLessThanOrEqual(0.9);
-      const afterRowBox = await row.boundingBox();
-      expect(afterRowBox).toBeTruthy();
-      expect(beforeRowBox!.height - afterRowBox!.height).toBeGreaterThan(1);
+      await expect
+        .poll(async () => {
+          const afterRowBox = await row.boundingBox();
+          return afterRowBox ? beforeRowBox!.height - afterRowBox.height : 0;
+        })
+        .toBeGreaterThan(1);
 
       const scaleAfterWheel = await readScale(list, 'data-row-scale');
       await page.waitForTimeout(550);
@@ -253,19 +256,19 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     },
   );
 
-  await slowStep('file manager keeps the Type column stable while repeatedly shrinking rows', async () => {
+  await slowStep('file manager keeps its visible columns stable while repeatedly shrinking rows', async () => {
     await openConnectedFileManager(page);
     const list = activeFileManagerList(page);
     const fileManagerModal = page.getByTestId('file-manager-modal');
-    const typeHeader = fileManagerModal.getByTestId('file-manager-type-header');
+    const nameHeader = fileManagerModal.locator('.file-table-header-name');
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
-    await expect(typeHeader).toBeVisible();
+    await expect(nameHeader).toBeVisible();
     const headerTitles = (await fileManagerModal.locator('thead th').allTextContents()).map((text) =>
       text.replace(/[▲▼]/g, '').trim(),
     );
-    expect(headerTitles).toEqual(['Type', 'Name', 'Size', 'Permissions', 'Modified']);
+    expect(headerTitles).toEqual(['Name', 'Permissions', 'Modified']);
 
-    const typeHeaderLayout = await typeHeader.evaluate((element) => {
+    const nameHeaderLayout = await nameHeader.evaluate((element) => {
       const html = element as HTMLElement;
       const style = getComputedStyle(html);
       return {
@@ -276,19 +279,19 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
         scrollHeight: html.scrollHeight,
       };
     });
-    expect(typeHeaderLayout.whiteSpace).toBe('nowrap');
-    expect(typeHeaderLayout.textTransform).toBe('none');
-    expect(typeHeaderLayout.scrollHeight).toBeLessThanOrEqual(typeHeaderLayout.clientHeight + 1);
+    expect(nameHeaderLayout.whiteSpace).toBe('nowrap');
+    expect(nameHeaderLayout.textTransform).toBe('none');
+    expect(nameHeaderLayout.scrollHeight).toBeLessThanOrEqual(nameHeaderLayout.clientHeight + 1);
 
-    const widths = [typeHeaderLayout.width];
+    const widths = [nameHeaderLayout.width];
     for (let index = 0; index < 5; index += 1) {
       await ctrlWheel(list, 100);
-      widths.push((await typeHeader.boundingBox())!.width);
+      widths.push((await nameHeader.boundingBox())!.width);
     }
 
     expect(await readScale(list, 'data-row-scale')).toBeLessThanOrEqual(0.6);
     expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1.5);
-    const finalHeaderLayout = await typeHeader.evaluate((element) => {
+    const finalHeaderLayout = await nameHeader.evaluate((element) => {
       const html = element as HTMLElement;
       return { clientHeight: html.clientHeight, scrollHeight: html.scrollHeight };
     });
