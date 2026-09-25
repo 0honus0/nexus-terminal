@@ -177,13 +177,17 @@ export class RunnerHttpAdapter
     if (!command.payload || typeof command.payload !== 'object' || Array.isArray(command.payload)) {
       throw new Error('VALIDATION_FAILED');
     }
+    const payload = command.payload as Record<string, unknown>;
+    const lifecycleAction = ['start', 'stop', 'restart', 'delete'].includes(command.action);
+    if (lifecycleAction && typeof payload.workspaceId !== 'string') throw new Error('VALIDATION_FAILED');
+    const wirePayload = lifecycleAction ? { workspaceId: payload.workspaceId } : payload;
     const response = decodeCommandWireResponse(
       await this.request(
         '/v1/commands',
         {
           method: 'POST',
           body: {
-            ...command.payload,
+            ...wirePayload,
             commandId: command.commandId,
             action: command.action,
             ...(['provision', 'start', 'stop', 'restart', 'delete'].includes(command.action)

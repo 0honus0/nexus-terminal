@@ -1591,7 +1591,14 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const afterCreate = (await afterCreateResponse.json()) as Envelope<{
         items: Array<{ id: string; version: number }>;
       }>;
-      const singleDeleteId = afterCreate.data.items[0]!.id;
+      const selectedThreadIdSuffix = (await currentThreadItem.locator('.agent-thread-meta').innerText()).match(
+        /#([a-f0-9]{6})/,
+      )?.[1];
+      const singleDeleteId = afterCreate.data.items.find(
+        ({ id }) => selectedThreadIdSuffix !== undefined && id.endsWith(selectedThreadIdSuffix),
+      )?.id;
+      expect(singleDeleteId).toBeTruthy();
+      if (!singleDeleteId) throw new Error('Selected conversation was missing from the thread list');
 
       await currentThreadItem.getByRole('button', { name: 'Delete conversation', exact: true }).click();
       await currentThreadItem
