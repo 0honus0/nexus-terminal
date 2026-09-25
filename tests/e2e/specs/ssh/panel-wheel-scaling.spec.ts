@@ -155,8 +155,8 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     await expect(monitor).toContainText('CPU', { timeout: 20_000 });
     await expect(monitor).toHaveAttribute('data-status-scale', '1.00');
     await expect(monitor.locator('.monitor-panel')).toBeVisible();
-    await expect(monitor.locator('.metric-card')).toHaveCount(4);
-    await expect(monitor.locator('.metric-cpu .cpu-water')).toBeVisible();
+    await expect(monitor.locator('.metric-card')).toHaveCount(5);
+    await expect(monitor.locator('.metric-cpu .metric-progress')).toBeVisible();
     await expect(monitor.locator('.network-card')).toBeVisible();
 
     const countStatusControlFrames = () =>

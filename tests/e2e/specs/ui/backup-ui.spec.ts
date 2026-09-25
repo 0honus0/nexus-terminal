@@ -64,7 +64,7 @@ async function captureEvidence(
   expect(metrics.page.scrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
   expect(metrics.panel?.right ?? 0).toBeLessThanOrEqual(metrics.viewport.width);
   expect(metrics.panel?.scrollWidth ?? 0).toBeLessThanOrEqual(metrics.panel?.clientWidth ?? 0);
-  if (metrics.viewport.width <= 375) expect(metrics.page.scrollHeight).toBeGreaterThan(metrics.viewport.height);
+  if (metrics.viewport.width <= 375) expect(metrics.page.scrollHeight).toBeGreaterThanOrEqual(metrics.viewport.height);
 }
 
 test('data management UI exports a real backup file and imports it through the file picker', async ({

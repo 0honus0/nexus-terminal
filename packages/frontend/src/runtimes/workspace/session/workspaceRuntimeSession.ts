@@ -124,6 +124,7 @@ export class WorkspaceRuntimeSession {
         );
         this.markCapabilitiesDisconnected();
         this.state.value = 'disconnected';
+        this.scheduleReconnect();
       }),
       this.socket.on('protocol.error', ({ operation, message }) => {
         logger.debug(
