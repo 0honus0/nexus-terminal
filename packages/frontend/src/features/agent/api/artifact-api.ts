@@ -19,7 +19,9 @@ import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 
 export const createArtifactApi = () => ({
   async storage(): Promise<AgentArtifactStorageSummaryDto> {
-    return unwrap((await httpClient.get<AgentEnvelopeDto<AgentArtifactStorageSummaryDto>>('/agent/files/storage')).data);
+    return unwrap(
+      (await httpClient.get<AgentEnvelopeDto<AgentArtifactStorageSummaryDto>>('/agent/files/storage')).data,
+    );
   },
   async files(query: Omit<AgentArtifactLibraryQueryDto, 'limit'> = {}): Promise<AgentArtifactPageDto> {
     const params: AgentArtifactLibraryQueryDto = { limit: 100, ...query };
@@ -96,11 +98,9 @@ export const createArtifactApi = () => ({
     const input: AgentArtifactCleanupConfirmRequestDto = { confirmationId };
     return unwrap(
       (
-        await httpClient.post<AgentEnvelopeDto<AgentArtifactCleanupResultDto>>(
-          '/agent/files/cleanup/confirm',
-          input,
-          { headers: await mutationHeaders() },
-        )
+        await httpClient.post<AgentEnvelopeDto<AgentArtifactCleanupResultDto>>('/agent/files/cleanup/confirm', input, {
+          headers: await mutationHeaders(),
+        })
       ).data,
     );
   },

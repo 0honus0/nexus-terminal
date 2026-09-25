@@ -266,11 +266,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     socket.once('error', () => void protocol.close());
   };
 
-  const onAgentTerminalConnection = (
-    socket: WebSocket,
-    userId: number,
-    request: AgentTerminalAttachQueryDto,
-  ): void => {
+  const onAgentTerminalConnection = (socket: WebSocket, userId: number, request: AgentTerminalAttachQueryDto): void => {
     const protocol = new AgentTerminalProtocolSession(
       socket,
       { userId, ...request },

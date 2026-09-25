@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const read = (relativePath: string): string =>
-  readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
+const read = (relativePath: string): string => readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
 
 const functionSlice = (source: string, startMarker: string, endMarker: string): string => {
   const start = source.indexOf(startMarker);
@@ -26,11 +25,7 @@ const assertGenerationGuard = (source: string, kind: 'mcp' | 'acp'): void => {
     `${kind}: stale requests must not clear the current loading state`,
   );
 
-  const availabilityWatch = functionSlice(
-    source,
-    'watch(\n    () => props.agentAvailable',
-    '</script>',
-  );
+  const availabilityWatch = functionSlice(source, 'watch(\n    () => props.agentAvailable', '</script>');
   assert(
     availabilityWatch.includes('{ immediate: true }'),
     `${kind}: availability watch must initialize and reload automatically`,

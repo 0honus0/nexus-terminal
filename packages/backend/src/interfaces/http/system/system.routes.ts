@@ -1,8 +1,4 @@
-import type {
-  RemoteResourceStatusDto,
-  ResourceStatusDto,
-  SshResourceStatusDto,
-} from '@nexus-terminal/protocol/system';
+import type { RemoteResourceStatusDto, ResourceStatusDto, SshResourceStatusDto } from '@nexus-terminal/protocol/system';
 import { Router } from 'express';
 import type { ServerStatus } from '../../../platform/system/server-status.port';
 import type { SshResourceStatusService } from '../../../modules/system/ssh-resource-status.service';

@@ -46,14 +46,7 @@ export const createAuditRouter = (audit: AuditLogService): Router => {
         s.status(400).json({ message: '无效的审计操作类型' });
         return;
       }
-      const result = await audit.getLogs(
-        limit,
-        offset,
-        actionType,
-        start,
-        end,
-        query.search,
-      );
+      const result = await audit.getLogs(limit, offset, actionType, start, end, query.search);
       const payload: AuditLogPageDto = {
         logs: result.logs.map((log) => {
           let details: unknown = null;

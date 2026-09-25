@@ -572,19 +572,22 @@ export interface WorkspaceSuspendEventMapDto {
 }
 
 export interface WorkspaceRequestMapDto
-  extends WorkspaceCoreRequestMapDto,
+  extends
+    WorkspaceCoreRequestMapDto,
     WorkspaceFilesystemRequestMapDto,
     WorkspaceTransferRequestMapDto,
     WorkspaceSuspendRequestMapDto {}
 
 export interface WorkspaceResponseMapDto
-  extends WorkspaceCoreResponseMapDto,
+  extends
+    WorkspaceCoreResponseMapDto,
     WorkspaceFilesystemResponseMapDto,
     WorkspaceTransferResponseMapDto,
     WorkspaceSuspendResponseMapDto {}
 
 export interface WorkspaceEventMapDto
-  extends WorkspaceCoreEventMapDto,
+  extends
+    WorkspaceCoreEventMapDto,
     WorkspaceFilesystemEventMapDto,
     WorkspaceTransferEventMapDto,
     WorkspaceSuspendEventMapDto {}

@@ -52,7 +52,8 @@ const readConfigDto = (value: unknown): NotificationConfigDto => {
     'chatId',
     'messageTemplate',
     'customDomain',
-  ] as const) copyString(key);
+  ] as const)
+    copyString(key);
   if (value.method !== undefined) {
     if (value.method !== 'POST' && value.method !== 'GET' && value.method !== 'PUT')
       throw new Error('config.method 无效。');

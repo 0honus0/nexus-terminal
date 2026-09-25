@@ -51,7 +51,8 @@ const retainRequest = (value: unknown): AgentArtifactRetainRequestDto => {
   const body = record(value);
   if (Object.keys(body).some((key) => !['retained', 'expectedVersion'].includes(key)))
     throw new Error('VALIDATION_FAILED');
-  if (typeof body.retained !== 'boolean' || !positiveInteger(body.expectedVersion)) throw new Error('VALIDATION_FAILED');
+  if (typeof body.retained !== 'boolean' || !positiveInteger(body.expectedVersion))
+    throw new Error('VALIDATION_FAILED');
   return { retained: body.retained, expectedVersion: body.expectedVersion };
 };
 

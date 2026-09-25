@@ -38,7 +38,6 @@ export interface PluginPendingUpgradeView extends PluginPendingUpgradeRecord {
   app: AppView;
 }
 
-
 export interface PluginUninstallResult {
   state: 'draining' | 'removed';
   app: AppView;

@@ -134,24 +134,29 @@ export class PluginAgentSdkDispatcher {
         ]);
         const model = record(params.model);
         onlyKeys(model, ['providerId', 'modelId', 'configurationVersion']);
-        return this.runFacade.createRun({
-          threadId: string(params.threadId),
-          input: {
-            text: string(params.text, MAX_TEXT_BYTES),
-            artifactRefs: params.artifactRefs === undefined ? [] : stringArray(params.artifactRefs),
+        return this.runFacade.createRun(
+          {
+            threadId: string(params.threadId),
+            input: {
+              text: string(params.text, MAX_TEXT_BYTES),
+              artifactRefs: params.artifactRefs === undefined ? [] : stringArray(params.artifactRefs),
+            },
+            agentDefinitionId: string(params.agentDefinitionId),
+            model: {
+              providerId: string(model.providerId),
+              modelId: string(model.modelId),
+              configurationVersion: positiveInteger(model.configurationVersion),
+            },
+            approvalMode: 'ask',
+            executionMode: 'execute',
+            ...(params.reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: reasoningEffort(params.reasoningEffort) }),
+            connectionIds: params.connectionIds === undefined ? [] : positiveIntegerArray(params.connectionIds),
+            ...(params.initialGoal === undefined ? {} : { initialGoal: string(params.initialGoal, MAX_TEXT_BYTES) }),
           },
-          agentDefinitionId: string(params.agentDefinitionId),
-          model: {
-            providerId: string(model.providerId),
-            modelId: string(model.modelId),
-            configurationVersion: positiveInteger(model.configurationVersion),
-          },
-          approvalMode: 'ask',
-          executionMode: 'execute',
-          ...(params.reasoningEffort === undefined ? {} : { reasoningEffort: reasoningEffort(params.reasoningEffort) }),
-          connectionIds: params.connectionIds === undefined ? [] : positiveIntegerArray(params.connectionIds),
-          ...(params.initialGoal === undefined ? {} : { initialGoal: string(params.initialGoal, MAX_TEXT_BYTES) }),
-        }, operationId);
+          operationId,
+        );
       }
       case 'agent.runs.appendInput': {
         const params = record(rawParams);

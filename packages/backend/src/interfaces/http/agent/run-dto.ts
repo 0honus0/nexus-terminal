@@ -26,21 +26,15 @@ const modelRefDto = (model: AgentModelRefDto): AgentModelRefDto => ({
   configurationVersion: model.configurationVersion,
 });
 
-const modelCapabilitySnapshotDto = (
-  snapshot: AgentModelCapabilitySnapshotDto,
-): AgentModelCapabilitySnapshotDto => ({
+const modelCapabilitySnapshotDto = (snapshot: AgentModelCapabilitySnapshotDto): AgentModelCapabilitySnapshotDto => ({
   contextWindow: snapshot.contextWindow,
   maxOutputTokens: snapshot.maxOutputTokens,
   supportsTools: snapshot.supportsTools,
   supportsImageInput: snapshot.supportsImageInput,
   supportsFileInput: snapshot.supportsFileInput,
-  ...(snapshot.supportsPromptCacheKey === undefined
-    ? {}
-    : { supportsPromptCacheKey: snapshot.supportsPromptCacheKey }),
+  ...(snapshot.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: snapshot.supportsPromptCacheKey }),
   ...(snapshot.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...snapshot.reasoningEfforts] }),
-  ...(snapshot.defaultReasoningEffort === undefined
-    ? {}
-    : { defaultReasoningEffort: snapshot.defaultReasoningEffort }),
+  ...(snapshot.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: snapshot.defaultReasoningEffort }),
   ...(snapshot.reasoningMandatory === undefined ? {} : { reasoningMandatory: snapshot.reasoningMandatory }),
 });
 
@@ -189,9 +183,7 @@ export const runDto = (run: RunView): AgentRunViewDto => ({
             contextWindowTokens: run.usage.context.contextWindowTokens,
             source: run.usage.context.source,
             ...(run.usage.context.model === undefined ? {} : { model: modelRefDto(run.usage.context.model) }),
-            ...(run.usage.context.contextEpoch === undefined
-              ? {}
-              : { contextEpoch: run.usage.context.contextEpoch }),
+            ...(run.usage.context.contextEpoch === undefined ? {} : { contextEpoch: run.usage.context.contextEpoch }),
             updatedAt: run.usage.context.updatedAt,
           },
         }),
@@ -239,9 +231,7 @@ export const runSnapshotDto = (run: RunSnapshot): AgentRunSnapshotDto => ({
                     ...(choice.description === undefined ? {} : { description: choice.description }),
                   })),
                 }),
-            ...(question.recommendedChoice === undefined
-              ? {}
-              : { recommendedChoice: question.recommendedChoice }),
+            ...(question.recommendedChoice === undefined ? {} : { recommendedChoice: question.recommendedChoice }),
             ...(question.context === undefined ? {} : { context: question.context }),
           })),
           requestedAt: run.pendingInputRequest.requestedAt,

@@ -90,7 +90,8 @@ const ledgerPageDto = (page: LedgerPage): AgentLedgerPageDto => ({
 const createRequest = (value: unknown): AgentThreadCreateRequestDto => {
   const body = record(value);
   onlyKeys(body, ['title']);
-  if (body.title !== undefined && body.title !== null && typeof body.title !== 'string') throw new Error('VALIDATION_FAILED');
+  if (body.title !== undefined && body.title !== null && typeof body.title !== 'string')
+    throw new Error('VALIDATION_FAILED');
   return body.title === undefined ? {} : { title: body.title as string | null };
 };
 

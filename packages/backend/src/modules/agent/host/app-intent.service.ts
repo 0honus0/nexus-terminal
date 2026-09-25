@@ -71,11 +71,7 @@ export class AppIntentService {
     private readonly clock: ClockPort,
   ) {}
 
-  async createConfirmed(
-    scope: Scope,
-    input: CreateAppIntentInput,
-    idempotencyKey?: string,
-  ): Promise<AppIntentReceipt> {
+  async createConfirmed(scope: Scope, input: CreateAppIntentInput, idempotencyKey?: string): Promise<AppIntentReceipt> {
     const now = this.clock.nowUnixSeconds();
     await this.repository
       .purgeExpired(now, 100)

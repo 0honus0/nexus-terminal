@@ -14,15 +14,17 @@ const slice = (startMarker: string, endMarker: string): string => {
 };
 
 const loadMemories = slice('const loadMemories = async', 'const loadSourceMemories = async');
-assert(loadMemories.includes("const previousBaseline = memoryBaselines.value[memory.id];"));
+assert(loadMemories.includes('const previousBaseline = memoryBaselines.value[memory.id];'));
 assert(loadMemories.includes('const wasDirty ='));
-assert(loadMemories.includes('const serverChanged = previousBaseline !== undefined && previousBaseline !== memory.content;'));
 assert(
-  loadMemories.includes("if (!wasDirty) {\n          nextDrafts[memory.id] = memory.content;"),
+  loadMemories.includes('const serverChanged = previousBaseline !== undefined && previousBaseline !== memory.content;'),
+);
+assert(
+  loadMemories.includes('if (!wasDirty) {\n          nextDrafts[memory.id] = memory.content;'),
   'clean drafts must follow the authoritative refresh',
 );
 assert(
-  loadMemories.includes("} else if (serverChanged) {\n          nextConflicts[memory.id] = true;"),
+  loadMemories.includes('} else if (serverChanged) {\n          nextConflicts[memory.id] = true;'),
   'dirty drafts must be preserved and marked conflicted when the server changes',
 );
 assert(
@@ -41,11 +43,13 @@ assert(
   'same-App source refresh must not clear an existing import preview before authoritative results arrive',
 );
 assert(
-  loadSources.includes("const selectedSource = filtered.find((memory) => memory.id === sourceMemoryId.value) ?? null;"),
+  loadSources.includes('const selectedSource = filtered.find((memory) => memory.id === sourceMemoryId.value) ?? null;'),
   'source selection must be reconciled against the refreshed valid list',
 );
 assert(
-  loadSources.includes("if (!selectedSource) {\n          sourceMemoryId.value = '';\n          importPreview.value = null;"),
+  loadSources.includes(
+    "if (!selectedSource) {\n          sourceMemoryId.value = '';\n          importPreview.value = null;",
+  ),
   'selection/preview may be cleared only after the selected source is authoritatively absent',
 );
 assert(
@@ -69,7 +73,7 @@ assert(
 );
 
 assert(source.includes('const draftConflict = (memoryId: string): boolean =>'));
-assert(source.includes("@click=\"useLatestDraft(memory)\""));
+assert(source.includes('@click="useLatestDraft(memory)"'));
 assert(source.includes("$t('agent.settings.memory.draftConflict')"));
 
 process.stdout.write('agent memory draft merge regression: PASS\n');

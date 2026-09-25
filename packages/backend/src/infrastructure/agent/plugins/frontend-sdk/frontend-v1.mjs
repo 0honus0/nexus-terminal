@@ -150,7 +150,9 @@ const createSdk = ({ port, nonce }) => {
     if (message.ok === true) active.resolve(message.result);
     else {
       const code = message.error?.code || 'NEXUS_PLUGIN_REQUEST_FAILED';
-      active.reject(requestError(code, typeof message.error?.operationId === 'string' ? message.error.operationId : undefined));
+      active.reject(
+        requestError(code, typeof message.error?.operationId === 'string' ? message.error.operationId : undefined),
+      );
     }
   };
 

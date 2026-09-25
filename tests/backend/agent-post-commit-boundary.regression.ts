@@ -32,18 +32,14 @@ const repository: ProviderRepositoryPort = {
     };
     return persisted;
   },
-  update: async (
-    _userId: number,
-    _providerId: string,
-    _expectedVersion: number,
-    record: ProviderUpdateRecord,
-  ) => {
+  update: async (_userId: number, _providerId: string, _expectedVersion: number, record: ProviderUpdateRecord) => {
     assert(persisted);
     persisted = {
       ...persisted,
       ...record,
       hasCredential: record.clearCredential ? false : persisted.hasCredential || record.credential !== undefined,
-      credentialRevision: persisted.credentialRevision + (record.credential !== undefined || record.clearCredential ? 1 : 0),
+      credentialRevision:
+        persisted.credentialRevision + (record.credential !== undefined || record.clearCredential ? 1 : 0),
       liveCapabilities: record.resetLiveCapabilities ? [] : persisted.liveCapabilities,
       version: persisted.version + 1,
     };

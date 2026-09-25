@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const read = (relativePath: string): string =>
-  readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
+const read = (relativePath: string): string => readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
 
 const slice = (source: string, startMarker: string, endMarker: string): string => {
   const start = source.indexOf(startMarker);
@@ -25,8 +24,7 @@ assert(
   'public close must remain an intentional shutdown that does not request reconnect',
 );
 assert(
-  closeLifecycle.includes('private disconnect(): void') &&
-    closeLifecycle.includes('this.closeInternal(true);'),
+  closeLifecycle.includes('private disconnect(): void') && closeLifecycle.includes('this.closeInternal(true);'),
   'unexpected transport shutdown must use the notifying disconnect path',
 );
 assert(
@@ -39,10 +37,7 @@ assert(
 );
 
 const portError = slice(bridge, 'private readonly onPortError', 'private readonly onPortMessage');
-assert(
-  portError.includes('this.disconnect();'),
-  'MessagePort messageerror must notify the host surface after ready',
-);
+assert(portError.includes('this.disconnect();'), 'MessagePort messageerror must notify the host surface after ready');
 
 const portMessage = slice(bridge, 'private readonly onPortMessage', 'private validRequest');
 assert(
@@ -93,8 +88,7 @@ assert(
 
 const frameLoad = slice(frame, 'const onFrameLoad =', 'watch(');
 assert(
-  frameLoad.includes('event.currentTarget') &&
-    frameLoad.includes('suppressedFrameLoad === loadedFrame'),
+  frameLoad.includes('event.currentTarget') && frameLoad.includes('suppressedFrameLoad === loadedFrame'),
   'iframe load suppression must be scoped to the exact host-navigated frame',
 );
 assert(
@@ -105,9 +99,6 @@ assert(
   frameLoad.includes('void load();'),
   'an external iframe reload after ready must trigger a full generation-safe reconnect',
 );
-assert(
-  frame.includes('@load="onFrameLoad"'),
-  'iframe lifecycle must be wired to the reconnect handler',
-);
+assert(frame.includes('@load="onFrameLoad"'), 'iframe lifecycle must be wired to the reconnect handler');
 
 process.stdout.write('plugin frontend bridge reconnect regression: PASS\n');

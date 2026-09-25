@@ -23,9 +23,7 @@ export interface AgentTerminalCloseMessageDto {
 }
 
 export type AgentTerminalClientControlMessageDto =
-  | AgentTerminalResizeMessageDto
-  | AgentTerminalSignalMessageDto
-  | AgentTerminalCloseMessageDto;
+  AgentTerminalResizeMessageDto | AgentTerminalSignalMessageDto | AgentTerminalCloseMessageDto;
 
 export interface AgentTerminalReadyMessageDto {
   type: 'ready';

@@ -2,21 +2,9 @@ export const SERVER_TRANSFER_METHODS = ['auto', 'rsync', 'scp'] as const;
 export type ServerTransferMethodDto = (typeof SERVER_TRANSFER_METHODS)[number];
 export type ServerTransferMethodUsedDto = 'rsync' | 'scp';
 export type ServerTransferTaskStatusDto =
-  | 'queued'
-  | 'in-progress'
-  | 'completed'
-  | 'failed'
-  | 'partially-completed'
-  | 'cancelling'
-  | 'cancelled';
+  'queued' | 'in-progress' | 'completed' | 'failed' | 'partially-completed' | 'cancelling' | 'cancelled';
 export type ServerTransferSubTaskStatusDto =
-  | 'queued'
-  | 'connecting'
-  | 'transferring'
-  | 'completed'
-  | 'failed'
-  | 'cancelling'
-  | 'cancelled';
+  'queued' | 'connecting' | 'transferring' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
 
 export interface SendFileSourceItemDto {
   name: string;

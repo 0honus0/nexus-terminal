@@ -1,7 +1,4 @@
-import type {
-  AgentMemoryImportConfirmationDto,
-  AgentMemoryViewDto,
-} from '@nexus-terminal/protocol/agent-memories';
+import type { AgentMemoryImportConfirmationDto, AgentMemoryViewDto } from '@nexus-terminal/protocol/agent-memories';
 import type { AgentMemoryFacade } from '../../../modules/agent/public';
 
 type Memory = Awaited<ReturnType<AgentMemoryFacade['confirmImport']>>;
@@ -24,9 +21,7 @@ export const memoryDto = (memory: Memory): AgentMemoryViewDto => ({
   updatedAt: memory.updatedAt,
 });
 
-export const memoryImportConfirmationDto = (
-  confirmation: ImportConfirmation,
-): AgentMemoryImportConfirmationDto => ({
+export const memoryImportConfirmationDto = (confirmation: ImportConfirmation): AgentMemoryImportConfirmationDto => ({
   id: confirmation.id,
   userId: confirmation.userId,
   appId: confirmation.appId,

@@ -1,10 +1,7 @@
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import { executionErrorCode, failedToolResult as buildFailedToolResult } from '../execution/execution-errors';
-import {
-  GovernedMutationExecutor,
-  type GovernedMutationHooks,
-} from '../execution/governed-mutation-executor';
+import { GovernedMutationExecutor, type GovernedMutationHooks } from '../execution/governed-mutation-executor';
 import { toolLeaseTtlSeconds } from '../execution/tool-lease-policy';
 import type { ToolCallRunner } from '../execution/tool-call-runner';
 import type { RunExecutionReaderPort, RunSnapshotReaderPort } from '../runs/run.repository.port';

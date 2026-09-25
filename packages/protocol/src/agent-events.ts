@@ -99,8 +99,7 @@ export interface AgentTransientApprovalChangedPayloadDto {
 }
 
 export type AgentWsSubscriptionRequestDto =
-  | { channel: 'host'; cursor: number }
-  | { channel: 'run'; appId: string; runId: string; cursor: number };
+  { channel: 'host'; cursor: number } | { channel: 'run'; appId: string; runId: string; cursor: number };
 
 export type AgentWsSubscribePayloadDto =
   | ({ subscriptionId: string } & Extract<AgentWsSubscriptionRequestDto, { channel: 'host' }>)
@@ -184,7 +183,4 @@ export interface AgentWsEventMessageDto {
 }
 
 export type AgentWsServerMessageDto =
-  | AgentWsSubscribedMessageDto
-  | AgentWsUnsubscribedMessageDto
-  | AgentWsErrorMessageDto
-  | AgentWsEventMessageDto;
+  AgentWsSubscribedMessageDto | AgentWsUnsubscribedMessageDto | AgentWsErrorMessageDto | AgentWsEventMessageDto;

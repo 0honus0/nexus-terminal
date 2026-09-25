@@ -1,10 +1,5 @@
 export type AgentJsonValueDto =
-  | null
-  | boolean
-  | number
-  | string
-  | AgentJsonValueDto[]
-  | { [key: string]: AgentJsonValueDto };
+  null | boolean | number | string | AgentJsonValueDto[] | { [key: string]: AgentJsonValueDto };
 
 export type AgentVersionedRequestDto<T extends object> = T & { schemaVersion: 1 };
 

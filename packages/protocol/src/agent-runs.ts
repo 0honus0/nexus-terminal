@@ -1,9 +1,5 @@
 import type { AgentJsonValueDto, AgentToolRiskDto, AgentVersionedRequestDto } from './agent-common.js';
-import type {
-  AgentApprovalModeDto,
-  AgentContextCompactionModeDto,
-  AgentContextProfileDto,
-} from './agent-host.js';
+import type { AgentApprovalModeDto, AgentContextCompactionModeDto, AgentContextProfileDto } from './agent-host.js';
 import type { AgentModelCapabilityDto, AgentReasoningEffortDto } from './agent-providers.js';
 
 export interface AgentModelRefDto {
@@ -354,8 +350,7 @@ export interface AgentRunReconciliationResolveFieldsDto {
   resources: Array<{ resourceKey: string; version: number }>;
 }
 
-export type AgentRunReconciliationResolveRequestDto =
-  AgentVersionedRequestDto<AgentRunReconciliationResolveFieldsDto>;
+export type AgentRunReconciliationResolveRequestDto = AgentVersionedRequestDto<AgentRunReconciliationResolveFieldsDto>;
 
 export interface AgentRunAppendInputFieldsDto extends AgentUserInputDataDto {
   expectedVersion: number;
@@ -376,8 +371,7 @@ export interface AgentRunPendingInputMutationFieldsDto {
   expectedVersion: number;
 }
 
-export type AgentRunPendingInputMutationRequestDto =
-  AgentVersionedRequestDto<AgentRunPendingInputMutationFieldsDto>;
+export type AgentRunPendingInputMutationRequestDto = AgentVersionedRequestDto<AgentRunPendingInputMutationFieldsDto>;
 
 export interface AgentRunSetGoalFieldsDto {
   text: string;

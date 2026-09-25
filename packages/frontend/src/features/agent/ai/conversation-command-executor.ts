@@ -1,4 +1,9 @@
-import type { AgentArtifactRefDto, AgentPendingRunInputPageDto, AgentRunSnapshotDto, AgentRunViewDto } from '../api/agent-api';
+import type {
+  AgentArtifactRefDto,
+  AgentPendingRunInputPageDto,
+  AgentRunSnapshotDto,
+  AgentRunViewDto,
+} from '../api/agent-api';
 import { toAgentApiError } from '../api/agent-api';
 import { CONVERSATION_COMMAND_SUGGESTIONS, type ConversationSlashCommand } from './conversation-commands';
 

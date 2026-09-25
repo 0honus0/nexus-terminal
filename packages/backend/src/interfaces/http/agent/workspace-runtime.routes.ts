@@ -27,7 +27,11 @@ const setupPreviewRequest = (value: unknown): AgentWorkspaceRuntimeSetupPreviewR
   }
   if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
   const recipes = value.recipes.map((candidate) => {
-    if (!isRecord(candidate) || !hasOnlyKeys(candidate, ['recipeId', 'versions']) || !nonEmptyString(candidate.recipeId)) {
+    if (
+      !isRecord(candidate) ||
+      !hasOnlyKeys(candidate, ['recipeId', 'versions']) ||
+      !nonEmptyString(candidate.recipeId)
+    ) {
       throw new Error('VALIDATION_FAILED');
     }
     if (candidate.versions !== undefined) {
@@ -178,7 +182,11 @@ export const createWorkspaceRuntimeRouter = (
         request,
         response,
         workspaceRuntimeCommandDto(
-          await workspaceRuntime.confirmPackUninstall(agentUserId(request), input.confirmationId, input.expectedVersion),
+          await workspaceRuntime.confirmPackUninstall(
+            agentUserId(request),
+            input.confirmationId,
+            input.expectedVersion,
+          ),
         ),
         202,
       );
@@ -209,7 +217,11 @@ export const createWorkspaceRuntimeRouter = (
         request,
         response,
         workspaceRuntimeCommandDto(
-          await workspaceRuntime.confirmRuntimeCleanup(agentUserId(request), input.confirmationId, input.expectedVersion),
+          await workspaceRuntime.confirmRuntimeCleanup(
+            agentUserId(request),
+            input.confirmationId,
+            input.expectedVersion,
+          ),
         ),
         202,
       );
@@ -240,7 +252,11 @@ export const createWorkspaceRuntimeRouter = (
         request,
         response,
         workspaceRuntimeSettingsResetResultDto(
-          await workspaceRuntime.confirmSettingsReset(agentUserId(request), input.confirmationId, input.expectedVersion),
+          await workspaceRuntime.confirmSettingsReset(
+            agentUserId(request),
+            input.confirmationId,
+            input.expectedVersion,
+          ),
         ),
       );
     }),

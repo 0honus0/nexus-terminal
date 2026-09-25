@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const read = (relativePath: string): string =>
-  readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
+const read = (relativePath: string): string => readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
 
 const slice = (source: string, startMarker: string, endMarker: string): string => {
   const start = source.indexOf(startMarker);
@@ -34,13 +33,15 @@ assert(
   'deadline must respond without waiting for a still-running mutation to finish',
 );
 assert(
-  forward.includes('resolve({ kind: \'timeout\' });\n          controller.abort();'),
+  forward.includes("resolve({ kind: 'timeout' });\n          controller.abort();"),
   'timeout outcome must win the race before aborting any client-side HTTP wait',
 );
 
 const sdk = read('packages/backend/src/infrastructure/agent/plugins/frontend-sdk/frontend-v1.mjs');
 assert(
-  sdk.includes("error.outcomeUnknown = code === 'HOST_RPC_OUTCOME_UNKNOWN' || code === 'NEXUS_PLUGIN_MUTATION_OUTCOME_UNKNOWN';"),
+  sdk.includes(
+    "error.outcomeUnknown = code === 'HOST_RPC_OUTCOME_UNKNOWN' || code === 'NEXUS_PLUGIN_MUTATION_OUTCOME_UNKNOWN';",
+  ),
   'plugin SDK errors must identify unknown mutation outcomes',
 );
 assert(
@@ -71,10 +72,7 @@ assert(
   dispatcher.includes('this.runFacade.createThread(optionalString(params.title, 4_096), operationId)'),
   'thread create must receive the plugin operation id',
 );
-assert(
-  dispatcher.includes('}, operationId);'),
-  'run create must receive the plugin operation id',
-);
+assert(dispatcher.includes('}, operationId);'), 'run create must receive the plugin operation id');
 assert(
   dispatcher.includes('this.runFacade.cancelRun(await this.runFacade.getRun(string(params.runId)), operationId)'),
   'run cancel must receive the plugin operation id',
@@ -89,9 +87,7 @@ assert(
   agentApi.includes("...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})"),
   'thread create must forward optional plugin idempotency identity',
 );
-for (const marker of [
-  "headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey }",
-]) {
+for (const marker of ["headers: { ...(await mutationHeaders()), 'Idempotency-Key': idempotencyKey }"]) {
   assert(
     agentApi.split(marker).length - 1 >= 4,
     'Run/approval mutation APIs must use caller-provided idempotency keys instead of regenerating them',
@@ -107,15 +103,14 @@ assert(
   threadService.includes("throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');"),
   'thread replay must reject operation-id reuse with a different payload',
 );
-const threadRepository = read('packages/backend/src/infrastructure/agent/repositories/sqlite-conversation.repository.ts');
+const threadRepository = read(
+  'packages/backend/src/infrastructure/agent/repositories/sqlite-conversation.repository.ts',
+);
 assert(
   threadRepository.includes('INSERT OR IGNORE INTO ai_threads'),
   'concurrent thread create replays must collapse on the same durable id',
 );
-assert(
-  threadRepository.includes('inserted.changes === 0'),
-  'thread repository must distinguish create from replay',
-);
+assert(threadRepository.includes('inserted.changes === 0'), 'thread repository must distinguish create from replay');
 
 const appIntent = read('packages/backend/src/modules/agent/host/app-intent.service.ts');
 assert(
@@ -130,7 +125,9 @@ assert(
   appIntent.includes('existingHash !== requestedHash'),
   'AppIntent operation-id reuse must verify the semantic payload',
 );
-const appIntentRepository = read('packages/backend/src/infrastructure/agent/repositories/sqlite-app-intent.repository.ts');
+const appIntentRepository = read(
+  'packages/backend/src/infrastructure/agent/repositories/sqlite-app-intent.repository.ts',
+);
 assert(
   appIntentRepository.includes('INSERT OR IGNORE INTO agent_app_intent_receipts'),
   'concurrent AppIntent replays must collapse on the same receipt id',

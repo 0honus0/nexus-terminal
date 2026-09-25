@@ -18,16 +18,17 @@ type BinaryHandler = (data: Uint8Array) => void;
 
 const isProtocolRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-const protocolRecord = (value: unknown): Record<string, unknown> | null =>
-  isProtocolRecord(value) ? value : null;
+const protocolRecord = (value: unknown): Record<string, unknown> | null => (isProtocolRecord(value) ? value : null);
 
 const decodeProtocolMessage = (raw: string): ProtocolMessage => {
   const parsed = protocolRecord(JSON.parse(raw) as unknown);
-  if (!parsed || typeof parsed.type !== 'string' || !parsed.type) throw new Error('Workspace protocol message is invalid.');
+  if (!parsed || typeof parsed.type !== 'string' || !parsed.type)
+    throw new Error('Workspace protocol message is invalid.');
   if (parsed.type !== 'response') {
     return parsed.payload === undefined ? { type: parsed.type } : { type: parsed.type, payload: parsed.payload };
   }
-  if (typeof parsed.requestId !== 'string' || !parsed.requestId) throw new Error('Workspace response requestId is invalid.');
+  if (typeof parsed.requestId !== 'string' || !parsed.requestId)
+    throw new Error('Workspace response requestId is invalid.');
   const payload = protocolRecord(parsed.payload);
   if (!payload || typeof payload.ok !== 'boolean') throw new Error('Workspace response payload is invalid.');
   if (payload.error !== undefined && typeof payload.error !== 'string')
@@ -278,10 +279,7 @@ export class WorkspaceSocket {
     type: K,
     payload: WorkspaceRequestMapDto[K],
   ): Promise<{ data: WorkspaceResponseMapDto[K]; bytes: Uint8Array }>;
-  requestBinary<T = unknown>(
-    type: string,
-    payload: object = {},
-  ): Promise<{ data: T; bytes: Uint8Array }> {
+  requestBinary<T = unknown>(type: string, payload: object = {}): Promise<{ data: T; bytes: Uint8Array }> {
     return this.requestInternal<T>(type, crypto.randomUUID(), payload, true) as Promise<{
       data: T;
       bytes: Uint8Array;
@@ -371,10 +369,7 @@ export class WorkspaceSocket {
     }
   }
 
-  on<K extends keyof WorkspaceEventMapDto>(
-    type: K,
-    handler: EventHandler<WorkspaceEventMapDto[K]>,
-  ): () => void;
+  on<K extends keyof WorkspaceEventMapDto>(type: K, handler: EventHandler<WorkspaceEventMapDto[K]>): () => void;
   on<T = unknown>(type: string, handler: EventHandler<T>): () => void;
   on<T = unknown>(type: string, handler: EventHandler<T>): () => void {
     const listeners = this.handlers.get(type) ?? new Set<EventHandler>();

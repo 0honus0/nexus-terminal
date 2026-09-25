@@ -307,10 +307,9 @@
                   <span class="small-icon network-icon"><i class="fas fa-network-wired text-[10px]"></i></span>
                   <span class="metric-name">{{ t('statusMonitor.networkLabel') }}</span>
                 </div>
-                <span
-                  v-if="monitor.current.value.netInterface"
-                  class="metric-detail network-iface"
-                >{{ monitor.current.value.netInterface }}</span>
+                <span v-if="monitor.current.value.netInterface" class="metric-detail network-iface">{{
+                  monitor.current.value.netInterface
+                }}</span>
                 <div class="network-history-rates">
                   <span class="rate-down"
                     >↓ <span class="rate-full">{{ formatStatusRate(monitor.current.value.netRxRate) }}</span

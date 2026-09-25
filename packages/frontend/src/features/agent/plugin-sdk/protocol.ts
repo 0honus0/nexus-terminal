@@ -157,7 +157,12 @@ export interface PluginFrontendSdkV1 {
     threads: {
       list(before?: string): Promise<AgentThreadPageDto>;
       create(title?: string, operationId?: string): Promise<AgentThreadViewDto>;
-      rename(threadId: string, title: string, expectedVersion: number, operationId?: string): Promise<AgentThreadViewDto>;
+      rename(
+        threadId: string,
+        title: string,
+        expectedVersion: number,
+        operationId?: string,
+      ): Promise<AgentThreadViewDto>;
       entries(threadId: string, before?: string): Promise<AgentLedgerPageDto>;
     };
     runs: {

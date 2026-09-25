@@ -37,8 +37,7 @@ const terminalThemeCreateRequest = (body: unknown): TerminalThemeCreateRequestDt
   return { name: body.name, themeData: terminalThemeDataDto(body.themeData) };
 };
 
-const terminalThemeUpdateRequest = (body: unknown): TerminalThemeUpdateRequestDto =>
-  terminalThemeCreateRequest(body);
+const terminalThemeUpdateRequest = (body: unknown): TerminalThemeUpdateRequestDto => terminalThemeCreateRequest(body);
 
 export const createTerminalThemesRouter = (themes: TerminalThemeService): Router => {
   const router = Router();

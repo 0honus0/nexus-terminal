@@ -13,10 +13,7 @@ const slice = (startMarker: string, endMarker: string): string => {
   return source.slice(start, end);
 };
 
-assert(
-  source.includes('let detailApprovalGeneration = 0;'),
-  'detail approval refreshes need their own generation',
-);
+assert(source.includes('let detailApprovalGeneration = 0;'), 'detail approval refreshes need their own generation');
 
 const refresh = slice('const refreshDetailApprovalBatch = async', 'const refreshDetailSubagents = async');
 assert(
@@ -37,8 +34,7 @@ assert(
   'stale guard must run before approval state commit',
 );
 assert(
-  refresh.indexOf('detailApprovalBatch.value = next;') <
-    refresh.indexOf('detailSnapshot.value = snapshot;'),
+  refresh.indexOf('detailApprovalBatch.value = next;') < refresh.indexOf('detailSnapshot.value = snapshot;'),
   'approvals and snapshot must commit in the same accepted generation block',
 );
 
@@ -48,9 +44,7 @@ assert(
   'opening detail must invalidate older approval refreshes',
 );
 assert(
-  openDetail.includes(
-    "if (detailApprovals.status === 'fulfilled' && approvalGeneration === detailApprovalGeneration)",
-  ),
+  openDetail.includes("if (detailApprovals.status === 'fulfilled' && approvalGeneration === detailApprovalGeneration)"),
   'open-detail approvals must not overwrite a newer stream/mutation refresh',
 );
 assert(

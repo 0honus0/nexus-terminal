@@ -53,21 +53,17 @@ assert(
   'stale pagination must be rejected before replacing the cursor',
 );
 assert(
-  loadMore.includes(
-    'if (requestGeneration === threadListRefreshGeneration) threadListLoadingMore.value = false;',
-  ),
+  loadMore.includes('if (requestGeneration === threadListRefreshGeneration) threadListLoadingMore.value = false;'),
   'an invalidated request must not clear a newer pagination loading state',
 );
 
 const createThread = slice('const createThread = async', 'const beginThreadCreation = async');
 assert(
-  createThread.indexOf('invalidateThreadPagination();') >
-    createThread.indexOf('await facade.createThread'),
+  createThread.indexOf('invalidateThreadPagination();') > createThread.indexOf('await facade.createThread'),
   'successful thread creation must invalidate older pagination before mutating the local list',
 );
 assert(
-  createThread.indexOf('invalidateThreadPagination();') <
-    createThread.indexOf('threads.value = [thread'),
+  createThread.indexOf('invalidateThreadPagination();') < createThread.indexOf('threads.value = [thread'),
   'creation invalidation must happen before local list commit',
 );
 
@@ -79,27 +75,23 @@ assert(
 
 const selectFirst = slice('const selectFirstOrCreateThread = async', 'const deleteThreadConversation = async');
 assert(
-  selectFirst.indexOf('invalidateThreadPagination();') <
-    selectFirst.indexOf('facade.listThreads(undefined'),
+  selectFirst.indexOf('invalidateThreadPagination();') < selectFirst.indexOf('facade.listThreads(undefined'),
   'replacement first-page load after deletion must invalidate older pagination before reading',
 );
 
 const deleteThread = slice('const deleteThreadConversation = async', 'const requestDeleteThread =');
 assert(
-  deleteThread.indexOf('invalidateThreadPagination();') >
-    deleteThread.indexOf('await facade.deleteThread(thread);'),
+  deleteThread.indexOf('invalidateThreadPagination();') > deleteThread.indexOf('await facade.deleteThread(thread);'),
   'failed deletes must not invalidate pagination, but successful deletes must',
 );
 assert(
-  deleteThread.indexOf('invalidateThreadPagination();') <
-    deleteThread.indexOf('threads.value = threads.value.filter'),
+  deleteThread.indexOf('invalidateThreadPagination();') < deleteThread.indexOf('threads.value = threads.value.filter'),
   'delete invalidation must happen before local list commit',
 );
 
 const deleteAll = slice('const deleteAllConversations = async', 'const requestDeleteAllConversations =');
 assert(
-  deleteAll.indexOf('invalidateThreadPagination();') >
-    deleteAll.indexOf('await facade.deleteAllThreads();'),
+  deleteAll.indexOf('invalidateThreadPagination();') > deleteAll.indexOf('await facade.deleteAllThreads();'),
   'successful delete-all must invalidate older pagination',
 );
 

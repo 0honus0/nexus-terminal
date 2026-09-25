@@ -15,7 +15,11 @@ import type {
 } from '@nexus-terminal/protocol/agent-memories';
 import { Buffer } from 'node:buffer';
 import { Router, type Request } from 'express';
-import { AGENT_CAPABILITIES, type AgentCollaborationFacade, type AgentMemoryFacade } from '../../../modules/agent/public';
+import {
+  AGENT_CAPABILITIES,
+  type AgentCollaborationFacade,
+  type AgentMemoryFacade,
+} from '../../../modules/agent/public';
 import { agentData, agentRoute } from './agent-http';
 import { subagentDto, subagentMessageDto, subagentSettingsDto } from './collaboration-dto';
 import { isJsonValue } from './agent-route-input';
@@ -56,7 +60,12 @@ const capabilitySet = new Set<string>(AGENT_CAPABILITIES);
 const modelRef = (value: unknown): AgentSubagentProfileDto['allowedModels'][number] => {
   const body = record(value);
   only(body, ['providerId', 'modelId', 'configurationVersion']);
-  if (!nonEmpty(body.providerId) || !nonEmpty(body.modelId) || !Number.isSafeInteger(body.configurationVersion) || Number(body.configurationVersion) < 1) {
+  if (
+    !nonEmpty(body.providerId) ||
+    !nonEmpty(body.modelId) ||
+    !Number.isSafeInteger(body.configurationVersion) ||
+    Number(body.configurationVersion) < 1
+  ) {
     throw new Error('VALIDATION_FAILED');
   }
   return {
@@ -68,8 +77,23 @@ const modelRef = (value: unknown): AgentSubagentProfileDto['allowedModels'][numb
 
 const profileDtoInput = (value: unknown): AgentSubagentProfileDto => {
   const body = record(value);
-  only(body, ['id', 'role', 'defaultModel', 'allowedModels', 'capabilities', 'peerMessaging', 'mutationMode', 'maxSteps', 'failureMode']);
-  if (!nonEmpty(body.id) || !nonEmpty(body.role) || !Array.isArray(body.allowedModels) || body.allowedModels.length < 1) {
+  only(body, [
+    'id',
+    'role',
+    'defaultModel',
+    'allowedModels',
+    'capabilities',
+    'peerMessaging',
+    'mutationMode',
+    'maxSteps',
+    'failureMode',
+  ]);
+  if (
+    !nonEmpty(body.id) ||
+    !nonEmpty(body.role) ||
+    !Array.isArray(body.allowedModels) ||
+    body.allowedModels.length < 1
+  ) {
     throw new Error('VALIDATION_FAILED');
   }
   const allowedModels = body.allowedModels.map(modelRef);
@@ -101,7 +125,11 @@ const profileDtoInput = (value: unknown): AgentSubagentProfileDto => {
 const settingsReplaceRequest = (value: unknown): AgentSubagentSettingsReplaceRequestDto => {
   const body = record(value);
   only(body, ['expectedVersion', 'profiles']);
-  if (!Number.isSafeInteger(body.expectedVersion) || Number(body.expectedVersion) < 0 || !Array.isArray(body.profiles)) {
+  if (
+    !Number.isSafeInteger(body.expectedVersion) ||
+    Number(body.expectedVersion) < 0 ||
+    !Array.isArray(body.profiles)
+  ) {
     throw new Error('VALIDATION_FAILED');
   }
   return { profiles: body.profiles.map(profileDtoInput), expectedVersion: Number(body.expectedVersion) };
@@ -114,7 +142,18 @@ const stringArray = (value: unknown): string[] => {
 
 const subagentCreateRequest = (value: unknown): AgentSubagentCreateRequestDto => {
   const body = record(value);
-  only(body, ['parentRuntimeId', 'profileId', 'objective', 'constraints', 'inputArtifactRefs', 'maxSteps', 'deadlineAt', 'completionCriteria', 'dependsOn', 'dependencyMode']);
+  only(body, [
+    'parentRuntimeId',
+    'profileId',
+    'objective',
+    'constraints',
+    'inputArtifactRefs',
+    'maxSteps',
+    'deadlineAt',
+    'completionCriteria',
+    'dependsOn',
+    'dependencyMode',
+  ]);
   if (
     !nonEmpty(body.parentRuntimeId) ||
     !nonEmpty(body.profileId) ||

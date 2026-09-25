@@ -36,9 +36,7 @@ export interface AuthTwoFactorLoginResponseDto extends MessageResponseDto {
   user: AuthUserDto;
 }
 
-export type AuthStatusResponseDto =
-  | { isAuthenticated: false }
-  | { isAuthenticated: true; user: AuthUserDto };
+export type AuthStatusResponseDto = { isAuthenticated: false } | { isAuthenticated: true; user: AuthUserDto };
 
 export interface AuthPasswordChangeRequestDto {
   currentPassword: string;

@@ -32,22 +32,26 @@ import type {
 
 const unwrap = <T>(envelope: AgentEnvelopeDto<T>): T => envelope.data;
 
-
-
 export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<string, string>>) => ({
   async workspaceRuntimeAvailability(): Promise<AgentWorkspaceRuntimeAvailabilityDto> {
     return unwrap(
-      (await httpClient.get<AgentEnvelopeDto<AgentWorkspaceRuntimeAvailabilityDto>>('/agent/workspace-runtime/availability')).data,
+      (
+        await httpClient.get<AgentEnvelopeDto<AgentWorkspaceRuntimeAvailabilityDto>>(
+          '/agent/workspace-runtime/availability',
+        )
+      ).data,
     );
   },
   async workspaceRuntimeCatalog(): Promise<AgentWorkspaceRuntimeCatalogDto> {
     return unwrap(
-      (await httpClient.get<AgentEnvelopeDto<AgentWorkspaceRuntimeCatalogDto>>('/agent/workspace-runtime/catalog')).data,
+      (await httpClient.get<AgentEnvelopeDto<AgentWorkspaceRuntimeCatalogDto>>('/agent/workspace-runtime/catalog'))
+        .data,
     );
   },
   async workspaceRuntimeStorage(): Promise<AgentWorkspaceRuntimeStorageDto> {
     return unwrap(
-      (await httpClient.get<AgentEnvelopeDto<AgentWorkspaceRuntimeStorageDto>>('/agent/workspace-runtime/storage')).data,
+      (await httpClient.get<AgentEnvelopeDto<AgentWorkspaceRuntimeStorageDto>>('/agent/workspace-runtime/storage'))
+        .data,
     );
   },
   async previewWorkspaceRuntimeSetup(
@@ -164,7 +168,9 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
       ).data,
     );
   },
-  async previewWorkspaceRuntimeSettingsReset(expectedVersion: number): Promise<AgentWorkspaceRuntimeSettingsResetPreviewDto> {
+  async previewWorkspaceRuntimeSettingsReset(
+    expectedVersion: number,
+  ): Promise<AgentWorkspaceRuntimeSettingsResetPreviewDto> {
     const input: AgentWorkspaceRuntimeExpectedVersionRequestDto = { expectedVersion };
     return unwrap(
       (
