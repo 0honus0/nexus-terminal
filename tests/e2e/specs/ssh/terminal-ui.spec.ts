@@ -377,13 +377,14 @@ test('Ctrl+C interrupts a long-running terminal output stream', async ({ page, c
   const rows = terminal.locator('.xterm-rows');
   const commandInput = page.getByTestId('command-input');
   await commandInput.fill(
-    'INTERRUPT_FINISHED=no; i=0; while [ $i -lt 100000 ]; do printf \'INTERRUPT_STREAM_%06d\\n\' "$i"; i=$((i+1)); if [ $((i%100)) -eq 0 ]; then sleep 0.01; fi; done; INTERRUPT_FINISHED=yes',
+    'INTERRUPT_FINISHED=no; i=0; while [ $i -lt 100000 ]; do printf \'INTERRUPT_STREAM_%06d\\n\' "$i"; i=$((i+1)); if [ $((i%100)) -eq 0 ]; then if IFS= read -r -n 1 -t 0.01 key && [ "$key" = $\'\\003\' ]; then printf \'INTERRUPT_ACK\\n\'; break; fi; fi; done; if [ "$i" -ge 100000 ]; then INTERRUPT_FINISHED=yes; fi',
   );
   await commandInput.press('Enter');
   await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('INTERRUPT_STREAM_');
 
   await terminal.locator('textarea').focus();
   await page.keyboard.press('Control+c');
+  await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('INTERRUPT_ACK');
   await commandInput.fill('printf \'INTERRUPT_RESULT=%s\\n\' "$INTERRUPT_FINISHED"');
   await commandInput.press('Enter');
   await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('INTERRUPT_RESULT=no');
