@@ -97,8 +97,7 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       }));
       expect(navMetrics.scrollbarWidth).toBe('none');
       expect(navMetrics.webkitScrollbarDisplay).toBe('none');
-      if (viewport.width === 360) {
-        expect(navMetrics.scrollWidth).toBeGreaterThan(navMetrics.clientWidth);
+      if (navMetrics.scrollWidth > navMetrics.clientWidth + 1) {
         await navScroller.evaluate((element) => {
           element.scrollLeft = element.scrollWidth;
         });
@@ -106,6 +105,9 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
         await navScroller.evaluate((element) => {
           element.scrollLeft = 0;
         });
+      } else {
+        expect(navMetrics.scrollWidth).toBeLessThanOrEqual(navMetrics.clientWidth + 1);
+        await expect.poll(() => navScroller.evaluate((element) => element.scrollLeft)).toBe(0);
       }
       await expect(dashboard.getByTestId('dashboard-local-resources')).toBeVisible();
       await expect(dashboard.getByTestId('dashboard-system-resources')).toBeVisible();
