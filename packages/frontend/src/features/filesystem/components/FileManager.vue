@@ -212,6 +212,7 @@
   let unregisterSearchFocus: (() => void) | undefined;
   let unregisterPathFocus: (() => void) | undefined;
   let navigationQueue: Promise<void> = Promise.resolve();
+  let clipboardPasteSerial = 0;
 
   const enqueueNavigation = (operation: () => Promise<void>): Promise<void> => {
     const next = navigationQueue.then(operation, operation);
@@ -676,6 +677,12 @@
   const preserveListFocusOnMouseOpen = (event: MouseEvent): void => {
     if (document.activeElement === listScroller.value) event.preventDefault();
   };
+  const focusFileListFromPointer = (event: PointerEvent): void => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('button, a, input, textarea, select, [contenteditable="true"]'))
+      return;
+    listScroller.value?.focus({ preventScroll: true });
+  };
   const PARENT_CURSOR = '__parent__';
   const keyboardPaths = computed(() => [
     ...(browser.path.value === '/' ? [] : [PARENT_CURSOR]),
@@ -716,15 +723,116 @@
     browser.select(entry, 'only');
     return [entry];
   };
-  const handleKeyboardNavigation = (event: KeyboardEvent) => {
-    const target = event.target;
-    if (
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement ||
-      (target instanceof HTMLElement && target.isContentEditable)
-    )
+  const isEditableTarget = (target: EventTarget | null): boolean =>
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable);
+
+  const clipboardImageExtension = (mimeType: string): string => {
+    const known: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/bmp': 'bmp',
+      'image/tiff': 'tiff',
+      'image/svg+xml': 'svg',
+      'image/avif': 'avif',
+    };
+    const exact = known[mimeType.toLowerCase()];
+    if (exact) return exact;
+    const subtype = mimeType
+      .toLowerCase()
+      .replace(/^image\//, '')
+      .split('+')[0]
+      ?.replace(/[^a-z0-9]/g, '');
+    return subtype || 'png';
+  };
+
+  const clipboardScreenshotStamp = (date: Date): string => {
+    const pad = (value: number, length = 2) => String(value).padStart(length, '0');
+    return [
+      `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+      `${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}-${pad(date.getMilliseconds(), 3)}`,
+    ].join('_');
+  };
+
+  const toClipboardImageFiles = (sourceFiles: readonly Blob[]): LocalUploadFile[] => {
+    if (!sourceFiles.length) return [];
+    const stamp = clipboardScreenshotStamp(new Date());
+    return sourceFiles.map((file, index) => {
+      const suffix = sourceFiles.length > 1 ? `_${index + 1}` : '';
+      const type = file.type || 'image/png';
+      const renamed = new File([file], `Screenshot_${stamp}${suffix}.${clipboardImageExtension(type)}`, {
+        type,
+        lastModified: Date.now(),
+      });
+      return { file: renamed };
+    });
+  };
+
+  const eventClipboardImageFiles = (event: ClipboardEvent): LocalUploadFile[] => {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return [];
+    const itemFiles = Array.from(clipboard.items)
+      .filter((item) => item.kind === 'file' && item.type.toLowerCase().startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    const sourceFiles = itemFiles.length
+      ? itemFiles
+      : Array.from(clipboard.files).filter((file) => file.type.toLowerCase().startsWith('image/'));
+    return toClipboardImageFiles(sourceFiles);
+  };
+
+  const navigatorClipboardImageFiles = async (): Promise<LocalUploadFile[]> => {
+    const clipboard = navigator.clipboard as Clipboard & { read?: () => Promise<ClipboardItem[]> };
+    if (!clipboard || typeof clipboard.read !== 'function') return [];
+    const items = await clipboard.read();
+    const images: Blob[] = [];
+    for (const item of items) {
+      const imageType = item.types.find((type) => type.toLowerCase().startsWith('image/'));
+      if (imageType) images.push(await item.getType(imageType));
+    }
+    return toClipboardImageFiles(images);
+  };
+
+  const handleClipboardPaste = (event: ClipboardEvent): void => {
+    if (isEditableTarget(event.target)) return;
+    clipboardPasteSerial += 1;
+
+    const imageFiles = eventClipboardImageFiles(event);
+    if (imageFiles.length) {
+      event.preventDefault();
+      event.stopPropagation();
+      emit('uploadFiles', browser.path.value, imageFiles, []);
       return;
+    }
+
+    if (props.clipboardCount) {
+      event.preventDefault();
+      event.stopPropagation();
+      emit('paste', browser.path.value);
+    }
+  };
+
+  const handleKeyboardPasteFallback = async (observedPasteSerial: number, destination: string): Promise<void> => {
+    if (clipboardPasteSerial !== observedPasteSerial) return;
+    try {
+      const imageFiles = await navigatorClipboardImageFiles();
+      if (clipboardPasteSerial !== observedPasteSerial) return;
+      if (imageFiles.length) {
+        emit('uploadFiles', destination, imageFiles, []);
+        return;
+      }
+    } catch {
+      // Native ClipboardEvent remains the preferred path; permission/API failures fall through.
+    }
+    if (clipboardPasteSerial === observedPasteSerial && props.clipboardCount) emit('paste', destination);
+  };
+
+  const handleKeyboardNavigation = (event: KeyboardEvent) => {
+    if (isEditableTarget(event.target)) return;
 
     const key = event.key.toLowerCase();
     const ctrlOrMeta = event.ctrlKey || event.metaKey;
@@ -746,8 +854,11 @@
       return;
     }
     if (ctrlOrMeta && key === 'v') {
-      event.preventDefault();
-      if (props.clipboardCount) emit('paste', browser.path.value);
+      // Do not preventDefault: the native paste event gets first chance to expose rich clipboard data.
+      // Only if no paste event arrives do we fall back to the async Clipboard API.
+      const observedPasteSerial = clipboardPasteSerial;
+      const destination = browser.path.value;
+      window.setTimeout(() => void handleKeyboardPasteFallback(observedPasteSerial, destination), 0);
       return;
     }
     if (ctrlOrMeta && event.shiftKey && key === 'n') {
@@ -1257,6 +1368,7 @@
     }"
     @click="context = null"
     @keydown="handleKeyboardNavigation"
+    @paste="handleClipboardPaste"
     @dragenter="handleDragEnter"
     @dragover="handleContainerDragOver"
     @dragleave="handleDragLeave"
@@ -1468,11 +1580,14 @@
       v-else
       ref="listScroller"
       data-testid="file-manager-list"
+      tabindex="0"
+      :aria-label="t('fileManager.modalTitle')"
       class="min-h-0 flex-1 overflow-auto"
       :style="rowStyle"
       :data-row-scale="renderedRowScale.toFixed(2)"
       @wheel="scaleRows"
       @scroll="handleListScroll"
+      @pointerdown="focusFileListFromPointer"
       @contextmenu="openDirectoryContext($event, 'current-directory', browser.path.value)"
     >
       <p v-if="browser.searchError.value" class="border-b border-error/30 bg-error/10 px-3 py-2 text-sm text-error">

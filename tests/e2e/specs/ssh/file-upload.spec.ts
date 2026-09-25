@@ -26,6 +26,8 @@ interface DragFileDescriptor {
 }
 
 const M11_03E_EVIDENCE_DIR = process.env.M11_03E_EVIDENCE_DIR || '/tmp/nexus-m11-03e';
+const CLIPBOARD_SCREENSHOT_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 async function openFileManager(page: Page, context: BrowserContext): Promise<void> {
   await loginAsInitialAdmin(context.request);
@@ -210,6 +212,67 @@ async function openFileManagerSearch(page: Page): Promise<Locator> {
   await expect(input).toBeVisible();
   return input;
 }
+
+async function writeClipboardPng(page: Page, base64: string): Promise<string> {
+  return page.evaluate(async (encoded) => {
+    const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+    const blob = new Blob([bytes], { type: 'image/png' });
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+    const clipboardItems = await navigator.clipboard.read();
+    const pngItem = clipboardItems.find((item) => item.types.includes('image/png'));
+    if (!pngItem) throw new Error('Clipboard did not retain image/png after write.');
+    const roundTripped = new Uint8Array(await (await pngItem.getType('image/png')).arrayBuffer());
+    let binary = '';
+    for (const byte of roundTripped) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }, base64);
+}
+
+test('desktop Ctrl+V uploads a screenshot from the system clipboard into the current File Manager directory', async ({
+  page,
+  context,
+}) => {
+  await openFileManager(page, context);
+
+  await step('an image clipboard becomes a timestamped PNG upload', async () => {
+    await activeFileManagerList(page).focus();
+    const clipboardPng = await writeClipboardPng(page, CLIPBOARD_SCREENSHOT_PNG);
+    await page.keyboard.press('Control+V');
+
+    const screenshotRow = activeFileManagerList(page)
+      .locator('tr[data-filename^="Screenshot_"][data-filename$=".png"]')
+      .first();
+    await expect(screenshotRow).toBeVisible({ timeout: 30_000 });
+    const screenshotName = await screenshotRow.getAttribute('data-filename');
+    expect(screenshotName).toMatch(/^Screenshot_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}\.png$/);
+    expect(await downloadRemoteFile(page, screenshotName!)).toEqual(Buffer.from(clipboardPng, 'base64'));
+  });
+
+  await step('a non-image clipboard still falls back to the existing remote-file clipboard paste', async () => {
+    await fileManagerRow(page, 'copy-source.txt').click({ button: 'right' });
+    const contextMenu = page.getByTestId('file-manager-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await contextMenu.getByText('Copy', { exact: true }).first().click();
+
+    await fileManagerRow(page, 'folder-seed').dblclick();
+    await expect(fileManagerRow(page, 'nested.txt')).toBeVisible();
+    await activeFileManagerList(page).focus();
+    await page.evaluate(() => navigator.clipboard.writeText('plain clipboard text'));
+    await page.keyboard.press('Control+V');
+
+    await expect(fileManagerRow(page, 'copy-source.txt')).toBeVisible({ timeout: 20_000 });
+  });
+
+  await step('editable File Manager controls keep native text paste behavior', async () => {
+    const search = await openFileManagerSearch(page);
+    await search.fill('');
+    await search.focus();
+    await page.evaluate(() => navigator.clipboard.writeText('clipboard-search-text'));
+    await page.keyboard.press('Control+V');
+    await expect(search).toHaveValue('clipboard-search-text');
+  });
+});
 
 test('file browsing and recursive search remain responsive while upload writes are delayed', async ({
   page,
