@@ -248,7 +248,7 @@
       const continuationStart = Math.max(0, terminal.buffer.active.baseY + terminal.buffer.active.cursorY);
       for (const chunk of continuation) await writeTerminal(chunk);
       if (!terminal) return;
-      const anchoredViewportY = Math.min(terminal.buffer.active.baseY, continuationStart);
+      const anchoredViewportY = Math.max(0, Math.min(terminal.buffer.active.baseY, continuationStart - terminal.rows));
       terminal.scrollToLine(anchoredViewportY);
       historyLastViewportY = anchoredViewportY;
       syncSearchDecorations();
