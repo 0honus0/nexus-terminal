@@ -366,6 +366,29 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   });
 });
 
+test('Ctrl+C interrupts a long-running terminal output stream', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const terminal = page.getByTestId('terminal');
+  const rows = terminal.locator('.xterm-rows');
+  const commandInput = page.getByTestId('command-input');
+  await commandInput.fill(
+    'INTERRUPT_FINISHED=no; i=0; while [ $i -lt 100000 ]; do printf \'INTERRUPT_STREAM_%06d\\n\' "$i"; i=$((i+1)); if [ $((i%100)) -eq 0 ]; then sleep 0.01; fi; done; INTERRUPT_FINISHED=yes',
+  );
+  await commandInput.press('Enter');
+  await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('INTERRUPT_STREAM_');
+
+  await terminal.locator('textarea').focus();
+  await page.keyboard.press('Control+c');
+  await commandInput.fill('printf \'INTERRUPT_RESULT=%s\\n\' "$INTERRUPT_FINISHED"');
+  await commandInput.press('Enter');
+  await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('INTERRUPT_RESULT=no');
+});
+
 test('large terminal scrollback follows rapid scrollbar drags back to the newest output', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);

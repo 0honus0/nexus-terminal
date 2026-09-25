@@ -983,6 +983,19 @@
     root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
     root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
     terminal.attachCustomKeyEventHandler((event) => {
+      if (
+        event.type === 'keydown' &&
+        event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        event.key.toLowerCase() === 'c'
+      ) {
+        event.preventDefault();
+        void props.channel.sendInput('\x03');
+        if (historyBrowsing || historyRebuilding) void restoreLatestOutput();
+        return false;
+      }
       if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && event.shiftKey) {
         const key = event.key.toLowerCase();
         if (key === 'c') {
@@ -1011,6 +1024,11 @@
     cleanup.push(
       terminal.onData((data) => {
         emit('interaction');
+        if (data === '\x03') {
+          void props.channel.sendInput(data);
+          if (historyBrowsing || historyRebuilding) void restoreLatestOutput();
+          return;
+        }
         if (historyBrowsing || historyRebuilding) {
           void restoreLatestOutput().then(() => props.channel.sendInput(data));
           return;
