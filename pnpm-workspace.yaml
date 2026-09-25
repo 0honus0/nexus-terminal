@@ -22,6 +22,7 @@ allowBuilds:
   'cpu-features@0.0.10': false
   'esbuild@0.28.2': true
   ssh2: true
+  'vue-demi@0.14.10': true
 
 disallowWorkspaceCycles: true
 failIfNoMatch: true
