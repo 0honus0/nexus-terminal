@@ -25,8 +25,51 @@ export const modelCapabilityRegistrySyncScenario = async () => {
       },
     ]),
   );
+  const versionedModels = {
+    'global.anthropic.claude-sonnet-v1:0': {
+      limit: { context: 111_111, output: 4_096 },
+      tool_call: true,
+      modalities: { input: ['text'], output: ['text'] },
+    },
+    'bedrock/ap-south-1/global.anthropic.claude-sonnet-v1:0': {
+      limit: { context: 222_222, output: 4_096 },
+      tool_call: true,
+      modalities: { input: ['text'], output: ['text'] },
+    },
+    'ft:gpt-4o:org:custom': {
+      limit: { context: 333_333, output: 4_096 },
+      tool_call: true,
+      modalities: { input: ['text'], output: ['text'] },
+    },
+  };
+  const deepseekModels = {
+    'deepseek-v4.1-0731': {
+      limit: { context: 444_444, output: 8_192 },
+      tool_call: true,
+      modalities: { input: ['text'], output: ['text'] },
+    },
+    'deepseek-v4.2': {
+      limit: { context: 555_555, output: 8_192 },
+      tool_call: true,
+      modalities: { input: ['text'], output: ['text'] },
+    },
+  };
+  const googleModels = {
+    'gemini-3.8-flash': {
+      limit: { context: 666_666, output: 8_192 },
+      tool_call: true,
+      modalities: { input: ['text'], output: ['text'] },
+      reasoning: true,
+      reasoning_options: [{ type: 'effort', values: ['low', 'medium', 'high'] }],
+    },
+  };
   const snapshot = parseModelsDevRegistry(
-    { openai: { models } },
+    {
+      openai: { models },
+      amazon: { models: versionedModels },
+      deepseek: { models: deepseekModels },
+      google: { models: googleModels },
+    },
     { generatedAt, sourceRevision: 'scenario-revision-1' },
   );
   assert.equal(snapshot.entries['sync-model']?.contextWindow, 32_768);
@@ -86,6 +129,59 @@ export const modelCapabilityRegistrySyncScenario = async () => {
     const runtimeModel = resolveModelCapabilityDefaults('sync-model');
     assert.equal(runtimeModel?.contextWindow, 32_768);
     assert.deepEqual(runtimeModel?.reasoning?.supportedEfforts, ['low', 'high']);
+    assert.equal(
+      resolveModelCapabilityDefaults('custom:sync-model')?.contextWindow,
+      32_768,
+      'custom colon prefixes should resolve through the backend registry',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('CUSTOM/openai/SYNC_MODEL')?.contextWindow,
+      32_768,
+      'case and punctuation differences should resolve through the normalized suffix index',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('custom:global.anthropic.claude-sonnet-v1:0')?.contextWindow,
+      111_111,
+      'numeric model version suffixes must be preserved while custom prefixes are stripped',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('custom:bedrock/ap-south-1/global.anthropic.claude-sonnet-v1:0')?.contextWindow,
+      222_222,
+      'the most specific regional model id should win over its canonical suffix candidate',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('proxy:ft:gpt-4o:org:custom')?.contextWindow,
+      333_333,
+      'fine-tuned model identities must remain intact after prefix stripping',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('proxy:ft:gpt-4o:org:missing'),
+      null,
+      'an unknown fine-tune must not collapse to the base model',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('deepseek-v4.1')?.contextWindow,
+      444_444,
+      'an undated model family should resolve to its dated registry variant',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('deepseek-v4.2-0731')?.contextWindow,
+      555_555,
+      'a dated model id should fall back to the undated family entry when that exact version is absent',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('custom/deepseek_v4.1')?.contextWindow,
+      444_444,
+      'namespace stripping and normalized family matching should compose',
+    );
+    assert.equal(
+      resolveModelCapabilityDefaults('deepseek-v4.1-lite'),
+      null,
+      'non-version product suffixes must not be stripped as family versions',
+    );
+    const geminiHigh = resolveModelCapabilityDefaults('gemini-3.8-flash-high');
+    assert.equal(geminiHigh?.contextWindow, 666_666, 'reasoning preset variants should inherit the base model limits');
+    assert.equal(geminiHigh?.reasoning?.defaultEffort, 'high');
 
     const enabled = await registry.setAutoUpdate(true);
     assert.equal(enabled.autoUpdate, true);
@@ -150,6 +246,7 @@ export const modelCapabilityRegistrySyncScenario = async () => {
 
   return [
     { name: 'synced_model_identifiers', value: Object.keys(snapshot.entries).length, unit: 'models' },
+    { name: 'keeper_style_model_matches', value: 11, unit: 'cases' },
     { name: 'manual_refresh_calls', value: source.calls, unit: 'calls' },
     { name: 'registry_mutations_serialized', value: 1, unit: 'boolean' },
     { name: 'update_failure_preserved_snapshot', value: 1, unit: 'boolean' },

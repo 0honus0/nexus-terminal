@@ -9,7 +9,7 @@ import type {
   ProviderModelConfig,
   ReasoningEffort,
 } from './model.types';
-import { modelCapabilityRegistryDefaults } from './model-capability-registry-runtime';
+import { modelCapabilityRegistryMatch } from './model-capability-registry-runtime';
 
 export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
   'none',
@@ -21,8 +21,35 @@ export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
   'max',
 ] as const;
 
-const OPENAI_GPT_56_EFFORTS: ReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
-const OPENAI_GPT_51_EFFORTS: ReasoningEffort[] = ['none', 'low', 'medium', 'high'];
+const MODEL_CAPABILITY_LOCAL_OVERRIDES: Readonly<Record<string, ModelCapabilityDefaults>> = {
+  'gpt-5.6': {
+    supportsPromptCacheKey: true,
+    reasoning: { supportedEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium' },
+  },
+  'gpt-5.6-sol': {
+    supportsPromptCacheKey: true,
+    reasoning: { supportedEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium' },
+  },
+  'gpt-5.6-terra': {
+    supportsPromptCacheKey: true,
+    reasoning: { supportedEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium' },
+  },
+  'gpt-5.6-luna': {
+    supportsPromptCacheKey: true,
+    reasoning: { supportedEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium' },
+  },
+  'gpt-5.1': {
+    supportsPromptCacheKey: true,
+    reasoning: { supportedEfforts: ['none', 'low', 'medium', 'high'], defaultEffort: 'none' },
+  },
+  'gpt-5-pro': {
+    supportsPromptCacheKey: true,
+    reasoning: { supportedEfforts: ['high'], defaultEffort: 'high', mandatory: true },
+  },
+  'gpt-4o': {
+    supportsPromptCacheKey: true,
+  },
+};
 
 const cloneReasoning = (value: ModelCapabilityDefaults['reasoning']): ModelCapabilityDefaults['reasoning'] =>
   value
@@ -43,44 +70,6 @@ const cloneDefaults = (value: ModelCapabilityDefaults): ModelCapabilityDefaults 
   ...(value.reasoning === undefined ? {} : { reasoning: cloneReasoning(value.reasoning)! }),
 });
 
-const registryAlias = (id: string): string => {
-  const gpt56 = id.match(/^(gpt-5\.6-(?:sol|terra|luna))(?:-\d{4}-\d{2}-\d{2})?$/);
-  if (gpt56) return gpt56[1]!;
-  if (/^gpt-5\.1-\d{4}-\d{2}-\d{2}$/.test(id)) return 'gpt-5.1';
-  if (/^gpt-5-pro-\d{4}-\d{2}-\d{2}$/.test(id)) return 'gpt-5-pro';
-  if (/^gemini-3\.8-flash-(?:low|medium|high)$/.test(id)) return 'gemini-3.8-flash';
-  return id;
-};
-
-const localRegistryOverrides = (id: string): ModelCapabilityDefaults | null => {
-  if (/^gpt-5\.6(?:-(?:sol|terra|luna)(?:-\d{4}-\d{2}-\d{2})?)?$/.test(id)) {
-    return {
-      supportsPromptCacheKey: true,
-      reasoning: { supportedEfforts: OPENAI_GPT_56_EFFORTS, defaultEffort: 'medium' },
-    };
-  }
-  if (/^gpt-5\.1(?:-\d{4}-\d{2}-\d{2})?$/.test(id)) {
-    return {
-      supportsPromptCacheKey: true,
-      reasoning: { supportedEfforts: OPENAI_GPT_51_EFFORTS, defaultEffort: 'none' },
-    };
-  }
-  if (/^gpt-5-pro(?:-\d{4}-\d{2}-\d{2})?$/.test(id)) {
-    return {
-      supportsPromptCacheKey: true,
-      reasoning: { supportedEfforts: ['high'], defaultEffort: 'high', mandatory: true },
-    };
-  }
-  if (id === 'gpt-4o') return { supportsPromptCacheKey: true };
-  const geminiEffort = id.match(/^gemini-3\.8-flash-(low|medium|high)$/)?.[1] as ReasoningEffort | undefined;
-  if (geminiEffort) {
-    return {
-      reasoning: { supportedEfforts: ['low', 'medium', 'high'], defaultEffort: geminiEffort },
-    };
-  }
-  return null;
-};
-
 const overlayDefaults = (
   base: ModelCapabilityDefaults | null,
   overlay: ModelCapabilityDefaults | null,
@@ -98,9 +87,23 @@ const overlayDefaults = (
 };
 
 export const resolveModelCapabilityDefaults = (modelId: string): ModelCapabilityDefaults | null => {
-  const id = modelId.trim().toLowerCase();
-  const base = modelCapabilityRegistryDefaults(registryAlias(id));
-  return overlayDefaults(base, localRegistryOverrides(id));
+  const registryMatch = modelCapabilityRegistryMatch(modelId);
+  if (!registryMatch) return null;
+
+  const registryIdentity = registryMatch.canonicalId.toLowerCase();
+  let resolved = overlayDefaults(registryMatch.defaults, MODEL_CAPABILITY_LOCAL_OVERRIDES[registryIdentity] ?? null);
+
+  const reasoningEffort = registryMatch.reasoningEffort;
+  if (reasoningEffort && resolved?.reasoning?.supportedEfforts.includes(reasoningEffort)) {
+    resolved = overlayDefaults(resolved, {
+      reasoning: {
+        ...resolved.reasoning,
+        defaultEffort: reasoningEffort,
+      },
+    });
+  }
+
+  return resolved;
 };
 
 const sameEfforts = (

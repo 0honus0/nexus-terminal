@@ -1,8 +1,17 @@
 import { BUILTIN_MODEL_CAPABILITY_REGISTRY } from '../data/model-capability-registry.snapshot';
 import type { ModelCapabilityDefaults } from './model.types';
+import {
+  createModelCapabilityRegistryIndex,
+  matchModelCapabilityRegistry,
+  type ModelCapabilityRegistryIndex,
+  type ModelCapabilityRegistryMatch,
+} from './model-capability-matcher';
 import type { ModelCapabilityRegistrySnapshot } from './model-capability-registry-source';
 
+const builtinEntries = BUILTIN_MODEL_CAPABILITY_REGISTRY.entries as Readonly<Record<string, ModelCapabilityDefaults>>;
+const builtinIndex = createModelCapabilityRegistryIndex(builtinEntries);
 let runtimeSnapshot: ModelCapabilityRegistrySnapshot | null = null;
+let runtimeIndex: ModelCapabilityRegistryIndex | null = null;
 
 const cloneReasoning = (value: ModelCapabilityDefaults['reasoning']): ModelCapabilityDefaults['reasoning'] =>
   value
@@ -25,13 +34,14 @@ const cloneDefaults = (value: ModelCapabilityDefaults): ModelCapabilityDefaults 
 
 export const installRuntimeModelCapabilityRegistry = (snapshot: ModelCapabilityRegistrySnapshot | null): void => {
   runtimeSnapshot = snapshot;
+  runtimeIndex = snapshot ? createModelCapabilityRegistryIndex(snapshot.entries) : null;
 };
 
-export const modelCapabilityRegistryDefaults = (modelId: string): ModelCapabilityDefaults | null => {
-  const id = modelId.trim().toLowerCase();
-  const builtinEntries = BUILTIN_MODEL_CAPABILITY_REGISTRY.entries as Readonly<Record<string, ModelCapabilityDefaults>>;
-  const value = runtimeSnapshot?.entries[id] ?? builtinEntries[id];
-  return value ? cloneDefaults(value) : null;
+export const modelCapabilityRegistryMatch = (modelId: string): ModelCapabilityRegistryMatch | null => {
+  const match =
+    (runtimeIndex ? matchModelCapabilityRegistry(modelId, runtimeIndex) : null) ??
+    matchModelCapabilityRegistry(modelId, builtinIndex);
+  return match ? { ...match, defaults: cloneDefaults(match.defaults) } : null;
 };
 
 export const modelCapabilityRegistryBuiltinStatus = () => ({
