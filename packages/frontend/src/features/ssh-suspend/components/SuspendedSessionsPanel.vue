@@ -25,12 +25,23 @@
   const exportingId = ref<string | null>(null);
   const removingId = ref<string | null>(null);
 
+  const catalogWorkspaceIds = computed(() => {
+    const ids = new Set<string>();
+    for (const session of data.sessions.value) {
+      if (session.originalWorkspaceId) ids.add(session.originalWorkspaceId);
+      if (session.attachedWorkspaceId) ids.add(session.attachedWorkspaceId);
+    }
+    return ids;
+  });
   const filteredMarked = computed(() => {
     const term = data.search.value.trim().toLowerCase();
-    if (!term) return props.markedSessions;
-    return props.markedSessions.filter((session) =>
-      `${session.connectionName} ${session.workspaceId}`.toLowerCase().includes(term),
-    );
+    return props.markedSessions.filter((session) => {
+      // A marked runtime is only a provisional/local representation. Once the backend
+      // catalog owns the same original or attached Workspace, render that authoritative
+      // record instead of showing the same suspended shell twice after resume/reconnect.
+      if (catalogWorkspaceIds.value.has(session.workspaceId)) return false;
+      return !term || `${session.connectionName} ${session.workspaceId}`.toLowerCase().includes(term);
+    });
   });
   const hasResults = computed(() => filteredMarked.value.length > 0 || data.filtered.value.length > 0);
   let panelMounted = false;

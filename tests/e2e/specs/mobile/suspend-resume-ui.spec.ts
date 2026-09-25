@@ -371,6 +371,19 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
       })
       .toBe(recoveredSessionId);
 
+    await page.getByTestId('open-suspended-sessions-button').click();
+    const recoveredManager = page.getByRole('dialog', { name: 'Suspended SSH Sessions', exact: true });
+    await expect(recoveredManager).toBeVisible();
+    await expect(recoveredManager.getByTestId(`suspended-session-${suspended!.id}`)).toBeVisible({ timeout: 20_000 });
+    await expect(recoveredManager.getByTestId(`marked-suspended-session-${recoveredSessionId}`)).toHaveCount(0);
+    await expect(
+      recoveredManager
+        .locator('[data-testid^="suspended-session-"], [data-testid^="marked-suspended-session-"]')
+        .filter({ hasText: 'E2E SSH' }),
+    ).toHaveCount(1);
+    await recoveredManager.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(recoveredManager).toBeHidden();
+
     const recoveredInput = page.getByTestId('command-input');
     await expect(recoveredInput).toBeEnabled({ timeout: 20_000 });
     await recoveredInput.fill("printf 'AUTO_RECONCILE_OK\\n'");
