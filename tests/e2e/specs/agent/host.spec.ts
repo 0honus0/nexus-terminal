@@ -58,6 +58,75 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
   await expect(hub).toBeVisible();
 });
 
+test('Agent revisits a loaded conversation without blocking on a fresh history round trip', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  const csrf = await csrfToken(context.request);
+  const createThread = async (title: string): Promise<{ id: string }> => {
+    const response = await context.request.post('/api/v1/apps/nexus.agent/threads', {
+      headers: { 'X-Nexus-CSRF': csrf },
+      data: { title },
+    });
+    expect(response.status(), await response.text()).toBe(201);
+    return ((await response.json()) as AgentEnvelope<{ id: string }>).data;
+  };
+  const first = await createThread(`E2E Cached Conversation A ${Date.now()}`);
+  const second = await createThread(`E2E Cached Conversation B ${Date.now()}`);
+
+  let holdFirstRefresh = false;
+  let heldRequests = 0;
+  let releaseRefresh: (() => void) | undefined;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  await page.route(`**/api/v1/apps/nexus.agent/threads/${first.id}/entries*`, async (route) => {
+    if (holdFirstRefresh) {
+      heldRequests += 1;
+      await refreshGate;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/v1/apps/nexus.agent/runs*', async (route) => {
+    const url = new URL(route.request().url());
+    if (holdFirstRefresh && url.searchParams.get('threadId') === first.id) {
+      heldRequests += 1;
+      await refreshGate;
+    }
+    await route.continue();
+  });
+
+  await page.goto('/connections');
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(hub).toBeVisible();
+  const firstThread = hub.getByRole('button').filter({ hasText: 'E2E Cached Conversation A' });
+  const secondThread = hub.getByRole('button').filter({ hasText: 'E2E Cached Conversation B' });
+  await expect(firstThread).toBeVisible();
+  await expect(secondThread).toBeVisible();
+
+  await firstThread.click();
+  await expect(firstThread).toHaveAttribute('aria-current', 'true');
+  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+  await secondThread.click();
+  await expect(secondThread).toHaveAttribute('aria-current', 'true');
+  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+
+  holdFirstRefresh = true;
+  await firstThread.click();
+  await expect.poll(() => heldRequests).toBeGreaterThanOrEqual(2);
+  await expect(firstThread).toHaveAttribute('aria-current', 'true');
+  // The authoritative ledger/run refresh is deliberately stalled, but the cached conversation
+  // must remain visible instead of regressing to the full-screen loading state.
+  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+
+  releaseRefresh?.();
+  await expect(firstThread).toBeEnabled();
+});
+
 test('Agent feature enable opens one global floating window that survives route navigation', async ({
   page,
   context,

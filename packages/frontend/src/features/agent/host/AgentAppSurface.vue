@@ -147,6 +147,52 @@
   const errorRetry = computed(() => currentError.value?.retry ?? null);
   let currentRunCheckpointsGeneration = 0;
 
+  interface CachedThreadContext {
+    entries: AgentLedgerEntryDto[];
+    nextCursor: string | null;
+    run: AgentRunViewDto | null;
+    threadRuns: AgentRunViewDto[];
+    approvalBatch: AgentApprovalBatchViewModel | null;
+    reconciliationDetails: AgentRunReconciliationViewDto | null;
+  }
+
+  const THREAD_CONTEXT_CACHE_LIMIT = 12;
+  const threadContextCache = new Map<string, CachedThreadContext>();
+
+  const cacheCurrentThreadContext = (): void => {
+    const threadId = currentThread.value?.id;
+    if (!threadId || !threadContentReady.value) return;
+    const snapshot: CachedThreadContext = {
+      entries: [...entries.value],
+      nextCursor: nextCursor.value,
+      run: run.value,
+      threadRuns: [...threadRuns.value],
+      approvalBatch: approvalBatch.value,
+      reconciliationDetails: reconciliationDetails.value,
+    };
+    threadContextCache.delete(threadId);
+    threadContextCache.set(threadId, snapshot);
+    while (threadContextCache.size > THREAD_CONTEXT_CACHE_LIMIT) {
+      const oldest = threadContextCache.keys().next().value as string | undefined;
+      if (!oldest) break;
+      threadContextCache.delete(oldest);
+    }
+  };
+
+  const restoreCachedThreadContext = (threadId: string): boolean => {
+    const cached = threadContextCache.get(threadId);
+    if (!cached) return false;
+    threadContextCache.delete(threadId);
+    threadContextCache.set(threadId, cached);
+    entries.value = [...cached.entries];
+    nextCursor.value = cached.nextCursor;
+    run.value = cached.run;
+    threadRuns.value = [...cached.threadRuns];
+    approvalBatch.value = cached.approvalBatch;
+    reconciliationDetails.value = cached.reconciliationDetails;
+    return true;
+  };
+
   const refreshCurrentCheckpoints = async (): Promise<void> => {
     const requestGeneration = ++currentRunCheckpointsGeneration;
     const runId = run.value?.id ?? null;
@@ -229,6 +275,7 @@
   const busy = ref(false);
   const loading = ref(true);
   const selectingThread = ref(false);
+  const threadContentReady = ref(false);
   const draft = ref(agentSurfaceSession.state(props.appId).draft);
   const commandResult = ref<ConversationCommandResult | null>(null);
   let threadSelectionGeneration = 0;
@@ -904,42 +951,61 @@
   const selectThread = async (thread: AgentThreadViewDto, force = false): Promise<void> => {
     threadDrawerOpen.value = false;
     if (!force && currentThread.value?.id === thread.id) return;
+    cacheCurrentThreadContext();
     const selectionGeneration = ++threadSelectionGeneration;
     stopRunStream();
     currentThread.value = thread;
-    entries.value = [];
-    run.value = null;
-    reconciliationDetails.value = null;
-    threadRuns.value = [];
-    approvalBatch.value = null;
-    nextCursor.value = null;
+    currentRunCheckpoints.value = [];
+    const restoredFromCache = restoreCachedThreadContext(thread.id);
+    if (!restoredFromCache) {
+      entries.value = [];
+      run.value = null;
+      reconciliationDetails.value = null;
+      threadRuns.value = [];
+      approvalBatch.value = null;
+      nextCursor.value = null;
+    }
+    threadContentReady.value = restoredFromCache;
     clearErrors(THREAD_CONTEXT_FAILURE_DOMAINS);
     runtimeOperation.succeed();
     commandResult.value = null;
     agentSurfaceSession.setThread(props.appId, thread.id);
     selectingThread.value = true;
     try {
-      await refreshLedger();
-      if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
-      const runs = await facade.listRuns(thread.id);
+      const [, runs] = await Promise.all([refreshLedger(), facade.listRuns(thread.id)]);
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       threadRuns.value = runs.items;
       const selectedRun = runs.items.find((candidate) => nonTerminal.has(candidate.status)) ?? runs.items[0] ?? null;
+      run.value = selectedRun;
+      if (selectedRun) rememberThreadRun(selectedRun);
+      // The transcript and run list are enough to paint the conversation. Do not keep the
+      // full-screen loader up while snapshot/approval/background metadata catches up.
+      threadContentReady.value = true;
+
+      const approvalPromise = refreshApprovals(selectedRun?.id);
+      const backgroundPromise = refreshBackgroundRuns().catch((cause) => {
+        logger.debug(
+          { err: cause, appId: props.appId, threadId: thread.id },
+          'Agent UI background Run refresh deferred',
+        );
+      });
       const active =
         selectedRun && !nonTerminal.has(selectedRun.status) ? await facade.getRun(selectedRun.id) : selectedRun;
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       run.value = active;
       if (active) rememberThreadRun(active);
+      let reconciliationPromise: Promise<void>;
       if (active?.needsReconciliation) {
         runtimeOperation.markReconciling('RECONCILIATION_REQUIRED', t('agent.operations.reconciliationRequired'));
-        await refreshReconciliation(active.id);
+        reconciliationPromise = refreshReconciliation(active.id);
       } else {
         reconciliationDetails.value = null;
+        reconciliationPromise = Promise.resolve();
       }
-      await refreshApprovals(active?.id);
+      await Promise.all([approvalPromise, reconciliationPromise]);
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       if (active && nonTerminal.has(active.status)) startRunStream(active);
-      await refreshBackgroundRuns();
+      void backgroundPromise;
     } catch (cause) {
       if (selectionGeneration === threadSelectionGeneration) {
         fail(cause, {
@@ -1696,6 +1762,7 @@
   const resetDeletedThreadSelection = (): void => {
     threadSelectionGeneration += 1;
     stopRunStream();
+    threadContentReady.value = false;
     currentThread.value = null;
     entries.value = [];
     run.value = null;
@@ -1730,6 +1797,7 @@
     try {
       const deletingCurrent = currentThread.value?.id === thread.id;
       await facade.deleteThread(thread);
+      threadContextCache.delete(thread.id);
       invalidateThreadPagination();
       threads.value = threads.value.filter((candidate) => candidate.id !== thread.id);
       if (detailSnapshot.value?.threadId === thread.id) closeRunDetail();
@@ -1777,6 +1845,7 @@
     clearThreadDeleteArm();
     try {
       await facade.deleteAllThreads();
+      threadContextCache.clear();
       invalidateThreadPagination();
       closeRunDetail();
       resetDeletedThreadSelection();
@@ -2036,7 +2105,11 @@
       </header>
 
       <div class="relative min-h-0 flex-1">
-        <div v-if="loading || selectingThread" class="flex h-full items-center justify-center">
+        <div
+          v-if="loading || (selectingThread && !threadContentReady)"
+          data-testid="agent-thread-loading"
+          class="flex h-full items-center justify-center"
+        >
           <div class="flex flex-col items-center gap-3 text-text-secondary">
             <div
               class="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-card text-foreground"
