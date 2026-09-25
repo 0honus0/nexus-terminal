@@ -6,7 +6,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { SqliteConversationRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-conversation.repository';
 import { SqliteContextCheckpointRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-context-checkpoint.repository';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
-import { runMigrations } from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
+import {
+  definedMigrations,
+  runMigrations,
+} from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
 import { ContextCheckpointService } from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../../packages/backend/src/modules/agent/ai/context.service';
 import type { LedgerEntryView } from '../../../packages/backend/src/modules/agent/ai/conversation.repository.port';
@@ -23,6 +26,7 @@ import {
 } from './scenario-context-helpers';
 
 export const durableContextCheckpointScenario = async () => {
+  const latestMigrationId = Math.max(...definedMigrations.map((migration) => migration.id));
   const history: LedgerEntryView[] = [
     entry(1, 'user_input', { text: 'Project objective: repair the parser without changing generated files.' }),
     entry(2, 'assistant_message', { text: 'Confirmed the repository constraint and started inspection.' }),
@@ -296,7 +300,11 @@ export const durableContextCheckpointScenario = async () => {
       'migration 30 must create the Context checkpoint owner',
     );
     assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
-    assert.equal(migrationVersion?.version, 46, 'legacy databases must advance through migration 46');
+    assert.equal(
+      migrationVersion?.version,
+      latestMigrationId,
+      'legacy databases must advance through the latest migration',
+    );
   } finally {
     legacyDb.close();
     fs.rmSync(upgradeDirectory, { recursive: true, force: true });
@@ -310,6 +318,6 @@ export const durableContextCheckpointScenario = async () => {
     { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
     { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },
     { name: 'legacy_digest_tables', value: 0, unit: 'tables' },
-    { name: 'migration_version', value: 46, unit: 'version' },
+    { name: 'migration_version', value: latestMigrationId, unit: 'version' },
   ];
 };

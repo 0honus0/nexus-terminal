@@ -4,9 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { parseToolInspection } from '../../../packages/backend/src/infrastructure/agent/runtime/durable-state-decoders';
-import { runMigrations } from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
+import {
+  definedMigrations,
+  runMigrations,
+} from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
 
 export const legacyMachineInspectionMigrationScenario = async () => {
+  const latestMigrationId = Math.max(...definedMigrations.map((migration) => migration.id));
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-legacy-machine-inspection-'));
   const db = new DatabaseSync(path.join(directory, 'legacy-machine-inspection.sqlite'));
   const legacyInspection = {
@@ -83,7 +87,7 @@ export const legacyMachineInspectionMigrationScenario = async () => {
       .get() as { count: number };
     assert.equal(legacyRows.count, 0, 'migration 45 must remove decodable legacy machine inspection targets');
     const version = db.prepare('SELECT MAX(id) AS version FROM migrations').get() as { version: number };
-    assert.equal(version.version, 46);
+    assert.equal(version.version, latestMigrationId);
 
     return [
       { name: 'legacy_machine_inspections_migrated', value: 2, unit: 'rows' },
