@@ -156,7 +156,7 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: 'pipe',
-      stderr: 'pipe',
+      stderr: 'inherit',
     },
     {
       command: `corepack pnpm run dev --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
