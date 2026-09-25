@@ -4,11 +4,17 @@
     "clear": "クリア",
     "copy": "コピー",
     "delete": "削除",
+    "execute": "実行",
     "loading": "ロード中...",
     "empty": "履歴はありません",
+    "noMatches": "一致する履歴はありません",
     "confirmClear": "すべての履歴をクリアしますか？",
     "copied": "クリップボードにコピーしました",
     "copyFailed": "コピーに失敗しました",
+    "refresh": "再読み込み",
+    "compactMode": "コンパクト表示",
+    "expandSearch": "検索を展開",
+    "collapseSearch": "検索を折りたたむ",
     "actions": {
       "sendToAllSessions": "すべてのセッションに送信"
     },

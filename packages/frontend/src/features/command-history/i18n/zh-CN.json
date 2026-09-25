@@ -4,11 +4,17 @@
     "clear": "清空",
     "copy": "复制",
     "delete": "删除",
+    "execute": "执行",
     "loading": "加载中...",
     "empty": "没有历史记录",
+    "noMatches": "未找到匹配的历史记录",
     "confirmClear": "确定要清空所有历史记录吗？",
     "copied": "已复制到剪贴板",
     "copyFailed": "复制失败",
+    "refresh": "刷新",
+    "compactMode": "紧凑模式",
+    "expandSearch": "展开搜索",
+    "collapseSearch": "折叠搜索",
     "actions": {
       "sendToAllSessions": "发送到全部会话"
     },

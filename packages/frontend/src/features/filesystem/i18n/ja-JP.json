@@ -127,7 +127,8 @@
       "name": "名前",
       "size": "サイズ",
       "permissions": "権限",
-      "modified": "変更日"
+      "modified": "変更日",
+      "time": "時間"
     },
     "uploadStatus": {
       "cancelled": "キャンセルされました",

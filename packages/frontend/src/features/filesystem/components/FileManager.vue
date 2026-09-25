@@ -162,39 +162,51 @@
   const syncingTerminalPath = ref(false);
   const listScrollTop = ref(0);
   const listViewportHeight = ref(600);
+  const listViewportWidth = ref(800);
+  const isCustomResized = ref(false);
   const FILE_VIRTUALIZATION_THRESHOLD = 250;
   const FILE_LIST_OVERSCAN = 12;
   let listResizeObserver: ResizeObserver | undefined;
-  type ColumnKey = 'type' | 'name' | 'size' | 'permissions' | 'modified';
+  type ColumnKey = 'name' | 'permissions' | 'modified';
   const minimumColumnWidths: Record<ColumnKey, number> = {
-    type: 42,
-    name: 140,
-    size: 80,
-    permissions: 100,
-    modified: 140,
+    name: 80,
+    permissions: 70,
+    modified: 80,
   };
   const defaultColumnWidths: Record<ColumnKey, number> = {
-    type: 50,
-    name: 300,
-    size: 100,
-    permissions: 120,
-    modified: 180,
+    name: 200,
+    permissions: 76,
+    modified: 92,
   };
   const initialColumnWidth = (key: ColumnKey): number => {
     const width = props.columnWidths?.[key];
-    return typeof width === 'number' && Number.isFinite(width)
-      ? Math.max(minimumColumnWidths[key], width)
-      : defaultColumnWidths[key];
+    if (typeof width === 'number' && Number.isFinite(width)) {
+      return Math.max(minimumColumnWidths[key], width);
+    }
+    return defaultColumnWidths[key];
   };
   const renderedColumnWidths = ref<Record<ColumnKey, number>>({
-    type: initialColumnWidth('type'),
     name: initialColumnWidth('name'),
-    size: initialColumnWidth('size'),
     permissions: initialColumnWidth('permissions'),
     modified: initialColumnWidth('modified'),
   });
-  const totalColumnWidth = computed(() =>
-    Object.values(renderedColumnWidths.value).reduce((sum, width) => sum + width, 0),
+  const showPermissions = computed(() => listViewportWidth.value >= 400);
+  const showModified = computed(() => listViewportWidth.value >= 260);
+  const isLarge = computed(() => showPermissions.value);
+  const isMedium = computed(() => !showPermissions.value && showModified.value);
+  const isSmall = computed(() => !showModified.value);
+  const visibleColumnCount = computed(() => 1 + (showPermissions.value ? 1 : 0) + (showModified.value ? 1 : 0));
+  const canResizeName = computed(() => !device.isMobile.value && (showPermissions.value || showModified.value));
+  const canResizePermissions = computed(() => !device.isMobile.value && showModified.value);
+
+  const totalColumnWidth = computed(() => {
+    let sum = renderedColumnWidths.value.name;
+    if (showPermissions.value) sum += renderedColumnWidths.value.permissions;
+    if (showModified.value) sum += renderedColumnWidths.value.modified;
+    return sum;
+  });
+  const isCurrentPathFavorite = computed(() =>
+    catalog.favorites.value.some((item) => item.path === browser.path.value),
   );
   let activeColumnResize: { key: ColumnKey; pointerId: number; startX: number; startWidth: number } | undefined;
   let unregisterSearchFocus: (() => void) | undefined;
@@ -261,6 +273,9 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';
     const pad = (part: number) => String(part).padStart(2, '0');
+    if (listViewportWidth.value < 360) {
+      return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
   const formatModeOctal = (mode: number): string => (mode & 0o7777).toString(8).padStart(3, '0');
@@ -436,11 +451,25 @@
     if (ownsFilesystemState) await filesystemState.ensureLoaded();
     pathDraft.value = browser.path.value;
     listResizeObserver = new ResizeObserver((entries) => {
-      const height = entries[0]?.contentRect.height;
-      if (height && height > 0) listViewportHeight.value = height;
+      const entry = entries[0];
+      if (entry) {
+        const height = entry.contentRect.height;
+        const width = entry.contentRect.width;
+        if (height > 0) listViewportHeight.value = height;
+        if (width > 0) listViewportWidth.value = width;
+      }
     });
     await nextTick();
-    if (listScroller.value) listResizeObserver.observe(listScroller.value);
+    if (root.value) {
+      listViewportHeight.value = root.value.clientHeight || listViewportHeight.value;
+      listViewportWidth.value = root.value.clientWidth || listViewportWidth.value;
+      listResizeObserver.observe(root.value);
+    } else if (listScroller.value) {
+      listViewportHeight.value = listScroller.value.clientHeight || listViewportHeight.value;
+      listViewportWidth.value = listScroller.value.clientWidth || listViewportWidth.value;
+      listResizeObserver.observe(listScroller.value);
+    }
+    document.addEventListener('mousedown', handleOutsideHistory);
   });
   const stopListScrollerWatch = watch(
     listScroller,
@@ -468,6 +497,7 @@
   function moveColumnResize(event: PointerEvent) {
     const current = activeColumnResize;
     if (!current || event.pointerId !== current.pointerId) return;
+    isCustomResized.value = true;
     const minimum = minimumColumnWidths[current.key];
     const next = Math.max(minimum, Math.min(900, current.startWidth + event.clientX - current.startX));
     renderedColumnWidths.value = { ...renderedColumnWidths.value, [current.key]: Math.round(next) };
@@ -488,11 +518,35 @@
     window.addEventListener('pointerup', stopColumnResize);
     window.addEventListener('pointercancel', stopColumnResize);
   };
-  const columnStyle = (key: ColumnKey) => ({
-    width: `${renderedColumnWidths.value[key]}px`,
-    minWidth: `${minimumColumnWidths[key]}px`,
-  });
+  const columnStyle = (key: ColumnKey) => {
+    if (key === 'name') {
+      if (!showModified.value || !isCustomResized.value) {
+        return {
+          minWidth: `${minimumColumnWidths.name}px`,
+        };
+      }
+      return {
+        width: `${renderedColumnWidths.value.name}px`,
+        minWidth: `${minimumColumnWidths.name}px`,
+      };
+    }
+    if (!isCustomResized.value) {
+      if (key === 'permissions') {
+        const w = listViewportWidth.value < 460 ? 76 : 82;
+        return { width: `${w}px`, minWidth: `${minimumColumnWidths.permissions}px` };
+      }
+      if (key === 'modified') {
+        const w = listViewportWidth.value < 360 ? 92 : 116;
+        return { width: `${w}px`, minWidth: `${minimumColumnWidths.modified}px` };
+      }
+    }
+    return {
+      width: `${renderedColumnWidths.value[key]}px`,
+      minWidth: `${minimumColumnWidths[key]}px`,
+    };
+  };
   onBeforeUnmount(() => {
+    document.removeEventListener('mousedown', handleOutsideHistory);
     unregisterSearchFocus?.();
     unregisterPathFocus?.();
     if (remoteDragScrollTimer !== undefined) {
@@ -925,6 +979,7 @@
     }
   };
   const openPathHistory = async () => {
+    catalogVisible.value = false;
     if (pathHistoryCloseTimer !== undefined) {
       window.clearTimeout(pathHistoryCloseTimer);
       pathHistoryCloseTimer = undefined;
@@ -943,12 +998,37 @@
     pathHistoryIndex.value = -1;
     if (restore) pathDraft.value = browser.path.value;
   };
+  const handleOutsideHistory = (event: MouseEvent) => {
+    if (!pathHistoryOpen.value) return;
+    const target = event.target as Node | null;
+    const pathInputEl = pathInput.value as unknown as HTMLElement | null;
+    const pathContainer = pathInputEl?.closest('.file-manager-path-input');
+    if (pathContainer && target && pathContainer.contains(target)) return;
+    closePathHistory();
+  };
+  const togglePathHistory = () => {
+    if (pathHistoryOpen.value) {
+      closePathHistory();
+    } else {
+      catalogVisible.value = false;
+      void openPathHistory();
+    }
+  };
+  const toggleCatalog = () => {
+    if (catalogVisible.value) {
+      catalogVisible.value = false;
+    } else {
+      closePathHistory();
+      catalogVisible.value = true;
+    }
+  };
   const updatePathHistorySearch = () => {
     pathDraftRevision += 1;
     catalog.historySearch.value = pathDraft.value;
     pathHistoryIndex.value = -1;
   };
   const beginPathEditing = () => {
+    catalogVisible.value = false;
     pathDraftEditing.value = true;
     void openPathHistory();
   };
@@ -1168,7 +1248,12 @@
   <section
     ref="root"
     class="file-manager-root relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-sm text-foreground"
-    :class="{ 'is-mobile': device.isMobile.value }"
+    :class="{
+      'is-mobile': device.isMobile.value,
+      'is-size-large': isLarge,
+      'is-size-medium': isMedium,
+      'is-size-small': isSmall,
+    }"
     @click="context = null"
     @keydown="handleKeyboardNavigation"
     @dragenter="handleDragEnter"
@@ -1176,40 +1261,49 @@
     @dragleave="handleDragLeave"
     @drop.prevent="dropFiles"
   >
-    <header class="file-manager-toolbar flex shrink-0 flex-wrap items-center gap-1 bg-header p-2">
-      <div class="file-manager-actions flex min-w-0 items-center gap-1">
+        <header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2">
+      <div
+        class="file-manager-actions flex min-w-0 items-center"
+        :class="{ 'is-searching': searchExpanded, 'is-wide': listViewportWidth >= 280 }"
+      >
         <button
+          v-if="!searchExpanded"
           type="button"
-          class="file-manager-path-button file-manager-action-button"
+          class="file-manager-action-button"
           :disabled="!props.terminalDirectory || changingTerminalPath"
           :title="t('fileManager.actions.cdToTerminal')"
+          :aria-label="t('fileManager.actions.cdToTerminal')"
           @click.stop="changeTerminalToCurrent"
         >
-          <i :class="['fas', changingTerminalPath ? 'fa-spinner fa-spin' : 'fa-terminal', 'text-sm']"></i>
+          <i :class="['fas', changingTerminalPath ? 'fa-spinner fa-spin' : 'fa-terminal', 'text-xs']"></i>
         </button>
         <button
+          v-if="!searchExpanded"
           type="button"
-          class="file-manager-path-button file-manager-action-button"
+          class="file-manager-action-button"
           :disabled="!props.terminalDirectory || syncingTerminalPath"
           :title="t('fileManager.actions.syncFromTerminalPath')"
+          :aria-label="t('fileManager.actions.syncFromTerminalPath')"
           @click.stop="syncFromTerminal"
         >
-          <i :class="['fas', syncingTerminalPath ? 'fa-spinner fa-spin' : 'fa-folder-open', 'text-sm']"></i>
+          <i :class="['fas', syncingTerminalPath ? 'fa-spinner fa-spin' : 'fa-folder-open', 'text-xs']"></i>
         </button>
         <button
+          v-if="!searchExpanded"
           type="button"
-          class="file-manager-path-button file-manager-action-button"
+          class="file-manager-action-button"
           :title="t('fileManager.actions.refresh')"
+          :aria-label="t('fileManager.actions.refresh')"
           @click.stop="refresh"
         >
-          <i class="fas fa-sync-alt text-sm"></i>
+          <i :class="['fas text-xs', browser.loading.value ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
         </button>
         <div class="file-manager-search-slot flex shrink-0 items-center" :class="{ 'is-active': searchExpanded }">
           <button
             v-if="!searchExpanded"
             type="button"
             data-testid="file-manager-search-toggle"
-            class="file-manager-path-button file-manager-action-button"
+            class="file-manager-action-button"
             :title="t('fileManager.searchPlaceholder')"
             :aria-label="t('fileManager.searchPlaceholder')"
             @click.stop="
@@ -1217,11 +1311,11 @@
               nextTick(() => searchInput?.focus?.());
             "
           >
-            <i class="fas fa-search text-sm"></i>
+            <i class="fas fa-search text-xs"></i>
           </button>
-          <div v-else class="file-manager-search-box relative flex min-w-[150px] shrink items-center">
+          <div v-else class="file-manager-search-box relative flex w-full items-center">
             <i
-              class="fas fa-search pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-secondary"
+              class="fas fa-search pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-text-secondary"
             ></i>
             <input
               ref="searchInput"
@@ -1229,77 +1323,69 @@
               data-testid="file-manager-search-input"
               data-focus-id="fileManagerSearch"
               type="text"
-              class="min-w-[10px] flex-grow rounded border border-border bg-background py-1 pl-7 pr-7 text-sm text-foreground outline-none transition-colors duration-200 focus:border-primary focus:ring-1 focus:ring-primary"
+              class="h-6 w-full min-w-0 rounded-md border border-border/70 bg-input py-0.5 pl-6 pr-6 text-xs text-foreground outline-none transition-colors duration-150 focus:border-primary focus:ring-1 focus:ring-primary/40"
               :placeholder="t('fileManager.searchPlaceholder')"
               @keyup.enter="browser.search"
               @keyup.esc="closeSearch"
               @blur="!browser.searchQuery.value && (searchExpanded = false)"
             />
             <button
-              v-if="browser.searchQuery.value"
               type="button"
               data-testid="file-manager-search-clear"
-              class="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              :title="t('common.clear')"
-              :aria-label="t('common.clear')"
+              class="absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
+              :title="browser.searchQuery.value ? t('common.clear') : t('common.close')"
+              :aria-label="browser.searchQuery.value ? t('common.clear') : t('common.close')"
               @mousedown.prevent
-              @click.stop="
-                browser.clearSearch();
-                nextTick(() => searchInput?.focus?.());
-              "
+              @click.stop="browser.searchQuery.value ? browser.clearSearch() : closeSearch()"
             >
-              <i class="fas fa-times text-xs" aria-hidden="true"></i>
+              <i class="fas fa-times text-[10px]" aria-hidden="true"></i>
             </button>
           </div>
         </div>
 
         <button
-          ref="favoriteButton"
-          type="button"
-          class="file-manager-path-button file-manager-action-button"
-          :title="t('favoritePaths.title')"
-          :aria-label="t('favoritePaths.title')"
-          @click="catalogVisible = !catalogVisible"
-        >
-          <i class="fas fa-star text-sm"></i>
-        </button>
-        <button
-          v-if="showEditorButton"
+          v-if="showEditorButton && !searchExpanded"
           type="button"
           class="file-manager-action-button"
           :title="t('fileManager.actions.openEditor')"
           :aria-label="t('fileManager.actions.openEditor')"
           @click="emit('openEditor')"
         >
-          <i class="far fa-edit text-sm"></i>
+          <i class="far fa-edit text-xs"></i>
         </button>
         <button
+          v-if="!searchExpanded"
           data-testid="file-upload-button"
           type="button"
-          class="file-manager-action-button"
+          class="file-manager-action-button file-manager-action-button--primary"
           :title="t('fileManager.actions.uploadFile')"
+          :aria-label="t('fileManager.actions.uploadFile')"
           @click="emit('upload', browser.path.value)"
         >
-          <i class="fas fa-upload text-sm"></i>
+          <i class="fas fa-upload text-xs"></i>
         </button>
         <button
+          v-if="!searchExpanded"
           type="button"
           class="file-manager-action-button"
           :title="t('fileManager.actions.newFolder')"
+          :aria-label="t('fileManager.actions.newFolder')"
           @click="begin('mkdir')"
         >
-          <i class="fas fa-folder-plus text-sm"></i>
+          <i class="fas fa-folder-plus text-xs"></i>
         </button>
         <button
+          v-if="!searchExpanded"
           type="button"
           class="file-manager-action-button"
           :title="t('fileManager.actions.newFile')"
+          :aria-label="t('fileManager.actions.newFile')"
           @click="begin('file')"
         >
-          <i class="far fa-file-alt text-sm"></i>
+          <i class="far fa-file-alt text-xs"></i>
         </button>
         <button
-          v-if="device.isMobile.value || device.hasTouch.value"
+          v-if="!searchExpanded && (device.isMobile.value || device.hasTouch.value)"
           type="button"
           class="file-manager-action-button"
           :class="multiSelect ? 'border-primary bg-primary text-white' : ''"
@@ -1307,20 +1393,21 @@
           :aria-label="multiSelect ? t('fileManager.actions.exitMultiSelect') : t('fileManager.actions.multiSelect')"
           @click="toggleMultiSelect"
         >
-          <i class="fas fa-check-square text-sm"></i>
+          <i class="fas fa-check-square text-xs"></i>
         </button>
       </div>
 
       <div
-        class="file-manager-path-input relative flex w-full min-w-0 items-center rounded-lg border border-border bg-input px-1.5 py-0.5"
+        class="file-manager-path-input relative flex min-w-0 items-center rounded-md border border-border/70 bg-input px-2 py-0.5"
       >
+        <i class="fas fa-folder mr-1.5 shrink-0 text-xs text-text-secondary pointer-events-none" aria-hidden="true"></i>
         <input
           ref="pathInput"
           v-model="pathDraft"
           data-testid="file-manager-path-input"
           data-focus-id="fileManagerPathInput"
           type="text"
-          class="min-w-0 flex-1 border-0 bg-transparent p-0.5 font-medium text-link outline-none"
+          class="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-medium text-link outline-none"
           :title="t('fileManager.editPathTooltip')"
           @focus="beginPathEditing"
           @click="openPathHistory"
@@ -1328,6 +1415,34 @@
           @keydown="handlePathInputKeydown"
           @blur="endPathEditing"
         />
+        <button
+          ref="favoriteButton"
+          type="button"
+          class="file-manager-path-favorite-btn flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-warning focus:outline-none"
+          :class="{ '!text-amber-500': isCurrentPathFavorite }"
+          :title="t('favoritePaths.title')"
+          :aria-label="t('favoritePaths.title')"
+          @mousedown.prevent
+          @click="toggleCatalog"
+        >
+          <i class="fas fa-star text-xs"></i>
+        </button>
+        <button
+          type="button"
+          class="path-history-toggle flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
+          :title="t('pathHistory.title')"
+          :aria-label="t('pathHistory.title')"
+          @mousedown.prevent
+          @click.stop="togglePathHistory"
+        >
+          <i
+            :class="[
+              'fas text-xs transition-transform duration-150',
+              pathHistoryOpen ? 'fa-chevron-up' : 'fa-chevron-down',
+            ]"
+            aria-hidden="true"
+          ></i>
+        </button>
         <PathHistoryDropdown
           :visible="pathHistoryOpen"
           :loading="catalog.loadingHistory.value"
@@ -1371,60 +1486,67 @@
       <table
         class="file-table w-full table-fixed border-collapse border-border"
         :class="{ 'is-virtualized': shouldVirtualize }"
-        :style="{ minWidth: `${totalColumnWidth}px` }"
+        :style="{ minWidth: isCustomResized && showModified ? `${totalColumnWidth}px` : '100%' }"
       >
         <colgroup>
-          <col :style="columnStyle('type')" />
-          <col :style="columnStyle('name')" />
-          <col :style="columnStyle('size')" />
-          <col :style="columnStyle('permissions')" />
-          <col :style="columnStyle('modified')" />
+          <col class="file-col-name" :style="columnStyle('name')" />
+          <col v-if="showPermissions" class="file-col-permissions" :style="columnStyle('permissions')" />
+          <col v-if="showModified" class="file-col-modified" :style="columnStyle('modified')" />
         </colgroup>
         <thead class="sticky top-0 z-10 bg-header">
           <tr>
             <th
-              data-testid="file-manager-type-header"
-              class="file-table-header relative whitespace-nowrap"
-              :style="columnStyle('type')"
+              class="file-table-header file-table-header-name relative whitespace-nowrap text-left"
+              :style="columnStyle('name')"
             >
-              {{ t('fileManager.headers.type') }}
-              <span
-                v-if="!device.isMobile.value"
-                class="absolute right-[-3px] top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
-                @pointerdown="startColumnResize($event, 'type')"
-              ></span>
-            </th>
-            <th class="file-table-header relative whitespace-nowrap" :style="columnStyle('name')">
-              <button type="button" @click="browser.setSort('name')">
-                {{ t('fileManager.headers.name') }}{{ sortMark('name') }}
+              <button
+                type="button"
+                class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+                :class="{ '!text-primary font-bold': browser.sortKey.value === 'name' }"
+                @click="browser.setSort('name')"
+              >
+                <span>{{ t('fileManager.headers.name') }}</span>
+                <span v-if="browser.sortKey.value === 'name'" class="text-[10px]">{{ sortMark('name') }}</span>
               </button>
               <span
-                v-if="!device.isMobile.value"
+                v-if="canResizeName"
                 class="absolute right-[-3px] top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
                 @pointerdown="startColumnResize($event, 'name')"
               ></span>
             </th>
-            <th class="file-table-header relative whitespace-nowrap" :style="columnStyle('size')">
-              <button type="button" @click="browser.setSort('size')">
-                {{ t('fileManager.headers.size') }}{{ sortMark('size') }}
+            <th
+              v-if="showPermissions"
+              class="file-table-header file-table-header-permissions relative whitespace-nowrap text-left"
+              :style="columnStyle('permissions')"
+            >
+              <button
+                type="button"
+                class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+                :class="{ '!text-primary font-bold': browser.sortKey.value === 'permissions' }"
+                @click="browser.setSort('permissions')"
+              >
+                <span>{{ t('fileManager.headers.permissions') }}</span>
+                <span v-if="browser.sortKey.value === 'permissions'" class="text-[10px]">{{ sortMark('permissions') }}</span>
               </button>
               <span
-                v-if="!device.isMobile.value"
-                class="absolute right-[-3px] top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
-                @pointerdown="startColumnResize($event, 'size')"
-              ></span>
-            </th>
-            <th class="file-table-header relative whitespace-nowrap" :style="columnStyle('permissions')">
-              {{ t('fileManager.headers.permissions') }}
-              <span
-                v-if="!device.isMobile.value"
+                v-if="canResizePermissions"
                 class="absolute right-[-3px] top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
                 @pointerdown="startColumnResize($event, 'permissions')"
               ></span>
             </th>
-            <th class="file-table-header relative whitespace-nowrap" :style="columnStyle('modified')">
-              <button type="button" @click="browser.setSort('modified')">
-                {{ t('fileManager.headers.modified') }}{{ sortMark('modified') }}
+            <th
+              v-if="showModified"
+              class="file-table-header file-table-header-modified relative whitespace-nowrap text-left"
+              :style="columnStyle('modified')"
+            >
+              <button
+                type="button"
+                class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+                :class="{ '!text-primary font-bold': browser.sortKey.value === 'modified' }"
+                @click="browser.setSort('modified')"
+              >
+                <span>{{ t('fileManager.headers.modified') }}</span>
+                <span v-if="browser.sortKey.value === 'modified'" class="text-[10px]">{{ sortMark('modified') }}</span>
               </button>
             </th>
           </tr>
@@ -1451,29 +1573,22 @@
             @drop="dropRemote($event, parentOf(browser.path.value))"
             @contextmenu.stop="openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))"
           >
-            <td class="file-row-cell file-row-type text-center" :style="columnStyle('type')">
-              <i class="fas fa-level-up-alt text-primary"></i>
-            </td>
-            <td class="file-row-cell file-row-name" :style="columnStyle('name')">
+            <td class="file-row-cell file-row-name text-left">
               <span class="file-row-parent-content inline-flex min-w-0 items-center gap-2">
-                <i
-                  class="file-row-name-mobile-icon fas fa-level-up-alt hidden shrink-0 text-primary"
-                  aria-hidden="true"
-                ></i>
-                <span>..</span>
+                <i class="fas fa-level-up-alt shrink-0 text-xs text-primary" aria-hidden="true"></i>
+                <span class="font-medium text-xs">..</span>
               </span>
             </td>
-            <td class="file-row-cell" :style="columnStyle('size')"></td>
-            <td class="file-row-cell" :style="columnStyle('permissions')"></td>
-            <td class="file-row-cell" :style="columnStyle('modified')"></td>
+            <td v-if="showPermissions" class="file-row-cell file-row-permissions font-mono text-xs text-left"></td>
+            <td v-if="showModified" class="file-row-cell file-row-modified text-xs text-left"></td>
           </tr>
           <tr v-if="browser.visible.value.length === 0">
-            <td colspan="5" class="px-4 py-6 text-center italic text-text-secondary">
+            <td :colspan="visibleColumnCount" class="px-4 py-6 text-center italic text-text-secondary">
               {{ browser.searchQuery.value ? t('fileManager.noSearchResults') : t('fileManager.emptyDirectory') }}
             </td>
           </tr>
           <tr v-if="virtualTopPadding" aria-hidden="true">
-            <td colspan="5" class="border-0 p-0" :style="{ height: `${virtualTopPadding}px` }"></td>
+            <td :colspan="visibleColumnCount" class="border-0 p-0" :style="{ height: `${virtualTopPadding}px` }"></td>
           </tr>
           <tr
             v-for="entry in virtualEntries"
@@ -1503,85 +1618,48 @@
             @pointerup="longPress.end"
             @pointercancel="longPress.cancel"
           >
-            <td class="file-row-cell file-row-type text-center" :style="columnStyle('type')">
-              <i
-                :class="[
-                  'transition-colors duration-150',
-                  entry.metadata.isDirectory
-                    ? 'fas fa-folder text-primary'
-                    : entry.metadata.isSymbolicLink
-                      ? 'fas fa-link text-cyan-500'
-                      : `${getFileIconClass(entry.name)} text-text-secondary`,
-                  browser.selected.value.has(entry.path) ? '!text-white' : '',
-                ]"
-              ></i>
-            </td>
-            <td
-              class="file-row-cell file-row-name truncate"
-              :class="entry.metadata.isDirectory ? 'font-medium' : ''"
-              :style="columnStyle('name')"
-            >
-              <div class="file-row-mobile-layout min-w-0">
+            <td class="file-row-cell file-row-name truncate text-left" :class="entry.metadata.isDirectory ? 'font-medium' : ''">
+              <div class="file-row-name-container flex min-w-0 items-center gap-2">
+                <i
+                  :class="[
+                    'file-row-icon shrink-0 text-xs transition-colors duration-150',
+                    entry.metadata.isDirectory
+                      ? 'fas fa-folder text-primary'
+                      : entry.metadata.isSymbolicLink
+                        ? 'fas fa-link text-cyan-500'
+                        : `${getFileIconClass(entry.name)} text-text-secondary`,
+                    browser.selected.value.has(entry.path) ? '!text-white' : '',
+                  ]"
+                  aria-hidden="true"
+                ></i>
                 <button
                   type="button"
-                  class="file-row-name-button w-full truncate text-left"
+                  class="file-row-name-button min-w-0 flex-1 truncate text-left"
                   :data-file-path="entry.path"
                   @mousedown="preserveListFocusOnMouseOpen"
                 >
-                  <i
-                    :class="[
-                      'file-row-name-mobile-icon hidden shrink-0 transition-colors duration-150',
-                      entry.metadata.isDirectory
-                        ? 'fas fa-folder text-primary'
-                        : entry.metadata.isSymbolicLink
-                          ? 'fas fa-link text-cyan-500'
-                          : `${getFileIconClass(entry.name)} text-text-secondary`,
-                      browser.selected.value.has(entry.path) ? '!text-white' : '',
-                    ]"
-                    aria-hidden="true"
-                  ></i>
-                  <span class="file-row-name-label truncate">{{ displayEntryName(entry) }}</span>
+                  <span class="file-row-name-label truncate text-xs">{{ displayEntryName(entry) }}</span>
                 </button>
-                <div
-                  class="file-row-compact-meta hidden min-w-0 items-center gap-1.5 truncate font-normal tabular-nums"
-                  :class="browser.selected.value.has(entry.path) ? 'text-white/85' : 'text-text-secondary'"
-                >
-                  <span v-if="!entry.metadata.isDirectory" class="file-row-compact-size shrink-0">
-                    {{ formatSize(entry.metadata.size) }}
-                  </span>
-                  <span v-if="!entry.metadata.isDirectory" class="file-row-compact-separator" aria-hidden="true"
-                    >·</span
-                  >
-                  <span class="file-row-compact-modified truncate">
-                    {{ formatCompactModified(entry.metadata.modifiedAt) }}
-                  </span>
-                </div>
               </div>
             </td>
             <td
-              class="file-row-cell file-row-meta truncate"
+              v-if="showPermissions"
+              class="file-row-cell file-row-permissions truncate font-mono text-xs text-left"
               :class="browser.selected.value.has(entry.path) ? 'text-white' : 'text-text-secondary'"
-              :style="columnStyle('size')"
-            >
-              {{ entry.metadata.isDirectory ? '' : formatSize(entry.metadata.size) }}
-            </td>
-            <td
-              class="file-row-cell file-row-meta truncate font-mono"
-              :class="browser.selected.value.has(entry.path) ? 'text-white' : 'text-text-secondary'"
-              :style="columnStyle('permissions')"
             >
               {{ formatMode(entry.metadata.mode) }}
             </td>
             <td
-              class="file-row-cell file-row-meta truncate"
+              v-if="showModified"
+              class="file-row-cell file-row-modified truncate text-xs text-left tabular-nums"
               :class="browser.selected.value.has(entry.path) ? 'text-white' : 'text-text-secondary'"
-              :style="columnStyle('modified')"
+              :title="new Date(entry.metadata.modifiedAt).toLocaleString()"
             >
-              {{ new Date(entry.metadata.modifiedAt).toLocaleString() }}
+              {{ formatCompactModified(entry.metadata.modifiedAt) }}
             </td>
           </tr>
           <tr v-if="virtualBottomPadding" aria-hidden="true">
-            <td colspan="5" class="border-0 p-0" :style="{ height: `${virtualBottomPadding}px` }"></td>
+            <td :colspan="visibleColumnCount" class="border-0 p-0" :style="{ height: `${virtualBottomPadding}px` }"></td>
           </tr>
         </tbody>
       </table>
@@ -1914,146 +1992,273 @@
 
 <style scoped>
   .file-manager-root {
+    user-select: none;
     container-type: size;
     container-name: file-manager-pane;
-    font-family: var(--font-family-sans-serif, sans-serif);
-  }
-  .file-manager-loading-state {
-    display: grid;
-    place-items: center;
-  }
-  .file-manager-toolbar,
-  .file-manager-actions {
-    min-width: 0;
   }
   .file-manager-toolbar {
-    justify-content: flex-start !important;
-    column-gap: 0.35rem;
-    row-gap: 0.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.35rem 0.45rem;
+    min-width: 0;
+    max-width: 100%;
     position: relative;
     z-index: 30;
     overflow: visible;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
+    background: var(--header-bg-color, var(--header-bg));
   }
-  .file-manager-actions {
-    order: 2;
-    display: flex;
-    max-width: 100%;
-    flex: 1 1 auto;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    gap: 0.25rem;
-  }
-  .file-manager-action-button {
-    display: flex;
-    min-width: 1.75rem;
-    min-height: 1.75rem;
-    align-items: center;
-    justify-content: center;
-    padding: 0.25rem 0.5rem;
-    cursor: pointer;
-    border: 1px solid var(--border-color);
-    border-radius: 0.25rem;
-    background: var(--app-bg-color);
-    color: var(--text-color);
-    font-size: 0.75rem;
-    white-space: nowrap;
-    transition:
-      background-color 0.2s,
-      border-color 0.2s,
-      color 0.2s;
-  }
-  .file-manager-action-button:hover:not(:disabled) {
-    border-color: var(--link-active-color);
-    background: var(--header-bg-color);
-    color: var(--link-active-color);
-  }
-  .file-manager-action-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-  .file-manager-path-button {
-    width: 1.75rem;
-    height: 1.75rem;
-    min-width: 1.75rem;
-    min-height: 1.75rem;
-    flex: 0 0 1.75rem;
-    padding: 0;
-  }
-  .file-manager-search-slot > .file-manager-path-button {
-    width: 1.75rem;
-    height: 1.75rem;
-    flex-basis: 1.75rem;
-  }
-  .file-manager-search-box,
+
   .file-manager-path-input {
-    max-width: 100%;
-  }
-  .file-manager-path-input {
-    order: 3;
     width: 100%;
-    min-width: 8rem;
-    flex: 1 1 100%;
-    overflow: visible;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    min-height: 1.625rem;
+    height: 1.625rem;
+    padding: 0 0.35rem 0 0.5rem;
     background: var(--input-bg-color);
+    border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    border-radius: 0.375rem;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
   }
   .file-manager-path-input:focus-within {
-    border-color: var(--input-focus-border-color);
-    box-shadow: 0 0 0 2px var(--input-focus-glow);
+    border-color: var(--input-focus-border-color, var(--primary-color));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 25%, transparent);
   }
   .file-manager-path-input input {
     width: 100%;
     background: transparent !important;
     box-shadow: none !important;
   }
+  .file-manager-path-favorite-btn,
+  .path-history-toggle {
+    width: 1.4rem;
+    height: 1.4rem;
+    min-width: 1.4rem;
+    min-height: 1.4rem;
+    flex: 0 0 1.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0 0.05rem;
+    border-radius: 0.25rem;
+    color: var(--text-color-secondary);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .file-manager-path-favorite-btn:hover {
+    color: #f59e0b !important;
+    background: color-mix(in srgb, #f59e0b 12%, transparent);
+  }
+  .path-history-toggle:hover {
+    color: var(--text-color);
+    background: var(--hover-bg, rgba(255, 255, 255, 0.06));
+  }
+  .file-manager-path-favorite-btn i,
+  .path-history-toggle i {
+    font-size: 0.75rem !important;
+    line-height: 1;
+  }
 
+  .file-manager-actions {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.25rem 0.35rem;
+    flex-wrap: wrap;
+  }
+  .file-manager-actions.is-searching {
+    justify-content: stretch;
+  }
+  .file-manager-actions.is-wide:not(.is-searching) {
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+  }
+
+  @container file-manager-pane (min-width: 280px) {
+    .file-manager-actions:not(.is-searching) {
+      justify-content: space-between;
+      flex-wrap: nowrap;
+      gap: 0.25rem;
+    }
+  }
+
+  .file-manager-action-button {
+    display: inline-flex;
+    width: 1.625rem;
+    height: 1.625rem;
+    min-width: 1.625rem;
+    min-height: 1.625rem;
+    flex: 0 0 1.625rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    border-radius: 0.375rem;
+    background: var(--card-bg-color, var(--app-bg-color));
+    color: var(--text-color-secondary);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .file-manager-action-button i {
+    font-size: 0.75rem !important;
+    line-height: 1;
+  }
+  .file-manager-action-button:hover:not(:disabled) {
+    border-color: var(--border-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--header-bg-color));
+    color: var(--text-color);
+  }
+  .file-manager-action-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  .file-manager-action-button--primary {
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--card-bg-color, var(--app-bg-color)));
+    border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
+    color: var(--primary-color);
+  }
+  .file-manager-action-button--primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary-color) 20%, var(--card-bg-color, var(--app-bg-color)));
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+
+  .file-manager-search-slot {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+  .file-manager-search-slot:not(.is-active) {
+    width: 1.625rem;
+    height: 1.625rem;
+    min-width: 1.625rem;
+    min-height: 1.625rem;
+    flex: 0 0 1.625rem;
+    padding: 0;
+    margin: 0;
+  }
+  .file-manager-search-slot.is-active {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+  .file-manager-search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .file-table {
+    width: 100%;
+  }
   .file-table-header {
     overflow: hidden;
-    padding-top: calc(0.4rem * var(--file-row-scale));
-    padding-right: 0.8rem;
-    padding-bottom: calc(0.4rem * var(--file-row-scale));
-    padding-left: 0.8rem;
+    padding-top: calc(0.35rem * var(--file-row-scale));
+    padding-right: 0.5rem;
+    padding-bottom: calc(0.35rem * var(--file-row-scale));
+    padding-left: 0.5rem;
     cursor: default;
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     color: var(--text-color-secondary);
     font-size: 0.75rem;
     font-weight: 500;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.02em;
     text-align: left;
     user-select: none;
   }
-  .file-table-header:first-child {
-    padding-right: 0.5rem;
-    padding-left: 1rem;
+  .file-table-header-name {
+    padding-left: 0.6rem;
+    padding-right: 0.4rem;
+    text-align: left;
+  }
+  .file-table-header-permissions {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+    text-align: left;
+  }
+  .file-table-header-modified {
+    padding-left: 0.4rem;
+    padding-right: 0.6rem;
+    text-align: left;
   }
   .file-table-header button {
-    width: 100%;
     cursor: pointer;
     text-align: left;
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
   }
   .file-table-header button:hover {
     color: var(--text-color);
   }
+  .file-table-sort-trigger {
+    width: auto;
+    display: inline-flex;
+    align-items: center;
+    text-align: left;
+  }
   .file-row-cell {
-    padding-top: calc(0.4rem * var(--file-row-scale));
-    padding-right: 0.8rem;
-    padding-bottom: calc(0.4rem * var(--file-row-scale));
-    padding-left: 0.8rem;
-    border-bottom: 1px solid var(--border-color);
-    font-size: calc(0.8rem * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
+    padding-top: calc(0.35rem * var(--file-row-scale));
+    padding-right: 0.5rem;
+    padding-bottom: calc(0.35rem * var(--file-row-scale));
+    padding-left: 0.5rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
+    font-size: calc(0.75rem * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
     vertical-align: middle;
   }
-  .file-row-type {
-    padding-right: 0.5rem;
-    padding-left: 1rem;
+  .file-row-name {
+    padding-left: 0.6rem;
+    padding-right: 0.4rem;
+    text-align: left;
   }
-  .file-row-type i {
-    font-size: calc(1.1em * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
+  .file-manager-root.is-size-small .file-table-header-name,
+  .file-manager-root.is-size-small .file-row-name {
+    padding-right: 0.6rem;
   }
-  .file-row-name-mobile-icon {
-    display: none;
+  .file-row-permissions {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+    text-align: left;
   }
-  .file-row-meta {
-    font-size: calc(0.72rem * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
+  .file-row-modified {
+    padding-left: 0.4rem;
+    padding-right: 0.6rem;
+    text-align: left;
+  }
+  .file-row-icon {
+    font-size: calc(0.85rem * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
+    width: 1rem;
+    text-align: center;
+  }
+  .file-row-name-button {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
   }
 
   .context-item {
@@ -2062,338 +2267,89 @@
     align-items: center;
     margin-right: 0.25rem;
     margin-left: 0.25rem;
-    border-radius: 0.25rem;
-    padding: 0.375rem 1rem;
+    border-radius: 0.375rem;
+    padding: 0.375rem 0.75rem;
     color: var(--text-color);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     text-align: left;
     transition:
-      background-color 0.15s,
-      color 0.15s;
+      background-color 0.15s ease,
+      color 0.15s ease;
+    cursor: pointer;
   }
-  .context-item:hover {
+  .context-item:hover,
+  .context-item:focus-visible {
     background: color-mix(in srgb, var(--link-active-color) 12%, transparent);
+    outline: none;
   }
 
-  @container file-manager-pane (max-width: 760px) {
-    .file-table {
-      width: 100%;
-      min-width: 100% !important;
-    }
-    .file-table col:nth-child(1) {
-      width: 3.25rem !important;
-      min-width: 3.25rem !important;
-    }
-    .file-table col:nth-child(2) {
-      width: auto !important;
-      min-width: 0 !important;
-    }
-    .file-table col:nth-child(3) {
-      width: 5.5rem !important;
-      min-width: 5.5rem !important;
-    }
-    .file-table col:nth-child(4) {
-      width: 6.5rem !important;
-      min-width: 6.5rem !important;
-    }
-    .file-table col:nth-child(5) {
-      width: 9.25rem !important;
-      min-width: 9.25rem !important;
-    }
-    .file-table-header,
-    .file-row-cell {
-      padding-right: 0.45rem;
-      padding-left: 0.45rem;
-    }
-    .file-table-header:first-child,
-    .file-row-type {
-      width: 3.25rem !important;
-      min-width: 3.25rem !important;
-      padding-right: 0.3rem;
-      padding-left: 0.45rem;
-    }
-    .file-table-header:nth-child(2),
-    .file-row-name {
-      width: auto !important;
-      min-width: 0 !important;
-    }
-    .file-table-header:nth-child(3),
-    .file-row-cell:nth-child(3) {
-      width: 5.5rem !important;
-      min-width: 5.5rem !important;
-    }
-    .file-table-header:nth-child(4),
-    .file-row-cell:nth-child(4) {
-      width: 6.5rem !important;
-      min-width: 6.5rem !important;
-    }
-    .file-table-header:nth-child(5),
-    .file-row-cell:nth-child(5) {
-      width: 9.25rem !important;
-      min-width: 9.25rem !important;
-    }
-    .file-table-header > span {
-      display: none;
-    }
-  }
-
-  @container file-manager-pane (max-width: 620px) {
-    .file-table col:nth-child(1) {
-      width: 2.5rem !important;
-      min-width: 2.5rem !important;
-    }
-    .file-table col:nth-child(4),
-    .file-table-header:nth-child(4),
-    .file-row-cell:nth-child(4) {
-      width: 0 !important;
-      min-width: 0 !important;
-    }
-    .file-table-header:nth-child(4),
-    .file-row-cell:nth-child(4) {
-      visibility: hidden;
-      padding-right: 0;
-      padding-left: 0;
-      border-width: 0;
-    }
-    .file-table-header:first-child {
-      width: 2.5rem !important;
-      min-width: 2.5rem !important;
-      padding-right: 0.15rem;
-      padding-left: 0.35rem;
-      overflow: hidden;
-      color: transparent;
-      letter-spacing: 0;
-    }
-    .file-row-type {
-      width: 2.5rem !important;
-      min-width: 2.5rem !important;
-      padding-right: 0.15rem;
-      padding-left: 0.35rem;
-    }
-  }
-
-  @container file-manager-pane (max-width: 520px) {
-    .file-table col:nth-child(1) {
-      width: 2.25rem !important;
-      min-width: 2.25rem !important;
-    }
-    .file-table col:nth-child(n + 3),
-    .file-table-header:nth-child(n + 3),
-    .file-row-cell:nth-child(n + 3) {
-      width: 0 !important;
-      min-width: 0 !important;
-    }
-    .file-table-header:nth-child(n + 3),
-    .file-row-cell:nth-child(n + 3) {
-      visibility: hidden;
-      padding-right: 0;
-      padding-left: 0;
-      border-width: 0;
-    }
-    .file-table-header:first-child,
-    .file-row-type {
-      width: 2.25rem !important;
-      min-width: 2.25rem !important;
-      padding-right: 0.1rem;
-      padding-left: 0.3rem;
-    }
-    .file-table-header:nth-child(2) {
-      width: auto !important;
-      min-width: 0 !important;
-      padding-right: 0.5rem;
-      padding-left: 0.25rem;
-    }
-    .file-row-name {
-      width: auto !important;
-      min-width: 0 !important;
-      padding-right: 0.5rem;
-      padding-left: 0.25rem;
-      padding-top: calc(0.32rem * var(--file-row-scale));
-      padding-bottom: calc(0.32rem * var(--file-row-scale));
-    }
-    .file-row-compact-meta {
-      display: flex !important;
-      margin-top: 0.12rem;
-      overflow: hidden;
-      font-size: calc(0.68rem * max(0.9, var(--file-row-scale) * 0.35 + 0.65));
-      line-height: 1.05rem;
-    }
-    .file-table.is-virtualized .file-row-compact-meta {
-      display: none !important;
-    }
-
-    .file-manager-root.is-mobile .file-table col:nth-child(1),
-    .file-manager-root.is-mobile .file-table-header:first-child,
-    .file-manager-root.is-mobile .file-row-type {
-      width: 0 !important;
-      min-width: 0 !important;
-    }
-    .file-manager-root.is-mobile .file-table-header:first-child,
-    .file-manager-root.is-mobile .file-row-type {
-      visibility: hidden;
-      padding-right: 0;
-      padding-left: 0;
-      border-width: 0;
-    }
-    .file-manager-root.is-mobile .file-table-header:nth-child(2),
-    .file-manager-root.is-mobile .file-row-name {
-      padding-right: 0.75rem;
-      padding-left: 0.75rem;
-      text-align: left;
-    }
-    .file-manager-root.is-mobile .file-table-header:nth-child(2) button {
-      text-align: left;
-    }
-    .file-manager-root.is-mobile .file-row-mobile-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 7.75rem;
-      align-items: center;
-      gap: 0.75rem;
-    }
-    .file-manager-root.is-mobile .file-row-name-button {
-      display: flex;
-      min-width: 0;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 0.625rem;
-      overflow: hidden;
-      text-align: left;
-    }
-    .file-manager-root.is-mobile .file-row-name-label {
-      min-width: 0;
-      flex: 1 1 auto;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .file-manager-root.is-mobile .file-row-name-mobile-icon {
-      display: inline-flex !important;
-      align-items: center;
-      justify-content: center;
-    }
-    .file-manager-root.is-mobile .file-row-parent-content {
-      justify-content: flex-start;
-    }
-    .file-manager-root.is-mobile .file-row-compact-meta {
-      width: 7.75rem;
-      min-width: 7.75rem;
-      margin-top: 0;
-      justify-content: flex-end;
-      overflow: hidden;
-      text-align: right;
-    }
-    .file-manager-root.is-mobile .file-row-compact-size,
-    .file-manager-root.is-mobile .file-row-compact-separator {
-      display: none;
-    }
-    .file-manager-root.is-mobile .file-row-compact-modified {
-      width: 100%;
-      min-width: 0;
-      flex: 0 0 100%;
-      overflow: hidden;
-      text-align: right;
-      text-overflow: clip;
-      white-space: nowrap;
-    }
-  }
-
-  @container file-manager-pane (max-width: 520px) {
-    .file-manager-search-box {
-      width: min(100%, 10rem);
-      min-width: 0 !important;
-    }
-    .file-manager-actions {
-      gap: 0.25rem;
-    }
-    .file-manager-action-button {
-      padding-right: 0.45rem;
-      padding-left: 0.45rem;
-    }
-  }
-
-  @container file-manager-pane (max-width: 420px) {
-    .file-manager-actions {
-      display: flex;
-      width: 100%;
-      flex: 1 1 100%;
-      flex-wrap: wrap;
-      gap: 0.25rem;
-    }
-    .file-manager-actions > .file-manager-action-button,
-    .file-manager-search-slot {
-      width: 1.75rem;
-      min-width: 1.75rem;
-      flex: 0 0 1.75rem;
+  @container file-manager-pane (min-width: 560px) {
+    .file-manager-toolbar {
+      padding: 0.4rem 0.5rem;
+      gap: 0.35rem;
     }
     .file-manager-action-button,
-    .file-manager-search-slot .file-manager-action-button,
-    .file-manager-actions .file-manager-search-slot > .file-manager-path-button {
-      width: 1.75rem !important;
-      height: 1.75rem !important;
-      padding-right: 0.35rem;
-      padding-left: 0.35rem;
-    }
-    .file-manager-search-slot.is-active {
-      width: 100%;
-      min-width: 0;
-      flex: 1 1 100%;
-    }
-    .file-manager-search-slot.is-active .file-manager-search-box {
-      width: 100%;
-      min-width: 0 !important;
-    }
-  }
-
-  @container file-manager-pane (max-width: 360px) {
-    .file-row-compact-meta {
-      gap: 0.3rem;
-      font-size: calc(0.64rem * max(0.92, var(--file-row-scale) * 0.3 + 0.7));
-    }
-  }
-
-  @container file-manager-pane (max-width: 320px) {
-    .file-manager-toolbar {
-      gap: 0.25rem;
-      padding: 0.35rem;
-    }
-    .file-manager-actions {
-      gap: 0.25rem;
+    .file-manager-search-slot:not(.is-active) {
+      width: 1.75rem;
+      height: 1.75rem;
+      min-width: 1.75rem;
+      min-height: 1.75rem;
+      flex: 0 0 1.75rem;
     }
     .file-manager-action-button i {
       font-size: 0.8rem !important;
     }
+    .file-manager-path-input {
+      min-height: 1.75rem;
+      height: 1.75rem;
+    }
   }
 
-  @container file-manager-pane (max-height: 340px) {
+  @container file-manager-pane (max-width: 250px) {
     .file-manager-toolbar {
-      column-gap: 0.25rem;
-      row-gap: 0.2rem;
-      padding: 0.35rem;
+      padding: 0.25rem 0.35rem;
+      gap: 0.25rem;
     }
     .file-manager-actions {
-      gap: 0.2rem;
+      gap: 0.25rem;
+      justify-content: flex-start;
+      flex-wrap: wrap;
     }
     .file-manager-action-button,
-    .file-manager-search-slot .file-manager-action-button {
-      min-height: 1.5rem;
-      height: 1.5rem !important;
-      padding-top: 0.125rem;
-      padding-bottom: 0.125rem;
+    .file-manager-search-slot:not(.is-active) {
+      width: 1.55rem;
+      height: 1.55rem;
+      min-width: 1.55rem;
+      min-height: 1.55rem;
+      flex: 0 0 1.55rem;
+    }
+    .file-manager-action-button i {
+      font-size: 0.75rem !important;
     }
     .file-manager-path-input {
-      min-height: 1.55rem;
-      padding-top: 0;
-      padding-bottom: 0;
+      min-height: 1.5rem;
+      height: 1.5rem;
+      padding: 0 0.25rem;
     }
-    .file-manager-path-input input {
-      padding-top: 0;
-      padding-bottom: 0;
-      font-size: 0.75rem;
-      line-height: 1rem;
+    .file-row-cell {
+      padding-left: 0.3rem;
+      padding-right: 0.3rem;
     }
-    .file-table-header {
-      padding-top: calc(0.25rem * var(--file-row-scale));
-      padding-bottom: calc(0.25rem * var(--file-row-scale));
+  }
+
+  @container file-manager-pane (max-height: 220px) {
+    .file-manager-toolbar {
+      padding: 0.15rem 0.25rem;
+      gap: 0.1rem;
+    }
+    .file-manager-path-input {
+      min-height: 1.35rem;
+      height: 1.35rem;
+    }
+    .file-manager-action-button,
+    .file-manager-search-slot:not(.is-active) {
+      min-height: 1.35rem;
+      height: 1.35rem !important;
     }
   }
 </style>

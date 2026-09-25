@@ -36,9 +36,13 @@
     const trigger = props.triggerElement.getBoundingClientRect();
     const width = panel.value.offsetWidth;
     const height = panel.value.offsetHeight;
-    let top = trigger.bottom + 2;
-    let left = trigger.left;
-    if (top + height + PADDING > window.innerHeight) top = trigger.top - height - 2;
+    let top = trigger.bottom + 4;
+    // Align right edge of popover with trigger's right edge so it expands inward/leftward
+    let left = trigger.right - width;
+    if (left < PADDING && trigger.left + width <= window.innerWidth - PADDING) {
+      left = trigger.left;
+    }
+    if (top + height + PADDING > window.innerHeight) top = trigger.top - height - 4;
     top = Math.max(PADDING, Math.min(top, window.innerHeight - height - PADDING));
     left = Math.max(PADDING, Math.min(left, window.innerWidth - width - PADDING));
     panelStyle.value = { top: `${top}px`, left: `${left}px` };

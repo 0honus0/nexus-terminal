@@ -206,8 +206,6 @@
   };
   const displayText = (command: QuickCommandDto) =>
     displayMode.value === 'name' ? command.name?.trim() || command.command : command.command;
-  const secondaryText = (command: QuickCommandDto) =>
-    displayMode.value === 'name' ? command.command : command.name?.trim() || '';
 
   const edit = (command: QuickCommandDto) => {
     editing.value = command;
@@ -439,11 +437,6 @@
                   aria-hidden="true"
                 ></i>
               </button>
-              <span
-                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15"
-              >
-                <i class="fas fa-layer-group text-[11px]" aria-hidden="true"></i>
-              </span>
               <BaseInput
                 v-if="editingTagId === (group.id ?? 'untagged')"
                 v-model="tagDraft"
@@ -496,10 +489,6 @@
               @contextmenu.prevent="openContext($event, command)"
             >
               <div class="flex items-center gap-2 min-w-0 flex-1">
-                <i
-                  class="fas fa-terminal text-[10px] text-text-secondary/50 group-hover:text-primary transition-colors shrink-0"
-                  aria-hidden="true"
-                ></i>
                 <span
                   data-testid="quick-command-execute"
                   class="quick-command-display-text truncate text-xs font-medium text-foreground group-hover:text-foreground"
@@ -507,13 +496,7 @@
                 >
                   {{ displayText(command) }}
                 </span>
-                <span
-                  v-if="secondaryText(command)"
-                  class="quick-command-subtext hidden sm:inline truncate text-[10px] font-mono text-text-secondary/50 shrink-0"
-                  :title="secondaryText(command)"
-                >
-                  ({{ secondaryText(command) }})
-                </span>
+
               </div>
               <span
                 class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-secondary/40 opacity-0 group-hover:opacity-100 group-hover:text-primary group-hover:bg-primary/10 transition-all text-[9px]"
@@ -542,10 +525,6 @@
             @contextmenu.prevent="openContext($event, command)"
           >
             <div class="flex items-center gap-2 min-w-0 flex-1">
-              <i
-                class="fas fa-terminal text-[10px] text-text-secondary/50 group-hover:text-primary transition-colors shrink-0"
-                aria-hidden="true"
-              ></i>
               <span
                 data-testid="quick-command-execute"
                 class="quick-command-display-text truncate text-xs font-medium text-foreground group-hover:text-foreground"
@@ -553,13 +532,7 @@
               >
                 {{ displayText(command) }}
               </span>
-              <span
-                v-if="secondaryText(command)"
-                class="quick-command-subtext hidden sm:inline truncate text-[10px] font-mono text-text-secondary/50 shrink-0"
-                :title="secondaryText(command)"
-              >
-                ({{ secondaryText(command) }})
-              </span>
+
             </div>
             <span
               class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-secondary/40 opacity-0 group-hover:opacity-100 group-hover:text-primary group-hover:bg-primary/10 transition-all text-[9px]"
@@ -666,11 +639,9 @@
     .quick-command-row {
       padding-inline: 0.45rem;
     }
-    .quick-command-subtext {
-      display: none;
-    }
+
   }
-  @container quick-commands-pane (max-width: 240px) {
+  @container quick-commands-pane (max-width: 105px) {
     .quick-commands-controls {
       flex-wrap: wrap;
       justify-content: center;

@@ -31,7 +31,8 @@
   );
   const { t } = useI18n();
   const MAX_CHART_POINTS = 110;
-  const Y_AXIS_GUTTER_PX = 12;
+  const Y_AXIS_GUTTER_PX = 2;
+  const CHART_RIGHT_PAD_PX = 4;
   const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
   const latestSampleTime = computed(() =>
     Math.max(
@@ -159,8 +160,8 @@
       surface: value('--app-bg-color', chartTheme.value.surface),
       border: value('--border-color', chartTheme.value.border),
       primary: value('--link-active-color', chartTheme.value.primary),
-      download: value('--status-success-color', chartTheme.value.download),
-      upload: value('--status-warning-color', chartTheme.value.upload),
+      download: '#10b981',
+      upload: '#3b82f6',
     };
   };
   let themeObserver: MutationObserver | null = null;
@@ -231,23 +232,12 @@
     maintainAspectRatio: false,
     animation: false,
     layout: {
-      // Y labels are mirrored into the plot, so the left side only needs the
-      // narrow axis gutter itself. Reserve the same amount on the right so
-      // the full coordinate system is horizontally centered in the card.
-      padding: { left: 0, right: Y_AXIS_GUTTER_PX },
+      padding: { left: 0, right: CHART_RIGHT_PAD_PX },
     },
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: {
-        position: 'bottom',
-        align: 'start',
-        labels: {
-          color: chartTheme.value.text,
-          boxWidth: 8,
-          boxHeight: 8,
-          padding: 8,
-          font: { size: 10 },
-        },
+        display: false,
       },
       tooltip: {
         backgroundColor: chartTheme.value.surface,
@@ -274,6 +264,7 @@
           color: chartTheme.value.text,
           maxTicksLimit: props.rangeMinutes <= 1 ? 3 : 4,
           font: { size: 8 },
+          align: 'inner',
           callback: (value) => formatAxisTime(Number(value)),
         },
         grid: { display: false },

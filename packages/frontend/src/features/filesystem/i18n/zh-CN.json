@@ -127,7 +127,8 @@
       "name": "名称",
       "size": "大小",
       "permissions": "权限",
-      "modified": "修改时间"
+      "modified": "修改时间",
+      "time": "时间"
     },
     "uploadStatus": {
       "cancelled": "已取消",

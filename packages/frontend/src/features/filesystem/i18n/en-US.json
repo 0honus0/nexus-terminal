@@ -127,7 +127,8 @@
       "name": "Name",
       "size": "Size",
       "permissions": "Permissions",
-      "modified": "Modified"
+      "modified": "Modified",
+      "time": "Time"
     },
     "uploadStatus": {
       "cancelled": "Cancelled",

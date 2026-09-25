@@ -104,12 +104,14 @@
 
 <style scoped>
   .path-history-dropdown {
-    width: min(34rem, calc(100cqw - 0.75rem));
-    max-width: calc(100cqw - 0.75rem);
+    width: min(34rem, calc(100cqw - 0.5rem));
+    max-width: min(34rem, calc(100cqw - 0.5rem), 100%);
+    min-width: 0;
   }
 
   .path-history-path {
     overflow-wrap: anywhere;
+    word-break: break-all;
     line-height: 1.35;
     white-space: normal;
   }

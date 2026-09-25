@@ -38,7 +38,7 @@ export const defaultPreferences: PreferencesDto = {
   fileManagerShowDeleteConfirmation: true,
   sidebarPaneWidths: {},
   fileManagerRowSizeMultiplier: 1,
-  fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
+  fileManagerColWidths: { name: 200, permissions: 76, modified: 92 },
   spreadsheetPreviewRowsPerPage: 500,
   spreadsheetPreviewMaxColumns: 100,
   rdpModalWidth: 1064,

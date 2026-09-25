@@ -65,8 +65,8 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
     await expect(rowA).toBeVisible();
     await expect(historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_B' })).toHaveCount(0);
 
-    await rowA.hover();
-    await rowA.getByTestId('command-history-copy').click();
+    await rowA.click({ button: 'right' });
+    await page.getByTestId('command-history-copy').click();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(COMMAND_A);
   });
 
@@ -83,8 +83,8 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
     const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
     const historyId = Number(await rowA.getAttribute('data-history-id'));
     expect(historyId).toBeGreaterThan(0);
-    await rowA.hover();
-    await rowA.getByTestId('command-history-delete').click();
+    await rowA.click({ button: 'right' });
+    await page.getByTestId('command-history-delete').click();
     await expect(rowA).toHaveCount(0);
 
     await expect

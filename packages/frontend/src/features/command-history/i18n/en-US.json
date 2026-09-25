@@ -4,11 +4,17 @@
     "clear": "Clear",
     "copy": "Copy",
     "delete": "Delete",
+    "execute": "Execute",
     "loading": "Loading...",
     "empty": "No history records",
+    "noMatches": "No matching history records",
     "confirmClear": "Are you sure you want to clear all history?",
     "copied": "Copied to clipboard",
     "copyFailed": "Copy failed",
+    "refresh": "Refresh",
+    "compactMode": "Compact mode",
+    "expandSearch": "Expand search",
+    "collapseSearch": "Collapse search",
     "actions": {
       "sendToAllSessions": "Send to All Sessions"
     },

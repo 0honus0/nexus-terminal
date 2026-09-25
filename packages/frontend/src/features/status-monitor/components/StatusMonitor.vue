@@ -734,19 +734,19 @@
   .has-history .metric-list {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.22rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.2rem;
   }
   .has-history .metric-card {
-    min-height: 1.7rem;
-    height: 1.7rem;
+    min-height: 1.45rem;
+    height: 1.45rem;
     display: flex;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    gap: 0.35rem;
-    padding: 0.15rem 0.45rem;
-    border-radius: 0.45rem;
+    gap: 0.1rem;
+    padding: 0.1rem 0.24rem;
+    border-radius: 0.35rem;
   }
   .has-history .metric-top {
     min-width: 0;
@@ -755,23 +755,19 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 0.28rem;
   }
   .has-history .metric-identity {
-    gap: 0.28rem;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
   }
   .has-history .small-icon {
-    width: 1.15rem;
-    height: 1.15rem;
-    flex: 0 0 1.15rem;
-    border-radius: 0.25rem;
-  }
-  .has-history .small-icon svg {
-    width: 0.7rem;
-    height: 0.7rem;
+    display: none;
   }
   .has-history .metric-name {
-    font-size: 0.72rem;
+    font-size: 0.63rem;
+    font-weight: 600;
+    white-space: nowrap;
   }
   .has-history .metric-detail,
   .has-history .metric-progress {
@@ -786,17 +782,53 @@
   }
   .has-history .metric-percent {
     flex: 0 0 auto;
-    font-size: 0.72rem;
+    font-size: 0.63rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
     text-align: right;
+    white-space: nowrap;
   }
   .has-history .network-card {
     grid-column: span 2;
   }
-  .has-history .network-top {
+  .has-history .network-card .metric-top {
     width: 100%;
+    justify-content: space-between;
   }
   .has-history .network-bottom {
     display: none;
+  }
+  .has-history .network-card .network-history-rates {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    font-family: var(--font-mono);
+    font-size: 0.61rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .has-history .network-card .network-history-rates .rate-down,
+  .has-history .network-card .network-history-rates .rate-up {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    background: transparent;
+    border: none;
+    padding: 0;
+    white-space: nowrap;
+  }
+  .has-history .network-card .network-history-rates .rate-down {
+    color: #10b981;
+  }
+  .has-history .network-card .network-history-rates .rate-up {
+    color: #3b82f6;
+  }
+  .has-history .network-card .rate-full {
+    display: none;
+  }
+  .has-history .network-card .rate-compact {
+    display: inline;
   }
 
   .history-card {
@@ -804,7 +836,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 0.45rem;
+    padding: 0.28rem 0.28rem 0.24rem;
     border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
     border-radius: 0.55rem;
     background: color-mix(in srgb, var(--header-bg-color) 20%, var(--card-bg-color));
@@ -814,8 +846,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.4rem;
-    padding: 0 0.1rem 0.35rem;
+    gap: 0.35rem;
+    padding: 0 0.1rem 0.25rem;
   }
   .history-header > strong {
     min-width: 0;
