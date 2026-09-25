@@ -7,6 +7,60 @@
 > 实测环境（2026-09-21）：后端 `tsx src/index.ts`（:3001，dev）+ 前端 vite（:9998）+ 反代 `https://api.honus.top`，账号 `honus`。
 > 浏览器窗口：第一~三轮为 **1620×953 / dpr 1**；**第四轮实测时浏览器的真实窗口已是 1600×773 / dpr 1**（本轮起未做任何改动，Hub 窗口沿用持久化的 1600×711）。全文标注了每轮实测所用的尺寸，跨轮数字不要直接互相比较。
 > Git 状态可用；闭环过程以 `dev` 分支实际提交、静态门禁与真实 CDP 验收为准。
+
+
+## 当前整改进度（2026-09-26）
+
+> 本节是 `doc/problem.md` 当前唯一有效的进度入口；下文 2026-09-21～09-25 的长篇内容保留为问题发现、复现、修复和验收证据，不再用其中的历史“只剩 N 条”快照判断当前状态。
+>
+> **清空判定：未满足。** 2026-09-26 重新对 committed HEAD 做机械扫描与逐项代码复核后，§7.41–§7.51 共 11 条历史开放项仍有当前代码证据；同时本轮全前端架构审计确认还有 shared/foundation 边界、全前端 lint/test、状态生命周期、Design System、持久化与大组件拆分等结构整改未完成。只有本节所有开放项和 §7.41–§7.51 全部关闭后，才清空本文件的待办内容。
+
+### A. 既有 Problem 开放项复核
+
+| 项目 | 当前状态 | 2026-09-26 当前代码事实 |
+| --- | --- | --- |
+| §7.41 create thread unknown-outcome retry | 🟠 仍开放 | API/facade 已支持可选 `Idempotency-Key`，Plugin SDK 也会传 `operationId`；但 `AgentAppSurface.createThread()` 的错误按钮仍直接重调 `createThread(title)`，没有为同一次用户意图生成并复用稳定 key。 |
+| §7.42 Agent window per-user reset | 🟠 仍开放 | `window-manager.reset()` 仍只重置 bounds/status/app/view/launcher，没有恢复 `threadSidebarVisible=true`、`taskRailVisible=false`。 |
+| §7.43 Agent localStorage user scope | 🟠 仍开放 | `nexus.agent.thread-list-scale.v1` 与 `nexus.agent.task-rail-order.v1` 仍是全局 key，没有 user id namespace。 |
+| §7.44 hit-target floor | 🟠 仍开放 | `AgentAppSwitcher` 仍有 `h-5 w-5` 关闭按钮；Hub resize / 若干 icon-only 路径仍存在小于既定目标的真实指针盒，不能用“已有键盘路径”替代 pointer target。 |
+| §7.45 dirty-state structural compare | 🟠 仍开放 | `AppExecutionPolicySettings.vue` 仍以 `JSON.stringify(draft) !== JSON.stringify(overrides)` 判断对象型 dirty，键插入顺序仍会制造假 dirty。 |
+| §7.46 `userSummary` model/UI separation | 🟠 仍开放 | approval denied/expired、approval superseded、run cancelled 4 类 state-commit 仍把 `userSummary` JSON.stringify 进 `payload.text`，没有统一走 `toolResultLedgerPayload()` sibling 投影。 |
+| §7.47 cancelling Run input gate | 🟠 仍开放 | backend 已明确 `cancelling -> RUN_NOT_ACCEPTING_INPUT`；frontend `canSend()` / `send()` 仍把 `cancelling` 计入 `nonTerminal`，可发出必然被拒绝的 append-input。 |
+| §7.48 reading-text floor | 🟠 仍开放 | Hub model option hint 仍为 `text-[9px]` 阅读文本；其它 9/10px 多数是 icon/badge，不计入本项。 |
+| §7.49 English UI literal / i18n gaps | 🟠 仍开放 | 仍能直接找到 `Workspace`、`ID "..." already exists.`、`owned by ...`、`Tools` 等用户可见英文 literal；Agent 子导航 aria-label 已修成本地化，不再计入。 |
+| §7.50 cross-tab configuration refresh | 🟠 仍开放 | BroadcastChannel 已转发 thread/authorization/memory 等 host sourceType，但没有 configuration/providers/settings changed 的跨 tab 传播；另一个 tab 的 Hub/Settings 仍可能持有旧配置。 |
+| §7.51 frontend ESLint coverage | 🟠 仍开放 | `eslint.config.mjs` 的完整 TS/Vue 规则仍主要覆盖 Agent；`foundation/ui` 与普通 frontend feature 尚未进入统一 frontend lint profile。 |
+
+### B. 本轮前端架构整改进度
+
+本轮在 **365 个 frontend TS/Vue 源文件、24 个 feature、1 个 Workspace runtime、27 个 public entrypoint** 上重新建立依赖图和公共契约检查。当前基线：feature/runtime 顶层依赖环 **0**；foundation/client/shared 反向依赖上层 **0**；UI/composable/store 直接 import `@nexus-terminal/protocol` **0**；跨 feature/runtime deep import **0**。
+
+| 阶段 | 状态 | 已完成 / 下一步 |
+| --- | --- | --- |
+| FE-ARCH-01 DTO / wire contract 边界 | ✅ 完成 | 协议 DTO 被限制在 api/model/ports/protocol/public 边界；UI/composable/store 不直接消费 `@nexus-terminal/protocol`。 |
+| FE-ARCH-02 public type contract | ✅ 完成 | 公共 composable/controller/facade 改为具名、显式 contract；跨模块类型从 `public.ts` 暴露；Workspace 顶层不再泄漏内部 session/registry 实现。对应本地 commit `035f1bd refactor(frontend): formalize public type boundaries`。 |
+| FE-ARCH-03 feature/runtime dependency graph | ✅ 完成 | 当前跨 feature/runtime deep import 为 0，顶层 dependency cycle 为 0；新增 `lint:frontend-boundaries` 防止回退。 |
+| FE-ARCH-04 shared/foundation public boundary | 🟠 待整改 | guard 目前只覆盖 features/runtimes；`App.vue` 仍直接 deep-import `shared/feedback/components/*`，foundation 也有 `useDeviceCapabilities` / `overlayStack` / `BaseModal.vue` 等绕过 index 的路径。应扩展规则到 `shared/* -> public.ts`、`foundation/{ui,browser,interaction,async} -> index.ts`。 |
+| FE-ARCH-05 public-contract guard 语义 | 🟠 待整改 | 现有 guard 能抓漏导，但不应把“实现文件里的所有 exported type”自动升级为跨模块 API。应引入明确 `contracts/` / `public-types.ts` 或 public-source 声明，只对设计上的 public contract 做完整性检查。 |
+| FE-ARCH-06 全前端 ESLint | 🟠 待整改 | 当前 ESLint 主要是 Agent profile；需要覆盖 `packages/frontend/src/**/*.{ts,vue}`，先统一 parser/no-unused/Vue correctness，再渐进启用 type-aware 规则。此项同时关闭 §7.51。 |
+| FE-ARCH-07 unit/component test 层 | 🟠 待整改 | `packages/frontend` 当前没有 `*.spec.ts/*.test.ts`；应补 Vitest + Vue Test Utils，优先覆盖 store/composable/controller/parser，E2E 保留跨栈验证。 |
+| FE-ARCH-08 状态生命周期统一 | 🟠 待整改 | 目前 Pinia、factory controller、module-scope reactive singleton 三种生命周期并存。优先收口 `useFilesystemCatalog`、`useSuspendedSessions`、workspace layout/focus、Agent per-app view state，并把 Pinia 文件外的 loadPromise/cacheGeneration/revision 收回 store scope。 |
+| FE-ARCH-09 authenticated-session teardown | 🟠 待整改 | `App.vue` 仍手工维护多个 `resetXxxCache()`；应建立统一 user/session scoped reset/dispose 生命周期，避免新增 feature 漏 reset。 |
+| FE-ARCH-10 Workspace data access | 🟠 待整改 | `workspace/layout` 与 `workspace/focus` 仍直接调用 `httpClient`；应下沉到 runtime adapter/repository/API owner，使 layout/focus 只管理 domain state。 |
+| FE-ARCH-11 typed/versioned browser persistence | 🟠 待整改 | localStorage/sessionStorage 分散在 Dashboard、Connections、Workspace、Agent、Transfers、Quick Commands 等；应统一 typed/versioned storage helper + decoder/migration，替代 `JSON.parse(...) as ...`。§7.42/§7.43 也并入该阶段。 |
+| FE-ARCH-12 UI runtime error boundary | 🟠 待整改 | 已有 `window.error` / `unhandledrejection` 诊断，但缺 app/surface 级 `errorHandler/onErrorCaptured` 用户可见 fallback/retry；优先 Agent、Workspace、Preview。 |
+| FE-ARCH-13 Design System 收敛 | 🟠 待整改 | `foundation/ui` 中 `Base*` 与 `Ui* Gen2` 是两套独立实现且两边都大量使用。应明确 Gen2 为目标，补齐 primitive 后逐 feature 迁移，最终删除旧 Base 体系。 |
+| FE-ARCH-14 横向 feature 耦合 | 🟠 待整改 | `connections -> proxies/remote-desktop/ssh-keys/tags`、`transfers -> connections/tags`、`agent -> auth/connections/terminal` 当前无循环但耦合偏强；优先把 Transfers target selection 和 Agent runtime capability 改为 port/adapter/composition 注入。 |
+| FE-ARCH-15 大型 SFC / 子系统内部边界 | 🟠 待整改 | `AgentAppSurface.vue` 3231 行、`FileManager.vue` 2480、`ModelProviderSettings.vue` 2457、`WorkspaceSessionSurface.vue` 1740、`TerminalView.vue` 1332、`StatusMonitor.vue` 1319。应先有 lint/unit-test 安全网，再按 controller/state-machine/presentation 拆；Agent/Workspace 增加内部二级依赖边界。 |
+| FE-ARCH-16 TypeScript strictness 第二阶段 | 🟠 待评估 | 当前 `strict: true` 已启用；后续按 feature 渐进评估 `noUncheckedIndexedAccess`、`exactOptionalPropertyTypes`，禁止靠批量 `!` / `as` 机械消错。 |
+
+### C. 下一实施顺序
+
+1. **安全网**：FE-ARCH-04/05/06/07（完整边界 guard + 全前端 ESLint + Vitest/VTU）。
+2. **状态与数据层**：FE-ARCH-08/09/10/11/12。
+3. **UI 与领域重构**：FE-ARCH-13/14/15。
+4. **严格类型增强**：FE-ARCH-16。
+5. 在上述阶段中顺带关闭 §7.41–§7.51；全部关闭后再执行 `problem.md` 清空/归档。
 >
 > **当前实施状态（2026-09-23）**：已关闭 §7.12（空态 pager 命中区）、§7.13-d（会话列表缩放入口/重置）、§6.2 批 1/2（设置区主/次/危险/图标按钮收敛到 Gen2 `UiButton`）、§7.20（设置区 27 处原生 checkbox 收敛到 Gen2 `UiCheckbox`）、§7.21（Hub 模型弹层恢复"真毛玻璃 + 无盒选项行"）、§7.22（Provider / 设置写完立即刷新主界面）、§7.23（玻璃配方上收到 Gen2 通用层）、§7.13-e（11 个稳态禁用按钮补齐原因文案）、§7.2（骨架：最小高度 380 → 480 + 矮窗口 composer 压缩、侧栏可折叠、窗口状态持久化、列宽复核、顶栏双击最大化）、§7.24-a（「Agent 功能」卡片瘦身）与 §7.24-b/-c（16 张卡的长句迁入通用 `UiInfoHint`，设置区可见说明 2145 → 1209 字；Hub 侧补 2 处弹层头部说明）、§7.2-g（停靠态侧栏折叠/展开补 200ms 列宽过渡 + 淡出，修掉"闪一下跳到展开位置"）、§6.2 第三批（Agent 设置区分组导航胶囊 `115×36 r12` → `115×32 r8`，并在同轮抓到 `添加备用模型` 触发器误用 comfortable 密度 `137×36 fs13` → `133×32 fs12`）、§7.25（设置区「一层卡片」重构：模块卡并入分组卡、模块内分组框降级为 inset 并把分组导航改为粘性，叶子的带边框祖先 3 层 → 1 层）、§7.26（Composer 配置弹层首帧错位：测量前解除占位尺寸 + 未定位不绘制，模型/思考强度/App 切换器首帧即终值）、§7.27（**Agent 设置区布局重构**：宽屏常驻左栏分区导航 240px + 17 个锚点跳转 + 滚动联动，窄屏保留顶部胶囊；同轮修掉粘性导航被顶栏吞掉、模块 `z-20` 压过导航条、`v-show` 因双根失效、`UiInfoHint` 漏 import 四个真实缺陷）、§7.28（设置区空态统一到 Gen2 `UiEmptyState`，10 处；`dense` 档实测 950×38 / 卡片档 950×143）、§7.29（设置区面板头部摘要去「标签: 数值」方块化，改图标 + 标签/数值两行）、§7.30（**Agent 设置区信息密度与窄屏**：16 条模块标题带去底色消除斑马纹、标题与动作簇 `gap` 12 → `12px 16px`、工具条 `gap-1.5` → `gap-2.5`，414px 下动作簇改为整行下移左对齐，同轮修掉插件仓库输入框的窄屏横向溢出）。、§7.31（**设置区 8 处独立「保存」按钮语义分级**：无未保存变更时由浅紫实心主按钮降为 `soft`/`neutral` + 禁用 + 原因 `title`，并给 Browser / ACP / Subagent 三处补上 dirty 快照比对，§7.15-c 整条关闭）。、§7.32（**设置区 22 处原生 `<select>` 全部收敛到 Gen2 `UiSelect`**：新增 `pickOption()` / `NONE_OPTION`，`UiSelect` 的 v-model 收窄为「可空进、非空出」，实测三组可见 10 处、残留原生 0、414px 无溢出）。默认模型仍是 Gen2 `UiCombobox`（§7.6 / §7.18，trigger / panel 共用同一 glass fill / blur / border）。、§7.33（`QuantityInput` 单位药丸 18×20 → 24×24）、§7.34（模型行 11px 纯文字按钮 → Gen2 `UiButton` + 「一键取消」补确认弹窗）、§7.35（Workspace 运行时 5 处原生 `<select>` → `UiSelect`，`features/agent/**` 原生 select 归零）、§7.36（TaskRail「最近事实」改 `dl` 投影 + 原始 payload 折进二级 `<details>`）、§7.38（**§2.8 收口**：Launcher 改长按拖动 + 「重置位置」，虚拟列表行高改量探针行）、§7.37（**Agent 错误横幅补失败域与重试入口**：9 个失败域 + 读「重试」/ 写「重新同步」，机器码不再直接当兜底文案，§2.9 收口）、§7.39（**工具结果摘要的「模型证据 / 用户投影」拆分**：`ToolResult.userSummary` 在 `projectToolResult` 被剥离、ledger payload 旁路携带、`ConversationMessage.vue` 优先渲染并回退历史 `summary`；`tools/host/**` 16 文件 52 处 + 4 条 state-commit 失败摘要接入，新增三语 `agent.conversation.toolSummary.*`（72 句 + 39 枚举标签），§1.8 / §3.6 的"工具摘要英文硬编码"整条关闭）、§7.40（**i18n 死 key 收口**：`scripts/check-agent-i18n.mjs` 新增第 4 条"key 可达性"守卫，三语字典删除 75×3 条不可达文案，1,467 → 1,392，§3.5 收口）。每条闭环均带真实 CDP 实测数据 + 类型检查；**§0 速览表的开放项已只剩 2 条、且都带明确结论**：设置区顶部 Tab 36px（跨页 chrome，按约定不动）、
 > 巨型 UI 文件拆分（§3.1；2026-09-23 已复核并**按约定延后**——该条无隐藏的用户可见缺陷，拆分需搬迁约 30 props + 15 emit，
@@ -3010,7 +3064,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.41 §7.37 回看：创建会话失败的「重试」会重放无幂等 POST（P1 · 🟠 开放 2026-09-23）
+### 7.41 §7.37 回看：创建会话失败的「重试」会重放无幂等 POST（P1 · 🟠 2026-09-26 复核仍开放）
 
 本轮按历史 commit 回看 `441810d`（`fix(agent): give the error banner a failure domain and a retry action`）时，发现 §7.37 的“**读路径重试 / 写路径重新同步**”规则有一条漏网路径。
 
@@ -3033,7 +3087,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.42 §7.2-c 回看：侧栏 / TaskRail 持久化字段漏进 reset，账号切换会继承上一用户布局（P2 · 🟠 开放 2026-09-23）
+### 7.42 §7.2-c 回看：侧栏 / TaskRail 持久化字段漏进 reset，账号切换会继承上一用户布局（P2 · 🟠 2026-09-26 复核仍开放）
 
 历史 commit `30fa0ed`（`feat(agent): let the thread sidebar collapse and remember the layout`）新增了 `threadSidebarVisible` 与 `taskRailVisible` 两个持久化字段：它们进入 `AgentHubState`、`restoreForUser()` 与 `persistForUser()`，目标是**按 user id 保存**布局偏好。
 
@@ -3052,7 +3106,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 **本轮证据**：`git show 30fa0ed` 明确显示该提交新增了 state / restore / persist 三处字段但没有改 `reset()`；当前 HEAD 仍保持这一缺口。frontend `vue-tsc --noEmit` 通过。
 
-### 7.43 §7.13-d / §7.14-b 回看：两类 localStorage UI 偏好仍跨账号共用（P2 · 🟠 开放 2026-09-23）
+### 7.43 §7.13-d / §7.14-b 回看：两类 localStorage UI 偏好仍跨账号共用（P2 · 🟠 2026-09-26 复核仍开放）
 
 **当前代码事实**：
 
@@ -3066,7 +3120,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.44 §2.4 / §7.14-b 回看：命中区 floor 并未真正收口（P1 · 🟠 开放 2026-09-23）
+### 7.44 §2.4 / §7.14-b 回看：命中区 floor 并未真正收口（P1 · 🟠 2026-09-26 复核仍开放）
 
 `8a3bc76` 的标题是 “finish the hit-target floor for 2.4”，`761a970` 又给 Hub resize 补了键盘几何，但当前 HEAD 仍存在可直接证明的小操作目标：
 
@@ -3086,7 +3140,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.45 §7.31 回看：对象型 dirty-state 用 JSON.stringify，会把“值相同、键顺序不同”判成未保存修改（P2 · 🟠 开放 2026-09-23）
+### 7.45 §7.31 回看：对象型 dirty-state 用 JSON.stringify，会把“值相同、键顺序不同”判成未保存修改（P2 · 🟠 2026-09-26 复核仍开放）
 
 `fb10342` 给 8 处保存按钮补 dirty 语义，其中 `AppExecutionPolicySettings.vue` 当前使用：
 
@@ -3104,7 +3158,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.46 §7.39 回看：4 条 state-commit 失败结果把 userSummary 放进了模型 text，而不是 ledger sibling（P1 · 🟠 开放 2026-09-23）
+### 7.46 §7.39 回看：4 条 state-commit 失败结果把 userSummary 放进了模型 text，而不是 ledger sibling（P1 · 🟠 2026-09-26 复核仍开放）
 
 §7.39 的核心边界是：模型只看英文证据 `payload.text`，用户本地化摘要走 ledger sibling `payload.userSummary`。普通工具结果通过 `toolResultLedgerPayload()` 正确实现了这一点，但 `2564ec7` 同批改的 4 类 state-commit 路径没有走 helper，而是把 `userSummary` **JSON.stringify 进 text 本体**：
 
@@ -3122,7 +3176,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.47 §2.5 回看：Run 已进入 cancelling 时 Send 仍可用，后端会必然拒绝（P1 · 🟠 开放 2026-09-23）
+### 7.47 §2.5 回看：Run 已进入 cancelling 时 Send 仍可用，后端会必然拒绝（P1 · 🟠 2026-09-26 复核仍开放）
 
 `d9c7ed4` 正确把 Send 与 Stop 拆成两个按钮，但状态边界漏了 `cancelling`：
 
@@ -3136,7 +3190,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.48 §2.3 回看：11px 阅读文字 floor 被 8166c89 重新打穿（P1 · 🟠 开放 2026-09-23）
+### 7.48 §2.3 回看：11px 阅读文字 floor 被 8166c89 重新打穿（P1 · 🟠 2026-09-26 复核仍开放）
 
 `5364e2b` / `e4d86e2` 刚把真实阅读文本提升到 ≥11px，随后：
 
@@ -3150,7 +3204,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.49 §7.14-c i18n 回看：源码中的英文 UI literal 仍有漏网（P2 · 🟠 开放 2026-09-23）
+### 7.49 §7.14-c i18n 回看：源码中的英文 UI literal 仍有漏网（P2 · 🟠 2026-09-26 复核仍开放）
 
 当时的硬编码扫描主要以 CJK / 字典值为抓手，漏掉了**源码里的英文用户文案**。`97560f1` 已把 ACP Integration 的 create/update/delete 成功 toast 改为 i18n key，但未知错误 fallback 仍保留 `formatAgentApiError(cause, 'ACP request failed.')`；同一提交又在 `BrowserRuntimeSettings.submitAddTarget()` 新增了 `ID "${id}" already exists.` 英文校验文案。也就是说 §7.49 仍开放，只是当前漏网点发生了变化。
 
@@ -3168,7 +3222,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.50 §7.22 已知残留提升：跨标签页修改 Provider / Settings，另一个 tab 的 Hub 与 Settings 都不刷新（P2 · 🟠 开放 2026-09-23）
+### 7.50 §7.22 已知残留提升：跨标签页修改 Provider / Settings，另一个 tab 的 Hub 与 Settings 都不刷新（P2 · 🟠 2026-09-26 复核仍开放）
 
 §7.22 行 2142 已经记录“未覆盖：跨标签页仍不推送”，但顶部总状态把 §7.22 整体列为关闭。本轮复核当前代码后确认该缺口仍存在：
 
@@ -3181,7 +3235,7 @@ backend `tsc --noEmit`、frontend `vue-tsc --noEmit`、`eslint`（agent 前后�
 
 ---
 
-### 7.51 Gen2 foundation 进入主路径后仍没有正确 ESLint 配置（P2 · 🟠 开放 2026-09-23）
+### 7.51 Gen2 foundation 进入主路径后仍没有正确 ESLint 配置（P2 · 🟠 2026-09-26 复核仍开放）
 
 §7.28 已记录 “`foundation/ui/**` 不在 eslint flat-config 的 files 范围”，本轮 66 commit 复核后这个问题的重要性已上升：`a2a9e94` 以及后续提交让 `UiButton / UiSelect / UiPopover / UiEmptyState / UiInfoHint` 成为 Agent 设置和 Hub 的公共基础层。
 
