@@ -435,7 +435,7 @@
               id="settings-panel-appearance"
               @customize="appearance.openCustomizer()"
             />
-            <AgentSettingsPanel v-if="visited.has('agent')" v-show="active === 'agent'" />
+            <AgentSettingsPanel v-if="visited.has('agent')" v-show="active === 'agent'" id="settings-panel-agent" />
             <AboutPanel v-if="visited.has('about')" v-show="active === 'about'" id="settings-panel-about" />
           </div>
         </section>
