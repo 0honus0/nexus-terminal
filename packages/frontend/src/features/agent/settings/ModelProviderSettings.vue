@@ -48,6 +48,10 @@
     defaultProviderId: string | null;
     defaultModelId: string | null;
     fallbackModels: Array<{ providerId: string; modelId: string }>;
+    saveFallbackModels: (
+      models: Array<{ providerId: string; modelId: string }>,
+      success?: string | null,
+    ) => Promise<boolean>;
   }>();
 
   const emit = defineEmits<{
@@ -55,7 +59,6 @@
     protocol: [provider: AgentProviderViewDto, protocol: AgentProviderViewDto['protocol']];
     discover: [provider: AgentProviderViewDto];
     defaultModel: [providerId: string, modelId: string];
-    fallbackModels: [models: Array<{ providerId: string; modelId: string }>];
     delete: [provider: AgentProviderViewDto];
   }>();
 
@@ -769,11 +772,12 @@
   };
 
   // 取消已添加（单项）
-  const removeFallbackModels = (providerId: string, modelIds: ReadonlySet<string>): void => {
+  const removeFallbackModels = async (providerId: string, modelIds: ReadonlySet<string>): Promise<boolean> => {
     const next = props.fallbackModels.filter(
       (fallback) => fallback.providerId !== providerId || !modelIds.has(fallback.modelId),
     );
-    if (next.length !== props.fallbackModels.length) emit('fallbackModels', next);
+    if (next.length === props.fallbackModels.length) return true;
+    return props.saveFallbackModels(next, null);
   };
 
   const removeConfiguredModel = async (provider: AgentProviderViewDto, modelId: string): Promise<void> => {
@@ -787,7 +791,7 @@
       const noticeRemoved = t('agent.settings.providers.saveNoticeRemoved');
       const saved = await updateModels(provider, nextModels, noticeRemoved);
       if (!saved) return;
-      removeFallbackModels(provider.id, new Set([modelId]));
+      await removeFallbackModels(provider.id, new Set([modelId]));
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -817,7 +821,7 @@
       const noticeAllRemoved = t('agent.settings.providers.saveNoticeRemovedAll', { count: removeCount });
       const saved = await updateModels(provider, nextModels, noticeAllRemoved);
       if (!saved) return;
-      removeFallbackModels(provider.id, removableIds);
+      await removeFallbackModels(provider.id, removableIds);
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -963,23 +967,26 @@
     fallbackSearch.value = '';
   };
 
-  const addFallbackModel = (providerId: string, modelId: string) => {
+  const addFallbackModel = async (providerId: string, modelId: string): Promise<void> => {
     const key = `${providerId}\u0000${modelId}`;
     if (fallbackAtCapacity.value || fallbackModelKeys.value.has(key)) return;
-    emit('fallbackModels', [...validFallbackModels.value, { providerId, modelId }]);
+    const saved = await props.saveFallbackModels(
+      [...validFallbackModels.value, { providerId, modelId }],
+      t('agent.settings.providers.saveNoticeFallback'),
+    );
+    if (!saved) return;
     fallbackDropdownOpen.value = false;
     fallbackSearch.value = '';
-    operationFeedback.notifySuccess(t('agent.settings.providers.saveNoticeFallback'));
   };
 
-  const removeFallbackModel = (key: string) => {
-    emit(
-      'fallbackModels',
+  const removeFallbackModel = async (key: string): Promise<void> => {
+    await props.saveFallbackModels(
       validFallbackModels.value.filter((item) => `${item.providerId}\u0000${item.modelId}` !== key),
+      t('agent.settings.providers.saveNoticeFallback'),
     );
   };
 
-  const moveFallbackModel = (index: number, delta: number) => {
+  const moveFallbackModel = async (index: number, delta: number): Promise<void> => {
     const current = validFallbackModels.value;
     const target = index + delta;
     if (target < 0 || target >= current.length) return;
@@ -987,7 +994,7 @@
     const [moved] = next.splice(index, 1);
     if (!moved) return;
     next.splice(target, 0, moved);
-    emit('fallbackModels', next);
+    await props.saveFallbackModels(next, t('agent.settings.providers.saveNoticeFallback'));
   };
 
   const modelCount = computed(() => props.providers.reduce((total, p) => total + p.models.length, 0));

@@ -2,18 +2,19 @@
   import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useOperationFeedback } from '@/shared/feedback/public';
   import { pickOption } from './pick-option';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
   type BrowserTarget = AgentSettingsViewDto['requestedSettings']['browser']['targets'][number];
   type BrowserEndpoint = BrowserTarget['endpoints'][number];
 
-  const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
-  const emit = defineEmits<{ save: [patch: AgentSettingsViewDto['requestedSettings']['browser']] }>();
+  const props = defineProps<{
+    settings: AgentSettingsViewDto;
+    busy: boolean;
+    save: (patch: AgentSettingsViewDto['requestedSettings']['browser'], success?: string | null) => Promise<boolean>;
+  }>();
 
   const { t } = useI18n();
-  const operationFeedback = useOperationFeedback('agent.settings.browserRuntime');
 
   const cloneTargets = (source: readonly BrowserTarget[]): BrowserTarget[] =>
     source.map((target) => ({
@@ -32,6 +33,12 @@
   const sync = (): void => {
     baselineTargets.value = cloneTargets(props.settings.requestedSettings.browser.targets);
     targets.value = cloneTargets(baselineTargets.value);
+  };
+
+  const persistTargets = async (nextTargets: BrowserTarget[], success: string): Promise<boolean> => {
+    const saved = await props.save({ targets: cloneTargets(nextTargets) }, success);
+    if (saved) targets.value = cloneTargets(nextTargets);
+    return saved;
   };
 
   const scopeOptions = [
@@ -76,7 +83,7 @@
     targetModalOpen.value = true;
   };
 
-  const submitAddTarget = (): void => {
+  const submitAddTarget = async (): Promise<void> => {
     const id = targetForm.id.trim();
     if (!id) {
       targetModalError.value = t('agent.settings.disabledReason.incompleteForm');
@@ -106,18 +113,14 @@
 
     const nextTargets = cloneTargets(targets.value);
     nextTargets.push({ id, endpoints, allowedUrlPatterns: patterns.length > 0 ? patterns : ['https://*/*'] });
-    targets.value = nextTargets;
-    emit('save', { targets: cloneTargets(nextTargets) });
-    operationFeedback.notifySuccess(t('agent.settings.browserRuntime.targetCreated'));
-    targetModalOpen.value = false;
+    const saved = await persistTargets(nextTargets, t('agent.settings.browserRuntime.targetCreated'));
+    if (saved) targetModalOpen.value = false;
   };
 
-  const removeTarget = (index: number): void => {
+  const removeTarget = async (index: number): Promise<void> => {
     const nextTargets = cloneTargets(targets.value);
     nextTargets.splice(index, 1);
-    targets.value = nextTargets;
-    emit('save', { targets: cloneTargets(nextTargets) });
-    operationFeedback.notifySuccess(t('agent.settings.browserRuntime.targetDeleted'));
+    await persistTargets(nextTargets, t('agent.settings.browserRuntime.targetDeleted'));
   };
 
   // 模态弹窗 2：为指定目标添加端点 (Endpoint)
@@ -145,7 +148,7 @@
     endpointModalOpen.value = true;
   };
 
-  const submitAddEndpoint = (): void => {
+  const submitAddEndpoint = async (): Promise<void> => {
     if (!endpointModalTarget.value) return;
     const url = endpointForm.url.trim();
     if (!url) {
@@ -166,20 +169,16 @@
       verifyTls: endpointForm.verifyTls,
     });
 
-    targets.value = nextTargets;
-    emit('save', { targets: cloneTargets(nextTargets) });
-    operationFeedback.notifySuccess(t('agent.settings.browserRuntime.endpointAdded'));
-    endpointModalOpen.value = false;
+    const saved = await persistTargets(nextTargets, t('agent.settings.browserRuntime.endpointAdded'));
+    if (saved) endpointModalOpen.value = false;
   };
 
-  const removeEndpoint = (target: BrowserTarget, endpointIndex: number): void => {
+  const removeEndpoint = async (target: BrowserTarget, endpointIndex: number): Promise<void> => {
     const nextTargets = cloneTargets(targets.value);
     const found = nextTargets.find((candidate) => candidate.id === target.id);
     if (!found) return;
     found.endpoints.splice(endpointIndex, 1);
-    targets.value = nextTargets;
-    emit('save', { targets: cloneTargets(nextTargets) });
-    operationFeedback.notifySuccess(t('agent.settings.browserRuntime.endpointDeleted'));
+    await persistTargets(nextTargets, t('agent.settings.browserRuntime.endpointDeleted'));
   };
 
   const setTargetEndpointScope = (value: unknown): void => {

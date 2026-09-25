@@ -19,8 +19,12 @@
   }
 
   const DEFAULT_AGENT_APP_ID = 'nexus.agent';
-  const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean; agentAvailable: boolean }>();
-  const emit = defineEmits<{ saveProfiles: [profiles: Profile[]] }>();
+  const props = defineProps<{
+    settings: AgentSettingsViewDto;
+    busy: boolean;
+    agentAvailable: boolean;
+    saveProfiles: (profiles: Profile[], success?: string | null) => Promise<boolean>;
+  }>();
   const { t } = useI18n();
   const feedback = useFeedback();
   const operationFeedback = useOperationFeedback('agent.settings.acp-runtime');
@@ -190,7 +194,7 @@
     profileModalOpen.value = true;
   };
 
-  const submitAddProfile = (): void => {
+  const submitAddProfile = async (): Promise<void> => {
     profileModalError.value = '';
     const id = profileForm.id.trim();
     const cwd = profileForm.cwd.trim();
@@ -212,23 +216,22 @@
 
     try {
       const normalized = normalizeProfiles(nextProfiles);
+      const saved = await props.saveProfiles(normalized, t('agent.settings.acpRuntime.profileSaved'));
+      if (!saved) return;
       profiles.value = nextProfiles;
-      emit('saveProfiles', normalized);
-      operationFeedback.notifySuccess(t('agent.settings.acpRuntime.profileSaved'));
       profileModalOpen.value = false;
     } catch (cause) {
       profileModalError.value = explain(cause);
     }
   };
 
-  const removeProfile = (index: number): void => {
+  const removeProfile = async (index: number): Promise<void> => {
     const nextProfiles = [...profiles.value];
     nextProfiles.splice(index, 1);
     try {
       const normalized = normalizeProfiles(nextProfiles);
-      profiles.value = nextProfiles;
-      emit('saveProfiles', normalized);
-      operationFeedback.notifySuccess(t('agent.settings.acpRuntime.profileRemoved'));
+      const saved = await props.saveProfiles(normalized, t('agent.settings.acpRuntime.profileRemoved'));
+      if (saved) profiles.value = nextProfiles;
     } catch (cause) {
       operationFeedback.notifyError({ operation: 'remove-profile', message: explain(cause), cause });
     }

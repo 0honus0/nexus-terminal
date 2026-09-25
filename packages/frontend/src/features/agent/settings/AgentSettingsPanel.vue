@@ -280,21 +280,26 @@
     }
   };
 
-  const patchSection = (section: string, patch: Record<string, unknown>, success?: string) =>
-    execute(
+  const patchSection = async (
+    section: string,
+    patch: Record<string, unknown>,
+    success?: string | null,
+  ): Promise<boolean> =>
+    (await execute<boolean>(
       `patch-${section}`,
       ['settings-write'],
       async () => {
-        if (!settings.value) return;
+        if (!settings.value) throw new Error('AGENT_SETTINGS_UNAVAILABLE');
         settings.value = await agentApi.patchSettings({ [section]: patch }, settings.value.revision);
         agentHostEvents.emit('host-changed', undefined);
         agentHostEvents.emit('configuration-changed', undefined);
         await postCommitSync(`patch-${section}`, async () => {
           storage.value = await agentApi.storage();
         });
+        return true;
       },
       success,
-    );
+    )) === true;
 
   const runtimeReady = (state: AgentSettingsViewDto['availability']['state']): boolean =>
     state === 'enabling' || state === 'enabled' || state === 'degraded';
@@ -518,8 +523,18 @@
       t('agent.settings.providers.saveNoticeDefault'),
     );
 
-  const setFallbackModels = (fallbackModels: Array<{ providerId: string; modelId: string }>) =>
-    patchSection('model', { fallbackModels }, t('agent.settings.providers.saveNoticeFallback'));
+  const setFallbackModels = (
+    fallbackModels: Array<{ providerId: string; modelId: string }>,
+    success: string | null = t('agent.settings.providers.saveNoticeFallback'),
+  ) => patchSection('model', { fallbackModels }, success);
+
+  const saveBrowserSettings = (patch: AgentSettingsViewDto['requestedSettings']['browser'], success?: string | null) =>
+    patchSection('browser', patch, success);
+
+  const saveAcpProfiles = (
+    profiles: AgentSettingsViewDto['requestedSettings']['workspaceRuntime']['acpProfiles'],
+    success?: string | null,
+  ) => patchSection('workspaceRuntime', { acpProfiles: profiles }, success);
 
   const discoverProviderModels = (provider: AgentProviderViewDto) =>
     execute(
@@ -690,7 +705,7 @@
               :add-provider-model="addProviderModel"
               :update-provider-models="updateProviderModels"
               @default-model="setDefaultModel"
-              @fallback-models="setFallbackModels"
+              :save-fallback-models="setFallbackModels"
               @delete="deleteProvider"
             />
             <BudgetContextSettings
@@ -738,16 +753,12 @@
               :busy="settingsMutationBusy"
               @settings-updated="(updated) => (settings = updated)"
             />
-            <BrowserRuntimeSettings
-              :settings="settings"
-              :busy="settingsMutationBusy"
-              @save="(patch) => patchSection('browser', patch)"
-            />
+            <BrowserRuntimeSettings :settings="settings" :busy="settingsMutationBusy" :save="saveBrowserSettings" />
             <AcpRuntimeSettings
               :settings="settings"
               :busy="runtimeIntegrationBusy"
               :agent-available="apps.some((app) => app.id === 'nexus.agent')"
-              @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
+              :save-profiles="saveAcpProfiles"
             />
             <StorageArtifactSettings
               :settings="settings"
