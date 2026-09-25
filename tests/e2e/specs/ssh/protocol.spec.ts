@@ -302,6 +302,41 @@ test('same-workspace move treats a missing destination path as available', async
   }
 });
 
+test('filesystem operations preserve POSIX filenames with backslashes quotes and line breaks', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `special-paths-${crypto.randomUUID()}`);
+  const literalBackslashName = '{{.Destination}}\\n{{end}}"';
+  const literalBackslashPath = `/${literalBackslashName}`;
+  const actualNewlineName = 'line\nbreak\'"$;[]{}.txt';
+  const actualNewlinePath = `/${actualNewlineName}`;
+
+  try {
+    await waitForFilesystemReady(workspace.socket);
+
+    const before = await rootFileNames(workspace.socket);
+    expect(before).toContain(literalBackslashName);
+    expect(before).toContain(actualNewlineName);
+
+    await expect(readRemoteText(workspace.socket, literalBackslashPath)).resolves.toContain('backslash-delete-e2e');
+    await expect(readRemoteText(workspace.socket, actualNewlinePath)).resolves.toContain('newline-delete-e2e');
+    await expect(
+      requestWorkspace(workspace.socket, 'filesystem.stat', { path: literalBackslashPath }),
+    ).resolves.toMatchObject({ name: literalBackslashName, path: literalBackslashPath });
+
+    await requestWorkspace(workspace.socket, 'filesystem.remove', {
+      paths: [literalBackslashPath, actualNewlinePath],
+    });
+
+    const after = await rootFileNames(workspace.socket);
+    expect(after).not.toContain(literalBackslashName);
+    expect(after).not.toContain(actualNewlineName);
+  } finally {
+    await closeWebSocket(workspace.socket);
+  }
+});
+
 test('archive commands use the same remote root as filesystem operations', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();

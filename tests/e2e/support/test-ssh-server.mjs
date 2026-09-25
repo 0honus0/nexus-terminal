@@ -98,7 +98,7 @@ const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
 
 function normalizeRemotePath(remotePath = '.') {
-  let raw = String(remotePath || '.').replace(/\\/g, '/');
+  let raw = String(remotePath || '.');
   const normalizedRoot = rootDir.replace(/\\/g, '/');
   if (raw === normalizedRoot) raw = '/';
   else if (raw.startsWith(`${normalizedRoot}/`)) raw = raw.slice(normalizedRoot.length);
@@ -555,6 +555,8 @@ async function resetRoot() {
   await fsp.writeFile(path.join(rootDir, 'copy-source.txt'), 'copy-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'archive-source.txt'), 'archive-me\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, '{{.Destination}}\\n{{end}}"'), 'backslash-delete-e2e\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'line\nbreak\'"$;[]{}.txt'), 'newline-delete-e2e\n', 'utf8');
   await writeUnicodePathZipFixture(path.join(rootDir, '中文解压测试.zip'), '中文解压测试');
   await fsp.mkdir(path.join(rootDir, 'deleted-cwd'), { recursive: true });
   await fsp.writeFile(path.join(rootDir, 'deleted-cwd', 'inside.txt'), 'deleted-cwd-e2e\n', 'utf8');

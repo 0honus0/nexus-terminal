@@ -14,7 +14,7 @@ import type { FileRemovalService } from '../../../platform/filesystem/file-remov
 import type { MutationGuardPort } from '../../../platform/operations/mutation-guard.port';
 import type { RemoteFileSearchService } from '../../../platform/filesystem/remote-file-search.service';
 import type { RemoteFileSystem } from '../../../platform/filesystem/remote-filesystem';
-import { normalizeAbsoluteRemotePath } from '../../../platform/filesystem/remote-path';
+import { normalizeAbsoluteRemotePath, remoteFileResourceKey } from '../../../platform/filesystem/remote-path';
 import type { RemoteTextWriterService } from '../../../platform/filesystem/remote-text-writer.service';
 import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceSession } from '../workspace-session';
@@ -160,7 +160,7 @@ export class WorkspaceFilesystemService {
   }
   async realpath(workspaceId: string, remotePath: string) {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
-    const requestedPath = path.posix.normalize(remotePath.replace(/\\/g, '/'));
+    const requestedPath = path.posix.normalize(remotePath);
     if (!requestedPath) throw new Error('Remote path is required.');
     const absolutePath = await fs.resolvePath(requestedPath);
     const metadata = await fs.metadata(absolutePath, { followSymbolicLinks: true });
@@ -207,7 +207,7 @@ export class WorkspaceFilesystemService {
     const session = this.sessions.require(workspaceId);
     const resourceKeys = [
       `connection:${session.connectionId}`,
-      ...remotePaths.map((remotePath) => `connection:${session.connectionId}:file:${remotePath}`),
+      ...remotePaths.map((remotePath) => remoteFileResourceKey(`connection:${session.connectionId}`, remotePath)),
     ];
     return this.mutationGuard.withMutation(
       {

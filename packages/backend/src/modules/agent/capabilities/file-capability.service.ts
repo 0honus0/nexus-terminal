@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { applyPatch, parsePatch, type StructuredPatch } from 'diff';
+import { remoteFileResourceKey } from '../../../platform/filesystem/remote-path';
 import type { SshFilePathInspection, SshFileTargetPort } from './ssh-file-target.port';
 import type { ResolvedAgentTarget, AgentTargetResolver } from './target-resolver';
 import type { AgentTargetKind, ToolTargetFingerprint } from './tool-target.types';
@@ -144,8 +145,8 @@ export class FileCapabilityService {
 
   resourceKey(target: ResolvedAgentTarget, path: string): string {
     return target.selector.target === 'workspace'
-      ? `workspace:${target.selector.id}:${target.workspaceGeneration}:file:${path}`
-      : `connection:${target.connectionId}:file:${path}`;
+      ? remoteFileResourceKey(`workspace:${target.selector.id}:${target.workspaceGeneration}`, path)
+      : remoteFileResourceKey(`connection:${target.connectionId}`, path);
   }
 
   async stat(context: ToolContext, target: ResolvedAgentTarget, path: string): Promise<UnifiedFileStat> {

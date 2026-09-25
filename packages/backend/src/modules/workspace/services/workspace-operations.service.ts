@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { normalizeAbsoluteRemotePath } from '../../../platform/filesystem/remote-path';
+import { normalizeAbsoluteRemotePath, remoteFileResourceKey } from '../../../platform/filesystem/remote-path';
 import type {
   ArchiveEvent,
   ArchiveOperation,
@@ -339,7 +339,7 @@ export class WorkspaceOperationsService {
     const resourceKeys = [
       ...connectionIds.map((connectionId) => `connection:${connectionId}`),
       ...connectionIds.flatMap((connectionId) =>
-        paths.map((remotePath) => `connection:${connectionId}:file:${remotePath}`),
+        paths.map((remotePath) => remoteFileResourceKey(`connection:${connectionId}`, remotePath)),
       ),
     ];
     return {
@@ -359,8 +359,8 @@ export class WorkspaceOperationsService {
       leaseOwnerId: `${workspaceId}:${randomUUID()}`,
       operationId: `${operationId}:${randomUUID()}`,
       readResourceKeys: [`connection:${connectionId}`],
-      resourceKeys: paths.map(
-        (remotePath) => `connection:${connectionId}:file:${normalizeAbsoluteRemotePath(remotePath, 'Remote path')}`,
+      resourceKeys: paths.map((remotePath) =>
+        remoteFileResourceKey(`connection:${connectionId}`, normalizeAbsoluteRemotePath(remotePath, 'Remote path')),
       ),
       timeoutSeconds: 300,
     };

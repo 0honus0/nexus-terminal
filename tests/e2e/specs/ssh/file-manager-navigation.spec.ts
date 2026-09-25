@@ -21,6 +21,7 @@ const FAVORITE_NAME = 'E2E Folder Seed';
 const FAVORITE_PATH = '/folder-seed';
 const SPECIAL_PATH = '/  特殊 空格\'"$#`()[]{}!&;=,+测试  ';
 const DELETED_CWD_PATH = '/deleted-cwd';
+const BACKSLASH_DELETE_FILENAME = '{{.Destination}}\\n{{end}}"';
 const LONG_LIST_COUNT = 260;
 const LONG_FILENAME = `zz-m11-long-name-${'x'.repeat(180)}.txt`;
 const M11_03A_EVIDENCE_DIR = process.env.M11_03A_EVIDENCE_DIR || '/tmp/nexus-m11-03a';
@@ -254,6 +255,28 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
     await manager(page).getByTitle('Refresh', { exact: true }).click();
     await expect(row(page, 'force-delete-e2e')).toHaveCount(0);
+  });
+
+  await step('delete preserves literal backslashes, template markers, and quotes in POSIX filenames', async () => {
+    const target = activeFileManagerList(page)
+      .locator('tbody tr[data-filename]')
+      .filter({ hasText: BACKSLASH_DELETE_FILENAME })
+      .first();
+    await expect(target).toHaveAttribute('data-filename', BACKSLASH_DELETE_FILENAME);
+    await target.click({ button: 'right' });
+
+    const contextMenu = page.getByTestId('file-manager-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await contextMenu.getByText('Delete', { exact: true }).click();
+    const confirm = page.getByRole('dialog', { name: 'Please confirm', exact: true });
+    await expect(confirm).toContainText(BACKSLASH_DELETE_FILENAME);
+    await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(target).toHaveCount(0, { timeout: 20_000 });
+
+    await manager(page).getByTitle('Refresh', { exact: true }).click();
+    await expect(
+      activeFileManagerList(page).locator('tbody tr[data-filename]').filter({ hasText: BACKSLASH_DELETE_FILENAME }),
+    ).toHaveCount(0);
   });
 
   await step('Name sorting toggles between ascending and descending order', async () => {
