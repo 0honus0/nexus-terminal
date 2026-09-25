@@ -1251,6 +1251,13 @@
     commandResult.value = { title, lines: [message], tone: 'error' };
   };
 
+  const isRunVersionConflict = (cause: unknown): boolean => {
+    const error = toAgentApiError(cause);
+    if (error.status !== 409 || error.code !== 'STATE_CONFLICT') return false;
+    if (!error.details || typeof error.details !== 'object' || Array.isArray(error.details)) return false;
+    return (error.details as { field?: unknown }).field === 'expectedVersion';
+  };
+
   const adoptCommandRun = (candidate: AgentRunViewDto): void => {
     if (currentThread.value?.id !== candidate.threadId || run.value?.id !== candidate.id) return;
     run.value = candidate;
@@ -1317,7 +1324,22 @@
       const active = run.value;
       if (active && nonTerminal.has(active.status)) {
         const artifactRefs = await resolveArtifactRefs(selectedArtifacts, active);
-        await facade.appendInput(active, submission.text, artifactRefs);
+        const idempotencyKey = crypto.randomUUID();
+        try {
+          await facade.appendInput(active, submission.text, artifactRefs, idempotencyKey);
+        } catch (cause) {
+          if (!isRunVersionConflict(cause)) throw cause;
+          const refreshed = await facade.getRun(active.id);
+          if (currentThread.value?.id !== refreshed.threadId) throw cause;
+          run.value = refreshed;
+          rememberThreadRun(refreshed);
+          if (!nonTerminal.has(refreshed.status)) {
+            await createNewRun(submission.text, selectedArtifacts);
+            runtimeOperation.succeed();
+            return;
+          }
+          await facade.appendInput(refreshed, submission.text, artifactRefs, crypto.randomUUID());
+        }
         clearComposer(true);
         await refreshLedger();
         const next = await refreshRun(active.id);

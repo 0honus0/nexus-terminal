@@ -1329,12 +1329,17 @@ if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
   exit 1
 fi
 grep -Fq 'RUNNER_JOURNAL_INVALID' "$corrupt_runner_log"
-grep -Fq '{not-json' "$corrupt_runner_root/state/journal.json" || {
-  echo 'Agent Runner replaced the corrupt journal instead of failing closed.' >&2
+[[ ! -e "$corrupt_runner_root/state/journal.json" ]] || {
+  echo 'Agent Runner left the corrupt journal in its active location.' >&2
   exit 1
 }
-compgen -G "$corrupt_runner_root/state/journal.json.corrupt.*" >/dev/null || {
+mapfile -t corrupt_journal_evidence < <(find "$corrupt_runner_root/state" -maxdepth 1 -type f -name 'journal.json.corrupt.*' -print)
+[[ "${#corrupt_journal_evidence[@]}" -eq 1 ]] || {
   echo 'Agent Runner did not preserve the corrupt journal evidence.' >&2
+  exit 1
+}
+grep -Fq '{not-json' "${corrupt_journal_evidence[0]}" || {
+  echo 'Agent Runner changed the corrupt journal evidence.' >&2
   exit 1
 }
 if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
@@ -1346,8 +1351,12 @@ if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
   echo 'Agent Runner accepted the same corrupt journal on a retry.' >&2
   exit 1
 fi
-grep -Fq '{not-json' "$corrupt_runner_root/state/journal.json" || {
-  echo 'Agent Runner changed corrupt journal state after a retry.' >&2
+grep -Fq '{not-json' "${corrupt_journal_evidence[0]}" || {
+  echo 'Agent Runner changed corrupt journal evidence after a retry.' >&2
+  exit 1
+}
+[[ ! -e "$corrupt_runner_root/state/journal.json" ]] || {
+  echo 'Agent Runner restored corrupt journal state after a retry.' >&2
   exit 1
 }
 
