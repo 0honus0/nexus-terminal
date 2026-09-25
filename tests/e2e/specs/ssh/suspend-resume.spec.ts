@@ -762,7 +762,12 @@ test('resumed terminal pages older history through a bounded window and restores
     // Returning to the live tail resets the history cursor. Re-entering history should request
     // the newest previous page again instead of keeping an exhausted cursor from the prior browse.
     await dragHistorySliderToTop();
-    await expect.poll(() => historyRequestCount, { timeout: 10_000 }).toBeGreaterThan(requestsBeforeReturningToTail);
+    await page.mouse.move(scrollableBox!.x + scrollableBox!.width / 2, scrollableBox!.y + scrollableBox!.height / 2);
+    await wheelUntil(
+      -6_000,
+      () => historyRequestCount > requestsBeforeReturningToTail,
+      're-entering history should request an older page',
+    );
   } finally {
     expect((await context.request.put('/api/v1/settings/layout', { data: originalLayout })).ok()).toBeTruthy();
   }
