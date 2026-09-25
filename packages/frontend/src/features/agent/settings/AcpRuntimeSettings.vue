@@ -161,6 +161,8 @@
   // 模态弹窗 1：添加配置档 (Profile)
   const profileModalOpen = ref(false);
   const profileModalError = ref('');
+  const editingProfileId = ref<string | null>(null);
+  const editingProfileIdLocked = ref(false);
   const profileForm = reactive({
     id: '',
     cwd: '/workspace/work',
@@ -169,7 +171,9 @@
 
   const isProfileIdValid = computed(() => /^[a-z][a-z0-9_.-]{0,127}$/.test(profileForm.id.trim()));
   const isProfileIdDuplicate = computed(() =>
-    profiles.value.some((candidate) => candidate.id === profileForm.id.trim()),
+    profiles.value.some(
+      (candidate) => candidate.id === profileForm.id.trim() && candidate.id !== editingProfileId.value,
+    ),
   );
   const isCwdValid = computed(() => {
     const cwd = profileForm.cwd.trim();
@@ -183,6 +187,8 @@
   );
 
   const openAddProfileModal = (): void => {
+    editingProfileId.value = null;
+    editingProfileIdLocked.value = false;
     let index = profiles.value.length + 1;
     let defaultId = `acp-profile-${index}`;
     while (profiles.value.some((candidate) => candidate.id === defaultId)) defaultId = `acp-profile-${++index}`;
@@ -190,6 +196,18 @@
     profileForm.id = defaultId;
     profileForm.cwd = '/workspace/work';
     profileForm.commandInput = 'acp-agent';
+    profileModalError.value = '';
+    profileModalOpen.value = true;
+  };
+
+  const openEditProfileModal = (profile: ProfileDraft): void => {
+    editingProfileId.value = profile.id;
+    editingProfileIdLocked.value = integrations.value.some(
+      (integration) => integration.kind === 'acp' && acpConfiguration(integration).profileId === profile.id,
+    );
+    profileForm.id = profile.id;
+    profileForm.cwd = profile.cwd;
+    profileForm.commandInput = profile.argvText;
     profileModalError.value = '';
     profileModalOpen.value = true;
   };
@@ -205,14 +223,10 @@
       return;
     }
 
-    const nextProfiles: ProfileDraft[] = [
-      ...profiles.value,
-      {
-        id,
-        argvText: JSON.stringify(argv),
-        cwd,
-      },
-    ];
+    const nextDraft: ProfileDraft = { id, argvText: JSON.stringify(argv), cwd };
+    const nextProfiles: ProfileDraft[] = editingProfileId.value
+      ? profiles.value.map((profile) => (profile.id === editingProfileId.value ? nextDraft : profile))
+      : [...profiles.value, nextDraft];
 
     try {
       const normalized = normalizeProfiles(nextProfiles);
@@ -220,6 +234,8 @@
       if (!saved) return;
       profiles.value = nextProfiles;
       profileModalOpen.value = false;
+      editingProfileId.value = null;
+      editingProfileIdLocked.value = false;
     } catch (cause) {
       profileModalError.value = explain(cause);
     }
@@ -443,6 +459,19 @@
             >
               <UiButton
                 appearance="ghost"
+                tone="neutral"
+                density="compact"
+                icon-only
+                type="button"
+                :disabled="disabled"
+                :title="$t('common.edit')"
+                :aria-label="$t('common.edit')"
+                @click="openEditProfileModal(profile)"
+              >
+                <i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
+              </UiButton>
+              <UiButton
+                appearance="ghost"
                 tone="danger"
                 density="compact"
                 icon-only
@@ -631,8 +660,8 @@
     <!-- 弹窗 1：添加 ACP 配置档模态弹窗 -->
     <BaseModal
       :visible="profileModalOpen"
-      :title="$t('agent.settings.acpRuntime.modalProfileTitle')"
-      :aria-label="$t('agent.settings.acpRuntime.modalProfileTitle')"
+      :title="editingProfileId ? $t('common.edit') : $t('agent.settings.acpRuntime.modalProfileTitle')"
+      :aria-label="editingProfileId ? $t('common.edit') : $t('agent.settings.acpRuntime.modalProfileTitle')"
       :close-on-backdrop="!disabled"
       :close-on-escape="!disabled"
       :focus-on-open="true"
@@ -658,6 +687,7 @@
                 ></i>
                 <input
                   v-model="profileForm.id"
+                  :disabled="editingProfileIdLocked"
                   required
                   data-no-highlight
                   class="h-9 w-full rounded-lg border border-border/80 bg-background pl-8 pr-3 font-mono text-xs text-foreground outline-none focus:border-border-hover transition-colors"
@@ -744,8 +774,12 @@
             :disabled="!canSubmitProfile"
             @click="submitAddProfile"
           >
-            <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-            <span>{{ $t('agent.settings.providers.saveAndAdd') }}</span>
+            <i
+              :class="editingProfileId ? 'fa-solid fa-floppy-disk' : 'fa-solid fa-plus'"
+              class="text-xs"
+              aria-hidden="true"
+            ></i>
+            <span>{{ editingProfileId ? $t('common.save') : $t('agent.settings.providers.saveAndAdd') }}</span>
           </UiButton>
         </div>
       </template>

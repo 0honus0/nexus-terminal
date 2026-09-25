@@ -53,6 +53,7 @@
   // 模态弹窗 1：添加目标 (Target)
   const targetModalOpen = ref(false);
   const targetModalError = ref('');
+  const editingTargetId = ref<string | null>(null);
   const targetForm = reactive({
     id: '',
     patternsText: 'https://*/*',
@@ -66,6 +67,7 @@
   });
 
   const openAddTargetModal = (): void => {
+    editingTargetId.value = null;
     let index = targets.value.length + 1;
     let defaultId = `browser-${index}`;
     while (targets.value.some((target) => target.id === defaultId)) defaultId = `browser-${++index}`;
@@ -83,13 +85,22 @@
     targetModalOpen.value = true;
   };
 
+  const openEditTargetModal = (target: BrowserTarget): void => {
+    editingTargetId.value = target.id;
+    targetForm.id = target.id;
+    targetForm.patternsText = target.allowedUrlPatterns.join('\n');
+    targetForm.includeEndpoint = false;
+    targetModalError.value = '';
+    targetModalOpen.value = true;
+  };
+
   const submitAddTarget = async (): Promise<void> => {
     const id = targetForm.id.trim();
     if (!id) {
       targetModalError.value = t('agent.settings.disabledReason.incompleteForm');
       return;
     }
-    if (targets.value.some((candidate) => candidate.id === id)) {
+    if (targets.value.some((candidate) => candidate.id === id && candidate.id !== editingTargetId.value)) {
       targetModalError.value = `ID "${id}" already exists.`;
       return;
     }
@@ -112,9 +123,24 @@
     }
 
     const nextTargets = cloneTargets(targets.value);
-    nextTargets.push({ id, endpoints, allowedUrlPatterns: patterns.length > 0 ? patterns : ['https://*/*'] });
-    const saved = await persistTargets(nextTargets, t('agent.settings.browserRuntime.targetCreated'));
-    if (saved) targetModalOpen.value = false;
+    const allowedUrlPatterns = patterns.length > 0 ? patterns : ['https://*/*'];
+    if (editingTargetId.value) {
+      const index = nextTargets.findIndex((candidate) => candidate.id === editingTargetId.value);
+      if (index < 0) return;
+      const current = nextTargets[index];
+      if (!current) return;
+      nextTargets[index] = { ...current, id, allowedUrlPatterns };
+    } else {
+      nextTargets.push({ id, endpoints, allowedUrlPatterns });
+    }
+    const saved = await persistTargets(
+      nextTargets,
+      editingTargetId.value ? t('agent.ui.saved') : t('agent.settings.browserRuntime.targetCreated'),
+    );
+    if (saved) {
+      targetModalOpen.value = false;
+      editingTargetId.value = null;
+    }
   };
 
   const removeTarget = async (index: number): Promise<void> => {
@@ -125,6 +151,7 @@
 
   // 模态弹窗 2：为指定目标添加端点 (Endpoint)
   const endpointModalOpen = ref(false);
+  const editingEndpointIndex = ref<number | null>(null);
   const endpointModalTarget = ref<BrowserTarget | null>(null);
   const endpointModalError = ref('');
   const endpointForm = reactive({
@@ -137,6 +164,7 @@
   });
 
   const openAddEndpointModal = (target: BrowserTarget): void => {
+    editingEndpointIndex.value = null;
     endpointModalTarget.value = target;
     endpointForm.url = 'http://127.0.0.1:9222';
     endpointForm.scope = 'external-network';
@@ -144,6 +172,21 @@
     endpointForm.priority = target.endpoints.length * 10 + 10;
     endpointForm.allowPlaintext = true;
     endpointForm.verifyTls = true;
+    endpointModalError.value = '';
+    endpointModalOpen.value = true;
+  };
+
+  const openEditEndpointModal = (target: BrowserTarget, endpointIndex: number): void => {
+    const endpoint = target.endpoints[endpointIndex];
+    if (!endpoint) return;
+    endpointModalTarget.value = target;
+    editingEndpointIndex.value = endpointIndex;
+    endpointForm.url = endpoint.url;
+    endpointForm.scope = endpoint.scope;
+    endpointForm.via = endpoint.via;
+    endpointForm.priority = endpoint.priority;
+    endpointForm.allowPlaintext = endpoint.allowPlaintext;
+    endpointForm.verifyTls = endpoint.verifyTls;
     endpointModalError.value = '';
     endpointModalOpen.value = true;
   };
@@ -160,17 +203,26 @@
     const target = nextTargets.find((candidate) => candidate.id === endpointModalTarget.value?.id);
     if (!target) return;
 
-    target.endpoints.push({
+    const nextEndpoint: BrowserEndpoint = {
       scope: endpointForm.scope,
       via: endpointForm.via,
       url,
       priority: endpointForm.priority || 10,
       allowPlaintext: endpointForm.allowPlaintext,
       verifyTls: endpointForm.verifyTls,
-    });
+    };
+    if (editingEndpointIndex.value === null) target.endpoints.push(nextEndpoint);
+    else if (target.endpoints[editingEndpointIndex.value]) target.endpoints[editingEndpointIndex.value] = nextEndpoint;
+    else return;
 
-    const saved = await persistTargets(nextTargets, t('agent.settings.browserRuntime.endpointAdded'));
-    if (saved) endpointModalOpen.value = false;
+    const saved = await persistTargets(
+      nextTargets,
+      editingEndpointIndex.value === null ? t('agent.settings.browserRuntime.endpointAdded') : t('agent.ui.saved'),
+    );
+    if (saved) {
+      endpointModalOpen.value = false;
+      editingEndpointIndex.value = null;
+    }
   };
 
   const removeEndpoint = async (target: BrowserTarget, endpointIndex: number): Promise<void> => {
@@ -310,6 +362,19 @@
             </UiButton>
             <UiButton
               appearance="soft"
+              tone="neutral"
+              density="compact"
+              icon-only
+              type="button"
+              :disabled="busy"
+              :title="$t('common.edit')"
+              :aria-label="$t('common.edit')"
+              @click="openEditTargetModal(target)"
+            >
+              <i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
+            </UiButton>
+            <UiButton
+              appearance="soft"
               tone="danger"
               density="compact"
               icon-only
@@ -354,6 +419,19 @@
               <span v-if="endpoint.verifyTls" class="text-[10px] text-success">TLS</span>
               <UiButton
                 appearance="ghost"
+                tone="neutral"
+                density="compact"
+                icon-only
+                type="button"
+                :disabled="busy"
+                :title="$t('common.edit')"
+                :aria-label="$t('common.edit')"
+                @click="openEditEndpointModal(target, endpointIndex)"
+              >
+                <i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
+              </UiButton>
+              <UiButton
+                appearance="ghost"
                 tone="danger"
                 density="compact"
                 icon-only
@@ -388,8 +466,8 @@
     <!-- 弹窗 1：添加浏览器目标模态弹窗 -->
     <BaseModal
       :visible="targetModalOpen"
-      :title="$t('agent.settings.browserRuntime.modalTitle')"
-      :aria-label="$t('agent.settings.browserRuntime.modalTitle')"
+      :title="editingTargetId ? $t('common.edit') : $t('agent.settings.browserRuntime.modalTitle')"
+      :aria-label="editingTargetId ? $t('common.edit') : $t('agent.settings.browserRuntime.modalTitle')"
       :close-on-backdrop="!busy"
       :close-on-escape="!busy"
       :focus-on-open="true"
@@ -436,7 +514,7 @@
           </label>
 
           <!-- 初始端点配置子区块 -->
-          <div class="rounded-xl border border-border/60 bg-header/15 p-3.5 space-y-3">
+          <div v-if="!editingTargetId" class="rounded-xl border border-border/60 bg-header/15 p-3.5 space-y-3">
             <div class="flex items-center justify-between">
               <span class="text-xs font-semibold text-foreground flex items-center gap-1.5">
                 <i class="fa-solid fa-link text-primary text-[11px]" aria-hidden="true"></i>
@@ -542,8 +620,12 @@
             :disabled="busy || !targetForm.id.trim()"
             @click="submitAddTarget"
           >
-            <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-            <span>{{ $t('agent.settings.providers.saveAndAdd') }}</span>
+            <i
+              :class="editingTargetId ? 'fa-solid fa-floppy-disk' : 'fa-solid fa-plus'"
+              class="text-xs"
+              aria-hidden="true"
+            ></i>
+            <span>{{ editingTargetId ? $t('common.save') : $t('agent.settings.providers.saveAndAdd') }}</span>
           </UiButton>
         </div>
       </template>
@@ -552,8 +634,10 @@
     <!-- 弹窗 2：添加端点模态弹窗 -->
     <BaseModal
       :visible="endpointModalOpen"
-      :title="`${endpointModalTarget?.id || ''} · ${$t('agent.settings.browserRuntime.modalEndpointTitle')}`"
-      :aria-label="$t('agent.settings.browserRuntime.modalEndpointTitle')"
+      :title="`${endpointModalTarget?.id || ''} · ${editingEndpointIndex === null ? $t('agent.settings.browserRuntime.modalEndpointTitle') : $t('common.edit')}`"
+      :aria-label="
+        editingEndpointIndex === null ? $t('agent.settings.browserRuntime.modalEndpointTitle') : $t('common.edit')
+      "
       :close-on-backdrop="!busy"
       :close-on-escape="!busy"
       :focus-on-open="true"
@@ -661,8 +745,14 @@
             :disabled="busy || !endpointForm.url.trim()"
             @click="submitAddEndpoint"
           >
-            <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-            <span>{{ $t('agent.settings.providers.saveAndAdd') }}</span>
+            <i
+              :class="editingEndpointIndex === null ? 'fa-solid fa-plus' : 'fa-solid fa-floppy-disk'"
+              class="text-xs"
+              aria-hidden="true"
+            ></i>
+            <span>{{
+              editingEndpointIndex === null ? $t('agent.settings.providers.saveAndAdd') : $t('common.save')
+            }}</span>
           </UiButton>
         </div>
       </template>

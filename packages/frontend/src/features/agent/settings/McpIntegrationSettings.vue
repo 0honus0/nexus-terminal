@@ -27,6 +27,7 @@
   // 模态弹窗状态
   const modalOpen = ref(false);
   const modalError = ref('');
+  const editingIntegration = ref<AgentIntegrationViewDto | null>(null);
   const showCredential = ref(false);
   const form = reactive({
     displayName: '',
@@ -95,6 +96,7 @@
   };
 
   const openAddModal = (): void => {
+    editingIntegration.value = null;
     pendingCreateIdentity = null;
     form.displayName = '';
     form.endpoint = '';
@@ -106,7 +108,22 @@
     modalOpen.value = true;
   };
 
+  const openEditModal = (integration: AgentIntegrationViewDto): void => {
+    const configuration = mcpConfiguration(integration);
+    editingIntegration.value = integration;
+    pendingCreateIdentity = null;
+    form.displayName = configuration.displayName;
+    form.endpoint = configuration.endpoint;
+    form.credential = '';
+    form.trustToolAnnotations = configuration.trustToolAnnotations === true;
+    form.enabled = integration.enabled;
+    modalError.value = '';
+    showCredential.value = false;
+    modalOpen.value = true;
+  };
+
   const closeAddModal = (): void => {
+    editingIntegration.value = null;
     pendingCreateIdentity = null;
     modalOpen.value = false;
     modalError.value = '';
@@ -124,26 +141,44 @@
     localBusy.value = true;
     modalError.value = '';
     try {
-      const input = {
-        kind: 'mcp' as const,
-        configuration: {
-          displayName: name,
-          transport: 'streamable-http' as const,
-          endpoint: url,
-          privateHostExceptions: [],
-          protocolVersion: '2026-07-28' as const,
-          trustToolAnnotations: form.trustToolAnnotations,
-        },
-        enabled: form.enabled,
-        ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
-      };
-      const fingerprint = JSON.stringify(input);
-      if (!pendingCreateIdentity || pendingCreateIdentity.fingerprint !== fingerprint) {
-        pendingCreateIdentity = { fingerprint, idempotencyKey: crypto.randomUUID() };
+      const credential = form.credential.trim();
+      if (editingIntegration.value) {
+        const existing = editingIntegration.value;
+        const configuration = mcpConfiguration(existing);
+        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, existing, {
+          kind: 'mcp',
+          configuration: {
+            ...configuration,
+            displayName: name,
+            endpoint: url,
+            trustToolAnnotations: form.trustToolAnnotations,
+          },
+          enabled: form.enabled,
+          ...(credential ? { credential } : {}),
+        });
+        operationFeedback.notifySuccess(t('agent.settings.mcpIntegrations.updated'));
+      } else {
+        const input = {
+          kind: 'mcp' as const,
+          configuration: {
+            displayName: name,
+            transport: 'streamable-http' as const,
+            endpoint: url,
+            privateHostExceptions: [],
+            protocolVersion: '2026-07-28' as const,
+            trustToolAnnotations: form.trustToolAnnotations,
+          },
+          enabled: form.enabled,
+          ...(credential ? { credential } : {}),
+        };
+        const fingerprint = JSON.stringify(input);
+        if (!pendingCreateIdentity || pendingCreateIdentity.fingerprint !== fingerprint) {
+          pendingCreateIdentity = { fingerprint, idempotencyKey: crypto.randomUUID() };
+        }
+        await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, input, pendingCreateIdentity.idempotencyKey);
+        pendingCreateIdentity = null;
+        operationFeedback.notifySuccess(t('agent.settings.mcpIntegrations.created'));
       }
-      await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, input, pendingCreateIdentity.idempotencyKey);
-      pendingCreateIdentity = null;
-      operationFeedback.notifySuccess(t('agent.settings.mcpIntegrations.created'));
       closeAddModal();
       await loadIntegrations();
     } catch (cause) {
@@ -415,6 +450,19 @@
               ></i>
             </UiButton>
             <UiButton
+              appearance="soft"
+              tone="neutral"
+              density="compact"
+              icon-only
+              type="button"
+              :disabled="disabled"
+              :title="$t('common.edit')"
+              :aria-label="$t('common.edit')"
+              @click="openEditModal(integration)"
+            >
+              <i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
+            </UiButton>
+            <UiButton
               type="button"
               appearance="soft"
               density="compact"
@@ -518,8 +566,8 @@
     <!-- 添加 MCP 集成模态弹窗（遵循添加模型服务商 (Provider) 新 UI 风格） -->
     <BaseModal
       :visible="modalOpen"
-      :title="$t('agent.settings.mcpIntegrations.modalTitle')"
-      :aria-label="$t('agent.settings.mcpIntegrations.modalTitle')"
+      :title="editingIntegration ? $t('common.edit') : $t('agent.settings.mcpIntegrations.modalTitle')"
+      :aria-label="editingIntegration ? $t('common.edit') : $t('agent.settings.mcpIntegrations.modalTitle')"
       :close-on-backdrop="!localBusy"
       :close-on-escape="!localBusy"
       :focus-on-open="true"
@@ -645,8 +693,12 @@
             :disabled="disabled || !form.displayName.trim() || !form.endpoint.trim()"
             @click="submitAddModal"
           >
-            <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-            <span>{{ $t('agent.settings.providers.saveAndAdd') }}</span>
+            <i
+              :class="editingIntegration ? 'fa-solid fa-floppy-disk' : 'fa-solid fa-plus'"
+              class="text-xs"
+              aria-hidden="true"
+            ></i>
+            <span>{{ editingIntegration ? $t('common.save') : $t('agent.settings.providers.saveAndAdd') }}</span>
           </UiButton>
         </div>
       </template>
