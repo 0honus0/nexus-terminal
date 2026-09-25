@@ -496,7 +496,6 @@
                 >
                   {{ displayText(command) }}
                 </span>
-
               </div>
               <span
                 class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-secondary/40 opacity-0 group-hover:opacity-100 group-hover:text-primary group-hover:bg-primary/10 transition-all text-[9px]"
@@ -532,7 +531,6 @@
               >
                 {{ displayText(command) }}
               </span>
-
             </div>
             <span
               class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-secondary/40 opacity-0 group-hover:opacity-100 group-hover:text-primary group-hover:bg-primary/10 transition-all text-[9px]"
@@ -639,7 +637,6 @@
     .quick-command-row {
       padding-inline: 0.45rem;
     }
-
   }
   @container quick-commands-pane (max-width: 105px) {
     .quick-commands-controls {

@@ -432,7 +432,6 @@
     .command-history-row {
       padding-inline: 0.45rem;
     }
-
   }
   @container command-history-pane (max-width: 125px) {
     .command-history-controls {

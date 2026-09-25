@@ -1261,7 +1261,7 @@
     @dragleave="handleDragLeave"
     @drop.prevent="dropFiles"
   >
-        <header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2">
+    <header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2">
       <div
         class="file-manager-actions flex min-w-0 items-center"
         :class="{ 'is-searching': searchExpanded, 'is-wide': listViewportWidth >= 280 }"
@@ -1526,7 +1526,9 @@
                 @click="browser.setSort('permissions')"
               >
                 <span>{{ t('fileManager.headers.permissions') }}</span>
-                <span v-if="browser.sortKey.value === 'permissions'" class="text-[10px]">{{ sortMark('permissions') }}</span>
+                <span v-if="browser.sortKey.value === 'permissions'" class="text-[10px]">{{
+                  sortMark('permissions')
+                }}</span>
               </button>
               <span
                 v-if="canResizePermissions"
@@ -1618,7 +1620,10 @@
             @pointerup="longPress.end"
             @pointercancel="longPress.cancel"
           >
-            <td class="file-row-cell file-row-name truncate text-left" :class="entry.metadata.isDirectory ? 'font-medium' : ''">
+            <td
+              class="file-row-cell file-row-name truncate text-left"
+              :class="entry.metadata.isDirectory ? 'font-medium' : ''"
+            >
               <div class="file-row-name-container flex min-w-0 items-center gap-2">
                 <i
                   :class="[
@@ -1659,7 +1664,11 @@
             </td>
           </tr>
           <tr v-if="virtualBottomPadding" aria-hidden="true">
-            <td :colspan="visibleColumnCount" class="border-0 p-0" :style="{ height: `${virtualBottomPadding}px` }"></td>
+            <td
+              :colspan="visibleColumnCount"
+              class="border-0 p-0"
+              :style="{ height: `${virtualBottomPadding}px` }"
+            ></td>
           </tr>
         </tbody>
       </table>
