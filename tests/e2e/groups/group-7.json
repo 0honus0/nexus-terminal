@@ -3,15 +3,8 @@
   "group": 7,
   "workers": 8,
   "specs": [
-    "specs/ui/notification-delivery.spec.ts",
-    "specs/ui/notification-settings.spec.ts",
-    "specs/ui/proxy-management.spec.ts",
-    "specs/ui/system-settings.spec.ts",
-    "specs/ui/theme-switching.spec.ts",
-    "specs/ssh/command-history-management.spec.ts",
-    "specs/ssh/quick-command-collapsible-search.spec.ts",
-    "specs/ssh/quick-command-management.spec.ts",
-    "specs/ssh/quick-command-tags-variables.spec.ts",
-    "specs/ssh/progress-display-baseline.spec.ts"
+    "specs/ui/workspace-no-session.spec.ts",
+    "specs/ssh/cross-session-transfer.spec.ts",
+    "specs/ssh/file-upload.spec.ts"
   ]
 }
