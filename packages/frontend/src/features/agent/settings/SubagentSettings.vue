@@ -56,6 +56,39 @@
 
   const modelKey = (model: AgentSubagentProfileDto['defaultModel']): string =>
     model ? `${model.providerId}\u0000${model.modelId}\u0000${model.configurationVersion}` : '';
+  type ModelRef = NonNullable<AgentSubagentProfileDto['defaultModel']>;
+  const modelFamilyKey = (model: ModelRef): string => `${model.providerId}\u0000${model.modelId}`;
+  const currentModelOption = (model: ModelRef) =>
+    modelOptions.value.find(
+      (candidate) => candidate.ref.providerId === model.providerId && candidate.ref.modelId === model.modelId,
+    );
+  const staleModelRefs = (profile: AgentSubagentProfileDto): ModelRef[] => {
+    const refs = [...profile.allowedModels, ...(profile.defaultModel ? [profile.defaultModel] : [])];
+    const stale = new Map<string, ModelRef>();
+    for (const model of refs) {
+      if (modelOptions.value.some((candidate) => candidate.key === modelKey(model))) continue;
+      stale.set(modelKey(model), model);
+    }
+    return [...stale.values()];
+  };
+  const replaceModelFamily = (profile: AgentSubagentProfileDto, next: ModelRef): void => {
+    const family = modelFamilyKey(next);
+    profile.allowedModels = [...profile.allowedModels.filter((model) => modelFamilyKey(model) !== family), { ...next }];
+    if (profile.defaultModel && modelFamilyKey(profile.defaultModel) === family) {
+      profile.defaultModel = { ...next };
+    }
+  };
+  const rebindModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): void => {
+    const current = currentModelOption(stale);
+    if (!current) return;
+    replaceModelFamily(profile, current.ref);
+  };
+  const canRemoveStaleModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): boolean =>
+    modelKey(profile.defaultModel) !== modelKey(stale) && profile.allowedModels.length > 1;
+  const removeStaleModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): void => {
+    if (!canRemoveStaleModelRef(profile, stale)) return;
+    profile.allowedModels = profile.allowedModels.filter((model) => modelKey(model) !== modelKey(stale));
+  };
   const preferredModel = computed(() => {
     const requested = props.settings.requestedSettings.model;
     return (
@@ -159,22 +192,28 @@
   const setDefaultModel = (profile: AgentSubagentProfileDto, key: string): void => {
     const selected = modelOptions.value.find((candidate) => candidate.key === key);
     if (!selected) return;
+    const family = modelFamilyKey(selected.ref);
+    profile.allowedModels = profile.allowedModels.filter((model) => modelFamilyKey(model) !== family);
+    profile.allowedModels.push({ ...selected.ref });
     profile.defaultModel = { ...selected.ref };
-    if (!profile.allowedModels.some((model) => modelKey(model) === key))
-      profile.allowedModels.push({ ...selected.ref });
   };
 
   const toggleAllowedModel = (profile: AgentSubagentProfileDto, key: string, checked: boolean): void => {
     const selected = modelOptions.value.find((candidate) => candidate.key === key);
     if (!selected) return;
+    const family = modelFamilyKey(selected.ref);
     if (checked) {
-      if (!profile.allowedModels.some((model) => modelKey(model) === key))
-        profile.allowedModels.push({ ...selected.ref });
+      replaceModelFamily(profile, selected.ref);
       if (!profile.defaultModel) profile.defaultModel = { ...selected.ref };
       return;
     }
-    if (profile.allowedModels.length <= 1 || modelKey(profile.defaultModel) === key) return;
-    profile.allowedModels = profile.allowedModels.filter((model) => modelKey(model) !== key);
+    const familyModels = profile.allowedModels.filter((model) => modelFamilyKey(model) === family);
+    if (
+      profile.allowedModels.length - familyModels.length < 1 ||
+      (profile.defaultModel && modelFamilyKey(profile.defaultModel) === family)
+    )
+      return;
+    profile.allowedModels = profile.allowedModels.filter((model) => modelFamilyKey(model) !== family);
   };
 
   const toggleCapability = (profile: AgentSubagentProfileDto, capability: CapabilityId, checked: boolean): void => {
@@ -185,6 +224,10 @@
     }
   };
 
+  const hasStaleModelRefs = computed(() =>
+    Boolean(profileSettings.value?.policy.profiles.some((profile) => staleModelRefs(profile).length > 0)),
+  );
+
   const saveProfiles = async (): Promise<void> => {
     const appId = profileAppId.value;
     if (
@@ -192,7 +235,8 @@
       !appId ||
       selectedAppId.value !== appId ||
       profileBusy.value ||
-      invalidProfileLimits.value
+      invalidProfileLimits.value ||
+      hasStaleModelRefs.value
     )
       return;
     const requestGeneration = profileLoadGeneration;
@@ -408,6 +452,47 @@
             :key="`${profile.id}:${index}`"
             class="rounded-lg bg-header/25 p-4"
           >
+            <div
+              v-for="stale in staleModelRefs(profile)"
+              :key="`stale:${modelKey(stale)}`"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs"
+            >
+              <span class="text-text-secondary">
+                {{
+                  $t('agent.settings.subagents.staleModel', {
+                    model: `${stale.providerId} · ${stale.modelId}`,
+                    version: stale.configurationVersion,
+                  })
+                }}
+              </span>
+              <UiButton
+                v-if="currentModelOption(stale)"
+                appearance="soft"
+                tone="neutral"
+                density="compact"
+                type="button"
+                :disabled="profileBusy"
+                @click="rebindModelRef(profile, stale)"
+              >
+                {{ $t('agent.settings.subagents.rebindModel') }}
+              </UiButton>
+              <div v-else class="flex items-center gap-2">
+                <span class="font-medium text-warning">
+                  {{ $t('agent.settings.subagents.modelUnavailable') }}
+                </span>
+                <UiButton
+                  v-if="canRemoveStaleModelRef(profile, stale)"
+                  appearance="soft"
+                  tone="neutral"
+                  density="compact"
+                  type="button"
+                  :disabled="profileBusy"
+                  @click="removeStaleModelRef(profile, stale)"
+                >
+                  {{ $t('agent.settings.subagents.removeStaleModel') }}
+                </UiButton>
+              </div>
+            </div>
             <div class="grid gap-3 lg:grid-cols-3">
               <label>
                 <span class="mb-1 block text-xs text-text-secondary">{{
@@ -537,12 +622,13 @@
         </div>
 
         <div class="mt-4 flex items-center justify-end gap-2">
+          <UiInfoHint v-if="hasStaleModelRefs" :text="$t('agent.settings.subagents.rebindBeforeSave')" />
           <UiInfoHint v-if="!isProfilesDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
           <UiButton
             :appearance="isProfilesDirty ? 'solid' : 'soft'"
             :tone="isProfilesDirty ? 'primary' : 'neutral'"
             type="button"
-            :disabled="profileBusy || !profileSettings || invalidProfileLimits || !isProfilesDirty"
+            :disabled="profileBusy || !profileSettings || invalidProfileLimits || hasStaleModelRefs || !isProfilesDirty"
             @click="saveProfiles"
           >
             {{ $t('agent.settings.subagents.saveProfiles') }}
