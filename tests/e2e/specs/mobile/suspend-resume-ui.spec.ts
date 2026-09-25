@@ -204,12 +204,18 @@ test('mobile resumed terminal loads older suspended output when dragged downward
   // toward older output. The first gesture can land on the currently loaded history boundary while
   // the previous page is fetched. Prepending intentionally preserves that viewport anchor, so a
   // following downward gesture is what navigates into the newly inserted rows.
-  for (let attempt = 0; attempt < 6 && !(await rows.innerText()).includes(earlyMarker); attempt += 1) {
+  for (let attempt = 0; attempt < 6 && historyRequests === 0; attempt += 1) {
+    await dragTerminalDown(page);
+    await page.waitForTimeout(250);
+  }
+  expect(historyRequests).toBeGreaterThan(0);
+  await expect(rows).not.toContainText(earlyMarker);
+
+  for (let attempt = 0; attempt < 30 && !(await rows.innerText()).includes(earlyMarker); attempt += 1) {
     await dragTerminalDown(page);
     await page.waitForTimeout(250);
   }
   await expect.poll(async () => rows.innerText(), { timeout: 20_000 }).toContain(earlyMarker);
-  expect(historyRequests).toBeGreaterThan(0);
 
   const resumedTab = page
     .getByTestId('terminal-tab-bar')

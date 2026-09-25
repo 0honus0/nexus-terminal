@@ -229,7 +229,7 @@
     // capabilities so TerminalView can lazily page older history after a resume.
     setPreviousOutputAvailable: (available) => runtimeTerminalChannel.setPreviousOutputAvailable?.(available),
     hasPreviousOutput: () => runtimeTerminalChannel.hasPreviousOutput?.() ?? false,
-    loadPreviousOutput: () => runtimeTerminalChannel.loadPreviousOutput?.() ?? Promise.resolve(null),
+    loadPreviousOutput: (maxBytes) => runtimeTerminalChannel.loadPreviousOutput?.(maxBytes) ?? Promise.resolve(null),
     resetPreviousOutput: () => runtimeTerminalChannel.resetPreviousOutput?.() ?? Promise.resolve(false),
   };
   watch(

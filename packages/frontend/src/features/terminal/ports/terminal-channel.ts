@@ -15,6 +15,6 @@ export interface TerminalChannel {
   completeResume?(): void;
   setPreviousOutputAvailable?(available: boolean): void;
   hasPreviousOutput?(): boolean;
-  loadPreviousOutput?(): Promise<TerminalHistoryPage | null>;
+  loadPreviousOutput?(maxBytes?: number): Promise<TerminalHistoryPage | null>;
   resetPreviousOutput?(): Promise<boolean>;
 }

@@ -513,6 +513,10 @@ export interface WorkspaceSuspendHistoryPreviousResponseDto {
   hasMore: boolean;
 }
 
+export interface WorkspaceSuspendHistoryPreviousRequestDto {
+  maxBytes?: number;
+}
+
 export interface WorkspaceSuspendHistoryResetResponseDto {
   available: boolean;
 }
@@ -546,7 +550,7 @@ export interface WorkspaceSuspendRequestMapDto {
   'suspend.list': Record<string, never>;
   'suspend.resume': WorkspaceSuspendResumeRequestDto;
   'suspend.owner.renew': Record<string, never>;
-  'suspend.history.previous': Record<string, never>;
+  'suspend.history.previous': WorkspaceSuspendHistoryPreviousRequestDto;
   'suspend.history.reset': Record<string, never>;
   'suspend.terminate': WorkspaceSuspendSessionRequestDto;
   'suspend.remove': WorkspaceSuspendSessionRequestDto;

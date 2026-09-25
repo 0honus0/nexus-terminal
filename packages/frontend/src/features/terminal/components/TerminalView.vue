@@ -306,7 +306,8 @@
     const generation = historyViewGeneration;
     historyLoading = true;
     try {
-      const page = await props.channel.loadPreviousOutput();
+      const pageBytes = Math.max(16 * 1024, Math.min(64 * 1024, (terminal?.cols ?? 80) * (terminal?.rows ?? 24) * 8));
+      const page = await props.channel.loadPreviousOutput(pageBytes);
       if (generation !== historyViewGeneration) return;
       if (page?.data.byteLength) await rebuildHistoryWindow(page.data);
     } catch {

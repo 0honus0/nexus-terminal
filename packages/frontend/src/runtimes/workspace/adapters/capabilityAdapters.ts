@@ -123,11 +123,11 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
     hasPreviousOutput() {
       return previousOutputAvailable;
     },
-    async loadPreviousOutput() {
+    async loadPreviousOutput(maxBytes) {
       if (!previousOutputAvailable) return null;
       if (historyLoad) return historyLoad;
       const task = socket
-        .requestBinary('suspend.history.previous', {})
+        .requestBinary('suspend.history.previous', maxBytes ? { maxBytes } : {})
         .then(({ data: page, bytes }) => {
           previousOutputAvailable = page.hasMore;
           return {

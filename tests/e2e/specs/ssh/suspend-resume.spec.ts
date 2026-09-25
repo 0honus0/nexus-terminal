@@ -555,6 +555,12 @@ test('resume sends only the newest cached tail and pages older terminal history 
     );
     expect(replayedFirstPage.data).toEqual(firstPreviousPage!.data);
     expect(replayedFirstPage.bytes.equals(firstPreviousPage!.bytes)).toBe(true);
+    await requestWorkspace(recoverySocket, 'suspend.history.reset');
+    const boundedPage = await requestWorkspaceBinary<{ hasMore: boolean }>(recoverySocket, 'suspend.history.previous', {
+      maxBytes: 16 * 1024,
+    });
+    expect(boundedPage.bytes.byteLength).toBeLessThanOrEqual(16 * 1024);
+    expect(boundedPage.data.hasMore).toBe(true);
     await requestWorkspace(recoverySocket, 'suspend.unmark');
   } finally {
     await closeWebSocket(recoverySocket);

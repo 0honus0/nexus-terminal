@@ -584,7 +584,7 @@ export class WorkspaceProtocolSession {
       case 'suspend.owner.renew':
         return this.suspendOwnerRenew();
       case 'suspend.history.previous':
-        return this.suspendHistoryPrevious();
+        return this.suspendHistoryPrevious(payload);
       case 'suspend.history.reset':
         return this.suspendHistoryReset();
       case 'suspend.terminate':
@@ -1073,10 +1073,11 @@ export class WorkspaceProtocolSession {
     return response;
   }
 
-  private async suspendHistoryPrevious() {
+  private async suspendHistoryPrevious(payload: JsonRecord) {
     const history = await this.dependencies.suspendCoordinator.loadPreviousHistory(
       this.requireWorkspace(),
       this.identity.userId,
+      numberValue(payload.maxBytes),
     );
     const response: WorkspaceSuspendHistoryPreviousResponseDto = { hasMore: history.hasMore };
     return new WorkspaceBinaryResponse(response, singleBinaryChunk(history.data));

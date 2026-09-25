@@ -449,14 +449,21 @@ export class WorkspaceSuspendCoordinatorService {
       );
   }
 
-  async loadPreviousHistory(workspaceId: string, userId: number): Promise<PreviousWorkspaceHistoryResult> {
+  async loadPreviousHistory(
+    workspaceId: string,
+    userId: number,
+    maxBytes?: number,
+  ): Promise<PreviousWorkspaceHistoryResult> {
     const session = this.workspaces.requireSession(workspaceId);
     if (session.userId !== userId) throw new Error('无权读取此会话的历史输出。');
     const history = this.resumedHistory.get(workspaceId);
     if (!history || history.userId !== userId || history.cursor <= 0) {
       return { data: new Uint8Array(), hasMore: false };
     }
-    const page = await this.logs.readBefore(history.logIdentifier, history.cursor, RESUME_HISTORY_PAGE_BYTES);
+    const requestedBytes =
+      typeof maxBytes === 'number' && Number.isFinite(maxBytes) ? maxBytes : RESUME_HISTORY_PAGE_BYTES;
+    const pageBytes = Math.max(4096, Math.min(RESUME_HISTORY_PAGE_BYTES, Math.floor(requestedBytes)));
+    const page = await this.logs.readBefore(history.logIdentifier, history.cursor, pageBytes);
     history.cursor = page.startOffset;
     const hasMore = page.startOffset > 0;
     return { data: page.data, hasMore };
