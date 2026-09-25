@@ -7,12 +7,14 @@ ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/protocol/package.json ./packages/protocol/package.json
 
 FROM workspace-base AS backend-builder
 RUN apk add --no-cache python3 py3-setuptools make g++
 COPY packages/backend/package.json ./packages/backend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/backend
+COPY packages/protocol/src ./packages/protocol/src
 COPY packages/backend/src ./packages/backend/src
 COPY packages/backend/tsconfig.json ./packages/backend/tsconfig.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
@@ -25,6 +27,7 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 COPY packages/frontend/package.json ./packages/frontend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/frontend
+COPY packages/protocol/src ./packages/protocol/src
 COPY packages/frontend/src ./packages/frontend/src
 COPY packages/frontend/public ./packages/frontend/public
 COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./packages/frontend/
