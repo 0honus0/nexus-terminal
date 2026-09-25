@@ -2,6 +2,7 @@ export type AgentReasoningEffortDto = 'none' | 'minimal' | 'low' | 'medium' | 'h
 export type AgentModelCapabilityDto = 'tools' | 'image_input' | 'file_input' | 'reasoning';
 export type AgentModelCapabilitySourceDto = 'registry' | 'provider' | 'manual';
 export type AgentReasoningCapabilitySourceDto = 'provider' | 'registry' | 'manual';
+export const AGENT_PROVIDER_MODEL_LIMIT = 100;
 export type AgentModelCapabilityFieldDto =
   | 'contextWindow'
   | 'maxOutputTokens'

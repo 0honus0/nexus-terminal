@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { AGENT_PROVIDER_MODEL_LIMIT } from '@nexus-terminal/protocol/agent-providers';
 import { logErrorCode, logger } from '../../../shared/logging/logger';
 import type { ClockPort } from '../agent.types';
 import type { LanguageModelPort } from './language-model.port';
@@ -145,7 +146,7 @@ const validateProviderInput = (
     throw new Error('VALIDATION_FAILED');
   }
   if (raw.credential !== undefined && raw.clearCredential === true) throw new Error('VALIDATION_FAILED');
-  if (!Array.isArray(raw.models) || raw.models.length < 1 || raw.models.length > 100) {
+  if (!Array.isArray(raw.models) || raw.models.length < 1 || raw.models.length > AGENT_PROVIDER_MODEL_LIMIT) {
     throw new Error('VALIDATION_FAILED');
   }
   const liveByModel = new Map(liveCapabilities.map((observation) => [observation.modelId, observation]));

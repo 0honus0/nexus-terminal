@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref, useId, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { AGENT_PROVIDER_MODEL_LIMIT } from '@nexus-terminal/protocol/agent-providers';
   import {
     BaseModal,
     UiButton,
@@ -129,7 +130,7 @@
   const drawerLoading = reactive<Record<string, boolean>>({});
   const filterQueries = reactive<Record<string, string>>({});
   const filterConfiguredQueries = reactive<Record<string, string>>({});
-  const MAX_PROVIDER_MODELS = 100;
+  const MAX_PROVIDER_MODELS = AGENT_PROVIDER_MODEL_LIMIT;
 
   const filteredConfigured = (provider: AgentProviderViewDto) => {
     const query = (filterConfiguredQueries[provider.id] || '').trim().toLowerCase();
@@ -400,9 +401,14 @@
 
     modalTesting.value = true;
     try {
+      const importedPulledModels =
+        importAllPulled.value && pulledModels.value.length > 0 ? pulledModels.value.slice(0, MAX_PROVIDER_MODELS) : [];
+      if (importAllPulled.value) {
+        notifyModelCapacity(Math.max(0, pulledModels.value.length - importedPulledModels.length));
+      }
       const modelsToCreate: AgentProviderModelInputDto[] =
-        importAllPulled.value && pulledModels.value.length > 0
-          ? pulledModels.value.map((m) => {
+        importedPulledModels.length > 0
+          ? importedPulledModels.map((m) => {
               const defaults = m.registryDefaults;
               const caps = m.providerCapabilities?.capabilities;
               return {
