@@ -1,5 +1,5 @@
 import type { WorkspaceSuspendAutoTerminatedEventDto } from '@nexus-terminal/protocol/workspace';
-import { computed, ref } from 'vue';
+import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import { apiErrorMessage, apiErrorStatus } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { sshSuspendApi } from '../api/sshSuspendApi';
@@ -27,6 +27,30 @@ const handoffRefreshes = new Map<string, number>();
 export type SuspendedAutoTerminationViewModel = WorkspaceSuspendAutoTerminatedEventDto & {
   name?: string;
 };
+
+export interface SuspendedSessionsLoadOptions {
+  silent?: boolean;
+  force?: boolean;
+}
+
+export interface SuspendedSessionsLoadResult {
+  ok: boolean;
+  status?: number;
+}
+
+export interface SuspendedSessionsController {
+  sessions: Ref<SuspendedSessionDto[]>;
+  search: Ref<string>;
+  loading: Ref<boolean>;
+  error: Ref<string | null>;
+  filtered: ComputedRef<SuspendedSessionDto[]>;
+  load(options?: SuspendedSessionsLoadOptions): Promise<SuspendedSessionsLoadResult>;
+  startPolling(): void;
+  stopPolling(): void;
+  rename(session: SuspendedSessionDto, name: string): Promise<string>;
+  remove(session: SuspendedSessionDto): Promise<void>;
+  exportLog(id: string): Promise<string>;
+}
 
 const handledAutoTerminations = new Set<string>();
 const handledAutoTerminationOrder: string[] = [];
@@ -56,7 +80,7 @@ export function applySuspendedAutoTermination(
   };
 }
 
-const load = async (options: { silent?: boolean; force?: boolean } = {}): Promise<{ ok: boolean; status?: number }> => {
+const load = async (options: SuspendedSessionsLoadOptions = {}): Promise<SuspendedSessionsLoadResult> => {
   if (loaded && !options.force && !options.silent) return { ok: true };
   if (loadPromise) {
     const pending = loadPromise;
@@ -188,7 +212,7 @@ const stopPolling = (): void => {
   pollIntervalMs = BASE_POLL_MS;
 };
 
-export function useSuspendedSessions() {
+export function useSuspendedSessions(): SuspendedSessionsController {
   const search = ref('');
   const filtered = computed(() => {
     const term = search.value.trim().toLowerCase();

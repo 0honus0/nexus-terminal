@@ -1,6 +1,21 @@
-import { computed } from 'vue';
+import { computed, type ComputedRef } from 'vue';
+import type { ConnectionDto, ConnectionFormInput, ConnectionFormUpdate } from '../model/connection';
 import { useConnectionsStore } from '../store/connections.store';
-export function useConnections() {
+
+export interface ConnectionsController {
+  connections: ComputedRef<ConnectionDto[]>;
+  loaded: ComputedRef<boolean>;
+  load(force?: boolean): Promise<ConnectionDto[]>;
+  revalidate(maxAgeMs?: number): Promise<ConnectionDto[]>;
+  refresh(id: number): Promise<ConnectionDto>;
+  markConnected(id: number, timestamp: number): ConnectionDto | null;
+  create(input: ConnectionFormInput): Promise<ConnectionDto>;
+  update(id: number, input: ConnectionFormUpdate): Promise<ConnectionDto>;
+  remove(id: number): Promise<void>;
+  clone(id: number, name: string): Promise<ConnectionDto>;
+}
+
+export function useConnections(): ConnectionsController {
   const store = useConnectionsStore();
   return {
     connections: computed(() => store.items),

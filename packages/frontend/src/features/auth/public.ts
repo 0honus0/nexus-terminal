@@ -1,12 +1,34 @@
 import type { Pinia } from 'pinia';
+import type { AuthSessionState, SetupState } from './model/auth';
 import { useAuthSession } from './composables/useAuthSession';
 import { useAuthStore } from './store/auth.store';
 
-export type { AuthUserDto, AuthLoginRequestDto, AuthLoginResultViewModel, AuthSetupRequestDto } from './model/auth';
+export { default as LoginView } from './views/LoginView.vue';
+export const loadSetupView = () => import('./views/SetupView.vue');
+
+export type {
+  AuthUserDto,
+  AuthLoginRequestDto,
+  AuthLoginResultViewModel,
+  AuthSetupRequestDto,
+  AuthSessionState,
+  SetupState,
+} from './model/auth';
 export { useAuthSession };
+export type { AuthSessionController } from './composables/useAuthSession';
+
+export interface AuthNavigationFacade {
+  resolveSetupState(force?: boolean): Promise<SetupState>;
+  resolveSession(force?: boolean): Promise<AuthSessionState>;
+  invalidateSession(): void;
+  readonly setupRequired: boolean;
+  readonly setupResolved: boolean;
+  readonly authenticated: boolean;
+  readonly sessionResolved: boolean;
+}
 
 /** Router/bootstrap-only facade. It exposes Auth navigation state without exporting the internal Pinia store. */
-export const createAuthNavigationFacade = (pinia: Pinia) => {
+export const createAuthNavigationFacade = (pinia: Pinia): AuthNavigationFacade => {
   const store = useAuthStore(pinia);
 
   return {

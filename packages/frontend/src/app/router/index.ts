@@ -1,16 +1,15 @@
 import type { Pinia } from 'pinia';
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
-import { createAuthNavigationFacade } from '@/features/auth/public';
+import { createAuthNavigationFacade, loadSetupView } from '@/features/auth/public';
+import { loadConnectionsView } from '@/features/connections/public';
+import { loadProxiesView } from '@/features/proxies/public';
+import { loadNotificationsView } from '@/features/notifications/public';
+import { loadAuditLogView } from '@/features/audit/public';
+import { loadWorkspaceView } from '@/runtimes/workspace/public';
 import { clearDynamicImportRecoveryMarker, recoverStaleDynamicImport } from '@/app/bootstrap/pwa';
 
 const loadDashboard = () => import('../pages/dashboard/DashboardPage.vue');
 const loadLogin = () => import('../pages/login/LoginPage.vue');
-const loadSetup = () => import('@/features/auth/views/SetupView.vue');
-const loadWorkspace = () => import('@/runtimes/workspace/views/WorkspaceView.vue');
-const loadConnections = () => import('@/features/connections/views/ConnectionsView.vue');
-const loadProxies = () => import('@/features/proxies/views/ProxiesView.vue');
-const loadNotifications = () => import('@/features/notifications/views/NotificationsView.vue');
-const loadAuditLogs = () => import('@/features/audit/views/AuditLogView.vue');
 const loadSettings = () => import('../pages/settings/SettingsPage.vue');
 
 let authenticatedPreloadScheduled = false;
@@ -25,12 +24,12 @@ export const preloadAuthenticatedRoutes = (): void => {
   authenticatedPreloadScheduled = true;
   const preload = async () => {
     for (const loader of [
-      loadConnections,
+      loadConnectionsView,
       loadSettings,
-      loadWorkspace,
-      loadNotifications,
-      loadProxies,
-      loadAuditLogs,
+      loadWorkspaceView,
+      loadNotificationsView,
+      loadProxiesView,
+      loadAuditLogView,
     ]) {
       await loader().catch(() => undefined);
     }
@@ -59,32 +58,32 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/setup',
     name: 'Setup',
-    component: loadSetup,
+    component: loadSetupView,
   },
-  { path: '/workspace', name: 'Workspace', component: loadWorkspace },
+  { path: '/workspace', name: 'Workspace', component: loadWorkspaceView },
   {
     path: '/connections',
     name: 'Connections',
     meta: { keepAlive: true },
-    component: loadConnections,
+    component: loadConnectionsView,
   },
   {
     path: '/proxies',
     name: 'Proxies',
     meta: { keepAlive: true },
-    component: loadProxies,
+    component: loadProxiesView,
   },
   {
     path: '/notifications',
     name: 'Notifications',
     meta: { keepAlive: true },
-    component: loadNotifications,
+    component: loadNotificationsView,
   },
   {
     path: '/audit-logs',
     name: 'AuditLogs',
     meta: { keepAlive: true },
-    component: loadAuditLogs,
+    component: loadAuditLogView,
   },
   {
     path: '/settings',

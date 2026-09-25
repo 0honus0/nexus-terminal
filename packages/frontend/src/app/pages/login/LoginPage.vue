@@ -3,8 +3,7 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import LoginView from '@/features/auth/views/LoginView.vue';
-  import { useAuthSession } from '@/features/auth/public';
+  import { LoginView, useAuthSession } from '@/features/auth/public';
   import { LoginCaptchaChallenge, useLoginSecurity } from '@/features/security/public';
 
   const router = useRouter();

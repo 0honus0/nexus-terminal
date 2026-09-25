@@ -1,9 +1,41 @@
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
 import type { FilesystemChannel } from '../ports/filesystem-channel';
 import type { WorkspaceFileSearchEntryDto, WorkspaceRemoteFileEntryDto } from '../model/filesystem';
 
 export type FilesystemSortKey = 'name' | 'size' | 'permissions' | 'modified';
 export type FilesystemSortDirection = 'asc' | 'desc';
+
+export interface FilesystemBrowserController {
+  path: Ref<string>;
+  entries: Ref<WorkspaceRemoteFileEntryDto[]>;
+  searchEntries: Ref<WorkspaceFileSearchEntryDto[]>;
+  visible: ComputedRef<(WorkspaceRemoteFileEntryDto | WorkspaceFileSearchEntryDto)[]>;
+  searchQuery: Ref<string>;
+  searchActive: ComputedRef<boolean>;
+  searching: Ref<boolean>;
+  searchTruncated: Ref<boolean>;
+  searchError: Ref<string | null>;
+  loading: Ref<boolean>;
+  loaded: Ref<boolean>;
+  error: Ref<string | null>;
+  selected: Ref<Set<string>>;
+  selectionAnchor: Ref<string | null>;
+  sortKey: Ref<FilesystemSortKey>;
+  sortDirection: Ref<FilesystemSortDirection>;
+  load(path?: string): Promise<boolean | undefined>;
+  refresh(): Promise<void>;
+  open(entry: WorkspaceRemoteFileEntryDto): Promise<void>;
+  goParent(): Promise<boolean | undefined>;
+  search(): Promise<void>;
+  scheduleSearch(delayMs?: number): void;
+  clearSearch(): void;
+  select(entry: WorkspaceRemoteFileEntryDto, mode?: 'only' | 'toggle' | 'range'): void;
+  toggle(entry: WorkspaceRemoteFileEntryDto): void;
+  selectAll(): void;
+  clearSelection(): void;
+  setSort(key: FilesystemSortKey): void;
+  dispose(): void;
+}
 
 const parentPath = (path: string) => {
   const normalized = path.replace(/\/+$/, '') || '/';
@@ -33,7 +65,7 @@ const compare = (
   return result;
 };
 
-export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '/') {
+export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '/'): FilesystemBrowserController {
   const path = ref(initialPath);
   const entries = ref<WorkspaceRemoteFileEntryDto[]>([]);
   const searchEntries = ref<WorkspaceFileSearchEntryDto[]>([]);
@@ -246,5 +278,3 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
     dispose,
   };
 }
-
-export type FilesystemBrowserController = ReturnType<typeof useFilesystemBrowser>;

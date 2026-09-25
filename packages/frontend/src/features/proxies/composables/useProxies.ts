@@ -1,6 +1,16 @@
-import { computed } from 'vue';
+import { computed, type ComputedRef } from 'vue';
+import type { ProxyCreateRequestDto, ProxyDto } from '../model/proxy';
 import { useProxiesStore } from '../store/proxies.store';
-export function useProxies() {
+
+export interface ProxiesController {
+  proxies: ComputedRef<ProxyDto[]>;
+  load(force?: boolean): Promise<ProxyDto[]>;
+  create(input: ProxyCreateRequestDto): Promise<ProxyDto>;
+  update(id: number, input: Partial<ProxyCreateRequestDto>): Promise<ProxyDto>;
+  remove(id: number): Promise<void>;
+}
+
+export function useProxies(): ProxiesController {
   const store = useProxiesStore();
   return {
     proxies: computed(() => store.items),

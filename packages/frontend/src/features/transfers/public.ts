@@ -10,8 +10,9 @@ export type {
   FileClipboardSnapshot,
 } from './state/fileClipboardController';
 export { useServerTransfers } from './composables/useServerTransfers';
+export type { ServerTransfersController } from './composables/useServerTransfers';
 export { createTransferController } from './state/transferController';
-export type { TransferController } from './state/transferController';
+export type { ConflictStrategy, TransferController, UploadConflict } from './state/transferController';
 export type { TransferChannel } from './ports/transfer-channel';
 export type {
   ProgressSource,

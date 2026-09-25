@@ -1,6 +1,33 @@
-import { computed, ref } from 'vue';
+import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import { filesystemCatalogApi } from '../api/filesystemCatalogApi';
 import type { FavoritePathDto, FavoritePathSortDto, PathHistoryEntryDto } from '../model/catalog';
+
+export interface FavoritePathSaveInput {
+  id?: number;
+  path: string;
+  name?: string | null;
+}
+
+export interface FilesystemCatalogController {
+  favorites: Ref<FavoritePathDto[]>;
+  history: Ref<PathHistoryEntryDto[]>;
+  favoriteSort: Ref<FavoritePathSortDto>;
+  favoriteSearch: Ref<string>;
+  historySearch: Ref<string>;
+  loadingFavorites: Ref<boolean>;
+  loadingHistory: Ref<boolean>;
+  filteredFavorites: ComputedRef<FavoritePathDto[]>;
+  filteredHistory: ComputedRef<PathHistoryEntryDto[]>;
+  loadFavorites(force?: boolean): Promise<void>;
+  setFavoriteSort(sort: FavoritePathSortDto): Promise<void>;
+  saveFavorite(input: FavoritePathSaveInput): Promise<FavoritePathDto>;
+  removeFavorite(id: number): Promise<void>;
+  useFavorite(item: FavoritePathDto): Promise<void>;
+  loadHistory(force?: boolean): Promise<void>;
+  recordPath(path: string): Promise<void>;
+  removeHistory(id: number): Promise<void>;
+  clearHistory(): Promise<void>;
+}
 
 const favorites = ref<FavoritePathDto[]>([]);
 const history = ref<PathHistoryEntryDto[]>([]);
@@ -26,7 +53,7 @@ const sortFavorites = () => {
   });
 };
 
-export function useFilesystemCatalog() {
+export function useFilesystemCatalog(): FilesystemCatalogController {
   const favoriteSearch = ref('');
   const historySearch = ref('');
   const loadingFavorites = ref(false);
@@ -67,7 +94,7 @@ export function useFilesystemCatalog() {
     sortFavorites();
   }
 
-  async function saveFavorite(input: { id?: number; path: string; name?: string | null }): Promise<FavoritePathDto> {
+  async function saveFavorite(input: FavoritePathSaveInput): Promise<FavoritePathDto> {
     const item = input.id
       ? await filesystemCatalogApi.updateFavorite(input.id, input.path, input.name?.trim() || null)
       : await filesystemCatalogApi.addFavorite(input.path, input.name?.trim() || null);

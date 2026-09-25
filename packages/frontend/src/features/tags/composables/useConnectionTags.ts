@@ -1,6 +1,18 @@
-import { computed } from 'vue';
+import { computed, type ComputedRef } from 'vue';
+import type { ConnectionTagDto } from '../model/tag';
 import { useTagsStore } from '../store/tags.store';
-export function useConnectionTags() {
+
+export interface ConnectionTagsController {
+  tags: ComputedRef<ConnectionTagDto[]>;
+  loaded: ComputedRef<boolean>;
+  load(force?: boolean): Promise<ConnectionTagDto[]>;
+  revalidate(maxAgeMs?: number): Promise<ConnectionTagDto[]>;
+  create(name: string): Promise<ConnectionTagDto>;
+  rename(id: number, name: string): Promise<ConnectionTagDto>;
+  remove(id: number): Promise<void>;
+}
+
+export function useConnectionTags(): ConnectionTagsController {
   const store = useTagsStore();
   return {
     tags: computed(() => store.items),

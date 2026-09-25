@@ -10,6 +10,11 @@ export {
   findSuspendedSessionByOriginalWorkspace,
 } from './composables/useSuspendedSessions';
 export type {
+  SuspendedSessionsController,
+  SuspendedSessionsLoadOptions,
+  SuspendedSessionsLoadResult,
+} from './composables/useSuspendedSessions';
+export type {
   WorkspaceSuspendAutoTerminatedEventDto,
   SuspendedAutoTerminationViewModel,
 } from './composables/useSuspendedSessions';

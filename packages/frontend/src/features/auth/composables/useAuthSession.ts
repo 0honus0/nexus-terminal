@@ -1,7 +1,26 @@
-import { computed } from 'vue';
+import { computed, type ComputedRef } from 'vue';
+import type {
+  AuthLoginRequestDto,
+  AuthLoginResultViewModel,
+  AuthSessionState,
+  AuthSetupRequestDto,
+  AuthUserDto,
+} from '../model/auth';
 import { useAuthStore } from '../store/auth.store';
 
-export function useAuthSession() {
+export interface AuthSessionController {
+  user: ComputedRef<AuthUserDto | null>;
+  isAuthenticated: ComputedRef<boolean>;
+  setupRequired: ComputedRef<boolean>;
+  pendingSecondFactor: ComputedRef<boolean>;
+  setup(credentials: AuthSetupRequestDto): Promise<void>;
+  login(credentials: AuthLoginRequestDto): Promise<AuthLoginResultViewModel>;
+  verifyTwoFactor(token: string): Promise<AuthUserDto>;
+  logout(): Promise<void>;
+  refreshSession(): Promise<AuthSessionState>;
+}
+
+export function useAuthSession(): AuthSessionController {
   const store = useAuthStore();
 
   return {

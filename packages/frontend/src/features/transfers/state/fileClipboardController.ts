@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, type ComputedRef, type Ref } from 'vue';
 
 export type FileClipboardOperation = 'copy' | 'cut';
 
@@ -15,11 +15,22 @@ export interface FileClipboardSnapshot {
   items: readonly FileClipboardItem[];
 }
 
+export interface FileClipboardController {
+  value: Ref<FileClipboardSnapshot | null>;
+  count: ComputedRef<number>;
+  set(
+    operation: FileClipboardOperation,
+    sourceScopeId: string,
+    items: readonly FileClipboardItem[],
+  ): FileClipboardSnapshot | null;
+  clear(generation?: string): boolean;
+}
+
 /**
  * File-operation intent only. Transfer progress/lifecycle remains owned by the
  * normal TransferController; this controller stores no task state.
  */
-export function createFileClipboardController() {
+export function createFileClipboardController(): FileClipboardController {
   const value = ref<FileClipboardSnapshot | null>(null);
 
   const set = (
@@ -55,5 +66,3 @@ export function createFileClipboardController() {
     clear,
   };
 }
-
-export type FileClipboardController = ReturnType<typeof createFileClipboardController>;

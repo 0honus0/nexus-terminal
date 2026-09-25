@@ -13,4 +13,6 @@ export type {
   AgentWorkspaceRuntimeAvailabilityDto,
   AgentHardLimitPreviewDto,
   AgentTargetDenylistViewDto,
+  AgentApprovalBatchViewModel,
+  AgentServerClockAnchorViewModel,
 } from './api/agent-api';

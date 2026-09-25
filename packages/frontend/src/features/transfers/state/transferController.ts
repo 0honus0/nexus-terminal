@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import type { TransferChannel } from '../ports/transfer-channel';
 import type {
   ArchiveCommand,
@@ -9,12 +9,32 @@ import type {
   UploadSourceFile,
 } from '../model/transfer';
 
-type ConflictStrategy = 'overwrite' | 'skip';
+export type ConflictStrategy = 'overwrite' | 'skip';
 const TERMINAL_TASK_CLEANUP_DELAY_MS = 800;
-interface UploadConflict {
+export interface UploadConflict {
   id: string;
   path: string;
   batchId: string;
+}
+
+export interface TransferController {
+  tasks: Ref<TransferTask[]>;
+  active: ComputedRef<TransferTask[]>;
+  conflict: ComputedRef<UploadConflict | null>;
+  startUploadBatch(
+    sources: readonly (File | UploadSourceFile)[],
+    destination: TransferLocation,
+    directories?: readonly string[],
+  ): Promise<string[]>;
+  copyMove(request: Omit<CopyMoveCommand, 'id'>): Promise<string>;
+  archive(request: Omit<ArchiveCommand, 'id'>): Promise<string>;
+  cancel(id: string): Promise<void>;
+  cancelAll(): Promise<void>;
+  resolveConflict(strategy: ConflictStrategy, applyToAll?: boolean): Promise<void>;
+  waitForTask(id: string): Promise<TransferTask>;
+  markPartial(id: string, message: string): void;
+  remove(id: string): void;
+  dispose(): void;
 }
 
 const isDone = (status: TransferTask['status']): boolean =>
@@ -34,7 +54,7 @@ const normalizeRelativeDirectory = (value?: string): string => {
 const normalizeUploadSource = (value: File | UploadSourceFile): UploadSourceFile =>
   value instanceof File ? { file: value } : { file: value.file, relativeDirectory: value.relativeDirectory };
 
-export function createTransferController(channel: TransferChannel) {
+export function createTransferController(channel: TransferChannel): TransferController {
   const tasks = ref<TransferTask[]>([]);
   const conflictQueue = ref<UploadConflict[]>([]);
   const uploadBatches = new Map<string, string>();
@@ -377,5 +397,3 @@ export function createTransferController(channel: TransferChannel) {
     },
   };
 }
-
-export type TransferController = ReturnType<typeof createTransferController>;

@@ -1,9 +1,18 @@
-import { computed, ref } from 'vue';
+import { computed, ref, type ComputedRef } from 'vue';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { securityApi } from '../api/securityApi';
 import type { CaptchaConfigDto } from '../model/security';
 
-type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
+export type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
+
+export interface LoginSecurityController {
+  captchaConfig: ComputedRef<CaptchaConfigDto>;
+  captchaStatus: ComputedRef<CaptchaStatus>;
+  hasPasskeys: ComputedRef<boolean>;
+  loading: ComputedRef<boolean>;
+  refresh(username?: string): Promise<void>;
+  loginWithPasskey(username?: string): Promise<void>;
+}
 
 const DEFAULT_CAPTCHA_CONFIG: CaptchaConfigDto = { enabled: false, provider: 'none' };
 
@@ -16,7 +25,7 @@ const hasConfiguredCaptchaWidget = (config: CaptchaConfigDto): boolean => {
   return false;
 };
 
-export function useLoginSecurity() {
+export function useLoginSecurity(): LoginSecurityController {
   const captchaConfig = ref<CaptchaConfigDto>(DEFAULT_CAPTCHA_CONFIG);
   const captchaLoading = ref(true);
   const captchaLoadError = ref(false);

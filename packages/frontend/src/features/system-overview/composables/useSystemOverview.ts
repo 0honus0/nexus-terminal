@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import { apiErrorMessage } from '@/client/http';
 import { systemOverviewApi } from '../api/systemOverviewApi';
 import type { ResourceStatusDto, SshResourceStatusDto } from '../model/systemOverview';
@@ -8,7 +8,20 @@ export interface SystemOverviewLoadOptions {
   remote?: boolean;
 }
 
-export const useSystemOverview = () => {
+export interface SystemOverviewController {
+  local: Ref<ResourceStatusDto | null>;
+  remote: Ref<SshResourceStatusDto[]>;
+  loading: ComputedRef<boolean>;
+  localLoading: Ref<boolean>;
+  remoteLoading: Ref<boolean>;
+  localError: Ref<string | null>;
+  remoteError: Ref<string | null>;
+  load(options?: SystemOverviewLoadOptions): Promise<void>;
+  loadLocal(): Promise<void>;
+  loadRemote(): Promise<void>;
+}
+
+export const useSystemOverview = (): SystemOverviewController => {
   const local = ref<ResourceStatusDto | null>(null);
   const remote = ref<SshResourceStatusDto[]>([]);
   const localLoading = ref(false);
