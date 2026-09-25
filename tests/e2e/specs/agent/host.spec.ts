@@ -326,8 +326,8 @@ test('Agent settings surface exposes the production control plane and captures f
   const workspaceRuntime = panel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
   await workspaceRuntime.scrollIntoViewIfNeeded();
   await expect(workspaceRuntime).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Browser Runtime', exact: true })).toBeAttached();
-  await expect(panel.getByRole('heading', { name: 'ACP Runtime', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'ACP', exact: true })).toBeAttached();
   await expect(panel.getByRole('heading', { name: 'Artifacts and storage', exact: true })).toBeAttached();
   await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 

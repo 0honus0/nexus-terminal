@@ -1372,6 +1372,12 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         .toContain('/literal slash prompt');
     });
 
+    const cancelRun = hub.getByRole('button', { name: 'Cancel run', exact: true });
+    if (await cancelRun.isVisible()) {
+      await cancelRun.click();
+      await expect(cancelRun).toHaveCount(0, { timeout: 30_000 });
+    }
+
     const modelSelector = hub.getByRole('button', { name: 'Model', exact: true });
     await expect(modelSelector).toBeVisible({ timeout: 60_000 });
     await modelSelector.click();

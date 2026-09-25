@@ -10,6 +10,7 @@ import type { CatalogPack, ToolchainPackRef } from '../types';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { ToolchainStore } from './toolchain-store';
 import { ToolchainMutationCoordinator } from './toolchain-mutation-coordinator';
+import { runnerLog } from '../logging';
 
 const RUNNER_API_VERSION = '1.0.0';
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
@@ -21,6 +22,19 @@ const MAX_MANIFEST_BYTES = 64 * 1024;
 const MISE_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_MISE_OUTPUT_BYTES = 64 * 1024;
 const MAX_RELOCATABLE_TEXT_BYTES = 8 * 1024 * 1024;
+
+const digestMismatch = (pack: CatalogPack, ref: ToolchainPackRef, phase: string, actualDigest?: string): Error => {
+  runnerLog('warn', 'Agent Runner Toolchain Pack digest mismatch', {
+    familyId: pack.familyId,
+    versionId: pack.versionId,
+    architecture: process.arch,
+    phase,
+    expectedDigest: pack.contentDigestByArch[process.arch] ?? null,
+    providedDigest: ref.contentDigest,
+    actualDigest: actualDigest ?? null,
+  });
+  return new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+};
 
 interface PackManifest {
   schemaVersion: 1;
@@ -297,7 +311,7 @@ export class PackInstaller {
     await this.mutations.run(() => {
       const pack = this.catalog.pack(ref.familyId, ref.versionId);
       const expected = pack.contentDigestByArch[process.arch];
-      if (!expected || expected !== ref.contentDigest) throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+      if (!expected || expected !== ref.contentDigest) throw digestMismatch(pack, ref, 'catalog-reference');
       this.store.remove(ref);
     });
   }
@@ -310,7 +324,7 @@ export class PackInstaller {
           const pack = this.catalog.pack(ref.familyId, ref.versionId);
           const expected = pack.contentDigestByArch[process.arch];
           if (!expected || expected !== ref.contentDigest || !/^sha256:[a-f0-9]{64}$/.test(expected)) {
-            throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+            throw digestMismatch(pack, ref, 'catalog-reference');
           }
           if (!this.store.installed(ref)) await this.installOne(pack, ref, commandId);
           this.store.activate(ref);
@@ -333,7 +347,7 @@ export class PackInstaller {
       visiting.add(key);
       const pack = this.catalog.pack(ref.familyId, ref.versionId);
       const expected = pack.contentDigestByArch[process.arch];
-      if (!expected || expected !== ref.contentDigest) throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+      if (!expected || expected !== ref.contentDigest) throw digestMismatch(pack, ref, 'catalog-reference');
       for (const dependency of pack.dependencies) {
         const child = this.catalog.pack(dependency.familyId, dependency.versionId);
         const digest = child.contentDigestByArch[process.arch];
@@ -390,7 +404,7 @@ export class PackInstaller {
     const digest = await hashFile(temporary);
     if (digest !== ref.contentDigest) {
       fs.rmSync(temporary, { force: true });
-      throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+      throw digestMismatch(pack, ref, 'downloaded-archive', digest);
     }
     fsyncFile(temporary);
     fs.rmSync(archive, { force: true });
@@ -529,7 +543,7 @@ export class PackInstaller {
       fs.writeFileSync(path.join(materialized, 'pack.json'), `${JSON.stringify(manifest)}\n`, { mode: 0o644 });
       this.verifyManifest(materialized, pack);
       const digest = normalizedTreeDigest(materialized);
-      if (digest !== ref.contentDigest) throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
+      if (digest !== ref.contentDigest) throw digestMismatch(pack, ref, 'mise-tree', digest);
       this.store.writeMarker(materialized, ref, Math.floor(Date.now() / 1000));
       lockAndSyncTree(materialized);
       this.store.commit(materialized, ref);
