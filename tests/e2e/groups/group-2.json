@@ -3,23 +3,14 @@
   "group": 2,
   "workers": 8,
   "specs": [
-    "specs/http/auth-2fa.spec.ts",
-    "specs/http/auth-api.spec.ts",
-    "specs/http/backup.spec.ts",
-    "specs/http/connection-import.spec.ts",
-    "specs/http/connections-tags.spec.ts",
-    "specs/http/database-migrations.spec.ts",
-    "specs/http/quick-commands-audit.spec.ts",
-    "specs/http/rdp-remoteapp.spec.ts",
-    "specs/http/terminal-themes.spec.ts",
+    "specs/mobile/dashboard-mobile.spec.ts",
+    "specs/mobile/ssh-workspace.spec.ts",
+    "specs/mobile/suspend-resume-ui.spec.ts",
+    "specs/mobile/terminal-touch.spec.ts",
+    "specs/mobile/touch-advanced.spec.ts",
+    "specs/mobile/touch-workflows.spec.ts",
     "specs/ui/dashboard-workflows.spec.ts",
-    "specs/ssh/command-history-management.spec.ts",
-    "specs/ssh/quick-command-collapsible-search.spec.ts",
-    "specs/ssh/quick-command-management.spec.ts",
-    "specs/ssh/quick-command-tags-variables.spec.ts",
-    "specs/ssh/panel-wheel-scaling.spec.ts",
-    "specs/ssh/terminal-protocol.spec.ts",
-    "specs/ssh/terminal-tools-ui.spec.ts",
-    "specs/ssh/terminal-ui.spec.ts"
+    "specs/ssh/sftp-download.spec.ts",
+    "specs/ssh/status-history-time-axis.spec.ts"
   ]
 }

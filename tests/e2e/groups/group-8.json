@@ -3,10 +3,9 @@
   "group": 8,
   "workers": 8,
   "specs": [
+    "specs/ssh/file-manager-navigation.spec.ts",
+    "specs/ssh/file-preview-editor.spec.ts",
     "specs/ssh/progress-display-archive-cancel.spec.ts",
-    "specs/ssh/progress-display-archive.spec.ts",
-    "specs/ssh/progress-display-baseline.spec.ts",
-    "specs/ssh/progress-display-copy-cancel.spec.ts",
-    "specs/ssh/progress-display-upload-copy.spec.ts"
+    "specs/ssh/suspend-resume.spec.ts"
   ]
 }
