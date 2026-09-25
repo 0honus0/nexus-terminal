@@ -17,6 +17,7 @@
     type AgentRemotePluginPackageDto,
     type AgentRemotePluginPublisherDto,
   } from '../api/agent-api';
+  import { groupPluginCatalogSources, type PluginSourceGroup } from './plugin-catalog-grouping';
 
   const PLUGIN_STAGING_ARTIFACT_SCOPE = 'nexus.plugin-installer';
 
@@ -51,71 +52,10 @@
     ...remoteCatalogs.value.map((catalog) => ({ catalog, official: false as const })),
   ]);
 
-  interface PluginSourcePackageItem {
-    package: AgentRemotePluginPackageDto;
-    catalog: AgentRemotePluginCatalogDto;
-    official: boolean;
-  }
-
-  interface PluginSourceGroup {
-    owner: string;
-    official: boolean;
-    catalogs: Array<{ catalog: AgentRemotePluginCatalogDto; official: boolean }>;
-    packages: PluginSourcePackageItem[];
-  }
-
   const searchQuery = ref('');
   const collapsedGroups = ref<Set<string>>(new Set());
 
-  const extractGithubUser = (rawUrl: string): string => {
-    try {
-      const url = new URL(rawUrl);
-      const parts = url.pathname.split('/').filter(Boolean);
-      const host = url.hostname.toLowerCase();
-      if (host.includes('github') || host.includes('gitlab') || host.includes('gitee')) {
-        if (parts.length > 0 && parts[0] && parts[0] !== 'catalog.json') {
-          return parts[0];
-        }
-      }
-      if (parts.length > 1 && parts[0] !== 'catalog.json') {
-        return parts[0];
-      }
-      return url.hostname;
-    } catch {
-      return rawUrl;
-    }
-  };
-
-  const groupedCatalogSources = computed<PluginSourceGroup[]>(() => {
-    const groups: PluginSourceGroup[] = [];
-    const groupMap = new Map<string, PluginSourceGroup>();
-
-    for (const source of catalogSources.value) {
-      const owner = extractGithubUser(source.catalog.repositoryUrl);
-      let group = groupMap.get(owner);
-      if (!group) {
-        group = {
-          owner,
-          official: source.official,
-          catalogs: [],
-          packages: [],
-        };
-        groupMap.set(owner, group);
-        groups.push(group);
-      } else if (source.official) {
-        group.official = true;
-      }
-      group.catalogs.push(source);
-      for (const entry of source.catalog.packages) {
-        group.packages.push({
-          package: entry,
-          catalog: source.catalog,
-          official: source.official,
-        });
-      }
-    }
-    return groups;
-  });
+  const groupedCatalogSources = computed<PluginSourceGroup[]>(() => groupPluginCatalogSources(catalogSources.value));
 
   const totalPluginCount = computed(() => groupedCatalogSources.value.reduce((acc, g) => acc + g.packages.length, 0));
 
@@ -141,17 +81,17 @@
       .filter((group) => group.packages.length > 0);
   });
 
-  const isGroupExpanded = (owner: string): boolean => {
+  const isGroupExpanded = (key: string): boolean => {
     if (searchQuery.value.trim()) return true;
-    return !collapsedGroups.value.has(owner);
+    return !collapsedGroups.value.has(key);
   };
 
-  const toggleGroup = (owner: string): void => {
+  const toggleGroup = (key: string): void => {
     const next = new Set(collapsedGroups.value);
-    if (next.has(owner)) {
-      next.delete(owner);
+    if (next.has(key)) {
+      next.delete(key);
     } else {
-      next.add(owner);
+      next.add(key);
     }
     collapsedGroups.value = next;
   };
@@ -709,7 +649,7 @@
         <div v-if="filteredCatalogGroups.length" class="mt-3.5 pt-3.5 border-t border-border space-y-3">
           <div
             v-for="group in filteredCatalogGroups"
-            :key="group.owner"
+            :key="group.key"
             class="rounded-xl border border-border bg-card shadow-2xs overflow-hidden transition-all duration-200"
           >
             <!-- 仓库来源头部：可展开/折叠 -->
@@ -717,13 +657,13 @@
               role="button"
               tabindex="0"
               class="w-full flex flex-wrap items-center justify-between gap-2.5 px-3.5 sm:px-4 py-2.5 sm:py-3 bg-header/40 hover:bg-header/70 transition-colors select-none cursor-pointer"
-              @click="toggleGroup(group.owner)"
-              @keydown.enter.space.prevent="toggleGroup(group.owner)"
+              @click="toggleGroup(group.key)"
+              @keydown.enter.space.prevent="toggleGroup(group.key)"
             >
               <!-- 左侧：展开折叠指示 + 来源标识 (GitHub user) + 官方/第三方标签 + 插件数量 + 来源链接（靠左排列，充裕展示空间） -->
               <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
                 <i
-                  :class="isGroupExpanded(group.owner) ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'"
+                  :class="isGroupExpanded(group.key) ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'"
                   class="text-[11px] text-text-secondary w-3 text-center transition-transform shrink-0"
                   aria-hidden="true"
                 ></i>
@@ -760,37 +700,35 @@
 
                 <!-- 仓库源链接：靠左放置在来源信息旁，边界明确，展示宽度充裕，点击复制 -->
                 <button
-                  v-if="group.catalogs[0]?.catalog.repositoryUrl"
+                  v-if="group.sourceUrl"
                   type="button"
                   class="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-header/60 hover:bg-header hover:border-border hover:text-foreground px-2 py-1 text-[11px] font-mono text-text-secondary transition-colors cursor-pointer max-w-full"
-                  :title="group.catalogs[0].catalog.repositoryUrl"
-                  @click.stop="copyCatalogUrl(group.catalogs[0].catalog.repositoryUrl)"
+                  :title="group.sourceUrl"
+                  @click.stop="copyCatalogUrl(group.sourceUrl)"
                 >
                   <i
                     :class="
-                      copiedSourceUrl === group.catalogs[0].catalog.repositoryUrl
-                        ? 'fa-solid fa-check text-success'
-                        : 'fa-regular fa-copy'
+                      copiedSourceUrl === group.sourceUrl ? 'fa-solid fa-check text-success' : 'fa-regular fa-copy'
                     "
                     class="text-[10px] shrink-0"
                     aria-hidden="true"
                   ></i>
                   <span
                     class="truncate max-w-[280px] sm:max-w-[420px] md:max-w-[620px] lg:max-w-[820px] text-[10px] sm:text-[11px]"
-                    >{{ group.catalogs[0].catalog.repositoryUrl }}</span
+                    >{{ group.sourceUrl }}</span
                   >
                 </button>
               </div>
 
               <!-- 右侧：展开/折叠状态提示 -->
               <div class="hidden md:flex items-center gap-1 text-[11px] text-text-secondary/60 shrink-0 select-none">
-                <span>{{ isGroupExpanded(group.owner) ? $t('common.collapse') : $t('common.expand') }}</span>
+                <span>{{ isGroupExpanded(group.key) ? $t('common.collapse') : $t('common.expand') }}</span>
               </div>
             </div>
 
             <!-- 展开后的仓库插件列表 -->
             <div
-              v-if="isGroupExpanded(group.owner)"
+              v-if="isGroupExpanded(group.key)"
               class="p-3 sm:p-4 space-y-2.5 border-t border-border bg-background/40"
             >
               <div class="flex items-center justify-between px-1 text-xs text-text-secondary font-medium">
