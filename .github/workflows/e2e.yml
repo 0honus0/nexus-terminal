@@ -368,8 +368,6 @@ jobs:
           push: false
           load: true
           tags: nexus-terminal:e2e-smoke
-          cache-from: type=gha,scope=unified-image
-          cache-to: type=gha,mode=max,scope=unified-image
 
       # 独立 Runner 镜像与发布 workflow 使用同一个 Dockerfile；这里至少保证每次 E2E 都能真实构建。
       - name: Build standalone Agent Runner image

@@ -272,11 +272,7 @@ test('Agent settings surface exposes the production control plane and captures f
   const capabilityField = (label: string) => capabilityDialog.getByLabel(label, { exact: true });
   await capabilityField('Context window').fill('32768');
   await capabilityField('Maximum output tokens').fill('4096');
-  await capabilityDialog
-    .getByText('Reasoning levels', { exact: true })
-    .locator('xpath=ancestor::label[1]')
-    .locator('input')
-    .check();
+  await capabilityDialog.getByRole('checkbox', { name: 'Reasoning levels', exact: true }).check();
   await capabilityDialog.getByRole('button', { name: 'low', exact: true }).click();
   await capabilityDialog.getByRole('button', { name: 'high', exact: true }).click();
   await pickGen2Option(capabilityDialog.getByLabel('Default effort'), 'high');

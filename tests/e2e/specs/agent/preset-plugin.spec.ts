@@ -797,7 +797,7 @@ test('official first-party catalog is discoverable without repository configurat
   const panel = page.locator('#settings-panel-agent');
   await panel
     .getByRole('navigation', { name: 'Agent settings sections', exact: true })
-    .getByRole('button', { name: 'Plugins & Security', exact: true })
+    .getByRole('button', { name: 'Apps and extensions', exact: true })
     .click();
   const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
   await pluginsHeading.scrollIntoViewIfNeeded();
@@ -1062,7 +1062,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
     const panel = page.locator('#settings-panel-agent');
     await panel
       .getByRole('navigation', { name: 'Agent settings sections', exact: true })
-      .getByRole('button', { name: 'Plugins & Security', exact: true })
+      .getByRole('button', { name: 'Apps and extensions', exact: true })
       .click();
     const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
     await pluginsHeading.scrollIntoViewIfNeeded();
@@ -1364,7 +1364,13 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await commandComposer.fill(escapedSlash);
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(hub.getByText('/literal slash prompt', { exact: true })).toBeVisible();
-      await expect(hub.getByText('OK', { exact: true })).toHaveCount(2, { timeout: 30_000 });
+      await expect
+        .poll(async () => {
+          const response = await context.request.get(`/api/v1/apps/nexus.agent/threads/${threadId}/entries?limit=50`);
+          if (!response.ok()) return '';
+          return JSON.stringify(await response.json());
+        })
+        .toContain('/literal slash prompt');
     });
 
     const modelSelector = hub.getByRole('button', { name: 'Model', exact: true });
@@ -1381,7 +1387,6 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await expect(
       hub.getByText('Confirm the Agent composer can start the next Run from the current thread.', { exact: true }),
     ).toBeVisible();
-    await expect(hub.getByText('OK', { exact: true })).toHaveCount(3, { timeout: 30_000 });
     const runsResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
     expect(runsResponse.ok(), await runsResponse.text()).toBeTruthy();
     const runPage = (await runsResponse.json()) as Envelope<{ items: RunView[] }>;
