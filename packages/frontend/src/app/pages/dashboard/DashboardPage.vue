@@ -290,32 +290,41 @@
 </script>
 
 <template>
-  <main data-testid="dashboard-view" class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6">
-    <div class="mx-auto w-full max-w-[1680px] space-y-5">
-      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-4">
-        <div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div class="min-w-0">
-            <div class="flex min-w-0 items-center gap-3">
-              <span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">{{
+  <main
+    data-testid="dashboard-view"
+    class="min-h-full bg-background px-4 py-2.5 text-foreground sm:px-6 sm:py-3 lg:px-8 lg:py-3.5"
+  >
+    <div class="mx-auto w-full max-w-[1680px] space-y-2.5 sm:space-y-3">
+      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-2 sm:pb-2.5">
+        <div class="grid gap-1.5 px-0.5 sm:gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div
+            class="min-w-0 flex flex-col justify-center sm:gap-1 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-3.5 lg:gap-y-0.5"
+          >
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="text-[9px] font-semibold uppercase tracking-[0.16em] text-primary">{{
                 t('projectName').split(' ')[0]
               }}</span>
-              <span class="h-4 w-px bg-border" aria-hidden="true"></span>
-              <h1 class="truncate text-xl font-semibold tracking-tight">{{ t('nav.dashboard') }}</h1>
+              <span class="h-3 w-px bg-border" aria-hidden="true"></span>
+              <h1 class="truncate text-sm font-semibold tracking-tight sm:text-base">{{ t('nav.dashboard') }}</h1>
             </div>
-            <div v-if="latestConnection" class="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]">
+            <div
+              v-if="latestConnection"
+              class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-secondary sm:mt-0"
+            >
+              <span class="hidden text-border/80 lg:inline" aria-hidden="true">•</span>
               <span class="text-text-secondary">{{ t('dashboard.latestConnection') }}</span>
               <strong
-                class="max-w-48 truncate text-foreground"
+                class="max-w-40 truncate font-medium text-foreground sm:max-w-48"
                 :title="latestConnection.name || latestConnection.host"
                 >{{ latestConnection.name || latestConnection.host }}</strong
               >
-              <span class="hidden max-w-64 truncate font-mono text-text-secondary md:inline"
+              <span class="hidden max-w-56 truncate font-mono text-text-secondary md:inline"
                 >{{ latestConnection.username }}@{{ latestConnection.host }}:{{ latestConnection.port }}</span
               >
-              <span class="text-text-secondary">{{ formatRelativeTime(latestConnection.lastConnectedAt) }}</span>
+              <span>{{ formatRelativeTime(latestConnection.lastConnectedAt) }}</span>
               <button
                 type="button"
-                class="h-7 rounded-md border border-primary/30 bg-primary/10 px-2.5 text-[11px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                class="h-5.5 rounded border border-primary/30 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px]"
                 @click="connect(latestConnection)"
               >
                 {{ t('dashboard.reconnect') }}
@@ -324,7 +333,7 @@
                 v-if="activeSuspendedSessions.length"
                 data-testid="dashboard-suspended-sessions"
                 type="button"
-                class="hidden h-7 items-center gap-1.5 rounded-md border border-primary/25 bg-primary/10 px-2.5 text-[11px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 lg:inline-flex"
+                class="hidden h-5.5 items-center gap-1.5 rounded border border-primary/25 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px] lg:inline-flex"
                 :title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
                 @click="openSuspendedSessions"
               >
@@ -333,11 +342,11 @@
                 <span class="rounded-full bg-primary/15 px-1.5 tabular-nums">{{ activeSuspendedSessions.length }}</span>
               </button>
             </div>
-            <div v-else-if="activeSuspendedSessions.length" class="mt-3 hidden lg:flex">
+            <div v-else-if="activeSuspendedSessions.length" class="mt-1 hidden sm:mt-0 lg:flex">
               <button
                 data-testid="dashboard-suspended-sessions"
                 type="button"
-                class="inline-flex h-7 items-center gap-1.5 rounded-md border border-primary/25 bg-primary/10 px-2.5 text-[11px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                class="inline-flex h-5.5 items-center gap-1.5 rounded border border-primary/25 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px]"
                 :title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
                 @click="openSuspendedSessions"
               >
@@ -349,49 +358,52 @@
           </div>
 
           <div
-            class="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-5 lg:justify-end"
+            class="flex min-w-0 flex-col items-stretch gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-4 lg:justify-end lg:gap-x-5"
           >
-            <div
-              data-testid="dashboard-overview-stats"
-              class="flex items-end justify-between gap-7 px-1 sm:justify-start"
-            >
+            <div data-testid="dashboard-overview-stats" class="flex items-center gap-4 sm:items-end sm:gap-5">
               <div>
-                <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
-                  connections.connections.value.length
-                }}</strong>
-                <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.totalConnections') }}</div>
+                <div class="flex items-baseline gap-1.5 sm:block">
+                  <strong
+                    class="block text-sm font-semibold leading-none tabular-nums sm:text-base sm:leading-tight lg:text-lg"
+                    >{{ connections.connections.value.length }}</strong
+                  >
+                  <div class="text-[10px] text-text-secondary sm:mt-0.5">{{ t('dashboard.totalConnections') }}</div>
+                </div>
               </div>
               <div>
-                <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
-                  tags.tags.value.length
-                }}</strong>
-                <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.tagCount') }}</div>
+                <div class="flex items-baseline gap-1.5 sm:block">
+                  <strong
+                    class="block text-sm font-semibold leading-none tabular-nums sm:text-base sm:leading-tight lg:text-lg"
+                    >{{ tags.tags.value.length }}</strong
+                  >
+                  <div class="text-[10px] text-text-secondary sm:mt-0.5">{{ t('dashboard.tagCount') }}</div>
+                </div>
               </div>
             </div>
 
             <div
               v-if="preferences.values.value.dashboardShowLocalResources"
               data-testid="dashboard-local-resources"
-              class="min-w-0 border-t border-border pt-3 sm:min-w-[300px] sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"
+              class="min-w-0 border-t border-border/70 pt-1.5 sm:min-w-[240px] sm:border-l sm:border-t-0 sm:pl-3.5 sm:pt-0"
             >
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
+              <div class="flex items-center justify-between gap-2">
+                <div class="min-w-0 truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
                   {{ t('dashboard.resources.local') }}
                 </div>
-                <span class="flex items-center gap-1.5 text-[9px] text-text-secondary"
+                <span class="flex items-center gap-1 text-[9px] text-text-secondary"
                   ><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span
                   >{{ t('dashboard.resources.live') }}</span
                 >
               </div>
-              <div v-if="resources.local.value" class="mt-2 grid grid-cols-3 gap-4">
+              <div v-if="resources.local.value" class="mt-0.5 grid grid-cols-3 gap-2 sm:gap-2.5">
                 <div>
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[10px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span
-                    ><strong class="text-base font-semibold tabular-nums">{{
+                  <div class="flex items-baseline justify-between gap-1">
+                    <span class="text-[9px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span>
+                    <strong class="text-[11px] font-semibold tabular-nums sm:text-xs">{{
                       percent(resources.local.value.cpuPercent)
                     }}</strong>
                   </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-0.5 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
                       class="h-full rounded-full bg-primary"
                       :style="{ width: percent(resources.local.value.cpuPercent) }"
@@ -401,15 +413,15 @@
                 <div
                   :title="`${formatMemory(resources.local.value.memUsed)} / ${formatMemory(resources.local.value.memTotal)}`"
                 >
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[10px] font-medium text-text-secondary">{{
+                  <div class="flex items-baseline justify-between gap-1">
+                    <span class="text-[9px] font-medium text-text-secondary">{{
                       t('dashboard.resources.memory')
-                    }}</span
-                    ><strong class="text-base font-semibold tabular-nums">{{
+                    }}</span>
+                    <strong class="text-[11px] font-semibold tabular-nums sm:text-xs">{{
                       percent(resources.local.value.memPercent)
                     }}</strong>
                   </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-0.5 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
                       class="h-full rounded-full bg-success"
                       :style="{ width: percent(resources.local.value.memPercent) }"
@@ -417,13 +429,13 @@
                   </div>
                 </div>
                 <div>
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[10px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span
-                    ><strong class="text-base font-semibold tabular-nums">{{
+                  <div class="flex items-baseline justify-between gap-1">
+                    <span class="text-[9px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span>
+                    <strong class="text-[11px] font-semibold tabular-nums sm:text-xs">{{
                       percent(resources.local.value.diskPercent)
                     }}</strong>
                   </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-0.5 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
                       class="h-full rounded-full bg-warning"
                       :style="{ width: percent(resources.local.value.diskPercent) }"
@@ -431,10 +443,10 @@
                   </div>
                 </div>
               </div>
-              <div v-else-if="resources.localError.value" class="py-2 text-[11px] text-error">
+              <div v-else-if="resources.localError.value" class="py-0.5 text-[10px] text-error">
                 {{ resources.localError.value }}
               </div>
-              <div v-else class="grid min-h-10 place-items-center py-2 text-[11px] text-text-secondary">
+              <div v-else class="flex h-4 items-center justify-center text-[10px] text-text-secondary sm:h-4.5">
                 <BaseSpinner v-if="resources.localLoading.value" size="sm" /><span v-else>{{
                   t('dashboard.resources.unavailable')
                 }}</span>

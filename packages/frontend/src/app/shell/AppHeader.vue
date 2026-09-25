@@ -75,7 +75,7 @@
   <header
     data-testid="app-header"
     v-if="route.name !== 'Workspace' || preferences.values.value.navBarVisible"
-    class="sticky top-0 z-30 flex h-14 items-center border-b border-border bg-header pl-3 pr-6 shadow-sm"
+    class="sticky top-0 z-30 flex h-11 items-center border-b border-border bg-header pl-3 pr-4 shadow-sm sm:pr-6"
   >
     <nav
       ref="nav"
@@ -83,7 +83,7 @@
       :aria-label="t('common.primaryNavigation')"
     >
       <div class="app-nav-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-        <img src="@/assets/logo.png" :alt="t('projectName')" class="h-10 w-auto shrink-0" />
+        <img src="@/assets/logo.png" :alt="t('projectName')" class="h-7 w-auto shrink-0" />
         <RouterLink class="nav-link inline-flex" to="/">{{ t('nav.dashboard') }}</RouterLink>
         <RouterLink class="nav-link inline-flex" to="/workspace">{{ t('nav.terminal') }}</RouterLink>
         <RouterLink class="nav-link hidden md:inline-flex" to="/connections">{{ t('nav.connections') }}</RouterLink>
@@ -162,8 +162,8 @@
   }
 
   .nav-link {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     white-space: nowrap;
   }
@@ -171,8 +171,8 @@
   .icon-link {
     border: 0;
     background: transparent;
-    padding: 0.5rem;
-    font-size: 1.125rem;
+    padding: 0.25rem;
+    font-size: 0.9375rem;
     line-height: 1;
     color: var(--icon-color);
   }
@@ -196,7 +196,7 @@
     background: var(--link-active-color);
     opacity: 0;
     pointer-events: none;
-    transform: translateY(6px);
+    transform: translateY(2px);
     transition:
       left 300ms ease,
       width 300ms ease,
