@@ -495,17 +495,73 @@ jobs:
             tests/e2e/test-results/
           if-no-files-found: ignore
 
-      - name: Fail E2E group after collecting all results
-        if: ${{ always() && steps.e2e.outcome != 'success' }}
+      - name: Record E2E group outcome
+        if: always()
         shell: bash
+        env:
+          E2E_GROUP_ID: ${{ matrix.group }}
+          E2E_OUTCOME: ${{ steps.e2e.outcome }}
         run: |
-          echo "::error::E2E group ${{ matrix.group }} finished with outcome: ${{ steps.e2e.outcome }}"
-          exit 1
+          set -euo pipefail
+          result_dir="tests/e2e/.tmp/group-results"
+          mkdir -p "$result_dir"
+          printf '{"group":%s,"outcome":"%s"}\n' "$E2E_GROUP_ID" "$E2E_OUTCOME" > "$result_dir/group-$E2E_GROUP_ID.json"
+
+      - name: Upload E2E group outcome
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-result-group-${{ matrix.group }}
+          path: tests/e2e/.tmp/group-results/group-${{ matrix.group }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+  playwright-result:
+    name: Aggregate Playwright result
+    needs: [environment, playwright-groups]
+    if: ${{ always() && needs.environment.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download E2E group outcomes
+        uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-result-group-*
+          path: ${{ runner.temp }}/e2e-group-results
+          merge-multiple: true
+
+      - name: Fail only after every E2E group completed
+        shell: bash
+        env:
+          EXPECTED_GROUPS: ${{ needs.environment.outputs.workers }}
+        run: |
+          set -euo pipefail
+          result_root="$RUNNER_TEMP/e2e-group-results"
+          mapfile -t results < <(find "$result_root" -maxdepth 1 -type f -name 'group-*.json' -print | sort)
+
+          if [[ "${#results[@]}" -ne "$EXPECTED_GROUPS" ]]; then
+            echo "::error::Expected $EXPECTED_GROUPS E2E group results, found ${#results[@]}."
+            exit 1
+          fi
+
+          failed=false
+          for result in "${results[@]}"; do
+            group="$(jq -r '.group' "$result")"
+            outcome="$(jq -r '.outcome' "$result")"
+            echo "E2E group $group outcome: $outcome"
+            if [[ "$outcome" != "success" ]]; then
+              echo "::error::E2E group $group finished with outcome: $outcome"
+              failed=true
+            fi
+          done
+
+          if [[ "$failed" == "true" ]]; then
+            exit 1
+          fi
 
   screenshots-commit:
     name: Commit functional screenshots
-    needs: [environment, playwright-groups]
-    if: ${{ always() && (needs.environment.outputs.screenshots_requested == 'true' || needs.environment.outputs.changed == 'true') && needs.environment.result == 'success' && needs.playwright-groups.result == 'success' }}
+    needs: [environment, playwright-groups, playwright-result]
+    if: ${{ always() && (needs.environment.outputs.screenshots_requested == 'true' || needs.environment.outputs.changed == 'true') && needs.environment.result == 'success' && needs.playwright-groups.result == 'success' && needs.playwright-result.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -599,8 +655,8 @@ jobs:
           git push origin "HEAD:$GITHUB_REF_NAME"
 
   rebalance:
-    needs: [environment, runner-image, playwright-groups, screenshots-commit]
-    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.refresh_artifacts == true) && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.playwright-groups.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
+    needs: [environment, runner-image, playwright-groups, playwright-result, screenshots-commit]
+    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.refresh_artifacts == true) && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.playwright-groups.result == 'success' && needs.playwright-result.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
     permissions:
       actions: read
       contents: write
@@ -688,7 +744,7 @@ jobs:
 
   release-gate:
     name: Release gate
-    needs: [environment, runner-image, quality, build-image, playwright-groups]
+    needs: [environment, runner-image, quality, build-image, playwright-groups, playwright-result]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -700,7 +756,7 @@ jobs:
           QUALITY_RESULT: ${{ needs.quality.result }}
           DOCKER_RESULT: ${{ needs.build-image.result }}
           DOCKER_REQUIRED: ${{ needs.environment.outputs.docker_validation }}
-          PLAYWRIGHT_RESULT: ${{ needs.playwright-groups.result }}
+          PLAYWRIGHT_RESULT: ${{ needs.playwright-result.result }}
         run: |
           set -euo pipefail
           failed=false
@@ -731,7 +787,7 @@ jobs:
           else
             require_success_or_skipped "Docker deployment smoke" "$DOCKER_RESULT"
           fi
-          require_success "Playwright groups" "$PLAYWRIGHT_RESULT"
+          require_success "Aggregated Playwright result" "$PLAYWRIGHT_RESULT"
 
           if [[ "$failed" == "true" ]]; then
             exit 1
