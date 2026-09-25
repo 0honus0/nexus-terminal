@@ -1,3 +1,9 @@
+export const dateFromUnixSeconds = (value: number | null | undefined): Date | null => {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  const date = new Date(value * 1000);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 export const formatAgentNumber = (locale: string, value: number, options?: Intl.NumberFormatOptions): string =>
   new Intl.NumberFormat(locale, options).format(value);
 

@@ -17,8 +17,7 @@ export interface AgentAcpIntegrationConfigurationDto {
 }
 
 export type AgentIntegrationConfigurationDto =
-  | AgentMcpIntegrationConfigurationDto
-  | AgentAcpIntegrationConfigurationDto;
+  AgentMcpIntegrationConfigurationDto | AgentAcpIntegrationConfigurationDto;
 
 export interface AgentIntegrationViewDto {
   id: string;
@@ -32,6 +31,7 @@ export interface AgentIntegrationViewDto {
   enabled: boolean;
   refreshState: 'idle' | 'refreshing' | 'ready' | 'error';
   lastErrorCode: string | null;
+  /** Unix epoch seconds for the latest refresh attempt/success and scheduled retry. */
   lastAttemptAt: number | null;
   lastSuccessAt: number | null;
   nextRetryAt: number | null;
@@ -58,8 +58,7 @@ export interface AgentAcpIntegrationCreateRequestDto {
 }
 
 export type AgentIntegrationCreateRequestDto =
-  | AgentMcpIntegrationCreateRequestDto
-  | AgentAcpIntegrationCreateRequestDto;
+  AgentMcpIntegrationCreateRequestDto | AgentAcpIntegrationCreateRequestDto;
 
 export interface AgentMcpIntegrationUpdateFieldsDto {
   kind: 'mcp';
@@ -75,9 +74,7 @@ export interface AgentAcpIntegrationUpdateFieldsDto {
   enabled: boolean;
 }
 
-export type AgentIntegrationUpdateFieldsDto =
-  | AgentMcpIntegrationUpdateFieldsDto
-  | AgentAcpIntegrationUpdateFieldsDto;
+export type AgentIntegrationUpdateFieldsDto = AgentMcpIntegrationUpdateFieldsDto | AgentAcpIntegrationUpdateFieldsDto;
 
 export type AgentIntegrationUpdateRequestDto = AgentIntegrationUpdateFieldsDto & {
   expectedVersion: number;
