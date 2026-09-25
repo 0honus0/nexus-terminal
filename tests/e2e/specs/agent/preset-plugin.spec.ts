@@ -1372,10 +1372,25 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         .toContain('/literal slash prompt');
     });
 
-    const cancelRun = hub.getByRole('button', { name: 'Cancel run', exact: true });
-    if (await cancelRun.isVisible()) {
-      await cancelRun.click();
-      await expect(cancelRun).toHaveCount(0, { timeout: 30_000 });
+    const threadRunsResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
+    expect(threadRunsResponse.ok(), await threadRunsResponse.text()).toBeTruthy();
+    const threadRunPage = (await threadRunsResponse.json()) as Envelope<{ items: RunView[] }>;
+    const terminalRunStatuses = ['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'];
+    const activeRun = threadRunPage.data.items.find(
+      (candidate) => !terminalRunStatuses.includes(candidate.status),
+    );
+    if (activeRun) {
+      const cancelled = await context.request.post(`/api/v1/apps/nexus.agent/runs/${activeRun.id}/cancel`, {
+        headers: { 'X-Nexus-CSRF': await csrfToken(context.request), 'Idempotency-Key': randomUUID() },
+        data: { schemaVersion: 1, expectedVersion: activeRun.version },
+      });
+      expect(cancelled.ok(), await cancelled.text()).toBeTruthy();
+      await waitForTerminalRun(context.request, activeRun.id);
+      await page.reload();
+      await openAgentHub(page);
+      const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+      await presetThread.click();
+      await expect(presetThread).toHaveAttribute('aria-current', 'true');
     }
 
     const modelSelector = hub.getByRole('button', { name: 'Model', exact: true });

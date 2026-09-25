@@ -83,7 +83,7 @@
       "versionId": "3.14.7",
       "displayName": "Python 3.14.7",
       "contentDigestByArch": {
-        "x64": "sha256:2e6c4c15ef0a1ac144c4d78ab240691cf680e293297170b894ec14bd905e4013"
+        "x64": "sha256:f9e90b2b7b71cd16fa1eb41b567afd049097c4d725292d657aefeaf94bdb1057"
       },
       "downloadRefByArch": {
         "x64": "mise://2026.9.5/python/3.14.7"

@@ -338,34 +338,30 @@ test('Agent settings surface exposes the production control plane and captures f
   const agentAppsSection = panel
     .getByRole('heading', { name: 'Agent apps', exact: true })
     .locator('xpath=ancestor::section[1]');
-  const nexusAgentCard = agentAppsSection
-    .getByText('Nexus Agent', { exact: true })
-    .first()
-    .locator('xpath=ancestor::div[contains(@class, "rounded-2xl")][1]');
-  await nexusAgentCard.getByRole('button', { name: 'Configure Policies', exact: true }).click();
-  const allGranted = nexusAgentCard.getByRole('button', { name: 'Disable all capabilities', exact: true });
+  await agentAppsSection.getByRole('button', { name: 'Configure Policies', exact: true }).click();
+  const allGranted = agentAppsSection.getByRole('button', { name: 'Disable all capabilities', exact: true });
   await expect(allGranted).toContainText('Disable');
   await expect(allGranted.locator('.fa-check')).toBeVisible();
 
-  const firstCapability = nexusAgentCard.getByRole('checkbox').first();
+  const firstCapability = agentAppsSection.getByRole('checkbox').first();
   await expect(firstCapability).toBeChecked();
   await firstCapability.uncheck();
-  const partiallyGranted = nexusAgentCard.getByRole('button', { name: 'Enable all capabilities', exact: true });
+  const partiallyGranted = agentAppsSection.getByRole('button', { name: 'Enable all capabilities', exact: true });
   await expect(partiallyGranted).toContainText('Enable');
   await expect(partiallyGranted.locator('.fa-minus')).toBeVisible();
 
   await partiallyGranted.click();
-  const restoredAll = nexusAgentCard.getByRole('button', { name: 'Disable all capabilities', exact: true });
+  const restoredAll = agentAppsSection.getByRole('button', { name: 'Disable all capabilities', exact: true });
   await expect(restoredAll.locator('.fa-check')).toBeVisible();
 
   await restoredAll.click();
-  const noneGranted = nexusAgentCard.getByRole('button', { name: 'Enable all capabilities', exact: true });
+  const noneGranted = agentAppsSection.getByRole('button', { name: 'Enable all capabilities', exact: true });
   await expect(noneGranted).toContainText('Enable');
   await expect(noneGranted.locator('.fa-check')).toHaveCount(0);
   await expect(noneGranted.locator('.fa-minus')).toHaveCount(0);
   await noneGranted.click();
   await expect(
-    nexusAgentCard.getByRole('button', { name: 'Disable all capabilities', exact: true }).locator('.fa-check'),
+    agentAppsSection.getByRole('button', { name: 'Disable all capabilities', exact: true }).locator('.fa-check'),
   ).toBeVisible();
 
   await settingsNavigation.getByRole('button', { name: 'Safety and system', exact: true }).click();
