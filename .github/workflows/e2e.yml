@@ -404,9 +404,9 @@ jobs:
         password: ${{ github.token }}
       options: --ipc=host
     strategy:
-      # Keep full failure collection on main/scheduled/manual validation, but stop
-      # sibling groups early on ordinary branch/PR iteration once one group fails.
-      fail-fast: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name != github.event.repository.default_branch) }}
+      # Always collect every group result. The release-gate job runs with always()
+      # and reports the aggregate failure only after all matrix groups finish.
+      fail-fast: false
       matrix: ${{ fromJSON(needs.environment.outputs.matrix) }}
     env:
       E2E_GROUP_WORKERS: ${{ needs.environment.outputs.workers }}
