@@ -923,6 +923,9 @@
 <template>
   <div
     ref="surfaceRoot"
+    data-workspace-surface
+    :data-workspace-id="session.id"
+    :data-workspace-active="active !== false ? 'true' : undefined"
     class="relative flex h-full min-h-0 overflow-hidden bg-background"
     :class="mobile ? 'flex-col' : 'flex-row'"
     @pointerdown.capture="handleSurfacePointerDown"
@@ -1351,6 +1354,8 @@
 
     <OverlayPanel
       data-testid="file-manager-modal"
+      :data-workspace-id="session.id"
+      :data-workspace-active="active !== false ? 'true' : undefined"
       panel-test-id="file-manager-modal-panel"
       :visible="fileManagerPopupVisible"
       teleport
@@ -1434,6 +1439,8 @@
 
     <OverlayPanel
       data-testid="document-popup"
+      :data-workspace-id="session.id"
+      :data-workspace-active="active !== false ? 'true' : undefined"
       :data-document-mode="documentMode"
       :visible="documentPopupVisible"
       :keep-mounted="true"

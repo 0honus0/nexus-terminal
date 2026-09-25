@@ -103,9 +103,11 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
 }
 
 const visibleFileManagerModal = (page: Page): Locator =>
-  page.locator('[data-testid="file-manager-modal"]:visible').first();
+  page.locator('[data-testid="file-manager-modal"][data-workspace-active="true"]:visible').first();
 const visibleFileManagerOpenButton = (page: Page): Locator =>
-  page.locator('[data-testid="open-file-manager-button"]:visible').first();
+  page
+    .locator('[data-workspace-surface][data-workspace-active="true"] [data-testid="open-file-manager-button"]:visible')
+    .first();
 
 export function activeFileManagerList(page: Page): Locator {
   return visibleFileManagerModal(page).getByTestId('file-manager-list');
