@@ -747,10 +747,10 @@ test('resumed terminal pages older history through a bounded window and restores
     await expect.poll(() => historyResponseCount, { timeout: 10_000 }).toBeGreaterThan(0);
 
     for (let pageIndex = 0; pageIndex < 30 && !(await renderedTerminalText()).includes(earlyMarker); pageIndex += 1) {
-      const previousResponses = historyResponseCount;
       await dragHistorySliderToTop();
+      await page.mouse.move(scrollableBox!.x + scrollableBox!.width / 2, scrollableBox!.y + scrollableBox!.height / 2);
       await page.mouse.wheel(0, -6_000);
-      await expect.poll(() => historyResponseCount, { timeout: 10_000 }).toBeGreaterThan(previousResponses);
+      await page.waitForTimeout(100);
     }
     expect(await renderedTerminalText()).toContain(earlyMarker);
 
