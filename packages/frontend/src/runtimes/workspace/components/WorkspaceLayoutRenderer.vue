@@ -425,25 +425,20 @@
   }
   :deep(.splitpanes__splitter) {
     position: relative;
-    z-index: 5;
+    z-index: 30;
     box-sizing: border-box;
     background: transparent !important;
     background-image: none !important;
   }
   :deep(.splitpanes__splitter::before) {
     content: '';
-    display: block;
-    width: 100%;
-    height: 100%;
+    position: absolute;
     border: 0;
     background: var(--border-color);
     transition: background-color 0.1s ease-in-out;
   }
   :deep(.splitpanes__splitter:hover::before) {
     background: var(--primary-light-color, var(--primary-color));
-  }
-  :deep(.splitpanes__splitter::after) {
-    display: none !important;
   }
   .workspace-split--locked :deep(.splitpanes__splitter) {
     pointer-events: none;
@@ -452,10 +447,24 @@
   .workspace-split--locked :deep(.splitpanes__splitter::before) {
     background: var(--border-color);
   }
-  :deep(.splitpanes--vertical > .splitpanes__splitter) {
-    width: 1px !important;
+  .workspace-split.splitpanes--vertical > :deep(.splitpanes__splitter) {
+    width: 9px !important;
+    margin-inline: -4px;
   }
-  :deep(.splitpanes--horizontal > .splitpanes__splitter) {
-    height: 1px !important;
+  .workspace-split.splitpanes--vertical > :deep(.splitpanes__splitter::before) {
+    inset-block: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
+  }
+  .workspace-split.splitpanes--horizontal > :deep(.splitpanes__splitter) {
+    height: 9px !important;
+    margin-block: -4px;
+  }
+  .workspace-split.splitpanes--horizontal > :deep(.splitpanes__splitter::before) {
+    inset-inline: 0;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%);
   }
 </style>

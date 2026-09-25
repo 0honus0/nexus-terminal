@@ -617,14 +617,16 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       await expect(configurator).toBeHidden();
     });
 
-    await step('an unlocked layout splitter remains draggable', async () => {
+    await step('an unlocked layout splitter keeps a wider invisible resize hit area', async () => {
       const before = await firstPane.boundingBox();
       const splitterBox = await firstSplitter.boundingBox();
       expect(before).toBeTruthy();
       expect(splitterBox).toBeTruthy();
-      await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, splitterBox!.y + splitterBox!.height / 2);
+      const resizeY = splitterBox!.y + splitterBox!.height / 2;
+      const expandedHitX = splitterBox!.x + splitterBox!.width / 2 + 3;
+      await page.mouse.move(expandedHitX, resizeY);
       await page.mouse.down();
-      await page.mouse.move(splitterBox!.x + 80, splitterBox!.y + splitterBox!.height / 2, { steps: 8 });
+      await page.mouse.move(splitterBox!.x + 80, resizeY, { steps: 8 });
       await page.mouse.up();
       await expect
         .poll(async () => Math.abs(((await firstPane.boundingBox())?.width ?? 0) - before!.width))
