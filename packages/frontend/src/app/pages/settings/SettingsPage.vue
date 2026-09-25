@@ -166,6 +166,14 @@
     () => allTabs.value.find((item) => item.value === active.value) ?? allTabs.value[0],
   );
 
+  type TabSurface = 'mobile' | 'desktop';
+  type TabOrientation = 'horizontal' | 'vertical';
+  const tabElementId = (surface: TabSurface, tab: SettingsTab): string => `settings-tab-${surface}-${tab}`;
+  const tabLabel = (tab: SettingsTab): string => {
+    const item = allTabs.value.find((candidate) => candidate.value === tab);
+    return item ? t(item.labelKey) : tab;
+  };
+
   const selectTab = (tab: SettingsTab) => {
     if (active.value === tab) {
       if (contentContainer.value) {
@@ -180,6 +188,34 @@
     if (currentQueryTab !== tab) {
       void router.replace({ query: { ...route.query, tab } }).catch(() => undefined);
     }
+  };
+
+  const focusTab = (surface: TabSurface, tab: SettingsTab): void => {
+    requestAnimationFrame(() => document.getElementById(tabElementId(surface, tab))?.focus());
+  };
+
+  const handleTabKeydown = (
+    event: KeyboardEvent,
+    current: SettingsTab,
+    orientation: TabOrientation,
+    surface: TabSurface,
+  ): void => {
+    const tabs = allTabs.value.map((item) => item.value);
+    const index = tabs.indexOf(current);
+    if (index < 0) return;
+    let target: SettingsTab | undefined;
+    if (event.key === 'Home') target = tabs[0];
+    else if (event.key === 'End') target = tabs[tabs.length - 1];
+    else if (orientation === 'horizontal' && event.key === 'ArrowRight') target = tabs[(index + 1) % tabs.length];
+    else if (orientation === 'horizontal' && event.key === 'ArrowLeft')
+      target = tabs[(index - 1 + tabs.length) % tabs.length];
+    else if (orientation === 'vertical' && event.key === 'ArrowDown') target = tabs[(index + 1) % tabs.length];
+    else if (orientation === 'vertical' && event.key === 'ArrowUp')
+      target = tabs[(index - 1 + tabs.length) % tabs.length];
+    if (!target) return;
+    event.preventDefault();
+    selectTab(target);
+    focusTab(surface, target);
   };
 
   const handlePreferencesSaved = (preferences: PreferencesDto) => {
@@ -275,6 +311,8 @@
                 :key="item.value"
                 type="button"
                 role="tab"
+                :id="tabElementId('mobile', item.value)"
+                :tabindex="active === item.value ? 0 : -1"
                 :aria-selected="active === item.value"
                 :aria-controls="`settings-panel-${item.value}`"
                 class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer"
@@ -284,6 +322,7 @@
                     : 'text-text-secondary hover:text-foreground hover:bg-header/60'
                 "
                 @click="selectTab(item.value)"
+                @keydown="handleTabKeydown($event, item.value, 'horizontal', 'mobile')"
               >
                 <i :class="item.icon" class="text-[11px]" aria-hidden="true"></i>
                 <span>{{ t(item.labelKey) }}</span>
@@ -309,7 +348,12 @@
               </div>
 
               <!-- 分组导航 (Soft, breathable groups without harsh divider borders) -->
-              <nav class="space-y-3.5 xl:space-y-4" role="tablist" :aria-label="t('settings.sectionsAriaLabel')">
+              <nav
+                class="space-y-3.5 xl:space-y-4"
+                role="tablist"
+                aria-orientation="vertical"
+                :aria-label="t('settings.sectionsAriaLabel')"
+              >
                 <div v-for="group in tabGroups" :key="group.id" class="space-y-1">
                   <div class="px-2.5 text-[11px] font-semibold text-text-secondary/70 uppercase tracking-wider">
                     {{ t(group.titleKey) }}
@@ -320,6 +364,8 @@
                       :key="item.value"
                       type="button"
                       role="tab"
+                      :id="tabElementId('desktop', item.value)"
+                      :tabindex="active === item.value ? 0 : -1"
                       :aria-selected="active === item.value"
                       :aria-controls="`settings-panel-${item.value}`"
                       class="group relative flex w-full items-center justify-between rounded-xl pl-3 pr-2.5 py-2 xl:py-2.5 text-left text-xs transition-all duration-150 ease-out cursor-pointer overflow-hidden"
@@ -329,6 +375,7 @@
                           : 'text-text-secondary hover:text-foreground hover:bg-header/70 font-medium'
                       "
                       @click="selectTab(item.value)"
+                      @keydown="handleTabKeydown($event, item.value, 'vertical', 'desktop')"
                     >
                       <!-- 左侧高亮指示条 (Active Left Indicator) -->
                       <span
@@ -403,11 +450,15 @@
               v-if="visited.has('workspace')"
               v-show="active === 'workspace'"
               id="settings-panel-workspace"
+              role="tabpanel"
+              :aria-label="tabLabel('workspace')"
             />
             <PreferencesSettingsPanel
               v-if="visited.has('system')"
               v-show="active === 'system'"
               id="settings-panel-system"
+              role="tabpanel"
+              :aria-label="tabLabel('system')"
               section="system"
               :locales="supportedLocales"
               @saved="handlePreferencesSaved"
@@ -416,6 +467,8 @@
               v-if="visited.has('security')"
               v-show="active === 'security'"
               id="settings-panel-security"
+              role="tabpanel"
+              :aria-label="tabLabel('security')"
               section="security"
               :two-factor-enabled="auth.user.value?.twoFactorEnabled"
               @auth-changed="auth.refreshSession"
@@ -424,19 +477,41 @@
               v-if="visited.has('ipControl')"
               v-show="active === 'ipControl'"
               id="settings-panel-ipControl"
+              role="tabpanel"
+              :aria-label="tabLabel('ipControl')"
               section="ipControl"
               :two-factor-enabled="auth.user.value?.twoFactorEnabled"
               @auth-changed="auth.refreshSession"
             />
-            <BackupSettingsPanel v-if="visited.has('data')" v-show="active === 'data'" id="settings-panel-data" />
+            <BackupSettingsPanel
+              v-if="visited.has('data')"
+              v-show="active === 'data'"
+              id="settings-panel-data"
+              role="tabpanel"
+              :aria-label="tabLabel('data')"
+            />
             <AppearanceSettingsPanel
               v-if="visited.has('appearance')"
               v-show="active === 'appearance'"
               id="settings-panel-appearance"
+              role="tabpanel"
+              :aria-label="tabLabel('appearance')"
               @customize="appearance.openCustomizer()"
             />
-            <AgentSettingsPanel v-if="visited.has('agent')" v-show="active === 'agent'" id="settings-panel-agent" />
-            <AboutPanel v-if="visited.has('about')" v-show="active === 'about'" id="settings-panel-about" />
+            <AgentSettingsPanel
+              v-if="visited.has('agent')"
+              v-show="active === 'agent'"
+              id="settings-panel-agent"
+              role="tabpanel"
+              :aria-label="tabLabel('agent')"
+            />
+            <AboutPanel
+              v-if="visited.has('about')"
+              v-show="active === 'about'"
+              id="settings-panel-about"
+              role="tabpanel"
+              :aria-label="tabLabel('about')"
+            />
           </div>
         </section>
       </div>
