@@ -746,11 +746,13 @@ test('resumed terminal pages older history through a bounded window and restores
     await wheelUntil(-6_000, () => historyRequestCount > 0, 'scrolling upward should request older history');
     await expect.poll(() => historyResponseCount, { timeout: 10_000 }).toBeGreaterThan(0);
 
-    await wheelUntil(
-      -6_000,
-      async () => (await renderedTerminalText()).includes(earlyMarker),
-      'older pages should reach the earliest history',
-    );
+    for (let pageIndex = 0; pageIndex < 30 && !(await renderedTerminalText()).includes(earlyMarker); pageIndex += 1) {
+      const previousResponses = historyResponseCount;
+      await dragHistorySliderToTop();
+      await page.mouse.wheel(0, -6_000);
+      await expect.poll(() => historyResponseCount, { timeout: 10_000 }).toBeGreaterThan(previousResponses);
+    }
+    expect(await renderedTerminalText()).toContain(earlyMarker);
 
     const requestsBeforeReturningToTail = historyRequestCount;
     await dragHistorySliderToBottom();
