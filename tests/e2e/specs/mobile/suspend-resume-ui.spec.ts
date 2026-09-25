@@ -235,6 +235,18 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
+  await page.addInitScript(() => {
+    const NativeWebSocket = window.WebSocket;
+    const tracked: WebSocket[] = [];
+    const target = window as typeof window & { __e2eWorkspaceSockets?: WebSocket[] };
+    target.__e2eWorkspaceSockets = tracked;
+    window.WebSocket = class extends NativeWebSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols ?? []);
+        if (new URL(String(url), window.location.href).pathname === '/ws/workspace') tracked.push(this);
+      }
+    } as typeof WebSocket;
+  });
   await connectTestSshFromConnectionsPage(page, connectionId);
 
   const tabBar = page.getByTestId('terminal-tab-bar');
@@ -314,6 +326,58 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
     });
     expect(maxTabs).toBe(1);
     await expect(tabBar.locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first()).toBeVisible();
+
+    const browserSocketClosed = await page.evaluate(() => {
+      const sockets = (window as typeof window & { __e2eWorkspaceSockets?: WebSocket[] }).__e2eWorkspaceSockets ?? [];
+      const socket = [...sockets].reverse().find((candidate) => candidate.readyState === WebSocket.OPEN);
+      if (!socket) return false;
+      socket.close(4000, 'E2E controlled Workspace disconnect');
+      return true;
+    });
+    expect(browserSocketClosed).toBeTruthy();
+
+    await expect
+      .poll(
+        async () => {
+          const currentTab = tabBar.locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first();
+          const workspaceId = (await currentTab.getAttribute('data-session-id')) ?? '';
+          const record = (await suspendedSessions(context.request)).find((session) => session.id === suspended!.id);
+          return {
+            tabCount: await tabBar.locator('[data-session-id]').count(),
+            workspaceId,
+            originalWorkspaceId: record?.originalWorkspaceId,
+            status: record?.status,
+            ownershipState: record?.ownershipState,
+            attachedWorkspaceId: record?.attachedWorkspaceId,
+          };
+        },
+        { timeout: 30_000 },
+      )
+      .toMatchObject({
+        tabCount: 1,
+        originalWorkspaceId: resumedSessionId,
+        status: 'active',
+        ownershipState: 'attached',
+      });
+
+    const recoveredTab = tabBar.locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first();
+    const recoveredSessionId = (await recoveredTab.getAttribute('data-session-id')) ?? '';
+    expect(recoveredSessionId).not.toBe('');
+    expect(recoveredSessionId).not.toBe(resumedSessionId);
+    await expect
+      .poll(async () => {
+        const record = (await suspendedSessions(context.request)).find((session) => session.id === suspended!.id);
+        return record?.attachedWorkspaceId;
+      })
+      .toBe(recoveredSessionId);
+
+    const recoveredInput = page.getByTestId('command-input');
+    await expect(recoveredInput).toBeEnabled({ timeout: 20_000 });
+    await recoveredInput.fill("printf 'AUTO_RECONCILE_OK\\n'");
+    await recoveredInput.press('Enter');
+    await expect
+      .poll(async () => page.getByTestId('terminal').locator('.xterm-rows').innerText())
+      .toContain('AUTO_RECONCILE_OK');
   } finally {
     await page.evaluate(() => {
       const target = window as typeof window & { __suspendTabObserver?: MutationObserver; __suspendTabState?: unknown };

@@ -433,6 +433,14 @@ export class WorkspaceRuntimeSession {
       );
       return;
     }
+    if (navigator.onLine === false) {
+      this.state.value = 'disconnected';
+      logger.debug(
+        { workspaceId: this.id, connectionId: this.connection.id, reconnectAttempt: this.reconnectAttempt },
+        'Workspace reconnect deferred while browser is offline',
+      );
+      return;
+    }
     this.reconnectAttempt += 1;
     const delay = Math.min(2 ** Math.min(this.reconnectAttempt, 5) * 1000, RECONNECT_MAX_DELAY_MS);
     this.state.value = 'reconnecting';

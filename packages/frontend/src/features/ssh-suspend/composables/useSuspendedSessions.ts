@@ -43,10 +43,7 @@ export function applySuspendedAutoTermination(
     if (oldest) handledAutoTerminations.delete(oldest);
   }
   const session = sessions.value.find((item) => item.id === id);
-  if (session) {
-    session.status = 'disconnected';
-    session.disconnectedAt = new Date().toISOString();
-  } else {
+  if (!session) {
     logger.debug(
       { suspendedSessionId: id, reason: event.reason, failureKind: 'suspended_session_not_found_in_catalog' },
       'Suspended Workspace auto-termination referenced an unknown catalog session',

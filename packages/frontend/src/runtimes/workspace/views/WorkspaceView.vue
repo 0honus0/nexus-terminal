@@ -61,10 +61,10 @@
   const history = useCommandHistory();
   const serverTransfers = useServerTransfers();
   const registry = workspaceRuntimeRegistry;
-  const FOREGROUND_RECOVERY_ATTEMPTS = 10;
-  const FOREGROUND_RECOVERY_DELAY_MS = 400;
-  let foregroundRecoveryPromise: Promise<void> | null = null;
-  let wasDocumentHidden = false;
+  const SESSION_RECONCILE_ATTEMPTS = 10;
+  const SESSION_RECONCILE_DELAY_MS = 400;
+  let sessionReconcilePromise: Promise<void> | null = null;
+  let sessionReconcileRequested = false;
   let workspaceActive = false;
   watch(registry.suspendAutoTerminationNotice, (notice) => {
     if (!notice) return;
@@ -583,16 +583,33 @@
         },
         'Marked Workspace could not find a matching suspended session',
       );
-      registry.remove(workspaceId, 'Marked suspended session could not be recovered');
       return;
     }
     await resumeSuspended(suspended);
   };
 
-  const recoverMarkedSshSessionsAfterForeground = (): Promise<void> => {
-    if (!workspaceActive || !device.isMobile.value) return Promise.resolve();
-    if (foregroundRecoveryPromise) return foregroundRecoveryPromise;
-    foregroundRecoveryPromise = (async () => {
+  const reconcileDisconnectedWorkspaceSessions = (options: { kickOrdinary?: boolean } = {}): Promise<void> => {
+    if (!workspaceActive) return Promise.resolve();
+
+    if (options.kickOrdinary) {
+      for (const session of registry.orderedSessions.value) {
+        if (
+          !session.markedForSuspend.value &&
+          (session.state.value === 'disconnected' ||
+            session.state.value === 'error' ||
+            session.state.value === 'reconnecting')
+        ) {
+          session.reconnectNow();
+        }
+      }
+    }
+
+    if (sessionReconcilePromise) {
+      sessionReconcileRequested = true;
+      return sessionReconcilePromise;
+    }
+    sessionReconcileRequested = false;
+    sessionReconcilePromise = (async () => {
       const candidates = new Set(
         registry.orderedSessions.value
           .filter(
@@ -605,76 +622,94 @@
       );
       if (!candidates.size) return;
 
-      for (let attempt = 0; attempt < FOREGROUND_RECOVERY_ATTEMPTS && candidates.size; attempt += 1) {
-        if (!workspaceActive || !device.isMobile.value) return;
+      for (let attempt = 0; attempt < SESSION_RECONCILE_ATTEMPTS && candidates.size; attempt += 1) {
+        if (!workspaceActive) return;
         for (const workspaceId of [...candidates]) {
           const session = registry.sessions.get(workspaceId);
           if (
             !session?.markedForSuspend.value ||
             session.state.value === 'connected' ||
             session.state.value === 'connecting'
-          )
+          ) {
             candidates.delete(workspaceId);
+          }
         }
         if (!candidates.size) break;
 
         const refreshed = await refreshSuspendedSessionsCatalog();
-        if (!workspaceActive || !device.isMobile.value) return;
+        if (!workspaceActive) return;
         if (refreshed.ok) {
           for (const workspaceId of [...candidates]) {
             const suspended = findSuspendedSessionByOriginalWorkspace(workspaceId);
             if (!suspended) continue;
+            if (suspended.ownershipState !== 'available') {
+              if (suspended.attachedWorkspaceId && suspended.attachedWorkspaceId !== workspaceId) {
+                logger.debug(
+                  {
+                    workspaceId,
+                    suspendedSessionId: suspended.id,
+                    attachedWorkspaceId: suspended.attachedWorkspaceId,
+                    ownershipState: suspended.ownershipState,
+                  },
+                  'Marked Workspace reconciliation deferred to authoritative backend owner',
+                );
+                candidates.delete(workspaceId);
+              }
+              continue;
+            }
             if (await resumeSuspended(suspended, { silent: true })) candidates.delete(workspaceId);
           }
         }
-        if (candidates.size) await new Promise((resolve) => window.setTimeout(resolve, FOREGROUND_RECOVERY_DELAY_MS));
+
+        if (candidates.size && attempt + 1 < SESSION_RECONCILE_ATTEMPTS) {
+          await new Promise((resolve) => window.setTimeout(resolve, SESSION_RECONCILE_DELAY_MS));
+        }
       }
 
-      if (!candidates.size) return;
-      if (!workspaceActive || !device.isMobile.value) return;
-      const finalRefresh = await refreshSuspendedSessionsCatalog();
-      if (!workspaceActive || !device.isMobile.value || !finalRefresh.ok) return;
-      for (const workspaceId of [...candidates]) {
+      for (const workspaceId of candidates) {
         const session = registry.sessions.get(workspaceId);
-        if (
-          !session?.markedForSuspend.value ||
-          session.state.value === 'connected' ||
-          session.state.value === 'connecting'
-        )
-          continue;
-        const suspended = findSuspendedSessionByOriginalWorkspace(workspaceId);
-        if (suspended) {
-          await resumeSuspended(suspended, { silent: true });
-          continue;
-        }
+        if (!session?.markedForSuspend.value) continue;
         logger.debug(
           {
             workspaceId,
             connectionId: session.connection.id,
             state: session.state.value,
-            failureKind: 'suspended_session_not_found',
+            failureKind: 'suspended_backend_state_pending',
           },
-          'Foreground recovery could not find a matching suspended session',
+          'Marked Workspace remains disconnected until backend suspended state becomes recoverable',
         );
-        // A suspend mark is explicit user intent. If takeover never produced a recoverable
-        // hanging session, close the stale local tab instead of silently opening a fresh SSH login.
-        registry.remove(workspaceId, 'Marked suspended session could not be recovered');
       }
     })().finally(() => {
-      foregroundRecoveryPromise = null;
+      sessionReconcilePromise = null;
+      if (sessionReconcileRequested && workspaceActive) {
+        sessionReconcileRequested = false;
+        void reconcileDisconnectedWorkspaceSessions();
+      }
     });
-    return foregroundRecoveryPromise;
+    return sessionReconcilePromise;
   };
 
+  watch(
+    () =>
+      registry.orderedSessions.value.map((session) => ({
+        id: session.id,
+        marked: session.markedForSuspend.value,
+        state: session.state.value,
+      })),
+    (states) => {
+      if (states.some((session) => session.marked && session.state !== 'connected' && session.state !== 'connecting')) {
+        void reconcileDisconnectedWorkspaceSessions();
+      }
+    },
+  );
+
   const handleDocumentVisibilityChange = () => {
-    if (!device.isMobile.value) return;
-    if (document.visibilityState === 'hidden') {
-      wasDocumentHidden = true;
-      return;
-    }
-    if (!wasDocumentHidden) return;
-    wasDocumentHidden = false;
-    void recoverMarkedSshSessionsAfterForeground();
+    if (document.visibilityState !== 'visible') return;
+    void reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
+  };
+
+  const handleBrowserOnline = () => {
+    void reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
   };
 
   const saveSidebarWidth = (pane: string, width: string) => {
@@ -757,6 +792,7 @@
     window.addEventListener('keydown', handleGlobalKeydown);
     window.addEventListener('keyup', handleGlobalKeyup);
     document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
+    window.addEventListener('online', handleBrowserOnline);
     stopServerTransferPolling = serverTransfers.startPolling();
     const startup = await Promise.allSettled([
       workspaceLayout.load(),
@@ -771,13 +807,15 @@
         preferenceLoad.reason instanceof Error ? preferenceLoad.reason.message : String(preferenceLoad.reason),
       );
     await loadQueryActions();
-    if (device.isMobile.value && document.visibilityState === 'visible') void recoverMarkedSshSessionsAfterForeground();
+    if (document.visibilityState === 'visible') {
+      void reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
+    }
   });
   onBeforeUnmount(() => {
     workspaceActive = false;
-    wasDocumentHidden = false;
     window.removeEventListener('keydown', handleGlobalKeydown);
     window.removeEventListener('keyup', handleGlobalKeyup);
+    window.removeEventListener('online', handleBrowserOnline);
     document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
     stopServerTransferPolling?.();
     void statusScaleSaver.dispose({ flush: true });
