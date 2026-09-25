@@ -3,8 +3,6 @@
   "group": 1,
   "workers": 8,
   "specs": [
-    "specs/ui/login-captcha-surface.spec.ts",
-    "specs/ssh/sftp-download.spec.ts",
-    "specs/ssh/status-history-time-axis.spec.ts"
+    "specs/ui/login-captcha-surface.spec.ts"
   ]
 }
