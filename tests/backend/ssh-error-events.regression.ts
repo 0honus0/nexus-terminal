@@ -234,6 +234,17 @@ assert.doesNotThrow(
   'a throwing shell close subscriber must be isolated from the ssh2 channel callback',
 );
 
+const ownedCloseChannel = new FakeChannel();
+const ownedCloseShell = new SshShellSessionAdapter(ownedCloseChannel as unknown as ClientChannel);
+let ownedCloseEvents = 0;
+ownedCloseShell.onClose(() => {
+  ownedCloseEvents += 1;
+});
+ownedCloseShell.close();
+assert.equal(ownedCloseEvents, 1, 'transport-owned shell close must notify terminal owners immediately');
+ownedCloseChannel.emit('close');
+assert.equal(ownedCloseEvents, 1, 'late ssh2 close must not duplicate the owned shell close notification');
+
 const connectedRaw = new FakeConnectClient();
 connectSshClient(connectedRaw as unknown as Client, {
   config: { username: 'test' },

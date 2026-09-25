@@ -15,11 +15,7 @@ export class SshShellSessionAdapter implements RemoteShellSession {
       emitSshEventSafely(this.events, 'stderr', Buffer.isBuffer(data) ? data : Buffer.from(data)),
     );
     channel.on('error', (error: Error) => emitSshEventSafely(this.events, 'shell-error', error));
-    channel.on('close', () => {
-      if (!this.open) return;
-      this.open = false;
-      emitSshEventSafely(this.events, 'close');
-    });
+    channel.on('close', () => this.finishClose());
   }
 
   get isOpen(): boolean {
@@ -80,11 +76,17 @@ export class SshShellSessionAdapter implements RemoteShellSession {
 
   close(): void {
     if (!this.open) return;
-    this.open = false;
+    this.finishClose();
     try {
       this.channel.close();
     } catch {
       this.channel.destroy();
     }
+  }
+
+  private finishClose(): void {
+    if (!this.open) return;
+    this.open = false;
+    emitSshEventSafely(this.events, 'close');
   }
 }

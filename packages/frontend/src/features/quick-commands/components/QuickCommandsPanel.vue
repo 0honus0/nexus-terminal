@@ -477,7 +477,7 @@
               v-for="command in group.commands"
               :key="command.id"
               :data-command-id="command.id"
-              class="quick-command-row group flex cursor-pointer select-none items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 transition-all duration-150 hover:bg-primary/10 active:bg-primary/15"
+              class="quick-command-row group flex cursor-pointer select-none items-center justify-between gap-2 rounded-lg transition-all duration-150 hover:bg-primary/10 active:bg-primary/15"
               :class="[
                 compact ? 'quick-command-row--compact' : '',
                 selectedId === command.id ? 'bg-primary/20 font-medium' : '',
@@ -523,7 +523,7 @@
             v-for="command in flat"
             :key="command.id"
             :data-command-id="command.id"
-            class="quick-command-row group flex cursor-pointer select-none items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 transition-all duration-150 hover:bg-primary/10 active:bg-primary/15"
+            class="quick-command-row group flex cursor-pointer select-none items-center justify-between gap-2 rounded-lg transition-all duration-150 hover:bg-primary/10 active:bg-primary/15"
             :class="[
               compact ? 'quick-command-row--compact' : '',
               selectedId === command.id ? 'bg-primary/20 font-medium' : '',

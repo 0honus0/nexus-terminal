@@ -6,6 +6,12 @@ const source = fs.readFileSync(
   'utf8',
 );
 
+assert.equal(
+  (source.match(/quick-command-row group flex cursor-pointer[^"]*px-2\.5 py-1\.5/g) ?? []).length,
+  0,
+  'template utility padding must not override scale-owned Quick Commands row padding',
+);
+
 assert(
   source.includes('padding: max(0.1rem, calc(var(--quick-row-scale) * 0.5rem - 0.15rem))'),
   'normal Quick Commands rows must convert a 0.12 scale step into a visible vertical padding change',
