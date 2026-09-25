@@ -17,5 +17,8 @@ assert(
 );
 assert(workflow.indexOf('Upload Playwright report') < workflow.indexOf('Fail E2E group after collecting all results'));
 assert(config.includes('maxFailures: 0'));
+assert(config.includes('corepack pnpm exec tsx src/index.ts'));
+assert(config.includes('corepack pnpm run dev --host 127.0.0.1'));
+assert(!config.includes('&& pnpm exec tsx src/index.ts'));
 
 process.stdout.write('E2E workflow failure aggregation regression: PASS\n');
