@@ -190,7 +190,8 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await clearSearch.click();
     await expect(reopenedAfterRename).toHaveValue('');
     await expect(reopenedAfterRename).toBeVisible();
-    await expect(clearSearch).toHaveCount(0);
+    await expect(clearSearch).toBeVisible();
+    await expect(clearSearch).toHaveAttribute('aria-label', 'Close');
     await expect(row(page, 'seed.txt')).toBeVisible();
 
     await reopenedAfterRename.fill('second-preview');
