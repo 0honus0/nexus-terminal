@@ -60,8 +60,15 @@ async function prepareCaptchaLogin(
   await setCaptchaConfig(request, config);
 }
 
-async function restoreCaptcha(request: import('@playwright/test').APIRequestContext): Promise<void> {
-  await setCaptchaConfig(request, DISABLED_CAPTCHA);
+async function restoreCaptcha(
+  request: import('@playwright/test').APIRequestContext,
+  authenticatedFallback?: import('@playwright/test').APIRequestContext,
+): Promise<void> {
+  const restore = (context: import('@playwright/test').APIRequestContext) =>
+    context.put('/api/v1/settings/captcha', { data: DISABLED_CAPTCHA });
+  let response = await restore(request);
+  if (response.status() === 401 && authenticatedFallback) response = await restore(authenticatedFallback);
+  expect(response.ok(), await response.text()).toBeTruthy();
 }
 
 async function loadLoginWithCaptcha(
@@ -333,6 +340,6 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
       contentType: 'application/json',
     });
   } finally {
-    await restoreCaptcha(request);
+    await restoreCaptcha(request, page.context().request);
   }
 });

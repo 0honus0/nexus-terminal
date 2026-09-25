@@ -687,7 +687,7 @@
       </p>
     </div>
 
-    <footer class="mt-6 flex shrink-0 items-center justify-between border-t border-border/50 pt-5">
+    <footer class="mt-6 flex shrink-0 flex-wrap items-center gap-3 border-t border-border/50 pt-5">
       <div v-if="!scriptMode && form.type === 'SSH'" class="flex min-w-0 items-center gap-2">
         <BaseButton data-testid="connection-test-button" type="button" size="sm" :loading="testing" @click="test">{{
           t('connections.form.testConnection')
@@ -716,7 +716,7 @@
         >
       </div>
       <div v-else class="flex-1" />
-      <div class="flex space-x-3">
+      <div class="ml-auto flex space-x-3">
         <BaseButton
           v-if="connection && !scriptMode"
           data-testid="connection-delete-button"

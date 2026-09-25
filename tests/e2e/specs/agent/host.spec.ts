@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
@@ -67,18 +68,16 @@ test('Agent feature enable opens one global floating window that survives route 
   expect(initialSettingsResponse.ok(), await initialSettingsResponse.text()).toBeTruthy();
   const settings = ((await initialSettingsResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
   expect(settings.effectiveSettings.feature.enabled).toBe(false);
-  await page.goto('/settings');
-  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+  await page.goto('/settings?tab=agent');
 
   const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
   const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
-  const featureSection = page
-    .getByRole('heading', { name: 'Agent feature', exact: true })
-    .locator('xpath=ancestor::section[1]');
+  const panel = page.locator('#settings-panel-agent');
+  await expect(panel).toBeVisible();
   await expect(launcher).toHaveCount(0);
   await expect(hub).toHaveCount(0);
 
-  await featureSection.getByRole('button', { name: 'Enable Agent', exact: true }).click();
+  await panel.getByRole('button', { name: 'Enable Agent', exact: true }).click();
   const onboarding = page.getByRole('dialog', { name: 'Enable Agent with Nexus Agent', exact: true });
   await expect(onboarding).toBeVisible();
   await expect(onboarding.getByText('Nexus Agent', { exact: true })).toBeVisible();
@@ -89,7 +88,9 @@ test('Agent feature enable opens one global floating window that survives route 
   await onboarding.getByRole('button', { name: 'Install Nexus Agent & enable Agent', exact: true }).click();
 
   await expect(onboarding).toHaveCount(0, { timeout: 15_000 });
-  await expect(featureSection.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
+  await expect(launcher).toBeVisible({ timeout: 10_000 });
+  await launcher.click();
   await expect(hub).toBeVisible({ timeout: 10_000 });
   await expect(launcher).toHaveCount(0);
   const settingsBounds = await hub.boundingBox();
@@ -149,17 +150,17 @@ test('Agent settings surface exposes the production control plane and captures f
   await loginAsInitialAdmin(context.request);
   await setUiLanguage(context.request);
   await enableAgentWithRecommendedNexusAgent(context.request);
-  await page.goto('/settings');
-  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+  await page.goto('/settings?tab=agent');
 
   const panel = page.locator('#settings-panel-agent');
   await expect(panel).toBeVisible();
   const settingsNavigation = panel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
   await expect(settingsNavigation).toBeVisible();
   await expect(settingsNavigation.getByRole('button', { name: 'Models & Budget', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true })).toBeVisible();
   await expect(settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true })).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Plugins & Security', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Agent feature', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Safety and system', exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
   const providersHeading = panel.getByRole('heading', { name: 'Model providers', exact: true });
   await expect(providersHeading).toBeVisible();
   await captureFunctionalScreenshot(page, 'agent-settings-models.png', { viewport: { width: 1440, height: 900 } });
@@ -169,7 +170,9 @@ test('Agent settings surface exposes the production control plane and captures f
   const addProvider = page.getByRole('dialog', { name: 'Add Model Provider', exact: true });
   await expect(addProvider).toBeVisible();
   const providerField = (label: string) =>
-    addProvider.locator('label').filter({ hasText: label }).locator('input').first();
+    label === 'Credential'
+      ? addProvider.getByRole('textbox', { name: 'Credential', exact: true })
+      : addProvider.locator('label').filter({ hasText: label }).locator('input').first();
   await providerField('Display name').fill('Settings UI Provider');
   await providerField('Base URL').fill(`${E2E_URLS.openAiProviderOrigin}/v1`);
   await providerField('Credential').fill('e2e-provider-secret');
@@ -220,12 +223,14 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(errorToast).toBeHidden({ timeout: 7_500 });
   await page.unroute('**/api/v1/agent/ai/providers/*');
 
-  const defaultModel = providersSection.getByRole('button', { name: 'Default model for new runs', exact: true });
+  const defaultModel = providersSection.getByRole('combobox', {
+    name: 'Default model for new runs',
+    exact: true,
+  });
   await expect(defaultModel).toBeEnabled();
   await defaultModel.click();
-  const defaultDropdown = defaultModel.locator('xpath=..');
-  const defaultOption = defaultDropdown
-    .getByRole('button')
+  const defaultOption = page
+    .getByRole('option')
     .filter({ hasText: 'e2e-model' })
     .filter({ hasText: 'Settings UI Provider' });
   await expect(defaultOption).toBeVisible();
@@ -264,8 +269,7 @@ test('Agent settings surface exposes the production control plane and captures f
   const capabilityDialog = page.getByRole('dialog', { name: 'Model capabilities', exact: true });
   await expect(capabilityDialog).toBeVisible();
   await expect(capabilityDialog.getByText('e2e-custom-no-metadata', { exact: true })).toBeVisible();
-  const capabilityField = (label: string) =>
-    capabilityDialog.locator('label').filter({ hasText: label }).locator('input').first();
+  const capabilityField = (label: string) => capabilityDialog.getByLabel(label, { exact: true });
   await capabilityField('Context window').fill('32768');
   await capabilityField('Maximum output tokens').fill('4096');
   await capabilityDialog
@@ -309,12 +313,15 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(configuredModelsPanel.getByRole('checkbox', { name: 'Select all', exact: true })).toHaveCount(0);
   await expect(configuredModelsPanel.getByRole('button', { name: /Remove selected/ })).toHaveCount(0);
 
+  await providersSection.getByRole('button', { name: 'Add fallback model', exact: true }).click();
+  const customFallbackOption = page
+    .getByRole('button')
+    .filter({ hasText: 'e2e-custom-no-metadata' })
+    .filter({ hasText: 'Settings UI Provider' });
   const fallbackSaved = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
   );
-  await providersSection
-    .getByRole('button', { name: 'e2e-custom-no-metadata · Settings UI Provider', exact: true })
-    .click();
+  await customFallbackOption.click();
   expect((await fallbackSaved).ok()).toBeTruthy();
   await expect(page.getByText('Fallback chain updated and saved', { exact: true })).toBeVisible();
 
@@ -339,11 +346,9 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(panel.getByRole('heading', { name: 'Artifacts and storage', exact: true })).toBeAttached();
   await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 
-  await settingsNavigation.getByRole('button', { name: 'Plugins & Security', exact: true }).click();
+  await settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Globally blocked targets', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'System guardrails', exact: true })).toBeVisible();
   const agentAppsSection = panel
     .getByRole('heading', { name: 'Agent apps', exact: true })
     .locator('xpath=ancestor::section[1]');
@@ -377,13 +382,16 @@ test('Agent settings surface exposes the production control plane and captures f
     nexusAgentCard.getByRole('button', { name: 'Disable all capabilities', exact: true }).locator('.fa-check'),
   ).toBeVisible();
 
+  await settingsNavigation.getByRole('button', { name: 'Safety and system', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: 'Globally blocked targets', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'System guardrails', exact: true })).toBeVisible();
+
   await captureFunctionalScreenshot(page, 'agent-settings-plugins-security.png', {
     viewport: { width: 1440, height: 900 },
   });
 
   await page.setViewportSize({ width: 720, height: 900 });
-  await page.goto('/settings');
-  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+  await page.goto('/settings?tab=agent');
   const narrowPanel = page.locator('#settings-panel-agent');
   const narrowNavigation = narrowPanel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
   await expect(narrowNavigation).toBeVisible();
@@ -493,8 +501,7 @@ test('fallback settings drop stale models and provider deletion repairs the defa
     },
   });
 
-  await page.goto('/settings');
-  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+  await page.goto('/settings?tab=agent');
   const providersSection = page
     .getByRole('heading', { name: 'Model providers', exact: true })
     .locator('xpath=ancestor::section[1]');
@@ -503,14 +510,14 @@ test('fallback settings drop stale models and provider deletion repairs the defa
   await expect(primaryCard.getByText('Fallback Primary', { exact: true })).toBeVisible();
   await expect(providersSection.getByText('stale-fallback', { exact: true })).toHaveCount(0);
 
-  const validFallback = providersSection.getByRole('button', {
-    name: 'valid-fallback · Fallback Primary',
-    exact: true,
+  const validFallbackRow = providersSection.locator('li').filter({ hasText: 'valid-fallback' }).filter({
+    hasText: 'Fallback Primary',
   });
+  await expect(validFallbackRow).toBeVisible();
   const normalizedOff = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
   );
-  await validFallback.click();
+  await validFallbackRow.getByRole('button', { name: 'Remove', exact: true }).click();
   expect((await normalizedOff).ok()).toBeTruthy();
   const afterNormalize = await context.request.get('/api/v1/agent/settings');
   expect(afterNormalize.ok(), await afterNormalize.text()).toBeTruthy();
@@ -518,10 +525,16 @@ test('fallback settings drop stale models and provider deletion repairs the defa
     data: { requestedSettings: { model: { fallbackModels: [] } } },
   });
 
+  await providersSection.getByRole('button', { name: 'Add fallback model', exact: true }).click();
+  const fallbackOption = page
+    .getByRole('button')
+    .filter({ hasText: 'valid-fallback' })
+    .filter({ hasText: 'Fallback Primary' });
+  await expect(fallbackOption).toBeVisible();
   const restoredFallback = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
   );
-  await validFallback.click();
+  await fallbackOption.click();
   expect((await restoredFallback).ok()).toBeTruthy();
   const afterRestore = await context.request.get('/api/v1/agent/settings');
   expect(afterRestore.ok(), await afterRestore.text()).toBeTruthy();
@@ -1207,7 +1220,7 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     });
 
     const created = await request.post('/api/v1/apps/nexus.agent/integrations', {
-      headers: mutationHeaders,
+      headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
       data: {
         kind: 'acp',
         enabled: true,

@@ -629,16 +629,18 @@
       height: 1.75rem;
     }
     .quick-command-list-area {
-      padding: 0.35rem 0.35rem;
+      padding: 0.125rem 0.35rem 0.35rem;
     }
     .quick-command-group-header {
-      padding-inline: 0.5rem;
+      min-height: 2.375rem;
+      align-items: flex-start;
+      padding: 0.25rem 0.5rem;
     }
     .quick-command-row {
       padding-inline: 0.45rem;
     }
   }
-  @container quick-commands-pane (max-width: 105px) {
+  @container quick-commands-pane (max-width: 140px) {
     .quick-commands-controls {
       flex-wrap: wrap;
       justify-content: center;

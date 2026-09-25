@@ -384,6 +384,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     let historyContext = page.getByTestId('path-history-context-menu');
     await expect(historyContext).toBeVisible();
     await historyContext.getByRole('button', { name: 'Copy path', exact: true }).click();
+    await expect(historyContext).toBeHidden();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(FAVORITE_PATH);
 
     await folderHistory.click({ button: 'right' });

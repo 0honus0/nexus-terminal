@@ -1458,7 +1458,7 @@
     <div
       v-if="(!browser.loaded.value && !browser.error.value) || browser.loading.value || browser.searching.value"
       data-testid="file-manager-loading-state"
-      class="file-manager-loading-state min-h-0 flex-1"
+      class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
     >
       <BaseSpinner />
     </div>

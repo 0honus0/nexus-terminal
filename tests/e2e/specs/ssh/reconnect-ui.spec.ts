@@ -253,6 +253,7 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
     });
   } finally {
     await setTestSshOnline(true);
+    await loginAsInitialAdmin(context.request);
     const restoreSettings = await context.request.put('/api/v1/settings', {
       data: { frontendLogLevel: originalFrontendLogLevel },
     });

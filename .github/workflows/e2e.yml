@@ -536,14 +536,15 @@ jobs:
         run: |
           set -euo pipefail
           result_root="$RUNNER_TEMP/e2e-group-results"
+          mkdir -p "$result_root"
           mapfile -t results < <(find "$result_root" -maxdepth 1 -type f -name 'group-*.json' -print | sort)
 
+          failed=false
           if [[ "${#results[@]}" -ne "$EXPECTED_GROUPS" ]]; then
             echo "::error::Expected $EXPECTED_GROUPS E2E group results, found ${#results[@]}."
-            exit 1
+            failed=true
           fi
 
-          failed=false
           for result in "${results[@]}"; do
             group="$(jq -r '.group' "$result")"
             outcome="$(jq -r '.outcome' "$result")"

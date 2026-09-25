@@ -152,18 +152,18 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     const longNameRow = activeFileManagerList(page).locator(`tr[data-filename="${MOBILE_LONG_FILENAME}"]`).first();
     await expect(longNameRow).toBeVisible();
     const longNameGeometry = await longNameRow.evaluate((row) => {
-      const label = row.querySelector<HTMLElement>('.file-row-name-label');
-      const name = row.querySelector<HTMLElement>('.file-row-name-button')?.getBoundingClientRect();
-      if (!label || !name) return null;
+      const nameButton = row.querySelector<HTMLElement>('.file-row-name-button');
+      const name = nameButton?.getBoundingClientRect();
+      if (!nameButton || !name) return null;
       return {
-        labelClientWidth: label.clientWidth,
-        labelScrollWidth: label.scrollWidth,
+        nameClientWidth: nameButton.clientWidth,
+        nameScrollWidth: nameButton.scrollWidth,
         rowRight: row.getBoundingClientRect().right,
         nameRight: name.right,
       };
     });
     expect(longNameGeometry).toBeTruthy();
-    expect(longNameGeometry!.labelScrollWidth).toBeGreaterThan(longNameGeometry!.labelClientWidth);
+    expect(longNameGeometry!.nameScrollWidth).toBeGreaterThan(longNameGeometry!.nameClientWidth);
     expect(longNameGeometry!.nameRight).toBeLessThanOrEqual(longNameGeometry!.rowRight + 1);
     await captureFunctionalScreenshot(page, 'mobile-file-manager.png');
     const box = await file.boundingBox();

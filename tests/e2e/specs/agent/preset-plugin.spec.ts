@@ -793,8 +793,7 @@ test('official first-party catalog is discoverable without repository configurat
     },
   });
 
-  await page.goto('/settings');
-  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+  await page.goto('/settings?tab=agent');
   const panel = page.locator('#settings-panel-agent');
   await panel
     .getByRole('navigation', { name: 'Agent settings sections', exact: true })
@@ -871,7 +870,9 @@ test('uninstalled plugin retained AppStorage can be permanently deleted', async 
   const stored = await request.post('/api/v1/agent/plugins/nexus.custom-surface/frontend/rpc', {
     headers,
     data: {
+      version: '1.0.0',
       method: 'storage.put',
+      operationId: crypto.randomUUID(),
       params: { key: 'e2e.retained', value: { retained: true }, expectedVersion: null },
     },
   });
@@ -1057,8 +1058,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
   );
 
   await step('the Agent settings UI shows both installed plugins', async () => {
-    await page.goto('/settings');
-    await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+    await page.goto('/settings?tab=agent');
     const panel = page.locator('#settings-panel-agent');
     await panel
       .getByRole('navigation', { name: 'Agent settings sections', exact: true })
@@ -1286,7 +1286,11 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect.poll(async () => (await hub.boundingBox())?.width ?? 0).toBeGreaterThan(1040);
       await expect(taskPanelToggle).toBeVisible();
       await expect(taskPanelToggle).toHaveAttribute('aria-expanded', 'false');
-      await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeHidden();
+      await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeVisible();
+      await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
       await expect(headerThreadDelete).toBeHidden();
     });
 

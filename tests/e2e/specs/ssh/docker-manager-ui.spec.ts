@@ -686,6 +686,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         .toBe(true);
     });
   } finally {
+    await loginAsInitialAdmin(context.request);
     if (utilitySuspendedId) {
       const cleanup = await context.request.delete(`/api/v1/ssh-suspend/terminate/${utilitySuspendedId}`);
       expect([200, 404]).toContain(cleanup.status());

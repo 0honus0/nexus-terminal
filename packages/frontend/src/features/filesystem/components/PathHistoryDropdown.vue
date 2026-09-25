@@ -27,8 +27,8 @@
   const copyContextPath = () => {
     if (!context.value) return;
     const path = context.value.item.path;
-    context.value = null;
     emit('copy', path);
+    context.value = null;
   };
   const removeContextPath = () => {
     if (!context.value) return;
@@ -90,11 +90,11 @@
       panel-test-id="path-history-context-menu"
       @close="context = null"
     >
-      <button class="context-item" @mousedown.prevent @click="copyContextPath">
+      <button class="context-item" @mousedown.prevent.stop @click="copyContextPath">
         <i class="fas fa-copy" aria-hidden="true"></i>
         <span>{{ t('pathHistory.copy') }}</span>
       </button>
-      <button class="context-item text-error" @mousedown.prevent @click="removeContextPath">
+      <button class="context-item text-error" @mousedown.prevent.stop @click="removeContextPath">
         <i class="fas fa-trash-alt" aria-hidden="true"></i>
         <span>{{ t('pathHistory.delete') }}</span>
       </button>

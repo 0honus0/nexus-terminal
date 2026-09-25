@@ -10,12 +10,15 @@ assert(
     workflow,
   ),
 );
+assert(/- name: Record E2E group outcome\n\s+if: always\(\)/.test(workflow));
+assert(workflow.indexOf('Upload Playwright report') < workflow.indexOf('Record E2E group outcome'));
+assert(workflow.includes('name: Aggregate Playwright result'));
+assert(workflow.includes('pattern: e2e-result-group-*'));
+assert(workflow.includes('Expected $EXPECTED_GROUPS E2E group results'));
 assert(
-  workflow.includes(
-    "- name: Fail E2E group after collecting all results\n        if: ${{ always() && steps.e2e.outcome != 'success' }}",
-  ),
+  workflow.indexOf('Expected $EXPECTED_GROUPS E2E group results') < workflow.indexOf('for result in "${results[@]}"'),
 );
-assert(workflow.indexOf('Upload Playwright report') < workflow.indexOf('Fail E2E group after collecting all results'));
+assert(workflow.includes('require_success "Aggregated Playwright result" "$PLAYWRIGHT_RESULT"'));
 assert(config.includes('maxFailures: 0'));
 assert(config.includes('corepack pnpm exec tsx src/index.ts'));
 assert(config.includes('corepack pnpm run dev --host 127.0.0.1'));

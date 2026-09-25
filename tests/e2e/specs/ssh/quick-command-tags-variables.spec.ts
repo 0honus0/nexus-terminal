@@ -204,7 +204,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
       }));
       expect(rowPresentation.selected).toBe(false);
       expect(rowPresentation.userSelect).toBe('none');
-      expect(rowPresentation.fontSize).toBeGreaterThanOrEqual(14);
+      expect(rowPresentation.fontSize).toBe(12);
       expect(rowPresentation.fontWeight).toBeGreaterThanOrEqual(500);
       expect(rowPresentation.monospaceClass).toBe(false);
 

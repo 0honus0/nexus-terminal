@@ -178,10 +178,12 @@ test('password change UI updates the real login credential and can restore the t
         user: { username: E2E_ADMIN.username },
       });
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(page).toHaveURL(/\/settings$/);
+      await expect(page).toHaveURL(/\/settings\?tab=security$/);
     });
 
     await step('restore the standard E2E password for following tests', async () => {
+      expect((await context.request.post('/api/v1/auth/logout')).ok()).toBeTruthy();
+      expect(await login(context.request, TEMP_PASSWORD)).toBeTruthy();
       const restore = await context.request.put('/api/v1/auth/password', {
         data: { currentPassword: TEMP_PASSWORD, newPassword: E2E_ADMIN.password },
       });
