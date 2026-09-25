@@ -161,7 +161,8 @@ export class WorkspaceRuntimeSession {
 
   async connect(viewport?: WorkspaceTerminalViewportDto): Promise<WorkspaceConnectResponseDto> {
     if (this.disposed) throw new Error('Workspace session has been disposed.');
-    if (viewport) this.lastViewport = viewport;
+    const latestViewport = viewport ?? this.adapters.terminalViewport();
+    if (latestViewport) this.lastViewport = latestViewport;
     this.clearReconnectTimer();
     this.closing = false;
     const reconnectAttempt = this.reconnectAttempt;
@@ -476,7 +477,7 @@ export class WorkspaceRuntimeSession {
       'Workspace reconnect attempt started',
     );
     try {
-      await this.connect(this.lastViewport);
+      await this.connect();
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
       logger.debug(

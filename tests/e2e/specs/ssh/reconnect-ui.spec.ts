@@ -220,6 +220,9 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
   let openedWebSockets = 0;
   let workspaceConnectRequests = 0;
   let workspaceConnectResponses = 0;
+  let latestTerminalViewport: { columns: number; rows: number } | undefined;
+  const terminalResizeViewports: Array<{ columns: number; rows: number }> = [];
+  const workspaceConnectViewports: Array<{ columns: number; rows: number } | undefined> = [];
   const pendingWorkspaceConnectRequests = new Set<string>();
   page.on('websocket', (socket) => {
     if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
@@ -227,9 +230,21 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
     socket.on('framesent', (event) => {
       if (typeof event.payload !== 'string') return;
       try {
-        const message = JSON.parse(event.payload) as { type?: string; requestId?: string };
+        const message = JSON.parse(event.payload) as {
+          type?: string;
+          requestId?: string;
+          payload?: { columns?: number; rows?: number; viewport?: { columns?: number; rows?: number } };
+        };
+        if (message.type === 'terminal.resize' && message.payload?.columns && message.payload?.rows) {
+          latestTerminalViewport = { columns: message.payload.columns, rows: message.payload.rows };
+          terminalResizeViewports.push(latestTerminalViewport);
+        }
         if (message.type === 'workspace.connect' && message.requestId) {
           workspaceConnectRequests += 1;
+          const viewport = message.payload?.viewport;
+          workspaceConnectViewports.push(
+            viewport?.columns && viewport?.rows ? { columns: viewport.columns, rows: viewport.rows } : undefined,
+          );
           pendingWorkspaceConnectRequests.add(message.requestId);
         }
       } catch {
@@ -269,8 +284,13 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
       await expect(xtermInput).toBeAttached();
       await expect.poll(() => openedWebSockets).toBeGreaterThanOrEqual(1);
       await expect.poll(() => workspaceConnectResponses, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+      await expect.poll(() => latestTerminalViewport).toBeTruthy();
+      expect(latestTerminalViewport!.columns).toBeGreaterThan(80);
+      expect(latestTerminalViewport!.rows).toBeGreaterThan(0);
     });
 
+    const fittedViewport = { ...latestTerminalViewport! };
+    const initialResizeCount = terminalResizeViewports.length;
     const initialConnectRequestCount = workspaceConnectRequests;
     const initialConnectedCount = workspaceConnectResponses;
 
@@ -304,6 +324,9 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
       // itself is intentionally reused.
       await expect.poll(() => workspaceConnectRequests, { timeout: 2_500 }).toBeGreaterThan(beforeKeypress);
       await expect.poll(() => workspaceConnectResponses, { timeout: 5_000 }).toBeGreaterThan(initialConnectedCount);
+      await expect.poll(() => workspaceConnectViewports.at(-1)).toEqual(fittedViewport);
+      await expect.poll(() => terminalResizeViewports.length).toBeGreaterThan(initialResizeCount);
+      expect(terminalResizeViewports.at(-1)).toEqual(fittedViewport);
 
       await commandInput.fill("printf 'NEXUS_RECONNECTED_E2E\\n'");
       await commandInput.press('Enter');

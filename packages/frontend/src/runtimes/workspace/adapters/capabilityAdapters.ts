@@ -39,7 +39,7 @@ import { WorkspaceSocket } from '../protocol/workspaceSocket';
 
 interface WorkspaceTerminalGate {
   canSend(): boolean;
-  deferResize(viewport: WorkspaceTerminalViewportDto): void;
+  rememberResize(viewport: WorkspaceTerminalViewportDto): void;
 }
 
 export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceTerminalGate): TerminalChannel => {
@@ -71,13 +71,9 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       socket.sendConnected('terminal.input', { data });
     },
     resize: (viewport: WorkspaceTerminalViewportDto) => {
-      if (gate && !gate.canSend()) {
-        gate.deferResize(viewport);
-        return;
-      }
-      if (!socket.sendConnected('terminal.resize', { columns: viewport.columns, rows: viewport.rows })) {
-        gate?.deferResize(viewport);
-      }
+      gate?.rememberResize(viewport);
+      if (gate && !gate.canSend()) return;
+      socket.sendConnected('terminal.resize', { columns: viewport.columns, rows: viewport.rows });
     },
     onOutput(handler) {
       outputHandlers.add(handler);
@@ -962,13 +958,13 @@ export const createWorkspaceCapabilityAdapters = (
   connectionId: number,
 ): WorkspaceCapabilityAdapters => {
   let workspaceBound = false;
-  let deferredTerminalViewport: WorkspaceTerminalViewportDto | undefined;
+  let lastTerminalViewport: WorkspaceTerminalViewportDto | undefined;
   const filesystem = createFilesystemChannel(socket);
   const transfers = createTransferChannel(socket, workspaceId);
   const terminal = createTerminalChannel(socket, {
     canSend: () => workspaceBound && socket.connected,
-    deferResize: (viewport) => {
-      deferredTerminalViewport = viewport;
+    rememberResize: (viewport) => {
+      lastTerminalViewport = { ...viewport };
     },
   });
   return {
@@ -982,14 +978,13 @@ export const createWorkspaceCapabilityAdapters = (
     status: createStatusChannel(socket, workspaceId, connectionId),
     docker: createDockerChannel(socket),
     suspend: createSshSuspendChannel(socket),
-    terminalViewport: () => deferredTerminalViewport,
+    terminalViewport: () => lastTerminalViewport,
     async workspaceConnected() {
       workspaceBound = true;
-      if (deferredTerminalViewport) {
-        const viewport = deferredTerminalViewport;
-        deferredTerminalViewport = undefined;
-        await terminal.resize(viewport);
-      }
+      // A reconnect/resume can create a fresh remote PTY even though the mounted xterm keeps
+      // the same rows/columns. Reapply the latest fitted viewport so the remote PTY cannot fall
+      // back to its 80x24 default merely because no local ResizeObserver event fired.
+      if (lastTerminalViewport) await terminal.resize(lastTerminalViewport);
       void transfers.workspaceConnected().catch(() => undefined);
     },
     workspaceDisconnected() {
@@ -998,7 +993,7 @@ export const createWorkspaceCapabilityAdapters = (
     },
     dispose() {
       workspaceBound = false;
-      deferredTerminalViewport = undefined;
+      lastTerminalViewport = undefined;
       transfers.dispose();
     },
   };
