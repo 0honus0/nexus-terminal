@@ -615,6 +615,7 @@
         "defaultModel": "Default model for new runs",
         "chooseDefault": "Choose a default model",
         "defaultBadge": "Default",
+        "defaultModelMissing": "Missing from this provider",
         "contextShort": "{value} context",
         "outputShort": "{value} output",
         "toolCapable": "Tools",

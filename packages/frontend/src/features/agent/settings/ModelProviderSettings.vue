@@ -15,6 +15,7 @@
   import { useOperationFeedback } from '@/shared/feedback/public';
   import { formatAgentDate } from '../locale-format';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
+  import { resolveProviderDefaultModelStatus } from './provider-default-model-status';
   import {
     agentApi,
     formatAgentApiError,
@@ -63,6 +64,14 @@
   }>();
 
   const { t, locale } = useI18n();
+  const providerDefaultModelStatus = (provider: AgentProviderViewDto) =>
+    resolveProviderDefaultModelStatus({
+      providerId: provider.id,
+      modelIds: provider.models.map((model) => model.id),
+      defaultProviderId: props.defaultProviderId,
+      defaultModelId: props.defaultModelId,
+    });
+
   const operationFeedback = useOperationFeedback('agent.settings.providers');
   const providerCredentialInputId = `agent-provider-credential-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
@@ -1801,14 +1810,31 @@
                 <!-- 底部辅助信息条（统一高度 h-8 pt-2） -->
                 <div class="mt-auto pt-2 border-t border-border/40 shrink-0">
                   <div class="flex items-center justify-between gap-2 h-8 text-xs text-text-secondary px-0.5">
-                    <span class="inline-flex items-center gap-1.5 truncate text-[11px]">
-                      <i class="fa-solid fa-star text-[10px] text-primary" aria-hidden="true"></i>
+                    <span
+                      v-if="providerDefaultModelStatus(provider).kind !== 'none'"
+                      class="inline-flex items-center gap-1.5 min-w-0 truncate text-[11px]"
+                    >
+                      <i
+                        :class="
+                          providerDefaultModelStatus(provider).kind === 'stale'
+                            ? 'fa-solid fa-triangle-exclamation text-warning'
+                            : 'fa-solid fa-star text-primary'
+                        "
+                        class="text-[10px]"
+                        aria-hidden="true"
+                      ></i>
                       <span>{{ $t('agent.settings.providers.defaultModel') }}:</span>
-                      <span class="font-mono font-medium text-foreground truncate">{{
-                        defaultModelId || provider.models[0]?.id
-                      }}</span>
+                      <span class="font-mono font-medium text-foreground truncate">
+                        {{ providerDefaultModelStatus(provider).modelId }}
+                      </span>
+                      <span
+                        v-if="providerDefaultModelStatus(provider).kind === 'stale'"
+                        class="shrink-0 font-medium text-warning"
+                      >
+                        {{ $t('agent.settings.providers.defaultModelMissing') }}
+                      </span>
                     </span>
-                    <span class="shrink-0 text-[11px] font-mono text-text-secondary/80">
+                    <span class="ml-auto shrink-0 text-[11px] font-mono text-text-secondary/80">
                       {{ $t('agent.settings.providers.configuredModels') }} {{ provider.models.length }}
                     </span>
                   </div>

@@ -615,6 +615,7 @@
         "defaultModel": "默认模型",
         "chooseDefault": "选择默认模型",
         "defaultBadge": "默认",
+        "defaultModelMissing": "当前 Provider 中缺失",
         "contextShort": "{value} 上下文",
         "outputShort": "{value} 输出",
         "toolCapable": "支持 Tools",

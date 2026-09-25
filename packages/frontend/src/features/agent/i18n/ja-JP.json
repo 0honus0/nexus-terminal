@@ -615,6 +615,7 @@
         "defaultModel": "新しい Run の既定モデル",
         "chooseDefault": "既定モデルを選択",
         "defaultBadge": "既定",
+        "defaultModelMissing": "この Provider に存在しません",
         "contextShort": "コンテキスト {value}",
         "outputShort": "出力 {value}",
         "toolCapable": "Tools 対応",
