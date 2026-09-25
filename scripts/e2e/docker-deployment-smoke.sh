@@ -1524,7 +1524,7 @@ if (!frontendAsset.ok || !frontendHtml.includes('Full-stack Plugin')) {
 const backendStatus = await ok(
   'POST',
   '/api/v1/agent/plugins/nexus.fullstack/frontend/rpc',
-  { method: 'storage.get', params: { key: 'backend.status' } },
+  { version: fullStackVerified.plugin.version, method: 'storage.get', params: { key: 'backend.status' } },
   mutationHeaders,
 );
 if (
