@@ -170,7 +170,13 @@ export class ToolchainStore {
     fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o755 });
     const staging = `${target}.staging`;
     removeManagedTree(staging);
-    fs.cpSync(this.path(ref), staging, { recursive: true, dereference: false, force: false, errorOnExist: true });
+    fs.cpSync(this.path(ref), staging, {
+      recursive: true,
+      dereference: false,
+      verbatimSymlinks: true,
+      force: false,
+      errorOnExist: true,
+    });
     makeTreeWritable(staging);
     relocateRuntimeTree(staging, this.canonicalPath(ref), target);
     const marker: RuntimeViewMarker = { schemaVersion: 1, contentDigest: ref.contentDigest, executionPath: target };

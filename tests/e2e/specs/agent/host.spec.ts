@@ -323,28 +323,18 @@ test('Agent settings surface exposes the production control plane and captures f
 
   await settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Plugin / App execution budget', exact: true })).toBeVisible();
   const workspaceRuntime = panel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
   await workspaceRuntime.scrollIntoViewIfNeeded();
   await expect(workspaceRuntime).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Browser Runtime', exact: true })).toBeAttached();
   await expect(panel.getByRole('heading', { name: 'ACP Runtime', exact: true })).toBeAttached();
-  const subagents = panel.getByRole('heading', { name: 'Subagents', exact: true });
-  await subagents.scrollIntoViewIfNeeded();
-  await expect(subagents).toBeVisible();
-  await expect(panel.getByText('Phase 3', { exact: true })).toBeVisible();
-  const subagentSection = subagents.locator('xpath=ancestor::section[1]');
-  await subagentSection.getByRole('button', { name: 'Add profile', exact: true }).click();
-  await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
-  await expect(subagentSection.getByLabel('Role', { exact: true })).toHaveValue('Bounded child agent');
-  await subagentSection.getByRole('button', { name: 'Save profiles', exact: true }).click();
-  await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
   await expect(panel.getByRole('heading', { name: 'Artifacts and storage', exact: true })).toBeAttached();
   await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 
   await settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Plugin / App execution budget', exact: true })).toBeVisible();
   const agentAppsSection = panel
     .getByRole('heading', { name: 'Agent apps', exact: true })
     .locator('xpath=ancestor::section[1]');
@@ -357,7 +347,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(allGranted).toContainText('Disable');
   await expect(allGranted.locator('.fa-check')).toBeVisible();
 
-  const firstCapability = nexusAgentCard.locator('input[type="checkbox"]').first();
+  const firstCapability = nexusAgentCard.getByRole('checkbox').first();
   await expect(firstCapability).toBeChecked();
   await firstCapability.uncheck();
   const partiallyGranted = nexusAgentCard.getByRole('button', { name: 'Enable all capabilities', exact: true });
@@ -381,6 +371,16 @@ test('Agent settings surface exposes the production control plane and captures f
   await settingsNavigation.getByRole('button', { name: 'Safety and system', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Globally blocked targets', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'System guardrails', exact: true })).toBeVisible();
+  const subagents = panel.getByRole('heading', { name: 'Subagents', exact: true });
+  await subagents.scrollIntoViewIfNeeded();
+  await expect(subagents).toBeVisible();
+  await expect(panel.getByText('Phase 3', { exact: true })).toBeVisible();
+  const subagentSection = subagents.locator('xpath=ancestor::section[1]');
+  await subagentSection.getByRole('button', { name: 'Add profile', exact: true }).click();
+  await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
+  await expect(subagentSection.getByLabel('Role', { exact: true })).toHaveValue('Bounded child agent');
+  await subagentSection.getByRole('button', { name: 'Save profiles', exact: true }).click();
+  await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
 
   await captureFunctionalScreenshot(page, 'agent-settings-plugins-security.png', {
     viewport: { width: 1440, height: 900 },

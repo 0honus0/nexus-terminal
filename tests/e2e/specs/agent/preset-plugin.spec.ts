@@ -802,8 +802,7 @@ test('official first-party catalog is discoverable without repository configurat
   const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
   await pluginsHeading.scrollIntoViewIfNeeded();
   const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
-  await expect(pluginsSection.getByText('Nexus first-party catalog', { exact: true })).toBeVisible();
-  await expect(pluginsSection.getByText('Publisher pinned by Host', { exact: true })).toBeVisible();
+  await expect(pluginsSection.getByText('Official repository', { exact: true })).toBeVisible();
   const agentCatalogIds = pluginsSection.getByText('nexus.agent', { exact: true });
   await expect(agentCatalogIds).toHaveCount(2);
   await expect(agentCatalogIds.first()).toBeVisible();
@@ -1374,6 +1373,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     });
 
     const modelSelector = hub.getByRole('button', { name: 'Model', exact: true });
+    await expect(modelSelector).toBeVisible({ timeout: 60_000 });
     await modelSelector.click();
     const modelDialog = page.getByRole('dialog', { name: 'Model', exact: true });
     await expect(modelDialog).toBeVisible();

@@ -27,6 +27,7 @@ const preparePack = (store: ToolchainStore, ref: ToolchainPackRef, label: string
   fs.writeFileSync(path.join(source, 'bin', 'nxprobe'), `#!/bin/sh\nprintf '%s\\n' '${label}'\n`, {
     mode: 0o755,
   });
+  fs.symlinkSync('nxprobe', path.join(source, 'bin', 'nxprobe-link'));
   fs.writeFileSync(path.join(source, 'lib', 'prefix.txt'), `${store.canonicalPath(ref)}/lib\n`, {
     mode: 0o644,
   });
@@ -58,6 +59,7 @@ try {
 
   const viewA = store.executionPath(refA);
   assert.equal(runProbe(viewA), 'digest-a');
+  assert.equal(fs.readlinkSync(path.join(viewA, 'bin', 'nxprobe-link')), 'nxprobe');
   assert.notEqual(viewA, store.canonicalPath(refA));
   const aPrefix = fs.readFileSync(path.join(viewA, 'lib', 'prefix.txt'), 'utf8').trim();
   assert.equal(aPrefix, `${viewA}/lib`);
