@@ -242,7 +242,9 @@ test('file previews and text editor protect historical file-opening regressions'
     await findInput.fill('plain-no-extension');
     await expect(findInput).toHaveValue('plain-no-extension');
     await page.keyboard.press('Escape');
-    await expect(findWidget).toBeHidden();
+    // Monaco keeps the find widget mounted for reuse and marks the closed widget inaccessible
+    // instead of removing it from layout. Assert the component's authoritative closed state.
+    await expect(findWidget).toHaveAttribute('aria-hidden', 'true');
   });
 
   await step('editor popup resize keeps Monaco visible and usable', async () => {
