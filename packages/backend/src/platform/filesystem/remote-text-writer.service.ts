@@ -6,7 +6,7 @@ import { toRemoteFileEntry } from './file-entry';
 
 const normalizeEncoding = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-export class RemoteTextFileService {
+export class RemoteTextWriterService {
   async write(
     filesystem: RemoteFileSystem,
     remotePath: string,

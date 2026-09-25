@@ -106,7 +106,7 @@ import { ExecutionSessionDiagnosticProbe } from '../platform/execution/diagnosti
 import { ExecutionSessionManager } from '../platform/execution/execution-session-manager';
 import { FileRemovalService } from '../platform/filesystem/file-removal.service';
 import { RemoteFileSearchService } from '../platform/filesystem/remote-file-search.service';
-import { RemoteTextFileService } from '../platform/filesystem/remote-text-file.service';
+import { RemoteTextWriterService } from '../platform/filesystem/remote-text-writer.service';
 import type { DirectoryArchivePort } from '../platform/operations/archive/directory-archive.port';
 import { RemoteArchiveOperationService } from '../platform/operations/archive/remote-archive-operation.service';
 import type { ArchiveOperation } from '../platform/operations/archive/archive-operation.port';
@@ -121,7 +121,7 @@ import type { ServerStatusCollector } from '../platform/system/server-status.por
 
 export interface PlatformServices {
   executionSessions: ExecutionSessionManager;
-  textFiles: RemoteTextFileService;
+  textWriter: RemoteTextWriterService;
   fileSearch: RemoteFileSearchService;
   fileRemoval: FileRemovalService;
   uploads: UploadOperation;
@@ -289,7 +289,7 @@ export const createCompositionRoot = (
   });
   const htmlThemes = new HtmlThemeService(htmlStore, new GitHubHtmlThemeCatalogAdapter(), appearance);
 
-  const textFiles = new RemoteTextFileService();
+  const textWriter = new RemoteTextWriterService();
   const fileSearch = new RemoteFileSearchService();
   const fileRemoval = new FileRemovalService();
   const uploads = new StreamUploadOperationService(executionSessions);
@@ -332,7 +332,7 @@ export const createCompositionRoot = (
   const workspaceFilesystem = new WorkspaceFilesystemService(
     workspaceSessions,
     executionSessions,
-    textFiles,
+    textWriter,
     fileSearch,
     fileRemoval,
     directoryArchives,
@@ -488,7 +488,7 @@ export const createCompositionRoot = (
   };
   const platform: PlatformServices = {
     executionSessions,
-    textFiles,
+    textWriter,
     fileSearch,
     fileRemoval,
     uploads,

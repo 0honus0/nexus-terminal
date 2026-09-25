@@ -15,7 +15,7 @@ import type { MutationGuardPort } from '../../../platform/operations/mutation-gu
 import type { RemoteFileSearchService } from '../../../platform/filesystem/remote-file-search.service';
 import type { RemoteFileSystem } from '../../../platform/filesystem/remote-filesystem';
 import { normalizeAbsoluteRemotePath } from '../../../platform/filesystem/remote-path';
-import type { RemoteTextFileService } from '../../../platform/filesystem/remote-text-file.service';
+import type { RemoteTextWriterService } from '../../../platform/filesystem/remote-text-writer.service';
 import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceSession } from '../workspace-session';
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
@@ -31,7 +31,7 @@ export class WorkspaceFilesystemService {
   constructor(
     private readonly sessions: WorkspaceSessionRegistry,
     private readonly executions: ExecutionSessionManager,
-    private readonly textFiles: RemoteTextFileService,
+    private readonly textWriter: RemoteTextWriterService,
     private readonly searcher: RemoteFileSearchService,
     private readonly removal: FileRemovalService,
     private readonly directoryArchives: DirectoryArchivePort,
@@ -79,14 +79,14 @@ export class WorkspaceFilesystemService {
     const normalized = this.absolute(remotePath);
     return this.withMutation(workspaceId, 'filesystem.write', [normalized], async () => {
       const fs = await this.filesystem(this.sessions.require(workspaceId));
-      return this.textFiles.write(fs, normalized, content, encoding);
+      return this.textWriter.write(fs, normalized, content, encoding);
     });
   }
   async createFile(workspaceId: string, remotePath: string, content = '', encoding = 'utf-8') {
     const normalized = this.absolute(remotePath);
     return this.withMutation(workspaceId, 'filesystem.create', [normalized], async () => {
       const fs = await this.filesystem(this.sessions.require(workspaceId));
-      return this.textFiles.create(fs, normalized, content, encoding);
+      return this.textWriter.create(fs, normalized, content, encoding);
     });
   }
   async createDirectory(workspaceId: string, remotePath: string): Promise<void> {
