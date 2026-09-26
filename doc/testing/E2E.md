@@ -4,7 +4,7 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
-The canonical GitHub workflow is `.github/workflows/e2e.yml`. Its quality job installs the root workspace once, runs `pnpm run check` serially, checks repository formatting, and builds Backend, Frontend, and Agent Runner before grouped Playwright execution can satisfy the release gate. Check implementations live under `scripts/checks/`; their regression tests live under the root `tests/` tree.
+The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs the seven Playwright projects directly on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version. Repository checks, builds, Docker smoke, screenshot refreshes, and release gates are no longer prerequisites for E2E execution.
 
 ## Structure
 
@@ -26,7 +26,7 @@ The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP files
 
 Test support HTTP controls are limited to deterministic fixture setup and fault injection (for example remote file creation, artificial latency, or SSH availability). Test assertions use the Nexus HTTP/WebSocket/UI/ingress surfaces. Fake external services validate incoming requests directly and return success/failure instead of exposing captured internal request logs to specs.
 
-Functional/documentation screenshots are declared directly at real E2E checkpoints with `captureFunctionalScreenshot(page, filename)`. There is no separate global screenshot manifest. When capture is enabled, each grouped E2E job uploads only the PNGs its scenarios actually produced; after all groups pass, the workflow aggregates that run's screenshots and synchronizes `doc/imgs/e2e/` to the produced set. Runner-environment refreshes and manual workflow dispatches enable screenshot capture after the grouped E2E path succeeds.
+Functional/documentation screenshots are declared directly at real E2E checkpoints with `captureFunctionalScreenshot(page, filename)`. Screenshot capture remains opt-in for focused maintenance runs; the canonical E2E workflow does not mutate the repository or commit refreshed screenshots.
 
 ## Logs
 
@@ -37,7 +37,7 @@ tests/e2e/specs/ssh/file-manager-navigation.spec.ts
 tests/e2e/logs/ssh/file-manager-navigation/navigates remote directories over real SFTP.log
 ```
 
-The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. Grouped GitHub Actions runs upload one log artifact per group (`playwright-e2e-logs-group-N`).
+The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. Failed GitHub Actions matrix jobs upload logs, Playwright reports, traces, screenshots, and videos in a project-scoped diagnostic artifact.
 
 On GitHub Actions, the mirrored reporter also prints concise live progress to the job log: test start/end, explicit `test.step(...)` start/result, retry number, and duration. Set `E2E_CONSOLE_LOGS=1` to enable the same console output locally without changing the full per-test log files.
 
@@ -64,61 +64,19 @@ pnpm run test:e2e:remote -- --project=http specs/http/auth-2fa.spec.ts
 pnpm --filter @nexus-terminal/e2e run test:docs
 ```
 
-GitHub Actions remote runners provide the canonical complete E2E evidence with the pinned Chromium/runtime dependencies. Local commands remain useful for listing tests, refreshing the seed, running one spec or one focused group, and reproducing failures; local success is not the project-wide release signal. The project-wide requirement is recorded in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001). Automated dependency updates explicitly dispatch this same workflow on their update branch after the PR is created or refreshed; they do not embed a second Playwright/ingress suite in the updater workflow.
+GitHub Actions provides the canonical complete E2E evidence. Each matrix job installs the frozen workspace plus the pinned Playwright Chromium runtime on a fresh hosted runner and runs one Playwright project directly. Local commands remain useful for listing tests, running focused specs, and reproducing failures. Automated dependency updates dispatch this same workflow on their update branch.
 
 For a long-lived remote development host that may already be serving Nexus on the default E2E ports, use `pnpm run test:e2e:remote -- <Playwright args>`. The remote launcher keeps explicit `NEXUS_E2E_*_PORT` overrides, dynamically reserves unique loopback ports for every unset E2E service, and invokes Playwright through Corepack so a stale system-level `pnpm` shim does not control the run. It enforces the repository Node engine before starting tests. This helper is for focused remote reproduction; it does not replace the canonical GitHub Actions evidence.
 
-## Parallel groups
+## CI project matrix
 
-`tests/e2e/groups/settings.json` defines the default number of CI group workers. `workers` means independent GitHub Actions runners, not Playwright workers inside one process. Each group still runs Playwright with `workers: 1`; the parallelism comes from running multiple isolated group jobs at the same time.
+The canonical workflow uses a static matrix with one isolated job for each Playwright project: `auth`, `http`, `agent`, `websocket`, `ui`, `ssh`, and `mobile`. Matrix jobs fail directly when their Playwright command fails; there is no aggregate result job or release gate.
 
-Generating groups with another worker count creates exactly that many `group-N.json` files:
+Each job checks out the tested commit, sets up Node 24 and pnpm, installs the frozen workspace, installs Chromium with Playwright's system dependencies, and runs exactly one project. Fresh GitHub-hosted runners eliminate local port collisions and remove the custom GHCR runner-image dependency.
 
-```bash
-pnpm run test:e2e:groups:generate --workers 3
-pnpm run test:e2e:groups:check --workers 3
-```
+The existing `tests/e2e/groups/` tooling remains available for optional local sharding and timing experiments, but it is no longer part of the canonical CI path. Likewise, environment-sync and custom runner-image scripts remain maintenance helpers rather than workflow prerequisites.
 
-The generator discovers all main specs under `agent`, `auth`, `http`, `websocket`, `ui`, `ssh`, and `mobile`, keeps a whole spec as the smallest scheduling unit, and uses stable semantic families. Related specs are kept together when doing so does not create an excessive load imbalance.
-
-`tests/e2e/groups/timings.json` stores a rolling timing history. The mirrored reporter writes one machine-readable duration per spec, group jobs upload those timing files, and a successful non-PR run merges them back into the history before the default grouping is reconsidered. The effective duration is the median of the most recent samples, so one unusually slow runner does not immediately reshuffle the groups.
-
-Rebalancing is intentionally sticky. Existing assignments are retained unless the predicted longest-group improvement reaches the configured percentage threshold or the current longest/shortest gap exceeds the configured duration threshold. With identical specs and timing history, generation is deterministic and produces byte-for-byte stable group files.
-
-The `E2E` workflow accepts an optional `workers` value when manually dispatched. The override changes only that run’s matrix width; it does not rewrite `groups/settings.json`. After a successful non-PR run, timing history is still consumed by the rebalance job and the repository’s **default** grouping may be updated. To permanently change the default worker count, update `groups/settings.json`, regenerate the groups, and commit it.
-
-The group generator accepts up to one worker per discovered spec. GitHub-hosted runner concurrency is account-plan scoped, so requesting more workers than the account can run concurrently causes excess group jobs to queue rather than increasing effective parallelism. Keep the repository default conservative unless measured CI results justify a higher value.
-
-Group jobs use the `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.63.0-node24` image family, but GitHub Actions resolves the concrete execution image by its immutable `fingerprint-*` tag. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, archive tools used by SSH/SFTP tests, and a pnpm content-addressable store plus the package metadata cache required by lockfile supply-chain verification, both prefetched from the root lockfile at fixed image paths. Its fingerprint includes the root package/lock/workspace metadata, so dependency changes rebuild the shared image once; ordinary source changes reuse it and every matrix shard links dependencies with an offline frozen install instead of downloading the same packages eight times. GitHub Actions runs the immutable `fingerprint-*` tag rather than the mutable version alias, so concurrent branches with different lockfiles cannot replace each other's execution image.
-
-On successful non-PR runs (`push`, scheduled, or `workflow_dispatch`), the workflow collects all group timing artifacts, refreshes the rolling history, reruns the **default** grouping algorithm, and commits changed `tests/e2e/groups/` assignments back to the triggering branch. A manual `workers` override controls only that run’s matrix; rebalance still regenerates the repository default grouping from the collected timings. Pull requests skip the rebalance job and never write grouping state.
-
-## Test environment maintenance
-
-The repository keeps E2E/CI runtime versions in `scripts/e2e/versions.json`. Use the root-level maintenance scripts instead of editing the runner image and workflows independently:
-
-```bash
-# Resolve current upstream stable versions and synchronize the repository.
-pnpm run test:e2e:env:latest
-
-# Re-apply the already recorded versions without contacting upstream version sources.
-pnpm run test:e2e:env:sync
-
-# Build and smoke-check the configured image locally; add --push after GHCR login.
-pnpm run test:e2e:runner:build
-```
-
-`resolve-latest-test-environment.mjs` resolves the latest Node LTS major from the official Node.js release index, the latest stable `@playwright/test` version from the npm registry, and the latest stable release major for the configured official GitHub/Docker actions. `sync-test-environment.mjs` then pins Playwright to that exact version, refreshes the shared workspace lockfile, synchronizes Node runtimes used by CI, updates the runner Dockerfile and GHCR image tag, and normalizes those action majors across workflows. OS-level browser dependencies and archive utilities are refreshed naturally when the runner image is rebuilt from its current Debian base.
-
-`.github/workflows/e2e.yml` starts every run by checking the latest stable test environment. On the default branch it applies available updates in-memory, builds and pushes the corresponding E2E runner image before any E2E jobs start, and passes the same environment patch to the build and test jobs. Pull requests and non-default branches check latest versions but are never rewritten automatically. A weekly schedule keeps this check active even when no source change triggers E2E.
-
-Dependency refreshes do not maintain a second E2E implementation. `.github/workflows/update-dependencies.yml` updates the pnpm workspace, verifies frozen install/format/build/production audit, then pushes its update branch and creates or refreshes the PR. The dependency branch/PR changes the root lockfile/package metadata, which triggers this canonical E2E workflow; shared concurrency identity prevents the push and PR forms of the same source branch from running duplicate full suites.
-
-The same workflow validates both deployment modes without duplicating the full suite. The raw test environment runs the complete grouped Playwright suite. In parallel, `Docker deployment smoke` builds the final unified `Dockerfile` image with `load: true`, copies the repository `docker-compose.yml` and `.env.example` into an isolated temporary project as `.env`, points that Compose project at the just-built image and a temporary seeded data directory, and starts `frontend`, `backend`, and `guacd` with `docker compose up -d`. It then waits for the production ingress and verifies the frontend, proxied status API, WebAuthn ingress, authenticated login, Backend-to-guacd reachability, and an authenticated WebSocket upgrade through Nginx before cleaning the project with `docker compose down`. This keeps the actual Compose/.env.example deployment contract, container packaging, and production-style proxy wiring covered while avoiding a second copy of all functional E2E cases.
-
-`test:docs` refreshes the user-facing feature screenshots in `doc/imgs/e2e/`, but it no longer owns a separate screenshot-only Playwright suite. Screenshot checkpoints live inside the real `ui`/`ssh`/`mobile` regression specs and are activated with `E2E_CAPTURE_SCREENSHOTS=1`; the `captureFunctionalScreenshot` call at that business checkpoint is the declaration that the screenshot exists. In GitHub Actions, a runner-environment refresh or manual E2E dispatch enables that flag on the existing parallel Playwright groups, so screenshots are produced while the real E2E scenarios are already running. Each group uploads only the PNGs it produced; after all groups pass, a lightweight job merges the artifacts, replaces `doc/imgs/e2e/` with exactly the screenshots produced by that successful run, records the filenames in the Actions summary, and commits the refresh when files changed. Removing a screenshot checkpoint from its E2E scenario removes that screenshot from the next full refresh; there is no historical filename manifest to keep it artificially required. No second dependency installation, browser/server startup, or standalone docs test pass is required. Docker deployment smoke remains an independent terminal validation branch and does not gate timing rebalance.
-
-The production ingress suite targets a real Nginx endpoint rather than the Vite development server. In GitHub Actions it runs inside `Docker deployment smoke` against the frontend role from the final unified image, with `RP_ID=ssh.honus.top` and `RP_ORIGIN=https://ssh.honus.top,https://ssh.trui.de`; the request sends `Host: ssh.honus.top`, so the regression does not depend on public DNS. For focused local debugging, point it at any prepared production-style ingress:
+Production-ingress coverage can still be run explicitly against a prepared production-style endpoint:
 
 ```bash
 NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e2e run test:ingress

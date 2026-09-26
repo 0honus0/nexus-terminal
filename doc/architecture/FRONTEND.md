@@ -187,7 +187,6 @@ Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 Mess
 - frontend state lifecycle；
 - Agent i18n reachability；
 - Frontend/Agent ESLint；
-- Frontend unit tests；
 - Frontend TypeScript check。
 
-`scripts/checks/frontend/public-boundaries.mjs` 当前检查公共入口、跨 feature 耦合、Agent/Workspace 子系统方向、SFC section 大小、public contract 完整性和 Workspace HTTP adapter 边界。检查脚本位于 `scripts/checks/`，测试位于根 `tests/`。GitHub E2E workflow 在格式和 production build 前串行执行该命令。
+`scripts/checks/frontend/public-boundaries.mjs` 当前检查公共入口、跨 feature 耦合、Agent/Workspace 子系统方向、SFC section 大小、public contract 完整性和 Workspace HTTP adapter 边界。检查脚本位于 `scripts/checks/`，对应回归测试位于根 `tests/`。这些 repository checks 保留为独立开发验证，不再作为 GitHub E2E workflow 的前置 gate。

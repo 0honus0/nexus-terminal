@@ -120,7 +120,7 @@ jobs:
             --base "$BASE_BRANCH" \
             --head "$UPDATE_BRANCH" \
             --title "chore(deps): update Nexus dependencies" \
-            --body $'Automated dependency refresh for the Nexus pnpm workspace.\n\nBefore this PR is created or updated, this workflow verifies a frozen install, formatting, production builds, and production dependency audit. This updater then explicitly dispatches the canonical E2E workflow on the dependency branch, which owns the complete grouped browser/API regression plus required Docker smoke. Major-version upgrades remain constrained by the workspace dependency ranges.'
+            --body $'Automated dependency refresh for the Nexus pnpm workspace.\n\nBefore this PR is created or updated, this workflow verifies a frozen install, formatting, production builds, and production dependency audit. This updater then explicitly dispatches the canonical E2E workflow on the dependency branch, which runs the browser/API project matrix directly without a secondary release gate. Major-version upgrades remain constrained by the workspace dependency ranges.'
 
       - name: Dispatch canonical E2E
         if: steps.changes.outputs.changed == 'true'

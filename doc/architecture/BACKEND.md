@@ -150,8 +150,8 @@ Bootstrap 注册 process、database、Runner、provider、plugin 和 transport �
 
 ## 验证
 
-- `pnpm run check` 执行 transport contract、Frontend/Agent 静态检查、Frontend unit 与 type check。
+- `pnpm run check` 执行 transport contract、Frontend/Agent 静态检查与 Frontend type check。
 - `pnpm run build:backend` 执行 Backend TypeScript build 并复制 locale/Plugin SDK runtime asset。
 - Backend 回归与 Agent deterministic scenarios 位于根 `tests/backend/`。
 - 用户可达 HTTP/WebSocket/SSH/Agent 行为由 `tests/e2e/` 验证。
-- Docker smoke 验证统一镜像、Compose、Nginx ingress、guacd 与可选 Runner 部署路径。
+- Docker smoke 脚本仍可按需运行，但不再作为 canonical E2E workflow 的 gate。

@@ -962,11 +962,11 @@ Environment selection 不是 frontend authority：Run create 携带 recipe selec
 
 ## 22. 测试与发布门槛
 
-GitHub Actions 的 canonical E2E workflow 在 grouped Playwright 前执行统一 quality job：根 workspace 安装完成后，先串行运行 `pnpm run check`，再检查全仓格式并构建 Backend、Frontend 与 Agent Runner。
+GitHub Actions 的 canonical E2E workflow 直接以 Node 24 + Playwright Chromium 运行 `auth/http/agent/websocket/ui/ssh/mobile` project matrix，不再串联 quality、Docker smoke、runner-image、截图提交、rebalance 或 Release gate。
 
-`pnpm run check` 当前包含 transport contract、Frontend public boundary、Frontend state lifecycle、Agent i18n reachability、Frontend/Agent ESLint、Frontend unit test 与 Frontend type check。检查实现统一位于 `scripts/checks/`，对应回归测试统一位于根 `tests/`；Agent deterministic scenarios 位于 `tests/backend/agent-scenarios`，用户可达 Agent E2E 位于 `tests/e2e/specs/agent`。
+`pnpm run check` 仍保留 transport contract、Frontend public boundary、Frontend state lifecycle、Agent i18n reachability、Frontend/Agent ESLint 与 Frontend type check，作为独立开发验证；Frontend unit test 已移除。Agent deterministic scenarios 位于 `tests/backend/agent-scenarios`，用户可达 Agent E2E 位于 `tests/e2e/specs/agent`。
 
-发布证据还包括 grouped E2E、统一镜像与独立 Runner smoke、Compose/Nginx/guacd 部署 smoke、production dependency audit 和 Release gate。依赖更新 workflow 更新根 workspace 后显式触发同一 E2E workflow，不维护第二套测试流程。
+依赖更新 workflow 更新根 workspace 后显式触发同一 E2E workflow，不维护第二套 E2E 流程。
 
 Agent 改动需保持：
 
