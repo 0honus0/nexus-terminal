@@ -149,7 +149,8 @@
   const targetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKindDto): boolean =>
     targetScopeSelection(appId, capability, target) !== undefined;
 
-  const targetLabel = (target: AgentTargetKindDto): string => (target === 'workspace' ? 'Workspace' : 'SSH');
+  const targetLabel = (target: AgentTargetKindDto): string =>
+    target === 'workspace' ? t('agent.settings.apps.targetWorkspace') : 'SSH';
 
   const setTargetEnabled = (
     appId: string,

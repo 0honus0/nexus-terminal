@@ -67,6 +67,7 @@
         "targetScope": "Target scope",
         "targetScopeAll": "All targets",
         "targetScopeIds": "Specific IDs",
+        "targetWorkspace": "Workspace",
         "empty": "No Agent apps are available.",
         "permissionsCollapsedHint": "Expand to review and edit this app’s capability grants.",
         "capabilitiesHeader": "Capabilities & Security Grants",
@@ -729,6 +730,7 @@
         "selectPulledModel": "Choose from pulled models",
         "importAllPulled": "Import all pulled models ({count})",
         "modelCount": "{count} models",
+        "ownedBy": "Owned by {owner}",
         "description": "Configure OpenAI-compatible providers. Credentials are stored separately and are never returned by the API."
       },
       "guardrails": {
@@ -820,7 +822,8 @@
         "targetCreated": "CDP target added and saved.",
         "targetDeleted": "CDP target deleted and saved.",
         "endpointAdded": "CDP endpoint added and saved.",
-        "endpointDeleted": "CDP endpoint deleted and saved."
+        "endpointDeleted": "CDP endpoint deleted and saved.",
+        "idAlreadyExists": "ID \"{id}\" already exists."
       },
       "mcpIntegrations": {
         "title": "MCP Integrations",
@@ -831,6 +834,7 @@
         "displayName": "Display name",
         "endpoint": "Endpoint",
         "credential": "Credential (optional)",
+        "credentialPlaceholder": "Bearer token / API key",
         "enabled": "Enabled",
         "trustAnnotations": "Trust server tool annotations",
         "create": "Add integration",

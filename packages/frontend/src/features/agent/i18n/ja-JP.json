@@ -67,6 +67,7 @@
         "targetScope": "ターゲット範囲",
         "targetScopeAll": "すべてのターゲット",
         "targetScopeIds": "特定の ID",
+        "targetWorkspace": "ワークスペース",
         "empty": "利用可能な Agent App はありません。",
         "permissionsCollapsedHint": "展開してこの App の Capability grant を確認・編集します。",
         "capabilitiesHeader": "システム権限とセキュリティポリシー",
@@ -729,6 +730,7 @@
         "selectPulledModel": "取得したモデルから選択",
         "importAllPulled": "取得した全モデルをインポート ({count})",
         "modelCount": "{count} 件のモデル",
+        "ownedBy": "提供元: {owner}",
         "description": "OpenAI-compatible Provider と接続エンドポイントを設定します。認証情報は別管理され、平文で漏洩することはありません。"
       },
       "guardrails": {
@@ -820,7 +822,8 @@
         "targetCreated": "CDP ターゲットを追加・保存しました。",
         "targetDeleted": "CDP ターゲットを削除・保存しました。",
         "endpointAdded": "CDP エンドポイントが追加され、保存されました。",
-        "endpointDeleted": "CDP エンドポイントが削除され、保存されました。"
+        "endpointDeleted": "CDP エンドポイントが削除され、保存されました。",
+        "idAlreadyExists": "ID「{id}」はすでに存在します。"
       },
       "mcpIntegrations": {
         "title": "MCP 連携",
@@ -831,6 +834,7 @@
         "displayName": "表示名",
         "endpoint": "Endpoint",
         "credential": "Credential（任意）",
+        "credentialPlaceholder": "Bearer token / API Key",
         "enabled": "有効",
         "trustAnnotations": "Server Tool annotations を信頼",
         "create": "統合を追加",

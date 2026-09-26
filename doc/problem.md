@@ -7,27 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.49 英文 UI literal / i18n 仍有漏网（P2）
-
-**当前代码事实**
-
-仍能找到用户可见英文 literal，例如：
-
-- `AppManagementSettings.targetLabel()` 的 `Workspace`
-- `BrowserRuntimeSettings` 的 `ID "..." already exists.`
-- `ModelProviderSettings` 的 `owned by ...`
-- 模型能力 badge 的 `Tools`
-
-Agent 子导航 `aria-label` 已经走 i18n，不再属于本项。
-
-**整改目标**
-
-补齐三语 key/label helper，并增强 i18n 静态门禁，使英文用户文案、label helper 返回值、accessibility 文案都能被扫描，而不是只查 CJK。
-
-**关闭条件**
-
-已知 literal 清零，门禁能重新抓出等价回归。
-
 ### §7.50 跨标签页修改配置后其它 tab 不刷新（P2）
 
 **当前代码事实**

@@ -640,7 +640,7 @@
                 autocomplete="new-password"
                 data-no-highlight
                 class="h-9 w-full rounded-lg border border-border/80 bg-background pl-8 pr-9 font-mono text-xs text-foreground outline-none focus:border-border-hover"
-                placeholder="Bearer token / API key"
+                :placeholder="$t('agent.settings.mcpIntegrations.credentialPlaceholder')"
               />
               <button
                 type="button"

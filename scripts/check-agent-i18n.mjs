@@ -7,7 +7,9 @@
  *   3. user-facing Chinese hardcoded in component sources, leaking into the
  *      English/Japanese UI;
  *   4. dictionary keys that no source file can ever resolve, keeping three
- *      locales worth of dead copy alive.
+ *      locales worth of dead copy alive;
+ *   5. user-facing English literals embedded directly in Agent templates or UI
+ *      label/error helpers instead of going through the dictionaries.
  *
  * Anything that is genuinely untranslatable (brand, protocol, URL/sample
  * values, pure placeholders) belongs in BRAND_TERMS below, and any source line
@@ -122,6 +124,36 @@ const looksLikeEnglishSentence = (text) => {
   return words.length >= 2;
 };
 
+const SOURCE_ENGLISH_TECHNICAL_TERMS = new Set(['SSH', 'HTTP/WS', 'TLS', 'Ed25519']);
+
+const normalizeUiLiteral = (value) =>
+  value
+    .replace(/\{\{[\s\S]*?\}\}/g, ' ')
+    .replace(/\$\{[^}]*\}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isTechnicalUiLiteral = (value) => {
+  const normalized = normalizeUiLiteral(value);
+  if (!normalized || SOURCE_ENGLISH_TECHNICAL_TERMS.has(normalized)) return true;
+  if (/^[A-Z0-9][A-Z0-9+./:_-]*$/.test(normalized)) return true;
+  if (/^(?:https?|wss?):\/\//i.test(normalized)) return true;
+  if (/^[A-Za-z0-9_.:+*?/-]+(?:\s*,\s*[A-Za-z0-9_.:+*?/-]+)*$/.test(normalized) && /[\d/*.:_-]/.test(normalized)) {
+    return true;
+  }
+  return false;
+};
+
+const looksLikeSourceEnglishUi = (value) => {
+  const normalized = normalizeUiLiteral(value);
+  if (isTechnicalUiLiteral(normalized) || hasCjk(normalized)) return false;
+  const words = normalized.match(/[A-Za-z][A-Za-z'’-]*/g) ?? [];
+  if (words.length >= 2) return true;
+  return /^[A-Z][a-z]{2,}$/.test(normalized);
+};
+
+const quotedLiterals = (line) => [...line.matchAll(/(['"`])([^'"`]+)\1/g)].map((match) => match[2]);
+
 const english = load('en-US');
 const problems = [];
 
@@ -160,6 +192,63 @@ const walk = (dir) => {
   }
 };
 walk(agentDir);
+
+const ENGLISH_UI_DIRECT_LITERAL_PATTERNS = [
+  /\b\w*(?:Error|Message|Title|Description|Hint)\w*\.value\s*=\s*(['"`])([^'"`]+)\1/g,
+  /\b(?:label|description|message|title|hint|tooltip|placeholder)\s*:\s*(['"`])([^'"`]+)\1/g,
+  /formatAgentApiError\s*\([^\n]*?,\s*(['"`])([^'"`]+)\1/g,
+];
+const ENGLISH_UI_NAMED_HELPER = /\b\w*(?:Label|Text|Message|Title|Description|Hint)\w*\b\s*=/i;
+
+for (const file of sourceFiles) {
+  const source = readFileSync(file, 'utf8');
+  const relative = file.slice(agentDir.length + 1);
+
+  if (file.endsWith('.vue')) {
+    const templateMatch = source.match(/<template>([\s\S]*?)<\/template>/);
+    if (templateMatch) {
+      const template = templateMatch[1].replace(/<!--[\s\S]*?-->/g, '');
+      const templateStartLine = source.slice(0, templateMatch.index + '<template>'.length).split('\n').length;
+      const templateLines = template.split('\n');
+
+      templateLines.forEach((line, offset) => {
+        const trimmed = line.trim();
+        if (/^[A-Za-z][A-Za-z0-9 &'’+/_-]*$/.test(trimmed) && looksLikeSourceEnglishUi(trimmed)) {
+          problems.push(
+            `hardcoded English UI text at ${relative}:${templateStartLine + offset} → ${JSON.stringify(trimmed)}`,
+          );
+        }
+        for (const match of line.matchAll(/(?:^|\s)(?:title|aria-label|placeholder)=["']([^"']+)["']/g)) {
+          const value = match[1].trim();
+          if (!looksLikeSourceEnglishUi(value)) continue;
+          problems.push(
+            `hardcoded English UI attribute at ${relative}:${templateStartLine + offset} → ${JSON.stringify(value)}`,
+          );
+        }
+      });
+    }
+  }
+
+  const code = file.endsWith('.vue') ? source.slice(0, source.indexOf('<template>')) : source;
+  const lines = stripNonRuntimeComments(code).split('\n');
+  lines.forEach((line, index) => {
+    for (const pattern of ENGLISH_UI_DIRECT_LITERAL_PATTERNS) {
+      pattern.lastIndex = 0;
+      for (const match of line.matchAll(pattern)) {
+        const value = match[2];
+        if (value.startsWith('agent.') || value.startsWith('common.')) continue;
+        if (!looksLikeSourceEnglishUi(value)) continue;
+        problems.push(`hardcoded English UI literal at ${relative}:${index + 1} → ${JSON.stringify(value)}`);
+      }
+    }
+    if (!ENGLISH_UI_NAMED_HELPER.test(line)) return;
+    for (const value of quotedLiterals(line)) {
+      if (value.startsWith('agent.') || value.startsWith('common.')) continue;
+      if (!looksLikeSourceEnglishUi(value)) continue;
+      problems.push(`hardcoded English UI helper literal at ${relative}:${index + 1} → ${JSON.stringify(value)}`);
+    }
+  });
+}
 
 const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/;
 for (const file of sourceFiles) {
@@ -244,4 +333,6 @@ if (problems.length) {
   process.exit(1);
 }
 
-console.log('Agent i18n check passed (key parity + no verbatim English + no hardcoded CJK + no unused keys).');
+console.log(
+  'Agent i18n check passed (key parity + no verbatim locale leaks + no hardcoded CJK/English UI copy + no unused keys).',
+);

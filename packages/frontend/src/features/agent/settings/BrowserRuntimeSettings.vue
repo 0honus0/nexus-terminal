@@ -102,7 +102,7 @@
       return;
     }
     if (targets.value.some((candidate) => candidate.id === id && candidate.id !== editingTargetId.value)) {
-      targetModalError.value = `ID "${id}" already exists.`;
+      targetModalError.value = t('agent.settings.browserRuntime.idAlreadyExists', { id });
       return;
     }
 

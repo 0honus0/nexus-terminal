@@ -308,7 +308,7 @@
     pulledModels.value.map((m) => ({
       value: m.id,
       label: m.id,
-      description: m.ownedBy ? `owned by ${m.ownedBy}` : undefined,
+      description: m.ownedBy ? t('agent.settings.providers.ownedBy', { owner: m.ownedBy }) : undefined,
     })),
   );
 
@@ -2275,7 +2275,7 @@
                   v-if="model.supportsTools"
                   class="rounded bg-success/10 text-success border border-success/20 px-1.5 py-0.5 font-medium"
                 >
-                  Tools
+                  {{ $t('agent.settings.providers.toolCapable') }}
                 </span>
                 <span
                   v-if="model.supportsImageInput"

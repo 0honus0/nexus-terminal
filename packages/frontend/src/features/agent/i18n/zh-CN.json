@@ -67,6 +67,7 @@
         "targetScope": "目标范围",
         "targetScopeAll": "全部目标",
         "targetScopeIds": "指定 ID",
+        "targetWorkspace": "工作区",
         "empty": "当前没有可用的 Agent App。",
         "permissionsCollapsedHint": "展开后查看并编辑此 App 的能力授权。",
         "capabilitiesHeader": "系统能力与安全沙箱授权",
@@ -729,6 +730,7 @@
         "selectPulledModel": "从拉取到的模型中选择",
         "importAllPulled": "导入所有拉取的模型 ({count})",
         "modelCount": "{count} 个模型",
+        "ownedBy": "提供方：{owner}",
         "description": "配置 OpenAI-compatible 模型服务商与接入端点。凭据单独安全保存，不会明文泄露。"
       },
       "guardrails": {
@@ -820,7 +822,8 @@
         "targetCreated": "CDP 目标已添加并保存。",
         "targetDeleted": "CDP 目标已删除并保存。",
         "endpointAdded": "CDP 端点已添加并保存。",
-        "endpointDeleted": "CDP 端点已删除并保存。"
+        "endpointDeleted": "CDP 端点已删除并保存。",
+        "idAlreadyExists": "ID“{id}”已存在。"
       },
       "mcpIntegrations": {
         "title": "MCP 集成",
@@ -831,6 +834,7 @@
         "displayName": "显示名称",
         "endpoint": "Endpoint",
         "credential": "Credential（可选）",
+        "credentialPlaceholder": "Bearer token / API Key",
         "enabled": "启用",
         "trustAnnotations": "信任 Server Tool annotations",
         "create": "添加集成",
