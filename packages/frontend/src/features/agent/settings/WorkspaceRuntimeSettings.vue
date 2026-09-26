@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { structurallyEqual } from '@/foundation/data';
   import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -71,12 +72,16 @@
 
   const disabled = computed(() => props.busy || localBusy.value);
   const requested = computed(() => props.settings.requestedSettings.workspaceRuntime);
-  const canonicalRecipeIds = (ids: readonly string[]): string => JSON.stringify([...ids].sort());
+  const normalizedRecipeIds = (ids: readonly string[]): string[] => [...ids].sort();
   const selectionDirty = computed(
-    () => canonicalRecipeIds(selectedRecipeIds.value) !== canonicalRecipeIds(selectionBaseline.value),
+    () =>
+      !structurallyEqual(normalizedRecipeIds(selectedRecipeIds.value), normalizedRecipeIds(selectionBaseline.value)),
   );
-  const remoteMatchesSelection = computed(
-    () => canonicalRecipeIds(selectedRecipeIds.value) === canonicalRecipeIds(requested.value.enabledRecipeIds),
+  const remoteMatchesSelection = computed(() =>
+    structurallyEqual(
+      normalizedRecipeIds(selectedRecipeIds.value),
+      normalizedRecipeIds(requested.value.enabledRecipeIds),
+    ),
   );
 
   const formatBytes = (bytes: number): string => {

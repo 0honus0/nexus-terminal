@@ -7,26 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.45 对象型 dirty-state 依赖 JSON insertion order（P2）
-
-**当前代码事实**
-
-`AppExecutionPolicySettings.vue` 仍使用：
-
-```ts
-JSON.stringify(draft.value) !== JSON.stringify(view.value?.overrides ?? {});
-```
-
-用户删除再恢复同一个 key 后，语义值可以完全相同，但对象键顺序不同，导致假 dirty。
-
-**整改目标**
-
-使用稳定 canonical compare、排序 entries，或按允许字段逐项比较；对象 insertion order 不得成为业务状态的一部分。
-
-**关闭条件**
-
-值相同但键顺序不同的 overrides 判定为 clean，并有回归覆盖。
-
 ### §7.46 `userSummary` 仍进入模型可见 `payload.text`（P1）
 
 **当前代码事实**
@@ -303,7 +283,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **安全网**：FE-ARCH-04 / 05 / 06 / 07，同时关闭 §7.51。
-2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.45 / 48 / 49。
+2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 5. **严格类型增强**：FE-ARCH-16。

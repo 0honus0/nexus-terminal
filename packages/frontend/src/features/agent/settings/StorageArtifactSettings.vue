@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { structurallyEqual } from '@/foundation/data';
   import { UiButton, UiInfoHint } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import type { AgentSettingsViewDto, AgentArtifactStorageSummaryDto } from '../api/agent-api';
@@ -21,9 +22,6 @@
     Object.fromEntries(
       Object.entries(props.settings.requestedSettings.storage).map(([key, value]) => [key, Number(value)]),
     ) as Record<string, number | null>;
-  const canonicalStorage = (value: Record<string, number | null>): string =>
-    JSON.stringify(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)));
-
   const baseline = ref<Record<string, number | null>>(storageDraftFromProps());
   const draft = ref<Record<string, number | null>>({ ...baseline.value });
 
@@ -50,10 +48,8 @@
     };
   });
 
-  const isDirty = computed(() => canonicalStorage(draft.value) !== canonicalStorage(baseline.value));
-  const remoteMatchesDraft = computed(
-    () => canonicalStorage(draft.value) === canonicalStorage(storageDraftFromProps()),
-  );
+  const isDirty = computed(() => !structurallyEqual(draft.value, baseline.value));
+  const remoteMatchesDraft = computed(() => structurallyEqual(draft.value, storageDraftFromProps()));
 
   watch(
     () => props.settings.revision,

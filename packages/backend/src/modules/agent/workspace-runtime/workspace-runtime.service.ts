@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { logger } from '../../../shared/logging/logger';
 import type { AgentSettingsService } from '../host/agent-settings.service';
 import type { AppLifecycleService } from '../host/app-lifecycle.service';
@@ -96,7 +97,7 @@ const assertSpecMatchesFrozenProfile = (spec: AgentWorkspaceCreateSpec | null, p
   }
   const sameIds = (requested: readonly string[] | undefined, frozen: readonly string[]): boolean => {
     if (requested === undefined) return true;
-    return JSON.stringify([...requested].sort()) === JSON.stringify([...frozen].sort());
+    return isDeepStrictEqual([...requested].sort(), [...frozen].sort());
   };
   if (
     !sameIds(
@@ -506,7 +507,7 @@ export class WorkspaceRuntimeService {
       workspace.profile.toolchain.map((pack) => [pack.familyId, pack.versionId]),
     ) as Record<string, string>;
     const nextToolchain = resolveWorkspaceToolchain(catalog, recipe.id, { ...currentVersions, ...versions });
-    if (JSON.stringify(nextToolchain) === JSON.stringify(workspace.profile.toolchain)) {
+    if (isDeepStrictEqual(nextToolchain, workspace.profile.toolchain)) {
       throw new Error('WORKSPACE_TOOLCHAIN_NO_CHANGE');
     }
 
@@ -647,7 +648,7 @@ export class WorkspaceRuntimeService {
       try {
         const remote = await this.controller.query(command.id);
         const updated =
-          remote.status !== command.status || JSON.stringify(remote.result) !== JSON.stringify(command.result)
+          remote.status !== command.status || !isDeepStrictEqual(remote.result, command.result)
             ? await this.repository.completeCommand(scope, command.id, remote.status, remote.result, this.now())
             : command;
         await this.syncCommandProjection(scope, updated);

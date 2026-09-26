@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { structurallyEqual } from '@/foundation/data';
   import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -25,9 +26,9 @@
 
   const baselineTargets = ref<BrowserTarget[]>(cloneTargets(props.settings.requestedSettings.browser.targets));
   const targets = ref<BrowserTarget[]>(cloneTargets(baselineTargets.value));
-  const isDirty = computed(() => JSON.stringify(targets.value) !== JSON.stringify(baselineTargets.value));
-  const remoteMatchesDraft = computed(
-    () => JSON.stringify(targets.value) === JSON.stringify(props.settings.requestedSettings.browser.targets),
+  const isDirty = computed(() => !structurallyEqual(targets.value, baselineTargets.value));
+  const remoteMatchesDraft = computed(() =>
+    structurallyEqual(targets.value, props.settings.requestedSettings.browser.targets),
   );
 
   const sync = (): void => {

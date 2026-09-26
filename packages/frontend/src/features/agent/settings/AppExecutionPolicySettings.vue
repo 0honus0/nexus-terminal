@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { structurallyEqual } from '@/foundation/data';
   import { UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -197,7 +198,7 @@
     }),
   );
 
-  const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(view.value?.overrides ?? {}));
+  const dirty = computed(() => !structurallyEqual(draft.value, view.value?.overrides ?? {}));
 
   const save = async (): Promise<void> => {
     const appId = loadedAppId.value;

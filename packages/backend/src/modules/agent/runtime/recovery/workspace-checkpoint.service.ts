@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { logger } from '../../../../shared/logging/logger';
 import type { AgentRunEnvironmentSnapshot, Scope } from '../../agent.types';
 import type { ArtifactRef } from '../../ai/artifact.port';
@@ -72,7 +73,7 @@ const decodeManifest = (
       root.schemaVersion !== 1 ||
       root.kind !== 'nexus.workspace.checkpoint' ||
       !expectedEnvironment ||
-      JSON.stringify(root.profile) !== JSON.stringify(expectedEnvironment)
+      !isDeepStrictEqual(root.profile, expectedEnvironment)
     ) {
       throw new Error('invalid');
     }

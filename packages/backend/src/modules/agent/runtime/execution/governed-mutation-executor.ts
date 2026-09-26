@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { logger } from '../../../../shared/logging/logger';
 import type { JsonValue, Scope } from '../../agent.types';
 import type { ToolPolicyDecision } from '../../capabilities/policy.service';
@@ -12,8 +13,7 @@ import { executionErrorCode } from './execution-errors';
 import { toolLeaseTtlSeconds } from './tool-lease-policy';
 import type { ToolCallRunner } from './tool-call-runner';
 
-const inspectionChanged = (left: ToolInspection, right: ToolInspection): boolean =>
-  JSON.stringify(left) !== JSON.stringify(right);
+const inspectionChanged = (left: ToolInspection, right: ToolInspection): boolean => !isDeepStrictEqual(left, right);
 
 export type GovernedMutationCommitPhase =
   | 'inspection_refreshed'

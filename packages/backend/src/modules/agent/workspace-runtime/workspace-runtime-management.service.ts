@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { logger } from '../../../shared/logging/logger';
 import { createDefaultAgentSettings, type AgentSettingsDocument } from '../agent-defaults';
 import type { JsonValue } from '../agent.types';
@@ -287,7 +288,7 @@ export class WorkspaceRuntimeManagementService {
         : [],
       defaultVersionId: typeof payload.defaultVersionId === 'string' ? payload.defaultVersionId : null,
     };
-    if (JSON.stringify(next) !== JSON.stringify(settings.requestedSettings.workspaceRuntime)) {
+    if (!isDeepStrictEqual(next, settings.requestedSettings.workspaceRuntime)) {
       await this.settings.patch(userId, { workspaceRuntime: next }, expectedVersion);
     }
     await this.confirmations.delete(userId, confirmationId);

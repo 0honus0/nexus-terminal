@@ -2,6 +2,7 @@
   import { computed, ref, toRaw, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { WorkspaceFocusConfigDto } from '@nexus-terminal/protocol/settings';
+  import { structurallyEqual } from '@/foundation/data';
   import { BaseButton, BaseInput, BaseModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { normalizeWorkspaceFocusShortcut, workspaceFocus, workspaceFocusTargets } from '../focus/workspaceFocus';
@@ -14,7 +15,7 @@
   const original = ref<WorkspaceFocusConfigDto>({ sequence: [], shortcuts: {} });
   const saving = ref(false);
   const draggingTarget = ref<string | null>(null);
-  const hasChanges = computed(() => JSON.stringify(draft.value) !== JSON.stringify(original.value));
+  const hasChanges = computed(() => !structurallyEqual(draft.value, original.value));
 
   const clone = <T,>(value: T): T => {
     const raw = toRaw(value);

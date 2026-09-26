@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { structurallyEqual } from '@/foundation/data';
   import { BaseModal, UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -61,17 +62,15 @@
   const grantFor = (appId: string, capability: CapabilityId): AgentCapabilityGrantInputDto | undefined =>
     (drafts.value[appId] ?? []).find((grant) => grant.capability === capability);
 
-  const canonicalGrants = (grants: readonly AgentCapabilityGrantInputDto[]): string =>
-    JSON.stringify(
-      [...grants]
-        .map((grant) => cloneGrant(grant))
-        .sort((left, right) => left.capability.localeCompare(right.capability)),
-    );
+  const normalizedGrants = (grants: readonly AgentCapabilityGrantInputDto[]): AgentCapabilityGrantInputDto[] =>
+    [...grants]
+      .map((grant) => cloneGrant(grant))
+      .sort((left, right) => left.capability.localeCompare(right.capability));
 
   const grantChanged = (appId: string): boolean => {
     const view = grantViews.value[appId];
     if (!view) return false;
-    return canonicalGrants(view.grants) !== canonicalGrants(drafts.value[appId] ?? []);
+    return !structurallyEqual(normalizedGrants(view.grants), normalizedGrants(drafts.value[appId] ?? []));
   };
 
   const loadGrant = async (appId: string, options: { forceDraftSync?: boolean } = {}): Promise<void> => {
@@ -81,7 +80,7 @@
       const view = await agentApi.appGrants(appId);
       if (grantLoadGeneration.get(appId) !== generation) return;
       const currentDraft = drafts.value[appId] ?? [];
-      const draftMatchesView = canonicalGrants(currentDraft) === canonicalGrants(view.grants);
+      const draftMatchesView = structurallyEqual(normalizedGrants(currentDraft), normalizedGrants(view.grants));
       const preserveDraftAndBaseline = !options.forceDraftSync && grantChanged(appId) && !draftMatchesView;
       if (!preserveDraftAndBaseline) {
         grantViews.value = { ...grantViews.value, [appId]: view };

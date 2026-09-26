@@ -2,6 +2,7 @@
   import { computed, ref, toRaw, watch } from 'vue';
   import draggable from 'vuedraggable';
   import { useI18n } from 'vue-i18n';
+  import { structurallyEqual } from '@/foundation/data';
   import { OverlayPanel } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
@@ -60,8 +61,7 @@
 
   const hasChanges = computed(
     () =>
-      JSON.stringify(draft.value) !== JSON.stringify(originalDraft.value) ||
-      JSON.stringify(sidebar.value) !== JSON.stringify(originalSidebar.value),
+      !structurallyEqual(draft.value, originalDraft.value) || !structurallyEqual(sidebar.value, originalSidebar.value),
   );
   const allUsedPanes = computed(
     () => new Set<WorkspacePaneNameDto>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),

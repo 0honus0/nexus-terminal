@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { AgentDefinitionRegistryPort, AgentDefinitionView } from './agent-definition.port';
 
 export class AgentDefinitionRegistry implements AgentDefinitionRegistryPort {
@@ -16,7 +17,7 @@ export class AgentDefinitionRegistry implements AgentDefinitionRegistryPort {
     }
     const existing = appDefinitions.get(definition.id);
     if (existing) {
-      if (JSON.stringify(existing) !== JSON.stringify(definition)) {
+      if (!isDeepStrictEqual(existing, definition)) {
         throw new Error(`Conflicting Agent definition: ${appId}@${appVersion}/${definition.id}`);
       }
       return;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { logger } from '@/client/logging/logger';
+  import { structurallyEqual } from '@/foundation/data';
   import { overlayStack, type OverlayStackRegistration } from '@/foundation/ui/overlayStack';
   import type { AgentAppSummaryDto, AgentHostSummaryDto } from '../api/agent-api';
   import PluginAppFrame from './PluginAppFrame.vue';
@@ -627,7 +628,7 @@
   const handleResize = () => {
     const previousBounds = { ...state.bounds };
     agentWindowManager.clamp();
-    if (JSON.stringify(previousBounds) !== JSON.stringify(state.bounds)) {
+    if (!structurallyEqual(previousBounds, state.bounds)) {
       logger.debug(
         { previousBounds, bounds: { ...state.bounds }, maximized: state.maximized },
         'Agent floating window clamped to viewport',

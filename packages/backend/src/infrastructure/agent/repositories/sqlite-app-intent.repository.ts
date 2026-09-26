@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type {
   AppIntentReceipt,
   AppIntentReceiptCreate,
@@ -89,8 +90,8 @@ export class SqliteAppIntentRepository implements AppIntentRepositoryPort {
           existing.receiverAppId !== receipt.receiverAppId ||
           existing.intentId !== receipt.intentId ||
           existing.schemaVersion !== receipt.schemaVersion ||
-          JSON.stringify(existing.input) !== JSON.stringify(receipt.input) ||
-          JSON.stringify(existing.artifactIds) !== JSON.stringify(receipt.artifactIds)
+          !isDeepStrictEqual(existing.input, receipt.input) ||
+          !isDeepStrictEqual(existing.artifactIds, receipt.artifactIds)
         ) {
           throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
         }

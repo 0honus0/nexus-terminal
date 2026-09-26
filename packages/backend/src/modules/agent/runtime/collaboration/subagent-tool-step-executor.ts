@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import { executionErrorCode, failedToolResult as buildFailedToolResult } from '../execution/execution-errors';
@@ -47,8 +48,7 @@ const interruptedMutationResult = (): ToolResult => ({
   },
 });
 
-const inspectionChanged = (left: ToolInspection, right: ToolInspection): boolean =>
-  JSON.stringify(left) !== JSON.stringify(right);
+const inspectionChanged = (left: ToolInspection, right: ToolInspection): boolean => !isDeepStrictEqual(left, right);
 
 export class SubagentToolStepExecutor {
   private readonly governedMutations: GovernedMutationExecutor;

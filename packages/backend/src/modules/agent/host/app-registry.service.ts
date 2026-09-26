@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { compare } from 'semver';
 import type { AgentAppDefinition } from './app.types';
 
@@ -18,7 +19,7 @@ export class AppRegistryService {
     const { id, version } = definition.manifest;
     const existing = this.versions.get(id)?.get(version);
     if (existing) {
-      if (JSON.stringify(existing.manifest) !== JSON.stringify(definition.manifest)) {
+      if (!isDeepStrictEqual(existing.manifest, definition.manifest)) {
         throw new Error(`Conflicting Agent App version: ${id}@${version}`);
       }
       return;

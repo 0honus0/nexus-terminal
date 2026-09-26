@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { structurallyEqual } from '@/foundation/data';
   import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -33,7 +34,7 @@
   const draft = ref<Record<string, number | null>>({ ...globalLimitsBaseline.value });
   const selectedAppId = ref('');
   const profileSettings = ref<AgentSubagentSettingsViewDto | null>(null);
-  const profileBaseline = ref('');
+  const profileBaseline = ref<AgentSubagentProfileDto[]>([]);
   const profileBusy = ref(false);
   const profileAppId = ref('');
   let profileLoadGeneration = 0;
@@ -109,7 +110,7 @@
     if (!appId) {
       profileAppId.value = '';
       profileSettings.value = null;
-      profileBaseline.value = '';
+      profileBaseline.value = [];
       capabilityOptions.value = [];
       profileBusy.value = false;
       return;
@@ -117,7 +118,7 @@
     if (profileAppId.value !== appId) {
       profileAppId.value = '';
       profileSettings.value = null;
-      profileBaseline.value = '';
+      profileBaseline.value = [];
       capabilityOptions.value = [];
     }
     profileBusy.value = true;
@@ -130,7 +131,7 @@
         policy: { ...loaded.policy, profiles: cloneProfiles(loaded.policy.profiles) },
       };
       profileAppId.value = appId;
-      profileBaseline.value = JSON.stringify(profileSettings.value.policy.profiles);
+      profileBaseline.value = cloneProfiles(profileSettings.value.policy.profiles);
     } catch (cause) {
       if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
       const message = explain(cause);
@@ -251,7 +252,7 @@
         ...updated,
         policy: { ...updated.policy, profiles: cloneProfiles(updated.policy.profiles) },
       };
-      profileBaseline.value = JSON.stringify(profileSettings.value.policy.profiles);
+      profileBaseline.value = cloneProfiles(profileSettings.value.policy.profiles);
       operationFeedback.notifySuccess(t('agent.ui.saved'));
     } catch (cause) {
       if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId || profileAppId.value !== appId)
@@ -314,11 +315,9 @@
     emit('save', draft.value);
   };
 
-  const isGlobalLimitsDirty = computed(
-    () => JSON.stringify(draft.value) !== JSON.stringify(globalLimitsBaseline.value),
-  );
-  const remoteMatchesGlobalLimits = computed(
-    () => JSON.stringify(draft.value) === JSON.stringify(props.settings.requestedSettings.subagents),
+  const isGlobalLimitsDirty = computed(() => !structurallyEqual(draft.value, globalLimitsBaseline.value));
+  const remoteMatchesGlobalLimits = computed(() =>
+    structurallyEqual(draft.value, props.settings.requestedSettings.subagents),
   );
 
   watch(
@@ -334,7 +333,7 @@
   const isProfilesDirty = computed(
     () =>
       Boolean(profileSettings.value) &&
-      JSON.stringify(profileSettings.value?.policy.profiles ?? []) !== profileBaseline.value,
+      !structurallyEqual(profileSettings.value?.policy.profiles ?? [], profileBaseline.value),
   );
 
   const subagentLabels = computed<Record<string, string>>(() => ({

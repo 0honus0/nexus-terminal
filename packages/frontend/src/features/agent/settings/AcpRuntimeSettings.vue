@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { structurallyEqual } from '@/foundation/data';
   import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -62,10 +63,8 @@
     profileBaseline.value = next.map((profile) => ({ ...profile }));
     profiles.value = next;
   };
-  const profilesDirty = computed(() => JSON.stringify(profiles.value) !== JSON.stringify(profileBaseline.value));
-  const remoteMatchesProfiles = computed(
-    () => JSON.stringify(profiles.value) === JSON.stringify(draftProfilesFromProps()),
-  );
+  const profilesDirty = computed(() => !structurallyEqual(profiles.value, profileBaseline.value));
+  const remoteMatchesProfiles = computed(() => structurallyEqual(profiles.value, draftProfilesFromProps()));
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 

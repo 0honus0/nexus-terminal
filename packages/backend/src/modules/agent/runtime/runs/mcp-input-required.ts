@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { JsonValue } from '../../agent.types';
 import type { McpInputResume } from '../../ai/integrations.types';
 import type { ToolResult } from '../../capabilities/tool.types';
@@ -163,7 +164,7 @@ export const mcpInputResumeForRequest = (
     value.integrationId !== expected.integrationId ||
     value.schemaHash !== expected.schemaHash ||
     value.method !== expected.method ||
-    JSON.stringify(value.requestParams) !== JSON.stringify(expected.requestParams)
+    !isDeepStrictEqual(value.requestParams, expected.requestParams)
   ) {
     throw new Error('MCP_INPUT_CONTINUATION_MISMATCH');
   }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { nextTick, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { structurallyEqual } from '@/foundation/data';
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { usePreferences } from '../composables/usePreferences';
@@ -57,17 +58,9 @@
     }
   });
 
-  const sameValue = (left: unknown, right: unknown) => {
-    if (left === right) return true;
-    if (typeof left === 'object' && left !== null && typeof right === 'object' && right !== null) {
-      return JSON.stringify(left) === JSON.stringify(right);
-    }
-    return false;
-  };
-
   const refreshDirtyState = () => {
     dirty.value = (Object.keys(form) as (keyof PreferencesDto)[]).some(
-      (key) => !sameValue(form[key], preferences.values.value[key]),
+      (key) => !structurallyEqual(form[key], preferences.values.value[key]),
     );
   };
 

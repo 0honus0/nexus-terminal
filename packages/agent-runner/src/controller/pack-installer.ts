@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { isUtf8 } from 'node:buffer';
 import { spawn } from 'node:child_process';
+import { isDeepStrictEqual } from 'node:util';
 import { MANAGED_PROCESS_DETACHED, signalManagedProcess } from '../managed-process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -113,16 +114,16 @@ const safeArchivePath = (raw: string): string => {
 };
 
 const sameStrings = (a: readonly string[], b: readonly string[]): boolean =>
-  JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  isDeepStrictEqual([...a].sort(), [...b].sort());
 
 const sameDependencies = (
   a: readonly { familyId: string; versionId: string }[],
   b: readonly { familyId: string; versionId: string }[],
 ): boolean =>
-  JSON.stringify(
+  isDeepStrictEqual(
     [...a].sort((x, y) => `${x.familyId}/${x.versionId}`.localeCompare(`${y.familyId}/${y.versionId}`)),
-  ) ===
-  JSON.stringify([...b].sort((x, y) => `${x.familyId}/${x.versionId}`.localeCompare(`${y.familyId}/${y.versionId}`)));
+    [...b].sort((x, y) => `${x.familyId}/${x.versionId}`.localeCompare(`${y.familyId}/${y.versionId}`)),
+  );
 
 const fsyncFile = (filePath: string): void => {
   const fd = fs.openSync(filePath, 'r');
