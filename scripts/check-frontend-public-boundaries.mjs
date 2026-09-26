@@ -51,8 +51,8 @@ const exists = async (candidate) => {
 };
 
 const importPattern = /(?:\bfrom\s*|\bimport\s*\()\s*['"]([^'"]+)['"]/g;
-const publicTypeReexportPattern = /export\s+type\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/gs;
-const publicTypeStarReexportPattern = /export\s+type\s+\*\s+from\s*['"]([^'"]+)['"]/g;
+const publicTypeReexportPattern = /export\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/gs;
+const publicTypeStarReexportPattern = /export\s+(?:type\s+)?\*\s+from\s*['"]([^'"]+)['"]/g;
 const exportedTypeDeclarationPattern = /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)/gm;
 const findings = [];
 const files = await walk(sourceRoot);
@@ -104,10 +104,17 @@ for (const sourceFile of files) {
 const resolvePublicContractSource = async (publicFile, specifier) => {
   if (!specifier.startsWith('.')) return null;
   const base = path.resolve(path.dirname(publicFile), specifier);
-  for (const candidate of [`${base}.ts`, path.join(base, 'index.ts')]) {
+  for (const candidate of [base, `${base}.ts`, path.join(base, 'index.ts')]) {
     if (await exists(candidate)) return candidate;
   }
   return null;
+};
+
+const isPublicContractSource = (publicFile, sourceFile) => {
+  if (path.extname(sourceFile) !== '.ts') return false;
+  const relative = path.relative(path.dirname(publicFile), sourceFile);
+  const parts = relative.split(path.sep);
+  return relative === 'public-types.ts' || (parts.length === 2 && parts[0] === 'contracts');
 };
 
 const publicContractFindings = [];
@@ -115,35 +122,36 @@ const publicFiles = files.filter((file) => path.basename(file) === 'public.ts');
 
 for (const publicFile of publicFiles) {
   const text = await readFile(publicFile, 'utf8');
-  const typeExportsBySpecifier = new Map();
+  const typeExportsBySource = new Map();
   const starTypeExports = new Set();
 
   publicTypeStarReexportPattern.lastIndex = 0;
   let starMatch;
   while ((starMatch = publicTypeStarReexportPattern.exec(text))) {
-    starTypeExports.add(starMatch[1]);
+    const source = await resolvePublicContractSource(publicFile, starMatch[1]);
+    if (source) starTypeExports.add(source);
   }
 
   publicTypeReexportPattern.lastIndex = 0;
   let exportMatch;
   while ((exportMatch = publicTypeReexportPattern.exec(text))) {
-    const specifier = exportMatch[2];
-    const names = typeExportsBySpecifier.get(specifier) ?? new Set();
+    const source = await resolvePublicContractSource(publicFile, exportMatch[2]);
+    if (!source) continue;
+    const names = typeExportsBySource.get(source) ?? new Set();
     for (const item of exportMatch[1].split(',')) {
       const sourceName = item
         .trim()
+        .replace(/^type\s+/u, '')
         .split(/\s+as\s+/u)[0]
         ?.trim();
       if (sourceName) names.add(sourceName);
     }
-    typeExportsBySpecifier.set(specifier, names);
+    typeExportsBySource.set(source, names);
   }
 
-  for (const [specifier, publicNames] of typeExportsBySpecifier) {
-    if (starTypeExports.has(specifier)) continue;
-    const contractSource = await resolvePublicContractSource(publicFile, specifier);
-    if (!contractSource) continue;
-
+  for (const contractSource of files.filter((file) => isPublicContractSource(publicFile, file))) {
+    if (starTypeExports.has(contractSource)) continue;
+    const publicNames = typeExportsBySource.get(contractSource) ?? new Set();
     const contractText = await readFile(contractSource, 'utf8');
     exportedTypeDeclarationPattern.lastIndex = 0;
     let declarationMatch;

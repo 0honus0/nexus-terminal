@@ -23,22 +23,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-05 public contract guard 语义收紧
-
-**状态：🟠 待整改**
-
-现有 guard 能抓漏导，但不应把“实现文件里的所有 exported type”自动升级成产品级公共 API。
-
-需要明确 public contract source，例如：
-
-```text
-contracts/*.ts
-public-types.ts
-public.ts 显式 re-export
-```
-
-只有设计上声明为 contract 的源文件才要求完整导出；普通实现文件允许 feature 内部 `export type/interface`。
-
 ### FE-ARCH-06 全前端 ESLint
 
 **状态：🟠 待整改**
@@ -176,7 +160,7 @@ exactOptionalPropertyTypes
 
 ## 3. 实施顺序
 
-1. **安全网**：FE-ARCH-05 / 06 / 07，同时关闭 §7.51。
+1. **安全网**：FE-ARCH-06 / 07，同时关闭 §7.51。
 2. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
