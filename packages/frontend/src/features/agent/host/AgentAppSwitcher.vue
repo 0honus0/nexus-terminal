@@ -178,7 +178,7 @@
           </div>
           <button
             type="button"
-            class="flex h-5 w-5 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+            class="flex h-6 w-6 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-header hover:text-foreground"
             :aria-label="$t('agent.hub.close')"
             :title="$t('agent.hub.close')"
             @click.stop="close()"

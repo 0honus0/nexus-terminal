@@ -40,6 +40,12 @@ a {
    * handles), because unlayered declarations win over any layer regardless of
    * specificity — the same trap the font reset above was moved here for.
    */
+  /* Physical pointer-target floor for native actions. Visual glyphs may stay smaller. */
+  button {
+    min-inline-size: 1.5rem;
+    min-block-size: 1.5rem;
+  }
+
   button:not(:disabled) {
     cursor: pointer;
   }

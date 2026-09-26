@@ -1445,7 +1445,7 @@
             <button
               type="button"
               data-testid="file-manager-search-clear"
-              class="absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
+              class="absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
               :title="browser.searchQuery.value ? t('common.clear') : t('common.close')"
               :aria-label="browser.searchQuery.value ? t('common.clear') : t('common.close')"
               @mousedown.prevent
@@ -1626,7 +1626,7 @@
               </button>
               <span
                 v-if="canResizeName"
-                class="absolute right-[-3px] top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
+                class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
                 @pointerdown="startColumnResize($event, 'name')"
               ></span>
             </th>
@@ -1648,7 +1648,7 @@
               </button>
               <span
                 v-if="canResizePermissions"
-                class="absolute right-[-3px] top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
+                class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
                 @pointerdown="startColumnResize($event, 'permissions')"
               ></span>
             </th>
@@ -2161,11 +2161,11 @@
   }
   .file-manager-path-favorite-btn,
   .path-history-toggle {
-    width: 1.4rem;
-    height: 1.4rem;
-    min-width: 1.4rem;
-    min-height: 1.4rem;
-    flex: 0 0 1.4rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+    flex: 0 0 1.5rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2468,13 +2468,13 @@
       gap: 0.1rem;
     }
     .file-manager-path-input {
-      min-height: 1.35rem;
-      height: 1.35rem;
+      min-height: 1.5rem;
+      height: 1.5rem;
     }
     .file-manager-action-button,
     .file-manager-search-slot:not(.is-active) {
-      min-height: 1.35rem;
-      height: 1.35rem !important;
+      min-height: 1.5rem;
+      height: 1.5rem !important;
     }
   }
 </style>

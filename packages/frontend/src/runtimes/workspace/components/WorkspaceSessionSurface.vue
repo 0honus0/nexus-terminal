@@ -959,7 +959,7 @@
     >
       <div
         data-testid="left-sidebar-resize-handle"
-        class="absolute inset-y-0 right-0 z-20 w-1 cursor-col-resize"
+        class="absolute inset-y-0 right-[-4px] z-20 w-[9px] cursor-col-resize"
         @pointerdown="leftResize.startResize"
       ></div>
       <button
@@ -1150,7 +1150,10 @@
       class="fixed top-0 bottom-0 right-0 z-[110] flex max-w-[80vw] flex-col overflow-hidden border-l border-border bg-background transition-transform duration-300 ease-in-out"
       :style="{ width: `${rightSidebarWidth}px` }"
     >
-      <div class="absolute inset-y-0 left-0 z-20 w-1 cursor-col-resize" @pointerdown="rightResize.startResize"></div>
+      <div
+        class="absolute inset-y-0 left-[-4px] z-20 w-[9px] cursor-col-resize"
+        @pointerdown="rightResize.startResize"
+      ></div>
       <button
         type="button"
         class="absolute right-2 top-1 z-10 p-1 text-2xl leading-none text-text-secondary hover:text-foreground"
@@ -1426,7 +1429,7 @@
         v-if="!mobile"
         data-testid="file-manager-resize-handle"
         type="button"
-        class="absolute bottom-0 right-0 z-40 h-5 w-5 touch-none select-none cursor-nwse-resize bg-transparent opacity-70 transition hover:bg-primary/15 hover:opacity-100"
+        class="absolute bottom-0 right-0 z-40 h-6 w-6 touch-none select-none cursor-nwse-resize bg-transparent opacity-70 transition hover:bg-primary/15 hover:opacity-100"
         :title="t('fileManager.resizePopup')"
         :aria-label="t('fileManager.resizePopup')"
         @pointerdown.stop="fileManagerPopupSizing.resize.startResize"
@@ -1480,7 +1483,7 @@
           v-if="!mobile"
           data-testid="document-popup-resize-handle"
           type="button"
-          class="absolute bottom-0 right-0 z-30 h-5 w-5 touch-none select-none cursor-nwse-resize bg-transparent opacity-70 transition hover:bg-white/15 hover:opacity-100"
+          class="absolute bottom-0 right-0 z-30 h-6 w-6 touch-none select-none cursor-nwse-resize bg-transparent opacity-70 transition hover:bg-white/15 hover:opacity-100"
           :title="documentPopupResizeLabel"
           :aria-label="documentPopupResizeLabel"
           @pointerdown.stop="startDocumentPopupResize"

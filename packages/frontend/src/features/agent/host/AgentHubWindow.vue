@@ -936,7 +936,7 @@
     <button
       v-if="!state.maximized"
       type="button"
-      class="absolute bottom-0 right-0 z-40 flex h-4 w-4 touch-none select-none cursor-nwse-resize items-end justify-end rounded-tl-md rounded-br-2xl p-0.5 text-text-secondary/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+      class="absolute bottom-0 right-0 z-40 flex h-6 w-6 touch-none select-none cursor-nwse-resize items-end justify-end rounded-tl-md rounded-br-2xl p-0.5 text-text-secondary/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
       :title="$t('agent.hub.resizeHint')"
       :aria-label="$t('agent.hub.resize')"
       :aria-keyshortcuts="'ArrowLeft ArrowRight ArrowUp ArrowDown'"

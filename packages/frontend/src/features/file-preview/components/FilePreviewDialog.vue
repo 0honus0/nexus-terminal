@@ -95,7 +95,7 @@
         <span class="min-w-0 flex-1 truncate">{{ tab.name }}</span>
         <button
           type="button"
-          class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-lg leading-none opacity-70 hover:bg-border hover:opacity-100 focus:opacity-100 focus:outline-none sm:h-5 sm:w-5 sm:text-sm"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-lg leading-none opacity-70 hover:bg-border hover:opacity-100 focus:opacity-100 focus:outline-none sm:h-6 sm:w-6 sm:text-sm"
           :aria-label="t('fileManager.preview.closeFile', { file: tab.name })"
           @click="closeTab($event, tab.id)"
         >

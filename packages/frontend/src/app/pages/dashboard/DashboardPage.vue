@@ -324,7 +324,7 @@
               <span>{{ formatRelativeTime(latestConnection.lastConnectedAt) }}</span>
               <button
                 type="button"
-                class="h-5.5 rounded border border-primary/30 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px]"
+                class="h-6 rounded border border-primary/30 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px]"
                 @click="connect(latestConnection)"
               >
                 {{ t('dashboard.reconnect') }}
@@ -333,7 +333,7 @@
                 v-if="activeSuspendedSessions.length"
                 data-testid="dashboard-suspended-sessions"
                 type="button"
-                class="hidden h-5.5 items-center gap-1.5 rounded border border-primary/25 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px] lg:inline-flex"
+                class="hidden h-6 items-center gap-1.5 rounded border border-primary/25 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px] lg:inline-flex"
                 :title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
                 @click="openSuspendedSessions"
               >
@@ -346,7 +346,7 @@
               <button
                 data-testid="dashboard-suspended-sessions"
                 type="button"
-                class="inline-flex h-5.5 items-center gap-1.5 rounded border border-primary/25 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px]"
+                class="inline-flex h-6 items-center gap-1.5 rounded border border-primary/25 bg-primary/10 px-2 text-[10px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px]"
                 :title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
                 @click="openSuspendedSessions"
               >

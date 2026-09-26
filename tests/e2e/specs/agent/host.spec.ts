@@ -58,6 +58,40 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
   await expect(hub).toBeVisible();
 });
 
+test('Agent Hub native buttons keep a 24px physical pointer-target floor', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  await page.goto('/connections');
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(hub).toBeVisible();
+  const undersized = await hub.locator('button').evaluateAll((buttons) =>
+    buttons
+      .filter((button) => {
+        const style = getComputedStyle(button);
+        return style.display !== 'none' && style.visibility !== 'hidden' && button.getClientRects().length > 0;
+      })
+      .map((button) => {
+        const rect = button.getBoundingClientRect();
+        return {
+          width: rect.width,
+          height: rect.height,
+          label: button.getAttribute('aria-label') ?? button.getAttribute('title') ?? button.textContent?.trim() ?? '',
+        };
+      })
+      .filter(({ width, height }) => width < 24 || height < 24),
+  );
+  expect(undersized).toEqual([]);
+
+  const resizeHandle = hub.locator('button.cursor-nwse-resize');
+  const resizeBox = await resizeHandle.boundingBox();
+  expect(resizeBox).toBeTruthy();
+  expect(resizeBox!.width).toBeGreaterThanOrEqual(24);
+  expect(resizeBox!.height).toBeGreaterThanOrEqual(24);
+});
+
 test('Agent window state resets every user-scoped layout field before an empty user restore', async ({
   page,
   context,

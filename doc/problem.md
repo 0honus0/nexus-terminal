@@ -7,20 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.44 指针命中区 floor 仍未完全收口（P1）
-
-**当前代码事实**
-
-仍存在真实操作按钮小于既定命中区，例如 `AgentAppSwitcher` 关闭按钮仍为 `h-5 w-5`；Hub resize 与若干 icon-only 路径也需要统一复核。已有键盘路径不能替代 pointer/touch target。
-
-**整改目标**
-
-可见图标无需放大，但实际 pointer target 统一至少 24px，优先采用 Gen2 compact icon button 的 28–32px 规格；resize handle 保持现有键盘/separator 语义。
-
-**关闭条件**
-
-对 Agent 可交互 icon/resize controls 做机械扫描 + 真实盒尺寸复核，不再存在无特殊理由的小命中区。
-
 ### §7.45 对象型 dirty-state 依赖 JSON insertion order（P2）
 
 **当前代码事实**
@@ -317,7 +303,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **安全网**：FE-ARCH-04 / 05 / 06 / 07，同时关闭 §7.51。
-2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.44–45 / 48 / 49。
+2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.45 / 48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 5. **严格类型增强**：FE-ARCH-16。

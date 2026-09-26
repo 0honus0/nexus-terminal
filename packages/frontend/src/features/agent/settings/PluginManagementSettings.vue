@@ -613,7 +613,7 @@
           <button
             v-if="searchQuery"
             type="button"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-foreground text-xs cursor-pointer p-0.5"
+            class="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-xs text-text-secondary hover:text-foreground cursor-pointer"
             @click="searchQuery = ''"
           >
             <i class="fa-solid fa-circle-xmark"></i>
@@ -635,7 +635,7 @@
             >
             <button
               type="button"
-              class="inline-flex h-5 w-5 items-center justify-center rounded text-text-secondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50 cursor-pointer"
+              class="inline-flex h-6 w-6 items-center justify-center rounded text-text-secondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50 cursor-pointer"
               :title="$t('agent.settings.plugins.removeRepository')"
               :disabled="locked"
               @click="removeRepository(repository.url)"

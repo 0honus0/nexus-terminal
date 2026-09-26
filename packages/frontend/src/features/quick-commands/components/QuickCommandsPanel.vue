@@ -427,7 +427,7 @@
             <div class="flex items-center gap-2 min-w-0 flex-1">
               <button
                 type="button"
-                class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-secondary/70 transition-colors group-hover:text-foreground cursor-pointer"
+                class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-secondary/70 transition-colors group-hover:text-foreground cursor-pointer"
                 :aria-expanded="expanded[group.name] !== false"
                 @click.stop="store.toggle(group.name)"
               >
