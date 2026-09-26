@@ -14,10 +14,41 @@ assert(surface.includes('const created = await facade.createRun(fields, idempote
 assert(
   surface.includes('if (pendingRunCreateIdentity?.idempotencyKey === idempotencyKey) pendingRunCreateIdentity = null;'),
 );
+assert(
+  surface.includes('const createThread = async (title?: string, idempotencyKey = crypto.randomUUID()): Promise<void> => {'),
+  'thread create must mint caller-stable identity at the UI intent boundary',
+);
+assert(
+  surface.includes('const thread = await facade.createThread(normalizedTitle || undefined, idempotencyKey);'),
+  'thread create must forward the stable identity',
+);
+assert(
+  surface.includes('retry: () => void createThread(title, idempotencyKey),'),
+  'unknown-outcome thread create retry must reuse the original identity',
+);
 
 const agentApi = read('packages/frontend/src/features/agent/api/agent-api.ts');
 assert(agentApi.includes('idempotencyKey: string,\n  ): Promise<AgentIntegrationViewDto>'));
 assert(agentApi.includes("'Idempotency-Key': idempotencyKey"));
+assert(
+  agentApi.includes("...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})"),
+  'thread create transport must forward the optional idempotency key',
+);
+
+const threadRoute = read('packages/backend/src/interfaces/http/agent/app-threads.routes.ts');
+assert(
+  threadRoute.includes("request.header('idempotency-key') || undefined"),
+  'thread route must forward the caller-provided identity',
+);
+const conversationService = read('packages/backend/src/modules/agent/ai/conversation.service.ts');
+assert(
+  conversationService.includes('const threadId = idempotencyKey ? requireIdempotencyKey(idempotencyKey) : randomUUID();'),
+  'thread service must derive durable identity from the caller idempotency key',
+);
+assert(
+  conversationService.includes("throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');"),
+  'reusing a thread identity with a different payload must be rejected',
+);
 
 const mcp = read('packages/frontend/src/features/agent/settings/McpIntegrationSettings.vue');
 assert(mcp.includes('let pendingCreateIdentity: { fingerprint: string; idempotencyKey: string } | null = null;'));
