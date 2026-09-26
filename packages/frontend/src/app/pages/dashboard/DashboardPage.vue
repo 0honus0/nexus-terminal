@@ -64,25 +64,16 @@
     });
   });
   const MAX_RECENT_LOGS = 5;
-  const connectionSummary = computed(() => {
-    let usedCount = 0;
-    const protocolCounts: Record<ConnectionDto['type'], number> = { SSH: 0, RDP: 0, VNC: 0 };
-    let latestConnection: ConnectionDto | null = null;
+  const latestConnection = computed(() => {
+    let latest: ConnectionDto | null = null;
     let latestTimestamp = -1;
     for (const item of connections.connections.value) {
-      protocolCounts[item.type] += 1;
-      if (!item.lastConnectedAt) continue;
-      usedCount += 1;
-      if (item.lastConnectedAt > latestTimestamp) {
-        latestTimestamp = item.lastConnectedAt;
-        latestConnection = item;
-      }
+      if (!item.lastConnectedAt || item.lastConnectedAt <= latestTimestamp) continue;
+      latestTimestamp = item.lastConnectedAt;
+      latest = item;
     }
-    return { usedCount, protocolCounts, latestConnection };
+    return latest;
   });
-  const usedCount = computed(() => connectionSummary.value.usedCount);
-  const protocolCounts = computed(() => connectionSummary.value.protocolCounts);
-  const latestConnection = computed(() => connectionSummary.value.latestConnection);
   const activeSuspendedSessions = computed(() =>
     suspended.sessions.value
       .filter((session) => session.status === 'active')

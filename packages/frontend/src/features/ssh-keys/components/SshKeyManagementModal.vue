@@ -2,7 +2,7 @@
   import { onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseFormField, BaseInput, BaseModal, BaseTable, BaseTextarea } from '@/foundation/ui';
+  import { BaseButton, BaseFormField, BaseInput, BaseModal, BaseTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useSshKeys } from '../composables/useSshKeys';
   import type { SshKeySummaryDto } from '../model/sshKey';

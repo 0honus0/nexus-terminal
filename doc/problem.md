@@ -7,27 +7,7 @@
 
 ## 1. 当前开放问题
 
-### §7.51 全前端 ESLint 覆盖仍不完整（P2）
-
-**当前代码事实**
-
-`eslint.config.mjs` 的完整 TypeScript/Vue profile 仍主要覆盖 Agent；`foundation/ui` 与普通 frontend feature 尚未统一进入同一 lint 基线。
-
-**整改目标**
-
-统一覆盖 `packages/frontend/src/**/*.{ts,vue}`，至少启用正确 parser、unused 检查和 Vue correctness，再渐进启用 type-aware 规则。
-
-**关闭条件**
-
-全 frontend lint 成为正式脚本/CI 门禁，`foundation/ui` 和普通 feature 能直接 lint 而不是 parser failure 或规则缺失。
-
 ## 2. 前端架构待整改项
-
-### FE-ARCH-06 全前端 ESLint
-
-**状态：🟠 待整改**
-
-与 §7.51 同一整改项。先完成全 frontend parser/基础 correctness/no-unused 覆盖，再逐步打开 type-aware 规则，避免一次性制造大量机械 suppress。
 
 ### FE-ARCH-08 状态生命周期统一
 
@@ -145,10 +125,9 @@ exactOptionalPropertyTypes
 
 ## 3. 实施顺序
 
-1. **安全网**：FE-ARCH-06，同时关闭 §7.51。
-2. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
-3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
-4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
-5. **严格类型增强**：FE-ARCH-16。
+1. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
+2. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
+3. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
+4. **严格类型增强**：FE-ARCH-16。
 
 当某项完成并验证后，直接从本文件删除；不保留关闭记录。

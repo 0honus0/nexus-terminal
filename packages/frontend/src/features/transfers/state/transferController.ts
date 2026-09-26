@@ -5,7 +5,6 @@ import type {
   CopyMoveCommand,
   TransferLocation,
   TransferTask,
-  UploadCommand,
   UploadSourceFile,
 } from '../model/transfer';
 

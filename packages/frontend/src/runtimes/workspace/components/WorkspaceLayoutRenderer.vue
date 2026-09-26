@@ -1,6 +1,5 @@
 <script setup lang="ts">
   import { defineAsyncComponent, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
   import { Splitpanes, Pane } from 'splitpanes';
   import 'splitpanes/dist/splitpanes.css';
   import { loadTerminalView, type TerminalChannel, type TerminalVisualOptions } from '@/features/terminal/public';
@@ -52,8 +51,6 @@
   interface PreviewApi {
     open?: (path: string) => Promise<unknown> | unknown;
   }
-
-  const { t } = useI18n();
 
   const props = defineProps<{
     active?: boolean;

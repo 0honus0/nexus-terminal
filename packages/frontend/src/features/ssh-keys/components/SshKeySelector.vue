@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseSelect } from '@/foundation/ui';
+  import { BaseSelect } from '@/foundation/ui';
   import { useSshKeys } from '../composables/useSshKeys';
   import SshKeyManagementModal from './SshKeyManagementModal.vue';
   const { t } = useI18n();

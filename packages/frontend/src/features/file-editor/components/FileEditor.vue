@@ -69,7 +69,7 @@
   let localSession: FileEditorSessionController | undefined;
   const resolveSession = (): FileEditorSessionController =>
     props.session ?? (localSession ??= createFileEditorSession(props.port));
-  const session = new Proxy({} as FileEditorSessionController, {
+  const editorSession = new Proxy({} as FileEditorSessionController, {
     get(_target, property) {
       return Reflect.get(resolveSession(), property);
     },
@@ -82,30 +82,33 @@
   let unregisterFocus: (() => void) | undefined;
 
   const LARGE_FILE_CHARACTER_THRESHOLD = 2 * 1024 * 1024;
-  const content = computed({ get: () => session.active.value?.content ?? '', set: (value) => session.update(value) });
+  const content = computed({
+    get: () => editorSession.active.value?.content ?? '',
+    set: (value) => editorSession.update(value),
+  });
   const largeFile = computed(() => content.value.length >= LARGE_FILE_CHARACTER_THRESHOLD);
-  const selectedEncoding = computed(() => session.active.value?.encoding ?? 'utf-8');
+  const selectedEncoding = computed(() => editorSession.active.value?.encoding ?? 'utf-8');
   const currentLineEnding = computed<EditorLineEnding>(() => {
-    const value = session.active.value?.content ?? '';
+    const value = editorSession.active.value?.content ?? '';
     if (value.includes('\r\n')) return 'crlf';
     if (value.includes('\r')) return 'cr';
     return 'lf';
   });
   const saveDisabled = computed(() => {
-    const active = session.active.value;
+    const active = editorSession.active.value;
     if (!active) return true;
-    return session.loading.value || active.saveState === 'saving' || (!props.showCloseButton && !active.dirty);
+    return editorSession.loading.value || active.saveState === 'saving' || (!props.showCloseButton && !active.dirty);
   });
   const contextIndex = computed(() =>
-    context.value ? session.tabs.value.findIndex((tab) => tab.id === context.value!.id) : -1,
+    context.value ? editorSession.tabs.value.findIndex((tab) => tab.id === context.value!.id) : -1,
   );
-  const contextCanCloseOthers = computed(() => contextIndex.value >= 0 && session.tabs.value.length > 1);
+  const contextCanCloseOthers = computed(() => contextIndex.value >= 0 && editorSession.tabs.value.length > 1);
   const contextCanCloseRight = computed(
-    () => contextIndex.value >= 0 && contextIndex.value < session.tabs.value.length - 1,
+    () => contextIndex.value >= 0 && contextIndex.value < editorSession.tabs.value.length - 1,
   );
   const contextCanCloseLeft = computed(() => contextIndex.value > 0);
 
-  const save = () => session.save();
+  const save = () => editorSession.save();
   const triggerSave = (): void => {
     void save().catch(() => undefined);
   };
@@ -115,22 +118,22 @@
   };
 
   const confirmDiscardIfDirty = async (): Promise<boolean> => {
-    if (!session.active.value?.dirty) return true;
+    if (!editorSession.active.value?.dirty) return true;
     return feedback.confirm({ message: t('fileEditor.confirmDiscardChanges') });
   };
   const reload = async (): Promise<void> => {
-    const active = session.active.value;
+    const active = editorSession.active.value;
     if (!active || active.saveState === 'saving' || !(await confirmDiscardIfDirty())) return;
-    const current = session.active.value;
+    const current = editorSession.active.value;
     if (!current || current.id !== active.id || current.saveState === 'saving') return;
     try {
-      await session.reload(active.id);
+      await editorSession.reload(active.id);
     } catch {
       return;
     }
   };
   const changeEncoding = async (event: Event): Promise<void> => {
-    const active = session.active.value;
+    const active = editorSession.active.value;
     const target = event.target as HTMLSelectElement;
     const encoding = target.value;
     if (!active || !encoding || encoding === active.encoding || active.saveState === 'saving') {
@@ -141,29 +144,29 @@
       target.value = active.encoding;
       return;
     }
-    const current = session.active.value;
+    const current = editorSession.active.value;
     if (!current || current.id !== active.id || current.saveState === 'saving') {
       target.value = current?.encoding ?? active.encoding;
       return;
     }
     try {
-      await session.changeEncoding(active.id, encoding);
+      await editorSession.changeEncoding(active.id, encoding);
     } catch {
-      target.value = session.active.value?.encoding ?? active.encoding;
+      target.value = editorSession.active.value?.encoding ?? active.encoding;
     }
   };
   const changeLineEnding = (event: Event): void => {
-    const active = session.active.value;
+    const active = editorSession.active.value;
     const target = event.target as HTMLSelectElement;
     if (!active || active.saveState === 'saving') {
       if (active) target.value = currentLineEnding.value;
       return;
     }
-    session.changeLineEnding(active.id, target.value as EditorLineEnding);
+    editorSession.changeLineEnding(active.id, target.value as EditorLineEnding);
   };
   const updateScrollPosition = (position: { scrollTop: number; scrollLeft: number }): void => {
-    const active = session.active.value;
-    if (active) session.updateScrollPosition(active.id, position.scrollTop, position.scrollLeft);
+    const active = editorSession.active.value;
+    if (active) editorSession.updateScrollPosition(active.id, position.scrollTop, position.scrollLeft);
   };
 
   const updateEncodingWidth = (): void => {
@@ -193,7 +196,7 @@
   const open = (path: string) => {
     if (device.isMobile.value) void loadCodeMirrorMobileEditor().catch(() => undefined);
     else void loadMonacoEditor().catch(() => undefined);
-    return session.open(path, { scopeId: props.scopeId, scopeLabel: props.scopeLabel, port: props.port });
+    return editorSession.open(path, { scopeId: props.scopeId, scopeLabel: props.scopeLabel, port: props.port });
   };
   const openContext = (event: MouseEvent, id: string) => {
     event.preventDefault();
@@ -203,34 +206,36 @@
     const id = context.value?.id;
     context.value = null;
     if (!id) return;
-    if (action === 'close') session.close(id);
-    else if (action === 'others') session.closeOthers(id);
-    else if (action === 'right') session.closeToRight(id);
-    else session.closeToLeft(id);
+    if (action === 'close') editorSession.close(id);
+    else if (action === 'others') editorSession.closeOthers(id);
+    else if (action === 'right') editorSession.closeToRight(id);
+    else editorSession.closeToLeft(id);
   };
   const handleEditorKeydown = (event: KeyboardEvent) => {
     if (!root.value?.getClientRects().length || !event.altKey) return;
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    if (session.tabs.value.length <= 1) return;
+    if (editorSession.tabs.value.length <= 1) return;
     event.preventDefault();
     event.stopPropagation();
-    session.activateRelative(event.key === 'ArrowLeft' ? -1 : 1);
+    editorSession.activateRelative(event.key === 'ArrowLeft' ? -1 : 1);
   };
 
   onMounted(() => {
     unregisterFocus = focusRegistry.register(
       'fileEditorActive',
       () => {
-        if (!session.active.value) return false;
+        if (!editorSession.active.value) return false;
         if (device.isMobile.value) mobileEditor.value?.focus?.();
         else desktopEditor.value?.focus?.();
         return true;
       },
-      () => Boolean(root.value?.getClientRects().length && session.active.value),
+      () => Boolean(root.value?.getClientRects().length && editorSession.active.value),
     );
     window.addEventListener('keydown', handleEditorKeydown, true);
   });
-  watch(() => [selectedEncoding.value, session.active.value?.id] as const, updateEncodingWidth, { immediate: true });
+  watch(() => [selectedEncoding.value, editorSession.active.value?.id] as const, updateEncodingWidth, {
+    immediate: true,
+  });
   onBeforeUnmount(() => {
     unregisterFocus?.();
     window.removeEventListener('keydown', handleEditorKeydown, true);
@@ -238,7 +243,7 @@
   defineExpose({
     open,
     save,
-    close: (id: string) => session.close(id),
+    close: (id: string) => editorSession.close(id),
     focus: () => (device.isMobile.value ? mobileEditor.value?.focus?.() : desktopEditor.value?.focus?.()),
   });
 </script>
@@ -246,17 +251,17 @@
   <section ref="root" data-testid="file-editor-view" class="file-editor-container">
     <div class="file-editor-tabs" role="tablist">
       <div
-        v-for="tab in session.tabs.value"
+        v-for="tab in editorSession.tabs.value"
         :key="tab.id"
         class="tab-item"
-        :class="{ active: session.activeId.value === tab.id }"
+        :class="{ active: editorSession.activeId.value === tab.id }"
         :title="showScopeLabel && tab.scopeLabel ? `${tab.scopeLabel}: ${tab.path}` : tab.path"
         role="tab"
-        :aria-selected="session.activeId.value === tab.id"
+        :aria-selected="editorSession.activeId.value === tab.id"
         tabindex="0"
-        @click="session.activeId.value = tab.id"
-        @keydown.enter.prevent="session.activeId.value = tab.id"
-        @keydown.space.prevent="session.activeId.value = tab.id"
+        @click="editorSession.activeId.value = tab.id"
+        @keydown.enter.prevent="editorSession.activeId.value = tab.id"
+        @keydown.space.prevent="editorSession.activeId.value = tab.id"
         @contextmenu="openContext($event, tab.id)"
       >
         <span class="tab-filename">{{ tab.name }}</span>
@@ -266,21 +271,21 @@
           class="close-tab-btn"
           :title="t('fileManager.actions.closeTab')"
           :aria-label="t('fileManager.actions.closeTab')"
-          @click.stop="session.close(tab.id)"
+          @click.stop="editorSession.close(tab.id)"
         >
           ×
         </button>
       </div>
-      <div v-if="!session.tabs.value.length" class="no-tabs-placeholder"></div>
+      <div v-if="!editorSession.tabs.value.length" class="no-tabs-placeholder"></div>
     </div>
 
-    <div v-if="session.active.value" class="editor-header" :class="{ 'is-mobile': device.isMobile.value }">
-      <span class="editor-path-label" :title="session.active.value.path">
+    <div v-if="editorSession.active.value" class="editor-header" :class="{ 'is-mobile': device.isMobile.value }">
+      <span class="editor-path-label" :title="editorSession.active.value.path">
         {{ t('fileManager.editingFile')
-        }}<template v-if="showScopeLabel && session.active.value.scopeLabel"
-          >({{ session.active.value.scopeLabel }})</template
-        >: {{ session.active.value.path }}
-        <span v-if="session.active.value.dirty" class="modified-indicator">*</span>
+        }}<template v-if="showScopeLabel && editorSession.active.value.scopeLabel"
+          >({{ editorSession.active.value.scopeLabel }})</template
+        >: {{ editorSession.active.value.path }}
+        <span v-if="editorSession.active.value.dirty" class="modified-indicator">*</span>
       </span>
 
       <div class="editor-actions">
@@ -290,7 +295,7 @@
           :value="selectedEncoding"
           class="encoding-select"
           :title="t('fileManager.changeEncodingTooltip')"
-          :disabled="session.loading.value || session.active.value.saveState === 'saving'"
+          :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @change="changeEncoding"
         >
           <option v-for="option in encodingOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
@@ -300,7 +305,7 @@
           :value="currentLineEnding"
           class="encoding-select line-ending-select"
           :title="t('fileEditor.lineEnding')"
-          :disabled="session.loading.value || session.active.value.saveState === 'saving'"
+          :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @change="changeLineEnding"
         >
           <option value="lf">{{ t('fileEditor.lineEndingLf') }}</option>
@@ -308,13 +313,13 @@
           <option value="cr">{{ t('fileEditor.lineEndingCr') }}</option>
         </select>
 
-        <span v-if="session.active.value.saveState === 'saving'" class="save-status saving"
+        <span v-if="editorSession.active.value.saveState === 'saving'" class="save-status saving"
           >{{ t('fileManager.saving') }}...</span
         >
-        <span v-else-if="session.active.value.saveState === 'saved'" role="status" class="save-status success"
+        <span v-else-if="editorSession.active.value.saveState === 'saved'" role="status" class="save-status success"
           >✅ {{ t('fileManager.saveSuccess') }}</span
         >
-        <span v-else-if="session.active.value.saveState === 'error'" role="alert" class="save-status error"
+        <span v-else-if="editorSession.active.value.saveState === 'error'" role="alert" class="save-status error"
           >❌ {{ t('fileManager.saveError') }}</span
         >
 
@@ -332,7 +337,7 @@
           type="button"
           class="save-btn"
           :title="t('fileEditor.refreshRemote')"
-          :disabled="session.loading.value || session.active.value.saveState === 'saving'"
+          :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @click="reload"
         >
           {{ t('fileManager.actions.refresh') }}
@@ -379,38 +384,38 @@
     </div>
 
     <div class="editor-content-area">
-      <div v-if="session.loading.value" data-testid="file-editor-loading-state" class="editor-loading">
+      <div v-if="editorSession.loading.value" data-testid="file-editor-loading-state" class="editor-loading">
         {{ t('fileManager.loadingFile') }}
       </div>
-      <template v-else-if="session.active.value">
+      <template v-else-if="editorSession.active.value">
         <CodeMirrorMobileEditor
           v-if="device.isMobile.value"
-          :key="session.active.value.id"
+          :key="editorSession.active.value.id"
           ref="mobileEditor"
           v-model="content"
           class="editor-instance"
-          :path="session.active.value.path"
+          :path="editorSession.active.value.path"
           :font-size="mobileFontSize"
           :font-family="fontFamily"
           :large-file="largeFile"
-          :scroll-top="session.active.value.scrollTop"
-          :scroll-left="session.active.value.scrollLeft"
+          :scroll-top="editorSession.active.value.scrollTop"
+          :scroll-left="editorSession.active.value.scrollLeft"
           @request-save="triggerSave"
           @font-size-change="emit('mobileFontSize', $event)"
           @update-scroll-position="updateScrollPosition"
         />
         <MonacoEditor
           v-else
-          :key="session.active.value.id"
+          :key="editorSession.active.value.id"
           ref="desktopEditor"
           v-model="content"
           class="editor-instance"
-          :path="session.active.value.path"
+          :path="editorSession.active.value.path"
           :font-size="fontSize"
           :font-family="fontFamily"
           :large-file="largeFile"
-          :initial-scroll-top="session.active.value.scrollTop"
-          :initial-scroll-left="session.active.value.scrollLeft"
+          :initial-scroll-top="editorSession.active.value.scrollTop"
+          :initial-scroll-left="editorSession.active.value.scrollLeft"
           @request-save="triggerSave"
           @font-size="emit('fontSize', $event)"
           @update-scroll-position="updateScrollPosition"
@@ -419,7 +424,7 @@
       <div v-else class="editor-placeholder">{{ t('fileManager.selectFileToEdit') }}</div>
     </div>
 
-    <p v-if="session.active.value?.error" class="editor-error">{{ session.active.value.error }}</p>
+    <p v-if="editorSession.active.value?.error" class="editor-error">{{ editorSession.active.value.error }}</p>
 
     <BaseContextMenu :visible="Boolean(context)" :x="context?.x ?? 0" :y="context?.y ?? 0" @close="context = null">
       <button

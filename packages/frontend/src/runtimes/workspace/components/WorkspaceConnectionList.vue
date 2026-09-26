@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu, BaseSpinner } from '@/foundation/ui';
+  import { BaseContextMenu } from '@/foundation/ui';
   import { loadConnectionEditorModal, useConnections, type ConnectionDto } from '@/features/connections/public';
   import { useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
   import { useFeedback } from '@/shared/feedback/public';

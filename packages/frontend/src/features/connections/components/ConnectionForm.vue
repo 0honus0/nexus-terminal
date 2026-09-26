@@ -2,7 +2,7 @@
   import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect, BaseTextarea } from '@/foundation/ui';
+  import { BaseButton, BaseFormField, BaseInput, BaseSelect, BaseTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { ConnectionTagPicker, connectionTagsService } from '@/features/tags/public';
   import { SshKeySelector, useSshKeys } from '@/features/ssh-keys/public';

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseContextMenu, BaseSpinner, OverlayPanel } from '@/foundation/ui';
+  import { BaseContextMenu, BaseSpinner, OverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { writeClipboardText } from '@/foundation/browser';
   import { createWheelScaleResolver, useLongPressGesture } from '@/foundation/interaction';
@@ -264,12 +264,6 @@
       ? Math.max(0, (browser.visible.value.length - virtualEndIndex.value) * estimatedRowHeight.value)
       : 0,
   );
-  const formatSize = (bytes: number) =>
-    bytes < 1024
-      ? `${bytes} B`
-      : bytes < 1048576
-        ? `${(bytes / 1024).toFixed(1)} KB`
-        : `${(bytes / 1048576).toFixed(1)} MB`;
   const formatCompactModified = (value: string | number | Date): string => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';

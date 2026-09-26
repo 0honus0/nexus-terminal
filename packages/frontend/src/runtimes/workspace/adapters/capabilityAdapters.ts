@@ -23,7 +23,7 @@ import type {
 } from '@/features/filesystem/public';
 import { decodeEditorDocument, type FileDocumentPort, type LoadedEditorDocument } from '@/features/file-editor/public';
 import type { FilePreviewSource } from '@/features/file-preview/public';
-import type { WorkspaceStatusSampleDto, StatusChannel } from '@/features/status-monitor/public';
+import type { StatusChannel } from '@/features/status-monitor/public';
 import type { SshSuspendChannel } from '@/features/ssh-suspend/public';
 import type { TerminalChannel, TerminalOutput, WorkspaceTerminalViewportDto } from '@/features/terminal/public';
 import type {
@@ -31,7 +31,6 @@ import type {
   CopyMoveCommand,
   TransferChannel,
   TransferEvent,
-  TransferTask,
   UploadPrepareCommand,
   UploadCommand,
 } from '@/features/transfers/public';

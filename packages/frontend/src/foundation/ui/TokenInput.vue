@@ -1,6 +1,5 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
-  import BaseInput from './BaseInput.vue';
 
   export interface TokenOption {
     value: string | number;

@@ -11,7 +11,7 @@
   import { connectionsApi } from '../api/connectionsApi';
   import ConnectionEditorModal from '../components/ConnectionEditorModal.vue';
   import BatchEditConnectionModal from '../components/BatchEditConnectionModal.vue';
-  import type { ConnectionDto, ConnectionFormInput, ConnectionFormUpdate } from '../model/connection';
+  import type { ConnectionDto, ConnectionFormUpdate } from '../model/connection';
   const { t, locale } = useI18n();
   const router = useRouter();
   const feedback = useFeedback();

@@ -3,7 +3,7 @@
   import { startRegistration } from '@simplewebauthn/browser';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseInput, BaseTable } from '@/foundation/ui';
+  import { BaseButton, BaseInput } from '@/foundation/ui';
   import { securityApi } from '../api/securityApi';
   import type { PasskeySummaryDto } from '../model/security';
 
