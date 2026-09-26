@@ -127,6 +127,73 @@ test('Agent revisits a loaded conversation without blocking on a fresh history r
   await expect(firstThread).toBeEnabled();
 });
 
+test('Agent create-thread Retry reuses the same idempotency key after an unknown outcome', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  const csrf = await csrfToken(context.request);
+
+  const seed = await context.request.post('/api/v1/apps/nexus.agent/threads', {
+    headers: { 'X-Nexus-CSRF': csrf },
+    data: { title: `E2E Idempotency Seed ${Date.now()}` },
+  });
+  expect(seed.status(), await seed.text()).toBe(201);
+
+  const beforeResponse = await context.request.get('/api/v1/apps/nexus.agent/threads?limit=100');
+  expect(beforeResponse.ok(), await beforeResponse.text()).toBeTruthy();
+  const before = (await beforeResponse.json()) as AgentEnvelope<{ items: Array<{ id: string }> }>;
+
+  let createAttempts = 0;
+  const idempotencyKeys: string[] = [];
+  await page.route('**/api/v1/apps/nexus.agent/threads', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+
+    createAttempts += 1;
+    idempotencyKeys.push(route.request().headers()['idempotency-key'] ?? '');
+    if (createAttempts === 1) {
+      const committed = await route.fetch();
+      expect(committed.status(), await committed.text()).toBe(201);
+      await route.fulfill({
+        status: 502,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: { code: 'UPSTREAM_RESPONSE_LOST', message: 'simulated response loss after commit' },
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto('/connections');
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(hub).toBeVisible();
+  await hub.getByTitle('New', { exact: true }).click();
+
+  await expect.poll(() => createAttempts).toBe(1);
+  const retry = hub.getByRole('button', { name: 'Retry', exact: true });
+  await expect(retry).toBeVisible();
+  await retry.click();
+
+  await expect.poll(() => createAttempts).toBe(2);
+  expect(idempotencyKeys[0]).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(idempotencyKeys[1]).toBe(idempotencyKeys[0]);
+
+  const afterResponse = await context.request.get('/api/v1/apps/nexus.agent/threads?limit=100');
+  expect(afterResponse.ok(), await afterResponse.text()).toBeTruthy();
+  const after = (await afterResponse.json()) as AgentEnvelope<{ items: Array<{ id: string }> }>;
+  expect(after.data.items).toHaveLength(before.data.items.length + 1);
+
+  await page.unroute('**/api/v1/apps/nexus.agent/threads');
+});
+
 test('Agent feature enable opens one global floating window that survives route navigation', async ({
   page,
   context,

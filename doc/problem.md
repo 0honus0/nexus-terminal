@@ -7,22 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.41 创建会话 unknown-outcome retry 会重复 POST（P1）
-
-**当前代码事实**
-
-- `agentApi.createThread()` / run facade 已支持可选 `Idempotency-Key`；Plugin SDK 创建 Thread 时也会传稳定 `operationId`。
-- `AgentAppSurface.createThread()` 失败后的错误按钮仍直接执行 `createThread(title)`。
-- 该 UI 路径没有为“一次创建意图”生成并在 retry 时复用同一个 idempotency key。
-
-**整改目标**
-
-为 UI thread create 建立 caller-stable identity；同一次用户意图在 unknown outcome 后重试必须复用原 key。若不重放写请求，则改为 authoritative resync，并明确“结果未知”。
-
-**关闭条件**
-
-网络丢响应但后端已提交时，用户点击重试不会创建第二个 Thread；有对应回归测试。
-
 ### §7.42 Agent window reset 漏掉 per-user 布局字段（P2）
 
 **当前代码事实**
@@ -371,7 +355,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **安全网**：FE-ARCH-04 / 05 / 06 / 07，同时关闭 §7.51。
-2. **现存正确性问题**：优先 §7.41 / 46 / 47 / 50，再处理 §7.42–45 / 48 / 49。
+2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.42–45 / 48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 5. **严格类型增强**：FE-ARCH-16。

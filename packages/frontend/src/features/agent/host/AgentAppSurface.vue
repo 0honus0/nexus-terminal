@@ -1044,13 +1044,13 @@
     void refreshThreadListFromHost();
   };
 
-  const createThread = async (title?: string): Promise<void> => {
+  const createThread = async (title?: string, idempotencyKey = crypto.randomUUID()): Promise<void> => {
     if (busy.value) return;
     busy.value = true;
     clearError('agent.operations.failureDomain.threads');
     try {
       const normalizedTitle = title?.trim();
-      const thread = await facade.createThread(normalizedTitle || undefined);
+      const thread = await facade.createThread(normalizedTitle || undefined, idempotencyKey);
       invalidateThreadPagination();
       threads.value = [thread, ...threads.value.filter((item) => item.id !== thread.id)];
       threadSidebar.value?.resetScroll();
@@ -1058,7 +1058,7 @@
     } catch (cause) {
       fail(cause, {
         domainKey: 'agent.operations.failureDomain.threads',
-        retry: () => void createThread(title),
+        retry: () => void createThread(title, idempotencyKey),
       });
     } finally {
       busy.value = false;
