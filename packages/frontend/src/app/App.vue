@@ -10,7 +10,7 @@
   import { markConnectionConnected } from '@/features/connections/public';
   import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { usePreferences } from '@/features/preferences/public';
-  import { DialogHost, NotificationHost } from '@/shared/feedback/public';
+  import { DialogHost, NotificationHost, RuntimeErrorBoundary } from '@/shared/feedback/public';
   import { authenticatedSessionLifecycle, type AuthenticatedSessionDispatch } from '@/shared/session/public';
   import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
@@ -98,13 +98,17 @@
     <AppHeader v-if="auth.isAuthenticated.value" @customize-appearance="appearance.openCustomizer()" />
     <div class="min-h-0 flex-1">
       <RouterView v-slot="{ Component, route }">
-        <KeepAlive :key="authenticatedPageCacheGeneration">
-          <component v-if="route.meta.keepAlive" :is="Component" :key="String(route.name)" />
-        </KeepAlive>
-        <component v-if="!route.meta.keepAlive" :is="Component" />
+        <RuntimeErrorBoundary scope="route" :reset-key="route.fullPath">
+          <KeepAlive :key="authenticatedPageCacheGeneration">
+            <component v-if="route.meta.keepAlive" :is="Component" :key="String(route.name)" />
+          </KeepAlive>
+          <component v-if="!route.meta.keepAlive" :is="Component" />
+        </RuntimeErrorBoundary>
       </RouterView>
     </div>
-    <AgentSurfaceHost v-if="auth.isAuthenticated.value" />
+    <RuntimeErrorBoundary v-if="auth.isAuthenticated.value" scope="agent" :reset-key="auth.user.value?.id ?? null">
+      <AgentSurfaceHost />
+    </RuntimeErrorBoundary>
     <RemoteDesktopModal
       v-if="remoteDesktopVisible"
       :visible="true"

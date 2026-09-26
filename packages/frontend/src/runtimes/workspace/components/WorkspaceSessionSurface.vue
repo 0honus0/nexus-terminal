@@ -12,7 +12,7 @@
   } from '@/foundation/ui';
   import { useDraggablePosition, usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
-  import { useFeedback } from '@/shared/feedback/public';
+  import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
   import { loadFilePreview, previewKindFor } from '@/features/file-preview/public';
   import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
   import { applyTerminalModifiers, type TerminalChannel, type TerminalVisualOptions } from '@/features/terminal/public';
@@ -1505,19 +1505,24 @@
             class="pointer-events-none absolute bottom-1 right-1 h-2.5 w-2.5 border-b-2 border-r-2 border-text-secondary/70"
           ></span>
         </button>
-        <FilePreview
-          ref="popupPreviewRef"
+        <RuntimeErrorBoundary
           v-show="documentMode === 'preview'"
-          class="min-h-0 flex-1"
-          :source="session.adapters.preview"
-          :scope-id="session.id"
-          :session="previewSession"
-          :spreadsheet-rows-per-page="spreadsheetRowsPerPage"
-          :spreadsheet-max-columns="spreadsheetMaxColumns"
-          @edit="editPreview"
-          @hide="hidePreview"
-          @dismiss="hideDocumentPopup"
-        />
+          scope="file-preview"
+          :reset-key="`${session.id}:${previewSession.active.value?.id ?? ''}`"
+        >
+          <FilePreview
+            ref="popupPreviewRef"
+            class="min-h-0 flex-1"
+            :source="session.adapters.preview"
+            :scope-id="session.id"
+            :session="previewSession"
+            :spreadsheet-rows-per-page="spreadsheetRowsPerPage"
+            :spreadsheet-max-columns="spreadsheetMaxColumns"
+            @edit="editPreview"
+            @hide="hidePreview"
+            @dismiss="hideDocumentPopup"
+          />
+        </RuntimeErrorBoundary>
       </div>
     </OverlayPanel>
 

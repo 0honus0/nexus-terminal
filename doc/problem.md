@@ -9,14 +9,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-12 UI runtime error boundary
-
-**状态：🟠 待整改**
-
-已有 `window.error` / `unhandledrejection` 诊断，但缺 surface 级用户可见 error boundary。
-
-优先覆盖 Agent、Workspace、Preview：组件树异常应被局部隔离并提供 fallback/retry，而不是只写日志或拖垮整个 surface。
-
 ### FE-ARCH-13 Design System 收敛
 
 **状态：🟠 待整改**
@@ -76,8 +68,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
-2. **状态与数据层**：FE-ARCH-12。
-3. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
-4. **严格类型增强**：FE-ARCH-16。
+2. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
+3. **严格类型增强**：FE-ARCH-16。
 
 当某项完成并验证后，直接从本文件删除；不保留关闭记录。
