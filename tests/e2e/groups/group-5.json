@@ -4,12 +4,17 @@
   "workers": 8,
   "specs": [
     "specs/ui/audit-log-filtering.spec.ts",
-    "specs/ui/batch-connection-edit.spec.ts",
-    "specs/ssh/command-history-management.spec.ts",
-    "specs/ssh/quick-command-collapsible-search.spec.ts",
-    "specs/ssh/quick-command-management.spec.ts",
-    "specs/ssh/quick-command-tags-variables.spec.ts",
-    "specs/ssh/file-manager-navigation.spec.ts",
-    "specs/ssh/file-preview-editor.spec.ts"
+    "specs/ui/login-passkey-surface.spec.ts",
+    "specs/ui/captcha-settings.spec.ts",
+    "specs/ui/change-password.spec.ts",
+    "specs/ui/ip-blacklist-settings.spec.ts",
+    "specs/ui/ip-whitelist-settings.spec.ts",
+    "specs/ui/protected-navigation.spec.ts",
+    "specs/ui/ssh-key-management.spec.ts",
+    "specs/ui/notification-delivery.spec.ts",
+    "specs/ui/notification-settings.spec.ts",
+    "specs/ui/proxy-management.spec.ts",
+    "specs/ui/system-settings.spec.ts",
+    "specs/ui/theme-switching.spec.ts"
   ]
 }

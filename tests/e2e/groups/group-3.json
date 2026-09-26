@@ -4,16 +4,8 @@
   "workers": 8,
   "specs": [
     "specs/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "specs/ui/captcha-settings.spec.ts",
-    "specs/ui/change-password.spec.ts",
-    "specs/ui/ip-blacklist-settings.spec.ts",
-    "specs/ui/ip-whitelist-settings.spec.ts",
-    "specs/ui/protected-navigation.spec.ts",
-    "specs/ui/ssh-key-management.spec.ts",
-    "specs/ui/notification-delivery.spec.ts",
-    "specs/ui/notification-settings.spec.ts",
-    "specs/ui/proxy-management.spec.ts",
-    "specs/ui/system-settings.spec.ts",
-    "specs/ui/theme-switching.spec.ts"
+    "specs/ssh/file-manager-navigation.spec.ts",
+    "specs/ssh/file-preview-editor.spec.ts",
+    "specs/ssh/suspend-resume.spec.ts"
   ]
 }

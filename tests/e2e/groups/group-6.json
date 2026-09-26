@@ -3,6 +3,7 @@
   "group": 6,
   "workers": 8,
   "specs": [
+    "specs/auth/setup-login.spec.ts",
     "specs/mobile/dashboard-mobile.spec.ts",
     "specs/mobile/ssh-workspace.spec.ts",
     "specs/mobile/suspend-resume-ui.spec.ts",
@@ -11,9 +12,6 @@
     "specs/mobile/touch-workflows.spec.ts",
     "specs/ui/backup-ui.spec.ts",
     "specs/ui/connection-non-ssh-bulk.spec.ts",
-    "specs/ui/custom-terminal-theme.spec.ts",
-    "specs/websocket/authenticated-session.spec.ts",
-    "specs/ssh/sftp-download.spec.ts",
-    "specs/ssh/status-history-time-axis.spec.ts"
+    "specs/ui/custom-terminal-theme.spec.ts"
   ]
 }
