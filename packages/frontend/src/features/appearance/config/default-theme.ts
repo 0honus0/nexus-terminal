@@ -98,8 +98,9 @@ export const darkUiTheme: Record<string, string> = {
 
 const isDarkColor = (color: string): boolean => {
   const match = color.trim().match(/^#([0-9a-f]{6})$/i);
-  if (!match) return false;
-  const value = Number.parseInt(match[1], 16);
+  const hex = match?.[1];
+  if (!hex) return false;
+  const value = Number.parseInt(hex, 16);
   const red = (value >> 16) & 0xff;
   const green = (value >> 8) & 0xff;
   const blue = value & 0xff;
@@ -121,8 +122,8 @@ export const normalizeUiTheme = (theme: Record<string, string>): Record<string, 
 
   fallback('--card-bg-color', dark ? 'rgb(43 48 53 / 90%)' : 'rgb(246 247 249 / 92%)');
   fallback('--input-bg-color', dark ? '#1e293b' : '#ffffff');
-  fallback('--input-text-color', dark ? '#f8fafc' : normalized['--text-color']);
-  fallback('--input-placeholder-color', dark ? '#94a3b8' : normalized['--text-color-secondary']);
+  fallback('--input-text-color', dark ? '#f8fafc' : (normalized['--text-color'] ?? '#212529'));
+  fallback('--input-placeholder-color', dark ? '#94a3b8' : (normalized['--text-color-secondary'] ?? '#6c757d'));
   fallback('--input-disabled-bg-color', dark ? '#0b1220' : '#f3f4f6');
   fallback('--input-disabled-text-color', dark ? '#64748b' : '#6b7280');
   fallback('--input-disabled-border-color', dark ? '#334155' : '#d1d5db');

@@ -7,23 +7,4 @@
 
 ## 1. 当前开放问题
 
-## 2. 前端架构待整改项
-
-### FE-ARCH-16 TypeScript strictness 第二阶段
-
-**状态：🟠 待评估**
-
-当前已经 `strict: true`。后续按 feature 渐进评估：
-
-```text
-noUncheckedIndexedAccess
-exactOptionalPropertyTypes
-```
-
-不得通过批量 `!` / `as` 机械消错；只有真正改善 contract 精度时才推进。
-
-## 3. 实施顺序
-
-1. **严格类型增强**：FE-ARCH-16。
-
-当某项完成并验证后，直接从本文件删除；不保留关闭记录。
+当前无未完成问题。

@@ -80,6 +80,7 @@
     }
 
     const touch = event.touches[0];
+    if (!touch) return;
     touchGesture = {
       identifier: touch.identifier,
       startX: touch.clientX,

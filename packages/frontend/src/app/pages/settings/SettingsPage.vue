@@ -162,9 +162,11 @@
   watch(() => route.query.tab, syncRouteTab, { immediate: true });
   onActivated(syncRouteTab);
 
-  const currentTab = computed<TabItem>(
-    () => allTabs.value.find((item) => item.value === active.value) ?? allTabs.value[0],
-  );
+  const currentTab = computed<TabItem>(() => {
+    const item = allTabs.value.find((candidate) => candidate.value === active.value);
+    if (!item) throw new Error(`Settings tab configuration is missing: ${active.value}`);
+    return item;
+  });
 
   type TabSurface = 'mobile' | 'desktop';
   type TabOrientation = 'horizontal' | 'vertical';

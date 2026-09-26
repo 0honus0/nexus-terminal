@@ -295,8 +295,10 @@
       pulledModels.value = list;
       if (list.length > 0) {
         operationFeedback.notifySuccess(t('agent.settings.providers.pullSuccess', { count: list.length }));
-        const match = list.find((m) => m.id === requestModelId) ?? list[0];
-        applyPulledModel(match);
+        const match = list.find((m) => m.id === requestModelId);
+        const first = list[0];
+        if (match) applyPulledModel(match);
+        else if (first) applyPulledModel(first);
       } else {
         operationFeedback.notifyInfo(t('agent.settings.providers.discoveryEmpty'));
       }
@@ -533,15 +535,15 @@
     const list = filteredAvailable(provider);
     if (!list.length) return;
     const allSelected = isAllDiscoveredSelected(provider);
-    if (!selectedDiscovered[provider.id]) selectedDiscovered[provider.id] = {};
+    const selection = (selectedDiscovered[provider.id] ??= {});
     for (const m of list) {
-      selectedDiscovered[provider.id][m.id] = !allSelected;
+      selection[m.id] = !allSelected;
     }
   };
 
   const toggleDiscoveredItem = (provider: AgentProviderViewDto, modelId: string) => {
-    if (!selectedDiscovered[provider.id]) selectedDiscovered[provider.id] = {};
-    selectedDiscovered[provider.id][modelId] = !selectedDiscovered[provider.id][modelId];
+    const selection = (selectedDiscovered[provider.id] ??= {});
+    selection[modelId] = !selection[modelId];
   };
 
   // 统一更新方法
@@ -696,7 +698,8 @@
     if (!saved) return;
     if (editor.mode === 'add') {
       if (manualModelId[provider.id] === model.id) manualModelId[provider.id] = '';
-      if (selectedDiscovered[provider.id]) delete selectedDiscovered[provider.id][model.id];
+      const selection = selectedDiscovered[provider.id];
+      if (selection) delete selection[model.id];
     }
     capabilityEditor.value = null;
   };
@@ -786,9 +789,8 @@
       const noticeSingle = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
       const saved = await updateModels(provider, [...provider.models, newModel], noticeSingle);
       if (!saved) return;
-      if (selectedDiscovered[provider.id]) {
-        delete selectedDiscovered[provider.id][modelId];
-      }
+      const selection = selectedDiscovered[provider.id];
+      if (selection) delete selection[modelId];
     } finally {
       isSavingModels[provider.id] = false;
     }

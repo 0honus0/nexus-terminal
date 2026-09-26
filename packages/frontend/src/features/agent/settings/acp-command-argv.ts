@@ -22,6 +22,7 @@ export const parseAcpCommandToArgv = (input: string): string[] | null => {
 
   for (let index = 0; index < input.length; index += 1) {
     const char = input[index];
+    if (char === undefined) break;
 
     if (quote === 'single') {
       if (char === "'") quote = null;

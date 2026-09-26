@@ -5,6 +5,7 @@
     "module": "ESNext", // 使用 ES 模块系统
     "moduleResolution": "Bundler", // 与 Vite 的模块解析行为保持一致
     "strict": true, // 启用所有严格类型检查选项
+    "noUncheckedIndexedAccess": true, // 索引读取必须处理不存在的元素，避免数组和字典越界被当作确定值
     "jsx": "preserve", // 保留 JSX 语法供后续处理 (如 Vue)
     "sourceMap": true, // 生成 Source Map 文件
     "resolveJsonModule": true, // 允许导入 JSON 文件

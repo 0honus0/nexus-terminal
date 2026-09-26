@@ -55,10 +55,12 @@ export function parseQuantity(raw: string | number | null | undefined, type: Qua
   const match = trimmed.match(/^([+-]?\d+(?:\.\d+)?)\s*([a-z]*)$/i);
   if (!match) return null;
 
-  const num = parseFloat(match[1]);
+  const numeric = match[1];
+  if (!numeric) return null;
+  const num = parseFloat(numeric);
   if (!Number.isFinite(num)) return null;
 
-  const unit = match[2];
+  const unit = match[2] ?? '';
 
   if (type === 'bytes') {
     let multiplier = 1;

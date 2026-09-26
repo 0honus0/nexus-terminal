@@ -142,9 +142,11 @@
     return 'custom';
   });
 
-  const activePresetMeta = computed(
-    () => presets.value.find((candidate) => candidate.id === activePreset.value) ?? presets.value[1],
-  );
+  const activePresetMeta = computed(() => {
+    const preset = presets.value.find((candidate) => candidate.id === activePreset.value);
+    if (!preset) throw new Error(`Budget preset configuration is missing: ${activePreset.value}`);
+    return preset;
+  });
 
   const applyPreset = (preset: BudgetPreset) => {
     if (preset.id === 'custom') return;

@@ -154,7 +154,8 @@
     }>
   >(() => {
     const status = monitor.current.value;
-    const cpuLoad = status?.loadAvg?.length ? `${t('statusMonitor.load')} ${status.loadAvg[0].toFixed(2)}` : '';
+    const firstLoadAverage = status?.loadAvg?.[0];
+    const cpuLoad = firstLoadAverage === undefined ? '' : `${t('statusMonitor.load')} ${firstLoadAverage.toFixed(2)}`;
     const cpuDetail =
       cpuLoad ||
       (status?.cpuModel

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 const guard = fileURLToPath(new URL('../scripts/checks/frontend/public-boundaries.mjs', import.meta.url));
+const frontendTsconfig = fileURLToPath(new URL('../packages/frontend/tsconfig.json', import.meta.url));
 
 const runGuard = (sourcePath, publicSource) => {
   const root = mkdtempSync(path.join(tmpdir(), 'frontend-boundaries-'));
@@ -135,6 +136,11 @@ test('large Vue files require extracted controller or presentation modules', () 
     '<script setup>const value = 1;</script>\n<template><div>{{ value }}</div></template>\n<style scoped src="./Bounded.css"></style>\n',
   );
   assert.equal(externalStyle.status, 0, externalStyle.stderr);
+});
+
+test('frontend indexed access remains strict', () => {
+  const config = readFileSync(frontendTsconfig, 'utf8');
+  assert.match(config, /"noUncheckedIndexedAccess"\s*:\s*true/u);
 });
 
 test('legacy Base design system symbols cannot return', () => {

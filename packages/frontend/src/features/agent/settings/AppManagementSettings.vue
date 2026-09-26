@@ -579,7 +579,9 @@
                     <i class="fa-solid fa-key text-[9px] text-primary"></i>
                     {{ $t('agent.settings.apps.grantsMetric') }}:
                     <strong class="font-mono text-foreground">
-                      {{ grantViews[app.id].grants.length }}/{{ grantViews[app.id].capabilityDefinitions.length }}
+                      {{ grantViews[app.id]?.grants.length ?? 0 }}/{{
+                        grantViews[app.id]?.capabilityDefinitions.length ?? 0
+                      }}
                     </strong>
                   </span>
                 </div>
@@ -744,7 +746,7 @@
               <!-- 能力清单卡片网格 -->
               <div class="grid gap-2 sm:grid-cols-2">
                 <div
-                  v-for="capability in grantViews[app.id].capabilityDefinitions
+                  v-for="capability in (grantViews[app.id]?.capabilityDefinitions ?? [])
                     .map((definition) => definition.id)
                     .filter((id) => getCapabilityMeta(id).category === cat.id)"
                   :key="capability"
