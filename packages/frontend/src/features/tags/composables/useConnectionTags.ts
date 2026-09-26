@@ -1,4 +1,5 @@
 import { computed, type ComputedRef } from 'vue';
+import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import type { ConnectionTagDto } from '../model/tag';
 import { useTagsStore } from '../store/tags.store';
 
@@ -26,3 +27,5 @@ export function useConnectionTags(): ConnectionTagsController {
 }
 
 export const resetConnectionTagsCache = (): void => useTagsStore().reset();
+
+registerAuthenticatedSessionReset('connection-tags-cache', resetConnectionTagsCache);

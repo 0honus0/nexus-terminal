@@ -3,6 +3,7 @@ import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import { defineStore, storeToRefs } from 'pinia';
 import { apiErrorMessage, apiErrorStatus } from '@/client/http';
 import { logger } from '@/client/logging/logger';
+import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { sshSuspendApi } from '../api/sshSuspendApi';
 import type { SuspendedSessionDto } from '../model/sshSuspend';
 export type { WorkspaceSuspendAutoTerminatedEventDto };
@@ -234,6 +235,7 @@ export const applySuspendedAutoTermination = (
   event: WorkspaceSuspendAutoTerminatedEventDto,
 ): SuspendedAutoTerminationViewModel | null => useSuspendedSessionsStore().applySuspendedAutoTermination(event);
 export const resetSuspendedSessionsCatalog = (): void => useSuspendedSessionsStore().resetSuspendedSessionsCatalog();
+registerAuthenticatedSessionReset('suspended-sessions-cache', resetSuspendedSessionsCatalog);
 export const refreshSuspendedSessionsCatalog = (): Promise<SuspendedSessionsLoadResult> =>
   useSuspendedSessionsStore().refreshSuspendedSessionsCatalog();
 export const removeSuspendedSessionFromCatalog = (id: string): void =>

@@ -9,14 +9,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-09 authenticated session teardown
-
-**状态：🟠 待整改**
-
-`App.vue` 仍手工维护多个 `resetXxxCache()`。新增 user-scoped feature 时容易漏 reset。
-
-需要建立统一 authenticated-session lifecycle：attach / user-changed / logout / dispose，由 user-scoped owner 注册 teardown/reset，而不是 composition root 维护越来越长的手工清单。
-
 ### FE-ARCH-10 Workspace data access 边界
 
 **状态：🟠 待整改**
@@ -106,7 +98,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
-2. **状态与数据层**：FE-ARCH-09 / 10 / 11 / 12。
+2. **状态与数据层**：FE-ARCH-10 / 11 / 12。
 3. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 4. **严格类型增强**：FE-ARCH-16。
 

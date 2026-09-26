@@ -1,4 +1,5 @@
 import { computed, type ComputedRef } from 'vue';
+import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import type { ProxyCreateRequestDto, ProxyDto } from '../model/proxy';
 import { useProxiesStore } from '../store/proxies.store';
 
@@ -22,3 +23,5 @@ export function useProxies(): ProxiesController {
 }
 
 export const resetProxiesCache = (): void => useProxiesStore().reset();
+
+registerAuthenticatedSessionReset('proxies-cache', resetProxiesCache);

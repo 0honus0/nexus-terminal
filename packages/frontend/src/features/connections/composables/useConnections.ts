@@ -1,4 +1,5 @@
 import { computed, type ComputedRef } from 'vue';
+import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import type { ConnectionDto, ConnectionFormInput, ConnectionFormUpdate } from '../model/connection';
 import { useConnectionsStore } from '../store/connections.store';
 
@@ -35,3 +36,5 @@ export const refreshConnection = (id: number) => useConnectionsStore().refresh(i
 export const markConnectionConnected = (id: number, timestamp: number) =>
   useConnectionsStore().markConnected(id, timestamp);
 export const resetConnectionsCache = (): void => useConnectionsStore().reset();
+
+registerAuthenticatedSessionReset('connections-cache', resetConnectionsCache);

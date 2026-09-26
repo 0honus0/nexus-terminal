@@ -1,4 +1,5 @@
 import { computed, type ComputedRef } from 'vue';
+import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import type { PreferencesDto, PreferencesPatchDto } from '../model/preferences';
 import { usePreferencesStore } from '../store/preferences.store';
 
@@ -22,3 +23,5 @@ export function usePreferences(): PreferencesController {
 }
 
 export const resetPreferencesCache = (): void => usePreferencesStore().reset();
+
+registerAuthenticatedSessionReset('preferences-cache', resetPreferencesCache);

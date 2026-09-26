@@ -1,21 +1,17 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
   import { RouterView } from 'vue-router';
   import { preloadAuthenticatedRoutes } from './router';
   import { logger } from '@/client/logging/logger';
   import AppHeader from './shell/AppHeader.vue';
   import { useAuthSession } from '@/features/auth/public';
-  import { loadAppearanceCustomizerModal, resetAppearanceCache, useAppearance } from '@/features/appearance/public';
+  import { loadAppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
   import { AgentSurfaceHost } from '@/features/agent/public';
-  import { markConnectionConnected, resetConnectionsCache } from '@/features/connections/public';
+  import { markConnectionConnected } from '@/features/connections/public';
   import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
-  import { resetPreferencesCache, usePreferences } from '@/features/preferences/public';
+  import { usePreferences } from '@/features/preferences/public';
   import { DialogHost, NotificationHost } from '@/shared/feedback/public';
-  import { resetProxiesCache } from '@/features/proxies/public';
-  import { resetConnectionTagsCache } from '@/features/tags/public';
-  import { resetNotificationsCache } from '@/features/notifications/public';
-  import { resetAuditCache } from '@/features/audit/public';
-  import { resetSuspendedSessionsCatalog } from '@/features/ssh-suspend/public';
+  import { authenticatedSessionLifecycle, type AuthenticatedSessionDispatch } from '@/shared/session/public';
   import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
   const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
@@ -53,29 +49,29 @@
       .catch((cause) => logger.error({ err: cause }, 'Failed to persist remote desktop window size'));
   };
 
-  const resetAuthenticatedUiState = () => {
+  const reportSessionCleanupFailures = (result: AuthenticatedSessionDispatch | null): void => {
+    if (!result) return;
+    for (const failure of result.failures) {
+      logger.error(
+        { err: failure.cause, ownerId: failure.ownerId, sessionEvent: result.event.type },
+        'Authenticated session owner cleanup failed',
+      );
+    }
+  };
+
+  const disposeAuthenticatedShell = (): void => {
     authenticatedPageCacheGeneration.value += 1;
-    resetConnectionsCache();
-    resetConnectionTagsCache();
-    resetProxiesCache();
-    resetNotificationsCache();
-    resetAuditCache();
-    resetSuspendedSessionsCatalog();
-    resetPreferencesCache();
-    resetAppearanceCache();
+    remoteDesktopLauncher.close();
+    void disposeWorkspaceRuntime();
   };
 
   watch(
-    () => auth.user.value?.id ?? null,
-    (userId, previousUserId) => {
-      if (previousUserId !== null && userId !== null && userId !== previousUserId) resetAuthenticatedUiState();
-    },
-  );
-
-  watch(
-    auth.isAuthenticated,
-    (authenticated, wasAuthenticated) => {
-      if (authenticated) {
+    [auth.isAuthenticated, () => auth.user.value?.id ?? null],
+    ([authenticated, userId]) => {
+      if (authenticated && userId !== null) {
+        const result = authenticatedSessionLifecycle.attach(userId);
+        reportSessionCleanupFailures(result);
+        if (result?.event.type === 'user-changed') disposeAuthenticatedShell();
         preloadAuthenticatedRoutes();
         void appearance.load().catch((cause) => logger.error({ err: cause }, 'Failed to load appearance settings'));
         void preferences
@@ -83,14 +79,18 @@
           .catch((cause) => logger.error({ err: cause }, 'Failed to load application preferences'));
         return;
       }
-      remoteDesktopLauncher.close();
-      if (wasAuthenticated) {
-        resetAuthenticatedUiState();
-        void disposeWorkspaceRuntime();
-      }
+      const result = authenticatedSessionLifecycle.logout();
+      reportSessionCleanupFailures(result);
+      if (result) disposeAuthenticatedShell();
     },
     { immediate: true },
   );
+
+  onBeforeUnmount(() => {
+    reportSessionCleanupFailures(authenticatedSessionLifecycle.dispose());
+    remoteDesktopLauncher.close();
+    void disposeWorkspaceRuntime();
+  });
 </script>
 
 <template>

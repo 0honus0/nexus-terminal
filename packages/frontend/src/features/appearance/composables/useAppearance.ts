@@ -1,5 +1,6 @@
 import { computed, type ComputedRef } from 'vue';
 import type { AppearanceUpdateRequestDto, TerminalThemeDto } from '@nexus-terminal/protocol/appearance';
+import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { useAppearanceStore } from '../store/appearance.store';
 
 export interface AppearanceController {
@@ -32,3 +33,5 @@ export function useAppearance(): AppearanceController {
 }
 
 export const resetAppearanceCache = (): void => useAppearanceStore().reset();
+
+registerAuthenticatedSessionReset('appearance-cache', resetAppearanceCache);
