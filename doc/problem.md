@@ -29,21 +29,6 @@
 
 与 §7.51 同一整改项。先完成全 frontend parser/基础 correctness/no-unused 覆盖，再逐步打开 type-aware 规则，避免一次性制造大量机械 suppress。
 
-### FE-ARCH-07 unit / component test 层
-
-**状态：🟠 待整改**
-
-`packages/frontend` 当前没有正式 `*.spec.ts` / `*.test.ts` 单元或组件测试层。
-
-需要引入 Vitest + Vue Test Utils，优先覆盖：
-
-- store / composable / controller
-- parser / canonical compare / persisted-state decoder
-- request generation / stale response guard
-- 不依赖真实浏览器的状态机与边界行为
-
-E2E 继续负责真实跨栈用户路径，不用它替代所有前端逻辑测试。
-
 ### FE-ARCH-08 状态生命周期统一
 
 **状态：🟠 待整改**
@@ -160,7 +145,7 @@ exactOptionalPropertyTypes
 
 ## 3. 实施顺序
 
-1. **安全网**：FE-ARCH-06 / 07，同时关闭 §7.51。
+1. **安全网**：FE-ARCH-06，同时关闭 §7.51。
 2. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
