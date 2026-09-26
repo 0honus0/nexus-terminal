@@ -55,7 +55,6 @@ jobs:
     name: Prepare publication
     runs-on: ubuntu-latest
     outputs:
-      source_ref: ${{ steps.source.outputs.ref }}
       source_sha: ${{ steps.source_commit.outputs.sha }}
       image_tag: ${{ steps.image_tag.outputs.value }}
       channel: ${{ steps.channel.outputs.value }}
@@ -156,6 +155,47 @@ jobs:
           echo "value=$channel" >> "$GITHUB_OUTPUT"
           echo "tag=$channel_tag" >> "$GITHUB_OUTPUT"
 
+      - name: Require validated main commit for release channel
+        if: steps.channel.outputs.value == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source_commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --no-tags
+          main_sha="$(git rev-parse origin/main)"
+          if [[ "$SOURCE_SHA" != "$main_sha" ]]; then
+            echo "Release publication must use the current main commit: source=$SOURCE_SHA main=$main_sha" >&2
+            exit 1
+          fi
+
+          checks="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "/repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs?status=completed&per_page=100")"
+          required_checks=(
+            'Checks, format, and build'
+            'Docker deployment smoke'
+            'Playwright (auth)'
+            'Playwright (http)'
+            'Playwright (agent)'
+            'Playwright (websocket)'
+            'Playwright (ui)'
+            'Playwright (ssh)'
+            'Playwright (mobile)'
+          )
+          for required_check in "${required_checks[@]}"; do
+            successful="$(jq --arg name "$required_check" \
+              '[.check_runs[] | select(.name == $name and .conclusion == "success" and .app.slug == "github-actions")] | length' \
+              <<< "$checks")"
+            if [[ "$successful" -lt 1 ]]; then
+              echo "Current main commit has no successful '$required_check' check: $SOURCE_SHA" >&2
+              exit 1
+            fi
+          done
+
       - name: Select image architecture
         id: architecture
         shell: bash
@@ -244,7 +284,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.prepare.outputs.source_ref }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
 
       - name: Set image name
         id: image
@@ -295,7 +335,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.prepare.outputs.source_ref }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
 
       - name: Set Runner image name
         id: image
