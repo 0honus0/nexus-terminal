@@ -15,6 +15,7 @@
     "specs/ui/notification-settings.spec.ts",
     "specs/ui/proxy-management.spec.ts",
     "specs/ui/system-settings.spec.ts",
-    "specs/ui/theme-switching.spec.ts"
+    "specs/ui/theme-switching.spec.ts",
+    "specs/websocket/authenticated-session.spec.ts"
   ]
 }

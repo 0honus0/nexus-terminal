@@ -8,7 +8,6 @@
     "specs/agent/provider.spec.ts",
     "specs/ui/batch-connection-edit.spec.ts",
     "specs/ui/connection-create.spec.ts",
-    "specs/websocket/authenticated-session.spec.ts",
     "specs/ssh/connection-edit-delete.spec.ts",
     "specs/ssh/connection-list-search.spec.ts",
     "specs/ssh/connection.spec.ts",
