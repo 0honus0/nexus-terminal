@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { collectAgentI18nReferences } from '../../scripts/check-agent-i18n.mjs';
+import { collectAgentI18nReferences } from '../../scripts/checks/agent/i18n.mjs';
 
 const dummy = collectAgentI18nReferences("const unused = 'agent.settings.groups.fake';");
 assert.equal(dummy.literals.has('agent.settings.groups.fake'), false);

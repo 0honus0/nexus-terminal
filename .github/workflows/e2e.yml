@@ -14,6 +14,8 @@ on:
       - 'packages/frontend/**'
       - 'tests/**'
       - 'scripts/e2e/**'
+      - 'scripts/checks/**'
+      - 'scripts/format/**'
       - 'scripts/build/build.sh'
       - '.prettierignore'
       - 'package.json'
@@ -34,6 +36,8 @@ on:
       - 'packages/frontend/**'
       - 'tests/**'
       - 'scripts/e2e/**'
+      - 'scripts/checks/**'
+      - 'scripts/format/**'
       - 'scripts/build/build.sh'
       - '.prettierignore'
       - 'package.json'
@@ -285,7 +289,7 @@ jobs:
         run: scripts/e2e/build-runner-image.sh --push --image "$E2E_RUNNER_REPOSITORY"
 
   quality:
-    name: Format and build
+    name: Checks, format, and build
     needs: [environment]
     if: ${{ always() && needs.environment.result == 'success' }}
     runs-on: ubuntu-latest
@@ -303,6 +307,9 @@ jobs:
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Run repository checks serially
+        run: pnpm run check
 
       - name: Check formatting
         run: pnpm run format:all:check
@@ -780,7 +787,7 @@ jobs:
 
           require_success "Update E2E environment" "$ENVIRONMENT_RESULT"
           require_success_or_skipped "Build E2E runner image" "$RUNNER_IMAGE_RESULT"
-          require_success "Format and build" "$QUALITY_RESULT"
+          require_success "Checks, format, and build" "$QUALITY_RESULT"
           if [[ "$DOCKER_REQUIRED" == "true" ]]; then
             require_success "Docker deployment smoke" "$DOCKER_RESULT"
           else

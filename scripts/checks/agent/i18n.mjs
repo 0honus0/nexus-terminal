@@ -74,7 +74,8 @@ export const collectAgentI18nReferences = (sourceText) => {
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
-const agentDir = resolve(here, '../packages/frontend/src/features/agent');
+const repositoryRoot = resolve(here, '../../..');
+const agentDir = resolve(repositoryRoot, 'packages/frontend/src/features/agent');
 const localeDir = join(agentDir, 'i18n');
 const LOCALES = ['en-US', 'zh-CN', 'ja-JP'];
 
@@ -279,9 +280,9 @@ for (const file of sourceFiles) {
  * a dummy literal cannot keep dead locale copy alive.
  */
 const REFERENCE_ROOTS = [
-  resolve(here, '../packages/frontend/src'),
-  resolve(here, '../packages/backend/src'),
-  resolve(here, '../packages/agent-runner/src'),
+  resolve(repositoryRoot, 'packages/frontend/src'),
+  resolve(repositoryRoot, 'packages/backend/src'),
+  resolve(repositoryRoot, 'packages/agent-runner/src'),
 ];
 
 const referenceFiles = [];

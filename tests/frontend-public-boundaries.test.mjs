@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-const guard = fileURLToPath(new URL('../scripts/check-frontend-public-boundaries.mjs', import.meta.url));
+const guard = fileURLToPath(new URL('../scripts/checks/frontend/public-boundaries.mjs', import.meta.url));
 
 const runGuard = (sourcePath, publicSource) => {
   const root = mkdtempSync(path.join(tmpdir(), 'frontend-boundaries-'));

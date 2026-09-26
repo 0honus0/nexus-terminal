@@ -43,9 +43,8 @@ node_modules/
 jspm_packages/
 scripts/*
 !scripts/check-package-management.mjs
-!scripts/check-transport-contract-boundaries.mjs
-!scripts/check-frontend-public-boundaries.mjs
-!scripts/check-frontend-state-lifecycles.mjs
+!scripts/checks/
+!scripts/checks/**
 !scripts/e2e/
 !scripts/e2e/**
 !scripts/docker/
@@ -55,7 +54,8 @@ scripts/*
 !scripts/backend/
 !scripts/backend/**
 !scripts/check-test-policy.mjs
-!scripts/check-agent-i18n.mjs
+!scripts/format/
+!scripts/format/**
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -192,7 +192,5 @@ electron-app/dist_electron/
 /tests/e2e/*.sqlite3
 /tests/e2e/**/*.db-shm
 /tests/e2e/**/*.db-wal
-
-!scripts/format-changed.mjs
 
 # Agent plugin source/build tooling (generated signed packages stay outside the repo)
