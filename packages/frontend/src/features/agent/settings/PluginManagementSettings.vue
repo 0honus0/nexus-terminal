@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { UiButton, UiEmptyState, UiInfoHint } from '@/foundation/ui';
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -17,6 +17,7 @@
     type AgentRemotePluginPackageDto,
     type AgentRemotePluginPublisherDto,
   } from '../api/agent-api';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
   import { groupPluginCatalogSources, type PluginSourceGroup } from './plugin-catalog-grouping';
 
   const PLUGIN_STAGING_ARTIFACT_SCOPE = 'nexus.plugin-installer';
@@ -193,6 +194,16 @@
     await loadRemoteCatalogs();
   };
 
+  const emitConfigurationChanged = (): void => {
+    agentHostEvents.emit('configuration-changed', { origin: 'local' });
+  };
+
+  const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
+    if (event.origin === 'external') void refresh();
+  };
+  const stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
+  onBeforeUnmount(stopConfigurationChanged);
+
   const run = async (operation: string, action: () => Promise<void>): Promise<void> => {
     if (locked.value) return;
     localBusy.value = true;
@@ -258,6 +269,7 @@
       await agentApi.trustPluginPublisher(publisher.publicKeyPem, publisher.label);
       notifyNotice('PUBLISHER_TRUSTED');
       await refreshAfterCommit('trust-remote-publisher');
+      emitConfigurationChanged();
     });
   };
 
@@ -286,6 +298,7 @@
       publisherPem.value = '';
       notifyNotice('PUBLISHER_TRUSTED');
       await refreshAfterCommit('trust-publisher');
+      emitConfigurationChanged();
     });
   };
 
@@ -294,6 +307,7 @@
       await agentApi.revokePluginPublisher(keyId);
       notifyNotice('PUBLISHER_REVOKED');
       await refreshAfterCommit('revoke-publisher');
+      emitConfigurationChanged();
     });
   };
 

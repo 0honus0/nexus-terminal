@@ -66,6 +66,7 @@ export const AGENT_HOST_EVENT_TYPES = [
   'authorization.changed',
   'thread.changed',
   'memory.changed',
+  'configuration.changed',
 ] as const;
 
 export type AgentHostEventTypeDto = (typeof AGENT_HOST_EVENT_TYPES)[number];

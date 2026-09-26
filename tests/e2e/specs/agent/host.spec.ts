@@ -1237,6 +1237,78 @@ test('Agent Host event stream elects one cross-tab leader', async ({ page, conte
   await follower.close();
 });
 
+test('Agent configuration changes propagate across tabs without overwriting dirty settings drafts', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+
+  const openPerformanceSettings = async (target: Page): Promise<Locator> => {
+    await target.goto('/settings?tab=agent');
+    const panel = target.locator('#settings-panel-agent');
+    await expect(panel).toBeVisible();
+    await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+    const section = panel
+      .getByRole('heading', { name: 'Execution and performance', exact: true })
+      .locator('xpath=ancestor::section[1]');
+    await expect(section).toBeVisible();
+    return section;
+  };
+
+  const leaderSection = await openPerformanceSettings(page);
+  const follower = await context.newPage();
+  const followerSection = await openPerformanceSettings(follower);
+  const leaderInput = leaderSection.getByRole('spinbutton');
+  const followerInput = followerSection.getByRole('spinbutton');
+
+  const currentValue = Number(await leaderInput.inputValue());
+  const minValue = Number((await leaderInput.getAttribute('min')) ?? '1');
+  const maxValue = Number((await leaderInput.getAttribute('max')) ?? String(Math.max(currentValue + 2, 3)));
+  const alternatives = Array.from({ length: maxValue - minValue + 1 }, (_, index) => minValue + index).filter(
+    (value) => value !== currentValue,
+  );
+  expect(alternatives.length).toBeGreaterThanOrEqual(2);
+  const leaderTarget = alternatives[0]!;
+  const followerDraft = alternatives[1]!;
+
+  await follower.evaluate(async () => {
+    const { agentHostEvents } = await import('/src/features/agent/host/agent-host-events.ts');
+    const state = window as typeof window & {
+      __agentConfigurationOrigins?: string[];
+      __stopAgentConfigurationProbe?: () => void;
+    };
+    state.__stopAgentConfigurationProbe?.();
+    state.__agentConfigurationOrigins = [];
+    state.__stopAgentConfigurationProbe = agentHostEvents.on('configuration-changed', (event) => {
+      state.__agentConfigurationOrigins?.push(event.origin);
+    });
+  });
+
+  await followerInput.fill(String(followerDraft));
+  await expect(followerSection.getByText('Concurrency changed, click save', { exact: true })).toBeVisible();
+
+  await leaderInput.fill(String(leaderTarget));
+  await leaderSection.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(leaderSection.getByText('Current concurrency settings are in effect', { exact: true })).toBeVisible();
+
+  await expect
+    .poll(() =>
+      follower.evaluate(
+        () => (window as typeof window & { __agentConfigurationOrigins?: string[] }).__agentConfigurationOrigins ?? [],
+      ),
+    )
+    .toContain('external');
+  await expect(followerInput).toHaveValue(String(followerDraft));
+  await expect(followerSection).toContainText(`Effective ${leaderTarget} · system limit`);
+  await expect(followerSection.getByText('Concurrency changed, click save', { exact: true })).toBeVisible();
+
+  await leaderInput.fill(String(currentValue));
+  await leaderSection.getByRole('button', { name: 'Save', exact: true }).click();
+  await follower.close();
+});
+
 test('Agent WebSocket bounds concurrent sockets per authenticated session', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   const hostSocketPromise = page.waitForEvent('websocket', {

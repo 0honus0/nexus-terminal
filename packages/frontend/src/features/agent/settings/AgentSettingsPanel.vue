@@ -1,10 +1,10 @@
 <script setup lang="ts">
   import { UiButton } from '@/foundation/ui';
-  import { computed, onMounted, reactive, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BaseModal from '@/foundation/ui/BaseModal.vue';
   import { useOperationFeedback } from '@/shared/feedback/public';
-  import { agentHostEvents } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
   import {
     agentApi,
     formatAgentApiError,
@@ -60,6 +60,7 @@
   const denylistBusy = computed(() => activeOperationLocks.has('denylist'));
   const runtimeIntegrationBusy = computed(() => settingsMutationBusy.value || appContextBusy.value);
   const loadError = ref('');
+  let pendingExternalConfigurationRefresh = false;
   const recommendedPlugin = ref<AgentRecommendedPluginDto | null>(null);
   const onboardingVisible = ref(false);
   const showKeyDetails = ref(false);
@@ -160,8 +161,9 @@
 
   const message = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 
-  const load = async () => {
-    loading.value = true;
+  const load = async (options: { background?: boolean } = {}) => {
+    const showLoading = options.background !== true || !settings.value;
+    if (showLoading) loading.value = true;
     loadError.value = '';
     try {
       const [nextSettings, nextApps, nextProviders, nextStorage, nextWorkspaceRuntime, nextDenylist] =
@@ -183,7 +185,7 @@
       loadError.value = message(cause);
       operationFeedback.notifyError({ operation: 'load-settings', message: loadError.value, cause });
     } finally {
-      loading.value = false;
+      if (showLoading) loading.value = false;
     }
   };
 
@@ -232,6 +234,33 @@
     }
   };
 
+  const refreshExternalConfiguration = (): void => {
+    if (activeOperationLocks.size > 0) {
+      pendingExternalConfigurationRefresh = true;
+      return;
+    }
+    void load({ background: true });
+  };
+
+  const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
+    if (event.origin === 'external') refreshExternalConfiguration();
+  };
+
+  const emitConfigurationChanged = (): void => {
+    agentHostEvents.emit('configuration-changed', { origin: 'local' });
+  };
+
+  const applySettingsUpdate = (updated: AgentSettingsViewDto): void => {
+    settings.value = updated;
+    emitConfigurationChanged();
+  };
+
+  const refreshAfterChildMutation = async (): Promise<void> => {
+    await load({ background: true });
+    agentHostEvents.emit('host-changed', undefined);
+    emitConfigurationChanged();
+  };
+
   const execute = async <T = void,>(
     operation: string,
     locks: readonly SettingsOperationLock[],
@@ -251,7 +280,7 @@
     try {
       const result = await action();
       // Provider list changed (model added/removed/enabled): let the open Agent surface reload.
-      if (locks.includes('providers')) agentHostEvents.emit('configuration-changed', undefined);
+      if (locks.includes('providers')) emitConfigurationChanged();
       if (success !== null) operationFeedback.notifySuccess(success ?? t('agent.ui.saved'));
       return result;
     } catch (cause) {
@@ -264,7 +293,12 @@
       });
       return undefined;
     } finally {
+      const shouldRefreshExternally = pendingExternalConfigurationRefresh;
       for (const lock of locks) activeOperationLocks.delete(lock);
+      if (shouldRefreshExternally && activeOperationLocks.size === 0) {
+        pendingExternalConfigurationRefresh = false;
+        void load({ background: true });
+      }
     }
   };
 
@@ -292,7 +326,7 @@
         if (!settings.value) throw new Error('AGENT_SETTINGS_UNAVAILABLE');
         settings.value = await agentApi.patchSettings({ [section]: patch }, settings.value.revision);
         agentHostEvents.emit('host-changed', undefined);
-        agentHostEvents.emit('configuration-changed', undefined);
+        emitConfigurationChanged();
         await postCommitSync(`patch-${section}`, async () => {
           storage.value = await agentApi.storage();
         });
@@ -329,7 +363,7 @@
           const updated = await agentApi.patchSettings({ feature: { enabled: false } }, settings.value.revision);
           settings.value = updated;
           agentHostEvents.emit('host-changed', undefined);
-          agentHostEvents.emit('configuration-changed', undefined);
+          emitConfigurationChanged();
           await postCommitSync('disable-feature', async () => {
             storage.value = await agentApi.storage();
           });
@@ -354,7 +388,7 @@
           settings.value = updated;
           reportFeaturePostCommitState(updated);
           agentHostEvents.emit('host-changed', undefined);
-          agentHostEvents.emit('configuration-changed', undefined);
+          emitConfigurationChanged();
           operationFeedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
           await postCommitSync('enable-feature', async () => {
             storage.value = await agentApi.storage();
@@ -392,7 +426,7 @@
         settings.value = updated;
         reportFeaturePostCommitState(updated);
         agentHostEvents.emit('host-changed', undefined);
-        agentHostEvents.emit('configuration-changed', undefined);
+        emitConfigurationChanged();
         operationFeedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
         await postCommitSync('install-recommended-plugin', async () => {
           [storage.value, apps.value] = await Promise.all([agentApi.storage(), agentApi.apps()]);
@@ -422,6 +456,8 @@
     execute('toggle-app', ['apps'], async () => {
       const updated = await agentApi.setAppEnabled(app, enabled);
       apps.value = apps.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
+      agentHostEvents.emit('host-changed', undefined);
+      emitConfigurationChanged();
     });
 
   const previewHardLimits = (proposed: Partial<AgentHardLimitsDto>) =>
@@ -440,6 +476,7 @@
       settings.value = await agentApi.confirmHardLimits(confirmationId, expectedVersion);
       hardLimitPreview.value = null;
       agentHostEvents.emit('host-changed', undefined);
+      emitConfigurationChanged();
       await postCommitSync('confirm-hard-limits', async () => {
         storage.value = await agentApi.storage();
       });
@@ -594,9 +631,12 @@
       agentHostEvents.emit('host-changed', undefined);
     });
 
+  let stopConfigurationChanged = (): void => {};
   onMounted(() => {
+    stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
     void load();
   });
+  onBeforeUnmount(() => stopConfigurationChanged());
 </script>
 
 <template>
@@ -725,7 +765,12 @@
 
           <!-- 2. 工具与扩展 -->
           <div v-if="visitedGroups.has('tools')" v-show="activeGroup === 'tools'" class="space-y-5">
-            <AppManagementSettings :apps="apps" :busy="appContextBusy" @toggle="toggleApp" @refresh="load" />
+            <AppManagementSettings
+              :apps="apps"
+              :busy="appContextBusy"
+              @toggle="toggleApp"
+              @refresh="refreshAfterChildMutation"
+            />
             <McpIntegrationSettings
               :busy="appContextBusy"
               :agent-available="apps.some((app) => app.id === 'nexus.agent')"
@@ -734,8 +779,8 @@
               :apps="apps"
               :settings="settings"
               :busy="runtimeIntegrationBusy"
-              @refresh="load"
-              @settings-updated="(updated) => (settings = updated)"
+              @refresh="refreshAfterChildMutation"
+              @settings-updated="applySettingsUpdate"
             />
             <AppExecutionPolicySettings :apps="apps" :busy="appContextBusy" />
           </div>
@@ -751,7 +796,7 @@
               :availability="workspaceRuntime"
               :settings="settings"
               :busy="settingsMutationBusy"
-              @settings-updated="(updated) => (settings = updated)"
+              @settings-updated="applySettingsUpdate"
             />
             <BrowserRuntimeSettings :settings="settings" :busy="settingsMutationBusy" :save="saveBrowserSettings" />
             <AcpRuntimeSettings

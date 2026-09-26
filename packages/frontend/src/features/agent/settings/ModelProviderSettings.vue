@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref, useId, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { AGENT_PROVIDER_MODEL_LIMIT } from '@nexus-terminal/protocol/agent-providers';
   import {
@@ -26,6 +26,7 @@
     type AgentProviderViewDto,
     type AgentModelCapabilityDefaultsDto,
   } from '../api/agent-api';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
 
   const props = defineProps<{
     addProviderModel: (
@@ -84,6 +85,10 @@
   const copiedUrl = ref<string | null>(null);
   const modelRegistryStatus = ref<AgentModelRegistryStatusDto | null>(null);
   const modelRegistryBusy = ref(false);
+
+  const emitConfigurationChanged = (): void => {
+    agentHostEvents.emit('configuration-changed', { origin: 'local' });
+  };
   let modelRegistryGeneration = 0;
 
   const loadModelRegistryStatus = async (): Promise<void> => {
@@ -104,6 +109,7 @@
       const status = await agentApi.refreshModelRegistry();
       if (generation === modelRegistryGeneration) modelRegistryStatus.value = status;
       operationFeedback.notifySuccess(t('agent.settings.providers.registryUpdated'));
+      emitConfigurationChanged();
     } catch (cause) {
       operationFeedback.notifyError({
         operation: 'refresh-model-registry',
@@ -123,6 +129,7 @@
     try {
       const status = await agentApi.setModelRegistryAutoUpdate(enabled);
       if (generation === modelRegistryGeneration) modelRegistryStatus.value = status;
+      emitConfigurationChanged();
     } catch (cause) {
       operationFeedback.notifyError({
         operation: 'set-model-registry-auto-update',
@@ -134,6 +141,12 @@
       modelRegistryBusy.value = false;
     }
   };
+
+  const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
+    if (event.origin === 'external') void loadModelRegistryStatus();
+  };
+  const stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
+  onBeforeUnmount(stopConfigurationChanged);
 
   const formatRegistryDate = (value: number): string => formatAgentDate(locale.value, new Date(value * 1000));
 
@@ -544,6 +557,7 @@
     try {
       await agentApi.updateProvider(provider, { models });
       operationFeedback.notifySuccess(successMsg ?? t('agent.ui.saved'));
+      emitConfigurationChanged();
       return true;
     } catch (cause) {
       const errMsg = formatAgentApiError(cause, t('agent.ui.createFailed'), t);

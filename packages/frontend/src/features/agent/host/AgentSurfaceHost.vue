@@ -36,6 +36,10 @@
     agentHostEvents.emit('memory-changed', payload);
   };
 
+  const dispatchConfigurationChanged = (): void => {
+    agentHostEvents.emit('configuration-changed', { origin: 'external' });
+  };
+
   const chooseDefaultApp = (next: AgentHostSummaryDto): void => {
     const enabled = next.apps.filter((app) => app.enabled);
     if (enabled.length === 0) {
@@ -165,6 +169,9 @@
         if (event.type === 'host.changed' && event.sourceType === 'memory.changed') {
           dispatchMemoryChanged(event.payload);
         }
+        if (event.type === 'host.changed' && event.sourceType === 'configuration.changed') {
+          dispatchConfigurationChanged();
+        }
         await refresh('host-event');
         if (activeUserId !== null) {
           hostChannel?.postMessage({
@@ -290,6 +297,9 @@
     ) {
       dispatchMemoryChanged(message.payload as Record<string, unknown>);
     }
+    if (message.sourceType === 'configuration.changed') {
+      dispatchConfigurationChanged();
+    }
     void refresh('host-event');
   };
   hostChannel?.addEventListener('message', onHostBroadcast);
@@ -301,6 +311,17 @@
   };
   const stopLocalHostChanged = agentHostEvents.on('host-changed', onLocalHostChanged);
 
+  const onLocalConfigurationChanged = (event: { origin: 'local' | 'external' }): void => {
+    if (event.origin !== 'local' || !auth.isAuthenticated.value || activeUserId === null) return;
+    void refresh('host-event');
+    hostChannel?.postMessage({
+      type: 'host.changed',
+      userId: activeUserId,
+      sourceType: 'configuration.changed',
+    });
+  };
+  const stopLocalConfigurationChanged = agentHostEvents.on('configuration-changed', onLocalConfigurationChanged);
+
   const onVisibility = (): void => {
     if (document.visibilityState === 'hidden') persistLayout('document-hidden');
   };
@@ -311,6 +332,7 @@
     activeUserId = null;
     document.removeEventListener('visibilitychange', onVisibility);
     stopLocalHostChanged();
+    stopLocalConfigurationChanged();
     hostChannel?.removeEventListener('message', onHostBroadcast);
     hostChannel?.close();
   });

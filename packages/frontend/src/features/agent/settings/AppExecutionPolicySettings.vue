@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { structurallyEqual } from '@/foundation/data';
   import { UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -11,6 +11,7 @@
     type AgentExecutionPolicyOverridesDto,
     type AgentExecutionPolicyViewDto,
   } from '../api/agent-api';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
   import QuantityInput from './QuantityInput.vue';
   import { formatQuantity, type QuantityType } from './quantity-format';
   import { useQuantityLabels } from './use-quantity-labels';
@@ -129,7 +130,9 @@
   const clone = (value: AgentExecutionPolicyOverridesDto): AgentExecutionPolicyOverridesDto =>
     JSON.parse(JSON.stringify(value)) as AgentExecutionPolicyOverridesDto;
 
-  const load = async (): Promise<void> => {
+  const dirty = computed(() => !structurallyEqual(draft.value, view.value?.overrides ?? {}));
+
+  const load = async (options: { preserveDirty?: boolean } = {}): Promise<void> => {
     const requestGeneration = ++loadGeneration;
     const appId = selectedAppId.value;
     if (!appId) {
@@ -148,9 +151,15 @@
     try {
       const next = await agentApi.appExecutionPolicy(appId);
       if (requestGeneration !== loadGeneration || selectedAppId.value !== appId) return;
+      const currentDraft = clone(draft.value);
+      const preserveDraft =
+        options.preserveDirty === true &&
+        loadedAppId.value === appId &&
+        dirty.value &&
+        !structurallyEqual(currentDraft, next.overrides);
       loadedAppId.value = appId;
       view.value = next;
-      draft.value = clone(next.overrides);
+      if (!preserveDraft) draft.value = clone(next.overrides);
     } catch (cause) {
       if (requestGeneration !== loadGeneration || selectedAppId.value !== appId) return;
       const message = explain(cause);
@@ -167,7 +176,7 @@
     },
     { immediate: true },
   );
-  watch(selectedAppId, load, { immediate: true });
+  watch(selectedAppId, () => void load(), { immediate: true });
 
   const hasOverride = (key: keyof AgentExecutionPolicyOverridesDto): boolean =>
     Object.prototype.hasOwnProperty.call(draft.value, key);
@@ -198,7 +207,11 @@
     }),
   );
 
-  const dirty = computed(() => !structurallyEqual(draft.value, view.value?.overrides ?? {}));
+  const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
+    if (event.origin === 'external') void load({ preserveDirty: true });
+  };
+  const stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
+  onBeforeUnmount(stopConfigurationChanged);
 
   const save = async (): Promise<void> => {
     const appId = loadedAppId.value;
@@ -213,6 +226,7 @@
       view.value = next;
       draft.value = clone(next.overrides);
       operationFeedback.notifySuccess(t('agent.ui.saved'));
+      agentHostEvents.emit('configuration-changed', { origin: 'local' });
     } catch (cause) {
       if (requestGeneration !== loadGeneration || selectedAppId.value !== appId || loadedAppId.value !== appId) return;
       const message = explain(cause);

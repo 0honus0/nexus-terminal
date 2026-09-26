@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { structurallyEqual } from '@/foundation/data';
   import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import QuantityInput from './QuantityInput.vue';
@@ -16,6 +16,7 @@
     type AgentSubagentProfileTemplateDto,
     type AgentSubagentSettingsViewDto,
   } from '../api/agent-api';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.subagents');
@@ -104,7 +105,11 @@
   const cloneProfiles = (profiles: AgentSubagentProfileDto[]): AgentSubagentProfileDto[] =>
     JSON.parse(JSON.stringify(profiles)) as AgentSubagentProfileDto[];
 
-  const loadProfiles = async (): Promise<void> => {
+  const profilesAreDirty = (): boolean =>
+    Boolean(profileSettings.value) &&
+    !structurallyEqual(profileSettings.value?.policy.profiles ?? [], profileBaseline.value);
+
+  const loadProfiles = async (options: { preserveDirty?: boolean } = {}): Promise<void> => {
     const requestGeneration = ++profileLoadGeneration;
     const appId = selectedAppId.value;
     if (!appId) {
@@ -126,12 +131,17 @@
       const [loaded, grantView] = await Promise.all([agentApi.subagentSettings(appId), agentApi.appGrants(appId)]);
       if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
       capabilityOptions.value = grantView.grants.map((grant) => grant.capability);
+      const remoteProfiles = cloneProfiles(loaded.policy.profiles);
+      const preserveDraft = options.preserveDirty === true && profileAppId.value === appId && profilesAreDirty();
+      const draftProfiles = preserveDraft
+        ? cloneProfiles(profileSettings.value?.policy.profiles ?? [])
+        : cloneProfiles(remoteProfiles);
       profileSettings.value = {
         ...loaded,
-        policy: { ...loaded.policy, profiles: cloneProfiles(loaded.policy.profiles) },
+        policy: { ...loaded.policy, profiles: draftProfiles },
       };
       profileAppId.value = appId;
-      profileBaseline.value = cloneProfiles(profileSettings.value.policy.profiles);
+      profileBaseline.value = remoteProfiles;
     } catch (cause) {
       if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
       const message = explain(cause);
@@ -254,6 +264,7 @@
       };
       profileBaseline.value = cloneProfiles(profileSettings.value.policy.profiles);
       operationFeedback.notifySuccess(t('agent.ui.saved'));
+      agentHostEvents.emit('configuration-changed', { origin: 'local' });
     } catch (cause) {
       if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId || profileAppId.value !== appId)
         return;
@@ -271,7 +282,7 @@
     },
     { immediate: true },
   );
-  watch(selectedAppId, loadProfiles, { immediate: true });
+  watch(selectedAppId, () => void loadProfiles(), { immediate: true });
 
   const invalidGlobalLimits = computed(() => Object.values(draft.value).some((value) => value === null || value < 1));
   const invalidProfileLimits = computed(() =>
@@ -330,11 +341,13 @@
     },
     { immediate: true },
   );
-  const isProfilesDirty = computed(
-    () =>
-      Boolean(profileSettings.value) &&
-      !structurallyEqual(profileSettings.value?.policy.profiles ?? [], profileBaseline.value),
-  );
+  const isProfilesDirty = computed(profilesAreDirty);
+
+  const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
+    if (event.origin === 'external') void loadProfiles({ preserveDirty: true });
+  };
+  const stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
+  onBeforeUnmount(stopConfigurationChanged);
 
   const subagentLabels = computed<Record<string, string>>(() => ({
     maxDelegationDepth: t('agent.settings.subagents.labels.maxDelegationDepth'),

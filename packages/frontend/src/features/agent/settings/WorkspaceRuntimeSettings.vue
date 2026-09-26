@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { structurallyEqual } from '@/foundation/data';
   import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -18,6 +18,7 @@
     type AgentWorkspaceRuntimeSetupPreviewDto,
     type AgentWorkspaceRuntimeStorageDto,
   } from '../api/agent-api';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
   import { formatAgentEnumLabel } from '../enum-labels';
 
   const props = defineProps<{
@@ -129,6 +130,16 @@
     }
   };
 
+  const emitConfigurationChanged = (): void => {
+    agentHostEvents.emit('configuration-changed', { origin: 'local' });
+  };
+
+  const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
+    if (event.origin === 'external') void loadDetails();
+  };
+  const stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
+  onBeforeUnmount(stopConfigurationChanged);
+
   const run = async (operation: string, action: () => Promise<void>) => {
     if (disabled.value) return;
     localBusy.value = true;
@@ -226,6 +237,7 @@
       lastCommand.value = await agentApi.installToolchainPack(pack.familyId, pack.versionId);
       await loadDetails();
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.installSubmitted'));
+      emitConfigurationChanged();
     });
 
   const previewUninstall = (pack: AgentToolchainCatalogPackDto) =>
@@ -270,6 +282,7 @@
       cleanupPreview.value = null;
       await loadDetails();
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.cleanupSubmitted'));
+      emitConfigurationChanged();
     });
 
   const cleanupCache = () =>
@@ -277,6 +290,7 @@
       lastCommand.value = await agentApi.cleanupWorkspaceRuntimeCache();
       await loadDetails();
       operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.cacheSubmitted'));
+      emitConfigurationChanged();
     });
 
   const previewReset = () =>

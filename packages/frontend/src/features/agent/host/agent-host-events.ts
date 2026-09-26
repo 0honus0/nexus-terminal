@@ -1,10 +1,14 @@
+export interface AgentConfigurationChangedEvent {
+  origin: 'local' | 'external';
+}
+
 export interface AgentHostEventMap {
   'thread-changed': Record<string, unknown>;
   'authorization-changed': Record<string, unknown>;
   'memory-changed': Record<string, unknown>;
   'host-changed': undefined;
-  // Provider / settings writes: the open Agent surface reloads its run configuration.
-  'configuration-changed': undefined;
+  // Provider / settings writes: open Agent surfaces reload run configuration; Settings reloads only external changes.
+  'configuration-changed': AgentConfigurationChangedEvent;
 }
 
 type AgentHostEventType = keyof AgentHostEventMap;

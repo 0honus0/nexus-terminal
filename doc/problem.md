@@ -7,20 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.50 跨标签页修改配置后其它 tab 不刷新（P2）
-
-**当前代码事实**
-
-BroadcastChannel / host event 已传播 thread / authorization / memory 等事件，但没有完整传播 configuration/providers/settings changed。Tab A 修改 Provider/Settings 后，Tab B 已打开的 Hub 或 Settings 仍可能持有旧 definitions/providers/settings/version。
-
-**整改目标**
-
-为 configuration/apps/authorization 等变化定义明确跨 tab sourceType；接收端做 generation-safe authoritative reload。若本地存在 dirty draft，只更新 baseline/version，不覆盖草稿。
-
-**关闭条件**
-
-双 tab 回归覆盖 Provider/Settings 修改、Hub 更新、Settings baseline/version 更新，以及 dirty draft 保留。
-
 ### §7.51 全前端 ESLint 覆盖仍不完整（P2）
 
 **当前代码事实**

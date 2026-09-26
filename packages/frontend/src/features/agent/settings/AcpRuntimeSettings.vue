@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { structurallyEqual } from '@/foundation/data';
   import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
   import {
@@ -11,6 +11,7 @@
     type AgentIntegrationViewDto,
     type AgentSettingsViewDto,
   } from '../api/agent-api';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
   import { parseAcpCommandToArgv } from './acp-command-argv';
 
   type Profile = AgentSettingsViewDto['requestedSettings']['workspaceRuntime']['acpProfiles'][number];
@@ -88,11 +89,22 @@
     }
   };
 
+  const emitConfigurationChanged = (): void => {
+    agentHostEvents.emit('configuration-changed', { origin: 'local' });
+  };
+
+  const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
+    if (event.origin === 'external') void loadIntegrations();
+  };
+  const stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
+  onBeforeUnmount(stopConfigurationChanged);
+
   const run = async (operation: string, action: () => Promise<void>, success = ''): Promise<void> => {
     if (integrationDisabled.value) return;
     localBusy.value = true;
     try {
       await action();
+      emitConfigurationChanged();
       if (success) operationFeedback.notifySuccess(success);
     } catch (cause) {
       operationFeedback.notifyError({ operation, message: explain(cause), cause });
