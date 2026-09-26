@@ -5,7 +5,7 @@
   import { useOperationFeedback } from '@/shared/feedback/public';
   import { formatAgentDateTime } from '../locale-format';
   import type { AgentProviderViewDto, AgentReasoningEffortDto } from '../api/agent-api';
-  import { NONE_OPTION } from './pick-option';
+  import { NONE_OPTION } from '../common/pick-option';
 
   type AgentProviderModelDto = AgentProviderViewDto['models'][number];
   type CapabilityField =

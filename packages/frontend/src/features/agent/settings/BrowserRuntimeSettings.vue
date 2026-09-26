@@ -3,7 +3,7 @@
   import { UiModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { pickOption } from './pick-option';
+  import { pickOption } from '../common/pick-option';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
   type BrowserTarget = AgentSettingsViewDto['requestedSettings']['browser']['targets'][number];

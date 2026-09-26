@@ -69,14 +69,48 @@ const legacyDesignSystemNames = [
   'BaseTextarea',
 ];
 const legacyDesignSystemPattern = new RegExp(`\\b(?:${legacyDesignSystemNames.join('|')})\\b`, 'g');
+const MAX_SFC_LINES = 3000;
+const MAX_SFC_SCRIPT_LINES = 2000;
+const MAX_INLINE_STYLE_LINES = 400;
 const findings = [];
 const featureCouplingFindings = [];
+const internalBoundaryFindings = [];
+const sfcSizeFindings = [];
 const workspaceTransportFindings = [];
 const legacyDesignSystemFindings = [];
 const files = await walk(sourceRoot);
 
 for (const sourceFile of files) {
   const text = await readFile(sourceFile, 'utf8');
+  if (path.extname(sourceFile) === '.vue') {
+    const totalLines = text.split('\n').length;
+    const scriptLines = text.match(/<script[^>]*>([\s\S]*?)<\/script>/u)?.[1]?.split('\n').length ?? 0;
+    const inlineStyleLines = [...text.matchAll(/<style(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/style>/gu)].reduce(
+      (largest, style) => Math.max(largest, style[1]?.split('\n').length ?? 0),
+      0,
+    );
+    if (totalLines > MAX_SFC_LINES)
+      sfcSizeFindings.push({
+        file: path.relative(root, sourceFile),
+        section: 'file',
+        lines: totalLines,
+        limit: MAX_SFC_LINES,
+      });
+    if (scriptLines > MAX_SFC_SCRIPT_LINES)
+      sfcSizeFindings.push({
+        file: path.relative(root, sourceFile),
+        section: 'script',
+        lines: scriptLines,
+        limit: MAX_SFC_SCRIPT_LINES,
+      });
+    if (inlineStyleLines > MAX_INLINE_STYLE_LINES)
+      sfcSizeFindings.push({
+        file: path.relative(root, sourceFile),
+        section: 'inline style',
+        lines: inlineStyleLines,
+        limit: MAX_INLINE_STYLE_LINES,
+      });
+  }
   legacyDesignSystemPattern.lastIndex = 0;
   const legacyDesignSystemMatch = legacyDesignSystemPattern.exec(text);
   if (legacyDesignSystemMatch) {
@@ -116,6 +150,40 @@ for (const sourceFile of files) {
 
     const targetOwner = moduleOwner(targetFile);
     if (!targetOwner) continue;
+    if (sourceOwner?.name === targetOwner.name && ['agent', 'workspace'].includes(sourceOwner.name)) {
+      const sourceRelative = path.relative(path.join(sourceRoot, sourceOwner.kind, sourceOwner.name), sourceFile);
+      const targetRelative = path.relative(path.join(sourceRoot, targetOwner.kind, targetOwner.name), targetFile);
+      const sourceArea = sourceRelative.split(path.sep)[0];
+      const targetArea = targetRelative.split(path.sep)[0];
+      const forbidden =
+        sourceOwner.name === 'agent'
+          ? {
+              api: new Set(['ai', 'files', 'host', 'plugin-sdk', 'runtime', 'settings']),
+              common: new Set(['ai', 'api', 'files', 'host', 'plugin-sdk', 'runtime', 'settings']),
+              events: new Set(['ai', 'api', 'files', 'host', 'plugin-sdk', 'runtime', 'settings']),
+              runtime: new Set(['ai', 'files', 'host', 'plugin-sdk', 'settings']),
+              settings: new Set(['ai', 'files', 'host', 'plugin-sdk', 'runtime']),
+            }[sourceArea]
+          : {
+              adapters: new Set(['components', 'session', 'state', 'views']),
+              focus: new Set(['adapters', 'components', 'session', 'state', 'views']),
+              layout: new Set(['adapters', 'components', 'session', 'state', 'views']),
+              model: new Set(['adapters', 'components', 'session', 'state', 'views']),
+              ports: new Set(['adapters', 'components', 'focus', 'layout', 'session', 'state', 'views']),
+              protocol: new Set(['adapters', 'components', 'session', 'state', 'views']),
+              session: new Set(['components', 'focus', 'layout', 'state', 'views']),
+              components: new Set(['views']),
+            }[sourceArea];
+      if (forbidden?.has(targetArea)) {
+        internalBoundaryFindings.push({
+          file: path.relative(root, sourceFile),
+          line: text.slice(0, match.index).split('\n').length,
+          owner: sourceOwner.name,
+          sourceArea,
+          targetArea,
+        });
+      }
+    }
     if (sourceOwner?.kind === 'features' && targetOwner.kind === 'features' && sourceOwner.name !== targetOwner.name) {
       featureCouplingFindings.push({
         file: path.relative(root, sourceFile),
@@ -216,6 +284,8 @@ for (const publicFile of publicFiles) {
 if (
   findings.length ||
   featureCouplingFindings.length ||
+  internalBoundaryFindings.length ||
+  sfcSizeFindings.length ||
   publicContractFindings.length ||
   workspaceTransportFindings.length ||
   legacyDesignSystemFindings.length
@@ -229,6 +299,16 @@ if (
   for (const finding of featureCouplingFindings) {
     console.error(
       `- ${finding.file}:${finding.line} couples feature "${finding.sourceFeature}" to feature "${finding.targetFeature}". Compose cross-feature capabilities in the application layer.`,
+    );
+  }
+  for (const finding of internalBoundaryFindings) {
+    console.error(
+      `- ${finding.file}:${finding.line} reverses the ${finding.owner} subsystem boundary (${finding.sourceArea} -> ${finding.targetArea}). Move orchestration toward the host/view composition layer.`,
+    );
+  }
+  for (const finding of sfcSizeFindings) {
+    console.error(
+      `- ${finding.file} has ${finding.lines} ${finding.section} lines (limit ${finding.limit}). Extract controller, state, or presentation code.`,
     );
   }
   for (const finding of publicContractFindings) {

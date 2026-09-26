@@ -5,7 +5,7 @@
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import QuantityInput from './QuantityInput.vue';
-  import { pickOption } from './pick-option';
+  import { pickOption } from '../common/pick-option';
   import {
     agentApi,
     formatAgentApiError,
@@ -16,7 +16,7 @@
     type AgentSubagentProfileTemplateDto,
     type AgentSubagentSettingsViewDto,
   } from '../api/agent-api';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
 
   const { t } = useI18n();
   const operationFeedback = useOperationFeedback('agent.settings.subagents');

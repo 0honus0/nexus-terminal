@@ -104,6 +104,39 @@ test('features cannot import other features directly', () => {
   assert.equal(capability.status, 0, capability.stderr);
 });
 
+test('Agent and Workspace subsystem dependencies point toward composition roots', () => {
+  const agentReverse = runFrontendFileGuard(
+    'features/agent/runtime/example.ts',
+    "import { setting } from '../settings/example';\n",
+    { 'features/agent/settings/example.ts': 'export const setting = true;\n' },
+  );
+  assert.equal(agentReverse.status, 1);
+  assert.match(agentReverse.stderr, /reverses the agent subsystem boundary \(runtime -> settings\)/);
+
+  const workspaceReverse = runFrontendFileGuard(
+    'runtimes/workspace/session/example.ts',
+    "import { panel } from '../components/example';\n",
+    { 'runtimes/workspace/components/example.ts': 'export const panel = true;\n' },
+  );
+  assert.equal(workspaceReverse.status, 1);
+  assert.match(workspaceReverse.stderr, /reverses the workspace subsystem boundary \(session -> components\)/);
+});
+
+test('large Vue files require extracted controller or presentation modules', () => {
+  const oversized = runFrontendFileGuard(
+    'features/example/Oversized.vue',
+    `<script setup>\n${'const value = 1;\n'.repeat(2001)}</script>\n<template><div /></template>\n`,
+  );
+  assert.equal(oversized.status, 1);
+  assert.match(oversized.stderr, /has 2003 script lines \(limit 2000\)/);
+
+  const externalStyle = runFrontendFileGuard(
+    'features/example/Bounded.vue',
+    '<script setup>const value = 1;</script>\n<template><div>{{ value }}</div></template>\n<style scoped src="./Bounded.css"></style>\n',
+  );
+  assert.equal(externalStyle.status, 0, externalStyle.stderr);
+});
+
 test('legacy Base design system symbols cannot return', () => {
   const legacy = runFrontendFileGuard(
     'features/example/ExampleView.vue',

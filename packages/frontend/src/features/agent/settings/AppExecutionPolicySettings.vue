@@ -11,7 +11,7 @@
     type AgentExecutionPolicyOverridesDto,
     type AgentExecutionPolicyViewDto,
   } from '../api/agent-api';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
   import QuantityInput from './QuantityInput.vue';
   import { formatQuantity, type QuantityType } from './quantity-format';
   import { useQuantityLabels } from './use-quantity-labels';

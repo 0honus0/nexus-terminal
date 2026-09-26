@@ -4,7 +4,7 @@
   import { useI18n } from 'vue-i18n';
   import { UiModal } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
   import {
     agentApi,
     formatAgentApiError,

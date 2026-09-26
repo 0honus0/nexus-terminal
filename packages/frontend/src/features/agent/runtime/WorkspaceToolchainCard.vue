@@ -2,7 +2,7 @@
   import { computed, ref, watch } from 'vue';
   import { UiSelect } from '@/foundation/ui';
   import type { AgentWorkspaceDto, AgentWorkspaceRuntimeCatalogDto } from '../api/agent-api';
-  import { NONE_OPTION } from '../settings/pick-option';
+  import { NONE_OPTION } from '../common/pick-option';
 
   const props = defineProps<{
     workspace: AgentWorkspaceDto;

@@ -18,7 +18,7 @@
     type AgentWorkspaceRuntimeSetupPreviewDto,
     type AgentWorkspaceRuntimeStorageDto,
   } from '../api/agent-api';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
   import { formatAgentEnumLabel } from '../enum-labels';
 
   const props = defineProps<{

@@ -26,7 +26,7 @@
     type AgentProviderViewDto,
     type AgentModelCapabilityDefaultsDto,
   } from '../api/agent-api';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
 
   const props = defineProps<{
     addProviderModel: (
@@ -2435,37 +2435,4 @@
   />
 </template>
 
-<style scoped>
-  .default-model-select {
-    display: inline-flex;
-    width: auto;
-    max-width: 100%;
-  }
-
-  .default-model-select :deep(.ui-select__trigger) {
-    display: inline-flex;
-    width: auto;
-    max-width: 100%;
-    justify-content: flex-start;
-    gap: 4px;
-    padding-inline: 10px 8px !important;
-    transition:
-      width var(--ui-motion-duration) var(--ui-motion-ease),
-      background-color var(--ui-motion-duration) var(--ui-motion-ease),
-      border-color var(--ui-motion-duration) var(--ui-motion-ease),
-      color var(--ui-motion-duration) var(--ui-motion-ease),
-      box-shadow var(--ui-motion-duration) var(--ui-motion-ease);
-  }
-
-  .default-model-select :deep(.ui-select__value) {
-    flex: 0 0 auto;
-    width: auto;
-    min-width: 0;
-    max-width: min(340px, calc(100vw - 160px));
-  }
-
-  .default-model-select :deep(.ui-select__icon) {
-    flex: none;
-    margin-left: 0;
-  }
-</style>
+<style scoped src="./ModelProviderSettings.css"></style>

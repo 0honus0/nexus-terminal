@@ -9,21 +9,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-15 大型 SFC 与子系统内部边界
-
-**状态：🟠 待整改**
-
-当前高风险大文件包括：
-
-- `AgentAppSurface.vue` ~3231 行
-- `FileManager.vue` ~2480 行
-- `ModelProviderSettings.vue` ~2457 行
-- `WorkspaceSessionSurface.vue` ~1740 行
-- `TerminalView.vue` ~1332 行
-- `StatusMonitor.vue` ~1319 行
-
-先完成 lint/unit-test 安全网，再按 controller/state-machine/presentation 拆分。Agent 与 Workspace 还需要内部二级依赖边界，防止子目录之间形成新的双向耦合。
-
 ### FE-ARCH-16 TypeScript strictness 第二阶段
 
 **状态：🟠 待评估**
@@ -39,7 +24,6 @@ exactOptionalPropertyTypes
 
 ## 3. 实施顺序
 
-1. **UI 与领域结构**：FE-ARCH-15。
-2. **严格类型增强**：FE-ARCH-16。
+1. **严格类型增强**：FE-ARCH-16。
 
 当某项完成并验证后，直接从本文件删除；不保留关闭记录。

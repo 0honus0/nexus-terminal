@@ -17,7 +17,7 @@
     type AgentRemotePluginPackageDto,
     type AgentRemotePluginPublisherDto,
   } from '../api/agent-api';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
   import { groupPluginCatalogSources, type PluginSourceGroup } from './plugin-catalog-grouping';
 
   const PLUGIN_STAGING_ARTIFACT_SCOPE = 'nexus.plugin-installer';

@@ -3,8 +3,8 @@
   import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useOperationFeedback } from '@/shared/feedback/public';
-  import { agentHostEvents } from '../host/agent-host-events';
-  import { NONE_OPTION, pickOption } from './pick-option';
+  import { agentHostEvents } from '../events/agent-host-events';
+  import { NONE_OPTION, pickOption } from '../common/pick-option';
   import {
     agentApi,
     formatAgentApiError,

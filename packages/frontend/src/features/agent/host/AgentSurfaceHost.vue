@@ -7,7 +7,7 @@
   import { canExecuteAgentApp } from '../app-availability';
   import AgentHubWindow from './AgentHubWindow.vue';
   import AgentLauncher from './AgentLauncher.vue';
-  import { agentHostEvents } from './agent-host-events';
+  import { agentHostEvents } from '../events/agent-host-events';
   import { provideAgentHostState } from './agent-host-state';
 
   const auth = useRuntimeFeatureCapabilities().auth;

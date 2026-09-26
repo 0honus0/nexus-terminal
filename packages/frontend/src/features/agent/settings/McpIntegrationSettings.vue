@@ -9,7 +9,7 @@
     type AgentIntegrationViewDto,
     type AgentMcpIntegrationConfigurationDto,
   } from '../api/agent-api';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
   import { dateFromUnixSeconds, formatAgentTime } from '../locale-format';
 
   const DEFAULT_AGENT_APP_ID = 'nexus.agent';

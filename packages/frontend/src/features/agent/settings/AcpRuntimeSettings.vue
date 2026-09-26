@@ -11,7 +11,7 @@
     type AgentIntegrationViewDto,
     type AgentSettingsViewDto,
   } from '../api/agent-api';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
+  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
   import { parseAcpCommandToArgv } from './acp-command-argv';
 
   type Profile = AgentSettingsViewDto['requestedSettings']['workspaceRuntime']['acpProfiles'][number];
