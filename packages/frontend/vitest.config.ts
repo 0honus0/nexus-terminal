@@ -7,10 +7,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@vue/test-utils': fileURLToPath(
+        new URL('./node_modules/@vue/test-utils/dist/vue-test-utils.esm-bundler.mjs', import.meta.url),
+      ),
     },
   },
   test: {
-    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    include: ['../../tests/frontend/unit/**/*.test.ts', '../../tests/frontend/unit/**/*.spec.ts'],
     environment: 'node',
   },
 });

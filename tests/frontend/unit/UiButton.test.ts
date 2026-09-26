@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import UiButton from './UiButton.vue';
+import UiButton from '@/foundation/ui/UiButton.vue';
 
 describe('UiButton', () => {
   it('blocks activation and reports busy state while loading', async () => {

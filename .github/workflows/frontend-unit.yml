@@ -4,12 +4,14 @@ on:
   push:
     paths:
       - 'packages/frontend/**'
+      - 'tests/frontend/unit/**'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/frontend-unit.yml'
   pull_request:
     paths:
       - 'packages/frontend/**'
+      - 'tests/frontend/unit/**'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/frontend-unit.yml'

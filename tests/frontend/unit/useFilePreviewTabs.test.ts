@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createFilePreviewSession } from './useFilePreviewTabs';
-import type { FilePreviewReadResult, FilePreviewSource } from '../ports/file-preview-source';
+import { createFilePreviewSession } from '@/features/file-preview/composables/useFilePreviewTabs';
+import type { FilePreviewReadResult, FilePreviewSource } from '@/features/file-preview/ports/file-preview-source';
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;

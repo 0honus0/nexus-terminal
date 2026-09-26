@@ -14,10 +14,12 @@
     "skipLibCheck": true, // 跳过对声明文件 (*.d.ts) 的类型检查
     "noEmit": true, // 不输出编译后的文件 (由 Vite 处理构建)
     "paths": {
-      "@/*": ["./src/*"] // 路径相对于 tsconfig.json
+      "@/*": ["./src/*"], // 路径相对于 tsconfig.json
+      "@vue/test-utils": ["./node_modules/@vue/test-utils"],
+      "vitest": ["./node_modules/vitest"]
     },
     "types": ["vite/client", "node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"], // 需要进行类型检查的文件
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "../../tests/frontend/unit/**/*.ts"], // 需要进行类型检查的文件
   "exclude": ["node_modules"] // 排除检查的目录
 }

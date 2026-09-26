@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseThemeObject } from './themeEditor';
+import { parseThemeObject } from '@/features/appearance/model/themeEditor';
 
 describe('parseThemeObject', () => {
   it('accepts string token maps without changing values', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFileClipboardController } from './fileClipboardController';
+import { createFileClipboardController } from '@/features/transfers/state/fileClipboardController';
 
 describe('createFileClipboardController', () => {
   it('keeps a snapshot of the selected items and clears only the current generation', () => {
