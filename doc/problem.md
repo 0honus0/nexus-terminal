@@ -7,23 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.43 Agent 两类 localStorage 偏好仍跨账号共用（P2）
-
-**当前代码事实**
-
-以下 key 仍是浏览器全局：
-
-- `nexus.agent.thread-list-scale.v1`
-- `nexus.agent.task-rail-order.v1`
-
-**整改目标**
-
-迁移到 user-scoped namespace，并明确旧全局 key 的一次性迁移或直接废弃策略。
-
-**关闭条件**
-
-A 的 sidebar zoom / TaskRail 顺序不会影响 B；账号切换回归通过。
-
 ### §7.44 指针命中区 floor 仍未完全收口（P1）
 
 **当前代码事实**
@@ -267,8 +250,6 @@ localStorage/sessionStorage 分散在 Dashboard、Connections、Workspace、Agen
 - scoped key builder（尤其 user/session scope）
 - read/write/remove helper
 
-§7.43 并入该阶段一起关闭。
-
 ### FE-ARCH-12 UI runtime error boundary
 
 **状态：🟠 待整改**
@@ -336,7 +317,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **安全网**：FE-ARCH-04 / 05 / 06 / 07，同时关闭 §7.51。
-2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.43–45 / 48 / 49。
+2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.44–45 / 48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 5. **严格类型增强**：FE-ARCH-16。

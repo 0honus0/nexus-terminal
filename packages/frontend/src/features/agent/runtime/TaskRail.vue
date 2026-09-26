@@ -17,9 +17,11 @@
   import SubagentTree from './SubagentTree.vue';
   import ApprovalTimeline from './ApprovalTimeline.vue';
   import { useConnections } from '@/features/connections/public';
+  import { useAuthSession } from '@/features/auth/public';
   import { formatAgentEnumLabel } from '../enum-labels';
 
   const { t } = useI18n();
+  const auth = useAuthSession();
 
   const props = withDefaults(
     defineProps<{
@@ -136,17 +138,27 @@
     { id: 'background' },
     { id: 'history' },
   ];
-  const railStorageKey = 'nexus.agent.task-rail-order.v1';
+  const LEGACY_RAIL_STORAGE_KEY = 'nexus.agent.task-rail-order.v1';
+  const RAIL_STORAGE_KEY_PREFIX = 'nexus.agent.task-rail-order.v1.user';
+  const railStorageKey = computed(() => {
+    const userId = auth.user.value?.id;
+    return userId === undefined || userId === null ? null : `${RAIL_STORAGE_KEY_PREFIX}.${userId}`;
+  });
+  const defaultCards = (): RailCard[] => defaultCardOrder.map((card) => ({ id: card.id }));
   const loadCardOrder = (): RailCard[] => {
     try {
-      const stored = JSON.parse(localStorage.getItem(railStorageKey) ?? '[]') as unknown;
-      if (!Array.isArray(stored)) return defaultCardOrder;
+      // The old global order cannot be attributed to an account safely.
+      localStorage.removeItem(LEGACY_RAIL_STORAGE_KEY);
+      const key = railStorageKey.value;
+      if (!key) return defaultCards();
+      const stored = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown;
+      if (!Array.isArray(stored)) return defaultCards();
       const known = new Set(defaultCardOrder.map((card) => card.id));
       const ids = stored.filter((id): id is RailCardId => typeof id === 'string' && known.has(id as RailCardId));
       const missing = defaultCardOrder.map((card) => card.id).filter((id) => !ids.includes(id));
       return [...ids, ...missing].map((id) => ({ id }));
     } catch {
-      return defaultCardOrder;
+      return defaultCards();
     }
   };
   const railCards = ref<RailCard[]>(loadCardOrder());
@@ -187,9 +199,25 @@
       );
     },
   });
-  watch(railCards, (cards) => localStorage.setItem(railStorageKey, JSON.stringify(cards.map((card) => card.id))), {
-    deep: true,
-  });
+  watch(
+    railCards,
+    (cards) => {
+      const key = railStorageKey.value;
+      if (!key) return;
+      try {
+        localStorage.setItem(key, JSON.stringify(cards.map((card) => card.id)));
+      } catch {
+        // View preference persistence is best-effort.
+      }
+    },
+    { deep: true },
+  );
+  watch(
+    () => auth.user.value?.id ?? null,
+    () => {
+      railCards.value = loadCardOrder();
+    },
+  );
 
   // §7.14-b：卡片顺序写进 localStorage 后没有恢复入口，键盘/误拖之后无法回到默认顺序。
   const orderChanged = computed(

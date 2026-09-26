@@ -2,6 +2,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { UiPopover } from '@/foundation/ui';
+  import { useAuthSession } from '@/features/auth/public';
   import type { AgentRunStatusDto, AgentThreadViewDto } from '../api/agent-api';
 
   const props = defineProps<{
@@ -28,6 +29,7 @@
   }>();
 
   const { locale } = useI18n();
+  const auth = useAuthSession();
   const query = ref('');
   const scroller = ref<HTMLElement | null>(null);
   const scrollTop = ref(0);
@@ -41,7 +43,12 @@
   const SCALE_MAX = 1.3;
   const SCALE_DEFAULT = 1;
   const SCALE_STEP = 0.1;
-  const SCALE_STORAGE_KEY = 'nexus.agent.thread-list-scale.v1';
+  const LEGACY_SCALE_STORAGE_KEY = 'nexus.agent.thread-list-scale.v1';
+  const SCALE_STORAGE_KEY_PREFIX = 'nexus.agent.thread-list-scale.v1.user';
+  const scaleStorageKey = computed(() => {
+    const userId = auth.user.value?.id;
+    return userId === undefined || userId === null ? null : `${SCALE_STORAGE_KEY_PREFIX}.${userId}`;
+  });
   const nonTerminal = new Set<AgentRunStatusDto>([
     'created',
     'running',
@@ -52,15 +59,20 @@
   ]);
 
   const restoreScale = (): number => {
-    if (typeof window === 'undefined') return 1;
+    if (typeof window === 'undefined') return SCALE_DEFAULT;
     try {
-      const stored = window.localStorage.getItem(SCALE_STORAGE_KEY);
-      if (!stored) return 1;
+      // The legacy key has unknown user provenance. Never assign it to whichever
+      // account happens to be active when the upgraded client first starts.
+      window.localStorage.removeItem(LEGACY_SCALE_STORAGE_KEY);
+      const key = scaleStorageKey.value;
+      if (!key) return SCALE_DEFAULT;
+      const stored = window.localStorage.getItem(key);
+      if (!stored) return SCALE_DEFAULT;
       const parsed = Number(stored);
-      if (!Number.isFinite(parsed)) return 1;
+      if (!Number.isFinite(parsed)) return SCALE_DEFAULT;
       return Math.min(SCALE_MAX, Math.max(SCALE_MIN, parsed));
     } catch {
-      return 1;
+      return SCALE_DEFAULT;
     }
   };
 
@@ -146,9 +158,23 @@
     syncMetrics();
     maybeLoadMore();
   };
+  watch(
+    () => auth.user.value?.id ?? null,
+    () => {
+      scale.value = restoreScale();
+      measuredRowHeight.value = null;
+      void nextTick(() => {
+        measureRowHeight();
+        syncMetrics();
+        maybeLoadMore();
+      });
+    },
+  );
   const persistScale = (): void => {
+    const key = scaleStorageKey.value;
+    if (!key) return;
     try {
-      window.localStorage.setItem(SCALE_STORAGE_KEY, String(scale.value));
+      window.localStorage.setItem(key, String(scale.value));
     } catch {
       // View preference persistence is best-effort.
     }

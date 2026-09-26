@@ -132,6 +132,91 @@ test('Agent window state resets every user-scoped layout field before an empty u
   expect(state.afterEmptyUserRestore).toEqual(expected);
 });
 
+test('Agent view preferences use the authenticated user namespace and discard legacy global keys', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  const authStatus = await context.request.get('/api/v1/auth/status');
+  expect(authStatus.ok(), await authStatus.text()).toBeTruthy();
+  const {
+    user: { id: userId },
+  } = (await authStatus.json()) as { user: { id: number } };
+  const otherUserId = userId + 1_000_000;
+
+  await page.goto('/connections');
+  await page.evaluate(
+    ({ currentUserId, untouchedUserId }) => {
+      localStorage.setItem('nexus.agent.thread-list-scale.v1', '1.3');
+      localStorage.setItem(`nexus.agent.thread-list-scale.v1.user.${currentUserId}`, '0.9');
+      localStorage.setItem(`nexus.agent.thread-list-scale.v1.user.${untouchedUserId}`, '1.3');
+
+      localStorage.setItem(
+        'nexus.agent.task-rail-order.v1',
+        JSON.stringify(['history', 'background', 'targets', 'plan', 'approvals', 'progress']),
+      );
+      localStorage.setItem(
+        `nexus.agent.task-rail-order.v1.user.${currentUserId}`,
+        JSON.stringify(['progress', 'plan', 'approvals', 'targets', 'background', 'history']),
+      );
+      localStorage.setItem(
+        `nexus.agent.task-rail-order.v1.user.${untouchedUserId}`,
+        JSON.stringify(['history', 'background', 'targets', 'approvals', 'plan', 'progress']),
+      );
+    },
+    { currentUserId: userId, untouchedUserId: otherUserId },
+  );
+
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(hub).toBeVisible();
+  await expect(hub.getByText('90%', { exact: true }).first()).toBeVisible();
+  await hub.getByRole('button', { name: 'Show or hide task panel', exact: true }).click();
+  await expect(hub.locator('#agent-task-rail')).toBeVisible();
+
+  const expectedCurrentRail = JSON.stringify(['progress', 'plan', 'approvals', 'targets', 'background', 'history']);
+  const expectedOtherRail = JSON.stringify(['history', 'background', 'targets', 'approvals', 'plan', 'progress']);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ currentUserId, untouchedUserId }) => ({
+          legacyScale: localStorage.getItem('nexus.agent.thread-list-scale.v1'),
+          legacyRail: localStorage.getItem('nexus.agent.task-rail-order.v1'),
+          currentScale: localStorage.getItem(`nexus.agent.thread-list-scale.v1.user.${currentUserId}`),
+          otherScale: localStorage.getItem(`nexus.agent.thread-list-scale.v1.user.${untouchedUserId}`),
+          currentRail: localStorage.getItem(`nexus.agent.task-rail-order.v1.user.${currentUserId}`),
+          otherRail: localStorage.getItem(`nexus.agent.task-rail-order.v1.user.${untouchedUserId}`),
+        }),
+        { currentUserId: userId, untouchedUserId: otherUserId },
+      ),
+    )
+    .toEqual({
+      legacyScale: null,
+      legacyRail: null,
+      currentScale: '0.9',
+      otherScale: '1.3',
+      currentRail: expectedCurrentRail,
+      otherRail: expectedOtherRail,
+    });
+
+  await hub.getByRole('button', { name: 'List zoom', exact: true }).click();
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ currentUserId, untouchedUserId }) => ({
+          currentScale: localStorage.getItem(`nexus.agent.thread-list-scale.v1.user.${currentUserId}`),
+          otherScale: localStorage.getItem(`nexus.agent.thread-list-scale.v1.user.${untouchedUserId}`),
+        }),
+        { currentUserId: userId, untouchedUserId: otherUserId },
+      ),
+    )
+    .toEqual({ currentScale: '1', otherScale: '1.3' });
+});
+
 test('Agent revisits a loaded conversation without blocking on a fresh history round trip', async ({
   page,
   context,
