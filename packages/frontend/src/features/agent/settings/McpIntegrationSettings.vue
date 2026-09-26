@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { BaseModal, UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+  import { UiModal, UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
@@ -577,7 +577,7 @@
     </div>
 
     <!-- 添加 MCP 集成模态弹窗（遵循添加模型服务商 (Provider) 新 UI 风格） -->
-    <BaseModal
+    <UiModal
       :visible="modalOpen"
       :title="editingIntegration ? $t('common.edit') : $t('agent.settings.mcpIntegrations.modalTitle')"
       :aria-label="editingIntegration ? $t('common.edit') : $t('agent.settings.mcpIntegrations.modalTitle')"
@@ -715,6 +715,6 @@
           </UiButton>
         </div>
       </template>
-    </BaseModal>
+    </UiModal>
   </section>
 </template>

@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { AGENT_PROVIDER_MODEL_LIMIT } from '@nexus-terminal/protocol/agent-providers';
   import {
-    BaseModal,
+    UiModal,
     UiButton,
     UiCheckbox,
     UiEmptyState,
@@ -1878,7 +1878,7 @@
     </div>
   </section>
 
-  <BaseModal
+  <UiModal
     :visible="Boolean(confirmingRemoveAll)"
     :title="$t('agent.settings.providers.removeAllModelsConfirmTitle')"
     :aria-label="$t('agent.settings.providers.removeAllModelsConfirmTitle')"
@@ -1905,9 +1905,9 @@
         </UiButton>
       </div>
     </template>
-  </BaseModal>
+  </UiModal>
 
-  <BaseModal
+  <UiModal
     :visible="Boolean(deletingProvider)"
     :title="$t('agent.settings.providers.deleteConfirm')"
     :aria-label="$t('agent.settings.providers.deleteConfirm')"
@@ -1934,10 +1934,10 @@
         </button>
       </div>
     </template>
-  </BaseModal>
+  </UiModal>
 
   <!-- 添加 Provider 模态弹窗（彻底移除原生下拉，全面升级现代化分段器与预设高亮） -->
-  <BaseModal
+  <UiModal
     :visible="modalOpen"
     :title="$t('agent.settings.providers.modalTitle')"
     :aria-label="$t('agent.settings.providers.modalTitle')"
@@ -2048,7 +2048,7 @@
           <UiButton
             appearance="soft"
             tone="primary"
-            size="sm"
+            density="compact"
             type="button"
             :disabled="isPullingModels || !form.baseUrl.trim()"
             @click="pullModelsFromEndpoint"
@@ -2220,10 +2220,10 @@
         </div>
       </div>
     </template>
-  </BaseModal>
+  </UiModal>
 
   <!-- 已配模型与连通测试模态弹窗 -->
-  <BaseModal
+  <UiModal
     :visible="testModalOpen"
     :title="`${currentTestModalProvider?.displayName || ''} · ${$t('agent.settings.providers.testModalTitle')}`"
     :aria-label="$t('agent.settings.providers.testModalTitle')"
@@ -2423,7 +2423,7 @@
         </UiButton>
       </div>
     </template>
-  </BaseModal>
+  </UiModal>
 
   <ModelCapabilityEditor
     :visible="Boolean(capabilityEditor && capabilityEditorModel)"

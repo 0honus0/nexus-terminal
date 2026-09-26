@@ -2,7 +2,7 @@
   import { onMounted, ref } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { BaseSpinner } from '@/foundation/ui';
+  import { UiSpinner } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { apiErrorMessage } from '@/client/http';
   import NotificationSettingForm from '../components/NotificationSettingForm.vue';
@@ -73,7 +73,7 @@
       </button>
 
       <div v-if="loading && items.length === 0 && !error" class="p-4 text-center text-text-secondary italic">
-        <BaseSpinner class="mx-auto" />
+        <UiSpinner class="mx-auto" />
       </div>
       <div
         v-else-if="!loading && !error && items.length === 0"

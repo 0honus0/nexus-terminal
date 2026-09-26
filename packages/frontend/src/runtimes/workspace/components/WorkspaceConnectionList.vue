@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu } from '@/foundation/ui';
+  import { UiContextMenu } from '@/foundation/ui';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { loadConnectionEditorModal, useConnections, type ConnectionDto } from '@/features/connections/public';
   import { useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
@@ -397,7 +397,7 @@
       </ul>
     </div>
 
-    <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="190" @close="context = null">
+    <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="190" @close="context = null">
       <button class="context-item" @click="addConnection">
         <i class="fas fa-plus" aria-hidden="true"></i><span>{{ t('connections.addConnection') }}</span>
       </button>
@@ -410,7 +410,7 @@
       <button class="context-item text-error" @click="deleteConnection(context.connection)">
         <i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('connections.actions.delete') }}</span>
       </button>
-    </BaseContextMenu>
+    </UiContextMenu>
 
     <ConnectionEditorModal
       v-if="editorVisible"

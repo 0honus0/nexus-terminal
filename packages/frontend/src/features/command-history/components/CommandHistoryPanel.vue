@@ -2,7 +2,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu } from '@/foundation/ui';
+  import { UiContextMenu } from '@/foundation/ui';
   import {
     booleanStorageCodec,
     numberStorageCodec,
@@ -364,7 +364,7 @@
       </div>
     </div>
 
-    <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="200" @close="context = null">
+    <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="200" @close="context = null">
       <button class="context-item" @click="execute(context.entry)">
         <i class="fas fa-play" aria-hidden="true"></i>
         <span>{{ t('commandHistory.execute') }}</span>
@@ -382,7 +382,7 @@
         <i class="fas fa-paper-plane" aria-hidden="true"></i>
         <span>{{ t('commandHistory.actions.sendToAllSessions') }}</span>
       </button>
-    </BaseContextMenu>
+    </UiContextMenu>
   </section>
 </template>
 

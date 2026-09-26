@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import type { WorkspaceFocusConfigDto } from '@nexus-terminal/protocol/settings';
   import { structurallyEqual } from '@/foundation/data';
-  import { BaseButton, BaseInput, BaseModal } from '@/foundation/ui';
+  import { UiButton, UiInput, UiModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { normalizeWorkspaceFocusShortcut, workspaceFocusTargets } from '../focus/workspaceFocus';
   import { useWorkspaceUiState } from '../state/workspaceUiState';
@@ -113,7 +113,7 @@
 </script>
 
 <template>
-  <BaseModal
+  <UiModal
     :visible="visible"
     :title="t('focusSwitcher.configTitle')"
     panel-class="w-[min(900px,95vw)] max-h-[90dvh]"
@@ -216,7 +216,7 @@
             class="flex items-center justify-between gap-3 rounded border border-border/50 bg-input p-2"
           >
             <span class="min-w-0 flex-1 truncate text-sm">{{ t(`focusSwitcher.input.${id}`) }}</span>
-            <BaseInput
+            <UiInput
               :model-value="shortcut(id)"
               class="w-28 shrink-0 text-center text-xs italic"
               readonly
@@ -236,13 +236,13 @@
 
     <template #footer>
       <div class="flex justify-end gap-3">
-        <BaseButton @click="attemptClose">{{ t('common.cancel') }}</BaseButton>
-        <BaseButton variant="primary" :loading="saving" :disabled="!hasChanges" @click="save">
+        <UiButton @click="attemptClose">{{ t('common.cancel') }}</UiButton>
+        <UiButton appearance="solid" tone="primary" :loading="saving" :disabled="!hasChanges" @click="save">
           {{ t('common.save') }}{{ hasChanges ? ' *' : '' }}
-        </BaseButton>
+        </UiButton>
       </div>
     </template>
-  </BaseModal>
+  </UiModal>
 </template>
 
 <style scoped>

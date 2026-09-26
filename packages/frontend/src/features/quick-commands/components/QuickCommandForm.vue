@@ -3,15 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { useFeedback } from '@/shared/feedback/public';
   import { useResizeHandle } from '@/foundation/interaction';
-  import {
-    BaseButton,
-    BaseFormField,
-    BaseInput,
-    BaseModal,
-    BaseTextarea,
-    TokenInput,
-    type TokenOption,
-  } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput, UiModal, UiTextarea, TokenInput, type TokenOption } from '@/foundation/ui';
   import type { QuickCommandDto, QuickCommandFormInput, QuickCommandTagDto } from '../model/quickCommand';
   import { useQuickCommandsStore } from '../store/quickCommands.store';
 
@@ -166,7 +158,7 @@
 </script>
 
 <template>
-  <BaseModal
+  <UiModal
     :visible="visible"
     :title="t(command ? 'quickCommands.form.titleEdit' : 'quickCommands.form.titleAdd')"
     panel-class="!max-h-none !max-w-none"
@@ -221,26 +213,26 @@
       </template>
     </template>
     <form data-testid="quick-command-form" class="space-y-5 py-5" @submit.prevent="save">
-      <BaseFormField :label="t('quickCommands.form.name')">
-        <BaseInput
+      <UiFormField :label="t('quickCommands.form.name')">
+        <UiInput
           v-model="form.name"
           data-testid="quick-command-name"
           :placeholder="t('quickCommands.form.namePlaceholder')"
         />
-      </BaseFormField>
+      </UiFormField>
 
-      <BaseFormField :label="t('quickCommands.form.command')">
-        <BaseTextarea
+      <UiFormField :label="t('quickCommands.form.command')">
+        <UiTextarea
           v-model="form.command"
           data-testid="quick-command-command"
-          rows="5"
+          :min-rows="5"
           required
           class="min-h-[80px] whitespace-nowrap"
           :placeholder="t('quickCommands.form.commandPlaceholder')"
         />
-      </BaseFormField>
+      </UiFormField>
 
-      <BaseFormField :label="t('quickCommands.form.tags')">
+      <UiFormField :label="t('quickCommands.form.tags')">
         <TokenInput
           :model-value="form.tagIds.map(String)"
           input-test-id="tag-input-text"
@@ -255,7 +247,7 @@
           @create="createTag"
           @delete-option="deleteTag"
         />
-      </BaseFormField>
+      </UiFormField>
 
       <section>
         <h3 class="mb-3 text-sm font-medium text-text-secondary">{{ t('quickCommands.form.variablesTitle') }}</h3>
@@ -271,16 +263,16 @@
             :key="index"
             class="space-y-2 rounded-lg border border-border/40 bg-input/30 p-2.5"
           >
-            <BaseInput
+            <UiInput
               v-model="variable.key"
               :data-testid="`quick-command-variable-name-${index}`"
               :placeholder="t('quickCommands.form.variableNamePlaceholder')"
               @keydown.enter.prevent.stop
             />
-            <BaseTextarea
+            <UiTextarea
               v-model="variable.value"
               :data-testid="`quick-command-variable-value-${index}`"
-              rows="2"
+              :min-rows="2"
               class="min-h-[40px] resize-y"
               :placeholder="t('quickCommands.form.variableValuePlaceholder')"
             />
@@ -305,7 +297,7 @@
       </section>
 
       <div class="flex justify-end gap-3 border-t border-border pt-4">
-        <BaseButton type="button" @click="emit('close')">{{ t('common.cancel') }}</BaseButton>
+        <UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
         <button
           data-testid="quick-command-execute-draft"
           type="button"
@@ -315,12 +307,18 @@
         >
           <i class="fas fa-play mr-1" aria-hidden="true"></i>{{ t('quickCommands.form.execute') }}
         </button>
-        <BaseButton data-testid="quick-command-submit" type="submit" variant="primary" :disabled="!form.command.trim()">
+        <UiButton
+          data-testid="quick-command-submit"
+          type="submit"
+          appearance="solid"
+          tone="primary"
+          :disabled="!form.command.trim()"
+        >
           {{ t('common.save') }}
-        </BaseButton>
+        </UiButton>
       </div>
     </form>
-  </BaseModal>
+  </UiModal>
 </template>
 
 <style scoped>

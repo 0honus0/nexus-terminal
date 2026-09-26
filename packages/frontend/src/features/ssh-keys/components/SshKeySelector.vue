@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseSelect } from '@/foundation/ui';
+  import { UiNativeSelect } from '@/foundation/ui';
   import { useSshKeys } from '../composables/useSshKeys';
   import SshKeyManagementModal from './SshKeyManagementModal.vue';
   const { t } = useI18n();
@@ -30,10 +30,10 @@
 <template>
   <div class="space-y-2">
     <div class="flex items-center space-x-3">
-      <BaseSelect id="ssh-key-select" v-model="model" class="min-w-0 flex-1" :disabled="loading">
+      <UiNativeSelect id="ssh-key-select" v-model="model" class="min-w-0 flex-1" :disabled="loading">
         <option :value="null">{{ t('sshKeys.selector.selectPlaceholder') }}</option>
         <option v-for="key in keys.keys.value" :key="key.id" :value="key.id">{{ key.name }}</option>
-      </BaseSelect>
+      </UiNativeSelect>
       <button
         data-testid="ssh-key-manage-button"
         type="button"

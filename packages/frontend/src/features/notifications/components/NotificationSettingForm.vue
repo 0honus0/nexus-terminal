@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, reactive, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect, BaseTextarea } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect, UiTextarea } from '@/foundation/ui';
   import { apiErrorMessage } from '@/client/http';
   import { notificationsApi } from '../api/notificationsApi';
   import type {
@@ -176,25 +176,24 @@
     </h3>
 
     <div class="space-y-4">
-      <BaseFormField :label="t('settings.notifications.form.name')" for-id="setting-name"
-        ><BaseInput id="setting-name" v-model="form.name" required
-      /></BaseFormField>
+      <UiFormField :label="t('settings.notifications.form.name')" for-id="setting-name"
+        ><UiInput id="setting-name" v-model="form.name" required
+      /></UiFormField>
       <label class="flex items-center"
-        ><BaseCheckbox id="setting-enabled" v-model="form.enabled" class="mr-2" /><span
-          class="text-sm text-foreground"
-          >{{ t('common.enabled') }}</span
-        ></label
+        ><UiCheckbox id="setting-enabled" v-model="form.enabled" class="mr-2" /><span class="text-sm text-foreground">{{
+          t('common.enabled')
+        }}</span></label
       >
-      <BaseFormField :label="t('settings.notifications.form.channelType')" for-id="setting-channel-type">
-        <BaseSelect id="setting-channel-type" v-model="form.channelType" :disabled="Boolean(setting)"
+      <UiFormField :label="t('settings.notifications.form.channelType')" for-id="setting-channel-type">
+        <UiNativeSelect id="setting-channel-type" v-model="form.channelType" :disabled="Boolean(setting)"
           ><option value="webhook">{{ t('settings.notifications.types.webhook') }}</option>
           <option value="email">{{ t('settings.notifications.types.email') }}</option>
-          <option value="telegram">{{ t('settings.notifications.types.telegram') }}</option></BaseSelect
+          <option value="telegram">{{ t('settings.notifications.types.telegram') }}</option></UiNativeSelect
         >
         <p v-if="setting" class="mt-1 text-xs text-text-secondary">
           {{ t('settings.notifications.form.channelTypeEditNote') }}
         </p>
-      </BaseFormField>
+      </UiFormField>
     </div>
 
     <section class="mt-4 space-y-4 rounded-md border border-border bg-header/30 p-4">
@@ -202,108 +201,108 @@
         {{ t(`settings.notifications.types.${form.channelType}`) }} {{ t('common.settings') }}
       </h4>
       <template v-if="form.channelType === 'webhook'">
-        <BaseFormField label="URL" for-id="webhook-url"
-          ><BaseInput id="webhook-url" v-model="form.url" type="url" required
-        /></BaseFormField>
-        <BaseFormField :label="t('settings.notifications.form.webhookMethod')"
-          ><BaseSelect id="webhook-method" v-model="form.method"
+        <UiFormField label="URL" for-id="webhook-url"
+          ><UiInput id="webhook-url" v-model="form.url" type="url" required
+        /></UiFormField>
+        <UiFormField :label="t('settings.notifications.form.webhookMethod')"
+          ><UiNativeSelect id="webhook-method" v-model="form.method"
             ><option>POST</option>
             <option>GET</option>
-            <option>PUT</option></BaseSelect
-          ></BaseFormField
+            <option>PUT</option></UiNativeSelect
+          ></UiFormField
         >
-        <BaseFormField :label="t('settings.notifications.form.webhookHeaders')" for-id="webhook-headers"
-          ><BaseTextarea id="webhook-headers" v-model="form.webhookHeaders" rows="3" class="font-mono text-sm" />
+        <UiFormField :label="t('settings.notifications.form.webhookHeaders')" for-id="webhook-headers"
+          ><UiTextarea id="webhook-headers" v-model="form.webhookHeaders" :min-rows="3" class="font-mono text-sm" />
           <p v-if="headerValidation.error" class="mt-1 text-xs text-error">
             {{ headerValidation.error }}
-          </p></BaseFormField
+          </p></UiFormField
         >
-        <BaseFormField :label="t('settings.notifications.form.webhookBodyTemplate')" for-id="webhook-body"
-          ><BaseTextarea
+        <UiFormField :label="t('settings.notifications.form.webhookBodyTemplate')" for-id="webhook-body"
+          ><UiTextarea
             id="webhook-body"
             v-model="form.webhookBodyTemplate"
-            rows="3"
+            :min-rows="3"
             class="font-mono text-sm"
             :placeholder="t('settings.notifications.form.webhookBodyPlaceholder')"
           />
           <p class="mt-1 text-xs text-text-secondary">
             {{ t('settings.notifications.form.templateHelp') }} {event}, {timestamp}, {details}
-          </p></BaseFormField
+          </p></UiFormField
         >
       </template>
       <template v-else-if="form.channelType === 'email'">
-        <BaseFormField :label="t('settings.notifications.form.emailTo')"
-          ><BaseInput v-model="form.to" type="email" multiple required />
+        <UiFormField :label="t('settings.notifications.form.emailTo')"
+          ><UiInput v-model="form.to" type="email" multiple required />
           <p class="mt-1 text-xs text-text-secondary">
             {{ t('settings.notifications.form.emailToHelp') }}
-          </p></BaseFormField
+          </p></UiFormField
         >
-        <BaseFormField :label="t('settings.notifications.form.emailBodyTemplate')"
-          ><BaseTextarea
+        <UiFormField :label="t('settings.notifications.form.emailBodyTemplate')"
+          ><UiTextarea
             v-model="form.emailBodyTemplate"
-            rows="3"
+            :min-rows="3"
             :placeholder="t('settings.notifications.form.emailBodyPlaceholder')"
           />
           <p class="mt-1 text-xs text-text-secondary">
             {{ t('settings.notifications.form.templateHelp') }} {event}, {timestamp}, {details}
-          </p></BaseFormField
+          </p></UiFormField
         >
-        <BaseFormField :label="t('settings.notifications.form.smtpHost')"
-          ><BaseInput v-model="form.smtpHost" required
-        /></BaseFormField>
+        <UiFormField :label="t('settings.notifications.form.smtpHost')"
+          ><UiInput v-model="form.smtpHost" required
+        /></UiFormField>
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <BaseFormField :label="t('settings.notifications.form.smtpPort')"
-            ><BaseInput v-model="form.smtpPort" type="number" min="1" max="65535" required /></BaseFormField
+          <UiFormField :label="t('settings.notifications.form.smtpPort')"
+            ><UiInput v-model="form.smtpPort" type="number" min="1" max="65535" required /></UiFormField
           ><label class="flex items-end pb-2 text-sm"
-            ><BaseCheckbox v-model="form.smtpSecure" class="mr-2" />{{
+            ><UiCheckbox v-model="form.smtpSecure" class="mr-2" />{{
               t('settings.notifications.form.smtpSecure')
             }}</label
           >
         </div>
-        <BaseFormField :label="t('settings.notifications.form.smtpUser')"
-          ><BaseInput v-model="form.smtpUser"
-        /></BaseFormField>
-        <BaseFormField :label="t('settings.notifications.form.smtpPass')"
-          ><BaseInput v-model="form.smtpPass" type="password"
-        /></BaseFormField>
-        <BaseFormField :label="t('settings.notifications.form.smtpFrom')"
-          ><BaseInput v-model="form.from" type="email" required />
+        <UiFormField :label="t('settings.notifications.form.smtpUser')"
+          ><UiInput v-model="form.smtpUser"
+        /></UiFormField>
+        <UiFormField :label="t('settings.notifications.form.smtpPass')"
+          ><UiInput v-model="form.smtpPass" type="password"
+        /></UiFormField>
+        <UiFormField :label="t('settings.notifications.form.smtpFrom')"
+          ><UiInput v-model="form.from" type="email" required />
           <p class="mt-1 text-xs text-text-secondary">
             {{ t('settings.notifications.form.smtpFromHelp') }}
-          </p></BaseFormField
+          </p></UiFormField
         >
       </template>
       <template v-else>
-        <BaseFormField :label="t('settings.notifications.form.telegramToken')"
-          ><BaseInput v-model="form.botToken" type="password" :required="!setting" autocomplete="new-password" />
+        <UiFormField :label="t('settings.notifications.form.telegramToken')"
+          ><UiInput v-model="form.botToken" type="password" :required="!setting" autocomplete="new-password" />
           <p class="mt-1 text-xs text-text-secondary">
             {{ t('settings.notifications.form.telegramTokenHelp') }}
-          </p></BaseFormField
+          </p></UiFormField
         >
-        <BaseFormField :label="t('settings.notifications.form.telegramChatId')"
-          ><BaseInput v-model="form.chatId" required
-        /></BaseFormField>
-        <BaseFormField :label="t('settings.notifications.form.telegramCustomDomain')"
-          ><BaseInput v-model="form.customDomain" type="url"
-        /></BaseFormField>
-        <BaseFormField :label="t('settings.notifications.form.telegramMessageTemplate')"
-          ><BaseTextarea
+        <UiFormField :label="t('settings.notifications.form.telegramChatId')"
+          ><UiInput v-model="form.chatId" required
+        /></UiFormField>
+        <UiFormField :label="t('settings.notifications.form.telegramCustomDomain')"
+          ><UiInput v-model="form.customDomain" type="url"
+        /></UiFormField>
+        <UiFormField :label="t('settings.notifications.form.telegramMessageTemplate')"
+          ><UiTextarea
             v-model="form.messageTemplate"
-            rows="3"
+            :min-rows="3"
             :placeholder="t('settings.notifications.form.telegramMessagePlaceholder')"
-        /></BaseFormField>
+        /></UiFormField>
       </template>
 
       <div class="border-t border-border/50 pt-4 text-center">
-        <BaseButton
+        <UiButton
           v-if="setting || canTest"
           data-testid="notification-test"
           type="button"
-          size="sm"
+          density="compact"
           :disabled="!canTest && !setting"
           :loading="testing.active"
           @click="testChannel"
-          >{{ t('settings.notifications.form.testButton') }}</BaseButton
+          >{{ t('settings.notifications.form.testButton') }}</UiButton
         >
         <small v-else class="mt-2 block text-xs text-text-secondary">{{
           t('settings.notifications.form.fillRequiredToTest')
@@ -325,7 +324,7 @@
           v-for="event in events"
           :key="event"
           class="flex cursor-pointer select-none items-center text-sm text-foreground"
-          ><BaseCheckbox
+          ><UiCheckbox
             :model-value="form.enabledEvents.includes(event)"
             class="mr-2"
             @update:model-value="toggleEvent(event)"
@@ -335,10 +334,14 @@
     </div>
 
     <div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
-      <BaseButton type="button" @click="emit('close')">{{ t('common.cancel') }}</BaseButton
-      ><BaseButton type="submit" variant="primary" :disabled="Boolean(headerValidation.error) || testing.active">{{
-        t('common.save')
-      }}</BaseButton>
+      <UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton
+      ><UiButton
+        type="submit"
+        appearance="solid"
+        tone="primary"
+        :disabled="Boolean(headerValidation.error) || testing.active"
+        >{{ t('common.save') }}</UiButton
+      >
     </div>
   </form>
 </template>

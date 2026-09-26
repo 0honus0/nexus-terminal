@@ -2,7 +2,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu, BaseInput } from '@/foundation/ui';
+  import { UiContextMenu, UiInput } from '@/foundation/ui';
   import { readStoredValue, stringStorageCodec, writeClipboardText, writeStoredValue } from '@/foundation/browser';
   import { useFeedback } from '@/shared/feedback/public';
   import { focusRegistry } from '@/shared/focus/public';
@@ -432,7 +432,7 @@
                   aria-hidden="true"
                 ></i>
               </button>
-              <BaseInput
+              <UiInput
                 v-if="editingTagId === (group.id ?? 'untagged')"
                 v-model="tagDraft"
                 data-testid="quick-command-group-rename-input"
@@ -538,7 +538,7 @@
       </div>
     </div>
 
-    <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="200" @close="context = null">
+    <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="200" @close="context = null">
       <button class="context-item" @click="copy(context.command)">
         <i class="fas fa-copy" aria-hidden="true"></i><span>{{ t('quickCommands.actions.copy') }}</span>
       </button>
@@ -562,7 +562,7 @@
         <i class="fas fa-paper-plane" aria-hidden="true"></i
         ><span>{{ t('quickCommands.actions.sendToAllSessions') }}</span>
       </button>
-    </BaseContextMenu>
+    </UiContextMenu>
 
     <QuickCommandForm
       :visible="visible"

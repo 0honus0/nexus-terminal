@@ -9,20 +9,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-13 Design System 收敛
-
-**状态：🟠 待整改**
-
-`foundation/ui` 里 `Base*` 与 `Ui* Gen2` 是两套独立实现，且两边仍有大量真实调用。
-
-需要明确 Gen2 为唯一目标体系，补齐缺失 primitive 后逐 feature 迁移：
-
-```text
-Base* -> Ui* Gen2 -> 删除旧 Base 实现
-```
-
-迁移必须统一 props 语义、density、focus/a11y、disabled、theme token 和 form behavior，而不是只改 class。
-
 ### FE-ARCH-14 横向 feature 耦合收口
 
 **状态：🟠 待整改**
@@ -68,7 +54,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
-2. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
+2. **UI 与领域结构**：FE-ARCH-14 / 15。
 3. **严格类型增强**：FE-ARCH-16。
 
 当某项完成并验证后，直接从本文件删除；不保留关闭记录。

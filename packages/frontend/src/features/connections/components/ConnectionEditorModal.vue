@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal } from '@/foundation/ui';
+  import { UiModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import ConnectionForm from './ConnectionForm.vue';
   import { useConnections } from '../composables/useConnections';
@@ -96,7 +96,7 @@
 </script>
 
 <template>
-  <BaseModal
+  <UiModal
     :visible="visible"
     :z-index="150"
     panel-class="!max-w-2xl !max-h-[90vh] !p-6"
@@ -111,5 +111,5 @@
       @cancel="emit('close')"
       @delete="remove"
     />
-  </BaseModal>
+  </UiModal>
 </template>

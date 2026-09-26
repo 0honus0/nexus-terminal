@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseInput } from '@/foundation/ui';
+  import { UiButton, UiInput } from '@/foundation/ui';
   import { defaultWindowThemeColor } from '../config/default-theme';
   import { useAppearanceStore } from '../store/appearance.store';
 
@@ -71,9 +71,9 @@
       <div>
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.appearance.title') }}</h3>
         <p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.description') }}</p>
-        <BaseButton variant="primary" @click="emit('customize')">
+        <UiButton appearance="solid" tone="primary" @click="emit('customize')">
           {{ t('settings.appearance.customizeButton') }}
-        </BaseButton>
+        </UiButton>
       </div>
 
       <hr class="border-border/50" />
@@ -94,7 +94,7 @@
             class="h-10 w-14 cursor-pointer rounded border border-border bg-background"
             @input="pick"
           />
-          <BaseInput
+          <UiInput
             id="windowThemeColorInput"
             v-model="draft"
             data-testid="window-theme-color-input"
@@ -105,18 +105,19 @@
             @input="status = null"
             @keyup.enter="save"
           />
-          <BaseButton
+          <UiButton
             data-testid="window-theme-color-save"
-            variant="primary"
+            appearance="solid"
+            tone="primary"
             :disabled="saving || !valid"
             :loading="saving"
             @click="save"
           >
             {{ t('settings.appearance.windowThemeColor.save') }}
-          </BaseButton>
-          <BaseButton data-testid="window-theme-color-reset" :disabled="saving" @click="reset">
+          </UiButton>
+          <UiButton data-testid="window-theme-color-reset" :disabled="saving" @click="reset">
             {{ t('settings.appearance.windowThemeColor.reset') }}
-          </BaseButton>
+          </UiButton>
         </div>
         <p v-if="!valid" class="mt-2 text-sm text-error" data-testid="window-theme-color-invalid">
           {{ t('settings.appearance.windowThemeColor.invalid') }}

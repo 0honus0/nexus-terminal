@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseFormField, BaseInput, BaseTextarea } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { darkUiTheme, defaultUiTheme, defaultWindowThemeColor, normalizeUiTheme } from '../config/default-theme';
   import { useAppearanceStore } from '../store/appearance.store';
@@ -163,17 +163,17 @@
   <section class="space-y-6">
     <section v-if="showWindow" class="space-y-4">
       <div class="grid gap-4 md:grid-cols-2">
-        <BaseFormField :label="t('settings.appearance.windowThemeColor.label')">
+        <UiFormField :label="t('settings.appearance.windowThemeColor.label')">
           <div class="flex gap-2">
             <input v-model="form.windowThemeColor" type="color" class="h-10 w-14" />
-            <BaseInput v-model="form.windowThemeColor" data-testid="window-theme-color-input" />
+            <UiInput v-model="form.windowThemeColor" data-testid="window-theme-color-input" />
           </div>
-        </BaseFormField>
+        </UiFormField>
         <div class="flex items-end gap-2">
-          <BaseButton data-testid="window-theme-color-save" variant="primary" @click="saveWindow">{{
+          <UiButton data-testid="window-theme-color-save" appearance="solid" tone="primary" @click="saveWindow">{{
             t('common.save')
-          }}</BaseButton>
-          <BaseButton @click="resetWindowColor">{{ t('common.restore') }}</BaseButton>
+          }}</UiButton>
+          <UiButton @click="resetWindowColor">{{ t('common.restore') }}</UiButton>
         </div>
       </div>
     </section>
@@ -186,19 +186,19 @@
         {{ t('styleCustomizer.terminalStyles') }}
       </h3>
       <div class="grid gap-4 md:grid-cols-3">
-        <BaseFormField :label="t('styleCustomizer.terminalFontFamily')">
-          <BaseInput v-model="form.terminalFontFamily" data-testid="terminal-font-family" />
-        </BaseFormField>
-        <BaseFormField :label="t('styleCustomizer.terminalFontSize')">
-          <BaseInput v-model="form.terminalFontSize" data-testid="terminal-font-size-desktop" type="number" />
-        </BaseFormField>
-        <BaseFormField :label="t('styleCustomizer.terminalFontSizeMobile')">
-          <BaseInput v-model="form.terminalFontSizeMobile" data-testid="terminal-font-size-mobile" type="number" />
-        </BaseFormField>
+        <UiFormField :label="t('styleCustomizer.terminalFontFamily')">
+          <UiInput v-model="form.terminalFontFamily" data-testid="terminal-font-family" />
+        </UiFormField>
+        <UiFormField :label="t('styleCustomizer.terminalFontSize')">
+          <UiInput v-model="form.terminalFontSize" data-testid="terminal-font-size-desktop" type="number" />
+        </UiFormField>
+        <UiFormField :label="t('styleCustomizer.terminalFontSizeMobile')">
+          <UiInput v-model="form.terminalFontSizeMobile" data-testid="terminal-font-size-mobile" type="number" />
+        </UiFormField>
       </div>
-      <BaseButton v-if="props.section !== 'all'" data-testid="terminal-font-save" @click="saveTerminal">{{
+      <UiButton v-if="props.section !== 'all'" data-testid="terminal-font-save" @click="saveTerminal">{{
         t('common.save')
-      }}</BaseButton>
+      }}</UiButton>
     </section>
 
     <section v-if="showEditor" class="space-y-4">
@@ -209,24 +209,24 @@
         {{ t('styleCustomizer.otherSettings') }}
       </h3>
       <div class="grid gap-4 md:grid-cols-3">
-        <BaseFormField :label="t('styleCustomizer.editorFontFamily')">
-          <BaseInput v-model="form.editorFontFamily" data-testid="editor-font-family" />
-        </BaseFormField>
-        <BaseFormField :label="t('styleCustomizer.editorFontSize')">
-          <BaseInput v-model="form.editorFontSize" data-testid="editor-font-size-desktop" type="number" />
-        </BaseFormField>
-        <BaseFormField :label="t('styleCustomizer.editorFontSizeMobile')">
-          <BaseInput v-model="form.mobileEditorFontSize" data-testid="editor-font-size-mobile" type="number" />
-        </BaseFormField>
+        <UiFormField :label="t('styleCustomizer.editorFontFamily')">
+          <UiInput v-model="form.editorFontFamily" data-testid="editor-font-family" />
+        </UiFormField>
+        <UiFormField :label="t('styleCustomizer.editorFontSize')">
+          <UiInput v-model="form.editorFontSize" data-testid="editor-font-size-desktop" type="number" />
+        </UiFormField>
+        <UiFormField :label="t('styleCustomizer.editorFontSizeMobile')">
+          <UiInput v-model="form.mobileEditorFontSize" data-testid="editor-font-size-mobile" type="number" />
+        </UiFormField>
       </div>
-      <BaseButton v-if="props.section !== 'all'" data-testid="editor-font-save" @click="saveEditor">{{
+      <UiButton v-if="props.section !== 'all'" data-testid="editor-font-save" @click="saveEditor">{{
         t('common.save')
-      }}</BaseButton>
+      }}</UiButton>
     </section>
 
-    <BaseButton v-if="props.section === 'all'" variant="primary" @click="saveGeneral">{{
+    <UiButton v-if="props.section === 'all'" appearance="solid" tone="primary" @click="saveGeneral">{{
       t('common.save')
-    }}</BaseButton>
+    }}</UiButton>
 
     <section v-if="showUi">
       <h3
@@ -240,12 +240,12 @@
           t('styleCustomizer.themeModeLabel')
         }}</span>
         <div class="flex flex-wrap justify-start gap-2">
-          <BaseButton data-testid="theme-default-mode" size="sm" @click="resetUiTheme">{{
+          <UiButton data-testid="theme-default-mode" density="compact" @click="resetUiTheme">{{
             t('styleCustomizer.defaultMode')
-          }}</BaseButton>
-          <BaseButton data-testid="theme-dark-mode" size="sm" @click="applyDarkMode">{{
+          }}</UiButton>
+          <UiButton data-testid="theme-dark-mode" density="compact" @click="applyDarkMode">{{
             t('styleCustomizer.darkMode')
-          }}</BaseButton>
+          }}</UiButton>
         </div>
       </div>
       <p class="mb-3 text-sm leading-relaxed text-text-secondary">{{ t('styleCustomizer.uiDescription') }}</p>
@@ -293,11 +293,11 @@
       </h4>
       <p class="mb-3 text-sm leading-relaxed text-text-secondary">{{ t('styleCustomizer.uiThemeJsonEditorDesc') }}</p>
       <div class="mt-4">
-        <BaseTextarea
+        <UiTextarea
           v-model="uiThemeJson"
           data-testid="ui-theme-json"
           class="min-h-[200px] resize-y whitespace-pre-wrap break-words p-3 font-mono text-sm leading-snug"
-          rows="15"
+          :min-rows="15"
           spellcheck="false"
           @focus="rawThemeEditing = true"
           @blur="
@@ -313,8 +313,8 @@
         </p>
       </div>
       <div v-if="props.showUiActions" class="mt-4 flex gap-2">
-        <BaseButton variant="primary" @click="saveUiTheme">{{ t('common.save') }}</BaseButton>
-        <BaseButton @click="resetUiTheme">{{ t('common.restore') }}</BaseButton>
+        <UiButton appearance="solid" tone="primary" @click="saveUiTheme">{{ t('common.save') }}</UiButton>
+        <UiButton @click="resetUiTheme">{{ t('common.restore') }}</UiButton>
       </div>
     </section>
   </section>

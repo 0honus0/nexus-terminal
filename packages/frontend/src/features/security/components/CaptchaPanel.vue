@@ -2,7 +2,7 @@
   import { onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { securityApi } from '../api/securityApi';
   import type { CaptchaConfigUpdateDto } from '../model/security';
@@ -66,7 +66,7 @@
     <p class="mb-4 text-sm text-text-secondary">{{ t('settings.captcha.description') }}</p>
     <form class="space-y-4" @submit.prevent="save">
       <label class="flex items-center text-sm">
-        <BaseCheckbox
+        <UiCheckbox
           id="captchaEnabled"
           v-model="form.enabled"
           data-testid="captcha-enabled"
@@ -75,13 +75,13 @@
         />
         <span>{{ t('settings.captcha.enableLabel') }}</span>
       </label>
-      <BaseFormField :label="t('settings.captcha.providerLabel')" for-id="captchaProvider">
-        <BaseSelect id="captchaProvider" v-model="form.provider" data-testid="captcha-provider">
+      <UiFormField :label="t('settings.captcha.providerLabel')" for-id="captchaProvider">
+        <UiNativeSelect id="captchaProvider" v-model="form.provider" data-testid="captcha-provider">
           <option value="none">{{ t('settings.captcha.providerNone') }}</option>
           <option value="hcaptcha">hCaptcha</option>
           <option value="recaptcha">reCAPTCHA</option>
-        </BaseSelect>
-      </BaseFormField>
+        </UiNativeSelect>
+      </UiFormField>
       <div
         v-if="form.enabled && form.provider === 'hcaptcha'"
         class="ml-1 space-y-4 border-l-2 border-border/50 pl-4 pt-2"
@@ -96,13 +96,13 @@
             >{{ t('settings.captcha.hcaptchaProviderName') }}</a
           >
         </p>
-        <BaseFormField :label="t('settings.captcha.siteKeyLabel')" for-id="hcaptchaSiteKey"
-          ><BaseInput id="hcaptchaSiteKey" v-model="form.hcaptchaSiteKey"
-        /></BaseFormField>
-        <BaseFormField :label="t('settings.captcha.secretKeyLabel')" for-id="hcaptchaSecretKey">
-          <BaseInput id="hcaptchaSecretKey" v-model="form.hcaptchaSecretKey" type="password" />
+        <UiFormField :label="t('settings.captcha.siteKeyLabel')" for-id="hcaptchaSiteKey"
+          ><UiInput id="hcaptchaSiteKey" v-model="form.hcaptchaSiteKey"
+        /></UiFormField>
+        <UiFormField :label="t('settings.captcha.secretKeyLabel')" for-id="hcaptchaSecretKey">
+          <UiInput id="hcaptchaSecretKey" v-model="form.hcaptchaSecretKey" type="password" />
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.captcha.secretKeyHint') }}</p>
-        </BaseFormField>
+        </UiFormField>
       </div>
       <div
         v-if="form.enabled && form.provider === 'recaptcha'"
@@ -118,18 +118,18 @@
             >{{ t('settings.captcha.recaptchaProviderName') }}</a
           >
         </p>
-        <BaseFormField :label="t('settings.captcha.siteKeyLabel')" for-id="recaptchaSiteKey"
-          ><BaseInput id="recaptchaSiteKey" v-model="form.recaptchaSiteKey"
-        /></BaseFormField>
-        <BaseFormField :label="t('settings.captcha.secretKeyLabel')" for-id="recaptchaSecretKey">
-          <BaseInput id="recaptchaSecretKey" v-model="form.recaptchaSecretKey" type="password" />
+        <UiFormField :label="t('settings.captcha.siteKeyLabel')" for-id="recaptchaSiteKey"
+          ><UiInput id="recaptchaSiteKey" v-model="form.recaptchaSiteKey"
+        /></UiFormField>
+        <UiFormField :label="t('settings.captcha.secretKeyLabel')" for-id="recaptchaSecretKey">
+          <UiInput id="recaptchaSecretKey" v-model="form.recaptchaSecretKey" type="password" />
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.captcha.secretKeyHint') }}</p>
-        </BaseFormField>
+        </UiFormField>
       </div>
       <div class="flex items-center justify-between gap-4 pt-2">
-        <BaseButton data-testid="captcha-save" type="submit" variant="primary" :loading="loading">{{
+        <UiButton data-testid="captcha-save" type="submit" appearance="solid" tone="primary" :loading="loading">{{
           t('common.save')
-        }}</BaseButton>
+        }}</UiButton>
         <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
       </div>
     </form>

@@ -1,15 +1,7 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import {
-    BaseButton,
-    BaseCheckbox,
-    BaseFormField,
-    BaseInput,
-    BaseModal,
-    BaseSelect,
-    OverlayPanel,
-  } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiNativeSelect, OverlayPanel } from '@/foundation/ui';
   import { useDraggablePosition, usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
@@ -1343,15 +1335,15 @@
       @pointerdown="progressRestoreDrag.startDragging"
       @dragstart.prevent
     >
-      <BaseButton
+      <UiButton
         data-testid="transfer-progress-restore-button"
         class="select-none"
-        size="sm"
+        density="compact"
         :class="progressRestoreDrag.dragging.value ? 'cursor-grabbing' : 'cursor-move'"
         @click="restoreHiddenProgress"
       >
         {{ t('progressCenter.title') }} ({{ transfers.tasks.value.length }})
-      </BaseButton>
+      </UiButton>
     </div>
     <SendFilesModal
       v-if="sendFilesItems.length"
@@ -1635,7 +1627,7 @@
       </form>
     </OverlayPanel>
 
-    <BaseModal
+    <UiModal
       v-else
       :visible="Boolean(archiveDialog)"
       :title="
@@ -1659,59 +1651,59 @@
           <div v-for="entry in archiveDialog?.entries ?? []" :key="entry.path" class="truncate">{{ entry.path }}</div>
         </div>
         <template v-if="archiveDialog?.kind === 'compress'">
-          <BaseFormField :label="t('workspace.archive.format')" for-id="archive-format">
-            <BaseSelect id="archive-format" v-model="archiveFormat" :disabled="archivePasswordRequired">
+          <UiFormField :label="t('workspace.archive.format')" for-id="archive-format">
+            <UiNativeSelect id="archive-format" v-model="archiveFormat" :disabled="archivePasswordRequired">
               <option value="zip">zip</option>
               <option value="tar.gz">tar.gz</option>
               <option value="tar.bz2">tar.bz2</option>
-            </BaseSelect>
-          </BaseFormField>
+            </UiNativeSelect>
+          </UiFormField>
           <template v-if="archivePasswordAvailable">
-            <BaseFormField
+            <UiFormField
               :label="t('fileManager.archivePassword.password')"
               for-id="archive-password"
               :required="archivePasswordRequired"
             >
-              <BaseInput
+              <UiInput
                 id="archive-password"
                 v-model="archivePassword"
                 data-testid="archive-password-input"
                 :type="archiveShowPassword ? 'text' : 'password'"
               />
-            </BaseFormField>
-            <BaseFormField
+            </UiFormField>
+            <UiFormField
               v-if="archivePassword"
               :label="t('fileManager.archivePassword.confirmPassword')"
               for-id="archive-password-confirm"
               :required="archivePasswordRequired"
             >
-              <BaseInput
+              <UiInput
                 id="archive-password-confirm"
                 v-model="archiveConfirmPassword"
                 data-testid="archive-password-confirm"
                 :type="archiveShowPassword ? 'text' : 'password'"
               />
-            </BaseFormField>
+            </UiFormField>
           </template>
-          <BaseFormField :label="t('workspace.transfer.destination')" for-id="archive-destination">
-            <BaseInput id="archive-destination" v-model="archiveDestination" />
-          </BaseFormField>
+          <UiFormField :label="t('workspace.transfer.destination')" for-id="archive-destination">
+            <UiInput id="archive-destination" v-model="archiveDestination" />
+          </UiFormField>
         </template>
-        <BaseFormField
+        <UiFormField
           v-else-if="archivePasswordAvailable"
           :label="t('fileManager.archivePassword.password')"
           for-id="archive-password"
           required
         >
-          <BaseInput
+          <UiInput
             id="archive-password"
             v-model="archivePassword"
             data-testid="archive-password-input"
             :type="archiveShowPassword ? 'text' : 'password'"
           />
-        </BaseFormField>
+        </UiFormField>
         <label v-if="archivePasswordAvailable" class="flex items-center gap-2 text-sm text-text-secondary">
-          <BaseCheckbox v-model="archiveShowPassword" />{{ t('fileManager.archivePassword.showPassword') }}
+          <UiCheckbox v-model="archiveShowPassword" />{{ t('fileManager.archivePassword.showPassword') }}
         </label>
         <p v-if="archivePasswordError" data-testid="archive-password-error" class="text-sm text-error" role="alert">
           {{ archivePasswordError }}
@@ -1720,11 +1712,12 @@
           {{ t('fileManager.archivePassword.compatibilityNotice') }}
         </p>
         <div class="flex justify-end gap-2">
-          <BaseButton type="button" @click="() => closeArchiveDialog()">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton
+          <UiButton type="button" @click="() => closeArchiveDialog()">{{ t('common.cancel') }}</UiButton>
+          <UiButton
             data-testid="archive-password-submit"
             type="submit"
-            variant="primary"
+            appearance="solid"
+            tone="primary"
             :disabled="archivePasswordInvalid"
           >
             {{
@@ -1734,10 +1727,10 @@
                   : t('fileManager.archivePassword.extract')
                 : t('common.confirm')
             }}
-          </BaseButton>
+          </UiButton>
         </div>
       </form>
-    </BaseModal>
+    </UiModal>
   </div>
 </template>
 

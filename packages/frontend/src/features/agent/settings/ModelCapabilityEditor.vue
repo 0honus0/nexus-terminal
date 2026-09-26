@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, reactive, useId, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal, UiButton, UiCheckbox, UiSelect } from '@/foundation/ui';
+  import { UiModal, UiButton, UiCheckbox, UiSelect } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import { formatAgentDateTime } from '../locale-format';
   import type { AgentProviderViewDto, AgentReasoningEffortDto } from '../api/agent-api';
@@ -204,7 +204,7 @@
 </script>
 
 <template>
-  <BaseModal
+  <UiModal
     :visible="visible && Boolean(capabilityEditorModel)"
     :title="$t('agent.settings.providers.capabilityTitle')"
     :aria-label="$t('agent.settings.providers.capabilityTitle')"
@@ -415,5 +415,5 @@
         </div>
       </div>
     </template>
-  </BaseModal>
+  </UiModal>
 </template>

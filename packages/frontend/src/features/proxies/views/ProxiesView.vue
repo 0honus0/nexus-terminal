@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal } from '@/foundation/ui';
+  import { UiModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import ProxyForm from '../components/ProxyForm.vue';
   import { useProxies } from '../composables/useProxies';
@@ -140,7 +140,7 @@
         </div>
       </div>
 
-      <BaseModal
+      <UiModal
         :visible="modal"
         :close-on-backdrop="false"
         panel-class="w-[calc(100vw-2rem)] max-w-lg sm:min-w-[350px]"
@@ -148,7 +148,7 @@
         @close="modal = false"
       >
         <ProxyForm :proxy="editing" :loading="loading" @submit="save" @cancel="modal = false" />
-      </BaseModal>
+      </UiModal>
     </div>
   </div>
 </template>

@@ -54,12 +54,37 @@ const importPattern = /(?:\bfrom\s*|\bimport\s*\()\s*['"]([^'"]+)['"]/g;
 const publicTypeReexportPattern = /export\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/gs;
 const publicTypeStarReexportPattern = /export\s+(?:type\s+)?\*\s+from\s*['"]([^'"]+)['"]/g;
 const exportedTypeDeclarationPattern = /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)/gm;
+const legacyDesignSystemNames = [
+  'BaseBadge',
+  'BaseButton',
+  'BaseCheckbox',
+  'BaseContextMenu',
+  'BaseFormField',
+  'BaseInput',
+  'BaseListboxSelect',
+  'BaseModal',
+  'BaseSelect',
+  'BaseSpinner',
+  'BaseTable',
+  'BaseTextarea',
+];
+const legacyDesignSystemPattern = new RegExp(`\\b(?:${legacyDesignSystemNames.join('|')})\\b`, 'g');
 const findings = [];
 const workspaceTransportFindings = [];
+const legacyDesignSystemFindings = [];
 const files = await walk(sourceRoot);
 
 for (const sourceFile of files) {
   const text = await readFile(sourceFile, 'utf8');
+  legacyDesignSystemPattern.lastIndex = 0;
+  const legacyDesignSystemMatch = legacyDesignSystemPattern.exec(text);
+  if (legacyDesignSystemMatch) {
+    legacyDesignSystemFindings.push({
+      file: path.relative(root, sourceFile),
+      line: text.slice(0, legacyDesignSystemMatch.index).split('\n').length,
+      name: legacyDesignSystemMatch[0],
+    });
+  }
   const sourceOwner = moduleOwner(sourceFile);
   importPattern.lastIndex = 0;
   let match;
@@ -179,7 +204,12 @@ for (const publicFile of publicFiles) {
   }
 }
 
-if (findings.length || publicContractFindings.length || workspaceTransportFindings.length) {
+if (
+  findings.length ||
+  publicContractFindings.length ||
+  workspaceTransportFindings.length ||
+  legacyDesignSystemFindings.length
+) {
   console.error('Frontend public API boundary guard failed:');
   for (const finding of findings) {
     console.error(
@@ -194,6 +224,11 @@ if (findings.length || publicContractFindings.length || workspaceTransportFindin
   for (const finding of workspaceTransportFindings) {
     console.error(
       `- ${finding.file}:${finding.line} imports the HTTP client directly. Workspace transport access belongs in an adapter.`,
+    );
+  }
+  for (const finding of legacyDesignSystemFindings) {
+    console.error(
+      `- ${finding.file}:${finding.line} uses legacy Design System symbol ${finding.name}. Use the Ui* Gen2 component.`,
     );
   }
   process.exit(1);

@@ -1012,6 +1012,61 @@
   background: color-mix(in srgb, var(--ui-disabled-text) 18%, var(--ui-disabled-fill));
 }
 
+.ui-native-select {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.ui-native-select__control {
+  width: 100%;
+  height: var(--ui-control-height);
+  appearance: none;
+  padding-inline: var(--ui-control-padding-inline) calc(var(--ui-control-padding-inline) + 16px);
+  border: 1px solid var(--ui-hairline);
+  background: var(--ui-fill-inset);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-inset);
+  cursor: pointer;
+}
+
+.ui-native-select__control:not(:disabled):hover {
+  border-color: var(--ui-hairline-strong);
+  background: var(--ui-fill-inset-hover);
+}
+
+.ui-native-select[data-invalid='true'] .ui-native-select__control {
+  border-color: color-mix(in srgb, var(--status-error-color) 70%, var(--border-color));
+  --ui-focus-color: var(--status-error-color);
+  --ui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--status-error-color) 17%, transparent);
+}
+
+.ui-native-select__control:disabled {
+  cursor: not-allowed;
+  border-color: var(--ui-disabled-border);
+  background: var(--ui-disabled-fill);
+  color: var(--ui-disabled-text);
+  box-shadow: none;
+}
+
+.ui-native-select__icon {
+  position: absolute;
+  top: 50%;
+  right: var(--ui-control-padding-inline);
+  width: 12px;
+  height: 12px;
+  translate: 0 -50%;
+  color: var(--ui-text-muted);
+  pointer-events: none;
+}
+
+.ui-native-select__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .ui-select {
   position: relative;
   display: block;

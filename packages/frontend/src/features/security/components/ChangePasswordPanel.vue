@@ -2,7 +2,7 @@
   import { ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseFormField, BaseInput } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { securityApi } from '../api/securityApi';
 
@@ -50,37 +50,42 @@
   <section data-testid="change-password-settings">
     <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.changePassword.title') }}</h3>
     <form class="space-y-4" @submit.prevent="submit">
-      <BaseFormField :label="t('settings.changePassword.currentPassword')" for-id="currentPassword">
-        <BaseInput
+      <UiFormField :label="t('settings.changePassword.currentPassword')" for-id="currentPassword">
+        <UiInput
           id="currentPassword"
           v-model="currentPassword"
           data-testid="change-password-current"
           type="password"
           autocomplete="current-password"
         />
-      </BaseFormField>
-      <BaseFormField :label="t('settings.changePassword.newPassword')" for-id="newPassword">
-        <BaseInput
+      </UiFormField>
+      <UiFormField :label="t('settings.changePassword.newPassword')" for-id="newPassword">
+        <UiInput
           id="newPassword"
           v-model="newPassword"
           data-testid="change-password-new"
           type="password"
           autocomplete="new-password"
         />
-      </BaseFormField>
-      <BaseFormField :label="t('settings.changePassword.confirmPassword')" for-id="confirmPassword">
-        <BaseInput
+      </UiFormField>
+      <UiFormField :label="t('settings.changePassword.confirmPassword')" for-id="confirmPassword">
+        <UiInput
           id="confirmPassword"
           v-model="confirmPassword"
           data-testid="change-password-confirm"
           type="password"
           autocomplete="new-password"
         />
-      </BaseFormField>
+      </UiFormField>
       <div class="flex items-center justify-between gap-4">
-        <BaseButton data-testid="change-password-submit" type="submit" variant="primary" :loading="loading">{{
-          t('settings.changePassword.submit')
-        }}</BaseButton>
+        <UiButton
+          data-testid="change-password-submit"
+          type="submit"
+          appearance="solid"
+          tone="primary"
+          :loading="loading"
+          >{{ t('settings.changePassword.submit') }}</UiButton
+        >
         <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm" role="status">
           {{ message }}
         </p>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseInput, BaseModal } from '@/foundation/ui';
+  import { UiInput, UiModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { connectionTagsService, useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
   import { useConnections, type ConnectionDto } from '@/features/connections/public';
@@ -114,7 +114,7 @@
 </script>
 
 <template>
-  <BaseModal
+  <UiModal
     :visible="visible"
     :title="modalTitle"
     :z-index="150"
@@ -126,7 +126,7 @@
       <div class="space-y-3 border-b border-border/50 px-4 pb-4">
         <label class="grid gap-1.5 text-sm text-text-secondary">
           <span>{{ t('workspaceConnectionList.manageTags.tagName') }}</span>
-          <BaseInput v-model="name" :aria-label="t('workspaceConnectionList.manageTags.tagName')" />
+          <UiInput v-model="name" :aria-label="t('workspaceConnectionList.manageTags.tagName')" />
         </label>
 
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -214,7 +214,7 @@
         </button>
       </div>
     </template>
-  </BaseModal>
+  </UiModal>
 </template>
 
 <style scoped>

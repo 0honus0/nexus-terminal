@@ -2,7 +2,7 @@
   import { ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseFormField, BaseInput } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
   import { securityApi } from '../api/securityApi';
   import type { AuthTwoFactorSetupDto } from '../model/security';
 
@@ -78,19 +78,19 @@
         {{ t('settings.twoFactor.status.enabled') }}
       </p>
       <form class="space-y-4" @submit.prevent="disable">
-        <BaseFormField :label="t('settings.twoFactor.disable.passwordPrompt')" for-id="disablePassword">
-          <BaseInput id="disablePassword" v-model="disablePassword" type="password" autocomplete="current-password" />
-        </BaseFormField>
-        <BaseButton type="submit" variant="danger" :loading="loading">{{
+        <UiFormField :label="t('settings.twoFactor.disable.passwordPrompt')" for-id="disablePassword">
+          <UiInput id="disablePassword" v-model="disablePassword" type="password" autocomplete="current-password" />
+        </UiFormField>
+        <UiButton type="submit" appearance="solid" tone="danger" :loading="loading">{{
           t('settings.twoFactor.disable.button')
-        }}</BaseButton>
+        }}</UiButton>
       </form>
     </div>
     <div v-else>
       <p class="mb-4 text-sm text-text-secondary">{{ t('settings.twoFactor.status.disabled') }}</p>
-      <BaseButton v-if="!setup" variant="primary" :loading="loading" @click="begin">{{
+      <UiButton v-if="!setup" appearance="solid" tone="primary" :loading="loading" @click="begin">{{
         t('settings.twoFactor.enable.button')
-      }}</BaseButton>
+      }}</UiButton>
       <div v-else class="mt-4 space-y-4 rounded-md border border-border bg-header/30 p-4">
         <p class="text-sm text-text-secondary">{{ t('settings.twoFactor.setup.scanQrCode') }}</p>
         <img
@@ -105,20 +105,20 @@
           }}</code>
         </p>
         <form class="space-y-4" @submit.prevent="activate">
-          <BaseFormField :label="t('settings.twoFactor.setup.enterCode')" for-id="verificationCode">
-            <BaseInput
+          <UiFormField :label="t('settings.twoFactor.setup.enterCode')" for-id="verificationCode">
+            <UiInput
               id="verificationCode"
               v-model="verificationCode"
               inputmode="numeric"
               pattern="[0-9]{6}"
               autocomplete="one-time-code"
             />
-          </BaseFormField>
+          </UiFormField>
           <div class="flex items-center gap-3">
-            <BaseButton type="submit" variant="primary" :loading="loading">{{
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
               t('settings.twoFactor.setup.verifyButton')
-            }}</BaseButton>
-            <BaseButton type="button" :disabled="loading" @click="setup = null">{{ t('common.cancel') }}</BaseButton>
+            }}</UiButton>
+            <UiButton type="button" :disabled="loading" @click="setup = null">{{ t('common.cancel') }}</UiButton>
           </div>
         </form>
       </div>

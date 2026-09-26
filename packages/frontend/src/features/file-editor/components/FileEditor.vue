@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu } from '@/foundation/ui';
+  import { UiContextMenu } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { focusRegistry } from '@/shared/focus/public';
   import { useFeedback } from '@/shared/feedback/public';
@@ -426,7 +426,7 @@
 
     <p v-if="editorSession.active.value?.error" class="editor-error">{{ editorSession.active.value.error }}</p>
 
-    <BaseContextMenu :visible="Boolean(context)" :x="context?.x ?? 0" :y="context?.y ?? 0" @close="context = null">
+    <UiContextMenu :visible="Boolean(context)" :x="context?.x ?? 0" :y="context?.y ?? 0" @close="context = null">
       <button
         class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-md px-4 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-primary/10 hover:text-primary"
         role="menuitem"
@@ -458,7 +458,7 @@
       >
         {{ t('fileEditor.contextMenu.closeLeft') }}
       </button>
-    </BaseContextMenu>
+    </UiContextMenu>
   </section>
 </template>
 

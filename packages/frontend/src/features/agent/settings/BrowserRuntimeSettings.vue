@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { structurallyEqual } from '@/foundation/data';
-  import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
+  import { UiModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { pickOption } from './pick-option';
@@ -465,7 +465,7 @@
     </div>
 
     <!-- 弹窗 1：添加浏览器目标模态弹窗 -->
-    <BaseModal
+    <UiModal
       :visible="targetModalOpen"
       :title="editingTargetId ? $t('common.edit') : $t('agent.settings.browserRuntime.modalTitle')"
       :aria-label="editingTargetId ? $t('common.edit') : $t('agent.settings.browserRuntime.modalTitle')"
@@ -630,10 +630,10 @@
           </UiButton>
         </div>
       </template>
-    </BaseModal>
+    </UiModal>
 
     <!-- 弹窗 2：添加端点模态弹窗 -->
-    <BaseModal
+    <UiModal
       :visible="endpointModalOpen"
       :title="`${endpointModalTarget?.id || ''} · ${editingEndpointIndex === null ? $t('agent.settings.browserRuntime.modalEndpointTitle') : $t('common.edit')}`"
       :aria-label="
@@ -757,6 +757,6 @@
           </UiButton>
         </div>
       </template>
-    </BaseModal>
+    </UiModal>
   </section>
 </template>

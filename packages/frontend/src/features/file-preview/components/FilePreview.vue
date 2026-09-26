@@ -1,34 +1,34 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseSpinner } from '@/foundation/ui';
+  import { UiSpinner } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import ImagePreview from './ImagePreview.vue';
   import FilePreviewDialog from './FilePreviewDialog.vue';
 
   const MarkdownPreview = defineAsyncComponent({
     loader: () => import('./MarkdownPreview.vue'),
-    loadingComponent: BaseSpinner,
+    loadingComponent: UiSpinner,
     delay: 120,
   });
   const PdfPreview = defineAsyncComponent({
     loader: () => import('./PdfPreview.vue'),
-    loadingComponent: BaseSpinner,
+    loadingComponent: UiSpinner,
     delay: 120,
   });
   const SpreadsheetPreview = defineAsyncComponent({
     loader: () => import('./SpreadsheetPreview.vue'),
-    loadingComponent: BaseSpinner,
+    loadingComponent: UiSpinner,
     delay: 120,
   });
   const DatabasePreview = defineAsyncComponent({
     loader: () => import('./DatabasePreview.vue'),
-    loadingComponent: BaseSpinner,
+    loadingComponent: UiSpinner,
     delay: 120,
   });
   const DocxPreview = defineAsyncComponent({
     loader: () => import('./DocxPreview.vue'),
-    loadingComponent: BaseSpinner,
+    loadingComponent: UiSpinner,
     delay: 120,
   });
 
@@ -93,7 +93,7 @@
   <section ref="root" data-testid="file-preview-view" class="relative flex h-full min-h-0 flex-col bg-background">
     <template v-for="tab in preview.tabs.value" :key="tab.id">
       <div v-show="preview.activeId.value === tab.id" class="absolute inset-0 min-h-0">
-        <BaseSpinner v-if="tab.loading" class="m-6" />
+        <UiSpinner v-if="tab.loading" class="m-6" />
         <FilePreviewDialog
           v-else-if="tab.error"
           :file="{ name: tab.name, path: tab.path }"

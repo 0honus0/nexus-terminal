@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseFormField, BaseInput, BaseTextarea } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { appearanceApi } from '../api/appearanceApi';
   import type { TerminalThemeDto } from '@nexus-terminal/protocol/appearance';
@@ -189,18 +189,18 @@
       </div>
 
       <div class="mb-6 mt-4 flex flex-wrap items-center gap-2 border-b border-dashed border-border pb-4">
-        <BaseButton data-testid="terminal-theme-add" size="sm" @click="openCreate">{{
+        <UiButton data-testid="terminal-theme-add" density="compact" @click="openCreate">{{
           t('styleCustomizer.addNewTheme')
-        }}</BaseButton>
-        <BaseButton size="sm" @click="importInput?.click()">{{ t('styleCustomizer.importTheme') }}</BaseButton>
-        <BaseButton size="sm" :disabled="!activeTheme" @click="exportActive">{{
+        }}</UiButton>
+        <UiButton density="compact" @click="importInput?.click()">{{ t('styleCustomizer.importTheme') }}</UiButton>
+        <UiButton density="compact" :disabled="!activeTheme" @click="exportActive">{{
           t('styleCustomizer.exportActiveTheme')
-        }}</BaseButton>
+        }}</UiButton>
         <input ref="importInput" class="hidden" type="file" accept="application/json,.json" @change="importTheme" />
       </div>
 
       <div class="mb-4">
-        <BaseInput
+        <UiInput
           v-model="search"
           data-testid="terminal-theme-search"
           :placeholder="t('styleCustomizer.searchThemePlaceholder')"
@@ -284,7 +284,7 @@
         <label class="block w-full overflow-hidden text-ellipsis text-left text-sm font-medium text-foreground md:mb-0">
           {{ t('styleCustomizer.themeName') }}:
         </label>
-        <BaseInput v-model="themeName" data-testid="terminal-theme-name" />
+        <UiInput v-model="themeName" data-testid="terminal-theme-name" />
       </div>
 
       <hr class="my-4 border-border md:my-8" />
@@ -306,7 +306,7 @@
             type="color"
             class="h-[34px] min-w-[40px] max-w-[50px] shrink-0 rounded border border-border p-0.5"
           />
-          <BaseInput v-model="themeDraft[key]" class="min-w-[80px] flex-1" />
+          <UiInput v-model="themeDraft[key]" class="min-w-[80px] flex-1" />
         </div>
       </div>
 
@@ -317,8 +317,8 @@
       <p class="mb-3 text-sm leading-relaxed text-text-secondary">
         {{ t('styleCustomizer.terminalThemeJsonEditorDesc') }}
       </p>
-      <BaseFormField :label="t('styleCustomizer.terminalThemeJsonEditorTitle')" class="mt-4">
-        <BaseTextarea
+      <UiFormField :label="t('styleCustomizer.terminalThemeJsonEditorTitle')" class="mt-4">
+        <UiTextarea
           v-model="themeJson"
           data-testid="terminal-theme-json"
           class="min-h-[150px] resize-y whitespace-pre-wrap break-words font-mono text-sm leading-snug md:min-h-[200px]"
@@ -329,15 +329,13 @@
         <p v-if="themeParseError" class="mt-2 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
           {{ themeParseError }}
         </p>
-      </BaseFormField>
+      </UiFormField>
 
       <div class="mt-4 flex justify-end gap-2 border-t border-border pt-4">
-        <BaseButton data-testid="terminal-theme-cancel" @click="editorVisible = false">{{
-          t('common.cancel')
-        }}</BaseButton>
-        <BaseButton data-testid="terminal-theme-save" variant="primary" @click="saveTheme">{{
+        <UiButton data-testid="terminal-theme-cancel" @click="editorVisible = false">{{ t('common.cancel') }}</UiButton>
+        <UiButton data-testid="terminal-theme-save" appearance="solid" tone="primary" @click="saveTheme">{{
           t('common.save')
-        }}</BaseButton>
+        }}</UiButton>
       </div>
     </section>
   </section>

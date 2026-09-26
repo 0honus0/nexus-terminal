@@ -8,6 +8,7 @@ export type UiSelectValue = string | number;
 export interface UiSelectOption {
   value: UiSelectValue;
   label: string;
+  triggerLabel?: string;
   description?: string;
   disabled?: boolean;
 }

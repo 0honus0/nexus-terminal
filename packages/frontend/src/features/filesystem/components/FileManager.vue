@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu, BaseSpinner, OverlayPanel } from '@/foundation/ui';
+  import { UiContextMenu, UiSpinner, OverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { writeClipboardText } from '@/foundation/browser';
   import { createWheelScaleResolver, useLongPressGesture } from '@/foundation/interaction';
@@ -1567,7 +1567,7 @@
       data-testid="file-manager-loading-state"
       class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
     >
-      <BaseSpinner />
+      <UiSpinner />
     </div>
     <p v-else-if="browser.error.value" class="p-4 text-error">{{ browser.error.value }}</p>
     <div
@@ -1792,7 +1792,7 @@
       {{ t('fileManager.dropFilesHere') }}
     </div>
 
-    <BaseContextMenu
+    <UiContextMenu
       v-if="context"
       :visible="true"
       :x="context.x"
@@ -2002,9 +2002,9 @@
           {{ t('fileManager.actions.refresh') }}
         </button>
       </template>
-    </BaseContextMenu>
+    </UiContextMenu>
 
-    <BaseContextMenu
+    <UiContextMenu
       v-if="compressSubmenu"
       :visible="true"
       :x="compressSubmenu.x"
@@ -2028,7 +2028,7 @@
           {{ t('fileManager.contextMenu.compressTarBz2') }}
         </button>
       </div>
-    </BaseContextMenu>
+    </UiContextMenu>
 
     <OverlayPanel
       :visible="Boolean(action)"

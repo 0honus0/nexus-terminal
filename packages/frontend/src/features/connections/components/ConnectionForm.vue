@@ -2,7 +2,7 @@
   import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseFormField, BaseInput, BaseSelect, BaseTextarea } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput, UiNativeSelect, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { ConnectionTagPicker, connectionTagsService } from '@/features/tags/public';
   import { SshKeySelector, useSshKeys } from '@/features/ssh-keys/public';
@@ -390,9 +390,9 @@
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionBasic') }}
           </h4>
-          <BaseFormField :label="`${t('connections.form.name')} (${t('connections.form.optional')})`">
-            <BaseInput id="conn-name" v-model="form.name" />
-          </BaseFormField>
+          <UiFormField :label="`${t('connections.form.name')} (${t('connections.form.optional')})`">
+            <UiInput id="conn-name" v-model="form.name" />
+          </UiFormField>
           <div>
             <label class="mb-1 block text-sm font-medium text-text-secondary">{{
               t('connections.form.connectionType')
@@ -428,15 +428,15 @@
             </div>
           </div>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <BaseFormField :label="t('connections.form.host')" class="md:col-span-2">
-              <BaseInput id="conn-host" v-model="form.host" required />
+            <UiFormField :label="t('connections.form.host')" class="md:col-span-2">
+              <UiInput id="conn-host" v-model="form.host" required />
               <p v-if="!connection" class="mt-1 text-xs text-text-secondary">
                 <i class="fas fa-exclamation-circle mr-1" aria-hidden="true" />{{ t('connections.form.hostTooltip') }}
               </p>
-            </BaseFormField>
-            <BaseFormField :label="t('connections.form.port')">
-              <BaseInput id="conn-port" v-model="form.port" type="number" min="1" max="65535" required />
-            </BaseFormField>
+            </UiFormField>
+            <UiFormField :label="t('connections.form.port')">
+              <UiInput id="conn-port" v-model="form.port" type="number" min="1" max="65535" required />
+            </UiFormField>
           </div>
         </section>
 
@@ -444,9 +444,9 @@
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAuth') }}
           </h4>
-          <BaseFormField :label="t('connections.form.username')">
-            <BaseInput id="conn-username" v-model="form.username" required />
-          </BaseFormField>
+          <UiFormField :label="t('connections.form.username')">
+            <UiInput id="conn-username" v-model="form.username" required />
+          </UiFormField>
 
           <template v-if="form.type === 'SSH'">
             <div>
@@ -480,27 +480,27 @@
                 </button>
               </div>
             </div>
-            <BaseFormField v-if="form.authMethod === 'password'" :label="t('connections.form.password')">
-              <BaseInput id="conn-password" v-model="form.password" type="password" autocomplete="new-password" />
-            </BaseFormField>
-            <BaseFormField v-else :label="t('connections.form.sshKey')">
+            <UiFormField v-if="form.authMethod === 'password'" :label="t('connections.form.password')">
+              <UiInput id="conn-password" v-model="form.password" type="password" autocomplete="new-password" />
+            </UiFormField>
+            <UiFormField v-else :label="t('connections.form.sshKey')">
               <SshKeySelector v-model="form.sshKeyId" />
               <p v-if="connection && connection.authMethod === 'key'" class="mt-1 text-xs text-text-secondary">
                 {{ t('connections.form.keyUpdateNoteSelected') }}
               </p>
-            </BaseFormField>
+            </UiFormField>
           </template>
-          <BaseFormField
+          <UiFormField
             v-else
             :label="form.type === 'RDP' ? t('connections.form.password') : t('connections.form.vncPassword')"
           >
-            <BaseInput
+            <UiInput
               :id="form.type === 'RDP' ? 'conn-password-rdp' : 'conn-password-vnc'"
               v-model="form.password"
               type="password"
               autocomplete="new-password"
             />
-          </BaseFormField>
+          </UiFormField>
         </section>
 
         <section class="space-y-4 rounded-md border border-border bg-header/30 p-4">
@@ -545,17 +545,17 @@
                 </button>
               </div>
             </div>
-            <BaseFormField
+            <UiFormField
               v-if="form.route === 'proxy'"
               :label="`${t('connections.form.proxy')} (${t('connections.form.optional')})`"
             >
-              <BaseSelect v-model="form.proxyId">
+              <UiNativeSelect v-model="form.proxyId">
                 <option :value="null">{{ t('connections.form.noProxy') }}</option>
                 <option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="proxy.id">
                   {{ proxy.name }} ({{ proxy.type }} - {{ proxy.host }}:{{ proxy.port }})
                 </option>
-              </BaseSelect>
-            </BaseFormField>
+              </UiNativeSelect>
+            </UiFormField>
             <div v-if="form.route === 'jump'" class="space-y-3">
               <label class="mb-1 block text-sm font-medium text-text-secondary">{{
                 t('connections.form.jumpHostsTitle')
@@ -568,11 +568,11 @@
                 <span class="whitespace-nowrap text-sm font-medium text-text-secondary"
                   >{{ t('connections.form.jumpHostLabel') }} {{ index + 1 }}:</span
                 >
-                <BaseSelect v-model="form.jumpChain[index]" class="min-w-0 flex-1">
+                <UiNativeSelect v-model="form.jumpChain[index]" class="min-w-0 flex-1">
                   <option v-for="host in jumpHostsForIndex(index)" :key="host.id" :value="host.id">
                     {{ host.name || host.host }}
                   </option>
-                </BaseSelect>
+                </UiNativeSelect>
                 <button
                   type="button"
                   class="rounded-md p-1.5 text-error hover:opacity-80"
@@ -620,28 +620,28 @@
               /></span>
             </button>
             <div v-if="remoteAppEnabled" data-testid="rdp-remote-app-fields" class="space-y-3">
-              <BaseFormField :label="t('connections.form.remoteAppAlias')"
-                ><BaseInput v-model="form.remoteApp" data-testid="rdp-remote-app-alias"
-              /></BaseFormField>
-              <BaseFormField :label="`${t('connections.form.remoteAppDir')} (${t('connections.form.optional')})`"
-                ><BaseInput v-model="form.remoteAppDirectory" data-testid="rdp-remote-app-dir"
-              /></BaseFormField>
-              <BaseFormField :label="`${t('connections.form.remoteAppArgs')} (${t('connections.form.optional')})`"
-                ><BaseInput v-model="form.remoteAppArguments" data-testid="rdp-remote-app-args"
-              /></BaseFormField>
+              <UiFormField :label="t('connections.form.remoteAppAlias')"
+                ><UiInput v-model="form.remoteApp" data-testid="rdp-remote-app-alias"
+              /></UiFormField>
+              <UiFormField :label="`${t('connections.form.remoteAppDir')} (${t('connections.form.optional')})`"
+                ><UiInput v-model="form.remoteAppDirectory" data-testid="rdp-remote-app-dir"
+              /></UiFormField>
+              <UiFormField :label="`${t('connections.form.remoteAppArgs')} (${t('connections.form.optional')})`"
+                ><UiInput v-model="form.remoteAppArguments" data-testid="rdp-remote-app-args"
+              /></UiFormField>
             </div>
           </div>
 
-          <BaseFormField :label="`${t('connections.form.tags')} (${t('connections.form.optional')})`"
+          <UiFormField :label="`${t('connections.form.tags')} (${t('connections.form.optional')})`"
             ><ConnectionTagPicker v-model="form.tagIds"
-          /></BaseFormField>
-          <BaseFormField :label="t('connections.form.notes')"
-            ><BaseTextarea
+          /></UiFormField>
+          <UiFormField :label="t('connections.form.notes')"
+            ><UiTextarea
               id="conn-notes"
               v-model="form.notes"
-              rows="3"
+              :min-rows="3"
               :placeholder="t('connections.form.notesPlaceholder')"
-          /></BaseFormField>
+          /></UiFormField>
         </section>
       </template>
 
@@ -666,10 +666,10 @@
           </button>
         </div>
         <div v-if="scriptMode" class="mt-4">
-          <BaseTextarea
+          <UiTextarea
             id="conn-script-input"
             v-model="script"
-            rows="10"
+            :min-rows="10"
             class="font-mono"
             :placeholder="t('connections.form.scriptModePlaceholder')"
           />
@@ -689,9 +689,14 @@
 
     <footer class="mt-6 flex shrink-0 flex-wrap items-center gap-3 border-t border-border/50 pt-5">
       <div v-if="!scriptMode && form.type === 'SSH'" class="flex min-w-0 items-center gap-2">
-        <BaseButton data-testid="connection-test-button" type="button" size="sm" :loading="testing" @click="test">{{
-          t('connections.form.testConnection')
-        }}</BaseButton>
+        <UiButton
+          data-testid="connection-test-button"
+          type="button"
+          density="compact"
+          :loading="testing"
+          @click="test"
+          >{{ t('connections.form.testConnection') }}</UiButton
+        >
         <span
           v-if="testResult"
           data-testid="connection-test-result"
@@ -717,26 +722,28 @@
       </div>
       <div v-else class="flex-1" />
       <div class="ml-auto flex space-x-3">
-        <BaseButton
+        <UiButton
           v-if="connection && !scriptMode"
           data-testid="connection-delete-button"
           type="button"
-          variant="danger"
+          appearance="solid"
+          tone="danger"
           :disabled="loading || testing"
           @click="emit('delete')"
-          >{{ t('connections.actions.delete') }}</BaseButton
+          >{{ t('connections.actions.delete') }}</UiButton
         >
-        <BaseButton
+        <UiButton
           data-testid="connection-submit-button"
           type="submit"
-          variant="primary"
+          appearance="solid"
+          tone="primary"
           :loading="loading"
           :disabled="testing"
-          >{{ connection ? t('connections.form.confirmEdit') : t('connections.form.confirm') }}</BaseButton
+          >{{ connection ? t('connections.form.confirmEdit') : t('connections.form.confirm') }}</UiButton
         >
-        <BaseButton type="button" :disabled="loading || testing" @click="emit('cancel')">{{
+        <UiButton type="button" :disabled="loading || testing" @click="emit('cancel')">{{
           t('connections.form.cancel')
-        }}</BaseButton>
+        }}</UiButton>
       </div>
     </footer>
   </form>

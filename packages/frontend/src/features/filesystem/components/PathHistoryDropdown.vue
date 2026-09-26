@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu } from '@/foundation/ui';
+  import { UiContextMenu } from '@/foundation/ui';
   import type { PathHistoryEntryDto } from '../model/catalog';
 
   const props = defineProps<{
@@ -81,7 +81,7 @@
       </li>
     </ul>
 
-    <BaseContextMenu
+    <UiContextMenu
       v-if="context"
       :visible="true"
       :x="context.x"
@@ -98,7 +98,7 @@
         <i class="fas fa-trash-alt" aria-hidden="true"></i>
         <span>{{ t('pathHistory.delete') }}</span>
       </button>
-    </BaseContextMenu>
+    </UiContextMenu>
   </div>
 </template>
 

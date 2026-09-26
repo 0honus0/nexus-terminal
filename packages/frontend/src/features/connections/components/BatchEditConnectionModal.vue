@@ -1,15 +1,7 @@
 <script setup lang="ts">
   import { reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import {
-    BaseButton,
-    BaseCheckbox,
-    BaseFormField,
-    BaseInput,
-    BaseModal,
-    BaseSelect,
-    BaseTextarea,
-  } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiNativeSelect, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { ConnectionTagPicker } from '@/features/tags/public';
   import { useProxies } from '@/features/proxies/public';
@@ -145,7 +137,7 @@
 </script>
 
 <template>
-  <BaseModal
+  <UiModal
     :visible="visible"
     data-testid="batch-edit-modal"
     panel-class="!max-w-xl !max-h-[90vh] !p-6"
@@ -160,63 +152,63 @@
         <section class="rounded-md border border-border bg-background p-4">
           <div class="mb-2 flex items-center justify-between">
             <h4 class="text-base font-semibold">{{ t('connections.table.port') }}</h4>
-            <BaseCheckbox v-model="editPort" />
+            <UiCheckbox v-model="editPort" />
           </div>
-          <BaseFormField v-if="editPort" :label="t('connections.form.port')"
-            ><BaseInput v-model="form.port" type="number" min="1" max="65535"
-          /></BaseFormField>
+          <UiFormField v-if="editPort" :label="t('connections.form.port')"
+            ><UiInput v-model="form.port" type="number" min="1" max="65535"
+          /></UiFormField>
         </section>
 
         <section class="rounded-md border border-border bg-background p-4">
           <div class="mb-2 flex items-center justify-between">
             <h4 class="text-base font-semibold">{{ t('connections.form.sectionAuth') }}</h4>
-            <BaseCheckbox v-model="editAuth" />
+            <UiCheckbox v-model="editAuth" />
           </div>
           <div v-if="editAuth" class="space-y-3">
-            <BaseFormField :label="t('connections.form.username')"
-              ><BaseInput v-model="form.username" :placeholder="t('connections.batchEdit.leaveBlankNoChange')"
-            /></BaseFormField>
-            <BaseFormField :label="t('connections.form.authMethod')">
-              <BaseSelect v-model="form.authChoice"
+            <UiFormField :label="t('connections.form.username')"
+              ><UiInput v-model="form.username" :placeholder="t('connections.batchEdit.leaveBlankNoChange')"
+            /></UiFormField>
+            <UiFormField :label="t('connections.form.authMethod')">
+              <UiNativeSelect v-model="form.authChoice"
                 ><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
                 <option value="password">{{ t('connections.form.authMethodPassword') }}</option>
-                <option value="key">{{ t('connections.form.authMethodKey') }}</option></BaseSelect
+                <option value="key">{{ t('connections.form.authMethodKey') }}</option></UiNativeSelect
               >
-            </BaseFormField>
-            <BaseFormField v-if="form.authChoice === 'password'" :label="t('connections.form.password')"
-              ><BaseInput v-model="form.password" type="password" autocomplete="new-password"
-            /></BaseFormField>
-            <BaseFormField v-else-if="form.authChoice === 'key'" :label="t('connections.form.sshKey')">
-              <BaseSelect v-model="form.sshKeyChoice"
+            </UiFormField>
+            <UiFormField v-if="form.authChoice === 'password'" :label="t('connections.form.password')"
+              ><UiInput v-model="form.password" type="password" autocomplete="new-password"
+            /></UiFormField>
+            <UiFormField v-else-if="form.authChoice === 'key'" :label="t('connections.form.sshKey')">
+              <UiNativeSelect v-model="form.sshKeyChoice"
                 ><option value="">{{ t('connections.form.noSshKey') }}</option>
                 <option v-for="key in sshKeys.keys.value" :key="key.id" :value="String(key.id)">
                   {{ key.name }}
-                </option></BaseSelect
+                </option></UiNativeSelect
               >
-            </BaseFormField>
+            </UiFormField>
           </div>
         </section>
 
         <section class="rounded-md border border-border bg-background p-4">
           <div class="mb-2 flex items-center justify-between">
             <h4 class="text-base font-semibold">{{ t('connections.form.sectionAdvanced') }}</h4>
-            <BaseCheckbox v-model="editAdvanced" data-testid="batch-edit-advanced-toggle" />
+            <UiCheckbox v-model="editAdvanced" data-testid="batch-edit-advanced-toggle" />
           </div>
           <div v-if="editAdvanced" class="space-y-3">
-            <BaseFormField :label="t('connections.form.proxy')">
-              <BaseSelect v-model="form.proxyChoice"
+            <UiFormField :label="t('connections.form.proxy')">
+              <UiNativeSelect v-model="form.proxyChoice"
                 ><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
                 <option value="__none__">{{ t('connections.form.noProxy') }}</option>
                 <option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="String(proxy.id)">
                   {{ proxy.name }} ({{ proxy.type }})
-                </option></BaseSelect
+                </option></UiNativeSelect
               >
-            </BaseFormField>
+            </UiFormField>
             <div>
               <label class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
                 ><span>{{ t('connections.table.tags') }}</span
                 ><span class="flex items-center gap-2 text-xs font-normal"
-                  ><BaseCheckbox v-model="editTags" />{{ t('connections.batchEdit.changeTags') }}</span
+                  ><UiCheckbox v-model="editTags" />{{ t('connections.batchEdit.changeTags') }}</span
                 ></label
               >
               <ConnectionTagPicker v-if="editTags" v-model="form.tagIds" />
@@ -225,12 +217,12 @@
               <label class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
                 ><span>{{ t('connections.form.notes') }}</span
                 ><span class="flex items-center gap-2 text-xs font-normal"
-                  ><BaseCheckbox v-model="editNotes" data-testid="batch-edit-notes-toggle" />{{
+                  ><UiCheckbox v-model="editNotes" data-testid="batch-edit-notes-toggle" />{{
                     t('connections.batchEdit.changeNotes')
                   }}</span
                 ></label
               >
-              <BaseTextarea v-if="editNotes" id="batch-notes" v-model="form.notes" rows="3" />
+              <UiTextarea v-if="editNotes" id="batch-notes" v-model="form.notes" :min-rows="3" />
             </div>
           </div>
         </section>
@@ -243,11 +235,11 @@
         </p>
       </div>
       <footer class="mt-4 flex shrink-0 justify-end space-x-3 border-t border-border/50 pt-5">
-        <BaseButton @click="emit('close')">{{ t('common.cancel') }}</BaseButton>
-        <BaseButton data-testid="batch-edit-save" variant="primary" @click="save"
-          ><template #leading><i class="fas fa-save" aria-hidden="true" /></template>{{ t('common.save') }}</BaseButton
+        <UiButton @click="emit('close')">{{ t('common.cancel') }}</UiButton>
+        <UiButton data-testid="batch-edit-save" appearance="solid" tone="primary" @click="save"
+          ><template #leading><i class="fas fa-save" aria-hidden="true" /></template>{{ t('common.save') }}</UiButton
         >
       </footer>
     </div>
-  </BaseModal>
+  </UiModal>
 </template>

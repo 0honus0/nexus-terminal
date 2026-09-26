@@ -8,7 +8,6 @@
     SelectPortal,
     SelectRoot,
     SelectTrigger,
-    SelectValue,
     SelectViewport,
   } from 'reka-ui';
   import { computed, useAttrs } from 'vue';
@@ -39,6 +38,9 @@
       panelClass?: string;
       name?: string;
       hideIndicator?: boolean;
+      triggerClass?: string;
+      panelTestId?: string;
+      optionTestIdPrefix?: string;
     }>(),
     {
       modelValue: null,
@@ -49,15 +51,37 @@
       align: 'start',
       panelClass: '',
       hideIndicator: true,
+      triggerClass: '',
+      panelTestId: undefined,
+      optionTestIdPrefix: undefined,
     },
   );
 
   const emit = defineEmits<{ 'update:modelValue': [value: UiSelectValue] }>();
 
+  const emptyValueSentinel = computed(() => {
+    let candidate = '__nexus_ui_select_empty__';
+    const used = new Set(props.options.map((option) => option.value));
+    while (used.has(candidate)) candidate += '_';
+    return candidate;
+  });
+  const internalModelValue = computed(() => (props.modelValue === '' ? emptyValueSentinel.value : props.modelValue));
+  const internalOptionValue = (value: UiSelectValue): UiSelectValue =>
+    value === '' ? emptyValueSentinel.value : value;
+
+  const selectedLabel = computed(() => {
+    const selected = props.options.find((option) => option.value === props.modelValue);
+    return selected?.triggerLabel ?? selected?.label ?? props.placeholder;
+  });
+
   // Reka types the model as `AcceptableValue | AcceptableValue[]`; this wrapper
   // narrows it to a single string | number value.
   const onUpdateModelValue = (value: unknown): void => {
     const resolved = Array.isArray(value) ? value[0] : value;
+    if (resolved === emptyValueSentinel.value) {
+      emit('update:modelValue', '');
+      return;
+    }
     if (typeof resolved === 'string' || typeof resolved === 'number') emit('update:modelValue', resolved);
   };
 </script>
@@ -73,7 +97,7 @@
     class="ui-select"
   >
     <SelectRoot
-      :model-value="props.modelValue"
+      :model-value="internalModelValue"
       :disabled="props.disabled"
       :name="props.name"
       @update:model-value="onUpdateModelValue"
@@ -83,9 +107,12 @@
         data-no-highlight=""
         :aria-invalid="props.invalid || undefined"
         class="ui-control ui-focusable ui-select__trigger"
-        :class="{ 'ui-select__trigger--invalid': props.invalid, 'ui-select__trigger--disabled': props.disabled }"
+        :class="[
+          { 'ui-select__trigger--invalid': props.invalid, 'ui-select__trigger--disabled': props.disabled },
+          props.triggerClass,
+        ]"
       >
-        <SelectValue :placeholder="props.placeholder" class="ui-select__value" />
+        <span class="ui-select__value">{{ selectedLabel }}</span>
         <SelectIcon class="ui-select__icon">
           <svg viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path
@@ -102,6 +129,7 @@
         <SelectContent
           data-ui="select-panel"
           data-ui-gen="2"
+          :data-testid="props.panelTestId"
           :data-density="props.density"
           :data-hide-indicator="props.hideIndicator || undefined"
           position="popper"
@@ -116,7 +144,12 @@
             <SelectItem
               v-for="(option, index) in props.options"
               :key="index"
-              :value="option.value"
+              :data-testid="
+                props.optionTestIdPrefix
+                  ? `${props.optionTestIdPrefix}-${option.value === '' ? 'all' : String(option.value)}`
+                  : undefined
+              "
+              :value="internalOptionValue(option.value)"
               :disabled="option.disabled"
               :text-value="option.label"
               class="ui-select__item ui-focusable"

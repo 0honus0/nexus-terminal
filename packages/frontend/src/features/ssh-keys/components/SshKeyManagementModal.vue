@@ -2,7 +2,7 @@
   import { onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseFormField, BaseInput, BaseModal, BaseTextarea } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput, UiModal, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useSshKeys } from '../composables/useSshKeys';
   import type { SshKeySummaryDto } from '../model/sshKey';
@@ -93,7 +93,7 @@
   });
 </script>
 <template>
-  <BaseModal
+  <UiModal
     :visible="visible"
     :z-index="160"
     panel-class="w-[calc(100vw-2rem)] max-w-3xl max-h-[90dvh] sm:w-full"
@@ -104,9 +104,9 @@
       <template v-if="!showForm">
         <h3 class="mb-4 shrink-0 text-center text-xl font-semibold">{{ t('sshKeys.modal.title') }}</h3>
         <div class="mb-4 flex shrink-0 justify-end">
-          <BaseButton data-testid="ssh-key-add" variant="primary" :disabled="loading" @click="add"
+          <UiButton data-testid="ssh-key-add" appearance="solid" tone="primary" :disabled="loading" @click="add"
             ><template #leading><i class="fas fa-plus !text-white" aria-hidden="true" /></template
-            >{{ t('sshKeys.modal.addKey') }}</BaseButton
+            >{{ t('sshKeys.modal.addKey') }}</UiButton
           >
         </div>
         <p
@@ -171,7 +171,7 @@
           </table>
         </div>
         <div class="mt-6 shrink-0 text-right">
-          <BaseButton :disabled="loading" @click="visible = false">{{ t('sshKeys.modal.close') }}</BaseButton>
+          <UiButton :disabled="loading" @click="visible = false">{{ t('sshKeys.modal.close') }}</UiButton>
         </div>
       </template>
 
@@ -180,10 +180,10 @@
           {{ editing ? t('sshKeys.modal.editTitle') : t('sshKeys.modal.addTitle') }}
         </h3>
         <form class="flex-grow space-y-4 overflow-y-auto pr-2" @submit.prevent="submit">
-          <BaseFormField :label="t('sshKeys.modal.keyName')"
-            ><BaseInput id="key-name" v-model="form.name" required
-          /></BaseFormField>
-          <BaseFormField :label="t('sshKeys.modal.privateKey')">
+          <UiFormField :label="t('sshKeys.modal.keyName')"
+            ><UiInput id="key-name" v-model="form.name" required
+          /></UiFormField>
+          <UiFormField :label="t('sshKeys.modal.privateKey')">
             <div class="mb-2 flex flex-wrap items-center gap-2">
               <input
                 ref="keyFileInput"
@@ -192,23 +192,23 @@
                 class="hidden"
                 @change="loadKeyFile"
               />
-              <BaseButton data-testid="ssh-key-upload-button" type="button" :disabled="loading" @click="chooseKeyFile">
+              <UiButton data-testid="ssh-key-upload-button" type="button" :disabled="loading" @click="chooseKeyFile">
                 <template #leading><i class="fas fa-upload" aria-hidden="true" /></template>
                 {{ t('sshKeys.modal.chooseKeyFile') }}
-              </BaseButton>
+              </UiButton>
               <span class="text-xs text-text-secondary">{{ t('sshKeys.modal.keyInputHint') }}</span>
             </div>
-            <BaseTextarea
+            <UiTextarea
               id="key-private"
               v-model="form.privateKey"
-              rows="8"
+              :min-rows="8"
               :required="!editing"
               class="font-mono text-sm"
             />
-          </BaseFormField>
-          <BaseFormField :label="`${t('sshKeys.modal.passphrase')} (${t('connections.form.optional')})`"
-            ><BaseInput id="key-passphrase" v-model="form.passphrase" type="password" autocomplete="new-password"
-          /></BaseFormField>
+          </UiFormField>
+          <UiFormField :label="`${t('sshKeys.modal.passphrase')} (${t('connections.form.optional')})`"
+            ><UiInput id="key-passphrase" v-model="form.passphrase" type="password" autocomplete="new-password"
+          /></UiFormField>
           <p
             v-if="error"
             class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm font-medium text-error"
@@ -217,12 +217,17 @@
           </p>
         </form>
         <div class="mt-4 flex shrink-0 justify-end space-x-3 border-t border-border/50 pt-5">
-          <BaseButton :disabled="loading" @click="reset">{{ t('sshKeys.modal.cancel') }}</BaseButton
-          ><BaseButton data-testid="ssh-key-submit" variant="primary" :disabled="loading" @click="submit">{{
-            editing ? t('sshKeys.modal.saveChanges') : t('sshKeys.modal.addKey')
-          }}</BaseButton>
+          <UiButton :disabled="loading" @click="reset">{{ t('sshKeys.modal.cancel') }}</UiButton
+          ><UiButton
+            data-testid="ssh-key-submit"
+            appearance="solid"
+            tone="primary"
+            :disabled="loading"
+            @click="submit"
+            >{{ editing ? t('sshKeys.modal.saveChanges') : t('sshKeys.modal.addKey') }}</UiButton
+          >
         </div>
       </template>
     </div>
-  </BaseModal>
+  </UiModal>
 </template>

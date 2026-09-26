@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, defineComponent, h, ref, watch, type Component } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseSpinner } from '@/foundation/ui';
+  import { UiSpinner } from '@/foundation/ui';
   import { writeClipboardText } from '@/foundation/browser';
   import { createWheelScaleResolver } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
@@ -16,7 +16,7 @@
 
   const StatusCharts = defineAsyncComponent({
     loader: () => import('./StatusCharts.vue'),
-    loadingComponent: BaseSpinner,
+    loadingComponent: UiSpinner,
     delay: 120,
   });
 

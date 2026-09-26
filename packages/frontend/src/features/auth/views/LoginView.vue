@@ -3,7 +3,7 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput } from '@/foundation/ui';
   import { useAuthSession } from '../public';
 
   type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
@@ -122,41 +122,41 @@
 
         <form class="space-y-5" @submit.prevent="submit">
           <div v-if="!auth.pendingSecondFactor.value" class="space-y-6">
-            <BaseFormField :label="t('auth.login.username')" for-id="username">
-              <BaseInput
+            <UiFormField :label="t('auth.login.username')" for-id="username">
+              <UiInput
                 id="username"
                 v-model="credentials.username"
                 name="username"
                 autocomplete="username"
                 required
-                size="lg"
+                density="comfortable"
                 class="rounded-lg py-3"
                 :disabled="isBusy"
               />
-            </BaseFormField>
+            </UiFormField>
 
-            <BaseFormField :label="t('auth.login.password')" for-id="password">
-              <BaseInput
+            <UiFormField :label="t('auth.login.password')" for-id="password">
+              <UiInput
                 id="password"
                 v-model="credentials.password"
                 name="password"
                 type="password"
                 autocomplete="current-password"
                 required
-                size="lg"
+                density="comfortable"
                 class="rounded-lg py-3"
                 :disabled="isBusy"
               />
-            </BaseFormField>
+            </UiFormField>
 
             <label class="flex cursor-pointer items-center gap-2 text-sm text-text-secondary" for="rememberMe">
-              <BaseCheckbox id="rememberMe" v-model="rememberMe" :disabled="isBusy" />
+              <UiCheckbox id="rememberMe" v-model="rememberMe" :disabled="isBusy" />
               <span>{{ t('auth.login.rememberMe') }}</span>
             </label>
           </div>
 
-          <BaseFormField v-else :label="t('auth.login.twoFactorPrompt')" for-id="twoFactorToken">
-            <BaseInput
+          <UiFormField v-else :label="t('auth.login.twoFactorPrompt')" for-id="twoFactorToken">
+            <UiInput
               id="twoFactorToken"
               v-model="twoFactorToken"
               name="twoFactorToken"
@@ -164,20 +164,21 @@
               autocomplete="one-time-code"
               pattern="[0-9]{6}"
               required
-              size="lg"
+              density="comfortable"
               class="rounded-lg py-3"
               :disabled="isBusy"
             />
-          </BaseFormField>
+          </UiFormField>
 
           <slot v-if="!auth.pendingSecondFactor.value" name="security" />
 
           <p v-if="error" class="text-error text-center text-sm -mt-2 mb-2" role="alert">{{ error }}</p>
 
-          <BaseButton
+          <UiButton
             type="submit"
-            variant="primary"
-            size="lg"
+            appearance="solid"
+            tone="primary"
+            density="comfortable"
             block
             class="rounded-lg px-4 py-3"
             :disabled="captchaBlocked"
@@ -190,12 +191,12 @@
                   ? t('auth.login.verifyButton')
                   : t('auth.login.loginButton')
             }}
-          </BaseButton>
+          </UiButton>
 
-          <BaseButton
+          <UiButton
             v-if="props.passkeyAvailable && !auth.pendingSecondFactor.value"
             type="button"
-            size="lg"
+            density="comfortable"
             block
             class="rounded-lg px-4 py-3"
             :loading="isBusy"
@@ -203,7 +204,7 @@
           >
             <template #leading><i class="fas fa-key" aria-hidden="true"></i></template>
             {{ isBusy ? t('auth.login.loggingIn') : t('auth.login.loginWithPasskey') }}
-          </BaseButton>
+          </UiButton>
         </form>
       </section>
     </div>

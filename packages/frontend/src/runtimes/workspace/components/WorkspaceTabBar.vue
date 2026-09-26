@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, shallowRef } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu } from '@/foundation/ui';
+  import { UiContextMenu } from '@/foundation/ui';
   import { useLongPressGesture } from '@/foundation/interaction';
   import type { WorkspaceRuntimeSession } from '../session';
 
@@ -242,7 +242,7 @@
     </div>
   </div>
 
-  <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="220" @close="context = null">
+  <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="220" @close="context = null">
     <button v-if="contextCanToggleSuspend" class="context-item" @click="runContextAction('toggleSuspend')">
       {{ t(contextMarkedForSuspend ? 'tabs.contextMenu.unmarkForSuspend' : 'tabs.contextMenu.suspendSession') }}
     </button>
@@ -257,7 +257,7 @@
     <button v-if="canCloseLeft" class="context-item" @click="runContextAction('closeLeft')">
       {{ t('tabs.contextMenu.closeLeft') }}
     </button>
-  </BaseContextMenu>
+  </UiContextMenu>
 </template>
 
 <style scoped>

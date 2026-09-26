@@ -2,7 +2,7 @@
   import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { BaseListboxSelect, BaseSpinner } from '@/foundation/ui';
+  import { UiSelect, UiSpinner } from '@/foundation/ui';
   import {
     numberStorageCodec,
     readStoredValue,
@@ -463,7 +463,7 @@
                 {{ resources.localError.value }}
               </div>
               <div v-else class="flex h-4 items-center justify-center text-[11px] text-text-secondary sm:h-4.5">
-                <BaseSpinner v-if="resources.localLoading.value" size="sm" /><span v-else>{{
+                <UiSpinner v-if="resources.localLoading.value" density="compact" /><span v-else>{{
                   t('dashboard.resources.unavailable')
                 }}</span>
               </div>
@@ -523,7 +523,7 @@
                   class="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40"
               /></label>
               <div class="min-w-0 sm:min-w-32">
-                <BaseListboxSelect
+                <UiSelect
                   v-model="tagId"
                   :options="tagFilterOptions"
                   data-testid="dashboard-tag-filter"
@@ -534,7 +534,7 @@
                 />
               </div>
               <div class="min-w-0 sm:min-w-32">
-                <BaseListboxSelect
+                <UiSelect
                   v-model="sort"
                   :options="sortOptions"
                   data-testid="dashboard-sort-by"
@@ -668,7 +668,7 @@
               data-testid="dashboard-remote-resources-loading"
               class="grid h-full min-h-0 place-items-center"
             >
-              <BaseSpinner />
+              <UiSpinner />
             </div>
             <article
               v-for="remote in resources.remote.value"

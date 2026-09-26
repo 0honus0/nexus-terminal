@@ -34,6 +34,18 @@ const runWorkspaceGuard = (sourcePath, sourceText) => {
   }
 };
 
+const runFrontendFileGuard = (sourcePath, sourceText) => {
+  const root = mkdtempSync(path.join(tmpdir(), 'frontend-file-boundaries-'));
+  try {
+    const source = path.join(root, 'packages/frontend/src', sourcePath);
+    mkdirSync(path.dirname(source), { recursive: true });
+    writeFileSync(source, sourceText);
+    return spawnSync(process.execPath, [guard], { cwd: root, encoding: 'utf8' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+};
+
 test('explicit public re-export leaves implementation types private', () => {
   const result = runGuard('model/example.ts', "export type { PublicType } from './model/example';\n");
   assert.equal(result.status, 0, result.stderr);
@@ -68,4 +80,19 @@ test('workspace transport access is confined to adapters', () => {
     "import { httpClient } from '@/client/http';\n",
   );
   assert.equal(adapter.status, 0, adapter.stderr);
+});
+
+test('legacy Base design system symbols cannot return', () => {
+  const legacy = runFrontendFileGuard(
+    'features/example/ExampleView.vue',
+    "<script setup>import { BaseButton } from '@/foundation/ui';</script><template><BaseButton /></template>\n",
+  );
+  assert.equal(legacy.status, 1);
+  assert.match(legacy.stderr, /uses legacy Design System symbol BaseButton/);
+
+  const gen2 = runFrontendFileGuard(
+    'features/example/ExampleView.vue',
+    "<script setup>import { UiButton } from '@/foundation/ui';</script><template><UiButton /></template>\n",
+  );
+  assert.equal(gen2.status, 0, gen2.stderr);
 });

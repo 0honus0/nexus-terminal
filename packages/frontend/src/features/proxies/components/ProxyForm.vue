@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect } from '@/foundation/ui';
   import type { ProxyDto, ProxyCreateRequestDto, ProxyTypeDto } from '../model/proxy';
   const props = defineProps<{ proxy?: ProxyDto | null; loading?: boolean }>();
   const emit = defineEmits<{ submit: [input: Partial<ProxyCreateRequestDto>]; cancel: [] }>();
@@ -83,32 +83,32 @@
       {{ proxy ? t('proxies.form.titleEdit') : t('proxies.form.title') }}
     </h3>
     <form class="space-y-4" @submit.prevent="submit">
-      <BaseFormField :label="t('proxies.form.name')"
-        ><BaseInput id="proxy-name" v-model="form.name" required
-      /></BaseFormField>
-      <BaseFormField :label="t('proxies.form.type')"
-        ><BaseSelect id="proxy-type" v-model="form.type"
+      <UiFormField :label="t('proxies.form.name')"
+        ><UiInput id="proxy-name" v-model="form.name" required
+      /></UiFormField>
+      <UiFormField :label="t('proxies.form.type')"
+        ><UiNativeSelect id="proxy-type" v-model="form.type"
           ><option value="SOCKS5">SOCKS5</option>
-          <option value="HTTP">HTTP</option></BaseSelect
-        ></BaseFormField
+          <option value="HTTP">HTTP</option></UiNativeSelect
+        ></UiFormField
       >
-      <BaseFormField :label="t('proxies.form.host')"
-        ><BaseInput id="proxy-host" v-model="form.host" required
-      /></BaseFormField>
-      <BaseFormField :label="t('proxies.form.port')"
-        ><BaseInput id="proxy-port" v-model="form.port" type="number" min="1" max="65535" required
-      /></BaseFormField>
-      <BaseFormField :label="`${t('proxies.form.username')} (${t('proxies.form.optional')})`"
-        ><BaseInput id="proxy-username" v-model="form.username"
-      /></BaseFormField>
-      <BaseFormField :label="`${t('proxies.form.password')} (${t('proxies.form.optional')})`"
-        ><BaseInput id="proxy-password" v-model="form.password" type="password" autocomplete="new-password" />
+      <UiFormField :label="t('proxies.form.host')"
+        ><UiInput id="proxy-host" v-model="form.host" required
+      /></UiFormField>
+      <UiFormField :label="t('proxies.form.port')"
+        ><UiInput id="proxy-port" v-model="form.port" type="number" min="1" max="65535" required
+      /></UiFormField>
+      <UiFormField :label="`${t('proxies.form.username')} (${t('proxies.form.optional')})`"
+        ><UiInput id="proxy-username" v-model="form.username"
+      /></UiFormField>
+      <UiFormField :label="`${t('proxies.form.password')} (${t('proxies.form.optional')})`"
+        ><UiInput id="proxy-password" v-model="form.password" type="password" autocomplete="new-password" />
         <p v-if="proxy" class="mt-1 text-xs text-text-secondary">{{ t('proxies.form.passwordUpdateNote') }}</p>
         <label v-if="proxy" class="mt-2 flex cursor-pointer select-none items-center gap-2 text-sm text-text-secondary"
-          ><BaseCheckbox v-model="form.clearPassword" data-testid="proxy-clear-password" />{{
+          ><UiCheckbox v-model="form.clearPassword" data-testid="proxy-clear-password" />{{
             t('proxies.form.clearStoredPassword')
           }}</label
-        ></BaseFormField
+        ></UiFormField
       >
       <p
         v-if="error"
@@ -117,12 +117,10 @@
         {{ error }}
       </p>
       <div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
-        <BaseButton data-testid="proxy-submit" type="submit" variant="primary" :loading="loading">{{
+        <UiButton data-testid="proxy-submit" type="submit" appearance="solid" tone="primary" :loading="loading">{{
           t('common.save')
-        }}</BaseButton
-        ><BaseButton type="button" :disabled="loading" @click="emit('cancel')">{{
-          t('proxies.form.cancel')
-        }}</BaseButton>
+        }}</UiButton
+        ><UiButton type="button" :disabled="loading" @click="emit('cancel')">{{ t('proxies.form.cancel') }}</UiButton>
       </div>
     </form>
   </div>

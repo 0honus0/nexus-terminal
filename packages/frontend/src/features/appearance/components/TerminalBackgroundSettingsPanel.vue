@@ -1,16 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import {
-    BaseBadge,
-    BaseButton,
-    BaseCheckbox,
-    BaseFormField,
-    BaseInput,
-    BaseModal,
-    BaseSpinner,
-    BaseTextarea,
-  } from '@/foundation/ui';
+  import { UiBadge, UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiSpinner, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { appearanceApi } from '../api/appearanceApi';
   import type { LocalHtmlThemeDto, RemoteHtmlThemeDto } from '@nexus-terminal/protocol/appearance';
@@ -390,18 +381,23 @@
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <BaseButton data-testid="page-background-upload-button" size="sm" @click="pageBackgroundInput?.click()">
+            <UiButton
+              data-testid="page-background-upload-button"
+              density="compact"
+              @click="pageBackgroundInput?.click()"
+            >
               {{ t('styleCustomizer.uploadPageBg') }}
-            </BaseButton>
-            <BaseButton
+            </UiButton>
+            <UiButton
               v-if="store.settings.pageBackgroundImage"
               data-testid="page-background-remove"
-              size="sm"
-              variant="danger"
+              density="compact"
+              appearance="solid"
+              tone="danger"
               @click="removeBackground('page')"
             >
               {{ t('styleCustomizer.removePageBg') }}
-            </BaseButton>
+            </UiButton>
           </div>
         </div>
         <input
@@ -461,18 +457,19 @@
           </span>
         </div>
         <div class="mb-4 flex flex-wrap items-center gap-2">
-          <BaseButton size="sm" @click="terminalBackgroundInput?.click()">{{
+          <UiButton density="compact" @click="terminalBackgroundInput?.click()">{{
             t('styleCustomizer.uploadTerminalBg')
-          }}</BaseButton>
-          <BaseButton
+          }}</UiButton>
+          <UiButton
             data-testid="terminal-background-remove"
-            size="sm"
-            variant="danger"
+            density="compact"
+            appearance="solid"
+            tone="danger"
             :disabled="!store.settings.terminalBackgroundImage"
             @click="removeBackground('terminal')"
           >
             {{ t('styleCustomizer.removeTerminalBg') }}
-          </BaseButton>
+          </UiButton>
           <input
             ref="terminalBackgroundInput"
             data-testid="terminal-background-file"
@@ -500,11 +497,11 @@
             <span class="min-w-[3em] text-right text-sm text-foreground">{{
               form.terminalBackgroundOverlayOpacity.toFixed(2)
             }}</span>
-            <BaseButton
+            <UiButton
               data-testid="terminal-background-overlay-save"
-              size="sm"
+              density="compact"
               @click="saveBackgroundOverlayOpacity"
-              >{{ t('common.save') }}</BaseButton
+              >{{ t('common.save') }}</UiButton
             >
           </div>
         </div>
@@ -553,15 +550,15 @@
 
         <div v-if="htmlThemeTab === 'local'">
           <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <BaseInput
+            <UiInput
               v-model="localSearch"
               data-testid="html-theme-local-search"
               class="min-w-0 flex-grow"
               :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')"
             />
-            <BaseButton data-testid="html-theme-add" size="sm" class="shrink-0" @click="openNewPreset">{{
+            <UiButton data-testid="html-theme-add" density="compact" class="shrink-0" @click="openNewPreset">{{
               t('styleCustomizer.addNewTheme')
-            }}</BaseButton>
+            }}</UiButton>
           </div>
           <div v-if="loadingLocal" class="p-4 text-center text-text-secondary">{{ t('common.loading') }}</div>
           <ul
@@ -591,21 +588,22 @@
                 </span>
               </div>
               <div class="flex flex-wrap justify-start gap-2 md:justify-end">
-                <BaseButton data-testid="html-theme-apply" size="sm" @click="applyLocalPreset(theme)">{{
+                <UiButton data-testid="html-theme-apply" density="compact" @click="applyLocalPreset(theme)">{{
                   t('styleCustomizer.applyButton')
-                }}</BaseButton>
-                <BaseButton data-testid="html-theme-edit" size="sm" @click="openLocalPreset(theme)">{{
+                }}</UiButton>
+                <UiButton data-testid="html-theme-edit" density="compact" @click="openLocalPreset(theme)">{{
                   t('common.edit')
-                }}</BaseButton>
-                <BaseButton
+                }}</UiButton>
+                <UiButton
                   v-if="theme.type === 'custom'"
                   data-testid="html-theme-delete"
-                  size="sm"
-                  variant="danger"
+                  density="compact"
+                  appearance="solid"
+                  tone="danger"
                   @click="deleteLocalPreset(theme)"
                 >
                   {{ t('common.delete') }}
-                </BaseButton>
+                </UiButton>
               </div>
             </li>
           </ul>
@@ -617,27 +615,27 @@
         </div>
 
         <div v-else>
-          <BaseFormField :label="t('styleCustomizer.remoteHtmlPresetsRepositoryUrl')">
+          <UiFormField :label="t('styleCustomizer.remoteHtmlPresetsRepositoryUrl')">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <BaseInput
+              <UiInput
                 v-model="remoteRepositoryUrl"
                 data-testid="html-theme-remote-repository"
                 class="min-w-0 flex-grow"
                 :placeholder="t('styleCustomizer.remoteRepoUrlPlaceholder')"
               />
-              <BaseButton data-testid="html-theme-remote-save" size="sm" @click="saveRemoteRepository">{{
+              <UiButton data-testid="html-theme-remote-save" density="compact" @click="saveRemoteRepository">{{
                 t('common.save')
-              }}</BaseButton>
-              <BaseButton
+              }}</UiButton>
+              <UiButton
                 data-testid="html-theme-remote-load"
-                size="sm"
+                density="compact"
                 :disabled="!remoteRepositoryUrl || loadingRemote"
                 @click="loadRemoteThemes"
-                >{{ loadingRemote ? t('common.loading') : t('styleCustomizer.loadRemoteThemes') }}</BaseButton
+                >{{ loadingRemote ? t('common.loading') : t('styleCustomizer.loadRemoteThemes') }}</UiButton
               >
             </div>
-          </BaseFormField>
-          <BaseInput
+          </UiFormField>
+          <UiInput
             v-model="remoteSearch"
             data-testid="html-theme-remote-search"
             class="my-4"
@@ -660,12 +658,12 @@
                 theme.name.replace(/\.html$/i, '')
               }}</span>
               <div class="flex justify-start md:justify-end">
-                <BaseButton
+                <UiButton
                   data-testid="html-theme-remote-apply"
-                  size="sm"
+                  density="compact"
                   :disabled="!theme.downloadUrl"
                   @click="applyRemotePreset(theme)"
-                  >{{ t('styleCustomizer.applyButton') }}</BaseButton
+                  >{{ t('styleCustomizer.applyButton') }}</UiButton
                 >
               </div>
             </li>
@@ -683,7 +681,7 @@
         {{ t('styleCustomizer.terminalBgDisabled') }}
       </div>
 
-      <BaseModal
+      <UiModal
         :visible="presetEditorVisible"
         :title="editingLocalName ? t('styleCustomizer.editLocalPreset') : t('styleCustomizer.newLocalPreset')"
         :z-index="1100"
@@ -691,28 +689,28 @@
         @close="presetEditorVisible = false"
       >
         <div class="space-y-4">
-          <BaseFormField :label="t('styleCustomizer.presetName')">
-            <BaseInput
+          <UiFormField :label="t('styleCustomizer.presetName')">
+            <UiInput
               v-model="presetName"
               data-testid="html-theme-preset-name"
               :placeholder="t('styleCustomizer.presetNamePlaceholder')"
             />
-          </BaseFormField>
-          <BaseFormField :label="t('styleCustomizer.presetContent')">
-            <BaseTextarea
+          </UiFormField>
+          <UiFormField :label="t('styleCustomizer.presetContent')">
+            <UiTextarea
               v-model="presetContent"
               data-testid="html-theme-preset-content"
               class="min-h-80 font-mono text-xs"
             />
-          </BaseFormField>
+          </UiFormField>
           <div class="flex justify-end gap-2">
-            <BaseButton @click="presetEditorVisible = false">{{ t('common.cancel') }}</BaseButton>
-            <BaseButton data-testid="html-theme-preset-save" variant="primary" @click="saveLocalPreset">{{
+            <UiButton @click="presetEditorVisible = false">{{ t('common.cancel') }}</UiButton>
+            <UiButton data-testid="html-theme-preset-save" appearance="solid" tone="primary" @click="saveLocalPreset">{{
               t('common.save')
-            }}</BaseButton>
+            }}</UiButton>
           </div>
         </div>
-      </BaseModal>
+      </UiModal>
     </template>
 
     <template v-else>
@@ -723,9 +721,9 @@
             {{ store.settings.pageBackgroundImage || t('styleCustomizer.noBackground') }}
           </p>
           <input type="file" accept="image/*" @change="uploadBackground('page', $event)" />
-          <BaseButton v-if="store.settings.pageBackgroundImage" size="sm" @click="removeBackground('page')">
+          <UiButton v-if="store.settings.pageBackgroundImage" density="compact" @click="removeBackground('page')">
             {{ t('styleCustomizer.removePageBg') }}
-          </BaseButton>
+          </UiButton>
         </div>
 
         <div v-if="showBackground" class="space-y-2 rounded border border-border p-4">
@@ -734,18 +732,22 @@
             {{ store.settings.terminalBackgroundImage || t('styleCustomizer.noBackground') }}
           </p>
           <input type="file" accept="image/*" @change="uploadBackground('terminal', $event)" />
-          <BaseButton v-if="store.settings.terminalBackgroundImage" size="sm" @click="removeBackground('terminal')">
+          <UiButton
+            v-if="store.settings.terminalBackgroundImage"
+            density="compact"
+            @click="removeBackground('terminal')"
+          >
             {{ t('styleCustomizer.removeTerminalBg') }}
-          </BaseButton>
+          </UiButton>
         </div>
       </div>
 
       <div v-if="showBackground" class="space-y-4 rounded border border-border p-4">
         <label class="flex items-center gap-2">
-          <BaseCheckbox v-model="form.terminalBackgroundEnabled" />
+          <UiCheckbox v-model="form.terminalBackgroundEnabled" />
           {{ t('styleCustomizer.terminalBackgroundEnabled') }}
         </label>
-        <BaseFormField :label="t('styleCustomizer.terminalBgOverlayOpacity')">
+        <UiFormField :label="t('styleCustomizer.terminalBgOverlayOpacity')">
           <input
             v-model.number="form.terminalBackgroundOverlayOpacity"
             type="range"
@@ -754,17 +756,17 @@
             step="0.05"
             class="w-full"
           />
-        </BaseFormField>
-        <BaseFormField :label="t('styleCustomizer.presetContent')">
-          <BaseTextarea
+        </UiFormField>
+        <UiFormField :label="t('styleCustomizer.presetContent')">
+          <UiTextarea
             v-model="form.terminalCustomHtml"
             class="min-h-40 font-mono text-xs"
             :placeholder="t('styleCustomizer.customTerminalHTMLPlaceholder')"
           />
-        </BaseFormField>
+        </UiFormField>
         <div class="flex gap-2">
-          <BaseButton variant="primary" @click="saveVisuals">{{ t('common.save') }}</BaseButton>
-          <BaseButton @click="clearCustomHtml">{{ t('common.clear') }}</BaseButton>
+          <UiButton appearance="solid" tone="primary" @click="saveVisuals">{{ t('common.save') }}</UiButton>
+          <UiButton @click="clearCustomHtml">{{ t('common.clear') }}</UiButton>
         </div>
       </div>
 
@@ -772,70 +774,79 @@
         <div class="space-y-3 rounded border border-border p-4">
           <h3 class="font-semibold">{{ t('styleCustomizer.textStrokeSettings') }}</h3>
           <label class="flex items-center gap-2">
-            <BaseCheckbox v-model="form.terminalTextStrokeEnabled" data-testid="terminal-text-stroke-enabled" />
+            <UiCheckbox v-model="form.terminalTextStrokeEnabled" data-testid="terminal-text-stroke-enabled" />
             {{ t('styleCustomizer.enableTextStroke') }}
           </label>
-          <BaseFormField :label="t('styleCustomizer.textStrokeWidth')">
-            <BaseInput v-model="form.terminalTextStrokeWidth" data-testid="terminal-text-stroke-width" type="number" />
-          </BaseFormField>
-          <BaseFormField :label="t('styleCustomizer.textStrokeColor')">
-            <BaseInput v-model="form.terminalTextStrokeColor" data-testid="terminal-text-stroke-color" />
-          </BaseFormField>
+          <UiFormField :label="t('styleCustomizer.textStrokeWidth')">
+            <UiInput v-model="form.terminalTextStrokeWidth" data-testid="terminal-text-stroke-width" type="number" />
+          </UiFormField>
+          <UiFormField :label="t('styleCustomizer.textStrokeColor')">
+            <UiInput v-model="form.terminalTextStrokeColor" data-testid="terminal-text-stroke-color" />
+          </UiFormField>
         </div>
 
         <div class="space-y-3 rounded border border-border p-4">
           <h3 class="font-semibold">{{ t('styleCustomizer.textShadowSettings') }}</h3>
           <label class="flex items-center gap-2">
-            <BaseCheckbox v-model="form.terminalTextShadowEnabled" data-testid="terminal-text-shadow-enabled" />
+            <UiCheckbox v-model="form.terminalTextShadowEnabled" data-testid="terminal-text-shadow-enabled" />
             {{ t('styleCustomizer.enableTextShadow') }}
           </label>
           <div class="grid grid-cols-3 gap-2">
-            <BaseFormField :label="t('styleCustomizer.textShadowOffsetX')">
-              <BaseInput v-model="form.terminalTextShadowOffsetX" data-testid="terminal-text-shadow-x" type="number" />
-            </BaseFormField>
-            <BaseFormField :label="t('styleCustomizer.textShadowOffsetY')">
-              <BaseInput v-model="form.terminalTextShadowOffsetY" data-testid="terminal-text-shadow-y" type="number" />
-            </BaseFormField>
-            <BaseFormField :label="t('styleCustomizer.textShadowBlur')">
-              <BaseInput v-model="form.terminalTextShadowBlur" data-testid="terminal-text-shadow-blur" type="number" />
-            </BaseFormField>
+            <UiFormField :label="t('styleCustomizer.textShadowOffsetX')">
+              <UiInput v-model="form.terminalTextShadowOffsetX" data-testid="terminal-text-shadow-x" type="number" />
+            </UiFormField>
+            <UiFormField :label="t('styleCustomizer.textShadowOffsetY')">
+              <UiInput v-model="form.terminalTextShadowOffsetY" data-testid="terminal-text-shadow-y" type="number" />
+            </UiFormField>
+            <UiFormField :label="t('styleCustomizer.textShadowBlur')">
+              <UiInput v-model="form.terminalTextShadowBlur" data-testid="terminal-text-shadow-blur" type="number" />
+            </UiFormField>
           </div>
-          <BaseFormField :label="t('styleCustomizer.textShadowColor')">
-            <BaseInput v-model="form.terminalTextShadowColor" data-testid="terminal-text-shadow-color" />
-          </BaseFormField>
+          <UiFormField :label="t('styleCustomizer.textShadowColor')">
+            <UiInput v-model="form.terminalTextShadowColor" data-testid="terminal-text-shadow-color" />
+          </UiFormField>
         </div>
       </div>
-      <BaseButton
+      <UiButton
         v-if="showTextEffects"
         data-testid="terminal-text-effects-save"
-        variant="primary"
+        appearance="solid"
+        tone="primary"
         @click="saveVisuals"
-        >{{ t('common.save') }}</BaseButton
+        >{{ t('common.save') }}</UiButton
       >
 
       <div v-if="showBackground" class="grid gap-6 xl:grid-cols-2">
         <div class="space-y-3 rounded border border-border p-4">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="font-semibold">{{ t('styleCustomizer.localThemes') }}</h3>
-            <BaseButton size="sm" variant="primary" @click="openNewPreset">{{
+            <UiButton density="compact" appearance="solid" tone="primary" @click="openNewPreset">{{
               t('styleCustomizer.newLocalPreset')
-            }}</BaseButton>
+            }}</UiButton>
           </div>
-          <BaseInput v-model="localSearch" :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')" />
-          <BaseSpinner v-if="loadingLocal" />
+          <UiInput v-model="localSearch" :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')" />
+          <UiSpinner v-if="loadingLocal" />
           <ul v-else class="divide-y divide-border">
             <li v-for="theme in filteredLocalThemes" :key="theme.name" class="flex items-center gap-2 py-2">
               <span class="min-w-0 flex-1 truncate">{{ theme.name.replace(/\.html$/i, '') }}</span>
-              <BaseBadge>{{
+              <UiBadge>{{
                 t(theme.type === 'preset' ? 'styleCustomizer.presetTag' : 'styleCustomizer.customTag')
-              }}</BaseBadge>
-              <BaseButton size="sm" @click="applyLocalPreset(theme)">{{ t('styleCustomizer.applyButton') }}</BaseButton>
-              <BaseButton size="sm" @click="openLocalPreset(theme)">{{
+              }}</UiBadge>
+              <UiButton density="compact" @click="applyLocalPreset(theme)">{{
+                t('styleCustomizer.applyButton')
+              }}</UiButton>
+              <UiButton density="compact" @click="openLocalPreset(theme)">{{
                 theme.type === 'preset' ? t('styleCustomizer.editAsCopy') : t('common.edit')
-              }}</BaseButton>
-              <BaseButton v-if="theme.type === 'custom'" size="sm" variant="danger" @click="deleteLocalPreset(theme)">
+              }}</UiButton>
+              <UiButton
+                v-if="theme.type === 'custom'"
+                density="compact"
+                appearance="solid"
+                tone="danger"
+                @click="deleteLocalPreset(theme)"
+              >
                 {{ t('common.delete') }}
-              </BaseButton>
+              </UiButton>
             </li>
             <li v-if="!filteredLocalThemes.length" class="py-4 text-sm text-text-secondary">
               {{
@@ -849,23 +860,23 @@
 
         <div class="space-y-3 rounded border border-border p-4">
           <h3 class="font-semibold">{{ t('styleCustomizer.remoteThemes') }}</h3>
-          <BaseFormField :label="t('styleCustomizer.remoteHtmlPresetsRepositoryUrl')">
-            <BaseInput v-model="remoteRepositoryUrl" :placeholder="t('styleCustomizer.remoteRepoUrlPlaceholder')" />
-          </BaseFormField>
+          <UiFormField :label="t('styleCustomizer.remoteHtmlPresetsRepositoryUrl')">
+            <UiInput v-model="remoteRepositoryUrl" :placeholder="t('styleCustomizer.remoteRepoUrlPlaceholder')" />
+          </UiFormField>
           <div class="flex gap-2">
-            <BaseButton size="sm" variant="primary" @click="saveRemoteRepository">{{
+            <UiButton density="compact" appearance="solid" tone="primary" @click="saveRemoteRepository">{{
               t('styleCustomizer.saveUrl')
-            }}</BaseButton>
-            <BaseButton size="sm" @click="loadRemoteThemes">{{ t('styleCustomizer.loadRemoteThemes') }}</BaseButton>
+            }}</UiButton>
+            <UiButton density="compact" @click="loadRemoteThemes">{{ t('styleCustomizer.loadRemoteThemes') }}</UiButton>
           </div>
-          <BaseInput v-model="remoteSearch" :placeholder="t('styleCustomizer.searchRemoteThemesPlaceholder')" />
-          <BaseSpinner v-if="loadingRemote" />
+          <UiInput v-model="remoteSearch" :placeholder="t('styleCustomizer.searchRemoteThemesPlaceholder')" />
+          <UiSpinner v-if="loadingRemote" />
           <ul v-else class="divide-y divide-border">
             <li v-for="theme in filteredRemoteThemes" :key="theme.name" class="flex items-center gap-2 py-2">
               <span class="min-w-0 flex-1 truncate">{{ theme.name.replace(/\.html$/i, '') }}</span>
-              <BaseButton size="sm" :disabled="!theme.downloadUrl" @click="applyRemotePreset(theme)">
+              <UiButton density="compact" :disabled="!theme.downloadUrl" @click="applyRemotePreset(theme)">
                 {{ t('styleCustomizer.applyButton') }}
-              </BaseButton>
+              </UiButton>
             </li>
             <li v-if="!filteredRemoteThemes.length" class="py-4 text-sm text-text-secondary">
               {{
@@ -878,7 +889,7 @@
         </div>
       </div>
 
-      <BaseModal
+      <UiModal
         v-if="showBackground"
         :visible="presetEditorVisible"
         :title="editingLocalName ? t('styleCustomizer.editLocalPreset') : t('styleCustomizer.newLocalPreset')"
@@ -886,28 +897,28 @@
         @close="presetEditorVisible = false"
       >
         <div class="space-y-4">
-          <BaseFormField :label="t('styleCustomizer.presetName')">
-            <BaseInput
+          <UiFormField :label="t('styleCustomizer.presetName')">
+            <UiInput
               v-model="presetName"
               data-testid="html-theme-preset-name"
               :placeholder="t('styleCustomizer.presetNamePlaceholder')"
             />
-          </BaseFormField>
-          <BaseFormField :label="t('styleCustomizer.presetContent')">
-            <BaseTextarea
+          </UiFormField>
+          <UiFormField :label="t('styleCustomizer.presetContent')">
+            <UiTextarea
               v-model="presetContent"
               data-testid="html-theme-preset-content"
               class="min-h-80 font-mono text-xs"
             />
-          </BaseFormField>
+          </UiFormField>
           <div class="flex justify-end gap-2">
-            <BaseButton @click="presetEditorVisible = false">{{ t('common.cancel') }}</BaseButton>
-            <BaseButton data-testid="html-theme-preset-save" variant="primary" @click="saveLocalPreset">{{
+            <UiButton @click="presetEditorVisible = false">{{ t('common.cancel') }}</UiButton>
+            <UiButton data-testid="html-theme-preset-save" appearance="solid" tone="primary" @click="saveLocalPreset">{{
               t('common.save')
-            }}</BaseButton>
+            }}</UiButton>
           </div>
         </div>
-      </BaseModal>
+      </UiModal>
     </template>
   </section>
 </template>

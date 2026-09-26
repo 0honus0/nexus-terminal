@@ -3,7 +3,7 @@
   import { startRegistration } from '@simplewebauthn/browser';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseInput } from '@/foundation/ui';
+  import { UiButton, UiInput } from '@/foundation/ui';
   import { securityApi } from '../api/securityApi';
   import type { PasskeySummaryDto } from '../model/security';
 
@@ -86,9 +86,9 @@
   <section>
     <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.passkey.title') }}</h3>
     <p class="mb-4 text-sm text-text-secondary">{{ t('settings.passkey.description') }}</p>
-    <BaseButton variant="primary" :loading="loading" @click="register">{{
+    <UiButton appearance="solid" tone="primary" :loading="loading" @click="register">{{
       t('settings.passkey.registerNewButton')
-    }}</BaseButton>
+    }}</UiButton>
     <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="mt-3 text-sm" role="status">
       {{ message }}
     </p>
@@ -136,19 +136,25 @@
                 </button>
               </template>
               <div v-else class="flex flex-grow items-center">
-                <BaseInput
+                <UiInput
                   v-model="names[key.credentialId]"
                   class="!w-48"
                   :placeholder="t('settings.passkey.namePlaceholder')"
                   @keyup.enter="saveName(key)"
                   @keyup.esc="editing = null"
                 />
-                <BaseButton class="ml-2" size="sm" variant="primary" :disabled="loading" @click="saveName(key)">{{
-                  t('common.save')
-                }}</BaseButton>
-                <BaseButton class="ml-1" size="sm" :disabled="loading" @click="editing = null">{{
+                <UiButton
+                  class="ml-2"
+                  density="compact"
+                  appearance="solid"
+                  tone="primary"
+                  :disabled="loading"
+                  @click="saveName(key)"
+                  >{{ t('common.save') }}</UiButton
+                >
+                <UiButton class="ml-1" density="compact" :disabled="loading" @click="editing = null">{{
                   t('common.cancel')
-                }}</BaseButton>
+                }}</UiButton>
               </div>
             </div>
             <div class="mt-1 space-x-2 text-xs text-text-secondary">
@@ -159,13 +165,14 @@
               <span v-if="key.transports?.length" class="capitalize">({{ key.transports.join(', ') }})</span>
             </div>
           </div>
-          <BaseButton
-            size="sm"
-            variant="danger"
+          <UiButton
+            density="compact"
+            appearance="solid"
+            tone="danger"
             class="self-start sm:self-center"
             :disabled="loading || editing === key.credentialId"
             @click="remove(key)"
-            >{{ t('common.delete') }}</BaseButton
+            >{{ t('common.delete') }}</UiButton
           >
         </li>
       </ul>

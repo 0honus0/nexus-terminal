@@ -2,7 +2,7 @@
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { RecycleScroller } from 'vue-virtual-scroller';
-  import { BaseListboxSelect, type BaseListboxOption } from '@/foundation/ui';
+  import { UiSelect, type UiSelectOption } from '@/foundation/ui';
   import type {
     AgentAppSummaryDto,
     AgentArtifactRefDto,
@@ -18,20 +18,20 @@
   const props = defineProps<{ apps: AgentAppSummaryDto[] }>();
   const { t, locale } = useI18n();
 
-  const appOptions = computed<BaseListboxOption[]>(() => [
+  const appOptions = computed<UiSelectOption[]>(() => [
     { value: '', label: t('agent.files.allApps'), triggerLabel: t('agent.files.filterLabels.app') },
     ...props.apps.map((app) => ({ value: app.id, label: app.displayName })),
   ]);
 
   const appNames = computed(() => new Map(props.apps.map((app) => [app.id, app.displayName])));
 
-  const retentionOptions = computed<BaseListboxOption[]>(() => [
+  const retentionOptions = computed<UiSelectOption[]>(() => [
     { value: 'all', label: t('agent.files.allRetention'), triggerLabel: t('agent.files.filterLabels.status') },
     { value: 'retained', label: t('agent.files.retained') },
     { value: 'unretained', label: t('agent.files.unretained') },
   ]);
 
-  const fileKindOptions = computed<BaseListboxOption[]>(() => [
+  const fileKindOptions = computed<UiSelectOption[]>(() => [
     { value: 'all', label: t('agent.files.kind.all'), triggerLabel: t('agent.files.filterLabels.type') },
     { value: 'image', label: t('agent.files.kind.image') },
     { value: 'document', label: t('agent.files.kind.document') },
@@ -549,11 +549,10 @@
 
           <div class="flex shrink-0 items-center gap-0.5 rounded-lg bg-background/35 p-0.5">
             <div class="w-[4.75rem]">
-              <BaseListboxSelect
+              <UiSelect
                 v-model="kind"
                 :options="fileKindOptions"
-                size="sm"
-                :highlight="false"
+                density="compact"
                 :trigger-class="
                   [
                     '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',
@@ -566,11 +565,10 @@
               />
             </div>
             <div class="w-[4.75rem]">
-              <BaseListboxSelect
+              <UiSelect
                 v-model="appId"
                 :options="appOptions"
-                size="sm"
-                :highlight="false"
+                density="compact"
                 :trigger-class="
                   [
                     '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',
@@ -583,11 +581,10 @@
               />
             </div>
             <div class="w-[4.75rem]">
-              <BaseListboxSelect
+              <UiSelect
                 v-model="retained"
                 :options="retentionOptions"
-                size="sm"
-                :highlight="false"
+                density="compact"
                 :trigger-class="
                   [
                     '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',

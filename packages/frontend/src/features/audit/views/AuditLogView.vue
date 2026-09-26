@@ -2,7 +2,7 @@
   import { computed, onMounted, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { BaseSpinner } from '@/foundation/ui';
+  import { UiSpinner } from '@/foundation/ui';
   import { auditActionTypes, type AuditLogQueryDto } from '../model/audit';
   import { useAuditStore } from '../store/audit.store';
 
@@ -115,7 +115,7 @@
         {{ error === 'audit-load-error' ? t('auditLog.loadFailed') : error }}
       </div>
       <div v-else-if="loading && logs.length === 0" class="p-4 text-center text-text-secondary italic">
-        <BaseSpinner class="mx-auto" />
+        <UiSpinner class="mx-auto" />
       </div>
       <div
         v-else-if="!loading && logs.length === 0"

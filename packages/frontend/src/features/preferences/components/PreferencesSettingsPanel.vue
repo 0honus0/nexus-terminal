@@ -2,7 +2,7 @@
   import { nextTick, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { structurallyEqual } from '@/foundation/data';
-  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { usePreferences } from '../composables/usePreferences';
   import { LOG_LEVELS, commonTimezones, preferenceLanguageNames, type PreferencesDto } from '../model/preferences';
@@ -148,17 +148,17 @@
       </p>
       <form class="space-y-4" @submit.prevent="savePatch('language', { language: form.language })">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.language.title') }}</h3>
-        <BaseFormField :label="t('settings.language.selectLabel')" for-id="languageSelect">
-          <BaseSelect id="languageSelect" v-model="form.language" :disabled="savingSection !== null">
+        <UiFormField :label="t('settings.language.selectLabel')" for-id="languageSelect">
+          <UiNativeSelect id="languageSelect" v-model="form.language" :disabled="savingSection !== null">
             <option v-for="locale in props.locales" :key="locale" :value="locale">
               {{ preferenceLanguageNames[locale] || locale }}
             </option>
-          </BaseSelect>
-        </BaseFormField>
+          </UiNativeSelect>
+        </UiFormField>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <BaseButton type="submit" variant="primary" :loading="savingSection === 'language'">
+          <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'language'">
             {{ t('settings.language.saveButton') }}
-          </BaseButton>
+          </UiButton>
           <p
             v-if="sectionMessages.language?.text"
             class="text-sm"
@@ -173,16 +173,16 @@
 
       <form class="space-y-4" @submit.prevent="savePatch('timezone', { timezone: form.timezone })">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.timezone.title') }}</h3>
-        <BaseFormField :label="t('settings.timezone.selectLabel')" for-id="timezoneSelect">
-          <BaseSelect id="timezoneSelect" v-model="form.timezone" :disabled="savingSection !== null">
+        <UiFormField :label="t('settings.timezone.selectLabel')" for-id="timezoneSelect">
+          <UiNativeSelect id="timezoneSelect" v-model="form.timezone" :disabled="savingSection !== null">
             <option v-for="timezone in commonTimezones" :key="timezone" :value="timezone">{{ timezone }}</option>
-          </BaseSelect>
+          </UiNativeSelect>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.timezone.description') }}</p>
-        </BaseFormField>
+        </UiFormField>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <BaseButton type="submit" variant="primary" :loading="savingSection === 'timezone'">{{
+          <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'timezone'">{{
             t('common.save')
-          }}</BaseButton>
+          }}</UiButton>
           <p
             v-if="sectionMessages.timezone?.text"
             class="text-sm"
@@ -204,22 +204,30 @@
       >
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.logging.title') }}</h3>
         <div class="grid gap-4 md:grid-cols-2">
-          <BaseFormField :label="t('settings.logging.frontendLabel')" for-id="frontendLogLevelSelect">
-            <BaseSelect id="frontendLogLevelSelect" v-model="form.frontendLogLevel" :disabled="savingSection !== null">
+          <UiFormField :label="t('settings.logging.frontendLabel')" for-id="frontendLogLevelSelect">
+            <UiNativeSelect
+              id="frontendLogLevelSelect"
+              v-model="form.frontendLogLevel"
+              :disabled="savingSection !== null"
+            >
               <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level.toUpperCase() }}</option>
-            </BaseSelect>
-          </BaseFormField>
-          <BaseFormField :label="t('settings.logging.backendLabel')" for-id="backendLogLevelSelect">
-            <BaseSelect id="backendLogLevelSelect" v-model="form.backendLogLevel" :disabled="savingSection !== null">
+            </UiNativeSelect>
+          </UiFormField>
+          <UiFormField :label="t('settings.logging.backendLabel')" for-id="backendLogLevelSelect">
+            <UiNativeSelect
+              id="backendLogLevelSelect"
+              v-model="form.backendLogLevel"
+              :disabled="savingSection !== null"
+            >
               <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level.toUpperCase() }}</option>
-            </BaseSelect>
-          </BaseFormField>
+            </UiNativeSelect>
+          </UiFormField>
         </div>
         <p class="text-xs text-text-secondary">{{ t('settings.logging.description') }}</p>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <BaseButton type="submit" variant="primary" :loading="savingSection === 'logging'">{{
+          <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'logging'">{{
             t('common.save')
-          }}</BaseButton>
+          }}</UiButton>
           <p
             v-if="sectionMessages.logging?.text"
             class="text-sm"
@@ -245,7 +253,7 @@
             for="showPopupFileEditor"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="showPopupFileEditor"
               v-model="form.showPopupFileEditor"
               :disabled="savingSection !== null"
@@ -255,9 +263,9 @@
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.popupEditor.description') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'popup-editor'">{{
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'popup-editor'">{{
               t('common.save')
-            }}</BaseButton>
+            }}</UiButton>
             <p
               v-if="sectionMessages['popup-editor']?.text"
               class="text-sm"
@@ -281,7 +289,7 @@
             for="showPopupFileManager"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="showPopupFileManager"
               v-model="form.showPopupFileManager"
               :disabled="savingSection !== null"
@@ -290,9 +298,13 @@
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.popupFileManager.description') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'popup-file-manager'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'popup-file-manager'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['popup-file-manager']?.text"
               class="text-sm"
@@ -316,7 +328,7 @@
             for="shareFileEditorTabs"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="shareFileEditorTabs"
               v-model="form.shareFileEditorTabs"
               :disabled="savingSection !== null"
@@ -325,9 +337,13 @@
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.shareEditorTabs.description') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'share-editor-tabs'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'share-editor-tabs'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['share-editor-tabs']?.text"
               class="text-sm"
@@ -355,7 +371,7 @@
             for="workspaceSidebarPersistent"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="workspaceSidebarPersistent"
               v-model="form.workspaceSidebarPersistent"
               :disabled="savingSection !== null"
@@ -364,9 +380,13 @@
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.workspace.sidebarPersistentDescription') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'sidebar-persistent'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'sidebar-persistent'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['sidebar-persistent']?.text"
               class="text-sm"
@@ -386,8 +406,8 @@
           class="space-y-4"
           @submit.prevent="savePatch('command-input-sync', { commandInputSyncTarget: form.commandInputSyncTarget })"
         >
-          <BaseFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
-            <BaseSelect
+          <UiFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
+            <UiNativeSelect
               id="commandInputSyncTarget"
               v-model="form.commandInputSyncTarget"
               :disabled="savingSection !== null"
@@ -395,13 +415,17 @@
               <option value="none">{{ t('settings.commandInputSync.targetNone') }}</option>
               <option value="quickCommands">{{ t('settings.commandInputSync.targetQuickCommands') }}</option>
               <option value="commandHistory">{{ t('settings.commandInputSync.targetCommandHistory') }}</option>
-            </BaseSelect>
+            </UiNativeSelect>
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.commandInputSync.description') }}</p>
-          </BaseFormField>
+          </UiFormField>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'command-input-sync'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'command-input-sync'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['command-input-sync']?.text"
               class="text-sm"
@@ -427,18 +451,14 @@
             for="showConnectionTags"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
-              id="showConnectionTags"
-              v-model="form.showConnectionTags"
-              :disabled="savingSection !== null"
-            />
+            <UiCheckbox id="showConnectionTags" v-model="form.showConnectionTags" :disabled="savingSection !== null" />
             {{ t('settings.workspace.showConnectionTagsLabel') }}
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.workspace.showConnectionTagsDescription') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'connection-tags'">{{
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'connection-tags'">{{
               t('common.save')
-            }}</BaseButton>
+            }}</UiButton>
             <p
               v-if="sectionMessages['connection-tags']?.text"
               class="text-sm"
@@ -464,7 +484,7 @@
             for="showQuickCommandTags"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="showQuickCommandTags"
               v-model="form.showQuickCommandTags"
               :disabled="savingSection !== null"
@@ -473,9 +493,13 @@
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.workspace.showQuickCommandTagsDescription') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'quick-command-tags'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'quick-command-tags'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['quick-command-tags']?.text"
               class="text-sm"
@@ -503,7 +527,7 @@
             for="quickCommandsCollapsibleSearch"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="quickCommandsCollapsibleSearch"
               v-model="form.quickCommandsCollapsibleSearch"
               data-testid="quick-command-collapsible-search-toggle"
@@ -515,12 +539,13 @@
             {{ t('settings.workspace.quickCommandsCollapsibleSearchDescription') }}
           </p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton
+            <UiButton
               type="submit"
-              variant="primary"
+              appearance="solid"
+              tone="primary"
               data-testid="quick-command-collapsible-search-save"
               :loading="savingSection === 'quick-command-search'"
-              >{{ t('common.save') }}</BaseButton
+              >{{ t('common.save') }}</UiButton
             >
             <p
               v-if="sectionMessages['quick-command-search']?.text"
@@ -549,7 +574,7 @@
             for="quickCommandsCompactMode"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="quickCommandsCompactMode"
               v-model="form.quickCommandsCompactMode"
               :disabled="savingSection !== null"
@@ -558,9 +583,13 @@
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.workspace.quickCommandsCompactModeDescription') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'quick-command-compact'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'quick-command-compact'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['quick-command-compact']?.text"
               class="text-sm"
@@ -580,8 +609,8 @@
           class="space-y-4"
           @submit.prevent="savePatch('terminal-scrollback', { terminalScrollbackLimit: form.terminalScrollbackLimit })"
         >
-          <BaseFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
-            <BaseInput
+          <UiFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
+            <UiInput
               id="terminalScrollbackLimit"
               v-model="form.terminalScrollbackLimit"
               type="number"
@@ -591,11 +620,15 @@
               :disabled="savingSection !== null"
             />
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint') }}</p>
-          </BaseFormField>
+          </UiFormField>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'terminal-scrollback'">{{
-              t('settings.terminalScrollback.saveButton')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'terminal-scrollback'"
+              >{{ t('settings.terminalScrollback.saveButton') }}</UiButton
+            >
             <p
               v-if="sectionMessages['terminal-scrollback']?.text"
               class="text-sm"
@@ -623,11 +656,11 @@
           "
         >
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <BaseFormField
+            <UiFormField
               :label="t('settings.workspace.spreadsheetPreviewLimits.rowsLabel')"
               for-id="spreadsheetPreviewRowsPerPage"
             >
-              <BaseInput
+              <UiInput
                 id="spreadsheetPreviewRowsPerPage"
                 v-model="form.spreadsheetPreviewRowsPerPage"
                 data-testid="spreadsheet-preview-rows-per-page"
@@ -637,12 +670,12 @@
                 step="1"
                 :disabled="savingSection !== null"
               />
-            </BaseFormField>
-            <BaseFormField
+            </UiFormField>
+            <UiFormField
               :label="t('settings.workspace.spreadsheetPreviewLimits.columnsLabel')"
               for-id="spreadsheetPreviewMaxColumns"
             >
-              <BaseInput
+              <UiInput
                 id="spreadsheetPreviewMaxColumns"
                 v-model="form.spreadsheetPreviewMaxColumns"
                 data-testid="spreadsheet-preview-column-limit"
@@ -652,16 +685,17 @@
                 step="1"
                 :disabled="savingSection !== null"
               />
-            </BaseFormField>
+            </UiFormField>
           </div>
           <p class="text-xs text-text-secondary">{{ t('settings.workspace.spreadsheetPreviewLimits.hint') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton
+            <UiButton
               type="submit"
-              variant="primary"
+              appearance="solid"
+              tone="primary"
               data-testid="spreadsheet-preview-pagination-save"
               :loading="savingSection === 'spreadsheet-preview'"
-              >{{ t('common.save') }}</BaseButton
+              >{{ t('common.save') }}</UiButton
             >
             <p
               v-if="sectionMessages['spreadsheet-preview']?.text"
@@ -692,7 +726,7 @@
             for="fileManagerShowDeleteConfirmation"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="fileManagerShowDeleteConfirmation"
               v-model="form.fileManagerShowDeleteConfirmation"
               :disabled="savingSection !== null"
@@ -700,9 +734,13 @@
             {{ t('settings.workspace.fileManagerShowDeleteConfirmationLabel') }}
           </label>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'file-manager-delete'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'file-manager-delete'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['file-manager-delete']?.text"
               class="text-sm"
@@ -730,7 +768,7 @@
             for="terminalRightClickCopyPaste"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="terminalRightClickCopyPaste"
               v-model="form.terminalRightClickCopyPaste"
               :disabled="savingSection !== null"
@@ -741,9 +779,13 @@
             {{ t('settings.workspace.terminalRightClickCopyPasteDescription') }}
           </p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'terminal-right-click'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'terminal-right-click'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['terminal-right-click']?.text"
               class="text-sm"
@@ -775,7 +817,7 @@
               for="dashboardShowLocalResources"
               class="flex cursor-pointer items-start gap-2 text-sm text-foreground select-none"
             >
-              <BaseCheckbox
+              <UiCheckbox
                 id="dashboardShowLocalResources"
                 v-model="form.dashboardShowLocalResources"
                 class="mt-0.5"
@@ -791,7 +833,7 @@
               for="dashboardShowRemoteResources"
               class="flex cursor-pointer items-start gap-2 text-sm text-foreground select-none"
             >
-              <BaseCheckbox
+              <UiCheckbox
                 id="dashboardShowRemoteResources"
                 v-model="form.dashboardShowRemoteResources"
                 class="mt-0.5"
@@ -803,11 +845,11 @@
                 <span class="block text-xs text-text-secondary">{{ t('settings.dashboardResources.remoteHint') }}</span>
               </span>
             </label>
-            <BaseFormField
+            <UiFormField
               :label="t('settings.dashboardResources.refreshIntervalLabel')"
               for-id="remoteHostRefreshIntervalSeconds"
             >
-              <BaseInput
+              <UiInput
                 id="remoteHostRefreshIntervalSeconds"
                 v-model="form.remoteHostRefreshIntervalSeconds"
                 type="number"
@@ -817,12 +859,16 @@
                 :disabled="savingSection !== null"
               />
               <p class="mt-1 text-xs text-text-secondary">{{ t('settings.dashboardResources.refreshIntervalHint') }}</p>
-            </BaseFormField>
+            </UiFormField>
           </div>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'dashboard-resources'">{{
-              t('common.save')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :loading="savingSection === 'dashboard-resources'"
+              >{{ t('common.save') }}</UiButton
+            >
             <p
               v-if="sectionMessages['dashboard-resources']?.text"
               class="text-sm"
@@ -846,7 +892,7 @@
             for="showStatusMonitorIpAddress"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="showStatusMonitorIpAddress"
               v-model="form.showStatusMonitorIpAddress"
               :disabled="savingSection !== null"
@@ -854,9 +900,9 @@
             {{ t('settings.statusMonitorShowIp.enableLabel') }}
           </label>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'status-ip'">{{
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'status-ip'">{{
               t('common.save')
-            }}</BaseButton>
+            }}</UiButton>
             <p
               v-if="sectionMessages['status-ip']?.text"
               class="text-sm"
@@ -878,11 +924,8 @@
             savePatch('status-monitor', { statusMonitorIntervalSeconds: form.statusMonitorIntervalSeconds })
           "
         >
-          <BaseFormField
-            :label="t('settings.statusMonitor.refreshIntervalLabel')"
-            for-id="statusMonitorIntervalSeconds"
-          >
-            <BaseInput
+          <UiFormField :label="t('settings.statusMonitor.refreshIntervalLabel')" for-id="statusMonitorIntervalSeconds">
+            <UiInput
               id="statusMonitorIntervalSeconds"
               v-model="form.statusMonitorIntervalSeconds"
               type="number"
@@ -891,11 +934,11 @@
               :disabled="savingSection !== null"
             />
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.statusMonitor.refreshIntervalHint') }}</p>
-          </BaseFormField>
+          </UiFormField>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'status-monitor'">{{
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'status-monitor'">{{
               t('settings.statusMonitor.saveButton')
-            }}</BaseButton>
+            }}</UiButton>
             <p
               v-if="sectionMessages['status-monitor']?.text"
               class="text-sm"
@@ -920,8 +963,8 @@
             })
           "
         >
-          <BaseFormField :label="t('settings.docker.refreshIntervalLabel')" for-id="dockerStatusIntervalSeconds">
-            <BaseInput
+          <UiFormField :label="t('settings.docker.refreshIntervalLabel')" for-id="dockerStatusIntervalSeconds">
+            <UiInput
               id="dockerStatusIntervalSeconds"
               v-model="form.dockerStatusIntervalSeconds"
               type="number"
@@ -930,12 +973,12 @@
               :disabled="savingSection !== null"
             />
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.docker.refreshIntervalHint') }}</p>
-          </BaseFormField>
+          </UiFormField>
           <label
             for="dockerDefaultExpand"
             class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none"
           >
-            <BaseCheckbox
+            <UiCheckbox
               id="dockerDefaultExpand"
               v-model="form.dockerDefaultExpand"
               :disabled="savingSection !== null"
@@ -943,9 +986,9 @@
             {{ t('settings.docker.defaultExpandLabel') }}
           </label>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'docker'">{{
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'docker'">{{
               t('settings.docker.saveButton')
-            }}</BaseButton>
+            }}</UiButton>
             <p
               v-if="sectionMessages.docker?.text"
               class="text-sm"
@@ -963,14 +1006,14 @@
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.workspace.layoutLockTitle') }}</h3>
         <form class="space-y-4" @submit.prevent="savePatch('layout-lock', { layoutLocked: form.layoutLocked })">
           <label for="layoutLocked" class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none">
-            <BaseCheckbox id="layoutLocked" v-model="form.layoutLocked" :disabled="savingSection !== null" />
+            <UiCheckbox id="layoutLocked" v-model="form.layoutLocked" :disabled="savingSection !== null" />
             {{ t('settings.workspace.layoutLockLabel') }}
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.workspace.layoutLockDescription') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'layout-lock'">{{
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'layout-lock'">{{
               t('common.save')
-            }}</BaseButton>
+            }}</UiButton>
             <p
               v-if="sectionMessages['layout-lock']?.text"
               class="text-sm"
@@ -988,14 +1031,14 @@
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.workspace.navBarVisibleTitle') }}</h3>
         <form class="space-y-4" @submit.prevent="savePatch('nav-bar-visible', { navBarVisible: form.navBarVisible })">
           <label for="navBarVisible" class="flex cursor-pointer items-center gap-2 text-sm text-foreground select-none">
-            <BaseCheckbox id="navBarVisible" v-model="form.navBarVisible" :disabled="savingSection !== null" />
+            <UiCheckbox id="navBarVisible" v-model="form.navBarVisible" :disabled="savingSection !== null" />
             {{ t('settings.workspace.navBarVisibleLabel') }}
           </label>
           <p class="text-xs text-text-secondary">{{ t('settings.workspace.navBarVisibleDescription') }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <BaseButton type="submit" variant="primary" :loading="savingSection === 'nav-bar-visible'">{{
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'nav-bar-visible'">{{
               t('common.save')
-            }}</BaseButton>
+            }}</UiButton>
             <p
               v-if="sectionMessages['nav-bar-visible']?.text"
               class="text-sm"

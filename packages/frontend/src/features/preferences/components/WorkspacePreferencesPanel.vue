@@ -2,7 +2,7 @@
   import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { structurallyEqual } from '@/foundation/data';
-  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { usePreferences } from '../composables/usePreferences';
   import type { PreferencesDto } from '../model/preferences';
@@ -205,7 +205,7 @@
               for="showPopupFileEditor"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
             >
-              <BaseCheckbox
+              <UiCheckbox
                 id="showPopupFileEditor"
                 v-model="form.showPopupFileEditor"
                 :disabled="savingGroup !== null"
@@ -225,7 +225,7 @@
               for="showPopupFileManager"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
             >
-              <BaseCheckbox
+              <UiCheckbox
                 id="showPopupFileManager"
                 v-model="form.showPopupFileManager"
                 :disabled="savingGroup !== null"
@@ -240,7 +240,7 @@
               for="shareFileEditorTabs"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
             >
-              <BaseCheckbox
+              <UiCheckbox
                 id="shareFileEditorTabs"
                 v-model="form.shareFileEditorTabs"
                 :disabled="savingGroup !== null"
@@ -255,7 +255,7 @@
               for="fileManagerShowDeleteConfirmation"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
             >
-              <BaseCheckbox
+              <UiCheckbox
                 id="fileManagerShowDeleteConfirmation"
                 v-model="form.fileManagerShowDeleteConfirmation"
                 :disabled="savingGroup !== null"
@@ -272,11 +272,11 @@
               {{ t('settings.workspace.spreadsheetPreviewLimits.title') }}
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
-              <BaseFormField
+              <UiFormField
                 :label="t('settings.workspace.spreadsheetPreviewLimits.rowsLabel')"
                 for-id="spreadsheetPreviewRowsPerPage"
               >
-                <BaseInput
+                <UiInput
                   id="spreadsheetPreviewRowsPerPage"
                   v-model="form.spreadsheetPreviewRowsPerPage"
                   data-testid="spreadsheet-preview-rows-per-page"
@@ -286,12 +286,12 @@
                   step="1"
                   :disabled="savingGroup !== null"
                 />
-              </BaseFormField>
-              <BaseFormField
+              </UiFormField>
+              <UiFormField
                 :label="t('settings.workspace.spreadsheetPreviewLimits.columnsLabel')"
                 for-id="spreadsheetPreviewMaxColumns"
               >
-                <BaseInput
+                <UiInput
                   id="spreadsheetPreviewMaxColumns"
                   v-model="form.spreadsheetPreviewMaxColumns"
                   data-testid="spreadsheet-preview-column-limit"
@@ -301,7 +301,7 @@
                   step="1"
                   :disabled="savingGroup !== null"
                 />
-              </BaseFormField>
+              </UiFormField>
             </div>
             <p class="mt-2 text-xs leading-5 text-text-secondary">
               {{ t('settings.workspace.spreadsheetPreviewLimits.hint') }}
@@ -312,13 +312,14 @@
           <p class="min-h-4 text-xs" :class="groupMessages.files?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.files?.text }}
           </p>
-          <BaseButton
+          <UiButton
             data-testid="spreadsheet-preview-pagination-save"
             type="submit"
-            variant="primary"
+            appearance="solid"
+            tone="primary"
             :disabled="!filesDirty"
             :loading="savingGroup === 'files'"
-            >{{ t('settings.workspace.saveGroup') }}</BaseButton
+            >{{ t('settings.workspace.saveGroup') }}</UiButton
           >
         </div>
       </form>
@@ -334,7 +335,7 @@
         <div class="grid gap-3 p-3 lg:grid-cols-2">
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
             <label for="workspaceSidebarPersistent" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-              ><BaseCheckbox
+              ><UiCheckbox
                 id="workspaceSidebarPersistent"
                 v-model="form.workspaceSidebarPersistent"
                 :disabled="savingGroup !== null"
@@ -344,8 +345,8 @@
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.sidebarPersistentDescription') }}</p>
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
-            <BaseFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
-              <BaseSelect
+            <UiFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
+              <UiNativeSelect
                 id="commandInputSyncTarget"
                 v-model="form.commandInputSyncTarget"
                 :disabled="savingGroup !== null"
@@ -353,13 +354,13 @@
                 <option value="none">{{ t('settings.commandInputSync.targetNone') }}</option>
                 <option value="quickCommands">{{ t('settings.commandInputSync.targetQuickCommands') }}</option>
                 <option value="commandHistory">{{ t('settings.commandInputSync.targetCommandHistory') }}</option>
-              </BaseSelect>
-            </BaseFormField>
+              </UiNativeSelect>
+            </UiFormField>
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.commandInputSync.description') }}</p>
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
             <label for="showConnectionTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-              ><BaseCheckbox
+              ><UiCheckbox
                 id="showConnectionTags"
                 v-model="form.showConnectionTags"
                 :disabled="savingGroup !== null"
@@ -370,7 +371,7 @@
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
             <label for="showQuickCommandTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-              ><BaseCheckbox
+              ><UiCheckbox
                 id="showQuickCommandTags"
                 v-model="form.showQuickCommandTags"
                 :disabled="savingGroup !== null"
@@ -388,7 +389,7 @@
             <label
               for="quickCommandsCollapsibleSearch"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-              ><BaseCheckbox
+              ><UiCheckbox
                 id="quickCommandsCollapsibleSearch"
                 v-model="form.quickCommandsCollapsibleSearch"
                 data-testid="quick-command-collapsible-search-toggle"
@@ -402,7 +403,7 @@
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
             <label for="quickCommandsCompactMode" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-              ><BaseCheckbox
+              ><UiCheckbox
                 id="quickCommandsCompactMode"
                 v-model="form.quickCommandsCompactMode"
                 :disabled="savingGroup !== null"
@@ -414,8 +415,8 @@
             </p>
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
-            <BaseFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
-              <BaseInput
+            <UiFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
+              <UiInput
                 id="terminalScrollbackLimit"
                 v-model="form.terminalScrollbackLimit"
                 type="number"
@@ -424,12 +425,12 @@
                 step="1"
                 :disabled="savingGroup !== null"
               />
-            </BaseFormField>
+            </UiFormField>
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint') }}</p>
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
             <label for="terminalRightClickCopyPaste" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-              ><BaseCheckbox
+              ><UiCheckbox
                 id="terminalRightClickCopyPaste"
                 v-model="form.terminalRightClickCopyPaste"
                 :disabled="savingGroup !== null"
@@ -445,13 +446,14 @@
           <p class="min-h-4 text-xs" :class="groupMessages.commands?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.commands?.text }}
           </p>
-          <BaseButton
+          <UiButton
             data-testid="quick-command-collapsible-search-save"
             type="submit"
-            variant="primary"
+            appearance="solid"
+            tone="primary"
             :disabled="!commandsDirty"
             :loading="savingGroup === 'commands'"
-            >{{ t('settings.workspace.saveGroup') }}</BaseButton
+            >{{ t('settings.workspace.saveGroup') }}</UiButton
           >
         </div>
       </form>
@@ -468,7 +470,7 @@
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
             <div class="space-y-2">
               <label for="dashboardShowLocalResources" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-                ><BaseCheckbox
+                ><UiCheckbox
                   id="dashboardShowLocalResources"
                   v-model="form.dashboardShowLocalResources"
                   :aria-label="t('settings.dashboardResources.localLabel')"
@@ -479,7 +481,7 @@
               <label
                 for="dashboardShowRemoteResources"
                 class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-                ><BaseCheckbox
+                ><UiCheckbox
                   id="dashboardShowRemoteResources"
                   v-model="form.dashboardShowRemoteResources"
                   :aria-label="t('settings.dashboardResources.remoteLabel')"
@@ -490,10 +492,10 @@
             </div>
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
-            <BaseFormField
+            <UiFormField
               :label="t('settings.dashboardResources.refreshIntervalLabel')"
               for-id="remoteHostRefreshIntervalSeconds"
-              ><BaseInput
+              ><UiInput
                 id="remoteHostRefreshIntervalSeconds"
                 v-model="form.remoteHostRefreshIntervalSeconds"
                 type="number"
@@ -501,11 +503,11 @@
                 max="86400"
                 step="1"
                 :disabled="savingGroup !== null"
-            /></BaseFormField>
+            /></UiFormField>
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
             <label for="showStatusMonitorIpAddress" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-              ><BaseCheckbox
+              ><UiCheckbox
                 id="showStatusMonitorIpAddress"
                 v-model="form.showStatusMonitorIpAddress"
                 :disabled="savingGroup !== null"
@@ -513,10 +515,10 @@
               /><span>{{ t('settings.statusMonitorShowIp.enableLabel') }}</span></label
             >
             <div class="mt-3">
-              <BaseFormField
+              <UiFormField
                 :label="t('settings.statusMonitor.refreshIntervalLabel')"
                 for-id="statusMonitorIntervalSeconds"
-                ><BaseInput
+                ><UiInput
                   id="statusMonitorIntervalSeconds"
                   v-model="form.statusMonitorIntervalSeconds"
                   type="number"
@@ -524,12 +526,12 @@
                   max="86400"
                   step="1"
                   :disabled="savingGroup !== null"
-              /></BaseFormField>
+              /></UiFormField>
             </div>
           </div>
           <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
-            <BaseFormField :label="t('settings.docker.refreshIntervalLabel')" for-id="dockerStatusIntervalSeconds"
-              ><BaseInput
+            <UiFormField :label="t('settings.docker.refreshIntervalLabel')" for-id="dockerStatusIntervalSeconds"
+              ><UiInput
                 id="dockerStatusIntervalSeconds"
                 v-model="form.dockerStatusIntervalSeconds"
                 type="number"
@@ -537,9 +539,9 @@
                 max="86400"
                 step="1"
                 :disabled="savingGroup !== null"
-            /></BaseFormField>
+            /></UiFormField>
             <label for="dockerDefaultExpand" class="mt-3 flex cursor-pointer items-start gap-2 text-sm font-medium"
-              ><BaseCheckbox
+              ><UiCheckbox
                 id="dockerDefaultExpand"
                 v-model="form.dockerDefaultExpand"
                 :disabled="savingGroup !== null"
@@ -552,12 +554,13 @@
           <p class="min-h-4 text-xs" :class="groupMessages.monitoring?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.monitoring?.text }}
           </p>
-          <BaseButton
+          <UiButton
             type="submit"
-            variant="primary"
+            appearance="solid"
+            tone="primary"
             :disabled="!monitoringDirty"
             :loading="savingGroup === 'monitoring'"
-            >{{ t('settings.workspace.saveGroup') }}</BaseButton
+            >{{ t('settings.workspace.saveGroup') }}</UiButton
           >
         </div>
       </form>
@@ -580,7 +583,7 @@
           <div class="grid gap-3 p-3 lg:grid-cols-2">
             <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
               <label for="layoutLocked" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-                ><BaseCheckbox
+                ><UiCheckbox
                   id="layoutLocked"
                   v-model="form.layoutLocked"
                   :disabled="savingGroup !== null"
@@ -591,7 +594,7 @@
             </div>
             <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
               <label for="navBarVisible" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-                ><BaseCheckbox
+                ><UiCheckbox
                   id="navBarVisible"
                   v-model="form.navBarVisible"
                   :disabled="savingGroup !== null"
@@ -605,9 +608,14 @@
             <p class="min-h-4 text-xs" :class="groupMessages.layout?.success ? 'text-success' : 'text-error'">
               {{ groupMessages.layout?.text }}
             </p>
-            <BaseButton type="submit" variant="primary" :disabled="!layoutDirty" :loading="savingGroup === 'layout'">{{
-              t('settings.workspace.saveGroup')
-            }}</BaseButton>
+            <UiButton
+              type="submit"
+              appearance="solid"
+              tone="primary"
+              :disabled="!layoutDirty"
+              :loading="savingGroup === 'layout'"
+              >{{ t('settings.workspace.saveGroup') }}</UiButton
+            >
           </div>
         </form>
       </details>

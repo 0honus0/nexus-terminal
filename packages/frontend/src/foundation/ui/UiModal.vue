@@ -40,6 +40,8 @@
 <template>
   <OverlayPanel
     :visible="props.visible"
+    data-ui="modal"
+    data-ui-gen="2"
     teleport
     preset="standard-modal"
     :z-index="props.zIndex"

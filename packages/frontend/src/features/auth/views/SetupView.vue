@@ -3,7 +3,7 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseFormField, BaseInput } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
   import { useAuthSession } from '../public';
 
   const router = useRouter();
@@ -71,49 +71,49 @@
         </h2>
 
         <form class="space-y-5" @submit.prevent="submit">
-          <BaseFormField :label="t('auth.setup.username')" for-id="username">
-            <BaseInput
+          <UiFormField :label="t('auth.setup.username')" for-id="username">
+            <UiInput
               id="username"
               v-model="username"
               name="username"
               autocomplete="username"
               required
-              size="lg"
+              density="comfortable"
               class="rounded-lg py-3"
               :placeholder="t('auth.setup.usernamePlaceholder')"
               :disabled="isLoading"
             />
-          </BaseFormField>
+          </UiFormField>
 
-          <BaseFormField :label="t('auth.setup.password')" for-id="password">
-            <BaseInput
+          <UiFormField :label="t('auth.setup.password')" for-id="password">
+            <UiInput
               id="password"
               v-model="password"
               name="password"
               type="password"
               autocomplete="new-password"
               required
-              size="lg"
+              density="comfortable"
               class="rounded-lg py-3"
               :placeholder="t('auth.setup.passwordPlaceholder')"
               :disabled="isLoading"
             />
-          </BaseFormField>
+          </UiFormField>
 
-          <BaseFormField :label="t('auth.setup.confirmPassword')" for-id="confirmPassword">
-            <BaseInput
+          <UiFormField :label="t('auth.setup.confirmPassword')" for-id="confirmPassword">
+            <UiInput
               id="confirmPassword"
               v-model="confirmPassword"
               name="confirmPassword"
               type="password"
               autocomplete="new-password"
               required
-              size="lg"
+              density="comfortable"
               class="rounded-lg py-3"
               :placeholder="t('auth.setup.confirmPasswordPlaceholder')"
               :disabled="isLoading"
             />
-          </BaseFormField>
+          </UiFormField>
 
           <p
             v-if="error"
@@ -130,9 +130,17 @@
             {{ successMessage }}
           </p>
 
-          <BaseButton type="submit" variant="primary" size="lg" block class="rounded-lg px-4 py-3" :loading="isLoading">
+          <UiButton
+            type="submit"
+            appearance="solid"
+            tone="primary"
+            density="comfortable"
+            block
+            class="rounded-lg px-4 py-3"
+            :loading="isLoading"
+          >
             {{ isLoading ? t('auth.setup.settingUp') : t('auth.setup.submitButton') }}
-          </BaseButton>
+          </UiButton>
         </form>
       </section>
     </div>

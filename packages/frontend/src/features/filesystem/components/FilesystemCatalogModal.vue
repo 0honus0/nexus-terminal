@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu, OverlayPanel } from '@/foundation/ui';
+  import { UiContextMenu, OverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { useLongPressGesture } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
@@ -273,7 +273,7 @@
     </div>
   </div>
 
-  <BaseContextMenu
+  <UiContextMenu
     v-if="context"
     :visible="true"
     :x="context.x"
@@ -294,7 +294,7 @@
       <i class="fas fa-trash-alt" aria-hidden="true"></i>
       <span>{{ t('common.delete') }}</span>
     </button>
-  </BaseContextMenu>
+  </UiContextMenu>
 
   <OverlayPanel
     :visible="formVisible"

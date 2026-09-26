@@ -2,7 +2,7 @@
   import { ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { BaseButton, BaseFormField, BaseInput } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
   import { backupApi } from '../api/backupApi';
 
   const { t } = useI18n();
@@ -81,20 +81,21 @@
         <h3 class="mb-2 text-base font-semibold text-foreground">{{ t('settings.backup.title') }}</h3>
         <p class="mb-4 max-w-3xl text-sm text-text-secondary">{{ t('settings.backup.description') }}</p>
         <form class="space-y-3" @submit.prevent="exportBackup">
-          <BaseFormField :label="t('settings.backup.currentPassword')" class="max-w-md">
-            <BaseInput
+          <UiFormField :label="t('settings.backup.currentPassword')" class="max-w-md">
+            <UiInput
               v-model="exportPassword"
               data-testid="backup-export-password"
               type="password"
               autocomplete="current-password"
               required
             />
-          </BaseFormField>
+          </UiFormField>
           <div class="flex flex-wrap items-center gap-3">
-            <BaseButton
+            <UiButton
               data-testid="backup-export"
               type="submit"
-              variant="primary"
+              appearance="solid"
+              tone="primary"
               :loading="exportLoading"
               :disabled="!exportPassword"
             >
@@ -102,7 +103,7 @@
                 ><i :class="exportLoading ? 'fas fa-spinner fa-spin' : 'fas fa-download'" aria-hidden="true"></i
               ></template>
               {{ exportLoading ? t('common.loading') : t('settings.backup.export') }}
-            </BaseButton>
+            </UiButton>
             <p v-if="exportMessage" :class="exportSuccess ? 'text-success' : 'text-error'" class="text-sm">
               {{ exportMessage }}
             </p>
@@ -114,7 +115,7 @@
         <h3 class="mb-2 text-base font-semibold text-foreground">{{ t('settings.backup.import') }}</h3>
         <p class="mb-4 max-w-3xl text-sm text-text-secondary">{{ t('settings.backup.importDescription') }}</p>
         <form class="space-y-3" @submit.prevent="importBackup">
-          <BaseFormField :label="t('settings.backup.backupFile')" class="max-w-xl">
+          <UiFormField :label="t('settings.backup.backupFile')" class="max-w-xl">
             <input
               ref="importInput"
               data-testid="backup-import-file"
@@ -124,21 +125,17 @@
               class="block w-full overflow-hidden rounded-md border border-border bg-input text-sm text-text-secondary shadow-sm file:mr-4 file:border-0 file:bg-button file:px-4 file:py-2 file:text-button-text hover:file:bg-button-hover"
               @change="selectFile"
             />
-          </BaseFormField>
-          <BaseFormField :label="t('settings.backup.backupPassword')" class="max-w-md">
-            <BaseInput
-              v-model="importPassword"
-              data-testid="backup-import-password"
-              type="password"
-              autocomplete="off"
-            />
+          </UiFormField>
+          <UiFormField :label="t('settings.backup.backupPassword')" class="max-w-md">
+            <UiInput v-model="importPassword" data-testid="backup-import-password" type="password" autocomplete="off" />
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.backup.backupPasswordHelp') }}</p>
-          </BaseFormField>
+          </UiFormField>
           <div class="flex flex-wrap items-center gap-3">
-            <BaseButton
+            <UiButton
               data-testid="backup-import"
               type="submit"
-              variant="primary"
+              appearance="solid"
+              tone="primary"
               :loading="importLoading"
               :disabled="!importFile"
             >
@@ -146,7 +143,7 @@
                 ><i :class="importLoading ? 'fas fa-spinner fa-spin' : 'fas fa-upload'" aria-hidden="true"></i
               ></template>
               {{ importLoading ? t('common.loading') : t('settings.backup.import') }}
-            </BaseButton>
+            </UiButton>
             <p v-if="importMessage" :class="importSuccess ? 'text-success' : 'text-error'" class="text-sm">
               {{ importMessage }}
             </p>

@@ -2,7 +2,7 @@
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { structurallyEqual } from '@/foundation/data';
-  import { BaseModal, UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
+  import { UiModal, UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
@@ -840,7 +840,7 @@
   </section>
 
   <!-- 卸载 Agent App 二次安全确认弹窗 -->
-  <BaseModal
+  <UiModal
     :visible="uninstallModalOpen"
     :title="$t('agent.settings.apps.uninstallConfirmTitle')"
     :aria-label="$t('agent.settings.apps.uninstallConfirmTitle')"
@@ -904,5 +904,5 @@
         </button>
       </div>
     </template>
-  </BaseModal>
+  </UiModal>
 </template>

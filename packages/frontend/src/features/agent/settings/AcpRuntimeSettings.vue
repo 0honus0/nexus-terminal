@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { structurallyEqual } from '@/foundation/data';
-  import { BaseModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
+  import { UiModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
@@ -643,7 +643,7 @@
     </section>
 
     <!-- 弹窗 1：添加 ACP 配置档模态弹窗 -->
-    <BaseModal
+    <UiModal
       :visible="profileModalOpen"
       :title="editingProfileId ? $t('common.edit') : $t('agent.settings.acpRuntime.modalProfileTitle')"
       :aria-label="editingProfileId ? $t('common.edit') : $t('agent.settings.acpRuntime.modalProfileTitle')"
@@ -768,10 +768,10 @@
           </UiButton>
         </div>
       </template>
-    </BaseModal>
+    </UiModal>
 
     <!-- 弹窗 2：添加 ACP 集成模态弹窗 -->
-    <BaseModal
+    <UiModal
       :visible="integrationModalOpen"
       :title="$t('agent.settings.acpRuntime.modalIntegrationTitle')"
       :aria-label="$t('agent.settings.acpRuntime.modalIntegrationTitle')"
@@ -866,6 +866,6 @@
           </UiButton>
         </div>
       </template>
-    </BaseModal>
+    </UiModal>
   </div>
 </template>
