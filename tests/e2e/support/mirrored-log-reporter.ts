@@ -24,7 +24,6 @@ export default class MirroredLogReporter implements Reporter {
   private logRoot = '';
   private fileByTestId = new Map<string, string>();
   private unexpectedFirstAttempts = new Map<string, string>();
-  private specDurationsMs = new Map<string, number>();
   private specOrder = new Map<string, number>();
   private startedSpecs = new Set<string>();
   private totalSpecs = 0;
@@ -105,12 +104,6 @@ export default class MirroredLogReporter implements Reporter {
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
-    if (result.retry === 0) {
-      const relativeSpec = path.relative(this.testDir, test.location.file).split(path.sep).join('/');
-      const spec = path.posix.join('specs', relativeSpec);
-      this.specDurationsMs.set(spec, (this.specDurationsMs.get(spec) || 0) + result.duration);
-    }
-
     this.append(
       test,
       `\nstatus: ${result.status}\ndurationMs: ${result.duration}\nfinished: ${new Date().toISOString()}\n`,
@@ -145,7 +138,6 @@ export default class MirroredLogReporter implements Reporter {
   onEnd(result: FullResult) {
     const elapsed = this.runStartedAt > 0 ? Date.now() - this.runStartedAt : result.duration;
     this.consoleLog(`\n[E2E] Finished: ${result.status} in ${this.formatDuration(elapsed)}`);
-    this.writeSpecTimings();
     if (this.unexpectedFirstAttempts.size === 0) return;
 
     const summaryFile = path.join(this.logRoot, '_flaky-tests.log');
@@ -162,21 +154,6 @@ export default class MirroredLogReporter implements Reporter {
     // artifacts/logs for diagnosis while preventing a retry-pass from producing
     // a misleading green CI run.
     if (result.status === 'passed') return { status: 'failed' as const };
-  }
-
-  private writeSpecTimings(): void {
-    if (this.specDurationsMs.size === 0) return;
-    const output = process.env.E2E_TIMINGS_OUTPUT
-      ? path.resolve(process.env.E2E_TIMINGS_OUTPUT)
-      : path.resolve(this.testDir, '..', '.tmp', 'spec-timings.json');
-    const specs = Object.fromEntries(
-      [...this.specDurationsMs.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([spec, duration]) => [spec, Math.round(duration)]),
-    );
-    fs.mkdirSync(path.dirname(output), { recursive: true });
-    fs.writeFileSync(output, `${JSON.stringify({ version: 1, specs }, null, 2)}\n`, 'utf8');
-    this.consoleLog(`[E2E] Wrote spec timings: ${output}`);
   }
 
   private logFileFor(test: TestCase, retry = 0): string {

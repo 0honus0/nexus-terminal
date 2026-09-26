@@ -962,7 +962,7 @@ Environment selection 不是 frontend authority：Run create 携带 recipe selec
 
 ## 22. 测试与发布门槛
 
-GitHub Actions 的 canonical E2E workflow 直接以 Node 24 + Playwright Chromium 运行 `auth/http/agent/websocket/ui/ssh/mobile` project matrix，不再串联 quality、Docker smoke、runner-image、截图提交、rebalance 或 Release gate。
+GitHub Actions 的 canonical E2E workflow 使用 Node 24：串行执行仓库检查、格式检查与生产构建，以独立 job 运行 `auth/http/agent/websocket/ui/ssh/mobile` project matrix，并构建统一镜像和独立 Agent Runner 镜像后执行三段 Docker smoke。
 
 `pnpm run check` 仍保留 transport contract、Frontend public boundary、Frontend state lifecycle、Agent i18n reachability、Frontend/Agent ESLint 与 Frontend type check，作为独立开发验证；Frontend unit test 已移除。Agent deterministic scenarios 位于 `tests/backend/agent-scenarios`，用户可达 Agent E2E 位于 `tests/e2e/specs/agent`。
 

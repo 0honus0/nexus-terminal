@@ -4,7 +4,7 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
-The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs the seven Playwright projects directly on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version. Repository checks, builds, Docker smoke, screenshot refreshes, and release gates are no longer prerequisites for E2E execution.
+The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs repository checks, formatting and production builds, the seven Playwright projects on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
 ## Structure
 
@@ -16,7 +16,7 @@ The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs the seven 
 - `tests/e2e/specs/ui/` — authenticated browser navigation and UI behavior.
 - `tests/e2e/specs/ssh/` — real SSH connection and SFTP/File Manager flows.
 - `tests/e2e/specs/mobile/` — mobile Workspace, layout, status monitor and touch interaction.
-- `tests/e2e/support/` — shared helpers, test servers, grouping and mirrored log reporter.
+- `tests/e2e/support/` — shared helpers, test servers and the mirrored log reporter.
 - `tests/e2e/fixtures/` — committed deterministic seed and isolated external service fixtures.
 - `tests/e2e/.tmp/` and `tests/e2e/logs/` — generated runtime data and per-test logs, ignored by Git.
 
@@ -47,10 +47,6 @@ From the repository root:
 
 ```bash
 pnpm run test:e2e:seed
-pnpm run test:e2e:groups:generate --workers 4
-pnpm run test:e2e:groups:check --workers 4
-pnpm run test:e2e:groups:matrix --workers 4
-pnpm run test:e2e:group --workers 4 --group 1
 pnpm run test:e2e
 pnpm run test:e2e:auth
 pnpm run test:e2e:http
@@ -64,17 +60,15 @@ pnpm run test:e2e:remote -- --project=http specs/http/auth-2fa.spec.ts
 pnpm --filter @nexus-terminal/e2e run test:docs
 ```
 
-GitHub Actions provides the canonical complete E2E evidence. Each matrix job installs the frozen workspace plus the pinned Playwright Chromium runtime on a fresh hosted runner and runs one Playwright project directly. Local commands remain useful for listing tests, running focused specs, and reproducing failures. Automated dependency updates dispatch this same workflow on their update branch.
+GitHub Actions provides the canonical complete delivery evidence. The quality job runs repository checks, formatting and production builds serially. Each Playwright matrix job installs the frozen workspace plus the pinned Chromium runtime on a fresh hosted runner and runs one project directly. The Docker job builds the unified and standalone Agent Runner images, then exercises standalone Runner, core-without-Runner and full deployment smoke paths. Local commands remain useful for listing tests, running focused specs and reproducing failures. Automated dependency updates dispatch this same workflow on their update branch.
 
 For a long-lived remote development host that may already be serving Nexus on the default E2E ports, use `pnpm run test:e2e:remote -- <Playwright args>`. The remote launcher keeps explicit `NEXUS_E2E_*_PORT` overrides, dynamically reserves unique loopback ports for every unset E2E service, and invokes Playwright through Corepack so a stale system-level `pnpm` shim does not control the run. It enforces the repository Node engine before starting tests. This helper is for focused remote reproduction; it does not replace the canonical GitHub Actions evidence.
 
 ## CI project matrix
 
-The canonical workflow uses a static matrix with one isolated job for each Playwright project: `auth`, `http`, `agent`, `websocket`, `ui`, `ssh`, and `mobile`. Matrix jobs fail directly when their Playwright command fails; there is no aggregate result job or release gate.
+The canonical workflow uses a static matrix with one isolated job for each Playwright project: `auth`, `http`, `agent`, `websocket`, `ui`, `ssh`, and `mobile`. Matrix jobs fail directly when their Playwright command fails.
 
-Each job checks out the tested commit, sets up Node 24 and pnpm, installs the frozen workspace, installs Chromium with Playwright's system dependencies, and runs exactly one project. Fresh GitHub-hosted runners eliminate local port collisions and remove the custom GHCR runner-image dependency.
-
-The existing `tests/e2e/groups/` tooling remains available for optional local sharding and timing experiments, but it is no longer part of the canonical CI path. Likewise, environment-sync and custom runner-image scripts remain maintenance helpers rather than workflow prerequisites.
+Each job checks out the tested commit, sets up Node 24 and pnpm, installs the frozen workspace, installs Chromium with Playwright's system dependencies, and runs exactly one project. Fresh GitHub-hosted runners eliminate local port collisions.
 
 Production-ingress coverage can still be run explicitly against a prepared production-style endpoint:
 
