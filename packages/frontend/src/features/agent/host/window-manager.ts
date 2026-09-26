@@ -34,9 +34,8 @@ const MIN_HEIGHT = 480;
 // §2.8: the launcher's home position. Dragging it away is now an explicit long press, and this
 // constant is what the "reset position" entry restores to (see AgentLauncher.vue).
 const DEFAULT_LAUNCHER_POSITION = { right: 22, bottom: 24 } as const;
-let preferredLauncherPosition: { right: number; bottom: number } = { ...DEFAULT_LAUNCHER_POSITION };
 
-const state = reactive<AgentHubState>({
+const createDefaultState = (): AgentHubState => ({
   status: 'closed',
   bounds: { ...DEFAULT_BOUNDS },
   maximized: false,
@@ -48,10 +47,20 @@ const state = reactive<AgentHubState>({
   taskRailVisible: false,
 });
 
+let preferredLauncherPosition: { right: number; bottom: number } = { ...DEFAULT_LAUNCHER_POSITION };
+const state = reactive<AgentHubState>(createDefaultState());
+
 // Keep the user's intended bounds separate from viewport-clamped render bounds.
 // Temporary viewport shrinkage (for example docked DevTools) can then be reversed
 // when the viewport grows again without losing the user's chosen position or size.
 let preferredBounds: AgentHubBounds = { ...DEFAULT_BOUNDS };
+
+const resetStateToDefaults = (): void => {
+  const defaults = createDefaultState();
+  preferredBounds = { ...defaults.bounds };
+  preferredLauncherPosition = { ...defaults.launcherPosition };
+  Object.assign(state, defaults);
+};
 
 const viewport = (): { width: number; height: number } => ({
   width: Math.max(document.documentElement.clientWidth, window.innerWidth || 0),
@@ -168,6 +177,7 @@ export const agentWindowManager = {
     agentWindowManager.setLauncherPosition({ ...DEFAULT_LAUNCHER_POSITION });
   },
   restoreForUser(userId: number): void {
+    resetStateToDefaults();
     try {
       const raw = window.localStorage.getItem(storageKey(userId));
       const stored = parseStored(raw);
@@ -267,15 +277,7 @@ export const agentWindowManager = {
   },
   reset(): void {
     const previous = logContext();
-    state.status = 'closed';
-    preferredBounds = { ...DEFAULT_BOUNDS };
-    state.bounds = { ...preferredBounds };
-    state.maximized = false;
-    state.activeAppId = null;
-    state.recentAppIds = [];
-    state.hubView = 'conversation';
-    preferredLauncherPosition = { ...DEFAULT_LAUNCHER_POSITION };
-    state.launcherPosition = { ...preferredLauncherPosition };
+    resetStateToDefaults();
     logger.debug({ previous, ...logContext() }, 'Agent floating window state reset');
   },
 };

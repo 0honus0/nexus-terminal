@@ -58,6 +58,80 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
   await expect(hub).toBeVisible();
 });
 
+test('Agent window state resets every user-scoped layout field before an empty user restore', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await page.goto('/connections');
+
+  const state = await page.evaluate(async () => {
+    const modulePath = '/src/features/agent/host/window-manager.ts';
+    const { agentWindowManager } = (await import(modulePath)) as {
+      agentWindowManager: {
+        state: {
+          status: string;
+          bounds: { x: number; y: number; width: number; height: number };
+          maximized: boolean;
+          activeAppId: string | null;
+          recentAppIds: string[];
+          hubView: string;
+          launcherPosition: { right: number; bottom: number };
+          threadSidebarVisible: boolean;
+          taskRailVisible: boolean;
+        };
+        openHub(input?: { appId?: string }): void;
+        switchApp(input: { appId: string }): void;
+        setHubView(view: 'conversation' | 'files'): void;
+        setThreadSidebarVisible(visible: boolean): void;
+        setTaskRailVisible(visible: boolean): void;
+        setLauncherPosition(position: { right: number; bottom: number }): void;
+        setBounds(bounds: { x: number; y: number; width: number; height: number }): void;
+        toggleMaximize(): void;
+        reset(): void;
+        restoreForUser(userId: number): void;
+      };
+    };
+    const snapshot = () => JSON.parse(JSON.stringify(agentWindowManager.state)) as typeof agentWindowManager.state;
+    const dirty = () => {
+      agentWindowManager.openHub({ appId: 'nexus.agent' });
+      agentWindowManager.switchApp({ appId: 'another.app' });
+      agentWindowManager.setHubView('files');
+      agentWindowManager.setThreadSidebarVisible(false);
+      agentWindowManager.setTaskRailVisible(true);
+      agentWindowManager.setLauncherPosition({ right: 111, bottom: 222 });
+      agentWindowManager.setBounds({ x: 12, y: 18, width: 700, height: 600 });
+      agentWindowManager.toggleMaximize();
+    };
+
+    dirty();
+    agentWindowManager.reset();
+    const afterReset = snapshot();
+
+    dirty();
+    const emptyUserId = 2_147_483_000;
+    localStorage.removeItem(`nexus.agent.surface.v1.user.${emptyUserId}`);
+    agentWindowManager.restoreForUser(emptyUserId);
+    const afterEmptyUserRestore = snapshot();
+
+    return { afterReset, afterEmptyUserRestore };
+  });
+
+  const expected = {
+    status: 'closed',
+    bounds: { x: 80, y: 16, width: 1180, height: 740 },
+    maximized: false,
+    activeAppId: null,
+    recentAppIds: [],
+    hubView: 'conversation',
+    launcherPosition: { right: 22, bottom: 24 },
+    threadSidebarVisible: true,
+    taskRailVisible: false,
+  };
+  expect(state.afterReset).toEqual(expected);
+  expect(state.afterEmptyUserRestore).toEqual(expected);
+});
+
 test('Agent revisits a loaded conversation without blocking on a fresh history round trip', async ({
   page,
   context,

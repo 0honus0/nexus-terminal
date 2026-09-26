@@ -7,25 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.42 Agent window reset 漏掉 per-user 布局字段（P2）
-
-**当前代码事实**
-
-`window-manager.reset()` 仍只重置 status / bounds / maximized / app / view / launcher，没有恢复：
-
-- `threadSidebarVisible = true`
-- `taskRailVisible = false`
-
-新账号没有自己的持久化布局时，会继承同一 SPA 生命周期中上一账号的内存值。
-
-**整改目标**
-
-把默认 Agent window state 集中到单一 factory/defaultState；`reset()` 一次性恢复全部 user-scoped 字段。
-
-**关闭条件**
-
-A 登录修改布局 → logout → B 首次登录且无 storage，B 得到默认布局；新增字段不能再靠手工同步多个 reset 分支。
-
 ### §7.43 Agent 两类 localStorage 偏好仍跨账号共用（P2）
 
 **当前代码事实**
@@ -286,7 +267,7 @@ localStorage/sessionStorage 分散在 Dashboard、Connections、Workspace、Agen
 - scoped key builder（尤其 user/session scope）
 - read/write/remove helper
 
-§7.42 / §7.43 并入该阶段一起关闭。
+§7.43 并入该阶段一起关闭。
 
 ### FE-ARCH-12 UI runtime error boundary
 
@@ -355,7 +336,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **安全网**：FE-ARCH-04 / 05 / 06 / 07，同时关闭 §7.51。
-2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.42–45 / 48 / 49。
+2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.43–45 / 48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 5. **严格类型增强**：FE-ARCH-16。
