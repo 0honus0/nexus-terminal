@@ -2,13 +2,13 @@
   import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint } from '@/foundation/ui';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useConnections, type ConnectionDto } from '@/features/connections/public';
+  import { useRuntimeFeatureCapabilities, type ConnectionDto } from '@/shared/capabilities/public';
   import type { AgentTargetDenylistViewDto } from '../api/agent-api';
 
   const props = defineProps<{ denylist: AgentTargetDenylistViewDto; busy: boolean }>();
   const emit = defineEmits<{ save: [connectionIds: number[], reason: string] }>();
   const { t } = useI18n();
-  const connectionsStore = useConnections();
+  const connectionsStore = useRuntimeFeatureCapabilities().connections;
   const loadingConnections = ref(false);
   const connectionsResolved = ref(connectionsStore.loaded.value);
   const connectionLoadFailed = ref(false);
@@ -91,7 +91,7 @@
   };
 
   // 过滤后的连接列表
-  const allConnections = computed(() => connectionsStore.connections.value);
+  const allConnections = computed(() => connectionsStore.items.value);
   const blockedConnections = computed(() =>
     allConnections.value.filter((connection) => selectedIds.value.has(connection.id)),
   );

@@ -4,9 +4,13 @@ import type {
   AgentTerminalReadyMessageDto,
 } from '@nexus-terminal/protocol/agent-terminal';
 import { openWebSocket } from '@/client/websocket';
-import type { TerminalChannel, TerminalOutput, WorkspaceTerminalViewportDto } from '@/features/terminal/public';
+import type {
+  RuntimeTerminalChannel,
+  RuntimeTerminalOutput,
+  WorkspaceTerminalViewportDto,
+} from '@/shared/capabilities/public';
 
-export interface AgentWorkspaceTerminalChannel extends TerminalChannel {
+export interface AgentWorkspaceTerminalChannel extends RuntimeTerminalChannel {
   close(): void;
 }
 
@@ -34,7 +38,7 @@ export const createAgentWorkspaceTerminalChannel = (input: {
   workspaceId: string;
   generation: number;
 }): AgentWorkspaceTerminalChannel => {
-  const outputHandlers = new Set<(output: TerminalOutput) => void>();
+  const outputHandlers = new Set<(output: RuntimeTerminalOutput) => void>();
   const closeHandlers = new Set<(reason?: string) => void>();
   const errorHandlers = new Set<(message: string) => void>();
   const pendingInput: string[] = [];

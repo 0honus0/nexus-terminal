@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { onBeforeUnmount, ref, watch } from 'vue';
   import { logger } from '@/client/logging/logger';
-  import { useAuthSession } from '@/features/auth/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { agentApi, resetAgentCsrf, type AgentHostSummaryDto } from '../api/agent-api';
   import { agentEvents } from '../api/agent-events';
   import { canExecuteAgentApp } from '../app-availability';
@@ -10,7 +10,7 @@
   import { agentHostEvents } from './agent-host-events';
   import { provideAgentHostState } from './agent-host-state';
 
-  const auth = useAuthSession();
+  const auth = useRuntimeFeatureCapabilities().auth;
   const { surfaceSession: agentSurfaceSession, windowManager: agentWindowManager } = provideAgentHostState();
   const summary = ref<AgentHostSummaryDto | null>(null);
   const HOST_STREAM_LOCK_NAME = 'nexus.agent.host-stream.v1';
@@ -54,12 +54,12 @@
   };
 
   const refresh = async (reason: 'initial' | 'host-event'): Promise<AgentHostSummaryDto | null> => {
-    if (!auth.isAuthenticated.value || activeUserId === null) return null;
+    if (!auth.authenticated.value || activeUserId === null) return null;
     const requestGeneration = ++refreshGeneration;
     const requestUserId = activeUserId;
     try {
       const next = await agentApi.summary();
-      if (!auth.isAuthenticated.value || activeUserId !== requestUserId) return null;
+      if (!auth.authenticated.value || activeUserId !== requestUserId) return null;
       if (requestGeneration !== refreshGeneration) return next;
       const previousFeatureEnabled = summary.value?.featureEnabled ?? null;
       summary.value = next;
@@ -88,7 +88,7 @@
       );
       return next;
     } catch (cause) {
-      if (!auth.isAuthenticated.value || activeUserId !== requestUserId) return null;
+      if (!auth.authenticated.value || activeUserId !== requestUserId) return null;
       if (requestGeneration !== refreshGeneration) return summary.value;
       logger.warn(
         { err: cause, reason, userId: activeUserId, generation, refreshGeneration: requestGeneration },
@@ -242,7 +242,7 @@
   };
 
   watch(
-    () => [auth.isAuthenticated.value, auth.user.value?.id ?? null] as const,
+    () => [auth.authenticated.value, auth.userId.value] as const,
     ([authenticated, userId]) => {
       if (authenticated && userId !== null) {
         if (activeUserId !== null && activeUserId !== userId) {
@@ -265,7 +265,7 @@
   );
 
   const onHostBroadcast = (event: MessageEvent<unknown>): void => {
-    if (!auth.isAuthenticated.value || activeUserId === null) return;
+    if (!auth.authenticated.value || activeUserId === null) return;
     if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return;
     const message = event.data as {
       type?: unknown;
@@ -305,14 +305,14 @@
   hostChannel?.addEventListener('message', onHostBroadcast);
 
   const onLocalHostChanged = (): void => {
-    if (!auth.isAuthenticated.value || activeUserId === null) return;
+    if (!auth.authenticated.value || activeUserId === null) return;
     void refresh('host-event');
     if (activeUserId !== null) hostChannel?.postMessage({ type: 'host.changed', userId: activeUserId });
   };
   const stopLocalHostChanged = agentHostEvents.on('host-changed', onLocalHostChanged);
 
   const onLocalConfigurationChanged = (event: { origin: 'local' | 'external' }): void => {
-    if (event.origin !== 'local' || !auth.isAuthenticated.value || activeUserId === null) return;
+    if (event.origin !== 'local' || !auth.authenticated.value || activeUserId === null) return;
     void refresh('host-event');
     hostChannel?.postMessage({
       type: 'host.changed',
@@ -340,7 +340,7 @@
 
 <template>
   <Teleport to="body">
-    <template v-if="auth.isAuthenticated.value && summary">
+    <template v-if="auth.authenticated.value && summary">
       <AgentHubWindow
         v-if="summary.featureEnabled"
         :summary="summary"

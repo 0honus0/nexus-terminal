@@ -17,12 +17,12 @@
   import WorkspaceRuntimePanel from './WorkspaceRuntimePanel.vue';
   import SubagentTree from './SubagentTree.vue';
   import ApprovalTimeline from './ApprovalTimeline.vue';
-  import { useConnections } from '@/features/connections/public';
-  import { useAuthSession } from '@/features/auth/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { formatAgentEnumLabel } from '../enum-labels';
 
   const { t } = useI18n();
-  const auth = useAuthSession();
+  const capabilities = useRuntimeFeatureCapabilities();
+  const auth = capabilities.auth;
 
   const props = withDefaults(
     defineProps<{
@@ -141,7 +141,7 @@
   ];
   const LEGACY_RAIL_STORAGE_KEY = 'nexus.agent.task-rail-order.v1';
   const railStorage = computed(() => {
-    const userId = auth.user.value?.id;
+    const userId = auth.userId.value;
     if (userId === undefined || userId === null) return null;
     const known = new Set(defaultCardOrder.map((card) => card.id));
     return {
@@ -217,7 +217,7 @@
     { deep: true },
   );
   watch(
-    () => auth.user.value?.id ?? null,
+    () => auth.userId.value ?? null,
     () => {
       railCards.value = loadCardOrder();
     },
@@ -254,13 +254,13 @@
   };
 
   // §7.14-b：目标卡原先只渲染内部连接 ID（`#1`），改成连接名，ID 退到 title。
-  const connectionsStore = useConnections();
+  const connectionsStore = capabilities.connections;
   onMounted(() => {
     if (!connectionsStore.loaded.value) void connectionsStore.load().catch(() => {});
   });
   const targetLabels = computed(() => {
     const map = new Map<number, string>();
-    for (const connection of connectionsStore.connections.value) {
+    for (const connection of connectionsStore.items.value) {
       map.set(connection.id, connection.name?.trim() || `${connection.username}@${connection.host}`);
     }
     return map;

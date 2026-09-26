@@ -34,12 +34,17 @@ const runWorkspaceGuard = (sourcePath, sourceText) => {
   }
 };
 
-const runFrontendFileGuard = (sourcePath, sourceText) => {
+const runFrontendFileGuard = (sourcePath, sourceText, fixtures = {}) => {
   const root = mkdtempSync(path.join(tmpdir(), 'frontend-file-boundaries-'));
   try {
     const source = path.join(root, 'packages/frontend/src', sourcePath);
     mkdirSync(path.dirname(source), { recursive: true });
     writeFileSync(source, sourceText);
+    for (const [fixturePath, fixtureText] of Object.entries(fixtures)) {
+      const fixture = path.join(root, 'packages/frontend/src', fixturePath);
+      mkdirSync(path.dirname(fixture), { recursive: true });
+      writeFileSync(fixture, fixtureText);
+    }
     return spawnSync(process.execPath, [guard], { cwd: root, encoding: 'utf8' });
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -80,6 +85,23 @@ test('workspace transport access is confined to adapters', () => {
     "import { httpClient } from '@/client/http';\n",
   );
   assert.equal(adapter.status, 0, adapter.stderr);
+});
+
+test('features cannot import other features directly', () => {
+  const coupled = runFrontendFileGuard(
+    'features/transfers/TransferTarget.vue',
+    "import { useConnections } from '@/features/connections/public';\n",
+    { 'features/connections/public.ts': 'export const useConnections = () => {};\n' },
+  );
+  assert.equal(coupled.status, 1);
+  assert.match(coupled.stderr, /couples feature "transfers" to feature "connections"/);
+
+  const capability = runFrontendFileGuard(
+    'features/transfers/TransferTarget.vue',
+    "import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';\n",
+    { 'shared/capabilities/public.ts': 'export const useRuntimeFeatureCapabilities = () => {};\n' },
+  );
+  assert.equal(capability.status, 0, capability.stderr);
 });
 
 test('legacy Base design system symbols cannot return', () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, markRaw, onBeforeUnmount, ref, watch } from 'vue';
   import { RouterView } from 'vue-router';
   import { preloadAuthenticatedRoutes } from './router';
   import { logger } from '@/client/logging/logger';
@@ -7,16 +7,48 @@
   import { useAuthSession } from '@/features/auth/public';
   import { loadAppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
   import { AgentSurfaceHost } from '@/features/agent/public';
-  import { markConnectionConnected } from '@/features/connections/public';
+  import { markConnectionConnected, useConnections } from '@/features/connections/public';
+  import { ConnectionTagPicker, connectionTagsService, useConnectionTags } from '@/features/tags/public';
+  import { useProxies } from '@/features/proxies/public';
+  import { SshKeySelector, useSshKeys } from '@/features/ssh-keys/public';
+  import { loadTerminalView } from '@/features/terminal/public';
   import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { usePreferences } from '@/features/preferences/public';
   import { DialogHost, NotificationHost, RuntimeErrorBoundary } from '@/shared/feedback/public';
   import { authenticatedSessionLifecycle, type AuthenticatedSessionDispatch } from '@/shared/session/public';
+  import { provideRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
   const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
   const AppearanceCustomizerModal = defineAsyncComponent(loadAppearanceCustomizerModal);
   const auth = useAuthSession();
+  const connections = useConnections();
+  const tags = useConnectionTags();
+  const proxies = useProxies();
+  const sshKeys = useSshKeys();
+  provideRuntimeFeatureCapabilities({
+    auth: {
+      userId: computed(() => auth.user.value?.id ?? null),
+      authenticated: auth.isAuthenticated,
+    },
+    connections: {
+      items: connections.connections,
+      loaded: connections.loaded,
+      load: connections.load,
+      revalidate: connections.revalidate,
+    },
+    tags: {
+      items: tags.tags,
+      load: tags.load,
+      revalidate: tags.revalidate,
+      ensure: (names) => connectionTagsService.ensure(names),
+      picker: markRaw(ConnectionTagPicker),
+    },
+    proxies: { items: proxies.proxies, load: proxies.load },
+    sshKeys: { items: sshKeys.keys, load: sshKeys.load, selector: markRaw(SshKeySelector) },
+    remoteDesktop: { open: remoteDesktopLauncher.open },
+    terminal: { loadView: loadTerminalView },
+  });
   const appearance = useAppearance();
   const appearanceCustomizerVisible = appearance.customizerVisible;
   const preferences = usePreferences();

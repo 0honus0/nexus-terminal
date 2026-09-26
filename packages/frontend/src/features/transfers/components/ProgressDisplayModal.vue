@@ -4,7 +4,7 @@
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition } from '@/foundation/interaction';
   import { OverlayPanel } from '@/foundation/ui';
-  import { useConnections } from '@/features/connections/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import type { ProgressSource, TransferTask } from '../model/transfer';
   import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
   import type {
@@ -37,7 +37,7 @@
     remove: [sourceId: string, taskId: string];
   }>();
   const { t, locale } = useI18n();
-  const connections = useConnections();
+  const connections = useRuntimeFeatureCapabilities().connections;
   interface ProgressDisplayPosition {
     x: number;
     y: number;
@@ -150,7 +150,7 @@
     ['queued', 'in-progress'].includes(status);
   const connectionName = (connectionId?: number): string => {
     if (!connectionId) return t('transferProgressModal.unknownSourceServer');
-    const connection = connections.connections.value.find((item) => item.id === connectionId);
+    const connection = connections.items.value.find((item) => item.id === connectionId);
     return (
       connection?.name?.trim() || connection?.host || t('transferProgressModal.connectionIdFallback', { connectionId })
     );

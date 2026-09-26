@@ -4,9 +4,7 @@
   import { apiErrorMessage } from '@/client/http';
   import { UiButton, UiFormField, UiInput, UiNativeSelect, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
-  import { ConnectionTagPicker, connectionTagsService } from '@/features/tags/public';
-  import { SshKeySelector, useSshKeys } from '@/features/ssh-keys/public';
-  import { useProxies } from '@/features/proxies/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { connectionsApi } from '../api/connectionsApi';
   import { useConnections } from '../composables/useConnections';
   import type {
@@ -25,8 +23,11 @@
   }>();
   const { t } = useI18n();
   const feedback = useFeedback();
-  const proxies = useProxies();
-  const sshKeys = useSshKeys();
+  const capabilities = useRuntimeFeatureCapabilities();
+  const proxies = capabilities.proxies;
+  const sshKeys = capabilities.sshKeys;
+  const ConnectionTagPicker = capabilities.tags.picker;
+  const SshKeySelector = capabilities.sshKeys.selector;
   const connections = useConnections();
   const scriptMode = ref(false);
   const script = ref('');
@@ -313,17 +314,17 @@
     if (type === 'VNC' && !password) throw new Error(t('connections.form.scriptErrorMissingPasswordForVnc'));
     if (type === 'RDP' && keyName) throw new Error(t('connections.form.scriptErrorKeyNotApplicableForRdp'));
     if (type === 'VNC' && keyName) throw new Error(t('connections.form.scriptErrorKeyNotApplicableForVnc'));
-    const tags = await connectionTagsService.ensure(tagNames);
+    const tags = await capabilities.tags.ensure(tagNames);
     let sshKeyId: number | null = null;
     if (keyName) {
       await sshKeys.load(true);
-      sshKeyId = sshKeys.keys.value.find((k) => k.name === keyName)?.id ?? null;
+      sshKeyId = sshKeys.items.value.find((k) => k.name === keyName)?.id ?? null;
       if (!sshKeyId) throw new Error(t('connections.form.scriptErrorSshKeyNotFound', { keyName }));
     }
     let proxyId: number | null = null;
     if (proxyName) {
       await proxies.load(true);
-      proxyId = proxies.proxies.value.find((p) => p.name === proxyName)?.id ?? null;
+      proxyId = proxies.items.value.find((p) => p.name === proxyName)?.id ?? null;
       if (!proxyId) throw new Error(t('connections.form.scriptErrorProxyNotFound', { proxyName }));
     }
     return {
@@ -551,7 +552,7 @@
             >
               <UiNativeSelect v-model="form.proxyId">
                 <option :value="null">{{ t('connections.form.noProxy') }}</option>
-                <option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="proxy.id">
+                <option v-for="proxy in proxies.items.value" :key="proxy.id" :value="proxy.id">
                   {{ proxy.name }} ({{ proxy.type }} - {{ proxy.host }}:{{ proxy.port }})
                 </option>
               </UiNativeSelect>

@@ -70,6 +70,7 @@ const legacyDesignSystemNames = [
 ];
 const legacyDesignSystemPattern = new RegExp(`\\b(?:${legacyDesignSystemNames.join('|')})\\b`, 'g');
 const findings = [];
+const featureCouplingFindings = [];
 const workspaceTransportFindings = [];
 const legacyDesignSystemFindings = [];
 const files = await walk(sourceRoot);
@@ -115,6 +116,14 @@ for (const sourceFile of files) {
 
     const targetOwner = moduleOwner(targetFile);
     if (!targetOwner) continue;
+    if (sourceOwner?.kind === 'features' && targetOwner.kind === 'features' && sourceOwner.name !== targetOwner.name) {
+      featureCouplingFindings.push({
+        file: path.relative(root, sourceFile),
+        line: text.slice(0, match.index).split('\n').length,
+        sourceFeature: sourceOwner.name,
+        targetFeature: targetOwner.name,
+      });
+    }
     if (sourceOwner && sourceOwner.kind === targetOwner.kind && sourceOwner.name === targetOwner.name) {
       continue;
     }
@@ -206,6 +215,7 @@ for (const publicFile of publicFiles) {
 
 if (
   findings.length ||
+  featureCouplingFindings.length ||
   publicContractFindings.length ||
   workspaceTransportFindings.length ||
   legacyDesignSystemFindings.length
@@ -214,6 +224,11 @@ if (
   for (const finding of findings) {
     console.error(
       `- ${finding.file}:${finding.line} imports ${finding.target} via "${finding.specifier}". Cross-module imports must use ${finding.expected}.`,
+    );
+  }
+  for (const finding of featureCouplingFindings) {
+    console.error(
+      `- ${finding.file}:${finding.line} couples feature "${finding.sourceFeature}" to feature "${finding.targetFeature}". Compose cross-feature capabilities in the application layer.`,
     );
   }
   for (const finding of publicContractFindings) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { loadTerminalView } from '@/features/terminal/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import {
     createAgentWorkspaceTerminalChannel,
     type AgentWorkspaceTerminalChannel,
@@ -15,7 +15,7 @@
     running: boolean;
   }>();
 
-  const TerminalView = defineAsyncComponent(loadTerminalView);
+  const TerminalView = defineAsyncComponent(useRuntimeFeatureCapabilities().terminal.loadView);
   const { t } = useI18n();
   const channel = ref<AgentWorkspaceTerminalChannel | null>(null);
   const error = ref('');

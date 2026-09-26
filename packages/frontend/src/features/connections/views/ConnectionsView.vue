@@ -12,8 +12,7 @@
     writeStoredValue,
   } from '@/foundation/browser';
   import { useFeedback } from '@/shared/feedback/public';
-  import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
-  import { useConnectionTags } from '@/features/tags/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { useConnections } from '../composables/useConnections';
   import { connectionsApi } from '../api/connectionsApi';
   import ConnectionEditorModal from '../components/ConnectionEditorModal.vue';
@@ -23,7 +22,8 @@
   const router = useRouter();
   const feedback = useFeedback();
   const data = useConnections();
-  const tags = useConnectionTags();
+  const capabilities = useRuntimeFeatureCapabilities();
+  const tags = capabilities.tags;
   const search = ref('');
   type SortField = 'lastConnected' | 'name' | 'type' | 'updated' | 'created';
   type SortOrder = 'asc' | 'desc';
@@ -134,7 +134,7 @@
   };
   const tagNames = (connection: ConnectionDto) =>
     connection.tagIds
-      .map((id) => tags.tags.value.find((tag) => tag.id === id)?.name)
+      .map((id) => tags.items.value.find((tag) => tag.id === id)?.name)
       .filter((name): name is string => Boolean(name));
   const clone = async (c: ConnectionDto) => {
     try {
@@ -208,7 +208,7 @@
   };
   const connect = (c: ConnectionDto) => {
     if (c.type === 'RDP' || c.type === 'VNC') {
-      remoteDesktopLauncher.open({ id: c.id, name: c.name || c.host, type: c.type });
+      capabilities.remoteDesktop.open({ id: c.id, name: c.name || c.host, type: c.type });
       return;
     }
     return router.push({ name: 'Workspace', query: { connectionId: String(c.id) } });
@@ -263,7 +263,7 @@
               :aria-label="t('dashboard.filterByTag')"
             >
               <option value="">{{ t('dashboard.filterTags.all') }}</option>
-              <option v-for="tag in tags.tags.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
+              <option v-for="tag in tags.items.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
             </select>
             <select
               v-model="sort"

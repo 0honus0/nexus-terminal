@@ -3,9 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiNativeSelect, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
-  import { ConnectionTagPicker } from '@/features/tags/public';
-  import { useProxies } from '@/features/proxies/public';
-  import { useSshKeys } from '@/features/ssh-keys/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import type { ConnectionFormUpdate } from '../model/connection';
 
   type BatchAuthChoice = '__nochange__' | 'password' | 'key';
@@ -14,8 +12,10 @@
   const emit = defineEmits<{ close: []; save: [update: ConnectionFormUpdate] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
-  const proxies = useProxies();
-  const sshKeys = useSshKeys();
+  const capabilities = useRuntimeFeatureCapabilities();
+  const proxies = capabilities.proxies;
+  const sshKeys = capabilities.sshKeys;
+  const ConnectionTagPicker = capabilities.tags.picker;
 
   const editPort = ref(false);
   const editAuth = ref(false);
@@ -181,7 +181,7 @@
             <UiFormField v-else-if="form.authChoice === 'key'" :label="t('connections.form.sshKey')">
               <UiNativeSelect v-model="form.sshKeyChoice"
                 ><option value="">{{ t('connections.form.noSshKey') }}</option>
-                <option v-for="key in sshKeys.keys.value" :key="key.id" :value="String(key.id)">
+                <option v-for="key in sshKeys.items.value" :key="key.id" :value="String(key.id)">
                   {{ key.name }}
                 </option></UiNativeSelect
               >
@@ -199,7 +199,7 @@
               <UiNativeSelect v-model="form.proxyChoice"
                 ><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
                 <option value="__none__">{{ t('connections.form.noProxy') }}</option>
-                <option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="String(proxy.id)">
+                <option v-for="proxy in proxies.items.value" :key="proxy.id" :value="String(proxy.id)">
                   {{ proxy.name }} ({{ proxy.type }})
                 </option></UiNativeSelect
               >

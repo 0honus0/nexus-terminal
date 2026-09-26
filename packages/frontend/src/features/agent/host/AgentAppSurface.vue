@@ -2,7 +2,7 @@
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
-  import { useConnections } from '@/features/connections/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { UiButton, UiInfoHint } from '@/foundation/ui';
   import AgentConversation from '../ai/AgentConversation.vue';
   import {
@@ -64,7 +64,7 @@
   const { t } = useI18n();
   const { surfaceSession: agentSurfaceSession, windowManager: agentWindowManager } = useAgentHostState();
   const facade = createAgentRunFacade(props.appId);
-  const connectionsStore = useConnections();
+  const connectionsStore = useRuntimeFeatureCapabilities().connections;
   facade.start();
   const runtimeOperation = createRuntimeOperationState();
   const appExecutable = computed(() => isAgentAppExecutableHealth(props.appHealth));
@@ -93,7 +93,7 @@
   );
   const connections = computed(() => {
     if (!targetDenylist.value) return [];
-    return connectionsStore.connections.value.filter(
+    return connectionsStore.items.value.filter(
       (connection) => connection.type === 'SSH' && !deniedConnectionIds.value.has(connection.id),
     );
   });

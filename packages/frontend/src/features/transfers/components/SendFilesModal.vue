@@ -4,8 +4,7 @@
   import { OverlayPanel } from '@/foundation/ui';
   import { apiErrorMessage } from '@/client/http';
   import { useFeedback } from '@/shared/feedback/public';
-  import { useConnections, type ConnectionDto } from '@/features/connections/public';
-  import { useConnectionTags } from '@/features/tags/public';
+  import { useRuntimeFeatureCapabilities, type ConnectionDto } from '@/shared/capabilities/public';
   import { useServerTransfersStore } from '../store/serverTransfers.store';
   import type { SendFileSourceItemDto, ServerTransferMethodDto, ServerTransferTaskDto } from '../model/serverTransfer';
 
@@ -18,8 +17,9 @@
   const emit = defineEmits<{ close: []; sent: [task: ServerTransferTaskDto] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
-  const connections = useConnections();
-  const tags = useConnectionTags();
+  const capabilities = useRuntimeFeatureCapabilities();
+  const connections = capabilities.connections;
+  const tags = capabilities.tags;
   const transfers = useServerTransfersStore();
   const search = ref('');
   const selected = ref(new Set<number>());
@@ -36,9 +36,9 @@
     connections: ConnectionDto[];
   }
 
-  const tagNames = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name])));
+  const tagNames = computed(() => new Map(tags.items.value.map((tag) => [tag.id, tag.name])));
   const sshConnections = computed(() =>
-    connections.connections.value.filter(
+    connections.items.value.filter(
       (connection) => connection.type === 'SSH' && connection.id !== props.sourceConnectionId,
     ),
   );

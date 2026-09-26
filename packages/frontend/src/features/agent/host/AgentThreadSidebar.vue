@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { UiPopover } from '@/foundation/ui';
   import { numberStorageCodec, readStoredValue, removeLegacyStorageKeys, writeStoredValue } from '@/foundation/browser';
-  import { useAuthSession } from '@/features/auth/public';
+  import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { isAgentRunNonTerminal, type AgentRunStatusDto, type AgentThreadViewDto } from '../api/agent-api';
 
   const props = defineProps<{
@@ -30,7 +30,7 @@
   }>();
 
   const { locale } = useI18n();
-  const auth = useAuthSession();
+  const auth = useRuntimeFeatureCapabilities().auth;
   const query = ref('');
   const scroller = ref<HTMLElement | null>(null);
   const scrollTop = ref(0);
@@ -46,7 +46,7 @@
   const SCALE_STEP = 0.1;
   const LEGACY_SCALE_STORAGE_KEY = 'nexus.agent.thread-list-scale.v1';
   const scaleStorage = computed(() => {
-    const userId = auth.user.value?.id;
+    const userId = auth.userId.value;
     return userId === undefined || userId === null
       ? null
       : {
@@ -149,7 +149,7 @@
     maybeLoadMore();
   };
   watch(
-    () => auth.user.value?.id ?? null,
+    () => auth.userId.value,
     () => {
       scale.value = restoreScale();
       measuredRowHeight.value = null;
