@@ -7,27 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.46 `userSummary` 仍进入模型可见 `payload.text`（P1）
-
-**当前代码事实**
-
-以下 state-commit 路径仍把 `userSummary` JSON.stringify 进模型证据 `text`：
-
-- approval denied
-- approval expired
-- approval superseded
-- run cancelled before tool execution
-
-普通工具结果已经有正确的 `toolResultLedgerPayload()`：模型证据放 `text`，用户本地化摘要放 sibling `payload.userSummary`。
-
-**整改目标**
-
-四条路径统一走同一投影 helper，或至少保证 `userSummary` 只存在于 ledger sibling，绝不进入 model-facing JSON。
-
-**关闭条件**
-
-测试同时断言：UI payload 有 `userSummary`；解析 `payload.text` 后不存在 `userSummary`。
-
 ### §7.47 Run `cancelling` 时 Send 仍可进入后端必拒绝路径（P1）
 
 **当前代码事实**
@@ -283,7 +262,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **安全网**：FE-ARCH-04 / 05 / 06 / 07，同时关闭 §7.51。
-2. **现存正确性问题**：优先 §7.46 / 47 / 50，再处理 §7.48 / 49。
+2. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 5. **严格类型增强**：FE-ARCH-16。

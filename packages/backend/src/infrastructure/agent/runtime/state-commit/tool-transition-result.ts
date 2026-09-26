@@ -1,5 +1,5 @@
 import { projectToolResult } from '../../../../modules/agent/capabilities/tool-result-projection';
-import type { ToolResult } from '../../../../modules/agent/capabilities/tool.types';
+import type { ToolResult, ToolUserSummary } from '../../../../modules/agent/capabilities/tool.types';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
 import { pressureAdjustedToolOutputBytes } from '../../../../modules/agent/runtime/runs/run-budget-policy';
 import { mapRunRow, type RunRow } from '../../repositories/sqlite-run.mapper';
@@ -14,12 +14,19 @@ export const modelToolResultJson = (row: RunRow, result: ToolResult): string => 
  * sibling `userSummary`, so the conversation UI can localize the line without changing what the
  * model reads (and without adding the key to the model-facing JSON).
  */
+export const toolResultLedgerPayloadFromEvidence = (
+  toolCallId: string,
+  text: string,
+  userSummary?: ToolUserSummary,
+): Record<string, JsonValue> => ({
+  toolCallId,
+  text,
+  ...(userSummary ? { userSummary: userSummary as unknown as JsonValue } : {}),
+});
+
 export const toolResultLedgerPayload = (
   row: RunRow,
   result: ToolResult,
   toolCallId: string,
-): Record<string, JsonValue> => ({
-  toolCallId,
-  text: modelToolResultJson(row, result),
-  ...(result.userSummary ? { userSummary: result.userSummary as unknown as JsonValue } : {}),
-});
+): Record<string, JsonValue> =>
+  toolResultLedgerPayloadFromEvidence(toolCallId, modelToolResultJson(row, result), result.userSummary);

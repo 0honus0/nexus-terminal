@@ -39,6 +39,7 @@ import {
   summaryPayload,
   updateAppLiveCount,
 } from './transaction-primitives';
+import { toolResultLedgerPayloadFromEvidence } from './tool-transition-result';
 
 interface ThreadRow {
   next_sequence: number;
@@ -349,7 +350,6 @@ export const cancelRunTransition = async (
         outcome: 'confirmed',
         errorCode: 'RUN_CANCELLED_BEFORE_TOOL_EXECUTION',
         summary: 'The Run was cancelled before this queued tool call could execute.',
-        userSummary: { key: 'agent.conversation.toolSummary.runCancelled' },
         artifactRefs: [],
         truncated: false,
         verification: {
@@ -364,7 +364,9 @@ export const cancelRunTransition = async (
           id: randomUUID(),
           runId: row.id,
           kind: 'tool_result' as const,
-          payload: { toolCallId: tool.provider_call_id, text: cancelledResult },
+          payload: toolResultLedgerPayloadFromEvidence(tool.provider_call_id, cancelledResult, {
+            key: 'agent.conversation.toolSummary.runCancelled',
+          }),
         }));
       if (rootToolResults.length > 0) await appendLedger(tx, row, rootToolResults, command.now);
     }

@@ -10,6 +10,7 @@ import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { durableInteger, durableRecord, durableString, parseDurableJson } from '../durable-state-decoders';
 import { resetLoopGuard } from './loop-guard';
+import { toolResultLedgerPayloadFromEvidence } from './tool-transition-result';
 import {
   allocateHostEvent,
   appendEvents,
@@ -226,16 +227,16 @@ export const appendInputTransition = async (
           id: randomUUID(),
           runId: row.id,
           kind: 'tool_result',
-          payload: {
-            toolCallId: waitingApproval.provider_call_id,
-            text: JSON.stringify({
+          payload: toolResultLedgerPayloadFromEvidence(
+            waitingApproval.provider_call_id,
+            JSON.stringify({
               ok: false,
               outcome: 'confirmed',
               errorCode: 'APPROVAL_SUPERSEDED',
               summary: 'A newer user input superseded the pending approval.',
-              userSummary: { key: 'agent.conversation.toolSummary.approvalSuperseded' },
             }),
-          },
+            { key: 'agent.conversation.toolSummary.approvalSuperseded' },
+          ),
         },
       ],
       command.now,

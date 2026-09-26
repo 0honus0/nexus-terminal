@@ -23,6 +23,7 @@ import {
   expireOrphanedAcpPermissionApprovals,
   resolveAcpPermissionApprovalTransition,
 } from './acp-permission-approval-transitions';
+import { toolResultLedgerPayloadFromEvidence } from './tool-transition-result';
 
 export const requestToolApprovalTransition = async (
   tx: RelationalDatabase,
@@ -240,24 +241,24 @@ export const resolveToolApprovalTransition = async (
           id: randomUUID(),
           runId: row.id,
           kind: 'tool_result',
-          payload: {
-            toolCallId: approval.provider_call_id,
-            text: JSON.stringify({
+          payload: toolResultLedgerPayloadFromEvidence(
+            approval.provider_call_id,
+            JSON.stringify({
               ok: false,
               outcome: 'confirmed',
               errorCode: 'APPROVAL_DENIED',
               summary: command.feedback
                 ? `The user denied this remote mutation and provided guidance: ${command.feedback}`
                 : 'The user denied this remote mutation.',
-              userSummary: command.feedback
-                ? {
-                    key: 'agent.conversation.toolSummary.approvalDeniedWithFeedback',
-                    params: { feedback: command.feedback },
-                  }
-                : { key: 'agent.conversation.toolSummary.approvalDenied' },
               ...(command.feedback ? { userFeedback: command.feedback } : {}),
             }),
-          },
+            command.feedback
+              ? {
+                  key: 'agent.conversation.toolSummary.approvalDeniedWithFeedback',
+                  params: { feedback: command.feedback },
+                }
+              : { key: 'agent.conversation.toolSummary.approvalDenied' },
+          ),
         },
       ],
       command.now,
@@ -351,16 +352,16 @@ export const expireToolApprovalsTransition = async (tx: RelationalDatabase, now:
           id: randomUUID(),
           runId: row.id,
           kind: 'tool_result',
-          payload: {
-            toolCallId: item.provider_call_id,
-            text: JSON.stringify({
+          payload: toolResultLedgerPayloadFromEvidence(
+            item.provider_call_id,
+            JSON.stringify({
               ok: false,
               outcome: 'confirmed',
               errorCode: 'APPROVAL_EXPIRED',
               summary: 'The approval request expired before it was consumed.',
-              userSummary: { key: 'agent.conversation.toolSummary.approvalExpired' },
             }),
-          },
+            { key: 'agent.conversation.toolSummary.approvalExpired' },
+          ),
         },
       ],
       now,
