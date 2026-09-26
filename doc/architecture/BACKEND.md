@@ -150,8 +150,9 @@ Bootstrap 注册 process、database、Runner、provider、plugin 和 transport �
 
 ## 验证
 
-- `pnpm run check` 执行 transport contract、Frontend/Agent 静态检查与 Frontend type check。
+- `pnpm run check` 执行 Frontend/Agent ESLint 与 Frontend type check。
+- 架构和生命周期规则由根目录 [`AGENTS.md`](../../AGENTS.md) 约束 AI 开发与审查，不使用源码文本扫描测试。
 - `pnpm run build:backend` 执行 Backend TypeScript build 并复制 locale/Plugin SDK runtime asset。
-- Backend 回归与 Agent deterministic scenarios 位于根 `tests/backend/`。
+- Agent deterministic scenarios 位于 `tests/backend/agent-scenarios/`。
 - 用户可达 HTTP/WebSocket/SSH/Agent 行为由 `tests/e2e/` 验证。
-- Docker smoke 脚本仍可按需运行，但不再作为 canonical E2E workflow 的 gate。
+- Canonical workflow 保留 production-style Docker smoke。

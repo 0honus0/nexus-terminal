@@ -6,7 +6,7 @@
 
 ## 1. 文档目的
 
-本 SRS 以当前代码 owner、产品行为、工程约束和自动化验证为实现基线。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史来源通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复。v1.13 同步当前 Frontend capability composition、Workspace 子系统边界、Backend 分层、Agent live runtime、Plugin App surface、根目录测试布局和串行 repository checks。
+本 SRS 以当前代码 owner、产品行为、工程约束和自动化验证为实现基线。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史来源通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复。v1.13 同步当前 Frontend capability composition、Workspace 子系统边界、Backend 分层、Agent live runtime、Plugin App surface、根目录测试布局、AI 开发约束和串行标准检查。
 
 ## 2. 需求解释规则
 

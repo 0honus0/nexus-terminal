@@ -4,7 +4,7 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
-The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs repository checks, formatting and production builds, the seven Playwright projects on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
+The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, the seven Playwright projects on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
 ## Structure
 
@@ -60,7 +60,7 @@ pnpm run test:e2e:remote -- --project=http specs/http/auth-2fa.spec.ts
 pnpm --filter @nexus-terminal/e2e run test:docs
 ```
 
-GitHub Actions provides the canonical complete delivery evidence. The quality job runs repository checks, formatting and production builds serially. Each Playwright matrix job installs the frozen workspace plus the pinned Chromium runtime on a fresh hosted runner and runs one project directly. The Docker job builds the unified and standalone Agent Runner images, then exercises standalone Runner, core-without-Runner and full deployment smoke paths. Local commands remain useful for listing tests, running focused specs and reproducing failures. Automated dependency updates dispatch this same workflow on their update branch.
+GitHub Actions provides the canonical complete delivery evidence. The quality job runs standard lint/type checks, formatting and production builds serially. Each Playwright matrix job installs the frozen workspace plus the pinned Chromium runtime on a fresh hosted runner and runs one project directly. The Docker job builds the unified and standalone Agent Runner images, then exercises standalone Runner, core-without-Runner and full deployment smoke paths. Local commands remain useful for listing tests, running focused specs and reproducing failures. Automated dependency updates dispatch this same workflow on their update branch.
 
 For a long-lived remote development host that may already be serving Nexus on the default E2E ports, use `pnpm run test:e2e:remote -- <Playwright args>`. The remote launcher keeps explicit `NEXUS_E2E_*_PORT` overrides, dynamically reserves unique loopback ports for every unset E2E service, and invokes Playwright through Corepack so a stale system-level `pnpm` shim does not control the run. It enforces the repository Node engine before starting tests. This helper is for focused remote reproduction; it does not replace the canonical GitHub Actions evidence.
 

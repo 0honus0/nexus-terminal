@@ -182,11 +182,7 @@ Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 Mess
 
 仓库根命令 `pnpm run check` 串行执行：
 
-- transport contract boundary；
-- frontend public boundary 与对应回归测试；
-- frontend state lifecycle；
-- Agent i18n reachability；
 - Frontend/Agent ESLint；
 - Frontend TypeScript check。
 
-`scripts/checks/frontend/public-boundaries.mjs` 当前检查公共入口、跨 feature 耦合、Agent/Workspace 子系统方向、SFC section 大小、public contract 完整性和 Workspace HTTP adapter 边界。检查脚本位于 `scripts/checks/`，对应回归测试位于根 `tests/`。这些 repository checks 保留为独立开发验证，不再作为 GitHub E2E workflow 的前置 gate。
+模块公开入口、跨 feature 依赖、状态 owner、组件拆分和国际化规则由根目录 [`AGENTS.md`](../../AGENTS.md) 约束 AI 开发与审查。仓库不再用读取源码文本、匹配 import 或统计文件形状的脚本和测试充当架构门禁；用户可见行为通过真实 E2E 路径验证。

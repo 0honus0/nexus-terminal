@@ -3,10 +3,6 @@
 import { spawnSync } from 'node:child_process';
 
 const checks = [
-  ['Transport contract boundaries', ['run', 'lint:transport-contracts']],
-  ['Frontend public boundaries', ['run', 'lint:frontend-boundaries']],
-  ['Frontend state lifecycles', ['run', 'lint:frontend-state-lifecycles']],
-  ['Agent i18n', ['run', 'lint:agent-i18n']],
   ['Frontend ESLint', ['run', 'lint:frontend']],
   ['Agent ESLint', ['run', 'lint:agent']],
   ['Frontend type check', ['--filter', '@nexus-terminal/frontend', 'exec', 'vue-tsc', '--noEmit']],

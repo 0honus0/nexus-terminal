@@ -69,7 +69,7 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run repository checks serially
+      - name: Run standard checks serially
         run: pnpm run check
 
       - name: Check formatting
