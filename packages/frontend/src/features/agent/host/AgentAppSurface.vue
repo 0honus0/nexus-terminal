@@ -37,6 +37,7 @@
     AgentWorkspaceRuntimeAvailabilityDto,
     AgentWorkspaceRuntimeCatalogDto,
   } from '../api/agent-api';
+  import { agentRunAcceptsInput, isAgentRunNonTerminal } from '../api/agent-api';
   import { agentHostEvents } from './agent-host-events';
   import { agentWindowManager } from './window-manager';
   import { agentSurfaceSession } from './surface-session';
@@ -294,14 +295,6 @@
   let threadDeleteArmTimer: number | null = null;
   let deleteAllThreadsArmTimer: number | null = null;
 
-  const nonTerminal = new Set([
-    'created',
-    'running',
-    'awaiting_approval',
-    'awaiting_budget',
-    'awaiting_input',
-    'cancelling',
-  ]);
   const backgroundThreadStatuses = computed(() => {
     const statuses = new Map<string, AgentRunViewDto['status']>();
     for (const candidate of backgroundRuns.value) {
@@ -317,7 +310,7 @@
     () =>
       threads.value.filter((thread) => {
         const status = threadStatus(thread.id);
-        return status !== null && nonTerminal.has(status);
+        return status !== null && isAgentRunNonTerminal(status);
       }).length,
   );
   const threadStatuses = computed<Record<string, AgentRunViewDto['status'] | null>>(() =>
@@ -371,7 +364,7 @@
       : t('agent.operations.modelMissingCapabilities', {
           capabilities: option.missingCapabilities.map(modelCapabilityLabel).join(', '),
         });
-  const modelSelectionLocked = computed(() => Boolean(run.value && nonTerminal.has(run.value.status)));
+  const modelSelectionLocked = computed(() => Boolean(run.value && isAgentRunNonTerminal(run.value.status)));
   const executionModeValue = computed<AgentExecutionModeDto>(() =>
     modelSelectionLocked.value && run.value ? run.value.definition.executionMode : selectedExecutionMode.value,
   );
@@ -563,9 +556,11 @@
       if (run.value) return true;
       return submission.command.kind === 'goal.set' ? Boolean(definitions.value[0] && providerSelection.value) : true;
     }
-    return Boolean(
-      (run.value && nonTerminal.has(run.value.status)) || (definitions.value[0] && providerSelection.value),
-    );
+    if (run.value) {
+      if (agentRunAcceptsInput(run.value.status)) return true;
+      if (isAgentRunNonTerminal(run.value.status)) return false;
+    }
+    return Boolean(definitions.value[0] && providerSelection.value);
   });
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
@@ -760,7 +755,7 @@
     const page = await facade.listRuns();
     if (requestGeneration !== backgroundGeneration || (currentThread.value?.id ?? null) !== selectedThreadId) return;
     backgroundRuns.value = page.items.filter(
-      (candidate) => nonTerminal.has(candidate.status) && candidate.threadId !== selectedThreadId,
+      (candidate) => isAgentRunNonTerminal(candidate.status) && candidate.threadId !== selectedThreadId,
     );
   };
 
@@ -930,7 +925,7 @@
             : []),
         ]);
         if (signal.aborted) return;
-        if (!next || !nonTerminal.has(next.status)) {
+        if (!next || !isAgentRunNonTerminal(next.status)) {
           resetStreamingPresentation();
           facade.selectRun(null);
         }
@@ -975,7 +970,8 @@
       const [, runs] = await Promise.all([refreshLedger(), facade.listRuns(thread.id)]);
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       threadRuns.value = runs.items;
-      const selectedRun = runs.items.find((candidate) => nonTerminal.has(candidate.status)) ?? runs.items[0] ?? null;
+      const selectedRun =
+        runs.items.find((candidate) => isAgentRunNonTerminal(candidate.status)) ?? runs.items[0] ?? null;
       run.value = selectedRun;
       if (selectedRun) rememberThreadRun(selectedRun);
       // The transcript and run list are enough to paint the conversation. Do not keep the
@@ -990,7 +986,7 @@
         );
       });
       const active =
-        selectedRun && !nonTerminal.has(selectedRun.status) ? await facade.getRun(selectedRun.id) : selectedRun;
+        selectedRun && !isAgentRunNonTerminal(selectedRun.status) ? await facade.getRun(selectedRun.id) : selectedRun;
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       run.value = active;
       if (active) rememberThreadRun(active);
@@ -1004,7 +1000,7 @@
       }
       await Promise.all([approvalPromise, reconciliationPromise]);
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
-      if (active && nonTerminal.has(active.status)) startRunStream(active);
+      if (active && isAgentRunNonTerminal(active.status)) startRunStream(active);
       void backgroundPromise;
     } catch (cause) {
       if (selectionGeneration === threadSelectionGeneration) {
@@ -1333,7 +1329,7 @@
   const executeSlashCommand = createConversationCommandExecutor({
     t: (key, values) => (values ? t(key, values) : t(key)),
     getRun: () => run.value,
-    isActiveRun: (candidate) => nonTerminal.has(candidate.status) && candidate.status !== 'cancelling',
+    isActiveRun: (candidate) => agentRunAcceptsInput(candidate.status),
     beginMutation: beginRuntimeMutation,
     finishMutation: finishRuntimeMutation,
     succeedMutation: runtimeOperation.succeed,
@@ -1388,7 +1384,11 @@
     if (!currentThread.value || !beginRuntimeMutation()) return;
     try {
       const active = run.value;
-      if (active && nonTerminal.has(active.status)) {
+      if (active && isAgentRunNonTerminal(active.status) && !agentRunAcceptsInput(active.status)) {
+        runtimeOperation.succeed();
+        return;
+      }
+      if (active && agentRunAcceptsInput(active.status)) {
         const artifactRefs = await resolveArtifactRefs(selectedArtifacts, active);
         const idempotencyKey = crypto.randomUUID();
         try {
@@ -1399,7 +1399,7 @@
           if (currentThread.value?.id !== refreshed.threadId) throw cause;
           run.value = refreshed;
           rememberThreadRun(refreshed);
-          if (!nonTerminal.has(refreshed.status)) {
+          if (!isAgentRunNonTerminal(refreshed.status)) {
             await createNewRun(submission.text, selectedArtifacts);
             runtimeOperation.succeed();
             return;
@@ -1450,7 +1450,7 @@
     try {
       run.value = await facade.increaseBudget(run.value, increase);
       rememberThreadRun(run.value);
-      if (run.value && nonTerminal.has(run.value.status)) startRunStream(run.value);
+      if (run.value && isAgentRunNonTerminal(run.value.status)) startRunStream(run.value);
       runtimeOperation.succeed();
       await postCommitSync(
         () => Promise.all([refreshLedger(), refreshApprovals(runId), refreshBackgroundRuns()]).then(() => undefined),
@@ -1487,7 +1487,7 @@
               ? [refreshDetailApprovalBatch(approval.runId)]
               : []),
           ]);
-          if (nonTerminal.has(next.status)) startRunStream(next);
+          if (isAgentRunNonTerminal(next.status)) startRunStream(next);
         },
         {
           domainKey: 'agent.operations.failureDomain.approvals',
@@ -1721,9 +1721,11 @@
         if (run.value?.id === snapshot.id) {
           stopRunStream();
           run.value =
-            threadRuns.value.find((candidate) => nonTerminal.has(candidate.status)) ?? threadRuns.value[0] ?? null;
+            threadRuns.value.find((candidate) => isAgentRunNonTerminal(candidate.status)) ??
+            threadRuns.value[0] ??
+            null;
           approvalBatch.value = null;
-          if (run.value && nonTerminal.has(run.value.status)) startRunStream(run.value);
+          if (run.value && isAgentRunNonTerminal(run.value.status)) startRunStream(run.value);
         }
       }
       runtimeOperation.succeed();
@@ -1827,7 +1829,7 @@
 
   const requestDeleteThread = (thread: AgentThreadViewDto): void => {
     const status = threadStatus(thread.id);
-    if (status && nonTerminal.has(status)) return;
+    if (status && isAgentRunNonTerminal(status)) return;
     if (threadDeleteArmedId.value === thread.id) {
       void deleteThreadConversation(thread);
       return;
@@ -2066,13 +2068,13 @@
                   : $t('agent.operations.deleteThread')
               "
               :title="
-                run && nonTerminal.has(run.status)
+                run && isAgentRunNonTerminal(run.status)
                   ? $t('agent.operations.deleteThreadActiveHint')
                   : threadDeleteArmedId === currentThread.id
                     ? $t('agent.operations.confirmDeleteThread')
                     : $t('agent.operations.deleteThread')
               "
-              :disabled="busy || Boolean(run && nonTerminal.has(run.status))"
+              :disabled="busy || Boolean(run && isAgentRunNonTerminal(run.status))"
               @click="requestDeleteThread(currentThread)"
             >
               <i class="fa-solid fa-trash-can text-[10px]" aria-hidden="true"></i>

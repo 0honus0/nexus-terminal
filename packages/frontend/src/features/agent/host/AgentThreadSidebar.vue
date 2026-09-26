@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { UiPopover } from '@/foundation/ui';
   import { useAuthSession } from '@/features/auth/public';
-  import type { AgentRunStatusDto, AgentThreadViewDto } from '../api/agent-api';
+  import { isAgentRunNonTerminal, type AgentRunStatusDto, type AgentThreadViewDto } from '../api/agent-api';
 
   const props = defineProps<{
     open: boolean;
@@ -49,14 +49,6 @@
     const userId = auth.user.value?.id;
     return userId === undefined || userId === null ? null : `${SCALE_STORAGE_KEY_PREFIX}.${userId}`;
   });
-  const nonTerminal = new Set<AgentRunStatusDto>([
-    'created',
-    'running',
-    'awaiting_approval',
-    'awaiting_budget',
-    'awaiting_input',
-    'cancelling',
-  ]);
 
   const restoreScale = (): number => {
     if (typeof window === 'undefined') return SCALE_DEFAULT;
@@ -112,8 +104,8 @@
       .sort((left, right) => {
         const leftStatus = statusFor(left.id);
         const rightStatus = statusFor(right.id);
-        const leftActive = leftStatus !== null && nonTerminal.has(leftStatus);
-        const rightActive = rightStatus !== null && nonTerminal.has(rightStatus);
+        const leftActive = leftStatus !== null && isAgentRunNonTerminal(leftStatus);
+        const rightActive = rightStatus !== null && isAgentRunNonTerminal(rightStatus);
         if (leftActive !== rightActive) return leftActive ? -1 : 1;
         return right.updatedAt - left.updatedAt;
       });
@@ -438,7 +430,7 @@
             <span
               class="relative z-10 h-1.5 w-1.5 rounded-full transition-colors"
               :class="
-                statusFor(thread.id) && nonTerminal.has(statusFor(thread.id)!)
+                statusFor(thread.id) && isAgentRunNonTerminal(statusFor(thread.id)!)
                   ? statusFor(thread.id) === 'awaiting_approval' || statusFor(thread.id) === 'awaiting_budget'
                     ? 'bg-warning'
                     : 'bg-success'
@@ -457,7 +449,7 @@
             </span>
             <div class="agent-thread-meta mt-0.5 flex items-center justify-between gap-1.5 text-text-secondary/75">
               <span
-                v-if="statusFor(thread.id) && nonTerminal.has(statusFor(thread.id)!)"
+                v-if="statusFor(thread.id) && isAgentRunNonTerminal(statusFor(thread.id)!)"
                 class="rounded-sm px-1 py-0.5 font-medium"
                 :class="
                   statusFor(thread.id) === 'awaiting_approval' || statusFor(thread.id) === 'awaiting_budget'
@@ -483,13 +475,13 @@
                 : 'text-text-secondary/70 hover:bg-error/10 hover:text-error'
           "
           :title="
-            statusFor(thread.id) && nonTerminal.has(statusFor(thread.id)!)
+            statusFor(thread.id) && isAgentRunNonTerminal(statusFor(thread.id)!)
               ? $t('agent.operations.deleteThreadActiveHint')
               : threadDeleteArmedId === thread.id
                 ? $t('agent.operations.confirmDeleteThread')
                 : $t('agent.operations.deleteThread')
           "
-          :disabled="busy || Boolean(statusFor(thread.id) && nonTerminal.has(statusFor(thread.id)!))"
+          :disabled="busy || Boolean(statusFor(thread.id) && isAgentRunNonTerminal(statusFor(thread.id)!))"
           @click.stop="emit('deleteThread', thread)"
         >
           <i class="fa-solid fa-trash-can text-[9px]" aria-hidden="true"></i>

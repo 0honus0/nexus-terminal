@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import {
+  AGENT_RUN_INPUT_ACCEPTING_STATUSES,
+  AGENT_RUN_NON_TERMINAL_STATUSES,
+} from '@nexus-terminal/protocol/agent-runs';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
 import type {
   DurableEventInput,
@@ -11,14 +15,8 @@ import { appendHostEvent } from '../../events/host-event-outbox';
 import { RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { parseRunUsage } from '../durable-state-decoders';
 
-export const NON_TERMINAL = new Set<RunStatus>([
-  'created',
-  'running',
-  'awaiting_approval',
-  'awaiting_budget',
-  'awaiting_input',
-  'cancelling',
-]);
+export const NON_TERMINAL = new Set<RunStatus>(AGENT_RUN_NON_TERMINAL_STATUSES);
+export const ACCEPTS_INPUT = new Set<RunStatus>(AGENT_RUN_INPUT_ACCEPTING_STATUSES);
 export const COUNTED_LIVE = new Set<RunStatus>([
   'running',
   'awaiting_approval',

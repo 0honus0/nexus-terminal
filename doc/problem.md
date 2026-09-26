@@ -7,22 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.47 Run `cancelling` 时 Send 仍可进入后端必拒绝路径（P1）
-
-**当前代码事实**
-
-- Backend 明确把 `cancelling` 判为 `RUN_NOT_ACCEPTING_INPUT`。
-- Frontend `nonTerminal` 包含 `cancelling`。
-- `canSend()` / `send()` 仍会把该状态当作可 append-input 的 active Run。
-
-**整改目标**
-
-建立明确的 `acceptsInput(status)` 语义，不能继续用 `nonTerminal` 代替；至少排除 `cancelling`，并给用户显示正在停止的禁用原因。
-
-**关闭条件**
-
-Run cancelling 窗口内发送按钮不可触发 append-input，请求层不会产生必然失败的调用。
-
 ### §7.48 Hub model option hint 仍低于阅读文字 floor（P1）
 
 **当前代码事实**

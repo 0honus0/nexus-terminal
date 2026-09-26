@@ -106,6 +106,29 @@ export type AgentRunStatusDto =
   | 'cancelled'
   | 'interrupted';
 
+export const AGENT_RUN_NON_TERMINAL_STATUSES = [
+  'created',
+  'running',
+  'awaiting_approval',
+  'awaiting_budget',
+  'awaiting_input',
+  'cancelling',
+] as const satisfies readonly AgentRunStatusDto[];
+
+export const AGENT_RUN_INPUT_ACCEPTING_STATUSES = [
+  'created',
+  'running',
+  'awaiting_approval',
+  'awaiting_budget',
+  'awaiting_input',
+] as const satisfies readonly AgentRunStatusDto[];
+
+const NON_TERMINAL_STATUS_SET = new Set<AgentRunStatusDto>(AGENT_RUN_NON_TERMINAL_STATUSES);
+const INPUT_ACCEPTING_STATUS_SET = new Set<AgentRunStatusDto>(AGENT_RUN_INPUT_ACCEPTING_STATUSES);
+
+export const isAgentRunNonTerminal = (status: AgentRunStatusDto): boolean => NON_TERMINAL_STATUS_SET.has(status);
+export const agentRunAcceptsInput = (status: AgentRunStatusDto): boolean => INPUT_ACCEPTING_STATUS_SET.has(status);
+
 export type AgentGoalStatusDto = 'unknown' | 'in_progress' | 'satisfied' | 'not_satisfied';
 export type AgentVerificationStatusDto = 'not_started' | 'verified' | 'unverified' | 'failed';
 export type AgentExecutionModeDto = 'execute' | 'plan';

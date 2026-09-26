@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { agentRunAcceptsInput, type AgentRunStatusDto } from '@nexus-terminal/protocol/agent-runs';
 import type {
   ArtifactAgentAccess,
   ArtifactAttachInput,
@@ -761,15 +762,13 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
       );
       if (!thread) throw new Error('NOT_FOUND');
       if (input.runId) {
-        const run = await tx.queryOne<{ status: string }>(
+        const run = await tx.queryOne<{ status: AgentRunStatusDto }>(
           `SELECT status FROM agent_runs
            WHERE id = ? AND thread_id = ? AND user_id = ? AND app_id = ?`,
           [input.runId, input.threadId, userId, input.targetAppId],
         );
         if (!run) throw new Error('NOT_FOUND');
-        if (!['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input'].includes(run.status)) {
-          throw new Error('RUN_NOT_ACCEPTING_INPUT');
-        }
+        if (!agentRunAcceptsInput(run.status)) throw new Error('RUN_NOT_ACCEPTING_INPUT');
       }
 
       const crossApp = artifact.app_id !== input.targetAppId;

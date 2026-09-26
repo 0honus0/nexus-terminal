@@ -108,6 +108,7 @@ export type * from '@nexus-terminal/protocol/agent-memories';
 export type * from '@nexus-terminal/protocol/agent-plugins';
 export type * from '@nexus-terminal/protocol/agent-providers';
 export type * from '@nexus-terminal/protocol/agent-runs';
+export { agentRunAcceptsInput, isAgentRunNonTerminal } from '@nexus-terminal/protocol/agent-runs';
 export type * from '@nexus-terminal/protocol/agent-threads';
 
 import { agentRuntimeRequest } from './agent-http-client';

@@ -8,10 +8,10 @@ import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { projectRunUserInputs } from '../../repositories/run-input-projection';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import {
+  ACCEPTS_INPUT,
   allocateHostEvent,
   appendEvents,
   IDEMPOTENCY_TTL_SECONDS,
-  NON_TERMINAL,
   summaryPayload,
 } from './transaction-primitives';
 
@@ -43,7 +43,7 @@ export const mutatePendingInputTransition = async (
   );
   if (!row) throw new Error('NOT_FOUND');
   if (row.version !== command.expectedRunVersion) throw new Error('STATE_CONFLICT');
-  if (!NON_TERMINAL.has(row.status) || row.status === 'cancelling') throw new Error('RUN_NOT_ACCEPTING_INPUT');
+  if (!ACCEPTS_INPUT.has(row.status)) throw new Error('RUN_NOT_ACCEPTING_INPUT');
 
   const projected = await projectRunUserInputs(tx, command.scope, row.id);
   const pending = projected.filter((entry) => entry.sequence > row.consumed_input_sequence);
