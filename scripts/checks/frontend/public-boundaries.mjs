@@ -55,6 +55,7 @@ const publicTypeReexportPattern = /export\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"
 const publicTypeStarReexportPattern = /export\s+(?:type\s+)?\*\s+from\s*['"]([^'"]+)['"]/g;
 const exportedTypeDeclarationPattern = /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)/gm;
 const findings = [];
+const workspaceTransportFindings = [];
 const files = await walk(sourceRoot);
 
 for (const sourceFile of files) {
@@ -64,6 +65,17 @@ for (const sourceFile of files) {
   let match;
   while ((match = importPattern.exec(text))) {
     const specifier = match[1];
+    if (
+      sourceOwner?.kind === 'runtimes' &&
+      sourceOwner.name === 'workspace' &&
+      specifier === '@/client/http' &&
+      !path.relative(sourceRoot, sourceFile).split(path.sep).includes('adapters')
+    ) {
+      workspaceTransportFindings.push({
+        file: path.relative(root, sourceFile),
+        line: text.slice(0, match.index).split('\n').length,
+      });
+    }
     const candidates = resolveSourceImport(sourceFile, specifier);
     if (!candidates) continue;
 
@@ -167,7 +179,7 @@ for (const publicFile of publicFiles) {
   }
 }
 
-if (findings.length || publicContractFindings.length) {
+if (findings.length || publicContractFindings.length || workspaceTransportFindings.length) {
   console.error('Frontend public API boundary guard failed:');
   for (const finding of findings) {
     console.error(
@@ -177,6 +189,11 @@ if (findings.length || publicContractFindings.length) {
   for (const finding of publicContractFindings) {
     console.error(
       `- ${finding.publicFile} exposes types from ${finding.contractSource} but omits exported type ${finding.typeName}. Public contract source files must be re-exported completely.`,
+    );
+  }
+  for (const finding of workspaceTransportFindings) {
+    console.error(
+      `- ${finding.file}:${finding.line} imports the HTTP client directly. Workspace transport access belongs in an adapter.`,
     );
   }
   process.exit(1);

@@ -9,14 +9,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-10 Workspace data access 边界
-
-**状态：🟠 待整改**
-
-`workspace/layout` 与 `workspace/focus` 仍直接使用 `httpClient`。
-
-需要下沉到 workspace adapter/repository/API owner；layout/focus 只管理 domain state 和交互语义，不直接认识 transport client。
-
 ### FE-ARCH-11 typed / versioned browser persistence
 
 **状态：🟠 待整改**
@@ -98,7 +90,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
-2. **状态与数据层**：FE-ARCH-10 / 11 / 12。
+2. **状态与数据层**：FE-ARCH-11 / 12。
 3. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 4. **严格类型增强**：FE-ARCH-16。
 

@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import type { WorkspaceFocusConfigDto } from '@nexus-terminal/protocol/settings';
-import { httpClient } from '@/client/http';
+import type { WorkspaceSettingsRepository } from '../ports/workspace-settings-repository';
 
 export const workspaceFocusTargets = [
   'quickCommandsSearch',
@@ -56,7 +56,7 @@ const validConfigForSave = (value: WorkspaceFocusConfigDto): boolean => {
   });
 };
 
-export const createWorkspaceFocusController = () => {
+export const createWorkspaceFocusController = (settingsRepository: WorkspaceSettingsRepository) => {
   const config = ref<WorkspaceFocusConfigDto>(defaultConfig());
   const loaded = ref(false);
 
@@ -65,14 +65,14 @@ export const createWorkspaceFocusController = () => {
     loaded: computed(() => loaded.value),
     async load(force = false): Promise<void> {
       if (loaded.value && !force) return;
-      const { data } = await httpClient.get<WorkspaceFocusConfigDto>('/settings/focus-switcher-sequence');
-      config.value = normalizeLoadedConfig(data) ?? defaultConfig();
+      const loadedConfig = await settingsRepository.loadFocus();
+      config.value = normalizeLoadedConfig(loadedConfig) ?? defaultConfig();
       loaded.value = true;
     },
     async save(next: WorkspaceFocusConfigDto): Promise<void> {
       if (!validConfigForSave(next)) throw new Error('Invalid focus switcher configuration.');
       const request: WorkspaceFocusConfigDto = next;
-      await httpClient.put('/settings/focus-switcher-sequence', request);
+      await settingsRepository.saveFocus(request);
       config.value = structuredClone(next);
       loaded.value = true;
     },

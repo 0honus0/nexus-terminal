@@ -1,6 +1,7 @@
 import { inject, provide, type InjectionKey } from 'vue';
 import { createWorkspaceLayoutController, type WorkspaceLayoutController } from '../layout/workspaceLayout';
 import { createWorkspaceFocusController, type WorkspaceFocusController } from '../focus/workspaceFocus';
+import { workspaceSettingsHttpRepository } from '../adapters/workspaceSettingsHttpRepository';
 
 export interface WorkspaceUiState {
   layout: WorkspaceLayoutController;
@@ -10,7 +11,10 @@ export interface WorkspaceUiState {
 const workspaceUiStateKey: InjectionKey<WorkspaceUiState> = Symbol('workspace-ui-state');
 
 export const provideWorkspaceUiState = (): WorkspaceUiState => {
-  const state = { layout: createWorkspaceLayoutController(), focus: createWorkspaceFocusController() };
+  const state = {
+    layout: createWorkspaceLayoutController(workspaceSettingsHttpRepository),
+    focus: createWorkspaceFocusController(workspaceSettingsHttpRepository),
+  };
   provide(workspaceUiStateKey, state);
   return state;
 };

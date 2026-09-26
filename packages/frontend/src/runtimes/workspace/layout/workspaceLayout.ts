@@ -5,9 +5,9 @@ import type {
   WorkspacePaneNameDto,
   WorkspaceSidebarConfigDto,
 } from '@nexus-terminal/protocol/settings';
-import { httpClient } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { createLatestValueSaver } from '@/foundation/async';
+import type { WorkspaceSettingsRepository } from '../ports/workspace-settings-repository';
 
 export type { WorkspacePaneNameDto, WorkspaceSidebarConfigDto } from '@nexus-terminal/protocol/settings';
 
@@ -281,7 +281,7 @@ const writeStored = (key: string, value: unknown): void => {
   }
 };
 
-export const createWorkspaceLayoutController = () => {
+export const createWorkspaceLayoutController = (settingsRepository: WorkspaceSettingsRepository) => {
   const tree = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
   const sidebars = ref<WorkspaceSidebarConfigDto>(defaultSidebars());
   const loaded = ref(false);
@@ -318,7 +318,7 @@ export const createWorkspaceLayoutController = () => {
     delayMs: 1000,
     async save(nextTree) {
       const request: WorkspaceLayoutNodeDto = nextTree;
-      await httpClient.put('/settings/layout', request);
+      await settingsRepository.saveResizedLayout(request);
       writeStored(LAYOUT_STORAGE_KEY, nextTree);
     },
     onError: (error) => logger.error({ err: error }, 'Failed to persist resized workspace layout'),
@@ -335,12 +335,12 @@ export const createWorkspaceLayoutController = () => {
       loading.value = true;
       try {
         const [layoutResult, sidebarResult] = await Promise.allSettled([
-          httpClient.get<WorkspaceLayoutNodeDto | null>('/settings/layout'),
-          httpClient.get<WorkspaceSidebarConfigDto>('/settings/sidebar'),
+          settingsRepository.loadLayout(),
+          settingsRepository.loadSidebar(),
         ]);
 
         const backendLayout =
-          layoutResult.status === 'fulfilled' ? normalizeWorkspaceLayoutCandidate(layoutResult.value.data) : null;
+          layoutResult.status === 'fulfilled' ? normalizeWorkspaceLayoutCandidate(layoutResult.value) : null;
         const storedLayoutData = backendLayout
           ? null
           : readStored<WorkspaceLayoutNodeState>(LAYOUT_STORAGE_KEY, (value) => validateLayout(value, true));
@@ -348,8 +348,8 @@ export const createWorkspaceLayoutController = () => {
         const nextTree = normalizeWorkspaceLayout(backendLayout ?? storedLayout ?? createDefaultWorkspaceLayout());
 
         const backendSidebar =
-          sidebarResult.status === 'fulfilled' && validSidebar(sidebarResult.value.data, nextTree)
-            ? sidebarResult.value.data
+          sidebarResult.status === 'fulfilled' && validSidebar(sidebarResult.value, nextTree)
+            ? sidebarResult.value
             : null;
         const storedSidebar = backendSidebar
           ? null
@@ -373,7 +373,7 @@ export const createWorkspaceLayoutController = () => {
       if (!normalizedTree || !validSidebar(nextSidebars, normalizedTree)) throw new Error('Invalid Workspace layout.');
       await resizeSaver.flush();
       const request: WorkspaceLayoutSettingsRequestDto = { layout: normalizedTree, sidebar: nextSidebars };
-      await httpClient.put('/settings/workspace-layout', request);
+      await settingsRepository.saveLayout(request);
       tree.value = normalizedTree;
       sidebars.value = nextSidebars;
       loaded.value = true;

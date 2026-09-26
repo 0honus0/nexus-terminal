@@ -22,6 +22,18 @@ const runGuard = (sourcePath, publicSource) => {
   }
 };
 
+const runWorkspaceGuard = (sourcePath, sourceText) => {
+  const root = mkdtempSync(path.join(tmpdir(), 'workspace-boundaries-'));
+  try {
+    const source = path.join(root, 'packages/frontend/src/runtimes/workspace', sourcePath);
+    mkdirSync(path.dirname(source), { recursive: true });
+    writeFileSync(source, sourceText);
+    return spawnSync(process.execPath, [guard], { cwd: root, encoding: 'utf8' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+};
+
 test('explicit public re-export leaves implementation types private', () => {
   const result = runGuard('model/example.ts', "export type { PublicType } from './model/example';\n");
   assert.equal(result.status, 0, result.stderr);
@@ -45,3 +57,15 @@ for (const source of ['contracts/example.ts', 'public-types.ts']) {
     assert.equal(explicit.status, 0, explicit.stderr);
   });
 }
+
+test('workspace transport access is confined to adapters', () => {
+  const direct = runWorkspaceGuard('layout/workspaceLayout.ts', "import { httpClient } from '@/client/http';\n");
+  assert.equal(direct.status, 1);
+  assert.match(direct.stderr, /Workspace transport access belongs in an adapter/);
+
+  const adapter = runWorkspaceGuard(
+    'adapters/workspaceSettingsHttpRepository.ts',
+    "import { httpClient } from '@/client/http';\n",
+  );
+  assert.equal(adapter.status, 0, adapter.stderr);
+});
