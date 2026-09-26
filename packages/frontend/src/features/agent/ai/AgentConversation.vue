@@ -419,7 +419,8 @@
     <div class="relative z-10 min-h-0 flex-1">
       <div
         ref="scroller"
-        class="agent-conversation-scroller h-full overflow-y-auto overscroll-contain px-5 py-5"
+        data-testid="agent-conversation-scroller"
+        class="agent-conversation-scroller h-full overflow-y-auto overscroll-contain px-5 py-5 touch-pan-y"
         @scroll.passive="handleScroll"
       >
         <div class="mx-auto mb-4 flex max-w-3xl justify-center">
@@ -872,6 +873,11 @@
       color-mix(in srgb, var(--color-primary) 2%, transparent) 40%,
       transparent 70%
     );
+  }
+
+  .agent-conversation-scroller {
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
   }
 
   #agent-composer {

@@ -692,7 +692,6 @@
     :aria-label="$t('agent.hub.title')"
     @keydown="handleHubKeydown"
     @wheel.stop
-    @touchmove.stop
   >
     <header
       class="agent-hub-header flex h-11 shrink-0 touch-none select-none items-center justify-between gap-2.5 border-b border-border/45 bg-header/45 px-3 backdrop-blur-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/45"
