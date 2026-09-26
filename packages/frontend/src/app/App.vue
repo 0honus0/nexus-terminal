@@ -10,8 +10,7 @@
   import { markConnectionConnected, resetConnectionsCache } from '@/features/connections/public';
   import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { resetPreferencesCache, usePreferences } from '@/features/preferences/public';
-  import DialogHost from '@/shared/feedback/components/DialogHost.vue';
-  import NotificationHost from '@/shared/feedback/components/NotificationHost.vue';
+  import { DialogHost, NotificationHost } from '@/shared/feedback/public';
   import { resetProxiesCache } from '@/features/proxies/public';
   import { resetConnectionTagsCache } from '@/features/tags/public';
   import { resetNotificationsCache } from '@/features/notifications/public';

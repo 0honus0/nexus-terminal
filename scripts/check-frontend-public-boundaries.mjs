@@ -4,6 +4,7 @@ import path from 'node:path';
 const root = process.cwd();
 const sourceRoot = path.resolve(root, 'packages/frontend/src');
 const extensions = new Set(['.ts', '.tsx', '.vue']);
+const foundationPublicModules = new Set(['ui', 'browser', 'interaction', 'async']);
 
 const walk = async (directory) => {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -20,7 +21,14 @@ const moduleOwner = (absolutePath) => {
   const relative = path.relative(sourceRoot, absolutePath);
   if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
   const [kind, name] = relative.split(path.sep);
-  if (!name || (kind !== 'features' && kind !== 'runtimes')) return null;
+  if (
+    !name ||
+    (kind !== 'features' &&
+      kind !== 'runtimes' &&
+      kind !== 'shared' &&
+      !(kind === 'foundation' && foundationPublicModules.has(name)))
+  )
+    return null;
   return { kind, name };
 };
 
@@ -30,13 +38,7 @@ const resolveSourceImport = (sourceFile, specifier) => {
   else if (specifier.startsWith('.')) base = path.resolve(path.dirname(sourceFile), specifier);
   else return null;
 
-  const candidates = [
-    base,
-    `${base}.ts`,
-    `${base}.tsx`,
-    `${base}.vue`,
-    path.join(base, 'index.ts'),
-  ];
+  const candidates = [base, `${base}.ts`, `${base}.tsx`, `${base}.vue`, path.join(base, 'index.ts')];
   return candidates;
 };
 
@@ -51,8 +53,7 @@ const exists = async (candidate) => {
 const importPattern = /(?:\bfrom\s*|\bimport\s*\()\s*['"]([^'"]+)['"]/g;
 const publicTypeReexportPattern = /export\s+type\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/gs;
 const publicTypeStarReexportPattern = /export\s+type\s+\*\s+from\s*['"]([^'"]+)['"]/g;
-const exportedTypeDeclarationPattern =
-  /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)/gm;
+const exportedTypeDeclarationPattern = /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)/gm;
 const findings = [];
 const files = await walk(sourceRoot);
 
@@ -77,11 +78,7 @@ for (const sourceFile of files) {
 
     const targetOwner = moduleOwner(targetFile);
     if (!targetOwner) continue;
-    if (
-      sourceOwner &&
-      sourceOwner.kind === targetOwner.kind &&
-      sourceOwner.name === targetOwner.name
-    ) {
+    if (sourceOwner && sourceOwner.kind === targetOwner.kind && sourceOwner.name === targetOwner.name) {
       continue;
     }
 
@@ -89,7 +86,7 @@ for (const sourceFile of files) {
       sourceRoot,
       targetOwner.kind,
       targetOwner.name,
-      'public.ts',
+      targetOwner.kind === 'foundation' ? 'index.ts' : 'public.ts',
     );
     if (path.resolve(targetFile) === expectedPublicEntry) continue;
 
@@ -133,7 +130,10 @@ for (const publicFile of publicFiles) {
     const specifier = exportMatch[2];
     const names = typeExportsBySpecifier.get(specifier) ?? new Set();
     for (const item of exportMatch[1].split(',')) {
-      const sourceName = item.trim().split(/\s+as\s+/u)[0]?.trim();
+      const sourceName = item
+        .trim()
+        .split(/\s+as\s+/u)[0]
+        ?.trim();
       if (sourceName) names.add(sourceName);
     }
     typeExportsBySpecifier.set(specifier, names);
@@ -163,7 +163,7 @@ if (findings.length || publicContractFindings.length) {
   console.error('Frontend public API boundary guard failed:');
   for (const finding of findings) {
     console.error(
-      `- ${finding.file}:${finding.line} imports ${finding.target} via "${finding.specifier}". Cross-feature/runtime imports must use ${finding.expected}.`,
+      `- ${finding.file}:${finding.line} imports ${finding.target} via "${finding.specifier}". Cross-module imports must use ${finding.expected}.`,
     );
   }
   for (const finding of publicContractFindings) {

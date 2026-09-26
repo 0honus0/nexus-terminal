@@ -2,7 +2,7 @@
   import { UiButton } from '@/foundation/ui';
   import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import BaseModal from '@/foundation/ui/BaseModal.vue';
+  import { BaseModal } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
   import { agentHostEvents, type AgentConfigurationChangedEvent } from '../host/agent-host-events';
   import {

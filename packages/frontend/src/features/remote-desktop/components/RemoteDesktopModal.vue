@@ -4,7 +4,7 @@
   import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
   import { useI18n } from 'vue-i18n';
   import { OverlayPanel } from '@/foundation/ui';
-  import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
+  import { useDeviceCapabilities } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
   import { apiErrorMessage } from '@/client/http';
   import { logger } from '@/client/logging/logger';

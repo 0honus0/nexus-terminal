@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
+  import { OverlayPanel } from '@/foundation/ui';
   import { useDialogStore } from '../store/dialog.store';
 
   const store = useDialogStore();

@@ -2,7 +2,7 @@
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu } from '@/foundation/ui';
-  import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
+  import { useDeviceCapabilities } from '@/foundation/browser';
   import { focusRegistry } from '@/shared/focus/public';
   import { useFeedback } from '@/shared/feedback/public';
   const loadMonacoEditor = () => import('./MonacoEditor.vue');

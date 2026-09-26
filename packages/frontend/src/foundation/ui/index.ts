@@ -10,6 +10,8 @@ export { default as BaseSelect } from './BaseSelect.vue';
 export { default as BaseSpinner } from './BaseSpinner.vue';
 export { default as BaseTextarea } from './BaseTextarea.vue';
 export { default as OverlayPanel } from './OverlayPanel.vue';
+export { overlayStack } from './overlayStack';
+export type { OverlayStackRegistration } from './overlayStack';
 export type { ButtonVariant, UiSize } from './types';
 export { default as BaseBadge } from './BaseBadge.vue';
 export { default as BaseTable } from './BaseTable.vue';

@@ -2,7 +2,7 @@
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { logger } from '@/client/logging/logger';
   import { structurallyEqual } from '@/foundation/data';
-  import { overlayStack, type OverlayStackRegistration } from '@/foundation/ui/overlayStack';
+  import { overlayStack, type OverlayStackRegistration } from '@/foundation/ui';
   import type { AgentAppSummaryDto, AgentHostSummaryDto } from '../api/agent-api';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';

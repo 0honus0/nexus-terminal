@@ -2,7 +2,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BaseContextMenu, BaseSpinner, OverlayPanel } from '@/foundation/ui';
-  import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
+  import { useDeviceCapabilities } from '@/foundation/browser';
   import { writeClipboardText } from '@/foundation/browser';
   import { createWheelScaleResolver, useLongPressGesture } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';

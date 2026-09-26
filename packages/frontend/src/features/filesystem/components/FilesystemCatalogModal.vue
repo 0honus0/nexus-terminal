@@ -2,7 +2,7 @@
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu, OverlayPanel } from '@/foundation/ui';
-  import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
+  import { useDeviceCapabilities } from '@/foundation/browser';
   import { useLongPressGesture } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
   import { useFilesystemCatalog } from '../composables/useFilesystemCatalog';

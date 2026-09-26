@@ -23,26 +23,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-04 shared / foundation 公共边界
-
-**状态：🟠 待整改**
-
-当前 boundary guard 主要覆盖 features/runtimes。仍有：
-
-- `App.vue` deep-import `shared/feedback/components/*`
-- foundation 的 `useDeviceCapabilities` / `overlayStack` / `BaseModal.vue` 等直接文件引用
-
-目标规则：
-
-```text
-features/*  -> public.ts
-runtimes/*  -> public.ts
-shared/*    -> public.ts
-foundation/{ui,browser,interaction,async} -> index.ts
-```
-
-扩展 guard，并先消除现有违规。
-
 ### FE-ARCH-05 public contract guard 语义收紧
 
 **状态：🟠 待整改**
@@ -196,7 +176,7 @@ exactOptionalPropertyTypes
 
 ## 3. 实施顺序
 
-1. **安全网**：FE-ARCH-04 / 05 / 06 / 07，同时关闭 §7.51。
+1. **安全网**：FE-ARCH-05 / 06 / 07，同时关闭 §7.51。
 2. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
 3. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
 4. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
