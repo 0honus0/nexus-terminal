@@ -1,6 +1,6 @@
 # 功能
 
-Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和多平台支持。操作方式见 [使用](./USAGE.md)，部署与构建见 [部署与更新](./DEPLOYMENT.md)。
+Nexus Terminal 提供 SSH / SFTP、远程桌面、Agent 工作台、安全认证、界面定制和多平台支持。操作方式见 [使用](./USAGE.md)，部署与构建见 [部署与更新](./DEPLOYMENT.md)。
 
 ## SSH 与终端
 
@@ -24,6 +24,14 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和
 - RDP 远程桌面。
 - VNC 远程桌面。
 - Backend 内置的 Guacamole 网关与 Web 前端配合提供浏览器内远程访问。
+
+## Agent 工作台
+
+- 认证后的全局悬浮 Agent Host，可在 Dashboard、Settings 和 Workspace 之间保持 Thread/Run 上下文。
+- 支持 Goal、Plan、运行中追加输入、approval、artifact、checkpoint、历史和运行详情。
+- 通过可选 Agent Runner 管理持久 Workspace、Toolchain、Workspace Terminal、ACP 和 Browser 执行。
+- 支持 MCP 集成、Subagent 与签名 Plugin App；默认 first-party Agent 通过官方 Plugin catalog 安装。
+- Runner 不影响 SSH、SFTP、RDP/VNC 等核心远程管理能力，未配置时 Agent 增强执行能力显示为不可用。
 
 ## 安全与认证
 
@@ -52,7 +60,7 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和
 - 响应式移动端界面。
 - PWA 支持。
 - 明暗主题、终端配色和工作区样式定制。
-- 页面/终端背景、终端文字效果、本地 HTML theme 与可配置 GitHub 远程 HTML theme catalog。官方示例位于 `assets/html-themes/remote/`。
+- 页面/终端背景、终端文字效果、本地 HTML theme 与可配置 GitHub 远程 HTML theme catalog。
 - 独立桌面端发布版本。
 
 桌面端安装包见 [GitHub Releases](https://github.com/0honus0/nexus-terminal/releases/latest)。Web 端专属的部分认证与会话能力在桌面端可能有所不同。

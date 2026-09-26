@@ -1,20 +1,20 @@
 # Nexus Terminal 软件需求规格说明书（SRS）
 
-版本：v1.12
+版本：v1.13
 
-状态：Current product baseline + Agent live runtime baseline
+状态：Current product baseline
 
 ## 1. 文档目的
 
-本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。v1.5～v1.7 收紧 Workspace/File Manager/Preview/Remote Desktop 等 UI 与交互回归约束；v1.8 在 Owner 明确放行后把冻结的 Agent 设计同步为正式分期研发需求；v1.9 根据源码复核更新 Agent 实现基线；v1.10 以当时 `dev` 分支的已验证实现为事实源，把全局悬浮 Agent Host、运行中输入打断、Workspace Runtime/Host Runner、ACP/Browser/Workspace Terminal live execution、插件 AgentDefinition、Runner cleanup/journal 安全语义写回正式需求，并把 Agent 架构文档收口为 `doc/AGENT.md`；v1.11 记录当时单用户 native Runner 的 Bearer 认证、显式协议版本、最小 Backend↔Runner wire contract、无效 Workspace limits/network 配置删除、Runner Plugin 假 ACL 移除，以及 Agent 尚未进入 `main` 阶段不维护 dev→dev migration 兼容的历史决策；v1.12 明确 Plugin Frontend target 是完整 Custom App Surface，并把 App-scoped Agent SDK、isolated-origin SDK asset 与 MessagePort 边界写入正式架构。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
+本 SRS 以当前代码 owner、产品行为、工程约束和自动化验证为实现基线。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史来源通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复。v1.13 同步当前 Frontend capability composition、Workspace 子系统边界、Backend 分层、Agent live runtime、Plugin App surface、根目录测试布局和串行 repository checks。
 
 ## 2. 需求解释规则
 
 - `SRS-*`：当前软件需求编号，是研发/评审/验收的主入口。
-- `FR-*`：从最终旧产品基线与功能盘点整理的行为需求。
-- `GREQ-*`：从 Git 历史、缺陷修复、最终旧实现与重构 owner 边界派生的细粒度需求。
+- `FR-*`：从产品功能盘点整理的行为需求。
+- `GREQ-*`：从 Git 历史、缺陷修复和 owner 边界派生的细粒度需求。
 - Git commit：最底层历史证据，可从 GREQ 或 Git 索引直接打开。
-- 当 FR/GREQ 描述旧实现机制而当前 clean design 已提供等价行为时，以当前 SRS + GREQ 中的“Required behavior / Refactored design”作为规范性解释。
+- FR/GREQ 中的历史实现只作为来源证据；当前 SRS、架构 owner 文档和代码 contract 决定现行设计。
 
 ## 3. 模块目录
 
@@ -60,7 +60,7 @@
 
 ## 6. 当前范围说明
 
-本需求基线覆盖当前 Nexus Terminal 用户可达能力与已经确认的 clean architecture 行为。Agent 正式需求见 [Agent Platform](requirements/agent.md)，唯一架构规范为 [`doc/AGENT.md`](../AGENT.md)。当前 Agent 已进入 live product baseline：全局 floating Host、Thread/Run/Ledger、typed Plan、运行中 append-input interruption、Artifact、Policy/Approval/Lease、Workspace Runtime/Host Runner、MCP、ACP、Browser tunnel、Workspace local Terminal、Subagent 与 installable Agent plugin 均已有 production wiring；正式已交付需求状态按 Agent SRS 解释；尚未进入正式 SRS 的明确后续 roadmap 统一记录在 `doc/AGENT.md` 的“23. 已决定、待实现”，不得再建立平行施工清单。当前用户可编辑 durable Goal、Conversation slash-command、基于 Ledger/watermark 的 `/queue` inspection + versioned remove/reorder，以及服务端校验/冻结的 Next Run Environment selector 已交付。`nexus.agent` 现作为默认 first-party installable Plugin 由 Agent onboarding 推荐安装；一个通用 AgentDefinition 内包含 Operations / Developer 两个 Skill。`nexus.fullstack` 独立覆盖 frontend/backend/runner target 组合；这些 App 均不属于主镜像 compile-time built-in。既有非 Agent 功能仍以当前已实现基线为准。
+本需求基线覆盖当前 Nexus Terminal 用户可达能力与现行架构。Agent 正式需求见 [Agent Platform](requirements/agent.md)，架构规范为 [`doc/AGENT.md`](../AGENT.md)。当前 Agent 包含全局 floating Host、Thread/Run/Ledger、typed Plan、运行中 append-input、Artifact、Policy/Approval/Lease、Workspace Runtime/Runner、MCP、ACP、Browser、Workspace Terminal、Subagent 与 installable Plugin App。用户可编辑 durable Goal，使用 Conversation slash command 和 versioned queue，并为下一次 Run 选择由服务端验证和冻结的 Environment。`nexus.agent` 作为推荐的 first-party Plugin 安装；`nexus.fullstack` 覆盖 frontend/backend/runner target 组合。明确的后续项目仅记录在 `doc/AGENT.md` 的 roadmap。
 
 ## 7. v1.5–v1.7 UI / 交互回归需求索引
 

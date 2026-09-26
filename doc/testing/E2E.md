@@ -4,17 +4,21 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
+The canonical GitHub workflow is `.github/workflows/e2e.yml`. Its quality job installs the root workspace once, runs `pnpm run check` serially, checks repository formatting, and builds Backend, Frontend, and Agent Runner before grouped Playwright execution can satisfy the release gate. Check implementations live under `scripts/checks/`; their regression tests live under the root `tests/` tree.
+
 ## Structure
 
-- `tests/auth/` — first-run setup, administrator creation, login, and session establishment.
-- `tests/http/` — HTTP API authentication and protected endpoint flows.
-- `tests/ingress/` — production Nginx ingress regressions exercised against the production-style ingress rather than the Vite development server.
-- `tests/websocket/` — WebSocket upgrade authentication and protocol frame flows.
-- `tests/ui/` — authenticated browser navigation and UI behavior.
-- `tests/ssh/` — real SSH connection flows and file-manager SFTP behavior against an isolated in-process SSH server.
-- `tests/mobile/` — mobile-only SSH workspace, layout, status-monitor, and touch-interaction regressions.
-- `support/` — shared E2E helpers, test credentials, the test SSH server, and the mirrored log reporter.
-- `logs/` — generated per-test logs. Its directory structure mirrors `tests/` and it is ignored by Git.
+- `tests/e2e/specs/auth/` — first-run setup, administrator creation, login, and session establishment.
+- `tests/e2e/specs/http/` — HTTP API authentication and protected endpoint flows.
+- `tests/e2e/specs/agent/` — Agent Host, Provider, Plugin and Runner-backed product flows.
+- `tests/e2e/specs/ingress/` — production Nginx ingress regressions exercised against the production-style ingress.
+- `tests/e2e/specs/websocket/` — WebSocket upgrade authentication and protocol frame flows.
+- `tests/e2e/specs/ui/` — authenticated browser navigation and UI behavior.
+- `tests/e2e/specs/ssh/` — real SSH connection and SFTP/File Manager flows.
+- `tests/e2e/specs/mobile/` — mobile Workspace, layout, status monitor and touch interaction.
+- `tests/e2e/support/` — shared helpers, test servers, grouping and mirrored log reporter.
+- `tests/e2e/fixtures/` — committed deterministic seed and isolated external service fixtures.
+- `tests/e2e/.tmp/` and `tests/e2e/logs/` — generated runtime data and per-test logs, ignored by Git.
 
 The main E2E projects do not depend on `auth` to create shared state. Normal specs start from the committed seeded database, while the first-run setup regression explicitly requests an empty database. This keeps project and spec scheduling independent from first-run setup order.
 
@@ -29,8 +33,8 @@ Functional/documentation screenshots are declared directly at real E2E checkpoin
 Every test receives its own text log. The archive layout mirrors the test source layout, for example:
 
 ```text
-tests/ssh/file-manager-navigation.spec.ts
-logs/ssh/file-manager-navigation/navigates remote directories over real SFTP.log
+tests/e2e/specs/ssh/file-manager-navigation.spec.ts
+tests/e2e/logs/ssh/file-manager-navigation/navigates remote directories over real SFTP.log
 ```
 
 The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. Grouped GitHub Actions runs upload one log artifact per group (`playwright-e2e-logs-group-N`).
@@ -50,6 +54,7 @@ pnpm run test:e2e:group --workers 4 --group 1
 pnpm run test:e2e
 pnpm run test:e2e:auth
 pnpm run test:e2e:http
+pnpm run test:e2e:agent
 pnpm run test:e2e:websocket
 pnpm run test:e2e:ui
 pnpm run test:e2e:ssh
@@ -71,7 +76,7 @@ pnpm run test:e2e:groups:generate --workers 3
 pnpm run test:e2e:groups:check --workers 3
 ```
 
-The generator discovers all main specs under `auth`, `http`, `websocket`, `ui`, `ssh`, and `mobile`, keeps a whole spec as the smallest scheduling unit, and uses stable semantic families such as SSH file-manager, transfer, progress, terminal, connection, and UI security/settings/data. Related specs are kept together when doing so does not create an excessive load imbalance.
+The generator discovers all main specs under `agent`, `auth`, `http`, `websocket`, `ui`, `ssh`, and `mobile`, keeps a whole spec as the smallest scheduling unit, and uses stable semantic families. Related specs are kept together when doing so does not create an excessive load imbalance.
 
 `tests/e2e/groups/timings.json` stores a rolling timing history. The mirrored reporter writes one machine-readable duration per spec, group jobs upload those timing files, and a successful non-PR run merges them back into the history before the default grouping is reconsidered. The effective duration is the median of the most recent samples, so one unusually slow runner does not immediately reshuffle the groups.
 

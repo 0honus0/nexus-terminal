@@ -558,7 +558,7 @@ Model · Environment · Targets
 - Targets 是真实 Next Run SSH `connectionIds` selector；Run 创建后从 `Run.definition.connectionIds` 冻结展示。
 - Environment 是真实 Next Run selector。Frontend 只保存 recipe 选择（或显式 `No Workspace`）作为下一次 Run 的输入；创建 Run 时 Backend 同时校验 expected Catalog revision 与 Agent settings revision，解析 Recipe、Toolchain、Runner Plugin、ACP Profile、Browser Target 等完整 profile，并冻结到 `RunDefinition.environment`。
 
-Workspace create 只能消费该 Run 的 frozen Environment snapshot；模型侧 `workspace_create` 不再接受 recipe/toolchain 参数，因此不能在 Run 中途偷偷切换环境。显式 `No Workspace` 的 Run 会拒绝 Workspace create。独立管理 API 仍可为 legacy/administrative flow 创建 Workspace，但 Run-aware 路径必须优先使用 frozen snapshot。
+Workspace create 只能消费该 Run 的 frozen Environment snapshot；模型侧 `workspace_create` 不再接受 recipe/toolchain 参数，因此不能在 Run 中途偷偷切换环境。显式 `No Workspace` 的 Run 会拒绝 Workspace create。独立管理 API 仍可为管理流程创建 Workspace，但 Run-aware 路径必须优先使用 frozen snapshot。
 
 ### 12.3 Runner
 
@@ -962,29 +962,20 @@ Environment selection 不是 frontend authority：Run create 携带 recipe selec
 
 ## 22. 测试与发布门槛
 
-CI 保持最小化，只把能够直接证明仓库可交付的通用检查当门槛。完整 E2E 的 canonical evidence 必须来自 GitHub Actions 远程 runner：本地环境只用于单 spec、定向 smoke、日志复现和开发调试，不把开发机 Node/浏览器/端口/缓存状态当成完整回归或发布结论。
+GitHub Actions 的 canonical E2E workflow 在 grouped Playwright 前执行统一 quality job：根 workspace 安装完成后，先串行运行 `pnpm run check`，再检查全仓格式并构建 Backend、Frontend 与 Agent Runner。
 
-- Prettier 全仓格式检查；
-- Backend、Frontend、Agent Runner production build/typecheck；
-- 按 group 运行的真实产品 E2E；
-- Docker/Runner 打包相关变更，以及 `main`、定时或手动全量运行时执行 deployment smoke；
-- release 发布前仍执行 production dependency audit 与 Release gate。
-- `Update dependencies` workflow 只负责 workspace 依赖更新、frozen install、格式、production build/audit 与创建/更新 PR；由于 `GITHUB_TOKEN` push 不会递归触发 workflow，updater 在更新分支后显式 `workflow_dispatch` 同一 canonical E2E workflow，不在 updater 内再维护第二套 Chromium/ingress/full-E2E 流程。
+`pnpm run check` 当前包含 transport contract、Frontend public boundary、Frontend state lifecycle、Agent i18n reachability、Frontend/Agent ESLint、Frontend unit test 与 Frontend type check。检查实现统一位于 `scripts/checks/`，对应回归测试统一位于根 `tests/`；Agent deterministic scenarios 位于 `tests/backend/agent-scenarios`，用户可达 Agent E2E 位于 `tests/e2e/specs/agent`。
 
-不要为 Agent 的每条内部约束继续增加一次性 CI checker。已删除的 package-management、E2E-only test-policy、Runner prerequisite 独立 gate 不再恢复；这些要求作为本文件/工程约束中的 review invariant，由正常 build、真实 E2E 与 Docker smoke 证明最终行为。新增专用 gate 只有在通用 build/E2E 无法观察到一个高风险不变量、并且确有持续回归证据时才考虑。
+发布证据还包括 grouped E2E、统一镜像与独立 Runner smoke、Compose/Nginx/guacd 部署 smoke、production dependency audit 和 Release gate。依赖更新 workflow 更新根 workspace 后显式触发同一 E2E workflow，不维护第二套测试流程。
 
-Agent 改动仍必须遵守以下 review invariant：
+Agent 改动需保持：
 
-- 依赖解析只使用根 pnpm workspace/lockfile/catalog，不新增 workspace-local lockfile 或第二套 install flow；
-- 自动化测试源码统一进入仓库根 `tests/`，生产 `packages/` 下不再放测试目录；用户可达 Playwright E2E 位于 `tests/e2e`，Agent deterministic integration scenarios 位于 `tests/backend/agent-scenarios`；不再把测试源码分散回 Module/Repository/Adapter 所在生产目录；
-- Backend/Frontend 继续遵守既有 owner/layer/public API 依赖方向，新增 import 必须在 review 中检查跨层、feature 私有目录和循环依赖；不再用独立 architecture quality gate 代替架构审查；
-- Agent 三个 locale fragment 的 key 与用户可见语义保持同步；新增/修改 UI 文案时同一改动更新 `zh-CN/en-US/ja-JP`，不再设置独立 i18n checker；
-- Frontend 大依赖、编辑器/预览器等重资源继续按 route/feature 懒加载，异常 bundle 增长在变更审查中说明，不再设置独立 bundle-budget gate；
-- Runner 镜像/宿主是否具备所需 runtime 以真实 standalone/container smoke 为准，不用单独的二进制存在性 quality gate 代替行为验证；
-- GitHub Actions grouped E2E 使用长期 GHCR runner image 预装 Node/pnpm/Chromium，并按根 `package.json` + `pnpm-lock.yaml` + `pnpm-workspace.yaml` fingerprint 在固定 image path 预热 pnpm content-addressable store 与 supply-chain metadata cache；CI 实际拉取 immutable `fingerprint-*` image tag，避免并行分支争写版本 alias；matrix shard 只做 `pnpm install --offline` 链接依赖。依赖 authority 变化时重建一次 runner image，不在每个 shard 重新下载同一依赖；
-- Provider 同时支持 Chat Completions 与 Responses，但 Provider 网络访问没有 Nexus 内建 private-host/SSRF policy；
-- Agent mutation、StateCommit、approval/lease/reconcile、Plugin 签名与 scope 等安全不变量不得为了减少 CI 项而放宽；它们通过对应产品路径 E2E 与代码审查维持。
-- Host Tool 去重只允许抽取小型、显式的 input validation 与 canonical inspection/operation builder；不得自动推断 `risk/resourceKeys/preconditions`，也不得演化成隐藏安全语义的 Tool framework。
+- 根 pnpm workspace/lockfile/catalog 是唯一依赖 authority；
+- Agent 三个 locale fragment 的 key 与用户可见语义同步；
+- Provider、Runner、Plugin、mutation、approval、lease、reconcile 和 durable JSON 边界继续 fail closed；
+- Plugin 签名、scope、版本切换和进程 drain 通过产品路径、deterministic scenario 与 smoke 验证；
+- 日志与诊断保持有界、结构化和脱敏；
+- Host Tool 抽取只共享显式 validation/inspection/operation builder，不隐藏风险与授权语义。
 
 ## 23. 已决定、待实现
 
@@ -998,7 +989,7 @@ Agent 改动仍必须遵守以下 review invariant：
 1. 业务语义改变时，同时更新本文件和 Agent SRS。
 2. 不再新建 `doc/architecture/agent/*`、Agent review/implementation/current snapshot 平行文档。
 3. 只有当前事实进入“已交付”；roadmap 必须显式标记待实现。
-4. 不恢复已删除的 legacy Agent Environment 数据模型；Runtime 环境以 Workspace Runtime contract 为唯一方向。
+4. Agent Environment 只使用当前 Workspace Runtime 数据模型；Runtime 环境以 Workspace Runtime contract 为唯一方向。
 5. 不为 UI 便利复制 Run/Thread/Workspace/queue 的 authoritative state。
 6. destructive operation 必须 preview/freeze/confirm/recheck/reconcile。
 7. 不为可由 format/build/E2E 覆盖的规则增加专用 quality gate；特殊 Agent invariant 先更新本文件并在对应真实产品路径验证。

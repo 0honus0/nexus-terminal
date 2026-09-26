@@ -78,9 +78,18 @@ SSH 标签页支持挂起会话。挂起后即使浏览器断开，后端仍可�
 - 状态采样间隔、缩放和 Docker 刷新间隔均由 Settings 持久化；默认 Docker 刷新间隔为 5 秒。
 - Docker manager 在桌面宽 pane 使用表格，在窄 sidebar 使用卡片布局；Start/Stop/Restart/Remove 走 Docker capability，Enter/Logs 发送到当前 Workspace terminal。
 
+## Agent
+
+- 首次启用 Agent 时按 onboarding 安装推荐的 first-party Plugin，并在 Settings 中配置 Provider、模型和 Runner。
+- Agent launcher 在认证后显示；打开 Host 后可创建 Thread、设置 Goal、提交输入并查看 Plan、approval、artifact 和运行历史。
+- Run 执行期间可以继续提交输入。输入会进入 durable queue，并按当前 Run 状态打断或留待后续消费。
+- Environment 选择器决定下一次 Run 使用的 Workspace、Toolchain 和 target；服务端会验证并冻结本次执行配置。
+- Workspace Terminal、ACP、Browser 和 Runner Plugin 依赖可用的 Agent Runner。Runner 不可用时，普通 SSH/文件管理/远程桌面仍可使用。
+- Plugin App 只获得已声明并授权的 capability。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
+
 ## 外观与 HTML Theme
 
-Style Customizer 支持本地 HTML theme 和 GitHub 目录形式的远程 HTML theme catalog。默认官方示例仓库指向 `assets/html-themes/remote/`；已知旧官方 `doc/custom_html_theme` / `examples/html-themes` URL 会在升级、保存、远程列表读取以及备份恢复后的初始化阶段归一到当前目录，因此恢复历史备份后不会再因旧官方目录不存在而返回 400；用户自行配置的第三方仓库不会被改写。
+Style Customizer 支持本地 HTML theme 和 GitHub 目录形式的远程 HTML theme catalog。远程 catalog 配置在升级、保存、读取和备份恢复后都会经过规范化；用户配置的第三方仓库保持原地址。
 
 ## 安全与认证
 
