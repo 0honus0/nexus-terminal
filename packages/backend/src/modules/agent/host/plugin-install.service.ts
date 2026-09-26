@@ -23,7 +23,6 @@ import {
   type PluginInstallationView,
   type PluginInstallHooks,
   type PluginInstallResult,
-  type PluginPendingUpgradeView,
   type PluginStageInput,
   type PluginUninstallResult,
   type PluginUpgradeResult,

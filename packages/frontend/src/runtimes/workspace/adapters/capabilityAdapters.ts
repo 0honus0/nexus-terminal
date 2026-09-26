@@ -30,6 +30,8 @@ import type {
   ArchiveCommand,
   CopyMoveCommand,
   TransferChannel,
+  TransferErrorContext,
+  TransferErrorKind,
   TransferEvent,
   UploadPrepareCommand,
   UploadCommand,
@@ -403,7 +405,12 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     return request;
   };
 
-  const failUploadStream = (request: UploadCommand, message: string): void => {
+  const failUploadStream = (
+    request: UploadCommand,
+    message: string,
+    errorKind: TransferErrorKind = 'upload_failed',
+    errorContext?: TransferErrorContext,
+  ): void => {
     if (uploads.get(request.id) !== request) return;
     logger.debug(
       {
@@ -417,10 +424,18 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     );
     forgetUpload(request.id);
     closeUploadStream(request.id, 'Upload stream failed');
-    emit({ type: 'error', id: request.id, message });
+    emit({
+      type: 'error',
+      id: request.id,
+      ...(message ? { message } : {}),
+      errorKind,
+      ...(errorContext ? { errorContext } : {}),
+    });
     pumpUploadQueue();
     if (workspaceAvailable && socket.connected) {
-      void socket.request('upload.abort', { uploadId: request.id, message }).catch(() => undefined);
+      void socket
+        .request('upload.abort', { uploadId: request.id, message: message || errorKind })
+        .catch(() => undefined);
     }
   };
 
@@ -461,7 +476,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
           for (const request of snapshot.filter((item) => item.prepareId === prepareId)) {
             if (uploads.get(request.id) !== request) continue;
             forgetUpload(request.id);
-            emit({ type: 'error', id: request.id, message: 'Upload directory preparation state was lost.' });
+            emit({ type: 'error', id: request.id, errorKind: 'upload_directory_state_lost' });
           }
           continue;
         }
@@ -484,7 +499,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
           for (const request of snapshot.filter((item) => item.prepareId === prepareId)) {
             if (uploads.get(request.id) !== request) continue;
             forgetUpload(request.id);
-            emit({ type: 'error', id: request.id, message });
+            emit({ type: 'error', id: request.id, message, errorKind: 'upload_failed' });
           }
         }
       }
@@ -532,7 +547,12 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
         forgetUpload(request.id);
         closeUploadStream(request.id, 'Upload start failed');
         pumpUploadQueue();
-        emit({ type: 'error', id: request.id, message: cause instanceof Error ? cause.message : String(cause) });
+        emit({
+          type: 'error',
+          id: request.id,
+          message: cause instanceof Error ? cause.message : String(cause),
+          errorKind: 'upload_failed',
+        });
       });
     }
   }
@@ -572,12 +592,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
         'Workspace upload WebSocket closed',
       );
       if (event.code !== 1000 && workspaceAvailable && uploads.get(request.id) === request) {
-        failUploadStream(
-          request,
-          event.reason
-            ? `Upload stream closed (${event.code}: ${event.reason}).`
-            : `Upload stream closed unexpectedly (${event.code}).`,
-        );
+        failUploadStream(request, event.reason || '', 'upload_stream_closed', { closeCode: event.code });
       }
     };
     await new Promise<void>((resolve, reject) => {
@@ -590,7 +605,8 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
           { workspaceId, uploadId: request.id, readyState: uploadSocket.readyState },
           'Workspace upload WebSocket error event',
         );
-        reject(new Error(`Unable to open upload stream for ${request.file.name}.`));
+        failUploadStream(request, '', 'upload_stream_open_failed', { fileName: request.file.name });
+        reject(new Error('UPLOAD_STREAM_OPEN_FAILED'));
       };
     });
     if (request.file.size === 0) return;
@@ -662,7 +678,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       forgetUpload(id);
       closeUploadStream(id, 'Upload failed');
       pumpUploadQueue();
-      emit({ type: 'error', id, message: event.message ?? 'Upload failed.' });
+      emit({ type: 'error', id, message: event.message, errorKind: 'upload_failed' });
     }
   });
 
@@ -702,7 +718,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
         'Workspace copy/move operation failed',
       );
       activeRemoteOperations.delete(id);
-      emit({ type: 'error', id, message: event.message ?? 'Transfer failed.' });
+      emit({ type: 'error', id, message: event.message, errorKind: 'transfer_failed' });
     }
   });
 
@@ -720,7 +736,11 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       );
     } else if (event.type === 'completed') {
       activeRemoteOperations.delete(id);
-      emit({ type: 'completed', id, ...(event.warning ? { warning: event.warning } : {}) });
+      emit({
+        type: 'completed',
+        id,
+        ...(event.warning ? { warning: event.warning, warningKind: 'archive_completed_with_warning' as const } : {}),
+      });
     } else if (event.type === 'cancelled') {
       activeRemoteOperations.delete(id);
       emit({ type: 'cancelled', id });
@@ -740,7 +760,8 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       emit({
         type: 'error',
         id,
-        message: event.message ?? 'Archive operation failed.',
+        message: event.message,
+        errorKind: 'archive_failed',
         ...(event.code ? { code: event.code } : {}),
       });
     }
@@ -857,8 +878,8 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
         'Workspace transfer channel marked disconnected',
       );
       workspaceAvailable = false;
-      for (const [id, operation] of activeRemoteOperations) {
-        emit({ type: 'error', id, message: `Workspace connection closed during ${operation}.` });
+      for (const [id] of activeRemoteOperations) {
+        emit({ type: 'error', id, errorKind: 'workspace_connection_closed' });
       }
       activeRemoteOperations.clear();
       if (!uploads.size) return;

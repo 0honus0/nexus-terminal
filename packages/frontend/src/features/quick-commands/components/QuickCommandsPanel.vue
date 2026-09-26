@@ -3,7 +3,7 @@
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu, BaseInput } from '@/foundation/ui';
-  import { writeClipboardText } from '@/foundation/browser';
+  import { readStoredValue, stringStorageCodec, writeClipboardText, writeStoredValue } from '@/foundation/browser';
   import { useFeedback } from '@/shared/feedback/public';
   import { focusRegistry } from '@/shared/focus/public';
   import { createWheelScaleResolver } from '@/foundation/interaction';
@@ -13,7 +13,12 @@
   import type { ExecuteCommandIntent, QuickCommandDto, QuickCommandFormInput } from '../model/quickCommand';
 
   type DisplayMode = 'name' | 'command';
-  const DISPLAY_MODE_KEY = 'quickCommandsDisplayMode';
+  const displayModeStorage = {
+    namespace: 'quick-commands.display-mode',
+    version: 1,
+    codec: stringStorageCodec((value) => value === 'name' || value === 'command'),
+    legacyKeys: ['quickCommandsDisplayMode'],
+  } as const;
   const props = withDefaults(
     defineProps<{ collapsibleSearch?: boolean; showTags?: boolean; rowScale?: number; compact?: boolean }>(),
     { collapsibleSearch: false, showTags: true, rowScale: 1, compact: false },
@@ -39,13 +44,7 @@
   const tagDraft = ref('');
   let unregisterFocus: (() => void) | undefined;
 
-  const readDisplayMode = (): DisplayMode => {
-    try {
-      return localStorage.getItem(DISPLAY_MODE_KEY) === 'name' ? 'name' : 'command';
-    } catch {
-      return 'command';
-    }
-  };
+  const readDisplayMode = (): DisplayMode => (readStoredValue(displayModeStorage) === 'name' ? 'name' : 'command');
   const displayMode = ref<DisplayMode>(readDisplayMode());
   const resolveScale = createWheelScaleResolver({
     min: 0.5,
@@ -104,11 +103,7 @@
   };
   const toggleDisplayMode = () => {
     displayMode.value = displayMode.value === 'name' ? 'command' : 'name';
-    try {
-      localStorage.setItem(DISPLAY_MODE_KEY, displayMode.value);
-    } catch {
-      // Display preference may remain in memory when storage is unavailable.
-    }
+    writeStoredValue(displayModeStorage, displayMode.value);
   };
   const cycleSort = () => {
     sort.value = sort.value === 'name' ? 'usageCount' : sort.value === 'usageCount' ? 'lastUsed' : 'name';

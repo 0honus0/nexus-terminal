@@ -2,6 +2,7 @@
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu } from '@/foundation/ui';
+  import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { loadConnectionEditorModal, useConnections, type ConnectionDto } from '@/features/connections/public';
   import { useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
   import { useFeedback } from '@/shared/feedback/public';
@@ -26,13 +27,18 @@
   const editorVisible = ref(false);
   const editorConnection = ref<ConnectionDto | null>(null);
   const context = ref<{ connection: ConnectionDto; x: number; y: number } | null>(null);
-  const GROUPS_KEY = 'nexus.workspace.connectionGroups';
-  const expanded = ref<Record<string, boolean>>({});
-  try {
-    expanded.value = JSON.parse(localStorage.getItem(GROUPS_KEY) || '{}') as Record<string, boolean>;
-  } catch {
-    expanded.value = {};
-  }
+  const expandedGroupsStorage = {
+    namespace: 'workspace.connection-groups',
+    version: 1,
+    codec: jsonStorageCodec<Record<string, boolean>>((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+      const entries = Object.entries(value as Record<string, unknown>);
+      if (!entries.every(([, expanded]) => typeof expanded === 'boolean')) return undefined;
+      return Object.fromEntries(entries) as Record<string, boolean>;
+    }),
+    legacyKeys: ['nexus.workspace.connectionGroups'],
+  } as const;
+  const expanded = ref<Record<string, boolean>>(readStoredValue(expandedGroupsStorage) ?? {});
   let unregisterFocus: (() => void) | undefined;
   const loading = ref(true);
   const loadError = ref('');
@@ -158,7 +164,7 @@
   });
   const toggleGroup = (key: string) => {
     expanded.value = { ...expanded.value, [key]: !isExpanded(key) };
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(expanded.value));
+    writeStoredValue(expandedGroupsStorage, expanded.value);
   };
   const connectGroup = (connections: ConnectionDto[]) => {
     const ssh = connections.filter((connection) => connection.type === 'SSH');

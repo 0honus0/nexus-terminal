@@ -1,5 +1,6 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import { defineStore, storeToRefs } from 'pinia';
+import { readStoredValue, stringStorageCodec, writeStoredValue } from '@/foundation/browser';
 import { filesystemCatalogApi } from '../api/filesystemCatalogApi';
 import type { FavoritePathDto, FavoritePathSortDto, PathHistoryEntryDto } from '../model/catalog';
 
@@ -8,6 +9,13 @@ export interface FavoritePathSaveInput {
   path: string;
   name?: string | null;
 }
+
+const favoriteSortStorage = {
+  namespace: 'filesystem.favorite-sort',
+  version: 1,
+  codec: stringStorageCodec((value) => value === 'name' || value === 'lastUsedAt'),
+  legacyKeys: ['favoritePathSortBy'],
+} as const;
 
 export interface FilesystemCatalogController {
   favorites: Ref<FavoritePathDto[]>;
@@ -34,7 +42,7 @@ export const useFilesystemCatalogStore = defineStore('filesystem-catalog', () =>
   const favorites = ref<FavoritePathDto[]>([]);
   const history = ref<PathHistoryEntryDto[]>([]);
   const favoriteSort = ref<FavoritePathSortDto>(
-    localStorage.getItem('favoritePathSortBy') === 'lastUsedAt' ? 'lastUsedAt' : 'name',
+    readStoredValue(favoriteSortStorage) === 'lastUsedAt' ? 'lastUsedAt' : 'name',
   );
   const favoritesLoaded = ref(false);
   const loadingFavorites = ref(false);
@@ -81,7 +89,7 @@ export const useFilesystemCatalogStore = defineStore('filesystem-catalog', () =>
 
   async function setFavoriteSort(sort: FavoritePathSortDto): Promise<void> {
     favoriteSort.value = sort;
-    localStorage.setItem('favoritePathSortBy', sort);
+    writeStoredValue(favoriteSortStorage, sort);
     sortFavorites();
   }
 

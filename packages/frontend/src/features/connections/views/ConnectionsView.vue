@@ -4,6 +4,13 @@
   import { useI18n } from 'vue-i18n';
   import { formatDistanceToNow } from 'date-fns';
   import { enUS, ja, zhCN } from 'date-fns/locale';
+  import {
+    numberStorageCodec,
+    readStoredValue,
+    removeStoredValue,
+    stringStorageCodec,
+    writeStoredValue,
+  } from '@/foundation/browser';
   import { useFeedback } from '@/shared/feedback/public';
   import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { useConnectionTags } from '@/features/tags/public';
@@ -20,16 +27,28 @@
   const search = ref('');
   type SortField = 'lastConnected' | 'name' | 'type' | 'updated' | 'created';
   type SortOrder = 'asc' | 'desc';
-  const SORT_KEY = 'connections_view_sort_by';
-  const ORDER_KEY = 'connections_view_sort_order';
-  const TAG_KEY = 'connections_view_filter_tag';
   const validSorts = new Set<SortField>(['lastConnected', 'name', 'type', 'updated', 'created']);
-  const storedSort = localStorage.getItem(SORT_KEY) as SortField | null;
-  const storedOrder = localStorage.getItem(ORDER_KEY) as SortOrder | null;
-  const storedTag = Number(localStorage.getItem(TAG_KEY));
-  const sort = ref<SortField>(storedSort && validSorts.has(storedSort) ? storedSort : 'lastConnected');
-  const sortOrder = ref<SortOrder>(storedOrder === 'asc' ? 'asc' : 'desc');
-  const tagId = ref<number | ''>(Number.isInteger(storedTag) && storedTag > 0 ? storedTag : '');
+  const sortStorage = {
+    namespace: 'connections.sort',
+    version: 1,
+    codec: stringStorageCodec((value) => validSorts.has(value as SortField)),
+    legacyKeys: ['connections_view_sort_by'],
+  } as const;
+  const orderStorage = {
+    namespace: 'connections.sort-order',
+    version: 1,
+    codec: stringStorageCodec((value) => value === 'asc' || value === 'desc'),
+    legacyKeys: ['connections_view_sort_order'],
+  } as const;
+  const tagStorage = {
+    namespace: 'connections.tag',
+    version: 1,
+    codec: numberStorageCodec((value) => Number.isInteger(value) && value > 0),
+    legacyKeys: ['connections_view_filter_tag'],
+  } as const;
+  const sort = ref<SortField>((readStoredValue(sortStorage) as SortField | undefined) ?? 'lastConnected');
+  const sortOrder = ref<SortOrder>((readStoredValue(orderStorage) as SortOrder | undefined) ?? 'desc');
+  const tagId = ref<number | ''>(readStoredValue(tagStorage) ?? '');
   const formVisible = ref(false);
   const editing = ref<ConnectionDto | null>(null);
   const batch = ref(false);
@@ -64,9 +83,12 @@
       return (aTime - bTime) * direction;
     });
   });
-  watch(sort, (value) => localStorage.setItem(SORT_KEY, value));
-  watch(sortOrder, (value) => localStorage.setItem(ORDER_KEY, value));
-  watch(tagId, (value) => localStorage.setItem(TAG_KEY, value === '' ? '' : String(value)));
+  watch(sort, (value) => writeStoredValue(sortStorage, value));
+  watch(sortOrder, (value) => writeStoredValue(orderStorage, value));
+  watch(tagId, (value) => {
+    if (value === '') removeStoredValue(tagStorage);
+    else writeStoredValue(tagStorage, value);
+  });
 
   const formatRelativeTime = (timestamp: number | null): string => {
     if (!timestamp) return t('connections.status.never');

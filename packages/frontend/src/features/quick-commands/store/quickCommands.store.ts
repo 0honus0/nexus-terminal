@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
+import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 import { quickCommandsApi } from '../api/quickCommandsApi';
 import type {
   QuickCommandDto,
@@ -8,7 +9,17 @@ import type {
   QuickCommandSort,
   QuickCommandTagDto,
 } from '../model/quickCommand';
-const EXPANDED_KEY = 'quick-commands.expanded-groups';
+const expandedGroupsStorage = {
+  namespace: 'quick-commands.expanded-groups',
+  version: 1,
+  codec: jsonStorageCodec<Record<string, boolean>>((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (!entries.every(([, expanded]) => typeof expanded === 'boolean')) return undefined;
+    return Object.fromEntries(entries) as Record<string, boolean>;
+  }),
+  legacyKeys: ['quick-commands.expanded-groups'],
+} as const;
 export const useQuickCommandsStore = defineStore('quick-commands', () => {
   const items = ref<QuickCommandDto[]>([]),
     tags = ref<QuickCommandTagDto[]>([]),
@@ -18,12 +29,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     error = ref<string | null>(null),
     tagLoadError = ref<string | null>(null),
     selectedId = ref<number | null>(null);
-  const expanded = ref<Record<string, boolean>>({});
-  try {
-    expanded.value = JSON.parse(localStorage.getItem(EXPANDED_KEY) || '{}');
-  } catch {
-    expanded.value = {};
-  }
+  const expanded = ref<Record<string, boolean>>(readStoredValue(expandedGroupsStorage) ?? {});
   const filtered = computed(() => {
     const term = search.value.trim().toLowerCase();
     return items.value.filter(
@@ -129,7 +135,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
       const open = expanded.value[oldName];
       delete expanded.value[oldName];
       expanded.value[updated.name] = open;
-      localStorage.setItem(EXPANDED_KEY, JSON.stringify(expanded.value));
+      writeStoredValue(expandedGroupsStorage, expanded.value);
     }
     return updated;
   }
@@ -146,7 +152,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
         const open = expanded.value.Untagged;
         delete expanded.value.Untagged;
         expanded.value[tag.name] = open;
-        localStorage.setItem(EXPANDED_KEY, JSON.stringify(expanded.value));
+        writeStoredValue(expandedGroupsStorage, expanded.value);
       }
       return { tag, assigned: true as const };
     } catch (cause) {
@@ -155,7 +161,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
   }
   function toggle(name: string) {
     expanded.value[name] = !(expanded.value[name] ?? true);
-    localStorage.setItem(EXPANDED_KEY, JSON.stringify(expanded.value));
+    writeStoredValue(expandedGroupsStorage, expanded.value);
     selectedId.value = null;
   }
   function setSearch(value: string) {

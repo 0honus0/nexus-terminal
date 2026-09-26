@@ -9,20 +9,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-11 typed / versioned browser persistence
-
-**状态：🟠 待整改**
-
-localStorage/sessionStorage 分散在 Dashboard、Connections、Workspace、Agent、Transfers、Quick Commands 等模块，并存在 `JSON.parse(...) as ...` 的信任式读取。
-
-需要统一：
-
-- typed decoder
-- schema version
-- migration
-- scoped key builder（尤其 user/session scope）
-- read/write/remove helper
-
 ### FE-ARCH-12 UI runtime error boundary
 
 **状态：🟠 待整改**
@@ -90,7 +76,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
-2. **状态与数据层**：FE-ARCH-11 / 12。
+2. **状态与数据层**：FE-ARCH-12。
 3. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 4. **严格类型增强**：FE-ARCH-16。
 

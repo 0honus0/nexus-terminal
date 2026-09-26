@@ -35,7 +35,21 @@
     "resize": "Resize progress window",
     "restore": "Restore",
     "sourceSummary": "{count} tasks · {active} active",
-    "speed": "Speed"
+    "speed": "Speed",
+    "error": {
+      "unknown": "Transfer failed.",
+      "uploadDirectoryStateLost": "Upload preparation state was lost. Retry the upload.",
+      "uploadStreamClosed": "Upload stream closed unexpectedly (code {code}).",
+      "uploadStreamOpenFailed": "Could not open the upload stream for {file}.",
+      "uploadFailed": "Upload failed.",
+      "transferFailed": "File transfer failed.",
+      "workspaceConnectionClosed": "Workspace connection closed before the transfer completed.",
+      "archiveFailed": "Archive operation failed."
+    },
+    "warning": {
+      "archiveCompletedWithWarning": "Archive completed with warnings.",
+      "partialFailure": "The transfer completed, but a follow-up step failed."
+    }
   },
   "transferProgressModal": {
     "title": "File Transfer Progress",

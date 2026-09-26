@@ -110,7 +110,15 @@ export function createTransferController(channel: TransferChannel): TransferCont
   const markPartial = (id: string, message: string): void => {
     const task = tasks.value.find((current) => current.id === id);
     if (!task) return;
-    Object.assign(task, { status: 'partial', progress: 100, warning: message, error: undefined });
+    Object.assign(task, {
+      status: 'partial',
+      progress: 100,
+      warning: message,
+      warningKind: 'partial_failure',
+      error: undefined,
+      errorKind: undefined,
+      errorContext: undefined,
+    });
     task.errorCode = undefined;
     settleTask(task);
   };
@@ -167,8 +175,11 @@ export function createTransferController(channel: TransferChannel): TransferCont
         completedFiles: 0,
         currentFile: undefined,
         error: undefined,
+        errorKind: undefined,
+        errorContext: undefined,
         errorCode: undefined,
         warning: undefined,
+        warningKind: undefined,
       });
       return;
     }
@@ -191,7 +202,7 @@ export function createTransferController(channel: TransferChannel): TransferCont
       Object.assign(
         task,
         event.warning
-          ? { status: 'partial', progress: 100, warning: event.warning }
+          ? { status: 'partial', progress: 100, warning: event.warning, warningKind: event.warningKind }
           : { status: 'completed', progress: 100 },
       );
     else if (event.type === 'skipped') task.status = 'skipped';
@@ -200,6 +211,8 @@ export function createTransferController(channel: TransferChannel): TransferCont
       Object.assign(task, {
         status: 'error',
         error: event.message,
+        errorKind: event.errorKind,
+        errorContext: event.errorContext,
         errorCode: event.code,
       });
 

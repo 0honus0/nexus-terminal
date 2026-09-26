@@ -2,6 +2,19 @@ import type { WorkspaceArchiveErrorCodeDto } from '@nexus-terminal/protocol/work
 export type { WorkspaceArchiveErrorCodeDto };
 
 export type TransferKind = 'upload' | 'copy' | 'move' | 'compress' | 'decompress' | 'transfer';
+export type TransferErrorKind =
+  | 'upload_directory_state_lost'
+  | 'upload_stream_closed'
+  | 'upload_stream_open_failed'
+  | 'upload_failed'
+  | 'transfer_failed'
+  | 'workspace_connection_closed'
+  | 'archive_failed';
+export type TransferWarningKind = 'archive_completed_with_warning' | 'partial_failure';
+export interface TransferErrorContext {
+  closeCode?: number;
+  fileName?: string;
+}
 export type TransferStatus =
   | 'queued'
   | 'preparing'
@@ -38,8 +51,11 @@ export interface TransferTask {
   totalFiles: number | null;
   currentFile?: string;
   error?: string;
+  errorKind?: TransferErrorKind;
+  errorContext?: TransferErrorContext;
   errorCode?: WorkspaceArchiveErrorCodeDto;
   warning?: string;
+  warningKind?: TransferWarningKind;
   createdAt: number;
 }
 
@@ -91,10 +107,17 @@ export type TransferEvent =
       totalFiles?: number | null;
       currentFile?: string;
     }
-  | { type: 'completed'; id: string; warning?: string }
+  | { type: 'completed'; id: string; warning?: string; warningKind?: TransferWarningKind }
   | { type: 'paused'; id: string }
   | { type: 'resumed'; id: string }
   | { type: 'skipped'; id: string }
   | { type: 'cancelled'; id: string }
-  | { type: 'error'; id: string; message: string; code?: WorkspaceArchiveErrorCodeDto }
+  | {
+      type: 'error';
+      id: string;
+      message?: string;
+      errorKind?: TransferErrorKind;
+      errorContext?: TransferErrorContext;
+      code?: WorkspaceArchiveErrorCodeDto;
+    }
   | { type: 'conflict'; id: string; path: string };

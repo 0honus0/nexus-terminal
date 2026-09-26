@@ -1,5 +1,6 @@
 import { reactive, readonly } from 'vue';
 import { logger } from '@/client/logging/logger';
+import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 
 export interface AgentHubBounds {
   x: number;
@@ -21,6 +22,10 @@ interface AgentHubState {
   /** §7.2-c: drives the desktop sidebar column and the narrow overlay drawer alike. */
   threadSidebarVisible: boolean;
   taskRailVisible: boolean;
+}
+
+interface StoredAgentHubState extends Partial<AgentHubState> {
+  schemaVersion: 1;
 }
 
 const DEFAULT_BOUNDS: AgentHubBounds = { x: 80, y: 16, width: 1180, height: 740 };
@@ -90,18 +95,18 @@ export const createAgentWindowManager = () => {
     };
   };
 
-  const storageKey = (userId: number): string => `nexus.agent.surface.v1.user.${userId}`;
-
-  const parseStored = (raw: string | null): Partial<AgentHubState> | null => {
-    if (!raw || raw.length > 8 * 1024) return null;
-    try {
-      const value = JSON.parse(raw) as Record<string, unknown>;
-      if (value.schemaVersion !== 1) return null;
-      return value as Partial<AgentHubState>;
-    } catch {
-      return null;
-    }
-  };
+  const storageForUser = (userId: number) => ({
+    namespace: 'agent.surface',
+    version: 1,
+    scope: { kind: 'user', id: userId } as const,
+    codec: jsonStorageCodec<StoredAgentHubState>((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+      const record = value as Record<string, unknown>;
+      if (record.schemaVersion !== 1) return undefined;
+      return record as unknown as StoredAgentHubState;
+    }),
+    legacyKeys: [`nexus.agent.surface.v1.user.${userId}`],
+  });
 
   const rememberApp = (appId: string): void => {
     state.recentAppIds = [appId, ...state.recentAppIds.filter((candidate) => candidate !== appId)].slice(0, 8);
@@ -180,12 +185,8 @@ export const createAgentWindowManager = () => {
     restoreForUser(userId: number): void {
       resetStateToDefaults();
       try {
-        const raw = window.localStorage.getItem(storageKey(userId));
-        const stored = parseStored(raw);
-        if (!stored) {
-          if (raw) logger.warn({ userId, storedBytes: raw.length }, 'Ignored invalid Agent floating window layout');
-          return;
-        }
+        const stored = readStoredValue(storageForUser(userId));
+        if (!stored) return;
         const bounds = stored.bounds;
         if (
           bounds &&
@@ -216,7 +217,7 @@ export const createAgentWindowManager = () => {
     },
     persistForUser(userId: number): void {
       try {
-        const payload = JSON.stringify({
+        const stored: StoredAgentHubState = {
           schemaVersion: 1,
           bounds: preferredBounds,
           maximized: state.maximized,
@@ -225,12 +226,13 @@ export const createAgentWindowManager = () => {
           hubView: state.hubView,
           threadSidebarVisible: state.threadSidebarVisible,
           taskRailVisible: state.taskRailVisible,
-        });
-        if (payload.length > 8 * 1024) {
-          logger.warn({ userId, payloadBytes: payload.length }, 'Skipped oversized Agent floating window layout');
+        };
+        const payloadBytes = JSON.stringify(stored).length;
+        if (payloadBytes > 8 * 1024) {
+          logger.warn({ userId, payloadBytes }, 'Skipped oversized Agent floating window layout');
           return;
         }
-        window.localStorage.setItem(storageKey(userId), payload);
+        writeStoredValue(storageForUser(userId), stored);
         logger.debug({ userId, ...logContext() }, 'Agent floating window layout persisted');
       } catch (cause) {
         logger.warn({ err: cause, userId }, 'Failed to persist Agent floating window layout');

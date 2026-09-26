@@ -15,9 +15,11 @@
   import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import {
     loadProgressDisplayModal,
+    transferTaskErrorDescriptor,
     useServerTransfers,
     type FileClipboardOperation,
     type ProgressSource,
+    type TransferTask,
   } from '@/features/transfers/public';
   import type { WorkspaceRemoteFileEntryDto } from '@/features/filesystem/public';
   import {
@@ -49,10 +51,14 @@
   }
 
   const route = useRoute();
+  const { layout: workspaceLayout, focus: workspaceFocus } = provideWorkspaceUiState();
   const router = useRouter();
   const { t } = useI18n();
-  const { layout: workspaceLayout, focus: workspaceFocus } = provideWorkspaceUiState();
   const feedback = useFeedback();
+  const transferErrorMessage = (task: TransferTask): string => {
+    const descriptor = transferTaskErrorDescriptor(task);
+    return descriptor ? t(descriptor.key, descriptor.params ?? {}) : t('progressCenter.error.unknown');
+  };
   const device = useDeviceCapabilities();
   const preferences = usePreferences();
   const appearance = useAppearance();
@@ -274,8 +280,9 @@
       const task = await target.transferController.waitForTask(taskId);
       if (task.status === 'error') {
         feedback.notifyError(
-          task.error ??
-            t(snapshot.operation === 'cut' ? 'fileManager.errors.moveFailed' : 'fileManager.errors.copyFailed'),
+          task.error || task.errorKind
+            ? transferErrorMessage(task)
+            : t(snapshot.operation === 'cut' ? 'fileManager.errors.moveFailed' : 'fileManager.errors.copyFailed'),
         );
         return;
       }
@@ -813,6 +820,7 @@
   });
   onBeforeUnmount(() => {
     workspaceActive = false;
+    void workspaceLayout.dispose();
     window.removeEventListener('keydown', handleGlobalKeydown);
     window.removeEventListener('keyup', handleGlobalKeyup);
     window.removeEventListener('online', handleBrowserOnline);
@@ -820,7 +828,6 @@
     stopServerTransferPolling?.();
     void statusScaleSaver.dispose({ flush: true });
     void fileManagerRowScaleSaver.dispose({ flush: true });
-    void workspaceLayout.dispose();
     void quickCommandRowScaleSaver.dispose({ flush: true });
     void terminalFontSaver.dispose({ flush: true });
     void editorFontSaver.dispose({ flush: true });

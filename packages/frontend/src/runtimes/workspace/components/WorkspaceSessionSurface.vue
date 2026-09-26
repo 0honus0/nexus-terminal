@@ -11,6 +11,7 @@
     OverlayPanel,
   } from '@/foundation/ui';
   import { useDraggablePosition, usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
+  import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { useFeedback } from '@/shared/feedback/public';
   import { loadFilePreview, previewKindFor } from '@/features/file-preview/public';
   import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
@@ -18,9 +19,11 @@
   import {
     loadProgressCenter,
     loadSendFilesModal,
+    transferTaskErrorDescriptor,
     loadUploadConflictModal,
     type WorkspaceArchiveErrorCodeDto,
     type SendFileSourceItemDto,
+    type TransferTask,
   } from '@/features/transfers/public';
   import {
     loadFileManager,
@@ -135,6 +138,10 @@
   }>();
   const { t } = useI18n();
   const feedback = useFeedback();
+  const transferErrorMessage = (task: TransferTask): string => {
+    const descriptor = transferTaskErrorDescriptor(task);
+    return descriptor ? t(descriptor.key, descriptor.params ?? {}) : t('progressCenter.error.unknown');
+  };
   const transfers = props.session.transferController;
   const documentMode = ref<'editor' | 'preview'>('editor');
   const editorSession = computed(() => props.sharedEditorSession ?? props.session.editorController);
@@ -242,7 +249,25 @@
     get: () => props.progressVisible !== false,
     set: (visible: boolean) => emit('progressVisible', visible),
   });
-  const PROGRESS_RESTORE_POSITION_KEY = 'nexus.transfer-progress-restore-position';
+  interface ProgressRestorePosition {
+    x: number;
+    y: number;
+  }
+  const progressRestorePositionStorage = {
+    namespace: 'workspace.progress-restore-position',
+    version: 1,
+    codec: jsonStorageCodec<ProgressRestorePosition>((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+      const candidate = value as Record<string, unknown>;
+      return typeof candidate.x === 'number' &&
+        Number.isFinite(candidate.x) &&
+        typeof candidate.y === 'number' &&
+        Number.isFinite(candidate.y)
+        ? { x: candidate.x, y: candidate.y }
+        : undefined;
+    }),
+    legacyKeys: ['nexus.transfer-progress-restore-position'],
+  } as const;
   const PROGRESS_RESTORE_MARGIN = 8;
   const progressRestoreButton = ref<HTMLElement | null>(null);
   const progressRestorePosition = ref({ x: 0, y: 0 });
@@ -265,11 +290,7 @@
   });
   const saveProgressRestorePosition = (): void => {
     if (props.mobile || !progressRestorePositionInitialized.value) return;
-    try {
-      localStorage.setItem(PROGRESS_RESTORE_POSITION_KEY, JSON.stringify(progressRestorePosition.value));
-    } catch {
-      // Keep the in-memory position when storage is unavailable.
-    }
+    writeStoredValue(progressRestorePositionStorage, progressRestorePosition.value);
   };
   const initializeProgressRestorePosition = async (): Promise<void> => {
     if (props.mobile) return;
@@ -283,15 +304,8 @@
 
     const rect = element.getBoundingClientRect();
     let next = { x: rect.left, y: rect.top };
-    try {
-      const raw = localStorage.getItem(PROGRESS_RESTORE_POSITION_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as Partial<{ x: number; y: number }>;
-        if (Number.isFinite(saved.x) && Number.isFinite(saved.y)) next = { x: saved.x!, y: saved.y! };
-      }
-    } catch {
-      // Ignore malformed or unavailable storage and keep the original bottom-right position.
-    }
+    const saved = readStoredValue(progressRestorePositionStorage);
+    if (saved) next = saved;
     progressRestorePosition.value = clampProgressRestorePosition(next, element);
     progressRestorePositionInitialized.value = true;
   };
@@ -701,7 +715,7 @@
         await props.session.filesystemState.browser.refresh();
         return;
       }
-      if (task.status === 'error') throw new Error(task.error || t('fileManager.errors.generic'));
+      if (task.status === 'error') throw new Error(transferErrorMessage(task));
     } catch (cause) {
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -775,11 +789,11 @@
     }
     return `${parent.replace(/\/$/, '')}/${base}.${format}`.replace(/^\/\//, '/');
   };
-  const archivePasswordFailureMessage = (code: WorkspaceArchiveErrorCodeDto, fallback: string): string => {
+  const archivePasswordFailureMessage = (code: WorkspaceArchiveErrorCodeDto): string => {
     if (code === 'INVALID_PASSWORD') return t('fileManager.archivePassword.wrongPassword');
     if (code === 'PASSWORD_TOO_LONG') return t('fileManager.archivePassword.tooLong', { max: 128 });
     if (code === 'INVALID_PASSWORD_FORMAT') return t('fileManager.archivePassword.invalidCharacters');
-    return code === 'PASSWORD_REQUIRED' ? '' : fallback;
+    return code === 'PASSWORD_REQUIRED' ? '' : t('progressCenter.error.archiveFailed');
   };
   type ArchivePasswordErrorCode = Extract<
     WorkspaceArchiveErrorCodeDto,
@@ -795,14 +809,13 @@
   const openArchivePasswordPrompt = (
     requestContext: ArchiveRequestContext,
     code: WorkspaceArchiveErrorCodeDto = 'PASSWORD_REQUIRED',
-    fallback = '',
   ) => {
     archiveDialog.value = { kind: requestContext.kind, entries: [...requestContext.entries] };
     archiveDestination.value = requestContext.destination;
     archiveFormat.value = requestContext.format;
     resetArchivePassword();
     archivePasswordRequired.value = true;
-    archiveRemoteError.value = archivePasswordFailureMessage(code, fallback);
+    archiveRemoteError.value = archivePasswordFailureMessage(code);
   };
   const observeArchiveTask = (
     taskId: string,
@@ -820,11 +833,11 @@
         submissionGeneration === archivePromptGeneration &&
         !archiveDialog.value
       ) {
-        openArchivePasswordPrompt(requestContext, task.errorCode, task.error ?? '');
+        openArchivePasswordPrompt(requestContext, task.errorCode);
         return;
       }
       if (task.status === 'error') {
-        const detail = task.error || t('fileManager.errors.generic');
+        const detail = transferErrorMessage(task);
         const messageKey =
           requestContext.kind === 'compress'
             ? 'fileManager.errors.compressErrorDetailed'
@@ -1291,9 +1304,9 @@
       :terminal-search-open="session.terminalState.searchOpen.value"
       :terminal-search-term="session.terminalState.searchTerm.value"
       @update:pane="mobilePane = $event"
-      @update:terminal-search-open="session.terminalState.searchOpen.value = $event"
-      @update:terminal-search-term="session.terminalState.searchTerm.value = $event"
-      @update:command-draft="session.commandDraft.value = $event"
+      @update:terminal-search-open="session.setTerminalSearchOpen($event)"
+      @update:terminal-search-term="session.setTerminalSearchTerm($event)"
+      @update:command-draft="session.setCommandDraft($event)"
       @open-file-manager="fileManagerPopupVisible = true"
       @open-editor="
         documentMode = 'editor';

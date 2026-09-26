@@ -619,7 +619,7 @@
   /*
    * §7.2-e: the sidebar / rail toggles and the conversation-files view live in the
    * surface, but persistence is driven from here — any of them changing is a layout
-   * change that has to reach localStorage.
+   * change that has to reach browser persistence.
    */
   watch(
     () => [state.threadSidebarVisible, state.taskRailVisible, state.hubView] as const,

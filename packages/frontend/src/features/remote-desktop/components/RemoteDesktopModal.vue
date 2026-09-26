@@ -4,7 +4,7 @@
   import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
   import { useI18n } from 'vue-i18n';
   import { OverlayPanel } from '@/foundation/ui';
-  import { useDeviceCapabilities } from '@/foundation/browser';
+  import { readStoredValue, stringStorageCodec, useDeviceCapabilities, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
   import { apiErrorMessage } from '@/client/http';
   import { logger } from '@/client/logging/logger';
@@ -14,14 +14,14 @@
   import type { RemoteDesktopConnection, RemoteDesktopDisplayDto, RemoteDesktopState } from '../model/remoteDesktop';
   import type { RemoteDesktopSessionPort } from '../ports/remote-desktop-session-port';
 
-  const TOUCH_MODE_KEY = 'nexus.rdp.touch-mode';
-  const readTouchMode = (): RemoteTouchMode => {
-    try {
-      return localStorage.getItem(TOUCH_MODE_KEY) === 'touchpad' ? 'touchpad' : 'direct';
-    } catch {
-      return 'direct';
-    }
-  };
+  const touchModeStorage = {
+    namespace: 'remote-desktop.touch-mode',
+    version: 1,
+    codec: stringStorageCodec((value) => value === 'touchpad' || value === 'direct'),
+    legacyKeys: ['nexus.rdp.touch-mode'],
+  } as const;
+  const readTouchMode = (): RemoteTouchMode =>
+    readStoredValue(touchModeStorage) === 'touchpad' ? 'touchpad' : 'direct';
 
   const props = withDefaults(
     defineProps<{
@@ -137,11 +137,7 @@
   const setTouchMode = (mode: RemoteTouchMode) => {
     if (touchMode.value === mode) return;
     touchMode.value = mode;
-    try {
-      localStorage.setItem(TOUCH_MODE_KEY, mode);
-    } catch {
-      /* in-memory choice remains */
-    }
+    writeStoredValue(touchModeStorage, mode);
     const element = client?.getDisplay().getElement();
     if (element && state.value === 'connected') bindTouch(element);
   };

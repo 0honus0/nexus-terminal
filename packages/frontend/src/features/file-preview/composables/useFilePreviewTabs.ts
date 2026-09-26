@@ -13,6 +13,7 @@ export interface FilePreviewSessionController {
   activeId: Ref<string | null>;
   active: ComputedRef<PreviewTab | null>;
   open(path: string, context?: FilePreviewOpenContext): Promise<PreviewTab>;
+  activate(id: string): void;
   close(id: string): void;
   closeScope(scopeId: string): void;
   clear(): void;
@@ -126,6 +127,10 @@ export function createFilePreviewSession(defaultSource?: FilePreviewSource): Fil
     return tab;
   }
 
+  function activate(id: string): void {
+    if (tabs.value.some((tab) => tab.id === id)) activeId.value = id;
+  }
+
   function close(id: string): void {
     const index = tabs.value.findIndex((item) => item.id === id);
     if (index < 0) return;
@@ -171,7 +176,7 @@ export function createFilePreviewSession(defaultSource?: FilePreviewSource): Fil
     }
   }
 
-  return { tabs, activeId, active, open, close, closeScope, clear, refresh };
+  return { tabs, activeId, active, open, activate, close, closeScope, clear, refresh };
 }
 
 export const useFilePreviewTabs = createFilePreviewSession;

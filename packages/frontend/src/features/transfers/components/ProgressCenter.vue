@@ -1,10 +1,36 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
   import type { TransferTask } from '../model/transfer';
+  import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
 
-  const STORAGE_KEY = 'nexus.transfer-progress-window';
+  interface ProgressWindowGeometry {
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  }
+  const progressWindowStorage = {
+    namespace: 'transfers.progress-window',
+    version: 1,
+    codec: jsonStorageCodec<ProgressWindowGeometry>((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+      const candidate = value as Record<string, unknown>;
+      return [candidate.width, candidate.height, candidate.x, candidate.y].every(
+        (entry) => typeof entry === 'number' && Number.isFinite(entry),
+      )
+        ? {
+            width: candidate.width as number,
+            height: candidate.height as number,
+            x: candidate.x as number,
+            y: candidate.y as number,
+          }
+        : undefined;
+    }),
+    legacyKeys: ['nexus.transfer-progress-window'],
+  } as const;
   const MIN_WIDTH = 340;
   const MIN_HEIGHT = 190;
 
@@ -49,6 +75,10 @@
     return value.split(/[\/]/).filter(Boolean).at(-1) || value;
   };
   const archiveLabel = (task: TransferTask): string => t(`progressCenter.kind.${task.kind}`);
+  const localizedTransferMessage = (descriptor: ReturnType<typeof transferTaskErrorDescriptor>): string =>
+    descriptor ? t(descriptor.key, descriptor.params ?? {}) : '';
+  const taskError = (task: TransferTask): string => localizedTransferMessage(transferTaskErrorDescriptor(task));
+  const taskWarning = (task: TransferTask): string => localizedTransferMessage(transferTaskWarningDescriptor(task));
   const totalBytesWritten = () => props.tasks.reduce((sum, task) => sum + Math.max(0, task.bytesWritten), 0);
   const sampleAggregateSpeed = (): void => {
     const now = performance.now();
@@ -81,31 +111,22 @@
   };
 
   const saveWindow = (): void => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ width: width.value, height: height.value, x: position.value.x, y: position.value.y }),
-      );
-    } catch {
-      // Window state can remain in memory when storage is unavailable.
-    }
+    writeStoredValue(progressWindowStorage, {
+      width: width.value,
+      height: height.value,
+      x: position.value.x,
+      y: position.value.y,
+    });
   };
 
   const restoreWindow = (): void => {
     let restored = false;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as Partial<{ width: number; height: number; x: number; y: number }>;
-        if ([saved.width, saved.height, saved.x, saved.y].every((value) => Number.isFinite(value))) {
-          width.value = saved.width!;
-          height.value = saved.height!;
-          position.value = { x: saved.x!, y: saved.y! };
-          restored = true;
-        }
-      }
-    } catch {
-      // Ignore malformed storage.
+    const saved = readStoredValue(progressWindowStorage);
+    if (saved) {
+      width.value = saved.width;
+      height.value = saved.height;
+      position.value = { x: saved.x, y: saved.y };
+      restored = true;
     }
 
     if (!restored) {
@@ -311,8 +332,10 @@
         >
           <i class="fas fa-times" aria-hidden="true"></i>
         </button>
-        <span v-if="task.error" class="col-span-4 text-xs text-error">{{ task.error }}</span>
-        <span v-else-if="task.warning" class="col-span-4 text-xs text-warning">{{ task.warning }}</span>
+        <span v-if="task.error || task.errorKind" class="col-span-4 text-xs text-error">{{ taskError(task) }}</span>
+        <span v-else-if="task.warning || task.warningKind" class="col-span-4 text-xs text-warning">{{
+          taskWarning(task)
+        }}</span>
       </li>
     </ul>
 
@@ -370,8 +393,8 @@
         <button v-else type="button" class="archive-stop-button" @click="emit('remove', task.id)">
           <i class="fas fa-times" aria-hidden="true"></i>{{ t('common.remove') }}
         </button>
-        <p v-if="task.error" class="m-0 text-xs text-error">{{ task.error }}</p>
-        <p v-if="task.warning" class="m-0 text-xs text-warning">{{ task.warning }}</p>
+        <p v-if="task.error || task.errorKind" class="m-0 text-xs text-error">{{ taskError(task) }}</p>
+        <p v-if="task.warning || task.warningKind" class="m-0 text-xs text-warning">{{ taskWarning(task) }}</p>
       </li>
     </ul>
 
@@ -399,7 +422,7 @@
         ></progress>
         <div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
           <span :class="task.status === 'error' ? 'text-error' : ''">{{
-            task.error || t(`progressCenter.status.${task.status}`)
+            task.error || task.errorKind ? taskError(task) : t(`progressCenter.status.${task.status}`)
           }}</span>
           <span class="shrink-0 tabular-nums">
             <template v-if="task.totalBytes > 0"

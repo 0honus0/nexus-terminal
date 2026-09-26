@@ -3,15 +3,31 @@
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu } from '@/foundation/ui';
-  import { writeClipboardText } from '@/foundation/browser';
+  import {
+    booleanStorageCodec,
+    numberStorageCodec,
+    readStoredValue,
+    writeClipboardText,
+    writeStoredValue,
+  } from '@/foundation/browser';
   import { useFeedback } from '@/shared/feedback/public';
   import { focusRegistry } from '@/shared/focus/public';
   import { createWheelScaleResolver } from '@/foundation/interaction';
   import { useCommandHistoryStore } from '../store/commandHistory.store';
   import type { CommandHistoryEntryDto, ExecuteHistoryIntent } from '../model/commandHistory';
 
-  const COMPACT_KEY = 'commandHistoryCompactMode';
-  const ROW_SCALE_KEY = 'commandHistoryRowScale';
+  const compactStorage = {
+    namespace: 'command-history.compact',
+    version: 1,
+    codec: booleanStorageCodec,
+    legacyKeys: ['commandHistoryCompactMode'],
+  } as const;
+  const rowScaleStorage = {
+    namespace: 'command-history.row-scale',
+    version: 1,
+    codec: numberStorageCodec((value) => value >= 0.5 && value <= 2.5),
+    legacyKeys: ['commandHistoryRowScale'],
+  } as const;
 
   const props = withDefaults(
     defineProps<{
@@ -40,14 +56,7 @@
   const searchExpanded = ref(!props.collapsibleSearch || Boolean(search.value));
   let unregisterFocus: (() => void) | undefined;
 
-  const readCompactMode = (): boolean => {
-    if (props.compact) return true;
-    try {
-      return localStorage.getItem(COMPACT_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  };
+  const readCompactMode = (): boolean => (props.compact ? true : (readStoredValue(compactStorage) ?? false));
   const isCompact = ref(readCompactMode());
   watch(
     () => props.compact,
@@ -57,22 +66,13 @@
   );
   const toggleCompact = () => {
     isCompact.value = !isCompact.value;
-    try {
-      localStorage.setItem(COMPACT_KEY, String(isCompact.value));
-    } catch {
-      // Storage unavailable
-    }
+    writeStoredValue(compactStorage, isCompact.value);
     emit('compactMode', isCompact.value);
   };
 
   const readRowScale = (): number => {
     if (Number.isFinite(props.rowScale) && props.rowScale !== 1) return props.rowScale!;
-    try {
-      const val = Number(localStorage.getItem(ROW_SCALE_KEY));
-      return Number.isFinite(val) && val >= 0.5 && val <= 2.5 ? val : 1;
-    } catch {
-      return 1;
-    }
+    return readStoredValue(rowScaleStorage) ?? 1;
   };
   const localScale = ref(readRowScale());
   const resolveScale = createWheelScaleResolver({
@@ -95,11 +95,7 @@
     const change = resolveScale(event, localScale.value);
     if (!change) return;
     localScale.value = change.next;
-    try {
-      localStorage.setItem(ROW_SCALE_KEY, String(change.next));
-    } catch {
-      // Storage unavailable
-    }
+    writeStoredValue(rowScaleStorage, change.next);
     emit('rowScale', change.next);
   };
 

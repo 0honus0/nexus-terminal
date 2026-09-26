@@ -14,6 +14,8 @@
     "lineEndingLf": "LF",
     "lineEndingCrlf": "CRLF",
     "lineEndingCr": "CR",
-    "resizePopup": "Resize editor window"
+    "resizePopup": "Resize editor window",
+    "saveFile": "Save File",
+    "toggleComment": "Toggle Comment"
   }
 }

@@ -53,6 +53,18 @@ export class WorkspaceRuntimeSession {
   readonly statusController: StatusMonitorSessionController;
   readonly dockerController: DockerSessionController;
 
+  setCommandDraft(value: string): void {
+    this.commandDraft.value = value;
+  }
+
+  setTerminalSearchOpen(value: boolean): void {
+    this.terminalState.searchOpen.value = value;
+  }
+
+  setTerminalSearchTerm(value: string): void {
+    this.terminalState.searchTerm.value = value;
+  }
+
   private reconnectAttempt = 0;
   private reconnectTimer?: number;
   private reconnectInFlight = false;

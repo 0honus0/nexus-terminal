@@ -35,7 +35,21 @@
     "resize": "调整进度窗口大小",
     "restore": "恢复显示",
     "sourceSummary": "{count} 个任务 · {active} 个进行中",
-    "speed": "速度"
+    "speed": "速度",
+    "error": {
+      "unknown": "传输失败。",
+      "uploadDirectoryStateLost": "上传准备状态已丢失，请重试上传。",
+      "uploadStreamClosed": "上传数据流意外关闭（代码 {code}）。",
+      "uploadStreamOpenFailed": "无法为 {file} 打开上传数据流。",
+      "uploadFailed": "上传失败。",
+      "transferFailed": "文件传输失败。",
+      "workspaceConnectionClosed": "工作区连接已断开，传输未能完成。",
+      "archiveFailed": "归档操作失败。"
+    },
+    "warning": {
+      "archiveCompletedWithWarning": "归档已完成，但存在警告。",
+      "partialFailure": "传输已完成，但后续步骤失败。"
+    }
   },
   "transferProgressModal": {
     "title": "文件传输进度",

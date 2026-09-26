@@ -7,6 +7,7 @@ import type {
 } from '@nexus-terminal/protocol/settings';
 import { logger } from '@/client/logging/logger';
 import { createLatestValueSaver } from '@/foundation/async';
+import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 import type { WorkspaceSettingsRepository } from '../ports/workspace-settings-repository';
 
 export type { WorkspacePaneNameDto, WorkspaceSidebarConfigDto } from '@nexus-terminal/protocol/settings';
@@ -262,24 +263,32 @@ const defaultSidebarsFor = (layout: WorkspaceLayoutNodeState): WorkspaceSidebarC
   };
 };
 
-const readStored = <T>(key: string, validate: (value: unknown) => value is T): T | null => {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    return validate(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-};
+const workspaceLayoutStorage = {
+  namespace: 'workspace.layout',
+  version: 1,
+  codec: jsonStorageCodec<WorkspaceLayoutNodeState>((value) =>
+    validateLayout(value, true) ? (value as WorkspaceLayoutNodeState) : undefined,
+  ),
+  legacyKeys: [LAYOUT_STORAGE_KEY],
+} as const;
 
-const writeStored = (key: string, value: unknown): void => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Workspace layout remains usable in memory when browser storage is unavailable.
-  }
-};
+const workspaceSidebarStorage = {
+  namespace: 'workspace.sidebar',
+  version: 1,
+  codec: jsonStorageCodec<WorkspaceSidebarConfigDto>((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const candidate = value as Record<string, unknown>;
+    if (!Array.isArray(candidate.left) || !Array.isArray(candidate.right)) return undefined;
+    if (
+      ![...candidate.left, ...candidate.right].every(
+        (name) => typeof name === 'string' && paneNames.has(name as WorkspacePaneNameDto),
+      )
+    )
+      return undefined;
+    return { left: candidate.left as WorkspacePaneNameDto[], right: candidate.right as WorkspacePaneNameDto[] };
+  }),
+  legacyKeys: [SIDEBAR_STORAGE_KEY],
+} as const;
 
 export const createWorkspaceLayoutController = (settingsRepository: WorkspaceSettingsRepository) => {
   const tree = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
@@ -319,7 +328,7 @@ export const createWorkspaceLayoutController = (settingsRepository: WorkspaceSet
     async save(nextTree) {
       const request: WorkspaceLayoutNodeDto = nextTree;
       await settingsRepository.saveResizedLayout(request);
-      writeStored(LAYOUT_STORAGE_KEY, nextTree);
+      writeStoredValue(workspaceLayoutStorage, nextTree);
     },
     onError: (error) => logger.error({ err: error }, 'Failed to persist resized workspace layout'),
   });
@@ -341,9 +350,7 @@ export const createWorkspaceLayoutController = (settingsRepository: WorkspaceSet
 
         const backendLayout =
           layoutResult.status === 'fulfilled' ? normalizeWorkspaceLayoutCandidate(layoutResult.value) : null;
-        const storedLayoutData = backendLayout
-          ? null
-          : readStored<WorkspaceLayoutNodeState>(LAYOUT_STORAGE_KEY, (value) => validateLayout(value, true));
+        const storedLayoutData = backendLayout ? null : readStoredValue(workspaceLayoutStorage);
         const storedLayout = storedLayoutData ? normalizeWorkspaceLayoutCandidate(storedLayoutData) : null;
         const nextTree = normalizeWorkspaceLayout(backendLayout ?? storedLayout ?? createDefaultWorkspaceLayout());
 
@@ -351,18 +358,14 @@ export const createWorkspaceLayoutController = (settingsRepository: WorkspaceSet
           sidebarResult.status === 'fulfilled' && validSidebar(sidebarResult.value, nextTree)
             ? sidebarResult.value
             : null;
-        const storedSidebar = backendSidebar
-          ? null
-          : readStored<WorkspaceSidebarConfigDto>(SIDEBAR_STORAGE_KEY, (value): value is WorkspaceSidebarConfigDto =>
-              validSidebar(value, nextTree),
-            );
+        const storedSidebar = backendSidebar ? null : readStoredValue(workspaceSidebarStorage);
         const nextSidebars = backendSidebar ?? storedSidebar ?? defaultSidebarsFor(nextTree);
 
         tree.value = nextTree;
         sidebars.value = nextSidebars;
         loaded.value = true;
-        if (backendLayout || storedLayout) writeStored(LAYOUT_STORAGE_KEY, nextTree);
-        if (backendSidebar) writeStored(SIDEBAR_STORAGE_KEY, backendSidebar);
+        if (backendLayout || storedLayout) writeStoredValue(workspaceLayoutStorage, nextTree);
+        if (backendSidebar) writeStoredValue(workspaceSidebarStorage, backendSidebar);
       } finally {
         loading.value = false;
       }
@@ -377,8 +380,8 @@ export const createWorkspaceLayoutController = (settingsRepository: WorkspaceSet
       tree.value = normalizedTree;
       sidebars.value = nextSidebars;
       loaded.value = true;
-      writeStored(LAYOUT_STORAGE_KEY, normalizedTree);
-      writeStored(SIDEBAR_STORAGE_KEY, nextSidebars);
+      writeStoredValue(workspaceLayoutStorage, normalizedTree);
+      writeStoredValue(workspaceSidebarStorage, nextSidebars);
     },
     updateNodeSizes(containerId: string, sizes: readonly number[]): void {
       const nextTree = updateContainerSizes(tree.value, containerId, sizes);

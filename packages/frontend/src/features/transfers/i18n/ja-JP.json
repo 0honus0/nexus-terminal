@@ -35,7 +35,21 @@
     "resize": "進捗ウィンドウのサイズを変更",
     "restore": "表示を復元",
     "sourceSummary": "{count} 件のタスク · {active} 件実行中",
-    "speed": "速度"
+    "speed": "速度",
+    "error": {
+      "unknown": "転送に失敗しました。",
+      "uploadDirectoryStateLost": "アップロード準備状態が失われました。もう一度アップロードしてください。",
+      "uploadStreamClosed": "アップロードストリームが予期せず閉じられました（コード {code}）。",
+      "uploadStreamOpenFailed": "{file} のアップロードストリームを開けませんでした。",
+      "uploadFailed": "アップロードに失敗しました。",
+      "transferFailed": "ファイル転送に失敗しました。",
+      "workspaceConnectionClosed": "ワークスペース接続が切断され、転送を完了できませんでした。",
+      "archiveFailed": "アーカイブ操作に失敗しました。"
+    },
+    "warning": {
+      "archiveCompletedWithWarning": "アーカイブは完了しましたが、警告があります。",
+      "partialFailure": "転送は完了しましたが、後続処理に失敗しました。"
+    }
   },
   "transferProgressModal": {
     "title": "ファイル転送進捗",

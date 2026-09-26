@@ -1,4 +1,5 @@
 import { createI18n, type Composer } from 'vue-i18n';
+import { readStoredValue, stringStorageCodec, writeStoredValue } from '@/foundation/browser';
 
 interface MessageTree {
   [key: string]: string | MessageTree;
@@ -8,7 +9,12 @@ export const supportedLocales = ['en-US', 'zh-CN', 'ja-JP'] as const;
 export type SupportedLocale = (typeof supportedLocales)[number];
 
 const defaultLocale: SupportedLocale = 'en-US';
-const localeStorageKey = 'user-locale';
+const localeStorage = {
+  namespace: 'locale',
+  version: 1,
+  codec: stringStorageCodec((value) => supportedLocales.includes(value as SupportedLocale)),
+  legacyKeys: ['user-locale'],
+} as const;
 
 const messageModules = {
   ...import.meta.glob<MessageTree>('./messages/*.json', { eager: true, import: 'default' }),
@@ -88,12 +94,8 @@ const resolveSupportedLocale = (candidate?: string | null): SupportedLocale | nu
 };
 
 const getInitialLocale = (): SupportedLocale => {
-  try {
-    const stored = resolveSupportedLocale(localStorage.getItem(localeStorageKey));
-    if (stored) return stored;
-  } catch {
-    // Storage can be unavailable in privacy-restricted browser contexts.
-  }
+  const stored = resolveSupportedLocale(readStoredValue(localeStorage));
+  if (stored) return stored;
 
   return resolveSupportedLocale(navigator.language) ?? defaultLocale;
 };
@@ -112,11 +114,7 @@ export const setLocale = (candidate: string): boolean => {
   const composer = i18n.global as unknown as Composer;
   composer.locale.value = locale;
   document.documentElement.lang = locale;
-  try {
-    localStorage.setItem(localeStorageKey, locale);
-  } catch {
-    // Locale still changes for the current page when persistence is unavailable.
-  }
+  writeStoredValue(localeStorage, locale);
   return true;
 };
 

@@ -14,6 +14,8 @@
     "lineEndingLf": "LF",
     "lineEndingCrlf": "CRLF",
     "lineEndingCr": "CR",
-    "resizePopup": "调整编辑器窗口大小"
+    "resizePopup": "调整编辑器窗口大小",
+    "saveFile": "保存文件",
+    "toggleComment": "切换注释"
   }
 }

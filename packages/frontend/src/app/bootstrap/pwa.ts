@@ -1,6 +1,19 @@
+import {
+  jsonStorageCodec,
+  readStoredValue,
+  removeStoredValue,
+  stringStorageCodec,
+  writeStoredValue,
+} from '@/foundation/browser';
+
 const CACHE_PREFIX = 'nexus-terminal-cache-';
-const DYNAMIC_IMPORT_RELOAD_KEY = 'nexus-dynamic-import-reload';
-const GLOBAL_DYNAMIC_IMPORT_RELOAD_KEY = 'nexus-global-dynamic-import-reload';
+const dynamicImportReloadStorage = {
+  namespace: 'pwa.dynamic-import-reload',
+  version: 1,
+  area: 'session',
+  codec: stringStorageCodec(),
+  legacyKeys: ['nexus-dynamic-import-reload'],
+} as const;
 const GLOBAL_DYNAMIC_IMPORT_RELOAD_COOLDOWN_MS = 60_000;
 
 const isStaleDynamicImportError = (error: unknown): boolean => {
@@ -31,26 +44,29 @@ interface GlobalDynamicImportReloadMarker {
   attemptedAt: number;
 }
 
+const globalDynamicImportReloadStorage = {
+  namespace: 'pwa.global-dynamic-import-reload',
+  version: 1,
+  area: 'session',
+  codec: jsonStorageCodec<GlobalDynamicImportReloadMarker>((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const candidate = value as Record<string, unknown>;
+    return typeof candidate.target === 'string' && typeof candidate.attemptedAt === 'number'
+      ? { target: candidate.target, attemptedAt: candidate.attemptedAt }
+      : undefined;
+  }),
+  legacyKeys: ['nexus-global-dynamic-import-reload'],
+} as const;
+
 const recentGlobalReloadAttempt = (target: string): boolean => {
-  try {
-    const raw = sessionStorage.getItem(GLOBAL_DYNAMIC_IMPORT_RELOAD_KEY);
-    if (!raw) return false;
-    const marker = JSON.parse(raw) as Partial<GlobalDynamicImportReloadMarker>;
-    return (
-      marker.target === target &&
-      typeof marker.attemptedAt === 'number' &&
-      Date.now() - marker.attemptedAt < GLOBAL_DYNAMIC_IMPORT_RELOAD_COOLDOWN_MS
-    );
-  } catch {
-    return false;
-  }
+  const marker = readStoredValue(globalDynamicImportReloadStorage);
+  return Boolean(
+    marker && marker.target === target && Date.now() - marker.attemptedAt < GLOBAL_DYNAMIC_IMPORT_RELOAD_COOLDOWN_MS,
+  );
 };
 
 const markGlobalReloadAttempt = (target: string): void => {
-  sessionStorage.setItem(
-    GLOBAL_DYNAMIC_IMPORT_RELOAD_KEY,
-    JSON.stringify({ target, attemptedAt: Date.now() } satisfies GlobalDynamicImportReloadMarker),
-  );
+  writeStoredValue(globalDynamicImportReloadStorage, { target, attemptedAt: Date.now() });
 };
 
 export const registerAppServiceWorker = (): void => {
@@ -70,9 +86,9 @@ export const registerAppServiceWorker = (): void => {
 
 export const recoverStaleDynamicImport = async (error: unknown, reloadTarget: string): Promise<boolean> => {
   if (!isStaleDynamicImportError(error)) return false;
-  if (sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY) === reloadTarget) return true;
+  if (readStoredValue(dynamicImportReloadStorage) === reloadTarget) return true;
 
-  sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, reloadTarget);
+  writeStoredValue(dynamicImportReloadStorage, reloadTarget);
   await clearAppCaches();
   await updateServiceWorker();
   window.location.reload();
@@ -119,7 +135,5 @@ export const registerGlobalDynamicImportRecovery = (): void => {
 };
 
 export const clearDynamicImportRecoveryMarker = (routePath: string): void => {
-  if (sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY) === routePath) {
-    sessionStorage.removeItem(DYNAMIC_IMPORT_RELOAD_KEY);
-  }
+  if (readStoredValue(dynamicImportReloadStorage) === routePath) removeStoredValue(dynamicImportReloadStorage);
 };

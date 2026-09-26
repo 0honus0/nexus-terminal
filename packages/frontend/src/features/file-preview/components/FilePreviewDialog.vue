@@ -24,7 +24,7 @@
   const isRefreshing = computed(() => Boolean(activeTab.value?.refreshing));
 
   const activateTab = (tabId: string): void => {
-    props.session.activeId.value = tabId;
+    props.session.activate(tabId);
   };
   const closeTab = (event: MouseEvent, tabId: string): void => {
     event.stopPropagation();

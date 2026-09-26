@@ -1,10 +1,12 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition } from '@/foundation/interaction';
   import { OverlayPanel } from '@/foundation/ui';
   import { useConnections } from '@/features/connections/public';
   import type { ProgressSource, TransferTask } from '../model/transfer';
+  import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
   import type {
     ServerTransferSubTaskStatusDto,
     ServerTransferTaskDto,
@@ -36,7 +38,25 @@
   }>();
   const { t, locale } = useI18n();
   const connections = useConnections();
-  const DESKTOP_POSITION_STORAGE_KEY = 'nexus.progress-display-position';
+  interface ProgressDisplayPosition {
+    x: number;
+    y: number;
+  }
+  const progressDisplayPositionStorage = {
+    namespace: 'transfers.progress-display-position',
+    version: 1,
+    codec: jsonStorageCodec<ProgressDisplayPosition>((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+      const candidate = value as Record<string, unknown>;
+      return typeof candidate.x === 'number' &&
+        Number.isFinite(candidate.x) &&
+        typeof candidate.y === 'number' &&
+        Number.isFinite(candidate.y)
+        ? { x: candidate.x, y: candidate.y }
+        : undefined;
+    }),
+    legacyKeys: ['nexus.progress-display-position'],
+  } as const;
   const VIEWPORT_MARGIN = 8;
   const panelContent = ref<HTMLElement | null>(null);
   const position = ref({ x: VIEWPORT_MARGIN, y: VIEWPORT_MARGIN });
@@ -49,11 +69,7 @@
   });
   const savePosition = (): void => {
     if (props.mobile || !positionInitialized.value) return;
-    try {
-      localStorage.setItem(DESKTOP_POSITION_STORAGE_KEY, JSON.stringify(position.value));
-    } catch {
-      // The current position remains valid for this mount when storage is unavailable.
-    }
+    writeStoredValue(progressDisplayPositionStorage, position.value);
   };
   const restorePosition = async (): Promise<void> => {
     if (props.mobile) return;
@@ -62,15 +78,8 @@
     if (!element) return;
 
     let next = { x: element.getBoundingClientRect().left, y: element.getBoundingClientRect().top };
-    try {
-      const raw = localStorage.getItem(DESKTOP_POSITION_STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as Partial<{ x: number; y: number }>;
-        if (Number.isFinite(saved.x) && Number.isFinite(saved.y)) next = { x: saved.x!, y: saved.y! };
-      }
-    } catch {
-      // Ignore malformed or unavailable storage and keep the centered default.
-    }
+    const saved = readStoredValue(progressDisplayPositionStorage);
+    if (saved) next = saved;
     position.value = clampPosition(next, element);
     positionInitialized.value = true;
   };
@@ -116,6 +125,10 @@
     ['completed', 'cancelled', 'skipped', 'partial', 'error'].includes(status);
   const activeCount = (source: ProgressSource) => source.tasks.filter((task) => !done(task.status)).length;
   const normalizedProgress = (task: TransferTask) => Math.max(0, Math.min(100, task.progress));
+  const localizedTransferMessage = (descriptor: ReturnType<typeof transferTaskErrorDescriptor>): string =>
+    descriptor ? t(descriptor.key, descriptor.params ?? {}) : '';
+  const taskError = (task: TransferTask): string => localizedTransferMessage(transferTaskErrorDescriptor(task));
+  const taskWarning = (task: TransferTask): string => localizedTransferMessage(transferTaskWarningDescriptor(task));
   const sourceTitle = (source: ProgressSource): string => {
     const kinds = new Set(source.tasks.map((task) => task.kind));
     let taskLabel = '';
@@ -362,8 +375,12 @@
                         {{ normalizedProgress(task).toFixed(1) }}%
                       </span>
                     </div>
-                    <p v-if="task.warning" class="mb-0 mt-1 text-[11px] text-warning">{{ task.warning }}</p>
-                    <p v-if="task.error" class="mb-0 mt-1 text-[11px] text-error">{{ task.error }}</p>
+                    <p v-if="task.warning || task.warningKind" class="mb-0 mt-1 text-[11px] text-warning">
+                      {{ taskWarning(task) }}
+                    </p>
+                    <p v-if="task.error || task.errorKind" class="mb-0 mt-1 text-[11px] text-error">
+                      {{ taskError(task) }}
+                    </p>
                   </div>
                 </div>
               </article>

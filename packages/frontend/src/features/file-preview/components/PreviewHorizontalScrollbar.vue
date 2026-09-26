@@ -5,11 +5,10 @@
     defineProps<{
       target: HTMLElement | null;
       testId: string;
-      label?: string;
+      label: string;
       active?: boolean;
     }>(),
     {
-      label: 'Horizontal scroll',
       active: true,
     },
   );

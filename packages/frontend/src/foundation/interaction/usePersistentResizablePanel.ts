@@ -1,4 +1,5 @@
 import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
+import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 import { useResizeHandle, type ResizeHandleOptions, type ResizeSize } from './useResizeHandle';
 
 type SizeLimit = number | (() => number);
@@ -21,6 +22,21 @@ const resolveLimit = (value: SizeLimit): number => (typeof value === 'function' 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(min, value), max);
 const positiveFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+const sizeStorage = (storageKey: string) =>
+  ({
+    namespace: `panel-size.${storageKey}`,
+    version: 1,
+    codec: jsonStorageCodec<Partial<ResizeSize>>((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+      const candidate = value as Record<string, unknown>;
+      return {
+        ...(positiveFiniteNumber(candidate.width) ? { width: candidate.width } : {}),
+        ...(positiveFiniteNumber(candidate.height) ? { height: candidate.height } : {}),
+      };
+    }),
+    legacyKeys: [storageKey],
+  }) as const;
 
 /**
  * Reusable desktop panel sizing: persisted geometry, viewport clamping and bottom-right pointer resize.
@@ -47,29 +63,18 @@ export function usePersistentResizablePanel(options: PersistentResizablePanelOpt
   const restore = (): void => {
     if (!enabled()) return;
     resetToDefault();
-    try {
-      const raw = localStorage.getItem(options.storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { width?: unknown; height?: unknown };
-        if (positiveFiniteNumber(parsed.width)) width.value = parsed.width;
-        if (positiveFiniteNumber(parsed.height)) height.value = parsed.height;
-      }
-    } catch {
-      resetToDefault();
-    }
+    const stored = readStoredValue(sizeStorage(options.storageKey));
+    if (positiveFiniteNumber(stored?.width)) width.value = stored.width;
+    if (positiveFiniteNumber(stored?.height)) height.value = stored.height;
     clampSize();
   };
 
   const persist = (): void => {
     if (!enabled()) return;
-    try {
-      localStorage.setItem(
-        options.storageKey,
-        JSON.stringify({ width: Math.round(width.value), height: Math.round(height.value) }),
-      );
-    } catch {
-      // Browser-local presentation state may remain in memory when storage is unavailable.
-    }
+    writeStoredValue(sizeStorage(options.storageKey), {
+      width: Math.round(width.value),
+      height: Math.round(height.value),
+    });
   };
 
   const resize = useResizeHandle({

@@ -2,6 +2,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { UiPopover } from '@/foundation/ui';
+  import { numberStorageCodec, readStoredValue, removeLegacyStorageKeys, writeStoredValue } from '@/foundation/browser';
   import { useAuthSession } from '@/features/auth/public';
   import { isAgentRunNonTerminal, type AgentRunStatusDto, type AgentThreadViewDto } from '../api/agent-api';
 
@@ -44,28 +45,25 @@
   const SCALE_DEFAULT = 1;
   const SCALE_STEP = 0.1;
   const LEGACY_SCALE_STORAGE_KEY = 'nexus.agent.thread-list-scale.v1';
-  const SCALE_STORAGE_KEY_PREFIX = 'nexus.agent.thread-list-scale.v1.user';
-  const scaleStorageKey = computed(() => {
+  const scaleStorage = computed(() => {
     const userId = auth.user.value?.id;
-    return userId === undefined || userId === null ? null : `${SCALE_STORAGE_KEY_PREFIX}.${userId}`;
+    return userId === undefined || userId === null
+      ? null
+      : {
+          namespace: 'agent.thread-list-scale',
+          version: 1,
+          scope: { kind: 'user', id: userId } as const,
+          codec: numberStorageCodec((value) => value >= SCALE_MIN && value <= SCALE_MAX),
+          legacyKeys: [`nexus.agent.thread-list-scale.v1.user.${userId}`],
+        };
   });
 
   const restoreScale = (): number => {
-    if (typeof window === 'undefined') return SCALE_DEFAULT;
-    try {
-      // The legacy key has unknown user provenance. Never assign it to whichever
-      // account happens to be active when the upgraded client first starts.
-      window.localStorage.removeItem(LEGACY_SCALE_STORAGE_KEY);
-      const key = scaleStorageKey.value;
-      if (!key) return SCALE_DEFAULT;
-      const stored = window.localStorage.getItem(key);
-      if (!stored) return SCALE_DEFAULT;
-      const parsed = Number(stored);
-      if (!Number.isFinite(parsed)) return SCALE_DEFAULT;
-      return Math.min(SCALE_MAX, Math.max(SCALE_MIN, parsed));
-    } catch {
-      return SCALE_DEFAULT;
-    }
+    // The legacy global key has unknown user provenance; never assign it to the active account.
+    removeLegacyStorageKeys([LEGACY_SCALE_STORAGE_KEY]);
+    const storage = scaleStorage.value;
+    if (!storage) return SCALE_DEFAULT;
+    return readStoredValue(storage) ?? SCALE_DEFAULT;
   };
 
   const scale = ref(restoreScale());
@@ -163,13 +161,8 @@
     },
   );
   const persistScale = (): void => {
-    const key = scaleStorageKey.value;
-    if (!key) return;
-    try {
-      window.localStorage.setItem(key, String(scale.value));
-    } catch {
-      // View preference persistence is best-effort.
-    }
+    const storage = scaleStorage.value;
+    if (storage) writeStoredValue(storage, scale.value);
   };
   const clampScale = (value: number): number => Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.round(value * 10) / 10));
   // 唯一的缩放写入路径（Ctrl/⌘+滚轮与弹出面板共用）：改字号时保持"当前行"不跳动。

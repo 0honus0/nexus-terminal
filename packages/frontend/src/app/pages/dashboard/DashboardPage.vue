@@ -3,6 +3,13 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { BaseListboxSelect, BaseSpinner } from '@/foundation/ui';
+  import {
+    numberStorageCodec,
+    readStoredValue,
+    removeStoredValue,
+    stringStorageCodec,
+    writeStoredValue,
+  } from '@/foundation/browser';
   import { useConnections, type ConnectionDto } from '@/features/connections/public';
   import { useConnectionTags } from '@/features/tags/public';
   import { auditApi, type AuditLogEntryDto } from '@/features/audit/public';
@@ -20,19 +27,34 @@
   const suspended = useSuspendedSessions();
   const activity = ref<AuditLogEntryDto[]>([]);
   const search = ref('');
-  const DASHBOARD_TAG_KEY = 'nexus.dashboard.tagId';
-  const DASHBOARD_SORT_KEY = 'nexus.dashboard.sortField';
-  const DASHBOARD_SORT_ORDER_KEY = 'nexus.dashboard.sortOrder';
   type DashboardSort = 'lastConnected' | 'name' | 'type' | 'updated' | 'created';
   type DashboardSortOrder = 'asc' | 'desc';
   const validSorts = new Set<DashboardSort>(['lastConnected', 'name', 'type', 'updated', 'created']);
-  const storedTag = localStorage.getItem(DASHBOARD_TAG_KEY);
-  const storedSort = localStorage.getItem(DASHBOARD_SORT_KEY) as DashboardSort | null;
-  const storedOrder = localStorage.getItem(DASHBOARD_SORT_ORDER_KEY) as DashboardSortOrder | null;
-  const parsedTag = storedTag && storedTag !== 'all' ? Number.parseInt(storedTag, 10) : Number.NaN;
-  const tagId = ref<number | ''>(Number.isFinite(parsedTag) ? parsedTag : '');
-  const sort = ref<DashboardSort>(storedSort && validSorts.has(storedSort) ? storedSort : 'lastConnected');
-  const sortOrder = ref<DashboardSortOrder>(storedOrder === 'asc' ? 'asc' : 'desc');
+  const dashboardTagStorage = {
+    namespace: 'dashboard.tag',
+    version: 1,
+    codec: numberStorageCodec((value) => Number.isInteger(value) && value > 0),
+    legacyKeys: ['nexus.dashboard.tagId'],
+  } as const;
+  const dashboardSortStorage = {
+    namespace: 'dashboard.sort',
+    version: 1,
+    codec: stringStorageCodec((value) => validSorts.has(value as DashboardSort)),
+    legacyKeys: ['nexus.dashboard.sortField'],
+  } as const;
+  const dashboardSortOrderStorage = {
+    namespace: 'dashboard.sort-order',
+    version: 1,
+    codec: stringStorageCodec((value) => value === 'asc' || value === 'desc'),
+    legacyKeys: ['nexus.dashboard.sortOrder'],
+  } as const;
+  const tagId = ref<number | ''>(readStoredValue(dashboardTagStorage) ?? '');
+  const sort = ref<DashboardSort>(
+    (readStoredValue(dashboardSortStorage) as DashboardSort | undefined) ?? 'lastConnected',
+  );
+  const sortOrder = ref<DashboardSortOrder>(
+    (readStoredValue(dashboardSortOrderStorage) as DashboardSortOrder | undefined) ?? 'desc',
+  );
   const loading = ref(true);
   const tagFilterOptions = computed(() => [
     { value: '', label: t('dashboard.filterTags.all') },
@@ -204,9 +226,12 @@
     }, 800);
   };
 
-  watch(tagId, (value) => localStorage.setItem(DASHBOARD_TAG_KEY, value === '' ? 'all' : String(value)));
-  watch(sort, (value) => localStorage.setItem(DASHBOARD_SORT_KEY, value));
-  watch(sortOrder, (value) => localStorage.setItem(DASHBOARD_SORT_ORDER_KEY, value));
+  watch(tagId, (value) => {
+    if (value === '') removeStoredValue(dashboardTagStorage);
+    else writeStoredValue(dashboardTagStorage, value);
+  });
+  watch(sort, (value) => writeStoredValue(dashboardSortStorage, value));
+  watch(sortOrder, (value) => writeStoredValue(dashboardSortOrderStorage, value));
   watch(
     () => [preferences.values.value.dashboardShowLocalResources, preferences.values.value.statusMonitorIntervalSeconds],
     syncLocalRefresh,

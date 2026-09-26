@@ -12,6 +12,8 @@ export type {
 export { useServerTransfers } from './composables/useServerTransfers';
 export type { ServerTransfersController } from './composables/useServerTransfers';
 export { createTransferController } from './state/transferController';
+export { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from './presentation-transfer-message';
+export type { TransferMessageDescriptor } from './presentation-transfer-message';
 export type { ConflictStrategy, TransferController, UploadConflict } from './state/transferController';
 export type { TransferChannel } from './ports/transfer-channel';
 export type {
@@ -19,11 +21,14 @@ export type {
   WorkspaceArchiveErrorCodeDto,
   ArchiveCommand,
   CopyMoveCommand,
+  TransferErrorContext,
+  TransferErrorKind,
   TransferEvent,
   TransferKind,
   TransferLocation,
   TransferStatus,
   TransferTask,
+  TransferWarningKind,
   UploadPrepareCommand,
   UploadCommand,
   UploadSourceFile,

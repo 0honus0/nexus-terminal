@@ -2,6 +2,7 @@
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import draggable from 'vuedraggable';
+  import { jsonStorageCodec, readStoredValue, removeLegacyStorageKeys, writeStoredValue } from '@/foundation/browser';
   import type {
     AgentApprovalViewDto,
     AgentCheckpointViewDto,
@@ -139,27 +140,31 @@
     { id: 'history' },
   ];
   const LEGACY_RAIL_STORAGE_KEY = 'nexus.agent.task-rail-order.v1';
-  const RAIL_STORAGE_KEY_PREFIX = 'nexus.agent.task-rail-order.v1.user';
-  const railStorageKey = computed(() => {
+  const railStorage = computed(() => {
     const userId = auth.user.value?.id;
-    return userId === undefined || userId === null ? null : `${RAIL_STORAGE_KEY_PREFIX}.${userId}`;
+    if (userId === undefined || userId === null) return null;
+    const known = new Set(defaultCardOrder.map((card) => card.id));
+    return {
+      namespace: 'agent.task-rail-order',
+      version: 1,
+      scope: { kind: 'user', id: userId } as const,
+      codec: jsonStorageCodec<RailCardId[]>((value) =>
+        Array.isArray(value)
+          ? value.filter((id): id is RailCardId => typeof id === 'string' && known.has(id as RailCardId))
+          : undefined,
+      ),
+      legacyKeys: [`nexus.agent.task-rail-order.v1.user.${userId}`],
+    };
   });
   const defaultCards = (): RailCard[] => defaultCardOrder.map((card) => ({ id: card.id }));
   const loadCardOrder = (): RailCard[] => {
-    try {
-      // The old global order cannot be attributed to an account safely.
-      localStorage.removeItem(LEGACY_RAIL_STORAGE_KEY);
-      const key = railStorageKey.value;
-      if (!key) return defaultCards();
-      const stored = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown;
-      if (!Array.isArray(stored)) return defaultCards();
-      const known = new Set(defaultCardOrder.map((card) => card.id));
-      const ids = stored.filter((id): id is RailCardId => typeof id === 'string' && known.has(id as RailCardId));
-      const missing = defaultCardOrder.map((card) => card.id).filter((id) => !ids.includes(id));
-      return [...ids, ...missing].map((id) => ({ id }));
-    } catch {
-      return defaultCards();
-    }
+    // The old global order cannot be attributed to an account safely.
+    removeLegacyStorageKeys([LEGACY_RAIL_STORAGE_KEY]);
+    const storage = railStorage.value;
+    if (!storage) return defaultCards();
+    const ids = readStoredValue(storage) ?? [];
+    const missing = defaultCardOrder.map((card) => card.id).filter((id) => !ids.includes(id));
+    return [...ids, ...missing].map((id) => ({ id }));
   };
   const railCards = ref<RailCard[]>(loadCardOrder());
   const cardVisible = (id: RailCardId): boolean => {
@@ -202,13 +207,12 @@
   watch(
     railCards,
     (cards) => {
-      const key = railStorageKey.value;
-      if (!key) return;
-      try {
-        localStorage.setItem(key, JSON.stringify(cards.map((card) => card.id)));
-      } catch {
-        // View preference persistence is best-effort.
-      }
+      const storage = railStorage.value;
+      if (storage)
+        writeStoredValue(
+          storage,
+          cards.map((card) => card.id),
+        );
     },
     { deep: true },
   );
@@ -219,7 +223,7 @@
     },
   );
 
-  // §7.14-b：卡片顺序写进 localStorage 后没有恢复入口，键盘/误拖之后无法回到默认顺序。
+  // §7.14-b：卡片顺序写进浏览器持久化后没有恢复入口，键盘/误拖之后无法回到默认顺序。
   const orderChanged = computed(
     () => railCards.value.map((card) => card.id).join(',') !== defaultCardOrder.map((card) => card.id).join(','),
   );

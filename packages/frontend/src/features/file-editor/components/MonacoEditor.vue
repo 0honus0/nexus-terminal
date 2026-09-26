@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   // Register before the first editor.create() snapshots Monaco's standalone service collection.
   import 'monaco-editor/platform/actionWidget/browser/actionWidget';
   import 'monaco-editor/editor/contrib/comment/browser/comment';
@@ -15,6 +16,8 @@
   import { StandaloneServices } from 'monaco-editor/editor/standalone/browser/standaloneServices';
   // @ts-ignore internal Monaco ESM module
   import { ILanguageConfigurationService } from 'monaco-editor/editor/common/languages/languageConfigurationRegistry';
+
+  const { t } = useI18n();
 
   interface ResolvedComments {
     lineCommentToken?: string;
@@ -309,13 +312,13 @@
     });
     editor.addAction({
       id: 'nexus-save-file',
-      label: 'Save File',
+      label: t('fileEditor.saveFile'),
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
       run: () => emit('requestSave'),
     });
     editor.addAction({
       id: 'nexus-toggle-comment',
-      label: 'Toggle Comment',
+      label: t('fileEditor.toggleComment'),
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash],
       precondition: '!editorReadonly',
       run: async () => {
