@@ -126,8 +126,8 @@ test('email notification test preserves legacy HTML body-template rendering', as
   await field('Body Template (Optional)').locator('textarea').fill('<strong>NEXUS-E2E-HTML</strong> {eventDisplay}');
   await field('SMTP Host:').locator('input').fill('127.0.0.1');
   await field('SMTP Port:').locator('input').fill(String(E2E_PORTS.smtp));
-  const secure = page.locator('label').filter({ hasText: 'Use TLS/SSL' }).locator('input[type=checkbox]');
-  if (await secure.isChecked()) await secure.uncheck();
+  const secure = page.locator('label').filter({ hasText: 'Use TLS/SSL' }).getByRole('checkbox');
+  if ((await secure.getAttribute('data-state')) === 'checked') await secure.click();
   await field('Sender Email:').locator('input').fill('nexus@example.test');
 
   const responsePromise = page.waitForResponse(

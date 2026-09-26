@@ -101,8 +101,8 @@ test('Agent window state resets every user-scoped layout field before an empty u
 
   const state = await page.evaluate(async () => {
     const modulePath = '/src/features/agent/host/window-manager.ts';
-    const { agentWindowManager } = (await import(modulePath)) as {
-      agentWindowManager: {
+    const { createAgentWindowManager } = (await import(modulePath)) as {
+      createAgentWindowManager: () => {
         state: {
           status: string;
           bounds: { x: number; y: number; width: number; height: number };
@@ -126,6 +126,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
         restoreForUser(userId: number): void;
       };
     };
+    const agentWindowManager = createAgentWindowManager();
     const snapshot = () => JSON.parse(JSON.stringify(agentWindowManager.state)) as typeof agentWindowManager.state;
     const dirty = () => {
       agentWindowManager.openHub({ appId: 'nexus.agent' });
@@ -144,7 +145,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
 
     dirty();
     const emptyUserId = 2_147_483_000;
-    localStorage.removeItem(`nexus.agent.surface.v1.user.${emptyUserId}`);
+    localStorage.removeItem(`nexus.agent.surface.user.${emptyUserId}.v1`);
     agentWindowManager.restoreForUser(emptyUserId);
     const afterEmptyUserRestore = snapshot();
 
@@ -184,19 +185,19 @@ test('Agent view preferences use the authenticated user namespace and discard le
   await page.evaluate(
     ({ currentUserId, untouchedUserId }) => {
       localStorage.setItem('nexus.agent.thread-list-scale.v1', '1.3');
-      localStorage.setItem(`nexus.agent.thread-list-scale.v1.user.${currentUserId}`, '0.9');
-      localStorage.setItem(`nexus.agent.thread-list-scale.v1.user.${untouchedUserId}`, '1.3');
+      localStorage.setItem(`nexus.agent.thread-list-scale.user.${currentUserId}.v1`, '0.9');
+      localStorage.setItem(`nexus.agent.thread-list-scale.user.${untouchedUserId}.v1`, '1.3');
 
       localStorage.setItem(
         'nexus.agent.task-rail-order.v1',
         JSON.stringify(['history', 'background', 'targets', 'plan', 'approvals', 'progress']),
       );
       localStorage.setItem(
-        `nexus.agent.task-rail-order.v1.user.${currentUserId}`,
+        `nexus.agent.task-rail-order.user.${currentUserId}.v1`,
         JSON.stringify(['progress', 'plan', 'approvals', 'targets', 'background', 'history']),
       );
       localStorage.setItem(
-        `nexus.agent.task-rail-order.v1.user.${untouchedUserId}`,
+        `nexus.agent.task-rail-order.user.${untouchedUserId}.v1`,
         JSON.stringify(['history', 'background', 'targets', 'approvals', 'plan', 'progress']),
       );
     },
@@ -218,10 +219,10 @@ test('Agent view preferences use the authenticated user namespace and discard le
         ({ currentUserId, untouchedUserId }) => ({
           legacyScale: localStorage.getItem('nexus.agent.thread-list-scale.v1'),
           legacyRail: localStorage.getItem('nexus.agent.task-rail-order.v1'),
-          currentScale: localStorage.getItem(`nexus.agent.thread-list-scale.v1.user.${currentUserId}`),
-          otherScale: localStorage.getItem(`nexus.agent.thread-list-scale.v1.user.${untouchedUserId}`),
-          currentRail: localStorage.getItem(`nexus.agent.task-rail-order.v1.user.${currentUserId}`),
-          otherRail: localStorage.getItem(`nexus.agent.task-rail-order.v1.user.${untouchedUserId}`),
+          currentScale: localStorage.getItem(`nexus.agent.thread-list-scale.user.${currentUserId}.v1`),
+          otherScale: localStorage.getItem(`nexus.agent.thread-list-scale.user.${untouchedUserId}.v1`),
+          currentRail: localStorage.getItem(`nexus.agent.task-rail-order.user.${currentUserId}.v1`),
+          otherRail: localStorage.getItem(`nexus.agent.task-rail-order.user.${untouchedUserId}.v1`),
         }),
         { currentUserId: userId, untouchedUserId: otherUserId },
       ),
@@ -242,8 +243,8 @@ test('Agent view preferences use the authenticated user namespace and discard le
     .poll(() =>
       page.evaluate(
         ({ currentUserId, untouchedUserId }) => ({
-          currentScale: localStorage.getItem(`nexus.agent.thread-list-scale.v1.user.${currentUserId}`),
-          otherScale: localStorage.getItem(`nexus.agent.thread-list-scale.v1.user.${untouchedUserId}`),
+          currentScale: localStorage.getItem(`nexus.agent.thread-list-scale.user.${currentUserId}.v1`),
+          otherScale: localStorage.getItem(`nexus.agent.thread-list-scale.user.${untouchedUserId}.v1`),
         }),
         { currentUserId: userId, untouchedUserId: otherUserId },
       ),
@@ -1274,7 +1275,7 @@ test('Agent configuration changes propagate across tabs without overwriting dirt
   const followerDraft = alternatives[1]!;
 
   await follower.evaluate(async () => {
-    const { agentHostEvents } = await import('/src/features/agent/host/agent-host-events.ts');
+    const { agentHostEvents } = await import('/src/features/agent/events/agent-host-events.ts');
     const state = window as typeof window & {
       __agentConfigurationOrigins?: string[];
       __stopAgentConfigurationProbe?: () => void;

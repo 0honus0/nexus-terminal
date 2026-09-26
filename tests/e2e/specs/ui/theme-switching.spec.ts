@@ -319,10 +319,32 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
         .poll(() =>
           control.evaluate((node) => {
             const style = getComputedStyle(node);
-            return [style.backgroundColor, style.color];
+            const canvas = document.createElement('canvas');
+            canvas.width = 1;
+            canvas.height = 1;
+            const context = canvas.getContext('2d');
+            if (!context) return false;
+            const channels = (color: string): [number, number, number] => {
+              context.clearRect(0, 0, 1, 1);
+              context.fillStyle = color;
+              context.fillRect(0, 0, 1, 1);
+              const data = context.getImageData(0, 0, 1, 1).data;
+              return [data[0]!, data[1]!, data[2]!];
+            };
+            const luminance = ([red, green, blue]: [number, number, number]): number => {
+              const channel = (value: number): number => {
+                const normalized = value / 255;
+                return normalized <= 0.04045 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
+              };
+              return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue);
+            };
+            const background = luminance(channels(style.backgroundColor));
+            const foreground = luminance(channels(style.color));
+            const contrast = (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+            return contrast >= 4.5;
           }),
         )
-        .toEqual(['rgb(30, 41, 59)', 'rgb(233, 236, 239)']);
+        .toBe(true);
     }
 
     await page.reload({ waitUntil: 'domcontentloaded' });

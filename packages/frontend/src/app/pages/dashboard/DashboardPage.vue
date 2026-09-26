@@ -530,6 +530,7 @@
                   panel-test-id="dashboard-tag-filter-menu"
                   option-test-id-prefix="dashboard-tag-filter-option"
                   class="text-xs sm:text-sm"
+                  style="--ui-control-height: 2.375rem"
                   :aria-label="t('dashboard.filterByTag')"
                 />
               </div>
@@ -541,6 +542,7 @@
                   panel-test-id="dashboard-sort-by-menu"
                   option-test-id-prefix="dashboard-sort-by-option"
                   class="text-xs sm:text-sm"
+                  style="--ui-control-height: 2.375rem"
                   :aria-label="t('dashboard.sortBy')"
                 />
               </div>

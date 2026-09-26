@@ -20,7 +20,12 @@
 
   watch(
     () => props.resetKey,
-    () => reset(),
+    () => {
+      // A reset key is recovery input, not a remount key. Remounting a healthy
+      // subtree discards local UI state whenever route/query or active-item
+      // state changes.
+      if (error.value) reset();
+    },
   );
 
   onErrorCaptured((cause, instance, info) => {

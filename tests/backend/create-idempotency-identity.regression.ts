@@ -15,7 +15,9 @@ assert(
   surface.includes('if (pendingRunCreateIdentity?.idempotencyKey === idempotencyKey) pendingRunCreateIdentity = null;'),
 );
 assert(
-  surface.includes('const createThread = async (title?: string, idempotencyKey = crypto.randomUUID()): Promise<void> => {'),
+  surface.includes(
+    'const createThread = async (title?: string, idempotencyKey = crypto.randomUUID()): Promise<void> => {',
+  ),
   'thread create must mint caller-stable identity at the UI intent boundary',
 );
 assert(
@@ -42,7 +44,9 @@ assert(
 );
 const conversationService = read('packages/backend/src/modules/agent/ai/conversation.service.ts');
 assert(
-  conversationService.includes('const threadId = idempotencyKey ? requireIdempotencyKey(idempotencyKey) : randomUUID();'),
+  conversationService.includes(
+    'const threadId = idempotencyKey ? requireIdempotencyKey(idempotencyKey) : randomUUID();',
+  ),
   'thread service must derive durable identity from the caller idempotency key',
 );
 assert(

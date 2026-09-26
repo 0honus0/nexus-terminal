@@ -105,6 +105,7 @@
       <SelectTrigger
         v-bind="triggerAttrs"
         data-no-highlight=""
+        :data-value="props.modelValue == null ? '' : String(props.modelValue)"
         :aria-invalid="props.invalid || undefined"
         class="ui-control ui-focusable ui-select__trigger"
         :class="[

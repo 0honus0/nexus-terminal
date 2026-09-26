@@ -632,7 +632,7 @@ test('dashboard filters connections and persists tag and sort preferences across
         const geometry = await control.evaluate((element) => {
           const box = element.getBoundingClientRect();
           const label = element.querySelector(':scope > span')?.getBoundingClientRect();
-          const chevron = element.querySelector(':scope > svg')?.getBoundingClientRect();
+          const chevron = element.querySelector('svg')?.getBoundingClientRect();
           return {
             height: box.height,
             centerY: box.top + box.height / 2,
