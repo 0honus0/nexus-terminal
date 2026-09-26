@@ -60,10 +60,13 @@ pnpm run test:e2e:ui
 pnpm run test:e2e:ssh
 pnpm run test:e2e:mobile
 pnpm run test:e2e:list
+pnpm run test:e2e:remote -- --project=http specs/http/auth-2fa.spec.ts
 pnpm --filter @nexus-terminal/e2e run test:docs
 ```
 
 GitHub Actions remote runners provide the canonical complete E2E evidence with the pinned Chromium/runtime dependencies. Local commands remain useful for listing tests, refreshing the seed, running one spec or one focused group, and reproducing failures; local success is not the project-wide release signal. The project-wide requirement is recorded in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001). Automated dependency updates explicitly dispatch this same workflow on their update branch after the PR is created or refreshed; they do not embed a second Playwright/ingress suite in the updater workflow.
+
+For a long-lived remote development host that may already be serving Nexus on the default E2E ports, use `pnpm run test:e2e:remote -- <Playwright args>`. The remote launcher keeps explicit `NEXUS_E2E_*_PORT` overrides, dynamically reserves unique loopback ports for every unset E2E service, and invokes Playwright through Corepack so a stale system-level `pnpm` shim does not control the run. It enforces the repository Node engine before starting tests. This helper is for focused remote reproduction; it does not replace the canonical GitHub Actions evidence.
 
 ## Parallel groups
 

@@ -18,6 +18,7 @@
     "test:e2e:group": "pnpm --filter @nexus-terminal/e2e groups:run",
     "test:e2e:groups:update-timings": "pnpm --filter @nexus-terminal/e2e groups:update-timings",
     "test:e2e": "pnpm --filter @nexus-terminal/e2e test",
+    "test:e2e:remote": "node scripts/e2e/run-remote.mjs",
     "test:e2e:auth": "pnpm --filter @nexus-terminal/e2e test:auth",
     "test:e2e:http": "pnpm --filter @nexus-terminal/e2e test:http",
     "test:e2e:agent": "pnpm --filter @nexus-terminal/e2e test:agent",
