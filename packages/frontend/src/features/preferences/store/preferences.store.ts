@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { ref } from 'vue';
 import { setFrontendLogLevel } from '@/client/logging/logger';
 import { preferencesApi } from '../api/preferencesApi';
 import {
@@ -8,33 +9,36 @@ import {
   type PreferencesDto,
 } from '../model/preferences';
 
-let preferenceUpdateRevision = 0;
-const preferenceKeyRevisions = new Map<PreferenceKey, number>();
-let preferenceLoadPromise: Promise<PreferencesDto> | null = null;
-let preferenceCacheGeneration = 0;
+export const usePreferencesStore = defineStore('preferences', () => {
+  const values = ref<PreferencesDto>({ ...defaultPreferences });
+  const loaded = ref(false);
+  let preferenceUpdateRevision = 0;
+  const preferenceKeyRevisions = new Map<PreferenceKey, number>();
+  let preferenceLoadPromise: Promise<PreferencesDto> | null = null;
+  let preferenceCacheGeneration = 0;
 
-export const usePreferencesStore = defineStore('preferences', {
-  state: () => ({ values: { ...defaultPreferences } as PreferencesDto, loaded: false }),
-  actions: {
+  return {
+    values,
+    loaded,
     reset() {
       preferenceCacheGeneration += 1;
       preferenceUpdateRevision += 1;
       preferenceKeyRevisions.clear();
       preferenceLoadPromise = null;
-      this.values = { ...defaultPreferences };
-      this.loaded = false;
+      values.value = { ...defaultPreferences };
+      loaded.value = false;
       setFrontendLogLevel(defaultPreferences.frontendLogLevel);
     },
     async load(force = false) {
-      if (this.loaded && !force) return this.values;
+      if (loaded.value && !force) return values.value;
       if (!force && preferenceLoadPromise) return preferenceLoadPromise;
       const generation = preferenceCacheGeneration;
-      const load = preferencesApi.load().then((values) => {
-        if (generation !== preferenceCacheGeneration) return this.values;
-        this.values = values;
-        setFrontendLogLevel(values.frontendLogLevel);
-        this.loaded = true;
-        return this.values;
+      const load = preferencesApi.load().then((incoming) => {
+        if (generation !== preferenceCacheGeneration) return values.value;
+        values.value = incoming;
+        setFrontendLogLevel(incoming.frontendLogLevel);
+        loaded.value = true;
+        return values.value;
       });
       if (!force) preferenceLoadPromise = load;
       try {
@@ -48,11 +52,11 @@ export const usePreferencesStore = defineStore('preferences', {
       const keys = Object.keys(patch) as PreferenceKey[];
       const previous: Partial<PreferencesDto> = {};
       for (const key of keys) {
-        (previous as Record<string, unknown>)[key] = this.values[key];
+        (previous as Record<string, unknown>)[key] = values.value[key];
         preferenceKeyRevisions.set(key, revision);
       }
 
-      Object.assign(this.values, patch);
+      Object.assign(values.value, patch);
       if (patch.frontendLogLevel !== undefined) setFrontendLogLevel(patch.frontendLogLevel, true);
       try {
         await preferencesApi.update(patch);
@@ -66,10 +70,10 @@ export const usePreferencesStore = defineStore('preferences', {
           (rollback as Record<string, unknown>)[key] = previous[key];
           preferenceKeyRevisions.delete(key);
         }
-        Object.assign(this.values, rollback);
+        Object.assign(values.value, rollback);
         if (rollback.frontendLogLevel !== undefined) setFrontendLogLevel(rollback.frontendLogLevel, true);
         throw cause;
       }
     },
-  },
+  };
 });

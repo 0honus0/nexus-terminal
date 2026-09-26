@@ -1,28 +1,32 @@
 import { defineStore } from 'pinia';
+import { ref } from 'vue';
 import { proxiesApi } from '../api/proxiesApi';
 import type { ProxyDto, ProxyCreateRequestDto } from '../model/proxy';
 
-let loadPromise: Promise<ProxyDto[]> | null = null;
-let cacheGeneration = 0;
+export const useProxiesStore = defineStore('proxies', () => {
+  const items = ref<ProxyDto[]>([]);
+  const loaded = ref(false);
+  let loadPromise: Promise<ProxyDto[]> | null = null;
+  let cacheGeneration = 0;
 
-export const useProxiesStore = defineStore('proxies', {
-  state: () => ({ items: [] as ProxyDto[], loaded: false }),
-  actions: {
+  return {
+    items,
+    loaded,
     reset() {
       cacheGeneration += 1;
       loadPromise = null;
-      this.items = [];
-      this.loaded = false;
+      items.value = [];
+      loaded.value = false;
     },
     async load(force = false) {
-      if (this.loaded && !force) return this.items;
+      if (loaded.value && !force) return items.value;
       if (loadPromise) return loadPromise;
       const generation = cacheGeneration;
-      const request = proxiesApi.list().then((items) => {
-        if (generation !== cacheGeneration) return this.items;
-        this.items = items;
-        this.loaded = true;
-        return this.items;
+      const request = proxiesApi.list().then((incoming) => {
+        if (generation !== cacheGeneration) return items.value;
+        items.value = incoming;
+        loaded.value = true;
+        return items.value;
       });
       loadPromise = request;
       try {
@@ -33,18 +37,18 @@ export const useProxiesStore = defineStore('proxies', {
     },
     async create(input: ProxyCreateRequestDto) {
       const item = await proxiesApi.create(input);
-      this.items.push(item);
+      items.value.push(item);
       return item;
     },
     async update(id: number, input: Partial<ProxyCreateRequestDto>) {
       const item = await proxiesApi.update(id, input);
-      const i = this.items.findIndex((x) => x.id === id);
-      if (i >= 0) this.items[i] = item;
+      const i = items.value.findIndex((x) => x.id === id);
+      if (i >= 0) items.value[i] = item;
       return item;
     },
     async remove(id: number) {
       await proxiesApi.remove(id);
-      this.items = this.items.filter((x) => x.id !== id);
+      items.value = items.value.filter((x) => x.id !== id);
     },
-  },
+  };
 });

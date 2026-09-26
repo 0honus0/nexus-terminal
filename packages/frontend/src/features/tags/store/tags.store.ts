@@ -1,24 +1,30 @@
 import { defineStore } from 'pinia';
+import { ref } from 'vue';
 import { tagsApi } from '../api/tagsApi';
 import type { ConnectionTagDto } from '../model/tag';
 
 const DEFAULT_STALE_MS = 60_000;
-let loadPromise: Promise<ConnectionTagDto[]> | null = null;
-let cacheGeneration = 0;
+export const useTagsStore = defineStore('connection-tags', () => {
+  const items = ref<ConnectionTagDto[]>([]);
+  const loaded = ref(false);
+  const loadedAt = ref(0);
+  let loadPromise: Promise<ConnectionTagDto[]> | null = null;
+  let cacheGeneration = 0;
 
-export const useTagsStore = defineStore('connection-tags', {
-  state: () => ({ items: [] as ConnectionTagDto[], loaded: false, loadedAt: 0 }),
-  actions: {
+  return {
+    items,
+    loaded,
+    loadedAt,
     async load(force = false) {
-      if (this.loaded && !force) return this.items;
+      if (loaded.value && !force) return items.value;
       if (loadPromise) return loadPromise;
       const generation = cacheGeneration;
-      const request = tagsApi.list().then((items) => {
-        if (generation !== cacheGeneration) return this.items;
-        this.items = items;
-        this.loaded = true;
-        this.loadedAt = Date.now();
-        return this.items;
+      const request = tagsApi.list().then((incoming) => {
+        if (generation !== cacheGeneration) return items.value;
+        items.value = incoming;
+        loaded.value = true;
+        loadedAt.value = Date.now();
+        return items.value;
       });
       loadPromise = request;
       try {
@@ -28,34 +34,34 @@ export const useTagsStore = defineStore('connection-tags', {
       }
     },
     async revalidate(maxAgeMs = DEFAULT_STALE_MS) {
-      if (!this.loaded) return this.load();
-      if (Date.now() - this.loadedAt < Math.max(0, maxAgeMs)) return this.items;
+      if (!loaded.value) return this.load();
+      if (Date.now() - loadedAt.value < Math.max(0, maxAgeMs)) return items.value;
       return this.load(true);
     },
     reset() {
       cacheGeneration += 1;
       loadPromise = null;
-      this.items = [];
-      this.loaded = false;
-      this.loadedAt = 0;
+      items.value = [];
+      loaded.value = false;
+      loadedAt.value = 0;
     },
     async create(name: string) {
       const tag = await tagsApi.create(name);
-      this.items.push(tag);
-      this.loadedAt = Date.now();
+      items.value.push(tag);
+      loadedAt.value = Date.now();
       return tag;
     },
     async rename(id: number, name: string) {
       const tag = await tagsApi.update(id, name);
-      const i = this.items.findIndex((x) => x.id === id);
-      if (i >= 0) this.items[i] = tag;
-      this.loadedAt = Date.now();
+      const i = items.value.findIndex((x) => x.id === id);
+      if (i >= 0) items.value[i] = tag;
+      loadedAt.value = Date.now();
       return tag;
     },
     async remove(id: number) {
       await tagsApi.remove(id);
-      this.items = this.items.filter((x) => x.id !== id);
-      this.loadedAt = Date.now();
+      items.value = items.value.filter((x) => x.id !== id);
+      loadedAt.value = Date.now();
     },
-  },
+  };
 });

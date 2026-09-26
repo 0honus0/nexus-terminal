@@ -45,6 +45,7 @@ scripts/*
 !scripts/check-package-management.mjs
 !scripts/check-transport-contract-boundaries.mjs
 !scripts/check-frontend-public-boundaries.mjs
+!scripts/check-frontend-state-lifecycles.mjs
 !scripts/e2e/
 !scripts/e2e/**
 !scripts/docker/

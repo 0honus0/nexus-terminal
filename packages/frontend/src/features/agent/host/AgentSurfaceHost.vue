@@ -8,10 +8,10 @@
   import AgentHubWindow from './AgentHubWindow.vue';
   import AgentLauncher from './AgentLauncher.vue';
   import { agentHostEvents } from './agent-host-events';
-  import { agentSurfaceSession } from './surface-session';
-  import { agentWindowManager } from './window-manager';
+  import { provideAgentHostState } from './agent-host-state';
 
   const auth = useAuthSession();
+  const { surfaceSession: agentSurfaceSession, windowManager: agentWindowManager } = provideAgentHostState();
   const summary = ref<AgentHostSummaryDto | null>(null);
   const HOST_STREAM_LOCK_NAME = 'nexus.agent.host-stream.v1';
   const HOST_EVENT_CHANNEL_NAME = 'nexus.agent.host-events.v1';

@@ -8,8 +8,6 @@ import type {
   TerminalThemeDto,
 } from '@nexus-terminal/protocol/appearance';
 
-let appearanceCacheGeneration = 0;
-
 const parseTheme = (value?: string): Record<string, string> => {
   if (!value) return normalizeUiTheme({});
   try {
@@ -61,10 +59,11 @@ export const useAppearanceStore = defineStore('appearance', {
     loaded: false,
     settingsRevision: 0,
     customizerVisible: false,
+    cacheGeneration: 0,
   }),
   actions: {
     reset() {
-      appearanceCacheGeneration += 1;
+      this.cacheGeneration += 1;
       this.settingsRevision += 1;
       this.settings = {} as AppearanceSettingsDto;
       this.themes = [];
@@ -83,10 +82,10 @@ export const useAppearanceStore = defineStore('appearance', {
 
     async load(force = false) {
       if (this.loaded && !force) return;
-      const generation = appearanceCacheGeneration;
+      const generation = this.cacheGeneration;
       const settingsRevision = this.settingsRevision;
       const settings = await appearanceApi.load();
-      if (generation !== appearanceCacheGeneration) return;
+      if (generation !== this.cacheGeneration) return;
       this.loaded = true;
       if (settingsRevision === this.settingsRevision) {
         this.settings = settings;
@@ -94,16 +93,16 @@ export const useAppearanceStore = defineStore('appearance', {
       }
       try {
         const themes = await appearanceApi.listThemes();
-        if (generation === appearanceCacheGeneration) this.themes = themes;
+        if (generation === this.cacheGeneration) this.themes = themes;
       } catch (cause) {
         logger.warn({ err: cause }, 'Failed to load terminal themes; appearance settings remain available');
       }
     },
 
     async update(patch: AppearanceUpdateRequestDto) {
-      const generation = appearanceCacheGeneration;
+      const generation = this.cacheGeneration;
       const settings = await appearanceApi.update(patch);
-      if (generation !== appearanceCacheGeneration) return;
+      if (generation !== this.cacheGeneration) return;
       this.settingsRevision += 1;
       this.settings = settings;
       applySettings(settings);

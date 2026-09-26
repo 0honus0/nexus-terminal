@@ -5,12 +5,14 @@
   import { structurallyEqual } from '@/foundation/data';
   import { BaseButton, BaseInput, BaseModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
-  import { normalizeWorkspaceFocusShortcut, workspaceFocus, workspaceFocusTargets } from '../focus/workspaceFocus';
+  import { normalizeWorkspaceFocusShortcut, workspaceFocusTargets } from '../focus/workspaceFocus';
+  import { useWorkspaceUiState } from '../state/workspaceUiState';
 
   const props = defineProps<{ visible: boolean }>();
   const emit = defineEmits<{ close: [] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
+  const { focus: workspaceFocus } = useWorkspaceUiState();
   const draft = ref<WorkspaceFocusConfigDto>({ sequence: [], shortcuts: {} });
   const original = ref<WorkspaceFocusConfigDto>({ sequence: [], shortcuts: {} });
   const saving = ref(false);

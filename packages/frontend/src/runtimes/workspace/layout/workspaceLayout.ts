@@ -281,113 +281,119 @@ const writeStored = (key: string, value: unknown): void => {
   }
 };
 
-const tree = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
-const sidebars = ref<WorkspaceSidebarConfigDto>(defaultSidebars());
-const loaded = ref(false);
-const loading = ref(false);
+export const createWorkspaceLayoutController = () => {
+  const tree = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
+  const sidebars = ref<WorkspaceSidebarConfigDto>(defaultSidebars());
+  const loaded = ref(false);
+  const loading = ref(false);
 
-const updateContainerSizes = (
-  node: WorkspaceLayoutNodeState,
-  containerId: string,
-  sizes: readonly number[],
-): WorkspaceLayoutNodeState => {
-  if (node.id === containerId && node.type === 'container') {
-    const children = node.children ?? [];
-    if (children.length !== sizes.length) return node;
-    const resizedChildren = children.map((child, index) => {
-      const size = sizes[index];
-      return typeof size === 'number' && Number.isFinite(size) ? { ...child, size } : child;
+  const updateContainerSizes = (
+    node: WorkspaceLayoutNodeState,
+    containerId: string,
+    sizes: readonly number[],
+  ): WorkspaceLayoutNodeState => {
+    if (node.id === containerId && node.type === 'container') {
+      const children = node.children ?? [];
+      if (children.length !== sizes.length) return node;
+      const resizedChildren = children.map((child, index) => {
+        const size = sizes[index];
+        return typeof size === 'number' && Number.isFinite(size) ? { ...child, size } : child;
+      });
+      const nextChildren = rebalanceWorkspaceLayoutChildren(resizedChildren);
+      if (children.length === nextChildren.length && children.every((child, index) => child === nextChildren[index]))
+        return node;
+      return { ...node, children: nextChildren };
+    }
+    if (node.type !== 'container' || !node.children?.length) return node;
+    let changed = false;
+    const children = node.children.map((child) => {
+      const next = updateContainerSizes(child, containerId, sizes);
+      if (next !== child) changed = true;
+      return next;
     });
-    const nextChildren = rebalanceWorkspaceLayoutChildren(resizedChildren);
-    if (children.length === nextChildren.length && children.every((child, index) => child === nextChildren[index]))
-      return node;
-    return { ...node, children: nextChildren };
-  }
-  if (node.type !== 'container' || !node.children?.length) return node;
-  let changed = false;
-  const children = node.children.map((child) => {
-    const next = updateContainerSizes(child, containerId, sizes);
-    if (next !== child) changed = true;
-    return next;
+    return changed ? { ...node, children } : node;
+  };
+
+  const resizeSaver = createLatestValueSaver<WorkspaceLayoutNodeState>({
+    delayMs: 1000,
+    async save(nextTree) {
+      const request: WorkspaceLayoutNodeDto = nextTree;
+      await httpClient.put('/settings/layout', request);
+      writeStored(LAYOUT_STORAGE_KEY, nextTree);
+    },
+    onError: (error) => logger.error({ err: error }, 'Failed to persist resized workspace layout'),
   });
-  return changed ? { ...node, children } : node;
-};
 
-const resizeSaver = createLatestValueSaver<WorkspaceLayoutNodeState>({
-  delayMs: 1000,
-  async save(nextTree) {
-    const request: WorkspaceLayoutNodeDto = nextTree;
-    await httpClient.put('/settings/layout', request);
-    writeStored(LAYOUT_STORAGE_KEY, nextTree);
-  },
-  onError: (error) => logger.error({ err: error }, 'Failed to persist resized workspace layout'),
-});
+  const workspaceLayout = {
+    tree,
+    sidebars,
+    loaded: computed(() => loaded.value),
+    loading: computed(() => loading.value),
+    paneNames: [...paneNames] as readonly WorkspacePaneNameDto[],
+    async load(force = false): Promise<void> {
+      if (loaded.value && !force) return;
+      loading.value = true;
+      try {
+        const [layoutResult, sidebarResult] = await Promise.allSettled([
+          httpClient.get<WorkspaceLayoutNodeDto | null>('/settings/layout'),
+          httpClient.get<WorkspaceSidebarConfigDto>('/settings/sidebar'),
+        ]);
 
-export const workspaceLayout = {
-  tree,
-  sidebars,
-  loaded: computed(() => loaded.value),
-  loading: computed(() => loading.value),
-  paneNames: [...paneNames] as readonly WorkspacePaneNameDto[],
-  async load(force = false): Promise<void> {
-    if (loaded.value && !force) return;
-    loading.value = true;
-    try {
-      const [layoutResult, sidebarResult] = await Promise.allSettled([
-        httpClient.get<WorkspaceLayoutNodeDto | null>('/settings/layout'),
-        httpClient.get<WorkspaceSidebarConfigDto>('/settings/sidebar'),
-      ]);
+        const backendLayout =
+          layoutResult.status === 'fulfilled' ? normalizeWorkspaceLayoutCandidate(layoutResult.value.data) : null;
+        const storedLayoutData = backendLayout
+          ? null
+          : readStored<WorkspaceLayoutNodeState>(LAYOUT_STORAGE_KEY, (value) => validateLayout(value, true));
+        const storedLayout = storedLayoutData ? normalizeWorkspaceLayoutCandidate(storedLayoutData) : null;
+        const nextTree = normalizeWorkspaceLayout(backendLayout ?? storedLayout ?? createDefaultWorkspaceLayout());
 
-      const backendLayout =
-        layoutResult.status === 'fulfilled' ? normalizeWorkspaceLayoutCandidate(layoutResult.value.data) : null;
-      const storedLayoutData = backendLayout
-        ? null
-        : readStored<WorkspaceLayoutNodeState>(LAYOUT_STORAGE_KEY, (value) => validateLayout(value, true));
-      const storedLayout = storedLayoutData ? normalizeWorkspaceLayoutCandidate(storedLayoutData) : null;
-      const nextTree = normalizeWorkspaceLayout(backendLayout ?? storedLayout ?? createDefaultWorkspaceLayout());
+        const backendSidebar =
+          sidebarResult.status === 'fulfilled' && validSidebar(sidebarResult.value.data, nextTree)
+            ? sidebarResult.value.data
+            : null;
+        const storedSidebar = backendSidebar
+          ? null
+          : readStored<WorkspaceSidebarConfigDto>(SIDEBAR_STORAGE_KEY, (value): value is WorkspaceSidebarConfigDto =>
+              validSidebar(value, nextTree),
+            );
+        const nextSidebars = backendSidebar ?? storedSidebar ?? defaultSidebarsFor(nextTree);
 
-      const backendSidebar =
-        sidebarResult.status === 'fulfilled' && validSidebar(sidebarResult.value.data, nextTree)
-          ? sidebarResult.value.data
-          : null;
-      const storedSidebar = backendSidebar
-        ? null
-        : readStored<WorkspaceSidebarConfigDto>(SIDEBAR_STORAGE_KEY, (value): value is WorkspaceSidebarConfigDto =>
-            validSidebar(value, nextTree),
-          );
-      const nextSidebars = backendSidebar ?? storedSidebar ?? defaultSidebarsFor(nextTree);
-
-      tree.value = nextTree;
+        tree.value = nextTree;
+        sidebars.value = nextSidebars;
+        loaded.value = true;
+        if (backendLayout || storedLayout) writeStored(LAYOUT_STORAGE_KEY, nextTree);
+        if (backendSidebar) writeStored(SIDEBAR_STORAGE_KEY, backendSidebar);
+      } finally {
+        loading.value = false;
+      }
+    },
+    async save(nextTree: WorkspaceLayoutNodeState, nextSidebars = sidebars.value): Promise<void> {
+      const candidate = normalizeWorkspaceLayoutCandidate(nextTree);
+      const normalizedTree = candidate ? cloneWorkspaceLayout(candidate) : null;
+      if (!normalizedTree || !validSidebar(nextSidebars, normalizedTree)) throw new Error('Invalid Workspace layout.');
+      await resizeSaver.flush();
+      const request: WorkspaceLayoutSettingsRequestDto = { layout: normalizedTree, sidebar: nextSidebars };
+      await httpClient.put('/settings/workspace-layout', request);
+      tree.value = normalizedTree;
       sidebars.value = nextSidebars;
       loaded.value = true;
-      if (backendLayout || storedLayout) writeStored(LAYOUT_STORAGE_KEY, nextTree);
-      if (backendSidebar) writeStored(SIDEBAR_STORAGE_KEY, backendSidebar);
-    } finally {
-      loading.value = false;
-    }
-  },
-  async save(nextTree: WorkspaceLayoutNodeState, nextSidebars = sidebars.value): Promise<void> {
-    const candidate = normalizeWorkspaceLayoutCandidate(nextTree);
-    const normalizedTree = candidate ? cloneWorkspaceLayout(candidate) : null;
-    if (!normalizedTree || !validSidebar(nextSidebars, normalizedTree)) throw new Error('Invalid Workspace layout.');
-    await resizeSaver.flush();
-    const request: WorkspaceLayoutSettingsRequestDto = { layout: normalizedTree, sidebar: nextSidebars };
-    await httpClient.put('/settings/workspace-layout', request);
-    tree.value = normalizedTree;
-    sidebars.value = nextSidebars;
-    loaded.value = true;
-    writeStored(LAYOUT_STORAGE_KEY, normalizedTree);
-    writeStored(SIDEBAR_STORAGE_KEY, nextSidebars);
-  },
-  updateNodeSizes(containerId: string, sizes: readonly number[]): void {
-    const nextTree = updateContainerSizes(tree.value, containerId, sizes);
-    if (nextTree === tree.value) return;
-    tree.value = nextTree;
-    loaded.value = true;
-    resizeSaver.schedule(cloneWorkspaceLayout(nextTree));
-  },
-  async reset(): Promise<void> {
-    const next = createDefaultWorkspaceLayout();
-    await this.save(next, defaultSidebarsFor(next));
-  },
+      writeStored(LAYOUT_STORAGE_KEY, normalizedTree);
+      writeStored(SIDEBAR_STORAGE_KEY, nextSidebars);
+    },
+    updateNodeSizes(containerId: string, sizes: readonly number[]): void {
+      const nextTree = updateContainerSizes(tree.value, containerId, sizes);
+      if (nextTree === tree.value) return;
+      tree.value = nextTree;
+      loaded.value = true;
+      resizeSaver.schedule(cloneWorkspaceLayout(nextTree));
+    },
+    async reset(): Promise<void> {
+      const next = createDefaultWorkspaceLayout();
+      await this.save(next, defaultSidebarsFor(next));
+    },
+  };
+
+  return { ...workspaceLayout, dispose: () => resizeSaver.dispose({ flush: true }) };
 };
+
+export type WorkspaceLayoutController = ReturnType<typeof createWorkspaceLayoutController>;

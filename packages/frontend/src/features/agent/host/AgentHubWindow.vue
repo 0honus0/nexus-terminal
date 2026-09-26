@@ -6,14 +6,14 @@
   import type { AgentAppSummaryDto, AgentHostSummaryDto } from '../api/agent-api';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
-  import { agentSurfaceSession } from './surface-session';
-  import { agentWindowManager } from './window-manager';
+  import { useAgentHostState } from './agent-host-state';
 
   const loadAgentAppSurface = () => import('./AgentAppSurface.vue');
   const AgentAppSurface = defineAsyncComponent(loadAgentAppSurface);
   const ArtifactLibraryView = defineAsyncComponent(() => import('../files/ArtifactLibraryView.vue'));
 
   const props = defineProps<{ summary: AgentHostSummaryDto }>();
+  const { surfaceSession: agentSurfaceSession, windowManager: agentWindowManager } = useAgentHostState();
   const emit = defineEmits<{ layoutChange: [] }>();
   const state = agentWindowManager.state;
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);

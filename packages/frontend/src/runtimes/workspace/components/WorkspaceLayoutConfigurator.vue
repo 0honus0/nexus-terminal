@@ -8,11 +8,11 @@
   import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
   import {
     createDefaultWorkspaceLayout,
-    workspaceLayout,
     type WorkspaceLayoutNodeState,
     type WorkspacePaneNameDto,
     type WorkspaceSidebarConfigDto,
   } from '../layout/workspaceLayout';
+  import { useWorkspaceUiState } from '../state/workspaceUiState';
 
   type DragItem = WorkspaceLayoutNodeState | WorkspacePaneNameDto;
 
@@ -20,6 +20,7 @@
   const emit = defineEmits<{ close: []; layoutLocked: [locked: boolean] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
+  const { layout: workspaceLayout } = useWorkspaceUiState();
   const draft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
   const sidebar = ref<WorkspaceSidebarConfigDto>({ left: [], right: [] });
   const originalDraft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());

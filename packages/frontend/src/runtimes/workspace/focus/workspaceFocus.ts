@@ -23,9 +23,6 @@ export const normalizeWorkspaceFocusShortcut = (value: string): string | null =>
 };
 
 const defaultConfig = (): WorkspaceFocusConfigDto => ({ sequence: [...workspaceFocusTargets], shortcuts: {} });
-const config = ref<WorkspaceFocusConfigDto>(defaultConfig());
-const loaded = ref(false);
-
 const configShape = (value: unknown): value is WorkspaceFocusConfigDto => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const candidate = value as Partial<WorkspaceFocusConfigDto>;
@@ -59,20 +56,29 @@ const validConfigForSave = (value: WorkspaceFocusConfigDto): boolean => {
   });
 };
 
-export const workspaceFocus = {
-  config,
-  loaded: computed(() => loaded.value),
-  async load(force = false): Promise<void> {
-    if (loaded.value && !force) return;
-    const { data } = await httpClient.get<WorkspaceFocusConfigDto>('/settings/focus-switcher-sequence');
-    config.value = normalizeLoadedConfig(data) ?? defaultConfig();
-    loaded.value = true;
-  },
-  async save(next: WorkspaceFocusConfigDto): Promise<void> {
-    if (!validConfigForSave(next)) throw new Error('Invalid focus switcher configuration.');
-    const request: WorkspaceFocusConfigDto = next;
-    await httpClient.put('/settings/focus-switcher-sequence', request);
-    config.value = structuredClone(next);
-    loaded.value = true;
-  },
+export const createWorkspaceFocusController = () => {
+  const config = ref<WorkspaceFocusConfigDto>(defaultConfig());
+  const loaded = ref(false);
+
+  const workspaceFocus = {
+    config,
+    loaded: computed(() => loaded.value),
+    async load(force = false): Promise<void> {
+      if (loaded.value && !force) return;
+      const { data } = await httpClient.get<WorkspaceFocusConfigDto>('/settings/focus-switcher-sequence');
+      config.value = normalizeLoadedConfig(data) ?? defaultConfig();
+      loaded.value = true;
+    },
+    async save(next: WorkspaceFocusConfigDto): Promise<void> {
+      if (!validConfigForSave(next)) throw new Error('Invalid focus switcher configuration.');
+      const request: WorkspaceFocusConfigDto = next;
+      await httpClient.put('/settings/focus-switcher-sequence', request);
+      config.value = structuredClone(next);
+      loaded.value = true;
+    },
+  };
+
+  return workspaceFocus;
 };
+
+export type WorkspaceFocusController = ReturnType<typeof createWorkspaceFocusController>;

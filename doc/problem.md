@@ -9,26 +9,6 @@
 
 ## 2. 前端架构待整改项
 
-### FE-ARCH-08 状态生命周期统一
-
-**状态：🟠 待整改**
-
-当前同时存在：
-
-- Pinia store
-- factory/session controller
-- module-scope reactive singleton
-
-优先收口：
-
-- `useFilesystemCatalog`
-- `useSuspendedSessions`
-- workspace layout/focus
-- Agent per-app view state
-- store 文件外的 `loadPromise` / `cacheGeneration` / revision 等生命周期变量
-
-约定目标：app/user-global state 有明确 store/service owner；session/runtime state 由 factory/controller 创建；纯 utility 无状态；不靠 import module 隐式形成 singleton。
-
 ### FE-ARCH-09 authenticated session teardown
 
 **状态：🟠 待整改**
@@ -126,7 +106,7 @@ exactOptionalPropertyTypes
 ## 3. 实施顺序
 
 1. **现存正确性问题**：优先 §7.47 / 50，再处理 §7.48 / 49。
-2. **状态与数据层**：FE-ARCH-08 / 09 / 10 / 11 / 12。
+2. **状态与数据层**：FE-ARCH-09 / 10 / 11 / 12。
 3. **UI 与领域结构**：FE-ARCH-13 / 14 / 15。
 4. **严格类型增强**：FE-ARCH-16。
 

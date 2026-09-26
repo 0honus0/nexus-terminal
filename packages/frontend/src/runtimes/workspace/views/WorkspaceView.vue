@@ -29,8 +29,7 @@
   } from '@/features/ssh-suspend/public';
   import WorkspaceConnectionList from '../components/WorkspaceConnectionList.vue';
   import WorkspaceTabBar from '../components/WorkspaceTabBar.vue';
-  import { workspaceLayout } from '../layout/workspaceLayout';
-  import { workspaceFocus } from '../focus/workspaceFocus';
+  import { provideWorkspaceUiState } from '../state/workspaceUiState';
   import { workspaceRuntimeRegistry, type WorkspaceRuntimeSession } from '../session';
 
   const ProgressDisplayModal = defineAsyncComponent(loadProgressDisplayModal);
@@ -52,6 +51,7 @@
   const route = useRoute();
   const router = useRouter();
   const { t } = useI18n();
+  const { layout: workspaceLayout, focus: workspaceFocus } = provideWorkspaceUiState();
   const feedback = useFeedback();
   const device = useDeviceCapabilities();
   const preferences = usePreferences();
@@ -820,6 +820,7 @@
     stopServerTransferPolling?.();
     void statusScaleSaver.dispose({ flush: true });
     void fileManagerRowScaleSaver.dispose({ flush: true });
+    void workspaceLayout.dispose();
     void quickCommandRowScaleSaver.dispose({ flush: true });
     void terminalFontSaver.dispose({ flush: true });
     void editorFontSaver.dispose({ flush: true });

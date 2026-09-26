@@ -4,8 +4,8 @@ import { apiErrorMessage } from '@/client/http';
 import { auditApi } from '../api/auditApi';
 import type { AuditLogEntryDto, AuditLogQueryDto } from '../model/audit';
 
-let loadGeneration = 0;
 export const useAuditStore = defineStore('audit', () => {
+  let loadGeneration = 0;
   const logs = ref<AuditLogEntryDto[]>([]),
     total = ref(0),
     loading = ref(false),

@@ -39,8 +39,7 @@
   } from '../api/agent-api';
   import { agentRunAcceptsInput, isAgentRunNonTerminal } from '../api/agent-api';
   import { agentHostEvents } from './agent-host-events';
-  import { agentWindowManager } from './window-manager';
-  import { agentSurfaceSession } from './surface-session';
+  import { useAgentHostState } from './agent-host-state';
   import {
     clearAgentSurfaceFailure,
     clearAgentSurfaceFailures,
@@ -63,6 +62,7 @@
     appHealthReason: string | null;
   }>();
   const { t } = useI18n();
+  const { surfaceSession: agentSurfaceSession, windowManager: agentWindowManager } = useAgentHostState();
   const facade = createAgentRunFacade(props.appId);
   const connectionsStore = useConnections();
   facade.start();

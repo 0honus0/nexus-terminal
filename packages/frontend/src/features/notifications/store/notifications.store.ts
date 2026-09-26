@@ -4,8 +4,8 @@ import { apiErrorMessage } from '@/client/http';
 import { notificationsApi } from '../api/notificationsApi';
 import type { NotificationSettingDto, NotificationSettingCreateRequestDto } from '../model/notification';
 
-let loadGeneration = 0;
 export const useNotificationsStore = defineStore('notifications', () => {
+  let loadGeneration = 0;
   const items = ref<NotificationSettingDto[]>([]),
     loading = ref(false),
     error = ref<string | null>(null);

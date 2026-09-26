@@ -1,10 +1,11 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import type { AgentHostSummaryDto } from '../api/agent-api';
-  import { agentWindowManager } from './window-manager';
+  import { useAgentHostState } from './agent-host-state';
 
   const props = defineProps<{ summary: AgentHostSummaryDto | null; paused?: boolean }>();
   const emit = defineEmits<{ layoutChange: [] }>();
+  const { windowManager: agentWindowManager } = useAgentHostState();
 
   const position = computed(() => agentWindowManager.state.launcherPosition);
 
