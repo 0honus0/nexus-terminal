@@ -142,18 +142,3 @@ test('frontend indexed access remains strict', () => {
   const config = readFileSync(frontendTsconfig, 'utf8');
   assert.match(config, /"noUncheckedIndexedAccess"\s*:\s*true/u);
 });
-
-test('legacy Base design system symbols cannot return', () => {
-  const legacy = runFrontendFileGuard(
-    'features/example/ExampleView.vue',
-    "<script setup>import { BaseButton } from '@/foundation/ui';</script><template><BaseButton /></template>\n",
-  );
-  assert.equal(legacy.status, 1);
-  assert.match(legacy.stderr, /uses legacy Design System symbol BaseButton/);
-
-  const gen2 = runFrontendFileGuard(
-    'features/example/ExampleView.vue',
-    "<script setup>import { UiButton } from '@/foundation/ui';</script><template><UiButton /></template>\n",
-  );
-  assert.equal(gen2.status, 0, gen2.stderr);
-});

@@ -48,8 +48,8 @@
         <UiBadge tone="primary" appearance="soft">Foundation UI · Gen 2</UiBadge>
         <h1 class="text-2xl font-semibold tracking-tight">UI system gallery</h1>
         <p class="max-w-3xl text-sm leading-6 text-text-secondary">
-          Runtime marker: <code class="font-mono text-[12px]">data-ui-gen="2"</code>. This page intentionally exercises
-          every state before Gen 2 replaces legacy <code class="font-mono text-[12px]">Base*</code> components.
+          Runtime marker: <code class="font-mono text-[12px]">data-ui-gen="2"</code>. This page exercises the supported
+          states of the shared UI components.
         </p>
       </header>
 

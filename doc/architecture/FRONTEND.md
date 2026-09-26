@@ -379,18 +379,20 @@ features/<feature>/public.ts
 例如：
 
 ```text
-BaseButton
-BaseInput
-BaseTextarea
-BaseSelect
-BaseCheckbox
-BaseFormField
-BaseModal
+UiButton
+UiInput
+UiTextarea
+UiSelect
+UiNativeSelect
+UiCombobox
+UiCheckbox
+UiFormField
+UiModal
 OverlayPanel
-BaseSpinner
-BaseBadge
-BaseTable
-BaseContextMenu
+UiSpinner
+UiBadge
+UiTable
+UiContextMenu
 TokenInput
 ```
 

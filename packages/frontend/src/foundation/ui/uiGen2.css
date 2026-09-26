@@ -1,11 +1,8 @@
 /*
  * Foundation UI Gen 2
  *
- * Gen 1 is intentionally easy to identify by its Base* component names.
- * Gen 2 is equally explicit at runtime: every root carries data-ui-gen="2".
- * Keep all shared Gen 2 visual primitives scoped to that marker so the
- * migration can coexist with legacy global rules without silently restyling
- * existing screens.
+ * Every component root carries data-ui-gen="2". Shared visual primitives stay
+ * scoped to that marker so component styles do not leak into feature markup.
  */
 [data-ui-gen='2'] {
   --ui-control-height: 32px;
