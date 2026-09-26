@@ -358,7 +358,7 @@
             </div>
             <span
               v-if="entry.timestamp"
-              class="command-history-timestamp shrink-0 ml-auto pl-2 text-[10px] font-mono text-text-secondary/50 transition-colors group-hover:text-text-secondary/80 select-none text-right"
+              class="command-history-timestamp shrink-0 ml-auto pl-2 text-[11px] font-mono text-text-secondary/50 transition-colors group-hover:text-text-secondary/80 select-none text-right"
               :title="formatFullDate(entry.timestamp)"
             >
               {{ formatTime(entry.timestamp) }}

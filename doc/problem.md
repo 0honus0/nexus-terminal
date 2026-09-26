@@ -7,20 +7,6 @@
 
 ## 1. 当前开放问题
 
-### §7.48 Hub model option hint 仍低于阅读文字 floor（P1）
-
-**当前代码事实**
-
-`AgentAppSurface.vue` 的 model option hint 仍为 `text-[9px]` 阅读文本。其它 9/10px 命中多数是 icon/badge，不属于本问题。
-
-**整改目标**
-
-真实阅读文本恢复到既定最小字号；icon/badge 可以按视觉用途保留更小尺寸。
-
-**关闭条件**
-
-Agent UI 的非 icon/badge 阅读文本扫描不再发现低于 floor 的实例。
-
 ### §7.49 英文 UI literal / i18n 仍有漏网（P2）
 
 **当前代码事实**

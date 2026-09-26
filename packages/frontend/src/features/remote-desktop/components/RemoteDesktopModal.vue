@@ -717,7 +717,7 @@
               </div>
             </div>
             <span
-              class="text-[10px] leading-tight text-text-muted"
+              class="text-[11px] leading-tight text-text-muted"
               :class="device.isMobile.value ? 'whitespace-normal' : ''"
             >
               {{

@@ -234,7 +234,7 @@
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
               <span
-                class="session-time text-[10px] font-mono text-text-secondary/60"
+                class="session-time text-[11px] font-mono text-text-secondary/60"
                 :title="new Date(session.markedAt).toLocaleString()"
               >
                 {{ formatTime(session.markedAt) }}
@@ -313,7 +313,7 @@
                 <!-- 若有自定义名称且与底层连接不同，才显示连接名副标，杜绝同一名字出现两次 -->
                 <span
                   v-if="session.customName && session.customName !== session.connectionName"
-                  class="font-normal text-text-secondary/70 text-[10px] shrink-0"
+                  class="font-normal text-text-secondary/70 text-[11px] shrink-0"
                 >
                   ({{ session.connectionName }})
                 </span>
@@ -327,7 +327,7 @@
             <!-- 右侧：紧凑时间 + 状态徽章 -->
             <div class="flex items-center gap-1.5 shrink-0">
               <span
-                class="session-time text-[10px] font-mono text-text-secondary/60"
+                class="session-time text-[11px] font-mono text-text-secondary/60"
                 :title="new Date(session.suspendedAt).toLocaleString()"
               >
                 {{ formatTime(session.suspendedAt) }}

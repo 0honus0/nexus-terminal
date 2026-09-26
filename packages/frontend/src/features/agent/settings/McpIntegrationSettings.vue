@@ -605,7 +605,7 @@
               <span class="text-xs font-medium text-foreground">
                 {{ $t('agent.settings.mcpIntegrations.endpoint') }} <span class="text-error">*</span>
               </span>
-              <span class="text-[10px] text-text-secondary">{{
+              <span class="text-[11px] text-text-secondary">{{
                 $t('agent.settings.mcpIntegrations.mcpEndpointHint')
               }}</span>
             </div>

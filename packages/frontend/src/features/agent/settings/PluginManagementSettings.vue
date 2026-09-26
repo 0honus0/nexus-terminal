@@ -713,10 +713,9 @@
                     class="text-[10px] shrink-0"
                     aria-hidden="true"
                   ></i>
-                  <span
-                    class="truncate max-w-[280px] sm:max-w-[420px] md:max-w-[620px] lg:max-w-[820px] text-[10px] sm:text-[11px]"
-                    >{{ group.sourceUrl }}</span
-                  >
+                  <span class="truncate max-w-[280px] sm:max-w-[420px] md:max-w-[620px] lg:max-w-[820px] text-[11px]">{{
+                    group.sourceUrl
+                  }}</span>
                 </button>
               </div>
 

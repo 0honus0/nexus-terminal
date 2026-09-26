@@ -389,7 +389,7 @@
                 </p>
               </div>
 
-              <div class="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-[10px]">
+              <div class="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-[11px]">
                 <span
                   v-if="currentProfile === opt.value && hasOverride('contextProfile')"
                   class="font-medium text-primary flex items-center gap-1"
@@ -516,7 +516,7 @@
                 </p>
               </div>
 
-              <div class="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-[10px]">
+              <div class="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-[11px]">
                 <span
                   v-if="currentCompaction === opt.value && hasOverride('contextCompactionMode')"
                   class="font-medium text-primary flex items-center gap-1"

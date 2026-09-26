@@ -263,7 +263,7 @@
                   :title="column.type || column.name"
                 >
                   <span class="block truncate">{{ column.name }}</span>
-                  <span v-if="column.type" class="block truncate text-[10px] font-normal text-text-alt">{{
+                  <span v-if="column.type" class="block truncate text-[11px] font-normal text-text-alt">{{
                     column.type
                   }}</span>
                 </th>

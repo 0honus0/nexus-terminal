@@ -317,14 +317,14 @@
                       <span class="min-w-0 flex-1 truncate text-xs font-medium" :title="task.label">{{
                         task.label
                       }}</span>
-                      <span class="shrink-0 text-[10px] text-text-secondary">{{
+                      <span class="shrink-0 text-[11px] text-text-secondary">{{
                         t(`progressCenter.status.${task.status}`)
                       }}</span>
                       <button
                         v-if="!done(task.status)"
                         type="button"
                         data-testid="hidden-progress-cancel"
-                        class="shrink-0 rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-950/30 dark:text-red-300"
+                        class="shrink-0 rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-[11px] text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-950/30 dark:text-red-300"
                         :disabled="task.status === 'cancelling'"
                         @click="emit('cancel', source.id, task.id)"
                       >
