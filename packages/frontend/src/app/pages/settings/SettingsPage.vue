@@ -373,8 +373,8 @@
                       class="group relative flex w-full items-center justify-between rounded-xl pl-3 pr-2.5 py-2 xl:py-2.5 text-left text-xs transition-all duration-150 ease-out cursor-pointer overflow-hidden"
                       :class="
                         active === item.value
-                          ? 'bg-primary/10 text-primary font-semibold'
-                          : 'text-text-secondary hover:text-foreground hover:bg-header/70 font-medium'
+                          ? 'bg-header/75 text-foreground font-semibold border border-border/60 shadow-2xs backdrop-blur-md'
+                          : 'text-text-secondary hover:text-foreground hover:bg-header/40 font-medium'
                       "
                       @click="selectTab(item.value)"
                       @keydown="handleTabKeydown($event, item.value, 'vertical', 'desktop')"
@@ -382,14 +382,14 @@
                       <!-- 左侧高亮指示条 (Active Left Indicator) -->
                       <span
                         v-if="active === item.value"
-                        class="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary"
+                        class="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-foreground"
                         aria-hidden="true"
                       ></span>
 
                       <div class="flex items-center gap-2.5 min-w-0">
                         <div
                           class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-colors"
-                          :class="active === item.value ? 'bg-primary/20 text-primary' : [item.iconBg, item.iconColor]"
+                          :class="active === item.value ? 'bg-header text-foreground' : [item.iconBg, item.iconColor]"
                         >
                           <i :class="item.icon" class="text-xs" aria-hidden="true"></i>
                         </div>

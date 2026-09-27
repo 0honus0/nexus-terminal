@@ -355,34 +355,62 @@
 }
 
 .ui-button--solid {
-  border-color: transparent;
-  background: var(--ui-tone-solid);
-  color: var(--ui-tone-on-solid);
-  box-shadow: 0 1px 2px 0 color-mix(in srgb, var(--text-color) 12%, transparent);
-}
-
-.ui-button--solid:not(:disabled):hover {
-  background: color-mix(in srgb, var(--ui-tone-solid) 88%, var(--text-color));
-  box-shadow: 0 2px 4px 0 color-mix(in srgb, var(--text-color) 16%, transparent);
-}
-
-.ui-button--soft {
-  border-color: var(--ui-tone-border);
-  background: var(--ui-tone-soft);
-  color: var(--ui-tone-ink);
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  background: color-mix(in srgb, var(--card-bg-color) 68%, transparent);
+  color: var(--ui-text);
   -webkit-backdrop-filter: var(--glass-backdrop-filter, blur(12px));
   backdrop-filter: var(--glass-backdrop-filter, blur(12px));
   box-shadow:
-    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 8%, transparent),
+    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 16%, transparent),
+    inset 0 -1px 0 0 color-mix(in srgb, var(--text-color) 6%, transparent),
+    0 1px 3px 0 color-mix(in srgb, var(--text-color) 6%, transparent);
+}
+
+.ui-button--solid:not(:disabled):hover {
+  background: color-mix(in srgb, var(--card-bg-color) 86%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 85%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 22%, transparent),
+    inset 0 -1px 0 0 color-mix(in srgb, var(--text-color) 8%, transparent),
+    0 3px 6px 0 color-mix(in srgb, var(--text-color) 10%, transparent);
+}
+
+.ui-button--soft {
+  border: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
+  background: color-mix(in srgb, var(--card-bg-color) 50%, transparent);
+  color: var(--ui-text);
+  -webkit-backdrop-filter: var(--glass-backdrop-filter, blur(12px));
+  backdrop-filter: var(--glass-backdrop-filter, blur(12px));
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 10%, transparent),
+    inset 0 -1px 0 0 color-mix(in srgb, var(--text-color) 4%, transparent),
     0 1px 2px 0 color-mix(in srgb, var(--text-color) 5%, transparent);
 }
 
 .ui-button--soft:not(:disabled):hover {
-  background: var(--ui-tone-soft-hover);
-  border-color: color-mix(in srgb, var(--ui-tone-accent) 45%, var(--border-color));
+  background: color-mix(in srgb, var(--card-bg-color) 75%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 78%, transparent);
   box-shadow:
-    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 12%, transparent),
+    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 16%, transparent),
+    inset 0 -1px 0 0 color-mix(in srgb, var(--text-color) 6%, transparent),
     0 2px 4px 0 color-mix(in srgb, var(--text-color) 8%, transparent);
+}
+
+/* Danger tone override for buttons (retain readable warning color without harsh opaque blocks) */
+.ui-button[data-tone='danger'] {
+  color: var(--status-error-color);
+  border-color: color-mix(in srgb, var(--status-error-color) 35%, transparent);
+  background: color-mix(in srgb, var(--status-error-color) 12%, var(--card-bg-color));
+}
+
+.ui-button[data-tone='danger']:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--status-error-color) 55%, transparent);
+  background: color-mix(in srgb, var(--status-error-color) 20%, var(--card-bg-color));
+}
+
+/* Ensure primary buttons use clean neutral glass rather than purple */
+[data-ui-gen='2'][data-ui='button'][data-tone='primary'] {
+  color: var(--ui-text);
 }
 
 .ui-button--ghost {

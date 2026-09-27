@@ -712,14 +712,18 @@
             class="flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-1.5 sm:px-3 py-2 sm:py-2.5 text-xs font-medium transition-all cursor-pointer w-full text-center"
             :class="
               activeGroup === group.id
-                ? 'border border-primary bg-primary text-white shadow-xs font-semibold'
-                : 'border border-border bg-card hover:bg-header hover:border-border-hover text-foreground font-medium shadow-2xs'
+                ? 'border border-border/70 bg-header/65 text-foreground shadow-xs font-semibold backdrop-blur-md'
+                : 'border border-border/40 bg-card/40 hover:bg-header/40 hover:border-border/60 text-text-secondary hover:text-foreground font-medium shadow-2xs backdrop-blur-xs'
             "
             :aria-current="activeGroup === group.id ? 'page' : undefined"
             @click="selectGroup(group.id)"
           >
             <i
-              :class="[group.icon, 'text-xs shrink-0', activeGroup === group.id ? 'text-white' : 'text-primary']"
+              :class="[
+                group.icon,
+                'text-xs shrink-0',
+                activeGroup === group.id ? 'text-foreground' : 'text-text-secondary',
+              ]"
               aria-hidden="true"
             ></i>
             <span class="truncate">{{ $t(group.label) }}</span>

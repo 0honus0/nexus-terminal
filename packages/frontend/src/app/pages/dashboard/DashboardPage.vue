@@ -332,7 +332,7 @@
               <UiButton
                 density="compact"
                 appearance="soft"
-                tone="primary"
+                tone="neutral"
                 class="px-2.5"
                 @click="connect(latestConnection)"
               >
@@ -346,7 +346,7 @@
                 data-testid="dashboard-suspended-sessions"
                 density="compact"
                 appearance="soft"
-                tone="primary"
+                tone="neutral"
                 class="hidden lg:inline-flex"
                 :title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
                 @click="openSuspendedSessions"
@@ -361,7 +361,7 @@
                 data-testid="dashboard-suspended-sessions"
                 density="compact"
                 appearance="soft"
-                tone="primary"
+                tone="neutral"
                 :title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
                 @click="openSuspendedSessions"
               >
@@ -607,7 +607,7 @@
                     type="button"
                     :data-testid="`dashboard-connect-${item.id}`"
                     appearance="soft"
-                    tone="primary"
+                    tone="neutral"
                     class="w-full shrink-0 px-3.5 sm:w-auto"
                     @click="connect(item)"
                   >
