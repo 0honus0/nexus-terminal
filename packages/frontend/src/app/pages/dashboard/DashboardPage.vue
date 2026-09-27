@@ -491,7 +491,7 @@
           </header>
 
           <div
-            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
+            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-auto rounded-xl border border-border/80 bg-header/10 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
             style="scrollbar-gutter: stable both-edges"
           >
             <div
@@ -633,7 +633,7 @@
             </div>
           </header>
           <div
-            class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
+            class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-auto rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
             style="scrollbar-gutter: stable"
           >
             <div
