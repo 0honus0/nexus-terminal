@@ -661,7 +661,7 @@
         >
           <span>{{ $t('agent.settings.summary.activeApps') }}</span>
           <span class="font-mono font-medium text-foreground tracking-wide">
-            <span :class="enabledApps > 0 ? 'text-primary font-semibold' : 'text-text-secondary'">{{
+            <span :class="enabledApps > 0 ? 'text-foreground font-semibold' : 'text-text-secondary'">{{
               enabledApps
             }}</span>
             <span class="text-text-secondary/50 mx-1">/</span>
@@ -674,7 +674,7 @@
       <UiButton
         type="button"
         :appearance="runtimeReady(settings.availability.state) ? 'soft' : 'solid'"
-        :tone="runtimeReady(settings.availability.state) ? 'danger' : 'primary'"
+        :tone="runtimeReady(settings.availability.state) ? 'danger' : 'neutral'"
         :disabled="featureControlBusy"
         density="compact"
         class="shrink-0 text-xs"

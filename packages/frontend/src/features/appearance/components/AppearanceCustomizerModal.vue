@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+  import { UiButton } from '@/foundation/ui';
   import { useI18n } from 'vue-i18n';
   import BasicAppearancePanel from './BasicAppearancePanel.vue';
   import TerminalBackgroundSettingsPanel from './TerminalBackgroundSettingsPanel.vue';
@@ -99,8 +100,10 @@
               type="button"
               data-testid="style-customizer-ui-tab"
               :class="[
-                'mx-1 mb-0 block w-auto cursor-pointer rounded border border-transparent bg-transparent px-3 py-2 text-center text-sm text-foreground transition-colors duration-200 ease-in-out hover:bg-black/5 md:mx-0 md:mb-2 md:w-full md:py-[0.7rem] md:text-left md:text-[0.95rem]',
-                activeTab === 'ui' ? '!bg-button !font-bold !text-button-text' : '',
+                'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
+                activeTab === 'ui'
+                  ? 'border-border/60 bg-header/80 font-semibold text-foreground shadow-2xs backdrop-blur-md'
+                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground font-medium',
               ]"
               @click="activeTab = 'ui'"
             >
@@ -110,8 +113,10 @@
               type="button"
               data-testid="style-customizer-terminal-tab"
               :class="[
-                'mx-1 mb-0 block w-auto cursor-pointer rounded border border-transparent bg-transparent px-3 py-2 text-center text-sm text-foreground transition-colors duration-200 ease-in-out hover:bg-black/5 md:mx-0 md:mb-2 md:w-full md:py-[0.7rem] md:text-left md:text-[0.95rem]',
-                activeTab === 'terminal' ? '!bg-button !font-bold !text-button-text' : '',
+                'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
+                activeTab === 'terminal'
+                  ? 'border-border/60 bg-header/80 font-semibold text-foreground shadow-2xs backdrop-blur-md'
+                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground font-medium',
               ]"
               @click="activeTab = 'terminal'"
             >
@@ -121,8 +126,10 @@
               type="button"
               data-testid="style-customizer-background-tab"
               :class="[
-                'mx-1 mb-0 block w-auto cursor-pointer rounded border border-transparent bg-transparent px-3 py-2 text-center text-sm text-foreground transition-colors duration-200 ease-in-out hover:bg-black/5 md:mx-0 md:mb-2 md:w-full md:py-[0.7rem] md:text-left md:text-[0.95rem]',
-                activeTab === 'background' ? '!bg-button !font-bold !text-button-text' : '',
+                'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
+                activeTab === 'background'
+                  ? 'border-border/60 bg-header/80 font-semibold text-foreground shadow-2xs backdrop-blur-md'
+                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground font-medium',
               ]"
               @click="activeTab = 'background'"
             >
@@ -132,8 +139,10 @@
               type="button"
               data-testid="style-customizer-other-tab"
               :class="[
-                'mx-1 mb-0 block w-auto cursor-pointer rounded border border-transparent bg-transparent px-3 py-2 text-center text-sm text-foreground transition-colors duration-200 ease-in-out hover:bg-black/5 md:mx-0 md:mb-2 md:w-full md:py-[0.7rem] md:text-left md:text-[0.95rem]',
-                activeTab === 'other' ? '!bg-button !font-bold !text-button-text' : '',
+                'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
+                activeTab === 'other'
+                  ? 'border-border/60 bg-header/80 font-semibold text-foreground shadow-2xs backdrop-blur-md'
+                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground font-medium',
               ]"
               @click="activeTab = 'other'"
             >
@@ -154,31 +163,29 @@
         </div>
 
         <footer class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border bg-footer p-3 md:p-4">
-          <button
+          <UiButton
             v-if="activeTab === 'ui'"
             type="button"
             data-testid="ui-theme-reset"
-            class="ml-2 rounded border border-border bg-header px-4 py-2 text-sm font-bold text-foreground hover:bg-border md:px-5 md:text-base"
+            appearance="soft"
+            tone="neutral"
             @click="uiPanel?.resetUiTheme()"
           >
             {{ t('styleCustomizer.resetUiTheme') }}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             v-if="activeTab === 'ui'"
             type="button"
             data-testid="ui-theme-save"
-            class="ml-2 rounded border border-button bg-button px-4 py-2 text-sm font-bold text-button-text hover:border-button-hover hover:bg-button-hover md:px-5 md:text-base"
+            appearance="solid"
+            tone="primary"
             @click="uiPanel?.saveUiTheme()"
           >
             {{ t('styleCustomizer.saveUiTheme') }}
-          </button>
-          <button
-            type="button"
-            class="ml-2 rounded border border-border bg-header px-4 py-2 text-sm font-bold text-foreground hover:bg-border md:px-5 md:text-base"
-            @click="emit('close')"
-          >
+          </UiButton>
+          <UiButton type="button" appearance="soft" tone="neutral" @click="emit('close')">
             {{ t('common.close') }}
-          </button>
+          </UiButton>
         </footer>
       </div>
     </div>

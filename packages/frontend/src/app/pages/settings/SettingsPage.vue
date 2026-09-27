@@ -96,8 +96,8 @@
           value: 'agent',
           labelKey: 'agent.settings.tab',
           icon: 'fa-solid fa-wand-magic-sparkles',
-          iconColor: 'text-primary',
-          iconBg: 'bg-primary/15',
+          iconColor: 'text-foreground',
+          iconBg: 'bg-header',
           descriptionKey: 'settings.descriptions.agent',
           badge: 'AI',
         },
@@ -266,7 +266,7 @@
                     <span class="text-sm font-semibold text-foreground">{{ t(item.labelKey) }}</span>
                     <span
                       v-if="item.badge"
-                      class="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary"
+                      class="rounded-full bg-header px-2 py-0.5 text-[10px] font-semibold text-text-secondary border border-border/40"
                     >
                       {{ item.badge }}
                     </span>
@@ -297,7 +297,7 @@
             class="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-2xs hover:bg-header transition-colors shrink-0"
             @click="mobileView = 'menu'"
           >
-            <i class="fa-solid fa-chevron-left text-primary text-[11px]" aria-hidden="true"></i>
+            <i class="fa-solid fa-chevron-left text-foreground text-[11px]" aria-hidden="true"></i>
             <span>{{ t('settings.mobile.allSettings') }}</span>
           </button>
 
@@ -320,7 +320,7 @@
                 class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer"
                 :class="
                   active === item.value
-                    ? 'border-b-2 border-primary bg-primary/10 text-primary font-semibold'
+                    ? 'border-b-2 border-foreground bg-header/75 text-foreground font-semibold'
                     : 'text-text-secondary hover:text-foreground hover:bg-header/60'
                 "
                 @click="selectTab(item.value)"
@@ -342,7 +342,7 @@
               <!-- 侧边栏头部 (Floating Dock Header) -->
               <div class="flex items-center gap-2.5 px-2.5 pt-1 pb-3.5 border-b border-border">
                 <div
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary shadow-2xs"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-header text-foreground shadow-2xs border border-border/40"
                 >
                   <i class="fa-solid fa-sliders text-xs" aria-hidden="true"></i>
                 </div>
@@ -398,7 +398,11 @@
                       <span
                         v-if="item.badge"
                         class="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors"
-                        :class="active === item.value ? 'bg-primary text-white' : 'bg-primary/10 text-primary'"
+                        :class="
+                          active === item.value
+                            ? 'bg-foreground text-background'
+                            : 'bg-card text-text-secondary border border-border/40'
+                        "
                       >
                         {{ item.badge }}
                       </span>
