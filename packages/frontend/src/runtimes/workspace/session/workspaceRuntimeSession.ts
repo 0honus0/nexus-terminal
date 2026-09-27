@@ -68,6 +68,7 @@ export class WorkspaceRuntimeSession {
   private reconnectAttempt = 0;
   private reconnectTimer?: number;
   private reconnectInFlight = false;
+  private remotePtyDiscarded = false;
   private suspendOwnerHeartbeat?: number;
   private disposed = false;
   private closing = false;
@@ -179,6 +180,10 @@ export class WorkspaceRuntimeSession {
     this.closing = false;
     const reconnectAttempt = this.reconnectAttempt;
     const phase = this.hasConnected.value ? 'reconnect' : 'initial';
+    if (phase === 'reconnect' && !this.markedForSuspend.value && !this.remotePtyDiscarded) {
+      this.terminalState.discardRemotePty();
+      this.remotePtyDiscarded = true;
+    }
     const startedAt = performance.now();
     this.state.value = phase === 'reconnect' ? 'reconnecting' : 'connecting';
     this.statusMessage.value = '';
@@ -205,6 +210,7 @@ export class WorkspaceRuntimeSession {
       await this.adapters.workspaceConnected();
       if (!this.socket.connected) throw new Error('Workspace connection closed during terminal activation.');
       this.hasConnected.value = true;
+      this.remotePtyDiscarded = false;
       this.reconnectAttempt = 0;
       this.state.value = 'connected';
       logger.debug(

@@ -18,6 +18,8 @@
 
 移动端单指拖动终端时，普通历史和全屏交互程序均可按手势方向浏览内容；持续输出时仍可向上查看，长按选取和双指缩放保持可用。
 
+普通 SSH 断链后重新建立 PTY 时，终端保留历史内容，但清除旧 PTY 留下的全屏、鼠标上报、焦点上报和粘贴等交互模式；重连后键盘输入应直接交给新会话，不得继续产生旧程序的控制字符。挂起会话恢复同一 PTY 时不执行该重置。
+
 ## Git 历史派生需求
 
 [GREQ-TERM-001](../traceability/git-requirements.md#greq-term-001) · [GREQ-TERM-002](../traceability/git-requirements.md#greq-term-002) · [GREQ-TERM-003](../traceability/git-requirements.md#greq-term-003) · [GREQ-TERM-004](../traceability/git-requirements.md#greq-term-004) · [GREQ-TERM-005](../traceability/git-requirements.md#greq-term-005) · [GREQ-TERM-006](../traceability/git-requirements.md#greq-term-006)

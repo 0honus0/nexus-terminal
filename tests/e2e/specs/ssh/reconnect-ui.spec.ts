@@ -294,6 +294,12 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
     const initialConnectRequestCount = workspaceConnectRequests;
     const initialConnectedCount = workspaceConnectResponses;
 
+    await step('terminal application modes are active before the SSH outage', async () => {
+      await commandInput.fill("printf '\\033[?1049h\\033[?1000h\\033[?1006h\\033[?2004h'");
+      await commandInput.press('Enter');
+      await expect(terminal.locator('.xterm')).toHaveClass(/enable-mouse-events/);
+    });
+
     await step('SSH outage triggers more than one automatic reconnect cycle', async () => {
       await setTestSshOnline(false);
 
@@ -327,9 +333,12 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
       await expect.poll(() => workspaceConnectViewports.at(-1)).toEqual(fittedViewport);
       await expect.poll(() => terminalResizeViewports.length).toBeGreaterThan(initialResizeCount);
       expect(terminalResizeViewports.at(-1)).toEqual(fittedViewport);
+      await expect(terminal.locator('.xterm')).not.toHaveClass(/enable-mouse-events/);
 
-      await commandInput.fill("printf 'NEXUS_RECONNECTED_E2E\\n'");
-      await commandInput.press('Enter');
+      await xtermInput.focus();
+      await page.keyboard.press('ControlOrMeta+C');
+      await page.keyboard.type("printf 'NEXUS_RECONNECTED_E2E\\n'");
+      await page.keyboard.press('Enter');
       await expect
         .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 10_000 })
         .toContain('NEXUS_RECONNECTED_E2E');

@@ -13,7 +13,11 @@
   import type { TerminalChannel } from '../ports/terminal-channel';
   import type { TerminalVisualOptions } from '../model/terminal';
   import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
-  import { createTerminalSessionState, type TerminalSessionState } from '../state/terminalSessionState';
+  import {
+    createTerminalSessionState,
+    RESET_REMOTE_PTY_DISPLAY,
+    type TerminalSessionState,
+  } from '../state/terminalSessionState';
 
   const props = withDefaults(
     defineProps<{
@@ -348,6 +352,15 @@
     flushPendingOutput();
     terminal.write('\r\x1b[2K');
   };
+
+  watch(
+    terminalState.remotePtyGeneration,
+    () => {
+      flushPendingOutput();
+      terminal?.write(RESET_REMOTE_PTY_DISPLAY);
+    },
+    { flush: 'sync' },
+  );
 
   const MOBILE_LONG_PRESS_DELAY = 520;
   const MOBILE_LONG_PRESS_MOVE_TOLERANCE = 12;
