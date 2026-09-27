@@ -68,15 +68,18 @@ a {
   a:hover .fas,
   a:hover .far,
   a:hover .fab,
-  button:hover i,
-  button:hover .fas,
-  button:hover .far,
-  button:hover .fab,
   .icon-interactive:hover i,
   .icon-interactive:hover .fas,
   .icon-interactive:hover .far,
   .icon-interactive:hover .fab {
     color: var(--icon-hover-color);
+  }
+
+  button i,
+  button .fas,
+  button .far,
+  button .fab {
+    color: currentColor;
   }
 }
 
@@ -154,17 +157,6 @@ select:focus:not([data-no-highlight]):not(.no-highlight) {
   outline: none !important;
 }
 
-button.bg-button i,
-button.bg-button .fas,
-button.bg-button .far,
-button.bg-button .fab,
-button.bg-error i,
-button.bg-error .fas,
-button.bg-error .far,
-button.bg-error .fab {
-  color: currentColor !important;
-}
-
 /*
  * §2.10：reduced-motion 基线。
  *
@@ -214,144 +206,5 @@ button.bg-error .fab {
     backdrop-filter: var(--glass-backdrop-filter);
     border: 1px solid var(--glass-border-color);
     box-shadow: var(--glass-shadow);
-  }
-
-  /*
-   * Gen 2 button styling bridge:
-   * Bring legacy Tailwind button classes (`bg-button`, `bg-primary` on buttons)
-   * up to Gen2 visual standards (8px radius, micro-interaction scale, refined shadow).
-   */
-  button.bg-button {
-    position: relative;
-    border-radius: var(--ui-control-radius, 8px);
-    background-color: color-mix(in srgb, var(--card-bg-color) 10%, transparent) !important;
-    background-image:
-      radial-gradient(
-        100% 70% at 50% -10%,
-        rgba(255, 255, 255, 0.75) 0%,
-        rgba(255, 255, 255, 0.15) 55%,
-        transparent 80%
-      ),
-      linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.3) 0%,
-        rgba(255, 255, 255, 0.03) 45%,
-        rgba(255, 255, 255, 0.18) 100%
-      ) !important;
-    -webkit-backdrop-filter: blur(18px) saturate(180%);
-    backdrop-filter: blur(18px) saturate(180%);
-    border-width: 1px !important;
-    border-style: solid !important;
-    border-color: color-mix(in srgb, var(--border-color) 22%, rgba(255, 255, 255, 0.65)) !important;
-    color: var(--text-color) !important;
-    box-shadow:
-      inset 0 1px 1px 0 rgba(255, 255, 255, 0.8),
-      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06),
-      0 4px 12px 0 rgba(0, 0, 0, 0.06),
-      0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
-    transition:
-      background-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
-      border-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
-      box-shadow var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
-      transform var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1));
-  }
-
-  button.bg-button:not(:disabled):hover {
-    background-color: color-mix(in srgb, var(--card-bg-color) 18%, transparent) !important;
-    background-image:
-      radial-gradient(
-        100% 70% at 50% -10%,
-        rgba(255, 255, 255, 0.88) 0%,
-        rgba(255, 255, 255, 0.22) 55%,
-        transparent 80%
-      ),
-      linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.38) 0%,
-        rgba(255, 255, 255, 0.05) 45%,
-        rgba(255, 255, 255, 0.22) 100%
-      ) !important;
-    border-color: color-mix(in srgb, var(--border-color) 32%, rgba(255, 255, 255, 0.75)) !important;
-    box-shadow:
-      inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06),
-      0 6px 16px 0 rgba(0, 0, 0, 0.08),
-      0 2px 4px 0 rgba(0, 0, 0, 0.04) !important;
-    transform: translateY(-0.5px);
-  }
-
-  button.bg-button:not(:disabled):active {
-    transform: translateY(0);
-    background-color: color-mix(in srgb, var(--card-bg-color) 24%, transparent) !important;
-    box-shadow:
-      inset 0 1px 2px 0 rgba(0, 0, 0, 0.08),
-      0 2px 5px 0 rgba(0, 0, 0, 0.05) !important;
-  }
-
-  button.bg-primary {
-    position: relative;
-    border-radius: var(--ui-control-radius, 8px);
-    background-color: color-mix(in srgb, var(--card-bg-color) 14%, transparent) !important;
-    background-image:
-      radial-gradient(
-        100% 70% at 50% -10%,
-        rgba(255, 255, 255, 0.75) 0%,
-        rgba(255, 255, 255, 0.15) 55%,
-        transparent 80%
-      ),
-      linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.3) 0%,
-        rgba(255, 255, 255, 0.03) 45%,
-        rgba(255, 255, 255, 0.18) 100%
-      ) !important;
-    -webkit-backdrop-filter: blur(18px) saturate(180%);
-    backdrop-filter: blur(18px) saturate(180%);
-    border-width: 1px !important;
-    border-style: solid !important;
-    border-color: color-mix(in srgb, var(--border-color) 22%, rgba(255, 255, 255, 0.65)) !important;
-    color: var(--text-color) !important;
-    box-shadow:
-      inset 0 1px 1px 0 rgba(255, 255, 255, 0.8),
-      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06),
-      0 4px 12px 0 rgba(0, 0, 0, 0.06),
-      0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
-    transition:
-      background-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
-      border-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
-      box-shadow var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
-      transform var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1));
-  }
-
-  button.bg-primary:not(:disabled):hover {
-    background-color: color-mix(in srgb, var(--card-bg-color) 18%, transparent) !important;
-    background-image:
-      radial-gradient(
-        100% 70% at 50% -10%,
-        rgba(255, 255, 255, 0.88) 0%,
-        rgba(255, 255, 255, 0.22) 55%,
-        transparent 80%
-      ),
-      linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.38) 0%,
-        rgba(255, 255, 255, 0.05) 45%,
-        rgba(255, 255, 255, 0.22) 100%
-      ) !important;
-    border-color: color-mix(in srgb, var(--border-color) 32%, rgba(255, 255, 255, 0.75)) !important;
-    box-shadow:
-      inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06),
-      0 6px 16px 0 rgba(0, 0, 0, 0.08),
-      0 2px 4px 0 rgba(0, 0, 0, 0.04) !important;
-    transform: translateY(-0.5px);
-  }
-
-  button.bg-primary:not(:disabled):active {
-    transform: translateY(0);
-    background-color: color-mix(in srgb, var(--card-bg-color) 24%, transparent) !important;
-    box-shadow:
-      inset 0 1px 2px 0 rgba(0, 0, 0, 0.08),
-      0 2px 5px 0 rgba(0, 0, 0, 0.05) !important;
   }
 }
