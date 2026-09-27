@@ -2277,16 +2277,16 @@
         <div
           v-for="model in filteredTestModalModels"
           :key="model.id"
-          class="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-border/70 bg-header/20 p-3 text-xs transition-all hover:border-border/90 hover:bg-header/35"
+          class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-header/20 p-3 text-xs transition-all hover:border-border/90 hover:bg-header/35"
         >
           <!-- 左侧信息 -->
-          <div class="flex items-center gap-2.5 min-w-0">
+          <div class="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
             <div
               class="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-card border border-border/60 text-foreground"
             >
               <i class="fa-solid fa-cube text-xs text-primary/80"></i>
             </div>
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-mono text-xs font-bold text-foreground truncate">{{ model.id }}</span>
                 <span
@@ -2297,6 +2297,8 @@
                   <span>{{ $t('agent.settings.providers.defaultBadge') }}</span>
                 </span>
               </div>
+
+              <!-- 上下文与输出 -->
               <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-text-secondary">
                 <span class="rounded bg-card border border-border/50 px-1.5 py-0.5 font-mono">
                   {{ $t('agent.settings.providers.contextShort', { value: compactTokens(model.contextWindow) }) }}
@@ -2304,52 +2306,58 @@
                 <span class="rounded bg-card border border-border/50 px-1.5 py-0.5 font-mono">
                   {{ $t('agent.settings.providers.outputShort', { value: compactTokens(model.maxOutputTokens) }) }}
                 </span>
+              </div>
+
+              <!-- 支持能力标签（换行显示，无小图标） -->
+              <div
+                v-if="
+                  model.supportsTools ||
+                  model.supportsImageInput ||
+                  model.supportsFileInput ||
+                  model.reasoningEfforts?.length
+                "
+                class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]"
+              >
                 <span
                   v-if="model.supportsTools"
-                  class="inline-flex items-center gap-1 rounded bg-success/10 text-success border border-success/20 px-1.5 py-0.5 font-medium"
+                  class="inline-flex items-center rounded bg-success/10 text-success border border-success/20 px-1.5 py-0.5 font-medium"
                 >
-                  <i class="fa-solid fa-wrench text-[8px]" aria-hidden="true"></i>
-                  <span>{{ $t('agent.settings.providers.toolCapable') }}</span>
+                  {{ $t('agent.settings.providers.toolCapable') }}
                 </span>
                 <span
                   v-if="model.supportsImageInput"
-                  class="inline-flex items-center gap-1 rounded bg-info/10 text-info border border-info/20 px-1.5 py-0.5 font-medium"
+                  class="inline-flex items-center rounded bg-info/10 text-info border border-info/20 px-1.5 py-0.5 font-medium"
                 >
-                  <i class="fa-solid fa-image text-[8px]" aria-hidden="true"></i>
-                  <span>{{ $t('agent.settings.providers.imageInput') }}</span>
+                  {{ $t('agent.settings.providers.imageInput') }}
                 </span>
                 <span
                   v-if="model.supportsFileInput"
-                  class="inline-flex items-center gap-1 rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
+                  class="inline-flex items-center rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
                 >
-                  <i class="fa-solid fa-file text-[8px]" aria-hidden="true"></i>
-                  <span>{{ $t('agent.settings.providers.fileInput') }}</span>
+                  {{ $t('agent.settings.providers.fileInput') }}
                 </span>
                 <span
                   v-if="model.reasoningEfforts?.length"
-                  class="inline-flex items-center gap-1 rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
+                  class="inline-flex items-center rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
                 >
-                  <i class="fa-solid fa-brain text-[8px]"></i>
-                  <span>{{ $t('agent.settings.providers.reasoning') }}</span>
+                  {{ $t('agent.settings.providers.reasoning') }}
                 </span>
               </div>
             </div>
           </div>
 
           <!-- 右侧操作与测试 -->
-          <div
-            class="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto sm:shrink-0 justify-end pt-1 sm:pt-0"
-          >
+          <div class="flex flex-col gap-1.5 w-full sm:w-56 sm:shrink-0 justify-center">
             <!-- 测试反馈微芯片 -->
             <span
               v-if="testResults[testKey(currentTestModalProvider, model.id)]"
-              class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-mono font-medium"
+              class="flex items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-mono font-medium text-center"
               :class="
                 testResults[testKey(currentTestModalProvider, model.id)]?.state === 'success'
                   ? 'bg-success/10 text-success  border border-success/20'
                   : testResults[testKey(currentTestModalProvider, model.id)]?.state === 'error'
                     ? 'bg-error/10 text-error border border-error/20'
-                    : 'bg-header text-text-secondary'
+                    : 'bg-header text-text-secondary border border-border/50'
               "
             >
               <i
@@ -2362,80 +2370,102 @@
                 "
                 class="text-[11px]"
               ></i>
-              <span>{{ testResults[testKey(currentTestModalProvider, model.id)]?.message }}</span>
+              <span class="truncate">{{ testResults[testKey(currentTestModalProvider, model.id)]?.message }}</span>
             </span>
 
-            <!-- 设为默认模型 -->
-            <UiButton
-              appearance="soft"
-              tone="neutral"
-              density="compact"
-              v-if="!(currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)"
-              type="button"
-              :disabled="busy || !currentTestModalProvider.enabled"
-              @click="emit('defaultModel', currentTestModalProvider.id, model.id)"
-            >
-              <i class="fa-solid fa-star text-[10px]" aria-hidden="true"></i>
-              <span>{{ $t('agent.settings.providers.setDefault') }}</span>
-            </UiButton>
+            <!-- 2x2 按钮网格：两个一组、定长定宽、两行 -->
+            <div class="grid grid-cols-2 gap-1.5 w-full">
+              <!-- 设为默认模型 / 当前默认 -->
+              <UiButton
+                appearance="soft"
+                tone="neutral"
+                density="compact"
+                block
+                type="button"
+                :disabled="
+                  busy ||
+                  !currentTestModalProvider.enabled ||
+                  (currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)
+                "
+                @click="emit('defaultModel', currentTestModalProvider.id, model.id)"
+              >
+                <i
+                  :class="
+                    currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId
+                      ? 'fa-solid fa-check text-[10px] text-primary'
+                      : 'fa-solid fa-star text-[10px]'
+                  "
+                  aria-hidden="true"
+                ></i>
+                <span>{{
+                  currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId
+                    ? $t('agent.settings.providers.defaultBadge')
+                    : $t('agent.settings.providers.setDefault')
+                }}</span>
+              </UiButton>
 
-            <UiButton
-              appearance="soft"
-              tone="neutral"
-              density="compact"
-              type="button"
-              :disabled="busy"
-              @click="openCapabilityEditor(currentTestModalProvider, model)"
-            >
-              <i class="fa-solid fa-sliders text-[10px]" aria-hidden="true"></i>
-              <span>{{ $t('agent.settings.providers.capabilityEdit') }}</span>
-            </UiButton>
+              <!-- 微调能力 -->
+              <UiButton
+                appearance="soft"
+                tone="neutral"
+                density="compact"
+                block
+                type="button"
+                :disabled="busy"
+                @click="openCapabilityEditor(currentTestModalProvider, model)"
+              >
+                <i class="fa-solid fa-sliders text-[10px]" aria-hidden="true"></i>
+                <span>{{ $t('agent.settings.providers.capabilityEdit') }}</span>
+              </UiButton>
 
-            <!-- 快速测试连通性 -->
-            <UiButton
-              appearance="soft"
-              tone="neutral"
-              density="compact"
-              type="button"
-              :disabled="
-                busy ||
-                !currentTestModalProvider.enabled ||
-                testResults[testKey(currentTestModalProvider, model.id)]?.state === 'loading'
-              "
-              @click="testModel(currentTestModalProvider, model.id)"
-            >
-              <i class="fa-solid fa-vial text-[10px]" aria-hidden="true"></i>
-              <span>{{ $t('agent.settings.providers.test') }}</span>
-            </UiButton>
+              <!-- 快速测试连通性 -->
+              <UiButton
+                appearance="soft"
+                tone="neutral"
+                density="compact"
+                block
+                type="button"
+                :disabled="
+                  busy ||
+                  !currentTestModalProvider.enabled ||
+                  testResults[testKey(currentTestModalProvider, model.id)]?.state === 'loading'
+                "
+                @click="testModel(currentTestModalProvider, model.id)"
+              >
+                <i class="fa-solid fa-vial text-[10px]" aria-hidden="true"></i>
+                <span>{{ $t('agent.settings.providers.test') }}</span>
+              </UiButton>
 
-            <!-- 取消已添加模型 -->
-            <UiButton
-              type="button"
-              appearance="soft"
-              density="compact"
-              :tone="
-                currentTestModalProvider.models.length <= 1 ||
-                (currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)
-                  ? 'neutral'
-                  : 'danger'
-              "
-              :disabled="
-                busy ||
-                currentTestModalProvider.models.length <= 1 ||
-                (currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)
-              "
-              :title="
-                currentTestModalProvider.models.length <= 1
-                  ? $t('agent.settings.providers.atLeastOneModel')
-                  : currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId
-                    ? $t('agent.settings.providers.cannotRemoveDefault')
-                    : $t('agent.settings.providers.removeModel')
-              "
-              @click="removeConfiguredModel(currentTestModalProvider, model.id)"
-            >
-              <i class="fa-regular fa-trash-can text-[10px]"></i>
-              <span>{{ $t('agent.settings.providers.removeModel') }}</span>
-            </UiButton>
+              <!-- 取消已添加模型 -->
+              <UiButton
+                type="button"
+                appearance="soft"
+                density="compact"
+                block
+                :tone="
+                  currentTestModalProvider.models.length <= 1 ||
+                  (currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)
+                    ? 'neutral'
+                    : 'danger'
+                "
+                :disabled="
+                  busy ||
+                  currentTestModalProvider.models.length <= 1 ||
+                  (currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)
+                "
+                :title="
+                  currentTestModalProvider.models.length <= 1
+                    ? $t('agent.settings.providers.atLeastOneModel')
+                    : currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId
+                      ? $t('agent.settings.providers.cannotRemoveDefault')
+                      : $t('agent.settings.providers.removeModel')
+                "
+                @click="removeConfiguredModel(currentTestModalProvider, model.id)"
+              >
+                <i class="fa-regular fa-trash-can text-[10px]"></i>
+                <span>{{ $t('agent.settings.providers.removeModel') }}</span>
+              </UiButton>
+            </div>
           </div>
         </div>
 
