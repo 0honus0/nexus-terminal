@@ -46,7 +46,7 @@
     >
       <div class="min-w-0">
         <slot name="header">
-          <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
             <div class="flex min-w-0 items-center gap-2">
               <slot name="status-dot">
                 <span
