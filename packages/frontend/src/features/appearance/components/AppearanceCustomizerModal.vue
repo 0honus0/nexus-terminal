@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+  import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { UiButton } from '@/foundation/ui';
   import { useI18n } from 'vue-i18n';
   import BasicAppearancePanel from './BasicAppearancePanel.vue';
@@ -17,12 +17,22 @@
 
   const centerDialog = async (): Promise<void> => {
     await nextTick();
-    if (!props.visible || !root.value || !dialog.value) return;
-    const rootRect = root.value.getBoundingClientRect();
-    const dialogRect = dialog.value.getBoundingClientRect();
-    dialog.value.style.left = `${Math.max(0, (rootRect.width - dialogRect.width) / 2)}px`;
-    dialog.value.style.top = `${Math.max(0, (rootRect.height - dialogRect.height) / 2)}px`;
+    if (!dialog.value) return;
+    dialog.value.style.left = '';
+    dialog.value.style.top = '';
   };
+
+  const handleResize = (): void => {
+    if (!drag.active) {
+      void centerDialog();
+    }
+  };
+
+  onMounted(() => {
+    activeTab.value = 'ui';
+    void centerDialog();
+    window.addEventListener('resize', handleResize);
+  });
 
   watch(
     () => props.visible,
@@ -59,7 +69,10 @@
     document.removeEventListener('mouseup', stopDrag);
   };
 
-  onBeforeUnmount(stopDrag);
+  onBeforeUnmount(() => {
+    stopDrag();
+    window.removeEventListener('resize', handleResize);
+  });
 </script>
 
 <template>
@@ -68,7 +81,7 @@
       v-if="props.visible"
       ref="root"
       data-testid="style-customizer"
-      class="fixed inset-0 z-[1000]"
+      class="fixed inset-0 z-[1000] flex items-center justify-center"
       @click.self="emit('close')"
     >
       <div
