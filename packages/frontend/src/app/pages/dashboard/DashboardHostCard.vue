@@ -64,12 +64,16 @@
                 {{ name }}
               </component>
             </div>
-            <span v-if="address" class="truncate font-mono text-[13px] text-text-secondary" :title="address">
+            <span
+              v-if="address"
+              class="relative -translate-y-[2.5px] truncate font-mono text-[13px] text-text-secondary"
+              :title="address"
+            >
               {{ address }}
             </span>
             <span
               v-if="type"
-              class="self-center rounded border border-border/70 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary"
+              class="relative translate-y-[1.5px] self-center rounded border border-border/70 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary"
             >
               {{ type }}
             </span>
