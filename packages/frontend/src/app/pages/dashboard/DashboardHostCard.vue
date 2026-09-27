@@ -10,7 +10,6 @@
       type?: string;
       statusDotClass?: string;
       accentClass?: string;
-      accentTestId?: string;
     }>(),
     {
       as: 'div',
@@ -19,7 +18,6 @@
       type: undefined,
       statusDotClass: undefined,
       accentClass: undefined,
-      accentTestId: undefined,
     },
   );
 
@@ -31,12 +29,11 @@
 <template>
   <component
     :is="as"
-    class="group relative overflow-hidden rounded-none border border-border/60 bg-header/20 px-4 py-3.5 backdrop-blur-xs transition-colors hover:bg-header/35"
+    class="group relative overflow-hidden rounded-lg border border-border/60 bg-header/20 px-4 py-3.5 backdrop-blur-xs transition-colors hover:bg-header/35"
     :class="{ 'pl-4.5': hasAccent }"
   >
     <span
       v-if="accentClass"
-      :data-testid="accentTestId"
       class="absolute inset-y-0 left-0 w-1 transition-colors"
       :class="accentClass"
       aria-hidden="true"
@@ -61,7 +58,7 @@
               </slot>
               <component
                 :is="titleTag"
-                class="truncate text-base font-semibold tracking-tight text-foreground"
+                class="truncate text-lg font-semibold tracking-tight text-foreground"
                 :title="name"
               >
                 {{ name }}
