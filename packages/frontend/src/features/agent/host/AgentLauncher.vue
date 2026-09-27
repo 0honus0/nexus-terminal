@@ -9,13 +9,9 @@
 
   const position = computed(() => agentWindowManager.state.launcherPosition);
 
-  const HOLD_MS = 320;
-  const MOVE_CANCEL_PX = 10;
-  const RESET_VISIBLE_MS = 7000;
+  const DRAG_START_PX = 6;
 
   let pointerId: number | null = null;
-  let holdTimer: number | null = null;
-  let resetTimer: number | null = null;
   let originX = 0;
   let originY = 0;
   let startRight = 0;
@@ -23,7 +19,6 @@
   let hasMoved = false;
 
   const dragging = ref(false);
-  const resetVisible = ref(false);
 
   const badge = computed(() => {
     const summary = props.summary;
@@ -31,29 +26,13 @@
     return summary.totalRunningRuns + summary.totalPendingApprovals + summary.totalPendingBudgetRequests;
   });
 
-  const isDefaultPosition = computed(
-    () =>
-      position.value.right === agentWindowManager.defaultLauncherPosition.right &&
-      position.value.bottom === agentWindowManager.defaultLauncherPosition.bottom,
-  );
-
   const clamp = (right: number, bottom: number) => ({
     right: Math.max(12, Math.min(right, Math.max(12, window.innerWidth - 72))),
     bottom: Math.max(12, Math.min(bottom, Math.max(12, window.innerHeight - 72))),
   });
 
-  const clearHoldTimer = (): void => {
-    if (holdTimer !== null) window.clearTimeout(holdTimer);
-    holdTimer = null;
-  };
-
-  const clearResetTimer = (): void => {
-    if (resetTimer !== null) window.clearTimeout(resetTimer);
-    resetTimer = null;
-  };
-
   const pointerDown = (event: PointerEvent) => {
-    if (props.paused || event.button !== 0) return;
+    if (props.paused || event.button !== 0 || pointerId !== null) return;
     pointerId = event.pointerId;
     originX = event.clientX;
     originY = event.clientY;
@@ -61,30 +40,19 @@
     startBottom = position.value.bottom;
     hasMoved = false;
     dragging.value = false;
-    resetVisible.value = false;
-    clearHoldTimer();
     try {
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     } catch {
       // ignore
     }
-    holdTimer = window.setTimeout(() => {
-      holdTimer = null;
-      if (pointerId === event.pointerId && !hasMoved) dragging.value = true;
-    }, HOLD_MS);
   };
 
   const pointerMove = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
     const dx = event.clientX - originX;
     const dy = event.clientY - originY;
-    if (!dragging.value) {
-      if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
-        hasMoved = true;
-        clearHoldTimer();
-      }
-      return;
-    }
+    if (!dragging.value && Math.hypot(dx, dy) < DRAG_START_PX) return;
+    dragging.value = true;
     hasMoved = true;
     agentWindowManager.setLauncherPosition(clamp(startRight - dx, startBottom - dy));
   };
@@ -100,20 +68,11 @@
       }
     }
     pointerId = null;
-    clearHoldTimer();
     const wasDragging = dragging.value;
     dragging.value = false;
 
     if (wasDragging) {
       if (hasMoved) emit('layoutChange');
-      if (hasMoved && !isDefaultPosition.value) {
-        clearResetTimer();
-        resetVisible.value = true;
-        resetTimer = window.setTimeout(() => {
-          resetTimer = null;
-          resetVisible.value = false;
-        }, RESET_VISIBLE_MS);
-      }
       return;
     }
     if (hasMoved || props.paused) return;
@@ -132,23 +91,15 @@
     }
     const wasDragging = dragging.value;
     pointerId = null;
-    clearHoldTimer();
     dragging.value = false;
     if (wasDragging && hasMoved) agentWindowManager.setLauncherPosition(clamp(startRight, startBottom));
     hasMoved = true;
   };
 
-  const resetPosition = (): void => {
-    if (isDefaultPosition.value) return;
-    clearResetTimer();
-    resetVisible.value = false;
-    agentWindowManager.resetLauncherPosition();
-    emit('layoutChange');
-  };
-
   const onContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
-    resetPosition();
+    agentWindowManager.resetLauncherPosition();
+    emit('layoutChange');
   };
 
   const keydown = (event: KeyboardEvent) => {
@@ -167,8 +118,6 @@
   });
 
   onBeforeUnmount(() => {
-    clearHoldTimer();
-    clearResetTimer();
     window.removeEventListener('resize', handleViewportResize);
   });
 </script>
@@ -178,17 +127,6 @@
     class="fixed z-30 flex items-center gap-2"
     :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }"
   >
-    <button
-      v-if="resetVisible"
-      type="button"
-      data-agent-launcher-reset
-      class="flex h-7 items-center gap-1.5 rounded-full border border-border/70 bg-card/95 px-2.5 text-[11px] font-medium text-text-secondary shadow-sm backdrop-blur transition-colors hover:bg-header hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-      :title="$t('agent.launcher.resetHint')"
-      @click="resetPosition"
-    >
-      <i class="fa-solid fa-rotate-left text-[10px]" aria-hidden="true"></i>
-      <span>{{ $t('agent.launcher.reset') }}</span>
-    </button>
     <!-- 全局悬浮 Agent 呼出按钮（圆形微质感中性毛玻璃，非通体紫色，精致 AI 星芒矢量图标） -->
     <button
       type="button"

@@ -36,8 +36,6 @@ const MIN_WIDTH = 560;
  * readable rows even before the short-window composer compaction kicks in.
  */
 const MIN_HEIGHT = 480;
-// §2.8: the launcher's home position. Dragging it away is now an explicit long press, and this
-// constant is what the "reset position" entry restores to (see AgentLauncher.vue).
 const DEFAULT_LAUNCHER_POSITION = { right: 22, bottom: 24 } as const;
 
 const createDefaultState = (): AgentHubState => ({
@@ -169,9 +167,6 @@ export const createAgentWindowManager = () => {
       state.taskRailVisible = visible;
       logger.debug({ visible, ...logContext() }, 'Agent floating window task rail toggled');
     },
-    // §2.8: the home position that the launcher's "reset position" entry (and right-click)
-    // restores — dragging is an explicit long press now, see AgentLauncher.vue.
-    defaultLauncherPosition: { right: DEFAULT_LAUNCHER_POSITION.right, bottom: DEFAULT_LAUNCHER_POSITION.bottom },
     setLauncherPosition(position: { right: number; bottom: number }): void {
       preferredLauncherPosition = { ...position };
       state.launcherPosition = clampLauncherPosition(preferredLauncherPosition);

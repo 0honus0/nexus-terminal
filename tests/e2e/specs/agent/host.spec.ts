@@ -58,6 +58,87 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
   await expect(hub).toBeVisible();
 });
 
+test('Agent launcher moves immediately on drag and opens only on click', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  await page.goto('/connections');
+
+  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(launcher).toBeVisible();
+  const initial = await launcher.boundingBox();
+  expect(initial).toBeTruthy();
+
+  await page.mouse.move(initial!.x + initial!.width / 2, initial!.y + initial!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(initial!.x + initial!.width / 2 - 90, initial!.y + initial!.height / 2 - 80, { steps: 4 });
+  await page.mouse.up();
+
+  const moved = await launcher.boundingBox();
+  expect(moved).toBeTruthy();
+  expect(moved!.x).toBeLessThan(initial!.x - 60);
+  expect(moved!.y).toBeLessThan(initial!.y - 50);
+  await expect(hub).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reset position' })).toHaveCount(0);
+
+  await page.reload();
+  await expect(launcher).toBeVisible();
+  const restored = await launcher.boundingBox();
+  expect(restored).toBeTruthy();
+  expect(Math.abs(restored!.x - moved!.x)).toBeLessThan(2);
+  expect(Math.abs(restored!.y - moved!.y)).toBeLessThan(2);
+
+  await launcher.click({ button: 'right' });
+  const reset = await launcher.boundingBox();
+  expect(reset).toBeTruthy();
+  expect(Math.abs(reset!.x - initial!.x)).toBeLessThan(2);
+  expect(Math.abs(reset!.y - initial!.y)).toBeLessThan(2);
+
+  await launcher.click();
+  await expect(hub).toBeVisible();
+});
+
+test.describe('touch Agent launcher', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test('touch drag moves the launcher without opening the Hub', async ({ page, context }) => {
+    await loginAsInitialAdmin(context.request);
+    await setUiLanguage(context.request);
+    await enableAgentWithRecommendedNexusAgent(context.request);
+    await page.goto('/connections');
+
+    const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+    const hub = page.locator('section[aria-label="Agent"]');
+    await expect(launcher).toBeVisible();
+    const initial = await launcher.boundingBox();
+    expect(initial).toBeTruthy();
+    const startX = initial!.x + initial!.width / 2;
+    const startY = initial!.y + initial!.height / 2;
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y: startY }] });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: startX - 45, y: startY - 40 }],
+    });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: startX - 90, y: startY - 80 }],
+    });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+    const moved = await launcher.boundingBox();
+    expect(moved).toBeTruthy();
+    expect(moved!.x).toBeLessThan(initial!.x - 60);
+    expect(moved!.y).toBeLessThan(initial!.y - 50);
+    await expect(hub).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Reset position' })).toHaveCount(0);
+
+    await launcher.tap();
+    await expect(hub).toBeVisible();
+  });
+});
+
 test('Agent Hub native buttons keep a 24px physical pointer-target floor', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await setUiLanguage(context.request);
