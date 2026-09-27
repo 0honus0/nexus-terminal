@@ -271,6 +271,32 @@ test('mobile single-finger drag follows native touch scrolling direction and ret
   });
 });
 
+test('mobile drag scrolls interactive alternate-screen terminal applications', async ({ page, context }) => {
+  await connectMobileTerminal(page, context.request);
+  const rows = page.getByTestId('terminal').locator('.xterm-rows');
+  const commandInput = page.getByTestId('command-input');
+  await commandInput.fill(
+    "printf '\\033[?1049hALT_READY\\n'; IFS= read -r -s -n 3; printf '\\033[?1049lALT_SCROLL_RECEIVED\\n'",
+  );
+  await commandInput.press('Enter');
+  await expect.poll(async () => rows.innerText()).toContain('ALT_READY');
+  await swipeTerminal(page, -40);
+  await expect.poll(async () => rows.innerText()).toContain('ALT_SCROLL_RECEIVED');
+});
+
+test('mobile drag reaches terminal applications that request mouse wheel events', async ({ page, context }) => {
+  await connectMobileTerminal(page, context.request);
+  const rows = page.getByTestId('terminal').locator('.xterm-rows');
+  const commandInput = page.getByTestId('command-input');
+  await commandInput.fill(
+    "printf '\\033[?1000h\\033[?1006hMOUSE_READY\\n'; IFS= read -r -s -d M; printf '\\033[?1000l\\033[?1006lMOUSE_SCROLL_RECEIVED\\n'",
+  );
+  await commandInput.press('Enter');
+  await expect.poll(async () => rows.innerText()).toContain('MOUSE_READY');
+  await swipeTerminal(page, -40);
+  await expect.poll(async () => rows.innerText()).toContain('MOUSE_SCROLL_RECEIVED');
+});
+
 test('mobile pinch zoom persists the mobile terminal font size even when the tab closes immediately', async ({
   page,
   context,

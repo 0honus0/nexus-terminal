@@ -399,7 +399,7 @@
     return Math.max(1, (screenHeight || fallbackHeight || rows * 16) / rows);
   };
 
-  const scrollTerminalFromMobileDrag = (deltaPixels: number): void => {
+  const scrollTerminalFromMobileDrag = (deltaPixels: number, clientX: number, clientY: number): void => {
     if (!terminal || !Number.isFinite(deltaPixels) || deltaPixels === 0) return;
     mobileTouchScrollRemainder += deltaPixels;
     const rowHeight = terminalTouchRowHeight();
@@ -409,6 +409,21 @@
         : Math.ceil(mobileTouchScrollRemainder / rowHeight);
     if (lines === 0) return;
     mobileTouchScrollRemainder -= lines * rowHeight;
+    if (terminal.buffer.active.type === 'alternate' || terminal.element?.classList.contains('enable-mouse-events')) {
+      for (let index = 0; index < Math.abs(lines); index += 1) {
+        terminal.element?.dispatchEvent(
+          new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            clientX,
+            clientY,
+            deltaMode: WheelEvent.DOM_DELTA_LINE,
+            deltaY: Math.sign(lines),
+          }),
+        );
+      }
+      return;
+    }
     terminal.scrollLines(lines);
     if (lines < 0 && terminal.buffer.active.viewportY <= historyLoadThreshold()) void loadPreviousOutput();
   };
@@ -840,7 +855,7 @@
         // touch gestures into its custom scrollable element, so keep this behavior explicit here.
         const deltaPixels = mobileTouchScrollLastY - touch.clientY;
         mobileTouchScrollLastY = touch.clientY;
-        scrollTerminalFromMobileDrag(deltaPixels);
+        scrollTerminalFromMobileDrag(deltaPixels, touch.clientX, touch.clientY);
       }
       return;
     }
