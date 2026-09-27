@@ -17,6 +17,7 @@
   import { DialogHost, NotificationHost, RuntimeErrorBoundary } from '@/shared/feedback/public';
   import { authenticatedSessionLifecycle, type AuthenticatedSessionDispatch } from '@/shared/session/public';
   import { provideRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
+  import { setLocale } from './i18n';
   import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
   const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
@@ -52,6 +53,13 @@
   const appearance = useAppearance();
   const appearanceCustomizerVisible = appearance.customizerVisible;
   const preferences = usePreferences();
+  watch(
+    [preferences.loaded, () => preferences.values.value.language],
+    ([loaded, language]) => {
+      if (loaded) setLocale(language);
+    },
+    { immediate: true },
+  );
   const authenticatedPageCacheGeneration = ref(0);
   const remoteDesktopConnection = remoteDesktopLauncher.connection;
   const remoteDesktopVisible = remoteDesktopLauncher.visible;

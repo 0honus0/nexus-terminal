@@ -25,6 +25,8 @@ test('system settings persist timezone and language changes through the UI', asy
     await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
     await expect(page.locator('#settings-panel-system')).toBeVisible();
     await expect(page.locator('#languageSelect')).toBeVisible();
+    await expect(page.locator('#languageSelect')).toHaveValue('en-US');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
     await expect(page.locator('#timezoneSelect')).toBeVisible();
     await captureFunctionalScreenshot(page, 'system-settings.png', { viewport: { width: 1440, height: 900 } });
 
@@ -55,6 +57,7 @@ test('system settings persist timezone and language changes through the UI', asy
       await languageForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
       await expect(language).toHaveValue(TARGET_LANGUAGE);
+      await expect(page.locator('html')).toHaveAttribute('lang', TARGET_LANGUAGE);
 
       const persisted = await context.request.get('/api/v1/settings');
       expect(persisted.ok()).toBeTruthy();
@@ -67,6 +70,16 @@ test('system settings persist timezone and language changes through the UI', asy
       await expect(page.locator('#settings-panel-system')).toBeVisible();
       await expect(page.locator('#timezoneSelect')).toHaveValue(TARGET_TIMEZONE);
       await expect(page.locator('#languageSelect')).toHaveValue(TARGET_LANGUAGE);
+      await expect(page.locator('html')).toHaveAttribute('lang', TARGET_LANGUAGE);
+    });
+
+    await step('server language overrides the previous browser language on reload', async () => {
+      const updated = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+      expect(updated.ok()).toBeTruthy();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
+      await expect(page.locator('#languageSelect')).toHaveValue('en-US');
+      await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
     });
   } finally {
     const restore = await context.request.put('/api/v1/settings', {

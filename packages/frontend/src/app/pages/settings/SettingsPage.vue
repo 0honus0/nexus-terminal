@@ -5,14 +5,10 @@
   import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
   import { AgentSettingsPanel } from '@/features/agent/public';
   import { BackupSettingsPanel } from '@/features/backup/public';
-  import {
-    loadPreferencesSettingsPanel,
-    loadWorkspacePreferencesPanel,
-    type PreferencesDto,
-  } from '@/features/preferences/public';
+  import { loadPreferencesSettingsPanel, loadWorkspacePreferencesPanel } from '@/features/preferences/public';
   import { SecuritySettingsPanel } from '@/features/security/public';
   import { useAuthSession } from '@/features/auth/public';
-  import { setLocale, supportedLocales } from '@/app/i18n';
+  import { supportedLocales } from '@/app/i18n';
   import AboutPanel from './AboutPanel.vue';
   import packageJson from '../../../../package.json';
 
@@ -218,10 +214,6 @@
     event.preventDefault();
     selectTab(target);
     focusTab(surface, target);
-  };
-
-  const handlePreferencesSaved = (preferences: PreferencesDto) => {
-    setLocale(preferences.language);
   };
 </script>
 
@@ -467,7 +459,6 @@
               :aria-label="tabLabel('system')"
               section="system"
               :locales="supportedLocales"
-              @saved="handlePreferencesSaved"
             />
             <SecuritySettingsPanel
               v-if="visited.has('security')"

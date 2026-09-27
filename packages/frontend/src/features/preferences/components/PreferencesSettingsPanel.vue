@@ -16,7 +16,6 @@
     locales: () => ['en-US', 'zh-CN', 'ja-JP'],
     section: 'all',
   });
-  const emit = defineEmits<{ saved: [preferences: PreferencesDto] }>();
   const preferences = usePreferences();
   const form = reactive<PreferencesDto>({ ...preferences.values.value });
   const dirty = ref(false);
@@ -116,7 +115,6 @@
     try {
       await preferences.update(patch);
       refreshDirtyState();
-      emit('saved', { ...preferences.values.value });
       const message = t('settings.preferences.saved');
       sectionMessages[sectionId] = { text: message, success: true };
       feedback.notifySuccess(message);
