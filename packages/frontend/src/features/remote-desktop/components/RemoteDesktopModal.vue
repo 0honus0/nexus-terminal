@@ -3,7 +3,7 @@
   import Guacamole from 'guacamole-common-js';
   import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
   import { useI18n } from 'vue-i18n';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   import { readStoredValue, stringStorageCodec, useDeviceCapabilities, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
   import { apiErrorMessage } from '@/client/http';
@@ -371,7 +371,7 @@
     minHeight: minPanelHeight,
     maxWidth: maxPanelWidth,
     maxHeight: maxPanelHeight,
-    // OverlayPanel keeps this surface centered while its size changes. Without the
+    // UiOverlayPanel keeps this surface centered while its size changes. Without the
     // 2x compensation the visible bottom-right corner only follows half of the
     // pointer movement because both opposite edges move around the fixed center.
     widthMultiplier: 2,
@@ -551,7 +551,7 @@
     </button>
   </Teleport>
 
-  <OverlayPanel
+  <UiOverlayPanel
     :data-testid="connection?.type === 'VNC' ? 'vnc-modal' : 'remote-desktop-modal'"
     :visible="visible && !minimized"
     :keep-mounted="true"
@@ -800,7 +800,7 @@
         @pointerdown.stop="resize.startResize"
       ></button>
     </div>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>
 
 <style scoped>

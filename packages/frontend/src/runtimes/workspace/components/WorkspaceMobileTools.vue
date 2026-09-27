@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { defineAsyncComponent, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   import { VirtualKeyboard, type TerminalChannel } from '@/features/terminal/public';
   import { loadQuickCommandsPanel, type ExecuteCommandIntent } from '@/features/quick-commands/public';
   import { loadStatusMonitor, type StatusMonitorSessionController } from '@/features/status-monitor/public';
@@ -142,7 +142,7 @@
     />
   </div>
 
-  <OverlayPanel
+  <UiOverlayPanel
     :visible="quickCommandsVisible"
     teleport
     preset="standard-modal"
@@ -177,9 +177,9 @@
         @execute="executeQuickCommand"
       />
     </div>
-  </OverlayPanel>
+  </UiOverlayPanel>
 
-  <OverlayPanel
+  <UiOverlayPanel
     data-testid="status-monitor-modal"
     :visible="statusVisible"
     teleport
@@ -209,5 +209,5 @@
       :host="statusHost"
       @update:scale="emit('statusScale', $event)"
     />
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>

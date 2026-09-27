@@ -3,7 +3,7 @@
   import { useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { createLatestValueSaver } from '@/foundation/async';
   import { useFeedback } from '@/shared/feedback/public';
@@ -875,7 +875,7 @@
       @remove="removeProgressTask"
     />
 
-    <OverlayPanel
+    <UiOverlayPanel
       :visible="connectionPickerVisible"
       :close-on-escape="true"
       panel-class="max-h-[80dvh] max-w-md p-6"
@@ -902,7 +902,7 @@
       <div class="max-h-[calc(80dvh-7rem)] overflow-y-auto rounded border border-border">
         <WorkspaceConnectionList @open="openConnectionFromPicker" @open-many="openConnectionsFromPicker" />
       </div>
-    </OverlayPanel>
+    </UiOverlayPanel>
 
     <template v-if="!registry.orderedSessions.value.length">
       <div

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   const props = defineProps<{ visible: boolean; path?: string }>();
   const emit = defineEmits<{ resolve: [strategy: 'overwrite' | 'skip', applyToAll: boolean] }>();
   const { t } = useI18n();
@@ -15,7 +15,7 @@
   );
 </script>
 <template>
-  <OverlayPanel
+  <UiOverlayPanel
     :visible="visible"
     :z-index="1200"
     :close-on-backdrop="false"
@@ -61,5 +61,5 @@
         {{ t('fileManager.uploadConflict.overwrite') }}
       </button>
     </div>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { defineAsyncComponent } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   const SuspendedSessionsPanel = defineAsyncComponent(() => import('./SuspendedSessionsPanel.vue'));
   import type { MarkedSuspendedSessionState, SuspendedSessionDto } from '../model/sshSuspend';
 
@@ -22,7 +22,7 @@
 </script>
 
 <template>
-  <OverlayPanel
+  <UiOverlayPanel
     data-testid="suspended-sessions-modal"
     :visible="visible"
     teleport
@@ -77,5 +77,5 @@
         @removed="emit('close')"
       />
     </div>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>

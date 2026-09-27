@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition } from '@/foundation/interaction';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import type { ProgressSource, TransferTask } from '../model/transfer';
   import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
@@ -201,7 +201,7 @@
 </script>
 
 <template>
-  <OverlayPanel
+  <UiOverlayPanel
     :visible="visible"
     :overlay="true"
     :teleport="true"
@@ -536,7 +536,7 @@
         </div>
       </div>
     </section>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>
 
 <style scoped>

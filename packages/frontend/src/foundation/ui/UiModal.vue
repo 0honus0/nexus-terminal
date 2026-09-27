@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import type { StyleValue } from 'vue';
-  import OverlayPanel from './OverlayPanel.vue';
+  import UiOverlayPanel from './UiOverlayPanel.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -38,7 +38,7 @@
 </script>
 
 <template>
-  <OverlayPanel
+  <UiOverlayPanel
     :visible="props.visible"
     data-ui="modal"
     data-ui-gen="2"
@@ -76,5 +76,5 @@
     <footer v-if="$slots.footer" class="shrink-0 border-t border-border pt-3">
       <slot name="footer" />
     </footer>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>

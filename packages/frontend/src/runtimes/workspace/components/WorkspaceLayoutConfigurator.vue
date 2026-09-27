@@ -3,7 +3,7 @@
   import draggable from 'vuedraggable';
   import { useI18n } from 'vue-i18n';
   import { structurallyEqual } from '@/foundation/data';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
   import {
@@ -142,7 +142,7 @@
 </script>
 
 <template>
-  <OverlayPanel
+  <UiOverlayPanel
     :visible="visible"
     :z-index="1000"
     :surface="false"
@@ -346,7 +346,7 @@
         </button>
       </footer>
     </div>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>
 
 <style scoped>

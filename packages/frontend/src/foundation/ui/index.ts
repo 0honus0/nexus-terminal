@@ -1,12 +1,11 @@
-export { default as OverlayPanel } from './OverlayPanel.vue';
+export { default as UiOverlayPanel } from './UiOverlayPanel.vue';
 export { overlayStack } from './overlayStack';
 export type { OverlayStackRegistration } from './overlayStack';
-export { default as TokenInput } from './TokenInput.vue';
-export type { TokenOption } from './TokenInput.vue';
+export { default as UiTokenInput } from './UiTokenInput.vue';
+export type { UiTokenOption } from './UiTokenInput.vue';
 export { default as UiBadge } from './UiBadge.vue';
 export { default as UiButton } from './UiButton.vue';
 export { default as UiCheckbox } from './UiCheckbox.vue';
-export { default as UiCombobox } from './UiCombobox.vue';
 export { default as UiContextMenu } from './UiContextMenu.vue';
 export { default as UiDialog } from './UiDialog.vue';
 export { default as UiEmptyState } from './UiEmptyState.vue';
@@ -23,12 +22,4 @@ export { default as UiSurface } from './UiSurface.vue';
 export { default as UiSwitch } from './UiSwitch.vue';
 export { default as UiTable } from './UiTable.vue';
 export { default as UiTextarea } from './UiTextarea.vue';
-export type {
-  UiAppearance,
-  UiComboboxOption,
-  UiDensity,
-  UiSelectOption,
-  UiSelectValue,
-  UiSurfaceKind,
-  UiTone,
-} from './uiTypes';
+export type { UiAppearance, UiDensity, UiSelectOption, UiSelectValue, UiSurfaceKind, UiTone } from './uiTypes';

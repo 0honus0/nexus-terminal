@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   import { apiErrorMessage } from '@/client/http';
   import { useFeedback } from '@/shared/feedback/public';
   import { useRuntimeFeatureCapabilities, type ConnectionDto } from '@/shared/capabilities/public';
@@ -173,7 +173,7 @@
 </script>
 
 <template>
-  <OverlayPanel
+  <UiOverlayPanel
     :visible="visible"
     :z-index="70"
     panel-class="max-w-2xl max-h-[90vh] flex flex-col p-6"
@@ -353,5 +353,5 @@
         >{{ t('sendFilesModal.sendButton') }}
       </button>
     </div>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>

@@ -8,7 +8,7 @@
 - TypeScript `strict` 与 `noUncheckedIndexedAccess`。
 - HTTP 数据通过 `client/` 进入应用，业务代码使用 camelCase contract。
 - 终端、上传和 Workspace 使用明确的 WebSocket protocol/session owner。
-- Foundation UI 统一使用 `Ui*` 组件；自定义窗口表面使用 `OverlayPanel` 组合。
+- Foundation UI 统一使用 `Ui*` 组件；自定义窗口表面使用 `UiOverlayPanel` 组合。
 
 ## 源码布局
 
@@ -82,7 +82,7 @@ packages/frontend/src/
 
 Foundation 提供无产品领域含义、可独立复用的能力：异步控制、浏览器 API、数据工具、交互 primitive 和 UI primitive。它不能依赖 `shared`、`features`、`runtimes` 或 `app`。
 
-`foundation/ui` 是统一设计系统。表单、反馈、表格和弹层优先使用 `UiButton`、`UiInput`、`UiTextarea`、`UiSelect`、`UiNativeSelect`、`UiCombobox`、`UiCheckbox`、`UiFormField`、`UiModal`、`UiSpinner`、`UiBadge`、`UiTable`、`UiContextMenu`。需要自有标题栏、拖动、缩放或全屏语义的窗口以 `OverlayPanel` 为表面组合自己的 chrome。
+`foundation/ui` 是统一设计系统。表单、反馈、表格和弹层优先使用 `UiButton`、`UiInput`、`UiTextarea`、`UiSelect`、`UiNativeSelect`、`UiTokenInput`、`UiCheckbox`、`UiFormField`、`UiModal`、`UiSpinner`、`UiBadge`、`UiTable`、`UiContextMenu`。需要自有标题栏、拖动、缩放或全屏语义的窗口以 `UiOverlayPanel` 为表面组合自己的 chrome。
 
 ### `shared/`
 

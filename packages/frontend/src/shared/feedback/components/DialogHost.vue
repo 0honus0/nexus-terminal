@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel } from '@/foundation/ui';
   import { useDialogStore } from '../store/dialog.store';
 
   const store = useDialogStore();
@@ -24,7 +24,7 @@
 </script>
 
 <template>
-  <OverlayPanel
+  <UiOverlayPanel
     :visible="store.state.visible"
     teleport
     :z-index="9999"
@@ -84,5 +84,5 @@
         {{ primaryText }}
       </button>
     </div>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>

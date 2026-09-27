@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiNativeSelect, OverlayPanel } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiNativeSelect, UiOverlayPanel } from '@/foundation/ui';
   import { useDraggablePosition, usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
@@ -418,7 +418,7 @@
     maxHeight: fileManagerPopupAvailableHeight,
     active: computed(() => fileManagerPopupVisible.value),
     enabled: () => !props.mobile,
-    // OverlayPanel centers the popup. Double the pointer delta so the visible
+    // UiOverlayPanel centers the popup. Double the pointer delta so the visible
     // bottom-right corner follows the resize handle rather than moving at half speed.
     widthMultiplier: 2,
     heightMultiplier: 2,
@@ -1360,7 +1360,7 @@
       @resolve="transfers.resolveConflict"
     />
 
-    <OverlayPanel
+    <UiOverlayPanel
       data-testid="file-manager-modal"
       :data-workspace-id="session.id"
       :data-workspace-active="active !== false ? 'true' : undefined"
@@ -1443,9 +1443,9 @@
           class="pointer-events-none absolute bottom-1 right-1 h-2.5 w-2.5 border-b-2 border-r-2 border-text-secondary/70"
         ></span>
       </button>
-    </OverlayPanel>
+    </UiOverlayPanel>
 
-    <OverlayPanel
+    <UiOverlayPanel
       data-testid="document-popup"
       :data-workspace-id="session.id"
       :data-workspace-active="active !== false ? 'true' : undefined"
@@ -1516,9 +1516,9 @@
           />
         </RuntimeErrorBoundary>
       </div>
-    </OverlayPanel>
+    </UiOverlayPanel>
 
-    <OverlayPanel
+    <UiOverlayPanel
       v-if="archiveDialog && archivePasswordRequired"
       :visible="true"
       :z-index="1100"
@@ -1625,7 +1625,7 @@
           </button>
         </div>
       </form>
-    </OverlayPanel>
+    </UiOverlayPanel>
 
     <UiModal
       v-else

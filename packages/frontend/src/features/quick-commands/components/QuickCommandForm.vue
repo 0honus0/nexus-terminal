@@ -3,7 +3,15 @@
   import { useI18n } from 'vue-i18n';
   import { useFeedback } from '@/shared/feedback/public';
   import { useResizeHandle } from '@/foundation/interaction';
-  import { UiButton, UiFormField, UiInput, UiModal, UiTextarea, TokenInput, type TokenOption } from '@/foundation/ui';
+  import {
+    UiButton,
+    UiFormField,
+    UiInput,
+    UiModal,
+    UiTextarea,
+    UiTokenInput,
+    type UiTokenOption,
+  } from '@/foundation/ui';
   import type { QuickCommandDto, QuickCommandFormInput, QuickCommandTagDto } from '../model/quickCommand';
   import { useQuickCommandsStore } from '../store/quickCommands.store';
 
@@ -97,7 +105,7 @@
     { immediate: true },
   );
 
-  const options = () => props.tags.map<TokenOption>((tag) => ({ value: String(tag.id), label: tag.name }));
+  const options = () => props.tags.map<UiTokenOption>((tag) => ({ value: String(tag.id), label: tag.name }));
   const createTag = async (name: string) => {
     const normalized = name.trim();
     if (!normalized) return;
@@ -113,7 +121,7 @@
       );
     }
   };
-  const deleteTag = async (option: TokenOption) => {
+  const deleteTag = async (option: UiTokenOption) => {
     const id = Number(option.value);
     const tag = props.tags.find((item) => item.id === id);
     if (!tag) return;
@@ -233,7 +241,7 @@
       </UiFormField>
 
       <UiFormField :label="t('quickCommands.form.tags')">
-        <TokenInput
+        <UiTokenInput
           :model-value="form.tagIds.map(String)"
           input-test-id="tag-input-text"
           token-test-id="tag-chip"

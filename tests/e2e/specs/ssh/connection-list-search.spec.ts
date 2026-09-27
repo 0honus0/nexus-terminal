@@ -170,7 +170,7 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 
   let tagId = 0;
   await step(
-    'connection editor creates a long tag, Backspace only removes it locally, and exact Enter reselects it',
+    'connection editor creates a long tag, Backspace removes it locally, and keyboard selection reselects it',
     async () => {
       const primaryRow = list.locator(`li[data-connection-id="${primaryId}"]`);
       await primaryRow.click({ button: 'right' });
@@ -178,6 +178,14 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
       const form = page.getByTestId('connection-form');
       await expect(form).toBeVisible();
       const tagInput = form.getByTestId('tag-input-text');
+      await tagInput.fill(WORKSPACE_TAG);
+      await tagInput.press('ArrowDown');
+      await expect(tagInput).toHaveAttribute('aria-expanded', 'true');
+      await tagInput.press('Enter');
+      await expect(form.getByTestId('tag-chip').filter({ hasText: WORKSPACE_TAG })).toBeVisible();
+
+      await tagInput.press('Backspace');
+      await expect(form.getByTestId('tag-chip').filter({ hasText: WORKSPACE_TAG })).toHaveCount(0);
       await tagInput.fill(WORKSPACE_TAG);
       await tagInput.press('Enter');
       await expect

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiContextMenu, UiSpinner, OverlayPanel } from '@/foundation/ui';
+  import { UiContextMenu, UiSpinner, UiOverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { writeClipboardText } from '@/foundation/browser';
   import { createWheelScaleResolver, useLongPressGesture } from '@/foundation/interaction';
@@ -2031,7 +2031,7 @@
       </div>
     </UiContextMenu>
 
-    <OverlayPanel
+    <UiOverlayPanel
       :visible="Boolean(action)"
       :z-index="100"
       :close-on-escape="true"
@@ -2098,7 +2098,7 @@
           {{ actionConfirmLabel }}
         </button>
       </div>
-    </OverlayPanel>
+    </UiOverlayPanel>
     <FilesystemCatalogModal
       :visible="catalogVisible"
       :current-path="browser.path.value"

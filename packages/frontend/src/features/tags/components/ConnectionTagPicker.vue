@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { TokenInput, type TokenOption } from '@/foundation/ui';
+  import { UiTokenInput, type UiTokenOption } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useConnectionTags } from '../composables/useConnectionTags';
 
@@ -17,13 +17,13 @@
         feedback.notifyError(t('tags.error', { error: cause instanceof Error ? cause.message : String(cause) })),
       );
   });
-  const options = computed<TokenOption[]>(() => tags.tags.value.map((tag) => ({ value: tag.id, label: tag.name })));
+  const options = computed<UiTokenOption[]>(() => tags.tags.value.map((tag) => ({ value: tag.id, label: tag.name })));
   const create = async (name: string) => {
     const existing = tags.tags.value.find((tag) => tag.name.toLowerCase() === name.trim().toLowerCase());
     const tag = existing ?? (await tags.create(name));
     if (!model.value.includes(tag.id)) model.value = [...model.value, tag.id];
   };
-  const deleteGlobally = async (option: TokenOption) => {
+  const deleteGlobally = async (option: UiTokenOption) => {
     const tag = tags.tags.value.find((item) => item.id === Number(option.value));
     if (!tag) return;
     if (!(await feedback.confirm({ message: t('tags.prompts.confirmDelete', { name: tag.name }), destructive: true })))
@@ -41,7 +41,7 @@
 </script>
 
 <template>
-  <TokenInput
+  <UiTokenInput
     v-model="model"
     :options="options"
     :placeholder="t('tags.inputPlaceholder')"

@@ -61,7 +61,7 @@
           </div>
           <UiButton appearance="ghost" tone="neutral" density="compact" :loading="true">Loading</UiButton>
         </div>
-        <div class="grid gap-4">
+        <div class="ui-gallery-glass-stage grid gap-4 rounded-xl p-4 sm:p-5">
           <div v-for="appearance in appearances" :key="appearance" class="flex flex-wrap items-center gap-2.5">
             <span class="w-14 shrink-0 text-[11px] font-medium text-text-secondary">{{ appearance }}</span>
             <UiButton v-for="tone in tones" :key="tone" :appearance="appearance" :tone="tone">
@@ -288,3 +288,12 @@
     </div>
   </main>
 </template>
+
+<style scoped>
+  .ui-gallery-glass-stage {
+    background:
+      radial-gradient(circle at 14% 25%, rgb(110 190 222 / 65%), transparent 37%),
+      radial-gradient(circle at 83% 78%, rgb(226 172 133 / 60%), transparent 43%),
+      linear-gradient(120deg, #dfe9f2, #f4e8e0);
+  }
+</style>

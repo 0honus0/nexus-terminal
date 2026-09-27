@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiContextMenu, OverlayPanel } from '@/foundation/ui';
+  import { UiContextMenu, UiOverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { useLongPressGesture } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
@@ -296,7 +296,7 @@
     </button>
   </UiContextMenu>
 
-  <OverlayPanel
+  <UiOverlayPanel
     :visible="formVisible"
     :z-index="60"
     panel-class="max-w-md flex flex-col p-6"
@@ -358,7 +358,7 @@
         {{ saving ? t('common.saving') : t('common.save') }}
       </button>
     </div>
-  </OverlayPanel>
+  </UiOverlayPanel>
 </template>
 
 <style scoped>

@@ -183,25 +183,19 @@ select:focus:not([data-no-highlight]):not(.no-highlight) {
 }
 
 @layer components {
-  /*
-   * Canonical glass recipe — the single source of truth for every translucent
-   * surface: Agent popovers (files/AgentConfigPopover.vue), Gen2 popover /
-   * combobox / select / dialog and the UI gallery samples. Components opt in
-   * with the class; nothing repeats fill / blur / border / shadow by hand.
-   * Keep this recipe centralized so component-specific glass styles cannot drift.
-   */
   :root {
-    --glass-fill: color-mix(in srgb, var(--card-bg-color) 70%, transparent);
-    --glass-backdrop-filter: blur(12px);
-    --glass-border-color: color-mix(in srgb, var(--border-color) 35%, transparent);
-    --glass-inset-highlight: inset 0 1px 0 0 color-mix(in srgb, 255 255 255 / 20%, transparent);
+    --glass-fill: color-mix(in srgb, var(--card-bg-color) 64%, transparent);
+    --glass-backdrop-filter: blur(14px) saturate(155%);
+    --glass-border-color: color-mix(in srgb, var(--border-color) 38%, rgb(255 255 255 / 26%));
+    --glass-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 40%);
     --glass-shadow:
-      var(--glass-inset-highlight), 0 0 0 1px color-mix(in srgb, var(--border-color) 35%, transparent),
-      0 24px 48px -24px color-mix(in srgb, var(--text-color) 32%, transparent);
+      var(--glass-inset-highlight), inset 0 -1px 0 rgb(0 0 0 / 5%),
+      0 14px 32px -20px color-mix(in srgb, var(--text-color) 28%, transparent);
   }
 
   .glass-surface {
     background-color: var(--glass-fill);
+    background-image: radial-gradient(110% 70% at 50% -25%, rgb(255 255 255 / 14%), transparent 75%);
     -webkit-backdrop-filter: var(--glass-backdrop-filter);
     backdrop-filter: var(--glass-backdrop-filter);
     border: 1px solid var(--glass-border-color);
