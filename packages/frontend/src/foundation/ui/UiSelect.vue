@@ -10,7 +10,7 @@
     SelectTrigger,
     SelectViewport,
   } from 'reka-ui';
-  import { computed, useAttrs } from 'vue';
+  import { computed, ref, useAttrs } from 'vue';
   import type { UiDensity, UiSelectOption, UiSelectValue } from './uiTypes';
 
   // The wrapper div only owns layout classes; every other attribute (notably
@@ -35,6 +35,8 @@
       disabled?: boolean;
       invalid?: boolean;
       align?: 'start' | 'center' | 'end';
+      textAlign?: 'start' | 'center' | 'end';
+      matchTriggerWidth?: boolean;
       panelClass?: string;
       name?: string;
       hideIndicator?: boolean;
@@ -49,6 +51,8 @@
       disabled: false,
       invalid: false,
       align: 'start',
+      textAlign: 'start',
+      matchTriggerWidth: false,
       panelClass: '',
       hideIndicator: true,
       triggerClass: '',
@@ -68,6 +72,8 @@
   const internalModelValue = computed(() => (props.modelValue === '' ? emptyValueSentinel.value : props.modelValue));
   const internalOptionValue = (value: UiSelectValue): UiSelectValue =>
     value === '' ? emptyValueSentinel.value : value;
+
+  const open = ref(false);
 
   const selectedLabel = computed(() => {
     const selected = props.options.find((option) => option.value === props.modelValue);
@@ -94,9 +100,12 @@
     :data-density="props.density"
     :data-invalid="props.invalid || undefined"
     :data-disabled="props.disabled || undefined"
+    :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
+    :data-state="open ? 'open' : 'closed'"
     class="ui-select"
   >
     <SelectRoot
+      v-model:open="open"
       :model-value="internalModelValue"
       :disabled="props.disabled"
       :name="props.name"
@@ -106,6 +115,7 @@
         v-bind="triggerAttrs"
         data-no-highlight=""
         :data-value="props.modelValue == null ? '' : String(props.modelValue)"
+        :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
         :aria-invalid="props.invalid || undefined"
         class="ui-control ui-focusable ui-select__trigger"
         :class="[
@@ -133,11 +143,14 @@
           :data-testid="props.panelTestId"
           :data-density="props.density"
           :data-hide-indicator="props.hideIndicator || undefined"
+          :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
+          :data-match-trigger-width="props.matchTriggerWidth || undefined"
           position="popper"
           :align="props.align"
-          :side-offset="6"
+          :side-offset="0"
           :collision-padding="12"
           :avoid-collisions="true"
+          :body-lock="false"
           class="ui-surface ui-radius--panel ui-select__panel glass-surface"
           :class="[{ 'ui-select__panel--no-indicator': props.hideIndicator }, props.panelClass]"
         >
@@ -153,7 +166,7 @@
               :value="internalOptionValue(option.value)"
               :disabled="option.disabled"
               :text-value="option.label"
-              class="ui-select__item ui-focusable"
+              class="ui-select__item"
             >
               <span v-if="!props.hideIndicator" class="ui-select__item-indicator">
                 <SelectItemIndicator>

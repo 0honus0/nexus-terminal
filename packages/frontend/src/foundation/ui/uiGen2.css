@@ -1094,9 +1094,29 @@
   background: var(--ui-fill-inset-hover);
 }
 
+/*
+ * The open trigger borrows the canonical glass recipe (app/styles/global.css)
+ * so the control and the panel that it opens read as one surface. Only the
+ * geometry and the focus ring stay local.
+ */
+.ui-select[data-state='open'] .ui-select__trigger,
 .ui-select__trigger[data-state='open'] {
-  border-color: var(--ui-focus-color);
-  box-shadow: var(--ui-shadow-inset), var(--ui-focus-ring);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-color: var(--glass-border-color);
+  border-bottom-color: color-mix(in srgb, var(--border-color) 45%, transparent);
+  background-color: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-backdrop-filter);
+  backdrop-filter: var(--glass-backdrop-filter);
+  box-shadow: var(--glass-inset-highlight);
+  position: relative;
+  z-index: 86;
+}
+
+.ui-select__trigger:focus-visible {
+  outline: none;
+  border-color: var(--ui-hairline-strong);
+  box-shadow: none;
 }
 
 .ui-select__trigger--invalid {
@@ -1147,13 +1167,64 @@
 
 .ui-select__panel {
   z-index: 85;
-  min-width: max(var(--reka-select-trigger-width, 160px), 160px);
+  width: var(--reka-select-trigger-width, max-content);
+  min-width: var(--reka-select-trigger-width, 0px);
   max-width: min(var(--reka-select-content-available-width, calc(100vw - 24px)), calc(100vw - 24px));
   overflow: hidden;
   padding: 4px;
+  border: 1px solid var(--glass-border-color);
+  border-top-width: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: var(--ui-control-radius);
+  border-bottom-right-radius: var(--ui-control-radius);
+  background-color: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-backdrop-filter);
+  backdrop-filter: var(--glass-backdrop-filter);
+  box-shadow: var(--glass-shadow);
   color: var(--ui-text);
   outline: none;
   overscroll-behavior: contain;
+}
+
+.ui-select__panel[data-state='open'] {
+  animation: ui-gen2-combobox-in var(--ui-motion-duration) var(--ui-motion-ease);
+}
+
+.ui-select__panel[data-side='top'] {
+  border-top-width: 1px;
+  border-bottom-width: 0;
+  border-top-left-radius: var(--ui-control-radius);
+  border-top-right-radius: var(--ui-control-radius);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.ui-select__panel[data-match-trigger-width] {
+  width: var(--reka-select-trigger-width, 100%);
+  min-width: 0;
+  max-width: var(--reka-select-trigger-width, 100%);
+}
+
+.ui-select[data-text-align='center'] .ui-select__value,
+.ui-select__trigger[data-text-align='center'] .ui-select__value {
+  text-align: center;
+}
+
+.ui-select__panel[data-text-align='center'] .ui-select__item {
+  text-align: center;
+  justify-items: center;
+}
+
+.ui-select__panel[data-text-align='center'] .ui-select__item-body {
+  width: 100%;
+  align-items: center;
+  text-align: center;
+}
+
+.ui-select__panel[data-text-align='center'] .ui-select__item-label {
+  width: 100%;
+  text-align: center;
 }
 
 .ui-select__viewport {
@@ -1166,25 +1237,38 @@
   grid-template-columns: 14px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  min-height: 34px;
+  min-height: 32px;
   padding: 5px 8px;
-  border-radius: var(--ui-control-radius);
+  border-radius: calc(var(--ui-control-radius) - 2px);
+  border: none;
   color: var(--ui-text);
   font-size: var(--ui-control-font-size);
   line-height: 1.3;
   outline: none;
+  box-shadow: none;
   cursor: pointer;
   user-select: none;
+  transition:
+    background-color var(--ui-motion-duration) var(--ui-motion-ease),
+    color var(--ui-motion-duration) var(--ui-motion-ease);
+}
+
+.ui-select__item:focus,
+.ui-select__item:focus-visible,
+.ui-select__item.ui-focusable:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 .ui-select__panel[data-density='compact'] .ui-select__item {
-  min-height: 30px;
-  padding-block: 4px;
+  min-height: 28px;
+  padding-block: 3px;
 }
 
 .ui-select__panel[data-density='comfortable'] .ui-select__item {
-  min-height: 38px;
-  padding-block: 6px;
+  min-height: 36px;
+  padding-block: 5px;
 }
 
 .ui-select__panel[data-hide-indicator] .ui-select__item,
@@ -1201,9 +1285,17 @@
 }
 
 .ui-select__item[data-state='checked'] {
-  background: var(--ui-tone-soft);
-  color: var(--ui-tone-ink);
-  font-weight: 560;
+  background: var(--link-active-bg-color);
+  color: var(--link-active-color);
+  font-weight: 500;
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+
+.ui-select__item[data-state='checked'][data-highlighted] {
+  background: color-mix(in srgb, var(--link-active-color) 16%, var(--input-bg-color));
+  color: var(--link-active-color);
 }
 
 .ui-select__item[data-disabled] {

@@ -447,22 +447,23 @@
     if (ownsFilesystemState) await filesystemState.ensureLoaded();
     pathDraft.value = browser.path.value;
     listResizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        const height = entry.contentRect.height;
-        const width = entry.contentRect.width;
-        if (height > 0) listViewportHeight.value = height;
-        if (width > 0) listViewportWidth.value = width;
+      for (const entry of entries) {
+        if (entry.target === root.value) {
+          const width = entry.contentRect.width;
+          if (width > 0) listViewportWidth.value = width;
+        } else if (entry.target === listScroller.value) {
+          const height = entry.contentRect.height;
+          if (height > 0) listViewportHeight.value = height;
+        }
       }
     });
     await nextTick();
     if (root.value) {
-      listViewportHeight.value = root.value.clientHeight || listViewportHeight.value;
       listViewportWidth.value = root.value.clientWidth || listViewportWidth.value;
       listResizeObserver.observe(root.value);
-    } else if (listScroller.value) {
+    }
+    if (listScroller.value) {
       listViewportHeight.value = listScroller.value.clientHeight || listViewportHeight.value;
-      listViewportWidth.value = listScroller.value.clientWidth || listViewportWidth.value;
       listResizeObserver.observe(listScroller.value);
     }
     document.addEventListener('mousedown', handleOutsideHistory);

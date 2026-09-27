@@ -199,9 +199,9 @@ button.bg-error .fab {
    * Keep this recipe centralized so component-specific glass styles cannot drift.
    */
   :root {
-    --glass-fill: transparent;
-    --glass-backdrop-filter: blur(6px);
-    --glass-border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
+    --glass-fill: color-mix(in srgb, var(--card-bg-color) 70%, transparent);
+    --glass-backdrop-filter: blur(12px);
+    --glass-border-color: color-mix(in srgb, var(--border-color) 55%, transparent);
     --glass-inset-highlight: inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 7%, transparent);
     --glass-shadow:
       var(--glass-inset-highlight), 0 0 0 1px color-mix(in srgb, var(--border-color) 35%, transparent),
@@ -214,5 +214,31 @@ button.bg-error .fab {
     backdrop-filter: var(--glass-backdrop-filter);
     border: 1px solid var(--glass-border-color);
     box-shadow: var(--glass-shadow);
+  }
+
+  /*
+   * Gen 2 button styling bridge:
+   * Bring legacy Tailwind button classes (`bg-button`, `bg-primary` on buttons)
+   * up to Gen2 visual standards (8px radius, micro-interaction scale, refined shadow).
+   */
+  button.bg-button,
+  button.bg-primary {
+    border-radius: var(--ui-control-radius, 8px);
+    box-shadow: 0 1px 2px 0 color-mix(in srgb, var(--text-color) 12%, transparent);
+    transition:
+      background-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+      border-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+      box-shadow var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+      transform var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1));
+  }
+
+  button.bg-button:not(:disabled):hover,
+  button.bg-primary:not(:disabled):hover {
+    box-shadow: 0 2px 4px 0 color-mix(in srgb, var(--text-color) 16%, transparent);
+  }
+
+  button.bg-button:not(:disabled):active,
+  button.bg-primary:not(:disabled):active {
+    transform: scale(0.98);
   }
 }

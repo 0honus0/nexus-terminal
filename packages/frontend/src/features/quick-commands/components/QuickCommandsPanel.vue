@@ -419,10 +419,10 @@
             ]"
             @click="store.toggle(group.name)"
           >
-            <div class="flex items-center gap-2 min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 min-w-0 flex-1">
               <button
                 type="button"
-                class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-secondary/70 transition-colors group-hover:text-foreground cursor-pointer"
+                class="quick-command-group-toggle flex shrink-0 items-center justify-center rounded text-text-secondary/70 transition-colors group-hover:text-foreground cursor-pointer"
                 :aria-expanded="expanded[group.name] !== false"
                 @click.stop="store.toggle(group.name)"
               >
@@ -450,7 +450,7 @@
                 v-else
                 type="button"
                 data-testid="quick-command-group-name"
-                class="min-w-0 shrink truncate text-left text-xs font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer"
+                class="inline-flex items-center min-w-0 shrink truncate text-left text-xs font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer leading-none py-0.5"
                 :title="t('quickCommands.tags.clickToEditTag')"
                 @click.stop="startTagEdit(group)"
               >
@@ -591,6 +591,12 @@
   .quick-command-info {
     min-width: 0;
   }
+  .quick-command-group-toggle {
+    width: 14px;
+    min-width: 14px;
+    height: 18px;
+    padding: 0;
+  }
   .quick-command-group-header {
     min-width: 0;
     min-height: calc(var(--quick-row-scale) * 2.375rem);
@@ -628,7 +634,7 @@
     }
     .quick-command-group-header {
       min-height: 2.375rem;
-      align-items: flex-start;
+      align-items: center;
       padding: 0.25rem 0.5rem;
     }
     .quick-command-row {

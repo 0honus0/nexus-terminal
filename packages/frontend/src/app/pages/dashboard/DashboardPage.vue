@@ -2,7 +2,7 @@
   import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { UiSelect, UiSpinner } from '@/foundation/ui';
+  import { UiButton, UiSelect, UiSpinner } from '@/foundation/ui';
   import {
     numberStorageCodec,
     readStoredValue,
@@ -306,120 +306,116 @@
 </script>
 
 <template>
-  <main
-    data-testid="dashboard-view"
-    class="min-h-full bg-background px-4 py-2.5 text-foreground sm:px-6 sm:py-3 lg:px-8 lg:py-3.5"
-  >
-    <div class="mx-auto w-full max-w-[1680px] space-y-2.5 sm:space-y-3">
-      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-2 sm:pb-2.5">
-        <div class="grid gap-1.5 px-0.5 sm:gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div
-            class="min-w-0 flex flex-col justify-center sm:gap-1 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-3.5 lg:gap-y-0.5"
-          >
-            <div class="flex min-w-0 items-center gap-2">
-              <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">{{
+  <main data-testid="dashboard-view" class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6">
+    <div class="mx-auto w-full max-w-[1680px] space-y-5">
+      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-4">
+        <div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div class="min-w-0">
+            <div class="flex min-w-0 items-center gap-3">
+              <span class="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">{{
                 t('projectName').split(' ')[0]
               }}</span>
-              <span class="h-3 w-px bg-border" aria-hidden="true"></span>
-              <h1 class="truncate text-sm font-semibold tracking-tight sm:text-base">{{ t('nav.dashboard') }}</h1>
+              <span class="h-4 w-px bg-border" aria-hidden="true"></span>
+              <h1 class="truncate text-xl font-semibold tracking-tight">{{ t('nav.dashboard') }}</h1>
             </div>
-            <div
-              v-if="latestConnection"
-              class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-secondary sm:mt-0"
-            >
-              <span class="hidden text-border/80 lg:inline" aria-hidden="true">•</span>
+            <div v-if="latestConnection" class="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]">
               <span class="text-text-secondary">{{ t('dashboard.latestConnection') }}</span>
               <strong
-                class="max-w-40 truncate font-medium text-foreground sm:max-w-48"
+                class="max-w-48 truncate text-foreground"
                 :title="latestConnection.name || latestConnection.host"
                 >{{ latestConnection.name || latestConnection.host }}</strong
               >
-              <span class="hidden max-w-56 truncate font-mono text-text-secondary md:inline"
+              <span class="hidden max-w-64 truncate font-mono text-text-secondary md:inline"
                 >{{ latestConnection.username }}@{{ latestConnection.host }}:{{ latestConnection.port }}</span
               >
-              <span>{{ formatRelativeTime(latestConnection.lastConnectedAt) }}</span>
-              <button
-                type="button"
-                class="h-6 rounded border border-primary/30 bg-primary/10 px-2 text-[11px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px]"
+              <span class="text-text-secondary">{{ formatRelativeTime(latestConnection.lastConnectedAt) }}</span>
+              <UiButton
+                density="compact"
+                appearance="soft"
+                tone="primary"
+                class="px-2.5"
                 @click="connect(latestConnection)"
               >
-                {{ t('dashboard.reconnect') }}
-              </button>
-              <button
+                <span class="inline-flex items-center gap-1 text-[11px] font-medium">
+                  <i class="fa-solid fa-rotate-right text-[9px]" aria-hidden="true"></i>
+                  <span>{{ t('dashboard.reconnect') }}</span>
+                </span>
+              </UiButton>
+              <UiButton
                 v-if="activeSuspendedSessions.length"
                 data-testid="dashboard-suspended-sessions"
-                type="button"
-                class="hidden h-6 items-center gap-1.5 rounded border border-primary/25 bg-primary/10 px-2 text-[11px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px] lg:inline-flex"
+                density="compact"
+                appearance="soft"
+                tone="primary"
+                class="hidden lg:inline-flex"
                 :title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
                 @click="openSuspendedSessions"
               >
-                <i class="fas fa-pause-circle text-[10px]" aria-hidden="true"></i>
+                <template #leading><i class="fas fa-pause-circle text-[10px]" aria-hidden="true"></i></template>
                 <span>{{ t('dashboard.suspendedSessions') }}</span>
                 <span class="rounded-full bg-primary/15 px-1.5 tabular-nums">{{ activeSuspendedSessions.length }}</span>
-              </button>
+              </UiButton>
             </div>
-            <div v-else-if="activeSuspendedSessions.length" class="mt-1 hidden sm:mt-0 lg:flex">
-              <button
+            <div v-else-if="activeSuspendedSessions.length" class="mt-3 hidden lg:flex">
+              <UiButton
                 data-testid="dashboard-suspended-sessions"
-                type="button"
-                class="inline-flex h-6 items-center gap-1.5 rounded border border-primary/25 bg-primary/10 px-2 text-[11px] font-medium text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-6 sm:text-[11px]"
+                density="compact"
+                appearance="soft"
+                tone="primary"
                 :title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
                 @click="openSuspendedSessions"
               >
-                <i class="fas fa-pause-circle text-[10px]" aria-hidden="true"></i>
+                <template #leading><i class="fas fa-pause-circle text-[10px]" aria-hidden="true"></i></template>
                 <span>{{ t('dashboard.suspendedSessions') }}</span>
                 <span class="rounded-full bg-primary/15 px-1.5 tabular-nums">{{ activeSuspendedSessions.length }}</span>
-              </button>
+              </UiButton>
             </div>
           </div>
 
           <div
-            class="flex min-w-0 flex-col items-stretch gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-4 lg:justify-end lg:gap-x-5"
+            class="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-5 lg:justify-end"
           >
-            <div data-testid="dashboard-overview-stats" class="flex items-center gap-4 sm:items-end sm:gap-5">
+            <div
+              data-testid="dashboard-overview-stats"
+              class="flex items-end justify-between gap-7 px-1 sm:justify-start"
+            >
               <div>
-                <div class="flex items-baseline gap-1.5 sm:block">
-                  <strong
-                    class="block text-sm font-semibold leading-none tabular-nums sm:text-base sm:leading-tight lg:text-lg"
-                    >{{ connections.connections.value.length }}</strong
-                  >
-                  <div class="text-[11px] text-text-secondary sm:mt-0.5">{{ t('dashboard.totalConnections') }}</div>
-                </div>
+                <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
+                  connections.connections.value.length
+                }}</strong>
+                <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.totalConnections') }}</div>
               </div>
               <div>
-                <div class="flex items-baseline gap-1.5 sm:block">
-                  <strong
-                    class="block text-sm font-semibold leading-none tabular-nums sm:text-base sm:leading-tight lg:text-lg"
-                    >{{ tags.tags.value.length }}</strong
-                  >
-                  <div class="text-[11px] text-text-secondary sm:mt-0.5">{{ t('dashboard.tagCount') }}</div>
-                </div>
+                <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
+                  tags.tags.value.length
+                }}</strong>
+                <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.tagCount') }}</div>
               </div>
             </div>
 
             <div
               v-if="preferences.values.value.dashboardShowLocalResources"
               data-testid="dashboard-local-resources"
-              class="min-w-0 border-t border-border/70 pt-1.5 sm:min-w-[240px] sm:border-l sm:border-t-0 sm:pl-3.5 sm:pt-0"
+              class="min-w-0 border-t border-border pt-3 sm:min-w-[300px] sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"
             >
-              <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center justify-between gap-3">
                 <div class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
                   {{ t('dashboard.resources.local') }}
                 </div>
-                <span class="flex items-center gap-1 text-[11px] text-text-secondary"
+                <span class="flex items-center gap-1.5 text-[11px] text-text-secondary"
                   ><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span
                   >{{ t('dashboard.resources.live') }}</span
                 >
               </div>
-              <div v-if="resources.local.value" class="mt-0.5 grid grid-cols-3 gap-2 sm:gap-2.5">
+              <div v-if="resources.local.value" class="mt-2 grid grid-cols-3 gap-4">
                 <div>
-                  <div class="flex items-baseline justify-between gap-1">
+                  <div class="flex items-baseline justify-between gap-2">
                     <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span>
-                    <strong class="text-[11px] font-semibold tabular-nums sm:text-xs">{{
+                    <strong class="text-base font-semibold tabular-nums">{{
                       percent(resources.local.value.cpuPercent)
                     }}</strong>
                   </div>
-                  <div class="mt-0.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
                       class="h-full rounded-full bg-primary"
                       :style="{ width: percent(resources.local.value.cpuPercent) }"
@@ -429,15 +425,15 @@
                 <div
                   :title="`${formatMemory(resources.local.value.memUsed)} / ${formatMemory(resources.local.value.memTotal)}`"
                 >
-                  <div class="flex items-baseline justify-between gap-1">
+                  <div class="flex items-baseline justify-between gap-2">
                     <span class="text-[11px] font-medium text-text-secondary">{{
                       t('dashboard.resources.memory')
                     }}</span>
-                    <strong class="text-[11px] font-semibold tabular-nums sm:text-xs">{{
+                    <strong class="text-base font-semibold tabular-nums">{{
                       percent(resources.local.value.memPercent)
                     }}</strong>
                   </div>
-                  <div class="mt-0.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
                       class="h-full rounded-full bg-success"
                       :style="{ width: percent(resources.local.value.memPercent) }"
@@ -445,13 +441,13 @@
                   </div>
                 </div>
                 <div>
-                  <div class="flex items-baseline justify-between gap-1">
+                  <div class="flex items-baseline justify-between gap-2">
                     <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span>
-                    <strong class="text-[11px] font-semibold tabular-nums sm:text-xs">{{
+                    <strong class="text-base font-semibold tabular-nums">{{
                       percent(resources.local.value.diskPercent)
                     }}</strong>
                   </div>
-                  <div class="mt-0.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
                       class="h-full rounded-full bg-warning"
                       :style="{ width: percent(resources.local.value.diskPercent) }"
@@ -459,10 +455,10 @@
                   </div>
                 </div>
               </div>
-              <div v-else-if="resources.localError.value" class="py-0.5 text-[11px] text-error">
+              <div v-else-if="resources.localError.value" class="py-2 text-[11px] text-error">
                 {{ resources.localError.value }}
               </div>
-              <div v-else class="flex h-4 items-center justify-center text-[11px] text-text-secondary sm:h-4.5">
+              <div v-else class="grid min-h-10 place-items-center py-2 text-[11px] text-text-secondary">
                 <UiSpinner v-if="resources.localLoading.value" density="compact" /><span v-else>{{
                   t('dashboard.resources.unavailable')
                 }}</span>
@@ -485,13 +481,13 @@
             <div class="flex items-center justify-between gap-3">
               <div class="flex min-w-0 items-center gap-2.5">
                 <span
-                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
                   aria-hidden="true"
                   ><i class="fas fa-bolt text-sm"></i
                 ></span>
                 <div class="min-w-0">
-                  <h2 class="text-lg font-semibold">{{ t('dashboard.quickConnect') }}</h2>
-                  <p class="truncate text-[13px] text-text-secondary">{{ t('dashboard.quickConnectHint') }}</p>
+                  <h2 class="text-base font-semibold">{{ t('dashboard.quickConnect') }}</h2>
+                  <p class="truncate text-xs text-text-secondary">{{ t('dashboard.quickConnectHint') }}</p>
                 </div>
               </div>
               <span class="shrink-0 text-xs text-text-secondary"
@@ -502,12 +498,12 @@
 
           <div
             data-testid="dashboard-connection-list"
-            class="h-[clamp(300px,40vh,430px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 shadow-inner xl:h-[clamp(330px,44vh,460px)]"
+            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
             style="scrollbar-gutter: stable both-edges"
           >
             <div
               data-testid="dashboard-connection-toolbar"
-              class="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 border-b border-border/70 bg-background/95 p-2.5 backdrop-blur sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
+              class="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 border-b border-border/70 bg-background/80 p-2.5 backdrop-blur-md sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
             >
               <label class="relative col-span-3 min-w-0 sm:col-span-1"
                 ><span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder') }}</span
@@ -529,8 +525,10 @@
                   data-testid="dashboard-tag-filter"
                   panel-test-id="dashboard-tag-filter-menu"
                   option-test-id-prefix="dashboard-tag-filter-option"
-                  class="text-xs sm:text-sm"
+                  class="dashboard-filter-select-gen2 text-xs sm:text-sm"
                   style="--ui-control-height: 2.375rem"
+                  text-align="center"
+                  match-trigger-width
                   :aria-label="t('dashboard.filterByTag')"
                 />
               </div>
@@ -541,15 +539,19 @@
                   data-testid="dashboard-sort-by"
                   panel-test-id="dashboard-sort-by-menu"
                   option-test-id-prefix="dashboard-sort-by-option"
-                  class="text-xs sm:text-sm"
+                  class="dashboard-filter-select-gen2 text-xs sm:text-sm"
                   style="--ui-control-height: 2.375rem"
+                  text-align="center"
+                  match-trigger-width
                   :aria-label="t('dashboard.sortBy')"
                 />
               </div>
-              <button
+              <UiButton
                 data-testid="dashboard-sort-order"
-                type="button"
-                class="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-background text-text-secondary transition hover:bg-header hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                appearance="soft"
+                tone="neutral"
+                icon-only
+                class="!h-10 !w-10 shrink-0 text-xs"
                 :aria-label="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
                 :title="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
                 @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'"
@@ -558,7 +560,7 @@
                   :class="['fas', sortOrder === 'asc' ? 'fa-arrow-up-a-z' : 'fa-arrow-down-z-a', 'text-xs']"
                   aria-hidden="true"
                 ></i>
-              </button>
+              </UiButton>
             </div>
 
             <div class="p-1.5">
@@ -571,7 +573,7 @@
                   :key="item.id"
                   :data-testid="`dashboard-connection-row-${item.id}`"
                   :data-last-connected-at="item.lastConnectedAt ?? ''"
-                  class="grid grid-cols-1 items-center gap-3 rounded-lg bg-header/20 px-4 py-4 transition-colors hover:bg-header/30 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-5"
+                  class="grid grid-cols-1 items-center gap-3 rounded-lg border border-border/60 bg-header/20 px-4 py-4 backdrop-blur-xs transition-colors hover:bg-header/35 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-5"
                 >
                   <div class="min-w-0">
                     <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -601,14 +603,19 @@
                       >
                     </div>
                   </div>
-                  <button
+                  <UiButton
                     type="button"
                     :data-testid="`dashboard-connect-${item.id}`"
-                    class="h-10 w-full shrink-0 rounded-md bg-button px-5 text-sm font-medium text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary/60 sm:w-auto"
+                    appearance="soft"
+                    tone="primary"
+                    class="w-full shrink-0 px-3.5 sm:w-auto"
                     @click="connect(item)"
                   >
-                    {{ t('connections.actions.connect') }}
-                  </button>
+                    <span class="inline-flex items-center gap-1.5 text-xs font-semibold">
+                      <i class="fa-solid fa-arrow-right-to-bracket text-[10px]" aria-hidden="true"></i>
+                      <span>{{ t('connections.actions.connect') }}</span>
+                    </span>
+                  </UiButton>
                 </li>
               </ul>
               <div v-else class="py-14 text-center text-sm text-text-secondary">
@@ -636,13 +643,15 @@
           <header class="flex flex-col gap-2 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex min-w-0 items-center gap-2.5">
               <span
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                data-testid="dashboard-ssh-resources-icon"
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
                 aria-hidden="true"
-                ><i class="fas fa-server text-sm"></i
-              ></span>
+              >
+                <i class="fa-solid fa-server text-sm" aria-hidden="true"></i>
+              </span>
               <div class="min-w-0">
-                <h2 class="text-lg font-semibold">{{ t('dashboard.resources.sshTitle') }}</h2>
-                <p class="mt-0.5 truncate text-[13px] text-text-secondary">{{ t('dashboard.resources.sshHint') }}</p>
+                <h2 class="text-base font-semibold">{{ t('dashboard.resources.sshTitle') }}</h2>
+                <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.resources.sshHint') }}</p>
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-2 text-[11px]">
@@ -662,7 +671,7 @@
           </header>
           <div
             data-testid="dashboard-ssh-resource-list"
-            class="h-[clamp(300px,40vh,430px)] space-y-2.5 overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-2 shadow-inner xl:h-[clamp(330px,44vh,460px)]"
+            class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
             style="scrollbar-gutter: stable"
           >
             <div
@@ -676,9 +685,10 @@
               v-for="remote in resources.remote.value"
               :key="remote.key"
               :data-testid="`dashboard-remote-resource-${remote.key}`"
-              class="group relative overflow-hidden rounded-lg bg-header/20 px-4 py-4 transition-colors hover:bg-header/30"
+              class="group relative overflow-hidden rounded-lg bg-header/20 px-3 py-3.5 backdrop-blur-xs transition-colors hover:bg-header/30"
             >
               <span
+                :data-testid="`dashboard-ssh-resource-accent-${remote.key}`"
                 class="absolute inset-y-3 left-0 w-0.5 rounded-full"
                 :class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
                 aria-hidden="true"
@@ -691,10 +701,10 @@
                       :class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
                       aria-hidden="true"
                     ></span>
-                    <h3 class="truncate text-base font-semibold" :title="remote.name">{{ remote.name }}</h3>
+                    <h3 class="truncate text-sm font-semibold" :title="remote.name">{{ remote.name }}</h3>
                   </div>
                   <p
-                    class="mt-1 truncate pl-3.5 font-mono text-[13px] text-text-secondary"
+                    class="mt-1 truncate pl-3.5 font-mono text-xs text-text-secondary"
                     :title="`${remote.username}@${remote.host}:${remote.port}`"
                   >
                     {{ remote.username }}@{{ remote.host }}:{{ remote.port }}
@@ -708,11 +718,14 @@
               <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-2 sm:gap-4">
                 <div>
                   <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span
-                    ><strong class="text-lg font-semibold tabular-nums">{{ percent(remote.status.cpuPercent) }}</strong>
+                    <span class="text-[10px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span
+                    ><strong class="text-base font-semibold tabular-nums">{{
+                      percent(remote.status.cpuPercent)
+                    }}</strong>
                   </div>
                   <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
+                      :data-testid="`dashboard-resource-bar-${remote.key}-cpu`"
                       class="h-full rounded-full bg-primary"
                       :style="{ width: percent(remote.status.cpuPercent) }"
                     ></div>
@@ -720,46 +733,50 @@
                 </div>
                 <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
                   <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{
+                    <span class="text-[10px] font-medium text-text-secondary">{{
                       t('dashboard.resources.memory')
                     }}</span
-                    ><strong class="text-lg font-semibold tabular-nums">{{ percent(remote.status.memPercent) }}</strong>
+                    ><strong class="text-base font-semibold tabular-nums">{{
+                      percent(remote.status.memPercent)
+                    }}</strong>
                   </div>
                   <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
+                      :data-testid="`dashboard-resource-bar-${remote.key}-memory`"
                       class="h-full rounded-full bg-success"
                       :style="{ width: percent(remote.status.memPercent) }"
                     ></div>
                   </div>
-                  <div class="mt-1 truncate text-[11px] tabular-nums text-text-secondary">
+                  <div class="mt-1 truncate text-[9px] tabular-nums text-text-secondary">
                     {{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}
                   </div>
                 </div>
                 <div :title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`">
                   <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span
-                    ><strong class="text-lg font-semibold tabular-nums">{{
+                    <span class="text-[10px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span
+                    ><strong class="text-base font-semibold tabular-nums">{{
                       percent(remote.status.diskPercent)
                     }}</strong>
                   </div>
                   <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
+                      :data-testid="`dashboard-resource-bar-${remote.key}-disk`"
                       class="h-full rounded-full bg-warning"
                       :style="{ width: percent(remote.status.diskPercent) }"
                     ></div>
                   </div>
                   <div
                     data-testid="dashboard-remote-disk-detail"
-                    class="mt-1 truncate text-[11px] tabular-nums text-text-secondary"
+                    class="mt-1 truncate text-[9px] tabular-nums text-text-secondary"
                   >
                     {{ formatDisk(remote.status.diskUsed) }} / {{ formatDisk(remote.status.diskTotal) }}
                   </div>
                 </div>
               </div>
-              <div v-else-if="remote.error" class="mt-4 truncate text-xs text-error" :title="remote.error">
+              <div v-else-if="remote.error" class="mt-3 truncate text-xs text-error" :title="remote.error">
                 {{ remote.error }}
               </div>
-              <div v-else class="mt-4 text-xs text-text-secondary">{{ t('dashboard.resources.waiting') }}</div>
+              <div v-else class="mt-3 text-xs text-text-secondary">{{ t('dashboard.resources.waiting') }}</div>
             </article>
             <div
               v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
@@ -776,13 +793,14 @@
         <header class="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex min-w-0 items-center gap-2.5">
             <span
-              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+              data-testid="dashboard-recent-activity-icon"
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
               aria-hidden="true"
               ><i class="fas fa-clock-rotate-left text-sm"></i
             ></span>
             <div class="min-w-0">
-              <h2 class="text-lg font-semibold">{{ t('dashboard.recentActivity') }}</h2>
-              <p class="mt-0.5 truncate text-[13px] text-text-secondary">{{ t('dashboard.recentActivityHint') }}</p>
+              <h2 class="text-base font-semibold">{{ t('dashboard.recentActivity') }}</h2>
+              <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.recentActivityHint') }}</p>
             </div>
           </div>
           <div class="flex items-center gap-3">
@@ -844,3 +862,31 @@
     </div>
   </main>
 </template>
+
+<style scoped>
+  @media (max-width: 639px) {
+    .dashboard-filter-select-gen2[data-ui-gen='2'] {
+      --ui-control-padding-inline: 12px;
+      --ui-control-gap: 8px;
+      --ui-control-font-size: 12px;
+      --ui-control-radius: 8px;
+    }
+
+    .dashboard-filter-select-gen2[data-ui-gen='2'] :deep(.ui-select__trigger:not([data-state='open'])) {
+      border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+      background: var(--input-bg-color);
+      box-shadow: none;
+    }
+
+    .dashboard-filter-select-gen2[data-ui-gen='2']
+      :deep(.ui-select__trigger:not([data-state='open']):not(:disabled):hover) {
+      border-color: var(--border-color);
+      background: color-mix(in srgb, var(--input-bg-color) 90%, transparent);
+    }
+
+    .dashboard-filter-select-gen2[data-ui-gen='2'] :deep(.ui-select__trigger:focus-visible:not([data-state='open'])) {
+      border-color: color-mix(in srgb, var(--text-color) 35%, var(--border-color));
+      box-shadow: none;
+    }
+  }
+</style>
