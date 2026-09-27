@@ -3,6 +3,7 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { UiButton, UiSelect, UiSpinner } from '@/foundation/ui';
+  import DashboardHostCard from './DashboardHostCard.vue';
   import {
     numberStorageCodec,
     readStoredValue,
@@ -568,29 +569,18 @@
                 {{ t('common.loading') }}
               </div>
               <ul v-else-if="filtered.length" class="space-y-2">
-                <li
+                <DashboardHostCard
                   v-for="item in filtered"
                   :key="item.id"
+                  as="li"
+                  title-tag="span"
                   :data-testid="`dashboard-connection-row-${item.id}`"
                   :data-last-connected-at="item.lastConnectedAt ?? ''"
-                  class="grid grid-cols-1 items-center gap-3 rounded-lg border border-border/60 bg-header/20 px-4 py-4 backdrop-blur-xs transition-colors hover:bg-header/35 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-5"
+                  :name="item.name || item.host"
+                  :address="`${item.username}@${item.host}:${item.port}`"
+                  :type="item.type"
                 >
-                  <div class="min-w-0">
-                    <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <span class="truncate text-base font-semibold" :title="item.name || item.host">{{
-                        item.name || item.host
-                      }}</span
-                      ><span
-                        class="rounded border border-border bg-header/50 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-text-secondary"
-                        >{{ item.type }}</span
-                      >
-                    </div>
-                    <div
-                      class="mt-1 truncate font-mono text-[13px] text-text-secondary"
-                      :title="`${item.username}@${item.host}:${item.port}`"
-                    >
-                      {{ item.username }}@{{ item.host }}:{{ item.port }}
-                    </div>
+                  <template #metadata>
                     <div class="mt-2 flex min-w-0 flex-wrap items-center gap-2">
                       <span class="text-xs text-text-secondary"
                         >{{ t('dashboard.lastConnected') }} {{ formatRelativeTime(item.lastConnectedAt) }}</span
@@ -602,21 +592,23 @@
                         >{{ tagName }}</span
                       >
                     </div>
-                  </div>
-                  <UiButton
-                    type="button"
-                    :data-testid="`dashboard-connect-${item.id}`"
-                    appearance="soft"
-                    tone="neutral"
-                    class="w-full shrink-0 px-3.5 sm:w-auto"
-                    @click="connect(item)"
-                  >
-                    <span class="inline-flex items-center gap-1.5 text-xs font-semibold">
-                      <i class="fa-solid fa-arrow-right-to-bracket text-[10px]" aria-hidden="true"></i>
-                      <span>{{ t('connections.actions.connect') }}</span>
-                    </span>
-                  </UiButton>
-                </li>
+                  </template>
+                  <template #action>
+                    <UiButton
+                      type="button"
+                      :data-testid="`dashboard-connect-${item.id}`"
+                      appearance="soft"
+                      tone="neutral"
+                      class="w-full shrink-0 px-3.5 sm:w-auto"
+                      @click="connect(item)"
+                    >
+                      <span class="inline-flex items-center gap-1.5 text-xs font-semibold">
+                        <i class="fa-solid fa-arrow-right-to-bracket text-[10px]" aria-hidden="true"></i>
+                        <span>{{ t('connections.actions.connect') }}</span>
+                      </span>
+                    </UiButton>
+                  </template>
+                </DashboardHostCard>
               </ul>
               <div v-else class="py-14 text-center text-sm text-text-secondary">
                 <template v-if="search">{{ t('dashboard.noConnectionsMatchSearch') }}</template>
@@ -681,47 +673,24 @@
             >
               <UiSpinner />
             </div>
-            <article
+            <DashboardHostCard
               v-for="remote in resources.remote.value"
               :key="remote.key"
+              as="article"
+              title-tag="h3"
               :data-testid="`dashboard-remote-resource-${remote.key}`"
-              class="group relative overflow-hidden rounded-lg bg-header/20 px-3 py-3.5 backdrop-blur-xs transition-colors hover:bg-header/30"
+              :name="remote.name"
+              :address="`${remote.username}@${remote.host}:${remote.port}`"
+              type="SSH"
+              :status-dot-class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
+              :accent-class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
+              :accent-test-id="`dashboard-ssh-resource-accent-${remote.key}`"
             >
-              <span
-                :data-testid="`dashboard-ssh-resource-accent-${remote.key}`"
-                class="absolute inset-y-3 left-0 w-0.5 rounded-full"
-                :class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
-                aria-hidden="true"
-              ></span>
-              <div class="flex min-w-0 items-start justify-between gap-3 pl-1">
-                <div class="min-w-0">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <span
-                      class="h-1.5 w-1.5 shrink-0 rounded-full"
-                      :class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
-                      aria-hidden="true"
-                    ></span>
-                    <h3 class="truncate text-sm font-semibold" :title="remote.name">{{ remote.name }}</h3>
-                  </div>
-                  <p
-                    class="mt-1 truncate pl-3.5 font-mono text-xs text-text-secondary"
-                    :title="`${remote.username}@${remote.host}:${remote.port}`"
-                  >
-                    {{ remote.username }}@{{ remote.host }}:{{ remote.port }}
-                  </p>
-                </div>
-                <span
-                  class="rounded bg-header/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary"
-                  >SSH</span
-                >
-              </div>
-              <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-2 sm:gap-4">
+              <div v-if="remote.status" class="mt-3.5 grid grid-cols-3 gap-2 sm:gap-4">
                 <div>
                   <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[10px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span
-                    ><strong class="text-base font-semibold tabular-nums">{{
-                      percent(remote.status.cpuPercent)
-                    }}</strong>
+                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span>
+                    <strong class="text-lg font-semibold tabular-nums">{{ percent(remote.status.cpuPercent) }}</strong>
                   </div>
                   <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
@@ -733,12 +702,10 @@
                 </div>
                 <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
                   <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[10px] font-medium text-text-secondary">{{
+                    <span class="text-[11px] font-medium text-text-secondary">{{
                       t('dashboard.resources.memory')
-                    }}</span
-                    ><strong class="text-base font-semibold tabular-nums">{{
-                      percent(remote.status.memPercent)
-                    }}</strong>
+                    }}</span>
+                    <strong class="text-lg font-semibold tabular-nums">{{ percent(remote.status.memPercent) }}</strong>
                   </div>
                   <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
@@ -747,16 +714,14 @@
                       :style="{ width: percent(remote.status.memPercent) }"
                     ></div>
                   </div>
-                  <div class="mt-1 truncate text-[9px] tabular-nums text-text-secondary">
+                  <div class="mt-1 truncate text-[11px] tabular-nums text-text-secondary">
                     {{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}
                   </div>
                 </div>
                 <div :title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`">
                   <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[10px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span
-                    ><strong class="text-base font-semibold tabular-nums">{{
-                      percent(remote.status.diskPercent)
-                    }}</strong>
+                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span>
+                    <strong class="text-lg font-semibold tabular-nums">{{ percent(remote.status.diskPercent) }}</strong>
                   </div>
                   <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
                     <div
@@ -767,7 +732,7 @@
                   </div>
                   <div
                     data-testid="dashboard-remote-disk-detail"
-                    class="mt-1 truncate text-[9px] tabular-nums text-text-secondary"
+                    class="mt-1 truncate text-[11px] tabular-nums text-text-secondary"
                   >
                     {{ formatDisk(remote.status.diskUsed) }} / {{ formatDisk(remote.status.diskTotal) }}
                   </div>
@@ -777,7 +742,7 @@
                 {{ remote.error }}
               </div>
               <div v-else class="mt-3 text-xs text-text-secondary">{{ t('dashboard.resources.waiting') }}</div>
-            </article>
+            </DashboardHostCard>
             <div
               v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
               data-testid="dashboard-remote-resources"
