@@ -47,10 +47,10 @@
   --ui-tone-accent: var(--text-color);
   --ui-tone-solid: var(--text-color);
   --ui-tone-on-solid: var(--app-bg-color);
-  --ui-tone-soft: color-mix(in srgb, var(--text-color) 9%, var(--app-bg-color));
-  --ui-tone-soft-hover: color-mix(in srgb, var(--text-color) 13%, var(--app-bg-color));
+  --ui-tone-soft: color-mix(in srgb, var(--card-bg-color) 50%, transparent);
+  --ui-tone-soft-hover: color-mix(in srgb, var(--card-bg-color) 75%, transparent);
   --ui-tone-ink: var(--text-color);
-  --ui-tone-border: color-mix(in srgb, var(--text-color) 16%, var(--border-color));
+  --ui-tone-border: color-mix(in srgb, var(--border-color) 55%, transparent);
 }
 
 [data-ui-gen='2'][data-density='compact'] {
@@ -71,9 +71,9 @@
   --ui-tone-accent: var(--link-active-color);
   --ui-tone-solid: var(--button-bg-color);
   --ui-tone-on-solid: var(--button-text-color);
-  --ui-tone-soft: color-mix(in srgb, var(--link-active-color) 13%, var(--app-bg-color));
-  --ui-tone-soft-hover: color-mix(in srgb, var(--link-active-color) 19%, var(--app-bg-color));
-  --ui-tone-ink: color-mix(in srgb, var(--link-active-color) 78%, var(--text-color));
+  --ui-tone-soft: color-mix(in srgb, var(--link-active-color) 12%, transparent);
+  --ui-tone-soft-hover: color-mix(in srgb, var(--link-active-color) 20%, transparent);
+  --ui-tone-ink: color-mix(in srgb, var(--link-active-color) 85%, var(--text-color));
   --ui-tone-border: color-mix(in srgb, var(--link-active-color) 32%, var(--border-color));
 }
 
@@ -81,9 +81,9 @@
   --ui-tone-accent: var(--status-success-color);
   --ui-tone-solid: var(--status-success-color);
   --ui-tone-on-solid: var(--status-success-text-color);
-  --ui-tone-soft: color-mix(in srgb, var(--status-success-color) 12%, var(--app-bg-color));
-  --ui-tone-soft-hover: color-mix(in srgb, var(--status-success-color) 18%, var(--app-bg-color));
-  --ui-tone-ink: color-mix(in srgb, var(--status-success-color) 74%, var(--text-color));
+  --ui-tone-soft: color-mix(in srgb, var(--status-success-color) 12%, transparent);
+  --ui-tone-soft-hover: color-mix(in srgb, var(--status-success-color) 20%, transparent);
+  --ui-tone-ink: color-mix(in srgb, var(--status-success-color) 80%, var(--text-color));
   --ui-tone-border: color-mix(in srgb, var(--status-success-color) 30%, var(--border-color));
 }
 
@@ -91,9 +91,9 @@
   --ui-tone-accent: var(--status-warning-color);
   --ui-tone-solid: var(--status-warning-color);
   --ui-tone-on-solid: var(--status-warning-text-color);
-  --ui-tone-soft: color-mix(in srgb, var(--status-warning-color) 16%, var(--app-bg-color));
-  --ui-tone-soft-hover: color-mix(in srgb, var(--status-warning-color) 23%, var(--app-bg-color));
-  --ui-tone-ink: color-mix(in srgb, var(--status-warning-color) 58%, var(--text-color));
+  --ui-tone-soft: color-mix(in srgb, var(--status-warning-color) 14%, transparent);
+  --ui-tone-soft-hover: color-mix(in srgb, var(--status-warning-color) 22%, transparent);
+  --ui-tone-ink: color-mix(in srgb, var(--status-warning-color) 70%, var(--text-color));
   --ui-tone-border: color-mix(in srgb, var(--status-warning-color) 34%, var(--border-color));
 }
 
@@ -101,9 +101,9 @@
   --ui-tone-accent: var(--status-error-color);
   --ui-tone-solid: var(--status-error-color);
   --ui-tone-on-solid: var(--status-error-text-color);
-  --ui-tone-soft: color-mix(in srgb, var(--status-error-color) 12%, var(--app-bg-color));
-  --ui-tone-soft-hover: color-mix(in srgb, var(--status-error-color) 18%, var(--app-bg-color));
-  --ui-tone-ink: color-mix(in srgb, var(--status-error-color) 74%, var(--text-color));
+  --ui-tone-soft: color-mix(in srgb, var(--status-error-color) 12%, transparent);
+  --ui-tone-soft-hover: color-mix(in srgb, var(--status-error-color) 20%, transparent);
+  --ui-tone-ink: color-mix(in srgb, var(--status-error-color) 80%, var(--text-color));
   --ui-tone-border: color-mix(in srgb, var(--status-error-color) 30%, var(--border-color));
 }
 
@@ -370,12 +370,19 @@
   border-color: var(--ui-tone-border);
   background: var(--ui-tone-soft);
   color: var(--ui-tone-ink);
-  box-shadow: var(--ui-shadow-control);
+  -webkit-backdrop-filter: var(--glass-backdrop-filter, blur(12px));
+  backdrop-filter: var(--glass-backdrop-filter, blur(12px));
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 8%, transparent),
+    0 1px 2px 0 color-mix(in srgb, var(--text-color) 5%, transparent);
 }
 
 .ui-button--soft:not(:disabled):hover {
   background: var(--ui-tone-soft-hover);
-  border-color: color-mix(in srgb, var(--ui-tone-accent) 42%, var(--border-color));
+  border-color: color-mix(in srgb, var(--ui-tone-accent) 45%, var(--border-color));
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 12%, transparent),
+    0 2px 4px 0 color-mix(in srgb, var(--text-color) 8%, transparent);
 }
 
 .ui-button--ghost {
@@ -390,14 +397,20 @@
 }
 
 .ui-button--glass {
+  border-color: var(--glass-border-color);
+  background: var(--glass-fill);
   color: var(--ui-tone-ink);
+  -webkit-backdrop-filter: var(--glass-backdrop-filter);
+  backdrop-filter: var(--glass-backdrop-filter);
+  box-shadow: var(--glass-shadow);
 }
 
 .ui-button--glass:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--ui-tone-accent) 28%, var(--border-color));
+  background: color-mix(in srgb, var(--card-bg-color) 85%, transparent);
+  border-color: color-mix(in srgb, var(--ui-tone-accent) 35%, var(--border-color));
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--app-bg-color) 40%, transparent),
-    0 6px 18px -14px color-mix(in srgb, var(--text-color) 28%, transparent);
+    inset 0 1px 0 0 color-mix(in srgb, var(--text-color) 14%, transparent),
+    0 2px 6px 0 color-mix(in srgb, var(--text-color) 10%, transparent);
 }
 
 [data-ui-gen='2'][data-ui='button'] i,
