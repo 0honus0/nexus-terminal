@@ -633,7 +633,7 @@
             </div>
           </header>
           <div
-            class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-auto rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
+            class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-auto rounded-xl border border-border/80 bg-header/10 p-1 shadow-inner sm:p-1.5 xl:h-[clamp(360px,50vh,520px)]"
             style="scrollbar-gutter: stable"
           >
             <div
@@ -653,13 +653,15 @@
               :status-dot-class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
               :accent-class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
             >
-              <div v-if="remote.status" class="mt-3.5 grid grid-cols-3 gap-2 sm:gap-4">
+              <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-1.5 sm:mt-3.5 sm:gap-4">
                 <div>
-                  <div class="flex items-baseline justify-between gap-2">
+                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
                     <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span>
-                    <strong class="text-lg font-semibold tabular-nums">{{ percent(remote.status.cpuPercent) }}</strong>
+                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                      percent(remote.status.cpuPercent)
+                    }}</strong>
                   </div>
-                  <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
                     <div
                       class="h-full rounded-full bg-primary"
                       :style="{ width: percent(remote.status.cpuPercent) }"
@@ -667,35 +669,49 @@
                   </div>
                 </div>
                 <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
-                  <div class="flex items-baseline justify-between gap-2">
+                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
                     <span class="text-[11px] font-medium text-text-secondary">{{
                       t('dashboard.resources.memory')
                     }}</span>
-                    <strong class="text-lg font-semibold tabular-nums">{{ percent(remote.status.memPercent) }}</strong>
+                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                      percent(remote.status.memPercent)
+                    }}</strong>
                   </div>
-                  <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
                     <div
                       class="h-full rounded-full bg-success"
                       :style="{ width: percent(remote.status.memPercent) }"
                     ></div>
                   </div>
-                  <div class="mt-1 truncate text-[11px] tabular-nums text-text-secondary">
-                    {{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}
+                  <div
+                    class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
+                  >
+                    <span class="max-w-full truncate">{{ formatMemory(remote.status.memUsed) }}</span>
+                    <span class="max-w-full truncate text-text-secondary/75"
+                      >/ {{ formatMemory(remote.status.memTotal) }}</span
+                    >
                   </div>
                 </div>
                 <div :title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`">
-                  <div class="flex items-baseline justify-between gap-2">
+                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
                     <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span>
-                    <strong class="text-lg font-semibold tabular-nums">{{ percent(remote.status.diskPercent) }}</strong>
+                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                      percent(remote.status.diskPercent)
+                    }}</strong>
                   </div>
-                  <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
                     <div
                       class="h-full rounded-full bg-warning"
                       :style="{ width: percent(remote.status.diskPercent) }"
                     ></div>
                   </div>
-                  <div class="mt-1 truncate text-[11px] tabular-nums text-text-secondary">
-                    {{ formatDisk(remote.status.diskUsed) }} / {{ formatDisk(remote.status.diskTotal) }}
+                  <div
+                    class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
+                  >
+                    <span class="max-w-full truncate">{{ formatDisk(remote.status.diskUsed) }}</span>
+                    <span class="max-w-full truncate text-text-secondary/75"
+                      >/ {{ formatDisk(remote.status.diskTotal) }}</span
+                    >
                   </div>
                 </div>
               </div>

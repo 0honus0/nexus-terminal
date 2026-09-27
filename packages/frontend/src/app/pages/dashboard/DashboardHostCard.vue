@@ -29,8 +29,8 @@
 <template>
   <component
     :is="as"
-    class="group relative overflow-hidden rounded-lg border border-border/60 bg-header/20 px-4 py-3.5 backdrop-blur-xs transition-colors hover:bg-header/35"
-    :class="{ 'pl-4.5': hasAccent }"
+    class="group relative overflow-hidden rounded-lg border border-border/60 bg-header/20 p-3 backdrop-blur-xs transition-colors hover:bg-header/35 sm:px-4 sm:py-3.5"
+    :class="{ 'pl-3.5 sm:pl-4.5': hasAccent }"
   >
     <span
       v-if="accentClass"
