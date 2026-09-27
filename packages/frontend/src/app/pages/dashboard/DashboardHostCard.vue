@@ -46,12 +46,12 @@
     >
       <div class="min-w-0">
         <slot name="header">
-          <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <div class="flex min-w-0 items-center gap-2">
+          <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <div class="flex min-w-0 items-baseline gap-2">
               <slot name="status-dot">
                 <span
                   v-if="statusDotClass"
-                  class="h-2 w-2 shrink-0 rounded-full"
+                  class="h-2 w-2 shrink-0 self-center rounded-full"
                   :class="statusDotClass"
                   aria-hidden="true"
                 ></span>
@@ -69,7 +69,7 @@
             </span>
             <span
               v-if="type"
-              class="rounded border border-border/70 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary"
+              class="self-center rounded border border-border/70 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary"
             >
               {{ type }}
             </span>
