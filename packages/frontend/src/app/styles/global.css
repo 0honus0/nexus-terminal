@@ -222,13 +222,33 @@ button.bg-error .fab {
    * up to Gen2 visual standards (8px radius, micro-interaction scale, refined shadow).
    */
   button.bg-button {
+    position: relative;
     border-radius: var(--ui-control-radius, 8px);
-    background: color-mix(in srgb, var(--card-bg-color) 16%, transparent) !important;
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    backdrop-filter: blur(14px) saturate(140%);
-    border: 1px solid color-mix(in srgb, var(--border-color) 30%, transparent) !important;
+    background-color: color-mix(in srgb, var(--card-bg-color) 10%, transparent) !important;
+    background-image:
+      radial-gradient(
+        100% 70% at 50% -10%,
+        rgba(255, 255, 255, 0.75) 0%,
+        rgba(255, 255, 255, 0.15) 55%,
+        transparent 80%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.3) 0%,
+        rgba(255, 255, 255, 0.03) 45%,
+        rgba(255, 255, 255, 0.18) 100%
+      ) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    backdrop-filter: blur(18px) saturate(180%);
+    border-width: 1px !important;
+    border-style: solid !important;
+    border-color: color-mix(in srgb, var(--border-color) 22%, rgba(255, 255, 255, 0.65)) !important;
     color: var(--text-color) !important;
-    box-shadow: inset 0 1px 0 0 color-mix(in srgb, 255 255 255 / 18%, transparent) !important;
+    box-shadow:
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.8),
+      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06),
+      0 4px 12px 0 rgba(0, 0, 0, 0.06),
+      0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
     transition:
       background-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
       border-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
@@ -237,23 +257,65 @@ button.bg-error .fab {
   }
 
   button.bg-button:not(:disabled):hover {
-    background: color-mix(in srgb, var(--card-bg-color) 30%, transparent) !important;
-    border-color: color-mix(in srgb, var(--border-color) 45%, transparent) !important;
-    box-shadow: inset 0 1px 0 0 color-mix(in srgb, 255 255 255 / 28%, transparent) !important;
+    background-color: color-mix(in srgb, var(--card-bg-color) 18%, transparent) !important;
+    background-image:
+      radial-gradient(
+        100% 70% at 50% -10%,
+        rgba(255, 255, 255, 0.88) 0%,
+        rgba(255, 255, 255, 0.22) 55%,
+        transparent 80%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.38) 0%,
+        rgba(255, 255, 255, 0.05) 45%,
+        rgba(255, 255, 255, 0.22) 100%
+      ) !important;
+    border-color: color-mix(in srgb, var(--border-color) 32%, rgba(255, 255, 255, 0.75)) !important;
+    box-shadow:
+      inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06),
+      0 6px 16px 0 rgba(0, 0, 0, 0.08),
+      0 2px 4px 0 rgba(0, 0, 0, 0.04) !important;
+    transform: translateY(-0.5px);
   }
 
   button.bg-button:not(:disabled):active {
-    transform: scale(0.98);
+    transform: translateY(0);
+    background-color: color-mix(in srgb, var(--card-bg-color) 24%, transparent) !important;
+    box-shadow:
+      inset 0 1px 2px 0 rgba(0, 0, 0, 0.08),
+      0 2px 5px 0 rgba(0, 0, 0, 0.05) !important;
   }
 
   button.bg-primary {
+    position: relative;
     border-radius: var(--ui-control-radius, 8px);
-    background: color-mix(in srgb, var(--card-bg-color) 26%, transparent) !important;
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    backdrop-filter: blur(14px) saturate(140%);
-    border: 1px solid color-mix(in srgb, var(--border-color) 35%, transparent) !important;
+    background-color: color-mix(in srgb, var(--card-bg-color) 14%, transparent) !important;
+    background-image:
+      radial-gradient(
+        100% 70% at 50% -10%,
+        rgba(255, 255, 255, 0.75) 0%,
+        rgba(255, 255, 255, 0.15) 55%,
+        transparent 80%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.3) 0%,
+        rgba(255, 255, 255, 0.03) 45%,
+        rgba(255, 255, 255, 0.18) 100%
+      ) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    backdrop-filter: blur(18px) saturate(180%);
+    border-width: 1px !important;
+    border-style: solid !important;
+    border-color: color-mix(in srgb, var(--border-color) 22%, rgba(255, 255, 255, 0.65)) !important;
     color: var(--text-color) !important;
-    box-shadow: inset 0 1px 0 0 color-mix(in srgb, 255 255 255 / 22%, transparent) !important;
+    box-shadow:
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.8),
+      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06),
+      0 4px 12px 0 rgba(0, 0, 0, 0.06),
+      0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
     transition:
       background-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
       border-color var(--ui-motion-duration, 140ms) var(--ui-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
@@ -262,12 +324,34 @@ button.bg-error .fab {
   }
 
   button.bg-primary:not(:disabled):hover {
-    background: color-mix(in srgb, var(--card-bg-color) 42%, transparent) !important;
-    border-color: color-mix(in srgb, var(--border-color) 50%, transparent) !important;
-    box-shadow: inset 0 1px 0 0 color-mix(in srgb, 255 255 255 / 32%, transparent) !important;
+    background-color: color-mix(in srgb, var(--card-bg-color) 18%, transparent) !important;
+    background-image:
+      radial-gradient(
+        100% 70% at 50% -10%,
+        rgba(255, 255, 255, 0.88) 0%,
+        rgba(255, 255, 255, 0.22) 55%,
+        transparent 80%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.38) 0%,
+        rgba(255, 255, 255, 0.05) 45%,
+        rgba(255, 255, 255, 0.22) 100%
+      ) !important;
+    border-color: color-mix(in srgb, var(--border-color) 32%, rgba(255, 255, 255, 0.75)) !important;
+    box-shadow:
+      inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06),
+      0 6px 16px 0 rgba(0, 0, 0, 0.08),
+      0 2px 4px 0 rgba(0, 0, 0, 0.04) !important;
+    transform: translateY(-0.5px);
   }
 
   button.bg-primary:not(:disabled):active {
-    transform: scale(0.98);
+    transform: translateY(0);
+    background-color: color-mix(in srgb, var(--card-bg-color) 24%, transparent) !important;
+    box-shadow:
+      inset 0 1px 2px 0 rgba(0, 0, 0, 0.08),
+      0 2px 5px 0 rgba(0, 0, 0, 0.05) !important;
   }
 }

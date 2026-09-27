@@ -102,10 +102,30 @@
 
   // 4 个高内聚核心维度：模型与预算、工具与扩展、运行与环境、安全与防护
   const groups = [
-    { id: 'models', icon: 'fa-solid fa-brain', label: 'agent.settings.groups.models' },
-    { id: 'tools', icon: 'fa-solid fa-puzzle-piece', label: 'agent.settings.groups.extensions' },
-    { id: 'runtime', icon: 'fa-solid fa-gauge-high', label: 'agent.settings.groups.runtime' },
-    { id: 'safety', icon: 'fa-solid fa-shield-halved', label: 'agent.settings.groups.safety' },
+    {
+      id: 'models',
+      icon: 'fa-solid fa-brain',
+      label: 'agent.settings.groups.models',
+      iconColor: 'text-violet-500',
+    },
+    {
+      id: 'tools',
+      icon: 'fa-solid fa-puzzle-piece',
+      label: 'agent.settings.groups.extensions',
+      iconColor: 'text-blue-500',
+    },
+    {
+      id: 'runtime',
+      icon: 'fa-solid fa-gauge-high',
+      label: 'agent.settings.groups.runtime',
+      iconColor: 'text-amber-500',
+    },
+    {
+      id: 'safety',
+      icon: 'fa-solid fa-shield-halved',
+      label: 'agent.settings.groups.safety',
+      iconColor: 'text-emerald-500',
+    },
   ] as const;
 
   type AgentSettingsGroupId = (typeof groups)[number]['id'];
@@ -722,7 +742,7 @@
               :class="[
                 group.icon,
                 'text-xs shrink-0',
-                activeGroup === group.id ? 'text-foreground' : 'text-text-secondary',
+                activeGroup === group.id ? group.iconColor : 'text-text-secondary',
               ]"
               aria-hidden="true"
             ></i>

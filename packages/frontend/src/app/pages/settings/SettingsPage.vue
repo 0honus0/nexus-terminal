@@ -96,8 +96,8 @@
           value: 'agent',
           labelKey: 'agent.settings.tab',
           icon: 'fa-solid fa-wand-magic-sparkles',
-          iconColor: 'text-foreground',
-          iconBg: 'bg-header',
+          iconColor: 'text-violet-500',
+          iconBg: 'bg-violet-500/10',
           descriptionKey: 'settings.descriptions.agent',
           badge: 'AI',
         },
@@ -141,8 +141,8 @@
           value: 'about',
           labelKey: 'settings.tabs.about',
           icon: 'fa-solid fa-circle-info',
-          iconColor: 'text-slate-500',
-          iconBg: 'bg-slate-500/10',
+          iconColor: 'text-sky-500',
+          iconBg: 'bg-sky-500/10',
           descriptionKey: 'settings.descriptions.about',
         },
       ],
@@ -266,7 +266,7 @@
                     <span class="text-sm font-semibold text-foreground">{{ t(item.labelKey) }}</span>
                     <span
                       v-if="item.badge"
-                      class="rounded-full bg-header px-2 py-0.5 text-[10px] font-semibold text-text-secondary border border-border/40"
+                      class="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400 border border-violet-500/30"
                     >
                       {{ item.badge }}
                     </span>
@@ -297,7 +297,7 @@
             class="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-2xs hover:bg-header transition-colors shrink-0"
             @click="mobileView = 'menu'"
           >
-            <i class="fa-solid fa-chevron-left text-foreground text-[11px]" aria-hidden="true"></i>
+            <i class="fa-solid fa-chevron-left text-primary text-[11px]" aria-hidden="true"></i>
             <span>{{ t('settings.mobile.allSettings') }}</span>
           </button>
 
@@ -342,7 +342,7 @@
               <!-- 侧边栏头部 (Floating Dock Header) -->
               <div class="flex items-center gap-2.5 px-2.5 pt-1 pb-3.5 border-b border-border">
                 <div
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-header text-foreground shadow-2xs border border-border/40"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 shadow-2xs"
                 >
                   <i class="fa-solid fa-sliders text-xs" aria-hidden="true"></i>
                 </div>
@@ -389,7 +389,7 @@
                       <div class="flex items-center gap-2.5 min-w-0">
                         <div
                           class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-colors"
-                          :class="active === item.value ? 'bg-header text-foreground' : [item.iconBg, item.iconColor]"
+                          :class="[item.iconBg, item.iconColor]"
                         >
                           <i :class="item.icon" class="text-xs" aria-hidden="true"></i>
                         </div>
@@ -400,7 +400,7 @@
                         class="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors"
                         :class="
                           active === item.value
-                            ? 'bg-foreground text-background'
+                            ? 'bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/30'
                             : 'bg-card text-text-secondary border border-border/40'
                         "
                       >
