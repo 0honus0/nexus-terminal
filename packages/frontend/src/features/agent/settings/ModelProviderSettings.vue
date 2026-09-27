@@ -1413,9 +1413,9 @@
                     }}</span>
                   </span>
 
-                  <!-- 模型数量徽标 -->
+                  <!-- 模型数量徽标：窄模式下隐藏，避免与主体图标堆叠或重复 -->
                   <span
-                    class="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2 py-0.5 text-[11px] font-mono font-medium text-text-secondary"
+                    class="hidden sm:inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2 py-0.5 text-[11px] font-mono font-medium text-text-secondary"
                   >
                     <i class="fa-solid fa-layer-group text-[10px] text-text-secondary/60" aria-hidden="true"></i>
                     <span>{{ $t('agent.settings.providers.modelCount', { count: provider.models.length }) }}</span>
