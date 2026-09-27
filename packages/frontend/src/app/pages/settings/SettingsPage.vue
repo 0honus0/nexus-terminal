@@ -309,11 +309,11 @@
                 :tabindex="active === item.value ? 0 : -1"
                 :aria-selected="active === item.value"
                 :aria-controls="`settings-panel-${item.value}`"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium border-b-2 transition-colors duration-150 cursor-pointer"
                 :class="
                   active === item.value
-                    ? 'border-b-2 border-foreground bg-header/75 text-foreground font-semibold'
-                    : 'text-text-secondary hover:text-foreground hover:bg-header/60'
+                    ? 'border-primary bg-header/75 text-foreground font-semibold'
+                    : 'border-transparent text-text-secondary hover:text-foreground hover:bg-header/60'
                 "
                 @click="selectTab(item.value)"
                 @keydown="handleTabKeydown($event, item.value, 'horizontal', 'mobile')"
@@ -362,19 +362,21 @@
                       :tabindex="active === item.value ? 0 : -1"
                       :aria-selected="active === item.value"
                       :aria-controls="`settings-panel-${item.value}`"
-                      class="group relative flex w-full items-center justify-between rounded-xl pl-3 pr-2.5 py-2 xl:py-2.5 text-left text-xs transition-all duration-150 ease-out cursor-pointer overflow-hidden"
+                      class="group relative flex w-full items-center justify-between rounded-xl pl-3 pr-2.5 py-2 xl:py-2.5 text-left text-xs border transition-colors duration-150 ease-out cursor-pointer overflow-hidden"
                       :class="
                         active === item.value
-                          ? 'bg-header/75 text-foreground font-semibold border border-border/60 shadow-2xs backdrop-blur-md'
-                          : 'text-text-secondary hover:text-foreground hover:bg-header/40 font-medium'
+                          ? 'border-border/60 bg-header/75 text-foreground font-semibold shadow-2xs'
+                          : 'border-transparent text-text-secondary hover:text-foreground hover:bg-header/40 font-medium'
                       "
                       @click="selectTab(item.value)"
                       @keydown="handleTabKeydown($event, item.value, 'vertical', 'desktop')"
                     >
                       <!-- 左侧高亮指示条 (Active Left Indicator) -->
                       <span
-                        v-if="active === item.value"
-                        class="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-foreground"
+                        class="absolute inset-y-2.5 left-0 w-0.5 rounded-full bg-primary transition-all duration-200 ease-out"
+                        :class="
+                          active === item.value ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-50 pointer-events-none'
+                        "
                         aria-hidden="true"
                       ></span>
 

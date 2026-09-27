@@ -1371,7 +1371,7 @@
         >
           <!-- 服务商顶行摘要（主体鲜明、层级清晰） -->
           <div
-            class="flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-3.5 transition-colors"
+            class="flex flex-col md:flex-row md:items-center justify-between gap-3 px-3.5 sm:px-4 py-3 sm:py-3.5 transition-colors"
             :class="{ 'border-b border-border/50 bg-header/25': drawerOpen[provider.id] }"
           >
             <!-- 左侧核心身份：服务商主体（加大字号、独立区块、突出 newapi 主体）、状态、模型数与 URL -->
@@ -1456,15 +1456,15 @@
 
             <!-- 右侧操作工具条：协议下拉 + 模型与测试(仅图标) + 更新模型(仅图标) + 启动/停用(仅图标) + 删除(仅图标) -->
             <div
-              class="flex items-center justify-between md:justify-end gap-2.5 shrink-0 pt-2.5 md:pt-0 border-t border-border/40 md:border-0 px-2 sm:px-0"
+              class="flex items-center justify-between md:justify-end gap-2 sm:gap-2.5 shrink-0 pt-2.5 md:pt-0 border-t border-border/40 md:border-0 w-full md:w-auto"
             >
               <!-- 协议选择器（紧凑排布） -->
-              <div class="w-[140px] shrink-0">
+              <div class="min-w-0 flex-1 sm:flex-initial sm:w-[136px]">
                 <UiSelect
                   density="compact"
                   text-align="center"
                   :hide-indicator="true"
-                  panel-class="!min-w-[140px]"
+                  panel-class="!min-w-[136px]"
                   class="w-full text-[11px]"
                   :aria-label="$t('agent.settings.providers.protocol')"
                   :disabled="busy"
@@ -1474,7 +1474,7 @@
                 />
               </div>
 
-              <div class="flex items-center gap-1.5 shrink-0">
+              <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
                 <!-- 模型与测试（仅图标） -->
                 <UiButton
                   appearance="soft"
