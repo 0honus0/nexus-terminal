@@ -2247,7 +2247,7 @@
     :title="`${currentTestModalProvider?.displayName || ''} · ${$t('agent.settings.providers.testModalTitle')}`"
     :aria-label="$t('agent.settings.providers.testModalTitle')"
     :focus-on-open="true"
-    panel-class="max-w-2xl p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    panel-class="max-w-2xl p-4 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
     @close="testModalOpen = false"
   >
     <div v-if="currentTestModalProvider" class="space-y-4">
@@ -2282,7 +2282,7 @@
           <!-- 左侧信息 -->
           <div class="flex items-center gap-2.5 min-w-0">
             <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-card border border-border/60 text-foreground"
+              class="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-card border border-border/60 text-foreground"
             >
               <i class="fa-solid fa-cube text-xs text-primary/80"></i>
             </div>
@@ -2306,21 +2306,24 @@
                 </span>
                 <span
                   v-if="model.supportsTools"
-                  class="rounded bg-success/10 text-success border border-success/20 px-1.5 py-0.5 font-medium"
+                  class="inline-flex items-center gap-1 rounded bg-success/10 text-success border border-success/20 px-1.5 py-0.5 font-medium"
                 >
-                  {{ $t('agent.settings.providers.toolCapable') }}
+                  <i class="fa-solid fa-wrench text-[8px]" aria-hidden="true"></i>
+                  <span>{{ $t('agent.settings.providers.toolCapable') }}</span>
                 </span>
                 <span
                   v-if="model.supportsImageInput"
-                  class="rounded bg-info/10 text-info border border-info/20 px-1.5 py-0.5 font-medium"
+                  class="inline-flex items-center gap-1 rounded bg-info/10 text-info border border-info/20 px-1.5 py-0.5 font-medium"
                 >
-                  {{ $t('agent.settings.providers.imageInput') }}
+                  <i class="fa-solid fa-image text-[8px]" aria-hidden="true"></i>
+                  <span>{{ $t('agent.settings.providers.imageInput') }}</span>
                 </span>
                 <span
                   v-if="model.supportsFileInput"
-                  class="rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
+                  class="inline-flex items-center gap-1 rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 font-medium"
                 >
-                  {{ $t('agent.settings.providers.fileInput') }}
+                  <i class="fa-solid fa-file text-[8px]" aria-hidden="true"></i>
+                  <span>{{ $t('agent.settings.providers.fileInput') }}</span>
                 </span>
                 <span
                   v-if="model.reasoningEfforts?.length"
@@ -2334,7 +2337,9 @@
           </div>
 
           <!-- 右侧操作与测试 -->
-          <div class="flex items-center gap-2 shrink-0">
+          <div
+            class="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto sm:shrink-0 justify-end pt-1 sm:pt-0"
+          >
             <!-- 测试反馈微芯片 -->
             <span
               v-if="testResults[testKey(currentTestModalProvider, model.id)]"
@@ -2364,17 +2369,20 @@
             <UiButton
               appearance="soft"
               tone="neutral"
+              density="compact"
               v-if="!(currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)"
               type="button"
               :disabled="busy || !currentTestModalProvider.enabled"
               @click="emit('defaultModel', currentTestModalProvider.id, model.id)"
             >
-              {{ $t('agent.settings.providers.setDefault') }}
+              <i class="fa-solid fa-star text-[10px]" aria-hidden="true"></i>
+              <span>{{ $t('agent.settings.providers.setDefault') }}</span>
             </UiButton>
 
             <UiButton
               appearance="soft"
               tone="neutral"
+              density="compact"
               type="button"
               :disabled="busy"
               @click="openCapabilityEditor(currentTestModalProvider, model)"
@@ -2387,6 +2395,7 @@
             <UiButton
               appearance="soft"
               tone="neutral"
+              density="compact"
               type="button"
               :disabled="
                 busy ||
@@ -2403,6 +2412,7 @@
             <UiButton
               type="button"
               appearance="soft"
+              density="compact"
               :tone="
                 currentTestModalProvider.models.length <= 1 ||
                 (currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId)
