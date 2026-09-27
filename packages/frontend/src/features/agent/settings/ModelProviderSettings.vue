@@ -1069,7 +1069,11 @@
     if (name.includes('ollama') || url.includes('localhost') || url.includes('127.0.0.1'))
       return 'fa-solid fa-server text-warning';
     if (name.includes('silicon') || url.includes('siliconflow')) return 'fa-solid fa-microchip text-primary';
-    return 'fa-solid fa-cube text-text-secondary';
+    if (name.includes('newapi') || url.includes('newapi') || name.includes('oneapi') || url.includes('oneapi'))
+      return 'fa-solid fa-network-wired text-primary';
+    if (name.includes('anthropic') || name.includes('claude') || url.includes('anthropic'))
+      return 'fa-solid fa-brain text-warning';
+    return 'fa-solid fa-cloud text-primary';
   };
 
   const confirmRemoveAll = async (): Promise<void> => {
@@ -1090,22 +1094,32 @@
   <section class="relative z-20 rounded-2xl border border-border bg-card shadow-xs transition-all">
     <!-- 头部工具栏与统计 -->
     <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
+      class="flex items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
     >
-      <div>
-        <div class="flex items-center gap-2.5">
-          <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.providers.title') }}</h3>
-          <span
-            class="rounded-full border border-border/70 bg-background/80 px-2.5 py-0.5 text-[11px] font-medium text-text-secondary"
-          >
-            {{ $t('agent.settings.providers.counts', { providers: providers.length, models: modelCount }) }}
-          </span>
-          <UiInfoHint :text="$t('agent.settings.providers.description')" />
-        </div>
+      <div class="flex items-center gap-2 min-w-0">
+        <h3 class="text-sm font-semibold text-foreground whitespace-nowrap">
+          {{ $t('agent.settings.providers.title') }}
+        </h3>
+        <span
+          class="rounded-full border border-border/70 bg-background/80 px-2 sm:px-2.5 py-0.5 text-[11px] font-medium text-text-secondary whitespace-nowrap"
+        >
+          <span class="hidden sm:inline">{{
+            $t('agent.settings.providers.counts', { providers: providers.length, models: modelCount })
+          }}</span>
+          <span class="sm:hidden">{{ providers.length }} / {{ modelCount }}</span>
+        </span>
+        <UiInfoHint :text="$t('agent.settings.providers.description')" class="shrink-0" />
       </div>
 
       <!-- 添加服务商主按钮 -->
-      <UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" class="w-28" @click="openAddModal">
+      <UiButton
+        appearance="soft"
+        tone="neutral"
+        type="button"
+        :disabled="busy"
+        class="shrink-0 whitespace-nowrap w-auto px-3.5"
+        @click="openAddModal"
+      >
         <span class="inline-flex items-center gap-1.5 text-xs">
           <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
           <span>{{ $t('agent.settings.providers.add') }}</span>
@@ -1158,7 +1172,7 @@
 
       <!-- 默认模型选择微岛（现代定制无原生边框） -->
       <div
-        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-header/30 p-3.5 sm:p-4 transition-all relative z-10"
+        class="flex items-center justify-between gap-3 rounded-xl bg-header/30 p-3.5 sm:p-4 transition-all relative z-10"
       >
         <div class="flex items-center gap-2.5 shrink-0">
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -1357,7 +1371,7 @@
         >
           <!-- 服务商顶行摘要（主体鲜明、层级清晰） -->
           <div
-            class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 px-4 py-3.5 transition-colors"
+            class="flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-3.5 transition-colors"
             :class="{ 'border-b border-border/50 bg-header/25': drawerOpen[provider.id] }"
           >
             <!-- 左侧核心身份：服务商主体（加大字号、独立区块、突出 newapi 主体）、状态、模型数与 URL -->
@@ -1372,16 +1386,16 @@
               <!-- 服务商核心主体信息列 -->
               <div class="min-w-0 flex-1 space-y-1.5">
                 <!-- 第一行：Provider 名称主体（大字号、突出外围明显边界）、启用状态徽标、模型数量 -->
-                <div class="flex flex-wrap items-center gap-2">
+                <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <span
-                    class="inline-flex items-center rounded-xl border border-border/90 bg-background/90 px-3 py-1 text-sm sm:text-base font-bold tracking-tight text-foreground shadow-2xs"
+                    class="inline-flex shrink-0 items-center rounded-xl border border-border/90 bg-background/90 px-2.5 py-0.5 text-sm font-bold tracking-tight text-foreground shadow-2xs"
                   >
                     {{ provider.displayName }}
                   </span>
 
                   <!-- 状态徽标：已启用 / 已停用 -->
                   <span
-                    class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-all"
+                    class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-all"
                     :class="
                       provider.enabled
                         ? 'border-success/30 bg-success/10 text-success'
@@ -1401,9 +1415,9 @@
 
                   <!-- 模型数量徽标 -->
                   <span
-                    class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2.5 py-0.5 text-[11px] font-mono font-medium text-text-secondary"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2 py-0.5 text-[11px] font-mono font-medium text-text-secondary"
                   >
-                    <i class="fa-solid fa-cube text-[10px] text-text-secondary/60" aria-hidden="true"></i>
+                    <i class="fa-solid fa-layer-group text-[10px] text-text-secondary/60" aria-hidden="true"></i>
                     <span>{{ $t('agent.settings.providers.modelCount', { count: provider.models.length }) }}</span>
                   </span>
                 </div>
@@ -1442,14 +1456,15 @@
 
             <!-- 右侧操作工具条：协议下拉 + 模型与测试(仅图标) + 更新模型(仅图标) + 启动/停用(仅图标) + 删除(仅图标) -->
             <div
-              class="flex items-center justify-end gap-1.5 shrink-0 pt-2.5 lg:pt-0 border-t border-border/40 lg:border-0"
+              class="flex items-center justify-between md:justify-end gap-2 shrink-0 pt-2.5 md:pt-0 border-t border-border/40 md:border-0"
             >
               <!-- 协议选择器（紧凑排布） -->
-              <div class="w-[136px] shrink-0">
+              <div class="w-[140px] shrink-0">
                 <UiSelect
                   density="compact"
+                  text-align="center"
                   :hide-indicator="true"
-                  panel-class="!min-w-[136px]"
+                  panel-class="!min-w-[140px]"
                   class="w-full text-[11px]"
                   :aria-label="$t('agent.settings.providers.protocol')"
                   :disabled="busy"
@@ -1459,77 +1474,79 @@
                 />
               </div>
 
-              <!-- 模型与测试（仅图标） -->
-              <UiButton
-                appearance="soft"
-                tone="neutral"
-                density="compact"
-                icon-only
-                type="button"
-                :title="$t('agent.settings.providers.testModalBtn', { count: provider.models.length })"
-                :aria-label="$t('agent.settings.providers.testModalBtn', { count: provider.models.length })"
-                :disabled="busy"
-                @click="openTestModal(provider)"
-              >
-                <i class="fa-solid fa-vial text-xs text-primary" aria-hidden="true"></i>
-              </UiButton>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <!-- 模型与测试（仅图标） -->
+                <UiButton
+                  appearance="soft"
+                  tone="neutral"
+                  density="compact"
+                  icon-only
+                  type="button"
+                  :title="$t('agent.settings.providers.testModalBtn', { count: provider.models.length })"
+                  :aria-label="$t('agent.settings.providers.testModalBtn', { count: provider.models.length })"
+                  :disabled="busy"
+                  @click="openTestModal(provider)"
+                >
+                  <i class="fa-solid fa-vial text-xs text-primary" aria-hidden="true"></i>
+                </UiButton>
 
-              <!-- 更新模型（抽屉式同步，仅图标） -->
-              <UiButton
-                type="button"
-                appearance="soft"
-                density="compact"
-                icon-only
-                :tone="drawerOpen[provider.id] ? 'primary' : 'neutral'"
-                :title="$t('agent.settings.providers.discover')"
-                :aria-label="$t('agent.settings.providers.discover')"
-                :disabled="busy"
-                @click="toggleDrawer(provider)"
-              >
-                <i
-                  class="fa-solid fa-arrows-rotate text-xs"
-                  :class="{ 'fa-spin': busy || drawerLoading[provider.id] }"
-                  aria-hidden="true"
-                ></i>
-              </UiButton>
+                <!-- 更新模型（抽屉式同步，仅图标） -->
+                <UiButton
+                  type="button"
+                  appearance="soft"
+                  density="compact"
+                  icon-only
+                  :tone="drawerOpen[provider.id] ? 'primary' : 'neutral'"
+                  :title="$t('agent.settings.providers.discover')"
+                  :aria-label="$t('agent.settings.providers.discover')"
+                  :disabled="busy"
+                  @click="toggleDrawer(provider)"
+                >
+                  <i
+                    class="fa-solid fa-arrows-rotate text-xs"
+                    :class="{ 'fa-spin': busy || drawerLoading[provider.id] }"
+                    aria-hidden="true"
+                  ></i>
+                </UiButton>
 
-              <!-- 启停状态切换（仅图标）：启动(绿色) / 停用(红色) -->
-              <UiButton
-                type="button"
-                appearance="soft"
-                density="compact"
-                icon-only
-                :tone="provider.enabled ? 'danger' : 'success'"
-                :disabled="busy"
-                :title="
-                  provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable')
-                "
-                :aria-label="
-                  provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable')
-                "
-                @click="emit('toggle', provider, !provider.enabled)"
-              >
-                <i
-                  :class="provider.enabled ? 'fa-solid fa-power-off' : 'fa-solid fa-play'"
-                  class="text-xs"
-                  aria-hidden="true"
-                ></i>
-              </UiButton>
+                <!-- 启停状态切换（仅图标）：启动(绿色) / 停用(红色) -->
+                <UiButton
+                  type="button"
+                  appearance="soft"
+                  density="compact"
+                  icon-only
+                  :tone="provider.enabled ? 'danger' : 'success'"
+                  :disabled="busy"
+                  :title="
+                    provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable')
+                  "
+                  :aria-label="
+                    provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable')
+                  "
+                  @click="emit('toggle', provider, !provider.enabled)"
+                >
+                  <i
+                    :class="provider.enabled ? 'fa-solid fa-power-off' : 'fa-solid fa-play'"
+                    class="text-xs"
+                    aria-hidden="true"
+                  ></i>
+                </UiButton>
 
-              <!-- 删除服务商（仅图标） -->
-              <UiButton
-                type="button"
-                appearance="ghost"
-                tone="danger"
-                icon-only
-                density="compact"
-                :title="$t('agent.settings.providers.deleteConfirm')"
-                :aria-label="$t('agent.settings.providers.deleteConfirm')"
-                :disabled="busy"
-                @click="deletingProvider = provider"
-              >
-                <i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
-              </UiButton>
+                <!-- 删除服务商（仅图标） -->
+                <UiButton
+                  type="button"
+                  appearance="ghost"
+                  tone="danger"
+                  icon-only
+                  density="compact"
+                  :title="$t('agent.settings.providers.deleteConfirm')"
+                  :aria-label="$t('agent.settings.providers.deleteConfirm')"
+                  :disabled="busy"
+                  @click="deletingProvider = provider"
+                >
+                  <i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
+                </UiButton>
+              </div>
             </div>
           </div>
 
