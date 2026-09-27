@@ -1376,9 +1376,9 @@
           >
             <!-- 左侧核心身份：服务商主体（加大字号、独立区块、突出 newapi 主体）、状态、模型数与 URL -->
             <div class="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-              <!-- 服务商图标 Avatar（精致微渐变双层质感） -->
+              <!-- 服务商图标 Avatar：窄模式下隐藏，宽模式保留 -->
               <div
-                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 border border-primary/25 text-primary shadow-2xs"
+                class="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 border border-primary/25 text-primary shadow-2xs"
               >
                 <i :class="providerIcon(provider)" class="text-sm"></i>
               </div>
@@ -1413,9 +1413,9 @@
                     }}</span>
                   </span>
 
-                  <!-- 模型数量徽标：窄模式下隐藏，避免与主体图标堆叠或重复 -->
+                  <!-- 模型数量徽标 -->
                   <span
-                    class="hidden sm:inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2 py-0.5 text-[11px] font-mono font-medium text-text-secondary"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2 py-0.5 text-[11px] font-mono font-medium text-text-secondary"
                   >
                     <i class="fa-solid fa-layer-group text-[10px] text-text-secondary/60" aria-hidden="true"></i>
                     <span>{{ $t('agent.settings.providers.modelCount', { count: provider.models.length }) }}</span>
@@ -1456,7 +1456,7 @@
 
             <!-- 右侧操作工具条：协议下拉 + 模型与测试(仅图标) + 更新模型(仅图标) + 启动/停用(仅图标) + 删除(仅图标) -->
             <div
-              class="flex items-center justify-between md:justify-end gap-2 shrink-0 pt-2.5 md:pt-0 border-t border-border/40 md:border-0"
+              class="flex items-center justify-between md:justify-end gap-2.5 shrink-0 pt-2.5 md:pt-0 border-t border-border/40 md:border-0 px-2 sm:px-0"
             >
               <!-- 协议选择器（紧凑排布） -->
               <div class="w-[140px] shrink-0">

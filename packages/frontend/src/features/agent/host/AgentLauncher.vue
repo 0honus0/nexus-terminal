@@ -131,7 +131,7 @@
     <button
       type="button"
       data-agent-launcher-trigger
-      class="group relative flex h-11 w-11 touch-none select-none items-center justify-center rounded-full border border-border/80 bg-card/92 text-foreground shadow-[0_4px_20px_rgba(0,0,0,0.12)] backdrop-blur-xl ring-1 ring-white/20 dark:ring-white/8 transition-all duration-200 hover:border-primary/50 hover:shadow-[0_6px_24px_color-mix(in_srgb,var(--color-primary)_22%,transparent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:cursor-not-allowed disabled:opacity-50"
+      class="group relative flex h-9 w-9 sm:h-11 sm:w-11 touch-none select-none items-center justify-center rounded-full border border-border/80 bg-card/92 text-foreground shadow-[0_4px_20px_rgba(0,0,0,0.12)] backdrop-blur-xl ring-1 ring-white/20 dark:ring-white/8 transition-all duration-200 hover:border-primary/50 hover:shadow-[0_6px_24px_color-mix(in_srgb,var(--color-primary)_22%,transparent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:cursor-not-allowed disabled:opacity-50"
       :class="
         dragging
           ? 'scale-110 cursor-grabbing ring-2 ring-primary/60 shadow-2xl rotate-3'
@@ -165,7 +165,7 @@
           aria-hidden="true"
         ></span>
         <svg
-          class="relative h-5 w-5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6"
+          class="relative h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6"
           viewBox="0 0 24 24"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
@@ -210,7 +210,7 @@
       <!-- 状态与任务数字指示徽标 -->
       <span
         v-if="badge > 0"
-        class="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-error px-1 text-[10px] font-bold leading-none text-white shadow-xs ring-2 ring-background"
+        class="absolute -right-0.5 -top-0.5 sm:-right-1 sm:-top-1 flex h-4 min-w-4 sm:h-4.5 sm:min-w-4.5 items-center justify-center rounded-full bg-error px-1 text-[10px] font-bold leading-none text-white shadow-xs ring-2 ring-background"
       >
         {{ badge > 99 ? '99+' : badge }}
       </span>

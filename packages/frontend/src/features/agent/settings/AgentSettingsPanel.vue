@@ -664,33 +664,32 @@
     <!-- 顶部状态与主控条 (Status & Master Switch Banner) -->
     <div
       v-if="settings"
-      class="rounded-xl border border-border bg-card px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2.5 sm:gap-3 shadow-xs"
+      class="rounded-xl border border-border bg-card px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between sm:justify-start gap-2 sm:gap-4 shadow-xs"
     >
-      <!-- 左边两个靠左边：已启用状态 + 活跃 App 整体展示 -->
-      <div class="flex items-center gap-2.5 min-w-0">
-        <span
-          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold shrink-0 select-none"
-          :class="stateBadgeClass"
-        >
-          <span class="h-1.5 w-1.5 rounded-full" :class="stateDotClass"></span>
-          {{ stateLabel }}
-        </span>
+      <!-- 已启用状态 -->
+      <span
+        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold shrink-0 select-none"
+        :class="stateBadgeClass"
+      >
+        <span class="h-1.5 w-1.5 rounded-full" :class="stateDotClass"></span>
+        {{ stateLabel }}
+      </span>
 
-        <span
-          class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs text-text-secondary shadow-2xs shrink-0 select-none"
-        >
-          <span>{{ $t('agent.settings.summary.activeApps') }}</span>
-          <span class="font-mono font-medium text-foreground tracking-wide">
-            <span :class="enabledApps > 0 ? 'text-foreground font-semibold' : 'text-text-secondary'">{{
-              enabledApps
-            }}</span>
-            <span class="text-text-secondary/50 mx-1">/</span>
-            <span>{{ apps.length }}</span>
-          </span>
+      <!-- 活跃 App 整体展示 -->
+      <span
+        class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 sm:px-3 py-1 text-xs text-text-secondary shadow-2xs shrink-0 select-none"
+      >
+        <span>{{ $t('agent.settings.summary.activeApps') }}</span>
+        <span class="font-mono font-medium text-foreground tracking-wide">
+          <span :class="enabledApps > 0 ? 'text-foreground font-semibold' : 'text-text-secondary'">{{
+            enabledApps
+          }}</span>
+          <span class="text-text-secondary/50 mx-1">/</span>
+          <span>{{ apps.length }}</span>
         </span>
-      </div>
+      </span>
 
-      <!-- 最后一个靠右边：关闭/开启 Agent -->
+      <!-- 关闭/开启 Agent -->
       <UiButton
         type="button"
         :appearance="runtimeReady(settings.availability.state) ? 'soft' : 'solid'"
