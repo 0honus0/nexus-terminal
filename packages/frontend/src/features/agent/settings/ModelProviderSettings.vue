@@ -1566,11 +1566,13 @@
             <!-- 左右两栏策略布局：左侧【可添加模型】支持全选、多选、一键添加所有；右侧【已生效模型】支持单项及批量取消添加 -->
             <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-stretch">
               <!-- 左栏：可添加模型（支持多选、全选添加） -->
-              <div class="flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs h-full">
-                <!-- 顶栏标题与批量动作（统一高度 h-9 pb-2） -->
-                <div class="flex items-center justify-between gap-2 h-9 pb-2 border-b border-border/40 shrink-0">
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-xs font-semibold text-foreground">{{
+              <div
+                class="configured-models-pane flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs h-full"
+              >
+                <!-- 始终只显示一个批量动作，窄宽度下保持标题与操作同一行。 -->
+                <div class="flex min-h-9 items-center justify-between gap-2 pb-2 border-b border-border/40 shrink-0">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <span class="shrink-0 whitespace-nowrap text-xs font-semibold text-foreground">{{
                       $t('agent.settings.providers.discoveredModels')
                     }}</span>
                     <span
@@ -1581,36 +1583,41 @@
                   </div>
 
                   <!-- 批量操作动作区 -->
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex min-w-0 items-center justify-end">
                     <!-- 多选添加按钮 -->
                     <UiButton
+                      class="min-w-0 max-w-full"
                       appearance="solid"
                       tone="primary"
                       density="compact"
                       v-if="selectedDiscoveredCount(provider) > 0"
                       type="button"
                       :disabled="busy"
+                      :title="$t('agent.settings.providers.addSelected', { count: selectedDiscoveredCount(provider) })"
                       @click="addSelectedDiscovered(provider)"
                     >
                       <i class="fa-solid fa-plus text-[10px]"></i>
-                      <span>{{
-                        $t('agent.settings.providers.addSelected', { count: selectedDiscoveredCount(provider) })
+                      <span class="min-w-0 truncate">{{
+                        $t('agent.settings.providers.addSelectedCompact', {
+                          count: selectedDiscoveredCount(provider),
+                        })
                       }}</span>
                     </UiButton>
 
                     <!-- 一键添加所有模型按钮 -->
                     <UiButton
+                      class="min-w-0 max-w-full"
                       appearance="soft"
                       tone="neutral"
                       density="compact"
-                      v-if="availableDiscoveries(provider).length > 0"
+                      v-if="availableDiscoveries(provider).length > 0 && selectedDiscoveredCount(provider) === 0"
                       type="button"
                       :disabled="busy"
                       :title="$t('agent.settings.providers.addAllModels')"
                       @click="addAllDiscovered(provider)"
                     >
                       <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
-                      <span>{{ $t('agent.settings.providers.addAllModels') }}</span>
+                      <span class="min-w-0 truncate">{{ $t('agent.settings.providers.addAllModelsCompact') }}</span>
                     </UiButton>
                   </div>
                 </div>
@@ -1787,10 +1794,14 @@
                       <span class="font-mono text-xs text-foreground truncate">{{ model.id }}</span>
                       <span
                         v-if="provider.id === defaultProviderId && model.id === defaultModelId"
-                        class="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[11px] font-semibold text-primary"
+                        class="configured-model-default-badge inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[11px] font-semibold text-primary"
+                        :title="$t('agent.settings.providers.defaultBadge')"
+                        :aria-label="$t('agent.settings.providers.defaultBadge')"
                       >
-                        <i class="fa-solid fa-star text-[7px]"></i>
-                        <span>{{ $t('agent.settings.providers.defaultBadge') }}</span>
+                        <i class="fa-solid fa-star text-[7px]" aria-hidden="true"></i>
+                        <span class="configured-model-default-label">{{
+                          $t('agent.settings.providers.defaultBadge')
+                        }}</span>
                       </span>
                     </div>
 
@@ -1903,7 +1914,7 @@
     :aria-label="$t('agent.settings.providers.removeAllModelsConfirmTitle')"
     :focus-on-open="true"
     :restore-focus="true"
-    panel-class="max-w-md p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    panel-class="max-w-md p-5 sm:p-6 rounded-2xl"
     @close="confirmingRemoveAll = null"
   >
     <p class="text-sm leading-6 text-text-secondary">
@@ -1932,7 +1943,7 @@
     :aria-label="$t('agent.settings.providers.deleteConfirm')"
     :focus-on-open="true"
     :restore-focus="true"
-    panel-class="max-w-md p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    panel-class="max-w-md p-5 sm:p-6 rounded-2xl"
     @close="deletingProvider = null"
   >
     <p class="text-sm leading-6 text-text-secondary">
@@ -1964,7 +1975,7 @@
     :close-on-escape="!modalTesting"
     :focus-on-open="true"
     :restore-focus="true"
-    panel-class="max-w-xl p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    panel-class="max-w-xl p-5 sm:p-6 rounded-2xl"
     @close="closeModal"
   >
     <div class="space-y-4">
@@ -2247,7 +2258,7 @@
     :title="`${currentTestModalProvider?.displayName || ''} · ${$t('agent.settings.providers.testModalTitle')}`"
     :aria-label="$t('agent.settings.providers.testModalTitle')"
     :focus-on-open="true"
-    panel-class="max-w-2xl p-4 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    panel-class="max-w-2xl p-4 sm:p-6 rounded-2xl"
     @close="testModalOpen = false"
   >
     <div v-if="currentTestModalProvider" class="space-y-4">

@@ -6,7 +6,7 @@
 </script>
 
 <template>
-  <div data-ui="table" data-ui-gen="2" class="ui-table glass-surface overflow-x-auto rounded-lg">
+  <div data-ui="table" data-ui-gen="2" class="ui-table ui-glass-panel overflow-x-auto rounded-lg">
     <table v-if="!empty" class="min-w-full border-collapse text-sm">
       <thead class="ui-table__head text-left text-text-secondary">
         <slot name="head" />

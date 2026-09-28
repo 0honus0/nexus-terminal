@@ -11,6 +11,7 @@
     stringStorageCodec,
     writeStoredValue,
   } from '@/foundation/browser';
+  import { UiButton, UiInput, UiNativeSelect, UiSwitch } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { useConnections } from '../composables/useConnections';
@@ -215,13 +216,13 @@
   };
 </script>
 <template>
-  <main class="bg-background p-4 text-foreground md:p-6 lg:p-8">
+  <main class="p-4 text-foreground md:p-6 lg:p-8">
     <div class="mx-auto max-w-screen-lg">
       <h1 class="mb-6 text-2xl font-semibold">{{ t('nav.connections') }}</h1>
 
-      <section class="min-h-[400px] overflow-hidden rounded-lg border border-border bg-background shadow">
+      <section class="ui-glass-panel min-h-[400px] overflow-hidden rounded-xl">
         <header
-          class="flex flex-col items-stretch justify-between gap-3 border-b border-border px-4 py-3 lg:flex-row lg:items-center"
+          class="flex flex-col items-stretch justify-between gap-3 border-b border-border/60 px-4 py-3 lg:flex-row lg:items-center"
         >
           <h2 class="shrink-0 text-lg font-medium">{{ t('dashboard.connectionList') }} ({{ filtered.length }})</h2>
           <div class="flex w-full flex-wrap items-stretch gap-2 lg:w-auto lg:flex-nowrap lg:items-center">
@@ -229,45 +230,35 @@
               <label for="batch-edit-toggle" class="mr-2 text-sm font-medium text-text-secondary">{{
                 t('connections.batchEdit.toggleLabel')
               }}</label>
-              <button
+              <UiSwitch
+                v-model="batch"
                 id="batch-edit-toggle"
                 data-testid="batch-edit-toggle"
-                type="button"
-                role="switch"
-                :aria-checked="batch"
-                class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                :class="batch ? 'bg-primary' : 'bg-gray-300'"
-                @click="
-                  batch = !batch;
-                  selected = new Set();
-                "
-              >
-                <span
-                  aria-hidden="true"
-                  class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200"
-                  :class="batch ? 'translate-x-5' : 'translate-x-0'"
-                />
-              </button>
+                @update:model-value="selected = new Set()"
+              />
             </div>
 
-            <input
+            <UiInput
               v-model="search"
               data-testid="connections-search"
               type="text"
+              density="compact"
               :placeholder="t('dashboard.searchConnectionsPlaceholder')"
-              class="h-8 w-full rounded border border-border bg-background px-3 py-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:w-48"
+              class="w-full sm:w-48"
             />
-            <select
+            <UiNativeSelect
               v-model="tagId"
-              class="h-8 rounded border border-border bg-background px-2 py-1 pr-7 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              density="compact"
+              class="w-auto min-w-32"
               :aria-label="t('dashboard.filterByTag')"
             >
               <option value="">{{ t('dashboard.filterTags.all') }}</option>
               <option v-for="tag in tags.items.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-            </select>
-            <select
+            </UiNativeSelect>
+            <UiNativeSelect
               v-model="sort"
-              class="h-8 rounded border border-border bg-background px-2 py-1 pr-7 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              density="compact"
+              class="w-auto min-w-32"
               :aria-label="t('dashboard.sortBy')"
             >
               <option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
@@ -275,10 +266,11 @@
               <option value="type">{{ t('dashboard.sortOptions.type') }}</option>
               <option value="updated">{{ t('dashboard.sortOptions.updated') }}</option>
               <option value="created">{{ t('dashboard.sortOptions.created') }}</option>
-            </select>
-            <button
-              type="button"
-              class="flex h-8 items-center justify-center rounded border border-border px-1.5 hover:bg-header focus:outline-none focus:ring-1 focus:ring-primary"
+            </UiNativeSelect>
+            <UiButton
+              appearance="soft"
+              density="compact"
+              icon-only
               :aria-label="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
               :title="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
               @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'"
@@ -287,87 +279,87 @@
                 :class="['fas', sortOrder === 'asc' ? 'fa-arrow-up-a-z' : 'fa-arrow-down-z-a', 'w-4 text-center']"
                 aria-hidden="true"
               />
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               data-testid="connections-add-button"
               type="button"
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-button text-button-text shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              appearance="solid"
+              density="compact"
+              icon-only
               :title="t('connections.addConnection')"
               @click="openAdd"
             >
-              <i class="fas fa-plus !text-white" aria-hidden="true" />
-            </button>
-            <button
+              <i class="fas fa-plus" aria-hidden="true" />
+            </UiButton>
+            <UiButton
               type="button"
+              appearance="solid"
+              density="compact"
               :disabled="!filtered.some((connection) => connection.type === 'SSH')"
-              class="flex h-8 shrink-0 items-center justify-center rounded-md bg-button px-3 py-1.5 text-sm text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
               :title="t('connections.actions.testAllFiltered')"
               @click="testAllFiltered"
             >
-              <i class="fas fa-check-double mr-1 !text-white sm:mr-2" aria-hidden="true" /><span
-                class="hidden sm:inline"
-                >{{ t('connections.actions.testAllFiltered') }}</span
-              >
-            </button>
-            <button
+              <i class="fas fa-check-double" aria-hidden="true" /><span class="hidden sm:inline">{{
+                t('connections.actions.testAllFiltered')
+              }}</span>
+            </UiButton>
+            <UiButton
               type="button"
+              appearance="solid"
+              density="compact"
               :disabled="!filtered.some((connection) => connection.type === 'SSH')"
-              class="flex h-8 shrink-0 items-center justify-center rounded-md bg-button px-3 py-1.5 text-sm text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
               @click="connectAllFiltered"
             >
-              <i class="fas fa-network-wired mr-1 !text-white sm:mr-2" aria-hidden="true" /><span
-                class="hidden sm:inline"
-                >{{ t('connections.actions.connectAllFiltered') }}</span
-              >
-            </button>
+              <i class="fas fa-network-wired" aria-hidden="true" /><span class="hidden sm:inline">{{
+                t('connections.actions.connectAllFiltered')
+              }}</span>
+            </UiButton>
           </div>
         </header>
 
-        <div v-if="batch" class="flex flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-2">
-          <button
-            data-testid="batch-select-all"
-            type="button"
-            class="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm text-text-secondary shadow-sm hover:bg-border hover:text-foreground"
-            @click="selectAll"
-          >
+        <div v-if="batch" class="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2">
+          <UiButton data-testid="batch-select-all" type="button" appearance="soft" density="compact" @click="selectAll">
             {{ t('connections.batchEdit.selectAll') }} ({{ selected.size }})
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             data-testid="batch-deselect-all"
             type="button"
-            class="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm text-text-secondary shadow-sm hover:bg-border hover:text-foreground"
+            appearance="soft"
+            density="compact"
             @click="deselectAll"
           >
             {{ t('connections.batchEdit.deselectAll') }}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             data-testid="batch-invert-selection"
             type="button"
-            class="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm text-text-secondary shadow-sm hover:bg-border hover:text-foreground"
+            appearance="soft"
+            density="compact"
             @click="invert"
           >
             {{ t('connections.batchEdit.invertSelection') }}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             data-testid="batch-edit-selected"
             type="button"
             :disabled="selected.size === 0"
-            class="rounded-md bg-button px-4 py-1.5 text-sm text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
+            appearance="solid"
+            density="compact"
             @click="batchModal = true"
           >
-            <i class="fas fa-edit mr-1 !text-white" aria-hidden="true" />{{ t('connections.batchEdit.editSelected') }}
-          </button>
-          <button
+            <i class="fas fa-edit" aria-hidden="true" />{{ t('connections.batchEdit.editSelected') }}
+          </UiButton>
+          <UiButton
             data-testid="batch-delete-selected"
             type="button"
             :disabled="selected.size === 0"
-            class="rounded-md bg-red-600 px-4 py-1.5 text-sm text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            appearance="solid"
+            tone="danger"
+            density="compact"
             @click="deleteSelected"
           >
-            <i class="fas fa-trash-alt mr-1.5 !text-white" aria-hidden="true" />{{
-              t('connections.batchEdit.deleteSelectedButton')
-            }}
-          </button>
+            <i class="fas fa-trash-alt" aria-hidden="true" />{{ t('connections.batchEdit.deleteSelectedButton') }}
+          </UiButton>
         </div>
 
         <div class="p-4">
@@ -376,10 +368,10 @@
               v-for="c in filtered"
               :key="c.id"
               :data-testid="`connection-row-${c.id}`"
-              class="flex flex-col items-stretch rounded border border-border/50 bg-header/50 p-3 transition duration-150 sm:flex-row sm:items-center"
+              class="ui-glass-item flex flex-col items-stretch rounded-lg p-3 sm:flex-row sm:items-center"
               :class="[
                 selected.has(c.id) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : '',
-                batch ? 'cursor-pointer hover:bg-border/70' : 'hover:bg-border/30',
+                batch ? 'cursor-pointer' : '',
               ]"
               @click="batch && toggleSelected(c.id)"
             >
@@ -409,7 +401,7 @@
                   <span
                     v-for="name in tagNames(c)"
                     :key="name"
-                    class="rounded border border-border bg-background px-1.5 py-0.5 text-xs text-text-secondary"
+                    class="rounded-full border border-border/60 bg-card/20 px-1.5 py-0.5 text-xs text-text-secondary"
                     >{{ name }}</span
                   >
                 </div>
@@ -434,12 +426,13 @@
                 class="mt-3 flex w-full shrink-0 flex-wrap items-center gap-2 sm:mt-0 sm:w-auto sm:flex-nowrap sm:gap-0 sm:space-x-2"
                 :class="batch ? 'pointer-events-none' : ''"
               >
-                <button
+                <UiButton
                   v-if="c.type === 'SSH'"
                   data-testid="connection-row-test"
                   type="button"
                   :disabled="batch || testing.has(c.id)"
-                  class="flex h-9 w-[calc(50%-0.25rem)] shrink-0 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:flex-none"
+                  appearance="soft"
+                  class="w-[calc(50%-0.25rem)] sm:w-auto"
                   @click.stop="test(c)"
                 >
                   <i
@@ -450,32 +443,35 @@
                     ]"
                     aria-hidden="true"
                   /><span v-if="!testing.has(c.id)">{{ t('connections.actions.test') }}</span>
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   data-testid="connection-row-edit"
                   type="button"
                   :disabled="batch"
-                  class="flex h-9 w-[calc(50%-0.25rem)] shrink-0 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:flex-none"
+                  appearance="soft"
+                  class="w-[calc(50%-0.25rem)] sm:w-auto"
                   @click.stop="openEdit(c)"
                 >
                   <i class="fas fa-pencil-alt mr-1" aria-hidden="true" />{{ t('connections.actions.edit') }}
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   type="button"
                   :disabled="batch"
-                  class="flex h-9 w-[calc(50%-0.25rem)] shrink-0 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:flex-none"
+                  appearance="soft"
+                  class="w-[calc(50%-0.25rem)] sm:w-auto"
                   @click.stop="clone(c)"
                 >
                   <i class="fas fa-clone mr-1" aria-hidden="true" />{{ t('connections.actions.clone') }}
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   type="button"
                   :disabled="batch"
-                  class="flex h-9 w-[calc(50%-0.25rem)] shrink-0 items-center justify-center rounded-md bg-button px-4 py-2 text-sm font-medium text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:flex-none"
+                  appearance="solid"
+                  class="w-[calc(50%-0.25rem)] sm:w-auto"
                   @click.stop="connect(c)"
                 >
                   {{ t('connections.actions.connect') }}
-                </button>
+                </UiButton>
               </div>
             </li>
           </ul>

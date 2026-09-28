@@ -219,7 +219,7 @@
 
 <template>
   <main
-    class="min-h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-3.5rem)] lg:min-h-0 lg:max-h-[calc(100dvh-3.5rem)] lg:overflow-hidden bg-background text-foreground flex flex-col"
+    class="settings-page min-h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-3.5rem)] lg:min-h-0 lg:max-h-[calc(100dvh-3.5rem)] lg:overflow-hidden text-foreground flex flex-col"
     :class="{
       'h-[calc(100dvh-3.5rem)] max-h-[calc(100dvh-3.5rem)] overflow-hidden': mobileView === 'detail',
     }"
@@ -238,12 +238,12 @@
           <h2 class="px-2 text-xs font-semibold text-text-secondary tracking-wide">
             {{ t(group.titleKey) }}
           </h2>
-          <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs divide-y divide-border">
+          <div class="settings-mobile-group ui-glass-panel overflow-hidden rounded-2xl divide-y divide-border/60">
             <button
               v-for="item in group.items"
               :key="item.value"
               type="button"
-              class="flex w-full items-center justify-between p-3.5 text-left transition-colors hover:bg-header/50 active:bg-header/70"
+              class="settings-catalog-item flex w-full items-center justify-between p-3.5 text-left transition-colors"
               @click="selectTab(item.value)"
             >
               <div class="flex items-center gap-3 min-w-0">
@@ -283,10 +283,12 @@
         class="h-full w-full min-h-0 gap-2 sm:gap-3 lg:gap-8 overflow-hidden"
       >
         <!-- 移动端：顶部紧凑导航栏 (单行高度，居中选项，右侧不设冗余标签，放不下时右侧隐藏/可滑动) -->
-        <div class="flex items-center gap-2 pt-2.5 pb-1 lg:hidden shrink-0 w-full overflow-hidden">
+        <div
+          class="settings-mobile-toolbar ui-glass-nav mt-2 flex items-center gap-2 rounded-xl p-1.5 lg:hidden shrink-0 w-full overflow-hidden"
+        >
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-2xs hover:bg-header transition-colors shrink-0"
+            class="settings-mobile-back ui-glass-item inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-foreground transition-colors shrink-0"
             @click="mobileView = 'menu'"
           >
             <i class="fa-solid fa-chevron-left text-primary text-[11px]" aria-hidden="true"></i>
@@ -309,11 +311,11 @@
                 :tabindex="active === item.value ? 0 : -1"
                 :aria-selected="active === item.value"
                 :aria-controls="`settings-panel-${item.value}`"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium border-b-2 transition-colors duration-150 cursor-pointer"
+                class="settings-mobile-tab ui-glass-item inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer"
                 :class="
                   active === item.value
-                    ? 'border-primary bg-header/75 text-foreground font-semibold'
-                    : 'border-transparent text-text-secondary hover:text-foreground hover:bg-header/60'
+                    ? 'settings-mobile-tab--active text-foreground font-semibold'
+                    : 'border-transparent text-text-secondary hover:text-foreground'
                 "
                 @click="selectTab(item.value)"
                 @keydown="handleTabKeydown($event, item.value, 'horizontal', 'mobile')"
@@ -328,13 +330,13 @@
         <!-- 桌面端左侧悬浮控制岛 (Desktop Vertically Centered Floating Island) -->
         <aside class="hidden lg:flex flex-col justify-center shrink-0 w-64 xl:w-72 h-full py-6 select-none">
           <div
-            class="rounded-2xl border border-border bg-card p-3.5 xl:p-4 shadow-md dark:shadow-xl flex flex-col justify-between min-h-[560px] xl:min-h-[620px] max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-y-contain no-scrollbar"
+            class="settings-sidebar ui-glass-nav rounded-2xl p-3.5 xl:p-4 flex flex-col justify-between min-h-[560px] xl:min-h-[620px] max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-y-contain no-scrollbar"
           >
             <div class="space-y-3.5 xl:space-y-4">
               <!-- 侧边栏头部 (Floating Dock Header) -->
               <div class="flex items-center gap-2.5 px-2.5 pt-1 pb-3.5 border-b border-border">
                 <div
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 shadow-2xs"
+                  class="settings-icon-tile flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400"
                 >
                   <i class="fa-solid fa-sliders text-xs" aria-hidden="true"></i>
                 </div>
@@ -362,11 +364,11 @@
                       :tabindex="active === item.value ? 0 : -1"
                       :aria-selected="active === item.value"
                       :aria-controls="`settings-panel-${item.value}`"
-                      class="group relative flex w-full items-center justify-between rounded-xl pl-3 pr-2.5 py-2 xl:py-2.5 text-left text-xs border transition-colors duration-150 ease-out cursor-pointer overflow-hidden"
+                      class="settings-nav-item ui-glass-item group relative flex w-full items-center justify-between rounded-xl pl-3 pr-2.5 py-2 xl:py-2.5 text-left text-xs transition-colors duration-150 ease-out cursor-pointer overflow-hidden"
                       :class="
                         active === item.value
-                          ? 'border-border/60 bg-header/75 text-foreground font-semibold shadow-2xs'
-                          : 'border-transparent text-text-secondary hover:text-foreground hover:bg-header/40 font-medium'
+                          ? 'settings-nav-item--active text-foreground font-semibold'
+                          : 'settings-nav-item--idle border-transparent text-text-secondary hover:text-foreground font-medium'
                       "
                       @click="selectTab(item.value)"
                       @keydown="handleTabKeydown($event, item.value, 'vertical', 'desktop')"
@@ -519,6 +521,46 @@
 </template>
 
 <style scoped>
+  .settings-page {
+    background:
+      radial-gradient(circle at 4% 30%, rgb(65 160 205 / 10%), transparent 34rem),
+      radial-gradient(circle at 92% 75%, rgb(180 118 207 / 8%), transparent 38rem),
+      linear-gradient(var(--app-bg-color), var(--app-bg-color));
+  }
+
+  .settings-icon-tile {
+    border: 1px solid color-mix(in srgb, var(--link-active-color) 22%, rgb(255 255 255 / 34%));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 34%);
+    -webkit-backdrop-filter: blur(8px) saturate(145%);
+    backdrop-filter: blur(8px) saturate(145%);
+  }
+
+  .settings-nav-item--active,
+  .settings-mobile-tab--active {
+    border-color: color-mix(in srgb, var(--link-active-color) 24%, rgb(255 255 255 / 38%));
+    background:
+      radial-gradient(110% 90% at 50% -35%, rgb(255 255 255 / 18%), transparent 78%),
+      color-mix(in srgb, var(--card-bg-color) 38%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 36%),
+      0 8px 20px -16px color-mix(in srgb, var(--text-color) 28%, transparent);
+  }
+
+  .settings-nav-item--idle {
+    background: color-mix(in srgb, var(--card-bg-color) 3%, transparent);
+  }
+
+  .settings-nav-item--idle:hover,
+  .settings-mobile-tab:not(.settings-mobile-tab--active):hover,
+  .settings-mobile-back:hover,
+  .settings-catalog-item:hover {
+    background: color-mix(in srgb, var(--card-bg-color) 22%, transparent);
+  }
+
+  .settings-catalog-item:active {
+    background: color-mix(in srgb, var(--card-bg-color) 34%, transparent);
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

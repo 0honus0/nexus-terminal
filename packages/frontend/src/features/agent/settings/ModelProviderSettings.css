@@ -35,3 +35,18 @@
   flex: none;
   margin-left: 0;
 }
+
+.configured-models-pane {
+  container-name: configured-models;
+  container-type: inline-size;
+}
+
+@container configured-models (max-width: 360px) {
+  .configured-model-default-badge {
+    padding-inline: 0.4rem;
+  }
+
+  .configured-model-default-label {
+    display: none;
+  }
+}

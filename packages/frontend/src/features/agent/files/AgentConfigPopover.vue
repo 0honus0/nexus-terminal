@@ -214,7 +214,7 @@
         role="dialog"
         aria-modal="false"
         :aria-label="props.ariaLabel"
-        class="glass-surface fixed z-[60] max-w-[calc(100vw-24px)] overflow-y-auto rounded-2xl p-3 outline-none"
+        class="ui-glass-panel fixed z-[60] max-w-[calc(100vw-24px)] overflow-y-auto rounded-2xl p-3 outline-none"
         :class="props.panelClass"
       >
         <slot name="panel" :close="close" /></div

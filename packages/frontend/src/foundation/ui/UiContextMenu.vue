@@ -89,7 +89,7 @@
         :data-testid="props.panelTestId"
         data-ui="context-menu"
         data-ui-gen="2"
-        class="pointer-events-auto fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100dvw-1rem)] overflow-y-auto rounded border border-border bg-background p-1 text-sm text-foreground shadow-xl"
+        class="ui-context-menu ui-glass-panel pointer-events-auto fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100dvw-1rem)] overflow-y-auto p-1 text-sm text-foreground"
         :class="props.autoWidth ? 'min-w-[150px]' : ''"
         :style="{ left: `${left}px`, top: `${top}px`, width: props.autoWidth ? 'auto' : `${width}px` }"
         role="menu"

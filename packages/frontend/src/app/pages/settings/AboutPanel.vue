@@ -44,8 +44,8 @@
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-    <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
+  <section class="ui-glass-panel overflow-hidden rounded-xl">
+    <h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ t('settings.category.about') }}
     </h2>
     <div class="space-y-4 p-6">

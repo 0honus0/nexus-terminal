@@ -103,11 +103,9 @@
 </script>
 
 <template>
-  <div class="flex min-h-dvh items-center justify-center overflow-y-auto bg-background p-4">
-    <div class="flex w-full max-w-4xl overflow-hidden rounded-xl border border-border/20 bg-background shadow-2xl">
-      <section
-        class="hidden w-2/5 flex-col items-center justify-center bg-gradient-to-br from-primary to-link p-10 text-white md:flex"
-      >
+  <div class="auth-page flex min-h-dvh items-center justify-center overflow-y-auto p-4">
+    <div class="ui-glass-panel flex w-full max-w-4xl overflow-hidden rounded-2xl">
+      <section class="auth-brand-pane hidden w-2/5 flex-col items-center justify-center p-10 text-white md:flex">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
         <h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>
         <p class="text-center text-base opacity-80">{{ t('slogan') }}</p>
@@ -210,3 +208,19 @@
     </div>
   </div>
 </template>
+
+<style scoped>
+  .auth-page {
+    background:
+      radial-gradient(circle at 12% 24%, rgb(57 153 210 / 18%), transparent 34rem),
+      radial-gradient(circle at 88% 76%, rgb(171 102 205 / 14%), transparent 38rem), var(--app-bg-color);
+  }
+
+  .auth-brand-pane {
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--link-active-color) 82%, transparent), transparent),
+      color-mix(in srgb, var(--link-color) 72%, transparent);
+    border-right: 1px solid rgb(255 255 255 / 20%);
+    box-shadow: inset -1px 0 0 rgb(0 0 0 / 8%);
+  }
+</style>

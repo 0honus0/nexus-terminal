@@ -2,7 +2,7 @@
   import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiSelect, UiSpinner } from '@/foundation/ui';
+  import { UiButton, UiInput, UiSelect, UiSpinner } from '@/foundation/ui';
   import DashboardHostCard from './DashboardHostCard.vue';
   import {
     numberStorageCodec,
@@ -491,24 +491,25 @@
           </header>
 
           <div
-            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-auto rounded-xl border border-border/80 bg-header/10 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
+            class="ui-glass-inset h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-auto rounded-xl xl:h-[clamp(360px,50vh,520px)]"
             style="scrollbar-gutter: stable both-edges"
           >
             <div
-              class="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 border-b border-border/70 bg-background/80 p-2.5 backdrop-blur-md sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
+              class="ui-glass-nav sticky top-2 z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
             >
-              <label class="relative col-span-3 min-w-0 sm:col-span-1"
-                ><span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder') }}</span
-                ><i
-                  class="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary"
-                  aria-hidden="true"
-                ></i
-                ><input
+              <label class="col-span-3 min-w-0 sm:col-span-1"
+                ><span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder') }}</span>
+                <UiInput
                   v-model="search"
                   type="search"
+                  density="comfortable"
                   :placeholder="t('dashboard.searchConnectionsPlaceholder')"
-                  class="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40"
-              /></label>
+                  class="w-full"
+                  style="--ui-control-radius: 12px"
+                >
+                  <template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
+                </UiInput>
+              </label>
               <div class="min-w-0 sm:min-w-32">
                 <UiSelect
                   v-model="tagId"
@@ -633,7 +634,7 @@
             </div>
           </header>
           <div
-            class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-auto rounded-xl border border-border/80 bg-header/10 p-1 shadow-inner sm:p-1.5 xl:h-[clamp(360px,50vh,520px)]"
+            class="ui-glass-inset h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-auto rounded-xl p-1 sm:p-1.5 xl:h-[clamp(360px,50vh,520px)]"
             style="scrollbar-gutter: stable"
           >
             <div
@@ -752,16 +753,12 @@
         </header>
         <div
           v-if="loading && activity.length === 0"
-          class="rounded-xl border border-border/70 bg-header/10 py-10 text-center text-sm text-text-secondary"
+          class="ui-glass-inset rounded-xl py-10 text-center text-sm text-text-secondary"
         >
           {{ t('common.loading') }}
         </div>
         <ol v-else-if="activity.length" class="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-          <li
-            v-for="log in activity"
-            :key="log.id"
-            class="min-w-0 rounded-xl border border-border/70 bg-header/15 px-4 py-3.5 transition-colors hover:bg-header/25"
-          >
+          <li v-for="log in activity" :key="log.id" class="ui-glass-item min-w-0 rounded-xl px-4 py-3.5">
             <div class="flex min-w-0 items-start justify-between gap-2">
               <div class="flex min-w-0 items-center gap-2">
                 <span
@@ -789,10 +786,7 @@
             </p>
           </li>
         </ol>
-        <div
-          v-else
-          class="rounded-xl border border-border/70 bg-header/10 py-10 text-center text-sm text-text-secondary"
-        >
+        <div v-else class="ui-glass-inset rounded-xl py-10 text-center text-sm text-text-secondary">
           {{ t('dashboard.noRecentActivity') }}
         </div>
       </aside>
@@ -807,23 +801,6 @@
       --ui-control-gap: 8px;
       --ui-control-font-size: 12px;
       --ui-control-radius: 8px;
-    }
-
-    .dashboard-filter-select-gen2[data-ui-gen='2'] :deep(.ui-select__trigger:not([data-state='open'])) {
-      border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
-      background: var(--input-bg-color);
-      box-shadow: none;
-    }
-
-    .dashboard-filter-select-gen2[data-ui-gen='2']
-      :deep(.ui-select__trigger:not([data-state='open']):not(:disabled):hover) {
-      border-color: var(--border-color);
-      background: color-mix(in srgb, var(--input-bg-color) 90%, transparent);
-    }
-
-    .dashboard-filter-select-gen2[data-ui-gen='2'] :deep(.ui-select__trigger:focus-visible:not([data-state='open'])) {
-      border-color: color-mix(in srgb, var(--text-color) 35%, var(--border-color));
-      box-shadow: none;
     }
   }
 </style>

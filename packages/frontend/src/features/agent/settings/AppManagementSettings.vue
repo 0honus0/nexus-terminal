@@ -848,7 +848,7 @@
     :aria-label="$t('agent.settings.apps.uninstallConfirmTitle')"
     :close-on-backdrop="!uninstallBusy"
     :close-on-escape="!uninstallBusy"
-    panel-class="max-w-md p-5 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    panel-class="max-w-md p-5 rounded-2xl"
     @close="uninstallModalOpen = false"
   >
     <div class="space-y-3.5">

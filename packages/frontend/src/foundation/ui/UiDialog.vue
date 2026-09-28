@@ -45,9 +45,9 @@
     },
   );
 
-  // Glass is delegated to the shared `.glass-surface` recipe; every other kind
+  // Glass is delegated to the shared `.ui-glass-panel` recipe; every other kind
   // reuses the Gen 2 surface tokens so the panel matches the rest of the system.
-  const surfaceClass = computed(() => (props.surface === 'glass' ? 'glass-surface' : `ui-surface--${props.surface}`));
+  const surfaceClass = computed(() => (props.surface === 'glass' ? 'ui-glass-panel' : `ui-surface--${props.surface}`));
 
   // Reka still owns focus trap, restore, and dismiss timing. Every open-state
   // transition — Reka's `update:open`, the close button, and the slot-exposed

@@ -158,7 +158,7 @@
         :data-overlay-panel-preset="props.preset"
         data-ui="overlay-panel"
         data-ui-gen="2"
-        class="ui-overlay-panel glass-surface relative w-full rounded-lg text-foreground"
+        class="ui-overlay-panel ui-glass-panel relative w-full rounded-lg text-foreground"
         :class="[panelPresetClass, props.panelClass]"
         :style="props.panelStyle"
         :role="props.role"

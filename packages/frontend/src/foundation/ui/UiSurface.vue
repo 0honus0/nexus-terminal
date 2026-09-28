@@ -13,7 +13,7 @@
     },
   );
 
-  const surfaceClass = computed(() => (props.surface === 'glass' ? 'glass-surface' : `ui-surface--${props.surface}`));
+  const surfaceClass = computed(() => (props.surface === 'glass' ? 'ui-glass-panel' : `ui-surface--${props.surface}`));
 </script>
 
 <template>

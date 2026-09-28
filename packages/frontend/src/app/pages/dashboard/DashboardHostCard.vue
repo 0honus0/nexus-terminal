@@ -29,7 +29,7 @@
 <template>
   <component
     :is="as"
-    class="group relative overflow-hidden rounded-lg border border-border/60 bg-header/20 p-3 backdrop-blur-xs transition-colors hover:bg-header/35 sm:px-4 sm:py-3.5"
+    class="ui-glass-item group relative overflow-hidden rounded-lg p-3 sm:px-4 sm:py-3.5"
     :class="{ 'pl-3.5 sm:pl-4.5': hasAccent }"
   >
     <span
@@ -73,7 +73,7 @@
             </span>
             <span
               v-if="type"
-              class="relative translate-y-[1.5px] self-center rounded border border-border/70 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary"
+              class="relative translate-y-[1.5px] self-center rounded-full border border-border/60 bg-card/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary"
             >
               {{ type }}
             </span>

@@ -38,7 +38,6 @@
     class="ui-control ui-focusable ui-button"
     :class="[
       `ui-button--${props.appearance}`,
-      props.appearance === 'glass' && 'glass-surface',
       props.block && 'ui-button--block',
       props.iconOnly && 'ui-button--icon-only',
     ]"

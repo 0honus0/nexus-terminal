@@ -167,12 +167,9 @@
 </script>
 
 <template>
-  <section
-    data-testid="preferences-settings"
-    class="overflow-hidden rounded-xl border border-border bg-background shadow-sm"
-  >
+  <section data-testid="preferences-settings" class="ui-glass-panel overflow-hidden rounded-xl">
     <header
-      class="flex flex-col gap-2 border-b border-border bg-header/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+      class="flex flex-col gap-2 border-b border-border/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
     >
       <div class="min-w-0">
         <h2 class="text-lg font-semibold text-foreground">{{ t('settings.workspace.title') }}</h2>
@@ -194,13 +191,13 @@
         {{ loadError }}
       </p>
 
-      <form class="rounded-xl border border-border bg-card shadow-xs" @submit.prevent="saveGroup('files', fileKeys)">
-        <div class="border-b border-border bg-header/40 px-4 py-3">
+      <form class="ui-glass-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('files', fileKeys)">
+        <div class="border-b border-border/60 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.files') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.filesHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label
               for="showPopupFileEditor"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -220,7 +217,7 @@
               <p class="mt-1 leading-5">{{ t('settings.popupEditor.description') }}</p>
             </details>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label
               for="showPopupFileManager"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -235,7 +232,7 @@
             </label>
             <p class="mt-2 text-xs leading-5 text-text-secondary">{{ t('settings.popupFileManager.description') }}</p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label
               for="shareFileEditorTabs"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -250,7 +247,7 @@
             </label>
             <p class="mt-2 text-xs leading-5 text-text-secondary">{{ t('settings.shareEditorTabs.description') }}</p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label
               for="fileManagerShowDeleteConfirmation"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -265,7 +262,7 @@
             </label>
           </div>
           <div
-            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors lg:col-span-2"
+            class="ui-glass-item min-w-0 rounded-lg p-3.5 lg:col-span-2"
             data-testid="spreadsheet-preview-pagination-setting"
           >
             <div class="mb-3 text-sm font-medium text-foreground">
@@ -308,7 +305,7 @@
             </p>
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
           <p class="min-h-4 text-xs" :class="groupMessages.files?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.files?.text }}
           </p>
@@ -324,16 +321,13 @@
         </div>
       </form>
 
-      <form
-        class="rounded-xl border border-border bg-card shadow-xs"
-        @submit.prevent="saveGroup('commands', commandKeys)"
-      >
-        <div class="border-b border-border bg-header/40 px-4 py-3">
+      <form class="ui-glass-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('commands', commandKeys)">
+        <div class="border-b border-border/60 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.commands') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.commandsHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label for="workspaceSidebarPersistent" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="workspaceSidebarPersistent"
@@ -344,7 +338,7 @@
             >
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.sidebarPersistentDescription') }}</p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <UiFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
               <UiNativeSelect
                 id="commandInputSyncTarget"
@@ -358,7 +352,7 @@
             </UiFormField>
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.commandInputSync.description') }}</p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label for="showConnectionTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="showConnectionTags"
@@ -369,7 +363,7 @@
             >
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.showConnectionTagsDescription') }}</p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label for="showQuickCommandTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="showQuickCommandTags"
@@ -382,10 +376,7 @@
               {{ t('settings.workspace.showQuickCommandTagsDescription') }}
             </p>
           </div>
-          <div
-            class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors"
-            data-testid="quick-command-search-display-setting"
-          >
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5" data-testid="quick-command-search-display-setting">
             <label
               for="quickCommandsCollapsibleSearch"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium"
@@ -401,7 +392,7 @@
               {{ t('settings.workspace.quickCommandsCollapsibleSearchDescription') }}
             </p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label for="quickCommandsCompactMode" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="quickCommandsCompactMode"
@@ -414,7 +405,7 @@
               {{ t('settings.workspace.quickCommandsCompactModeDescription') }}
             </p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <UiFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
               <UiInput
                 id="terminalScrollbackLimit"
@@ -428,7 +419,7 @@
             </UiFormField>
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint') }}</p>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label for="terminalRightClickCopyPaste" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="terminalRightClickCopyPaste"
@@ -442,7 +433,7 @@
             </p>
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
           <p class="min-h-4 text-xs" :class="groupMessages.commands?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.commands?.text }}
           </p>
@@ -458,16 +449,13 @@
         </div>
       </form>
 
-      <form
-        class="rounded-xl border border-border bg-card shadow-xs"
-        @submit.prevent="saveGroup('monitoring', monitoringKeys)"
-      >
-        <div class="border-b border-border bg-header/40 px-4 py-3">
+      <form class="ui-glass-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('monitoring', monitoringKeys)">
+        <div class="border-b border-border/60 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.monitoring') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.monitoringHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <div class="space-y-2">
               <label for="dashboardShowLocalResources" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><UiCheckbox
@@ -491,7 +479,7 @@
               >
             </div>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <UiFormField
               :label="t('settings.dashboardResources.refreshIntervalLabel')"
               for-id="remoteHostRefreshIntervalSeconds"
@@ -505,7 +493,7 @@
                 :disabled="savingGroup !== null"
             /></UiFormField>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <label for="showStatusMonitorIpAddress" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="showStatusMonitorIpAddress"
@@ -529,7 +517,7 @@
               /></UiFormField>
             </div>
           </div>
-          <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
             <UiFormField :label="t('settings.docker.refreshIntervalLabel')" for-id="dockerStatusIntervalSeconds"
               ><UiInput
                 id="dockerStatusIntervalSeconds"
@@ -550,7 +538,7 @@
             >
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
           <p class="min-h-4 text-xs" :class="groupMessages.monitoring?.success ? 'text-success' : 'text-error'">
             {{ groupMessages.monitoring?.text }}
           </p>
@@ -565,9 +553,9 @@
         </div>
       </form>
 
-      <details class="rounded-xl border border-border bg-card shadow-xs">
+      <details class="ui-glass-inset overflow-hidden rounded-xl">
         <summary
-          class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 select-none hover:bg-header/30 transition-colors"
+          class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 select-none hover:bg-card/20 transition-colors"
         >
           <span
             ><span class="block text-sm font-semibold text-foreground">{{
@@ -579,9 +567,9 @@
           >
           <i class="fa-solid fa-chevron-down shrink-0 text-xs text-text-secondary" aria-hidden="true"></i>
         </summary>
-        <form class="border-t border-border" @submit.prevent="saveGroup('layout', layoutKeys)">
+        <form class="border-t border-border/60" @submit.prevent="saveGroup('layout', layoutKeys)">
           <div class="grid gap-3 p-3 lg:grid-cols-2">
-            <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+            <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
               <label for="layoutLocked" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><UiCheckbox
                   id="layoutLocked"
@@ -592,7 +580,7 @@
               >
               <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.layoutLockDescription') }}</p>
             </div>
-            <div class="min-w-0 rounded-lg bg-background/60 p-3.5 hover:bg-background/80 transition-colors">
+            <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
               <label for="navBarVisible" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><UiCheckbox
                   id="navBarVisible"
@@ -604,7 +592,7 @@
               <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.navBarVisibleDescription') }}</p>
             </div>
           </div>
-          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
             <p class="min-h-4 text-xs" :class="groupMessages.layout?.success ? 'text-success' : 'text-error'">
               {{ groupMessages.layout?.text }}
             </p>

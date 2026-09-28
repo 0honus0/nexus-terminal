@@ -81,6 +81,43 @@ a {
   button .fab {
     color: currentColor;
   }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--input-placeholder-color);
+    opacity: 1;
+  }
+
+  input:not(.ui-input__control):not(.ui-token-input__input):not([type='checkbox']):not([type='radio']):not(
+      [type='range']
+    ):not([type='color']),
+  textarea:not(.ui-textarea__control),
+  select:not(.ui-native-select__control) {
+    background-color: var(--glass-inset-fill);
+    color: var(--input-text-color);
+    -webkit-backdrop-filter: var(--glass-control-filter);
+    backdrop-filter: var(--glass-control-filter);
+  }
+
+  input:not(.ui-input__control):not(.ui-token-input__input):not([type='checkbox']):not([type='radio']):not(
+      [type='range']
+    ):not([type='color']):disabled,
+  textarea:not(.ui-textarea__control):disabled,
+  select:not(.ui-native-select__control):disabled {
+    background-color: color-mix(in srgb, var(--input-disabled-bg-color) 58%, transparent);
+    color: var(--input-disabled-text-color);
+    -webkit-text-fill-color: var(--input-disabled-text-color);
+    border-color: var(--input-disabled-border-color);
+    opacity: 1;
+  }
+
+  input:focus:not(#agent-composer):not([data-no-highlight]):not(.no-highlight),
+  textarea:focus:not(#agent-composer):not([data-no-highlight]):not(.no-highlight),
+  select:focus:not([data-no-highlight]):not(.no-highlight) {
+    border-color: var(--input-focus-border-color);
+    outline: 0;
+    box-shadow: 0 0 0 2px var(--input-focus-glow);
+  }
 }
 
 code,
@@ -98,55 +135,25 @@ pre {
   font-variant-numeric: tabular-nums;
 }
 
-input::placeholder,
-textarea::placeholder {
-  color: var(--input-placeholder-color);
-  opacity: 1;
-}
-
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--app-bg-color);
+  background: transparent;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
   background-color: var(--border-color);
-  border: 2px solid var(--app-bg-color);
+  background-clip: content-box;
+  border: 2px solid transparent;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-color-secondary);
-}
-
-input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
-textarea,
-select {
-  background-color: var(--input-bg-color);
-  color: var(--input-text-color);
-}
-
-input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):disabled,
-textarea:disabled,
-select:disabled {
-  background-color: var(--input-disabled-bg-color) !important;
-  color: var(--input-disabled-text-color) !important;
-  -webkit-text-fill-color: var(--input-disabled-text-color);
-  border-color: var(--input-disabled-border-color) !important;
-  opacity: 1 !important;
-}
-
-input:focus:not(#agent-composer):not([data-no-highlight]):not(.no-highlight),
-textarea:focus:not(#agent-composer):not([data-no-highlight]):not(.no-highlight),
-select:focus:not([data-no-highlight]):not(.no-highlight) {
-  border-color: var(--input-focus-border-color) !important;
-  outline: 0;
-  box-shadow: 0 0 0 2px var(--input-focus-glow) !important;
 }
 
 [data-no-highlight]:focus,
@@ -179,26 +186,5 @@ select:focus:not([data-no-highlight]):not(.no-highlight) {
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
     scroll-behavior: auto !important;
-  }
-}
-
-@layer components {
-  :root {
-    --glass-fill: color-mix(in srgb, var(--card-bg-color) 64%, transparent);
-    --glass-backdrop-filter: blur(14px) saturate(155%);
-    --glass-border-color: color-mix(in srgb, var(--border-color) 38%, rgb(255 255 255 / 26%));
-    --glass-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 40%);
-    --glass-shadow:
-      var(--glass-inset-highlight), inset 0 -1px 0 rgb(0 0 0 / 5%),
-      0 14px 32px -20px color-mix(in srgb, var(--text-color) 28%, transparent);
-  }
-
-  .glass-surface {
-    background-color: var(--glass-fill);
-    background-image: radial-gradient(110% 70% at 50% -25%, rgb(255 255 255 / 14%), transparent 75%);
-    -webkit-backdrop-filter: var(--glass-backdrop-filter);
-    backdrop-filter: var(--glass-backdrop-filter);
-    border: 1px solid var(--glass-border-color);
-    box-shadow: var(--glass-shadow);
   }
 }

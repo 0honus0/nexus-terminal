@@ -185,7 +185,7 @@
       v-if="suggestionsVisible"
       :id="listId"
       role="listbox"
-      class="ui-token-input__list glass-surface absolute left-0 right-0 top-full z-10 m-0 mt-0.5 max-h-[150px] list-none overflow-y-auto rounded-b p-0"
+      class="ui-token-input__list ui-glass-panel absolute left-0 right-0 top-full z-10 m-0 mt-0.5 max-h-[150px] list-none overflow-y-auto rounded-b p-0"
     >
       <li
         v-for="(option, index) in filteredOptions"
@@ -195,7 +195,7 @@
         :aria-selected="keyboardNavigating && activeIndex === index"
         class="ui-token-input__option cursor-pointer px-3 py-1.5 text-sm"
         :class="{ 'ui-token-input__option--active': keyboardNavigating && activeIndex === index }"
-        @mousedown.prevent
+        @pointerdown.prevent
         @click="add(option.value)"
       >
         {{ option.label }}

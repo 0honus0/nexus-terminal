@@ -32,7 +32,7 @@
     :focus-on-open="true"
     :restore-focus="true"
     backdrop-trigger="mousedown"
-    panel-class="max-w-[340px] w-full flex flex-col p-4 rounded-xl border border-border bg-background shadow-xl"
+    panel-class="max-w-[340px] w-full flex flex-col p-4 rounded-xl"
     role="dialog"
     :aria-modal="true"
     :aria-labelledby="titleId"

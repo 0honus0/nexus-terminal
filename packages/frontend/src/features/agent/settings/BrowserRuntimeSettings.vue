@@ -473,7 +473,7 @@
       :close-on-escape="!busy"
       :focus-on-open="true"
       :restore-focus="true"
-      panel-class="max-w-xl p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+      panel-class="max-w-xl p-5 sm:p-6 rounded-2xl"
       @close="targetModalOpen = false"
     >
       <div class="space-y-4">
@@ -643,7 +643,7 @@
       :close-on-escape="!busy"
       :focus-on-open="true"
       :restore-focus="true"
-      panel-class="max-w-lg p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+      panel-class="max-w-lg p-5 sm:p-6 rounded-2xl"
       @close="endpointModalOpen = false"
     >
       <div class="space-y-4">

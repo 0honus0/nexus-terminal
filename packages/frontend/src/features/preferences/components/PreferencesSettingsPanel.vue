@@ -131,8 +131,8 @@
 </script>
 
 <template>
-  <section data-testid="preferences-settings" class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-    <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
+  <section data-testid="preferences-settings" class="ui-glass-panel overflow-hidden rounded-xl">
+    <h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ props.section === 'system' ? t('settings.category.system') : t('settings.workspace.title') }}
     </h2>
 

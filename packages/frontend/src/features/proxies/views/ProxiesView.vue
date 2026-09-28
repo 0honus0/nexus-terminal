@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiModal } from '@/foundation/ui';
+  import { UiButton, UiEmptyState, UiModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import ProxyForm from '../components/ProxyForm.vue';
   import { useProxies } from '../composables/useProxies';
@@ -58,47 +58,48 @@
   };
 </script>
 <template>
-  <div class="bg-background p-4 text-foreground">
+  <div class="p-4 text-foreground">
     <div class="mx-auto max-w-6xl">
       <h2 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">{{ t('proxies.title') }}</h2>
-      <button
+      <UiButton
         v-if="!modal"
         data-testid="proxy-add-button"
         type="button"
-        class="mb-4 inline-flex items-center rounded bg-button px-4 py-2 text-sm font-medium text-button-text hover:bg-button-hover"
+        appearance="solid"
+        class="mb-4"
         @click="openAdd"
       >
         {{ t('proxies.addProxy') }}
-      </button>
+      </UiButton>
 
       <div class="mt-4">
         <div
           v-if="initialLoading && data.proxies.value.length === 0"
-          class="mb-4 rounded-md border border-border bg-header/50 p-4 text-center text-text-secondary italic"
+          class="ui-glass-inset mb-4 rounded-lg p-4 text-center text-text-secondary italic"
         >
           {{ t('proxies.loading') }}
         </div>
         <div v-else-if="loadError" class="mb-4 rounded border-l-4 border-error bg-error/10 p-4 text-error">
           {{ t('proxies.error', { error: loadError }) }}
         </div>
-        <div
+        <UiEmptyState
           v-else-if="data.proxies.value.length === 0"
-          class="mb-4 rounded border-l-4 border-blue-400 bg-blue-100 p-4 text-blue-700"
-        >
-          {{ t('proxies.noProxies') }}
-        </div>
+          class="mb-4"
+          icon="fa-solid fa-network-wired"
+          :description="t('proxies.noProxies')"
+        />
         <div v-else class="mt-4 grid gap-4">
           <article
             v-for="proxy in data.proxies.value"
             :key="proxy.id"
             :data-testid="`proxy-row-${proxy.id}`"
-            class="flex flex-col items-stretch justify-between gap-3 rounded-lg border border-border bg-background p-4 shadow-sm transition-shadow duration-200 hover:shadow-md sm:flex-row sm:items-start sm:gap-4"
+            class="ui-glass-item flex flex-col items-stretch justify-between gap-3 rounded-xl p-4 sm:flex-row sm:items-start sm:gap-4"
           >
             <div class="min-w-0 flex-grow space-y-1">
               <strong class="block break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>
               <div class="flex items-center space-x-2">
                 <span
-                  class="rounded-full border border-border bg-header px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
+                  class="rounded-full border border-border/60 bg-card/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
                   >{{ proxy.type }}</span
                 >
               </div>

@@ -54,7 +54,7 @@
           :align="props.align"
           :avoid-collisions="true"
           :collision-padding="12"
-          class="ui-info-hint__panel glass-surface"
+          class="ui-info-hint__panel ui-glass-panel"
         >
           <slot>{{ props.text }}</slot>
           <TooltipArrow class="ui-info-hint__arrow" :width="10" :height="5" />

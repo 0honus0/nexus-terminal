@@ -110,7 +110,7 @@
           sticky="always"
           position-strategy="fixed"
           :aria-label="props.ariaLabel"
-          class="ui-surface ui-radius--panel ui-popover__panel glass-surface"
+          class="ui-surface ui-radius--panel ui-popover__panel ui-glass-panel"
           :class="props.panelClass"
         >
           <slot name="panel" :close="close" />

@@ -179,14 +179,6 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
       await expect(form).toBeVisible();
       const tagInput = form.getByTestId('tag-input-text');
       await tagInput.fill(WORKSPACE_TAG);
-      await tagInput.press('ArrowDown');
-      await expect(tagInput).toHaveAttribute('aria-expanded', 'true');
-      await tagInput.press('Enter');
-      await expect(form.getByTestId('tag-chip').filter({ hasText: WORKSPACE_TAG })).toBeVisible();
-
-      await tagInput.press('Backspace');
-      await expect(form.getByTestId('tag-chip').filter({ hasText: WORKSPACE_TAG })).toHaveCount(0);
-      await tagInput.fill(WORKSPACE_TAG);
       await tagInput.press('Enter');
       await expect
         .poll(async () => (await listTags(context.request)).find((tag) => tag.name === WORKSPACE_TAG)?.id ?? 0)
@@ -202,6 +194,9 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
       expect((await listTags(context.request)).filter((tag) => tag.name === WORKSPACE_TAG)).toHaveLength(1);
 
       await tagInput.fill(WORKSPACE_TAG);
+      await expect(form.getByRole('option', { name: WORKSPACE_TAG })).toBeVisible();
+      await tagInput.press('ArrowDown');
+      await expect(tagInput).toHaveAttribute('aria-expanded', 'true');
       await tagInput.press('Enter');
       await expect(form.getByTestId('tag-chip').filter({ hasText: WORKSPACE_TAG })).toBeVisible();
       expect((await listTags(context.request)).filter((tag) => tag.name === WORKSPACE_TAG)).toHaveLength(1);

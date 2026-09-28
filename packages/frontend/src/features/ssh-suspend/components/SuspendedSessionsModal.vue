@@ -27,7 +27,7 @@
     :visible="visible"
     teleport
     :close-on-escape="true"
-    panel-class="max-w-[480px] w-full max-h-[82vh] flex flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl p-0"
+    panel-class="max-w-[480px] w-full max-h-[82vh] flex flex-col overflow-hidden rounded-xl p-0"
     role="dialog"
     :aria-modal="true"
     :aria-label="t('suspendedSshSessions.modalTitle')"

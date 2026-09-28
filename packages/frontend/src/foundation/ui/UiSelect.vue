@@ -151,7 +151,7 @@
           :collision-padding="12"
           :avoid-collisions="true"
           :body-lock="false"
-          class="ui-surface ui-radius--panel ui-select__panel glass-surface"
+          class="ui-surface ui-radius--panel ui-select__panel ui-glass-panel"
           :class="[{ 'ui-select__panel--no-indicator': props.hideIndicator }, props.panelClass]"
         >
           <SelectViewport class="ui-select__viewport">

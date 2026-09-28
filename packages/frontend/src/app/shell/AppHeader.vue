@@ -75,7 +75,7 @@
   <header
     data-testid="app-header"
     v-if="route.name !== 'Workspace' || preferences.values.value.navBarVisible"
-    class="sticky top-0 z-30 flex h-11 items-center border-b border-border bg-header pl-3 pr-4 shadow-sm sm:pr-6"
+    class="ui-glass-nav sticky top-0 z-30 flex h-11 items-center border-x-0 border-t-0 pl-3 pr-4 sm:pr-6"
   >
     <nav
       ref="nav"
