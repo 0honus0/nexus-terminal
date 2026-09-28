@@ -380,14 +380,18 @@
 </script>
 
 <template>
-  <form data-testid="connection-form" class="flex max-h-[78vh] min-h-0 flex-col" @submit.prevent="submit">
+  <form
+    data-testid="connection-form"
+    class="connection-form flex max-h-[78vh] min-h-0 flex-col"
+    @submit.prevent="submit"
+  >
     <h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
       {{ connection ? t('connections.form.titleEdit') : t('connections.form.title') }}
     </h3>
 
     <div class="flex-grow space-y-6 overflow-y-auto pr-2">
       <template v-if="!scriptMode">
-        <section class="space-y-4 rounded-md border border-border bg-header/30 p-4">
+        <section class="connection-form-section space-y-4 rounded-xl p-4">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionBasic') }}
           </h4>
@@ -398,11 +402,11 @@
             <label class="mb-1 block text-sm font-medium text-text-secondary">{{
               t('connections.form.connectionType')
             }}</label>
-            <div class="flex rounded-md shadow-sm">
+            <div class="connection-form-segmented flex rounded-lg p-1">
               <button
                 data-testid="connection-type-ssh"
                 type="button"
-                class="flex-1 rounded-l-md border border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'SSH' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
                 @click="form.type = 'SSH'"
               >
@@ -411,7 +415,7 @@
               <button
                 data-testid="connection-type-rdp"
                 type="button"
-                class="-ml-px flex-1 border-y border-r border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'RDP' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
                 @click="form.type = 'RDP'"
               >
@@ -420,7 +424,7 @@
               <button
                 data-testid="connection-type-vnc"
                 type="button"
-                class="-ml-px flex-1 rounded-r-md border border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'VNC' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
                 @click="form.type = 'VNC'"
               >
@@ -441,7 +445,7 @@
           </div>
         </section>
 
-        <section class="space-y-4 rounded-md border border-border bg-header/30 p-4">
+        <section class="connection-form-section space-y-4 rounded-xl p-4">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAuth') }}
           </h4>
@@ -454,10 +458,10 @@
               <label class="mb-1 block text-sm font-medium text-text-secondary">{{
                 t('connections.form.authMethod')
               }}</label>
-              <div class="flex rounded-md shadow-sm">
+              <div class="connection-form-segmented flex rounded-lg p-1">
                 <button
                   type="button"
-                  class="flex-1 rounded-l-md border border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                  class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                   :class="
                     form.authMethod === 'password'
                       ? 'bg-primary text-white'
@@ -469,7 +473,7 @@
                 </button>
                 <button
                   type="button"
-                  class="-ml-px flex-1 rounded-r-md border border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                  class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                   :class="
                     form.authMethod === 'key'
                       ? 'bg-primary text-white'
@@ -504,7 +508,7 @@
           </UiFormField>
         </section>
 
-        <section class="space-y-4 rounded-md border border-border bg-header/30 p-4">
+        <section class="connection-form-section space-y-4 rounded-xl p-4">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAdvanced') }}
           </h4>
@@ -513,10 +517,10 @@
               <label class="mb-1 block text-sm font-medium text-text-secondary">{{
                 t('connections.form.connectionMode')
               }}</label>
-              <div class="mb-4 flex rounded-md shadow-sm">
+              <div class="connection-form-segmented mb-4 flex rounded-lg p-1">
                 <button
                   type="button"
-                  class="flex-1 rounded-l-md border border-border px-3 py-2 text-sm font-medium"
+                  class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium"
                   :class="
                     form.route === null ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'
                   "
@@ -526,7 +530,7 @@
                 </button>
                 <button
                   type="button"
-                  class="-ml-px flex-1 border border-border px-3 py-2 text-sm font-medium"
+                  class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium"
                   :class="
                     form.route === 'proxy' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'
                   "
@@ -536,7 +540,7 @@
                 </button>
                 <button
                   type="button"
-                  class="-ml-px flex-1 rounded-r-md border border-border px-3 py-2 text-sm font-medium"
+                  class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium"
                   :class="
                     form.route === 'jump' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'
                   "
@@ -646,7 +650,7 @@
         </section>
       </template>
 
-      <section v-if="!connection" class="mt-6 space-y-4 rounded-md border border-border bg-header/30 p-4">
+      <section v-if="!connection" class="connection-form-section mt-6 space-y-4 rounded-xl p-4">
         <div class="flex items-center justify-between">
           <h4 class="text-base font-semibold">{{ t('connections.form.sectionScriptMode') }}</h4>
           <button
@@ -749,3 +753,67 @@
     </footer>
   </form>
 </template>
+
+<style scoped>
+  .connection-form-section {
+    border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+    background: color-mix(in srgb, var(--card-bg-color) 66%, var(--app-bg-color));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
+  }
+
+  .connection-form :deep(.ui-input),
+  .connection-form :deep(.ui-textarea),
+  .connection-form :deep(.ui-select__trigger) {
+    border-color: color-mix(in srgb, var(--border-color) 62%, transparent);
+    background: color-mix(in srgb, var(--app-bg-color) 92%, var(--card-bg-color)) !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 6%, transparent);
+  }
+
+  .connection-form :deep(.ui-input:hover),
+  .connection-form :deep(.ui-textarea:hover),
+  .connection-form :deep(.ui-select__trigger:not(:disabled):hover) {
+    border-color: color-mix(in srgb, var(--border-hover-color) 72%, transparent);
+  }
+
+  .connection-form :deep(.ui-input:focus-within),
+  .connection-form :deep(.ui-textarea:focus-within),
+  .connection-form :deep(.ui-select__trigger:focus-visible),
+  .connection-form :deep(.ui-select__trigger[data-state='open']) {
+    border-color: color-mix(in srgb, var(--link-active-color) 58%, var(--border-color));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--link-active-color) 10%, transparent);
+  }
+
+  .connection-form-segmented {
+    gap: 0.25rem;
+    border: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
+    background: color-mix(in srgb, var(--header-bg-color) 56%, var(--app-bg-color));
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 5%, transparent);
+  }
+
+  .connection-form-segment {
+    margin: 0;
+    border: 0 !important;
+    border-radius: 0.5rem !important;
+    background: transparent !important;
+    color: var(--text-color-secondary) !important;
+    transition:
+      background-color 140ms ease,
+      color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .connection-form-segment:hover {
+    background: color-mix(in srgb, var(--card-bg-color) 76%, var(--app-bg-color)) !important;
+    color: var(--text-color) !important;
+  }
+
+  .connection-form-segment.bg-primary {
+    background: color-mix(in srgb, var(--link-active-color) 16%, var(--card-bg-color)) !important;
+    color: var(--link-active-color) !important;
+    box-shadow:
+      0 1px 2px color-mix(in srgb, var(--text-color) 8%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 24%, transparent);
+  }
+</style>

@@ -878,7 +878,8 @@
     <UiOverlayPanel
       :visible="connectionPickerVisible"
       :close-on-escape="true"
-      panel-class="max-h-[80dvh] max-w-md p-6"
+      overlay-class="workspace-connection-picker-overlay"
+      panel-class="workspace-connection-picker-panel max-h-[80dvh] max-w-md p-6"
       @close="connectionPickerVisible = false"
     >
       <button
@@ -899,7 +900,7 @@
         </svg>
       </button>
       <h3 class="mb-4 text-center text-lg font-semibold">{{ t('terminalTabBar.selectServerTitle') }}</h3>
-      <div class="max-h-[calc(80dvh-7rem)] overflow-y-auto rounded border border-border">
+      <div class="workspace-connection-picker-body max-h-[calc(80dvh-7rem)] overflow-y-auto rounded-xl">
         <WorkspaceConnectionList @open="openConnectionFromPicker" @open-many="openConnectionsFromPicker" />
       </div>
     </UiOverlayPanel>
@@ -1050,3 +1051,25 @@
     />
   </main>
 </template>
+
+<style scoped>
+  :global(.workspace-connection-picker-overlay) {
+    background-color: rgb(15 23 42 / 24%);
+    -webkit-backdrop-filter: blur(1.5px) saturate(105%);
+    backdrop-filter: blur(1.5px) saturate(105%);
+  }
+
+  :global(.workspace-connection-picker-panel) {
+    border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+    background: var(--app-bg-color);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
+      0 18px 48px -24px rgb(15 23 42 / 38%);
+  }
+
+  .workspace-connection-picker-body {
+    border: 1px solid color-mix(in srgb, var(--border-color) 64%, transparent);
+    background: color-mix(in srgb, var(--card-bg-color) 72%, var(--app-bg-color));
+    overflow: hidden auto;
+  }
+</style>

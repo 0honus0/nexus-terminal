@@ -247,16 +247,16 @@
   <section
     ref="root"
     data-testid="workspace-connection-list"
-    class="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
+    class="workspace-connection-list flex h-full min-h-0 flex-col overflow-hidden text-foreground"
   >
-    <div class="flex border-b border-border/50 p-2">
+    <div class="workspace-connection-toolbar flex p-2">
       <input
         ref="searchInput"
         v-model="search"
         data-focus-id="connectionListSearch"
         type="text"
         :placeholder="t('workspaceConnectionList.searchPlaceholder')"
-        class="min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+        class="workspace-connection-search min-w-0 flex-1 rounded-lg px-4 py-1.5 text-sm text-foreground outline-none"
         @keydown="handleSearchKeydown"
       />
       <button
@@ -277,7 +277,7 @@
       <i class="fas fa-exclamation-triangle mr-2" aria-hidden="true"></i>{{ loadError }}
     </div>
 
-    <div v-else class="min-h-0 flex-1 overflow-y-auto p-2">
+    <div v-else class="workspace-connection-content min-h-0 flex-1 overflow-y-auto p-2">
       <div
         v-if="data.connections.value.length && !filtered.length && search"
         class="p-6 text-center text-text-secondary"
@@ -300,7 +300,7 @@
       <template v-else-if="showTags">
         <section v-for="group in groups" :key="group.key" class="mb-1 last:mb-0">
           <header
-            class="group flex cursor-pointer items-center rounded-md px-3 py-2 font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
+            class="workspace-connection-group group flex cursor-pointer items-center rounded-lg px-3 py-2 font-semibold text-foreground transition-colors duration-150"
             @click="toggleGroup(group.key)"
           >
             <i
@@ -345,7 +345,7 @@
               v-for="connection in group.connections"
               :key="connection.id"
               :data-connection-id="connection.id"
-              class="group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-md py-2 pl-4 pr-3 text-ellipsis text-foreground transition-colors duration-150 hover:bg-primary/10"
+              class="workspace-connection-item group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-lg py-2 pl-4 pr-3 text-ellipsis text-foreground transition-colors duration-150"
               :class="{
                 'bg-primary/20 font-medium': connection.id === props.activeConnectionId,
                 'ring-1 ring-inset ring-primary/40': connection.id === highlightedId,
@@ -374,7 +374,7 @@
           v-for="connection in filtered"
           :key="connection.id"
           :data-connection-id="connection.id"
-          class="group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-md py-2 pl-4 pr-3 text-ellipsis text-foreground transition-colors duration-150 hover:bg-primary/10"
+          class="workspace-connection-item group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-lg py-2 pl-4 pr-3 text-ellipsis text-foreground transition-colors duration-150"
           :class="{
             'bg-primary/20 font-medium': connection.id === props.activeConnectionId,
             'ring-1 ring-inset ring-primary/40': connection.id === highlightedId,
@@ -432,6 +432,38 @@
 </template>
 
 <style scoped>
+  .workspace-connection-list {
+    background: var(--app-bg-color);
+  }
+  .workspace-connection-toolbar {
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
+    background: color-mix(in srgb, var(--card-bg-color) 64%, var(--app-bg-color));
+  }
+  .workspace-connection-search {
+    border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+    background: color-mix(in srgb, var(--input-bg-color) 72%, var(--app-bg-color));
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 6%, transparent);
+  }
+  .workspace-connection-search:hover {
+    border-color: color-mix(in srgb, var(--border-hover-color) 72%, transparent);
+  }
+  .workspace-connection-search:focus {
+    border-color: color-mix(in srgb, var(--link-active-color) 58%, var(--border-color));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--link-active-color) 10%, transparent);
+  }
+  .workspace-connection-content {
+    background: var(--app-bg-color);
+  }
+  .workspace-connection-group:hover {
+    background: color-mix(in srgb, var(--card-bg-color) 78%, var(--app-bg-color));
+  }
+  .workspace-connection-item:hover {
+    background: color-mix(in srgb, var(--link-active-color) 9%, var(--app-bg-color));
+  }
+  .workspace-connection-item.bg-primary\/20 {
+    background: color-mix(in srgb, var(--link-active-color) 16%, var(--app-bg-color));
+  }
+
   .context-item {
     display: flex;
     width: calc(100% - 0.5rem);
