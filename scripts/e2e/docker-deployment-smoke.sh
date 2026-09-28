@@ -1519,7 +1519,7 @@ const fullStackFrontend = await ok('GET', '/api/v1/agent/plugins/nexus.fullstack
 if (fullStackFrontend.sandbox !== 'allow-scripts' || !fullStackFrontend.url.includes('/plugins/nexus.fullstack/1.0.0/')) {
   throw new Error(`Full-stack frontend descriptor is invalid: ${JSON.stringify(fullStackFrontend)}`);
 }
-const frontendAsset = await fetch(fullStackFrontend.url);
+const frontendAsset = await fetch(new URL(fullStackFrontend.url, baseUrl));
 const frontendHtml = await frontendAsset.text();
 if (!frontendAsset.ok || !frontendHtml.includes('Full-stack Plugin')) {
   throw new Error(`Full-stack frontend asset was not served from the isolated plugin origin: ${frontendAsset.status}`);
