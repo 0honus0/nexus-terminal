@@ -369,7 +369,10 @@ kill -0 "$browser_probe_pid" 2>/dev/null || { echo 'Browser CDP probe did not st
 # docker-core-no-runner-smoke.sh; here Compose explicitly enables the optional Runner profile.
 # Workspace is still a persistent native runtime boundary, not an additional security sandbox.
 compose up -d --build
-compose ps
+# Keep the immediate process snapshot for diagnostics, but let the explicit readiness
+# checks below decide whether the deployment is usable. Some Compose versions report
+# a non-zero status while dependent services are still in their health start period.
+compose ps || true
 
 frontend_ready=0
 for _ in {1..60}; do
