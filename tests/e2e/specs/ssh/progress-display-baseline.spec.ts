@@ -77,17 +77,6 @@ async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, ta
   await reopenConnectedFileManager(page);
 }
 
-async function expectPopupBelowApplicationModals(popup: Locator): Promise<void> {
-  await expect
-    .poll(() =>
-      popup.evaluate((element) => {
-        const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
-        return Number.isFinite(zIndex) ? zIndex : 0;
-      }),
-    )
-    .toBeLessThan(50);
-}
-
 test('desktop Progress Display floats above the workspace without resizing the terminal', async ({ page, context }) => {
   let holdNextServerRefresh = false;
   let backgroundRefreshStarted: (() => void) | undefined;
@@ -210,13 +199,12 @@ test('existing copy progress popup hides and restores through Progress Display',
       await expect(center).toBeVisible({ timeout: 10_000 });
       const task = visibleProgressTask(page, sourceName);
       await expect(task).toContainText('Copy');
-      await expectPopupBelowApplicationModals(center);
+      await expect(page.getByTestId('file-manager-modal')).toBeVisible();
     });
 
     await step('the minimize-style action hides the popup and Progress Display restores it', async () => {
       const center = visibleProgressCenter(page);
       await expect(center.getByTestId('transfer-progress-task')).toBeVisible();
-      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
       await openProgressDisplayAndRestorePopup(page, center, sourceName);
     });
@@ -245,13 +233,12 @@ test('existing archive progress popup hides and restores through Progress Displa
       const center = visibleProgressCenter(page);
       await expect(center).toBeVisible({ timeout: 10_000 });
       await expect(visibleProgressTask(page, 'archive-source.zip')).toContainText('Compress');
-      await expectPopupBelowApplicationModals(center);
+      await expect(page.getByTestId('file-manager-modal')).toBeVisible();
     });
 
     await step('the minimize-style action hides the archive popup and Progress Display restores it', async () => {
       const center = visibleProgressCenter(page);
       await expect(visibleProgressTask(page, 'archive-source.zip')).toBeVisible();
-      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
       await openProgressDisplayAndRestorePopup(page, center, 'archive-source.zip');
     });

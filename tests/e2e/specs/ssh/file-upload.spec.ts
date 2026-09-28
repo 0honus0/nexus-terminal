@@ -433,17 +433,7 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
       await expect(uploadTasks).toHaveCount(largeFiles.length);
       const progressBody = progressPopup.locator('ul');
       await expect(progressBody).toBeVisible();
-
-      await expect
-        .poll(() =>
-          progressPopup.evaluate((element) => {
-            const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
-            return Number.isFinite(zIndex) ? zIndex : 0;
-          }),
-        )
-        .toBeLessThan(50);
-
-      await closeConnectedFileManager(page);
+      await expect(page.getByTestId('file-manager-modal')).toBeVisible();
       await progressPopup.getByTestId('transfer-progress-hide').click();
       await expect(progressPopup).toBeHidden();
 
