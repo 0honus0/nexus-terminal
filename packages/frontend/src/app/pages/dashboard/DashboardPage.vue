@@ -307,8 +307,11 @@
 </script>
 
 <template>
-  <main data-testid="dashboard-view" class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6">
-    <div class="mx-auto w-full max-w-[1680px] space-y-5">
+  <main
+    data-testid="dashboard-view"
+    class="dashboard-page min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6"
+  >
+    <div class="dashboard-layout mx-auto flex w-full max-w-[1680px] flex-col gap-5">
       <section data-testid="dashboard-overview" class="border-b border-border/70 pb-4">
         <div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div class="min-w-0">
@@ -469,6 +472,7 @@
 
       <div
         data-testid="dashboard-workspace"
+        class="dashboard-workspace"
         :class="
           preferences.values.value.dashboardShowRemoteResources
             ? 'grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)] xl:items-start xl:gap-0'
@@ -793,7 +797,7 @@
         >
           {{ t('common.loading') }}
         </div>
-        <ol v-else-if="activity.length" class="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <ol v-else-if="activity.length" class="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
           <li v-for="log in activity" :key="log.id" class="dashboard-muted-card min-w-0 rounded-xl px-4 py-3.5">
             <div class="flex min-w-0 items-start justify-between gap-2">
               <div class="flex min-w-0 items-center gap-2">
@@ -841,8 +845,26 @@
   }
 
   @media (min-width: 1280px) {
+    .dashboard-page {
+      height: calc(100dvh - 2.75rem);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .dashboard-layout {
+      display: grid;
+      height: 100%;
+      min-height: 0;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    .dashboard-workspace {
+      min-height: 0;
+    }
+
     .dashboard-surface {
-      height: calc(clamp(360px, 50vh, 520px) + 72px);
+      height: 100%;
+      min-height: 0;
     }
   }
 

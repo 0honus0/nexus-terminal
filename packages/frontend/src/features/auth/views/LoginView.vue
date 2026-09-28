@@ -128,7 +128,7 @@
                 autocomplete="username"
                 required
                 density="comfortable"
-                class="rounded-lg py-3"
+                class="auth-login-input rounded-lg"
                 :disabled="isBusy"
               />
             </UiFormField>
@@ -142,7 +142,7 @@
                 autocomplete="current-password"
                 required
                 density="comfortable"
-                class="rounded-lg py-3"
+                class="auth-login-input rounded-lg"
                 :disabled="isBusy"
               />
             </UiFormField>
@@ -163,7 +163,7 @@
               pattern="[0-9]{6}"
               required
               density="comfortable"
-              class="rounded-lg py-3"
+              class="auth-login-input rounded-lg"
               :disabled="isBusy"
             />
           </UiFormField>
@@ -178,7 +178,7 @@
             tone="primary"
             density="comfortable"
             block
-            class="rounded-lg px-4 py-3"
+            class="auth-login-submit rounded-lg px-4 py-3"
             :disabled="captchaBlocked"
             :loading="isBusy"
           >
@@ -222,5 +222,27 @@
       color-mix(in srgb, var(--link-color) 72%, transparent);
     border-right: 1px solid rgb(255 255 255 / 20%);
     box-shadow: inset -1px 0 0 rgb(0 0 0 / 8%);
+  }
+
+  .auth-login-input {
+    padding-inline: 0;
+  }
+
+  .auth-login-input :deep(.ui-input__control) {
+    padding-inline: var(--ui-control-padding-inline);
+  }
+
+  .auth-login-submit.ui-button--solid[data-tone='primary']:not(:disabled) {
+    --ui-button-glass-fill: var(--button-bg-color);
+    --ui-button-glass-fill-hover: var(--button-hover-bg-color);
+    color: var(--button-text-color);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 18%),
+      0 1px 2px rgb(0 0 0 / 8%),
+      0 10px 20px -14px color-mix(in srgb, var(--button-bg-color) 55%, transparent);
+  }
+
+  .auth-login-submit.ui-button--solid[data-tone='primary']:not(:disabled):active {
+    background-color: var(--button-hover-bg-color);
   }
 </style>
