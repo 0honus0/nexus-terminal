@@ -307,9 +307,9 @@
 </script>
 
 <template>
-  <main class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6">
+  <main data-testid="dashboard-view" class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6">
     <div class="mx-auto w-full max-w-[1680px] space-y-5">
-      <section class="border-b border-border/70 pb-4">
+      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-4">
         <div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div class="min-w-0">
             <div class="flex min-w-0 items-center gap-3">
@@ -344,6 +344,7 @@
               </UiButton>
               <UiButton
                 v-if="activeSuspendedSessions.length"
+                data-testid="dashboard-suspended-sessions"
                 density="compact"
                 appearance="soft"
                 tone="neutral"
@@ -358,6 +359,7 @@
             </div>
             <div v-else-if="activeSuspendedSessions.length" class="mt-3 hidden lg:flex">
               <UiButton
+                data-testid="dashboard-suspended-sessions"
                 density="compact"
                 appearance="soft"
                 tone="neutral"
@@ -372,6 +374,7 @@
           </div>
 
           <div
+            data-testid="dashboard-overview-stats"
             class="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-5 lg:justify-end"
           >
             <div class="flex items-end justify-between gap-7 px-1 sm:justify-start">
@@ -391,6 +394,7 @@
 
             <div
               v-if="preferences.values.value.dashboardShowLocalResources"
+              data-testid="dashboard-local-resources"
               class="min-w-0 border-t border-border pt-3 sm:min-w-[300px] sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"
             >
               <div class="flex items-center justify-between gap-3">
@@ -464,13 +468,17 @@
       </section>
 
       <div
+        data-testid="dashboard-workspace"
         :class="
           preferences.values.value.dashboardShowRemoteResources
             ? 'grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)] xl:items-start xl:gap-0'
             : 'grid grid-cols-1'
         "
       >
-        <section class="dashboard-surface order-1 flex min-w-0 flex-col overflow-hidden xl:mr-4">
+        <section
+          data-testid="dashboard-connections"
+          class="dashboard-surface order-1 flex min-w-0 flex-col overflow-hidden xl:mr-4"
+        >
           <header class="shrink-0 px-4 pb-3 pt-4">
             <div class="flex items-center justify-between gap-3">
               <div class="flex min-w-0 items-center gap-2.5">
@@ -491,16 +499,19 @@
           </header>
 
           <div
+            data-testid="dashboard-connection-list"
             class="h-[clamp(300px,42vh,440px)] min-h-0 overflow-y-auto overscroll-auto xl:h-auto xl:flex-1"
             style="scrollbar-gutter: stable both-edges"
           >
             <div
+              data-testid="dashboard-connection-toolbar"
               class="dashboard-toolbar sticky top-2 z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
             >
               <label class="col-span-3 min-w-0 sm:col-span-1"
                 ><span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder') }}</span>
                 <UiInput
                   v-model="search"
+                  data-testid="dashboard-connection-search"
                   type="search"
                   density="comfortable"
                   :placeholder="t('dashboard.searchConnectionsPlaceholder')"
@@ -513,6 +524,9 @@
               <div class="min-w-0 sm:min-w-32">
                 <UiSelect
                   v-model="tagId"
+                  data-testid="dashboard-tag-filter"
+                  panel-test-id="dashboard-tag-filter-menu"
+                  option-test-id-prefix="dashboard-tag-filter-option"
                   :options="tagFilterOptions"
                   class="dashboard-filter-select-gen2 text-xs sm:text-sm"
                   style="--ui-control-height: 2.375rem"
@@ -524,6 +538,9 @@
               <div class="min-w-0 sm:min-w-32">
                 <UiSelect
                   v-model="sort"
+                  data-testid="dashboard-sort-by"
+                  panel-test-id="dashboard-sort-by-menu"
+                  option-test-id-prefix="dashboard-sort-by-option"
                   :options="sortOptions"
                   class="dashboard-filter-select-gen2 text-xs sm:text-sm"
                   style="--ui-control-height: 2.375rem"
@@ -533,6 +550,7 @@
                 />
               </div>
               <UiButton
+                data-testid="dashboard-sort-order"
                 appearance="soft"
                 tone="neutral"
                 icon-only
@@ -556,6 +574,7 @@
                 <DashboardHostCard
                   v-for="item in filtered"
                   :key="item.id"
+                  :data-testid="`dashboard-connection-row-${item.id}`"
                   as="li"
                   title-tag="span"
                   :name="item.name || item.host"
@@ -577,6 +596,7 @@
                   </template>
                   <template #action>
                     <UiButton
+                      :data-testid="`dashboard-connect-${item.id}`"
                       type="button"
                       appearance="soft"
                       tone="neutral"
@@ -599,7 +619,10 @@
             </div>
           </div>
           <div class="shrink-0 border-t border-border/70 px-4 py-2.5 text-right">
-            <RouterLink to="/connections" class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
+            <RouterLink
+              data-testid="dashboard-connections-link"
+              to="/connections"
+              class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
               >{{ t('dashboard.viewAllConnections') }} →</RouterLink
             >
           </div>
@@ -607,6 +630,7 @@
 
         <section
           v-if="preferences.values.value.dashboardShowRemoteResources"
+          data-testid="dashboard-system-resources"
           class="dashboard-surface order-2 flex min-w-0 flex-col overflow-hidden xl:ml-4"
         >
           <header class="flex shrink-0 flex-col gap-2 px-4 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -626,19 +650,25 @@
               <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary"
                 >{{ resources.remote.value.length }} {{ t('dashboard.resources.remote') }}</span
               >
-              <span class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success">{{
-                t('dashboard.resources.snapshot', {
-                  seconds: preferences.values.value.remoteHostRefreshIntervalSeconds,
-                })
-              }}</span>
+              <span
+                data-testid="dashboard-remote-refresh-interval"
+                class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success"
+                >{{
+                  t('dashboard.resources.snapshot', {
+                    seconds: preferences.values.value.remoteHostRefreshIntervalSeconds,
+                  })
+                }}</span
+              >
             </div>
           </header>
           <div
+            data-testid="dashboard-ssh-resource-list"
             class="h-[clamp(300px,42vh,440px)] min-h-0 space-y-2 overflow-y-auto overscroll-auto px-2 pb-2 xl:h-auto xl:flex-1"
             style="scrollbar-gutter: stable"
           >
             <div
               v-if="resources.remoteLoading.value && resources.remote.value.length === 0"
+              data-testid="dashboard-remote-resources-loading"
               class="grid h-full min-h-0 place-items-center"
             >
               <UiSpinner />
@@ -646,6 +676,7 @@
             <DashboardHostCard
               v-for="remote in resources.remote.value"
               :key="remote.key"
+              :data-testid="`dashboard-remote-resource-${remote.key}`"
               as="article"
               title-tag="h3"
               :name="remote.name"
@@ -685,6 +716,7 @@
                     ></div>
                   </div>
                   <div
+                    data-testid="dashboard-remote-disk-detail"
                     class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
                   >
                     <span class="max-w-full truncate">{{ formatMemory(remote.status.memUsed) }}</span>
@@ -723,6 +755,7 @@
             </DashboardHostCard>
             <div
               v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
+              data-testid="dashboard-remote-resources"
               class="flex h-full min-h-0 items-center justify-center px-4 text-center text-xs text-text-secondary"
             >
               {{ resources.remoteError.value || t('dashboard.resources.noRemoteSessions') }}
@@ -731,7 +764,7 @@
         </section>
       </div>
 
-      <aside class="border-t border-border/70 pt-5">
+      <aside data-testid="dashboard-recent-activity" class="border-t border-border/70 pt-5">
         <header class="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex min-w-0 items-center gap-2.5">
             <span
@@ -746,7 +779,10 @@
           </div>
           <div class="flex items-center gap-3">
             <span class="text-xs tabular-nums text-text-secondary">{{ activity.length }}</span
-            ><RouterLink to="/audit-logs" class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
+            ><RouterLink
+              data-testid="dashboard-audit-link"
+              to="/audit-logs"
+              class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
               >{{ t('dashboard.viewFullAuditLog') }} →</RouterLink
             >
           </div>

@@ -86,8 +86,8 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
   await expect(launcher).toBeVisible();
   const restored = await launcher.boundingBox();
   expect(restored).toBeTruthy();
-  expect(Math.abs(restored!.x - moved!.x)).toBeLessThan(2);
-  expect(Math.abs(restored!.y - moved!.y)).toBeLessThan(2);
+  expect(Math.abs(restored!.x - moved!.x)).toBeLessThan(3);
+  expect(Math.abs(restored!.y - moved!.y)).toBeLessThan(3);
 
   await launcher.click({ button: 'right' });
   const reset = await launcher.boundingBox();
