@@ -4,6 +4,7 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import { slowStep, step } from '../../support/steps';
 import { E2E_SSH } from '../../support/ssh';
 import { E2E_PORTS } from '../../support/test-env';
+import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 
 const CRUD_CHANNEL_NAME = 'E2E Notification CRUD Delivery';
 const STRICT_WEBHOOK_URL = `${E2E_SSH.controlUrl}/e2e-notification-webhook-strict`;
@@ -63,9 +64,9 @@ test('notification test button performs a real webhook POST with configured head
   const settings = page.getByTestId('notification-settings');
   await settings.getByTestId('notification-add-channel').click();
   await page.locator('#setting-name').fill('E2E Unsaved Webhook Delivery');
-  await page.locator('#setting-channel-type').selectOption('webhook');
+  await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
   await page.locator('#webhook-url').fill(STRICT_WEBHOOK_URL);
-  await page.locator('#webhook-method').selectOption('POST');
+  await selectUiOption(page.locator('#webhook-method'), 'POST');
   await page.locator('#webhook-headers').fill('{"Content-Type":"application/json","X-E2E-Webhook":"delivery"}');
   await page.locator('#webhook-body').fill('{"source":"nexus-e2e","event":"{event}","details":{details}}');
 
@@ -91,9 +92,9 @@ test('notification test localizes user-facing content while preserving the raw e
   const settings = page.getByTestId('notification-settings');
   await settings.getByTestId('notification-add-channel').click();
   await page.locator('#setting-name').fill('E2E Localized Webhook Delivery');
-  await page.locator('#setting-channel-type').selectOption('webhook');
+  await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
   await page.locator('#webhook-url').fill(`${STRICT_WEBHOOK_URL}?locale=zh-CN`);
-  await page.locator('#webhook-method').selectOption('POST');
+  await selectUiOption(page.locator('#webhook-method'), 'POST');
   await page.locator('#webhook-headers').fill('{"Content-Type":"application/json","X-E2E-Webhook":"delivery"}');
   await page
     .locator('#webhook-body')
@@ -120,7 +121,7 @@ test('email notification test preserves legacy HTML body-template rendering', as
   const settings = page.getByTestId('notification-settings');
   await settings.getByTestId('notification-add-channel').click();
   await page.locator('#setting-name').fill('E2E HTML Email Delivery');
-  await page.locator('#setting-channel-type').selectOption('email');
+  await selectUiOption(page.locator('#setting-channel-type'), 'email');
   const field = (label: string) => page.locator('label').filter({ hasText: label }).locator('..');
   await field('Recipient Email(s):').locator('input').fill('recipient@example.test');
   await field('Body Template (Optional)').locator('textarea').fill('<strong>NEXUS-E2E-HTML</strong> {eventDisplay}');
@@ -155,11 +156,11 @@ test('notification settings complete a real CRUD, event persistence, and deliver
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'System', exact: true }).click();
   const preferences = page.locator('#settings-panel-system');
-  await expect(preferences.locator('#languageSelect')).toHaveValue('en-US');
+  await expectUiSelectValue(preferences.locator('#languageSelect'), 'en-US');
   const languageSavePromise = page.waitForResponse(
     (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
   );
-  await preferences.locator('#languageSelect').selectOption('en-US');
+  await selectUiOption(preferences.locator('#languageSelect'), 'en-US');
   await preferences.locator('form').first().getByRole('button', { name: 'Save Language', exact: true }).click();
   expect((await languageSavePromise).ok()).toBeTruthy();
   await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('en-US');
@@ -171,9 +172,9 @@ test('notification settings complete a real CRUD, event persistence, and deliver
   await step('create an enabled webhook and select notification events', async () => {
     await settings.getByTestId('notification-add-channel').click();
     await page.locator('#setting-name').fill(CRUD_CHANNEL_NAME);
-    await page.locator('#setting-channel-type').selectOption('webhook');
+    await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
     await page.locator('#webhook-url').fill(STRICT_WEBHOOK_URL);
-    await page.locator('#webhook-method').selectOption('POST');
+    await selectUiOption(page.locator('#webhook-method'), 'POST');
     await page.locator('#webhook-headers').fill('{"Content-Type":"application/json","X-E2E-Webhook":"delivery"}');
     await page.locator('#webhook-body').fill('{"source":"nexus-e2e","event":"{event}","details":{details}}');
     await page.getByLabel('Login Success', { exact: true }).check();

@@ -14,6 +14,7 @@ import {
   E2E_SSH,
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
+import { selectUiOption } from '../../support/ui-select';
 import {
   closeProgressDisplay,
   hideVisibleProgressCenter,
@@ -344,7 +345,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
         await expect(validTargetRow.locator('input[type="checkbox"]')).toBeChecked();
         await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
         await targetPath.fill('server-transfer-e2e');
-        await modal.getByLabel('Transfer Method', { exact: true }).selectOption('rsync');
+        await selectUiOption(modal.getByLabel('Transfer Method', { exact: true }), 'rsync');
 
         // The Workspace transfer catalog can still be loading/refreshed in parallel. That global
         // task-list state must not make this independent form look like it is submitting.

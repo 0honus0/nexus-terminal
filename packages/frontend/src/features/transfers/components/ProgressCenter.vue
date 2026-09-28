@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
@@ -110,6 +110,29 @@
     };
   };
 
+  const clampRenderedWindow = (): void => {
+    const element = panel.value;
+    if (!element) return;
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
+    const rect = element.getBoundingClientRect();
+    const maxWidth = Math.max(1, viewportWidth - 16);
+    const maxHeight = Math.max(1, viewportHeight - 16);
+    if (rect.width > maxWidth + 0.5) width.value = maxWidth;
+    if (rect.height > maxHeight + 0.5) height.value = maxHeight;
+    const renderedWidth = Math.min(rect.width, maxWidth);
+    const renderedHeight = Math.min(rect.height, maxHeight);
+    position.value = {
+      x: Math.max(8, Math.min(position.value.x, viewportWidth - renderedWidth - 8)),
+      y: Math.max(8, Math.min(position.value.y, viewportHeight - renderedHeight - 8)),
+    };
+  };
+
+  const clampAfterRender = (): void => {
+    clampWindow();
+    void nextTick(clampRenderedWindow);
+  };
+
   const saveWindow = (): void => {
     writeStoredValue(progressWindowStorage, {
       width: width.value,
@@ -165,14 +188,19 @@
 
   onMounted(() => {
     restoreWindow();
+    void nextTick(clampRenderedWindow);
     sampleAggregateSpeed();
     speedTimer = window.setInterval(sampleAggregateSpeed, 500);
-    window.addEventListener('resize', clampWindow);
+    window.addEventListener('resize', clampAfterRender);
   });
   onBeforeUnmount(() => {
     if (speedTimer !== undefined) window.clearInterval(speedTimer);
-    window.removeEventListener('resize', clampWindow);
+    window.removeEventListener('resize', clampAfterRender);
   });
+  watch(
+    () => [props.tasks.length, activeTasks.value.length, presentationMode.value],
+    () => void nextTick(clampRenderedWindow),
+  );
 </script>
 
 <template>
@@ -458,6 +486,7 @@
 
 <style scoped>
   .transfer-progress-window {
+    box-sizing: border-box;
     min-width: min(340px, calc(100vw - 16px));
     min-height: min(190px, calc(100vh - 16px));
     max-width: calc(100vw - 16px);

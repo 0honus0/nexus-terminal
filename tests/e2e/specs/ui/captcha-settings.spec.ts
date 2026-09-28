@@ -2,6 +2,7 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 
 const HCAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000001';
 const RECAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000002';
@@ -46,7 +47,7 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
 
     await step('enable hCaptcha and save provider keys through the UI', async () => {
       await captcha.getByTestId('captcha-enabled').check();
-      await captcha.getByTestId('captcha-provider').selectOption('hcaptcha');
+      await selectUiOption(captcha.getByTestId('captcha-provider'), 'hcaptcha');
       await captcha.locator('#hcaptchaSiteKey').fill(HCAPTCHA_SITE_KEY);
       await captcha.locator('#hcaptchaSecretKey').fill('e2e-hcaptcha-secret');
       const savePromise = page.waitForResponse(
@@ -71,7 +72,7 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
       await page.getByRole('tab', { name: 'Security', exact: true }).click();
       const reloaded = page.getByTestId('captcha-settings');
       await expect(reloaded.getByTestId('captcha-enabled')).toBeChecked();
-      await expect(reloaded.getByTestId('captcha-provider')).toHaveValue('hcaptcha');
+      await expectUiSelectValue(reloaded.getByTestId('captcha-provider'), 'hcaptcha');
       await expect(reloaded.locator('#hcaptchaSiteKey')).toHaveValue(HCAPTCHA_SITE_KEY);
       await expect(reloaded.locator('#hcaptchaSecretKey')).toHaveAttribute('type', 'password');
       await expect(reloaded.locator('#hcaptchaSecretKey')).toHaveValue('');
@@ -79,7 +80,7 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
 
     await step('switch to reCAPTCHA and persist its public configuration through the UI', async () => {
       const reloaded = page.getByTestId('captcha-settings');
-      await reloaded.getByTestId('captcha-provider').selectOption('recaptcha');
+      await selectUiOption(reloaded.getByTestId('captcha-provider'), 'recaptcha');
       await reloaded.locator('#recaptchaSiteKey').fill(RECAPTCHA_SITE_KEY);
       await reloaded.locator('#recaptchaSecretKey').fill('e2e-recaptcha-secret');
       const savePromise = page.waitForResponse(
@@ -105,7 +106,7 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
       await page.getByRole('tab', { name: 'Security', exact: true }).click();
       const reloaded = page.getByTestId('captcha-settings');
       await expect(reloaded.getByTestId('captcha-enabled')).toBeChecked();
-      await expect(reloaded.getByTestId('captcha-provider')).toHaveValue('recaptcha');
+      await expectUiSelectValue(reloaded.getByTestId('captcha-provider'), 'recaptcha');
       await expect(reloaded.locator('#recaptchaSiteKey')).toHaveValue(RECAPTCHA_SITE_KEY);
       await expect(reloaded.locator('#recaptchaSecretKey')).toHaveAttribute('type', 'password');
       await expect(reloaded.locator('#recaptchaSecretKey')).toHaveValue('');
@@ -114,7 +115,7 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
     await step('disable CAPTCHA through the UI and persist the safe default', async () => {
       const reloaded = page.getByTestId('captcha-settings');
       await reloaded.getByTestId('captcha-enabled').uncheck();
-      await expect(reloaded.getByTestId('captcha-provider')).toHaveValue('none');
+      await expectUiSelectValue(reloaded.getByTestId('captcha-provider'), 'none');
       const savePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'PUT',
       );

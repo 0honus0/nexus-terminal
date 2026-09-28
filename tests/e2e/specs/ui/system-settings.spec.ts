@@ -2,6 +2,7 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 
 const TARGET_TIMEZONE = 'Asia/Shanghai';
 const TARGET_LANGUAGE = 'zh-CN';
@@ -25,7 +26,7 @@ test('system settings persist timezone and language changes through the UI', asy
     await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
     await expect(page.locator('#settings-panel-system')).toBeVisible();
     await expect(page.locator('#languageSelect')).toBeVisible();
-    await expect(page.locator('#languageSelect')).toHaveValue('en-US');
+    await expectUiSelectValue(page.locator('#languageSelect'), 'en-US');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
     await expect(page.locator('#timezoneSelect')).toBeVisible();
     await captureFunctionalScreenshot(page, 'system-settings.png', { viewport: { width: 1440, height: 900 } });
@@ -33,7 +34,7 @@ test('system settings persist timezone and language changes through the UI', asy
     await step('save a timezone through the system settings form', async () => {
       const timezone = page.locator('#timezoneSelect');
       const timezoneForm = page.locator('form').filter({ has: timezone });
-      await timezone.selectOption(TARGET_TIMEZONE);
+      await selectUiOption(timezone, TARGET_TIMEZONE);
 
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
@@ -49,14 +50,14 @@ test('system settings persist timezone and language changes through the UI', asy
     await step('save a language through the system settings form', async () => {
       const language = page.locator('#languageSelect');
       const languageForm = page.locator('form').filter({ has: language });
-      await language.selectOption(TARGET_LANGUAGE);
+      await selectUiOption(language, TARGET_LANGUAGE);
 
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
       await languageForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
-      await expect(language).toHaveValue(TARGET_LANGUAGE);
+      await expectUiSelectValue(language, TARGET_LANGUAGE);
       await expect(page.locator('html')).toHaveAttribute('lang', TARGET_LANGUAGE);
 
       const persisted = await context.request.get('/api/v1/settings');
@@ -68,8 +69,8 @@ test('system settings persist timezone and language changes through the UI', asy
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
       await expect(page.locator('#settings-panel-system')).toBeVisible();
-      await expect(page.locator('#timezoneSelect')).toHaveValue(TARGET_TIMEZONE);
-      await expect(page.locator('#languageSelect')).toHaveValue(TARGET_LANGUAGE);
+      await expectUiSelectValue(page.locator('#timezoneSelect'), TARGET_TIMEZONE);
+      await expectUiSelectValue(page.locator('#languageSelect'), TARGET_LANGUAGE);
       await expect(page.locator('html')).toHaveAttribute('lang', TARGET_LANGUAGE);
     });
 
@@ -78,7 +79,7 @@ test('system settings persist timezone and language changes through the UI', asy
       expect(updated.ok()).toBeTruthy();
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
-      await expect(page.locator('#languageSelect')).toHaveValue('en-US');
+      await expectUiSelectValue(page.locator('#languageSelect'), 'en-US');
       await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
     });
   } finally {
@@ -354,11 +355,11 @@ test('system settings persist frontend and backend log levels through the UI', a
     const frontend = page.locator('#frontendLogLevelSelect');
     const backend = page.locator('#backendLogLevelSelect');
     const form = page.getByTestId('logging-settings-form');
-    await expect(frontend).toHaveValue('info');
-    await expect(backend).toHaveValue('info');
+    await expectUiSelectValue(frontend, 'info');
+    await expectUiSelectValue(backend, 'info');
 
-    await frontend.selectOption('debug');
-    await backend.selectOption('debug');
+    await selectUiOption(frontend, 'debug');
+    await selectUiOption(backend, 'debug');
     const responsePromise = page.waitForResponse(
       (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
     );
@@ -371,8 +372,8 @@ test('system settings persist frontend and backend log levels through the UI', a
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
-    await expect(page.locator('#frontendLogLevelSelect')).toHaveValue('debug');
-    await expect(page.locator('#backendLogLevelSelect')).toHaveValue('debug');
+    await expectUiSelectValue(page.locator('#frontendLogLevelSelect'), 'debug');
+    await expectUiSelectValue(page.locator('#backendLogLevelSelect'), 'debug');
 
     const invalid = await context.request.put('/api/v1/settings', { data: { backendLogLevel: 'verbose' } });
     expect(invalid.status()).toBe(400);

@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection } from '../../support/ssh';
+import { selectUiOption } from '../../support/ui-select';
 
 const MOBILE_NAMES = [
   'E2E Mobile Dashboard Connection Alpha With A Long Name',
@@ -45,7 +46,7 @@ async function switchInterfaceToChinese(page: Page): Promise<void> {
   await page.getByRole('tab', { name: 'System' }).click();
   const language = page.locator('#languageSelect');
   await expect(language).toBeVisible();
-  await language.selectOption('zh-CN');
+  await selectUiOption(language, 'zh-CN');
   const save = page.waitForResponse(
     (response) => response.url().includes('/api/v1/settings') && response.request().method() === 'PUT',
   );

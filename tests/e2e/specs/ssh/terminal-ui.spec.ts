@@ -166,11 +166,9 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   context,
 }, testInfo) => {
   const sentTextFrames: string[] = [];
-  const sentBinaryFrames: Buffer[] = [];
   page.on('websocket', (socket) => {
     socket.on('framesent', (event) => {
       if (typeof event.payload === 'string') sentTextFrames.push(event.payload);
-      else sentBinaryFrames.push(event.payload);
     });
   });
 
@@ -333,15 +331,20 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       const before = await terminal.boundingBox();
       expect(before).toBeTruthy();
       await input.focus();
-      const firstTypedFrame = sentBinaryFrames.length;
+      const firstTypedFrame = sentTextFrames.length;
       await page.keyboard.type('x'.repeat(600));
       // Ctrl+C is sent directly, so wait until every typed byte left the browser before interrupting the line.
       await expect
         .poll(
           () =>
-            sentBinaryFrames
-              .slice(firstTypedFrame)
-              .reduce((count, frame) => count + frame.filter((byte) => byte === 0x78).length, 0),
+            sentTextFrames.slice(firstTypedFrame).reduce((count, rawFrame) => {
+              try {
+                const frame = JSON.parse(rawFrame) as { type?: string; payload?: { data?: string } };
+                return frame.type === 'terminal.input' ? count + (frame.payload?.data?.length ?? 0) : count;
+              } catch {
+                return count;
+              }
+            }, 0),
           { timeout: 15_000 },
         )
         .toBeGreaterThanOrEqual(600);

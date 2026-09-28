@@ -4,6 +4,7 @@ import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { E2E_SSH, configureSshE2eSettings, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import { closeWebSocket, openWorkspaceSession, requestWorkspace } from '../../support/ws';
+import { selectUiOption } from '../../support/ui-select';
 
 const ALPHA_NAME = 'E2E Dashboard Alpha';
 const BETA_NAME = 'E2E Dashboard Beta';
@@ -68,7 +69,7 @@ async function switchInterfaceToChinese(page: Page): Promise<void> {
   await page.getByRole('tab', { name: 'System' }).click();
   const language = page.locator('#languageSelect');
   await expect(language).toBeVisible();
-  await language.selectOption('zh-CN');
+  await selectUiOption(language, 'zh-CN');
   const save = page.waitForResponse(
     (response) => response.url().includes('/api/v1/settings') && response.request().method() === 'PUT',
   );

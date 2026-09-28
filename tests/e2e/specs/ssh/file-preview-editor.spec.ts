@@ -12,6 +12,7 @@ import {
 } from '../../support/ssh';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
+import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 
 const row = (page: Page, filename: string) => fileManagerRow(page, filename);
 const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus.file-editor.desktop-popup-size';
@@ -457,16 +458,16 @@ test('file previews and text editor protect historical file-opening regressions'
     const viewLines = editor.locator('.monaco-editor .view-lines');
 
     await expect.poll(async () => viewLines.innerText()).toContain('ENCODING_E2E');
-    await expect(encoding).toHaveValue('utf-16le');
-    await expect(lineEnding).toHaveValue('crlf');
+    await expectUiSelectValue(encoding, 'utf-16le');
+    await expectUiSelectValue(lineEnding, 'crlf');
 
-    await encoding.selectOption('utf-8');
-    await expect(encoding).toHaveValue('utf-8');
-    await encoding.selectOption('utf-16le');
+    await selectUiOption(encoding, 'utf-8');
+    await expectUiSelectValue(encoding, 'utf-8');
+    await selectUiOption(encoding, 'utf-16le');
     await expect.poll(async () => viewLines.innerText()).toContain('SECOND_LINE');
 
-    await lineEnding.selectOption('lf');
-    await expect(lineEnding).toHaveValue('lf');
+    await selectUiOption(lineEnding, 'lf');
+    await expectUiSelectValue(lineEnding, 'lf');
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toContainText('Save successful', { timeout: 15_000 });
 
@@ -474,7 +475,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'utf16-crlf.txt').dblclick();
     const reopened = editorView(page);
     await expect(reopened).toBeVisible();
-    await expect(reopened.getByTestId('file-editor-line-ending')).toHaveValue('lf');
+    await expectUiSelectValue(reopened.getByTestId('file-editor-line-ending'), 'lf');
     await expect.poll(async () => reopened.locator('.monaco-editor .view-lines').innerText()).toContain('SECOND_LINE');
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
@@ -483,7 +484,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'gb18030-low-confidence.txt').dblclick();
     const editor = editorView(page);
     await expect(editor).toBeVisible();
-    await expect(editor.getByTestId('file-editor-encoding')).toHaveValue('gb18030');
+    await expectUiSelectValue(editor.getByTestId('file-editor-encoding'), 'gb18030');
     await expect.poll(async () => editor.locator('.monaco-editor .view-lines').innerText()).toContain('中文测试');
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });

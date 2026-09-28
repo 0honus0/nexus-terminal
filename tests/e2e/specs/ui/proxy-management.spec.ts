@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import { selectUiOption } from '../../support/ui-select';
 
 const ORIGINAL_NAME = 'E2E Proxy Lifecycle';
 const RENAMED_NAME = 'E2E Proxy Lifecycle Renamed';
@@ -31,7 +32,7 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
     await page.getByTestId('proxy-add-button').click();
     const form = page.getByTestId('proxy-form');
     await form.locator('#proxy-name').fill(ORIGINAL_NAME);
-    await form.locator('#proxy-type').selectOption('HTTP');
+    await selectUiOption(form.locator('#proxy-type'), 'HTTP');
     await form.locator('#proxy-host').fill(LONG_HOST);
     await form.locator('#proxy-port').fill('70000');
     await form.locator('#proxy-username').fill('proxy-user');
@@ -100,7 +101,7 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
     await row.getByTestId('proxy-edit').click();
     const form = page.getByTestId('proxy-form');
     await form.locator('#proxy-name').fill(UPDATED_NAME);
-    await form.locator('#proxy-type').selectOption('SOCKS5');
+    await selectUiOption(form.locator('#proxy-type'), 'SOCKS5');
     await form.locator('#proxy-password').fill('proxy-password-v2');
     const updatePromise = page.waitForRequest(
       (request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT',

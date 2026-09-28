@@ -3,6 +3,7 @@ import type { TestInfo } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 
 const PROXY_NAME = 'E2E Audit Filter Proxy';
 const PAGINATION_PREFIX = 'E2E Audit Pagination Proxy';
@@ -89,7 +90,7 @@ test('audit log UI filters by action type and details search term', async ({ pag
     await expect(view).toBeVisible();
 
     await step('filter to proxy creation events and the unique audit details', async () => {
-      await view.getByTestId('audit-action-type').selectOption('PROXY_CREATED');
+      await selectUiOption(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
       await view.getByTestId('audit-search').fill(PROXY_NAME);
       await view.getByTestId('audit-apply-filter').click();
       const row = view.locator('tr[data-audit-id]').filter({ hasText: PROXY_NAME });
@@ -217,7 +218,7 @@ test('audit log pagination resets on filters and retains active filters across p
     const paginationInfo = (value: string) => view.getByText(value, { exact: true });
 
     await step('apply action and details filters on page one', async () => {
-      await view.getByTestId('audit-action-type').selectOption('PROXY_CREATED');
+      await selectUiOption(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
       await view.getByTestId('audit-search').fill(PAGINATION_PREFIX);
       const responsePromise = waitForAuditRequest(0, PAGINATION_PREFIX);
       await view.getByTestId('audit-apply-filter').click();
@@ -225,7 +226,7 @@ test('audit log pagination resets on filters and retains active filters across p
       await expect(paginationInfo(`Page 1 of 2 (${PAGINATION_COUNT} total logs)`)).toBeVisible();
       await expect(view.locator('tr[data-audit-id]')).toHaveCount(50);
       await expect(view.getByTestId('audit-search')).toHaveValue(PAGINATION_PREFIX);
-      await expect(view.getByTestId('audit-action-type')).toHaveValue('PROXY_CREATED');
+      await expectUiSelectValue(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
     });
 
     await step('move to page two while retaining both active filters', async () => {
@@ -236,7 +237,7 @@ test('audit log pagination resets on filters and retains active filters across p
       await expect(paginationInfo(`Page 2 of 2 (${PAGINATION_COUNT} total logs)`)).toBeVisible();
       await expect(view.locator('tr[data-audit-id]')).toHaveCount(1);
       await expect(view.getByTestId('audit-search')).toHaveValue(PAGINATION_PREFIX);
-      await expect(view.getByTestId('audit-action-type')).toHaveValue('PROXY_CREATED');
+      await expectUiSelectValue(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
       await expect(view.locator('tr[data-audit-id]').first()).toContainText(PAGINATION_PREFIX);
     });
 
@@ -249,7 +250,7 @@ test('audit log pagination resets on filters and retains active filters across p
       await expect(paginationInfo('Page 1 of 1 (1 total logs)')).toBeVisible();
       await expect(view.locator('tr[data-audit-id]')).toHaveCount(1);
       await expect(view.locator('tr[data-audit-id]').first()).toContainText(uniqueName);
-      await expect(view.getByTestId('audit-action-type')).toHaveValue('PROXY_CREATED');
+      await expectUiSelectValue(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
     });
 
     await capturePaginationEvidence(page, testInfo, 'after');

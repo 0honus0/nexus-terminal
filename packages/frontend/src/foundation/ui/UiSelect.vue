@@ -208,6 +208,7 @@
             <SelectItem
               v-for="(option, index) in resolvedOptions"
               :key="index"
+              :data-value="option.value == null ? '' : String(option.value)"
               :data-testid="
                 props.optionTestIdPrefix
                   ? `${props.optionTestIdPrefix}-${option.value === '' ? 'all' : String(option.value)}`

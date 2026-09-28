@@ -3,6 +3,7 @@ import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { configureSshE2eSettings, E2E_SSH } from '../../support/ssh';
 import { step } from '../../support/steps';
+import { selectUiOption } from '../../support/ui-select';
 
 const ORIGINAL_NAME = 'Z-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobile';
 const EDITED_NAME = 'A-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobileEdited';
@@ -150,7 +151,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
 
     const form = page.getByTestId('connection-form');
     await expect(form).toBeVisible();
-    await form.locator('#ssh-key-select').selectOption(String(keyId));
+    await selectUiOption(form.locator('#ssh-key-select'), String(keyId));
     await form.locator('#conn-name').fill(CONNECTION_NAME);
     await form.locator('#conn-host').fill(E2E_SSH.host);
     await form.locator('#conn-port').fill(String(E2E_SSH.port));

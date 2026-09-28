@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 import { E2E_SSH } from '../../support/ssh';
+import { selectUiOption } from '../../support/ui-select';
 
 const CHANNEL_NAME = 'E2E Webhook Channel';
 
@@ -31,9 +32,9 @@ test('notification settings create, edit, persist, and delete a webhook channel 
   await step('add a webhook notification channel', async () => {
     await settings.getByTestId('notification-add-channel').click();
     await page.locator('#setting-name').fill(CHANNEL_NAME);
-    await page.locator('#setting-channel-type').selectOption('webhook');
+    await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
     await page.locator('#webhook-url').fill(`${E2E_SSH.controlUrl}/e2e-notification-webhook`);
-    await page.locator('#webhook-method').selectOption('POST');
+    await selectUiOption(page.locator('#webhook-method'), 'POST');
     await page.locator('#webhook-body').fill('{"event":"{event}"}');
     await page
       .locator('form')
