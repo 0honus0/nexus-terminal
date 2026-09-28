@@ -110,9 +110,11 @@ export const modelCapabilityRegistrySyncScenario = async () => {
     result: ModelCapabilityRegistryFetchResult = { state: 'updated', snapshot };
     failure: Error | null = null;
     calls = 0;
+    timeouts: number[] = [];
 
-    async fetch(): Promise<ModelCapabilityRegistryFetchResult> {
+    async fetch(_sourceRevision: string | null, timeoutMs: number): Promise<ModelCapabilityRegistryFetchResult> {
       this.calls += 1;
+      this.timeouts.push(timeoutMs);
       if (this.failure) throw this.failure;
       return structuredClone(this.result);
     }
@@ -129,6 +131,7 @@ export const modelCapabilityRegistrySyncScenario = async () => {
     assert.equal(updated.entryCount, Object.keys(snapshot.entries).length);
     assert.equal(updated.sourceRevision, 'scenario-revision-1');
     assert.equal(source.calls, 1);
+    assert.deepEqual(source.timeouts, [3_000], 'startup registry synchronization should use the short deadline');
 
     const runtimeModel = resolveModelCapabilityDefaults('sync-model');
     assert.equal(runtimeModel?.contextWindow, 32_768);
@@ -194,6 +197,7 @@ export const modelCapabilityRegistrySyncScenario = async () => {
 
     source.failure = new Error('MODEL_REGISTRY_HTTP_503');
     await assert.rejects(() => registry.refresh(), /MODEL_REGISTRY_HTTP_503/);
+    assert.deepEqual(source.timeouts, [3_000, 15_000], 'manual refresh should retain the full update deadline');
     assert.equal(registry.status().lastErrorCode, 'MODEL_REGISTRY_HTTP_503');
     assert.equal(resolveModelCapabilityDefaults('sync-model')?.contextWindow, 32_768);
   } finally {
@@ -206,7 +210,7 @@ export const modelCapabilityRegistrySyncScenario = async () => {
     release: (() => void) | null = null;
     calls = 0;
 
-    async fetch(): Promise<ModelCapabilityRegistryFetchResult> {
+    async fetch(_sourceRevision: string | null, _timeoutMs: number): Promise<ModelCapabilityRegistryFetchResult> {
       this.calls += 1;
       if (this.calls === 1) return { state: 'updated', snapshot: structuredClone(snapshot) };
       this.entered?.();

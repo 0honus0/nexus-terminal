@@ -66,9 +66,9 @@ export class LocalModelCapabilityRegistryStore implements ModelCapabilityRegistr
 }
 
 export class ModelsDevCapabilityRegistrySource implements ModelCapabilityRegistrySourcePort {
-  async fetch(sourceRevision: string | null): Promise<ModelCapabilityRegistryFetchResult> {
+  async fetch(sourceRevision: string | null, timeoutMs: number): Promise<ModelCapabilityRegistryFetchResult> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(new Error('MODEL_REGISTRY_UPDATE_TIMEOUT')), 15_000);
+    const timeout = setTimeout(() => controller.abort(new Error('MODEL_REGISTRY_UPDATE_TIMEOUT')), timeoutMs);
     try {
       const response = await fetch(MODEL_REGISTRY_SOURCE_URL, {
         signal: controller.signal,

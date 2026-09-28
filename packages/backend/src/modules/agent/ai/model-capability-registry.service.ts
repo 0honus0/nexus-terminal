@@ -2,7 +2,11 @@ import { logErrorCode, logger } from '../../../shared/logging/logger';
 import type { ClockPort } from '../agent.types';
 import type { ModelCapabilityDefaults } from './model.types';
 import { resolveModelCapabilityDefaults } from './model-capability-resolver';
-import { MODEL_REGISTRY_SOURCE_URL } from './model-capability-registry-source';
+import {
+  MODEL_REGISTRY_MANUAL_REFRESH_TIMEOUT_MS,
+  MODEL_REGISTRY_SOURCE_URL,
+  MODEL_REGISTRY_STARTUP_TIMEOUT_MS,
+} from './model-capability-registry-source';
 import {
   installRuntimeModelCapabilityRegistry,
   modelCapabilityRegistryRuntimeStatus,
@@ -58,7 +62,7 @@ export class ModelCapabilityRegistryService {
     }
     installRuntimeModelCapabilityRegistry(this.state.snapshot);
     try {
-      await this.refresh();
+      await this.refreshWithTimeout(MODEL_REGISTRY_STARTUP_TIMEOUT_MS);
     } catch {
       // The refresh path records the failure and keeps the last remote snapshot available.
     }
@@ -87,8 +91,12 @@ export class ModelCapabilityRegistryService {
   }
 
   refresh(): Promise<ModelCapabilityRegistryStatus> {
+    return this.refreshWithTimeout(MODEL_REGISTRY_MANUAL_REFRESH_TIMEOUT_MS);
+  }
+
+  private refreshWithTimeout(timeoutMs: number): Promise<ModelCapabilityRegistryStatus> {
     if (this.refreshPromise) return this.refreshPromise;
-    this.refreshPromise = this.enqueueMutation(() => this.refreshInternal()).finally(() => {
+    this.refreshPromise = this.enqueueMutation(() => this.refreshInternal(timeoutMs)).finally(() => {
       this.refreshPromise = null;
     });
     return this.refreshPromise;
@@ -103,7 +111,7 @@ export class ModelCapabilityRegistryService {
     return result;
   }
 
-  private async refreshInternal(): Promise<ModelCapabilityRegistryStatus> {
+  private async refreshInternal(timeoutMs: number): Promise<ModelCapabilityRegistryStatus> {
     const startedAt = this.clock.nowUnixSeconds();
     this.state = { ...this.state, lastAttemptAt: startedAt };
     await this.store.save(this.state);
@@ -112,7 +120,7 @@ export class ModelCapabilityRegistryService {
       'Agent model capability registry update started',
     );
     try {
-      const result = await this.source.fetch(this.state.snapshot?.sourceRevision ?? null);
+      const result = await this.source.fetch(this.state.snapshot?.sourceRevision ?? null, timeoutMs);
       const completedAt = this.clock.nowUnixSeconds();
       if (result.state === 'updated') {
         this.state = {

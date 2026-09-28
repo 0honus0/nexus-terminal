@@ -18,5 +18,5 @@ export type ModelCapabilityRegistryFetchResult =
   | { state: 'updated'; snapshot: ModelCapabilityRegistrySnapshot };
 
 export interface ModelCapabilityRegistrySourcePort {
-  fetch(sourceRevision: string | null): Promise<ModelCapabilityRegistryFetchResult>;
+  fetch(sourceRevision: string | null, timeoutMs: number): Promise<ModelCapabilityRegistryFetchResult>;
 }

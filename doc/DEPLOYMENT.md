@@ -110,6 +110,8 @@ Compose 默认以三个服务运行：
 - `VITE_*` 是前端构建时变量，运行中的容器修改 `.env` 不会重新生成已经构建好的前端静态资源。
 - 修改运行时 `.env` 后建议执行 `docker compose up -d --force-recreate`，确保 Compose 重新创建相关容器。
 
+Agent 模型能力 Registry 从 `models.dev` 获取远端快照，并把成功结果保存在 Backend 数据目录。Backend 启动时会先加载已有快照，再以 3 秒超时尝试同步远端；远端不可达不会阻止 Backend 继续启动，有缓存时继续使用缓存，无缓存时 Registry 明确显示为 unavailable。当前不执行周期自动刷新；需要立即更新时，可在 Agent Provider 设置中手动刷新，手动请求使用 15 秒超时。
+
 ### Passkey / WebAuthn
 
 `.env` 中使用：
