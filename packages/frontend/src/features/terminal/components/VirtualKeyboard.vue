@@ -1,144 +1,323 @@
 <script setup lang="ts">
-  const props = withDefaults(defineProps<{ ctrlActive?: boolean; altActive?: boolean }>(), {
-    ctrlActive: false,
-    altActive: false,
-  });
-  const emit = defineEmits<{ input: [value: string]; toggleModifier: [modifier: 'ctrl' | 'alt'] }>();
+  import { computed, onBeforeUnmount, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { readStoredValue, stringStorageCodec, writeStoredValue } from '@/foundation/browser';
+  import { UiSurface } from '@/foundation/ui';
+  import { encodeTerminalKey, type TerminalKey } from '../model/terminalKeys';
+  import type { StickyModifierLevels, TerminalModifier } from '../state/stickyModifiers';
 
+  const props = withDefaults(
+    defineProps<{
+      modifiers?: StickyModifierLevels;
+      /** Reads the live DECCKM state at key time so cursor keys match the remote application. */
+      applicationCursorKeys?: () => boolean;
+    }>(),
+    {
+      modifiers: () => ({ ctrl: 'off', alt: 'off', shift: 'off' }),
+      applicationCursorKeys: () => false,
+    },
+  );
+  const emit = defineEmits<{ input: [value: string]; toggleModifier: [modifier: TerminalModifier] }>();
+  const { t } = useI18n();
+
+  type KeyboardPage = 'main' | 'function';
   type KeyDefinition =
-    | { label: string; sequence: string; modifiedSequence?: string }
-    | { label: 'Ctrl' | 'Alt'; modifier: 'ctrl' | 'alt' };
+    | { kind: 'key'; id: string; key: TerminalKey; label?: string; icon?: string; repeat?: boolean }
+    | { kind: 'modifier'; id: string; modifier: TerminalModifier; label: string }
+    | { kind: 'page'; id: string }
+    | { kind: 'spacer'; id: string };
 
-  const send = (key: KeyDefinition) => {
-    if ('modifier' in key) {
-      emit('toggleModifier', key.modifier);
-      return;
-    }
-    // Modifier encoding stays owned by WorkspaceSessionSurface. Only Del swaps
-    // to its standard Delete base sequence before the shared modifier encoder.
-    const base = (props.ctrlActive || props.altActive) && key.modifiedSequence ? key.modifiedSequence : key.sequence;
-    emit('input', base);
+  const REPEAT_DELAY_MS = 400;
+  const REPEAT_INTERVAL_MS = 60;
+  const pageStorage = {
+    namespace: 'terminal.virtual-keyboard-page',
+    version: 1,
+    codec: stringStorageCodec((value) => value === 'main' || value === 'function'),
   };
 
-  const activeModifier = (key: KeyDefinition): boolean =>
-    'modifier' in key && ((key.modifier === 'ctrl' && props.ctrlActive) || (key.modifier === 'alt' && props.altActive));
+  const page = ref<KeyboardPage>((readStoredValue(pageStorage) as KeyboardPage | undefined) ?? 'main');
+  const togglePage = () => {
+    page.value = page.value === 'main' ? 'function' : 'main';
+    writeStoredValue(pageStorage, page.value);
+  };
 
-  const primary: KeyDefinition[] = [
-    { label: 'Ctrl', modifier: 'ctrl' },
-    { label: 'Alt', modifier: 'alt' },
-    { label: 'Tab', sequence: '\t' },
-    { label: 'Esc', sequence: '\x1b' },
-    { label: 'Del', sequence: '\x7f', modifiedSequence: '\x1b[3~' },
-  ];
-  const rows: KeyDefinition[][] = [
-    [
-      { label: 'Home', sequence: '\x1b[1~' },
-      { label: 'End', sequence: '\x1b[4~' },
-      { label: 'PgUp', sequence: '\x1b[5~' },
-      { label: 'PgDn', sequence: '\x1b[6~' },
-      { label: 'Ins', sequence: '\x1b[2~' },
-      { label: '↑', sequence: '\x1b[A' },
-      { label: 'F1', sequence: '\x1b[11~' },
+  const key = (id: TerminalKey, options: { label?: string; icon?: string; repeat?: boolean } = {}): KeyDefinition => ({
+    kind: 'key',
+    id,
+    key: id,
+    ...options,
+  });
+  const ctrl: KeyDefinition = { kind: 'modifier', id: 'ctrl', modifier: 'ctrl', label: 'Ctrl' };
+  const alt: KeyDefinition = { kind: 'modifier', id: 'alt', modifier: 'alt', label: 'Alt' };
+  const shift: KeyDefinition = { kind: 'modifier', id: 'shift', modifier: 'shift', label: '⇧' };
+  const fn: KeyDefinition = { kind: 'page', id: 'fn' };
+  const escape = key('escape', { label: 'Esc' });
+  const tab = key('tab', { label: 'Tab' });
+  const functionKey = (index: number) => key(`f${index}` as TerminalKey, { label: `F${index}` });
+
+  // Two 9-column rows. The first three columns (modifiers, Fn, Esc/Tab) stay fixed across
+  // pages so Ctrl/Alt/Shift+Fx combinations never require a page switch.
+  const layouts: Record<KeyboardPage, KeyDefinition[][]> = {
+    main: [
+      [
+        ctrl,
+        shift,
+        escape,
+        key('home', { label: 'Home' }),
+        key('pageUp', { label: 'PgUp', repeat: true }),
+        key('delete', { label: 'Del', repeat: true }),
+        { kind: 'spacer', id: 'arrow-gap' },
+        key('arrowUp', { icon: 'fa-arrow-up', repeat: true }),
+        key('backspace', { icon: 'fa-delete-left', repeat: true }),
+      ],
+      [
+        alt,
+        fn,
+        tab,
+        key('end', { label: 'End' }),
+        key('pageDown', { label: 'PgDn', repeat: true }),
+        key('insert', { label: 'Ins' }),
+        key('arrowLeft', { icon: 'fa-arrow-left', repeat: true }),
+        key('arrowDown', { icon: 'fa-arrow-down', repeat: true }),
+        key('arrowRight', { icon: 'fa-arrow-right', repeat: true }),
+      ],
     ],
-    [
-      { label: 'F2', sequence: '\x1b[12~' },
-      { label: 'F3', sequence: '\x1b[13~' },
-      { label: 'F4', sequence: '\x1b[14~' },
-      { label: 'F5', sequence: '\x1b[15~' },
-      { label: '←', sequence: '\x1b[D' },
-      { label: '↓', sequence: '\x1b[B' },
-      { label: '→', sequence: '\x1b[C' },
+    function: [
+      [ctrl, shift, escape, ...[1, 2, 3, 4, 5, 6].map(functionKey)],
+      [alt, fn, tab, ...[7, 8, 9, 10, 11, 12].map(functionKey)],
     ],
-    [
-      { label: 'F6', sequence: '\x1b[17~' },
-      { label: 'F7', sequence: '\x1b[18~' },
-      { label: 'F8', sequence: '\x1b[19~' },
-      { label: 'F9', sequence: '\x1b[20~' },
-      { label: 'F10', sequence: '\x1b[21~' },
-      { label: 'F11', sequence: '\x1b[23~' },
-      { label: 'F12', sequence: '\x1b[24~' },
-    ],
-  ];
+  };
+  const rows = computed(() => layouts[page.value]);
+
+  const ariaLabel = (definition: KeyDefinition): string | undefined => {
+    if (definition.kind === 'modifier') {
+      const name = t(`terminal.virtualKeyboard.${definition.modifier}`);
+      return props.modifiers[definition.modifier] === 'locked'
+        ? t('terminal.virtualKeyboard.modifierLocked', { key: name })
+        : name;
+    }
+    if (definition.kind === 'page') return t('terminal.virtualKeyboard.functionKeys');
+    if (definition.kind !== 'key') return undefined;
+    // Function keys are announced by their F1–F12 label; named keys get a localized name.
+    return /^f\d+$/.test(definition.key) ? definition.label : t(`terminal.virtualKeyboard.${definition.key}`);
+  };
+  const pressedState = (definition: KeyDefinition): boolean | undefined => {
+    if (definition.kind === 'modifier') return props.modifiers[definition.modifier] !== 'off';
+    if (definition.kind === 'page') return page.value === 'function';
+    return undefined;
+  };
+  const stateClass = (definition: KeyDefinition): Record<string, boolean> => ({
+    'is-armed': definition.kind === 'modifier' && props.modifiers[definition.modifier] === 'once',
+    'is-locked': definition.kind === 'modifier' && props.modifiers[definition.modifier] === 'locked',
+    'is-armed-page': definition.kind === 'page' && page.value === 'function',
+    'is-repeating': repeatingId.value === definition.id,
+  });
+
+  const sendKey = (terminalKey: TerminalKey) => {
+    emit('input', encodeTerminalKey(terminalKey, { applicationCursorKeys: props.applicationCursorKeys() }));
+  };
+  const activate = (definition: KeyDefinition) => {
+    if (definition.kind === 'modifier') emit('toggleModifier', definition.modifier);
+    else if (definition.kind === 'page') togglePage();
+    else if (definition.kind === 'key') sendKey(definition.key);
+  };
+
+  const repeatingId = ref<string | null>(null);
+  let repeatDelay: ReturnType<typeof setTimeout> | undefined;
+  let repeatInterval: ReturnType<typeof setInterval> | undefined;
+  const stopRepeat = () => {
+    if (repeatDelay !== undefined) clearTimeout(repeatDelay);
+    if (repeatInterval !== undefined) clearInterval(repeatInterval);
+    repeatDelay = undefined;
+    repeatInterval = undefined;
+    repeatingId.value = null;
+  };
+
+  const handlePointerDown = (event: PointerEvent, definition: KeyDefinition) => {
+    // Keep focus (and the system IME) on the command input while tapping keys.
+    event.preventDefault();
+    if (event.button !== 0 || definition.kind !== 'key' || !definition.repeat) return;
+    stopRepeat();
+    try {
+      (event.currentTarget as Element).setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointers may not be capturable; release events still stop the repeat.
+    }
+    repeatingId.value = definition.id;
+    sendKey(definition.key);
+    repeatDelay = setTimeout(() => {
+      repeatInterval = setInterval(() => sendKey(definition.key), REPEAT_INTERVAL_MS);
+    }, REPEAT_DELAY_MS);
+  };
+  const handleClick = (event: MouseEvent, definition: KeyDefinition) => {
+    // Repeatable keys already fired on pointerdown; only keyboard activation (detail 0) sends here.
+    if (definition.kind === 'key' && definition.repeat && event.detail !== 0) return;
+    activate(definition);
+  };
+
+  onBeforeUnmount(stopRepeat);
 </script>
 
 <template>
-  <div class="mobile-virtual-keyboard virtual-keyboard-bar border-t border-border bg-background">
-    <div class="primary-key-row">
-      <button
-        v-for="key in primary"
-        :key="key.label"
-        type="button"
-        class="virtual-key primary-key rounded border border-border bg-input text-foreground transition-colors duration-150 hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary"
-        :class="{ 'bg-primary text-primary-foreground hover:bg-primary/90': activeModifier(key) }"
-        :title="key.label"
-        :aria-pressed="'modifier' in key ? activeModifier(key) : undefined"
-        @pointerdown.prevent
-        @click="send(key)"
-      >
-        {{ key.label }}
-      </button>
+  <UiSurface
+    surface="plain"
+    radius="control"
+    class="mobile-virtual-keyboard virtual-keyboard-bar"
+    role="toolbar"
+    :aria-label="t('terminal.virtualKeyboard.label')"
+    :data-page="page"
+    @contextmenu.prevent
+  >
+    <div v-for="(row, rowIndex) in rows" :key="`${page}-${rowIndex}`" class="virtual-key-row">
+      <template v-for="definition in row" :key="definition.id">
+        <span v-if="definition.kind === 'spacer'" class="virtual-key-spacer" aria-hidden="true"></span>
+        <button
+          v-else
+          type="button"
+          class="virtual-key"
+          :class="[`virtual-key--${definition.kind}`, stateClass(definition)]"
+          :data-key="definition.id"
+          :aria-label="ariaLabel(definition)"
+          :aria-pressed="pressedState(definition)"
+          @pointerdown="handlePointerDown($event, definition)"
+          @pointerup="stopRepeat"
+          @pointercancel="stopRepeat"
+          @lostpointercapture="stopRepeat"
+          @click="handleClick($event, definition)"
+        >
+          <i
+            v-if="definition.kind === 'key' && definition.icon"
+            :class="['fa-solid', definition.icon]"
+            aria-hidden="true"
+          ></i>
+          <template v-else-if="definition.kind === 'page'">Fn</template>
+          <template v-else-if="definition.kind !== 'key' || definition.label">{{ definition.label }}</template>
+        </button>
+      </template>
     </div>
-
-    <div v-for="(row, index) in rows" :key="index" class="secondary-key-row">
-      <button
-        v-for="key in row"
-        :key="key.label"
-        type="button"
-        class="virtual-key compact-key rounded border border-border bg-input text-foreground transition-colors duration-150 hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary"
-        :title="key.label"
-        @pointerdown.prevent
-        @click="send(key)"
-      >
-        {{ key.label }}
-      </button>
-    </div>
-  </div>
+  </UiSurface>
 </template>
 
 <style scoped>
   .virtual-keyboard-bar {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    overflow: hidden;
-    padding: 0.25rem;
-    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+    gap: 4px;
+    padding: 4px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--ui-hairline);
+    border-radius: 0;
+    background: var(--glass-nav-fill);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
 
-  .primary-key-row,
-  .secondary-key-row {
+  .virtual-key-row {
     display: grid;
-    width: 100%;
-    gap: 2px;
-  }
-
-  .primary-key-row {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .secondary-key-row {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    gap: 4px;
   }
 
   .virtual-key {
-    text-align: center;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .primary-key,
-  .compact-key {
+    position: relative;
+    display: flex;
     min-width: 0;
-    height: 1.8rem;
+    height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
     padding: 0;
-    line-height: 1;
-  }
-
-  .primary-key {
+    border: 1px solid var(--ui-hairline);
+    border-radius: var(--ui-control-radius);
+    background: var(--ui-fill-inset);
+    box-shadow: var(--ui-glass-highlight);
+    color: var(--ui-text);
     font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      transform var(--ui-motion-duration) var(--ui-motion-ease),
+      background-color var(--ui-motion-duration) var(--ui-motion-ease),
+      border-color var(--ui-motion-duration) var(--ui-motion-ease),
+      color var(--ui-motion-duration) var(--ui-motion-ease);
   }
 
-  .compact-key {
-    font-size: clamp(0.55rem, 2.5vw, 0.7rem);
+  .virtual-key i {
+    font-size: 0.85rem;
+    pointer-events: none;
+  }
+
+  .virtual-key--modifier,
+  .virtual-key--page {
+    color: var(--ui-text-muted);
+    font-weight: 600;
+  }
+
+  .virtual-key--modifier {
+    font-size: 0.8rem;
+  }
+
+  @media (hover: hover) {
+    .virtual-key:hover {
+      background: var(--ui-fill-inset-hover);
+    }
+  }
+
+  .virtual-key:focus-visible {
+    outline: none;
+    border-color: var(--ui-focus-color);
+    box-shadow: var(--ui-focus-ring);
+  }
+
+  .virtual-key:active,
+  .virtual-key.is-repeating {
+    transform: scale(0.94);
+    background: var(--ui-fill-inset-hover);
+    border-color: var(--ui-hairline-strong);
+  }
+
+  .virtual-key.is-armed,
+  .virtual-key.is-armed-page {
+    border-color: color-mix(in srgb, var(--link-active-color) 55%, var(--border-color));
+    background: color-mix(in srgb, var(--link-active-color) 20%, transparent);
+    color: var(--link-active-color);
+  }
+
+  .virtual-key.is-locked {
+    border-color: var(--link-active-color);
+    background: var(--link-active-color);
+    color: var(--app-bg-color);
+  }
+
+  /* A locked modifier carries an underline so it is distinguishable without color alone. */
+  .virtual-key.is-locked::after {
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    width: 1rem;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+    content: '';
+    transform: translateX(-50%);
+  }
+
+  .virtual-key-spacer {
+    min-width: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .virtual-key {
+      transition: none;
+    }
+
+    .virtual-key:active,
+    .virtual-key.is-repeating {
+      transform: none;
+    }
   }
 </style>

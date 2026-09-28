@@ -1,6 +1,7 @@
 export interface TerminalModifierState {
   ctrl: boolean;
   alt: boolean;
+  shift?: boolean;
 }
 
 const CTRL_DIGIT_SEQUENCES: Record<string, string> = {
@@ -16,6 +17,8 @@ const CTRL_DIGIT_SEQUENCES: Record<string, string> = {
 const toCtrlSequence = (character: string): string | null => {
   if (character === ' ') return '\x00';
   if (character === '?') return '\x7f';
+  // xterm sends BS for Ctrl+Backspace so readline can delete the previous word.
+  if (character === '\x7f') return '\x08';
   if (CTRL_DIGIT_SEQUENCES[character]) return CTRL_DIGIT_SEQUENCES[character];
 
   const upperCharacter = character.toUpperCase();
@@ -26,30 +29,33 @@ const toCtrlSequence = (character: string): string | null => {
 };
 
 /**
- * Apply one sticky terminal Ctrl/Alt state to a user-input sequence.
+ * Apply one sticky terminal Ctrl/Alt/Shift state to a user-input sequence.
  *
- * Printable characters follow the final mobile Workspace Ctrl mapping. Known xterm
- * navigation/function sequences retain their modifier parameter semantics so the
- * clean virtual keyboard does not lose capabilities while sharing the same state.
+ * Printable characters follow the mobile Workspace Ctrl mapping. xterm navigation and
+ * function sequences, in both CSI and SS3 (application cursor) form, are re-encoded with
+ * the xterm modifier parameter, which always uses the CSI form.
  * `null` means the sticky modifier cannot represent this input and must remain active.
  */
 export const applyTerminalModifiers = (input: string, modifiers: TerminalModifierState): string | null => {
-  if (!modifiers.ctrl && !modifiers.alt) return null;
+  if (!modifiers.ctrl && !modifiers.alt && !modifiers.shift) return null;
 
+  const parameter = 1 + (modifiers.shift ? 1 : 0) + (modifiers.alt ? 2 : 0) + (modifiers.ctrl ? 4 : 0);
   const tilde = input.match(/^\x1b\[([0-9]+)~$/);
-  const cursor = input.match(/^\x1b\[([ABCD])$/);
-  if (tilde || cursor) {
-    const parameter = 1 + (modifiers.alt ? 2 : 0) + (modifiers.ctrl ? 4 : 0);
-    if (tilde) return `\x1b[${tilde[1]};${parameter}~`;
-    return `\x1b[1;${parameter}${cursor![1]}`;
-  }
+  if (tilde) return `\x1b[${tilde[1]};${parameter}~`;
+  const letter = input.match(/^\x1b(?:\[|O)([ABCDHFPQRS])$/);
+  if (letter) return `\x1b[1;${parameter}${letter[1]}`;
 
-  if (input === '\t' || input === '\x1b') return modifiers.alt ? `\x1b${input}` : input;
+  if (input === '\t') {
+    const tab = modifiers.shift ? '\x1b[Z' : '\t';
+    return modifiers.alt ? `\x1b${tab}` : tab;
+  }
+  if (input === '\x1b') return modifiers.alt ? '\x1b\x1b' : input;
   if (Array.from(input).length !== 1) return null;
 
-  let sequence = input;
+  let sequence = modifiers.shift ? input.toUpperCase() : input;
+  if (Array.from(sequence).length !== 1) sequence = input;
   if (modifiers.ctrl) {
-    const ctrlSequence = toCtrlSequence(input);
+    const ctrlSequence = toCtrlSequence(sequence);
     if (ctrlSequence === null) return null;
     sequence = ctrlSequence;
   }

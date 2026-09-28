@@ -459,15 +459,18 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
       .toContain('Nexus mobile virtual keyboard');
     await captureFunctionalScreenshot(page, 'mobile-virtual-keyboard.png');
 
-    const screenshotCtrl = keyboard.getByRole('button', { name: 'Ctrl', exact: true });
-    const screenshotAlt = keyboard.getByRole('button', { name: 'Alt', exact: true });
-    await screenshotCtrl.click();
+    // Document both modifier states: Ctrl locked by a double tap, Alt armed for one key.
+    const screenshotCtrl = keyboard.locator('[data-key="ctrl"]');
+    const screenshotAlt = keyboard.locator('[data-key="alt"]');
+    await screenshotCtrl.dblclick();
     await screenshotAlt.click();
-    await expect(screenshotCtrl).toHaveAttribute('aria-pressed', 'true');
+    await expect(screenshotCtrl).toHaveAccessibleName('Ctrl (locked)');
     await expect(screenshotAlt).toHaveAttribute('aria-pressed', 'true');
     await captureFunctionalScreenshot(page, 'mobile-virtual-modifiers.png');
     await screenshotCtrl.click();
+    // A second tap inside the double-tap window locks Alt instead of clearing it; one more tap clears a lock.
     await screenshotAlt.click();
+    if ((await screenshotAlt.getAttribute('aria-pressed')) === 'true') await screenshotAlt.click();
     await expect(screenshotCtrl).toHaveAttribute('aria-pressed', 'false');
     await expect(screenshotAlt).toHaveAttribute('aria-pressed', 'false');
   }
@@ -481,7 +484,7 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     const alt = keyboard.getByRole('button', { name: 'Alt', exact: true });
     await alt.click();
     await expect(alt).toHaveAttribute('aria-pressed', 'true');
-    await keyboard.getByRole('button', { name: '←', exact: true }).click();
+    await keyboard.getByRole('button', { name: 'Left arrow', exact: true }).click();
     await expect(alt).toHaveAttribute('aria-pressed', 'false');
     await expect
       .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
@@ -500,12 +503,79 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     await alt.click();
     await expect(ctrl).toHaveAttribute('aria-pressed', 'true');
     await expect(alt).toHaveAttribute('aria-pressed', 'true');
-    await keyboard.getByRole('button', { name: 'Del', exact: true }).click();
+    await keyboard.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(ctrl).toHaveAttribute('aria-pressed', 'false');
     await expect(alt).toHaveAttribute('aria-pressed', 'false');
     await expect
       .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toMatch(/CTRL_ALT_DEL_BYTES=\s*27\s+91\s+51\s+59\s+55\s+126/);
+  });
+});
+
+test('mobile virtual keyboard follows application cursor mode, pages function keys and locks modifiers', async ({
+  page,
+  context,
+}) => {
+  await connectMobileSsh(page, context.request);
+
+  const commandInput = page.getByTestId('command-input');
+  const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
+  await page.getByTestId('toggle-virtual-keyboard').click();
+  const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
+  await expect(keyboard).toBeVisible();
+
+  await slowStep('Up arrow sends SS3 while the remote application enables DECCKM', async () => {
+    // The ready marker is split so the echoed command line never matches it.
+    await commandInput.fill(
+      "printf '\\033[?1h%s%s\\n' APP_MODE_ READY; bytes=$(dd bs=1 count=3 2>/dev/null | od -An -t u1); printf '\\033[?1l'; printf 'APP_UP_BYTES=%s\\n' \"$bytes\"",
+    );
+    await commandInput.press('Enter');
+    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toMatch(/APP_MODE_READY/);
+    await keyboard.getByRole('button', { name: 'Up arrow', exact: true }).click();
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+      .toMatch(/APP_UP_BYTES=\s*27\s+79\s+65/);
+  });
+
+  await slowStep('Shift+F1 from the function page sends the xterm modified SS3 key', async () => {
+    await commandInput.fill(
+      'bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf \'SHIFT_F1_BYTES=%s\\n\' "$bytes"',
+    );
+    await commandInput.press('Enter');
+
+    const fn = keyboard.getByRole('button', { name: 'Function keys', exact: true });
+    await fn.click();
+    await expect(fn).toHaveAttribute('aria-pressed', 'true');
+    const shift = keyboard.getByRole('button', { name: 'Shift', exact: true });
+    await shift.click();
+    await keyboard.getByRole('button', { name: 'F1', exact: true }).click();
+    await expect(shift).toHaveAttribute('aria-pressed', 'false');
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+      .toMatch(/SHIFT_F1_BYTES=\s*27\s+91\s+49\s+59\s+50\s+80/);
+    await fn.click();
+    await expect(fn).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  await slowStep('double-tapping Ctrl locks it across keys until it is tapped again', async () => {
+    await commandInput.fill(
+      // Hex without spaces keeps both sequences on one narrow mobile terminal row.
+      "bytes=$(dd bs=1 count=12 2>/dev/null | od -An -t x1 | tr -d ' \\n'); printf 'CTRL_LOCK=%s\\n' \"$bytes\"",
+    );
+    await commandInput.press('Enter');
+
+    const ctrl = keyboard.locator('[data-key="ctrl"]');
+    await ctrl.dblclick();
+    await expect(ctrl).toHaveAccessibleName('Ctrl (locked)');
+    const left = keyboard.getByRole('button', { name: 'Left arrow', exact: true });
+    await left.click();
+    await left.click();
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'true');
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+      .toMatch(/CTRL_LOCK=1b5b313b35441b5b313b3544/);
+    await ctrl.click();
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'false');
   });
 });
 

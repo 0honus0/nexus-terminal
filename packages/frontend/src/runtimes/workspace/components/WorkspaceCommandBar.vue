@@ -5,7 +5,7 @@
   import { expandQuickCommand, useQuickCommands } from '@/features/quick-commands/public';
   import { useCommandHistory } from '@/features/command-history/public';
   import type { PreferencesDto } from '@/features/preferences/public';
-  import { applyTerminalModifiers } from '@/features/terminal/public';
+  import { applyTerminalModifiers, type TerminalModifierState } from '@/features/terminal/public';
   import { useFeedback } from '@/shared/feedback/public';
 
   const props = withDefaults(
@@ -18,8 +18,7 @@
       modelValue?: string;
       terminalSearchOpen?: boolean;
       terminalSearchTerm?: string;
-      terminalCtrlActive?: boolean;
-      terminalAltActive?: boolean;
+      terminalModifiers?: TerminalModifierState;
       virtualKeyboardVisible?: boolean;
       dockerPaneActive?: boolean;
       nonTerminalPaneActive?: boolean;
@@ -123,14 +122,7 @@
     return false;
   };
   const captureStickyTerminalInput = (input: string): boolean => {
-    if (!props.terminalCtrlActive && !props.terminalAltActive) return false;
-    if (
-      applyTerminalModifiers(input, {
-        ctrl: Boolean(props.terminalCtrlActive),
-        alt: Boolean(props.terminalAltActive),
-      }) === null
-    )
-      return false;
+    if (!props.terminalModifiers || applyTerminalModifiers(input, props.terminalModifiers) === null) return false;
     emit('terminalInput', input);
     return true;
   };

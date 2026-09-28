@@ -1149,6 +1149,7 @@
     paste,
     selectAll,
     scrollToBottom: () => void restoreLatestOutput(),
+    applicationCursorKeys: () => terminal?.modes.applicationCursorKeysMode ?? false,
   });
 </script>
 

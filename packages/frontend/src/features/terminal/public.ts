@@ -13,3 +13,10 @@ export { createTerminalSessionState } from './state/terminalSessionState';
 export type { TerminalSessionState } from './state/terminalSessionState';
 export { applyTerminalModifiers } from './model/terminalModifiers';
 export type { TerminalModifierState } from './model/terminalModifiers';
+export { createStickyTerminalModifiers } from './state/stickyModifiers';
+export type {
+  StickyModifierLevel,
+  StickyModifierLevels,
+  StickyTerminalModifiers,
+  TerminalModifier,
+} from './state/stickyModifiers';

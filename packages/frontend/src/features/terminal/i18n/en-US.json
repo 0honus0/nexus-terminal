@@ -15,6 +15,27 @@
       "selectAll": "Select All",
       "adjustSelectionStart": "Adjust selection start",
       "adjustSelectionEnd": "Adjust selection end"
+    },
+    "virtualKeyboard": {
+      "label": "Terminal keys",
+      "ctrl": "Ctrl",
+      "alt": "Alt",
+      "shift": "Shift",
+      "modifierLocked": "{key} (locked)",
+      "functionKeys": "Function keys",
+      "escape": "Escape",
+      "tab": "Tab",
+      "backspace": "Backspace",
+      "delete": "Delete",
+      "insert": "Insert",
+      "home": "Home",
+      "end": "End",
+      "pageUp": "Page Up",
+      "pageDown": "Page Down",
+      "arrowUp": "Up arrow",
+      "arrowDown": "Down arrow",
+      "arrowLeft": "Left arrow",
+      "arrowRight": "Right arrow"
     }
   }
 }

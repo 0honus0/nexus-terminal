@@ -7,7 +7,12 @@
   import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
   import { loadFilePreview, previewKindFor } from '@/features/file-preview/public';
   import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
-  import { applyTerminalModifiers, type TerminalChannel, type TerminalVisualOptions } from '@/features/terminal/public';
+  import {
+    applyTerminalModifiers,
+    createStickyTerminalModifiers,
+    type TerminalChannel,
+    type TerminalVisualOptions,
+  } from '@/features/terminal/public';
   import {
     loadProgressCenter,
     loadSendFilesModal,
@@ -54,6 +59,7 @@
     findNext?: () => void;
     findPrevious?: () => void;
     scrollToBottom?: () => void;
+    applicationCursorKeys?: () => boolean;
   }
   interface EditorApi {
     open?: (path: string) => Promise<unknown> | unknown;
@@ -192,28 +198,16 @@
   const activeLeftSidebar = ref<WorkspacePaneNameDto | null>(null);
   const activeRightSidebar = ref<WorkspacePaneNameDto | null>(null);
   const mobilePane = ref<WorkspacePaneNameDto>('terminal');
-  const mobileCtrlActive = ref(false);
-  const mobileAltActive = ref(false);
-  const clearMobileModifiers = (): void => {
-    mobileCtrlActive.value = false;
-    mobileAltActive.value = false;
-  };
-  const toggleMobileModifier = (modifier: 'ctrl' | 'alt'): void => {
-    if (modifier === 'ctrl') mobileCtrlActive.value = !mobileCtrlActive.value;
-    else mobileAltActive.value = !mobileAltActive.value;
-  };
+  const mobileModifiers = createStickyTerminalModifiers();
   const runtimeTerminalChannel = props.session.adapters.terminal;
   const presentationTerminalChannel: TerminalChannel = {
     sendInput(data) {
       let next = data;
-      if (props.mobile && (mobileCtrlActive.value || mobileAltActive.value)) {
-        const modified = applyTerminalModifiers(data, {
-          ctrl: mobileCtrlActive.value,
-          alt: mobileAltActive.value,
-        });
+      if (props.mobile) {
+        const modified = applyTerminalModifiers(data, mobileModifiers.active.value);
         if (modified !== null) {
           next = modified;
-          clearMobileModifiers();
+          mobileModifiers.consume();
         }
       }
       return runtimeTerminalChannel.sendInput(next);
@@ -234,7 +228,7 @@
   watch(
     () => props.mobile,
     (mobile) => {
-      if (!mobile) clearMobileModifiers();
+      if (!mobile) mobileModifiers.clear();
     },
   );
   const progressVisible = computed({
@@ -1279,8 +1273,7 @@
       :pane="mobilePane"
       :terminal-api="terminalApi"
       :terminal-channel="presentationTerminalChannel"
-      :ctrl-active="mobileCtrlActive"
-      :alt-active="mobileAltActive"
+      :modifiers="mobileModifiers.levels"
       :status-session="session.statusController"
       :status-interval-seconds="statusIntervalSeconds"
       :status-scale="statusScale"
@@ -1307,8 +1300,8 @@
       @open-suspended="emit('openSuspended')"
       @command="(command, all) => emit('command', command, all)"
       @interaction="emit('interaction')"
-      @toggle-modifier="toggleMobileModifier"
-      @clear-modifiers="clearMobileModifiers"
+      @toggle-modifier="mobileModifiers.toggle($event)"
+      @clear-modifiers="mobileModifiers.clear()"
       @status-scale="emit('statusScale', $event)"
       @quick-command-row-scale="emit('quickCommandRowScale', $event)"
       @quick-command-compact-mode="emit('quickCommandCompactMode', $event)"

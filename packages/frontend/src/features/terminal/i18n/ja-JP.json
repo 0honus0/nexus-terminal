@@ -15,6 +15,27 @@
       "selectAll": "すべて選択",
       "adjustSelectionStart": "選択範囲の開始位置を調整",
       "adjustSelectionEnd": "選択範囲の終了位置を調整"
+    },
+    "virtualKeyboard": {
+      "label": "端末キー",
+      "ctrl": "Ctrl",
+      "alt": "Alt",
+      "shift": "Shift",
+      "modifierLocked": "{key}（ロック中）",
+      "functionKeys": "ファンクションキー",
+      "escape": "Esc キー",
+      "tab": "Tab キー",
+      "backspace": "バックスペース",
+      "delete": "削除",
+      "insert": "挿入",
+      "home": "Home キー",
+      "end": "End キー",
+      "pageUp": "ページアップ",
+      "pageDown": "ページダウン",
+      "arrowUp": "上矢印キー",
+      "arrowDown": "下矢印キー",
+      "arrowLeft": "左矢印キー",
+      "arrowRight": "右矢印キー"
     }
   }
 }

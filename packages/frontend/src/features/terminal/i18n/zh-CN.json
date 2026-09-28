@@ -15,6 +15,27 @@
       "selectAll": "全选",
       "adjustSelectionStart": "调整选区起点",
       "adjustSelectionEnd": "调整选区终点"
+    },
+    "virtualKeyboard": {
+      "label": "终端按键",
+      "ctrl": "Ctrl",
+      "alt": "Alt",
+      "shift": "Shift",
+      "modifierLocked": "{key}（已锁定）",
+      "functionKeys": "功能键",
+      "escape": "Esc 键",
+      "tab": "Tab 键",
+      "backspace": "退格",
+      "delete": "删除",
+      "insert": "插入",
+      "home": "Home 键",
+      "end": "End 键",
+      "pageUp": "向上翻页",
+      "pageDown": "向下翻页",
+      "arrowUp": "上方向键",
+      "arrowDown": "下方向键",
+      "arrowLeft": "左方向键",
+      "arrowRight": "右方向键"
     }
   }
 }

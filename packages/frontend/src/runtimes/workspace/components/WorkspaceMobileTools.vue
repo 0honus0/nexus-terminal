@@ -1,8 +1,14 @@
 <script setup lang="ts">
-  import { defineAsyncComponent, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { booleanStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { UiOverlayPanel } from '@/foundation/ui';
-  import { VirtualKeyboard, type TerminalChannel } from '@/features/terminal/public';
+  import {
+    VirtualKeyboard,
+    type StickyModifierLevels,
+    type TerminalChannel,
+    type TerminalModifier,
+  } from '@/features/terminal/public';
   import { loadQuickCommandsPanel, type ExecuteCommandIntent } from '@/features/quick-commands/public';
   import { loadStatusMonitor, type StatusMonitorSessionController } from '@/features/status-monitor/public';
   import type { PreferencesDto } from '@/features/preferences/public';
@@ -20,6 +26,7 @@
     findNext?: () => void;
     findPrevious?: () => void;
     clear?: () => void;
+    applicationCursorKeys?: () => boolean;
   }
 
   const props = defineProps<{
@@ -40,8 +47,7 @@
     commandReady?: boolean;
     terminalSearchOpen?: boolean;
     terminalSearchTerm?: string;
-    ctrlActive?: boolean;
-    altActive?: boolean;
+    modifiers: StickyModifierLevels;
   }>();
 
   const emit = defineEmits<{
@@ -57,12 +63,23 @@
     quickCommandRowScale: [scale: number];
     quickCommandCompactMode: [compact: boolean];
     interaction: [];
-    toggleModifier: [modifier: 'ctrl' | 'alt'];
+    toggleModifier: [modifier: TerminalModifier];
     clearModifiers: [];
   }>();
 
   const { t } = useI18n();
-  const keyboardVisible = ref(false);
+  const keyboardVisibleStorage = {
+    namespace: 'workspace.mobile-virtual-keyboard-visible',
+    version: 1,
+    codec: booleanStorageCodec,
+  };
+  const keyboardVisible = ref(readStoredValue(keyboardVisibleStorage) ?? false);
+  const activeModifiers = computed(() => ({
+    ctrl: props.modifiers.ctrl !== 'off',
+    alt: props.modifiers.alt !== 'off',
+    shift: props.modifiers.shift !== 'off',
+  }));
+  const applicationCursorKeys = () => props.terminalApi?.applicationCursorKeys?.() ?? false;
   const quickCommandsVisible = ref(false);
   const statusVisible = ref(false);
   const executeQuickCommand = (intent: ExecuteCommandIntent) => {
@@ -75,13 +92,11 @@
   };
   const toggleKeyboard = () => {
     keyboardVisible.value = !keyboardVisible.value;
+    writeStoredValue(keyboardVisibleStorage, keyboardVisible.value);
     if (!keyboardVisible.value) emit('clearModifiers');
   };
   const selectPane = (pane: WorkspacePaneNameDto) => {
-    if (pane !== 'terminal' && keyboardVisible.value) {
-      keyboardVisible.value = false;
-      emit('clearModifiers');
-    }
+    if (pane !== 'terminal') emit('clearModifiers');
     emit('update:pane', pane);
   };
   const toggleDockerPane = () => {
@@ -90,9 +105,7 @@
   watch(
     () => props.pane,
     (pane) => {
-      if (pane === 'terminal' || !keyboardVisible.value) return;
-      keyboardVisible.value = false;
-      emit('clearModifiers');
+      if (pane !== 'terminal') emit('clearModifiers');
     },
   );
 </script>
@@ -110,8 +123,7 @@
       :terminal-search-open="terminalSearchOpen"
       :terminal-search-term="terminalSearchTerm"
       :mobile="true"
-      :terminal-ctrl-active="ctrlActive"
-      :terminal-alt-active="altActive"
+      :terminal-modifiers="activeModifiers"
       :virtual-keyboard-visible="keyboardVisible"
       :docker-pane-active="pane === 'dockerManager'"
       :non-terminal-pane-active="pane !== 'terminal'"
@@ -135,8 +147,8 @@
     />
     <VirtualKeyboard
       v-if="keyboardVisible && pane === 'terminal'"
-      :ctrl-active="ctrlActive"
-      :alt-active="altActive"
+      :modifiers="modifiers"
+      :application-cursor-keys="applicationCursorKeys"
       @toggle-modifier="emit('toggleModifier', $event)"
       @input="sendTerminalInput"
     />
