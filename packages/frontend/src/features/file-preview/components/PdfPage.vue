@@ -201,14 +201,14 @@
 <template>
   <section
     ref="root"
-    class="flex w-max min-w-full justify-center"
+    class="flex w-max min-w-full"
     :data-testid="`pdf-page-${pageNumber}`"
     :data-pdf-page="pageNumber"
     :data-pdf-page-number="pageNumber"
     :aria-label="t('fileManager.preview.pdfPage', { page: pageNumber })"
   >
     <div
-      class="relative shrink-0 bg-white shadow-xl"
+      class="relative mx-auto shrink-0 bg-white shadow-xl"
       :style="{ width: `${displayWidth}px`, height: `${displayHeight}px` }"
     >
       <div
