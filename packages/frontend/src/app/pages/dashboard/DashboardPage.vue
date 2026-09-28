@@ -581,6 +581,7 @@
                   v-for="item in filtered"
                   :key="item.id"
                   :data-testid="`dashboard-connection-row-${item.id}`"
+                  :data-last-connected-at="item.lastConnectedAt ?? 0"
                   as="li"
                   title-tag="span"
                   :name="item.name || item.host"
@@ -723,12 +724,9 @@
                   </div>
                   <div
                     data-testid="dashboard-remote-disk-detail"
-                    class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
+                    class="mt-1 truncate text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
                   >
-                    <span class="max-w-full truncate">{{ formatMemory(remote.status.memUsed) }}</span>
-                    <span class="max-w-full truncate text-text-secondary/75"
-                      >/ {{ formatMemory(remote.status.memTotal) }}</span
-                    >
+                    {{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}
                   </div>
                 </div>
                 <div :title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`">

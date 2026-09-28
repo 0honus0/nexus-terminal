@@ -1,6 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import { E2E_ADMIN } from '../../support/test-identity';
 
 test('quick command CRUD and audit logs remain functional', async ({ request }) => {
   await loginAsInitialAdmin(request);
@@ -61,6 +62,6 @@ test('quick command CRUD and audit logs remain functional', async ({ request }) 
     expect(body.total).toBeGreaterThan(0);
     const login = body.logs.find((log) => log.actionType === 'LOGIN_SUCCESS');
     expect(login).toBeTruthy();
-    expect(login?.details).toMatchObject({ username: 'e2e-admin' });
+    expect(login?.details).toMatchObject({ username: E2E_ADMIN.username });
   });
 });

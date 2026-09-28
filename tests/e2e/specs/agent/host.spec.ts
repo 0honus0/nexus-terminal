@@ -587,7 +587,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await providerField('Display name').fill('Settings UI Provider');
   await providerField('Base URL').fill(`${E2E_URLS.openAiProviderOrigin}/v1`);
   await providerField('Credential').fill('e2e-provider-secret');
-  await providerField('Model ID').fill('e2e-model');
+  await addProvider.getByTestId('agent-provider-model-id').fill('e2e-model');
   await providerField('Context window').fill('8192');
   await providerField('Maximum output tokens').fill('128');
   await addProvider.getByRole('button', { name: 'Save & Add', exact: true }).click();

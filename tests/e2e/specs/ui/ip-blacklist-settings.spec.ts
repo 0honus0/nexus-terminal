@@ -3,6 +3,7 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+import { E2E_ADMIN } from '../../support/test-identity';
 
 const TEST_BLOCKED_IP = '198.51.100.24';
 
@@ -137,7 +138,7 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const failedLogin = await context.request.post('/api/v1/auth/login', {
           headers: { 'x-forwarded-for': TEST_BLOCKED_IP },
-          data: { username: 'e2e-admin', password: 'not-the-password', rememberMe: false },
+          data: { username: E2E_ADMIN.username, password: 'not-the-password', rememberMe: false },
         });
         expect(failedLogin.status()).toBe(401);
       }

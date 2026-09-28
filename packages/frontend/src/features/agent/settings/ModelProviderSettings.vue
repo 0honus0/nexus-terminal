@@ -2331,6 +2331,7 @@
                 :id="providerModelInputId"
                 v-model="form.modelId"
                 required
+                data-testid="agent-provider-model-id"
                 data-no-highlight
                 class="provider-modal-input h-8.5 w-full rounded-lg px-2.5 font-mono text-xs text-foreground outline-none"
                 :placeholder="$t('agent.settings.providers.modelPlaceholder')"

@@ -201,7 +201,7 @@
 <template>
   <section
     ref="root"
-    class="flex min-w-full justify-center"
+    class="flex w-max min-w-full justify-center"
     :data-testid="`pdf-page-${pageNumber}`"
     :data-pdf-page="pageNumber"
     :data-pdf-page-number="pageNumber"

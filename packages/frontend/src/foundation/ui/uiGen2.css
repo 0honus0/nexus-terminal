@@ -768,14 +768,11 @@
   padding-inline: var(--ui-control-padding-inline);
   border: 1px solid var(--ui-hairline);
   border-radius: var(--ui-control-radius);
-  background: var(--ui-fill-inset);
-  color: var(--ui-text);
+  background: var(--input-bg-color);
+  color: var(--input-text-color);
   box-shadow: var(--ui-glass-highlight), var(--ui-shadow-inset);
   -webkit-backdrop-filter: var(--ui-glass-control-filter);
   backdrop-filter: var(--ui-glass-control-filter);
-  --input-bg-color: transparent;
-  --input-text-color: currentColor;
-  --input-placeholder-color: color-mix(in srgb, var(--ui-text-muted) 72%, transparent);
 }
 
 .ui-input:not(.ui-input--disabled):hover {

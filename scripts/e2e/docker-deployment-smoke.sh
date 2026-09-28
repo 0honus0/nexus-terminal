@@ -1366,7 +1366,7 @@ curl -fsS -H "Host: ssh.honus.top" "http://127.0.0.1:${http_port}/.well-known/we
 
 NEXUS_PRODUCTION_BASE_URL="http://127.0.0.1:${http_port}" pnpm --dir "$repo_root/tests/e2e" run test:ingress
 
-login_body='{"username":"e2e-admin","password":"E2e-Admin-Password-2026!","rememberMe":false}'
+login_body='{"username":"honus","password":"honustest","rememberMe":false}'
 curl -fsS \
   -c "$cookie_jar" \
   -H 'Content-Type: application/json' \
