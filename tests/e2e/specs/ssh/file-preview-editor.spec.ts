@@ -1124,10 +1124,15 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
       const dialog = documentPopup(page);
       await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
       for (let index = 0; index < 5; index += 1) await dialog.getByTestId('pdf-zoom-in').click();
-      const { scroller } = await dragBottomScrollbar(previewHorizontalScrollbar(dialog), pdfScroller(dialog));
-      await scroller.evaluate((element) => {
+      const { scrollbar, scroller } = await dragBottomScrollbar(
+        previewHorizontalScrollbar(dialog),
+        pdfScroller(dialog),
+      );
+      await scrollbar.evaluate((element) => {
         element.scrollLeft = 0;
+        element.dispatchEvent(new Event('scroll'));
       });
+      await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
       const geometry = await scroller.evaluate((element) => {
         const pageElement = element.querySelector<HTMLElement>('[data-pdf-page]');
         if (!pageElement) throw new Error('PDF page element is missing');
