@@ -179,7 +179,6 @@ test('successful hidden upload auto-cleans its completed task from Progress Disp
     await dragLocalFile(page, filename, 2 * 1024 * 1024, 0x5a);
     const center = visibleProgressCenter(page);
     await expect(center).toBeVisible({ timeout: 10_000 });
-    await closeConnectedFileManager(page);
     await hideVisibleProgressCenter(page);
 
     const display = await openProgressDisplay(page);
