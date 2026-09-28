@@ -86,7 +86,7 @@
         <article
           v-for="item in items"
           :key="item.id"
-          class="ui-glass-item flex flex-col items-start justify-between gap-4 rounded-xl p-4 sm:flex-row"
+          class="ui-solid-item flex flex-col items-start justify-between gap-4 rounded-xl p-4 sm:flex-row"
         >
           <div class="min-w-0 flex-grow">
             <strong class="mb-1 block break-words text-base font-semibold text-foreground">{{ item.name }}</strong>
@@ -130,7 +130,7 @@
         </article>
       </div>
 
-      <div v-if="formVisible" class="ui-glass-inset mt-6 rounded-xl p-6">
+      <div v-if="formVisible" class="ui-solid-inset mt-6 rounded-xl p-6">
         <NotificationSettingForm :visible="formVisible" :setting="editing" @close="formVisible = false" @save="save" />
       </div>
     </div>

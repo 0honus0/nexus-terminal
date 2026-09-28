@@ -11,7 +11,7 @@
     stringStorageCodec,
     writeStoredValue,
   } from '@/foundation/browser';
-  import { UiButton, UiInput, UiNativeSelect, UiSwitch } from '@/foundation/ui';
+  import { UiButton, UiInput, UiSelect, UiSwitch } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { useConnections } from '../composables/useConnections';
@@ -220,13 +220,11 @@
     <div class="mx-auto max-w-screen-lg">
       <h1 class="mb-6 text-2xl font-semibold">{{ t('nav.connections') }}</h1>
 
-      <section class="ui-glass-panel min-h-[400px] overflow-hidden rounded-xl">
-        <header
-          class="flex flex-col items-stretch justify-between gap-3 border-b border-border/60 px-4 py-3 lg:flex-row lg:items-center"
-        >
+      <section class="ui-solid-panel min-h-[400px] overflow-hidden rounded-xl">
+        <header class="flex flex-col items-stretch gap-3 border-b border-border/60 px-4 py-3">
           <h2 class="shrink-0 text-lg font-medium">{{ t('dashboard.connectionList') }} ({{ filtered.length }})</h2>
-          <div class="flex w-full flex-wrap items-stretch gap-2 lg:w-auto lg:flex-nowrap lg:items-center">
-            <div class="mr-1 flex items-center">
+          <div class="flex w-full flex-wrap items-stretch gap-2 sm:items-center">
+            <div class="mr-1 flex shrink-0 items-center">
               <label for="batch-edit-toggle" class="mr-2 text-sm font-medium text-text-secondary">{{
                 t('connections.batchEdit.toggleLabel')
               }}</label>
@@ -238,35 +236,31 @@
               />
             </div>
 
-            <UiInput
-              v-model="search"
-              data-testid="connections-search"
-              type="text"
-              density="compact"
-              :placeholder="t('dashboard.searchConnectionsPlaceholder')"
-              class="w-full sm:w-48"
-            />
-            <UiNativeSelect
-              v-model="tagId"
-              density="compact"
-              class="w-auto min-w-32"
-              :aria-label="t('dashboard.filterByTag')"
-            >
-              <option value="">{{ t('dashboard.filterTags.all') }}</option>
-              <option v-for="tag in tags.items.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-            </UiNativeSelect>
-            <UiNativeSelect
-              v-model="sort"
-              density="compact"
-              class="w-auto min-w-32"
-              :aria-label="t('dashboard.sortBy')"
-            >
-              <option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
-              <option value="name">{{ t('dashboard.sortOptions.name') }}</option>
-              <option value="type">{{ t('dashboard.sortOptions.type') }}</option>
-              <option value="updated">{{ t('dashboard.sortOptions.updated') }}</option>
-              <option value="created">{{ t('dashboard.sortOptions.created') }}</option>
-            </UiNativeSelect>
+            <div class="w-full sm:w-48">
+              <UiInput
+                v-model="search"
+                data-testid="connections-search"
+                type="text"
+                density="compact"
+                :placeholder="t('dashboard.searchConnectionsPlaceholder')"
+                class="w-full"
+              />
+            </div>
+            <div class="w-full sm:w-40">
+              <UiSelect v-model="tagId" density="compact" class="w-full" :aria-label="t('dashboard.filterByTag')">
+                <option value="">{{ t('dashboard.filterTags.all') }}</option>
+                <option v-for="tag in tags.items.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
+              </UiSelect>
+            </div>
+            <div class="w-full sm:w-40">
+              <UiSelect v-model="sort" density="compact" class="w-full" :aria-label="t('dashboard.sortBy')">
+                <option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
+                <option value="name">{{ t('dashboard.sortOptions.name') }}</option>
+                <option value="type">{{ t('dashboard.sortOptions.type') }}</option>
+                <option value="updated">{{ t('dashboard.sortOptions.updated') }}</option>
+                <option value="created">{{ t('dashboard.sortOptions.created') }}</option>
+              </UiSelect>
+            </div>
             <UiButton
               appearance="soft"
               density="compact"
@@ -295,6 +289,7 @@
               type="button"
               appearance="solid"
               density="compact"
+              class="shrink-0"
               :disabled="!filtered.some((connection) => connection.type === 'SSH')"
               :title="t('connections.actions.testAllFiltered')"
               @click="testAllFiltered"
@@ -307,6 +302,7 @@
               type="button"
               appearance="solid"
               density="compact"
+              class="shrink-0"
               :disabled="!filtered.some((connection) => connection.type === 'SSH')"
               @click="connectAllFiltered"
             >
@@ -368,7 +364,7 @@
               v-for="c in filtered"
               :key="c.id"
               :data-testid="`connection-row-${c.id}`"
-              class="ui-glass-item flex flex-col items-stretch rounded-lg p-3 sm:flex-row sm:items-center"
+              class="ui-solid-item flex flex-col items-stretch rounded-lg p-3 sm:flex-row sm:items-center"
               :class="[
                 selected.has(c.id) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : '',
                 batch ? 'cursor-pointer' : '',

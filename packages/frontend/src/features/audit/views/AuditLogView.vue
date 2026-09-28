@@ -2,7 +2,7 @@
   import { computed, onMounted, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { UiSpinner } from '@/foundation/ui';
+  import { UiButton, UiInput, UiSelect, UiSpinner } from '@/foundation/ui';
   import { auditActionTypes, type AuditLogQueryDto } from '../model/audit';
   import { useAuditStore } from '../store/audit.store';
 
@@ -73,13 +73,12 @@
           <label for="search-term" class="mb-1 block text-sm font-medium text-text-secondary">{{
             t('common.search')
           }}</label>
-          <input
+          <UiInput
             id="search-term"
             v-model="searchDraft"
             data-testid="audit-search"
             type="text"
             :placeholder="t('auditLog.searchPlaceholder')"
-            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             @keyup.enter="applyFilters"
           />
         </div>
@@ -87,27 +86,17 @@
           <label for="action-type" class="mb-1 block text-sm font-medium text-text-secondary">{{
             t('auditLog.table.actionType')
           }}</label>
-          <select
-            id="action-type"
-            v-model="actionTypeDraft"
-            data-testid="audit-action-type"
-            class="w-full rounded-md border border-border bg-background px-3 py-2 pr-8 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
+          <UiSelect id="action-type" v-model="actionTypeDraft" data-testid="audit-action-type">
             <option value="">{{ t('common.all') }}</option>
             <option v-for="type in auditActionTypes" :key="type" :value="type">
               {{ t(`auditLog.actions.${type}`, type) }}
             </option>
-          </select>
+          </UiSelect>
         </div>
         <div class="self-end">
-          <button
-            data-testid="audit-apply-filter"
-            type="button"
-            class="rounded bg-button px-4 py-2 text-sm font-medium text-button-text hover:bg-button-hover"
-            @click="applyFilters"
-          >
+          <UiButton data-testid="audit-apply-filter" type="button" appearance="solid" @click="applyFilters">
             {{ t('common.filter') }}
-          </button>
+          </UiButton>
         </div>
       </div>
 

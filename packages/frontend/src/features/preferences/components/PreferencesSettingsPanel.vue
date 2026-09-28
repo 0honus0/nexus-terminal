@@ -2,7 +2,7 @@
   import { nextTick, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { structurallyEqual } from '@/foundation/data';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { usePreferences } from '../composables/usePreferences';
   import { LOG_LEVELS, commonTimezones, preferenceLanguageNames, type PreferencesDto } from '../model/preferences';
@@ -131,7 +131,7 @@
 </script>
 
 <template>
-  <section data-testid="preferences-settings" class="ui-glass-panel overflow-hidden rounded-xl">
+  <section data-testid="preferences-settings" class="ui-solid-panel overflow-hidden rounded-xl">
     <h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ props.section === 'system' ? t('settings.category.system') : t('settings.workspace.title') }}
     </h2>
@@ -147,11 +147,11 @@
       <form class="space-y-4" @submit.prevent="savePatch('language', { language: form.language })">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.language.title') }}</h3>
         <UiFormField :label="t('settings.language.selectLabel')" for-id="languageSelect">
-          <UiNativeSelect id="languageSelect" v-model="form.language" :disabled="savingSection !== null">
+          <UiSelect id="languageSelect" v-model="form.language" :disabled="savingSection !== null">
             <option v-for="locale in props.locales" :key="locale" :value="locale">
               {{ preferenceLanguageNames[locale] || locale }}
             </option>
-          </UiNativeSelect>
+          </UiSelect>
         </UiFormField>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'language'">
@@ -172,9 +172,9 @@
       <form class="space-y-4" @submit.prevent="savePatch('timezone', { timezone: form.timezone })">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.timezone.title') }}</h3>
         <UiFormField :label="t('settings.timezone.selectLabel')" for-id="timezoneSelect">
-          <UiNativeSelect id="timezoneSelect" v-model="form.timezone" :disabled="savingSection !== null">
+          <UiSelect id="timezoneSelect" v-model="form.timezone" :disabled="savingSection !== null">
             <option v-for="timezone in commonTimezones" :key="timezone" :value="timezone">{{ timezone }}</option>
-          </UiNativeSelect>
+          </UiSelect>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.timezone.description') }}</p>
         </UiFormField>
         <div class="flex flex-wrap items-center justify-between gap-3">
@@ -203,22 +203,14 @@
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.logging.title') }}</h3>
         <div class="grid gap-4 md:grid-cols-2">
           <UiFormField :label="t('settings.logging.frontendLabel')" for-id="frontendLogLevelSelect">
-            <UiNativeSelect
-              id="frontendLogLevelSelect"
-              v-model="form.frontendLogLevel"
-              :disabled="savingSection !== null"
-            >
+            <UiSelect id="frontendLogLevelSelect" v-model="form.frontendLogLevel" :disabled="savingSection !== null">
               <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level.toUpperCase() }}</option>
-            </UiNativeSelect>
+            </UiSelect>
           </UiFormField>
           <UiFormField :label="t('settings.logging.backendLabel')" for-id="backendLogLevelSelect">
-            <UiNativeSelect
-              id="backendLogLevelSelect"
-              v-model="form.backendLogLevel"
-              :disabled="savingSection !== null"
-            >
+            <UiSelect id="backendLogLevelSelect" v-model="form.backendLogLevel" :disabled="savingSection !== null">
               <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level.toUpperCase() }}</option>
-            </UiNativeSelect>
+            </UiSelect>
           </UiFormField>
         </div>
         <p class="text-xs text-text-secondary">{{ t('settings.logging.description') }}</p>
@@ -405,7 +397,7 @@
           @submit.prevent="savePatch('command-input-sync', { commandInputSyncTarget: form.commandInputSyncTarget })"
         >
           <UiFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
-            <UiNativeSelect
+            <UiSelect
               id="commandInputSyncTarget"
               v-model="form.commandInputSyncTarget"
               :disabled="savingSection !== null"
@@ -413,7 +405,7 @@
               <option value="none">{{ t('settings.commandInputSync.targetNone') }}</option>
               <option value="quickCommands">{{ t('settings.commandInputSync.targetQuickCommands') }}</option>
               <option value="commandHistory">{{ t('settings.commandInputSync.targetCommandHistory') }}</option>
-            </UiNativeSelect>
+            </UiSelect>
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.commandInputSync.description') }}</p>
           </UiFormField>
           <div class="flex flex-wrap items-center justify-between gap-3">

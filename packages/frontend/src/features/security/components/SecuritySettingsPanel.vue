@@ -12,7 +12,7 @@
 </script>
 
 <template>
-  <div v-if="props.section === 'security'" class="ui-glass-panel overflow-hidden rounded-xl">
+  <div v-if="props.section === 'security'" class="ui-solid-panel overflow-hidden rounded-xl">
     <h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ $t('settings.category.security') }}
     </h2>

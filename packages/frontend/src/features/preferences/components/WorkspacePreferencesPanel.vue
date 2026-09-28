@@ -2,7 +2,7 @@
   import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { structurallyEqual } from '@/foundation/data';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { usePreferences } from '../composables/usePreferences';
   import type { PreferencesDto } from '../model/preferences';
@@ -167,7 +167,7 @@
 </script>
 
 <template>
-  <section data-testid="preferences-settings" class="ui-glass-panel overflow-hidden rounded-xl">
+  <section data-testid="preferences-settings" class="ui-solid-panel overflow-hidden rounded-xl">
     <header
       class="flex flex-col gap-2 border-b border-border/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
     >
@@ -191,13 +191,13 @@
         {{ loadError }}
       </p>
 
-      <form class="ui-glass-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('files', fileKeys)">
+      <form class="ui-solid-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('files', fileKeys)">
         <div class="border-b border-border/60 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.files') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.filesHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label
               for="showPopupFileEditor"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -217,7 +217,7 @@
               <p class="mt-1 leading-5">{{ t('settings.popupEditor.description') }}</p>
             </details>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label
               for="showPopupFileManager"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -232,7 +232,7 @@
             </label>
             <p class="mt-2 text-xs leading-5 text-text-secondary">{{ t('settings.popupFileManager.description') }}</p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label
               for="shareFileEditorTabs"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -247,7 +247,7 @@
             </label>
             <p class="mt-2 text-xs leading-5 text-text-secondary">{{ t('settings.shareEditorTabs.description') }}</p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label
               for="fileManagerShowDeleteConfirmation"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
@@ -262,7 +262,7 @@
             </label>
           </div>
           <div
-            class="ui-glass-item min-w-0 rounded-lg p-3.5 lg:col-span-2"
+            class="ui-solid-item min-w-0 rounded-lg p-3.5 lg:col-span-2"
             data-testid="spreadsheet-preview-pagination-setting"
           >
             <div class="mb-3 text-sm font-medium text-foreground">
@@ -321,13 +321,13 @@
         </div>
       </form>
 
-      <form class="ui-glass-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('commands', commandKeys)">
+      <form class="ui-solid-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('commands', commandKeys)">
         <div class="border-b border-border/60 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.commands') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.commandsHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label for="workspaceSidebarPersistent" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="workspaceSidebarPersistent"
@@ -338,9 +338,9 @@
             >
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.sidebarPersistentDescription') }}</p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <UiFormField :label="t('settings.commandInputSync.selectLabel')" for-id="commandInputSyncTarget">
-              <UiNativeSelect
+              <UiSelect
                 id="commandInputSyncTarget"
                 v-model="form.commandInputSyncTarget"
                 :disabled="savingGroup !== null"
@@ -348,11 +348,11 @@
                 <option value="none">{{ t('settings.commandInputSync.targetNone') }}</option>
                 <option value="quickCommands">{{ t('settings.commandInputSync.targetQuickCommands') }}</option>
                 <option value="commandHistory">{{ t('settings.commandInputSync.targetCommandHistory') }}</option>
-              </UiNativeSelect>
+              </UiSelect>
             </UiFormField>
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.commandInputSync.description') }}</p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label for="showConnectionTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="showConnectionTags"
@@ -363,7 +363,7 @@
             >
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.showConnectionTagsDescription') }}</p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label for="showQuickCommandTags" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="showQuickCommandTags"
@@ -376,7 +376,7 @@
               {{ t('settings.workspace.showQuickCommandTagsDescription') }}
             </p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5" data-testid="quick-command-search-display-setting">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5" data-testid="quick-command-search-display-setting">
             <label
               for="quickCommandsCollapsibleSearch"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium"
@@ -392,7 +392,7 @@
               {{ t('settings.workspace.quickCommandsCollapsibleSearchDescription') }}
             </p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label for="quickCommandsCompactMode" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="quickCommandsCompactMode"
@@ -405,7 +405,7 @@
               {{ t('settings.workspace.quickCommandsCompactModeDescription') }}
             </p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <UiFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
               <UiInput
                 id="terminalScrollbackLimit"
@@ -419,7 +419,7 @@
             </UiFormField>
             <p class="mt-2 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint') }}</p>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label for="terminalRightClickCopyPaste" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="terminalRightClickCopyPaste"
@@ -449,13 +449,13 @@
         </div>
       </form>
 
-      <form class="ui-glass-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('monitoring', monitoringKeys)">
+      <form class="ui-solid-inset overflow-hidden rounded-xl" @submit.prevent="saveGroup('monitoring', monitoringKeys)">
         <div class="border-b border-border/60 px-4 py-3">
           <h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.monitoring') }}</h3>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.monitoringHint') }}</p>
         </div>
         <div class="grid gap-3 p-3 lg:grid-cols-2">
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <div class="space-y-2">
               <label for="dashboardShowLocalResources" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><UiCheckbox
@@ -479,7 +479,7 @@
               >
             </div>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <UiFormField
               :label="t('settings.dashboardResources.refreshIntervalLabel')"
               for-id="remoteHostRefreshIntervalSeconds"
@@ -493,7 +493,7 @@
                 :disabled="savingGroup !== null"
             /></UiFormField>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <label for="showStatusMonitorIpAddress" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="showStatusMonitorIpAddress"
@@ -517,7 +517,7 @@
               /></UiFormField>
             </div>
           </div>
-          <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+          <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
             <UiFormField :label="t('settings.docker.refreshIntervalLabel')" for-id="dockerStatusIntervalSeconds"
               ><UiInput
                 id="dockerStatusIntervalSeconds"
@@ -553,7 +553,7 @@
         </div>
       </form>
 
-      <details class="ui-glass-inset overflow-hidden rounded-xl">
+      <details class="ui-solid-inset overflow-hidden rounded-xl">
         <summary
           class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 select-none hover:bg-card/20 transition-colors"
         >
@@ -569,7 +569,7 @@
         </summary>
         <form class="border-t border-border/60" @submit.prevent="saveGroup('layout', layoutKeys)">
           <div class="grid gap-3 p-3 lg:grid-cols-2">
-            <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+            <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
               <label for="layoutLocked" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><UiCheckbox
                   id="layoutLocked"
@@ -580,7 +580,7 @@
               >
               <p class="mt-2 text-xs text-text-secondary">{{ t('settings.workspace.layoutLockDescription') }}</p>
             </div>
-            <div class="ui-glass-item min-w-0 rounded-lg p-3.5">
+            <div class="ui-solid-item min-w-0 rounded-lg p-3.5">
               <label for="navBarVisible" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
                 ><UiCheckbox
                   id="navBarVisible"

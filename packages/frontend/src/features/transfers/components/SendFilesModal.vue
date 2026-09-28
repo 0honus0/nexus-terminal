@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiOverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel, UiSelect } from '@/foundation/ui';
   import { apiErrorMessage } from '@/client/http';
   import { useFeedback } from '@/shared/feedback/public';
   import { useRuntimeFeatureCapabilities, type ConnectionDto } from '@/shared/capabilities/public';
@@ -219,20 +219,11 @@
             <label for="send-files-transfer-method" class="mb-1 block text-sm font-medium text-text-secondary">{{
               t('sendFilesModal.transferMethodLabel')
             }}</label>
-            <select
-              id="send-files-transfer-method"
-              v-model="method"
-              class="w-full appearance-none rounded-md border border-border bg-background bg-no-repeat px-3 py-2 pr-8 text-foreground shadow-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-              style="
-                background-image: url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2016%2016%22%3E%3Cpath%20fill=%22none%22%20stroke=%22%236c757d%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%20stroke-width=%222%22%20d=%22M2%205l6%206%206-6%22/%3E%3C/svg%3E');
-                background-position: right 0.75rem center;
-                background-size: 16px 12px;
-              "
-            >
+            <UiSelect id="send-files-transfer-method" v-model="method" class="w-full">
               <option value="auto">{{ t('sendFilesModal.transferMethodAuto') }}</option>
               <option value="rsync">{{ t('sendFilesModal.methodRsync') }}</option>
               <option value="scp">{{ t('sendFilesModal.methodScp') }}</option>
-            </select>
+            </UiSelect>
           </div>
         </div>
       </div>

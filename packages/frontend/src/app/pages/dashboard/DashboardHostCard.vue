@@ -29,12 +29,12 @@
 <template>
   <component
     :is="as"
-    class="ui-glass-item group relative overflow-hidden rounded-lg p-3 sm:px-4 sm:py-3.5"
+    class="dashboard-host-card group relative overflow-hidden rounded-lg p-3 sm:px-4 sm:py-3.5"
     :class="{ 'pl-3.5 sm:pl-4.5': hasAccent }"
   >
     <span
       v-if="accentClass"
-      class="absolute inset-y-0 left-0 w-1 transition-colors"
+      class="absolute inset-y-2 left-0 w-0.5 transition-colors sm:inset-y-2.5"
       :class="accentClass"
       aria-hidden="true"
     ></span>
@@ -91,3 +91,23 @@
     <slot></slot>
   </component>
 </template>
+
+<style scoped>
+  .dashboard-host-card {
+    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+    background: color-mix(in srgb, var(--card-bg-color) 82%, var(--app-bg-color));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+      0 5px 14px -12px color-mix(in srgb, var(--text-color) 32%, transparent);
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease,
+      transform 140ms ease;
+  }
+
+  .dashboard-host-card:hover {
+    border-color: color-mix(in srgb, var(--border-color) 64%, var(--link-active-color));
+    background: color-mix(in srgb, var(--card-bg-color) 90%, var(--app-bg-color));
+    transform: translateY(-1px);
+  }
+</style>

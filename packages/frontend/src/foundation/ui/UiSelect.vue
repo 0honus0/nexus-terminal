@@ -10,7 +10,7 @@
     SelectTrigger,
     SelectViewport,
   } from 'reka-ui';
-  import { computed, ref, useAttrs } from 'vue';
+  import { Comment, Fragment, Text, computed, ref, useAttrs, useSlots, type VNode } from 'vue';
   import type { UiDensity, UiSelectOption, UiSelectValue } from './uiTypes';
 
   // The wrapper div only owns layout classes; every other attribute (notably
@@ -18,6 +18,7 @@
   defineOptions({ inheritAttrs: false });
 
   const attrs = useAttrs();
+  const slots = useSlots();
   const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style }));
   const triggerAttrs = computed(() => {
     const { class: _class, style: _style, ...rest } = attrs;
@@ -29,7 +30,7 @@
       // Accepts a nullable value so a caller can start empty and let the trigger
       // show its placeholder, but every update hands back a real option value.
       modelValue?: UiSelectValue | null;
-      options: UiSelectOption[];
+      options?: UiSelectOption[];
       placeholder?: string;
       density?: UiDensity;
       disabled?: boolean;
@@ -63,20 +64,65 @@
 
   const emit = defineEmits<{ 'update:modelValue': [value: UiSelectValue] }>();
 
+  const optionText = (children: VNode['children']): string => {
+    if (typeof children === 'string' || typeof children === 'number') return String(children);
+    if (!Array.isArray(children)) return '';
+    return children
+      .map((child) => {
+        if (typeof child === 'string' || typeof child === 'number') return String(child);
+        return child && typeof child === 'object' && 'children' in child ? optionText(child.children) : '';
+      })
+      .join('')
+      .trim();
+  };
+
+  const collectSlotOptions = (nodes: VNode[], target: UiSelectOption[]): void => {
+    for (const node of nodes) {
+      if (node.type === Comment || node.type === Text) continue;
+      if (node.type === Fragment && Array.isArray(node.children)) {
+        collectSlotOptions(node.children as VNode[], target);
+        continue;
+      }
+      if (node.type === 'option') {
+        const label = optionText(node.children);
+        const optionProps = node.props ?? {};
+        target.push({
+          // Like a native <option>, fall back to the text only when no value is bound; an explicit
+          // `:value="null"` (for example "no proxy") must stay null.
+          value: ('value' in optionProps ? optionProps.value : label) as UiSelectValue,
+          label,
+          disabled: Boolean(node.props?.disabled),
+        });
+      }
+    }
+  };
+
+  const resolvedOptions = computed<UiSelectOption[]>(() => {
+    if (props.options) return props.options;
+    const options: UiSelectOption[] = [];
+    collectSlotOptions(slots.default?.() ?? [], options);
+    return options;
+  });
+
   const emptyValueSentinel = computed(() => {
     let candidate = '__nexus_ui_select_empty__';
-    const used = new Set(props.options.map((option) => option.value));
+    const used = new Set(resolvedOptions.value.map((option) => option.value));
     while (used.has(candidate)) candidate += '_';
     return candidate;
   });
-  const internalModelValue = computed(() => (props.modelValue === '' ? emptyValueSentinel.value : props.modelValue));
+  const nullValueSentinel = computed(() => `${emptyValueSentinel.value}_null`);
+  const internalModelValue = computed(() => {
+    if (props.modelValue === '') return emptyValueSentinel.value;
+    if (props.modelValue === null) return nullValueSentinel.value;
+    return props.modelValue;
+  });
   const internalOptionValue = (value: UiSelectValue): UiSelectValue =>
-    value === '' ? emptyValueSentinel.value : value;
+    value === '' ? emptyValueSentinel.value : value === null ? nullValueSentinel.value : value;
 
   const open = ref(false);
 
   const selectedLabel = computed(() => {
-    const selected = props.options.find((option) => option.value === props.modelValue);
+    const selected = resolvedOptions.value.find((option) => option.value === props.modelValue);
     return selected?.triggerLabel ?? selected?.label ?? props.placeholder;
   });
 
@@ -86,6 +132,10 @@
     const resolved = Array.isArray(value) ? value[0] : value;
     if (resolved === emptyValueSentinel.value) {
       emit('update:modelValue', '');
+      return;
+    }
+    if (resolved === nullValueSentinel.value) {
+      emit('update:modelValue', null);
       return;
     }
     if (typeof resolved === 'string' || typeof resolved === 'number') emit('update:modelValue', resolved);
@@ -156,7 +206,7 @@
         >
           <SelectViewport class="ui-select__viewport">
             <SelectItem
-              v-for="(option, index) in props.options"
+              v-for="(option, index) in resolvedOptions"
               :key="index"
               :data-testid="
                 props.optionTestIdPrefix

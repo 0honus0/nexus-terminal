@@ -2,7 +2,7 @@
   import { onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { securityApi } from '../api/securityApi';
   import type { CaptchaConfigUpdateDto } from '../model/security';
@@ -76,11 +76,11 @@
         <span>{{ t('settings.captcha.enableLabel') }}</span>
       </label>
       <UiFormField :label="t('settings.captcha.providerLabel')" for-id="captchaProvider">
-        <UiNativeSelect id="captchaProvider" v-model="form.provider" data-testid="captcha-provider">
+        <UiSelect id="captchaProvider" v-model="form.provider" data-testid="captcha-provider">
           <option value="none">{{ t('settings.captcha.providerNone') }}</option>
           <option value="hcaptcha">hCaptcha</option>
           <option value="recaptcha">reCAPTCHA</option>
-        </UiNativeSelect>
+        </UiSelect>
       </UiFormField>
       <div
         v-if="form.enabled && form.provider === 'hcaptcha'"

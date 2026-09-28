@@ -44,7 +44,7 @@
 </script>
 
 <template>
-  <section class="ui-glass-panel overflow-hidden rounded-xl">
+  <section class="ui-solid-panel overflow-hidden rounded-xl">
     <h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ t('settings.category.about') }}
     </h2>

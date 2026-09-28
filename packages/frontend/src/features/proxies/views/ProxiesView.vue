@@ -75,7 +75,7 @@
       <div class="mt-4">
         <div
           v-if="initialLoading && data.proxies.value.length === 0"
-          class="ui-glass-inset mb-4 rounded-lg p-4 text-center text-text-secondary italic"
+          class="ui-solid-inset mb-4 rounded-lg p-4 text-center text-text-secondary italic"
         >
           {{ t('proxies.loading') }}
         </div>
@@ -93,7 +93,7 @@
             v-for="proxy in data.proxies.value"
             :key="proxy.id"
             :data-testid="`proxy-row-${proxy.id}`"
-            class="ui-glass-item flex flex-col items-stretch justify-between gap-3 rounded-xl p-4 sm:flex-row sm:items-start sm:gap-4"
+            class="ui-solid-item flex flex-col items-stretch justify-between gap-3 rounded-xl p-4 sm:flex-row sm:items-start sm:gap-4"
           >
             <div class="min-w-0 flex-grow space-y-1">
               <strong class="block break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>

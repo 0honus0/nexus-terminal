@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
   import type { ProxyDto, ProxyCreateRequestDto, ProxyTypeDto } from '../model/proxy';
   const props = defineProps<{ proxy?: ProxyDto | null; loading?: boolean }>();
   const emit = defineEmits<{ submit: [input: Partial<ProxyCreateRequestDto>]; cancel: [] }>();
@@ -87,9 +87,9 @@
         ><UiInput id="proxy-name" v-model="form.name" required
       /></UiFormField>
       <UiFormField :label="t('proxies.form.type')"
-        ><UiNativeSelect id="proxy-type" v-model="form.type"
+        ><UiSelect id="proxy-type" v-model="form.type" match-trigger-width
           ><option value="SOCKS5">SOCKS5</option>
-          <option value="HTTP">HTTP</option></UiNativeSelect
+          <option value="HTTP">HTTP</option></UiSelect
         ></UiFormField
       >
       <UiFormField :label="t('proxies.form.host')"

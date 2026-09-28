@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiNativeSelect, UiTextarea } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiSelect, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import type { ConnectionFormUpdate } from '../model/connection';
@@ -169,21 +169,21 @@
               ><UiInput v-model="form.username" :placeholder="t('connections.batchEdit.leaveBlankNoChange')"
             /></UiFormField>
             <UiFormField :label="t('connections.form.authMethod')">
-              <UiNativeSelect v-model="form.authChoice"
+              <UiSelect v-model="form.authChoice"
                 ><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
                 <option value="password">{{ t('connections.form.authMethodPassword') }}</option>
-                <option value="key">{{ t('connections.form.authMethodKey') }}</option></UiNativeSelect
+                <option value="key">{{ t('connections.form.authMethodKey') }}</option></UiSelect
               >
             </UiFormField>
             <UiFormField v-if="form.authChoice === 'password'" :label="t('connections.form.password')"
               ><UiInput v-model="form.password" type="password" autocomplete="new-password"
             /></UiFormField>
             <UiFormField v-else-if="form.authChoice === 'key'" :label="t('connections.form.sshKey')">
-              <UiNativeSelect v-model="form.sshKeyChoice"
+              <UiSelect v-model="form.sshKeyChoice"
                 ><option value="">{{ t('connections.form.noSshKey') }}</option>
                 <option v-for="key in sshKeys.items.value" :key="key.id" :value="String(key.id)">
                   {{ key.name }}
-                </option></UiNativeSelect
+                </option></UiSelect
               >
             </UiFormField>
           </div>
@@ -196,12 +196,12 @@
           </div>
           <div v-if="editAdvanced" class="space-y-3">
             <UiFormField :label="t('connections.form.proxy')">
-              <UiNativeSelect v-model="form.proxyChoice"
+              <UiSelect v-model="form.proxyChoice"
                 ><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
                 <option value="__none__">{{ t('connections.form.noProxy') }}</option>
                 <option v-for="proxy in proxies.items.value" :key="proxy.id" :value="String(proxy.id)">
                   {{ proxy.name }} ({{ proxy.type }})
-                </option></UiNativeSelect
+                </option></UiSelect
               >
             </UiFormField>
             <div>

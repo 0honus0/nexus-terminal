@@ -1,7 +1,7 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiContextMenu } from '@/foundation/ui';
+  import { UiContextMenu, UiSelect } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { focusRegistry } from '@/shared/focus/public';
   import { useFeedback } from '@/shared/feedback/public';
@@ -75,7 +75,6 @@
     },
   });
   const root = ref<HTMLElement | null>(null);
-  const encodingSelect = ref<HTMLSelectElement | null>(null);
   const mobileEditor = ref<{ focus?: () => void; openSearch?: () => void } | null>(null);
   const desktopEditor = ref<{ focus?: () => void; openSearch?: () => void } | null>(null);
   const context = ref<{ id: string; x: number; y: number } | null>(null);
@@ -132,65 +131,31 @@
       return;
     }
   };
-  const changeEncoding = async (event: Event): Promise<void> => {
+  const changeEncoding = async (value: unknown): Promise<void> => {
     const active = editorSession.active.value;
-    const target = event.target as HTMLSelectElement;
-    const encoding = target.value;
+    const encoding = typeof value === 'string' ? value : '';
     if (!active || !encoding || encoding === active.encoding || active.saveState === 'saving') {
-      if (active) target.value = active.encoding;
       return;
     }
     if (!(await confirmDiscardIfDirty())) {
-      target.value = active.encoding;
       return;
     }
     const current = editorSession.active.value;
     if (!current || current.id !== active.id || current.saveState === 'saving') {
-      target.value = current?.encoding ?? active.encoding;
       return;
     }
     try {
       await editorSession.changeEncoding(active.id, encoding);
-    } catch {
-      target.value = editorSession.active.value?.encoding ?? active.encoding;
-    }
+    } catch {}
   };
-  const changeLineEnding = (event: Event): void => {
+  const changeLineEnding = (value: unknown): void => {
     const active = editorSession.active.value;
-    const target = event.target as HTMLSelectElement;
-    if (!active || active.saveState === 'saving') {
-      if (active) target.value = currentLineEnding.value;
-      return;
-    }
-    editorSession.changeLineEnding(active.id, target.value as EditorLineEnding);
+    if (!active || active.saveState === 'saving' || (value !== 'lf' && value !== 'crlf' && value !== 'cr')) return;
+    editorSession.changeLineEnding(active.id, value);
   };
   const updateScrollPosition = (position: { scrollTop: number; scrollLeft: number }): void => {
     const active = editorSession.active.value;
     if (active) editorSession.updateScrollPosition(active.id, position.scrollTop, position.scrollLeft);
-  };
-
-  const updateEncodingWidth = (): void => {
-    void nextTick(() => {
-      const select = encodingSelect.value;
-      const selectedOption = select?.options[select.selectedIndex];
-      if (!select || !selectedOption) return;
-
-      const measurement = document.createElement('span');
-      const styles = window.getComputedStyle(select);
-      measurement.style.fontFamily = styles.fontFamily;
-      measurement.style.fontSize = styles.fontSize;
-      measurement.style.fontWeight = styles.fontWeight;
-      measurement.style.letterSpacing = styles.letterSpacing;
-      measurement.style.paddingLeft = styles.paddingLeft;
-      measurement.style.paddingRight = styles.paddingRight;
-      measurement.style.position = 'absolute';
-      measurement.style.visibility = 'hidden';
-      measurement.style.whiteSpace = 'nowrap';
-      measurement.textContent = selectedOption.text;
-      document.body.appendChild(measurement);
-      select.style.width = `${measurement.offsetWidth + 25}px`;
-      measurement.remove();
-    });
   };
 
   const open = (path: string) => {
@@ -232,9 +197,6 @@
       () => Boolean(root.value?.getClientRects().length && editorSession.active.value),
     );
     window.addEventListener('keydown', handleEditorKeydown, true);
-  });
-  watch(() => [selectedEncoding.value, editorSession.active.value?.id] as const, updateEncodingWidth, {
-    immediate: true,
   });
   onBeforeUnmount(() => {
     unregisterFocus?.();
@@ -289,29 +251,28 @@
       </span>
 
       <div class="editor-actions">
-        <select
-          ref="encodingSelect"
+        <UiSelect
           data-testid="file-editor-encoding"
-          :value="selectedEncoding"
+          :model-value="selectedEncoding"
           class="encoding-select"
           :title="t('fileManager.changeEncodingTooltip')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
-          @change="changeEncoding"
+          @update:model-value="changeEncoding"
         >
           <option v-for="option in encodingOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
-        </select>
-        <select
+        </UiSelect>
+        <UiSelect
           data-testid="file-editor-line-ending"
-          :value="currentLineEnding"
+          :model-value="currentLineEnding"
           class="encoding-select line-ending-select"
           :title="t('fileEditor.lineEnding')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
-          @change="changeLineEnding"
+          @update:model-value="changeLineEnding"
         >
           <option value="lf">{{ t('fileEditor.lineEndingLf') }}</option>
           <option value="crlf">{{ t('fileEditor.lineEndingCrlf') }}</option>
           <option value="cr">{{ t('fileEditor.lineEndingCr') }}</option>
-        </select>
+        </UiSelect>
 
         <span v-if="editorSession.active.value.saveState === 'saving'" class="save-status saving"
           >{{ t('fileManager.saving') }}...</span
@@ -616,20 +577,14 @@
   .encoding-select {
     width: auto;
     max-width: 12rem;
-    padding: 0.3rem 0.5rem;
-    cursor: pointer;
-    border: 1px solid #666;
-    border-radius: 3px;
-    outline: none;
-    background-color: #444;
-    color: #f0f0f0;
-    font-size: 0.85em;
+    flex: 0 1 auto;
   }
-  .encoding-select:hover {
-    background-color: #555;
-  }
-  .encoding-select:focus {
-    border-color: #888;
+  .encoding-select :deep(.ui-select__trigger) {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    --ui-control-height: 28px;
+    --ui-control-font-size: 11px;
   }
   .line-ending-select {
     max-width: 5.5rem;
@@ -638,7 +593,6 @@
     min-width: 0;
     max-width: 7rem;
     flex: 0 1 auto;
-    padding: 0.3rem 0.4rem;
   }
   .editor-header.is-mobile .line-ending-select {
     max-width: 4.5rem;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiNativeSelect, UiOverlayPanel } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiOverlayPanel, UiSelect } from '@/foundation/ui';
   import { useDraggablePosition, usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
@@ -1645,11 +1645,11 @@
         </div>
         <template v-if="archiveDialog?.kind === 'compress'">
           <UiFormField :label="t('workspace.archive.format')" for-id="archive-format">
-            <UiNativeSelect id="archive-format" v-model="archiveFormat" :disabled="archivePasswordRequired">
+            <UiSelect id="archive-format" v-model="archiveFormat" :disabled="archivePasswordRequired">
               <option value="zip">zip</option>
               <option value="tar.gz">tar.gz</option>
               <option value="tar.bz2">tar.bz2</option>
-            </UiNativeSelect>
+            </UiSelect>
           </UiFormField>
           <template v-if="archivePasswordAvailable">
             <UiFormField

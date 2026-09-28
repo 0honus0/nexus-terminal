@@ -104,7 +104,7 @@
 
 <template>
   <div class="auth-page flex min-h-dvh items-center justify-center overflow-y-auto p-4">
-    <div class="ui-glass-panel flex w-full max-w-4xl overflow-hidden rounded-2xl">
+    <div class="ui-glass-panel flex min-h-[440px] w-full max-w-4xl overflow-hidden rounded-2xl sm:min-h-[480px]">
       <section class="auth-brand-pane hidden w-2/5 flex-col items-center justify-center p-10 text-white md:flex">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
         <h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>

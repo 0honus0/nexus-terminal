@@ -2,22 +2,46 @@
  * Foundation UI Gen 2
  *
  * Component recipes stay scoped to data-ui-gen="2". Product surfaces use the
- * semantic ui-glass-* classes below so pages share the same material without
- * copying component internals or reviving a second component layer.
+ * semantic ui-glass-* or ui-solid-* classes below so pages share materials
+ * without copying component internals or reviving a second component layer.
  */
 :root {
-  --glass-fill: color-mix(in srgb, var(--card-bg-color) 58%, transparent);
-  --glass-nav-fill: color-mix(in srgb, var(--header-bg-color) 64%, transparent);
-  --glass-inset-fill: color-mix(in srgb, var(--input-bg-color) 42%, transparent);
-  --glass-item-fill: color-mix(in srgb, var(--card-bg-color) 16%, transparent);
-  --glass-item-hover-fill: color-mix(in srgb, var(--card-bg-color) 30%, transparent);
-  --glass-backdrop-filter: blur(14px) saturate(155%);
-  --glass-control-filter: blur(8px) saturate(145%);
-  --glass-border-color: color-mix(in srgb, var(--border-color) 38%, rgb(255 255 255 / 26%));
-  --glass-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 40%);
+  /*
+   * Liquid Glass material (iOS 26/27 style): very translucent fills over a strong blur,
+   * a specular rim that is brightest on the top edge, and a diagonal sheen. Rim and sheen
+   * derive from the theme background, so light themes get bright white edges and dark
+   * themes get quieter silver ones without per-theme overrides.
+   */
+  --glass-rim: color-mix(in srgb, var(--app-bg-color) 45%, rgb(255 255 255));
+  --glass-fill: color-mix(in srgb, var(--card-bg-color) 42%, transparent);
+  --glass-nav-fill: color-mix(in srgb, var(--header-bg-color) 55%, transparent);
+  --glass-inset-fill: color-mix(in srgb, var(--input-bg-color) 34%, transparent);
+  --glass-item-fill: color-mix(in srgb, var(--card-bg-color) 14%, transparent);
+  --glass-item-hover-fill: color-mix(in srgb, var(--card-bg-color) 28%, transparent);
+  --glass-backdrop-filter: blur(28px) saturate(185%);
+  --glass-control-filter: blur(16px) saturate(170%);
+  /* Mixing in the theme border keeps edges visible when a light panel sits on a light page. */
+  --glass-border-color: color-mix(
+    in srgb,
+    var(--border-color) 55%,
+    color-mix(in srgb, var(--glass-rim) 30%, transparent)
+  );
+  --glass-inset-highlight:
+    inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 55%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--glass-rim) 12%, transparent);
+  --glass-rim-shadow:
+    var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 14%, transparent),
+    inset -1px 0 0 color-mix(in srgb, var(--glass-rim) 8%, transparent);
+  --glass-sheen-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--glass-rim) 14%, transparent) 0%,
+    transparent 38%,
+    transparent 72%,
+    color-mix(in srgb, var(--glass-rim) 6%, transparent) 100%
+  );
   --glass-shadow:
-    var(--glass-inset-highlight), inset 0 -1px 0 rgb(0 0 0 / 5%),
-    0 14px 32px -20px color-mix(in srgb, var(--text-color) 28%, transparent);
+    var(--glass-rim-shadow), 0 1px 2px rgb(0 0 0 / 6%),
+    0 24px 56px -26px color-mix(in srgb, var(--text-color) 36%, transparent);
 }
 
 @layer components {
@@ -26,7 +50,7 @@
   .ui-glass-inset,
   .ui-glass-item {
     border: 1px solid var(--glass-border-color);
-    background-image: radial-gradient(110% 70% at 50% -25%, rgb(255 255 255 / 14%), transparent 75%);
+    background-image: var(--glass-sheen-image);
     box-shadow: var(--glass-shadow);
   }
 
@@ -54,20 +78,67 @@
     background-color: var(--glass-inset-fill);
     box-shadow:
       var(--glass-inset-highlight),
-      inset 0 1px 2px rgb(0 0 0 / 7%);
+      inset 0 1px 3px rgb(0 0 0 / 8%);
   }
 
   .ui-glass-item {
     background-color: var(--glass-item-fill);
-    box-shadow: var(--glass-inset-highlight);
+    box-shadow: var(--glass-rim-shadow);
     transition:
-      background-color 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
-      border-color 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .ui-glass-item:hover {
     background-color: var(--glass-item-hover-fill);
-    border-color: color-mix(in srgb, var(--border-color) 52%, rgb(255 255 255 / 36%));
+    border-color: color-mix(in srgb, var(--glass-rim) 34%, transparent);
+  }
+
+  .ui-solid-panel,
+  .ui-solid-inset,
+  .ui-solid-item {
+    border: 1px solid var(--border-color);
+    background-image: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .ui-solid-panel {
+    background-color: var(--card-bg-color);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+  }
+
+  .ui-solid-inset {
+    background-color: var(--input-bg-color);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 6%);
+  }
+
+  .ui-solid-item {
+    background-color: var(--card-bg-color);
+    box-shadow: none;
+    transition:
+      background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .ui-solid-item:hover {
+    background-color: var(--header-bg-color);
+    border-color: var(--border-hover-color);
+  }
+
+  /*
+   * Soft ambient light behind glass pages. Glass only reads as glass when something
+   * with color sits underneath it, so full-page surfaces opt in with this backdrop.
+   */
+  .ui-ambient-backdrop {
+    /* A tinted base plus corner light keeps the page center from washing out to pure white. */
+    background:
+      radial-gradient(48rem 34rem at 0% 0%, rgb(90 160 255 / 22%), transparent 70%),
+      radial-gradient(44rem 32rem at 100% 0%, rgb(64 200 224 / 16%), transparent 70%),
+      radial-gradient(52rem 36rem at 50% 100%, rgb(110 140 200 / 18%), transparent 70%),
+      color-mix(in srgb, var(--app-bg-color) 93%, rgb(96 120 160));
+    background-attachment: fixed;
   }
 }
 
@@ -76,8 +147,8 @@
   --ui-control-padding-inline: 11px;
   --ui-control-gap: 7px;
   --ui-control-font-size: 12px;
-  --ui-control-radius: 8px;
-  --ui-panel-radius: 16px;
+  --ui-control-radius: 10px;
+  --ui-panel-radius: 22px;
   --ui-pill-radius: 999px;
 
   --ui-motion-duration: 140ms;
@@ -85,24 +156,20 @@
 
   --ui-text: var(--text-color);
   --ui-text-muted: var(--text-color-secondary);
-  --ui-hairline: color-mix(in srgb, var(--border-color) 42%, rgb(255 255 255 / 30%));
-  --ui-hairline-strong: color-mix(in srgb, var(--border-color) 54%, rgb(255 255 255 / 48%));
+  --ui-hairline: color-mix(in srgb, var(--border-color) 62%, transparent);
+  --ui-hairline-strong: color-mix(in srgb, var(--border-color) 88%, transparent);
   --ui-fill-raised: color-mix(in srgb, var(--card-bg-color) 58%, transparent);
-  --ui-fill-raised-hover: color-mix(in srgb, var(--card-bg-color) 70%, transparent);
   --ui-fill-inset: color-mix(in srgb, var(--input-bg-color) 48%, transparent);
   --ui-fill-inset-hover: color-mix(in srgb, var(--input-bg-color) 62%, transparent);
   --ui-fill-soft: color-mix(in srgb, var(--card-bg-color) 18%, transparent);
   --ui-fill-soft-hover: color-mix(in srgb, var(--card-bg-color) 32%, transparent);
   --ui-glass-filter: blur(14px) saturate(155%);
   --ui-glass-control-filter: blur(8px) saturate(145%);
-  --ui-glass-highlight: inset 0 1px 0 rgb(255 255 255 / 42%);
+  --ui-glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 45%, transparent);
 
   --ui-shadow-raised:
     0 1px 1px color-mix(in srgb, var(--text-color) 6%, transparent),
     0 6px 20px -14px color-mix(in srgb, var(--text-color) 24%, transparent);
-  --ui-shadow-control:
-    inset 0 1px 0 color-mix(in srgb, var(--app-bg-color) 62%, transparent),
-    0 1px 2px color-mix(in srgb, var(--text-color) 7%, transparent);
   --ui-shadow-inset:
     inset 0 1px 2px color-mix(in srgb, var(--text-color) 9%, transparent),
     inset 0 0 0 1px color-mix(in srgb, var(--app-bg-color) 24%, transparent);
@@ -118,7 +185,6 @@
   --ui-tone-solid: var(--text-color);
   --ui-tone-on-solid: var(--app-bg-color);
   --ui-tone-soft: color-mix(in srgb, var(--card-bg-color) 16%, transparent);
-  --ui-tone-soft-hover: color-mix(in srgb, var(--card-bg-color) 30%, transparent);
   --ui-tone-ink: var(--text-color);
   --ui-tone-border: color-mix(in srgb, var(--border-color) 32%, transparent);
 }
@@ -142,7 +208,6 @@
   --ui-tone-solid: var(--card-bg-color);
   --ui-tone-on-solid: var(--text-color);
   --ui-tone-soft: color-mix(in srgb, var(--card-bg-color) 20%, transparent);
-  --ui-tone-soft-hover: color-mix(in srgb, var(--card-bg-color) 35%, transparent);
   --ui-tone-ink: var(--text-color);
   --ui-tone-border: color-mix(in srgb, var(--border-color) 35%, transparent);
 }
@@ -152,7 +217,6 @@
   --ui-tone-solid: var(--status-success-color);
   --ui-tone-on-solid: var(--status-success-text-color);
   --ui-tone-soft: color-mix(in srgb, var(--status-success-color) 12%, transparent);
-  --ui-tone-soft-hover: color-mix(in srgb, var(--status-success-color) 20%, transparent);
   --ui-tone-ink: color-mix(in srgb, var(--status-success-color) 80%, var(--text-color));
   --ui-tone-border: color-mix(in srgb, var(--status-success-color) 30%, var(--border-color));
 }
@@ -162,7 +226,6 @@
   --ui-tone-solid: var(--status-warning-color);
   --ui-tone-on-solid: var(--status-warning-text-color);
   --ui-tone-soft: color-mix(in srgb, var(--status-warning-color) 14%, transparent);
-  --ui-tone-soft-hover: color-mix(in srgb, var(--status-warning-color) 22%, transparent);
   --ui-tone-ink: color-mix(in srgb, var(--status-warning-color) 70%, var(--text-color));
   --ui-tone-border: color-mix(in srgb, var(--status-warning-color) 34%, var(--border-color));
 }
@@ -172,7 +235,6 @@
   --ui-tone-solid: var(--status-error-color);
   --ui-tone-on-solid: var(--status-error-text-color);
   --ui-tone-soft: color-mix(in srgb, var(--status-error-color) 12%, transparent);
-  --ui-tone-soft-hover: color-mix(in srgb, var(--status-error-color) 20%, transparent);
   --ui-tone-ink: color-mix(in srgb, var(--status-error-color) 80%, var(--text-color));
   --ui-tone-border: color-mix(in srgb, var(--status-error-color) 30%, var(--border-color));
 }
@@ -549,15 +611,16 @@
 .ui-button--glass {
   color: var(--ui-text);
   background-color: var(--ui-button-glass-fill);
-  background-image:
-    radial-gradient(95% 75% at 50% -28%, rgb(255 255 255 / 38%), transparent 85%),
-    linear-gradient(155deg, rgb(255 255 255 / 13%), transparent 48%, rgb(255 255 255 / 7%));
-  -webkit-backdrop-filter: blur(8px) saturate(165%);
-  backdrop-filter: blur(8px) saturate(165%);
-  border-color: color-mix(in srgb, var(--border-color) 25%, rgb(255 255 255 / 55%));
+  background-image: radial-gradient(
+    95% 75% at 50% -28%,
+    color-mix(in srgb, var(--glass-rim) 16%, transparent),
+    transparent 85%
+  );
+  -webkit-backdrop-filter: var(--glass-control-filter);
+  backdrop-filter: var(--glass-control-filter);
+  border-color: color-mix(in srgb, var(--glass-rim) 24%, transparent);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 68%),
-    inset 0 -1px 0 rgb(0 0 0 / 7%),
+    var(--glass-inset-highlight),
     0 1px 2px rgb(0 0 0 / 5%),
     0 8px 18px -14px rgb(0 0 0 / 22%);
 }
@@ -577,25 +640,13 @@
   --ui-button-glass-fill-hover: color-mix(in srgb, var(--card-bg-color) 27%, transparent);
 }
 
-.ui-button--solid::before,
-.ui-button--soft::before,
-.ui-button--glass::before {
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  background: radial-gradient(85% 65% at 50% -35%, rgb(255 255 255 / 30%), transparent 90%);
-  content: '';
-  pointer-events: none;
-}
-
 .ui-button--solid:not(:disabled):hover,
 .ui-button--soft:not(:disabled):hover,
 .ui-button--glass:not(:disabled):hover {
   background-color: var(--ui-button-glass-fill-hover);
-  border-color: color-mix(in srgb, var(--border-color) 34%, rgb(255 255 255 / 70%));
+  border-color: color-mix(in srgb, var(--glass-rim) 38%, transparent);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 82%),
-    inset 0 -1px 0 rgb(0 0 0 / 8%),
+    inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 60%, transparent),
     0 2px 4px rgb(0 0 0 / 7%),
     0 12px 22px -14px rgb(0 0 0 / 28%);
   transform: translateY(-0.5px);
@@ -615,32 +666,48 @@
   --ui-button-glass-fill: color-mix(in srgb, var(--status-error-color) 10%, transparent);
   --ui-button-glass-fill-hover: color-mix(in srgb, var(--status-error-color) 17%, transparent);
   color: var(--status-error-color);
-  border-color: color-mix(in srgb, var(--status-error-color) 28%, rgb(255 255 255 / 48%));
+  border-color: color-mix(in srgb, var(--status-error-color) 35%, var(--border-color));
 }
 
 .ui-button[data-tone='danger']:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--status-error-color) 42%, rgb(255 255 255 / 58%));
+  border-color: color-mix(in srgb, var(--status-error-color) 55%, var(--border-color));
 }
 
 .ui-button[data-tone='success'] {
   --ui-button-glass-fill: color-mix(in srgb, var(--status-success-color) 10%, transparent);
   --ui-button-glass-fill-hover: color-mix(in srgb, var(--status-success-color) 17%, transparent);
   color: var(--status-success-color);
-  border-color: color-mix(in srgb, var(--status-success-color) 28%, rgb(255 255 255 / 48%));
+  border-color: color-mix(in srgb, var(--status-success-color) 35%, var(--border-color));
 }
 
 .ui-button[data-tone='success']:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--status-success-color) 42%, rgb(255 255 255 / 58%));
+  border-color: color-mix(in srgb, var(--status-success-color) 55%, var(--border-color));
 }
 
-/* Ensure primary buttons use clean neutral glass rather than purple */
-[data-ui-gen='2'][data-ui='button'][data-tone='primary'] {
-  color: var(--ui-text) !important;
-  border-color: color-mix(in srgb, var(--border-color) 24%, rgba(255, 255, 255, 0.65));
+/* Primary stays neutral rather than purple. Solid primary inverts the neutral ink so the main
+   action reads as the strongest control; soft/glass primary keeps the quiet glass fill. */
+[data-ui-gen='2'][data-ui='button'][data-tone='primary']:not(.ui-button--solid) {
+  color: var(--ui-text);
 }
 
-[data-ui-gen='2'][data-ui='button'][data-tone='primary']:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--border-color) 32%, rgba(255, 255, 255, 0.75));
+.ui-button--solid[data-tone='primary']:not(:disabled) {
+  --ui-button-glass-fill: var(--text-color);
+  --ui-button-glass-fill-hover: color-mix(in srgb, var(--text-color) 86%, var(--app-bg-color));
+  border-color: transparent;
+  color: var(--app-bg-color);
+  background-image: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--app-bg-color) 22%, transparent),
+    0 1px 2px rgb(0 0 0 / 8%),
+    0 10px 20px -14px color-mix(in srgb, var(--text-color) 55%, transparent);
+}
+
+.ui-button--solid[data-tone='primary']:not(:disabled):hover {
+  border-color: transparent;
+}
+
+.ui-button--solid[data-tone='primary']:not(:disabled):active {
+  background-color: color-mix(in srgb, var(--text-color) 78%, var(--app-bg-color));
 }
 
 .ui-button--ghost {
@@ -956,10 +1023,10 @@
 }
 
 .ui-badge--soft {
-  border-color: color-mix(in srgb, var(--ui-tone-accent) 20%, rgb(255 255 255 / 30%));
+  border-color: color-mix(in srgb, var(--ui-tone-accent) 18%, var(--ui-hairline));
   background: var(--ui-tone-soft);
   color: var(--ui-tone-ink);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 30%, transparent);
   -webkit-backdrop-filter: var(--ui-glass-control-filter);
   backdrop-filter: var(--ui-glass-control-filter);
 }
@@ -968,7 +1035,7 @@
   border-color: var(--ui-tone-border);
   background: color-mix(in srgb, var(--card-bg-color) 5%, transparent);
   color: var(--ui-tone-ink);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 16%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 22%, transparent);
   -webkit-backdrop-filter: var(--ui-glass-control-filter);
   backdrop-filter: var(--ui-glass-control-filter);
 }
@@ -1297,63 +1364,6 @@
   background: color-mix(in srgb, var(--ui-disabled-text) 18%, var(--ui-disabled-fill));
 }
 
-.ui-native-select {
-  position: relative;
-  display: block;
-  width: 100%;
-  min-width: 0;
-}
-
-.ui-native-select__control {
-  width: 100%;
-  height: var(--ui-control-height);
-  appearance: none;
-  padding-inline: var(--ui-control-padding-inline) calc(var(--ui-control-padding-inline) + 16px);
-  border: 1px solid var(--ui-hairline);
-  background: var(--ui-fill-inset);
-  color: var(--ui-text);
-  box-shadow: var(--ui-glass-highlight), var(--ui-shadow-inset);
-  cursor: pointer;
-  -webkit-backdrop-filter: var(--ui-glass-control-filter);
-  backdrop-filter: var(--ui-glass-control-filter);
-}
-
-.ui-native-select__control:not(:disabled):hover {
-  border-color: var(--ui-hairline-strong);
-  background: var(--ui-fill-inset-hover);
-}
-
-.ui-native-select[data-invalid='true'] .ui-native-select__control {
-  border-color: color-mix(in srgb, var(--status-error-color) 70%, var(--border-color));
-  --ui-focus-color: var(--status-error-color);
-  --ui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--status-error-color) 17%, transparent);
-}
-
-.ui-native-select__control:disabled {
-  cursor: not-allowed;
-  border-color: var(--ui-disabled-border);
-  background: var(--ui-disabled-fill);
-  color: var(--ui-disabled-text);
-  box-shadow: none;
-}
-
-.ui-native-select__icon {
-  position: absolute;
-  top: 50%;
-  right: var(--ui-control-padding-inline);
-  width: 12px;
-  height: 12px;
-  translate: 0 -50%;
-  color: var(--ui-text-muted);
-  pointer-events: none;
-}
-
-.ui-native-select__icon svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
 .ui-select {
   position: relative;
   display: block;
@@ -1387,9 +1397,8 @@
 }
 
 /*
- * The open trigger borrows the canonical glass recipe (app/styles/global.css)
- * so the control and the panel that it opens read as one surface. Only the
- * geometry and the focus ring stay local.
+ * The open trigger borrows the canonical Gen 2 glass tokens so the control and
+ * its panel read as one surface. Only geometry and the focus ring stay local.
  */
 .ui-select[data-state='open'] .ui-select__trigger,
 .ui-select__trigger[data-state='open'] {
@@ -1801,7 +1810,6 @@
   .ui-badge,
   .ui-switch,
   .ui-checkbox,
-  .ui-native-select__control,
   .ui-select__trigger,
   .ui-select__panel,
   .ui-popover__panel,

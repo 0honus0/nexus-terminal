@@ -115,7 +115,7 @@
 
 <template>
   <div class="space-y-6">
-    <section data-testid="ip-whitelist-settings" class="ui-glass-panel overflow-hidden rounded-xl">
+    <section data-testid="ip-whitelist-settings" class="ui-solid-panel overflow-hidden rounded-xl">
       <h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
         {{ t('settings.ipWhitelist.title') }}
       </h2>
@@ -148,7 +148,7 @@
       </div>
     </section>
 
-    <section data-testid="ip-blacklist-settings" class="ui-glass-panel overflow-hidden rounded-xl">
+    <section data-testid="ip-blacklist-settings" class="ui-solid-panel overflow-hidden rounded-xl">
       <div class="flex items-center justify-between border-b border-border/60 px-6 py-4">
         <h2 class="text-lg font-semibold text-foreground">{{ t('settings.ipBlacklist.title') }}</h2>
         <label class="flex items-center gap-2 text-sm">

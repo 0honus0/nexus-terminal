@@ -470,8 +470,8 @@
             : 'grid grid-cols-1'
         "
       >
-        <section class="order-1 min-w-0 xl:pr-7">
-          <header class="pb-4">
+        <section class="dashboard-surface order-1 flex min-w-0 flex-col overflow-hidden xl:mr-4">
+          <header class="shrink-0 px-4 pb-3 pt-4">
             <div class="flex items-center justify-between gap-3">
               <div class="flex min-w-0 items-center gap-2.5">
                 <span
@@ -491,11 +491,11 @@
           </header>
 
           <div
-            class="ui-glass-inset h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-auto rounded-xl xl:h-[clamp(360px,50vh,520px)]"
+            class="h-[clamp(300px,42vh,440px)] min-h-0 overflow-y-auto overscroll-auto xl:h-auto xl:flex-1"
             style="scrollbar-gutter: stable both-edges"
           >
             <div
-              class="ui-glass-nav sticky top-2 z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
+              class="dashboard-toolbar sticky top-2 z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
             >
               <label class="col-span-3 min-w-0 sm:col-span-1"
                 ><span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder') }}</span>
@@ -598,7 +598,7 @@
               </div>
             </div>
           </div>
-          <div class="pt-3 text-right">
+          <div class="shrink-0 border-t border-border/70 px-4 py-2.5 text-right">
             <RouterLink to="/connections" class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
               >{{ t('dashboard.viewAllConnections') }} →</RouterLink
             >
@@ -607,9 +607,9 @@
 
         <section
           v-if="preferences.values.value.dashboardShowRemoteResources"
-          class="order-2 min-w-0 xl:border-l xl:border-border/70 xl:pl-7"
+          class="dashboard-surface order-2 flex min-w-0 flex-col overflow-hidden xl:ml-4"
         >
-          <header class="flex flex-col gap-2 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <header class="flex shrink-0 flex-col gap-2 px-4 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex min-w-0 items-center gap-2.5">
               <span
                 class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
@@ -634,7 +634,7 @@
             </div>
           </header>
           <div
-            class="ui-glass-inset h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-auto rounded-xl p-1 sm:p-1.5 xl:h-[clamp(360px,50vh,520px)]"
+            class="h-[clamp(300px,42vh,440px)] min-h-0 space-y-2 overflow-y-auto overscroll-auto px-2 pb-2 xl:h-auto xl:flex-1"
             style="scrollbar-gutter: stable"
           >
             <div
@@ -753,12 +753,12 @@
         </header>
         <div
           v-if="loading && activity.length === 0"
-          class="ui-glass-inset rounded-xl py-10 text-center text-sm text-text-secondary"
+          class="dashboard-muted-card rounded-xl py-10 text-center text-sm text-text-secondary"
         >
           {{ t('common.loading') }}
         </div>
         <ol v-else-if="activity.length" class="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-          <li v-for="log in activity" :key="log.id" class="ui-glass-item min-w-0 rounded-xl px-4 py-3.5">
+          <li v-for="log in activity" :key="log.id" class="dashboard-muted-card min-w-0 rounded-xl px-4 py-3.5">
             <div class="flex min-w-0 items-start justify-between gap-2">
               <div class="flex min-w-0 items-center gap-2">
                 <span
@@ -786,7 +786,7 @@
             </p>
           </li>
         </ol>
-        <div v-else class="ui-glass-inset rounded-xl py-10 text-center text-sm text-text-secondary">
+        <div v-else class="dashboard-muted-card rounded-xl py-10 text-center text-sm text-text-secondary">
           {{ t('dashboard.noRecentActivity') }}
         </div>
       </aside>
@@ -795,6 +795,28 @@
 </template>
 
 <style scoped>
+  .dashboard-surface {
+    border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--card-bg-color) 96%, var(--app-bg-color));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+      0 10px 24px -24px color-mix(in srgb, var(--text-color) 38%, transparent);
+  }
+
+  @media (min-width: 1280px) {
+    .dashboard-surface {
+      height: calc(clamp(360px, 50vh, 520px) + 72px);
+    }
+  }
+
+  .dashboard-toolbar,
+  .dashboard-muted-card {
+    border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+    background: color-mix(in srgb, var(--input-bg-color) 84%, var(--card-bg-color));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+  }
+
   @media (max-width: 639px) {
     .dashboard-filter-select-gen2[data-ui-gen='2'] {
       --ui-control-padding-inline: 12px;

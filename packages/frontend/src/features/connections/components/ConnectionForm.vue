@@ -2,7 +2,7 @@
   import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
-  import { UiButton, UiFormField, UiInput, UiNativeSelect, UiTextarea } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput, UiSelect, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { connectionsApi } from '../api/connectionsApi';
@@ -550,12 +550,12 @@
               v-if="form.route === 'proxy'"
               :label="`${t('connections.form.proxy')} (${t('connections.form.optional')})`"
             >
-              <UiNativeSelect v-model="form.proxyId">
+              <UiSelect v-model="form.proxyId">
                 <option :value="null">{{ t('connections.form.noProxy') }}</option>
                 <option v-for="proxy in proxies.items.value" :key="proxy.id" :value="proxy.id">
                   {{ proxy.name }} ({{ proxy.type }} - {{ proxy.host }}:{{ proxy.port }})
                 </option>
-              </UiNativeSelect>
+              </UiSelect>
             </UiFormField>
             <div v-if="form.route === 'jump'" class="space-y-3">
               <label class="mb-1 block text-sm font-medium text-text-secondary">{{
@@ -569,11 +569,11 @@
                 <span class="whitespace-nowrap text-sm font-medium text-text-secondary"
                   >{{ t('connections.form.jumpHostLabel') }} {{ index + 1 }}:</span
                 >
-                <UiNativeSelect v-model="form.jumpChain[index]" class="min-w-0 flex-1">
+                <UiSelect v-model="form.jumpChain[index]" class="min-w-0 flex-1">
                   <option v-for="host in jumpHostsForIndex(index)" :key="host.id" :value="host.id">
                     {{ host.name || host.host }}
                   </option>
-                </UiNativeSelect>
+                </UiSelect>
                 <button
                   type="button"
                   class="rounded-md p-1.5 text-error hover:opacity-80"

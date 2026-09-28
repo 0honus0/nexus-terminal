@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, reactive, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiNativeSelect, UiTextarea } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect, UiTextarea } from '@/foundation/ui';
   import { apiErrorMessage } from '@/client/http';
   import { notificationsApi } from '../api/notificationsApi';
   import type {
@@ -185,10 +185,10 @@
         }}</span></label
       >
       <UiFormField :label="t('settings.notifications.form.channelType')" for-id="setting-channel-type">
-        <UiNativeSelect id="setting-channel-type" v-model="form.channelType" :disabled="Boolean(setting)"
+        <UiSelect id="setting-channel-type" v-model="form.channelType" :disabled="Boolean(setting)"
           ><option value="webhook">{{ t('settings.notifications.types.webhook') }}</option>
           <option value="email">{{ t('settings.notifications.types.email') }}</option>
-          <option value="telegram">{{ t('settings.notifications.types.telegram') }}</option></UiNativeSelect
+          <option value="telegram">{{ t('settings.notifications.types.telegram') }}</option></UiSelect
         >
         <p v-if="setting" class="mt-1 text-xs text-text-secondary">
           {{ t('settings.notifications.form.channelTypeEditNote') }}
@@ -205,10 +205,10 @@
           ><UiInput id="webhook-url" v-model="form.url" type="url" required
         /></UiFormField>
         <UiFormField :label="t('settings.notifications.form.webhookMethod')"
-          ><UiNativeSelect id="webhook-method" v-model="form.method"
+          ><UiSelect id="webhook-method" v-model="form.method"
             ><option>POST</option>
             <option>GET</option>
-            <option>PUT</option></UiNativeSelect
+            <option>PUT</option></UiSelect
           ></UiFormField
         >
         <UiFormField :label="t('settings.notifications.form.webhookHeaders')" for-id="webhook-headers"

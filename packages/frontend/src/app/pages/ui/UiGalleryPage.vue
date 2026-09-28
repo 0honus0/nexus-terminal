@@ -10,7 +10,6 @@
     UiFormField,
     UiInfoHint,
     UiInput,
-    UiNativeSelect,
     UiPopover,
     UiSelect,
     UiSlider,
@@ -38,7 +37,7 @@
   const checkboxValue = ref(true);
   const checkboxOff = ref(false);
   const selectValue = ref<string | number | null>('balanced');
-  const nativeSelectValue = ref<string | number | null>('balanced');
+  const slotSelectValue = ref<string | number | null>('balanced');
   const tokenValues = ref<Array<string | number>>(['glass']);
   const dialogOpen = ref(false);
   const contextMenu = ref({ visible: false, x: 0, y: 0 });
@@ -267,19 +266,19 @@
         <UiSurface class="p-5">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <h2 class="text-sm font-semibold">Native select &amp; token input</h2>
+              <h2 class="text-sm font-semibold">Slot select &amp; token input</h2>
               <p class="mt-1 text-xs text-text-secondary">
-                Native and composed inputs share the same inset glass depth.
+                Declarative options and composed inputs share the same inset glass depth.
               </p>
             </div>
             <UiInfoHint text="Tooltips use the same floating glass material." label="Glass tooltip example" />
           </div>
           <div class="mt-4 grid gap-3">
-            <UiNativeSelect v-model="nativeSelectValue" aria-label="Native reasoning profile">
+            <UiSelect v-model="slotSelectValue" aria-label="Reasoning profile">
               <option value="balanced">Balanced</option>
               <option value="precise">Precise</option>
               <option value="fast">Fast</option>
-            </UiNativeSelect>
+            </UiSelect>
             <UiTokenInput
               v-model="tokenValues"
               :options="tokenOptions"

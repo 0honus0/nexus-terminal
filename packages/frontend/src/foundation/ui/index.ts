@@ -13,7 +13,6 @@ export { default as UiFormField } from './UiFormField.vue';
 export { default as UiInfoHint } from './UiInfoHint.vue';
 export { default as UiInput } from './UiInput.vue';
 export { default as UiModal } from './UiModal.vue';
-export { default as UiNativeSelect } from './UiNativeSelect.vue';
 export { default as UiPopover } from './UiPopover.vue';
 export { default as UiSelect } from './UiSelect.vue';
 export { default as UiSlider } from './UiSlider.vue';
