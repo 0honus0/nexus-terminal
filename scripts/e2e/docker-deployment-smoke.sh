@@ -397,7 +397,7 @@ for _ in {1..30}; do
 done
 [[ "$plugin_frontend_ready" -eq 1 ]] || { echo "Same-origin plugin route did not become ready." >&2; exit 1; }
 grep -Fq 'plugin-static-ok' "$plugin_frontend_body"
-grep -Eqi '^Content-Security-Policy: .*frame-ancestors http://127\.0\.0\.1:' "$plugin_frontend_headers"
+grep -Eqi "^Content-Security-Policy: .*frame-ancestors 'self' http://127\\.0\\.0\\.1:" "$plugin_frontend_headers"
 grep -Eqi '^Cache-Control: public, max-age=31536000, immutable' "$plugin_frontend_headers"
 grep -Eqi '^Access-Control-Allow-Origin: \*' "$plugin_frontend_headers"
 if grep -Eqi '^X-Frame-Options: *DENY' "$plugin_frontend_headers"; then
