@@ -1,8 +1,7 @@
 import type { ModelCapabilityRegistrySnapshot } from './model-capability-registry-source';
 
 export interface ModelCapabilityRegistryPersistedState {
-  schemaVersion: 1;
-  autoUpdate: boolean;
+  schemaVersion: 2;
   snapshot: ModelCapabilityRegistrySnapshot | null;
   lastAttemptAt: number | null;
   lastSuccessAt: number | null;

@@ -20,10 +20,32 @@ import type {
   ProviderView,
 } from '../../../packages/backend/src/modules/agent/ai/model.types';
 import { ProviderService } from '../../../packages/backend/src/modules/agent/ai/provider.service';
+import { installRuntimeModelCapabilityRegistry } from '../../../packages/backend/src/modules/agent/ai/model-capability-registry-runtime';
 import { clock } from './scenario-fixtures';
 import { ScriptedLanguageModel, StaticProviderRepository } from './scenario-benchmark-helpers';
 
 export const providerLiveCapabilityAuthorityScenario = async () => {
+  installRuntimeModelCapabilityRegistry({
+    schemaVersion: 1,
+    source: 'models.dev',
+    sourceUrl: 'https://models.dev/api.json?type=all',
+    sourceRevision: 'provider-live-capability-scenario',
+    generatedAt: clock.nowUnixSeconds(),
+    entries: {
+      'gpt-4o': {
+        contextWindow: 128_000,
+        maxOutputTokens: 16_384,
+        supportsTools: true,
+        supportsImageInput: true,
+        supportsFileInput: false,
+      },
+      'gpt-5.6-sol-2026-09-18': {
+        contextWindow: 1_050_000,
+        maxOutputTokens: 128_000,
+        supportsTools: true,
+      },
+    },
+  });
   const registryOnly = resolveProviderModelConfig({ id: 'gpt-4o' });
   assert.equal(registryOnly.contextWindow, 128_000);
   assert.equal(registryOnly.maxOutputTokens, 16_384);
@@ -473,6 +495,7 @@ export const providerLiveCapabilityAuthorityScenario = async () => {
     fs.rmSync(endpointDirectory, { recursive: true, force: true });
   }
 
+  installRuntimeModelCapabilityRegistry(null);
   return [
     { name: 'source_precedence_levels', value: 3, unit: 'sources' },
     { name: 'field_merge_cases', value: 5, unit: 'cases' },

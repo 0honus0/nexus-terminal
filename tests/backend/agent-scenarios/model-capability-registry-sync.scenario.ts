@@ -63,12 +63,20 @@ export const modelCapabilityRegistrySyncScenario = async () => {
       reasoning_options: [{ type: 'effort', values: ['low', 'medium', 'high'] }],
     },
   };
+  const opencodeModels = {
+    'deepseek-v4.1-flash': {
+      limit: { context: 777_777, output: 16_384 },
+      tool_call: true,
+      modalities: { input: ['text', 'image'], output: ['text'] },
+    },
+  };
   const snapshot = parseModelsDevRegistry(
     {
       openai: { models },
       amazon: { models: versionedModels },
       deepseek: { models: deepseekModels },
       google: { models: googleModels },
+      opencode: { models: opencodeModels },
     },
     { generatedAt, sourceRevision: 'scenario-revision-1' },
   );
@@ -82,8 +90,7 @@ export const modelCapabilityRegistrySyncScenario = async () => {
 
   class MemoryRegistryStore implements ModelCapabilityRegistryStorePort {
     state: ModelCapabilityRegistryPersistedState | null = {
-      schemaVersion: 1,
-      autoUpdate: false,
+      schemaVersion: 2,
       snapshot: null,
       lastAttemptAt: null,
       lastSuccessAt: null,
@@ -117,11 +124,8 @@ export const modelCapabilityRegistrySyncScenario = async () => {
 
   try {
     await registry.initialize();
-    assert.equal(registry.status().activeSource, 'builtin');
-    assert.equal(registry.status().autoUpdate, false);
-
-    const updated = await registry.refresh();
-    assert.equal(updated.activeSource, 'updated');
+    const updated = registry.status();
+    assert.equal(updated.activeSource, 'remote');
     assert.equal(updated.entryCount, Object.keys(snapshot.entries).length);
     assert.equal(updated.sourceRevision, 'scenario-revision-1');
     assert.equal(source.calls, 1);
@@ -179,13 +183,14 @@ export const modelCapabilityRegistrySyncScenario = async () => {
       null,
       'non-version product suffixes must not be stripped as family versions',
     );
+    assert.equal(
+      resolveModelCapabilityDefaults('deepseek/deepseek-v4.1-flash')?.contextWindow,
+      777_777,
+      'namespaced model ids should resolve exact models imported from the extended remote registry',
+    );
     const geminiHigh = resolveModelCapabilityDefaults('gemini-3.8-flash-high');
     assert.equal(geminiHigh?.contextWindow, 666_666, 'reasoning preset variants should inherit the base model limits');
     assert.equal(geminiHigh?.reasoning?.defaultEffort, 'high');
-
-    const enabled = await registry.setAutoUpdate(true);
-    assert.equal(enabled.autoUpdate, true);
-    assert.equal(store.state?.autoUpdate, true);
 
     source.failure = new Error('MODEL_REGISTRY_HTTP_503');
     await assert.rejects(() => registry.refresh(), /MODEL_REGISTRY_HTTP_503/);
@@ -199,8 +204,11 @@ export const modelCapabilityRegistrySyncScenario = async () => {
   class BlockingRegistrySource implements ModelCapabilityRegistrySourcePort {
     entered: (() => void) | null = null;
     release: (() => void) | null = null;
+    calls = 0;
 
     async fetch(): Promise<ModelCapabilityRegistryFetchResult> {
+      this.calls += 1;
+      if (this.calls === 1) return { state: 'updated', snapshot: structuredClone(snapshot) };
       this.entered?.();
       await new Promise<void>((resolve) => {
         this.release = resolve;
@@ -220,25 +228,13 @@ export const modelCapabilityRegistrySyncScenario = async () => {
     });
     blockingSource.entered = fetchEnteredResolve;
     const refresh = serializedRegistry.refresh();
+    const duplicateRefresh = serializedRegistry.refresh();
+    assert.equal(duplicateRefresh, refresh, 'concurrent remote refreshes should share one request');
     await fetchEntered;
 
-    let toggleSettled = false;
-    const toggle = serializedRegistry.setAutoUpdate(true).finally(() => {
-      toggleSettled = true;
-    });
-    await Promise.resolve();
-    assert.equal(toggleSettled, false, 'auto-update mutation must wait behind an in-flight registry refresh');
-    assert.equal(
-      serializedStore.state?.autoUpdate,
-      false,
-      'queued auto-update must not persist before refresh completes',
-    );
-
     blockingSource.release?.();
-    await refresh;
-    const toggled = await toggle;
-    assert.equal(toggled.autoUpdate, true);
-    assert.equal(serializedStore.state?.autoUpdate, true);
+    await Promise.all([refresh, duplicateRefresh]);
+    assert.equal(blockingSource.calls, 2);
   } finally {
     serializedRegistry.dispose();
     installRuntimeModelCapabilityRegistry(null);
@@ -248,7 +244,7 @@ export const modelCapabilityRegistrySyncScenario = async () => {
     { name: 'synced_model_identifiers', value: Object.keys(snapshot.entries).length, unit: 'models' },
     { name: 'keeper_style_model_matches', value: 11, unit: 'cases' },
     { name: 'manual_refresh_calls', value: source.calls, unit: 'calls' },
-    { name: 'registry_mutations_serialized', value: 1, unit: 'boolean' },
+    { name: 'registry_refresh_deduplicated', value: 1, unit: 'boolean' },
     { name: 'update_failure_preserved_snapshot', value: 1, unit: 'boolean' },
   ];
 };

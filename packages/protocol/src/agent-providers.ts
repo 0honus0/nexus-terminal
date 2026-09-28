@@ -173,16 +173,13 @@ export interface AgentAvailableModelDto {
 
 export interface AgentModelRegistryStatusDto {
   sourceUrl: string;
-  autoUpdate: boolean;
-  activeSource: 'builtin' | 'updated';
+  activeSource: 'remote' | 'unavailable';
   entryCount: number;
-  generatedAt: number;
+  generatedAt: number | null;
   sourceRevision: string | null;
-  builtinGeneratedAt: number;
   lastAttemptAt: number | null;
   lastSuccessAt: number | null;
   lastErrorCode: string | null;
-  nextAutoUpdateAt: number | null;
 }
 
 export interface AgentModelRegistryResolveQueryDto {
@@ -192,8 +189,4 @@ export interface AgentModelRegistryResolveQueryDto {
 export interface AgentModelRegistryResolveResponseDto {
   modelId: string;
   defaults: AgentModelCapabilityDefaultsDto | null;
-}
-
-export interface AgentModelRegistryUpdateRequestDto {
-  autoUpdate: boolean;
 }

@@ -4,7 +4,6 @@ import type {
   AgentModelRegistryResolveQueryDto,
   AgentModelRegistryResolveResponseDto,
   AgentModelRegistryStatusDto,
-  AgentModelRegistryUpdateRequestDto,
   AgentProviderCreateRequestDto,
   AgentProviderDeleteQueryDto,
   AgentProviderDeleteResponseDto,
@@ -58,16 +57,6 @@ export const createProviderApi = () => ({
           {},
           { headers: await mutationHeaders() },
         )
-      ).data,
-    );
-  },
-  async setModelRegistryAutoUpdate(autoUpdate: boolean): Promise<AgentModelRegistryStatusDto> {
-    const input: AgentModelRegistryUpdateRequestDto = { autoUpdate };
-    return unwrap(
-      (
-        await httpClient.patch<AgentEnvelopeDto<AgentModelRegistryStatusDto>>('/agent/ai/model-registry', input, {
-          headers: await mutationHeaders(),
-        })
       ).data,
     );
   },

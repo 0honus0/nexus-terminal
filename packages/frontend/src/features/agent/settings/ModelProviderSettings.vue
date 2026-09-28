@@ -13,6 +13,7 @@
     type UiSelectOption,
   } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
+  import { useResizeHandle } from '@/foundation/interaction';
   import { formatAgentDate } from '../locale-format';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import { resolveProviderDefaultModelStatus } from './provider-default-model-status';
@@ -75,6 +76,7 @@
 
   const operationFeedback = useOperationFeedback('agent.settings.providers');
   const providerCredentialInputId = `agent-provider-credential-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const providerModelInputId = `agent-provider-model-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
   // 添加服务商弹窗状态与表单
   const modalOpen = ref(false);
@@ -97,7 +99,7 @@
       const status = await agentApi.modelRegistryStatus();
       if (generation === modelRegistryGeneration) modelRegistryStatus.value = status;
     } catch {
-      // Supplemental status only; provider management still works with the built-in snapshot.
+      // Supplemental status only; provider management remains available without the remote registry.
     }
   };
 
@@ -114,26 +116,6 @@
       operationFeedback.notifyError({
         operation: 'refresh-model-registry',
         message: formatAgentApiError(cause, t('agent.settings.providers.registryUpdateFailed'), t),
-        cause,
-      });
-      await loadModelRegistryStatus();
-    } finally {
-      modelRegistryBusy.value = false;
-    }
-  };
-
-  const setModelRegistryAutoUpdate = async (enabled: boolean): Promise<void> => {
-    if (modelRegistryBusy.value) return;
-    modelRegistryBusy.value = true;
-    const generation = ++modelRegistryGeneration;
-    try {
-      const status = await agentApi.setModelRegistryAutoUpdate(enabled);
-      if (generation === modelRegistryGeneration) modelRegistryStatus.value = status;
-      emitConfigurationChanged();
-    } catch (cause) {
-      operationFeedback.notifyError({
-        operation: 'set-model-registry-auto-update',
-        message: formatAgentApiError(cause, t('agent.ui.saveFailed'), t),
         cause,
       });
       await loadModelRegistryStatus();
@@ -227,14 +209,63 @@
 
   const isPullingModels = ref(false);
   const pulledModels = ref<AgentDiscoveredProviderModelDto[]>([]);
+  const pulledModelQuery = ref('');
   const selectedPulledModelKey = ref<string | null>(null);
   const importAllPulled = ref(false);
+  const registryLookupBusy = ref(false);
+  const registryLookupAppliedModelId = ref<string | null>(null);
+  const providerPanelWidth = ref<number | null>(null);
+  const providerPanelHeight = ref<number | null>(null);
   let modalGeneration = 0;
   let pullGeneration = 0;
+  let registryLookupGeneration = 0;
+
+  const providerPanelStyle = computed(() =>
+    providerPanelWidth.value === null || providerPanelHeight.value === null
+      ? undefined
+      : {
+          width: `${providerPanelWidth.value}px`,
+          height: `${providerPanelHeight.value}px`,
+        },
+  );
+  const providerPanelResize = useResizeHandle({
+    width: computed({
+      get: () => providerPanelWidth.value ?? 576,
+      set: (value) => (providerPanelWidth.value = value),
+    }),
+    height: computed({
+      get: () => providerPanelHeight.value ?? 600,
+      set: (value) => (providerPanelHeight.value = value),
+    }),
+    minWidth: () => Math.min(512, window.innerWidth - 32),
+    minHeight: () => Math.min(480, window.innerHeight - 32),
+    maxWidth: () => window.innerWidth - 32,
+    maxHeight: () => window.innerHeight - 32,
+    widthMultiplier: 2,
+    heightMultiplier: 2,
+  });
+
+  const startProviderPanelResize = (event: PointerEvent): void => {
+    if (event.button !== 0) return;
+    const panel = (event.currentTarget as HTMLElement | null)?.closest<HTMLElement>('.provider-add-panel');
+    if (!panel) return;
+    const bounds = panel.getBoundingClientRect();
+    providerPanelWidth.value = bounds.width;
+    providerPanelHeight.value = bounds.height;
+    providerPanelResize.startResize(event);
+  };
+
+  const clearPulledModels = (): void => {
+    pulledModels.value = [];
+    pulledModelQuery.value = '';
+    selectedPulledModelKey.value = null;
+    importAllPulled.value = false;
+  };
 
   const openAddModal = () => {
     modalGeneration += 1;
     pullGeneration += 1;
+    registryLookupGeneration += 1;
     form.displayName = '';
     form.baseUrl = '';
     form.protocol = 'chat-completions';
@@ -246,14 +277,36 @@
     form.supportsImageInput = false;
     form.supportsFileInput = false;
     isPullingModels.value = false;
-    pulledModels.value = [];
-    selectedPulledModelKey.value = null;
-    importAllPulled.value = false;
+    registryLookupBusy.value = false;
+    registryLookupAppliedModelId.value = null;
+    providerPanelWidth.value = null;
+    providerPanelHeight.value = null;
+    clearPulledModels();
     modalError.value = '';
     modalTestResult.value = null;
     showApiKey.value = false;
     modalOpen.value = true;
   };
+
+  watch(
+    () => [form.baseUrl, form.credential] as const,
+    ([baseUrl, credential], [previousBaseUrl, previousCredential]) => {
+      if (baseUrl === previousBaseUrl && credential === previousCredential) return;
+      pullGeneration += 1;
+      isPullingModels.value = false;
+      clearPulledModels();
+    },
+  );
+
+  watch(
+    () => form.modelId,
+    (modelId, previousModelId) => {
+      if (modelId === previousModelId) return;
+      registryLookupGeneration += 1;
+      registryLookupBusy.value = false;
+      if (modelId.trim() !== registryLookupAppliedModelId.value) registryLookupAppliedModelId.value = null;
+    },
+  );
 
   const applyPulledModel = (model: AgentDiscoveredProviderModelDto) => {
     selectedPulledModelKey.value = model.id;
@@ -273,6 +326,7 @@
       return;
     }
     modalError.value = '';
+    clearPulledModels();
     isPullingModels.value = true;
     const requestModalGeneration = modalGeneration;
     const requestGeneration = ++pullGeneration;
@@ -305,7 +359,6 @@
     } catch (cause) {
       if (!isCurrentRequest()) return;
       const errMsg = formatAgentApiError(cause, t('agent.settings.providers.pullFailed'), t);
-      modalError.value = errMsg;
       operationFeedback.notifyError({ operation: 'pull-models', message: errMsg, cause });
     } finally {
       if (requestModalGeneration === modalGeneration && requestGeneration === pullGeneration) {
@@ -314,18 +367,13 @@
     }
   };
 
-  const onSelectPulledModel = (value: unknown) => {
-    const found = pulledModels.value.find((m) => m.id === value);
-    if (found) applyPulledModel(found);
-  };
-
-  const pulledModelOptions = computed<UiSelectOption[]>(() =>
-    pulledModels.value.map((m) => ({
-      value: m.id,
-      label: m.id,
-      description: m.ownedBy ? t('agent.settings.providers.ownedBy', { owner: m.ownedBy }) : undefined,
-    })),
-  );
+  const filteredPulledModels = computed(() => {
+    const query = pulledModelQuery.value.trim().toLowerCase();
+    if (!query) return pulledModels.value;
+    return pulledModels.value.filter(
+      (model) => model.id.toLowerCase().includes(query) || model.ownedBy?.toLowerCase().includes(query),
+    );
+  });
 
   const closeModal = () => {
     if (modalTesting.value) return;
@@ -637,6 +685,43 @@
       return (await agentApi.resolveModelRegistry(modelId)).defaults;
     } catch {
       return null;
+    }
+  };
+
+  const applyRegistryDefaultsToForm = (defaults: AgentModelCapabilityDefaultsDto): void => {
+    if (defaults.contextWindow !== undefined) form.contextWindow = defaults.contextWindow;
+    if (defaults.maxOutputTokens !== undefined) form.maxOutputTokens = defaults.maxOutputTokens;
+    if (defaults.supportsTools !== undefined) form.supportsTools = defaults.supportsTools;
+    if (defaults.supportsImageInput !== undefined) form.supportsImageInput = defaults.supportsImageInput;
+    if (defaults.supportsFileInput !== undefined) form.supportsFileInput = defaults.supportsFileInput;
+  };
+
+  const loadInitialModelFromRegistry = async (notifyResult = true): Promise<void> => {
+    const modelId = form.modelId.trim();
+    if (!modelId || registryLookupBusy.value) return;
+
+    const requestModalGeneration = modalGeneration;
+    const requestGeneration = ++registryLookupGeneration;
+    registryLookupBusy.value = true;
+    registryLookupAppliedModelId.value = null;
+    const isCurrentRequest = (): boolean =>
+      modalOpen.value &&
+      requestModalGeneration === modalGeneration &&
+      requestGeneration === registryLookupGeneration &&
+      form.modelId.trim() === modelId;
+
+    try {
+      const defaults = await resolveRegistryDefaults(modelId);
+      if (!isCurrentRequest()) return;
+      if (!defaults) {
+        if (notifyResult) operationFeedback.notifyInfo(t('agent.settings.providers.registryNoMatch'));
+        return;
+      }
+      applyRegistryDefaultsToForm(defaults);
+      registryLookupAppliedModelId.value = modelId;
+      if (notifyResult) operationFeedback.notifySuccess(t('agent.settings.providers.registryApplied'));
+    } finally {
+      if (requestGeneration === registryLookupGeneration) registryLookupBusy.value = false;
     }
   };
 
@@ -1135,8 +1220,10 @@
         <div class="flex flex-wrap items-center gap-2 text-text-secondary">
           <span class="font-medium text-foreground">{{ $t('agent.settings.providers.registryTitle') }}</span>
           <span>{{ modelRegistryStatus.entryCount }} {{ $t('agent.settings.providers.registryModels') }}</span>
-          <span>·</span>
-          <span>{{ formatRegistryDate(modelRegistryStatus.generatedAt) }}</span>
+          <template v-if="modelRegistryStatus.generatedAt">
+            <span>·</span>
+            <span>{{ formatRegistryDate(modelRegistryStatus.generatedAt) }}</span>
+          </template>
           <span
             v-if="modelRegistryStatus.lastErrorCode"
             class="rounded bg-error/10 px-1.5 py-0.5 font-mono text-[11px] text-error"
@@ -1145,14 +1232,6 @@
           </span>
         </div>
         <div class="flex items-center gap-2">
-          <label class="flex items-center gap-1.5 text-text-secondary">
-            <UiCheckbox
-              :model-value="modelRegistryStatus.autoUpdate"
-              :disabled="modelRegistryBusy"
-              @update:model-value="setModelRegistryAutoUpdate"
-            />
-            <span>{{ $t('agent.settings.providers.registryAutoUpdate') }}</span>
-          </label>
           <UiButton
             appearance="soft"
             tone="neutral"
@@ -1975,9 +2054,25 @@
     :close-on-escape="!modalTesting"
     :focus-on-open="true"
     :restore-focus="true"
-    panel-class="max-w-xl p-5 sm:p-6 rounded-2xl"
+    overlay-class="provider-add-overlay"
+    panel-class="provider-add-panel max-w-xl p-5 sm:p-6 rounded-2xl"
+    :panel-style="providerPanelStyle"
     @close="closeModal"
   >
+    <template #panel-overlay>
+      <button
+        type="button"
+        class="provider-add-resize-handle absolute bottom-0 right-0 z-40 h-6 w-6 touch-none select-none cursor-nwse-resize rounded-br-2xl bg-transparent text-text-secondary/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+        :title="$t('agent.settings.providers.resize')"
+        :aria-label="$t('agent.settings.providers.resize')"
+        @pointerdown.stop="startProviderPanelResize"
+      >
+        <svg class="absolute bottom-1 right-1 h-3 w-3" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M10.5 1.5a9 9 0 0 1-9 9" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" />
+        </svg>
+      </button>
+    </template>
+
     <div class="space-y-4">
       <p class="text-xs text-text-secondary leading-relaxed">
         {{ $t('agent.settings.providers.modalDescription') }}
@@ -1995,7 +2090,7 @@
               v-model="form.displayName"
               required
               data-no-highlight
-              class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 text-xs text-foreground outline-none focus:border-border-hover"
+              class="provider-modal-input h-9 w-full rounded-lg px-3 text-xs text-foreground outline-none"
               :placeholder="$t('agent.settings.providers.namePlaceholder')"
             />
           </label>
@@ -2004,7 +2099,7 @@
               $t('agent.settings.providers.protocol')
             }}</span>
             <UiSelect
-              class="w-full"
+              class="provider-modal-select w-full"
               :model-value="form.protocol"
               :options="[
                 { value: 'chat-completions', label: $t('agent.settings.providers.protocolChat') },
@@ -2021,13 +2116,25 @@
             >{{ $t('agent.settings.providers.baseUrl') }} <span class="text-error">*</span></span
           >
           <div class="relative flex items-center">
-            <i class="fa-solid fa-link absolute left-3 text-text-secondary text-xs pointer-events-none"></i>
+            <svg
+              class="pointer-events-none absolute left-3 h-4 w-4 text-foreground/80"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
             <input
               v-model="form.baseUrl"
               required
               type="url"
               data-no-highlight
-              class="h-9 w-full rounded-lg border border-border/80 bg-background pl-8 pr-3 font-mono text-xs text-foreground outline-none focus:border-border-hover"
+              class="provider-modal-input h-9 w-full rounded-lg pl-9 pr-3 font-mono text-xs text-foreground outline-none"
               :placeholder="$t('agent.settings.providers.baseUrlPlaceholder')"
             />
           </div>
@@ -2039,19 +2146,33 @@
             $t('agent.settings.providers.credential')
           }}</label>
           <div class="relative flex items-center">
-            <i class="fa-solid fa-key absolute left-3 text-text-secondary text-xs pointer-events-none"></i>
+            <svg
+              class="pointer-events-none absolute left-3 h-4 w-4 text-foreground/80"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="7.5" cy="15.5" r="4.5" />
+              <path d="m10.7 12.3 8.3-8.3" />
+              <path d="m15 8 2 2" />
+              <path d="m17 6 2 2" />
+            </svg>
             <input
               :id="providerCredentialInputId"
               v-model="form.credential"
               :type="showApiKey ? 'text' : 'password'"
               autocomplete="new-password"
               data-no-highlight
-              class="h-9 w-full rounded-lg border border-border/80 bg-background pl-8 pr-9 font-mono text-xs text-foreground outline-none focus:border-border-hover"
+              class="provider-modal-input h-9 w-full rounded-lg pl-9 pr-9 font-mono text-xs text-foreground outline-none"
               :placeholder="$t('agent.settings.providers.apiKeyPlaceholder')"
             />
             <button
               type="button"
-              class="absolute right-2.5 text-text-secondary hover:text-foreground transition-colors cursor-pointer"
+              class="absolute right-2.5 text-foreground/60 hover:text-foreground transition-colors cursor-pointer"
               :aria-label="
                 $t(showApiKey ? 'agent.settings.providers.hideCredential' : 'agent.settings.providers.showCredential')
               "
@@ -2059,7 +2180,7 @@
             >
               <i
                 :class="showApiKey ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"
-                class="text-xs"
+                class="text-[13px]"
                 aria-hidden="true"
               ></i>
             </button>
@@ -2091,7 +2212,7 @@
           </UiButton>
         </div>
 
-        <!-- 若已成功拉取模型，提供下拉选择与批量导入 -->
+        <!-- 若已成功拉取模型，提供搜索选择与批量导入 -->
         <div v-if="pulledModels.length > 0" class="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -2103,14 +2224,57 @@
               <span>{{ $t('agent.settings.providers.importAllPulled', { count: pulledModels.length }) }}</span>
             </label>
           </div>
-          <UiSelect
-            :model-value="selectedPulledModelKey"
-            :options="pulledModelOptions"
-            density="compact"
-            class="w-full"
-            panel-class="max-h-60"
-            @update:model-value="onSelectPulledModel"
-          />
+          <div class="relative flex items-center">
+            <i
+              class="fa-solid fa-magnifying-glass absolute left-3 text-[11px] text-text-secondary pointer-events-none"
+            ></i>
+            <input
+              v-model="pulledModelQuery"
+              type="search"
+              autocomplete="off"
+              data-no-highlight
+              class="provider-modal-input h-8.5 w-full rounded-lg pl-8 pr-14 text-xs text-foreground outline-none"
+              :placeholder="$t('agent.settings.providers.filterPlaceholder')"
+            />
+            <span class="pointer-events-none absolute right-3 text-[10px] tabular-nums text-text-secondary">
+              {{ filteredPulledModels.length }}/{{ pulledModels.length }}
+            </span>
+          </div>
+          <div
+            v-if="filteredPulledModels.length > 0"
+            class="max-h-44 overflow-y-auto rounded-lg border border-border/50 bg-card/65 p-1"
+          >
+            <button
+              v-for="model in filteredPulledModels"
+              :key="model.id"
+              type="button"
+              class="flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors"
+              :class="
+                selectedPulledModelKey === model.id
+                  ? 'border-primary/45 bg-primary/10 text-foreground'
+                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground'
+              "
+              @click="applyPulledModel(model)"
+            >
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-mono text-[11px]">{{ model.id }}</span>
+                <span v-if="model.ownedBy" class="mt-0.5 block truncate text-[10px] text-text-secondary/75">
+                  {{ $t('agent.settings.providers.ownedBy', { owner: model.ownedBy }) }}
+                </span>
+              </span>
+              <i
+                v-if="selectedPulledModelKey === model.id"
+                class="fa-solid fa-check shrink-0 text-[10px] text-primary"
+                aria-hidden="true"
+              ></i>
+            </button>
+          </div>
+          <div
+            v-else
+            class="rounded-lg border border-dashed border-border/60 px-3 py-4 text-center text-xs text-text-secondary"
+          >
+            {{ $t('agent.settings.providers.noMatchingModels') }}
+          </div>
         </div>
 
         <!-- 初始模型配置 -->
@@ -2121,6 +2285,22 @@
               <span>{{ $t('agent.settings.providers.initialModel') }}</span>
             </span>
             <div class="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-link hover:bg-link/10 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="registryLookupBusy || !form.modelId.trim()"
+                @click="loadInitialModelFromRegistry(true)"
+              >
+                <i
+                  class="text-[9px]"
+                  :class="registryLookupBusy ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-database'"
+                ></i>
+                {{
+                  registryLookupBusy
+                    ? $t('agent.settings.providers.loadingRegistry')
+                    : $t('agent.settings.providers.loadFromRegistry')
+                }}
+              </button>
               <label
                 class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none"
               >
@@ -2143,18 +2323,27 @@
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <label class="block">
-              <span class="mb-1 block text-[11px] text-text-secondary"
-                >{{ $t('agent.settings.providers.model') }} <span class="text-error">*</span></span
-              >
+            <div class="block">
+              <label :for="providerModelInputId" class="mb-1 block text-[11px] text-text-secondary">
+                {{ $t('agent.settings.providers.model') }} <span class="text-error">*</span>
+              </label>
               <input
+                :id="providerModelInputId"
                 v-model="form.modelId"
                 required
                 data-no-highlight
-                class="h-8.5 w-full rounded-lg border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground outline-none focus:border-border-hover"
+                class="provider-modal-input h-8.5 w-full rounded-lg px-2.5 font-mono text-xs text-foreground outline-none"
                 :placeholder="$t('agent.settings.providers.modelPlaceholder')"
+                @change="loadInitialModelFromRegistry(false)"
               />
-            </label>
+              <div
+                v-if="registryLookupAppliedModelId === form.modelId.trim()"
+                class="mt-1 flex items-center gap-1 text-[10px] text-success"
+              >
+                <i class="fa-solid fa-circle-check"></i>
+                <span>{{ $t('agent.settings.providers.registryApplied') }}</span>
+              </div>
+            </div>
 
             <label class="block">
               <span class="mb-1 block text-[11px] text-text-secondary">{{
@@ -2165,7 +2354,7 @@
                 type="number"
                 min="1"
                 data-no-highlight
-                class="h-8.5 w-full rounded-lg border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground outline-none focus:border-border-hover"
+                class="provider-modal-input h-8.5 w-full rounded-lg px-2.5 font-mono text-xs text-foreground outline-none"
               />
             </label>
 
@@ -2178,7 +2367,7 @@
                 type="number"
                 min="1"
                 data-no-highlight
-                class="h-8.5 w-full rounded-lg border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground outline-none focus:border-border-hover"
+                class="provider-modal-input h-8.5 w-full rounded-lg px-2.5 font-mono text-xs text-foreground outline-none"
               />
             </label>
           </div>

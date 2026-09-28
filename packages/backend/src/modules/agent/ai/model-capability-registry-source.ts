@@ -1,7 +1,6 @@
 import type { ModelCapabilityDefaults, ReasoningEffort } from './model.types';
 
 export const MODEL_REGISTRY_SOURCE_URL = 'https://models.dev/api.json?type=all';
-export const MODEL_REGISTRY_AUTO_UPDATE_INTERVAL_SECONDS = 24 * 60 * 60;
 export const MODEL_REGISTRY_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 
 export const MODEL_REGISTRY_PROVIDERS = [
@@ -21,6 +20,7 @@ export const MODEL_REGISTRY_PROVIDERS = [
   'microsoft',
   'nvidia',
   'bytedance-seed',
+  'opencode',
 ] as const;
 
 export interface ModelCapabilityRegistrySnapshot {

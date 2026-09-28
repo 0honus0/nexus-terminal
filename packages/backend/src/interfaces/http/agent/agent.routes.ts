@@ -32,7 +32,6 @@ import type {
   AgentModelRegistryResolveQueryDto,
   AgentModelRegistryResolveResponseDto,
   AgentModelRegistryStatusDto,
-  AgentModelRegistryUpdateRequestDto,
   AgentProviderCreateRequestDto,
   AgentProviderDeleteQueryDto,
   AgentProviderDeleteResponseDto,
@@ -510,16 +509,13 @@ const modelRegistryStatusDto = (
   status: ReturnType<AgentModelRegistryFacade['status']>,
 ): AgentModelRegistryStatusDto => ({
   sourceUrl: status.sourceUrl,
-  autoUpdate: status.autoUpdate,
   activeSource: status.activeSource,
   entryCount: status.entryCount,
   generatedAt: status.generatedAt,
   sourceRevision: status.sourceRevision,
-  builtinGeneratedAt: status.builtinGeneratedAt,
   lastAttemptAt: status.lastAttemptAt,
   lastSuccessAt: status.lastSuccessAt,
   lastErrorCode: status.lastErrorCode,
-  nextAutoUpdateAt: status.nextAutoUpdateAt,
 });
 
 export const createAgentRouter = (dependencies: AgentRouterDependencies): Router => {
@@ -972,27 +968,6 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentUserId(request);
       if (!isRecord(request.body) || !hasOnlyKeys(request.body, [])) throw new Error('VALIDATION_FAILED');
       agentData(request, response, modelRegistryStatusDto(await dependencies.modelRegistry.refresh()));
-    }),
-  );
-
-  router.patch(
-    '/ai/model-registry',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      agentUserId(request);
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['autoUpdate']) ||
-        typeof request.body.autoUpdate !== 'boolean'
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      const input: AgentModelRegistryUpdateRequestDto = { autoUpdate: request.body.autoUpdate };
-      agentData(
-        request,
-        response,
-        modelRegistryStatusDto(await dependencies.modelRegistry.setAutoUpdate(input.autoUpdate)),
-      );
     }),
   );
 

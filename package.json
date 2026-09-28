@@ -25,7 +25,6 @@
     "format:all:check": "prettier --check \"{packages,tests,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"{AGENTS.md,package.json}\"",
     "build:agent-runner": "pnpm --filter @nexus-terminal/agent-runner build",
     "perf:database-runtime": "pnpm --filter @nexus-terminal/backend exec tsx ../../scripts/backend/perf/database-runtime-benchmark.ts",
-    "agent:model-registry:sync": "pnpm --filter @nexus-terminal/backend exec tsx tools/sync-model-capability-registry.ts",
     "check": "node scripts/checks/run-all.mjs",
     "lint": "pnpm run lint:frontend && pnpm run lint:agent",
     "lint:frontend": "eslint packages/frontend/src",

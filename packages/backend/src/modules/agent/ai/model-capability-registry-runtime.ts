@@ -1,4 +1,3 @@
-import { BUILTIN_MODEL_CAPABILITY_REGISTRY } from '../data/model-capability-registry.snapshot';
 import type { ModelCapabilityDefaults } from './model.types';
 import {
   createModelCapabilityRegistryIndex,
@@ -8,8 +7,6 @@ import {
 } from './model-capability-matcher';
 import type { ModelCapabilityRegistrySnapshot } from './model-capability-registry-source';
 
-const builtinEntries = BUILTIN_MODEL_CAPABILITY_REGISTRY.entries as Readonly<Record<string, ModelCapabilityDefaults>>;
-const builtinIndex = createModelCapabilityRegistryIndex(builtinEntries);
 let runtimeSnapshot: ModelCapabilityRegistrySnapshot | null = null;
 let runtimeIndex: ModelCapabilityRegistryIndex | null = null;
 
@@ -38,17 +35,9 @@ export const installRuntimeModelCapabilityRegistry = (snapshot: ModelCapabilityR
 };
 
 export const modelCapabilityRegistryMatch = (modelId: string): ModelCapabilityRegistryMatch | null => {
-  const match =
-    (runtimeIndex ? matchModelCapabilityRegistry(modelId, runtimeIndex) : null) ??
-    matchModelCapabilityRegistry(modelId, builtinIndex);
+  const match = runtimeIndex ? matchModelCapabilityRegistry(modelId, runtimeIndex) : null;
   return match ? { ...match, defaults: cloneDefaults(match.defaults) } : null;
 };
-
-export const modelCapabilityRegistryBuiltinStatus = () => ({
-  entryCount: Object.keys(BUILTIN_MODEL_CAPABILITY_REGISTRY.entries).length,
-  generatedAt: BUILTIN_MODEL_CAPABILITY_REGISTRY.generatedAt,
-  sourceRevision: BUILTIN_MODEL_CAPABILITY_REGISTRY.sourceRevision,
-});
 
 export const modelCapabilityRegistryRuntimeStatus = () =>
   runtimeSnapshot

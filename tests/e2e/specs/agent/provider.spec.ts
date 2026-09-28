@@ -32,16 +32,16 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
-  await step('local model registry exposes broad built-in capabilities without a network refresh', async () => {
+  await step('Agent initialization loads remote model capabilities', async () => {
     const status = await request.get('/api/v1/agent/ai/model-registry');
     expect(status.ok(), await status.text()).toBeTruthy();
     const statusBody = (await status.json()) as Envelope<{
       sourceUrl: string;
-      activeSource: 'builtin' | 'updated';
+      activeSource: 'remote' | 'unavailable';
       entryCount: number;
-      autoUpdate: boolean;
     }>;
     expect(statusBody.data.sourceUrl).toBe('https://models.dev/api.json?type=all');
+    expect(statusBody.data.activeSource).toBe('remote');
     expect(statusBody.data.entryCount).toBeGreaterThan(100);
 
     for (const [modelId, contextWindow, maxOutputTokens] of [
@@ -58,6 +58,48 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
   });
 
   let provider!: ProviderView;
+
+  await step('unsaved provider endpoint can discover models before configuration is created', async () => {
+    const discovered = await request.post('/api/v1/agent/ai/providers/discover-endpoint-models', {
+      headers,
+      data: {
+        baseUrl: providerBase,
+        credential: providerSecret,
+      },
+    });
+    expect(discovered.ok(), await discovered.text()).toBeTruthy();
+    await expect(discovered.json()).resolves.toMatchObject({
+      data: [
+        { id: 'e2e-model', ownedBy: 'nexus-e2e', createdAt: 1700000000 },
+        { id: 'e2e-model-alt', ownedBy: 'nexus-e2e', createdAt: 1700000001 },
+      ],
+    });
+
+    const directBackendOrigin = new URL(E2E_URLS.backendOrigin);
+    directBackendOrigin.hostname = 'localhost';
+    const directOrigin = directBackendOrigin.origin;
+    const sameOriginDiscovery = await request.post(
+      `${directOrigin}/api/v1/agent/ai/providers/discover-endpoint-models`,
+      {
+        headers: { ...headers, Origin: directOrigin },
+        data: {
+          baseUrl: providerBase,
+          credential: providerSecret,
+        },
+      },
+    );
+    expect(sameOriginDiscovery.ok(), await sameOriginDiscovery.text()).toBeTruthy();
+
+    const mismatchedOrigin = await request.post(`${directOrigin}/api/v1/agent/ai/providers/discover-endpoint-models`, {
+      headers: { ...headers, Origin: 'https://cross-origin.invalid' },
+      data: {
+        baseUrl: providerBase,
+        credential: providerSecret,
+      },
+    });
+    expect(mismatchedOrigin.status()).toBe(403);
+    await expect(mismatchedOrigin.json()).resolves.toMatchObject({ error: { code: 'CSRF_REJECTED' } });
+  });
 
   await step('configured model endpoints can be saved without a private-network exception list', async () => {
     const created = await request.post('/api/v1/agent/ai/providers', {

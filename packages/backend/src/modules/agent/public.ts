@@ -218,7 +218,6 @@ export interface AgentModelRegistryFacade {
   resolve(modelId: string): ModelCapabilityDefaults | null;
   status(): ModelCapabilityRegistryStatus;
   refresh(): Promise<ModelCapabilityRegistryStatus>;
-  setAutoUpdate(enabled: boolean): Promise<ModelCapabilityRegistryStatus>;
 }
 
 export interface AgentArtifactFacade {

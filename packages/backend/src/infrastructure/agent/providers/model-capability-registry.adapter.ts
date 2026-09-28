@@ -22,7 +22,7 @@ const unixSecondsOrNull = (value: unknown): number | null =>
   value === null || (Number.isSafeInteger(value) && Number(value) > 0) ? (value as number | null) : null;
 
 const parsePersistedState = (raw: unknown): ModelCapabilityRegistryPersistedState => {
-  if (!isRecord(raw) || raw.schemaVersion !== 1 || typeof raw.autoUpdate !== 'boolean') {
+  if (!isRecord(raw) || raw.schemaVersion !== 2) {
     throw new Error('MODEL_REGISTRY_CACHE_INVALID');
   }
   const snapshot = raw.snapshot === null ? null : validateModelCapabilityRegistrySnapshot(raw.snapshot);
@@ -33,8 +33,7 @@ const parsePersistedState = (raw: unknown): ModelCapabilityRegistryPersistedStat
         ? raw.lastErrorCode
         : null;
   return {
-    schemaVersion: 1,
-    autoUpdate: raw.autoUpdate,
+    schemaVersion: 2,
     snapshot,
     lastAttemptAt: unixSecondsOrNull(raw.lastAttemptAt),
     lastSuccessAt: unixSecondsOrNull(raw.lastSuccessAt),
