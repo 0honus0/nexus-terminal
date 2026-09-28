@@ -67,7 +67,7 @@
   const onFrameLoad = (event: Event): void => {
     const loadedFrame = event.currentTarget;
     if (loadedFrame instanceof HTMLIFrameElement && suppressedFrameLoad === loadedFrame) {
-      suppressedFrameLoad = null;
+      if (status.value === 'ready') suppressedFrameLoad = null;
       return;
     }
     if (status.value !== 'ready' || !descriptor.value) return;

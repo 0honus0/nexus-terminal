@@ -360,6 +360,9 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       expect(after).toEqual(before);
       expect(await page.evaluate(() => window.scrollX)).toBe(0);
       await page.keyboard.press('Control+C');
+      // The E2E SSH fixture exposes the shell through pipes, so submit a newline to drain
+      // the synthetic line after verifying that Ctrl+C left the browser transport.
+      await page.keyboard.press('Enter');
 
       // Simulate IME composition near end of line
       await input.evaluate((element) => {
@@ -374,6 +377,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
         element.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
       });
       await page.keyboard.press('Control+C');
+      await page.keyboard.press('Enter');
     },
   );
 
