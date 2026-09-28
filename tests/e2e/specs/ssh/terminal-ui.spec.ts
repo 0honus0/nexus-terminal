@@ -360,9 +360,6 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       expect(after).toEqual(before);
       expect(await page.evaluate(() => window.scrollX)).toBe(0);
       await page.keyboard.press('Control+C');
-      // The E2E SSH fixture exposes the shell through pipes, so submit a newline to drain
-      // the synthetic line after verifying that Ctrl+C left the browser transport.
-      await page.keyboard.press('Enter');
 
       // Simulate IME composition near end of line
       await input.evaluate((element) => {
@@ -377,7 +374,18 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
         element.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
       });
       await page.keyboard.press('Control+C');
-      await page.keyboard.press('Enter');
+
+      // The E2E SSH shell is interactive over pipes rather than a controlling TTY, so Ctrl+C is
+      // an input byte instead of a terminal-driver signal. Submit the pending line before later
+      // command-bar checks so this layout scenario cannot leak its 600-byte fixture into them.
+      const resetMarker = `TERMINAL_INPUT_RESET_${crypto.randomUUID()}`;
+      await commandInput.fill('');
+      await commandInput.press('Enter');
+      await commandInput.fill(`printf '${resetMarker}\\n'`);
+      await commandInput.press('Enter');
+      await expect
+        .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
+        .toContain(resetMarker);
     },
   );
 
