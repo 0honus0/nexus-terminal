@@ -187,11 +187,11 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     environment:
-      AGENT_RUNNER_URL: http://agent-runner:8790
+      NEXUS_AGENT_RUNNER_URL: http://agent-runner:8790
       NEXUS_E2E_RESET_ENABLED: 1
-      AGENT_OFFICIAL_PLUGIN_CATALOG_URL: http://host.docker.internal:$plugin_repository_port/official-catalog.json
-      AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: ed25519:b75cef09083540273828a77809f5ec467bac0df101f5b6ec17727a4103f632f7
-      AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: |-
+      NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL: http://host.docker.internal:$plugin_repository_port/official-catalog.json
+      NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: ed25519:b75cef09083540273828a77809f5ec467bac0df101f5b6ec17727a4103f632f7
+      NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: |-
         -----BEGIN PUBLIC KEY-----
         MCowBQYDK2VwAyEALU2gA/FGdyVBtxtSsTRGmLiNjRsxeE8MdkMt2dndZQ8=
         -----END PUBLIC KEY-----
@@ -419,8 +419,8 @@ compose exec -T backend sh -lc 'nc -z guacd 4822'
 runner_ready=0
 for _ in {1..60}; do
   if compose exec -T backend node - <<'NODE'
-const token = process.env.AGENT_RUNNER_TOKEN;
-const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
+const token = process.env.NEXUS_AGENT_RUNNER_TOKEN;
+const response = await fetch(process.env.NEXUS_AGENT_RUNNER_URL + '/v1/availability', {
   headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-13' },
 }).catch(() => null);
 if (!response?.ok) process.exit(1);
@@ -436,8 +436,8 @@ done
 if [[ "$runner_ready" -ne 1 ]]; then
   echo "Agent Runner did not report a usable native runtime." >&2
   compose exec -T backend node - <<'NODE' || true
-const token = process.env.AGENT_RUNNER_TOKEN;
-const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
+const token = process.env.NEXUS_AGENT_RUNNER_TOKEN;
+const response = await fetch(process.env.NEXUS_AGENT_RUNNER_URL + '/v1/availability', {
   headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-13' },
 }).catch(() => null);
 if (!response) {
@@ -472,8 +472,8 @@ host_tool_snapshot_before="$(host_tool_snapshot)"
 compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" backend node --input-type=module - <<'NODE'
 const { randomUUID } = await import('node:crypto');
 const { lookup } = await import('node:dns/promises');
-const baseUrl = process.env.AGENT_RUNNER_URL;
-const token = process.env.AGENT_RUNNER_TOKEN;
+const baseUrl = process.env.NEXUS_AGENT_RUNNER_URL;
+const token = process.env.NEXUS_AGENT_RUNNER_TOKEN;
 const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-09-13' };
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const get = async (path) => {

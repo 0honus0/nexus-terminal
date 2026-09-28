@@ -112,18 +112,18 @@ const buildPasskeyRelyingParties = (env: NodeJS.ProcessEnv): PasskeyRelyingParty
 export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv = process.env): RuntimeConfig => ({
   appName: env.APP_NAME?.trim() || 'Nexus Terminal',
   appVersion: env.NEXUS_VERSION?.trim() || BACKEND_PACKAGE_VERSION,
-  agentPublicOrigin: parseOptionalExactOrigin(env.AGENT_PUBLIC_ORIGIN, 'AGENT_PUBLIC_ORIGIN'),
-  agentOfficialPluginCatalogUrl: env.AGENT_OFFICIAL_PLUGIN_CATALOG_URL?.trim() || undefined,
+  agentPublicOrigin: parseOptionalExactOrigin(env.NEXUS_PUBLIC_ORIGIN, 'NEXUS_PUBLIC_ORIGIN'),
+  agentOfficialPluginCatalogUrl: env.NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL?.trim() || undefined,
   agentOfficialPluginPublisherKeyId:
     (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'
-      ? env.AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID?.trim() || undefined
+      ? env.NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID?.trim() || undefined
       : undefined,
   agentOfficialPluginPublisherPublicKeyPem:
     (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'
-      ? env.AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM?.trim() || undefined
+      ? env.NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM?.trim() || undefined
       : undefined,
-  agentRunnerUrl: env.AGENT_RUNNER_URL?.trim() || undefined,
-  agentRunnerToken: env.AGENT_RUNNER_TOKEN?.trim() || undefined,
+  agentRunnerUrl: env.NEXUS_AGENT_RUNNER_URL?.trim() || undefined,
+  agentRunnerToken: env.NEXUS_AGENT_RUNNER_TOKEN?.trim() || undefined,
   host: env.HOST?.trim() || '0.0.0.0',
   trustProxy: env.TRUST_PROXY?.trim() || 'loopback, linklocal, uniquelocal',
   port: parsePositiveInteger(env.PORT, 3001, 'PORT'),

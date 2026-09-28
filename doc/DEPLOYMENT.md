@@ -142,7 +142,7 @@ location / {
 ```
 
 Agent 写操作会同时校验会话 CSRF token 与浏览器 Origin。反向代理应像上例一样保留原始 `Host`，并传递
-`X-Forwarded-Proto`；这样 Backend 可以按用户实际访问的公开地址完成同源校验。`AGENT_PUBLIC_ORIGIN` 仍可作为
+`X-Forwarded-Proto`；这样 Backend 可以按用户实际访问的公开地址完成同源校验。`NEXUS_PUBLIC_ORIGIN` 仍可作为
 显式公开 Origin 配置，但不会再要求它必须与每个反向代理入口完全相同。
 
 生产环境建议使用 HTTPS。浏览器对剪贴板等能力有安全上下文限制，HTTP 环境下部分功能会受限。
