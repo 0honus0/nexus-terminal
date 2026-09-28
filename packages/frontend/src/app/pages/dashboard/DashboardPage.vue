@@ -377,10 +377,12 @@
           </div>
 
           <div
-            data-testid="dashboard-overview-stats"
             class="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-5 lg:justify-end"
           >
-            <div class="flex items-end justify-between gap-7 px-1 sm:justify-start">
+            <div
+              data-testid="dashboard-overview-stats"
+              class="flex items-end justify-between gap-7 px-1 sm:justify-start"
+            >
               <div>
                 <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
                   connections.connections.value.length
