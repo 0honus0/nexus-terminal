@@ -124,6 +124,8 @@
     // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
     if (element.clientWidth <= 0 || element.clientHeight <= 0) return;
     fit.fit();
+    if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
+    if (element.scrollLeft !== 0) element.scrollLeft = 0;
     if (terminal.cols !== lastColumns || terminal.rows !== lastRows) {
       lastColumns = terminal.cols;
       lastRows = terminal.rows;
@@ -973,6 +975,75 @@
     { flush: 'post' },
   );
 
+  const setupImeCompositionBoundsProtection = (): (() => void) => {
+    const textarea = terminal?.textarea;
+    const compView = root.value?.querySelector<HTMLElement>('.composition-view');
+    const xtermEl = root.value?.querySelector<HTMLElement>('.xterm');
+    if (!textarea || !compView || !xtermEl) return () => undefined;
+
+    let isClamping = false;
+    const clampBounds = () => {
+      if (isClamping || !compView.classList.contains('active')) return;
+      isClamping = true;
+      try {
+        const termWidth = xtermEl.clientWidth;
+        if (termWidth <= 0) return;
+        const compRect = compView.getBoundingClientRect();
+        const compWidth = compRect.width || compView.scrollWidth || compView.offsetWidth;
+        if (compWidth <= 0) return;
+        const rawLeft = parseFloat(compView.style.left) || 0;
+        if (rawLeft + compWidth > termWidth) {
+          const maxLeft = Math.max(0, termWidth - compWidth - 4);
+          const newLeft = Math.min(rawLeft, maxLeft);
+          const newLeftPx = `${newLeft}px`;
+          if (compView.style.left !== newLeftPx) compView.style.left = newLeftPx;
+          if (textarea.style.left !== newLeftPx) textarea.style.left = newLeftPx;
+          const maxTaWidth = Math.max(1, termWidth - newLeft);
+          const newWidthPx = `${Math.min(compWidth, maxTaWidth)}px`;
+          if (textarea.style.width !== newWidthPx) textarea.style.width = newWidthPx;
+        }
+        if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
+        if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
+      } finally {
+        isClamping = false;
+      }
+    };
+
+    const observer = new MutationObserver(() => clampBounds());
+    observer.observe(compView, { attributes: true, attributeFilter: ['style', 'class'] });
+
+    const onCompUpdate = () => {
+      clampBounds();
+      queueMicrotask(clampBounds);
+      window.setTimeout(clampBounds, 0);
+    };
+
+    const onCompEnd = () => {
+      if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
+      if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
+    };
+
+    const onScrollReset = () => {
+      if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
+      if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
+    };
+
+    textarea.addEventListener('compositionstart', onCompUpdate);
+    textarea.addEventListener('compositionupdate', onCompUpdate);
+    textarea.addEventListener('compositionend', onCompEnd);
+    wrapper.value?.addEventListener('scroll', onScrollReset, { passive: true });
+    root.value?.addEventListener('scroll', onScrollReset, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      textarea.removeEventListener('compositionstart', onCompUpdate);
+      textarea.removeEventListener('compositionupdate', onCompUpdate);
+      textarea.removeEventListener('compositionend', onCompEnd);
+      wrapper.value?.removeEventListener('scroll', onScrollReset);
+      root.value?.removeEventListener('scroll', onScrollReset);
+    };
+  };
+
   onMounted(() => {
     terminal = new Terminal({
       convertEol: true,
@@ -994,6 +1065,7 @@
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(root.value!);
+    cleanup.push(setupImeCompositionBoundsProtection());
     historyLastViewportY = terminal.buffer.active.viewportY;
     const backgroundOsc = terminal.parser.registerOscHandler(11, (data) =>
       hasVisualBackground.value && data.trim() !== '?' ? true : false,

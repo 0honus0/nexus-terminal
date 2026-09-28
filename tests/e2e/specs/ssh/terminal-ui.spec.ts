@@ -166,9 +166,11 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   context,
 }, testInfo) => {
   const sentTextFrames: string[] = [];
+  const sentBinaryFrames: Buffer[] = [];
   page.on('websocket', (socket) => {
     socket.on('framesent', (event) => {
       if (typeof event.payload === 'string') sentTextFrames.push(event.payload);
+      else sentBinaryFrames.push(event.payload);
     });
   });
 
@@ -322,6 +324,55 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     expect(interactiveFrame?.payload?.sequence).toBeUndefined();
     await page.keyboard.press('Control+C');
   });
+
+  await step(
+    'long terminal input and IME composition cannot horizontally shift the terminal window boundary',
+    async () => {
+      const viewport = terminal.locator('.xterm-viewport');
+      const input = terminal.locator('.xterm-helper-textarea');
+      const before = await terminal.boundingBox();
+      expect(before).toBeTruthy();
+      await input.focus();
+      const firstTypedFrame = sentBinaryFrames.length;
+      await page.keyboard.type('x'.repeat(600));
+      // Ctrl+C is sent directly, so wait until every typed byte left the browser before interrupting the line.
+      await expect
+        .poll(
+          () =>
+            sentBinaryFrames
+              .slice(firstTypedFrame)
+              .reduce((count, frame) => count + frame.filter((byte) => byte === 0x78).length, 0),
+          { timeout: 15_000 },
+        )
+        .toBeGreaterThanOrEqual(600);
+      await expect
+        .poll(() =>
+          viewport.evaluate((element) => ({
+            overflowX: getComputedStyle(element).overflowX,
+            scrollLeft: element.scrollLeft,
+          })),
+        )
+        .toEqual({ overflowX: 'hidden', scrollLeft: 0 });
+      const after = await terminal.boundingBox();
+      expect(after).toEqual(before);
+      expect(await page.evaluate(() => window.scrollX)).toBe(0);
+      await page.keyboard.press('Control+C');
+
+      // Simulate IME composition near end of line
+      await input.evaluate((element) => {
+        element.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+        element.dispatchEvent(new CompositionEvent('compositionupdate', { data: "f's'd'fa'a'fa's'f" }));
+      });
+      const compositionAfter = await terminal.boundingBox();
+      expect(compositionAfter).toEqual(before);
+      expect(await terminal.evaluate((element) => element.scrollLeft)).toBe(0);
+      expect(await terminal.getByTestId('terminal-inner').evaluate((element) => element.scrollLeft)).toBe(0);
+      await input.evaluate((element) => {
+        element.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
+      });
+      await page.keyboard.press('Control+C');
+    },
+  );
 
   await step('terminal Ctrl+wheel ignores tiny direction reversals and changes only on a full step', async () => {
     const inner = terminal.getByTestId('terminal-inner');

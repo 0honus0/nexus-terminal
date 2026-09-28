@@ -1,6 +1,7 @@
 .terminal-inner-container {
   box-sizing: border-box;
   padding: 4px 5px 3px;
+  overflow: hidden;
 }
 
 .terminal-mobile-touch {
@@ -29,7 +30,23 @@
   border: 0;
 }
 .terminal-inner-container :deep(.xterm-viewport) {
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-x: none;
+}
+
+.terminal-inner-container :deep(.xterm-helpers) {
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.terminal-inner-container :deep(.composition-view) {
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .terminal-transparent :deep(.xterm),
