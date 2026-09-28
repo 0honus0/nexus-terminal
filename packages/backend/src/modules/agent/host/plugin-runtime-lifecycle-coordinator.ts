@@ -96,7 +96,7 @@ export class PluginRuntimeLifecycleCoordinator {
       version: plugin.version,
       sdkVersion: plugin.manifest.sdkVersion,
       protocolVersion: PLUGIN_FRONTEND_PROTOCOL_VERSION,
-      url: `${this.publicOrigin}/plugins/${encodeURIComponent(appId)}/${encodeURIComponent(plugin.version)}/${relativeEntry}`,
+      url: `/plugins/${encodeURIComponent(appId)}/${encodeURIComponent(plugin.version)}/${relativeEntry}`,
       sandbox: 'allow-scripts',
       maxMessageBytes: 256_000,
       requestTimeoutMs: 15_000,

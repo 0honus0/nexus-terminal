@@ -138,6 +138,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
       id: keyId,
       name: EDITED_NAME,
     });
+    await expect(row).toContainText(EDITED_NAME);
     const namesAfterRename = await modal.locator('tbody tr[data-key-id] td:first-child').allTextContents();
     expect(namesAfterRename.indexOf(EDITED_NAME)).toBeGreaterThanOrEqual(0);
     expect(namesAfterRename.indexOf(EDITED_NAME)).toBeLessThan(namesAfterRename.indexOf(SORT_PEER_NAME));

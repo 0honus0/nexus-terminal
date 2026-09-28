@@ -37,7 +37,7 @@ const applySecurityHeaders = (response: ServerResponse, publicOrigin: string): v
   response.setHeader('Access-Control-Allow-Origin', '*');
   response.setHeader(
     'Content-Security-Policy',
-    `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors ${publicOrigin}`,
+    `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors 'self' ${publicOrigin}`,
   );
 };
 

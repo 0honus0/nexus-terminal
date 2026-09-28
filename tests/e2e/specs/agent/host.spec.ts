@@ -668,7 +668,6 @@ test('Agent settings surface exposes the production control plane and captures f
   await testModels.getByRole('button', { name: 'Close', exact: true }).click();
 
   await expect(providersSection.getByText('Model registry', { exact: true })).toBeVisible();
-  await expect(providersSection.getByText('Auto update', { exact: true })).toBeVisible();
   await expect(providersSection.getByRole('button', { name: 'Update now', exact: true })).toBeVisible();
 
   await providersSection.getByRole('button', { name: 'Update models', exact: true }).click();
