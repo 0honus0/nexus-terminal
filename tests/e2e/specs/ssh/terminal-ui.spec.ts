@@ -561,6 +561,25 @@ test('desktop terminal right-click copies a selection then pastes when no select
     });
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('DESKTOP_RIGHT_CLICK_PASTE_OK');
   });
+
+  await step('right-click copies then pastes while a terminal app reports mouse input', async () => {
+    const mouseMarker = 'DESKTOP_MOUSE_REPORTING_COPY_MARKER';
+    await commandInput.fill(`printf '\\n${mouseMarker}\\n\\033[?1000h\\033[?1006h'`);
+    await commandInput.press('Enter');
+    await expect.poll(async () => rows.innerText()).toContain(mouseMarker);
+    const point = await terminalTextPoint(page, mouseMarker);
+    await page.mouse.dblclick(point.x, point.y);
+    await page.mouse.click(point.x, point.y, { button: 'right' });
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 5_000 }).toBe(mouseMarker);
+    const pasteCommand = "printf 'DESKTOP_MOUSE_REPORTING_PASTE_OK\\n'\r";
+    await page.evaluate((text) => navigator.clipboard.writeText(text), pasteCommand);
+    const box = await terminal.getByTestId('terminal-inner').boundingBox();
+    expect(box).toBeTruthy();
+    await page.mouse.click(box!.x + Math.min(40, box!.width / 4), box!.y + Math.min(100, box!.height / 3), {
+      button: 'right',
+    });
+    await expect.poll(async () => rows.innerText(), { timeout: 5_000 }).toContain('DESKTOP_MOUSE_REPORTING_PASTE_OK');
+  });
 });
 
 test('terminal font-size wheel change persists when the session is closed before debounce fires', async ({

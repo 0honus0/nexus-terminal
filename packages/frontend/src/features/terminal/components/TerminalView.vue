@@ -72,6 +72,7 @@
   let pagedHistorySession = false;
   let historyLastViewportY = 0;
   let historyLiveSnapshot = '';
+  let pasteAfterRightClickCopy = false;
   let historyWindowChunks: Uint8Array[] = [];
   let deferredTerminalOutputBytes = 0;
   let historyRestoreTask: Promise<void> | null = null;
@@ -539,7 +540,7 @@
     return { column, bufferRow: terminal.buffer.active.viewportY + viewportRow };
   };
 
-  const selectTerminalWordAtPoint = (clientX: number, clientY: number): boolean => {
+  const selectTerminalWordAtPoint = (clientX: number, clientY: number, allowLineFallback = true): boolean => {
     if (!terminal) return false;
     const position = getTerminalCellAtPoint(clientX, clientY);
     if (!position) return false;
@@ -554,6 +555,7 @@
       selectedColumn -= 1;
     }
     if (!hasText(selectedColumn)) {
+      if (!allowLineFallback) return false;
       terminal.selectLines(position.bufferRow, position.bufferRow);
       return terminal.hasSelection();
     }
@@ -798,7 +800,23 @@
       try {
         await copySelection();
         terminal.clearSelection();
+        pasteAfterRightClickCopy = true;
         terminal.focus();
+      } catch {
+        // Clipboard availability is browser-controlled.
+      }
+      return;
+    }
+    if (
+      !pasteAfterRightClickCopy &&
+      remoteMouseReportingActive() &&
+      selectTerminalWordAtPoint(event.clientX, event.clientY, false)
+    ) {
+      try {
+        await copySelection();
+        terminal?.clearSelection();
+        pasteAfterRightClickCopy = true;
+        terminal?.focus();
       } catch {
         // Clipboard availability is browser-controlled.
       }
@@ -806,10 +824,17 @@
     }
     try {
       await paste();
+      pasteAfterRightClickCopy = false;
       terminal?.focus();
     } catch {
       // Clipboard permissions are browser-controlled.
     }
+  };
+
+  const handleRightMouseDown = (event: MouseEvent): void => {
+    if (device.isMobile.value || !props.rightClickCopyPaste || event.button !== 2) return;
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const resolveWheelScale = createWheelScaleResolver({
@@ -1229,6 +1254,7 @@
       }).dispose,
     );
     root.value?.addEventListener('contextmenu', handleContextMenu);
+    root.value?.addEventListener('mousedown', handleRightMouseDown, true);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
     resizeObserver = new ResizeObserver(fitAndResize);
     resizeObserver.observe(root.value!);
@@ -1267,6 +1293,7 @@
       root.value.removeEventListener('touchend', handleTouchEnd);
       root.value.removeEventListener('touchcancel', handleTouchEnd);
       root.value.removeEventListener('contextmenu', handleContextMenu);
+      root.value.removeEventListener('mousedown', handleRightMouseDown, true);
     }
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
     clearMobileLongPressTimer();

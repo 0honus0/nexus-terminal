@@ -141,7 +141,7 @@
       "navBarVisibleDescription": "保持工作区顶部导航可见，也可以从工作区标签栏切换。",
       "terminalRightClickCopyPasteTitle": "终端右键复制/粘贴",
       "terminalRightClickCopyPasteLabel": "启用终端右键复制/粘贴",
-      "terminalRightClickCopyPasteDescription": "终端有选区时右键复制；没有选区时右键粘贴剪贴板文本。",
+      "terminalRightClickCopyPasteDescription": "有选区时右键复制，再次右键粘贴；在接管鼠标的终端程序中，可先右键文字复制所在词语。",
       "organizedDescription": "按使用场景分组相关设置，可一次检查并保存同一组修改，减少重复操作和页面噪声。",
       "unsavedGroups": "有 {count} 组设置尚未保存",
       "moreDetails": "查看说明",

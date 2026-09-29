@@ -141,7 +141,7 @@
       "navBarVisibleDescription": "Keep the Workspace top navigation visible. It can also be toggled from the Workspace tab bar.",
       "terminalRightClickCopyPasteTitle": "Terminal right-click copy/paste",
       "terminalRightClickCopyPasteLabel": "Enable terminal right-click copy/paste",
-      "terminalRightClickCopyPasteDescription": "Right-click copies the current selection; when there is no selection, right-click pastes clipboard text.",
+      "terminalRightClickCopyPasteDescription": "Right-click copies the selection, then right-click again to paste. In mouse-aware terminal apps, right-click text to copy its word first.",
       "organizedDescription": "Settings are grouped by workflow so related changes can be reviewed and saved together.",
       "unsavedGroups": "{count} setting group(s) have unsaved changes",
       "moreDetails": "Details",
