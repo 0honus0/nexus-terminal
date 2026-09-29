@@ -1279,8 +1279,9 @@
       class="terminal-background-overlay"
       :style="{ backgroundColor: `rgba(0,0,0,${visual.backgroundOverlayOpacity ?? 0})` }"
     ></div>
+    <!-- Custom backgrounds may size themselves only once, so start them after the session is visible. -->
     <iframe
-      v-if="sandboxedCustomHtml"
+      v-if="active && sandboxedCustomHtml"
       class="terminal-custom-html"
       sandbox="allow-scripts"
       :srcdoc="sandboxedCustomHtml"

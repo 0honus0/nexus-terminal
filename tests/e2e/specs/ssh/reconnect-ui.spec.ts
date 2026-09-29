@@ -401,6 +401,72 @@ test('hidden desktop terminal keeps its fitted geometry while switching sessions
   }
 });
 
+test('HTML terminal background starts with a visible viewport after switching sessions', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await setTestSshOnline(true);
+  await removeMultiSessionConnections(context.request);
+  const originalResponse = await context.request.get('/api/v1/appearance');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = (await originalResponse.json()) as {
+    terminalCustomHtml: string;
+    terminalBackgroundEnabled: boolean;
+  };
+  const presetName = 'e2e-visible-viewport.html';
+  const html = `<canvas id="scene"></canvas><script>
+    const canvas = document.getElementById('scene');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ff0000';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  </script>`;
+  const connectionIds = await createMultiSessionConnections(context.request);
+  const presetResponse = await context.request.post('/api/v1/appearance/html-presets/local', {
+    data: { name: presetName, content: html },
+  });
+  expect(presetResponse.status()).toBe(201);
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+    await page.getByTitle('Customize Style').click();
+    const customizer = page.getByTestId('style-customizer');
+    await customizer.getByTestId('style-customizer-background-tab').click();
+    await customizer.getByTestId('html-theme-local-search').fill(presetName);
+    const row = customizer.getByTestId(`html-theme-local-row-${presetName}`);
+    await expect(row).toBeVisible();
+    const apply = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+    );
+    await row.getByTestId('html-theme-apply').click();
+    expect((await apply).ok()).toBeTruthy();
+    await customizer.getByLabel('Close', { exact: true }).first().click();
+
+    await page.getByTestId('terminal-tab-bar').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+    const background = page.frameLocator('[data-workspace-active="true"] .terminal-custom-html');
+    await expect
+      .poll(() =>
+        background.locator('#scene').evaluate((element) => {
+          const canvas = element as HTMLCanvasElement;
+          if (canvas.width === 0 || canvas.height === 0) return false;
+          const pixel = canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data;
+          return pixel?.[0] === 255 && pixel[3] === 255;
+        }),
+      )
+      .toBe(true);
+  } finally {
+    await context.request.put('/api/v1/appearance', {
+      data: {
+        terminalCustomHtml: original.terminalCustomHtml,
+        terminalBackgroundEnabled: original.terminalBackgroundEnabled,
+      },
+    });
+    await context.request.delete(`/api/v1/appearance/html-presets/local/${presetName}`);
+    await removeMultiSessionConnections(context.request);
+  }
+});
+
 test.describe('M08.03-a mobile Workspace session lifecycle', () => {
   test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
 
