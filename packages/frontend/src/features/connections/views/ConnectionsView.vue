@@ -244,19 +244,18 @@
                 v-model="search"
                 data-testid="connections-search"
                 type="text"
-                density="compact"
                 :placeholder="t('dashboard.searchConnectionsPlaceholder')"
                 class="w-full"
               />
             </div>
             <div class="w-full sm:w-40">
-              <UiSelect v-model="tagId" density="compact" class="w-full" :aria-label="t('dashboard.filterByTag')">
+              <UiSelect v-model="tagId" class="w-full" :aria-label="t('dashboard.filterByTag')">
                 <option value="">{{ t('dashboard.filterTags.all') }}</option>
                 <option v-for="tag in tags.items.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
               </UiSelect>
             </div>
             <div class="w-full sm:w-40">
-              <UiSelect v-model="sort" density="compact" class="w-full" :aria-label="t('dashboard.sortBy')">
+              <UiSelect v-model="sort" class="w-full" :aria-label="t('dashboard.sortBy')">
                 <option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
                 <option value="name">{{ t('dashboard.sortOptions.name') }}</option>
                 <option value="type">{{ t('dashboard.sortOptions.type') }}</option>
@@ -266,7 +265,6 @@
             </div>
             <UiButton
               appearance="soft"
-              density="compact"
               icon-only
               :aria-label="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
               :title="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
@@ -281,7 +279,6 @@
               data-testid="connections-add-button"
               type="button"
               appearance="solid"
-              density="compact"
               icon-only
               :title="t('connections.addConnection')"
               @click="openAdd"
@@ -291,7 +288,6 @@
             <UiButton
               type="button"
               appearance="solid"
-              density="compact"
               class="shrink-0"
               :disabled="!filtered.some((connection) => connection.type === 'SSH')"
               :title="t('connections.actions.testAllFiltered')"
@@ -304,7 +300,6 @@
             <UiButton
               type="button"
               appearance="solid"
-              density="compact"
               class="shrink-0"
               :disabled="!filtered.some((connection) => connection.type === 'SSH')"
               @click="connectAllFiltered"
@@ -362,12 +357,12 @@
         </div>
 
         <div class="p-4">
-          <ul v-if="filtered.length" class="space-y-3">
+          <ul v-if="filtered.length" class="space-y-2">
             <li
               v-for="c in filtered"
               :key="c.id"
               :data-testid="`connection-row-${c.id}`"
-              class="ui-solid-item flex flex-col items-stretch rounded-lg p-3 sm:flex-row sm:items-center"
+              class="ui-solid-item flex flex-col items-stretch rounded-lg px-3 py-2.5 sm:flex-row sm:items-center"
               :class="[
                 selected.has(c.id) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : '',
                 batch ? 'cursor-pointer' : '',
@@ -375,17 +370,27 @@
               @click="batch && toggleSelected(c.id)"
             >
               <div class="mr-0 min-w-0 w-full flex-1 sm:mr-3 sm:w-auto">
-                <span class="flex items-center truncate font-medium" :title="c.name || c.host">
-                  <i
-                    :class="[
-                      'fas',
-                      c.type === 'VNC' ? 'fa-plug' : c.type === 'RDP' ? 'fa-desktop' : 'fa-server',
-                      'mr-2 w-4 text-center text-text-secondary',
-                    ]"
-                    aria-hidden="true"
-                  />
-                  <span class="truncate">{{ c.name || c.host }}</span>
-                </span>
+                <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span class="flex min-w-0 items-center font-medium" :title="c.name || c.host">
+                    <i
+                      :class="[
+                        'fas',
+                        c.type === 'VNC' ? 'fa-plug' : c.type === 'RDP' ? 'fa-desktop' : 'fa-server',
+                        'mr-2 w-4 shrink-0 text-center text-text-secondary',
+                      ]"
+                      aria-hidden="true"
+                    />
+                    <span class="truncate">{{ c.name || c.host }}</span>
+                  </span>
+                  <div v-if="tagNames(c).length" class="flex flex-wrap gap-1">
+                    <span
+                      v-for="name in tagNames(c)"
+                      :key="name"
+                      class="rounded-full border border-border/60 bg-card/20 px-1.5 py-0.5 text-xs text-text-secondary"
+                      >{{ name }}</span
+                    >
+                  </div>
+                </div>
                 <span class="block truncate text-sm text-text-secondary" :title="`${c.username}@${c.host}:${c.port}`"
                   >{{ c.username }}@{{ c.host }}:{{ c.port }}</span
                 >
@@ -395,14 +400,6 @@
                 <div v-if="c.notes" class="mt-1 text-xs text-text-secondary">
                   <span class="font-medium">{{ t('connections.form.notes') }}:</span>
                   <span class="break-words">{{ c.notes }}</span>
-                </div>
-                <div v-if="tagNames(c).length" class="mt-1.5 flex flex-wrap gap-1">
-                  <span
-                    v-for="name in tagNames(c)"
-                    :key="name"
-                    class="rounded-full border border-border/60 bg-card/20 px-1.5 py-0.5 text-xs text-text-secondary"
-                    >{{ name }}</span
-                  >
                 </div>
                 <div
                   v-if="c.type === 'SSH' && testResults.get(c.id)"
