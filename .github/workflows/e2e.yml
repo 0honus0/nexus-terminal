@@ -149,8 +149,8 @@ jobs:
 
   update-playwright-balance:
     name: Update Playwright duration balance
-    needs: playwright
-    if: ${{ always() && needs.playwright.result == 'success' }}
+    needs: [quality, playwright, docker-smoke]
+    if: ${{ always() && needs.quality.result == 'success' && needs.playwright.result == 'success' && needs.docker-smoke.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
