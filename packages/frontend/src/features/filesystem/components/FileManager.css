@@ -136,17 +136,6 @@
   cursor: not-allowed;
   opacity: 0.45;
 }
-.file-manager-action-button--primary {
-  background: color-mix(in srgb, var(--primary-color) 12%, var(--card-bg-color, var(--app-bg-color)));
-  border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
-  color: var(--primary-color);
-}
-.file-manager-action-button--primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--primary-color) 20%, var(--card-bg-color, var(--app-bg-color)));
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-}
-
 .file-manager-search-slot {
   display: flex;
   align-items: center;

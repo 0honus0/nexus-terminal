@@ -1465,7 +1465,7 @@
           v-if="!searchExpanded"
           data-testid="file-upload-button"
           type="button"
-          class="file-manager-action-button file-manager-action-button--primary"
+          class="file-manager-action-button"
           :title="t('fileManager.actions.uploadFile')"
           :aria-label="t('fileManager.actions.uploadFile')"
           @click="emit('upload', browser.path.value)"
