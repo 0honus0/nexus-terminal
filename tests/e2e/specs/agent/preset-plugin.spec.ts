@@ -88,6 +88,30 @@ const waitForTerminalRun = async (request: APIRequestContext, runId: string): Pr
   throw new Error(`Preset Agent Run did not reach a terminal state: ${JSON.stringify(latest)}`);
 };
 
+const cancelRunForCleanup = async (request: APIRequestContext, runId: string): Promise<RunView> => {
+  const terminalStatuses = ['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'];
+  const deadline = Date.now() + 10_000;
+  let latest: RunView | null = null;
+  while (Date.now() < deadline) {
+    const response = await request.get(`/api/v1/apps/nexus.agent/runs/${runId}`);
+    expect(response.ok(), await response.text()).toBeTruthy();
+    latest = ((await response.json()) as Envelope<RunView>).data;
+    if (terminalStatuses.includes(latest.status)) return latest;
+
+    const cancelled = await request.post(`/api/v1/apps/nexus.agent/runs/${runId}/cancel`, {
+      headers: { 'X-Nexus-CSRF': await csrfToken(request), 'Idempotency-Key': randomUUID() },
+      data: { schemaVersion: 1, expectedVersion: latest.version },
+    });
+    if (cancelled.ok()) return ((await cancelled.json()) as Envelope<RunView>).data;
+
+    const failure = (await cancelled.json()) as {
+      error?: { code?: string; details?: { field?: string } };
+    };
+    expect(failure.error).toMatchObject({ code: 'STATE_CONFLICT', details: { field: 'expectedVersion' } });
+  }
+  throw new Error(`Preset Agent Run could not be cancelled with a current version: ${JSON.stringify(latest)}`);
+};
+
 const installAndRunNexusAgent = async (
   request: APIRequestContext,
 ): Promise<{ threadId: string; connectionId: number }> => {
@@ -1378,11 +1402,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     const terminalRunStatuses = ['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'];
     const activeRun = threadRunPage.data.items.find((candidate) => !terminalRunStatuses.includes(candidate.status));
     if (activeRun) {
-      const cancelled = await context.request.post(`/api/v1/apps/nexus.agent/runs/${activeRun.id}/cancel`, {
-        headers: { 'X-Nexus-CSRF': await csrfToken(context.request), 'Idempotency-Key': randomUUID() },
-        data: { schemaVersion: 1, expectedVersion: activeRun.version },
-      });
-      expect(cancelled.ok(), await cancelled.text()).toBeTruthy();
+      await cancelRunForCleanup(context.request, activeRun.id);
       await waitForTerminalRun(context.request, activeRun.id);
       await page.reload();
       await openAgentHub(page);
