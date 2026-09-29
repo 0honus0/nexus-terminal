@@ -12,7 +12,7 @@
   const emit = defineEmits<{ customizeAppearance: [] }>();
   const router = useRouter();
   const route = useRoute();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const auth = useAuthSession();
   const preferences = usePreferences();
   const logoutError = ref<string | null>(null);
@@ -53,7 +53,7 @@
     void updateUnderline();
   });
   onBeforeUnmount(() => window.removeEventListener('resize', handleResize));
-  watch(() => route.fullPath, updateUnderline);
+  watch([() => route.fullPath, locale], updateUnderline);
 
   const logout = async (): Promise<void> => {
     if (loggingOut.value) return;

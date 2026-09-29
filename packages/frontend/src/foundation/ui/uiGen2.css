@@ -618,7 +618,7 @@
   );
   -webkit-backdrop-filter: var(--glass-control-filter);
   backdrop-filter: var(--glass-control-filter);
-  border-color: color-mix(in srgb, var(--glass-rim) 24%, transparent);
+  border-color: var(--ui-hairline);
   box-shadow:
     var(--glass-inset-highlight),
     0 1px 2px rgb(0 0 0 / 5%),
@@ -644,7 +644,7 @@
 .ui-button--soft:not(:disabled):hover,
 .ui-button--glass:not(:disabled):hover {
   background-color: var(--ui-button-glass-fill-hover);
-  border-color: color-mix(in srgb, var(--glass-rim) 38%, transparent);
+  border-color: var(--ui-hairline-strong);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 60%, transparent),
     0 2px 4px rgb(0 0 0 / 7%),
@@ -693,7 +693,7 @@
 .ui-button--solid[data-tone='primary']:not(:disabled) {
   --ui-button-glass-fill: var(--button-bg-color);
   --ui-button-glass-fill-hover: var(--button-hover-bg-color);
-  border-color: transparent;
+  border-color: color-mix(in srgb, var(--button-hover-bg-color) 55%, var(--button-bg-color));
   color: var(--button-text-color);
   background-image: none;
   box-shadow:
@@ -703,7 +703,7 @@
 }
 
 .ui-button--solid[data-tone='primary']:not(:disabled):hover {
-  border-color: transparent;
+  border-color: var(--button-hover-bg-color);
 }
 
 .ui-button--solid[data-tone='primary']:not(:disabled):active {
@@ -738,12 +738,12 @@
 
 .ui-button:disabled {
   cursor: not-allowed;
-  border-color: color-mix(in srgb, var(--border-color) 22%, transparent);
-  background: color-mix(in srgb, var(--card-bg-color) 12%, transparent);
+  border-color: var(--ui-disabled-border);
+  background: var(--ui-disabled-fill);
   color: var(--ui-disabled-text);
   box-shadow: none;
   transform: none;
-  opacity: 0.55;
+  opacity: 1;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
