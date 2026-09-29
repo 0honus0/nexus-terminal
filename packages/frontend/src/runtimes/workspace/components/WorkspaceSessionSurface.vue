@@ -1414,15 +1414,6 @@
           @column-widths="emit('fileManagerColumnWidths', $event)"
         />
       </div>
-      <ProgressCenter
-        v-if="transfers.tasks.value.length && progressVisible"
-        :tasks="transfers.tasks.value"
-        :source-label="session.connection.name || session.connection.host"
-        @cancel="transfers.cancel"
-        @cancel-all="transfers.cancelAll"
-        @hide="progressVisible = false"
-        @remove="removeTransferTask"
-      />
       <button
         v-if="!mobile"
         data-testid="file-manager-resize-handle"
@@ -1436,6 +1427,18 @@
           class="pointer-events-none absolute bottom-1 right-1 h-2.5 w-2.5 border-b-2 border-r-2 border-text-secondary/70"
         ></span>
       </button>
+      <template #overlay-content>
+        <ProgressCenter
+          v-if="transfers.tasks.value.length && progressVisible"
+          :tasks="transfers.tasks.value"
+          :source-label="session.connection.name || session.connection.host"
+          :teleport="false"
+          @cancel="transfers.cancel"
+          @cancel-all="transfers.cancelAll"
+          @hide="progressVisible = false"
+          @remove="removeTransferTask"
+        />
+      </template>
     </UiOverlayPanel>
 
     <UiOverlayPanel

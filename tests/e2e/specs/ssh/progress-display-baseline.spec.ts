@@ -215,6 +215,75 @@ test('existing copy progress popup hides and restores through Progress Display',
   }
 });
 
+test('application modals open above the standalone transfer progress popup', async ({ page, context }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openFileManager(page, context);
+  const sourceName = 'modal-layering-progress.bin';
+  await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${4 * 1024 * 1024}`, {
+    method: 'POST',
+  });
+  await refreshFileManager(page);
+  await expect(row(page, sourceName)).toBeVisible();
+
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
+  try {
+    await rightClickRow(page, sourceName);
+    await clickMenuItem(page, 'Copy');
+    await goIntoFolder(page, 'folder-seed');
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'Paste');
+
+    const center = visibleProgressCenter(page);
+    await expect(center).toBeVisible({ timeout: 10_000 });
+    await closeConnectedFileManager(page);
+    await expect(center).toBeVisible();
+
+    const header = center.locator('.transfer-progress-header');
+    const headerBox = await header.boundingBox();
+    expect(headerBox).toBeTruthy();
+    const dragStart = { x: headerBox!.x + 18, y: headerBox!.y + 18 };
+    await header.dispatchEvent('pointerdown', {
+      pointerId: 81,
+      isPrimary: true,
+      clientX: dragStart.x,
+      clientY: dragStart.y,
+      button: 0,
+      bubbles: true,
+    });
+    await page.evaluate(() =>
+      window.dispatchEvent(
+        new PointerEvent('pointermove', { pointerId: 81, isPrimary: true, clientX: 0, clientY: 0, bubbles: true }),
+      ),
+    );
+    await page.evaluate(() =>
+      window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 81, isPrimary: true, bubbles: true })),
+    );
+
+    await page.getByRole('button', { name: 'Configure Focus Switcher', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Configure Focus Switcher', exact: true });
+    await expect(dialog).toBeVisible();
+
+    const popupBox = await center.boundingBox();
+    const dialogBox = await dialog.boundingBox();
+    expect(popupBox).toBeTruthy();
+    expect(dialogBox).toBeTruthy();
+    const left = Math.max(popupBox!.x, dialogBox!.x);
+    const top = Math.max(popupBox!.y, dialogBox!.y);
+    const right = Math.min(popupBox!.x + popupBox!.width, dialogBox!.x + dialogBox!.width);
+    const bottom = Math.min(popupBox!.y + popupBox!.height, dialogBox!.y + dialogBox!.height);
+    expect(right).toBeGreaterThan(left);
+    expect(bottom).toBeGreaterThan(top);
+
+    const topmostDialogLabel = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest('[role="dialog"]')?.getAttribute('aria-label') ?? null,
+      { x: (left + right) / 2, y: (top + bottom) / 2 },
+    );
+    expect(topmostDialogLabel).toBe('Configure Focus Switcher');
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+});
+
 test('existing archive progress popup hides and restores through Progress Display', async ({ page, context }) => {
   await openFileManager(page, context);
   await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=1800`, { method: 'POST' });

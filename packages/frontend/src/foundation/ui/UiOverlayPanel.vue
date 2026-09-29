@@ -170,6 +170,7 @@
         <slot />
       </div>
       <slot v-else />
+      <slot name="overlay-content" />
     </div>
   </Teleport>
 </template>

@@ -34,7 +34,9 @@
   const MIN_WIDTH = 340;
   const MIN_HEIGHT = 190;
 
-  const props = defineProps<{ tasks: TransferTask[]; sourceLabel?: string }>();
+  const props = withDefaults(defineProps<{ tasks: TransferTask[]; sourceLabel?: string; teleport?: boolean }>(), {
+    teleport: true,
+  });
   const emit = defineEmits<{ cancel: [id: string]; cancelAll: []; remove: [id: string]; hide: [] }>();
   const { t } = useI18n();
   const panel = ref<HTMLElement | null>(null);
@@ -204,12 +206,12 @@
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport to="body" :disabled="!props.teleport">
     <div
       v-show="initialized"
       ref="panel"
       data-testid="transfer-progress-center"
-      class="transfer-progress-window fixed z-[60] flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
+      class="transfer-progress-window fixed z-40 flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
       :class="[
         `transfer-progress-window--${presentationMode}`,
         drag.dragging.value ? 'dragging select-none' : '',
