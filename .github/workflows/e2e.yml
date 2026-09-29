@@ -360,6 +360,12 @@ jobs:
           --filter @nexus-terminal/e2e
           --filter @nexus-terminal/agent-runner
 
+      - name: Restore Playwright browser cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: docker-smoke-playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install Chromium
         run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
 
@@ -380,6 +386,8 @@ jobs:
           push: false
           load: true
           tags: nexus-terminal:e2e-smoke
+          cache-from: type=gha,scope=unified-e2e-smoke
+          cache-to: type=gha,mode=max,scope=unified-e2e-smoke
 
       - name: Build standalone Agent Runner image
         uses: docker/build-push-action@v7

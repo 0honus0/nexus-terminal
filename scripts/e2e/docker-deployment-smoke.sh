@@ -1857,6 +1857,7 @@ console.log('agent pending-input HTTP: durable move/remove + version CAS ok');
 let runA = await createRun('Docker lifecycle smoke A');
 const workspaceA = await createReadyWorkspace(runA, 'A');
 runA = await cancelToTerminal(runA);
+console.log('agent lifecycle HTTP: Workspace A ready and Run terminal');
 const blockedDelete = await call(
   'DELETE',
   `/api/v1/apps/nexus.agent/runs/${runA.id}?expectedVersion=${runA.version}`,
@@ -1870,6 +1871,7 @@ if (blockedDelete.response.status !== 409 || blockedDelete.json?.error?.code !==
 let runB = await createRun('Docker lifecycle smoke B');
 const workspaceB = await createReadyWorkspace(runB, 'B');
 runB = await cancelToTerminal(runB);
+console.log('agent lifecycle HTTP: Workspace B ready and Run terminal');
 const settings = await ok('GET', '/api/v1/agent/settings');
 const cleanupPreview = await ok(
   'POST',
@@ -1886,6 +1888,7 @@ if (!cleanupPreview.workspaceIds.includes(workspaceA.id) || !cleanupPreview.work
 let runC = await createRun('Docker lifecycle smoke C');
 const workspaceC = await createReadyWorkspace(runC, 'C');
 runC = await cancelToTerminal(runC);
+console.log('agent lifecycle HTTP: Workspace C ready and Run terminal');
 if (cleanupPreview.workspaceIds.includes(workspaceC.id)) throw new Error('Cleanup preview unexpectedly included future Workspace.');
 
 let cleanupCommand = await ok(
@@ -1902,6 +1905,7 @@ while (['pending', 'running', 'unknown'].includes(cleanupCommand.status)) {
   cleanupCommand = await ok('GET', `/api/v1/agent/workspace-runtime/commands/${cleanupCommand.id}`);
 }
 if (cleanupCommand.status !== 'succeeded') throw new Error(`Runtime cleanup failed: ${JSON.stringify(cleanupCommand)}`);
+console.log('agent lifecycle HTTP: scoped runtime cleanup command succeeded');
 if (!cleanupCommand.result?.deleted?.includes(workspaceA.id) || !cleanupCommand.result?.deleted?.includes(workspaceB.id)) {
   throw new Error(`Runtime cleanup did not delete previewed Workspaces: ${JSON.stringify(cleanupCommand)}`);
 }
