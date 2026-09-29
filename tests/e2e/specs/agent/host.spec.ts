@@ -65,9 +65,15 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
   await page.goto('/connections');
 
   const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+  const launcherPosition = async () =>
+    launcher.locator('..').evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { right: Number.parseFloat(style.right), bottom: Number.parseFloat(style.bottom) };
+    });
   const hub = page.locator('section[aria-label="Agent"]');
   await expect(launcher).toBeVisible();
   const initial = await launcher.boundingBox();
+  const initialPosition = await launcherPosition();
   expect(initial).toBeTruthy();
 
   await page.mouse.move(initial!.x + initial!.width / 2, initial!.y + initial!.height / 2);
@@ -79,21 +85,16 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
   expect(moved).toBeTruthy();
   expect(moved!.x).toBeLessThan(initial!.x - 60);
   expect(moved!.y).toBeLessThan(initial!.y - 50);
+  const movedPosition = await launcherPosition();
   await expect(hub).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reset position' })).toHaveCount(0);
 
   await page.reload();
   await expect(launcher).toBeVisible();
-  const restored = await launcher.boundingBox();
-  expect(restored).toBeTruthy();
-  expect(Math.abs(restored!.x - moved!.x)).toBeLessThan(3);
-  expect(Math.abs(restored!.y - moved!.y)).toBeLessThan(3);
+  expect(await launcherPosition()).toEqual(movedPosition);
 
   await launcher.click({ button: 'right' });
-  const reset = await launcher.boundingBox();
-  expect(reset).toBeTruthy();
-  expect(Math.abs(reset!.x - initial!.x)).toBeLessThan(2);
-  expect(Math.abs(reset!.y - initial!.y)).toBeLessThan(2);
+  expect(await launcherPosition()).toEqual(initialPosition);
 
   await launcher.click();
   await expect(hub).toBeVisible();
