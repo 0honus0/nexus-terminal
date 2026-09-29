@@ -1505,9 +1505,7 @@
         </button>
       </div>
 
-      <div
-        class="file-manager-path-input relative flex min-w-0 items-center rounded-md border border-border/70 bg-input px-2 py-0.5"
-      >
+      <div class="file-manager-path-input relative flex min-w-0 items-center">
         <i class="fas fa-folder mr-1.5 shrink-0 text-xs text-text-secondary pointer-events-none" aria-hidden="true"></i>
         <input
           ref="pathInput"
