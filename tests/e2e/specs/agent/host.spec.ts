@@ -580,10 +580,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await providersSection.getByRole('button', { name: 'Add provider', exact: true }).first().click();
   const addProvider = page.getByRole('dialog', { name: 'Add Model Provider', exact: true });
   await expect(addProvider).toBeVisible();
-  const providerField = (label: string) =>
-    label === 'Credential'
-      ? addProvider.getByRole('textbox', { name: 'Credential', exact: true })
-      : addProvider.locator('label').filter({ hasText: label }).locator('input').first();
+  const providerField = (label: string) => addProvider.getByLabel(label, { exact: false }).first();
   await providerField('Display name').fill('Settings UI Provider');
   await providerField('Base URL').fill(`${E2E_URLS.openAiProviderOrigin}/v1`);
   await providerField('Credential').fill('e2e-provider-secret');
