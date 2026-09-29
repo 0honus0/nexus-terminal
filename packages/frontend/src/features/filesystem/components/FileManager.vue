@@ -190,8 +190,8 @@
     permissions: initialColumnWidth('permissions'),
     modified: initialColumnWidth('modified'),
   });
-  const showPermissions = computed(() => listViewportWidth.value >= 400);
-  const showModified = computed(() => listViewportWidth.value >= 260);
+  const showPermissions = computed(() => listViewportWidth.value >= 560);
+  const showModified = computed(() => listViewportWidth.value >= 400);
   const isLarge = computed(() => showPermissions.value);
   const isMedium = computed(() => !showPermissions.value && showModified.value);
   const isSmall = computed(() => !showModified.value);
@@ -1685,7 +1685,7 @@
             @contextmenu.stop="openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))"
           >
             <td class="file-row-cell file-row-name text-left">
-              <span class="file-row-parent-content inline-flex min-w-0 items-center gap-2">
+              <span class="file-row-parent-content inline-flex min-w-0 items-center gap-2.5">
                 <i class="file-row-icon fas fa-level-up-alt shrink-0 text-text-secondary" aria-hidden="true"></i>
                 <span class="file-row-name-label font-medium">..</span>
               </span>
@@ -1733,7 +1733,7 @@
               class="file-row-cell file-row-name truncate text-left"
               :class="entry.metadata.isDirectory ? 'font-medium' : ''"
             >
-              <div class="file-row-name-container flex min-w-0 items-center gap-2">
+              <div class="file-row-name-container flex min-w-0 items-center gap-2.5">
                 <i
                   :class="[
                     'file-row-icon shrink-0 transition-colors duration-150',

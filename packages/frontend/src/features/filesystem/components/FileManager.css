@@ -237,11 +237,13 @@
 .file-row-permissions {
   padding-left: 0.4rem;
   padding-right: 0.4rem;
+  font-size: calc(0.625rem * max(1, var(--file-row-scale) * 0.2 + 0.8));
   text-align: left;
 }
 .file-row-modified {
   padding-left: 0.4rem;
   padding-right: 0.6rem;
+  font-size: calc(0.625rem * max(1, var(--file-row-scale) * 0.2 + 0.8));
   text-align: left;
 }
 .file-row-name-container,
@@ -263,6 +265,8 @@
   line-height: 1rem;
 }
 .file-row-name-button {
+  display: flex;
+  align-items: center;
   background: transparent;
   border: none;
   outline: none;

@@ -305,18 +305,18 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
         scrollWidth: element.scrollWidth,
       }));
       expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
-      await expect(seed.locator('.file-row-permissions')).toHaveCount(layout.clientWidth >= 400 ? 1 : 0);
-      await expect(seed.locator('.file-row-modified')).toHaveCount(layout.clientWidth >= 260 ? 1 : 0);
+      await expect(seed.locator('.file-row-permissions')).toHaveCount(layout.clientWidth >= 560 ? 1 : 0);
+      await expect(seed.locator('.file-row-modified')).toHaveCount(layout.clientWidth >= 400 ? 1 : 0);
       await expect(fileManager.locator('.file-table-header-permissions')).toHaveCount(
-        layout.clientWidth >= 400 ? 1 : 0,
+        layout.clientWidth >= 560 ? 1 : 0,
       );
-      await expect(fileManager.locator('.file-table-header-modified')).toHaveCount(layout.clientWidth >= 260 ? 1 : 0);
+      await expect(fileManager.locator('.file-table-header-modified')).toHaveCount(layout.clientWidth >= 400 ? 1 : 0);
       return layout;
     };
 
     await page.setViewportSize({ width: 600, height: 780 });
     const intermediateLayout = await assertResponsiveColumns();
-    if (intermediateLayout.clientWidth >= 260) {
+    if (intermediateLayout.clientWidth >= 400) {
       const modifiedMetrics = await activeFileManagerList(page).evaluate((element) => {
         const listRect = element.getBoundingClientRect();
         const modified = element.querySelector<HTMLTableCellElement>('.file-table-header-modified');

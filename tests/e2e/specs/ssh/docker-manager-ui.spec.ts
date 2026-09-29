@@ -457,7 +457,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       expect(narrowMetrics.iconNameGap).not.toBeNull();
       expect(narrowMetrics.iconNameGap as number).toBeLessThanOrEqual(12);
       expect(narrowMetrics.permissionsCellCount).toBe(0);
-      expect(narrowMetrics.modifiedCellCount).toBe(1);
+      expect(narrowMetrics.modifiedCellCount).toBe(0);
       const pathMetrics = await fileManager.evaluate((element) => {
         const toolbar = element.querySelector<HTMLElement>('.file-manager-toolbar')!;
         const actions = element.querySelector<HTMLElement>('.file-manager-actions')!;
