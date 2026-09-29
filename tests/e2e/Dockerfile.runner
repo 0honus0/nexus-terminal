@@ -10,6 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     COREPACK_HOME=/opt/corepack \
     PNPM_HOME=/opt/pnpm \
     PNPM_CONFIG_STORE_DIR=/opt/pnpm/store \
+    PNPM_CONFIG_SIDE_EFFECTS_CACHE=true \
     XDG_CACHE_HOME=/opt/pnpm/cache \
     npm_config_nodedir=/usr/local \
     E2E_RUNNER_FINGERPRINT=${E2E_RUNNER_FINGERPRINT} \
@@ -31,5 +32,10 @@ COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/agent-runner/package.json packages/agent-runner/package.json
 COPY tests/e2e/package.json tests/e2e/package.json
-RUN pnpm install --frozen-lockfile --ignore-scripts \
-  && rm -rf node_modules packages/*/node_modules tests/e2e/node_modules
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends g++ make python3 \
+  && pnpm install --frozen-lockfile \
+  && rm -rf node_modules packages/*/node_modules tests/e2e/node_modules \
+  && apt-get purge -y --auto-remove g++ make python3 \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/* /root/.cache /tmp/*
