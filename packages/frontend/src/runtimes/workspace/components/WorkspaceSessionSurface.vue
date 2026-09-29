@@ -1,7 +1,16 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiOverlayPanel, UiSelect } from '@/foundation/ui';
+  import {
+    UiButton,
+    UiCheckbox,
+    UiFormField,
+    UiInput,
+    UiModal,
+    UiOverlayPanel,
+    UiResizeHandle,
+    UiSelect,
+  } from '@/foundation/ui';
   import { useDraggablePosition, usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
@@ -1415,19 +1424,14 @@
           @column-widths="emit('fileManagerColumnWidths', $event)"
         />
       </div>
-      <button
+      <UiResizeHandle
         v-if="!mobile"
         data-testid="file-manager-resize-handle"
-        type="button"
-        class="absolute bottom-0 right-0 z-40 h-6 w-6 touch-none select-none cursor-nwse-resize bg-transparent opacity-70 transition hover:bg-primary/15 hover:opacity-100"
+        class="absolute bottom-0 right-0 z-40"
         :title="t('fileManager.resizePopup')"
         :aria-label="t('fileManager.resizePopup')"
         @pointerdown.stop="fileManagerPopupSizing.resize.startResize"
-      >
-        <span
-          class="pointer-events-none absolute bottom-1 right-1 h-2.5 w-2.5 border-b-2 border-r-2 border-text-secondary/70"
-        ></span>
-      </button>
+      />
       <template #overlay-content>
         <ProgressCenter
           v-if="transfers.tasks.value.length && progressVisible"
@@ -1481,19 +1485,14 @@
           @font-size="emit('editorFontSize', $event)"
           @mobile-font-size="emit('mobileEditorFontSize', $event)"
         />
-        <button
+        <UiResizeHandle
           v-if="!mobile"
           data-testid="document-popup-resize-handle"
-          type="button"
-          class="absolute bottom-0 right-0 z-30 h-6 w-6 touch-none select-none cursor-nwse-resize bg-transparent opacity-70 transition hover:bg-white/15 hover:opacity-100"
+          class="absolute bottom-0 right-0 z-30"
           :title="documentPopupResizeLabel"
           :aria-label="documentPopupResizeLabel"
           @pointerdown.stop="startDocumentPopupResize"
-        >
-          <span
-            class="pointer-events-none absolute bottom-1 right-1 h-2.5 w-2.5 border-b-2 border-r-2 border-text-secondary/70"
-          ></span>
-        </button>
+        />
         <RuntimeErrorBoundary
           v-show="documentMode === 'preview'"
           scope="file-preview"

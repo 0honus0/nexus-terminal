@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
+  import { UiResizeHandle } from '@/foundation/ui';
   import type { TransferTask } from '../model/transfer';
   import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
 
@@ -479,14 +480,13 @@
         </li>
       </ul>
 
-      <button
-        type="button"
+      <UiResizeHandle
         data-testid="transfer-progress-resize"
-        class="transfer-progress-resize"
+        class="absolute bottom-0 right-0 z-10"
         :title="t('progressCenter.resize')"
         :aria-label="t('progressCenter.resize')"
         @pointerdown.stop="resize.startResize"
-      ></button>
+      />
     </div>
   </Teleport>
 </template>
@@ -657,33 +657,6 @@
   .progress-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
-  }
-  .transfer-progress-resize {
-    position: absolute;
-    right: 2px;
-    bottom: 2px;
-    width: 18px;
-    height: 18px;
-    border: 0;
-    background: transparent;
-    cursor: nwse-resize;
-    opacity: 0.55;
-  }
-  .transfer-progress-resize::before,
-  .transfer-progress-resize::after {
-    content: '';
-    position: absolute;
-    right: 3px;
-    bottom: 3px;
-    width: 8px;
-    height: 1px;
-    background: var(--text-color-secondary, currentColor);
-    transform: rotate(-45deg);
-    transform-origin: right center;
-  }
-  .transfer-progress-resize::after {
-    right: 6px;
-    width: 5px;
   }
   @media (max-width: 520px) {
     .upload-task-row {

@@ -8,6 +8,7 @@
     UiFormField,
     UiInput,
     UiModal,
+    UiResizeHandle,
     UiTextarea,
     UiTokenInput,
     type UiTokenOption,
@@ -208,11 +209,13 @@
           class="quick-resize quick-resize--top-right"
           @pointerdown.stop="resizeTopRight.startResize"
         ></div>
-        <div
+        <UiResizeHandle
           data-testid="quick-command-resize-bottom-right"
-          class="quick-resize quick-resize--bottom-right"
+          class="quick-resize absolute bottom-0 right-0 z-30"
+          :title="t('quickCommands.form.resize')"
+          :aria-label="t('quickCommands.form.resize')"
           @pointerdown.stop="resizeBottomRight.startResize"
-        ></div>
+        />
         <div
           data-testid="quick-command-resize-bottom-left"
           class="quick-resize quick-resize--bottom-left"
@@ -383,7 +386,6 @@
   }
   .quick-resize--top-left,
   .quick-resize--top-right,
-  .quick-resize--bottom-right,
   .quick-resize--bottom-left {
     width: 14px;
     height: 14px;
@@ -397,11 +399,6 @@
     top: 0;
     right: 0;
     cursor: nesw-resize;
-  }
-  .quick-resize--bottom-right {
-    right: 0;
-    bottom: 0;
-    cursor: nwse-resize;
   }
   .quick-resize--bottom-left {
     bottom: 0;

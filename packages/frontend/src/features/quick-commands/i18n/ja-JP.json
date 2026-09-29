@@ -28,6 +28,7 @@
       "variableValuePlaceholder": "変数値",
       "addVariable": "+ 変数を追加",
       "execute": "実行",
+      "resize": "クイックコマンドウィンドウのサイズを変更",
       "warningUndefinedVariables": "警告：コマンドテンプレートに未定義の変数があります: {variables}",
       "errorNoActiveSession": "コマンドを実行するためのアクティブなSSHセッションがありません。"
     },

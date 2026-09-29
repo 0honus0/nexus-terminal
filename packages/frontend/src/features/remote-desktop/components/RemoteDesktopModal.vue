@@ -3,7 +3,7 @@
   import Guacamole from 'guacamole-common-js';
   import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
   import { useI18n } from 'vue-i18n';
-  import { UiOverlayPanel } from '@/foundation/ui';
+  import { UiOverlayPanel, UiResizeHandle } from '@/foundation/ui';
   import { readStoredValue, stringStorageCodec, useDeviceCapabilities, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
   import { apiErrorMessage } from '@/client/http';
@@ -791,14 +791,14 @@
         </div>
       </footer>
 
-      <button
+      <UiResizeHandle
         v-if="!fullscreen && !device.isMobile.value"
         :data-testid="connection?.type === 'VNC' ? 'vnc-window-resize' : 'rdp-window-resize'"
-        type="button"
-        class="absolute bottom-0 right-0 z-[1100] h-6 w-6 touch-none select-none cursor-nwse-resize bg-transparent hover:bg-primary-dark/30"
+        class="absolute bottom-0 right-0 z-[1100]"
         :title="t('remoteDesktopModal.resize')"
+        :aria-label="t('remoteDesktopModal.resize')"
         @pointerdown.stop="resize.startResize"
-      ></button>
+      />
     </div>
   </UiOverlayPanel>
 </template>

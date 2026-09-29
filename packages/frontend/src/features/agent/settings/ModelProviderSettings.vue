@@ -9,6 +9,7 @@
     UiEmptyState,
     UiInfoHint,
     UiPopover,
+    UiResizeHandle,
     UiSelect,
     type UiSelectOption,
   } from '@/foundation/ui';
@@ -2060,17 +2061,12 @@
     @close="closeModal"
   >
     <template #panel-overlay>
-      <button
-        type="button"
-        class="provider-add-resize-handle absolute bottom-0 right-0 z-40 h-6 w-6 touch-none select-none cursor-nwse-resize rounded-br-2xl bg-transparent text-text-secondary/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+      <UiResizeHandle
+        class="provider-add-resize-handle absolute bottom-0 right-0 z-40"
         :title="$t('agent.settings.providers.resize')"
         :aria-label="$t('agent.settings.providers.resize')"
         @pointerdown.stop="startProviderPanelResize"
-      >
-        <svg class="absolute bottom-1 right-1 h-3 w-3" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <path d="M10.5 1.5a9 9 0 0 1-9 9" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" />
-        </svg>
-      </button>
+      />
     </template>
 
     <div class="space-y-4">
