@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiContextMenu, UiSelect } from '@/foundation/ui';
+  import { UiButton, UiContextMenu, UiSelect } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { focusRegistry } from '@/shared/focus/public';
   import { useFeedback } from '@/shared/feedback/public';
@@ -296,18 +296,27 @@
         >
           <i class="fas fa-search" aria-hidden="true"></i>
         </button>
-        <button
+        <UiButton
           type="button"
-          class="save-btn"
+          class="editor-action-button"
+          density="compact"
           :title="t('fileEditor.refreshRemote')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @click="reload"
         >
           {{ t('fileManager.actions.refresh') }}
-        </button>
-        <button type="button" class="save-btn" :disabled="saveDisabled" @click="triggerSave">
+        </UiButton>
+        <UiButton
+          type="button"
+          class="editor-action-button"
+          appearance="solid"
+          tone="primary"
+          density="compact"
+          :disabled="saveDisabled"
+          @click="triggerSave"
+        >
           {{ t('fileManager.actions.save') }}
-        </button>
+        </UiButton>
         <button
           v-if="showCloseButton && !device.isMobile.value"
           type="button"
@@ -605,25 +614,11 @@
     flex-basis: 4.5rem;
   }
 
-  .save-btn {
-    padding: 0.4rem 0.8rem;
-    cursor: pointer;
-    border: 0;
-    border-radius: 3px;
-    background-color: #4caf50;
-    color: #fff;
-    font-size: 0.9em;
+  .editor-action-button {
+    --ui-control-padding-inline: 14px;
   }
-  .save-btn:disabled {
-    cursor: not-allowed;
-    background-color: #aaa;
-  }
-  .save-btn:hover:not(:disabled) {
-    background-color: #45a049;
-  }
-  .editor-header.is-mobile .save-btn {
+  .editor-header.is-mobile .editor-action-button {
     flex: 0 0 auto;
-    padding: 0.4rem 0.65rem;
     white-space: nowrap;
   }
   .search-btn {
