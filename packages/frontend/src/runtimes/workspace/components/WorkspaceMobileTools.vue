@@ -206,7 +206,7 @@
   >
     <button
       type="button"
-      class="absolute right-2 top-2 z-20 grid h-8 w-8 place-items-center rounded-lg border border-border/60 bg-background/80 text-text-secondary active:scale-95"
+      class="absolute right-2 top-2 z-20 grid h-8 w-8 place-items-center rounded-lg border border-border/60 bg-background/80 text-text-secondary"
       :title="t('common.close')"
       :aria-label="t('common.close')"
       @click="statusVisible = false"

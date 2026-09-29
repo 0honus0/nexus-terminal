@@ -101,13 +101,11 @@
       0 5px 14px -12px color-mix(in srgb, var(--text-color) 32%, transparent);
     transition:
       border-color 140ms ease,
-      background-color 140ms ease,
-      transform 140ms ease;
+      background-color 140ms ease;
   }
 
   .dashboard-host-card:hover {
     border-color: color-mix(in srgb, var(--border-color) 64%, var(--link-active-color));
     background: color-mix(in srgb, var(--card-bg-color) 90%, var(--app-bg-color));
-    transform: translateY(-1px);
   }
 </style>

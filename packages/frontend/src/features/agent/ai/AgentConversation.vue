@@ -474,13 +474,13 @@
               v-for="prompt in visibleHomePromptCards"
               :key="prompt.promptKey"
               type="button"
-              class="agent-home-prompt group relative flex items-center rounded-2xl border border-border/75 p-3.5 text-left shadow-sm backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99]"
+              class="agent-home-prompt group relative flex items-center rounded-2xl border border-border/75 p-3.5 text-left shadow-sm backdrop-blur-xs transition-colors duration-200"
               :class="homePromptToneClasses[prompt.tone].card"
               @click="emit('updateDraft', $t(prompt.promptKey))"
             >
               <div class="flex items-start gap-3.5 w-full">
                 <span
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-2xs transition-all group-hover:scale-105"
+                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-2xs transition-colors"
                   :class="homePromptToneClasses[prompt.tone].icon"
                 >
                   <i class="fa-solid text-sm" :class="prompt.icon" aria-hidden="true"></i>
@@ -494,7 +494,7 @@
                       {{ $t(prompt.titleKey) }}
                     </span>
                     <span
-                      class="text-xs text-text-secondary/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                      class="text-xs text-text-secondary/40 transition-colors"
                       :class="homePromptToneClasses[prompt.tone].arrow"
                       aria-hidden="true"
                       >↗</span
@@ -834,7 +834,7 @@
               <button
                 v-if="activeRun"
                 type="button"
-                class="agent-stop-button flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-error/45 bg-error/10 text-[11px] font-semibold text-error transition-all hover:bg-error/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                class="agent-stop-button flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-error/45 bg-error/10 text-[11px] font-semibold text-error transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-50"
                 :aria-label="$t('agent.conversation.cancelRun')"
                 :title="$t('agent.conversation.cancelRun')"
                 :disabled="stopDisabled"
@@ -848,7 +848,7 @@
               </button>
               <button
                 type="button"
-                class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:border disabled:border-border/70 disabled:bg-foreground/[0.07] disabled:text-text-secondary disabled:opacity-50 disabled:shadow-none"
+                class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:border disabled:border-border/70 disabled:bg-foreground/[0.07] disabled:text-text-secondary disabled:opacity-50 disabled:shadow-none"
                 :aria-label="$t('agent.conversation.send')"
                 :title="sendDisabled ? sendDisabledHint : $t('agent.conversation.send')"
                 :disabled="sendDisabled"

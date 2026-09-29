@@ -453,7 +453,7 @@
       <button
         type="button"
         :disabled="busy"
-        class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-header/25 hover:border-border-hover py-2.5 text-xs text-text-secondary hover:text-foreground transition-all duration-200 cursor-pointer select-none active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
+        class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-header/25 hover:border-border-hover py-2.5 text-xs text-text-secondary hover:text-foreground transition-colors duration-200 cursor-pointer select-none disabled:pointer-events-none disabled:opacity-40"
         @click="openAddTargetModal"
       >
         <i

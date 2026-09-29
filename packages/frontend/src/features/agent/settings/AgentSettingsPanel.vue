@@ -1086,11 +1086,7 @@
               :disabled="featureOperationBusy"
               @click="confirmRecommendedInstall"
             >
-              <i
-                v-if="!featureOperationBusy"
-                class="fa-solid fa-download text-xs transition-transform group-hover:-translate-y-0.5"
-                aria-hidden="true"
-              ></i>
+              <i v-if="!featureOperationBusy" class="fa-solid fa-download text-xs" aria-hidden="true"></i>
               <i v-else class="fa-solid fa-circle-notch fa-spin text-xs" aria-hidden="true"></i>
               <span>{{
                 featureOperationBusy

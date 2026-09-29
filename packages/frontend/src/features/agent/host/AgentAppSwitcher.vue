@@ -148,7 +148,7 @@
     <button
       ref="triggerRef"
       type="button"
-      class="agent-app-new-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-transparent text-text-secondary/70 transition-colors hover:bg-card/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 active:scale-95"
+      class="agent-app-new-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-transparent text-text-secondary/70 transition-colors hover:bg-card/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
       :class="open ? 'bg-card/70 text-foreground' : ''"
       :aria-label="$t('agent.hub.chooseApp')"
       :title="$t('agent.hub.chooseApp')"

@@ -132,11 +132,7 @@
       type="button"
       data-agent-launcher-trigger
       class="group relative flex h-9 w-9 sm:h-11 sm:w-11 touch-none select-none items-center justify-center rounded-full border border-border/80 bg-card/92 text-foreground shadow-[0_4px_20px_rgba(0,0,0,0.12)] backdrop-blur-xl ring-1 ring-white/20 dark:ring-white/8 transition-all duration-200 hover:border-primary/50 hover:shadow-[0_6px_24px_color-mix(in_srgb,var(--color-primary)_22%,transparent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:cursor-not-allowed disabled:opacity-50"
-      :class="
-        dragging
-          ? 'scale-110 cursor-grabbing ring-2 ring-primary/60 shadow-2xl rotate-3'
-          : 'cursor-pointer hover:scale-105 active:scale-95'
-      "
+      :class="dragging ? 'scale-110 cursor-grabbing ring-2 ring-primary/60 shadow-2xl rotate-3' : 'cursor-pointer'"
       :aria-label="$t('agent.launcher.open')"
       :title="`${$t('agent.launcher.open')} · ${$t('agent.launcher.dragHint')}`"
       :disabled="paused"
@@ -165,7 +161,7 @@
           aria-hidden="true"
         ></span>
         <svg
-          class="relative h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6"
+          class="relative h-4 w-4 sm:h-5 sm:w-5"
           viewBox="0 0 24 24"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
