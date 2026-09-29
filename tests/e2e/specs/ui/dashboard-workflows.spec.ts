@@ -325,8 +325,9 @@ test('dashboard reconnect completion refreshes recent connection without navigat
   }
 });
 
-test('SSH resource loading state fills the scroll panel without a darker partial block', async ({ page, context }) => {
+test('SSH resource cards appear while their status requests are pending', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
+  await ensureTestSshConnection(context.request);
 
   const originalSettingsResponse = await context.request.get('/api/v1/settings');
   expect(originalSettingsResponse.ok()).toBeTruthy();
@@ -350,7 +351,7 @@ test('SSH resource loading state fills the scroll panel without a darker partial
     markRemoteRequestStarted = resolve;
   });
 
-  await page.route('**/api/v1/system/ssh-resources', async (route) => {
+  await page.route('**/api/v1/system/ssh-resources/*', async (route) => {
     markRemoteRequestStarted?.();
     const backendResponse = await route.fetch();
     await remoteResourcesReleased;
@@ -362,17 +363,11 @@ test('SSH resource loading state fills the scroll panel without a darker partial
     await remoteRequestStarted;
 
     const list = page.getByTestId('dashboard-ssh-resource-list');
-    const loadingState = page.getByTestId('dashboard-remote-resources-loading');
     await expect(list).toBeVisible();
-    await expect(loadingState).toBeVisible();
-    await expect(loadingState).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-
-    const listBox = await list.boundingBox();
-    const loadingBox = await loadingState.boundingBox();
-    expect(listBox).not.toBeNull();
-    expect(loadingBox).not.toBeNull();
-    expect(loadingBox?.height ?? 0).toBeGreaterThanOrEqual(120);
-    expect(loadingBox?.width ?? 0).toBeGreaterThanOrEqual((listBox?.width ?? 0) - 32);
+    await expect(
+      page.getByTestId(`dashboard-remote-resource-${E2E_SSH.host.toLowerCase()}:${E2E_SSH.port}`),
+    ).toBeVisible();
+    await expect(page.getByTestId('dashboard-remote-resources-loading')).toHaveCount(0);
   } finally {
     releaseRemoteResources?.();
     await page.unrouteAll({ behavior: 'wait' });
@@ -382,6 +377,80 @@ test('SSH resource loading state fills the scroll panel without a darker partial
       },
     });
     expect(restoreSettings.ok()).toBeTruthy();
+  }
+});
+
+test('a slow SSH resource does not hold back another host on the dashboard', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const goodConnectionId = await ensureTestSshConnection(context.request);
+  const originalSettingsResponse = await context.request.get('/api/v1/settings');
+  expect(originalSettingsResponse.ok()).toBeTruthy();
+  const originalSettings = (await originalSettingsResponse.json()) as { dashboardShowRemoteResources?: boolean };
+  expect(
+    (await context.request.put('/api/v1/settings', { data: { dashboardShowRemoteResources: true } })).ok(),
+  ).toBeTruthy();
+  const badHost = '198.51.100.88';
+  const badPort = 2222;
+  const create = await context.request.post('/api/v1/connections', {
+    data: {
+      name: 'E2E Slow SSH Resource',
+      type: 'SSH',
+      host: badHost,
+      port: badPort,
+      username: 'slow',
+      authMethod: 'password',
+      password: 'unused',
+    },
+  });
+  expect(create.status()).toBe(201);
+  const badConnectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
+  let releaseSlow: (() => void) | undefined;
+  const slowReleased = new Promise<void>((resolve) => {
+    releaseSlow = resolve;
+  });
+
+  await page.route('**/api/v1/system/ssh-resources/*', async (route) => {
+    const id = Number(route.request().url().split('/').at(-1));
+    if (id === badConnectionId) {
+      await slowReleased;
+      await route.abort('failed');
+    } else if (id === goodConnectionId) {
+      await route.fulfill({
+        json: {
+          key: `${E2E_SSH.host.toLowerCase()}:${E2E_SSH.port}`,
+          connectionId: goodConnectionId,
+          name: 'E2E SSH',
+          username: E2E_SSH.username,
+          host: E2E_SSH.host,
+          port: E2E_SSH.port,
+          status: { cpuPercent: 7, memPercent: 8, timestamp: Date.now() },
+          checkedAt: Date.now(),
+        },
+      });
+    } else await route.abort('failed');
+  });
+
+  try {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    const goodCard = page.getByTestId(`dashboard-remote-resource-${E2E_SSH.host.toLowerCase()}:${E2E_SSH.port}`);
+    const badCard = page.getByTestId(`dashboard-remote-resource-${badHost}:${badPort}`);
+    await expect(goodCard).toContainText('7%');
+    await expect(badCard).toBeVisible();
+    await expect(badCard).not.toContainText('Network Error');
+    releaseSlow?.();
+    await expect(badCard).toContainText('Network Error');
+    await expect(goodCard).toContainText('7%');
+  } finally {
+    releaseSlow?.();
+    await page.unrouteAll({ behavior: 'wait' });
+    expect((await context.request.delete(`/api/v1/connections/${badConnectionId}`)).ok()).toBeTruthy();
+    expect(
+      (
+        await context.request.put('/api/v1/settings', {
+          data: { dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true },
+        })
+      ).ok(),
+    ).toBeTruthy();
   }
 });
 
@@ -402,7 +471,7 @@ test('resource failures stay inside their panels and do not block quick connect'
   await page.route('**/api/v1/system/status', async (route) => {
     await route.abort('failed');
   });
-  await page.route('**/api/v1/system/ssh-resources', async (route) => {
+  await page.route('**/api/v1/system/ssh-resources/*', async (route) => {
     await route.abort('failed');
   });
 
@@ -411,7 +480,9 @@ test('resource failures stay inside their panels and do not block quick connect'
     const dashboard = page.getByTestId('dashboard-view');
     const local = dashboard.getByTestId('dashboard-local-resources');
     const remoteList = dashboard.getByTestId('dashboard-ssh-resource-list');
-    const remoteError = dashboard.getByTestId('dashboard-remote-resources');
+    const remoteError = dashboard.getByTestId(
+      `dashboard-remote-resource-${E2E_SSH.host.toLowerCase()}:${E2E_SSH.port}`,
+    );
     const connectionList = dashboard.getByTestId('dashboard-connection-list');
     const row = dashboard.getByTestId(`dashboard-connection-row-${connectionId}`);
 
@@ -421,12 +492,7 @@ test('resource failures stay inside their panels and do not block quick connect'
     await expect(row).toBeVisible();
     await expect(dashboard.getByTestId(`dashboard-connect-${connectionId}`)).toBeEnabled();
 
-    const listBox = await remoteList.boundingBox();
-    const errorBox = await remoteError.boundingBox();
-    expect(listBox).not.toBeNull();
-    expect(errorBox).not.toBeNull();
-    expect(errorBox!.width).toBeGreaterThanOrEqual(listBox!.width - 32);
-    expect(errorBox!.height).toBeGreaterThanOrEqual(120);
+    await expect(remoteList).toBeVisible();
   } finally {
     await page.unrouteAll({ behavior: 'wait' });
     const restoreSettings = await context.request.put('/api/v1/settings', {

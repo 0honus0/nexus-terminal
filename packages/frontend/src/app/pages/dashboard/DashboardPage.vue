@@ -186,7 +186,8 @@
     if (!document.hidden) void resources.loadLocal();
   };
   const refreshRemote = () => {
-    if (!document.hidden) void resources.loadRemote();
+    if (!document.hidden)
+      void resources.loadRemote(() => connections.load().then((items) => items.filter((item) => item.type === 'SSH')));
   };
   const scheduleLocalRefresh = () => {
     window.clearInterval(localRefreshTimer);
