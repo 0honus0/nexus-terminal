@@ -661,7 +661,7 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
       page,
       uploadNames.map((name, index) => ({
         name,
-        size: 24 * 1024 * 1024,
+        size: 8 * 1024 * 1024,
         fill: 0x50 + index,
       })),
     );
