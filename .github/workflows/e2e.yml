@@ -154,7 +154,7 @@ jobs:
           pnpm run build:agent-runner
 
   playwright:
-    name: Playwright (balanced shard ${{ matrix.shard }}/${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }})
+    name: Playwright shard ${{ matrix.shard }}
     needs: e2e-runner-image
     runs-on: ubuntu-latest
     timeout-minutes: 35
