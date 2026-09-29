@@ -259,6 +259,57 @@ test('resumed terminal preserves SGR wheel encoding requested by the remote TUI'
   expect(historyRequestCount).toBe(0);
 });
 
+test('resizing a suspended fullscreen terminal is ordered after its checkpoint', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const original = await openWorkspaceSession(request, connectionId, `suspend-resize-${crypto.randomUUID()}`);
+  const originalColumns = 100;
+  const originalRows = 30;
+  const resumedColumns = 140;
+  const resumedRows = 20;
+  const snapshot = `\x1b[?1049h\x1b[2J\x1b[HRESIZE_BASELINE\x1b[${originalRows};1HSTATUS_${originalColumns}x${originalRows}`;
+
+  await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
+  await closeWebSocket(original.socket);
+
+  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  const recovery = await openAuthenticatedWebSocket(request);
+  try {
+    let suspended: SuspendedSession | undefined;
+    for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
+      const list = await requestWorkspace<SuspendedSession[]>(recovery, 'suspend.list');
+      suspended = list.find(
+        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+      );
+      if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(suspended).toBeTruthy();
+
+    const initialChunks: Buffer[] = [];
+    const onInitialMessage = (data: Buffer, isBinary: boolean) => {
+      if (!isBinary) return;
+      const frame = decodeWorkspaceBinaryFrame(Buffer.from(data));
+      if (frame.type === 1) initialChunks.push(frame.payload);
+    };
+    recovery.on('message', onInitialMessage);
+    await requestWorkspace(recovery, 'suspend.resume', {
+      suspendedSessionId: suspended!.id,
+      workspaceId: `resized-${crypto.randomUUID()}`,
+      viewport: { columns: resumedColumns, rows: resumedRows },
+    });
+    recovery.off('message', onInitialMessage);
+    const cached = Buffer.concat(initialChunks).toString('utf8');
+    expect(cached).toContain('RESIZE_BASELINE');
+    expect(cached).toContain(`STATUS_${originalColumns}x${originalRows}`);
+    expect(cached).not.toContain(`STATUS_${resumedColumns}x${resumedRows}`);
+
+    await requestWorkspace(recovery, 'suspend.unmark');
+  } finally {
+    await closeWebSocket(recovery);
+  }
+});
+
 test('a second device explicitly takes over an attached suspended SSH owner without replacing the shell', async ({
   request,
 }) => {

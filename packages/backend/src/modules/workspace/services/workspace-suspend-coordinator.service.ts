@@ -414,10 +414,13 @@ export class WorkspaceSuspendCoordinatorService {
   async commitResume(workspaceId: string): Promise<void> {
     const pending = this.pending.get(workspaceId);
     if (!pending?.logIdentifier) throw new Error(`No prepared resume exists for ${workspaceId}.`);
-    // The retained tail is fully sent before commitResume() is called. Attach the live listener only
-    // now, while the shell is still paused, so the first resumed PTY bytes are ordered strictly after
-    // the cached history already delivered on the WebSocket.
-    this.terminal.attach(workspaceId, pending.viewport ?? { columns: 80, rows: 24 });
+    // The retained tail is fully sent before commitResume() is called. Keep its suspended geometry
+    // unchanged until that baseline reaches the browser. Fullscreen TUIs can emit a partial SIGWINCH
+    // redraw while paused; replaying that after an old-size checkpoint leaves duplicated rows and
+    // background cells. Resize only now, with live listeners installed, so redraw bytes are strictly
+    // ordered after the checkpoint that they replace.
+    const viewport = pending.viewport ?? { columns: 80, rows: 24 };
+    this.terminal.attach(workspaceId, viewport);
     if (
       pending.ownershipGeneration === undefined ||
       !(await this.suspended.commitResume(pending.userId, pending.suspendSessionId, {
@@ -439,20 +442,14 @@ export class WorkspaceSuspendCoordinatorService {
     }
     // Resume does not implicitly cancel suspend. Keep recording into the same retained log;
     // the frontend can explicitly unmark later if the user wants a normal reconnect lifecycle.
-    this.createMark(
-      workspaceId,
-      pending.userId,
-      pending.logIdentifier,
-      undefined,
-      pending.checkpoint,
-      pending.viewport ?? { columns: 80, rows: 24 },
-      {
-        suspendSessionId: pending.suspendSessionId,
-        ownerId: pending.ownerId,
-        ownershipGeneration: pending.ownershipGeneration,
-      },
-    );
+    this.createMark(workspaceId, pending.userId, pending.logIdentifier, undefined, pending.checkpoint, viewport, {
+      suspendSessionId: pending.suspendSessionId,
+      ownerId: pending.ownerId,
+      ownershipGeneration: pending.ownershipGeneration,
+    });
     const session = this.workspaces.requireSession(workspaceId);
+    await pending.checkpoint?.resize(viewport).catch(() => undefined);
+    session.shell.resize(viewport.columns, viewport.rows);
     session.shell.resume();
     logger.info(
       { workspaceId, suspendedSessionId: pending.suspendSessionId, historyAvailable: pending.historyCursor > 0 },

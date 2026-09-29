@@ -174,10 +174,6 @@ export class SshSuspendService {
     this.detachListeners(record);
     try {
       await record.outputChain.catch(() => undefined);
-      if (viewport) {
-        record.shell.resize(viewport.columns, viewport.rows);
-        await record.checkpoint?.resize(viewport);
-      }
       await this.logs.flush(record.logIdentifier);
       const offset = await this.logs.position(record.logIdentifier);
       const terminalCheckpoint = await this.refreshCheckpoint(record, offset, true).catch(() => undefined);
@@ -189,9 +185,9 @@ export class SshSuspendService {
         originalConnectionId: record.connectionId,
         checkpoint: record.checkpoint,
         terminalCheckpoint,
-        viewport: terminalCheckpoint
-          ? { columns: terminalCheckpoint.columns, rows: terminalCheckpoint.rows }
-          : viewport,
+        viewport:
+          viewport ??
+          (terminalCheckpoint ? { columns: terminalCheckpoint.columns, rows: terminalCheckpoint.rows } : undefined),
         shellPid: record.shellPid,
         shellKind: record.shellKind,
         shellIntegrationReady: record.shellIntegrationReady,
