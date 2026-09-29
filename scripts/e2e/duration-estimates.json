@@ -1,7 +1,7 @@
 {
   "version": 1,
   "specs": {
-    "specs/agent/host.spec.ts": 66665,
+    "specs/agent/host.spec.ts": 61786,
     "specs/agent/preset-plugin.spec.ts": 35407,
     "specs/agent/provider.spec.ts": 310,
     "specs/auth/setup-login.spec.ts": 8206,
