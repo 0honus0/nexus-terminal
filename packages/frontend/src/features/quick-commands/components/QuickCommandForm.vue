@@ -309,15 +309,17 @@
 
       <div class="flex justify-end gap-3 border-t border-border pt-4">
         <UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
-        <button
+        <UiButton
           data-testid="quick-command-execute-draft"
           type="button"
-          class="execute-action"
+          appearance="solid"
+          tone="success"
           :disabled="!form.command.trim()"
           @click="execute"
         >
-          <i class="fas fa-play mr-1" aria-hidden="true"></i>{{ t('quickCommands.form.execute') }}
-        </button>
+          <template #leading><i class="fas fa-play" aria-hidden="true"></i></template>
+          {{ t('quickCommands.form.execute') }}
+        </UiButton>
         <UiButton
           data-testid="quick-command-submit"
           type="submit"
@@ -341,25 +343,6 @@
       0 0 0 1px color-mix(in srgb, var(--border-color) 10%, transparent);
   }
 
-  .execute-action {
-    border-radius: 0.5rem;
-    background: var(--status-success-color, #28a745);
-    padding: 0.5rem 1.25rem;
-    color: white;
-    font-size: 0.875rem;
-    font-weight: 600;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
-    transition:
-      opacity 0.15s ease,
-      filter 0.15s ease;
-  }
-  .execute-action:hover:not(:disabled) {
-    filter: brightness(0.95);
-  }
-  .execute-action:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
   .quick-resize {
     position: absolute;
     z-index: 20;
