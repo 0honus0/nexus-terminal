@@ -333,6 +333,7 @@
   };
 
   const historyLoadThreshold = (): number => Math.max(4, Math.ceil((terminal?.rows ?? 24) * 0.2));
+  const remoteMouseReportingActive = (): boolean => terminal?.modes.mouseTrackingMode !== 'none';
   const copySelection = async () => {
     if (terminal?.hasSelection()) await writeClipboardText(terminal.getSelection());
   };
@@ -818,7 +819,11 @@
       applyFontSize(change.next);
       return;
     }
-    if (event.deltaY < 0 && (terminal?.buffer.active.viewportY ?? Number.POSITIVE_INFINITY) <= historyLoadThreshold()) {
+    if (
+      !remoteMouseReportingActive() &&
+      event.deltaY < 0 &&
+      (terminal?.buffer.active.viewportY ?? Number.POSITIVE_INFINITY) <= historyLoadThreshold()
+    ) {
       void loadPreviousOutput();
     }
   };

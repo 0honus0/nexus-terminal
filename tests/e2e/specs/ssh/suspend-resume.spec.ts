@@ -227,6 +227,7 @@ test('resumed terminal preserves SGR wheel encoding requested by the remote TUI'
   expect(suspended).toBeTruthy();
 
   const terminalInput: string[] = [];
+  let historyRequestCount = 0;
   page.on('websocket', (socket) => {
     socket.on('framesent', ({ payload }) => {
       if (typeof payload !== 'string') return;
@@ -234,6 +235,8 @@ test('resumed terminal preserves SGR wheel encoding requested by the remote TUI'
         const message = JSON.parse(payload) as { type?: string; payload?: { data?: unknown } };
         if (message.type === 'terminal.input' && typeof message.payload?.data === 'string') {
           terminalInput.push(message.payload.data);
+        } else if (message.type === 'suspend.history.previous') {
+          historyRequestCount += 1;
         }
       } catch {
         // Ignore non-protocol frames from other sockets on the page.
@@ -253,6 +256,7 @@ test('resumed terminal preserves SGR wheel encoding requested by the remote TUI'
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
   for (let attempt = 0; attempt < 3; attempt += 1) await page.mouse.wheel(0, -350);
   await expect.poll(() => terminalInput.some((data) => /\x1b\[<64;\d+;\d+M/.test(data)), { timeout: 5_000 }).toBe(true);
+  expect(historyRequestCount).toBe(0);
 });
 
 test('a second device explicitly takes over an attached suspended SSH owner without replacing the shell', async ({
