@@ -29,6 +29,7 @@ export default class MirroredLogReporter implements Reporter {
   private totalSpecs = 0;
   private consoleEnabled = process.env.GITHUB_ACTIONS === 'true' || process.env.E2E_CONSOLE_LOGS === '1';
   private runStartedAt = 0;
+  private latestResultByTestId = new Map<string, { spec: string; status: TestResult['status']; duration: number }>();
 
   onBegin(config: FullConfig, suite: Suite) {
     this.runStartedAt = Date.now();
@@ -104,6 +105,11 @@ export default class MirroredLogReporter implements Reporter {
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
+    this.latestResultByTestId.set(test.id, {
+      spec: this.specPath(test),
+      status: result.status,
+      duration: result.duration,
+    });
     this.append(
       test,
       `\nstatus: ${result.status}\ndurationMs: ${result.duration}\nfinished: ${new Date().toISOString()}\n`,
@@ -138,6 +144,7 @@ export default class MirroredLogReporter implements Reporter {
   onEnd(result: FullResult) {
     const elapsed = this.runStartedAt > 0 ? Date.now() - this.runStartedAt : result.duration;
     this.consoleLog(`\n[E2E] Finished: ${result.status} in ${this.formatDuration(elapsed)}`);
+    this.writeSpecDurations();
     if (this.unexpectedFirstAttempts.size === 0) return;
 
     const summaryFile = path.join(this.logRoot, '_flaky-tests.log');
@@ -154,6 +161,31 @@ export default class MirroredLogReporter implements Reporter {
     // artifacts/logs for diagnosis while preventing a retry-pass from producing
     // a misleading green CI run.
     if (result.status === 'passed') return { status: 'failed' as const };
+  }
+
+  private writeSpecDurations(): void {
+    const bySpec = new Map<string, Array<{ status: TestResult['status']; duration: number }>>();
+    for (const testResult of this.latestResultByTestId.values()) {
+      const results = bySpec.get(testResult.spec) ?? [];
+      results.push({ status: testResult.status, duration: testResult.duration });
+      bySpec.set(testResult.spec, results);
+    }
+
+    const specs = Object.fromEntries(
+      [...bySpec.entries()]
+        .filter(([, results]) => results.length > 0 && results.every(({ status }) => status === 'passed'))
+        .map(([spec, results]) => [spec, Math.round(results.reduce((total, { duration }) => total + duration, 0))])
+        .sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const outputPath = path.resolve(
+      process.env.E2E_SPEC_DURATIONS_PATH || path.join(this.testDir, '..', 'test-results', 'spec-durations.json'),
+    );
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(
+      outputPath,
+      `${JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), specs }, null, 2)}\n`,
+      'utf8',
+    );
   }
 
   private logFileFor(test: TestCase, retry = 0): string {

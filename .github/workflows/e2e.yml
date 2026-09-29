@@ -119,10 +119,21 @@ jobs:
         run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
 
       - name: Run balanced E2E shard ${{ matrix.shard }}
+        env:
+          E2E_SPEC_DURATIONS_PATH: test-results/spec-durations.json
         run: >-
           node scripts/e2e/balanced-shards.mjs run
           --shards "${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }}"
           --shard "${{ matrix.shard }}"
+
+      - name: Upload E2E spec timings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-timings-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: tests/e2e/test-results/spec-durations.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload E2E diagnostics
         if: failure()
@@ -135,6 +146,60 @@ jobs:
             tests/e2e/test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  update-playwright-balance:
+    name: Update Playwright duration balance
+    needs: playwright
+    if: ${{ always() && needs.playwright.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Download E2E spec timings
+        uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-timings-*-${{ github.run_attempt }}
+          path: e2e-timings
+
+      - name: Update duration estimates
+        run: node scripts/e2e/update-duration-estimates.mjs --input e2e-timings
+
+      - name: Upload proposed duration estimates
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-duration-estimates-${{ github.run_attempt }}
+          path: scripts/e2e/duration-estimates.json
+          retention-days: 14
+
+      - name: Push updated duration estimates
+        if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+        env:
+          TESTED_SHA: ${{ github.sha }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          if git diff --quiet -- scripts/e2e/duration-estimates.json; then
+            echo "Duration estimates are already current."
+            exit 0
+          fi
+          git fetch origin "$TARGET_BRANCH"
+          if [ "$(git rev-parse FETCH_HEAD)" != "$TESTED_SHA" ]; then
+            echo "origin/$TARGET_BRANCH advanced after this E2E run; skipping stale timing update."
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/e2e/duration-estimates.json
+          git commit -m "ci(e2e): refresh duration estimates [skip ci]"
+          git push origin "HEAD:$TARGET_BRANCH"
 
   docker-smoke:
     name: Docker deployment smoke

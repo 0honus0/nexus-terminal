@@ -4,7 +4,7 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
-The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, seven duration-balanced Playwright shards on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
+The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, eight duration-balanced Playwright shards on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
 ## Structure
 
@@ -69,6 +69,8 @@ For a long-lived remote development host that may already be serving Nexus on th
 The canonical push/pull-request workflow keeps eight isolated Playwright jobs, but their spec assignments are duration-balanced rather than fixed at one job per project. Manual dispatch can select 6–10 jobs. The allocator covers every spec under `auth`, `http`, `agent`, `websocket`, `ui`, `ssh`, and `mobile` exactly once. Matrix jobs fail directly when their Playwright command fails.
 
 Each job checks out the tested commit, sets up Node 24 and pnpm, installs the frozen workspace, installs Chromium with Playwright's system dependencies, and regenerates the same deterministic shard assignment before running it. Fresh GitHub-hosted runners eliminate local port collisions. The default balance can be inspected locally with `node scripts/e2e/balanced-shards.mjs plan --shards 8`.
+
+Every Playwright shard publishes its successful per-spec runtime after the run. A final aggregation job smooths those observations into `scripts/e2e/duration-estimates.json`; a new spec is added immediately, while an existing estimate changes only when the smoothed value differs by at least two seconds and five percent. Pull-request and manual runs upload the proposed baseline as an artifact without writing either branch. A successful branch push writes a material timing update directly back to the same branch that triggered the workflow. The workflow skips the update if that branch advanced after the tested revision. The generated commit contains `[skip ci]`, so pushing the baseline cannot recursively start another E2E workflow. The next E2E run therefore starts from the latest committed balance while one noisy run cannot completely replace established history.
 
 Production-ingress coverage can still be run explicitly against a prepared production-style endpoint:
 
