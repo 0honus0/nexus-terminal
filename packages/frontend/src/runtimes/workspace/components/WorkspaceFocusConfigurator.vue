@@ -116,6 +116,7 @@
   <UiModal
     :visible="visible"
     :title="t('focusSwitcher.configTitle')"
+    :z-index="70"
     panel-class="w-[min(900px,95vw)] max-h-[90dvh]"
     content-class="!py-0"
     @close="attemptClose"
