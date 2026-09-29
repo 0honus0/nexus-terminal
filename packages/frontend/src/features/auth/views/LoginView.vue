@@ -104,7 +104,9 @@
 
 <template>
   <div class="auth-page flex min-h-dvh items-center justify-center overflow-y-auto p-4">
-    <div class="ui-glass-panel flex min-h-[440px] w-full max-w-4xl overflow-hidden rounded-2xl sm:min-h-[480px]">
+    <div
+      class="auth-login-panel ui-glass-panel flex min-h-[440px] w-full max-w-4xl overflow-hidden rounded-2xl sm:min-h-[480px]"
+    >
       <section class="auth-brand-pane hidden w-2/5 flex-col items-center justify-center p-10 text-white md:flex">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
         <h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>
@@ -128,7 +130,7 @@
                 autocomplete="username"
                 required
                 density="comfortable"
-                class="auth-login-input rounded-lg"
+                class="auth-login-control auth-login-input rounded-lg"
                 :disabled="isBusy"
               />
             </UiFormField>
@@ -142,7 +144,7 @@
                 autocomplete="current-password"
                 required
                 density="comfortable"
-                class="auth-login-input rounded-lg"
+                class="auth-login-control auth-login-input rounded-lg"
                 :disabled="isBusy"
               />
             </UiFormField>
@@ -163,7 +165,7 @@
               pattern="[0-9]{6}"
               required
               density="comfortable"
-              class="auth-login-input rounded-lg"
+              class="auth-login-control auth-login-input rounded-lg"
               :disabled="isBusy"
             />
           </UiFormField>
@@ -178,7 +180,7 @@
             tone="primary"
             density="comfortable"
             block
-            class="auth-login-submit rounded-lg px-4 py-3"
+            class="auth-login-control rounded-lg px-4"
             :disabled="captchaBlocked"
             :loading="isBusy"
           >
@@ -196,7 +198,7 @@
             type="button"
             density="comfortable"
             block
-            class="rounded-lg px-4 py-3"
+            class="auth-login-control rounded-lg px-4"
             :loading="isBusy"
             @click="startPasskey"
           >
@@ -224,25 +226,22 @@
     box-shadow: inset -1px 0 0 rgb(0 0 0 / 8%);
   }
 
+  .auth-login-panel {
+    border-color: color-mix(in srgb, var(--border-color) 82%, var(--glass-rim));
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--glass-rim) 24%, transparent),
+      var(--glass-shadow);
+  }
+
+  .auth-login-control[data-ui-gen='2'] {
+    --ui-control-height: 44px;
+  }
+
   .auth-login-input {
     padding-inline: 0;
   }
 
   .auth-login-input :deep(.ui-input__control) {
     padding-inline: var(--ui-control-padding-inline);
-  }
-
-  .auth-login-submit.ui-button--solid[data-tone='primary']:not(:disabled) {
-    --ui-button-glass-fill: var(--button-bg-color);
-    --ui-button-glass-fill-hover: var(--button-hover-bg-color);
-    color: var(--button-text-color);
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 18%),
-      0 1px 2px rgb(0 0 0 / 8%),
-      0 10px 20px -14px color-mix(in srgb, var(--button-bg-color) 55%, transparent);
-  }
-
-  .auth-login-submit.ui-button--solid[data-tone='primary']:not(:disabled):active {
-    background-color: var(--button-hover-bg-color);
   }
 </style>

@@ -684,22 +684,22 @@
   border-color: color-mix(in srgb, var(--status-success-color) 55%, var(--border-color));
 }
 
-/* Primary stays neutral rather than purple. Solid primary inverts the neutral ink so the main
-   action reads as the strongest control; soft/glass primary keeps the quiet glass fill. */
+/* Soft and glass primary actions keep the quiet neutral treatment. Solid primary actions use
+   the theme's action color so the main action stays consistent across product surfaces. */
 [data-ui-gen='2'][data-ui='button'][data-tone='primary']:not(.ui-button--solid) {
   color: var(--ui-text);
 }
 
 .ui-button--solid[data-tone='primary']:not(:disabled) {
-  --ui-button-glass-fill: var(--text-color);
-  --ui-button-glass-fill-hover: color-mix(in srgb, var(--text-color) 86%, var(--app-bg-color));
+  --ui-button-glass-fill: var(--button-bg-color);
+  --ui-button-glass-fill-hover: var(--button-hover-bg-color);
   border-color: transparent;
-  color: var(--app-bg-color);
+  color: var(--button-text-color);
   background-image: none;
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--app-bg-color) 22%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 18%),
     0 1px 2px rgb(0 0 0 / 8%),
-    0 10px 20px -14px color-mix(in srgb, var(--text-color) 55%, transparent);
+    0 10px 20px -14px color-mix(in srgb, var(--button-bg-color) 55%, transparent);
 }
 
 .ui-button--solid[data-tone='primary']:not(:disabled):hover {
@@ -707,7 +707,7 @@
 }
 
 .ui-button--solid[data-tone='primary']:not(:disabled):active {
-  background-color: color-mix(in srgb, var(--text-color) 78%, var(--app-bg-color));
+  background-color: var(--button-hover-bg-color);
 }
 
 .ui-button--ghost {
@@ -763,6 +763,7 @@
   width: 100%;
   min-width: 0;
   height: var(--ui-control-height);
+  overflow: hidden;
   align-items: center;
   gap: var(--ui-control-gap);
   padding-inline: var(--ui-control-padding-inline);
@@ -809,6 +810,7 @@
   height: 100%;
   flex: 1;
   border: 0;
+  border-radius: calc(var(--ui-control-radius) - 1px);
   outline: 0;
   padding: 0;
   background: inherit;
@@ -816,6 +818,16 @@
   font: inherit;
   font-size: var(--ui-control-font-size);
   box-shadow: none;
+}
+
+.ui-input__control:autofill,
+.ui-input__control:-webkit-autofill,
+.ui-input__control:-webkit-autofill:hover,
+.ui-input__control:-webkit-autofill:focus,
+.ui-input__control:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--input-text-color);
+  caret-color: var(--input-text-color);
+  box-shadow: 0 0 0 1000px var(--input-bg-color) inset !important;
 }
 
 .ui-input__control::placeholder {
