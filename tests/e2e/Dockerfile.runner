@@ -10,6 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     COREPACK_HOME=/opt/corepack \
     PNPM_HOME=/opt/pnpm \
     PNPM_STORE_DIR=/opt/pnpm/store \
+    XDG_CACHE_HOME=/opt/pnpm/cache \
     npm_config_nodedir=/usr/local \
     E2E_RUNNER_FINGERPRINT=${E2E_RUNNER_FINGERPRINT} \
     PATH=/opt/pnpm:/opt/corepack:${PATH}
