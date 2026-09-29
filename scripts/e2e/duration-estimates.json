@@ -1,7 +1,7 @@
 {
   "version": 1,
   "specs": {
-    "specs/agent/host.spec.ts": 62579,
+    "specs/agent/host.spec.ts": 66665,
     "specs/agent/preset-plugin.spec.ts": 35407,
     "specs/agent/provider.spec.ts": 310,
     "specs/auth/setup-login.spec.ts": 8206,
@@ -29,7 +29,7 @@
     "specs/ssh/docker-manager-ui.spec.ts": 14015,
     "specs/ssh/file-document-preview.spec.ts": 43562,
     "specs/ssh/file-manager-navigation.spec.ts": 36084,
-    "specs/ssh/file-preview-editor.spec.ts": 70566,
+    "specs/ssh/file-preview-editor.spec.ts": 62700,
     "specs/ssh/file-upload-reconnect-stress.spec.ts": 30800,
     "specs/ssh/file-upload.spec.ts": 77519,
     "specs/ssh/panel-wheel-scaling.spec.ts": 17840,
