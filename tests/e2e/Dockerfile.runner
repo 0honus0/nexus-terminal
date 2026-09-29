@@ -31,7 +31,4 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY tests/e2e/package.json tests/e2e/package.json
-RUN pnpm fetch --frozen-lockfile --ignore-scripts \
-  --filter @nexus-terminal/backend \
-  --filter @nexus-terminal/frontend \
-  --filter @nexus-terminal/e2e
+RUN pnpm fetch --frozen-lockfile --ignore-scripts
