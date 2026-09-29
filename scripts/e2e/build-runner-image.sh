@@ -35,8 +35,16 @@ docker build \
   "$repo_root"
 
 echo "[E2E runner] verifying $full_image"
-docker run --rm "$full_image" sh -lc \
-  "node --version && pnpm --version | grep -Fx '$pnpm_version' && test -d \"\$PLAYWRIGHT_BROWSERS_PATH\" && pnpm install --frozen-lockfile --offline && pnpm --filter @nexus-terminal/e2e exec playwright --version | grep -F 'Version $playwright_version'"
+verification_workspace="$(mktemp -d)"
+trap 'rm -rf "$verification_workspace"' EXIT
+git -C "$repo_root" archive HEAD | tar -x -C "$verification_workspace"
+docker run --rm \
+  --workdir /__w/nexus-terminal/nexus-terminal \
+  --volume "$verification_workspace:/__w/nexus-terminal/nexus-terminal" \
+  "$full_image" sh -lc \
+  "node --version && pnpm --version | grep -Fx '$pnpm_version' && test -d \"\$PLAYWRIGHT_BROWSERS_PATH\" && test \"\$(pnpm store path)\" = /opt/pnpm/store/v11 && pnpm install --frozen-lockfile --offline && pnpm --filter @nexus-terminal/e2e exec playwright --version | grep -F 'Version $playwright_version'"
+rm -rf "$verification_workspace"
+trap - EXIT
 
 echo "[E2E runner] pushing $full_image"
 docker push "$full_image"
