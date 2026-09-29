@@ -12,6 +12,7 @@
   import '@xterm/xterm/css/xterm.css';
   import type { TerminalChannel } from '../ports/terminal-channel';
   import type { TerminalVisualOptions } from '../model/terminal';
+  import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
   import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
   import {
     createTerminalSessionState,
@@ -52,6 +53,7 @@
   let fit: FitAddon | undefined;
   let searchAddon: SearchAddon | undefined;
   let serializeAddon: SerializeAddon | undefined;
+  let runtimeModes: TerminalRuntimeModeTracker | undefined;
   let resizeObserver: ResizeObserver | undefined;
   const cleanup: Array<() => void> = [];
   const HISTORY_LIVE_SCROLLBACK_LINES = 20_000;
@@ -191,7 +193,7 @@
 
   const liveReplaySnapshot = (): string => {
     if (!historyBrowsing) {
-      return terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : '';
+      return `${terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : ''}${runtimeModes?.restoreSuffix() ?? ''}`;
     }
     return `${historyLiveSnapshot}${deferredTerminalOutputReplay()}`;
   };
@@ -236,7 +238,11 @@
     if (!terminal || !serializeAddon || newPage.byteLength === 0 || historyRebuilding) return;
     const enteringHistory = !historyBrowsing;
     if (enteringHistory) {
-      historyLiveSnapshot = serializeTerminalSnapshot(terminal, serializeAddon, HISTORY_LIVE_SNAPSHOT_MAX_BYTES);
+      historyLiveSnapshot = `${serializeTerminalSnapshot(
+        terminal,
+        serializeAddon,
+        HISTORY_LIVE_SNAPSHOT_MAX_BYTES,
+      )}${runtimeModes?.restoreSuffix() ?? ''}`;
       const continuation = currentHistoryContinuation();
       historyWindowChunks = continuation.byteLength ? [continuation] : [];
       historyBrowsing = true;
@@ -248,6 +254,7 @@
     try {
       terminal.options.scrollback = HISTORY_WINDOW_SCROLLBACK_LINES;
       terminal.reset();
+      runtimeModes?.reset();
       const [pageChunk, ...continuation] = historyWindowChunks;
       if (pageChunk) await writeTerminal(pageChunk);
       if (!terminal) return;
@@ -282,6 +289,7 @@
         historyWindowChunks = [];
         terminal.options.scrollback = liveScrollbackLimit();
         terminal.reset();
+        runtimeModes?.reset();
         if (snapshot) await writeTerminal(snapshot);
         await props.channel.resetPreviousOutput?.().catch(() => false);
         while (deferredTerminalOutput.length) {
@@ -949,6 +957,26 @@
     pendingOutputBytes = 0;
     terminal.write(batch, showLatest ? () => terminal?.scrollToBottom() : undefined);
   };
+  const drainPendingOutput = async (): Promise<void> => {
+    clearOutputSchedule();
+    if (pendingOutput.length) {
+      const batch = new Uint8Array(pendingOutputBytes);
+      let offset = 0;
+      for (const chunk of pendingOutput) {
+        batch.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      pendingOutput = [];
+      pendingOutputBytes = 0;
+      await writeTerminal(batch);
+    } else {
+      await writeTerminal('');
+    }
+  };
+  const serializeAfterDrain = async (): Promise<string> => {
+    await drainPendingOutput();
+    return liveReplaySnapshot();
+  };
   const scheduleOutputFlush = (): void => {
     if (outputFrame !== undefined || outputTimer !== undefined) return;
     if (props.active) outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
@@ -1065,6 +1093,8 @@
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(root.value!);
+    runtimeModes = trackTerminalRuntimeModes(terminal);
+    cleanup.push(() => runtimeModes?.dispose());
     cleanup.push(setupImeCompositionBoundsProtection());
     historyLastViewportY = terminal.buffer.active.viewportY;
     const backgroundOsc = terminal.parser.registerOscHandler(11, (data) =>
@@ -1213,7 +1243,7 @@
     focus: () => terminal?.focus(),
     fit: fitAndResize,
     clear: clearTerminal,
-    serialize: liveReplaySnapshot,
+    serialize: serializeAfterDrain,
     openSearch,
     findNext,
     findPrevious,

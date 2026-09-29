@@ -473,6 +473,14 @@ export interface WorkspaceSuspendMarkResponseDto {
   suspendedSessionId: string;
 }
 
+export type WorkspaceSuspendPrepareRequestDto = WorkspaceSuspendMarkRequestDto;
+
+export type WorkspaceSuspendPrepareResponseDto = null;
+
+export type WorkspaceSuspendCommitRequestDto = WorkspaceSuspendMarkRequestDto;
+
+export type WorkspaceSuspendCommitResponseDto = WorkspaceSuspendMarkResponseDto;
+
 export type WorkspaceSuspendUnmarkRequestDto = Record<string, never>;
 
 export type WorkspaceSuspendListResponseDto = SuspendedSessionDto[];
@@ -533,6 +541,8 @@ export interface WorkspaceSuspendRevokedEventDto {
 
 export interface WorkspaceSuspendRequestMapDto {
   'suspend.mark': WorkspaceSuspendMarkRequestDto;
+  'suspend.prepare': WorkspaceSuspendPrepareRequestDto;
+  'suspend.commit': WorkspaceSuspendCommitRequestDto;
   'suspend.unmark': WorkspaceSuspendUnmarkRequestDto;
   'suspend.list': Record<string, never>;
   'suspend.resume': WorkspaceSuspendResumeRequestDto;
@@ -546,6 +556,8 @@ export interface WorkspaceSuspendRequestMapDto {
 
 export interface WorkspaceSuspendResponseMapDto {
   'suspend.mark': WorkspaceSuspendMarkResponseDto;
+  'suspend.prepare': WorkspaceSuspendPrepareResponseDto;
+  'suspend.commit': WorkspaceSuspendCommitResponseDto;
   'suspend.unmark': null;
   'suspend.list': WorkspaceSuspendListResponseDto;
   'suspend.resume': WorkspaceSuspendResumeResponseDto;

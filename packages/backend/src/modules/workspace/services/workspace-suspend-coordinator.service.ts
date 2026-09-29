@@ -29,6 +29,7 @@ interface SuspendMark {
   suspendSessionId?: string;
   ownerId?: string;
   ownershipGeneration?: number;
+  shellPaused: boolean;
 }
 interface PendingResume {
   userId: number;
@@ -118,6 +119,14 @@ export class WorkspaceSuspendCoordinatorService {
       throw error;
     }
   }
+  async prepareSuspend(workspaceId: string, userId: number, initialBuffer?: string): Promise<void> {
+    await this.markForSuspend(workspaceId, userId, initialBuffer);
+    const mark = this.marks.get(workspaceId);
+    if (!mark || mark.userId !== userId) throw new Error('会话挂起准备失败。');
+    if (mark.shellPaused) return;
+    this.workspaces.requireSession(workspaceId).shell.pause();
+    mark.shellPaused = true;
+  }
   async suspendNow(workspaceId: string, userId: number, initialBuffer?: string): Promise<{ suspendSessionId: string }> {
     await this.markForSuspend(workspaceId, userId, initialBuffer);
     const result = await this.handleClientDisconnect(workspaceId);
@@ -133,6 +142,10 @@ export class WorkspaceSuspendCoordinatorService {
     if (this.marks.get(workspaceId) !== mark) return;
     this.marks.delete(workspaceId);
     await this.finishMark(mark);
+    if (mark.shellPaused) {
+      this.workspaces.requireSession(workspaceId).shell.resume();
+      mark.shellPaused = false;
+    }
     if (
       mark.suspendSessionId &&
       mark.ownerId &&
@@ -188,7 +201,10 @@ export class WorkspaceSuspendCoordinatorService {
     this.status.clear(workspaceId);
     // Freeze a marked PTY across the short Workspace -> suspended-owner handoff so no bytes can
     // fall into the listener gap between terminal.detach() and SshSuspendService listener binding.
-    if (mark) session.shell.pause();
+    if (mark && !mark.shellPaused) {
+      session.shell.pause();
+      mark.shellPaused = true;
+    }
     // Keep the mark listener alive through terminal detach so a decoder flush is retained too.
     this.terminal.detach(workspaceId);
     if (!mark) {
@@ -614,6 +630,7 @@ export class WorkspaceSuspendCoordinatorService {
       ready: initialWrite.then(() => this.logs.flush(logIdentifier)),
       writeChain: initialWrite,
       checkpoint: ownedCheckpoint,
+      shellPaused: false,
       ...(ownership ?? {}),
     };
     // Publish the transaction before awaiting I/O so disconnect cannot bypass suspend takeover.

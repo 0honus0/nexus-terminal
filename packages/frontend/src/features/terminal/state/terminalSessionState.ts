@@ -10,7 +10,7 @@ export interface TerminalSessionState {
 }
 
 export const RESET_REMOTE_PTY_DISPLAY =
-  '\x1b[?47;1047;1049l\x1b[?9;1000;1002;1003;1004;1005;1006;1015;2004;2026l\x1b[!p\r\x1b[2K';
+  '\x1b[?47;1047;1049l\x1b[?9;1000;1002;1003;1004;1005;1006;1015;1016;2004;2026l\x1b[!p\r\x1b[2K';
 
 /**
  * Keeps terminal presentation state across pane remounts without making the

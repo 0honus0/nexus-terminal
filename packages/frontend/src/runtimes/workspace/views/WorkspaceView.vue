@@ -44,7 +44,7 @@
   const WorkspaceSessionSurface = defineAsyncComponent(() => import('../components/WorkspaceSessionSurface.vue'));
 
   interface SurfaceApi {
-    terminalSnapshot?: () => string;
+    terminalSnapshot?: () => Promise<string>;
     focusTerminal?: () => void;
     fitTerminal?: () => void;
     scrollTerminalToBottom?: () => void;
@@ -491,7 +491,9 @@
         feedback.notifySuccess(t('sshSuspend.notifications.unmarkedSuccess', { id }));
         return;
       }
-      const snapshot = surfaces.get(id)?.terminalSnapshot?.() || session.terminalState.snapshot.value || undefined;
+      const snapshot = surfaces.get(id)?.terminalSnapshot
+        ? () => surfaces.get(id)!.terminalSnapshot!()
+        : async () => session.terminalState.snapshot.value;
       const suspendedSessionId = await session.markForSuspend(snapshot);
       registry.remove(id, 'Workspace suspended');
       await refreshSuspendedSessionsCatalog();

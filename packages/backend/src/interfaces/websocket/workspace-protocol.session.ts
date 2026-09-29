@@ -567,6 +567,10 @@ export class WorkspaceProtocolSession {
         return this.dockerStats(payload);
       case 'suspend.mark':
         return this.suspendMark(payload);
+      case 'suspend.prepare':
+        return this.suspendPrepare(payload);
+      case 'suspend.commit':
+        return this.suspendCommit(payload);
       case 'suspend.unmark':
         return this.suspendUnmark();
       case 'suspend.list': {
@@ -960,15 +964,42 @@ export class WorkspaceProtocolSession {
 
   private async suspendMark(payload: JsonRecord): Promise<WorkspaceSuspendMarkResponseDto> {
     const workspaceId = this.requireWorkspace();
-    const terminalSnapshot = stringValue(payload.terminalSnapshot);
-    if (payload.terminalSnapshot !== undefined && terminalSnapshot === undefined) {
-      throw new Error('terminalSnapshot must be a string.');
-    }
+    const terminalSnapshot = this.terminalSnapshot(payload);
     const request: WorkspaceSuspendMarkRequestDto = terminalSnapshot === undefined ? {} : { terminalSnapshot };
     const result = await this.dependencies.suspendCoordinator.suspendNow(
       workspaceId,
       this.identity.userId,
       request.terminalSnapshot,
+    );
+    this.unbindWorkspace();
+    return { suspendedSessionId: result.suspendSessionId };
+  }
+
+  private terminalSnapshot(payload: JsonRecord): string | undefined {
+    const terminalSnapshot = stringValue(payload.terminalSnapshot);
+    if (payload.terminalSnapshot !== undefined && terminalSnapshot === undefined) {
+      throw new Error('terminalSnapshot must be a string.');
+    }
+    return terminalSnapshot;
+  }
+
+  private async suspendPrepare(payload: JsonRecord): Promise<null> {
+    const workspaceId = this.requireWorkspace();
+    await this.dependencies.suspendCoordinator.prepareSuspend(
+      workspaceId,
+      this.identity.userId,
+      this.terminalSnapshot(payload),
+    );
+    await this.terminalTransport.drain();
+    return null;
+  }
+
+  private async suspendCommit(payload: JsonRecord): Promise<WorkspaceSuspendMarkResponseDto> {
+    const workspaceId = this.requireWorkspace();
+    const result = await this.dependencies.suspendCoordinator.suspendNow(
+      workspaceId,
+      this.identity.userId,
+      this.terminalSnapshot(payload),
     );
     this.unbindWorkspace();
     return { suspendedSessionId: result.suspendSessionId };

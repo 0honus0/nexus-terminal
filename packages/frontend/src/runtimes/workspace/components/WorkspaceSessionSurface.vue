@@ -51,7 +51,7 @@
     focus?: () => void;
     fit?: () => void;
     clear?: () => void;
-    serialize?: () => string;
+    serialize?: () => Promise<string>;
     copySelection?: () => Promise<void>;
     paste?: () => Promise<void>;
     selectAll?: () => void;
@@ -912,7 +912,7 @@
     }
   };
   defineExpose({
-    terminalSnapshot: () => terminalApi.value?.serialize?.() ?? '',
+    terminalSnapshot: () => terminalApi.value?.serialize?.() ?? Promise.resolve(''),
     focusTerminal: () => terminalApi.value?.focus?.(),
     fitTerminal: () => terminalApi.value?.fit?.(),
     scrollTerminalToBottom: () => terminalApi.value?.scrollToBottom?.(),

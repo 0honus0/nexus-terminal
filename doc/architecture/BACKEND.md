@@ -105,7 +105,7 @@ flowchart TD
 - SSH suspend module：挂起 catalog 与恢复事务；
 - Interfaces：HTTP/WebSocket streaming、认证和 backpressure。
 
-恢复挂起 SSH 会话时，Backend 负责 prepare、有限尾部回放、transport 交接、commit/rollback 与更早历史分页。Frontend 只负责 Runtime tab 的创建、替换与展示。
+挂起 SSH 会话时，Backend 先冻结 PTY 并排空已排队的终端传输，Frontend 再排空 xterm 写队列并提交最终快照，避免活跃输出落在快照边界之外。恢复时 Backend 负责 prepare、有限尾部回放、transport 交接、commit/rollback 与更早历史分页；Frontend 只负责 Runtime tab 的创建、替换与展示。
 
 ## Remote Desktop
 

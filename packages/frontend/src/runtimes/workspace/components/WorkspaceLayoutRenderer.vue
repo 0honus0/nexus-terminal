@@ -40,7 +40,7 @@
     focus?: () => void;
     fit?: () => void;
     clear?: () => void;
-    serialize?: () => string;
+    serialize?: () => Promise<string>;
     openSearch?: () => void;
     findNext?: () => void;
     findPrevious?: () => void;

@@ -199,6 +199,62 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
   }
 });
 
+test('resumed terminal preserves SGR wheel encoding requested by the remote TUI', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  const original = await openWorkspaceSession(context.request, connectionId, `suspend-mouse-${crypto.randomUUID()}`);
+  await requestWorkspace(original.socket, 'suspend.mark', {
+    terminalSnapshot: '\x1b[?1000h\x1b[?1006hMOUSE_MODE_READY\r\n',
+  });
+  await closeWebSocket(original.socket);
+
+  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  let suspended: SuspendedSession | undefined;
+  const catalogSocket = await openAuthenticatedWebSocket(context.request);
+  try {
+    for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
+      const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
+      suspended = list.find(
+        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+      );
+      if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  } finally {
+    await closeWebSocket(catalogSocket);
+  }
+  expect(suspended).toBeTruthy();
+
+  const terminalInput: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', ({ payload }) => {
+      if (typeof payload !== 'string') return;
+      try {
+        const message = JSON.parse(payload) as { type?: string; payload?: { data?: unknown } };
+        if (message.type === 'terminal.input' && typeof message.payload?.data === 'string') {
+          terminalInput.push(message.payload.data);
+        }
+      } catch {
+        // Ignore non-protocol frames from other sockets on the page.
+      }
+    });
+  });
+
+  await page.goto('/workspace?openSuspended=1');
+  const modal = page.getByTestId('suspended-sessions-modal');
+  await expect(modal).toBeVisible({ timeout: 20_000 });
+  await modal.getByTestId(`suspended-session-${suspended!.id}`).getByRole('button', { name: 'Resume' }).click();
+  await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
+  const terminal = page.locator('[data-testid="terminal"]:visible').first();
+  await expect(terminal).toBeVisible();
+  const box = await terminal.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  for (let attempt = 0; attempt < 3; attempt += 1) await page.mouse.wheel(0, -350);
+  await expect.poll(() => terminalInput.some((data) => /\x1b\[<64;\d+;\d+M/.test(data)), { timeout: 5_000 }).toBe(true);
+});
+
 test('a second device explicitly takes over an attached suspended SSH owner without replacing the shell', async ({
   request,
 }) => {
