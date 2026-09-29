@@ -242,10 +242,23 @@
   padding-right: 0.6rem;
   text-align: left;
 }
+.file-row-name-container,
+.file-row-parent-content {
+  min-height: 1rem;
+  line-height: 1rem;
+}
 .file-row-icon {
-  font-size: calc(0.85rem * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
+  display: inline-flex;
+  height: 1rem;
   width: 1rem;
-  text-align: center;
+  align-items: center;
+  justify-content: center;
+  font-size: inherit;
+  line-height: 1rem;
+}
+.file-row-name-label {
+  font-size: inherit;
+  line-height: 1rem;
 }
 .file-row-name-button {
   background: transparent;

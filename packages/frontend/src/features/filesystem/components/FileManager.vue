@@ -1688,12 +1688,12 @@
           >
             <td class="file-row-cell file-row-name text-left">
               <span class="file-row-parent-content inline-flex min-w-0 items-center gap-2">
-                <i class="fas fa-level-up-alt shrink-0 text-xs text-primary" aria-hidden="true"></i>
-                <span class="font-medium text-xs">..</span>
+                <i class="file-row-icon fas fa-level-up-alt shrink-0 text-text-secondary" aria-hidden="true"></i>
+                <span class="file-row-name-label font-medium">..</span>
               </span>
             </td>
-            <td v-if="showPermissions" class="file-row-cell file-row-permissions font-mono text-xs text-left"></td>
-            <td v-if="showModified" class="file-row-cell file-row-modified text-xs text-left"></td>
+            <td v-if="showPermissions" class="file-row-cell file-row-permissions font-mono text-left"></td>
+            <td v-if="showModified" class="file-row-cell file-row-modified text-left"></td>
           </tr>
           <tr v-if="browser.visible.value.length === 0">
             <td :colspan="visibleColumnCount" class="px-4 py-6 text-center italic text-text-secondary">
@@ -1710,7 +1710,7 @@
             :data-file-path="entry.path"
             class="file-row select-none touch-pan-y transition-colors duration-150"
             :class="[
-              browser.selected.value.has(entry.path) ? 'bg-primary text-white' : 'hover:bg-header/50',
+              browser.selected.value.has(entry.path) ? 'bg-primary/10 text-primary' : 'hover:bg-header/50',
               remoteDragTarget === entry.path ? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary' : '',
               entry.metadata.isDirectory || entry.metadata.isFile || entry.metadata.isSymbolicLink
                 ? 'cursor-pointer'
@@ -1738,13 +1738,13 @@
               <div class="file-row-name-container flex min-w-0 items-center gap-2">
                 <i
                   :class="[
-                    'file-row-icon shrink-0 text-xs transition-colors duration-150',
+                    'file-row-icon shrink-0 transition-colors duration-150',
                     entry.metadata.isDirectory
-                      ? 'fas fa-folder text-primary'
+                      ? 'fas fa-folder'
                       : entry.metadata.isSymbolicLink
-                        ? 'fas fa-link text-cyan-500'
-                        : `${getFileIconClass(entry.name)} text-text-secondary`,
-                    browser.selected.value.has(entry.path) ? '!text-white' : '',
+                        ? 'fas fa-link'
+                        : getFileIconClass(entry.name),
+                    browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary',
                   ]"
                   aria-hidden="true"
                 ></i>
@@ -1754,21 +1754,21 @@
                   :data-file-path="entry.path"
                   @mousedown="preserveListFocusOnMouseOpen"
                 >
-                  <span class="file-row-name-label truncate text-xs">{{ displayEntryName(entry) }}</span>
+                  <span class="file-row-name-label truncate">{{ displayEntryName(entry) }}</span>
                 </button>
               </div>
             </td>
             <td
               v-if="showPermissions"
-              class="file-row-cell file-row-permissions truncate font-mono text-xs text-left"
-              :class="browser.selected.value.has(entry.path) ? 'text-white' : 'text-text-secondary'"
+              class="file-row-cell file-row-permissions truncate font-mono text-left"
+              :class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
             >
               {{ formatMode(entry.metadata.mode) }}
             </td>
             <td
               v-if="showModified"
-              class="file-row-cell file-row-modified truncate text-xs text-left tabular-nums"
-              :class="browser.selected.value.has(entry.path) ? 'text-white' : 'text-text-secondary'"
+              class="file-row-cell file-row-modified truncate text-left tabular-nums"
+              :class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
               :title="new Date(entry.metadata.modifiedAt).toLocaleString()"
             >
               {{ formatCompactModified(entry.metadata.modifiedAt) }}
