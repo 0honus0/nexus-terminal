@@ -1,4 +1,5 @@
 export const loadWorkspaceView = () => import('./views/WorkspaceView.vue');
+export { preloadWorkspaceTerminalSurface } from './components/preloadWorkspaceTerminalSurface';
 
 export const disposeWorkspaceRuntimes = async (reason = 'Workspace runtime disposed'): Promise<void> => {
   const { workspaceRuntimeRegistry } = await import('./session');

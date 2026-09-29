@@ -18,6 +18,7 @@
   import { usePreferences } from '@/features/preferences/public';
   import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { useSuspendedSessions } from '@/features/ssh-suspend/public';
+  import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -113,6 +114,7 @@
       remoteDesktopLauncher.open({ id: item.id, name: item.name || item.host, type: item.type });
       return;
     }
+    preloadWorkspaceTerminalSurface();
     return router.push({ name: 'Workspace', query: { connectionId: String(item.id) } });
   };
   const openSuspendedSessions = () => router.push({ name: 'Workspace', query: { openSuspended: '1' } });

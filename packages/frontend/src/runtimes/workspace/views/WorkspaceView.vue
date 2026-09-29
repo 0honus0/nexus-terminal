@@ -11,7 +11,6 @@
   import { connectionService, type ConnectionDto } from '@/features/connections/public';
   import { terminalScrollbackForRuntime, usePreferences } from '@/features/preferences/public';
   import { defaultTerminalTheme, useAppearance } from '@/features/appearance/public';
-  import { loadTerminalView } from '@/features/terminal/public';
   import { useCommandHistory } from '@/features/command-history/public';
   import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import {
@@ -34,6 +33,10 @@
   import WorkspaceTabBar from '../components/WorkspaceTabBar.vue';
   import { provideWorkspaceUiState } from '../state/workspaceUiState';
   import { workspaceRuntimeRegistry, type WorkspaceRuntimeSession } from '../session';
+  import {
+    loadWorkspaceSessionSurface,
+    preloadWorkspaceTerminalSurface,
+  } from '../components/preloadWorkspaceTerminalSurface';
 
   const ProgressDisplayModal = defineAsyncComponent(loadProgressDisplayModal);
   const SuspendedSessionsModal = defineAsyncComponent(loadSuspendedSessionsModal);
@@ -42,8 +45,7 @@
     () => import('../components/WorkspaceLayoutConfigurator.vue'),
   );
   const WorkspaceFocusConfigurator = defineAsyncComponent(() => import('../components/WorkspaceFocusConfigurator.vue'));
-  const loadSessionSurface = () => import('../components/WorkspaceSessionSurface.vue');
-  const WorkspaceSessionSurface = defineAsyncComponent(loadSessionSurface);
+  const WorkspaceSessionSurface = defineAsyncComponent(loadWorkspaceSessionSurface);
 
   interface SurfaceApi {
     terminalSnapshot?: () => Promise<string>;
@@ -801,7 +803,7 @@
 
   onMounted(async () => {
     workspaceActive = true;
-    if (route.query.connectionId) void Promise.allSettled([loadSessionSurface(), loadTerminalView()]);
+    if (route.query.connectionId) preloadWorkspaceTerminalSurface();
     window.addEventListener('keydown', handleGlobalKeydown);
     window.addEventListener('keyup', handleGlobalKeyup);
     document.addEventListener('visibilitychange', handleDocumentVisibilityChange);

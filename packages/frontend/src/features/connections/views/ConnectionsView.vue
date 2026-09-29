@@ -14,6 +14,7 @@
   import { UiButton, UiInput, UiSelect, UiSwitch } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
+  import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
   import { useConnections } from '../composables/useConnections';
   import { connectionsApi } from '../api/connectionsApi';
   import ConnectionEditorModal from '../components/ConnectionEditorModal.vue';
@@ -131,6 +132,7 @@
       .filter((connection) => connection.type === 'SSH')
       .map((connection) => String(connection.id));
     if (!ids.length) return;
+    preloadWorkspaceTerminalSurface();
     void router.push({ name: 'Workspace', query: { connectionId: ids } });
   };
   const tagNames = (connection: ConnectionDto) =>
@@ -212,6 +214,7 @@
       capabilities.remoteDesktop.open({ id: c.id, name: c.name || c.host, type: c.type });
       return;
     }
+    preloadWorkspaceTerminalSurface();
     return router.push({ name: 'Workspace', query: { connectionId: String(c.id) } });
   };
 </script>

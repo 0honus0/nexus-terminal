@@ -119,6 +119,10 @@
   });
   let lastColumns = 0;
   let lastRows = 0;
+  const revealBackgroundWhenSized = () => {
+    const element = root.value;
+    if (props.active && element && element.clientWidth > 0 && element.clientHeight > 0) backgroundReady.value = true;
+  };
   const fitAndResize = () => {
     const element = root.value;
     if (!terminal || !fit || !element) return;
@@ -127,7 +131,7 @@
     // before resizing, so restoring the tab later exposes a visible redraw/blank strip. Keep the
     // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
     if (element.clientWidth <= 0 || element.clientHeight <= 0) return;
-    if (props.active) backgroundReady.value = true;
+    revealBackgroundWhenSized();
     fit.fit();
     if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
     if (element.scrollLeft !== 0) element.scrollLeft = 0;
@@ -1084,6 +1088,8 @@
   };
 
   onMounted(() => {
+    // Start the sandboxed background while xterm initializes; its own script can draw in parallel.
+    revealBackgroundWhenSized();
     terminal = new Terminal({
       convertEol: true,
       scrollOnUserInput: true,
