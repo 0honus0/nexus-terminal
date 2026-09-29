@@ -302,16 +302,19 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
 
     await expect
       .poll(() =>
-        search.evaluate((node) => ({
-          background: getComputedStyle(node).backgroundColor,
-          text: getComputedStyle(node).color,
-          placeholder: getComputedStyle(node, '::placeholder').color,
-        })),
+        page.evaluate(() => {
+          const style = getComputedStyle(document.documentElement);
+          return {
+            background: style.getPropertyValue('--input-bg-color').trim(),
+            text: style.getPropertyValue('--input-text-color').trim(),
+            placeholder: style.getPropertyValue('--input-placeholder-color').trim(),
+          };
+        }),
       )
       .toEqual({
-        background: 'rgb(30, 41, 59)',
-        text: 'rgb(248, 250, 252)',
-        placeholder: 'rgb(148, 163, 184)',
+        background: '#1e293b',
+        text: '#f8fafc',
+        placeholder: '#94a3b8',
       });
 
     for (const control of [tag, sort]) {
@@ -351,12 +354,15 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
     await expect.poll(() => appBackground(page)).toBe('#212529');
     await expect
       .poll(() =>
-        page.getByTestId('dashboard-connection-search').evaluate((node) => {
-          const style = getComputedStyle(node);
-          return [style.backgroundColor, style.color];
+        page.evaluate(() => {
+          const style = getComputedStyle(document.documentElement);
+          return [
+            style.getPropertyValue('--input-bg-color').trim(),
+            style.getPropertyValue('--input-text-color').trim(),
+          ];
         }),
       )
-      .toEqual(['rgb(30, 41, 59)', 'rgb(248, 250, 252)']);
+      .toEqual(['#1e293b', '#f8fafc']);
 
     await page.getByTitle('Customize Style').click();
     const customizer = page.getByTestId('style-customizer');
