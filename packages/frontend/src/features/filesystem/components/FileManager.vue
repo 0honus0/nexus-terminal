@@ -1577,7 +1577,7 @@
       data-testid="file-manager-list"
       tabindex="0"
       :aria-label="t('fileManager.modalTitle')"
-      class="min-h-0 flex-1 overflow-auto"
+      class="min-h-0 flex-1 overflow-auto outline-none"
       :style="rowStyle"
       :data-row-scale="renderedRowScale.toFixed(2)"
       @wheel="scaleRows"
