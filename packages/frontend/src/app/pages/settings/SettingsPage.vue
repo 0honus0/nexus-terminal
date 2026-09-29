@@ -525,6 +525,22 @@
     background: var(--app-bg-color);
   }
 
+  /* Settings actions are used repeatedly across long forms. Give the shared buttons a larger
+   * visual and pointer target here without increasing buttons in dense Workspace toolbars. */
+  .settings-page :deep([data-ui='button']:not([data-density='compact']):not([data-density='comfortable'])) {
+    --ui-control-height: 38px;
+    --ui-control-padding-inline: 14px;
+    --ui-control-gap: 8px;
+    --ui-control-font-size: 13px;
+  }
+
+  .settings-page :deep([data-ui='button'][data-density='compact']) {
+    --ui-control-height: 34px;
+    --ui-control-padding-inline: 11px;
+    --ui-control-gap: 7px;
+    --ui-control-font-size: 12px;
+  }
+
   .settings-icon-tile {
     border: 1px solid color-mix(in srgb, var(--link-active-color) 22%, rgb(255 255 255 / 34%));
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 34%);
