@@ -91,13 +91,6 @@ jobs:
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "Using E2E runner image $image"
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
       - name: Check for runner image update
         id: check
         env:
@@ -105,13 +98,10 @@ jobs:
           CAN_UPDATE_RUNNER_IMAGE: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           expected="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
-          current=""
-          if docker pull "$E2E_RUNNER_IMAGE" >/dev/null 2>&1; then
-            current="$(docker image inspect "$E2E_RUNNER_IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^E2E_RUNNER_FINGERPRINT=//p')"
-          fi
+          current="$(docker buildx imagetools inspect "$E2E_RUNNER_IMAGE" --format '{{range .Image.Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^E2E_RUNNER_FINGERPRINT=//p' || true)"
           if [ "$current" = "$expected" ]; then
             echo "build=false" >> "$GITHUB_OUTPUT"
-            echo "E2E runner image is current; skipping build."
+            echo "E2E runner image metadata matches; skipping pull and build."
           elif [ "$CAN_UPDATE_RUNNER_IMAGE" != "true" ]; then
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "A fork pull request cannot update GHCR; using latest and allowing dependency downloads."
@@ -119,6 +109,14 @@ jobs:
             echo "build=true" >> "$GITHUB_OUTPUT"
             echo "E2E runner image is missing or outdated; building latest now."
           fi
+
+      - name: Log in to GHCR
+        if: steps.check.outputs.build == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Build and push updated runner image
         if: steps.check.outputs.build == 'true'

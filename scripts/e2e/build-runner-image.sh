@@ -36,7 +36,7 @@ docker build \
 
 echo "[E2E runner] verifying $full_image"
 docker run --rm "$full_image" sh -lc \
-  "node --version && pnpm --version | grep -Fx '$pnpm_version' && pnpm dlx 'playwright@$playwright_version' --version | grep -F 'Version $playwright_version' && test -d \"\$PLAYWRIGHT_BROWSERS_PATH\""
+  "node --version && pnpm --version | grep -Fx '$pnpm_version' && test -d \"\$PLAYWRIGHT_BROWSERS_PATH\" && pnpm install --frozen-lockfile --offline && pnpm --filter @nexus-terminal/e2e exec playwright --version | grep -F 'Version $playwright_version'"
 
 echo "[E2E runner] pushing $full_image"
 docker push "$full_image"

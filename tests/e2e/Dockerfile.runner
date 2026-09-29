@@ -30,5 +30,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
+COPY packages/agent-runner/package.json packages/agent-runner/package.json
 COPY tests/e2e/package.json tests/e2e/package.json
-RUN pnpm fetch --frozen-lockfile --ignore-scripts
+RUN pnpm install --frozen-lockfile --ignore-scripts \
+  && rm -rf node_modules packages/*/node_modules tests/e2e/node_modules
