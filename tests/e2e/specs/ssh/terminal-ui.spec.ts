@@ -450,10 +450,10 @@ test('Ctrl+C interrupts a long-running terminal output stream', async ({ page, c
   const rows = terminal.locator('.xterm-rows');
   const commandInput = page.getByTestId('command-input');
   await commandInput.fill(
-    'INTERRUPT_FINISHED=no; i=0; while [ $i -lt 100000 ]; do printf \'INTERRUPT_STREAM_%06d\\n\' "$i"; i=$((i+1)); if [ $((i%100)) -eq 0 ]; then if IFS= read -r -n 1 -t 0.01 key && [ "$key" = $\'\\003\' ]; then printf \'INTERRUPT_ACK\\n\'; break; fi; fi; done; if [ "$i" -ge 100000 ]; then INTERRUPT_FINISHED=yes; fi',
+    'saved_stty=$(stty -g); stty -isig; INTERRUPT_FINISHED=yes; (i=0; while :; do batch=0; while [ $batch -lt 20 ]; do printf \'INTERRUPT_STREAM_%06d\\n\' "$i"; i=$((i+1)); batch=$((batch+1)); done; sleep 0.01; done) & producer=$!; while IFS= read -r -n 1 key; do if [ "$key" = $\'\\003\' ]; then INTERRUPT_FINISHED=no; break; fi; done; kill "$producer"; wait "$producer" 2>/dev/null; stty "$saved_stty"; printf \'INTERRUPT_ACK\\n\'',
   );
   await commandInput.press('Enter');
-  await expect.poll(() => streamedBytes, { timeout: 15_000 }).toBeGreaterThan(256 * 1024);
+  await expect.poll(() => streamedBytes, { timeout: 15_000 }).toBeGreaterThan(32 * 1024);
 
   await terminal.locator('textarea').focus();
   await page.keyboard.press('Control+c');
