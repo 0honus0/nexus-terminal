@@ -87,6 +87,7 @@
     quickCommandsVisible.value = false;
   };
   const sendTerminalInput = (value: string) => {
+    if (!props.commandReady) return;
     emit('interaction');
     void props.terminalChannel.sendInput(value);
   };
@@ -146,7 +147,7 @@
       @terminal-input="sendTerminalInput"
     />
     <VirtualKeyboard
-      v-if="keyboardVisible && pane === 'terminal'"
+      v-if="keyboardVisible && pane === 'terminal' && commandReady"
       :modifiers="modifiers"
       :application-cursor-keys="applicationCursorKeys"
       @toggle-modifier="emit('toggleModifier', $event)"

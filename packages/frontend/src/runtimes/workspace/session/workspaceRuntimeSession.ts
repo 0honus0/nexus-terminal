@@ -207,8 +207,10 @@ export class WorkspaceRuntimeSession {
       if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
         throw new Error('Workspace binary protocol version mismatch.');
       }
+      if (this.disposed || this.closing) throw new DOMException('Workspace closed', 'AbortError');
       await this.adapters.workspaceConnected();
-      if (!this.socket.connected) throw new Error('Workspace connection closed during terminal activation.');
+      if (this.disposed || this.closing || !this.socket.connected)
+        throw new Error('Workspace connection closed during terminal activation.');
       this.hasConnected.value = true;
       this.remotePtyDiscarded = false;
       this.reconnectAttempt = 0;
@@ -255,8 +257,10 @@ export class WorkspaceRuntimeSession {
         },
         'Workspace runtime connection failed',
       );
-      this.state.value = 'error';
-      this.statusMessage.value = error.message;
+      if (!this.disposed && !this.closing) {
+        this.state.value = 'error';
+        this.statusMessage.value = error.message;
+      }
       throw error;
     }
   }

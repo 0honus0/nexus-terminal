@@ -115,7 +115,7 @@ async function captureWorkspaceEvidence(page: Page, testInfo: TestInfo, name: 'b
   expect(metrics.tabScroller?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
 }
 
-test('initial SSH failure rolls back its provisional tab without automatic retry', async ({ page, context }) => {
+test('initial SSH failure removes its connecting tab without automatic retry', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
 
@@ -178,7 +178,7 @@ test('initial SSH failure rolls back its provisional tab without automatic retry
       await page.evaluate(
         () => (window as typeof window & { __e2eMaxWorkspaceTabs?: number }).__e2eMaxWorkspaceTabs ?? 0,
       ),
-    ).toBe(0);
+    ).toBe(1);
 
     const failedWorkspaceId = workspaceConnectIds[0]!;
     await page.waitForTimeout(3_000);

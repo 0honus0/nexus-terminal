@@ -202,6 +202,7 @@
   const runtimeTerminalChannel = props.session.adapters.terminal;
   const presentationTerminalChannel: TerminalChannel = {
     sendInput(data) {
+      if (props.session.state.value !== 'connected') return;
       let next = data;
       if (props.mobile) {
         const modified = applyTerminalModifiers(data, mobileModifiers.active.value);
@@ -1285,7 +1286,7 @@
       :command-draft="session.commandDraft.value"
       :command-input-sync-target="commandInputSyncTarget"
       :quick-commands-grouped="showQuickCommandTags"
-      :command-ready="session.hasConnected.value"
+      :command-ready="session.state.value === 'connected'"
       :terminal-search-open="session.terminalState.searchOpen.value"
       :terminal-search-term="session.terminalState.searchTerm.value"
       @update:pane="mobilePane = $event"

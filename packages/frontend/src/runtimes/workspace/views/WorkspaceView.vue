@@ -11,6 +11,7 @@
   import { connectionService, type ConnectionDto } from '@/features/connections/public';
   import { terminalScrollbackForRuntime, usePreferences } from '@/features/preferences/public';
   import { defaultTerminalTheme, useAppearance } from '@/features/appearance/public';
+  import { loadTerminalView } from '@/features/terminal/public';
   import { useCommandHistory } from '@/features/command-history/public';
   import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import {
@@ -41,7 +42,8 @@
     () => import('../components/WorkspaceLayoutConfigurator.vue'),
   );
   const WorkspaceFocusConfigurator = defineAsyncComponent(() => import('../components/WorkspaceFocusConfigurator.vue'));
-  const WorkspaceSessionSurface = defineAsyncComponent(() => import('../components/WorkspaceSessionSurface.vue'));
+  const loadSessionSurface = () => import('../components/WorkspaceSessionSurface.vue');
+  const WorkspaceSessionSurface = defineAsyncComponent(loadSessionSurface);
 
   interface SurfaceApi {
     terminalSnapshot?: () => Promise<string>;
@@ -365,6 +367,7 @@
     try {
       await registry.open(connection);
     } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return;
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       opening.value = false;
@@ -798,23 +801,21 @@
 
   onMounted(async () => {
     workspaceActive = true;
+    if (route.query.connectionId) void Promise.allSettled([loadSessionSurface(), loadTerminalView()]);
     window.addEventListener('keydown', handleGlobalKeydown);
     window.addEventListener('keyup', handleGlobalKeyup);
     document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
     window.addEventListener('online', handleBrowserOnline);
     stopServerTransferPolling = serverTransfers.startPolling();
-    const startup = await Promise.allSettled([
-      workspaceLayout.load(),
-      workspaceFocus.load(),
-      preferences.load(),
-      appearance.load(),
-      history.load(),
-    ]);
-    const preferenceLoad = startup[2];
-    if (preferenceLoad.status === 'rejected')
-      feedback.notifyError(
-        preferenceLoad.reason instanceof Error ? preferenceLoad.reason.message : String(preferenceLoad.reason),
-      );
+    // The layout is needed before mounting a terminal; the remaining settings can settle while
+    // the provisional session connects. Appearance changes are reactive, including its background.
+    const layoutLoad = workspaceLayout.load();
+    void Promise.allSettled([workspaceFocus.load(), appearance.load(), history.load()]);
+    void preferences
+      .load()
+      .catch((cause) => feedback.notifyError(cause instanceof Error ? cause.message : String(cause)));
+    await layoutLoad.catch(() => undefined);
+    if (!workspaceActive) return;
     await loadQueryActions();
     if (document.visibilityState === 'visible') {
       void reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });

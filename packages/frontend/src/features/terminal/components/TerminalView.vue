@@ -24,6 +24,7 @@
     defineProps<{
       channel: TerminalChannel;
       active?: boolean;
+      inputEnabled?: boolean;
       fontFamily?: string;
       fontSize?: number;
       theme?: Record<string, string>;
@@ -32,7 +33,7 @@
       visual?: TerminalVisualOptions;
       state?: TerminalSessionState;
     }>(),
-    { active: true, fontSize: 14, scrollback: 5000, rightClickCopyPaste: true },
+    { active: true, inputEnabled: true, fontSize: 14, scrollback: 5000, rightClickCopyPaste: true },
   );
   const emit = defineEmits<{
     ready: [];
@@ -49,6 +50,7 @@
   const searchOpen = terminalState.searchOpen;
   const searchTerm = terminalState.searchTerm;
   const renderedFontSize = ref(props.fontSize);
+  const backgroundReady = ref(false);
   let terminal: Terminal | undefined;
   let fit: FitAddon | undefined;
   let searchAddon: SearchAddon | undefined;
@@ -125,6 +127,7 @@
     // before resizing, so restoring the tab later exposes a visible redraw/blank strip. Keep the
     // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
     if (element.clientWidth <= 0 || element.clientHeight <= 0) return;
+    if (props.active) backgroundReady.value = true;
     fit.fit();
     if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
     if (element.scrollLeft !== 0) element.scrollLeft = 0;
@@ -338,8 +341,9 @@
     if (terminal?.hasSelection()) await writeClipboardText(terminal.getSelection());
   };
   const paste = async () => {
+    if (!props.inputEnabled) return;
     const text = await navigator.clipboard.readText();
-    if (text) terminal?.paste(text.replace(/\r\n?/g, '\n'));
+    if (text && props.inputEnabled) terminal?.paste(text.replace(/\r\n?/g, '\n'));
   };
   const selectAll = () => terminal?.selectAll();
   const clearTerminal = () => {
@@ -1003,6 +1007,8 @@
   watch(
     () => props.active,
     (active) => {
+      if (!active) backgroundReady.value = false;
+      else fitAndResize();
       if (active && pendingOutput.length) flushPendingOutput();
     },
     { flush: 'post' },
@@ -1085,6 +1091,7 @@
       cursorStyle: 'block',
       cursorInactiveStyle: 'block',
       allowTransparency: true,
+      disableStdin: !props.inputEnabled,
       fontFamily: props.fontFamily,
       fontSize: renderedFontSize.value,
       scrollback: props.scrollback,
@@ -1158,6 +1165,7 @@
     fitAndResize();
     cleanup.push(
       terminal.onData((data) => {
+        if (!props.inputEnabled) return;
         emit('interaction');
         if (data === '\x03') {
           void props.channel.sendInput(data);
@@ -1203,6 +1211,13 @@
     resizeObserver.observe(root.value!);
     emit('ready');
   });
+
+  watch(
+    () => props.inputEnabled,
+    (enabled) => {
+      if (terminal) terminal.options.disableStdin = !enabled;
+    },
+  );
 
   watch(
     () => [props.fontFamily, props.fontSize, resolvedTheme.value, props.scrollback] as const,
@@ -1281,7 +1296,7 @@
     ></div>
     <!-- Custom backgrounds may size themselves only once, so start them after the session is visible. -->
     <iframe
-      v-if="active && sandboxedCustomHtml"
+      v-if="active && backgroundReady && sandboxedCustomHtml"
       class="terminal-custom-html"
       sandbox="allow-scripts"
       :srcdoc="sandboxedCustomHtml"
