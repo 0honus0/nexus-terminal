@@ -382,16 +382,16 @@
 <template>
   <form
     data-testid="connection-form"
-    class="connection-form flex max-h-[78vh] min-h-0 flex-col"
+    class="connection-form flex max-h-[82dvh] min-h-0 flex-col"
     @submit.prevent="submit"
   >
-    <h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
+    <h3 class="mb-7 shrink-0 text-center text-xl font-semibold">
       {{ connection ? t('connections.form.titleEdit') : t('connections.form.title') }}
     </h3>
 
-    <div class="flex-grow space-y-6 overflow-y-auto pr-2">
+    <div class="flex-grow space-y-7 overflow-y-auto pr-1 sm:pr-3">
       <template v-if="!scriptMode">
-        <section class="connection-form-section space-y-4 rounded-xl p-4">
+        <section class="connection-form-section space-y-5 rounded-xl p-4 sm:p-5">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionBasic') }}
           </h4>
@@ -445,7 +445,7 @@
           </div>
         </section>
 
-        <section class="connection-form-section space-y-4 rounded-xl p-4">
+        <section class="connection-form-section space-y-5 rounded-xl p-4 sm:p-5">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAuth') }}
           </h4>
@@ -508,7 +508,7 @@
           </UiFormField>
         </section>
 
-        <section class="connection-form-section space-y-4 rounded-xl p-4">
+        <section class="connection-form-section space-y-5 rounded-xl p-4 sm:p-5">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAdvanced') }}
           </h4>
@@ -650,7 +650,7 @@
         </section>
       </template>
 
-      <section v-if="!connection" class="connection-form-section mt-6 space-y-4 rounded-xl p-4">
+      <section v-if="!connection" class="connection-form-section mt-7 space-y-5 rounded-xl p-4 sm:p-5">
         <div class="flex items-center justify-between">
           <h4 class="text-base font-semibold">{{ t('connections.form.sectionScriptMode') }}</h4>
           <button
@@ -692,7 +692,7 @@
       </p>
     </div>
 
-    <footer class="mt-6 flex shrink-0 flex-wrap items-center gap-3 border-t border-border/50 pt-5">
+    <footer class="mt-7 flex shrink-0 flex-wrap items-center gap-4 border-t border-border/50 pt-5">
       <div v-if="!scriptMode && form.type === 'SSH'" class="flex min-w-0 items-center gap-2">
         <UiButton
           data-testid="connection-test-button"
@@ -798,10 +798,6 @@
     border-radius: 0.5rem !important;
     background: transparent !important;
     color: var(--text-color-secondary) !important;
-    transition:
-      background-color 140ms ease,
-      color 140ms ease,
-      box-shadow 140ms ease;
   }
 
   .connection-form-segment:hover {

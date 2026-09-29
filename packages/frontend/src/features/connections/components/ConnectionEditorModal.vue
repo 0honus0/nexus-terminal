@@ -100,7 +100,7 @@
     :visible="visible"
     :z-index="150"
     overlay-class="connection-editor-overlay"
-    panel-class="connection-editor-panel !max-w-2xl !max-h-[90vh] !p-6"
+    panel-class="connection-editor-panel !max-w-3xl !max-h-[92dvh] !p-4 sm:!p-6 lg:!p-7"
     content-class="!overflow-hidden !py-0"
     @close="emit('close')"
   >
@@ -118,8 +118,6 @@
 <style scoped>
   :global(.connection-editor-overlay) {
     background-color: rgb(15 23 42 / 24%);
-    -webkit-backdrop-filter: blur(1.5px) saturate(105%);
-    backdrop-filter: blur(1.5px) saturate(105%);
   }
 
   :global(.connection-editor-panel) {
