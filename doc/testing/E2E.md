@@ -4,7 +4,7 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
-The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, the seven Playwright projects on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
+The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, seven duration-balanced Playwright shards on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
 ## Structure
 
@@ -60,15 +60,15 @@ pnpm run test:e2e:remote -- --project=http specs/http/auth-2fa.spec.ts
 pnpm --filter @nexus-terminal/e2e run test:docs
 ```
 
-GitHub Actions provides the canonical complete delivery evidence. The quality job runs standard lint/type checks, formatting and production builds serially. Each Playwright matrix job installs the frozen workspace plus the pinned Chromium runtime on a fresh hosted runner and runs one project directly. The Docker job builds the unified and standalone Agent Runner images, then exercises standalone Runner, core-without-Runner and full deployment smoke paths. Local commands remain useful for listing tests, running focused specs and reproducing failures. Automated dependency updates dispatch this same workflow on their update branch.
+GitHub Actions provides the canonical complete delivery evidence. The quality job runs standard lint/type checks, formatting and production builds serially. Push and pull-request runs use eight Playwright runners by default. Manual workflow dispatch can select 6–10 runners. The selected matrix uses `scripts/e2e/duration-estimates.json` and a longest-estimated-spec-first allocator to distribute the seven normal Playwright projects across duration-balanced shards. Each shard job installs the frozen workspace plus the pinned Chromium runtime on a fresh hosted runner, deterministically regenerates the same assignment and runs its assigned spec files. New specs without a direct estimate use the median for their Playwright project, then the global median as a fallback. The Docker job builds the unified and standalone Agent Runner images, then exercises standalone Runner, core-without-Runner and full deployment smoke paths. Local commands remain useful for listing tests, running focused specs and reproducing failures. Automated dependency updates dispatch this same workflow on their update branch.
 
 For a long-lived remote development host that may already be serving Nexus on the default E2E ports, use `pnpm run test:e2e:remote -- <Playwright args>`. The remote launcher keeps explicit `NEXUS_E2E_*_PORT` overrides, dynamically reserves unique loopback ports for every unset E2E service, and invokes Playwright through Corepack so a stale system-level `pnpm` shim does not control the run. It enforces the repository Node engine before starting tests. This helper is for focused remote reproduction; it does not replace the canonical GitHub Actions evidence.
 
-## CI project matrix
+## CI balanced shards
 
-The canonical workflow uses a static matrix with one isolated job for each Playwright project: `auth`, `http`, `agent`, `websocket`, `ui`, `ssh`, and `mobile`. Matrix jobs fail directly when their Playwright command fails.
+The canonical push/pull-request workflow keeps eight isolated Playwright jobs, but their spec assignments are duration-balanced rather than fixed at one job per project. Manual dispatch can select 6–10 jobs. The allocator covers every spec under `auth`, `http`, `agent`, `websocket`, `ui`, `ssh`, and `mobile` exactly once. Matrix jobs fail directly when their Playwright command fails.
 
-Each job checks out the tested commit, sets up Node 24 and pnpm, installs the frozen workspace, installs Chromium with Playwright's system dependencies, and runs exactly one project. Fresh GitHub-hosted runners eliminate local port collisions.
+Each job checks out the tested commit, sets up Node 24 and pnpm, installs the frozen workspace, installs Chromium with Playwright's system dependencies, and regenerates the same deterministic shard assignment before running it. Fresh GitHub-hosted runners eliminate local port collisions. The default balance can be inspected locally with `node scripts/e2e/balanced-shards.mjs plan --shards 8`.
 
 Production-ingress coverage can still be run explicitly against a prepared production-style endpoint:
 

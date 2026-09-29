@@ -42,6 +42,18 @@ on:
       - '.github/workflows/e2e.yml'
       - '.github/workflows/publish-ghcr.yml'
   workflow_dispatch:
+    inputs:
+      playwright_runners:
+        description: Number of duration-balanced Playwright runners
+        required: true
+        default: '8'
+        type: choice
+        options:
+          - '6'
+          - '7'
+          - '8'
+          - '9'
+          - '10'
 
 permissions:
   contents: read
@@ -81,20 +93,13 @@ jobs:
           pnpm run build:agent-runner
 
   playwright:
-    name: Playwright (${{ matrix.project }})
+    name: Playwright (balanced shard ${{ matrix.shard }}/${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        project:
-          - auth
-          - http
-          - agent
-          - websocket
-          - ui
-          - ssh
-          - mobile
+        shard: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.playwright_runners == '6' && '[1,2,3,4,5,6]' || github.event_name == 'workflow_dispatch' && inputs.playwright_runners == '7' && '[1,2,3,4,5,6,7]' || github.event_name == 'workflow_dispatch' && inputs.playwright_runners == '9' && '[1,2,3,4,5,6,7,8,9]' || github.event_name == 'workflow_dispatch' && inputs.playwright_runners == '10' && '[1,2,3,4,5,6,7,8,9,10]' || '[1,2,3,4,5,6,7,8]') }}
 
     steps:
       - name: Checkout repository
@@ -113,14 +118,17 @@ jobs:
       - name: Install Chromium
         run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
 
-      - name: Run ${{ matrix.project }} E2E
-        run: pnpm --filter @nexus-terminal/e2e exec playwright test --project="${{ matrix.project }}"
+      - name: Run balanced E2E shard ${{ matrix.shard }}
+        run: >-
+          node scripts/e2e/balanced-shards.mjs run
+          --shards "${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }}"
+          --shard "${{ matrix.shard }}"
 
       - name: Upload E2E diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-${{ matrix.project }}-${{ github.run_attempt }}
+          name: e2e-shard-${{ matrix.shard }}-${{ github.run_attempt }}
           path: |
             tests/e2e/logs/
             tests/e2e/playwright-report/

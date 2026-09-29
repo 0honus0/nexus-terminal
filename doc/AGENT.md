@@ -962,7 +962,7 @@ Environment selection 不是 frontend authority：Run create 携带 recipe selec
 
 ## 22. 测试与发布门槛
 
-GitHub Actions 的 canonical E2E workflow 使用 Node 24：串行执行仓库检查、格式检查与生产构建，以独立 job 运行 `auth/http/agent/websocket/ui/ssh/mobile` project matrix，并构建统一镜像和独立 Agent Runner 镜像后执行三段 Docker smoke。
+GitHub Actions 的 canonical E2E workflow 使用 Node 24：串行执行仓库检查、格式检查与生产构建，push/PR 默认将 `auth/http/agent/websocket/ui/ssh/mobile` 的 spec 按历史耗时均衡到 8 个独立 job，手动 dispatch 可选择 6–10 个，并构建统一镜像和独立 Agent Runner 镜像后执行三段 Docker smoke。
 
 `pnpm run check` 串行执行 Frontend/Agent ESLint 与 Frontend type check。架构、生命周期、国际化和模块边界由根目录 `AGENTS.md` 约束 AI 开发与审查，不再通过读取源码文本的回归脚本门禁。Agent deterministic scenarios 位于 `tests/backend/agent-scenarios`，用户可达 Agent E2E 位于 `tests/e2e/specs/agent`。
 
