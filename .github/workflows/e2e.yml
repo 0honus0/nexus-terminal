@@ -54,15 +54,78 @@ on:
           - '8'
           - '9'
           - '10'
+      refresh_screenshots:
+        description: Capture and update documentation screenshots
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: e2e-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
+  e2e-runner-image:
+    name: Prepare E2E runner image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Resolve runner image
+        id: image
+        env:
+          E2E_RUNNER_REPOSITORY: ghcr.io/${{ github.repository_owner }}/nexus-terminal-e2e-runner
+        run: |
+          image="$E2E_RUNNER_REPOSITORY:latest"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Using E2E runner image $image"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Check for runner image update
+        id: check
+        env:
+          E2E_RUNNER_IMAGE: ${{ steps.image.outputs.image }}
+          CAN_UPDATE_RUNNER_IMAGE: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          expected="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
+          current=""
+          if docker pull "$E2E_RUNNER_IMAGE" >/dev/null 2>&1; then
+            current="$(docker image inspect "$E2E_RUNNER_IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^E2E_RUNNER_FINGERPRINT=//p')"
+          fi
+          if [ "$current" = "$expected" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "E2E runner image is current; skipping build."
+          elif [ "$CAN_UPDATE_RUNNER_IMAGE" != "true" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "A fork pull request cannot update GHCR; using latest and allowing dependency downloads."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "E2E runner image is missing or outdated; building latest now."
+          fi
+
+      - name: Build and push updated runner image
+        if: steps.check.outputs.build == 'true'
+        env:
+          E2E_RUNNER_REPOSITORY: ghcr.io/${{ github.repository_owner }}/nexus-terminal-e2e-runner
+        run: scripts/e2e/build-runner-image.sh
+
   quality:
     name: Checks, format, and build
     runs-on: ubuntu-latest
@@ -94,8 +157,18 @@ jobs:
 
   playwright:
     name: Playwright (balanced shard ${{ matrix.shard }}/${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }})
+    needs: e2e-runner-image
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    container:
+      image: ${{ needs.e2e-runner-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+      options: --ipc=host
+    env:
+      E2E_CAPTURE_SCREENSHOTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && '1' || '0' }}
+      E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
     strategy:
       fail-fast: false
       matrix:
@@ -105,18 +178,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up pnpm and Node.js
-        uses: pnpm/setup@v2
-        with:
-          runtime: node@24
-          cache: true
-          install: false
-
-      - name: Install workspace dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Chromium
-        run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
+      - name: Link workspace dependencies from runner cache
+        run: |
+          expected="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
+          if [ "${E2E_RUNNER_FINGERPRINT:-}" = "$expected" ]; then
+            pnpm install --frozen-lockfile --offline
+          else
+            echo "Runner image fingerprint differs from this revision; allowing missing dependencies to download."
+            pnpm install --frozen-lockfile --prefer-offline
+            pnpm --filter @nexus-terminal/e2e exec playwright install --only-shell chromium
+          fi
 
       - name: Run balanced E2E shard ${{ matrix.shard }}
         env:
@@ -133,6 +204,15 @@ jobs:
           name: e2e-timings-${{ matrix.shard }}-${{ github.run_attempt }}
           path: tests/e2e/test-results/spec-durations.json
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload documentation screenshots
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-screenshots-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: tests/e2e/.tmp/functional-screenshots/*.png
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Upload E2E diagnostics
@@ -199,6 +279,64 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add scripts/e2e/duration-estimates.json
           git commit -m "ci(e2e): refresh duration estimates [skip ci]"
+          git push origin "HEAD:$TARGET_BRANCH"
+
+  update-e2e-screenshots:
+    name: Update E2E documentation screenshots
+    needs: [quality, playwright, docker-smoke]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && github.ref_type == 'branch' && needs.quality.result == 'success' && needs.playwright.result == 'success' && needs.docker-smoke.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download E2E screenshots
+        uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-screenshots-*-${{ github.run_attempt }}
+          path: e2e-screenshots
+          merge-multiple: true
+
+      - name: Stage E2E documentation screenshots
+        run: |
+          mapfile -t screenshots < <(find e2e-screenshots -maxdepth 1 -type f -name '*.png' -printf '%f\n' | sort)
+          if [ "${#screenshots[@]}" -eq 0 ]; then
+            echo "No documentation screenshots were produced." >&2
+            exit 1
+          fi
+          mkdir -p doc/imgs/e2e
+          find doc/imgs/e2e -maxdepth 1 -type f -name '*.png' -delete
+          for screenshot in "${screenshots[@]}"; do
+            test -s "e2e-screenshots/$screenshot"
+            signature="$(od -An -tx1 -N8 "e2e-screenshots/$screenshot" | tr -d ' \n')"
+            test "$signature" = "89504e470d0a1a0a"
+            cp "e2e-screenshots/$screenshot" "doc/imgs/e2e/$screenshot"
+          done
+          echo "Staged ${#screenshots[@]} E2E screenshots under doc/imgs/e2e."
+
+      - name: Commit updated screenshots
+        env:
+          TESTED_SHA: ${{ github.sha }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          if git diff --quiet -- doc/imgs/e2e; then
+            echo "E2E documentation screenshots are already current."
+            exit 0
+          fi
+          git fetch origin "$TARGET_BRANCH"
+          if [ "$(git rev-parse FETCH_HEAD)" != "$TESTED_SHA" ]; then
+            echo "origin/$TARGET_BRANCH advanced after this E2E run; skipping stale screenshot update."
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A doc/imgs/e2e
+          git commit -m "docs(e2e): refresh screenshots [skip ci]"
           git push origin "HEAD:$TARGET_BRANCH"
 
   docker-smoke:
