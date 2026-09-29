@@ -6,6 +6,7 @@ import type {
   SuspendedTerminalCheckpointSnapshot,
   SuspendedTerminalViewport,
 } from '../../modules/ssh-suspend/suspended-terminal-checkpoint.port';
+import { trackTerminalInputModes, type TerminalInputModeTracker } from './terminal-input-mode-tracker';
 
 const MAX_CHECKPOINT_BYTES = 4 * 1024 * 1024;
 const MAX_SCROLLBACK_LINES = 1000;
@@ -18,6 +19,7 @@ const validViewport = (viewport: SuspendedTerminalViewport): SuspendedTerminalVi
 class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
   private terminal: Terminal;
   private addon: SerializeAddon;
+  private inputModes: TerminalInputModeTracker;
   private chain: Promise<void> = Promise.resolve();
   private disposed = false;
 
@@ -25,6 +27,7 @@ class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
     const normalized = validViewport(viewport);
     this.terminal = this.createTerminal(normalized);
     this.addon = this.createAddon(this.terminal);
+    this.inputModes = trackTerminalInputModes(this.terminal);
     if (snapshot) this.chain = this.writeToTerminal(snapshot);
   }
 
@@ -45,6 +48,7 @@ class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
       this.terminal.dispose();
       this.terminal = this.createTerminal(normalized);
       this.addon = this.createAddon(this.terminal);
+      this.inputModes = trackTerminalInputModes(this.terminal);
       if (snapshot) await this.writeToTerminal(snapshot);
     });
   }
@@ -52,7 +56,9 @@ class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
   async snapshot(): Promise<SuspendedTerminalCheckpointSnapshot> {
     await this.chain;
     if (this.disposed) throw new Error('Suspended terminal checkpoint is disposed.');
-    const data = this.addon.serialize({ scrollback: 0 });
+    // SerializeAddon restores the buffer and the modes it knows; append the mouse/scroll input
+    // encodings it omits so a still-running TUI keeps receiving the input protocol it enabled.
+    const data = `${this.addon.serialize({ scrollback: 0 })}${this.inputModes.restoreSuffix()}`;
     if (Buffer.byteLength(data, 'utf8') > MAX_CHECKPOINT_BYTES) {
       throw new Error('Suspended terminal checkpoint exceeds the bounded snapshot size.');
     }

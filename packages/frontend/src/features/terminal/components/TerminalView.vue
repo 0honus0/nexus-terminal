@@ -13,6 +13,7 @@
   import type { TerminalChannel } from '../ports/terminal-channel';
   import type { TerminalVisualOptions } from '../model/terminal';
   import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
+  import { trackTerminalInputModes, type TerminalInputModeTracker } from '../model/terminalInputModes';
   import {
     createTerminalSessionState,
     RESET_REMOTE_PTY_DISPLAY,
@@ -52,6 +53,7 @@
   let fit: FitAddon | undefined;
   let searchAddon: SearchAddon | undefined;
   let serializeAddon: SerializeAddon | undefined;
+  let inputModes: TerminalInputModeTracker | undefined;
   let resizeObserver: ResizeObserver | undefined;
   const cleanup: Array<() => void> = [];
   const HISTORY_LIVE_SCROLLBACK_LINES = 20_000;
@@ -190,10 +192,13 @@
   };
 
   const liveReplaySnapshot = (): string => {
+    // Re-apply the input encodings SerializeAddon drops so a remounted/resumed xterm keeps talking
+    // to a still-running TUI with the protocol it enabled (mouse wheel, focus, alternate scroll).
+    const inputModeSuffix = inputModes?.restoreSuffix() ?? '';
     if (!historyBrowsing) {
-      return terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : '';
+      return `${terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : ''}${inputModeSuffix}`;
     }
-    return `${historyLiveSnapshot}${deferredTerminalOutputReplay()}`;
+    return `${historyLiveSnapshot}${deferredTerminalOutputReplay()}${inputModeSuffix}`;
   };
 
   const currentHistoryContinuation = (): Uint8Array => {
@@ -1065,6 +1070,8 @@
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(root.value!);
+    inputModes = trackTerminalInputModes(terminal);
+    cleanup.push(() => inputModes?.dispose());
     cleanup.push(setupImeCompositionBoundsProtection());
     historyLastViewportY = terminal.buffer.active.viewportY;
     const backgroundOsc = terminal.parser.registerOscHandler(11, (data) =>
