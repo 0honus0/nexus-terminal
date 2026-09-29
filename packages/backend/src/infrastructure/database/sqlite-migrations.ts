@@ -1229,6 +1229,50 @@ export const definedMigrations: SqliteMigration[] = [
       );
     `,
   },
+  {
+    id: 48,
+    name: 'Upgrade persisted Agent settings after retired fields and model fallbacks',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_settings'),
+    sql: `
+      UPDATE agent_settings
+      SET value_json = json_insert(
+        json_remove(
+          value_json,
+          '$.safety',
+          '$.budget.maxRunTokens',
+          '$.budget.maxContextTokens',
+          '$.budget.maxOutputTokens',
+          '$.budget.maxRawToolBytes',
+          '$.budget.maxRunCostMicros',
+          '$.hardLimits.maxRunTokens',
+          '$.hardLimits.maxContextTokens',
+          '$.hardLimits.maxOutputTokens',
+          '$.hardLimits.maxRawToolBytes',
+          '$.hardLimits.maxRunCostMicros',
+          '$.hardLimits.workspaceIdleTtlSeconds',
+          '$.workspaceRuntime.workspaceIdleTtlSeconds'
+        ),
+        '$.model.fallbackModels', json('[]')
+      )
+      WHERE json_extract(value_json, '$.schemaVersion') = 1
+        AND (
+          json_type(value_json, '$.safety') IS NOT NULL
+          OR json_type(value_json, '$.budget.maxRunTokens') IS NOT NULL
+          OR json_type(value_json, '$.budget.maxContextTokens') IS NOT NULL
+          OR json_type(value_json, '$.budget.maxOutputTokens') IS NOT NULL
+          OR json_type(value_json, '$.budget.maxRawToolBytes') IS NOT NULL
+          OR json_type(value_json, '$.budget.maxRunCostMicros') IS NOT NULL
+          OR json_type(value_json, '$.hardLimits.maxRunTokens') IS NOT NULL
+          OR json_type(value_json, '$.hardLimits.maxContextTokens') IS NOT NULL
+          OR json_type(value_json, '$.hardLimits.maxOutputTokens') IS NOT NULL
+          OR json_type(value_json, '$.hardLimits.maxRawToolBytes') IS NOT NULL
+          OR json_type(value_json, '$.hardLimits.maxRunCostMicros') IS NOT NULL
+          OR json_type(value_json, '$.hardLimits.workspaceIdleTtlSeconds') IS NOT NULL
+          OR json_type(value_json, '$.workspaceRuntime.workspaceIdleTtlSeconds') IS NOT NULL
+          OR json_type(value_json, '$.model.fallbackModels') IS NULL
+        );
+    `,
+  },
 ];
 
 /**

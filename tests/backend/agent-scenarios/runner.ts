@@ -61,6 +61,7 @@ import { acpInnerPermissionAbortRaceScenario } from './acp-inner-permission-abor
 import { failFastSiblingCancellationScenario } from './fail-fast-sibling-cancellation.scenario';
 import { modelCapabilityRegistrySyncScenario } from './model-capability-registry-sync.scenario';
 import { legacyMachineInspectionMigrationScenario } from './legacy-machine-inspection-migration.scenario';
+import { legacySettingsMigrationScenario } from './legacy-settings-migration.scenario';
 import { durableBoundaryDecodeScenario } from './durable-boundary-decode.scenario';
 import { currentDurableSchemaScenario } from './current-durable-schema.scenario';
 import { providerSettingsDeadFieldScenario } from './provider-settings-dead-field.scenario';
@@ -93,6 +94,7 @@ const scenarios = new Map<string, Scenario>([
   ['context/tool-exchange-atomicity', contextToolExchangeScenario],
   ['context/durable-compaction-checkpoint', durableContextCheckpointScenario],
   ['migration/legacy-machine-inspection-targets', legacyMachineInspectionMigrationScenario],
+  ['migration/legacy-agent-settings', legacySettingsMigrationScenario],
   ['migration/capability-grants-v2', capabilityGrantMigrationScenario],
   ['context/token-accounting', contextTokenAccountingScenario],
   ['context/project-instructions', projectInstructionsContextScenario],

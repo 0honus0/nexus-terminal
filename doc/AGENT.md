@@ -924,7 +924,7 @@ Agent 复用 Platform capability，不复用 Workspace runtime transport owner�
 - Root dispatcher process-local；
 - Subagent work durable SQLite claim queue。
 
-Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #44，其中 #35–44 完成 typed target grant、File/Shell capability 与历史 durable execution semantic 的一次性破坏性迁移。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
+Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #48，其中 #35–44 完成 typed target grant、File/Shell capability 与历史 durable execution semantic 的一次性破坏性迁移，#48 将旧版持久化 Agent Settings 中已移除的字段清理并补齐 `model.fallbackModels`。运行时仍严格校验 Settings，不接受旧字段。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
 
 如果未来进入多 Backend 实例，不允许只把 Root queue 换成 Redis 就宣称支持分布式。必须同时设计：
 
