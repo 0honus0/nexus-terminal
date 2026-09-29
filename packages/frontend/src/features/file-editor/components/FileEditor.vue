@@ -255,6 +255,7 @@
           data-testid="file-editor-encoding"
           :model-value="selectedEncoding"
           class="encoding-select"
+          match-trigger-width
           :title="t('fileManager.changeEncodingTooltip')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @update:model-value="changeEncoding"
@@ -265,6 +266,7 @@
           data-testid="file-editor-line-ending"
           :model-value="currentLineEnding"
           class="encoding-select line-ending-select"
+          match-trigger-width
           :title="t('fileEditor.lineEnding')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @update:model-value="changeLineEnding"
@@ -575,27 +577,32 @@
   }
 
   .encoding-select {
-    width: auto;
-    max-width: 12rem;
-    flex: 0 1 auto;
+    width: 8.5rem;
+    max-width: 8.5rem;
+    flex: 0 1 8.5rem;
   }
   .encoding-select :deep(.ui-select__trigger) {
-    width: auto;
+    width: 100%;
     min-width: 0;
     max-width: 100%;
     --ui-control-height: 28px;
     --ui-control-font-size: 11px;
   }
   .line-ending-select {
+    width: 5.5rem;
     max-width: 5.5rem;
+    flex-basis: 5.5rem;
   }
   .editor-header.is-mobile .encoding-select {
+    width: 7rem;
     min-width: 0;
     max-width: 7rem;
-    flex: 0 1 auto;
+    flex-basis: 7rem;
   }
   .editor-header.is-mobile .line-ending-select {
+    width: 4.5rem;
     max-width: 4.5rem;
+    flex-basis: 4.5rem;
   }
 
   .save-btn {

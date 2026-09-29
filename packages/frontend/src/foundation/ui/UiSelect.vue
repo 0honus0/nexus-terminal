@@ -19,6 +19,8 @@
 
   const attrs = useAttrs();
   const slots = useSlots();
+  const root = ref<HTMLElement | null>(null);
+  const portalTarget = computed(() => root.value?.closest<HTMLElement>('[data-ui="overlay"]') ?? 'body');
   const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style }));
   const triggerAttrs = computed(() => {
     const { class: _class, style: _style, ...rest } = attrs;
@@ -144,6 +146,7 @@
 
 <template>
   <div
+    ref="root"
     v-bind="rootAttrs"
     data-ui="select"
     data-ui-gen="2"
@@ -186,7 +189,7 @@
           </svg>
         </SelectIcon>
       </SelectTrigger>
-      <SelectPortal>
+      <SelectPortal :to="portalTarget">
         <SelectContent
           data-ui="select-panel"
           data-ui-gen="2"

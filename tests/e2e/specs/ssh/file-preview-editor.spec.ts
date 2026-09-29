@@ -253,6 +253,38 @@ test('SQLite database preview browses tables and searches the active table', asy
   await expect(database).toContainText('Carol changed profile');
 });
 
+test('file editor menus show complete encoding and line-ending choices', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+  await row(page, 'seed.txt').dblclick();
+  const editor = editorView(page);
+  await expect(editor).toBeVisible();
+
+  for (const [control, optionValue, selectedValue] of [
+    ['file-editor-encoding', 'utf-16le', 'utf-8'],
+    ['file-editor-line-ending', 'crlf', 'lf'],
+  ] as const) {
+    await editor.getByTestId(control).click();
+    const option = page.locator(`[role="option"][data-value="${optionValue}"]`);
+    await expect(option).toBeVisible();
+    const triggerBox = await editor.getByTestId(control).boundingBox();
+    const menuBox = await page.locator('[data-ui="select-panel"][data-state="open"]').boundingBox();
+    expect(triggerBox).toBeTruthy();
+    expect(menuBox).toBeTruthy();
+    expect(Math.abs(menuBox!.width - triggerBox!.width)).toBeLessThanOrEqual(1);
+    const labelOverflow = await option
+      .locator('.ui-select__item-label')
+      .evaluate((label) => Math.max(0, label.scrollWidth - label.clientWidth));
+    expect(labelOverflow).toBeLessThanOrEqual(1);
+    await page.locator(`[role="option"][data-value="${selectedValue}"]`).click();
+    await expectUiSelectValue(editor.getByTestId(control), selectedValue);
+  }
+});
+
 test('file previews and text editor protect historical file-opening regressions', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);

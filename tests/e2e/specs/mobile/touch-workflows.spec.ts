@@ -478,6 +478,27 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
     await expect
       .poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
       .toContain('plain-no-extension');
+
+    for (const [control, optionValue, selectedValue] of [
+      ['file-editor-encoding', 'utf-16le', 'utf-8'],
+      ['file-editor-line-ending', 'crlf', 'lf'],
+    ] as const) {
+      await editor.getByTestId(control).click();
+      const option = page.locator(`[role="option"][data-value="${optionValue}"]`);
+      await expect(option).toBeVisible();
+      const triggerBox = await editor.getByTestId(control).boundingBox();
+      const menuBox = await page.locator('[data-ui="select-panel"][data-state="open"]').boundingBox();
+      expect(triggerBox).toBeTruthy();
+      expect(menuBox).toBeTruthy();
+      expect(Math.abs(menuBox!.width - triggerBox!.width)).toBeLessThanOrEqual(1);
+      expect(
+        await option.locator('.ui-select__item-label').evaluate((label) => label.scrollWidth - label.clientWidth),
+      ).toBeLessThanOrEqual(1);
+      await page.locator(`[role="option"][data-value="${selectedValue}"]`).click();
+    }
+    expect(
+      await editor.locator('.editor-actions').evaluate((actions) => actions.scrollWidth - actions.clientWidth),
+    ).toBeLessThanOrEqual(1);
     await captureFunctionalScreenshot(page, 'mobile-file-editor.png');
 
     const viewport = page.viewportSize();
