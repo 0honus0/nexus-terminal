@@ -495,8 +495,9 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           toolbarPaddingRight: Number.parseFloat(toolbarStyle.paddingRight),
           actionsWidth: actionsRect.width,
           toolbarWidth: toolbarRect.width,
+          actionsDisplay: actionsStyle.display,
+          actionsGridColumns: actionsStyle.gridTemplateColumns,
           actionsJustify: actionsStyle.justifyContent,
-          actionsWrap: actionsStyle.flexWrap,
           rowEdgeGaps,
           pathWidth: path.getBoundingClientRect().width,
           pathBackground: pathStyle.backgroundColor,
@@ -512,12 +513,18 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       const toolbarInnerWidth =
         pathMetrics.toolbarWidth - pathMetrics.toolbarPaddingLeft - pathMetrics.toolbarPaddingRight;
       expect(Math.abs(pathMetrics.actionsWidth - toolbarInnerWidth)).toBeLessThan(2);
+      expect(pathMetrics.actionsDisplay).toBe('grid');
+      const actionColumnCount = pathMetrics.actionsGridColumns.split(' ').length;
+      expect(actionColumnCount).toBeGreaterThan(1);
       expect(pathMetrics.actionsJustify).toBe('space-between');
-      expect(pathMetrics.actionsWrap).toBe('nowrap');
-      expect(pathMetrics.rowEdgeGaps.length).toBeGreaterThan(0);
-      for (const row of pathMetrics.rowEdgeGaps.filter((entry) => entry.count > 1)) {
+      expect(pathMetrics.rowEdgeGaps.length).toBeGreaterThanOrEqual(2);
+      for (const [index, row] of pathMetrics.rowEdgeGaps.entries()) {
+        expect(row.count).toBeLessThanOrEqual(actionColumnCount);
         expect(Math.abs(row.left)).toBeLessThan(2);
-        expect(row.right).toBeGreaterThanOrEqual(-1);
+        if (index === 0) {
+          expect(row.count).toBe(actionColumnCount);
+          expect(Math.abs(row.right)).toBeLessThan(2);
+        }
       }
       expect(Math.abs(pathMetrics.pathWidth - toolbarInnerWidth)).toBeLessThan(2);
       expect(pathMetrics.pathBackground).not.toBe('rgba(0, 0, 0, 0)');

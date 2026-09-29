@@ -170,12 +170,12 @@
   type ColumnKey = 'name' | 'permissions' | 'modified';
   const minimumColumnWidths: Record<ColumnKey, number> = {
     name: 80,
-    permissions: 70,
+    permissions: 82,
     modified: 80,
   };
   const defaultColumnWidths: Record<ColumnKey, number> = {
     name: 200,
-    permissions: 76,
+    permissions: 88,
     modified: 92,
   };
   const initialColumnWidth = (key: ColumnKey): number => {
@@ -1370,10 +1370,7 @@
     @drop.prevent="dropFiles"
   >
     <header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2">
-      <div
-        class="file-manager-actions flex min-w-0 items-center"
-        :class="{ 'is-searching': searchExpanded, 'is-wide': listViewportWidth >= 280 }"
-      >
+      <div class="file-manager-actions flex min-w-0 items-center" :class="{ 'is-searching': searchExpanded }">
         <button
           v-if="!searchExpanded"
           type="button"

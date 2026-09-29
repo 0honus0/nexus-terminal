@@ -78,29 +78,17 @@
 .file-manager-actions {
   width: 100%;
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 1.625rem);
   align-items: center;
-  justify-content: flex-start;
-  gap: 0.25rem;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
 }
 .file-manager-actions.is-searching {
+  display: flex;
   justify-content: stretch;
 }
-.file-manager-actions.is-wide:not(.is-searching) {
-  justify-content: space-between;
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-}
-
-@container file-manager-pane (min-width: 280px) {
-  .file-manager-actions:not(.is-searching) {
-    justify-content: space-between;
-    flex-wrap: nowrap;
-    gap: 0.25rem;
-  }
-}
-
 .file-manager-action-button {
   display: inline-flex;
   width: 1.625rem;
@@ -190,11 +178,11 @@
 }
 .file-table-header-permissions {
   padding-left: 0.4rem;
-  padding-right: 0.4rem;
+  padding-right: 0.65rem;
   text-align: left;
 }
 .file-table-header-modified {
-  padding-left: 0.4rem;
+  padding-left: 0.65rem;
   padding-right: 0.6rem;
   text-align: left;
 }
@@ -236,12 +224,12 @@
 }
 .file-row-permissions {
   padding-left: 0.4rem;
-  padding-right: 0.4rem;
+  padding-right: 0.65rem;
   font-size: calc(0.625rem * max(1, var(--file-row-scale) * 0.2 + 0.8));
   text-align: left;
 }
 .file-row-modified {
-  padding-left: 0.4rem;
+  padding-left: 0.65rem;
   padding-right: 0.6rem;
   font-size: calc(0.625rem * max(1, var(--file-row-scale) * 0.2 + 0.8));
   text-align: left;
@@ -267,6 +255,7 @@
 .file-row-name-button {
   display: flex;
   align-items: center;
+  transform: translateY(-2px);
   background: transparent;
   border: none;
   outline: none;
@@ -327,9 +316,8 @@
     gap: 0.25rem;
   }
   .file-manager-actions {
-    gap: 0.25rem;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    grid-template-columns: repeat(auto-fit, 1.5rem);
+    row-gap: 0.25rem;
   }
   .file-manager-path-input {
     min-height: 1.5rem;
