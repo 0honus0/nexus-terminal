@@ -20,7 +20,7 @@
   const feedback = useFeedback();
   const catalog = useFilesystemCatalog();
   const panel = ref<HTMLElement | null>(null);
-  const panelStyle = ref<Record<string, string>>({});
+  const panelStyle = ref<Record<string, string>>({ visibility: 'hidden' });
   const editing = ref<FavoritePathDto | null>(null);
   const context = ref<{ item: FavoritePathDto; x: number; y: number } | null>(null);
   const formVisible = ref(false);
@@ -32,20 +32,25 @@
   const updatePosition = async (): Promise<void> => {
     if (!props.visible || !props.triggerElement) return;
     await nextTick();
-    if (!panel.value) return;
+    if (!props.visible || !panel.value) return;
     const trigger = props.triggerElement.getBoundingClientRect();
     const width = panel.value.offsetWidth;
-    const height = panel.value.offsetHeight;
-    let top = trigger.bottom + 4;
+    const below = Math.max(0, window.innerHeight - trigger.bottom - 4 - PADDING);
+    const above = Math.max(0, trigger.top - 4 - PADDING);
+    const desiredHeight = Math.min(320, window.innerHeight - PADDING * 2);
+    const openAbove = below < desiredHeight && above > below;
     // Align right edge of popover with trigger's right edge so it expands inward/leftward
     let left = trigger.right - width;
     if (left < PADDING && trigger.left + width <= window.innerWidth - PADDING) {
       left = trigger.left;
     }
-    if (top + height + PADDING > window.innerHeight) top = trigger.top - height - 4;
-    top = Math.max(PADDING, Math.min(top, window.innerHeight - height - PADDING));
     left = Math.max(PADDING, Math.min(left, window.innerWidth - width - PADDING));
-    panelStyle.value = { top: `${top}px`, left: `${left}px` };
+    panelStyle.value = {
+      [openAbove ? 'bottom' : 'top']: `${openAbove ? window.innerHeight - trigger.top + 4 : trigger.bottom + 4}px`,
+      left: `${left}px`,
+      maxHeight: `${Math.min(desiredHeight, openAbove ? above : below)}px`,
+      visibility: 'visible',
+    };
   };
   const handleOutsidePointer = (event: MouseEvent): void => {
     if (!props.visible || formVisible.value || context.value) return;
@@ -64,20 +69,25 @@
 
   watch(
     () => props.visible,
-    async (visible) => {
+    async (visible, _previous, onCleanup) => {
+      let current = true;
+      onCleanup(() => {
+        current = false;
+      });
       detachPositioning();
       if (!visible) {
         context.value = null;
+        panelStyle.value = { visibility: 'hidden' };
         return;
       }
       catalog.favoriteSearch.value = '';
+      attachPositioning();
+      await updatePosition();
       try {
         await catalog.loadFavorites();
       } catch {
-        feedback.notifyError(t('favoritePaths.notifications.fetchError'));
+        if (current) feedback.notifyError(t('favoritePaths.notifications.fetchError'));
       }
-      attachPositioning();
-      await updatePosition();
     },
     { immediate: true },
   );
