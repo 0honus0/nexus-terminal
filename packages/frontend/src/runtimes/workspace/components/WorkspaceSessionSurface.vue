@@ -453,8 +453,8 @@
   );
   const fileManagerPopupPanelClass = computed(() =>
     props.mobile
-      ? 'max-w-4xl h-[85vh] flex flex-col overflow-hidden'
-      : 'flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none',
+      ? 'workspace-file-manager-popup max-w-4xl h-[85vh] flex flex-col overflow-hidden'
+      : 'workspace-file-manager-popup flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none',
   );
   const editorPopupStyle = computed(() =>
     props.mobile
