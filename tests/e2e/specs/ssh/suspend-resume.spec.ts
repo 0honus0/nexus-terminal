@@ -481,7 +481,9 @@ test('terminal output produced after marking is retained in suspended history', 
     data: `(sleep 0.5; printf '${after}\\n') &\r`,
   });
   await new Promise((resolve) => setTimeout(resolve, 75));
-  await requestWorkspace(workspace.socket, 'suspend.mark', { terminalSnapshot: `${before}\r\n` });
+  await requestWorkspace(workspace.socket, 'suspend.mark', {
+    terminalSnapshot: `STALE_HISTORY_TEXT\r\x1b[31m${before}\x1b[0m\x1b[K\r\n\x1b[?1000h\x1b[?1006h`,
+  });
   await closeWebSocket(workspace.socket);
 
   const verifier = await openAuthenticatedWebSocket(request);
@@ -509,6 +511,8 @@ test('terminal output produced after marking is retained in suspended history', 
       )
       .toContain(after);
     expect(text).toContain(before);
+    expect(text).not.toContain('STALE_HISTORY_TEXT');
+    expect(text).not.toContain('\x1b[');
     expect((await request.delete(`/api/v1/ssh-suspend/terminate/${suspended!.id}`)).ok()).toBeTruthy();
   } finally {
     await closeWebSocket(verifier);

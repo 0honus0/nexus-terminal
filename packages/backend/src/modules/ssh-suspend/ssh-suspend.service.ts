@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { RemoteExecutionTransport, RemoteShellSession } from '../../platform/execution/remote-execution.port';
 import type { SuspendedSessionLogStore } from './suspended-session-log.port';
+import type { SuspendedTerminalLogExporter } from './suspended-terminal-log-export.port';
 import type { SuspendedTerminalCheckpoint, SuspendedTerminalViewport } from './suspended-terminal-checkpoint.port';
 import type {
   PreparedResumeSession,
@@ -80,6 +81,7 @@ export class SshSuspendService {
 
   constructor(
     private readonly logs: SuspendedSessionLogStore,
+    private readonly logExporter: SuspendedTerminalLogExporter,
     options: SshSuspendServiceOptions = {},
   ) {
     this.now = options.now ?? Date.now;
@@ -435,7 +437,10 @@ export class SshSuspendService {
       const safe = base.replace(/[^\w.-]/g, '_');
       const timestamp = new Date(record.suspendStartTime).toISOString().replace(/[:.]/g, '-');
       return {
-        stream: await this.logs.openRead(record.logIdentifier),
+        stream: await this.logExporter.render(await this.logs.openRead(record.logIdentifier), {
+          columns: record.latestCheckpoint?.columns ?? 80,
+          rows: record.latestCheckpoint?.rows ?? 24,
+        }),
         filename: `ssh_log_${safe}_${record.logIdentifier}_${timestamp}.log`,
       };
     } catch {

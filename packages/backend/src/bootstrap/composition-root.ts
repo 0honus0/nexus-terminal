@@ -45,6 +45,7 @@ import { BcryptPasswordHasher } from '../infrastructure/security/bcrypt-password
 import { SshTransportAdapter } from '../infrastructure/ssh/ssh-transport.adapter';
 import { LocalSuspendedSessionLogAdapter } from '../infrastructure/ssh-suspend/local-suspended-session-log.adapter';
 import { XtermSuspendedTerminalCheckpointFactory } from '../infrastructure/ssh-suspend/xterm-suspended-terminal-checkpoint.adapter';
+import { XtermSuspendedTerminalLogExportAdapter } from '../infrastructure/ssh-suspend/xterm-suspended-terminal-log-export.adapter';
 import { NodeLocalSystemStatusAdapter } from '../infrastructure/system/node-local-system-status.adapter';
 import { BackupService } from '../modules/backup/backup.service';
 import { AppearanceSettingsService } from '../modules/appearance/appearance-settings.service';
@@ -314,7 +315,8 @@ export const createCompositionRoot = (
 
   const suspendedLogs = new LocalSuspendedSessionLogAdapter(config.dataDirectory);
   const suspendedTerminalCheckpoints = new XtermSuspendedTerminalCheckpointFactory();
-  const sshSuspend = new SshSuspendService(suspendedLogs);
+  const suspendedTerminalLogExporter = new XtermSuspendedTerminalLogExportAdapter();
+  const sshSuspend = new SshSuspendService(suspendedLogs, suspendedTerminalLogExporter);
 
   const workspaceSessions = new WorkspaceSessionRegistry();
   const workspaceEvents = new WorkspaceEventHub();
