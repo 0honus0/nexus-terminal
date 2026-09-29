@@ -51,6 +51,7 @@
   const searchTerm = terminalState.searchTerm;
   const renderedFontSize = ref(props.fontSize);
   const backgroundReady = ref(false);
+  const backgroundFrame = ref<HTMLIFrameElement | null>(null);
   let terminal: Terminal | undefined;
   let fit: FitAddon | undefined;
   let searchAddon: SearchAddon | undefined;
@@ -121,8 +122,24 @@
   let lastRows = 0;
   const revealBackgroundWhenSized = () => {
     const element = root.value;
-    if (props.active && element && element.clientWidth > 0 && element.clientHeight > 0) backgroundReady.value = true;
+    if (!props.active || !element || element.clientWidth <= 0 || element.clientHeight <= 0) return;
+    backgroundReady.value = true;
   };
+  watch(
+    [backgroundFrame, sandboxedCustomHtml],
+    ([frame, html], _previous, onCleanup) => {
+      if (!frame || !html) return;
+      const loadWhenSized = () => {
+        if (frame.clientWidth > 0 && frame.clientHeight > 0 && frame.getAttribute('srcdoc') !== html)
+          frame.srcdoc = html;
+      };
+      const observer = new ResizeObserver(loadWhenSized);
+      observer.observe(frame);
+      loadWhenSized();
+      onCleanup(() => observer.disconnect());
+    },
+    { flush: 'post' },
+  );
   const fitAndResize = () => {
     const element = root.value;
     if (!terminal || !fit || !element) return;
@@ -1303,9 +1320,9 @@
     <!-- Custom backgrounds may size themselves only once, so start them after the session is visible. -->
     <iframe
       v-if="active && backgroundReady && sandboxedCustomHtml"
+      ref="backgroundFrame"
       class="terminal-custom-html"
       sandbox="allow-scripts"
-      :srcdoc="sandboxedCustomHtml"
       tabindex="-1"
       aria-hidden="true"
     ></iframe>

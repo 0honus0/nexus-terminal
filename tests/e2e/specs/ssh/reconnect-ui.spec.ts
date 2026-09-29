@@ -401,7 +401,10 @@ test('hidden desktop terminal keeps its fitted geometry while switching sessions
   }
 });
 
-test('HTML terminal background starts with a visible viewport after switching sessions', async ({ page, context }) => {
+test('HTML terminal background starts with a visible viewport on initial load and after switching sessions', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await setTestSshOnline(true);
@@ -443,18 +446,21 @@ test('HTML terminal background starts with a visible viewport after switching se
     expect((await apply).ok()).toBeTruthy();
     await customizer.getByLabel('Close', { exact: true }).first().click();
 
-    await page.getByTestId('terminal-tab-bar').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
     const background = page.frameLocator('[data-workspace-active="true"] .terminal-custom-html');
-    await expect
-      .poll(() =>
-        background.locator('#scene').evaluate((element) => {
-          const canvas = element as HTMLCanvasElement;
-          if (canvas.width === 0 || canvas.height === 0) return false;
-          const pixel = canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data;
-          return pixel?.[0] === 255 && pixel[3] === 255;
-        }),
-      )
-      .toBe(true);
+    const expectPaintedBackground = async () =>
+      expect
+        .poll(() =>
+          background.locator('#scene').evaluate((element) => {
+            const canvas = element as HTMLCanvasElement;
+            if (canvas.width === 0 || canvas.height === 0) return false;
+            const pixel = canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data;
+            return pixel?.[0] === 255 && pixel[3] === 255;
+          }),
+        )
+        .toBe(true);
+    await expectPaintedBackground();
+    await page.getByTestId('terminal-tab-bar').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+    await expectPaintedBackground();
   } finally {
     await context.request.put('/api/v1/appearance', {
       data: {
