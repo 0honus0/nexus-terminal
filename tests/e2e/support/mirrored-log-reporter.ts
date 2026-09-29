@@ -177,9 +177,11 @@ export default class MirroredLogReporter implements Reporter {
         .map(([spec, results]) => [spec, Math.round(results.reduce((total, { duration }) => total + duration, 0))])
         .sort(([left], [right]) => left.localeCompare(right)),
     );
-    const outputPath = path.resolve(
-      process.env.E2E_SPEC_DURATIONS_PATH || path.join(this.testDir, '..', 'test-results', 'spec-durations.json'),
-    );
+    const e2eRoot = path.resolve(this.testDir, '..');
+    const configuredPath = process.env.E2E_SPEC_DURATIONS_PATH;
+    const outputPath = configuredPath
+      ? path.resolve(e2eRoot, configuredPath)
+      : path.join(e2eRoot, 'test-results', 'spec-durations.json');
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(
       outputPath,
