@@ -48,7 +48,7 @@ docker run --rm \
   --workdir /__w/nexus-terminal/nexus-terminal \
   --volume "$verification_workspace:/__w/nexus-terminal/nexus-terminal" \
   "$full_image" sh -lc \
-  "node --version && pnpm --version | grep -Fx '$pnpm_version' && command -v rsync && test -d \"\$PLAYWRIGHT_BROWSERS_PATH\" && test \"\$(pnpm store path)\" = /opt/pnpm/store/v11 && pnpm install --frozen-lockfile --offline && pnpm --filter @nexus-terminal/e2e exec playwright --version | grep -F 'Version $playwright_version'"
+  "node --version && pnpm --version | grep -Fx '$pnpm_version' && command -v ssh && command -v scp && command -v rsync && command -v sshpass && test -d \"\$PLAYWRIGHT_BROWSERS_PATH\" && test \"\$(pnpm store path)\" = /opt/pnpm/store/v11 && pnpm install --frozen-lockfile --offline && pnpm --filter @nexus-terminal/e2e exec playwright --version | grep -F 'Version $playwright_version'"
 cleanup_verification_workspace
 trap - EXIT
 
