@@ -691,7 +691,6 @@
               title-tag="h3"
               :name="remote.name"
               :address="`${remote.username}@${remote.host}:${remote.port}`"
-              type="SSH"
               :status-dot-class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
               :accent-class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
             >

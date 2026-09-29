@@ -435,6 +435,7 @@ test('a slow SSH resource does not hold back another host on the dashboard', asy
     const goodCard = page.getByTestId(`dashboard-remote-resource-${E2E_SSH.host.toLowerCase()}:${E2E_SSH.port}`);
     const badCard = page.getByTestId(`dashboard-remote-resource-${badHost}:${badPort}`);
     await expect(goodCard).toContainText('7%');
+    await expect(goodCard.getByText('SSH', { exact: true })).toHaveCount(0);
     await expect(badCard).toBeVisible();
     await expect(badCard).not.toContainText('Network Error');
     releaseSlow?.();
