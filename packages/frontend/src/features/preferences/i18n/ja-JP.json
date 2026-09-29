@@ -141,7 +141,7 @@
       "navBarVisibleDescription": "ワークスペースの上部ナビゲーションを表示します。ワークスペースのタブバーからも切り替えられます。",
       "terminalRightClickCopyPasteTitle": "ターミナル右クリック コピー/貼り付け",
       "terminalRightClickCopyPasteLabel": "ターミナルの右クリック コピー/貼り付けを有効にする",
-      "terminalRightClickCopyPasteDescription": "選択範囲を右クリックでコピーし、もう一度右クリックで貼り付けます。マウス操作を扱う端末アプリでは、文字を右クリックするとその単語をコピーできます。",
+      "terminalRightClickCopyPasteDescription": "通常の端末では選択範囲を右クリックでコピーし、選択範囲がなければ貼り付けます。マウス操作を扱うアプリでは右クリックをアプリに渡し、Shift を押しながら選択して Ctrl+Shift+C/V を使います。",
       "organizedDescription": "関連する設定を用途ごとにまとめ、同じグループの変更をまとめて確認・保存できます。",
       "unsavedGroups": "未保存の設定グループが {count} 件あります",
       "moreDetails": "詳細",

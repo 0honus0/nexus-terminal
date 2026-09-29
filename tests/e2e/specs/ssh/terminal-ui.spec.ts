@@ -562,23 +562,25 @@ test('desktop terminal right-click copies a selection then pastes when no select
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('DESKTOP_RIGHT_CLICK_PASTE_OK');
   });
 
-  await step('right-click copies then pastes while a terminal app reports mouse input', async () => {
+  await step('mouse-aware apps keep right-click and use keyboard clipboard shortcuts', async () => {
     const mouseMarker = 'DESKTOP_MOUSE_REPORTING_COPY_MARKER';
-    await commandInput.fill(`printf '\\n${mouseMarker}\\n\\033[?1000h\\033[?1006h'`);
+    await commandInput.fill(`printf '\\n${mouseMarker}\\n\\033[?1000h\\033[?1006h'; cat -v`);
     await commandInput.press('Enter');
     await expect.poll(async () => rows.innerText()).toContain(mouseMarker);
     const point = await terminalTextPoint(page, mouseMarker);
-    await page.mouse.dblclick(point.x, point.y);
     await page.mouse.click(point.x, point.y, { button: 'right' });
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 5_000 }).toBe(mouseMarker);
-    const pasteCommand = "printf 'DESKTOP_MOUSE_REPORTING_PASTE_OK\\n'\r";
-    await page.evaluate((text) => navigator.clipboard.writeText(text), pasteCommand);
-    const box = await terminal.getByTestId('terminal-inner').boundingBox();
-    expect(box).toBeTruthy();
-    await page.mouse.click(box!.x + Math.min(40, box!.width / 4), box!.y + Math.min(100, box!.height / 3), {
-      button: 'right',
-    });
-    await expect.poll(async () => rows.innerText(), { timeout: 5_000 }).toContain('DESKTOP_MOUSE_REPORTING_PASTE_OK');
+    await expect.poll(async () => rows.innerText()).toMatch(/\^\[\[<2;/);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).not.toBe(mouseMarker);
+
+    await page.keyboard.down('Shift');
+    await page.mouse.dblclick(point.x, point.y);
+    await page.keyboard.up('Shift');
+    await page.keyboard.press('Control+Shift+C');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(mouseMarker);
+
+    await page.evaluate(() => navigator.clipboard.writeText('DESKTOP_MOUSE_REPORTING_PASTE_OK'));
+    await page.keyboard.press('Control+Shift+V');
+    await expect.poll(async () => rows.innerText()).toContain('DESKTOP_MOUSE_REPORTING_PASTE_OK');
   });
 });
 
