@@ -590,7 +590,7 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(e2eHostCard).toHaveCount(1);
       await expect(e2eHostCard).toContainText('CPU', { timeout: 20_000 });
       await expect(e2eHostCard.getByTestId('dashboard-remote-disk-detail')).toHaveText(
-        /^\d+(?:\.\d+)? (?:GB|TB) \/ \d+(?:\.\d+)? (?:GB|TB)$/,
+        /^\d+(?:\.\d+)? (?:GB|TB)\s*\/\s*\d+(?:\.\d+)? (?:GB|TB)$/,
       );
       await expect(page.getByText('活动 SSH 会话', { exact: true })).toHaveCount(0);
 
