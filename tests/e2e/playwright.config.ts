@@ -25,6 +25,7 @@ const e2ePluginPublisherKeyId = `ed25519:${createHash('sha256')
 const inheritedEnv = Object.fromEntries(
   Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
 );
+const pnpmCommand = process.env.NEXUS_E2E_PNPM_COMMAND ?? 'corepack pnpm';
 
 const pluginRepositoryEnv: Record<string, string> = {
   ...inheritedEnv,
@@ -46,7 +47,7 @@ const backendEnv: Record<string, string> = {
   GUACD_HOST: '127.0.0.1',
   GUACD_PORT: String(E2E_PORTS.guacd),
   NEXUS_VITE_BACKEND_ORIGIN: E2E_URLS.backendOrigin,
-  NEXUS_PUBLIC_ORIGIN: 'https://api.honus.top',
+  NEXUS_PUBLIC_ORIGIN: E2E_URLS.frontendOrigin,
   NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL: `${E2E_URLS.pluginRepositoryOrigin}/official-catalog.json`,
   NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: e2ePluginPublisherKeyId,
   NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: e2ePluginPublicKeyPem,
@@ -149,7 +150,7 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: `node ${JSON.stringify(prepareTestDataScript)} && corepack pnpm exec tsx src/index.ts`,
+      command: `node ${JSON.stringify(prepareTestDataScript)} && ${pnpmCommand} exec tsx src/index.ts`,
       cwd: path.join(repoRoot, 'packages/backend'),
       env: backendEnv,
       url: `${E2E_URLS.backendOrigin}/api/v1/auth/needs-setup`,
@@ -159,7 +160,7 @@ export default defineConfig({
       stderr: 'inherit',
     },
     {
-      command: `corepack pnpm run dev --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
+      command: `${pnpmCommand} run dev --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
       cwd: path.join(repoRoot, 'packages/frontend'),
       env: {
         ...backendEnv,
