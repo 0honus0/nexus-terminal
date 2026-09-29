@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { defineAsyncComponent, ref, watch } from 'vue';
-  import { Splitpanes, Pane } from 'splitpanes';
+  import { Splitpanes, Pane, type SplitpanesResizedPayload } from 'splitpanes';
   import 'splitpanes/dist/splitpanes.css';
   import { loadTerminalView, type TerminalChannel, type TerminalVisualOptions } from '@/features/terminal/public';
   import {
@@ -146,8 +146,10 @@
 
   const executeQuick = (intent: ExecuteCommandIntent) => emit('command', intent.command, Boolean(intent.allSessions));
   const executeHistory = (intent: ExecuteHistoryIntent) => emit('command', intent.command, Boolean(intent.allSessions));
-  const handleLayoutResize = (payload: { panes: Array<{ size: number }> }): void => {
-    if (props.layoutLocked || props.node.type !== 'container') return;
+  const handleLayoutResize = (payload: SplitpanesResizedPayload): void => {
+    // Splitpanes also emits `resized` while panes register or reconcile. Only an
+    // explicit splitter interaction owns and persists Workspace layout sizes.
+    if (!payload.event || props.layoutLocked || props.node.type !== 'container') return;
     const sizes = payload.panes.map((pane) => pane.size);
     if (sizes.length !== (props.node.children?.length ?? 0) || sizes.some((size) => !Number.isFinite(size))) return;
     emit('layoutResize', props.node.id, sizes);
