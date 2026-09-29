@@ -760,7 +760,6 @@
   place-items: end;
   padding: 3px;
   border: 0;
-  border-radius: 8px 0 8px 0;
   background: transparent;
   color: color-mix(in srgb, var(--text-color-secondary) 78%, transparent);
   cursor: nwse-resize;
@@ -769,13 +768,10 @@
   user-select: none;
   transition:
     color var(--ui-motion-duration) var(--ui-motion-ease),
-    background-color var(--ui-motion-duration) var(--ui-motion-ease),
-    opacity var(--ui-motion-duration) var(--ui-motion-ease),
-    box-shadow var(--ui-motion-duration) var(--ui-motion-ease);
+    opacity var(--ui-motion-duration) var(--ui-motion-ease);
 }
 
 .ui-resize-handle:hover {
-  background: color-mix(in srgb, var(--link-active-color) 12%, transparent);
   color: var(--text-color);
   opacity: 1;
 }
@@ -784,7 +780,6 @@
   outline: none;
   color: var(--link-active-color);
   opacity: 1;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 48%, transparent);
 }
 
 .ui-resize-handle:disabled {
