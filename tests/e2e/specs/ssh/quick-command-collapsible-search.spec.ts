@@ -63,15 +63,17 @@ test('quick command search stays visible by default and can be collapsed behind 
     await connectTestSshFromConnectionsPage(page, connectionId);
 
     await step('default-off setting keeps the existing search box visible', async () => {
-      const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+      const quickView = page.locator('.quick-commands-root:visible').first();
       await expect(quickView.locator(`[data-command-id="${commandId}"]`)).toBeVisible({ timeout: 20_000 });
-      await expect(quickView.getByTestId('quick-command-search')).toBeVisible();
-      await expect(quickView.getByTestId('quick-command-search-toggle')).toHaveCount(0);
+      await expect(quickView.getByPlaceholder('Search name or command...', { exact: true })).toBeVisible();
+      await expect(quickView.getByRole('button', { name: 'Expand search', exact: true })).toHaveCount(0);
     });
 
     await step('workspace settings enables collapsed search and persists it on the backend', async () => {
       await page.goto('/settings');
-      const settings = page.getByTestId('preferences-settings');
+      const settings = page
+        .locator('form')
+        .filter({ has: page.getByRole('heading', { name: 'Terminal & commands', exact: true }) });
       await expect(settings).toBeVisible();
 
       const checkbox = settings.getByRole('checkbox', {
@@ -84,7 +86,7 @@ test('quick command search stays visible by default and can be collapsed behind 
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
-      await settings.getByTestId('quick-command-collapsible-search-save').click();
+      await settings.getByRole('button', { name: 'Save group', exact: true }).click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');
@@ -96,11 +98,11 @@ test('quick command search stays visible by default and can be collapsed behind 
 
     await step('enabled setting replaces the input with a button until search is requested', async () => {
       await connectTestSshFromConnectionsPage(page, connectionId);
-      const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-      const toggle = quickView.getByTestId('quick-command-search-toggle');
+      const quickView = page.locator('.quick-commands-root:visible').first();
+      const toggle = quickView.getByRole('button', { name: 'Expand search', exact: true });
 
       await expect(toggle).toBeVisible({ timeout: 20_000 });
-      await expect(quickView.getByTestId('quick-command-search')).toHaveCount(0);
+      await expect(quickView.getByPlaceholder('Search name or command...', { exact: true })).toHaveCount(0);
 
       const controls = quickView.locator('.quick-commands-controls');
       const originalQuickViewStyle = await quickView.getAttribute('style');
@@ -154,7 +156,7 @@ test('quick command search stays visible by default and can be collapsed behind 
 
       await toggle.click();
 
-      const search = quickView.getByTestId('quick-command-search');
+      const search = quickView.getByPlaceholder('Search name or command...', { exact: true });
       await expect(search).toBeVisible();
       await expect(search).toBeFocused();
       await search.fill('Collapsible Search');
