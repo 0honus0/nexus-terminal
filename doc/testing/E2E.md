@@ -103,6 +103,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - document preview coverage uses the active document mode, named preview tabs, PDF toolbar and spreadsheet pager to verify cached state, close/hide behavior, single content scrollbars, external refresh and persisted pagination limits;
 - file preview/editor scenarios retain real remote-content, encoding, line-ending, search, database-table and resize assertions using existing editor controls and preview semantics;
 - connection creation coverage uses named actions, saved connection cards and inline test results while verifying real SSH authentication, credential-preserving clones, script imports and filtered bulk tests;
+- batch connection editing verifies persisted notes, failed-item selection after partial updates, lazy auxiliary catalogs and narrow-screen row selection through existing cards, switches and modal controls;
 - multi-megabyte SFTP uploads completing every block before success;
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;
