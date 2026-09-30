@@ -23,7 +23,7 @@ test('status history uses real 1/5/10/30 minute windows without stretching new-s
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const monitor = page.getByTestId('status-monitor').filter({ visible: true }).first();
+  const monitor = page.locator('.status-monitor:visible').first();
   await expect(monitor).toBeVisible({ timeout: 20_000 });
   await expect(monitor.locator('.metric-cpu')).toBeVisible({ timeout: 20_000 });
   await monitor.locator('.metric-cpu').click();
