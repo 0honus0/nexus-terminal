@@ -185,7 +185,8 @@ test('desktop Ctrl+V uploads a screenshot from the system clipboard into the cur
   await openFileManager(page, context);
 
   await step('an image clipboard becomes a timestamped PNG upload', async () => {
-    await activeFileManagerList(page).focus();
+    await fileManagerRow(page, 'copy-source.txt').click();
+    await expect(activeFileManagerList(page)).toBeFocused();
     const clipboardPng = await writeClipboardPng(page, CLIPBOARD_SCREENSHOT_PNG);
     await page.keyboard.press('Control+V');
 

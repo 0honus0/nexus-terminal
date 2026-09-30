@@ -651,6 +651,7 @@
       else void activate(entry);
       return;
     }
+    listScroller.value?.focus({ preventScroll: true });
     if (event.ctrlKey || event.metaKey) {
       browser.select(entry, 'toggle');
       return;
@@ -1703,6 +1704,7 @@
             :key="entry.path"
             :data-filename="entry.name"
             :data-file-path="entry.path"
+            tabindex="-1"
             class="file-row select-none touch-pan-y transition-colors duration-150"
             :class="[
               browser.selected.value.has(entry.path) ? 'bg-primary/10 text-primary' : 'hover:bg-header/50',
