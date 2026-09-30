@@ -5,6 +5,7 @@
   import {
     UiModal,
     UiButton,
+    UiActionGroup,
     UiCheckbox,
     UiEmptyState,
     UiInfoHint,
@@ -2470,7 +2471,7 @@
         <div
           v-for="model in filteredTestModalModels"
           :key="model.id"
-          class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-header/20 p-3 text-xs transition-all hover:border-border/90 hover:bg-header/35"
+          class="flex flex-col gap-3 rounded-xl border border-border/70 bg-header/20 p-3 text-xs transition-all hover:border-border/90 hover:bg-header/35"
         >
           <!-- 左侧信息 -->
           <div class="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
@@ -2481,7 +2482,9 @@
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="font-mono text-xs font-bold text-foreground truncate">{{ model.id }}</span>
+                <span class="min-w-0 max-w-full font-mono text-xs font-bold text-foreground [overflow-wrap:anywhere]">{{
+                  model.id
+                }}</span>
                 <span
                   v-if="currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId"
                   class="inline-flex items-center gap-1 rounded-md bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[11px] font-semibold text-primary"
@@ -2539,8 +2542,8 @@
             </div>
           </div>
 
-          <!-- 右侧操作与测试 -->
-          <div class="flex flex-col gap-1.5 w-full sm:w-56 sm:shrink-0 justify-center">
+          <!-- 信息下方的操作与测试反馈 -->
+          <div class="flex min-w-0 flex-col gap-2 w-full border-t border-border/50 pt-3">
             <!-- 测试反馈微芯片 -->
             <span
               v-if="testResults[testKey(currentTestModalProvider, model.id)]"
@@ -2563,11 +2566,13 @@
                 "
                 class="text-[11px]"
               ></i>
-              <span class="truncate">{{ testResults[testKey(currentTestModalProvider, model.id)]?.message }}</span>
+              <span class="min-w-0 [overflow-wrap:anywhere]">{{
+                testResults[testKey(currentTestModalProvider, model.id)]?.message
+              }}</span>
             </span>
 
-            <!-- 2x2 按钮网格：两个一组、定长定宽、两行 -->
-            <div class="grid grid-cols-2 gap-1.5 w-full">
+            <!-- 桌面四列，手机两列，尺寸由公共操作组持有 -->
+            <UiActionGroup layout="model">
               <!-- 设为默认模型 / 当前默认 -->
               <UiButton
                 appearance="soft"
@@ -2658,7 +2663,7 @@
                 <i class="fa-regular fa-trash-can text-[10px]"></i>
                 <span>{{ $t('agent.settings.providers.removeModel') }}</span>
               </UiButton>
-            </div>
+            </UiActionGroup>
           </div>
         </div>
 

@@ -10,6 +10,8 @@ Nexus Agent 是 Nexus Terminal 内的全局智能执行层，不是一个独立�
 
 Agent UI 复用 `foundation/ui` 的公共样式与组件 contract；模型选择框通过 `UiSelect.fitContent` 适配内容宽度，提供商表单使用公共表单材质，不从 Agent CSS 深入覆盖公共下拉控件。UI 测试专用标记与 props 不进入生产代码，开发约束见根目录 `AGENTS.md`。
 
+已配模型与连通测试卡片由 providers UI 展示模型和反馈，通过公共 `UiActionGroup` 的 model 布局承载底部操作，桌面四列、手机两列；模型名称不截断，业务测试与模型配置行为仍由 providers owner 持有。
+
 核心产品模型：
 
 ```text

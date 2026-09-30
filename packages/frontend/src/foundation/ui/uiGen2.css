@@ -2052,7 +2052,26 @@
   min-width: 0;
   padding-inline: 6px;
 }
+.ui-action-group[data-layout='model'] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.ui-button--action-model {
+  min-width: 0;
+  height: auto;
+  min-height: 44px;
+  padding-block: 8px;
+  white-space: normal;
+  line-height: 1.4;
+}
 @media (min-width: 640px) {
+  .ui-action-group[data-layout='model'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .ui-button--action-model {
+    min-height: 32px;
+  }
   .ui-action-group[data-layout='management'] {
     flex-shrink: 0;
     padding-top: 0;
