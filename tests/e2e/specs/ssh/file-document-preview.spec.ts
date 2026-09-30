@@ -15,11 +15,12 @@ import { selectUiOption } from '../../support/ui-select';
 
 const row = (page: Page, filename: string) => fileManagerRow(page, filename);
 const documentPopup = (page: Page): Locator =>
-  page.locator('[data-testid="document-popup"][data-workspace-active="true"]:visible').first();
+  page.locator('[data-document-mode="preview"][data-workspace-active="true"]:visible').first();
 const pdfScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: /^PDF · \d+ pages$/ });
 const pdfCurrentPage = (dialog: Locator): Locator =>
   dialog.getByRole('spinbutton', { name: 'Current page', exact: true });
-const visiblePdfPageCount = (dialog: Locator): Locator => dialog.locator('[data-testid="pdf-page-count"]:visible');
+const visiblePdfPageCount = (dialog: Locator): Locator =>
+  dialog.locator('.pdf-toolbar:visible .pdf-page-input + span > span');
 const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
 const previewHorizontalScrollbar = (dialog: Locator): Locator =>
   dialog.getByRole('scrollbar', { name: 'Horizontal scroll', exact: true });
@@ -41,21 +42,24 @@ const expectOverlayToCoverWorkspaceRail = async (
   testId: 'file-manager-modal' | 'document-popup',
   expectedZIndex: number,
 ): Promise<void> => {
-  const overlay = page.getByTestId(testId);
+  const selector =
+    testId === 'file-manager-modal' ? '[role="dialog"][aria-label="File Manager"]' : '[data-document-mode="preview"]';
+  const surface = page.locator(selector);
+  const overlay = testId === 'document-popup' ? surface : surface.locator('xpath=ancestor::*[@data-ui="overlay"][1]');
   await expect(overlay).toHaveCSS('z-index', String(expectedZIndex));
   await expect
     .poll(() =>
-      page.evaluate((id) => {
+      overlay.evaluate((element) => {
         const topmost = document.elementFromPoint(18, 160);
-        return Boolean(topmost?.closest(`[data-testid="${id}"]`));
-      }, testId),
+        return Boolean(topmost && element.contains(topmost));
+      }),
     )
     .toBe(true);
 };
 
 async function closePreview(page: Page, _filename: string): Promise<void> {
   const popup = documentPopup(page);
-  await popup.getByTestId('file-preview-view').getByTitle('Close preview', { exact: true }).click();
+  await popup.getByTitle('Close preview', { exact: true }).click();
   await expect(popup).toBeHidden();
 }
 
@@ -109,18 +113,23 @@ test('preview close button clears cached tabs when popup file editing is enabled
   await openConnectedFileManager(page);
 
   await slowStep('open two special-file previews and clear both with the workspace close button', async () => {
-    const fileList = page.getByTestId('file-manager-modal').getByTestId('file-manager-list');
+    const fileList = page
+      .getByRole('dialog', { name: 'File Manager', exact: true })
+      .locator('.file-table')
+      .locator('..');
     await fileList.focus();
     await row(page, 'preview.pdf').dblclick();
     const pdfDialog = documentPopup(page);
-    await expect(pdfDialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(visiblePdfPageCount(pdfDialog)).toHaveText('3');
     await pdfDialog.click({ position: { x: 2, y: 2 } });
     await expect(pdfDialog).toBeHidden();
 
     await row(page, 'preview.xlsx').dblclick();
     const xlsxDialog = documentPopup(page);
     await expect(xlsxDialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
-    await expect(xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
+    await expect(xlsxDialog.getByRole('tablist', { name: 'Open previews', exact: true }).getByRole('tab')).toHaveCount(
+      2,
+    );
 
     await xlsxDialog.getByTitle('Close preview', { exact: true }).click();
     await expect(xlsxDialog).toBeHidden();
@@ -130,10 +139,12 @@ test('preview close button clears cached tabs when popup file editing is enabled
   await slowStep('reopening after a close-button clear starts a fresh one-tab preview workspace', async () => {
     await row(page, 'preview.pdf').dblclick();
     const dialog = documentPopup(page);
-    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await expect(dialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
+    await expect(visiblePdfPageCount(dialog)).toHaveText('3');
+    await expect(dialog.getByRole('tablist', { name: 'Open previews', exact: true }).getByRole('tab')).toHaveCount(1);
     await expect(
-      dialog.getByTestId('file-preview-tabs').getByRole('tab', { name: 'preview.pdf', exact: true }),
+      dialog
+        .getByRole('tablist', { name: 'Open previews', exact: true })
+        .getByRole('tab', { name: 'preview.pdf', exact: true }),
     ).toHaveAttribute('aria-selected', 'true');
   });
 });
@@ -157,15 +168,17 @@ test('preview close button preserves cached tabs when popup file editing is disa
   await slowStep('build a two-tab preview workspace with PDF state', async () => {
     await row(page, 'preview.pdf').dblclick();
     const pdfDialog = documentPopup(page);
-    await expect(pdfDialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await pdfDialog.getByTestId('pdf-next-page').click();
+    await expect(visiblePdfPageCount(pdfDialog)).toHaveText('3');
+    await pdfDialog.getByRole('button', { name: 'Next page', exact: true }).click();
     await expect(pdfCurrentPage(pdfDialog)).toHaveValue('2');
     await hidePreview(page, 'preview.pdf');
 
     await row(page, 'preview.xlsx').dblclick();
     const xlsxDialog = documentPopup(page);
     await expect(xlsxDialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
-    await expect(xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
+    await expect(xlsxDialog.getByRole('tablist', { name: 'Open previews', exact: true }).getByRole('tab')).toHaveCount(
+      2,
+    );
     await xlsxDialog.getByTitle('Close preview', { exact: true }).click();
     await expect(xlsxDialog).toBeHidden();
   });
@@ -173,7 +186,9 @@ test('preview close button preserves cached tabs when popup file editing is disa
   await slowStep('reopening restores both tabs and the previous PDF page', async () => {
     await row(page, 'preview.pdf').dblclick();
     const pdfDialog = documentPopup(page);
-    await expect(pdfDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
+    await expect(pdfDialog.getByRole('tablist', { name: 'Open previews', exact: true }).getByRole('tab')).toHaveCount(
+      2,
+    );
     await expect(pdfCurrentPage(pdfDialog)).toHaveValue('2');
   });
 });
@@ -202,8 +217,8 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     const filename = 'preview.pdf';
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
-    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await dialog.getByTestId('pdf-next-page').click();
+    await expect(visiblePdfPageCount(dialog)).toHaveText('3');
+    await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
     await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await hidePreview(page, filename);
   });
@@ -212,7 +227,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     const filename = 'preview.xlsx';
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
-    await expect(dialog.getByTestId('spreadsheet-pagination')).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Next page', exact: true })).toHaveCount(0);
     await worksheetTab(dialog, 'Second').click();
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
     await hidePreview(page, filename);
@@ -224,7 +239,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     const dialog = documentPopup(page);
     await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
 
-    const tabs = dialog.getByTestId('file-preview-tabs');
+    const tabs = dialog.getByRole('tablist', { name: 'Open previews', exact: true });
     await expect(tabs.getByRole('tab')).toHaveCount(4);
     await expect(tabs.getByRole('tab', { name: '预览-测试.png' })).toBeVisible();
     await expect(tabs.getByRole('tab', { name: 'preview.pdf' })).toBeVisible();
@@ -249,12 +264,18 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     const pdfDialog = documentPopup(page);
     await expect(pdfCurrentPage(pdfDialog)).toHaveValue('2');
 
-    await pdfDialog.getByTestId('file-preview-tabs').getByRole('tab', { name: 'preview.xlsx' }).click();
+    await pdfDialog
+      .getByRole('tablist', { name: 'Open previews', exact: true })
+      .getByRole('tab', { name: 'preview.xlsx' })
+      .click();
     const xlsxDialog = documentPopup(page);
     await expect(worksheetTab(xlsxDialog, 'Second')).toHaveAttribute('aria-selected', 'true');
     await expect(xlsxDialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
 
-    await xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab', { name: '预览-测试.png' }).click();
+    await xlsxDialog
+      .getByRole('tablist', { name: 'Open previews', exact: true })
+      .getByRole('tab', { name: '预览-测试.png' })
+      .click();
     const imageDialog = documentPopup(page);
     await expect(imageDialog.locator('img')).toBeVisible();
   });
@@ -291,8 +312,9 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
       const filename = 'preview.pdf';
       await row(page, filename).dblclick();
       const dialog = documentPopup(page);
-      await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-      for (let index = 0; index < 5; index += 1) await dialog.getByTestId('pdf-zoom-in').click();
+      await expect(visiblePdfPageCount(dialog)).toHaveText('3');
+      for (let index = 0; index < 5; index += 1)
+        await dialog.getByRole('button', { name: 'Zoom in', exact: true }).click();
       const { scrollbar, scroller } = await dragBottomScrollbar(
         previewHorizontalScrollbar(dialog),
         pdfScroller(dialog),
@@ -451,7 +473,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
     const filename = 'preview.pdf';
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
-    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(visiblePdfPageCount(dialog)).toHaveText('3');
     const outline = pdfOutline(dialog);
     await expect(outline).toBeVisible();
     await outline.getByText('Second Chapter', { exact: true }).click();
@@ -528,7 +550,10 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
-      await page.getByTestId('spreadsheet-preview-pagination-save').click();
+      await rowsPerPage
+        .locator('xpath=ancestor::form[1]')
+        .getByRole('button', { name: 'Save group', exact: true })
+        .click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       await expect
@@ -553,8 +578,8 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 
       const pager = spreadsheetPageRange(dialog).locator('..');
       await expect(pager).toBeVisible();
-      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('1');
-      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('2');
+      await expect(pager.locator('strong').nth(0)).toHaveText('1');
+      await expect(pager.locator('strong').nth(1)).toHaveText('2');
       await expect(spreadsheetPageRange(dialog)).toContainText('1');
       await expect(spreadsheetPageRange(dialog)).toContainText('24');
       await expect(spreadsheetPageRange(dialog)).toContainText('40');
@@ -570,8 +595,8 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       });
 
       await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
-      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('2');
-      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('2');
+      await expect(pager.locator('strong').nth(0)).toHaveText('2');
+      await expect(pager.locator('strong').nth(1)).toHaveText('2');
       await expect(spreadsheetPageRange(dialog)).toContainText('25');
       await expect(spreadsheetPageRange(dialog)).toContainText('40');
       await expect(dialog.getByText('E2E-A25', { exact: true })).toBeVisible();
@@ -588,8 +613,8 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       });
 
       await dialog.getByRole('button', { name: 'Previous page', exact: true }).click();
-      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('1');
-      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('2');
+      await expect(pager.locator('strong').nth(0)).toHaveText('1');
+      await expect(pager.locator('strong').nth(1)).toHaveText('2');
       await expect(spreadsheetRows(dialog)).toHaveCount(24);
       await closePreview(page, filename);
     });
