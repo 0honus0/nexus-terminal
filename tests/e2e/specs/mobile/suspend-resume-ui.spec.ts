@@ -226,7 +226,13 @@ test('mobile resumed terminal loads older suspended output when dragged downward
     .first();
   await resumedTab.click({ button: 'right' });
   await expect(page.getByText('Unmark Suspend', { exact: true })).toBeVisible({ timeout: 10_000 });
+  const catalogRefresh = page.waitForResponse(
+    (response) => response.request().method() === 'GET' && response.url().includes('/ssh-suspend/suspended-sessions'),
+  );
   await page.getByText('Unmark Suspend', { exact: true }).click();
+  await catalogRefresh;
+  await resumedTab.click({ button: 'right' });
+  await expect(page.getByText('Suspend Session', { exact: true })).toBeVisible();
 });
 
 test('mobile resume replaces an immediately suspended tab without exposing a temporary duplicate', async ({

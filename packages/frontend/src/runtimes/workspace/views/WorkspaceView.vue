@@ -487,9 +487,11 @@
       );
       return;
     }
+    const unmarking = session.markedForSuspend.value;
     try {
-      if (session.markedForSuspend.value) {
+      if (unmarking) {
         await session.unmarkSuspend();
+        await refreshSuspendedSessionsCatalog();
         feedback.notifySuccess(t('sshSuspend.notifications.unmarkedSuccess', { id }));
         return;
       }
@@ -503,7 +505,7 @@
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       feedback.notifyError(
-        session.markedForSuspend.value
+        unmarking
           ? t('sshSuspend.notifications.unmarkError', { error: message })
           : t('sshSuspend.notifications.markForSuspendError', { error: message }),
       );
