@@ -87,7 +87,7 @@ async function dragLocalFolder(
   try {
     const list = activeFileManagerList(page);
     await list.dispatchEvent('dragenter', { dataTransfer });
-    const overlay = page.getByTestId('file-upload-drop-overlay');
+    const overlay = page.getByText('Drop files here to upload', { exact: true });
     await expect(overlay).toBeVisible();
     await overlay.dispatchEvent('drop', { dataTransfer });
     await expect(overlay).toBeHidden();
@@ -125,7 +125,7 @@ async function downloadRemoteFile(page: Page, name: string): Promise<Buffer> {
   const target = fileManagerRow(page, name);
   await expect(target).toBeVisible();
   await target.click({ button: 'right' });
-  const contextMenu = page.getByTestId('file-manager-context-menu');
+  const contextMenu = page.getByRole('menu');
   await expect(contextMenu).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
   await contextMenu.getByText('Download', { exact: true }).first().click();
@@ -140,7 +140,7 @@ async function readRemoteText(page: Page, name: string): Promise<string> {
 }
 
 function visibleProgressCenter(page: Page) {
-  return page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+  return page.locator('.transfer-progress-window:visible').first();
 }
 
 async function fileManagerMetrics(page: Page): Promise<Record<string, number>> {
@@ -153,10 +153,10 @@ async function fileManagerMetrics(page: Page): Promise<Record<string, number>> {
 }
 
 async function openFileManagerSearch(page: Page): Promise<Locator> {
-  const fileManager = page.getByTestId('file-manager-modal');
-  const input = fileManager.getByTestId('file-manager-search-input');
+  const fileManager = page.getByRole('dialog', { name: 'File Manager', exact: true });
+  const input = fileManager.getByPlaceholder('Search files...', { exact: true });
   if (!(await input.isVisible())) {
-    await fileManager.getByTestId('file-manager-search-toggle').click();
+    await fileManager.getByRole('button', { name: 'Search files...', exact: true }).click();
   }
   await expect(input).toBeVisible();
   return input;
@@ -201,7 +201,7 @@ test('desktop Ctrl+V uploads a screenshot from the system clipboard into the cur
 
   await step('a non-image clipboard still falls back to the existing remote-file clipboard paste', async () => {
     await fileManagerRow(page, 'copy-source.txt').click({ button: 'right' });
-    const contextMenu = page.getByTestId('file-manager-context-menu');
+    const contextMenu = page.getByRole('menu');
     await expect(contextMenu).toBeVisible();
     await contextMenu.getByText('Copy', { exact: true }).first().click();
 
@@ -246,11 +246,10 @@ test('file browsing and recursive search remain responsive while upload writes a
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 
-  await page.getByTestId('file-manager-modal').locator('[data-file-parent]').click();
+  await page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('[data-file-parent]').click();
   await expect(fileManagerRow(page, fileName)).toBeVisible({ timeout: 30_000 });
 
   await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
-    const fileManagerModal = page.getByTestId('file-manager-modal');
     const search = await openFileManagerSearch(page);
     await search.fill('nested');
     await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({
@@ -259,7 +258,7 @@ test('file browsing and recursive search remain responsive while upload writes a
   });
 
   await page.goto('/connections');
-  await expect(page.getByTestId('connections-add-button')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: 'Add New Connection', exact: true })).toBeVisible({ timeout: 10_000 });
 });
 
 test('Windows-style multi-file drag uploads every file and applies one conflict choice to the remaining batch', async ({
@@ -338,7 +337,10 @@ test('folder upload into an existing directory overwrites only conflicting files
     },
   );
   expect(fixture.ok).toBeTruthy();
-  await page.getByTestId('file-manager-modal').getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'File Manager', exact: true })
+    .getByRole('button', { name: 'Refresh', exact: true })
+    .click();
   await expect(fileManagerRow(page, folderName)).toBeVisible();
 
   await dragLocalFolder(page, folderName, [
@@ -348,7 +350,7 @@ test('folder upload into an existing directory overwrites only conflicting files
 
   const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
   await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-  await expect(conflictModal.getByTestId('upload-conflict-filename')).toHaveText('01-first.bin');
+  await expect(conflictModal.getByTitle('01-first.bin', { exact: true })).toHaveText('01-first.bin');
   await conflictModal
     .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
     .check();
@@ -379,25 +381,25 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
 
       const progressPopup = visibleProgressCenter(page);
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-      const uploadTasks = progressPopup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+      const uploadTasks = progressPopup.locator('[data-task-kind="upload"]');
       await expect(uploadTasks).toHaveCount(largeFiles.length);
       const progressBody = progressPopup.locator('ul');
       await expect(progressBody).toBeVisible();
-      await expect(page.getByTestId('file-manager-modal')).toBeVisible();
-      await progressPopup.getByTestId('transfer-progress-hide').click();
+      await expect(page.getByRole('dialog', { name: 'File Manager', exact: true })).toBeVisible();
+      await progressPopup.getByRole('button', { name: 'Hide progress', exact: true }).click();
       await expect(progressPopup).toBeHidden();
 
       const progressModal = await openDesktopProgressDisplay(page);
-      const hiddenSource = progressModal.getByTestId('hidden-progress-source').first();
-      const hiddenTask = hiddenSource.getByTestId('hidden-progress-task').first();
+      const hiddenSource = progressModal.locator('.hidden-progress-source-card').first();
+      const hiddenTask = hiddenSource.locator('.hidden-progress-task-row').first();
       await expect(hiddenSource).toBeVisible();
       await expect(hiddenTask).toBeVisible();
       await expect(hiddenTask.getByRole('progressbar')).toBeVisible();
-      await hiddenSource.getByTestId('hidden-progress-restore').click();
+      await hiddenSource.getByRole('button', { name: 'Restore', exact: true }).click();
       await expect(progressModal).toBeHidden();
       await expect(progressPopup).toBeVisible();
       await expect(progressBody).toBeVisible();
-      await progressPopup.getByTestId('transfer-progress-hide').click();
+      await progressPopup.getByRole('button', { name: 'Hide progress', exact: true }).click();
       await expect(progressPopup).toBeHidden();
       await reopenConnectedFileManager(page);
     });
@@ -445,7 +447,7 @@ test('multi-file upload uses all configured streams instead of size-capacity thr
     await dragLocalFiles(page, files);
     const progressPopup = visibleProgressCenter(page);
     await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-    const uploadTasks = progressPopup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+    const uploadTasks = progressPopup.locator('[data-task-kind="upload"]');
     await expect(uploadTasks).toHaveCount(files.length);
 
     // Each file needs four delayed SFTP WRITE acknowledgements, so no first-wave stream can
@@ -456,7 +458,7 @@ test('multi-file upload uses all configured streams instead of size-capacity thr
     const progressPopup = visibleProgressCenter(page);
     if (await progressPopup.isVisible().catch(() => false)) {
       await progressPopup
-        .getByTestId('transfer-progress-cancel-all')
+        .getByRole('button', { name: /^Cancel all \(\d+\)$/ })
         .click()
         .catch(() => undefined);
     }
@@ -483,9 +485,7 @@ test('batch upload completes every file under slow SFTP acknowledgements', async
       await dragLocalFiles(page, weakFiles);
       const progressPopup = visibleProgressCenter(page);
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-      await expect(
-        progressPopup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]'),
-      ).toHaveCount(weakFiles.length);
+      await expect(progressPopup.locator('[data-task-kind="upload"]')).toHaveCount(weakFiles.length);
       await waitForVisibleFiles(
         page,
         weakFiles.map((file) => file.name),
@@ -517,9 +517,9 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     await dragLocalFiles(page, files);
 
     const popup = visibleProgressCenter(page);
-    const uploadSpeed = popup.getByTestId('transfer-progress-speed');
-    const cancelAll = popup.getByTestId('transfer-progress-cancel-all');
-    const hideButton = popup.getByTestId('transfer-progress-hide');
+    const uploadSpeed = popup.getByText(/^Total speed /);
+    const cancelAll = popup.getByRole('button', { name: /^Cancel all \(\d+\)$/ });
+    const hideButton = popup.getByRole('button', { name: 'Hide progress', exact: true });
     await expect(popup).toBeVisible({ timeout: 10_000 });
     await expect(popup).toContainText('E2E SSH · Upload Tasks');
     await expect(cancelAll).toBeVisible();
@@ -554,7 +554,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(Math.abs(hideBox!.y + hideBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
     expect(Math.abs(cancelAllBox!.y + cancelAllBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
     await captureFunctionalScreenshot(page, 'upload-progress.png', { viewport: { width: 1440, height: 900 } });
-    const progressBars = popup.getByTestId('transfer-progress-bar');
+    const progressBars = popup.getByRole('progressbar');
     await expect(progressBars.first()).toBeVisible();
     const progressBarBoxes = await progressBars.evaluateAll((elements) =>
       elements.map((element) => {
@@ -571,7 +571,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     ).toBeLessThanOrEqual(1);
 
     await closeConnectedFileManager(page);
-    const resizeHandle = popup.getByTestId('transfer-progress-resize');
+    const resizeHandle = popup.getByLabel('Resize progress window', { exact: true });
     await expect(resizeHandle).toBeVisible();
     const resizeBox = await resizeHandle.boundingBox();
     expect(resizeBox).not.toBeNull();
@@ -588,11 +588,11 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     await expect(popup).toBeHidden();
 
     const modal = await openDesktopProgressDisplay(page);
-    const hiddenSources = modal.getByTestId('hidden-progress-source');
+    const hiddenSources = modal.locator('.hidden-progress-source-card');
     await expect(hiddenSources).toHaveCount(1);
     const sourceCard = hiddenSources.first();
     await expect(sourceCard).toContainText('E2E SSH · Upload Tasks');
-    const hiddenList = modal.getByTestId('hidden-progress-list');
+    const hiddenList = modal.locator('.hidden-progress-source-grid');
     const [sourceCardBox, hiddenListBox, hiddenListPaddingRight] = await Promise.all([
       sourceCard.boundingBox(),
       hiddenList.boundingBox(),
@@ -601,24 +601,25 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(sourceCardBox).not.toBeNull();
     expect(hiddenListBox).not.toBeNull();
     expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - hiddenListPaddingRight - 1);
-    const sourceTasks = sourceCard.getByTestId('hidden-progress-task');
+    const sourceTasks = sourceCard.locator('.hidden-progress-task-row');
     await expect(sourceTasks.first()).toBeVisible();
     expect(await sourceTasks.count()).toBeGreaterThan(1);
-    const listMetrics = await sourceCard.getByTestId('hidden-progress-source-list').evaluate((element) => ({
+    const listMetrics = await sourceCard.locator('.hidden-progress-source-list').evaluate((element) => ({
       clientHeight: element.clientHeight,
       scrollHeight: element.scrollHeight,
     }));
     expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight);
-    const cancelAllHidden = sourceCard.getByTestId('hidden-progress-cancel-all');
+    const cancelAllHidden = sourceCard.getByRole('button', { name: /^Cancel all \(\d+\)$/ });
     await expect(cancelAllHidden).toBeVisible();
-    await expect(modal.getByTestId('progress-display-hidden-hint')).toHaveText(
-      'Each card represents a hidden task; scroll within the card to view details.',
-    );
+    await expect(
+      modal.getByText('Each card represents a hidden task; scroll within the card to view details.', { exact: true }),
+    ).toHaveText('Each card represents a hidden task; scroll within the card to view details.');
     await captureFunctionalScreenshot(page, 'hidden-upload-progress.png', { viewport: { width: 1440, height: 900 } });
     await cancelAllHidden.click();
     await expect
       .poll(
-        async () => ((await sourceCard.isVisible()) ? sourceCard.getByTestId('hidden-progress-cancel').count() : 0),
+        async () =>
+          (await sourceCard.isVisible()) ? sourceCard.getByRole('button', { name: 'Cancel', exact: true }).count() : 0,
         {
           timeout: 10_000,
         },
@@ -627,9 +628,9 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     if (await sourceCard.isVisible()) {
       await expect(sourceCard).toContainText(/Completed|Failed|Partially completed|Cancelled/);
     } else {
-      await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
+      await expect(modal.getByText('There are no hidden progress tasks.', { exact: true })).toBeVisible();
     }
-    await modal.getByTestId('progress-display-close').click();
+    await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
@@ -670,21 +671,24 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
     const popup = visibleProgressCenter(page);
     await expect(popup).toBeVisible({ timeout: 10_000 });
     await closeConnectedFileManager(page);
-    await popup.getByTestId('transfer-progress-hide').click();
+    await popup.getByRole('button', { name: 'Hide progress', exact: true }).click();
     await expect(popup).toBeHidden();
 
     const modal = await openDesktopProgressDisplay(page);
-    const sourceCard = modal.getByTestId('hidden-progress-source').filter({ hasText: 'upload' }).first();
+    const sourceCard = modal.locator('.hidden-progress-source-card').filter({ hasText: 'Upload Tasks' }).first();
     await expect(sourceCard).toBeVisible();
-    await expect(sourceCard.getByTestId('hidden-progress-task').first()).toBeVisible();
+    await expect(sourceCard.locator('.hidden-progress-task-row').first()).toBeVisible();
 
-    await sourceCard.getByTestId('hidden-progress-cancel-all').click();
+    await sourceCard.getByRole('button', { name: /^Cancel all \(\d+\)$/ }).click();
     await expect(sourceCard).toBeHidden({ timeout: 2_000 });
-    await modal.getByTestId('progress-display-close').click();
+    await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
     await reopenConnectedFileManager(page);
 
     const refreshStartedAt = Date.now();
-    await page.getByTestId('file-manager-modal').getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'File Manager', exact: true })
+      .getByRole('button', { name: 'Refresh', exact: true })
+      .click();
     await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 2_000 });
     expect(Date.now() - refreshStartedAt).toBeLessThan(2_000);
     for (const name of uploadNames) {
@@ -709,12 +713,12 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   await mkdir(M11_03E_EVIDENCE_DIR, { recursive: true });
   await openFileManager(page, context);
 
-  const fileManager = page.getByTestId('file-manager-modal');
+  const fileManager = page.getByRole('dialog', { name: 'File Manager', exact: true });
   const folder = fileManagerRow(page, 'folder-seed');
   const folderPath = await folder.getAttribute('data-file-path');
   expect(folderPath).toBeTruthy();
   await folder.click();
-  await expect(fileManager.getByTestId('file-manager-path-input')).toHaveValue(folderPath!);
+  await expect(fileManager.locator('.file-manager-path-input input')).toHaveValue(folderPath!);
 
   const filename = 'm11-03e-picker-upload.bin';
   const payload = Buffer.alloc(768 * 1024 + 123, 0x6d);
@@ -732,7 +736,7 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   const observedStatuses = new Set<string>();
   try {
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileManager.getByTestId('file-upload-button').click();
+    await fileManager.getByRole('button', { name: 'Upload File', exact: true }).click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles({ name: filename, mimeType: 'application/octet-stream', buffer: payload });
 
