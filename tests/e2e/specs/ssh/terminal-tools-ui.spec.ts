@@ -52,10 +52,10 @@ test('common terminal tools work through the real SSH session', async ({ page, c
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const terminal = page.getByTestId('terminal');
+  const terminal = page.locator('.terminal-inner-container');
   const rows = terminal.locator('.xterm-rows');
-  const commandInput = page.getByTestId('command-input');
-  const commandBar = page.getByTestId('command-input-bar');
+  const commandInput = page.locator('.command-bar-command-input');
+  const commandBar = page.locator('.command-bar-root');
 
   await expect(terminal).toBeVisible({ timeout: 20_000 });
   await expect(commandInput).toBeVisible();
@@ -99,21 +99,21 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     await commandInput.press('Enter');
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
 
-    const historyView = page.getByTestId('command-history-view').filter({ visible: true }).first();
+    const historyView = page.locator('.command-history-root:visible').first();
     const historyItem = historyView.locator('li[data-history-id]').filter({ hasText: marker }).first();
     await expect(historyItem).toBeVisible({ timeout: 20_000 });
     const before = markerCount(await rows.innerText(), marker);
-    await historyItem.getByTestId('command-history-execute').click();
+    await historyItem.click();
     await expect
       .poll(async () => markerCount(await rows.innerText(), marker), { timeout: 15_000 })
       .toBeGreaterThan(before);
   });
 
   await step('Quick Commands executes a saved command in the active SSH session', async () => {
-    const quickCommandsView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+    const quickCommandsView = page.locator('.quick-commands-root:visible').first();
     const commandRow = quickCommandsView.locator(`[data-command-id="${quickCommandId}"]`);
     await expect(commandRow).toBeVisible({ timeout: 20_000 });
-    await commandRow.getByTestId('quick-command-execute').click();
+    await commandRow.getByTitle('Execute', { exact: true }).click();
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('QUICK_UI_E2E');
 
     await expect

@@ -71,7 +71,9 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
         await expect(task).toBeVisible();
         await expect(task).toContainText('Upload');
         await expect(task.getByRole('progressbar')).toBeVisible();
-        await expect(task.getByText(/^\d+\.\d%$/)).toBeVisible();
+        const percent = task.getByRole('progressbar').locator('..').locator('span');
+        await expect(percent).toBeVisible();
+        await expect.poll(async () => (await percent.innerText()).trim()).toMatch(/^\d+\.\d%$/);
         await expect(task.locator('[data-progress-session]')).toHaveCount(0);
         const source = hiddenSource(modal, filename);
         await expect(source).toBeVisible();
