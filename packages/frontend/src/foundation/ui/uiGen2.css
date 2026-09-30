@@ -31,9 +31,7 @@
     transparent 38%,
     transparent 100%
   );
-  --glass-shadow:
-    var(--glass-rim-shadow), 0 1px 2px rgb(0 0 0 / 6%),
-    0 24px 56px -26px color-mix(in srgb, var(--text-color) 36%, transparent);
+  --glass-shadow: var(--glass-rim-shadow), 0 1px 2px rgb(0 0 0 / 6%), 0 24px 56px -26px rgb(0 0 0 / 24%);
 }
 
 @layer components {
@@ -148,8 +146,8 @@
 
   --ui-text: var(--text-color);
   --ui-text-muted: var(--text-color-secondary);
-  --ui-hairline: color-mix(in srgb, var(--border-color) 62%, transparent);
-  --ui-hairline-strong: color-mix(in srgb, var(--border-color) 88%, transparent);
+  --ui-hairline: var(--glass-border-color);
+  --ui-hairline-strong: color-mix(in srgb, var(--border-color) 55%, transparent);
   --ui-fill-raised: color-mix(in srgb, var(--card-bg-color) 58%, transparent);
   --ui-fill-inset: color-mix(in srgb, var(--input-bg-color) 48%, transparent);
   --ui-fill-inset-hover: color-mix(in srgb, var(--input-bg-color) 62%, transparent);
@@ -157,14 +155,13 @@
   --ui-fill-soft-hover: color-mix(in srgb, var(--card-bg-color) 32%, transparent);
   --ui-glass-filter: blur(14px) saturate(155%);
   --ui-glass-control-filter: blur(8px) saturate(145%);
-  --ui-glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 45%, transparent);
+  --ui-glass-highlight: var(--glass-inset-highlight);
 
   --ui-shadow-raised:
     0 1px 1px color-mix(in srgb, var(--text-color) 6%, transparent),
     0 6px 20px -14px color-mix(in srgb, var(--text-color) 24%, transparent);
   --ui-shadow-inset:
-    inset 0 1px 2px color-mix(in srgb, var(--text-color) 9%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--app-bg-color) 24%, transparent);
+    inset 0 1px 2px rgb(0 0 0 / 8%), inset 0 0 0 1px color-mix(in srgb, var(--app-bg-color) 24%, transparent);
 
   --ui-focus-color: color-mix(in srgb, var(--link-active-color) 72%, var(--border-color));
   --ui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--link-active-color) 18%, transparent);
@@ -1619,17 +1616,17 @@
 }
 
 .ui-select__item[data-state='checked'] {
-  background: color-mix(in srgb, var(--link-active-color) 14%, transparent);
-  color: var(--link-active-color);
-  font-weight: 500;
+  background: color-mix(in srgb, var(--link-active-color) 72%, black);
+  color: white;
+  font-weight: 600;
   border: none;
   box-shadow: none;
   outline: none;
 }
 
 .ui-select__item[data-state='checked'][data-highlighted] {
-  background: color-mix(in srgb, var(--link-active-color) 20%, transparent);
-  color: var(--link-active-color);
+  background: color-mix(in srgb, var(--link-active-color) 80%, black);
+  color: white;
 }
 
 .ui-select__item[data-disabled] {
