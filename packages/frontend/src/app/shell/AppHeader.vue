@@ -70,12 +70,13 @@
       </div>
       <UiSelect
         class="app-nav-picker"
-        trigger-class="!min-h-11"
+        presentation="navigation"
+        panel-test-id="app-navigation-menu"
         :model-value="route.path"
         :options="navigationOptions"
         :aria-label="t('common.primaryNavigation')"
         :placeholder="t('common.primaryNavigation')"
-        text-align="center"
+        align="center"
         @update:model-value="navigate"
       />
 
@@ -215,8 +216,8 @@
     }
     .app-nav-picker {
       display: block;
-      width: 100%;
-      max-width: 240px;
+      width: auto;
+      max-width: 180px;
       justify-self: center;
     }
   }

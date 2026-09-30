@@ -364,7 +364,7 @@
               v-for="c in filtered"
               :key="c.id"
               :data-testid="`connection-row-${c.id}`"
-              class="ui-solid-item flex flex-col items-stretch justify-between gap-3 rounded-xl p-4 lg:flex-row lg:items-center lg:gap-4"
+              class="connection-card ui-solid-item flex flex-col items-stretch justify-between gap-3 rounded-xl p-4 lg:flex-row lg:items-center lg:gap-4"
               :class="[
                 selected.has(c.id) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : '',
                 batch ? 'cursor-pointer' : '',
@@ -421,7 +421,7 @@
                 </div>
               </div>
               <div
-                class="flex shrink-0 flex-wrap items-center justify-end gap-2 lg:flex-nowrap"
+                class="connection-card-actions grid shrink-0 grid-cols-4 gap-2"
                 :class="batch ? 'pointer-events-none' : ''"
               >
                 <UiButton
@@ -497,3 +497,21 @@
     />
   </main>
 </template>
+
+<style scoped>
+  .connection-card {
+    container-type: inline-size;
+  }
+  .connection-card-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .connection-card-actions :deep(.ui-button) {
+    min-width: 0;
+    padding-inline: 0.375rem;
+  }
+  @container (max-width: 280px) {
+    .connection-card-actions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>

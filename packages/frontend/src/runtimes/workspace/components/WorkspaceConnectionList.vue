@@ -359,12 +359,12 @@
             </button>
           </header>
 
-          <ul v-show="isExpanded(group.key)" class="m-0 list-none p-0 pl-3">
+          <ul v-show="isExpanded(group.key)" class="m-0 list-none p-0">
             <li
               v-for="connection in group.connections"
               :key="connection.id"
               :data-connection-id="connection.id"
-              class="workspace-connection-item group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-lg py-2 pl-4 pr-3 text-ellipsis text-foreground transition-colors duration-150"
+              class="workspace-connection-item group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-ellipsis text-foreground transition-colors duration-150"
               :class="{
                 'bg-primary/20 font-medium': connection.id === props.activeConnectionId,
                 'ring-1 ring-inset ring-primary/40': connection.id === highlightedId,
@@ -377,7 +377,7 @@
                   'fas',
                   connection.type === 'RDP' ? 'fa-desktop' : connection.type === 'VNC' ? 'fa-chalkboard' : 'fa-server',
                 ]"
-                class="mr-2.5 w-4 shrink-0 text-center text-text-secondary group-hover:text-primary"
+                class="mr-2 w-4 shrink-0 text-center text-text-secondary group-hover:text-primary"
                 aria-hidden="true"
               ></i>
               <span class="min-w-0 flex-1 truncate text-sm" :title="connection.name || connection.host">
