@@ -1611,7 +1611,7 @@
 }
 
 .ui-select__item[data-highlighted] {
-  background: var(--ui-fill-soft-hover);
+  background: color-mix(in srgb, var(--link-active-color) 30%, var(--card-bg-color));
   color: var(--ui-text);
 }
 
