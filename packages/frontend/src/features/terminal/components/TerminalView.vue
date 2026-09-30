@@ -358,8 +358,17 @@
 
   const historyLoadThreshold = (): number => Math.max(4, Math.ceil((terminal?.rows ?? 24) * 0.2));
   const remoteMouseReportingActive = (): boolean => terminal?.modes.mouseTrackingMode !== 'none';
+  let clipboardGestureAt = -Infinity;
+  const recordClipboardGesture = (): void => {
+    if (props.active && props.inputEnabled) clipboardGestureAt = performance.now();
+  };
   const copySelection = async () => {
     if (terminal?.hasSelection()) await writeClipboardText(terminal.getSelection());
+  };
+  const localClipboardGesture = (event: MouseEvent): boolean => event.shiftKey || Boolean(terminal?.hasSelection());
+  const handleLocalSelectionMouseMove = (event: MouseEvent): void => {
+    // xterm bypasses reporting for Shift + mousedown, but not hover/move.
+    if (!event.buttons && remoteMouseReportingActive() && localClipboardGesture(event)) event.stopPropagation();
   };
   const paste = async () => {
     if (!props.inputEnabled) return;
@@ -792,7 +801,12 @@
       openMobileClipboardMenu(event.clientX, event.clientY);
       return;
     }
-    if (!props.rightClickCopyPaste || remoteMouseReportingActive()) return;
+    if (remoteMouseReportingActive() && !event.shiftKey) {
+      // Preserve the application's right-button input without a browser menu overlay.
+      event.preventDefault();
+      return;
+    }
+    if (!props.rightClickCopyPaste) return;
     event.preventDefault();
     if (terminal?.hasSelection()) {
       try {
@@ -813,7 +827,12 @@
   };
 
   const handleRightMouseDown = (event: MouseEvent): void => {
-    if (device.isMobile.value || !props.rightClickCopyPaste || remoteMouseReportingActive() || event.button !== 2)
+    if (
+      device.isMobile.value ||
+      !props.rightClickCopyPaste ||
+      (remoteMouseReportingActive() && !event.shiftKey) ||
+      event.button !== 2
+    )
       return;
     event.preventDefault();
     event.stopPropagation();
@@ -1135,6 +1154,36 @@
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(root.value!);
+    const clipboardOsc = terminal.parser.registerOscHandler(52, (data) => {
+      // OSC 52 is application-independent. Only accept writes shortly after a
+      // deliberate interaction in the active terminal; never disclose local clipboard data.
+      const separator = data.indexOf(';');
+      const target = data.slice(0, separator);
+      const encoded = data.slice(separator + 1);
+      if (
+        separator < 0 ||
+        !/^[cp0-7]*$/.test(target) ||
+        encoded === '?' ||
+        encoded.length > 1024 * 1024 ||
+        !props.active ||
+        !props.inputEnabled ||
+        !terminal?.element?.contains(document.activeElement) ||
+        performance.now() - clipboardGestureAt > 2000
+      )
+        return true;
+      try {
+        const text = new TextDecoder('utf-8', { fatal: true }).decode(
+          Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)),
+        );
+        // Avoid the DOM selection fallback: asynchronous remote output must not
+        // steal terminal focus or alter the user's local selection.
+        void navigator.clipboard?.writeText(text).catch(() => undefined);
+      } catch {
+        // Invalid or oversized clipboard data is ignored; no reply is sent.
+      }
+      return true;
+    });
+    cleanup.push(() => clipboardOsc.dispose());
     runtimeModes = trackTerminalRuntimeModes(terminal);
     cleanup.push(() => runtimeModes?.dispose());
     cleanup.push(setupImeCompositionBoundsProtection());
@@ -1155,6 +1204,8 @@
     root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
     root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
     terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type === 'keydown' && !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key))
+        recordClipboardGesture();
       if (
         event.type === 'keydown' &&
         event.ctrlKey &&
@@ -1237,6 +1288,8 @@
     );
     root.value?.addEventListener('contextmenu', handleContextMenu);
     root.value?.addEventListener('mousedown', handleRightMouseDown, true);
+    root.value?.addEventListener('mousemove', handleLocalSelectionMouseMove, true);
+    root.value?.addEventListener('mouseup', recordClipboardGesture, true);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
     resizeObserver = new ResizeObserver(fitAndResize);
     resizeObserver.observe(root.value!);
@@ -1276,6 +1329,8 @@
       root.value.removeEventListener('touchcancel', handleTouchEnd);
       root.value.removeEventListener('contextmenu', handleContextMenu);
       root.value.removeEventListener('mousedown', handleRightMouseDown, true);
+      root.value.removeEventListener('mousemove', handleLocalSelectionMouseMove, true);
+      root.value.removeEventListener('mouseup', recordClipboardGesture, true);
     }
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
     clearMobileLongPressTimer();

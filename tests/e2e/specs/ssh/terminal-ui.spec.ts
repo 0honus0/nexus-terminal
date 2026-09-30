@@ -585,6 +585,22 @@ test('desktop terminal right-click copies a selection then pastes when no select
     await page.keyboard.press('Control+Shift+V');
     await expect.poll(async () => rows.innerText()).toContain('DESKTOP_MOUSE_REPORTING_PASTE_OK');
   });
+
+  await step('application clipboard writes use OSC 52 without interpreting application shortcuts', async () => {
+    await page.keyboard.press('Control+C');
+    const text = `通用终端复制\n${Array.from({ length: 2000 }, (_, index) => index + 1).join('\n')}`;
+    const input = terminal.locator('.xterm-helper-textarea');
+    await input.pressSequentially(
+      "printf '\\033]52;c;'; { printf '通用终端复制\\n'; seq 1 2000; } | base64 -w0; printf '\\007'",
+      { delay: 0 },
+    );
+    await input.press('Enter');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${text}\n`);
+    await input.pressSequentially("printf '\\033]52;c;?\\007\\033]52;c;invalid!\\007'", { delay: 0 });
+    await input.press('Enter');
+    await expect.poll(async () => rows.innerText()).toContain('invalid!');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${text}\n`);
+  });
 });
 
 test('terminal font-size wheel change persists when the session is closed before debounce fires', async ({
