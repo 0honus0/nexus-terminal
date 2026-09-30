@@ -551,6 +551,15 @@ test('desktop terminal right-click copies a selection then pastes when no select
     await page.mouse.dblclick(point.x, point.y);
     await page.mouse.click(point.x, point.y, { button: 'right' });
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(copyMarker);
+    await expect(terminal.locator('.xterm-selection > div')).toHaveCount(0);
+    const splitter = page.locator('[role="separator"][aria-orientation="vertical"]:visible').last();
+    const bounds = await splitter.boundingBox();
+    expect(bounds).toBeTruthy();
+    await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bounds!.x - 30, bounds!.y + bounds!.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await expect(terminal.locator('.xterm-selection > div')).toHaveCount(0);
   });
 
   await step('the same right-click path pastes after the copied selection was cleared', async () => {
