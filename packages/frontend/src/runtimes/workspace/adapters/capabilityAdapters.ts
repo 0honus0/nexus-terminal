@@ -878,10 +878,6 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
         'Workspace transfer channel marked disconnected',
       );
       workspaceAvailable = false;
-      for (const [id] of activeRemoteOperations) {
-        emit({ type: 'error', id, errorKind: 'workspace_connection_closed' });
-      }
-      activeRemoteOperations.clear();
       if (!uploads.size) return;
       recoveryPending = true;
       queuedUploads.splice(0);

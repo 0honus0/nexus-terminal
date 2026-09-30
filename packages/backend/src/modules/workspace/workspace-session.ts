@@ -8,6 +8,9 @@ export interface WorkspaceSession {
   connectionName: string;
   executionSessionId: string;
   shell: RemoteShellSession;
+  resumeToken: string;
+  attachmentGeneration: number;
+  attached: boolean;
   createdAt: number;
   lastConnectedAt?: number;
 }

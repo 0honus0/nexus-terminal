@@ -4,6 +4,8 @@ import type { UploadEvent } from '../../platform/operations/upload/upload-operat
 import type { ServerStatus } from '../../platform/system/server-status.port';
 import { logger } from '../../shared/logging/logger';
 
+const MAX_RETAINED_OPERATION_EVENTS = 256;
+
 export type WorkspaceEvent =
   | { type: 'terminal-output'; data: Uint8Array; stderr?: boolean }
   | { type: 'terminal-resize'; columns: number; rows: number }
@@ -26,6 +28,7 @@ export type WorkspaceEventListener = (event: WorkspaceEvent) => void;
 /** Protocol-neutral event fanout. Interfaces translate these events to WebSocket frames. */
 export class WorkspaceEventHub {
   private readonly listeners = new Map<string, Set<WorkspaceEventListener>>();
+  private readonly retained = new Map<string, Map<string, WorkspaceEvent>>();
 
   subscribe(sessionId: string, listener: WorkspaceEventListener): () => void {
     const listeners = this.listeners.get(sessionId) ?? new Set<WorkspaceEventListener>();
@@ -38,6 +41,14 @@ export class WorkspaceEventHub {
   }
 
   publish(sessionId: string, event: WorkspaceEvent): void {
+    const retentionKey = this.retentionKey(event);
+    if (retentionKey) {
+      const retained = this.retained.get(sessionId) ?? new Map<string, WorkspaceEvent>();
+      retained.delete(retentionKey);
+      retained.set(retentionKey, event);
+      while (retained.size > MAX_RETAINED_OPERATION_EVENTS) retained.delete(retained.keys().next().value!);
+      this.retained.set(sessionId, retained);
+    }
     for (const listener of this.listeners.get(sessionId) ?? []) {
       try {
         listener(event);
@@ -47,7 +58,18 @@ export class WorkspaceEventHub {
     }
   }
 
+  replayRetained(sessionId: string, listener: WorkspaceEventListener): void {
+    for (const event of this.retained.get(sessionId)?.values() ?? []) listener(event);
+  }
+
   clear(sessionId: string): void {
     this.listeners.delete(sessionId);
+    this.retained.delete(sessionId);
+  }
+
+  private retentionKey(event: WorkspaceEvent): string | null {
+    if (event.type === 'transfer-event') return `transfer:${event.event.requestId}`;
+    if (event.type === 'archive-event') return `archive:${event.event.requestId}`;
+    return null;
   }
 }

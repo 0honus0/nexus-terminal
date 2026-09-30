@@ -1,6 +1,8 @@
 import type {
   WorkspaceConnectResponseDto,
   WorkspaceConnectRequestDto,
+  WorkspaceResumeRequestDto,
+  WorkspaceResumeResponseDto,
   WorkspaceSuspendAutoTerminatedEventDto,
   WorkspaceSuspendResumeResponseDto,
   WorkspaceSuspendResumeRequestDto,
@@ -68,10 +70,15 @@ export class WorkspaceRuntimeSession {
   private reconnectAttempt = 0;
   private reconnectTimer?: number;
   private reconnectInFlight = false;
-  private remotePtyDiscarded = false;
+  private immediateReconnectRequested = false;
+  private resumeToken?: string;
+  private attachmentGeneration?: number;
+  private terminalOffset = 0;
   private suspendOwnerHeartbeat?: number;
   private disposed = false;
   private closing = false;
+  private terminalEnded = false;
+  private freshConnectionRequired = false;
   private lastViewport?: WorkspaceTerminalViewportDto;
   private readonly cleanup: Array<() => void> = [];
 
@@ -82,6 +89,11 @@ export class WorkspaceRuntimeSession {
     this.id = options.workspaceId ?? crypto.randomUUID();
     this.socket = new WorkspaceSocket({ workspaceId: this.id, connectionId: this.connection.id });
     this.adapters = createWorkspaceCapabilityAdapters(this.socket, this.id, this.connection.id);
+    this.cleanup.push(
+      this.socket.onBinary((data) => {
+        this.terminalOffset += data.byteLength;
+      }),
+    );
     this.transferController = createTransferController(this.adapters.transfers);
     this.terminalState = createTerminalSessionState();
     this.editorController = createFileEditorSession(this.adapters.documents);
@@ -106,6 +118,8 @@ export class WorkspaceRuntimeSession {
         this.statusMessage.value = message;
       }),
       this.socket.on('terminal.error', ({ message }) => {
+        this.terminalEnded = true;
+        this.prepareFreshConnection();
         logger.debug(
           {
             workspaceId: this.id,
@@ -127,6 +141,8 @@ export class WorkspaceRuntimeSession {
       }),
       this.socket.on('terminal.closed', () => {
         if (this.closing) return;
+        this.terminalEnded = true;
+        this.prepareFreshConnection();
         logger.debug(
           {
             workspaceId: this.id,
@@ -180,10 +196,6 @@ export class WorkspaceRuntimeSession {
     this.closing = false;
     const reconnectAttempt = this.reconnectAttempt;
     const phase = this.hasConnected.value ? 'reconnect' : 'initial';
-    if (phase === 'reconnect' && !this.markedForSuspend.value && !this.remotePtyDiscarded) {
-      this.terminalState.discardRemotePty();
-      this.remotePtyDiscarded = true;
-    }
     const startedAt = performance.now();
     this.state.value = phase === 'reconnect' ? 'reconnecting' : 'connecting';
     this.statusMessage.value = '';
@@ -198,12 +210,10 @@ export class WorkspaceRuntimeSession {
       'Workspace connection attempt started',
     );
     try {
-      const request: WorkspaceConnectRequestDto = {
-        workspaceId: this.id,
-        connectionId: this.connection.id,
-        ...(this.lastViewport ? { viewport: this.lastViewport } : {}),
-      };
-      const result = await this.socket.request('workspace.connect', request);
+      const result =
+        phase === 'initial' || this.freshConnectionRequired
+          ? await this.connectWorkspace()
+          : await this.resumeWorkspace();
       if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
         throw new Error('Workspace binary protocol version mismatch.');
       }
@@ -212,7 +222,12 @@ export class WorkspaceRuntimeSession {
       if (this.disposed || this.closing || !this.socket.connected)
         throw new Error('Workspace connection closed during terminal activation.');
       this.hasConnected.value = true;
-      this.remotePtyDiscarded = false;
+      this.resumeToken = result.resumeToken;
+      this.attachmentGeneration = result.attachmentGeneration;
+      this.terminalOffset =
+        phase === 'initial' ? result.terminalOffset : Math.max(this.terminalOffset, result.terminalOffset);
+      this.terminalEnded = false;
+      this.freshConnectionRequired = false;
       this.reconnectAttempt = 0;
       this.state.value = 'connected';
       logger.debug(
@@ -226,14 +241,13 @@ export class WorkspaceRuntimeSession {
         'Workspace connection attempt succeeded',
       );
       if (result.lastConnectedAt !== undefined) markConnectionConnected(this.connection.id, result.lastConnectedAt);
-      void this.filesystemState
-        .ensureLoaded()
-        .catch((error) =>
+      void (phase === 'reconnect' ? this.filesystemState.browser.refresh() : this.filesystemState.ensureLoaded()).catch(
+        (error) =>
           logger.debug(
             { err: error, workspaceId: this.id, connectionId: this.connection.id },
             'Workspace filesystem warmup failed',
           ),
-        );
+      );
       void this.statusController
         .workspaceConnected()
         .catch((error) =>
@@ -263,6 +277,30 @@ export class WorkspaceRuntimeSession {
       }
       throw error;
     }
+  }
+
+  private connectWorkspace(): Promise<WorkspaceConnectResponseDto> {
+    const request: WorkspaceConnectRequestDto = {
+      workspaceId: this.id,
+      connectionId: this.connection.id,
+      ...(this.lastViewport ? { viewport: this.lastViewport } : {}),
+    };
+    return this.socket.request('workspace.connect', request);
+  }
+
+  private resumeWorkspace(): Promise<WorkspaceResumeResponseDto> {
+    if (!this.resumeToken || this.attachmentGeneration === undefined) {
+      throw new Error('Workspace resume credentials are unavailable.');
+    }
+    const request: WorkspaceResumeRequestDto = {
+      workspaceId: this.id,
+      connectionId: this.connection.id,
+      resumeToken: this.resumeToken,
+      attachmentGeneration: this.attachmentGeneration,
+      terminalOffset: this.terminalOffset,
+      ...(this.lastViewport ? { viewport: this.lastViewport } : {}),
+    };
+    return this.socket.request('workspace.resume', request);
   }
 
   async resume(
@@ -297,6 +335,9 @@ export class WorkspaceRuntimeSession {
       if (!this.socket.connected) throw new Error('Workspace connection closed during terminal activation.');
       this.adapters.terminal.completeResume?.();
       this.hasConnected.value = true;
+      this.resumeToken = result.resumeToken;
+      this.attachmentGeneration = result.attachmentGeneration;
+      this.terminalOffset = result.terminalOffset;
       this.reconnectAttempt = 0;
       this.markedForSuspend.value = true;
       this.markedForSuspendAt.value = markedAt ?? new Date().toISOString();
@@ -353,15 +394,12 @@ export class WorkspaceRuntimeSession {
   }
 
   reconnectNow(): void {
-    if (
-      this.disposed ||
-      this.closing ||
-      this.markedForSuspend.value ||
-      this.state.value === 'connected' ||
-      this.state.value === 'connecting' ||
-      this.reconnectInFlight
-    )
+    if (this.disposed || this.closing || this.markedForSuspend.value || this.state.value === 'connected') return;
+    if (this.reconnectInFlight || this.state.value === 'connecting') {
+      this.immediateReconnectRequested = true;
+      this.clearReconnectTimer();
       return;
+    }
     logger.debug(
       {
         workspaceId: this.id,
@@ -393,7 +431,7 @@ export class WorkspaceRuntimeSession {
     this.clearSuspendOwnerHeartbeat();
     this.statusController.workspaceDisconnected();
     this.dockerController.workspaceDisconnected();
-    this.socket.close(reason);
+    this.closeRemoteWorkspace(reason);
     this.state.value = 'disconnected';
   }
 
@@ -420,7 +458,7 @@ export class WorkspaceRuntimeSession {
     this.dockerController.dispose();
     this.adapters.dispose();
     while (this.cleanup.length) this.cleanup.pop()?.();
-    this.socket.close(reason);
+    this.closeRemoteWorkspace(reason);
     this.state.value = 'disconnected';
   }
 
@@ -442,8 +480,34 @@ export class WorkspaceRuntimeSession {
     this.markCapabilitiesDisconnected();
     this.state.value = 'disconnected';
     if (reason) this.statusMessage.value = reason;
-    if (this.markedForSuspend.value) return;
+    if (this.markedForSuspend.value || this.terminalEnded) return;
     this.scheduleReconnect();
+  }
+
+  private closeRemoteWorkspace(reason: string): void {
+    if (!this.resumeToken || this.attachmentGeneration === undefined) {
+      this.socket.close(reason);
+      return;
+    }
+    const closeRequest = {
+      workspaceId: this.id,
+      connectionId: this.connection.id,
+      resumeToken: this.resumeToken,
+      attachmentGeneration: this.attachmentGeneration,
+    };
+    this.socket.close(reason);
+    void this.socket
+      .request('workspace.close', closeRequest)
+      .catch(() => undefined)
+      .finally(() => this.socket.close(reason));
+  }
+
+  private prepareFreshConnection(): void {
+    this.resumeToken = undefined;
+    this.attachmentGeneration = undefined;
+    this.terminalOffset = 0;
+    this.freshConnectionRequired = true;
+    this.terminalState.discardRemotePty();
   }
 
   private scheduleReconnect(): void {
@@ -509,6 +573,11 @@ export class WorkspaceRuntimeSession {
       this.scheduleReconnect();
     } finally {
       this.reconnectInFlight = false;
+      if (this.immediateReconnectRequested && !this.disposed && !this.closing && !this.markedForSuspend.value) {
+        this.immediateReconnectRequested = false;
+        this.clearReconnectTimer();
+        void this.reconnect();
+      }
     }
   }
 

@@ -268,21 +268,35 @@ export async function openWorkspaceSession(
   request: APIRequestContext,
   connectionId: number,
   workspaceId = `e2e-${crypto.randomUUID()}`,
-): Promise<{ socket: E2eWebSocket; workspaceId: string }> {
+): Promise<{
+  socket: E2eWebSocket;
+  workspaceId: string;
+  resumeToken: string;
+  attachmentGeneration: number;
+  terminalOffset: number;
+}> {
   const socket = await openAuthenticatedWebSocket(request);
-  const connected = await requestWorkspace<{ workspaceId: string; binaryProtocolVersion: number }>(
-    socket,
-    'workspace.connect',
-    {
-      connectionId,
-      workspaceId,
-      viewport: { columns: 100, rows: 30 },
-    },
-  );
+  const connected = await requestWorkspace<{
+    workspaceId: string;
+    binaryProtocolVersion: number;
+    resumeToken: string;
+    attachmentGeneration: number;
+    terminalOffset: number;
+  }>(socket, 'workspace.connect', {
+    connectionId,
+    workspaceId,
+    viewport: { columns: 100, rows: 30 },
+  });
   if (connected.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
     throw new Error(`Unexpected Workspace binary protocol: ${connected.binaryProtocolVersion}`);
   }
-  return { socket, workspaceId: connected.workspaceId };
+  return {
+    socket,
+    workspaceId: connected.workspaceId,
+    resumeToken: connected.resumeToken,
+    attachmentGeneration: connected.attachmentGeneration,
+    terminalOffset: connected.terminalOffset,
+  };
 }
 
 export async function waitForFilesystemReady(socket: E2eWebSocket): Promise<void> {

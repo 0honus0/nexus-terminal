@@ -3,6 +3,8 @@ import type { SuspendedSessionDto } from '@nexus-terminal/protocol/ssh-suspend';
 import type {
   WorkspaceConnectRequestDto,
   WorkspaceConnectResponseDto,
+  WorkspaceResumeRequestDto,
+  WorkspaceResumeResponseDto,
   WorkspaceArchiveCompressRequestDto,
   WorkspaceArchiveDecompressRequestDto,
   WorkspaceArchiveEventDto,
@@ -337,6 +339,8 @@ export class WorkspaceProtocolSession {
   private readonly terminalTransport: TerminalStreamTransport;
   private readonly consumerId = randomUUID();
   private ownershipRevokedReason?: string;
+  private attachmentGeneration?: number;
+  private explicitlyClosed = false;
   private readonly autoTerminationUnsubscribe: () => void;
   private readonly ownershipRevokedUnsubscribe: () => void;
 
@@ -478,7 +482,9 @@ export class WorkspaceProtocolSession {
     this.eventUnsubscribe = undefined;
     this.terminalTransport.dispose();
     const workspaceId = this.workspaceId;
+    const attachmentGeneration = this.attachmentGeneration;
     this.workspaceId = undefined;
+    this.attachmentGeneration = undefined;
     if (!workspaceId) return;
 
     const markedForSuspend = this.dependencies.suspendCoordinator.isMarked(workspaceId);
@@ -491,6 +497,23 @@ export class WorkspaceProtocolSession {
     if (markedForSuspend) logger.info(logContext, 'Marked Workspace protocol closing');
     else logger.debug(logContext, 'Workspace protocol closing');
 
+    const transportClosedNormally = context?.source === 'socket.close' && context.closeCode === 1000;
+    if (!this.explicitlyClosed && !transportClosedNormally && !markedForSuspend && attachmentGeneration !== undefined) {
+      try {
+        if (
+          this.dependencies.suspendCoordinator.detachForReconnect(
+            workspaceId,
+            this.identity.userId,
+            attachmentGeneration,
+          )
+        ) {
+          logger.info({ ...logContext, attachmentGeneration }, 'Workspace detached for reconnect');
+          return;
+        }
+      } catch (error) {
+        logger.warn({ err: error, workspaceId, ...context }, 'Workspace reconnect detach failed');
+      }
+    }
     await this.dependencies.suspendCoordinator
       .closeWorkspace(workspaceId)
       .catch((error) =>
@@ -502,6 +525,10 @@ export class WorkspaceProtocolSession {
     switch (type) {
       case 'workspace.connect':
         return this.connect(payload);
+      case 'workspace.resume':
+        return this.resumeWorkspace(payload);
+      case 'workspace.close':
+        return this.closeWorkspace(payload);
       case 'terminal.input':
         return this.terminalInput(payload);
       case 'terminal.resize':
@@ -637,13 +664,110 @@ export class WorkspaceProtocolSession {
         connectionId: session.connectionId,
         connectionName: session.connectionName,
         binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
+        resumeToken: session.resumeToken,
+        attachmentGeneration: session.attachmentGeneration,
+        terminalOffset: this.dependencies.terminal.offset(workspaceId),
         lastConnectedAt: session.lastConnectedAt,
       };
+      this.attachmentGeneration = session.attachmentGeneration;
       return response;
     } catch (error) {
       this.unbindWorkspace();
       throw error;
     }
+  }
+
+  private async resumeWorkspace(payload: JsonRecord): Promise<WorkspaceResumeResponseDto> {
+    if (this.workspaceId) throw new Error('Workspace socket is already bound.');
+    const workspaceId = this.requireWorkspaceId(payload.workspaceId);
+    const connectionId = numberValue(payload.connectionId);
+    const resumeToken = stringValue(payload.resumeToken);
+    const attachmentGeneration = numberValue(payload.attachmentGeneration);
+    const terminalOffset = numberValue(payload.terminalOffset);
+    if (!Number.isSafeInteger(connectionId) || connectionId! <= 0) throw new Error('Invalid Workspace resume request.');
+    if (!resumeToken || resumeToken.length > 256) throw new Error('Invalid Workspace resume request.');
+    if (!Number.isSafeInteger(attachmentGeneration) || attachmentGeneration! < 1) {
+      throw new Error('Invalid Workspace resume request.');
+    }
+    if (!Number.isSafeInteger(terminalOffset) || terminalOffset! < 0) {
+      throw new Error('Invalid Workspace resume request.');
+    }
+    if (payload.viewport !== undefined && !isJsonRecord(payload.viewport)) {
+      throw new Error('Invalid Workspace resume viewport.');
+    }
+    const viewport = record(payload.viewport);
+    const columns = numberValue(viewport.columns);
+    const rows = numberValue(viewport.rows);
+    const request: WorkspaceResumeRequestDto = {
+      workspaceId,
+      connectionId: connectionId!,
+      resumeToken,
+      attachmentGeneration: attachmentGeneration!,
+      terminalOffset: terminalOffset!,
+      ...(columns !== undefined && rows !== undefined ? { viewport: { columns, rows } } : {}),
+    };
+    const resumeRequest = {
+      workspaceId,
+      userId: this.identity.userId,
+      connectionId: request.connectionId,
+      resumeToken: request.resumeToken,
+      attachmentGeneration: request.attachmentGeneration,
+    };
+    this.dependencies.suspendCoordinator.validateDetachedWorkspace(resumeRequest);
+    this.dependencies.terminal.pauseForReconnect(workspaceId);
+    try {
+      const replay = this.dependencies.terminal.replayFrom(workspaceId, request.terminalOffset);
+      const session = this.dependencies.suspendCoordinator.resumeDetachedWorkspace(resumeRequest);
+      this.bindWorkspace(workspaceId);
+      this.attachmentGeneration = session.attachmentGeneration;
+      if (replay.byteLength) await this.terminalTransport.sendStream(singleBinaryChunk(replay), (chunk) => chunk);
+      this.dependencies.events.replayRetained(workspaceId, (event) => this.forwardEvent(event));
+      if (request.viewport)
+        this.dependencies.terminal.resize(workspaceId, request.viewport.columns, request.viewport.rows);
+      return {
+        workspaceId,
+        connectionId: session.connectionId,
+        connectionName: session.connectionName,
+        binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
+        resumeToken: session.resumeToken,
+        attachmentGeneration: session.attachmentGeneration,
+        terminalOffset: this.dependencies.terminal.offset(workspaceId),
+        replayedBytes: replay.byteLength,
+        ...(session.lastConnectedAt === undefined ? {} : { lastConnectedAt: session.lastConnectedAt }),
+      };
+    } finally {
+      this.dependencies.terminal.resumeAfterReconnect(workspaceId);
+    }
+  }
+
+  private async closeWorkspace(payload: JsonRecord): Promise<null> {
+    const workspaceId = this.requireWorkspaceId(payload.workspaceId);
+    const connectionId = numberValue(payload.connectionId);
+    const resumeToken = stringValue(payload.resumeToken);
+    const attachmentGeneration = numberValue(payload.attachmentGeneration);
+    if (
+      !Number.isSafeInteger(connectionId) ||
+      connectionId! <= 0 ||
+      !resumeToken ||
+      resumeToken.length > 256 ||
+      !Number.isSafeInteger(attachmentGeneration) ||
+      attachmentGeneration! < 1
+    ) {
+      throw new Error('Invalid Workspace close request.');
+    }
+    if (this.workspaceId && this.workspaceId !== workspaceId) throw new Error('Workspace socket is already bound.');
+    this.dependencies.workspace.validateAttachmentCredential({
+      workspaceId,
+      userId: this.identity.userId,
+      connectionId: connectionId!,
+      resumeToken,
+      attachmentGeneration: attachmentGeneration!,
+    });
+    this.explicitlyClosed = true;
+    if (this.workspaceId) this.unbindWorkspace();
+    this.attachmentGeneration = undefined;
+    await this.dependencies.suspendCoordinator.closeWorkspace(workspaceId);
+    return null;
   }
 
   private terminalInput(payload: JsonRecord): null {
@@ -1055,6 +1179,8 @@ export class WorkspaceProtocolSession {
       );
       if (this.closed) throw new Error('Workspace socket closed during suspended-session resume.');
       await this.dependencies.suspendCoordinator.commitResume(workspaceId);
+      const session = this.dependencies.workspace.requireSession(workspaceId);
+      this.attachmentGeneration = session.attachmentGeneration;
       const response: WorkspaceSuspendResumeResponseDto = {
         workspaceId,
         connectionId: result.connectionId,
@@ -1064,6 +1190,9 @@ export class WorkspaceProtocolSession {
         ownershipGeneration: result.ownershipGeneration,
         ownershipLeaseExpiresAt: result.ownershipLeaseExpiresAt,
         binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
+        resumeToken: session.resumeToken,
+        attachmentGeneration: session.attachmentGeneration,
+        terminalOffset: this.dependencies.terminal.offset(workspaceId),
       };
       return response;
     } catch (error) {
@@ -1156,10 +1285,12 @@ export class WorkspaceProtocolSession {
       case 'terminal-resize':
         return;
       case 'terminal-closed':
+        this.explicitlyClosed = true;
         this.sendEvent('terminal.closed', {});
         if (this.socket.readyState === WebSocket.OPEN) this.socket.close(1012, 'Terminal closed');
         return;
       case 'terminal-error':
+        this.explicitlyClosed = true;
         this.sendEvent('terminal.error', { message: event.message });
         if (this.socket.readyState === WebSocket.OPEN) this.socket.close(1011, 'Terminal error');
         return;

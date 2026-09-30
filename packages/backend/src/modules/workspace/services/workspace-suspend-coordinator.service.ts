@@ -73,6 +73,7 @@ export interface PreviousWorkspaceHistoryResult {
  * window between beginResume() and commitResume().
  */
 export class WorkspaceSuspendCoordinatorService {
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly marks = new Map<string, SuspendMark>();
   private readonly pending = new Map<string, PendingResume>();
   private readonly resumedHistory = new Map<string, ResumedHistory>();
@@ -538,6 +539,7 @@ export class WorkspaceSuspendCoordinatorService {
   }
 
   async closeWorkspace(workspaceId: string): Promise<void> {
+    this.cancelReconnectGrace(workspaceId);
     const pendingResume = this.pending.has(workspaceId);
     const markedForSuspend = this.marks.has(workspaceId);
     const sessionExists = Boolean(this.workspaces.getSession(workspaceId));
@@ -557,7 +559,40 @@ export class WorkspaceSuspendCoordinatorService {
     else logger.debug({ ...context, ...result }, 'Workspace close handoff completed');
   }
 
+  detachForReconnect(workspaceId: string, userId: number, attachmentGeneration: number): boolean {
+    if (!this.workspaces.detachAttachment(workspaceId, userId, attachmentGeneration)) return false;
+    this.cancelReconnectGrace(workspaceId);
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(workspaceId);
+      void this.closeWorkspace(workspaceId).catch((error) =>
+        logger.warn({ err: error, workspaceId }, 'Detached Workspace cleanup failed'),
+      );
+    }, 120_000);
+    timer.unref?.();
+    this.reconnectTimers.set(workspaceId, timer);
+    return true;
+  }
+
+  resumeDetachedWorkspace(request: Parameters<WorkspaceService['resumeAttachment']>[0]) {
+    const session = this.workspaces.resumeAttachment(request);
+    this.cancelReconnectGrace(request.workspaceId);
+    return session;
+  }
+
+  validateDetachedWorkspace(request: Parameters<WorkspaceService['validateResumeAttachment']>[0]) {
+    return this.workspaces.validateResumeAttachment(request);
+  }
+
+  private cancelReconnectGrace(workspaceId: string): void {
+    const timer = this.reconnectTimers.get(workspaceId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.reconnectTimers.delete(workspaceId);
+  }
+
   async dispose(): Promise<void> {
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.reconnectTimers.clear();
     this.ownershipRevocationUnsubscribe();
     for (const workspaceId of [...this.pending.keys()]) await this.rollbackResume(workspaceId).catch(() => false);
     for (const session of [...this.workspaces.listAllSessions()]) {

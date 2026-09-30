@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { RemoteExecutionTransport, RemoteShellSession } from '../../platform/execution/remote-execution.port';
 import type { ExecutionSessionManager } from '../../platform/execution/execution-session-manager';
 import type { ConnectionService } from '../connections/connection.service';
@@ -32,6 +33,21 @@ export interface DetachedWorkspace {
   session: WorkspaceSession;
   transport: RemoteExecutionTransport;
 }
+
+export interface ResumeWorkspaceRequest {
+  workspaceId: string;
+  userId: number;
+  connectionId: number;
+  resumeToken: string;
+  attachmentGeneration: number;
+}
+
+const resumeToken = (): string => randomBytes(32).toString('base64url');
+const sameToken = (left: string, right: string): boolean => {
+  const leftBytes = Buffer.from(left);
+  const rightBytes = Buffer.from(right);
+  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes);
+};
 
 /** Owns Workspace ↔ ExecutionSession lifecycle; protocol handlers never manipulate transports directly. */
 export class WorkspaceService {
@@ -98,6 +114,9 @@ export class WorkspaceService {
         connectionName: connection.name || connection.host,
         executionSessionId: execution.id,
         shell,
+        resumeToken: resumeToken(),
+        attachmentGeneration: 1,
+        attached: true,
         createdAt: Date.now(),
         lastConnectedAt,
       };
@@ -151,6 +170,9 @@ export class WorkspaceService {
         connectionName: request.connectionName,
         executionSessionId: execution.id,
         shell: request.shell,
+        resumeToken: resumeToken(),
+        attachmentGeneration: 1,
+        attached: true,
         createdAt: Date.now(),
       };
       this.sessions.set(session);
@@ -159,6 +181,41 @@ export class WorkspaceService {
       this.executionSessions.detach(execution.id);
       throw error;
     }
+  }
+
+  detachAttachment(workspaceId: string, userId: number, generation: number): boolean {
+    const session = this.sessions.get(workspaceId);
+    if (!session || session.userId !== userId || session.attachmentGeneration !== generation || !session.attached) {
+      return false;
+    }
+    session.attached = false;
+    return true;
+  }
+
+  validateResumeAttachment(request: ResumeWorkspaceRequest): WorkspaceSession {
+    const session = this.validateAttachmentCredential(request);
+    if (session.attached) throw new Error('WORKSPACE_RESUME_REJECTED');
+    return session;
+  }
+
+  validateAttachmentCredential(request: ResumeWorkspaceRequest): WorkspaceSession {
+    const session = this.sessions.get(request.workspaceId);
+    if (
+      !session ||
+      session.userId !== request.userId ||
+      session.connectionId !== request.connectionId ||
+      session.attachmentGeneration !== request.attachmentGeneration ||
+      !sameToken(session.resumeToken, request.resumeToken)
+    ) {
+      throw new Error('WORKSPACE_RESUME_REJECTED');
+    }
+    return session;
+  }
+
+  resumeAttachment(request: ResumeWorkspaceRequest): WorkspaceSession {
+    const session = this.validateResumeAttachment(request);
+    session.attached = true;
+    return session;
   }
 
   detach(id: string): DetachedWorkspace | null {
