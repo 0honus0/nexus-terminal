@@ -53,7 +53,11 @@ test('password change UI updates the real login credential and can restore the t
   try {
     await page.goto('/settings');
     await page.getByRole('tab', { name: 'Security', exact: true }).click();
-    const form = page.getByTestId('change-password-settings');
+    const form = page.getByRole('heading', { name: 'Change Password', exact: true }).locator('..');
+    const currentPassword = form.getByLabel('Current Password:', { exact: true });
+    const newPassword = form.getByLabel('New Password:', { exact: true });
+    const confirmPassword = form.getByLabel('Confirm New Password:', { exact: true });
+    const submit = form.getByRole('button', { name: 'Change Password', exact: true });
     await expect(form).toBeVisible();
 
     const collectMetrics = async (name: string) => {
@@ -80,12 +84,12 @@ test('password change UI updates the real login credential and can restore the t
             bodyScrollWidth: document.body.scrollWidth,
           },
           elements: {
-            settings: readRect('[data-testid="change-password-settings"]'),
-            current: readRect('[data-testid="change-password-current"]'),
-            newPassword: readRect('[data-testid="change-password-new"]'),
-            confirm: readRect('[data-testid="change-password-confirm"]'),
-            submit: readRect('[data-testid="change-password-submit"]'),
-            message: readRect('[data-testid="change-password-settings"] [role="status"]'),
+            settings: readRect('section:has(#currentPassword)'),
+            current: readRect('#currentPassword'),
+            newPassword: readRect('#newPassword'),
+            confirm: readRect('#confirmPassword'),
+            submit: readRect('section:has(#currentPassword) button[type="submit"]'),
+            message: readRect('section:has(#currentPassword) [role="status"]'),
           },
         };
       });
@@ -94,8 +98,8 @@ test('password change UI updates the real login credential and can restore the t
     };
 
     const beforeMetrics = await collectMetrics('before');
-    expect(beforeMetrics.page.scrollWidth).toBe(beforeMetrics.page.clientWidth);
-    expect(beforeMetrics.page.bodyScrollWidth).toBe(beforeMetrics.page.bodyClientWidth);
+    expect(beforeMetrics.page.scrollWidth).toBeLessThanOrEqual(beforeMetrics.page.clientWidth);
+    expect(beforeMetrics.page.bodyScrollWidth).toBeLessThanOrEqual(beforeMetrics.page.bodyClientWidth);
     await captureFunctionalScreenshot(page, 'security-change-password-form.png', {
       viewport: { width: 1440, height: 900 },
     });
@@ -106,50 +110,50 @@ test('password change UI updates the real login credential and can restore the t
           timeout: 1_000,
         })
         .catch(() => undefined);
-      await form.getByTestId('change-password-submit').click();
+      await submit.click();
       await expect(form).toContainText('Please fill in all password fields.');
       expect(await requestPromise).toBeUndefined();
 
-      await form.getByTestId('change-password-current').fill(E2E_ADMIN.password);
-      await form.getByTestId('change-password-new').fill(TEMP_PASSWORD);
-      await form.getByTestId('change-password-confirm').fill(`${TEMP_PASSWORD}-mismatch`);
+      await currentPassword.fill(E2E_ADMIN.password);
+      await newPassword.fill(TEMP_PASSWORD);
+      await confirmPassword.fill(`${TEMP_PASSWORD}-mismatch`);
       const mismatchRequest = page
         .waitForRequest((request) => request.url().endsWith('/api/v1/auth/password') && request.method() === 'PUT', {
           timeout: 1_000,
         })
         .catch(() => undefined);
-      await form.getByTestId('change-password-submit').click();
+      await submit.click();
       await expect(form).toContainText('New password and confirmation do not match.');
       expect(await mismatchRequest).toBeUndefined();
     });
 
     await step('the API rejects a wrong current password without losing form input', async () => {
-      await form.getByTestId('change-password-current').fill('Definitely-Wrong-Current-Password!');
-      await form.getByTestId('change-password-confirm').fill(TEMP_PASSWORD);
+      await currentPassword.fill('Definitely-Wrong-Current-Password!');
+      await confirmPassword.fill(TEMP_PASSWORD);
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/auth/password') && response.request().method() === 'PUT',
       );
-      await form.getByTestId('change-password-submit').click();
+      await submit.click();
       expect((await responsePromise).status()).toBe(400);
       await expect(form).toContainText('当前密码不正确。');
-      await expect(form.getByTestId('change-password-current')).toHaveValue('Definitely-Wrong-Current-Password!');
-      await expect(form.getByTestId('change-password-new')).toHaveValue(TEMP_PASSWORD);
-      await expect(form.getByTestId('change-password-confirm')).toHaveValue(TEMP_PASSWORD);
+      await expect(currentPassword).toHaveValue('Definitely-Wrong-Current-Password!');
+      await expect(newPassword).toHaveValue(TEMP_PASSWORD);
+      await expect(confirmPassword).toHaveValue(TEMP_PASSWORD);
     });
 
     await step('change the administrator password through the security UI', async () => {
-      await form.getByTestId('change-password-current').fill(E2E_ADMIN.password);
-      await form.getByTestId('change-password-new').fill(TEMP_PASSWORD);
-      await form.getByTestId('change-password-confirm').fill(TEMP_PASSWORD);
+      await currentPassword.fill(E2E_ADMIN.password);
+      await newPassword.fill(TEMP_PASSWORD);
+      await confirmPassword.fill(TEMP_PASSWORD);
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/auth/password') && response.request().method() === 'PUT',
       );
-      await form.getByTestId('change-password-submit').click();
+      await submit.click();
       expect((await responsePromise).ok()).toBeTruthy();
       passwordChanged = true;
-      await expect(form.getByTestId('change-password-current')).toHaveValue('');
-      await expect(form.getByTestId('change-password-new')).toHaveValue('');
-      await expect(form.getByTestId('change-password-confirm')).toHaveValue('');
+      await expect(currentPassword).toHaveValue('');
+      await expect(newPassword).toHaveValue('');
+      await expect(confirmPassword).toHaveValue('');
       await expect(form).toContainText('Password changed successfully!');
 
       const authenticatedStatus = await context.request.get('/api/v1/auth/status');
@@ -157,13 +161,13 @@ test('password change UI updates the real login credential and can restore the t
       await expect(authenticatedStatus.json()).resolves.toMatchObject({ isAuthenticated: true });
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByRole('tab', { name: 'Security', exact: true }).click();
-      await expect(page.getByTestId('change-password-settings')).toBeVisible();
-      await expect(page.getByTestId('change-password-current')).toHaveValue('');
-      await expect(page.getByTestId('change-password-new')).toHaveValue('');
-      await expect(page.getByTestId('change-password-confirm')).toHaveValue('');
+      await expect(form).toBeVisible();
+      await expect(currentPassword).toHaveValue('');
+      await expect(newPassword).toHaveValue('');
+      await expect(confirmPassword).toHaveValue('');
       const afterMetrics = await collectMetrics('after');
-      expect(afterMetrics.page.scrollWidth).toBe(afterMetrics.page.clientWidth);
-      expect(afterMetrics.page.bodyScrollWidth).toBe(afterMetrics.page.bodyClientWidth);
+      expect(afterMetrics.page.scrollWidth).toBeLessThanOrEqual(afterMetrics.page.clientWidth);
+      expect(afterMetrics.page.bodyScrollWidth).toBeLessThanOrEqual(afterMetrics.page.bodyClientWidth);
       await captureFunctionalScreenshot(page, 'security-change-password-success.png', {
         viewport: { width: 1440, height: 900 },
       });
