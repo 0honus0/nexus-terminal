@@ -178,6 +178,8 @@ Passkey 的部署域名配置见 [部署与更新](./DEPLOYMENT.md#passkey--weba
 
 ## 镜像发布
 
+Agent Python 运行环境固定到经过来源验证的预编译构建；相同 Python 版本的上游重建不会静默替换产物，来源 checksum 或安装树摘要不匹配时拒绝安装。
+
 镜像发布保留生产依赖 high 级安全审计；release channel 仅发布当前 main 提交，并要求该提交的完整 E2E（基础检查、全部 Playwright 分片和 Docker smoke）成功。Actions 运行标题显示 channel、架构和发布目标，主镜像与 Runner 任务使用固定名称，准备失败时仍可辨认任务。发布和部署方式见 [部署与更新](./DEPLOYMENT.md)。
 
 ## 当前限制与注意事项

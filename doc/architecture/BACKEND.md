@@ -122,6 +122,8 @@ Backend 持有用户、App、Thread、Run、Ledger、Plan、approval、lease、a
 
 Backend 到 Runner 的所有 HTTP/WebSocket 调用集中在 Runner adapter，使用 Bearer token 与 `X-Nexus-Agent-Protocol: 2026-09-13`。Provision 发送冻结 profile；后续 lifecycle/job 调用使用 Workspace id、generation 与必要执行输入。
 
+Runner 的 Python pack materializer 使用 catalog 相邻的 mise source lock 固定预编译构建 URL、archive checksum 与 provenance，再校验规范化安装树的 catalog digest；Backend 不持有另一份安装来源或摘要事实。部署必须包含 `scripts/docker/agent-runner/catalog/mise/python/` 的 source lock，缺失时安装 fail closed。
+
 Plugin package、immutable installed version、AppStorage、Workspace 和 Artifact 分别维护生命周期。Frontend target 在隔离 surface 中运行；backend/runner target 通过受控进程和版本化 SDK/IPC 运行。Plugin 不能把 Host authority function 注入 Tool catalog。
 
 ## 数据、事务与并发

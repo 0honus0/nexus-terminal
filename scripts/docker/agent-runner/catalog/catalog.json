@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "2026-09-11.4",
+  "revision": "2026-09-30.1",
   "runtimeDigest": "nexus-agent-runner:workspace-toolchain-profile-v2",
   "recipes": [
     {
@@ -83,7 +83,7 @@
       "versionId": "3.14.7",
       "displayName": "Python 3.14.7",
       "contentDigestByArch": {
-        "x64": "sha256:f9e90b2b7b71cd16fa1eb41b567afd049097c4d725292d657aefeaf94bdb1057"
+        "x64": "sha256:4a2ef018f1871b255d071cf2cb84bce29832ddb2fdc1957599f53053e890e5ad"
       },
       "downloadRefByArch": {
         "x64": "mise://2026.9.5/python/3.14.7"
@@ -101,7 +101,7 @@
       "versionId": "3.13.15",
       "displayName": "Python 3.13.15",
       "contentDigestByArch": {
-        "x64": "sha256:c20642525cb2142b352f127e5a925875b82a0187ae56b3e6b9802374871ff7d7"
+        "x64": "sha256:17cd99786c2f17663327811bff16b9da078f7a6bcb810ed7be7715ab3f50995e"
       },
       "downloadRefByArch": {
         "x64": "mise://2026.9.5/python/3.13.15"

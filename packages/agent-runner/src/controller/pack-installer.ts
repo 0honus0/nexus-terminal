@@ -496,6 +496,14 @@ export class PackInstaller {
     const working = path.join(miseRoot, 'work');
     fs.mkdirSync(working, { recursive: true, mode: 0o700 });
     const miseBin = process.env.NEXUS_AGENT_MISE_BIN?.trim() || '/usr/local/bin/mise';
+    const lockedPython = pack.familyId === 'python';
+    const installWorking = lockedPython ? this.catalog.catalogPath('mise', 'python') : working;
+    if (
+      lockedPython &&
+      (!fs.existsSync(path.join(installWorking, 'mise.toml')) || !fs.existsSync(path.join(installWorking, 'mise.lock')))
+    ) {
+      throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_UNSUPPORTED');
+    }
     const env: NodeJS.ProcessEnv = {
       PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin',
       HOME: path.join(miseRoot, 'home'),
@@ -503,7 +511,7 @@ export class PackInstaller {
       MISE_DATA_DIR: path.join(miseRoot, 'data'),
       MISE_STATE_DIR: path.join(miseRoot, 'state'),
       MISE_CONFIG_DIR: path.join(miseRoot, 'config'),
-      MISE_NO_CONFIG: '1',
+      ...(lockedPython ? { MISE_TRUSTED_CONFIG_PATHS: installWorking, MISE_LOCKED: '1' } : { MISE_NO_CONFIG: '1' }),
       MISE_YES: '1',
     };
     for (const directory of [
@@ -523,7 +531,7 @@ export class PackInstaller {
       fs.mkdirSync(staging, { recursive: true, mode: 0o700 });
       const materialized = path.join(staging, 'pack');
       await runProcess(miseBin, ['install-into', `${pack.familyId}@${pack.versionId}`, materialized], {
-        cwd: working,
+        cwd: installWorking,
         env,
         timeoutMs: MISE_INSTALL_TIMEOUT_MS,
       });
