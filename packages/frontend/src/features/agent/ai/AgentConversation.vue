@@ -478,7 +478,7 @@
               :class="homePromptToneClasses[prompt.tone].card"
               @click="emit('updateDraft', $t(prompt.promptKey))"
             >
-              <div class="flex items-start gap-3.5 w-full">
+              <div class="flex min-w-0 items-center gap-3.5 w-full">
                 <span
                   class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-2xs transition-colors"
                   :class="homePromptToneClasses[prompt.tone].icon"
@@ -488,7 +488,7 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center justify-between">
                     <span
-                      class="text-[13px] font-bold tracking-tight text-foreground transition-colors"
+                      class="min-w-0 truncate text-[13px] font-bold tracking-tight text-foreground transition-colors"
                       :class="homePromptToneClasses[prompt.tone].title"
                     >
                       {{ $t(prompt.titleKey) }}
@@ -500,7 +500,10 @@
                       >↗</span
                     >
                   </div>
-                  <p class="mt-1 text-xs leading-relaxed text-text-secondary/75">
+                  <p
+                    class="mt-1 truncate text-xs leading-relaxed text-text-secondary/75"
+                    :title="$t(prompt.descriptionKey)"
+                  >
                     {{ $t(prompt.descriptionKey) }}
                   </p>
                 </div>
