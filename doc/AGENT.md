@@ -2,9 +2,7 @@
 
 > 状态：Current architecture baseline
 >
-> 适用分支：`main`
->
-> 本文件是 Nexus Agent 的**唯一长期架构文档**。软件行为需求以 [`software-requirements/requirements/agent.md`](software-requirements/requirements/agent.md) 为准；强制工程约束以 [`software-requirements/engineering-constraints.md`](software-requirements/engineering-constraints.md) 为准。历史实现过程、重构 review 和阶段施工记录不再作为规范源。
+> 本文件是 Nexus Agent 的**唯一长期架构文档**。软件行为需求以 [`USAGE.md`](USAGE.md#agent) 为准；强制开发约束以根目录 [`AGENTS.md`](../AGENTS.md) 为准。Bug 修复与需求变更同步维护 USAGE，涉及 Agent owner 或 contract 的变化同步维护本文。
 
 ## 1. 产品定位
 

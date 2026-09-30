@@ -1,6 +1,6 @@
 # Nexus Terminal Frontend Architecture
 
-本文描述当前 Frontend 的目录、状态 owner、依赖方向和运行时边界。产品需求见 [软件需求](../software-requirements/README.md)，强制工程规则见 [Engineering Constraints](../software-requirements/engineering-constraints.md)。
+本文描述当前 Frontend 的目录、状态 owner、依赖方向和运行时边界。实际产品需求见 [USAGE](../USAGE.md)，开发规则见根目录 [AGENTS.md](../../AGENTS.md)。
 
 ## 技术基线
 
@@ -9,6 +9,7 @@
 - HTTP 数据通过 `client/` 进入应用，业务代码使用 camelCase contract。
 - 终端、上传和 Workspace 使用明确的 WebSocket protocol/session owner。
 - Foundation UI 统一使用 `Ui*` 组件；自定义窗口表面使用 `UiOverlayPanel` 组合。
+- `packages/protocol/src` 是 HTTP、WebSocket 与 Runner wire DTO 的唯一公共 owner，网络 adapter 直接使用规范 DTO，不在 Frontend 重复声明兼容类型。
 
 ## 源码布局
 
@@ -144,6 +145,12 @@ flowchart TD
 5. `app` 负责组合，不成为业务状态仓库。
 
 ## 状态与生命周期
+
+### 全局导航与会话展示
+
+`app/shell/AppHeader.vue` 持有导航展示，公共悬浮材质与 `--app-header-height` 由 `foundation/ui` 提供。设置页和 Workspace 使用同一高度变量；根页面预留滚动条空间，避免路由切换引起导航横移。窄屏导航复用 `UiSelect`，不引入独立 transport 或页面事实源。
+
+Workspace 无会话和新建连接入口共用 `WorkspaceStartPage`。显示启动页仅隐藏已有 session region，不卸载后台终端；发起 SSH 连接时立即进入等待界面，旧连接完成不关闭用户后来打开的启动页。挂起 catalog 由 `features/ssh-suspend` 持有，成功取消标记后刷新目录，不在 view 复制服务端列表。
 
 状态放在最小且真实的 owner 中：
 

@@ -1,6 +1,6 @@
 # Nexus Backend Architecture
 
-本文描述当前 Backend 的分层、owner 与运行时边界。产品需求见 [软件需求](../software-requirements/README.md)，Agent 细节见 [Agent 架构](../AGENT.md)，强制规则见 [Engineering Constraints](../software-requirements/engineering-constraints.md)。
+本文描述当前 Backend 的分层、owner 与运行时边界。实际产品需求见 [USAGE](../USAGE.md)，Agent 细节见 [Agent 架构](../AGENT.md)，开发规则见根目录 [AGENTS.md](../../AGENTS.md)。
 
 ## 技术基线
 
@@ -9,6 +9,7 @@
 - SQLite 持久化，数据库访问由 Infrastructure adapter 实现。
 - SSH/SFTP、Guacamole、通知、认证和 Agent Runner 通过明确 port/adapter 接入。
 - 对外 HTTP contract 使用 camelCase；数据库列名只存在于 repository/infrastructure 边界。
+- `packages/protocol/src` 持有跨 Frontend、Backend 与 Runner 的公共 wire DTO；输入在 Interface decode/validation，输出在边界映射，不在网络 adapter 复制协议类型。
 
 ## 源码布局
 
@@ -89,7 +90,7 @@ flowchart TD
   Config[config] --> Shared
 ```
 
-允许的静态依赖以 [EC-ARCH-001](../software-requirements/engineering-constraints.md#ec-arch-001) 为准。Infrastructure 对 Module 的依赖只允许用于实现 Module-owned `*.port` / `*.types` contract，并优先使用 type-only import。
+允许的静态依赖以根目录 [AGENTS.md](../../AGENTS.md) 为准。Infrastructure 对 Module 的依赖只允许用于实现 Module-owned `*.port` / `*.types` contract，并优先使用 type-only import。
 
 ## Workspace 与远程能力
 
@@ -105,7 +106,7 @@ flowchart TD
 - SSH suspend module：挂起 catalog 与恢复事务；
 - Interfaces：HTTP/WebSocket streaming、认证和 backpressure。
 
-挂起 SSH 会话时，Backend 先冻结 PTY 并排空已排队的终端传输，Frontend 再排空 xterm 写队列并提交最终快照，避免活跃输出落在快照边界之外。恢复时 Backend 负责 prepare、有限尾部回放、transport 交接、commit/rollback 与更早历史分页；Frontend 只负责 Runtime tab 的创建、替换与展示。
+挂起标记不关闭活动 Workspace。`workspace-suspend-coordinator.service.ts` 管理标记、终端输出日志与 checkpoint；标签关闭或连接断开后由 Backend 接管原 SSH/PTY。普通弱网续接校验原发起端恢复凭据，挂起会话恢复或确认接管则校验会话访问权限，不要求原设备凭据。恢复时 Backend 负责 prepare、有限尾部回放、transport 交接、commit/rollback 与更早历史分页；Frontend 只负责 Runtime tab 的创建、替换与展示。取消标记涉及输出队列排空与存储清理，请求超时不能作为确定取消失败的证据。
 
 ## Remote Desktop
 

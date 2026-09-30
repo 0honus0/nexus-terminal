@@ -1,6 +1,6 @@
 # Nexus Terminal E2E
 
-> Mandatory engineering rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md). If explanatory text differs from that register, the constraint register is authoritative.
+> Development rules are maintained in root [AGENTS.md](../../AGENTS.md). Observable product requirements are maintained in [USAGE](../USAGE.md).
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
@@ -120,7 +120,7 @@ pnpm install --frozen-lockfile
 pnpm --filter @nexus-terminal/e2e exec playwright install chromium
 ```
 
-On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. The canonical complete-E2E environment is documented in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001).
+On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`.
 
 ## Test reset baseline
 
@@ -134,4 +134,4 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 
 ## Engineering constraints
 
-E2E rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001). That document is authoritative when adding, moving, grouping, or optimizing tests.
+When adding, moving, grouping, or optimizing tests, follow root [AGENTS.md](../../AGENTS.md) and verify observable behavior described in [USAGE](../USAGE.md).
