@@ -1194,16 +1194,18 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         await batchThread.click();
         await expect(batchThread).toHaveAttribute('aria-current', 'true');
 
-        const toolCall = hub.getByTestId('agent-tool-call-entry');
+        const toolCall = hub
+          .locator('details')
+          .filter({ has: page.locator('summary').filter({ hasText: 'Tool call' }) });
         await expect(toolCall).toHaveCount(1);
-        const summary = toolCall.getByTestId('agent-tool-call-summary');
+        const summary = toolCall.locator('summary');
         await expect(summary).toContainText('Tool call');
         await expect(summary).not.toContainText('machine_list_connections');
         await expect(summary).not.toContainText('file_read');
-        await expect(toolCall.getByTestId('agent-tool-call-count')).toHaveText('2');
+        await expect(summary.getByText('2', { exact: true })).toBeVisible();
 
         await summary.click();
-        const details = toolCall.getByTestId('agent-tool-call-detail');
+        const details = toolCall.locator('[data-tool-name]');
         await expect(details).toHaveCount(2);
         await expect(details.nth(0)).toHaveAttribute('data-tool-name', 'machine_list_connections');
         await expect(details.nth(1)).toHaveAttribute('data-tool-name', 'file_read');
@@ -1295,7 +1297,10 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect(headerThreadDelete).toBeVisible();
       await openThreads.click();
       await expect(hub.getByPlaceholder('Search conversations', { exact: true })).toBeVisible();
-      await hub.getByRole('button', { name: 'Close conversations', exact: true }).click();
+      const threadBackdrop = hub.getByRole('button', { name: 'Close conversations', exact: true });
+      const backdropBounds = await threadBackdrop.boundingBox();
+      expect(backdropBounds).not.toBeNull();
+      await threadBackdrop.click({ position: { x: backdropBounds!.width - 12, y: backdropBounds!.height / 2 } });
 
       await page.reload();
       await openAgentHub(page);

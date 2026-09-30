@@ -52,7 +52,7 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
   await expect(launcher).toBeVisible();
   await expect(hub).toHaveCount(0);
 
-  await page.getByTestId('connections-add-button').click({ trial: true });
+  await page.getByRole('button', { name: 'Add New Connection', exact: true }).click({ trial: true });
 
   await launcher.click();
   await expect(hub).toBeVisible();
@@ -334,6 +334,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
           recentAppIds: string[];
           hubView: string;
           launcherPosition: { right: number; bottom: number };
+          launcherDock: 'left' | 'right' | null;
           threadSidebarVisible: boolean;
           taskRailVisible: boolean;
         };
@@ -343,6 +344,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
         setThreadSidebarVisible(visible: boolean): void;
         setTaskRailVisible(visible: boolean): void;
         setLauncherPosition(position: { right: number; bottom: number }): void;
+        dockLauncher(side: 'left' | 'right'): void;
         setBounds(bounds: { x: number; y: number; width: number; height: number }): void;
         toggleMaximize(): void;
         reset(): void;
@@ -358,6 +360,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
       agentWindowManager.setThreadSidebarVisible(false);
       agentWindowManager.setTaskRailVisible(true);
       agentWindowManager.setLauncherPosition({ right: 111, bottom: 222 });
+      agentWindowManager.dockLauncher('left');
       agentWindowManager.setBounds({ x: 12, y: 18, width: 700, height: 600 });
       agentWindowManager.toggleMaximize();
     };
@@ -383,6 +386,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
     recentAppIds: [],
     hubView: 'conversation',
     launcherPosition: { right: 22, bottom: 24 },
+    launcherDock: null,
     threadSidebarVisible: true,
     taskRailVisible: false,
   };
@@ -527,10 +531,10 @@ test('Agent revisits a loaded conversation without blocking on a fresh history r
 
   await firstThread.click();
   await expect(firstThread).toHaveAttribute('aria-current', 'true');
-  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
   await secondThread.click();
   await expect(secondThread).toHaveAttribute('aria-current', 'true');
-  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
 
   holdFirstRefresh = true;
   await firstThread.click();
@@ -538,7 +542,7 @@ test('Agent revisits a loaded conversation without blocking on a fresh history r
   await expect(firstThread).toHaveAttribute('aria-current', 'true');
   // The authoritative ledger/run refresh is deliberately stalled, but the cached conversation
   // must remain visible instead of regressing to the full-screen loading state.
-  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
 
   releaseRefresh?.();
   await expect(firstThread).toBeEnabled();
@@ -689,6 +693,7 @@ test('Agent feature enable opens one global floating window that survives route 
   expect(connectionsBounds).toEqual(settingsBounds);
 
   await page
+    .locator('.app-nav-links')
     .getByRole('link', { name: 'Dashboard', exact: true })
     .evaluate((element) => (element as HTMLAnchorElement).click());
   await expect(page).toHaveURL(/\/$/);
@@ -726,7 +731,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await providerField('Display name').fill('Settings UI Provider');
   await providerField('Base URL').fill(`${E2E_URLS.openAiProviderOrigin}/v1`);
   await providerField('Credential').fill('e2e-provider-secret');
-  await addProvider.getByTestId('agent-provider-model-id').fill('e2e-model');
+  await addProvider.getByRole('textbox', { name: 'Model ID *', exact: true }).fill('e2e-model');
   await providerField('Context window').fill('8192');
   await providerField('Maximum output tokens').fill('128');
   await addProvider.getByRole('button', { name: 'Save & Add', exact: true }).click();
@@ -734,7 +739,12 @@ test('Agent settings surface exposes the production control plane and captures f
   const providerName = providersSection.getByText('Settings UI Provider', { exact: true });
   await expect(providerName).toBeVisible();
   const providerCard = providerName.locator('xpath=ancestor::article[1]');
-  const protocolSelect = providerCard.getByLabel('Protocol', { exact: true });
+  await expect(providerCard.getByLabel('Protocol', { exact: true })).toHaveCount(0);
+  await providerCard.getByRole('button', { name: 'Models & test (1)', exact: true }).click();
+  const protocolModels = page.getByRole('dialog', { name: 'Configured models & test', exact: true });
+  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
+  const protocolDialog = page.getByRole('dialog', { name: 'Model capabilities', exact: true });
+  const protocolSelect = protocolDialog.getByLabel('Protocol', { exact: true });
   await expect(protocolSelect).toContainText('Chat Completions');
   await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
     if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"responses"')) {
@@ -747,8 +757,12 @@ test('Agent settings surface exposes the production control plane and captures f
   );
   await pickGen2Option(protocolSelect, 'Responses API');
   await expect(protocolSelect).toContainText('Responses API');
+  await protocolDialog.getByRole('button', { name: 'Save', exact: true }).click();
   expect((await protocolSaved).ok()).toBeTruthy();
+  await expect(protocolDialog).toBeHidden();
   await page.unroute('**/api/v1/agent/ai/providers/*');
+  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
+  await expect(protocolSelect).toContainText('Responses API');
 
   await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
     if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"chat-completions"')) {
@@ -766,12 +780,18 @@ test('Agent settings surface exposes the production control plane and captures f
     (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
   );
   await pickGen2Option(protocolSelect, 'Chat Completions');
+  await protocolDialog.getByRole('button', { name: 'Save', exact: true }).click();
   expect((await failedProtocolPatch).status()).toBe(500);
-  await expect(protocolSelect).toContainText('Responses API');
+  await expect(protocolDialog).toBeVisible();
   const errorToast = page.locator('.bg-red-600').last();
   await expect(errorToast).toBeVisible();
   await expect(errorToast).toBeHidden({ timeout: 7_500 });
   await page.unroute('**/api/v1/agent/ai/providers/*');
+  await protocolDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
+  await expect(protocolSelect).toContainText('Responses API');
+  await protocolDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await protocolModels.getByRole('button', { name: 'Close', exact: true }).click();
 
   const defaultModel = providersSection.getByRole('combobox', {
     name: 'Default model for new runs',
@@ -854,7 +874,7 @@ test('Agent settings surface exposes the production control plane and captures f
   const configuredModelsPanel = providersSection
     .getByText('Configured models', { exact: true })
     .locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
-  await expect(configuredModelsPanel.getByTestId('configured-models-remove-all')).toHaveCount(1);
+  await expect(configuredModelsPanel.getByRole('button', { name: 'Remove all', exact: true })).toHaveCount(1);
   await expect(configuredModelsPanel.getByRole('checkbox', { name: 'Select all', exact: true })).toHaveCount(0);
   await expect(configuredModelsPanel.getByRole('button', { name: /Remove selected/ })).toHaveCount(0);
 
@@ -1046,7 +1066,9 @@ test('fallback settings drop stale models and provider deletion repairs the defa
   const providersSection = page
     .getByRole('heading', { name: 'Model providers', exact: true })
     .locator('xpath=ancestor::section[1]');
-  const primaryCard = providersSection.locator(`[data-testid="agent-provider-card"][data-provider-id="${primary.id}"]`);
+  const primaryCard = providersSection
+    .locator('article')
+    .filter({ has: page.getByText('Fallback Primary', { exact: true }) });
   await expect(primaryCard).toBeVisible();
   await expect(primaryCard.getByText('Fallback Primary', { exact: true })).toBeVisible();
   await expect(providersSection.getByText('stale-fallback', { exact: true })).toHaveCount(0);

@@ -119,6 +119,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - RDP/VNC conditional forms and filtered bulk selection/deletion use named controls and connection cards, with API checks for saved connection fields and exact deletion results;
 - command-history search, clipboard copy, replay and individual deletion are exercised through real SSH output and persisted history IDs;
 - notification delivery tests use localized Add/Test controls and real webhook/SMTP receivers to verify unsaved delivery, localized event content, HTML email and persisted channel error recovery;
+- Agent Host coverage verifies launcher passivity, cached conversation visibility, user-scoped layout reset including launcher docking, provider controls and expanded batched tool-call details through existing labels and tool-name state;
 
 For optional focused local browser debugging, install Chromium when the host already has (or can install) the required system libraries:
 
