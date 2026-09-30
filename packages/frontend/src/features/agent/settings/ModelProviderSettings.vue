@@ -62,7 +62,6 @@
 
   const emit = defineEmits<{
     toggle: [provider: AgentProviderViewDto, enabled: boolean];
-    protocol: [provider: AgentProviderViewDto, protocol: AgentProviderViewDto['protocol']];
     discover: [provider: AgentProviderViewDto];
     defaultModel: [providerId: string, modelId: string];
     delete: [provider: AgentProviderViewDto];
@@ -191,11 +190,6 @@
 
   const protocolFromValue = (value: unknown): AgentProviderViewDto['protocol'] =>
     value === 'responses' ? 'responses' : 'chat-completions';
-
-  const protocolOptions = computed<UiSelectOption[]>(() => [
-    { value: 'chat-completions', label: t('agent.settings.providers.protocolChat') },
-    { value: 'responses', label: t('agent.settings.providers.protocolResponses') },
-  ]);
 
   const form = reactive({
     displayName: '',
@@ -2433,20 +2427,6 @@
     @close="testModalOpen = false"
   >
     <div v-if="currentTestModalProvider" class="space-y-4">
-      <UiFormField :label="$t('agent.settings.providers.protocol')">
-        <UiSelect
-          density="compact"
-          class="w-full sm:max-w-64"
-          :aria-label="$t('agent.settings.providers.protocol')"
-          :disabled="busy || Object.values(testResults).some((result) => result.state === 'loading')"
-          :model-value="currentTestModalProvider.protocol"
-          :options="protocolOptions"
-          @update:model-value="
-            (value: unknown) =>
-              currentTestModalProvider && emit('protocol', currentTestModalProvider, protocolFromValue(value))
-          "
-        />
-      </UiFormField>
       <!-- 顶部概览与搜索栏 -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="text-xs text-text-secondary flex-1 min-w-0">

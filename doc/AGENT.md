@@ -6,7 +6,7 @@
 
 ## 1. 产品定位
 
-提供商 SDK 错误由 infrastructure 的 `providers/provider-error.ts` 表驱动映射，保留 HTTP 状态、DNS、TLS、网络超时、响应校验失败的区别；不记录上游响应正文或凭据。HTTP 错误规则保留具体模型错误码；前端 `agent-api-error.ts` 用统一分类表本地化，模型测试复用同一张表。协议切换由模型与测试弹窗发出原有 provider 更新事件，不在 UI 维护第二份服务端配置。
+提供商 SDK 错误由 infrastructure 的 `providers/provider-error.ts` 表驱动映射，保留 HTTP 状态、DNS、TLS、网络超时、响应校验失败的区别；不记录上游响应正文或凭据。HTTP 错误规则保留具体模型错误码；前端 `agent-api-error.ts` 用统一分类表本地化，模型测试复用同一张表。每个模型的可选 protocol 由能力配置通过既有 models 更新 contract 保存到 models JSON，解析后由 SDK adapter 优先使用；未设置时沿用提供商默认协议，测试、正式调用和 continuation 使用同一有效协议。
 
 Nexus Agent 是 Nexus Terminal 内的全局智能执行层，不是一个独立页面，也不是 Workspace Terminal 的包装层。
 

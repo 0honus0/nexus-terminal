@@ -155,7 +155,9 @@ export const decodePersistedProviderModels = (raw: string): PersistedProviderMod
   if (!Array.isArray(value) || value.length > 1024) throw new Error('AGENT_DURABLE_STATE_INVALID');
   return value.map((item) => {
     const record = durableRecord(item);
-    assertAllowedKeys(record, ['id', 'capabilityOverrides']);
+    assertAllowedKeys(record, ['id', 'protocol', 'capabilityOverrides']);
+    if (record.protocol !== undefined && record.protocol !== 'responses' && record.protocol !== 'chat-completions')
+      throw new Error('AGENT_DURABLE_STATE_INVALID');
     const id = durableString(record.id) as string;
     if (!id.trim()) throw new Error('AGENT_DURABLE_STATE_INVALID');
     const overridesRaw = record.capabilityOverrides;
@@ -197,6 +199,7 @@ export const decodePersistedProviderModels = (raw: string): PersistedProviderMod
           })();
     return {
       id,
+      ...(record.protocol === undefined ? {} : { protocol: record.protocol as OpenAiCompatibleProtocol }),
       ...(capabilityOverrides === undefined ? {} : { capabilityOverrides }),
     };
   });

@@ -43,6 +43,7 @@ export interface AgentProviderModelCapabilityObservationDto extends AgentProvide
 
 export interface AgentProviderModelInputDto {
   id: string;
+  protocol?: AgentProviderProtocolDto;
   contextWindow: number;
   maxOutputTokens: number;
   supportsTools: boolean;

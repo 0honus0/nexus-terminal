@@ -1,8 +1,26 @@
 import assert from 'node:assert/strict';
+import { decodePersistedProviderModels } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-provider.repository';
+import { resolveProviderModelConfig } from '../../../packages/backend/src/modules/agent/ai/model-capability-resolver';
 import { OpenAiProviderAdapter } from '../../../packages/backend/src/infrastructure/agent/providers/openai-provider.adapter';
 import type { ModelRequest, TokenUsage } from '../../../packages/backend/src/modules/agent/ai/model.types';
 
 export const providerPromptCacheHintScenario = async () => {
+  const persisted = decodePersistedProviderModels(
+    JSON.stringify([
+      {
+        id: 'protocol-model',
+        protocol: 'responses',
+        capabilityOverrides: { contextWindow: 4096, maxOutputTokens: 256, supportsTools: false },
+      },
+      { id: 'default-model', capabilityOverrides: { contextWindow: 4096, maxOutputTokens: 256, supportsTools: false } },
+    ]),
+  );
+  assert.equal(resolveProviderModelConfig(persisted[0]).protocol, 'responses');
+  assert.equal(resolveProviderModelConfig(persisted[1]).protocol, undefined);
+  assert.throws(
+    () => decodePersistedProviderModels('[{"id":"invalid","protocol":"invalid"}]'),
+    /AGENT_DURABLE_STATE_INVALID/,
+  );
   const capturedBodies: Array<{ url: string; body: Record<string, unknown> }> = [];
   const originalFetch = globalThis.fetch;
   const chatStreamBody = [
@@ -261,6 +279,13 @@ export const providerPromptCacheHintScenario = async () => {
       false,
       'model capability gate must suppress prompt_cache_key when support is not frozen',
     );
+
+    const customProvider = providers.get('custom-responses')!;
+    const customModels = customProvider.models as Array<Record<string, unknown>>;
+    customModels[0].protocol = 'chat-completions';
+    await streamOnce(requestFor('custom-responses', 'proxy-reasoner'));
+    assert.ok(capturedBodies.at(-1)?.url.endsWith('/chat/completions'), 'model protocol overrides provider default');
+    delete customModels[0].protocol;
 
     globalThis.fetch = (async () =>
       new Response(

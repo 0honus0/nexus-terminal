@@ -68,11 +68,13 @@ export interface ModelCapabilitySnapshot {
 
 export interface PersistedProviderModelConfig {
   id: string;
+  protocol?: OpenAiCompatibleProtocol;
   capabilityOverrides?: ModelCapabilityOverrides;
 }
 
 export interface ProviderModelConfig {
   id: string;
+  protocol?: OpenAiCompatibleProtocol;
   contextWindow: number;
   maxOutputTokens: number;
   supportsTools: boolean;

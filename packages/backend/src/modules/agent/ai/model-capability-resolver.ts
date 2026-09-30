@@ -259,6 +259,7 @@ export const resolveProviderModelConfig = (
   const conflicts = conflictingCapabilityFields(registryDefaults, providerCapabilities, overrides);
   return {
     id: model.id,
+    ...(model.protocol === undefined ? {} : { protocol: model.protocol }),
     contextWindow,
     maxOutputTokens,
     supportsTools,

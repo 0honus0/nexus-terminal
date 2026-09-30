@@ -53,6 +53,7 @@
   };
 
   const capabilityForm = reactive({
+    protocol: 'chat-completions' as AgentProviderViewDto['protocol'],
     contextWindow: 0,
     maxOutputTokens: 0,
     supportsTools: false,
@@ -66,6 +67,7 @@
 
   const syncForm = (model: AgentProviderModelDto | null): void => {
     if (!model) return;
+    capabilityForm.protocol = model.protocol ?? props.provider?.protocol ?? 'chat-completions';
     capabilityForm.contextWindow = model.contextWindow;
     capabilityForm.maxOutputTokens = model.maxOutputTokens;
     capabilityForm.supportsTools = model.supportsTools;
@@ -185,6 +187,7 @@
     } = model;
     emit('save', {
       ...baseModel,
+      protocol: capabilityForm.protocol,
       contextWindow: capabilityForm.contextWindow,
       maxOutputTokens: capabilityForm.maxOutputTokens,
       supportsTools: capabilityForm.supportsTools,
@@ -215,6 +218,18 @@
     @close="close"
   >
     <div v-if="capabilityEditorModel" class="space-y-4">
+      <div class="space-y-1.5">
+        <label class="text-sm font-medium">{{ t('agent.settings.providers.protocol') }}</label>
+        <UiSelect
+          v-model="capabilityForm.protocol"
+          :disabled="busy"
+          :aria-label="t('agent.settings.providers.protocol')"
+          :options="[
+            { value: 'chat-completions', label: t('agent.settings.providers.protocolChat') },
+            { value: 'responses', label: t('agent.settings.providers.protocolResponses') },
+          ]"
+        />
+      </div>
       <div>
         <div class="font-mono text-sm font-semibold text-foreground">{{ capabilityEditorModel.id }}</div>
         <div class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.providers.capabilityDescription') }}</div>
