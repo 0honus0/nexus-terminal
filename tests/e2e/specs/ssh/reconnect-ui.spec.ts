@@ -52,7 +52,7 @@ async function createMultiSessionConnections(request: APIRequestContext): Promis
 
 async function openConnectionFromWorkspacePicker(page: Page, connectionId: number): Promise<void> {
   await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
-  const picker = page.getByRole('heading', { name: 'Select server to connect', exact: true });
+  const picker = page.getByTestId('workspace-start-page');
   await expect(picker).toBeVisible();
   const row = page.locator(`[data-testid="workspace-connection-list"] [data-connection-id="${connectionId}"]`);
   await expect(row).toBeVisible();

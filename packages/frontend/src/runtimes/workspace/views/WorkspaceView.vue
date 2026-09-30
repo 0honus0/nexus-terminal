@@ -362,10 +362,10 @@
       });
       return;
     }
+    connectionPickerVisible.value = false;
     opening.value = true;
     try {
       await registry.open(connection);
-      connectionPickerVisible.value = false;
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return;
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
