@@ -100,8 +100,71 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
   await expect(hub).toBeVisible();
 });
 
+test('Agent launcher docks on either edge, restores its side and expands on focus', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  await page.goto('/connections');
+  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(launcher).toBeVisible();
+
+  for (const side of ['left', 'right'] as const) {
+    const initial = (await launcher.boundingBox())!;
+    const width = await page.evaluate(() => document.documentElement.clientWidth);
+    await page.mouse.move(initial.x + initial.width / 2, initial.y + initial.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(side === 'left' ? 22 : width - 22, initial.y + initial.height / 2 - 40, { steps: 5 });
+    await page.mouse.up();
+    await page.mouse.move(width / 2, 50);
+    await expect(hub).toHaveCount(0);
+    await page.reload();
+    await expect(launcher).toBeVisible();
+    const restoredWidth = await page.evaluate(() => innerWidth);
+    const hiddenX = side === 'left' ? -22 : restoredWidth - 22;
+    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(hiddenX);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await launcher.focus();
+    await expect
+      .poll(async () => Math.round((await launcher.boundingBox())!.x))
+      .toBe(side === 'left' ? 0 : restoredWidth - 44);
+    await launcher.evaluate((button) => (button as HTMLButtonElement).blur());
+    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(hiddenX);
+    await launcher.click({ button: 'right' });
+  }
+  await launcher.press('Enter');
+  await expect(hub).toBeVisible();
+});
+
 test.describe('touch Agent launcher', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test('touch launcher docks half-hidden and opens from its exposed half', async ({ page, context }) => {
+    await loginAsInitialAdmin(context.request);
+    await setUiLanguage(context.request);
+    await enableAgentWithRecommendedNexusAgent(context.request);
+    await page.goto('/connections');
+    const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+    const hub = page.locator('section[aria-label="Agent"]');
+    await expect(launcher).toBeVisible();
+    const initial = (await launcher.boundingBox())!;
+    const y = initial.y + 22 - 60;
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: initial.x + 22, y: initial.y + 22 }],
+    });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 22, y }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect(hub).toHaveCount(0);
+    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
+    await page.reload();
+    await expect(launcher).toBeVisible();
+    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
+    await page.touchscreen.tap(11, (await launcher.boundingBox())!.y + 22);
+    await expect(hub).toBeVisible();
+    await cdp.detach();
+  });
 
   test('touch drag moves the launcher without opening the Hub', async ({ page, context }) => {
     await loginAsInitialAdmin(context.request);

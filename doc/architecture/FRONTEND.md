@@ -193,6 +193,8 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 `features/agent` 提供全局悬浮 Host、设置、历史、运行详情、approval、artifact、plugin App surface 与 onboarding。Agent 不属于 Workspace Runtime；需要 Workspace、terminal 或文件能力时使用 Backend contract 或 app 提供的 capability，不读取 Workspace 私有 state。
 
+Agent launcher 的位置与左右贴边状态由 `host/window-manager.ts` 统一持有和持久化，视口变化按贴边侧重新定位；`AgentLauncher.vue` 只负责拖动、边缘吸附触发和半隐藏展示，悬停/聚焦展开不改写保存的位置。
+
 Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 MessagePort 通信。它不能获得主应用 session cookie、HTTP client 或 Vue owner 实例。完整 Agent 设计见 [Agent 架构](../AGENT.md)。
 
 ## 验证
