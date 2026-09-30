@@ -43,35 +43,36 @@ function markerCount(text: string, marker: string): number {
 }
 
 async function captureQuickCommandsEvidence(page: Page, testInfo: TestInfo, name: 'before' | 'after'): Promise<void> {
-  const metrics = await page.evaluate(() => {
-    const quickView = [...document.querySelectorAll<HTMLElement>('[data-testid="quick-commands-view"]')].find(
-      (element) => element.getClientRects().length > 0,
-    );
-    const list = quickView?.querySelector<HTMLElement>('[data-testid="quick-command-list"]');
-    const search = quickView?.querySelector<HTMLElement>('[data-testid="quick-command-search"]');
-    const add = quickView?.querySelector<HTMLElement>('[data-testid="quick-command-add"]');
-    const rect = (element: Element | null) => {
-      if (!element) return null;
-      const box = element.getBoundingClientRect();
-      return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
-    };
-    return {
-      language: document.documentElement.lang,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      pageScrollWidth: document.documentElement.scrollWidth,
-      bodyScrollWidth: document.body.scrollWidth,
-      quickView: rect(quickView ?? null),
-      list: rect(list ?? null),
-      listClientWidth: list?.clientWidth ?? 0,
-      listScrollWidth: list?.scrollWidth ?? 0,
-      listClientHeight: list?.clientHeight ?? 0,
-      listScrollHeight: list?.scrollHeight ?? 0,
-      search: rect(search ?? null),
-      add: rect(add ?? null),
-      commandCount: quickView?.querySelectorAll('[data-command-id]').length ?? 0,
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim(),
-    };
-  });
+  const metrics = await page
+    .locator('.quick-commands-root')
+    .filter({ visible: true })
+    .first()
+    .evaluate((quickView) => {
+      const list = quickView.querySelector<HTMLElement>('.quick-command-list-area');
+      const search = quickView.querySelector<HTMLElement>('.quick-commands-search');
+      const add = quickView.querySelector<HTMLElement>('.quick-control--primary');
+      const rect = (element: Element | null) => {
+        if (!element) return null;
+        const box = element.getBoundingClientRect();
+        return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
+      };
+      return {
+        language: document.documentElement.lang,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        pageScrollWidth: document.documentElement.scrollWidth,
+        bodyScrollWidth: document.body.scrollWidth,
+        quickView: rect(quickView ?? null),
+        list: rect(list ?? null),
+        listClientWidth: list?.clientWidth ?? 0,
+        listScrollWidth: list?.scrollWidth ?? 0,
+        listClientHeight: list?.clientHeight ?? 0,
+        listScrollHeight: list?.scrollHeight ?? 0,
+        search: rect(search ?? null),
+        add: rect(add ?? null),
+        commandCount: quickView?.querySelectorAll('[data-command-id]').length ?? 0,
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim(),
+      };
+    });
   const screenshotPath = testInfo.outputPath(`quick-command-${name}.png`);
   const metricsPath = testInfo.outputPath(`quick-command-${name}.metrics.json`);
   await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled', caret: 'hide' });
@@ -111,8 +112,8 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-  const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
+  const quickView = page.locator('.quick-commands-root').filter({ visible: true }).first();
+  const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
   await expect(quickView).toBeVisible({ timeout: 20_000 });
   await page.setViewportSize({ width: 1280, height: 800 });
   await captureQuickCommandsEvidence(page, testInfo, 'before');
@@ -120,12 +121,12 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
   let commandId = 0;
   let defaultDialogSize: { width: number; height: number } | null = null;
   await step('create the command through the workspace UI', async () => {
-    await quickView.getByTestId('quick-command-add').click();
-    const form = page.getByTestId('quick-command-form');
+    await quickView.getByRole('button', { name: 'Add', exact: true }).click();
+    const form = page.getByRole('dialog', { name: 'Add Quick Command', exact: true }).locator('form');
     await expect(form).toBeVisible();
     const dialog = page.getByRole('dialog', { name: 'Add Quick Command', exact: true });
     const beforeResize = await dialog.boundingBox();
-    const resizeHandle = dialog.getByTestId('quick-command-resize-bottom-right');
+    const resizeHandle = dialog.getByLabel('Resize quick command window', { exact: true });
     const handleBox = await resizeHandle.boundingBox();
     expect(beforeResize).toBeTruthy();
     expect(handleBox).toBeTruthy();
@@ -142,9 +143,9 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     expect(afterResize!.y).toBeGreaterThanOrEqual(0);
     expect(afterResize!.x + afterResize!.width).toBeLessThanOrEqual(1280);
     expect(afterResize!.y + afterResize!.height).toBeLessThanOrEqual(800);
-    await form.getByTestId('quick-command-name').fill(ORIGINAL_NAME);
-    await form.getByTestId('quick-command-command').fill("printf 'QUICK_MANAGED_V1\\n'");
-    await form.getByTestId('quick-command-submit').click();
+    await form.getByPlaceholder('Optional, for quick identification', { exact: true }).fill(ORIGINAL_NAME);
+    await form.locator('textarea[required]').fill("printf 'QUICK_MANAGED_V1\\n'");
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(form).toBeHidden({ timeout: 15_000 });
 
     await expect
@@ -154,7 +155,7 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
   });
 
   await slowStep('search narrows the list and the saved command executes in the live SSH terminal', async () => {
-    const search = quickView.getByTestId('quick-command-search');
+    const search = quickView.getByPlaceholder('Search name or command...', { exact: true });
     await search.fill('Managed Quick Command');
     const row = quickView.locator(`[data-command-id="${commandId}"]`);
     await expect(row).toBeVisible();
@@ -168,7 +169,7 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await page.keyboard.press('Escape');
     await expect(contextMenu).toBeHidden();
     const before = markerCount(await terminalRows.innerText(), 'QUICK_MANAGED_V1');
-    await row.getByTestId('quick-command-execute').click();
+    await row.click();
     await expect
       .poll(async () => markerCount(await terminalRows.innerText(), 'QUICK_MANAGED_V1'), { timeout: 15_000 })
       .toBeGreaterThan(before);
@@ -184,17 +185,19 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await expect(menu).toBeVisible();
     await menu.getByText('Edit', { exact: true }).click();
 
-    const form = page.getByTestId('quick-command-form');
-    await expect(form.getByTestId('quick-command-name')).toHaveValue(ORIGINAL_NAME);
+    const form = page.getByRole('dialog', { name: 'Edit Quick Command', exact: true }).locator('form');
+    await expect(form.getByPlaceholder('Optional, for quick identification', { exact: true })).toHaveValue(
+      ORIGINAL_NAME,
+    );
     const reopenedDialog = page.getByRole('dialog', { name: 'Edit Quick Command', exact: true });
     const reopenedBox = await reopenedDialog.boundingBox();
     expect(reopenedBox).toBeTruthy();
     expect(defaultDialogSize).toBeTruthy();
     expect(Math.abs(reopenedBox!.width - defaultDialogSize!.width)).toBeLessThan(2);
     expect(Math.abs(reopenedBox!.height - defaultDialogSize!.height)).toBeLessThan(2);
-    await form.getByTestId('quick-command-name').fill(EDITED_NAME);
-    await form.getByTestId('quick-command-command').fill("printf 'QUICK_MANAGED_V2\\n'");
-    await form.getByTestId('quick-command-submit').click();
+    await form.getByPlaceholder('Optional, for quick identification', { exact: true }).fill(EDITED_NAME);
+    await form.locator('textarea[required]').fill("printf 'QUICK_MANAGED_V2\\n'");
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(form).toBeHidden({ timeout: 15_000 });
 
     await expect
@@ -203,11 +206,11 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
   });
 
   await slowStep('edited command executes and delete removes it from UI and persistence', async () => {
-    const search = quickView.getByTestId('quick-command-search');
+    const search = quickView.getByPlaceholder('Search name or command...', { exact: true });
     await search.fill('Edited');
     const row = quickView.locator(`[data-command-id="${commandId}"]`);
     await expect(row).toBeVisible();
-    await row.getByTestId('quick-command-execute').click();
+    await row.click();
     await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('QUICK_MANAGED_V2');
     await captureQuickCommandsEvidence(page, testInfo, 'after');
 
@@ -251,18 +254,17 @@ test('quick commands remain usable when the tag catalog fails to load', async ({
 
   try {
     await connectTestSshFromConnectionsPage(page, connectionId);
-    const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+    const quickView = page.locator('.quick-commands-root').filter({ visible: true }).first();
     const row = quickView.locator(`[data-command-id="${commandId}"]`);
-    await expect(quickView.getByTestId('quick-command-tag-load-warning')).toContainText(
+    await expect(quickView.getByRole('alert')).toContainText(
       'Failed to load Quick Command tags. Commands are still available: Network Error',
     );
     await expect(row).toBeVisible();
-    await expect(quickView.getByTestId('quick-command-group-untagged')).toHaveCount(0);
-    await expect(quickView.getByTestId(`quick-command-group-${tagId}`)).toHaveCount(0);
+    await expect(quickView.locator('.quick-command-group-card')).toHaveCount(0);
 
-    const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
+    const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
     const before = markerCount(await terminalRows.innerText(), 'QUICK_TAG_FAILURE_FALLBACK');
-    await row.getByTestId('quick-command-execute').click();
+    await row.click();
     await expect
       .poll(async () => markerCount(await terminalRows.innerText(), 'QUICK_TAG_FAILURE_FALLBACK'), { timeout: 15_000 })
       .toBeGreaterThan(before);
