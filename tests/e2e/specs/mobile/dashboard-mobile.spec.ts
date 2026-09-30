@@ -88,7 +88,7 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
 
       const dashboard = page.getByTestId('dashboard-view');
       await expect(dashboard).toBeVisible();
-      const navScroller = page.locator('header .app-nav-scroll').first();
+      const navScroller = page.locator('header .app-nav-links').first();
       await expect(navScroller).toBeVisible();
       const navMetrics = await navScroller.evaluate((element) => ({
         clientWidth: element.clientWidth,

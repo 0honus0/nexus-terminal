@@ -104,10 +104,6 @@
               <div v-if="proxy.username" class="break-all text-sm text-text-secondary sm:break-normal">
                 <i class="fas fa-user mr-1 text-xs opacity-70" aria-hidden="true" /> {{ proxy.username }}
               </div>
-              <div class="pt-1 text-xs text-text-secondary">
-                <i class="fas fa-clock mr-1 opacity-70" aria-hidden="true" />
-                {{ new Date(proxy.updatedAt * 1000).toLocaleString() }}
-              </div>
             </div>
             <template #actions>
               <UiButton

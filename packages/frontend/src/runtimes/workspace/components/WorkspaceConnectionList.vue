@@ -461,10 +461,11 @@
     margin-block: 0.375rem;
   }
   .workspace-connection-group:hover {
-    background: color-mix(in srgb, var(--link-active-color) 20%, var(--app-bg-color));
+    background: color-mix(in srgb, var(--text-color) 9%, var(--app-bg-color));
   }
   .workspace-connection-group {
-    background: color-mix(in srgb, var(--link-active-color) 16%, var(--app-bg-color));
+    background: color-mix(in srgb, var(--text-color) 5%, var(--app-bg-color));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-color) 45%, transparent);
   }
   .workspace-connection-item:hover {
     background: color-mix(in srgb, var(--link-active-color) 9%, var(--app-bg-color));

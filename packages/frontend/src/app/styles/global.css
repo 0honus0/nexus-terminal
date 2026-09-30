@@ -22,6 +22,7 @@ body {
   background-color: var(--app-bg-color);
   color: var(--text-color);
   line-height: 1.6;
+  caret-color: transparent;
 }
 
 a {
@@ -29,6 +30,19 @@ a {
 }
 
 @layer base {
+  input,
+  textarea,
+  [contenteditable]:not([contenteditable='false']) {
+    caret-color: auto;
+  }
+
+  button,
+  [role='button'],
+  [role='tab'],
+  nav {
+    user-select: none;
+  }
+
   button,
   input,
   textarea,

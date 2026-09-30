@@ -39,5 +39,11 @@
       padding-top: 0;
       border-top: 0;
     }
+    .ui-management-card__actions :deep(.ui-button) {
+      min-height: 44px;
+      min-width: 96px;
+      padding-inline: 18px;
+      font-size: 14px;
+    }
   }
 </style>

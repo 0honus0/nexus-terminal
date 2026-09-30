@@ -119,6 +119,7 @@
   };
   const openSuspendedSessions = () => router.push({ name: 'Workspace', query: { openSuspended: '1' } });
 
+  const relativeTimeFormatter = computed(() => new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' }));
   const formatRelativeTime = (timestamp: number | null | undefined): string => {
     if (!timestamp) return t('connections.status.never');
     try {
@@ -138,7 +139,7 @@
                   : absoluteSeconds < 31557600
                     ? [2629800, 'month']
                     : [31557600, 'year'];
-      return new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' }).format(Math.round(seconds / scale), unit);
+      return relativeTimeFormatter.value.format(Math.round(seconds / scale), unit);
     } catch {
       return String(timestamp);
     }
@@ -256,15 +257,19 @@
 
   const refreshDashboardData = async (initial = false) => {
     if (initial) loading.value = !connections.loaded.value || !tags.loaded.value;
-    const [, , audit] = await Promise.allSettled([
+    const catalog = Promise.allSettled([
       initial ? connections.load() : connections.revalidate(),
       initial ? tags.load() : tags.revalidate(),
-      auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }),
+    ]).then(() => {
+      if (initial) loading.value = false;
+    });
+    const [, , audit] = await Promise.allSettled([
+      catalog,
       preferences.load(),
+      auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }),
       suspended.load({ silent: true, force: true }),
     ]);
     if (audit.status === 'fulfilled') activity.value = audit.value.logs.slice(0, MAX_RECENT_LOGS);
-    if (initial) loading.value = false;
   };
 
   const activateDashboard = () => {
