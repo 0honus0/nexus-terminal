@@ -24,9 +24,9 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
-  const commandInput = page.getByTestId('command-input');
-  const historyView = page.getByTestId('command-history-view').filter({ visible: true }).first();
+  const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
+  const commandInput = page.locator('.command-bar-command-input');
+  const historyView = page.locator('.command-history-root').filter({ visible: true }).first();
   await expect(historyView).toBeVisible({ timeout: 20_000 });
 
   await slowStep('real terminal commands appear in history', async () => {
@@ -59,21 +59,21 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
   });
 
   await step('search filters unrelated history and copy writes the exact command to clipboard', async () => {
-    const search = historyView.getByTestId('command-history-search');
+    const search = historyView.locator('.command-history-search');
     await search.fill('HISTORY_MANAGED_A');
     const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
     await expect(rowA).toBeVisible();
     await expect(historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_B' })).toHaveCount(0);
 
     await rowA.click({ button: 'right' });
-    await page.getByTestId('command-history-copy').click();
+    await page.getByRole('button', { name: 'Copy', exact: true }).click();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(COMMAND_A);
   });
 
   await slowStep('clicking the filtered history entry re-runs it in the same SSH terminal', async () => {
     const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
     const before = markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A');
-    await rowA.getByTestId('command-history-execute').click();
+    await rowA.locator('.command-history-command').click();
     await expect
       .poll(async () => markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A'), { timeout: 15_000 })
       .toBeGreaterThan(before);
@@ -84,7 +84,7 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
     const historyId = Number(await rowA.getAttribute('data-history-id'));
     expect(historyId).toBeGreaterThan(0);
     await rowA.click({ button: 'right' });
-    await page.getByTestId('command-history-delete').click();
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(rowA).toHaveCount(0);
 
     await expect
