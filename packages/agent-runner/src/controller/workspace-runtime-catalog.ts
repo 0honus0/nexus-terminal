@@ -63,7 +63,9 @@ const decodePack = (value: unknown): CatalogPack => {
     familyId: stringValue(record.familyId),
     versionId: stringValue(record.versionId),
     displayName: stringValue(record.displayName),
-    contentDigestByArch: stringRecordValue(record.contentDigestByArch),
+    ...(record.archiveDigestByArch === undefined
+      ? {}
+      : { archiveDigestByArch: stringRecordValue(record.archiveDigestByArch) }),
     downloadRefByArch: stringRecordValue(record.downloadRefByArch),
     capabilities: stringArrayValue(record.capabilities, 512),
     runnerApiRange: stringValue(record.runnerApiRange),
@@ -131,12 +133,10 @@ export class WorkspaceRuntimeCatalog {
       }
       seen.add(ref.familyId);
       const pack = this.pack(ref.familyId, ref.versionId);
-      const digest = pack.contentDigestByArch[process.arch];
       if (
         pack.status !== 'supported' ||
         !pack.supportedArchitectures.includes(process.arch) ||
-        !digest ||
-        digest !== ref.contentDigest
+        !pack.downloadRefByArch[process.arch]
       ) {
         throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
       }

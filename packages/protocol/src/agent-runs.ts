@@ -46,7 +46,6 @@ export interface AgentRunEnvironmentSelectionDto {
 export interface AgentRunEnvironmentToolchainPackDto {
   familyId: string;
   versionId: string;
-  contentDigest: string;
 }
 
 export interface AgentRunEnvironmentRunnerPluginDto {

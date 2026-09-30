@@ -51,7 +51,7 @@ Ubuntu/Debian host 首次启用前，从源码 checkout 执行：
 ./scripts/agent-runner/prepare-ubuntu-host.sh
 ```
 
-该脚本只安装与 Toolchain Catalog 一致、SHA-256 固定的 `mise 2026.9.5`、Tool Pack 解包工具以及 Workspace Terminal 使用的系统 `script(1)` / `stty`，不编译或安装 Nexus 自定义 native helper。Tool Pack 仍执行版本校验与 Nexus canonical tree digest 校验，并通过 `/opt/nexus/packs/<family>/<version>` 暴露精确版本；多个 Workspace 复用同一份不可变 Tool Pack。
+该脚本只安装与 Toolchain Catalog 一致、SHA-256 固定的 `mise 2026.9.5`、Tool Pack 解包工具以及 Workspace Terminal 使用的系统 `script(1)` / `stty`，不编译或安装 Nexus 自定义 native helper。Node/Python/Go 的支持版本由 catalog JSON 维护，mise 按指定版本安装并保留上游校验，Runner 检查实际版本，不维护语言工具链的构建来源 lock 或预设安装树摘要。工具链通过 `/opt/nexus/packs/<family>/<version>` 暴露；多个 Workspace 复用同一份已安装工具链。
 
 Runner 默认监听 `127.0.0.1:8790`。Runner 是可选增强能力：未配置 `NEXUS_AGENT_RUNNER_URL` 时，Frontend/Backend/guacd 基础栈独立启动，连接管理、SSH/基础命令和诊断能力不依赖 Runner。需要 Runner 时可使用宿主 Runner，或通过 Compose `runner` profile 启用容器 Runner；两种模式都必须在 `.env` 设置同一个 `NEXUS_AGENT_RUNNER_TOKEN`。Runner 所有 HTTP 与 WebSocket 控制入口统一要求 `Authorization: Bearer <NEXUS_AGENT_RUNNER_TOKEN>` 和 `X-Nexus-Agent-Protocol: 2026-09-13`；token 至少 32 字符，推荐使用 `openssl rand -hex 32` 生成。该 token 代表对 Runner 的完整控制权，不得写入日志或交给浏览器/Plugin。Runner HTTP 本身不负责 TLS：不要直接暴露到公网；跨主机部署应放在受信私网，或由 TLS 反向代理保护。
 

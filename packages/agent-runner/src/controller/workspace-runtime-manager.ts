@@ -43,15 +43,10 @@ const decodeWorkspaceRuntimeMetadata = (value: unknown): WorkspaceRuntimeMetadat
   const toolchain = record.toolchain.map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('WORKSPACE_METADATA_INVALID');
     const pack = item as Record<string, unknown>;
-    if (
-      typeof pack.familyId !== 'string' ||
-      typeof pack.versionId !== 'string' ||
-      typeof pack.contentDigest !== 'string' ||
-      !/^sha256:[a-f0-9]{64}$/.test(pack.contentDigest)
-    ) {
+    if (typeof pack.familyId !== 'string' || typeof pack.versionId !== 'string') {
       throw new Error('WORKSPACE_METADATA_INVALID');
     }
-    return { familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest };
+    return { familyId: pack.familyId, versionId: pack.versionId };
   });
   return {
     workspaceId: record.workspaceId,
@@ -77,13 +72,8 @@ const toolchainFingerprint = (runtimeDigest: string, toolchain: readonly Toolcha
           .map((pack) => ({
             familyId: pack.familyId,
             versionId: pack.versionId,
-            contentDigest: pack.contentDigest,
           }))
-          .sort((a, b) =>
-            `${a.familyId}\u0000${a.versionId}\u0000${a.contentDigest}`.localeCompare(
-              `${b.familyId}\u0000${b.versionId}\u0000${b.contentDigest}`,
-            ),
-          ),
+          .sort((a, b) => `${a.familyId}\u0000${a.versionId}`.localeCompare(`${b.familyId}\u0000${b.versionId}`)),
       ),
     )
     .digest('hex');

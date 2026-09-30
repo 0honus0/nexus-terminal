@@ -618,7 +618,7 @@ Nexus 当前是单用户应用。Workspace/Generation/Toolchain 的职责是组�
 - Workspace 项目文件持久且彼此独立；
 - Generation 冻结一次 Workspace Profile/runtime 选择；
 - Node/Python/Go Tool Pack 全局不可变共享，通过当前 generation 的 PATH 选择；
-- Python Tool Pack 在 catalog 相邻的 `mise/python/mise.toml` 与 `mise.lock` 中固定上游预编译构建 URL、archive SHA-256 和 GitHub attestation provenance；安装只消费该 lock，之后仍验证规范化安装树的 catalog digest。同一 Python 版本的上游重建不会自动改变安装产物，更新时须同时核验 source lock、树摘要和真实 Docker smoke；
+- Node/Python/Go 的支持版本和架构由 `scripts/docker/agent-runner/catalog/catalog.json` 提供供用户选择；Runner 统一交给 mise 按指定版本安装，保留上游校验与安装后版本检查，不固定预编译构建来源或预设安装树摘要，也不引入选择指纹。工具链引用只有 familyId/versionId，安装缓存按类型、版本和 Runner 架构管理；已安装工具链不自动替换，使用中不允许卸载；
 - `/workspace/deps`、`/workspace/build` 等逻辑路径映射到按 toolchain fingerprint 分区的 Runner data root；
 - job、ACP、Terminal 和 Runner Plugin 都是 Runner 原生子进程；job/ACP/Runner Plugin 由独立 process group 管理并随 owner 生命周期整组回收，Terminal 使用真实 PTY foreground process group 处理交互 signal；
 - Host Runner 子进程共享宿主安全上下文；Docker Runner 子进程共享同一个 Runner 容器安全上下文；

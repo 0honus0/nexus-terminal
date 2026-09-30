@@ -84,7 +84,7 @@ export const resolveWorkspaceToolchain = (
       ? family.find((candidate) => candidate.versionId === requested)
       : (family.find((candidate) => candidate.enabled) ?? family.find((candidate) => candidate.installed) ?? family[0]);
     if (!pack) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
-    return { familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest };
+    return { familyId: pack.familyId, versionId: pack.versionId };
   });
 };
 

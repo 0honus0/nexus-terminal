@@ -78,6 +78,8 @@ GitHub Actions provides the canonical complete delivery evidence. The quality jo
 
 For a long-lived remote development host that may already be serving Nexus on the default E2E ports, use `pnpm run test:e2e:remote -- <Playwright args>`. The remote launcher keeps explicit `NEXUS_E2E_*_PORT` overrides, dynamically reserves unique loopback ports for every unset E2E service, and invokes the installed `pnpm` executable directly. It enforces the repository Node engine before starting tests. This helper is for focused remote reproduction; it does not replace the canonical GitHub Actions evidence.
 
+The standalone Runner smoke installs supported Node, Python and Go versions through public catalog/command endpoints, submits family/version references without content digests, and verifies installed-state projection. The full deployment smoke retains real execution, version switching, shared installation and lifecycle checks.
+
 ## CI balanced shards
 
 Release publication validates a complete successful run of this workflow for the current main SHA, so every selected shard and Docker smoke must pass together; retired per-project check names are not release prerequisites. UI regression locators must use accessible roles, names and existing product state or rendered component classes instead of requiring production-only test markers.

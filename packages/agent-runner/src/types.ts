@@ -15,7 +15,6 @@ export interface PluginRunnerTarget {
 export interface ToolchainPackRef {
   familyId: string;
   versionId: string;
-  contentDigest: string;
 }
 
 export interface CatalogPack {
@@ -23,7 +22,7 @@ export interface CatalogPack {
   familyId: string;
   versionId: string;
   displayName: string;
-  contentDigestByArch: Record<string, string>;
+  archiveDigestByArch?: Record<string, string>;
   downloadRefByArch: Record<string, string>;
   capabilities: string[];
   runnerApiRange: string;

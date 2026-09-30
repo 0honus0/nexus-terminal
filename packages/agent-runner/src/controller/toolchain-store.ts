@@ -9,7 +9,7 @@ const safeSegment = (value: string): string => {
 
 interface InstallMarker {
   schemaVersion: 1;
-  contentDigest: string;
+  architecture: string;
   installedAt: number;
 }
 
@@ -19,14 +19,13 @@ const decodeInstallMarker = (value: unknown): InstallMarker => {
   const record = value as Record<string, unknown>;
   if (
     record.schemaVersion !== 1 ||
-    typeof record.contentDigest !== 'string' ||
-    !/^sha256:[a-f0-9]{64}$/.test(record.contentDigest) ||
+    record.architecture !== process.arch ||
     !Number.isSafeInteger(record.installedAt) ||
     Number(record.installedAt) < 0
   ) {
     throw new Error('WORKSPACE_TOOLCHAIN_MARKER_INVALID');
   }
-  return { schemaVersion: 1, contentDigest: record.contentDigest, installedAt: Number(record.installedAt) };
+  return { schemaVersion: 1, architecture: process.arch, installedAt: Number(record.installedAt) };
 };
 
 const markerName = '.nexus-install.json';
@@ -35,7 +34,7 @@ const MAX_RELOCATABLE_TEXT_BYTES = 8 * 1024 * 1024;
 
 interface RuntimeViewMarker {
   schemaVersion: 1;
-  contentDigest: string;
+  architecture: string;
   executionPath: string;
 }
 
@@ -130,12 +129,7 @@ export class ToolchainStore {
   }
 
   path(ref: ToolchainPackRef): string {
-    return path.join(
-      this.packsRoot,
-      safeSegment(ref.familyId),
-      safeSegment(ref.versionId),
-      safeSegment(ref.contentDigest.replace(/^sha256:/, '')),
-    );
+    return path.join(this.packsRoot, safeSegment(ref.familyId), safeSegment(ref.versionId), process.arch);
   }
 
   canonicalPath(ref: Pick<ToolchainPackRef, 'familyId' | 'versionId'>): string {
@@ -149,14 +143,14 @@ export class ToolchainStore {
       '.runtime',
       safeSegment(ref.familyId),
       safeSegment(ref.versionId),
-      safeSegment(ref.contentDigest.replace(/^sha256:/, '')),
+      process.arch,
     );
     const markerPath = path.join(target, runtimeViewMarkerName);
     try {
       const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8')) as Partial<RuntimeViewMarker>;
       if (
         marker.schemaVersion === 1 &&
-        marker.contentDigest === ref.contentDigest &&
+        marker.architecture === process.arch &&
         marker.executionPath === target &&
         (fs.statSync(target).mode & 0o200) === 0
       ) {
@@ -179,7 +173,7 @@ export class ToolchainStore {
     });
     makeTreeWritable(staging);
     relocateRuntimeTree(staging, this.canonicalPath(ref), target);
-    const marker: RuntimeViewMarker = { schemaVersion: 1, contentDigest: ref.contentDigest, executionPath: target };
+    const marker: RuntimeViewMarker = { schemaVersion: 1, architecture: process.arch, executionPath: target };
     fs.writeFileSync(path.join(staging, runtimeViewMarkerName), `${JSON.stringify(marker)}\n`, { mode: 0o600 });
     lockTree(staging);
     fs.renameSync(staging, target);
@@ -210,11 +204,10 @@ export class ToolchainStore {
   }
 
   stagingPath(commandId: string, ref: ToolchainPackRef): string {
-    const digest = safeSegment(ref.contentDigest.replace(/^sha256:/, '')).slice(0, 16);
     return path.join(
       this.packsRoot,
       '.staging',
-      `${safeSegment(commandId)}-${safeSegment(ref.familyId)}-${safeSegment(ref.versionId)}-${digest}`,
+      `${safeSegment(commandId)}-${safeSegment(ref.familyId)}-${safeSegment(ref.versionId)}-${process.arch}`,
     );
   }
 
@@ -223,14 +216,14 @@ export class ToolchainStore {
     try {
       const parsed = decodeInstallMarker(JSON.parse(fs.readFileSync(marker, 'utf8')) as unknown);
       const rootMode = fs.statSync(this.path(ref)).mode & 0o777;
-      return parsed.schemaVersion === 1 && parsed.contentDigest === ref.contentDigest && (rootMode & 0o200) === 0;
+      return parsed.schemaVersion === 1 && parsed.architecture === process.arch && (rootMode & 0o200) === 0;
     } catch {
       return false;
     }
   }
 
   writeMarker(stagingPath: string, ref: ToolchainPackRef, installedAt: number): void {
-    const marker: InstallMarker = { schemaVersion: 1, contentDigest: ref.contentDigest, installedAt };
+    const marker: InstallMarker = { schemaVersion: 1, architecture: process.arch, installedAt };
     fs.writeFileSync(path.join(stagingPath, markerName), `${JSON.stringify(marker)}\n`, { mode: 0o444 });
   }
 
@@ -290,7 +283,7 @@ export class ToolchainStore {
       '.runtime',
       safeSegment(ref.familyId),
       safeSegment(ref.versionId),
-      safeSegment(ref.contentDigest.replace(/^sha256:/, '')),
+      process.arch,
     );
     removeManagedTree(runtimeView);
     removeManagedTree(`${runtimeView}.staging`);

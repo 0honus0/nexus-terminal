@@ -104,10 +104,11 @@ const getJson = async (path) => {
   throw lastError;
 };
 const catalog = await getJson('/v1/catalog');
-const pack = catalog.packs.find(
-  (candidate) => candidate.familyId === 'node' && candidate.versionId === '24.21.0' && candidate.status === 'supported',
-);
-if (!pack?.contentDigest) throw new Error('Node 24.21.0 Toolchain pack is unavailable in the standalone Runner catalog.');
+const packs = ['node', 'python', 'go'].map((familyId) => {
+  const pack = catalog.packs.find((candidate) => candidate.familyId === familyId && candidate.status === 'supported');
+  if (!pack) throw new Error(`${familyId} Toolchain pack is unavailable in the standalone Runner catalog.`);
+  return { familyId: pack.familyId, versionId: pack.versionId };
+});
 
 const now = Math.floor(Date.now() / 1000);
 const commandId = `image-pack-install-${Date.now()}`;
@@ -115,7 +116,7 @@ const command = {
   action: 'packInstall',
   commandId,
   deadlineAt: now + 300,
-  packs: [{ familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest }],
+  packs,
 };
 await readJson(await fetch(`${baseUrl}/v1/commands`, { method: 'POST', headers, body: JSON.stringify(command) }));
 let record;
@@ -130,11 +131,13 @@ for (let attempt = 0; attempt < 180; attempt += 1) {
 if (record?.status !== 'succeeded') throw new Error(`Toolchain pack install timed out: ${JSON.stringify(record)}`);
 
 const after = await getJson('/v1/catalog');
-const installed = after.packs.find(
-  (candidate) => candidate.familyId === pack.familyId && candidate.versionId === pack.versionId,
-);
-if (installed?.installed !== true) throw new Error('Installed Node Toolchain pack was not projected as installed.');
-console.log('standalone Agent Runner container smoke passed: native runtime ready + Node 24.21.0 Toolchain materialized');
+for (const pack of packs) {
+  const installed = after.packs.find(
+    (candidate) => candidate.familyId === pack.familyId && candidate.versionId === pack.versionId,
+  );
+  if (installed?.installed !== true) throw new Error(`Installed ${pack.familyId} Toolchain pack was not projected as installed.`);
+}
+console.log('standalone Agent Runner container smoke passed: native runtime ready + Node/Python/Go Toolchains materialized');
 NODE
 
 failed=0

@@ -517,9 +517,9 @@ const catalog = await get('/v1/catalog');
 const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 const pack = catalog.packs.find((candidate) => candidate.familyId === 'base-tools' && candidate.enabled);
 const nodePack = catalog.packs.find(
-  (candidate) => candidate.familyId === 'node' && candidate.enabled && candidate.contentDigest,
+  (candidate) => candidate.familyId === 'node' && candidate.enabled,
 );
-if (!recipe || !pack?.contentDigest || !nodePack?.contentDigest) {
+if (!recipe || !pack || !nodePack) {
   throw new Error('Smoke catalog does not expose the Workspace Runtime/base-tools/Node profile.');
 }
 
@@ -611,8 +611,8 @@ const identity = {
   runtimeDigest: catalog.runtimeDigest,
   catalogRevision: catalog.revision,
   toolchain: [
-    { familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest },
-    { familyId: nodePack.familyId, versionId: nodePack.versionId, contentDigest: nodePack.contentDigest },
+    { familyId: pack.familyId, versionId: pack.versionId },
+    { familyId: nodePack.familyId, versionId: nodePack.versionId },
   ],
   runnerPlugins: [],
   acpProfiles: [
@@ -1087,10 +1087,10 @@ if (removeGeneration.status !== 'succeeded') {
 
 const ref = (familyId, versionId) => {
   const candidate = catalog.packs.find(
-    (item) => item.familyId === familyId && item.versionId === versionId && item.enabled && item.contentDigest,
+    (item) => item.familyId === familyId && item.versionId === versionId && item.enabled,
   );
   if (!candidate) throw new Error(`Required smoke Tool Pack unavailable: ${familyId}@${versionId}`);
-  return { familyId, versionId, contentDigest: candidate.contentDigest };
+  return { familyId, versionId };
 };
 const baseRef = ref('base-tools', '1');
 const newToolchain = [baseRef, ref('go', '1.27.1'), ref('node', '24.21.0'), ref('python', '3.14.7')];
@@ -1146,6 +1146,7 @@ const runWorkspaceJob = async (identity, shell, expectedStdout) => {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   if (current?.status !== 'succeeded' || current.result?.exitCode !== 0 || current.result?.stdout !== expectedStdout) {
+    console.error('Workspace toolchain probe:', { toolchain: identity.toolchain, shell });
     throw new Error(`Workspace toolchain job failed: ${JSON.stringify(current)}`);
   }
 };
@@ -1289,7 +1290,7 @@ console.log(
 NODE
 
 # Both multi-version Workspaces share the global immutable Tool Store. Reusing the same
-# exact PackRef must not create per-Workspace copies or duplicate digest directories.
+# exact family/version must not create per-Workspace copies or duplicate architecture directories.
 assert_single_pack_copy() {
   local family="$1"
   local version="$2"

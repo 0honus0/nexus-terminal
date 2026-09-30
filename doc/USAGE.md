@@ -182,7 +182,7 @@ Passkey 的部署域名配置见 [部署与更新](./DEPLOYMENT.md#passkey--weba
 
 ## 镜像发布
 
-Agent Python 运行环境固定到经过来源验证的预编译构建；相同 Python 版本的上游重建不会静默替换产物，来源 checksum 或安装树摘要不匹配时拒绝安装。
+Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保留 Node、Python、Go 的可选版本和架构，用户从列表选择；安装使用 mise 获取指定版本并检查实际版本，不限制该版本具体的上游构建来源，也不要求维护安装树摘要或选择指纹。已安装环境重复使用，不因上游重建自动替换；使用中的版本不能卸载，明确卸载后重新安装可获取该版本当前的上游构建。
 
 镜像发布保留生产依赖 high 级安全审计；release channel 仅发布当前 main 提交，并要求该提交的完整 E2E（基础检查、全部 Playwright 分片和 Docker smoke）成功。Actions 运行标题显示 channel、架构和发布目标，主镜像与 Runner 任务使用固定名称，准备失败时仍可辨认任务。发布和部署方式见 [部署与更新](./DEPLOYMENT.md)。
 

@@ -51,7 +51,6 @@ export const runEnvironmentDto = (
     toolchain: environment.toolchain.map((pack) => ({
       familyId: pack.familyId,
       versionId: pack.versionId,
-      contentDigest: pack.contentDigest,
     })),
     runnerPlugins: environment.runnerPlugins.map((plugin) => ({
       pluginId: plugin.pluginId,
