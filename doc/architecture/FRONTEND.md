@@ -148,6 +148,8 @@ flowchart TD
 
 ### 全局导航与会话展示
 
+顶部导航与窄屏设置功能栏共用 `foundation/interaction/useHorizontalDragScroll`，仅为鼠标提供阈值拖动和拖后点击抑制；触摸与触控板保留原生滚动，不拦截纵向触摸手势。Pointer capture 由该 interaction owner 释放。
+
 重新挂载 Workspace 页面也执行前台存活核对。Session 的即时重连请求可在续接期间合并，成功进入 connected 后消耗待处理请求而不重复 resume；失败时仍允许即时重试。
 
 前台恢复事件（visibility、pageshow、online）由 View 转交 session owner。Session 通过 `WorkspaceSocket` 的单飞、有界 `workspace.ping` 检查当前 attachment，正常链路不替换；失效时仅以异常 close 分离 transport，不发送产品 `workspace.close`，再沿用普通续接或挂起目录核对。旧探测不能关闭新 socket，后台期间探测超时不触发主动断链；挂起静默恢复只接受 available owner，不自动 takeover。

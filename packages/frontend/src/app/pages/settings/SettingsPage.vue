@@ -9,6 +9,7 @@
   import { SecuritySettingsPanel } from '@/features/security/public';
   import { useAuthSession } from '@/features/auth/public';
   import { supportedLocales } from '@/app/i18n';
+  import { useHorizontalDragScroll } from '@/foundation/interaction';
   import AboutPanel from './AboutPanel.vue';
   import packageJson from '../../../../package.json';
 
@@ -27,6 +28,7 @@
   const mobileView = ref<'menu' | 'detail'>('detail');
   const currentVersion = packageJson.version;
   const contentContainer = ref<HTMLElement | null>(null);
+  const settingsTabsDrag = useHorizontalDragScroll();
 
   watch(
     active,
@@ -298,7 +300,14 @@
 
           <!-- 居中设置项（无遮挡时居中，放不下时右侧隐藏/可滑动） -->
           <div
-            class="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar py-0.5"
+            class="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar py-0.5 cursor-grab select-none"
+            @pointerdown="settingsTabsDrag.pointerdown"
+            @pointermove="settingsTabsDrag.pointermove"
+            @pointerup="settingsTabsDrag.pointerup"
+            @pointercancel="settingsTabsDrag.pointercancel"
+            @lostpointercapture="settingsTabsDrag.lostpointercapture"
+            @click.capture="settingsTabsDrag.click"
+            @dragstart.prevent
             role="tablist"
             :aria-label="t('settings.sectionsAriaLabel')"
           >

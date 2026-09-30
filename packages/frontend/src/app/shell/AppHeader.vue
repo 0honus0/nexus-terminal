@@ -8,6 +8,7 @@
   import { usePreferences } from '@/features/preferences/public';
   import { releaseRepository, releaseRepositoryUrl } from '@/app/config/release';
   import { disposeWorkspaceRuntime } from '@/app/workspaceLifecycle';
+  import { useHorizontalDragScroll } from '@/foundation/interaction';
 
   const emit = defineEmits<{ customizeAppearance: [] }>();
   const router = useRouter();
@@ -18,6 +19,7 @@
   const logoutError = ref<string | null>(null);
   const loggingOut = ref(false);
   const navigationLinks = ref<HTMLElement | null>(null);
+  const navigationDrag = useHorizontalDragScroll();
   const navigation = [
     { path: '/', label: 'nav.dashboard' },
     { path: '/workspace', label: 'nav.terminal' },
@@ -69,7 +71,17 @@
       <RouterLink to="/" class="app-brand" :aria-label="t('nav.dashboard')">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="h-7 w-auto shrink-0" />
       </RouterLink>
-      <div ref="navigationLinks" class="app-nav-links">
+      <div
+        ref="navigationLinks"
+        class="app-nav-links"
+        @pointerdown="navigationDrag.pointerdown"
+        @pointermove="navigationDrag.pointermove"
+        @pointerup="navigationDrag.pointerup"
+        @pointercancel="navigationDrag.pointercancel"
+        @lostpointercapture="navigationDrag.lostpointercapture"
+        @click.capture="navigationDrag.click"
+        @dragstart.prevent
+      >
         <RouterLink v-for="item in navigation" :key="item.path" class="nav-link inline-flex" :to="item.path">{{
           t(item.label)
         }}</RouterLink>
@@ -210,7 +222,9 @@
       padding: 4px;
       gap: 4px;
       border-radius: 12px;
-      background: color-mix(in srgb, var(--nav-item-active-bg-color) 35%, transparent);
+      background: transparent;
+      cursor: grab;
+      user-select: none;
       scrollbar-width: none;
     }
     .app-nav-links::-webkit-scrollbar {

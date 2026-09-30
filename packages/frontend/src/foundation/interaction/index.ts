@@ -1,4 +1,5 @@
 export { useDraggablePosition } from './useDraggablePosition';
+export { useHorizontalDragScroll } from './useHorizontalDragScroll';
 export type { DragPosition, DraggablePositionOptions } from './useDraggablePosition';
 export { useResizeHandle } from './useResizeHandle';
 export type { ResizeHandleOptions, ResizeSize } from './useResizeHandle';
