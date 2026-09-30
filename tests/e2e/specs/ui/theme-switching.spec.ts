@@ -1,8 +1,16 @@
 import { execFileSync } from 'node:child_process';
-import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
 import { ensureInitialAdmin, loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+
+const appearanceCustomizer = (page: Page): Locator =>
+  page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+const appearanceField = (surface: Locator, label: string): Locator =>
+  surface
+    .locator('[data-ui="form-field"]')
+    .filter({ has: surface.page().locator('label').getByText(label, { exact: true }) })
+    .locator('input, textarea');
 
 async function appBackground(page: Page): Promise<string> {
   return page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim());
@@ -419,20 +427,22 @@ test('terminal preset themes load from the API, switch through the UI, and persi
 
     await step('backend-only preset is discoverable and can be applied through the style customizer', async () => {
       await page.getByTitle('Customize Style').click();
-      const customizer = page.getByTestId('style-customizer');
+      const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
       await expect(customizer).toBeVisible();
-      await customizer.getByTestId('style-customizer-terminal-tab').click();
+      await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
 
-      const search = customizer.getByTestId('terminal-theme-search');
+      const search = customizer.getByPlaceholder('Search theme name...', { exact: true });
       await search.fill(targetTheme!.name);
-      const themeRow = customizer.getByTestId(`terminal-theme-row-${targetThemeId}`);
+      const themeRow = customizer
+        .getByRole('listitem')
+        .filter({ has: page.getByTitle(targetTheme!.name, { exact: true }) });
       await expect(themeRow).toHaveCount(1);
       await expect(themeRow).toBeVisible();
 
       const savePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
-      await themeRow.getByTestId('terminal-theme-apply').click();
+      await themeRow.getByRole('button', { name: 'Apply', exact: true }).click();
       expect((await savePromise).ok()).toBeTruthy();
 
       await expect
@@ -443,17 +453,17 @@ test('terminal preset themes load from the API, switch through the UI, and persi
         })
         .toBe(targetThemeId);
 
-      const activeThemeName = customizer.getByTestId('terminal-active-theme-name');
+      const activeThemeName = customizer.getByText('Active Theme:', { exact: true }).locator('..').locator('strong');
       await expect(activeThemeName).toHaveText(targetTheme!.name);
     });
 
     await step('selected terminal preset survives a full page reload', async () => {
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByTitle('Customize Style').click();
-      const customizer = page.getByTestId('style-customizer');
-      await customizer.getByTestId('style-customizer-terminal-tab').click();
+      const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+      await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
 
-      const activeThemeName = customizer.getByTestId('terminal-active-theme-name');
+      const activeThemeName = customizer.getByText('Active Theme:', { exact: true }).locator('..').locator('strong');
       await expect(activeThemeName).toHaveText(targetTheme!.name);
 
       const response = await context.request.get('/api/v1/appearance');
@@ -482,8 +492,8 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
     await page.setViewportSize({ width: 320, height: 667 });
     await page.goto('/');
     await page.getByTitle('Customize Style').click();
-    const customizer = page.getByTestId('style-customizer');
-    const dialog = customizer.getByTestId('style-customizer-dialog');
+    const customizer = appearanceCustomizer(page);
+    const dialog = customizer;
     await expect(dialog).toBeVisible();
     const dialogBox = await dialog.boundingBox();
     expect(dialogBox).not.toBeNull();
@@ -495,7 +505,7 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
       .toBeLessThanOrEqual(1);
 
     await step('custom UI JSON persists through the one Appearance owner', async () => {
-      await customizer.getByTestId('ui-theme-json').fill(
+      await customizer.locator('textarea').fill(
         JSON.stringify(
           {
             '--app-bg-color': '#f1f2f3',
@@ -509,7 +519,7 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
       const save = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
-      await customizer.getByTestId('ui-theme-save').click();
+      await customizer.getByRole('button', { name: 'Save UI Theme', exact: true }).click();
       expect((await save).ok()).toBeTruthy();
       await expect.poll(() => appBackground(page)).toBe('#f1f2f3');
       const persisted = await appearance(context.request);
@@ -519,28 +529,38 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
     });
 
     await step('desktop and mobile terminal typography plus text effects persist independently', async () => {
-      await customizer.getByTestId('style-customizer-terminal-tab').click();
-      await customizer.getByTestId('terminal-font-family').fill('E2E Terminal Mono, monospace');
-      await customizer.getByTestId('terminal-font-size-desktop').fill('17');
-      await customizer.getByTestId('terminal-font-size-mobile').fill('23');
+      await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+      await appearanceField(customizer, 'Terminal Font').fill('E2E Terminal Mono, monospace');
+      await appearanceField(customizer, 'Terminal Font Size').fill('17');
+      await appearanceField(customizer, 'Mobile Terminal Font Size').fill('23');
       const terminalFontSave = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
-      await customizer.getByTestId('terminal-font-save').click();
+      await customizer
+        .locator('section')
+        .filter({ has: page.getByRole('heading', { name: 'Terminal Styles', exact: true }) })
+        .last()
+        .getByRole('button', { name: 'Save', exact: true })
+        .click();
       expect((await terminalFontSave).ok()).toBeTruthy();
 
-      await customizer.getByTestId('terminal-text-stroke-enabled').check();
-      await customizer.getByTestId('terminal-text-stroke-width').fill('1.5');
-      await customizer.getByTestId('terminal-text-stroke-color').fill('#112233');
-      await customizer.getByTestId('terminal-text-shadow-enabled').check();
-      await customizer.getByTestId('terminal-text-shadow-x').fill('1');
-      await customizer.getByTestId('terminal-text-shadow-y').fill('2');
-      await customizer.getByTestId('terminal-text-shadow-blur').fill('3');
-      await customizer.getByTestId('terminal-text-shadow-color').fill('rgba(4,5,6,0.7)');
+      await customizer.getByRole('checkbox', { name: 'Enable Text Stroke', exact: true }).check();
+      await appearanceField(customizer, 'Stroke Width (px)').fill('1.5');
+      await appearanceField(customizer, 'Stroke Color').fill('#112233');
+      await customizer.getByRole('checkbox', { name: 'Enable Text Shadow', exact: true }).check();
+      await appearanceField(customizer, 'Shadow X Offset (px)').fill('1');
+      await appearanceField(customizer, 'Shadow Y Offset (px)').fill('2');
+      await appearanceField(customizer, 'Shadow Blur Radius (px)').fill('3');
+      await appearanceField(customizer, 'Shadow Color').fill('rgba(4,5,6,0.7)');
       const textEffectsSave = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
-      await customizer.getByTestId('terminal-text-effects-save').click();
+      await customizer
+        .locator('section')
+        .filter({ has: page.getByRole('heading', { name: 'Text Stroke Settings', exact: true }) })
+        .last()
+        .getByRole('button', { name: 'Save', exact: true })
+        .click();
       expect((await textEffectsSave).ok()).toBeTruthy();
 
       await expect
@@ -560,11 +580,11 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
     });
 
     await step('desktop and mobile editor typography persist independently and survive reload', async () => {
-      await customizer.getByTestId('style-customizer-other-tab').click();
-      await customizer.getByTestId('editor-font-family').fill('E2E Editor Mono, monospace');
-      await customizer.getByTestId('editor-font-size-desktop').fill('15');
-      await customizer.getByTestId('editor-font-size-mobile').fill('21');
-      await customizer.getByTestId('editor-font-save').click();
+      await customizer.getByRole('button', { name: 'Other Settings', exact: true }).click();
+      await appearanceField(customizer, 'Editor Font Family').fill('E2E Editor Mono, monospace');
+      await appearanceField(customizer, 'Editor Font Size').fill('15');
+      await appearanceField(customizer, 'Mobile Editor Font Size').fill('21');
+      await customizer.getByRole('button', { name: 'Save', exact: true }).click();
       await expect
         .poll(async () => {
           const value = await appearance(context.request);
@@ -574,13 +594,13 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
 
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByTitle('Customize Style').click();
-      const reloaded = page.getByTestId('style-customizer');
-      await reloaded.getByTestId('style-customizer-terminal-tab').click();
-      await expect(reloaded.getByTestId('terminal-font-size-desktop')).toHaveValue('17');
-      await expect(reloaded.getByTestId('terminal-font-size-mobile')).toHaveValue('23');
-      await reloaded.getByTestId('style-customizer-other-tab').click();
-      await expect(reloaded.getByTestId('editor-font-size-desktop')).toHaveValue('15');
-      await expect(reloaded.getByTestId('editor-font-size-mobile')).toHaveValue('21');
+      const reloaded = appearanceCustomizer(page);
+      await reloaded.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+      await expect(appearanceField(reloaded, 'Terminal Font Size')).toHaveValue('17');
+      await expect(appearanceField(reloaded, 'Mobile Terminal Font Size')).toHaveValue('23');
+      await reloaded.getByRole('button', { name: 'Other Settings', exact: true }).click();
+      await expect(appearanceField(reloaded, 'Editor Font Size')).toHaveValue('15');
+      await expect(appearanceField(reloaded, 'Mobile Editor Font Size')).toHaveValue('21');
     });
   } finally {
     await context.request.put('/api/v1/appearance', {
@@ -627,16 +647,16 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
     await page.setViewportSize({ width: 320, height: 667 });
     await page.goto('/');
     await page.getByTitle('Customize Style').click();
-    const customizer = page.getByTestId('style-customizer');
-    await customizer.getByTestId('style-customizer-background-tab').click();
-    await expect(customizer.getByTestId('page-background-settings')).toBeVisible();
+    const customizer = appearanceCustomizer(page);
+    await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+    await expect(customizer.getByRole('heading', { name: 'Page Background', exact: true })).toBeVisible();
 
     await step('page and terminal background uploads persist and remain inside the mobile viewport', async () => {
       const pageUpload = page.waitForResponse(
         (response) =>
           response.url().endsWith('/api/v1/appearance/background/page') && response.request().method() === 'POST',
       );
-      await customizer.getByTestId('page-background-file').setInputFiles({
+      await customizer.locator('input[type="file"]').nth(0).setInputFiles({
         name: 'm06-page.png',
         mimeType: 'image/png',
         buffer: ONE_PIXEL_PNG,
@@ -645,7 +665,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       await expect.poll(async () => Boolean((await appearance(context.request)).pageBackgroundImage)).toBeTruthy();
       await expect.poll(() => page.evaluate(() => document.body.style.backgroundImage)).not.toBe('none');
 
-      const overlay = customizer.getByTestId('terminal-background-overlay');
+      const overlay = customizer.locator('input[type="range"]');
       await overlay.fill('0.37');
       await expect(overlay).toHaveValue('0.37');
 
@@ -653,7 +673,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
         (response) =>
           response.url().endsWith('/api/v1/appearance/background/terminal') && response.request().method() === 'POST',
       );
-      await customizer.getByTestId('terminal-background-file').setInputFiles({
+      await customizer.locator('input[type="file"]').nth(1).setInputFiles({
         name: 'm06-terminal.png',
         mimeType: 'image/png',
         buffer: ONE_PIXEL_PNG,
@@ -662,7 +682,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       await expect.poll(async () => Boolean((await appearance(context.request)).terminalBackgroundImage)).toBeTruthy();
       await expect(overlay).toHaveValue('0.37');
 
-      await customizer.getByTestId('terminal-background-overlay-save').click();
+      await overlay.locator('..').getByRole('button', { name: 'Save', exact: true }).click();
       await expect.poll(async () => (await appearance(context.request)).terminalBackgroundOverlayOpacity).toBe(0.37);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
@@ -670,38 +690,40 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
     });
 
     await step('local HTML preset create, duplicate conflict, apply, rename, and delete use the real API', async () => {
-      await customizer.getByTestId('html-theme-add').click();
-      const editor = page.getByRole('dialog').filter({ has: page.getByTestId('html-theme-preset-name') });
+      await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
+      const editor = page
+        .getByRole('dialog')
+        .filter({ has: page.getByPlaceholder('e.g., my-theme.html', { exact: true }) });
       await expect(editor).toBeVisible();
-      await editor.getByTestId('html-theme-preset-name').fill(HTML_THEME_NAME.replace(/\.html$/, ''));
-      await editor.getByTestId('html-theme-preset-content').fill(HTML_THEME_CONTENT);
+      await appearanceField(editor, 'Theme Name').fill(HTML_THEME_NAME.replace(/\.html$/, ''));
+      await appearanceField(editor, 'Theme Content').fill(HTML_THEME_CONTENT);
       const create = page.waitForResponse(
         (response) =>
           response.url().endsWith('/api/v1/appearance/html-presets/local') && response.request().method() === 'POST',
       );
-      await editor.getByTestId('html-theme-preset-save').click();
+      await editor.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await create).status()).toBe(201);
       await expect(editor).toBeHidden();
 
-      await customizer.getByTestId('html-theme-local-search').fill('E2E Appearance Local');
-      let row = customizer.getByTestId(`html-theme-local-row-${HTML_THEME_NAME}`);
+      await customizer.getByPlaceholder('Search local themes...', { exact: true }).fill('E2E Appearance Local');
+      let row = customizer.getByRole('listitem').filter({ has: page.getByTitle(HTML_THEME_NAME, { exact: true }) });
       await expect(row).toBeVisible();
       const apply = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
-      await row.getByTestId('html-theme-apply').click();
+      await row.getByRole('button', { name: 'Apply', exact: true }).click();
       expect((await apply).ok()).toBeTruthy();
       await expect.poll(async () => (await appearance(context.request)).terminalCustomHtml).toBe(HTML_THEME_CONTENT);
 
-      await customizer.getByTestId('html-theme-add').click();
-      const duplicate = page.getByRole('dialog').filter({ has: page.getByTestId('html-theme-preset-name') });
-      await duplicate.getByTestId('html-theme-preset-name').fill(HTML_THEME_NAME.replace(/\.html$/, ''));
-      await duplicate.getByTestId('html-theme-preset-content').fill('<div>must not overwrite</div>');
+      await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
+      const duplicate = editor;
+      await appearanceField(duplicate, 'Theme Name').fill(HTML_THEME_NAME.replace(/\.html$/, ''));
+      await appearanceField(duplicate, 'Theme Content').fill('<div>must not overwrite</div>');
       const conflict = page.waitForResponse(
         (response) =>
           response.url().endsWith('/api/v1/appearance/html-presets/local') && response.request().method() === 'POST',
       );
-      await duplicate.getByTestId('html-theme-preset-save').click();
+      await duplicate.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await conflict).status()).toBe(400);
       await expect(duplicate).toBeVisible();
       const originalContent = await context.request.get(
@@ -711,16 +733,16 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       expect(await originalContent.text()).toBe(HTML_THEME_CONTENT);
       await duplicate.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-      row = customizer.getByTestId(`html-theme-local-row-${HTML_THEME_NAME}`);
-      await row.getByTestId('html-theme-edit').click();
-      const rename = page.getByRole('dialog').filter({ has: page.getByTestId('html-theme-preset-name') });
-      await rename.getByTestId('html-theme-preset-name').fill(HTML_THEME_RENAMED.replace(/\.html$/, ''));
-      await rename.getByTestId('html-theme-preset-save').click();
+      row = customizer.getByRole('listitem').filter({ has: page.getByTitle(HTML_THEME_NAME, { exact: true }) });
+      await row.getByRole('button', { name: 'Edit', exact: true }).click();
+      const rename = editor;
+      await appearanceField(rename, 'Theme Name').fill(HTML_THEME_RENAMED.replace(/\.html$/, ''));
+      await rename.getByRole('button', { name: 'Save', exact: true }).click();
       await expect(rename).toBeHidden();
-      await customizer.getByTestId('html-theme-local-search').fill('Renamed');
-      row = customizer.getByTestId(`html-theme-local-row-${HTML_THEME_RENAMED}`);
+      await customizer.getByPlaceholder('Search local themes...', { exact: true }).fill('Renamed');
+      row = customizer.getByRole('listitem').filter({ has: page.getByTitle(HTML_THEME_RENAMED, { exact: true }) });
       await expect(row).toBeVisible();
-      await row.getByTestId('html-theme-delete').click();
+      await row.getByRole('button', { name: 'Delete', exact: true }).click();
       const confirm = page.getByRole('dialog', { name: 'Please confirm' });
       await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect(row).toHaveCount(0);
@@ -730,14 +752,14 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       'real GitHub remote preset list, search, download, and apply persist through the Appearance owner',
       async () => {
         const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
-        await customizer.getByTestId('html-theme-remote-tab').click();
-        await customizer.getByTestId('html-theme-remote-repository').fill(repository);
+        await customizer.getByRole('button', { name: 'Remote Themes', exact: true }).click();
+        await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill(repository);
         const saveRepository = page.waitForResponse(
           (response) =>
             response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
             response.request().method() === 'PUT',
         );
-        await customizer.getByTestId('html-theme-remote-save').click();
+        await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
         expect((await saveRepository).ok()).toBeTruthy();
         await expect.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl).toBe(repository);
 
@@ -746,10 +768,10 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
             response.url().includes('/api/v1/appearance/html-presets/remote/list') &&
             response.request().method() === 'GET',
         );
-        await customizer.getByTestId('html-theme-remote-load').click();
+        await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
         expect((await listRemote).ok()).toBeTruthy();
-        await customizer.getByTestId('html-theme-remote-search').fill('丝带');
-        const remoteRow = customizer.getByTestId('html-theme-remote-row-丝带.html');
+        await customizer.getByPlaceholder('Search remote themes...', { exact: true }).fill('丝带');
+        const remoteRow = customizer.getByRole('listitem').filter({ has: page.getByText('丝带', { exact: true }) });
         await expect(remoteRow).toBeVisible();
 
         const remoteContent = page.waitForResponse(
@@ -760,7 +782,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
         const apply = page.waitForResponse(
           (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
         );
-        await remoteRow.getByTestId('html-theme-remote-apply').click();
+        await remoteRow.getByRole('button', { name: 'Apply', exact: true }).click();
         const downloaded = await remoteContent;
         expect(downloaded.ok()).toBeTruthy();
         const downloadedHtml = await downloaded.text();
@@ -800,34 +822,34 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       async () => {
         const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
         const before = (await appearance(context.request)).terminalCustomHtml;
-        await customizer
-          .getByTestId('html-theme-remote-repository')
-          .fill('https://example.com/not-a-github-repository');
+        await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill(
+          'https://example.com/not-a-github-repository',
+        );
         const invalidSave = page.waitForResponse(
           (response) =>
             response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
             response.request().method() === 'PUT',
         );
-        await customizer.getByTestId('html-theme-remote-save').click();
+        await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
         expect((await invalidSave).status()).toBe(400);
         expect((await appearance(context.request)).remoteHtmlPresetsUrl).toBe(repository);
         const load = page.waitForResponse((response) =>
           response.url().includes('/api/v1/appearance/html-presets/remote/list'),
         );
-        await customizer.getByTestId('html-theme-remote-load').click();
+        await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
         expect((await load).status()).toBe(400);
         expect((await appearance(context.request)).terminalCustomHtml).toBe(before);
 
-        await customizer.getByTestId('html-theme-remote-repository').fill('');
+        await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill('');
         const clearSave = page.waitForResponse(
           (response) =>
             response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
             response.request().method() === 'PUT',
         );
-        await customizer.getByTestId('html-theme-remote-save').click();
+        await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
         expect((await clearSave).ok()).toBeTruthy();
         await expect.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl ?? null).toBeNull();
-        await expect(customizer.getByTestId('html-theme-remote-load')).toBeDisabled();
+        await expect(customizer.getByRole('button', { name: 'refresh', exact: true })).toBeDisabled();
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
           .toBeLessThanOrEqual(1);
@@ -835,12 +857,12 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
     );
 
     await step('uploaded backgrounds are really removed and page CSS is cleared', async () => {
-      await customizer.getByTestId('style-customizer-background-tab').click();
+      await customizer.getByRole('button', { name: 'Background', exact: true }).click();
       const pageDelete = page.waitForResponse(
         (response) =>
           response.url().endsWith('/api/v1/appearance/background/page') && response.request().method() === 'DELETE',
       );
-      await customizer.getByTestId('page-background-remove').click();
+      await customizer.getByRole('button', { name: 'Remove Page Bg', exact: true }).click();
       expect((await pageDelete).ok()).toBeTruthy();
       await expect.poll(async () => Boolean((await appearance(context.request)).pageBackgroundImage)).toBeFalsy();
       await expect.poll(() => page.evaluate(() => document.body.style.backgroundImage)).toBe('none');
@@ -849,7 +871,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
         (response) =>
           response.url().endsWith('/api/v1/appearance/background/terminal') && response.request().method() === 'DELETE',
       );
-      await customizer.getByTestId('terminal-background-remove').click();
+      await customizer.getByRole('button', { name: 'Remove Terminal Bg', exact: true }).click();
       expect((await terminalDelete).ok()).toBeTruthy();
       await expect.poll(async () => Boolean((await appearance(context.request)).terminalBackgroundImage)).toBeFalsy();
     });
