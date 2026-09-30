@@ -66,6 +66,8 @@ For a long-lived remote development host that may already be serving Nexus on th
 
 ## CI balanced shards
 
+Release publication validates a complete successful run of this workflow for the current main SHA, so every selected shard and Docker smoke must pass together; retired per-project check names are not release prerequisites. UI regression locators must use accessible roles, names and existing product state or rendered component classes instead of requiring production-only test markers.
+
 The canonical push/pull-request workflow keeps eight isolated Playwright jobs, but their spec assignments are duration-balanced rather than fixed at one job per project. Manual dispatch can select 6–10 jobs. The allocator covers every spec under `auth`, `http`, `agent`, `websocket`, `ui`, `ssh`, and `mobile` exactly once. Matrix jobs fail directly when their Playwright command fails.
 
 Each job checks out the tested commit inside the current E2E runner image, links the frozen workspace offline, and regenerates the same deterministic shard assignment before running it. The image supplies Node 24, pnpm, Chromium and Playwright's system dependencies. Fresh GitHub-hosted runners eliminate local port collisions. The default balance can be inspected locally with `node scripts/e2e/balanced-shards.mjs plan --shards 8`.

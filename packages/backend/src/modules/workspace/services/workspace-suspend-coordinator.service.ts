@@ -128,7 +128,12 @@ export class WorkspaceSuspendCoordinatorService {
     this.workspaces.requireSession(workspaceId).shell.pause();
     mark.shellPaused = true;
   }
-  async markAttached(workspaceId: string, userId: number, ownerId: string, initialBuffer?: string) {
+  async markAttached(
+    workspaceId: string,
+    userId: number,
+    ownerId: string,
+    initialBuffer?: string,
+  ): Promise<{ suspendSessionId: string }> {
     await this.markForSuspend(workspaceId, userId, initialBuffer);
     const mark = this.marks.get(workspaceId);
     if (!mark || mark.userId !== userId) throw new Error('SUSPENDED_SESSION_OWNER_STALE');
@@ -156,7 +161,9 @@ export class WorkspaceSuspendCoordinatorService {
       mark.ownershipGeneration = ownership.generation;
     });
     await mark.ready;
-    if (this.marks.get(workspaceId) !== mark) throw new Error('SUSPENDED_SESSION_OWNER_STALE');
+    if (this.marks.get(workspaceId) !== mark || !mark.suspendSessionId) {
+      throw new Error('SUSPENDED_SESSION_OWNER_STALE');
+    }
     if (mark.shellPaused) {
       this.workspaces.requireSession(workspaceId).shell.resume();
       mark.shellPaused = false;

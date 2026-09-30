@@ -78,7 +78,16 @@ export async function ensureTestSshConnection(request: APIRequestContext): Promi
 
 export async function connectTestSshFromConnectionsPage(page: Page, connectionId: number): Promise<void> {
   await page.goto('/connections');
-  const row = page.getByTestId(`connection-row-${connectionId}`);
+  const response = await page.request.get('/api/v1/connections');
+  expect(response.ok()).toBeTruthy();
+  const connection = ((await response.json()) as Array<{ id: number; name: string; host: string }>).find(
+    (item) => item.id === connectionId,
+  );
+  expect(connection).toBeTruthy();
+  if (!connection) throw new Error(`SSH connection ${connectionId} is missing from the connection directory.`);
+  const row = page.locator('.connection-card').filter({
+    has: page.getByText(connection.name || connection.host, { exact: true }),
+  });
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page).toHaveURL(/\/workspace$/);
@@ -86,7 +95,7 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
   // actual Workspace lifecycle rather than racing a test-only timeout against the SSH 20s ready
   // timeout / 30s protocol timeout. The outer bound is only a deadlock guard; failures report the
   // last real state/message so transport regressions stay diagnosable instead of looking flaky.
-  const activeTab = page.getByTestId('terminal-tab-bar').getByRole('tab', { selected: true });
+  const activeTab = page.getByRole('tab', { selected: true });
   await expect(activeTab).toBeVisible();
   try {
     await expect(activeTab).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
@@ -99,18 +108,19 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
       }`,
     );
   }
-  await expect(page.getByTestId('command-input')).toBeEnabled();
+  await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
 }
 
 const visibleFileManagerModal = (page: Page): Locator =>
-  page.locator('[data-testid="file-manager-modal"][data-workspace-active="true"]:visible').first();
+  page.getByRole('dialog', { name: 'File Manager', exact: true }).filter({ visible: true }).first();
 const visibleFileManagerOpenButton = (page: Page): Locator =>
   page
-    .locator('[data-workspace-surface][data-workspace-active="true"] [data-testid="open-file-manager-button"]:visible')
+    .locator('[data-workspace-surface][data-workspace-active="true"]')
+    .getByRole('button', { name: 'File Manager', exact: true })
     .first();
 
 export function activeFileManagerList(page: Page): Locator {
-  return visibleFileManagerModal(page).getByTestId('file-manager-list');
+  return visibleFileManagerModal(page).locator('.file-manager-root table');
 }
 
 export function fileManagerRow(page: Page, filename: string): Locator {
@@ -128,7 +138,7 @@ export async function openConnectedFileManager(page: Page): Promise<void> {
 export async function closeConnectedFileManager(page: Page): Promise<void> {
   const modal = visibleFileManagerModal(page);
   await expect(modal).toBeVisible();
-  await modal.getByTestId('file-manager-modal-close').click();
+  await modal.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(modal).toBeHidden();
 }
 

@@ -96,6 +96,8 @@ Compose 默认以三个服务运行：
 
 当前发布 workflow 构建 `linux/amd64` 与 `linux/arm64`。GitHub Release 事件固定发布 `latest + release tag`；手动 `workflow_dispatch` 可选择 `dev` 或 `release` channel，默认 `dev`，并同时保留自定义 tag 或 `sha-<commit>` tag。
 
+发布运行标题直接显示事件或输入确定的 channel、architecture 和 target；主镜像与 Runner 发布任务使用固定名称，prepare 失败时也不会显示未解析的表达式。生产依赖审计保留 high 阻断，不跳过漏洞检查；邮件与归档依赖由根 lockfile 固定到修复版本。release channel 只允许当前 main 提交，并要求该提交已有完整成功的 E2E workflow（基础检查、所有动态 Playwright 分片、Docker deployment smoke），不再依赖已退出的逐项目 job 名称。
+
 正式发布 Agent 能力时应先发布 `nexus-agent-plugins` 的官方 catalog，再发布 Nexus 主镜像，因为生产 Host 默认从 `nexus-agent-plugins/releases/latest/download/catalog.json` 发现 first-party 插件。首次插件发布推荐先创建目标 tag 的 draft release，手动运行插件仓 `Release plugins` workflow 上传并核验 `catalog.json` 与两个签名 tar，再 publish release；随后再发布同一兼容线上的 Nexus 镜像。这样不会让已发布主镜像指向尚不存在的 `latest` catalog。
 
 ## `.env` 与持久化配置

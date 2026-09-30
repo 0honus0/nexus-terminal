@@ -16,7 +16,7 @@ const WORKSPACE_TAG_RENAMED = 'E2E Workspace Tag Renamed For Narrow Mobile';
 
 async function openWorkspaceConnectionPicker(page: Page) {
   await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
-  const list = page.getByTestId('workspace-connection-list');
+  const list = page.locator('.workspace-connection-list:visible');
   await expect(list).toBeVisible({ timeout: 20_000 });
   return list;
 }
@@ -71,7 +71,7 @@ test('workspace connection search filters by name and host and restores the full
   await connectTestSshFromConnectionsPage(page, primaryId);
 
   await page.getByTitle('Connections', { exact: true }).click();
-  const list = page.getByTestId('workspace-connection-list');
+  const list = page.locator('.workspace-connection-list:visible');
   const search = list.locator('input[data-focus-id="connectionListSearch"]');
   const primaryRow = list.locator(`li[data-connection-id="${primaryId}"]`);
   const secondaryRow = list.locator(`li[data-connection-id="${secondaryId}"]`);
@@ -165,7 +165,7 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
   await connectTestSshFromConnectionsPage(page, primaryId);
   await page.setViewportSize({ width: 360, height: 800 });
   await page.getByTitle('Connections', { exact: true }).click();
-  const list = page.getByTestId('workspace-connection-list');
+  const list = page.locator('.workspace-connection-list:visible');
   await expect(list).toBeVisible({ timeout: 20_000 });
 
   let tagId = 0;

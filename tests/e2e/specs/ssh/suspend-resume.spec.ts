@@ -64,14 +64,14 @@ test('marking suspend keeps the UI tab interactive and unmarking keeps the shell
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
-  const terminal = page.getByTestId('terminal');
+  const terminal = page.getByRole('application', { name: 'Terminal', exact: true });
   await expect(terminal).toBeVisible();
-  const activeTab = page.getByTestId('terminal-tab-bar').getByRole('tab', { selected: true });
+  const activeTab = page.getByRole('tab', { selected: true });
   await activeTab.click({ button: 'right' });
   await page.getByRole('button', { name: 'Suspend Session', exact: true }).click();
   await expect(activeTab).toBeVisible();
   await expect(terminal).toBeVisible();
-  const command = page.getByTestId('command-input');
+  const command = page.locator('.command-bar-command-input');
   await command.fill('echo MARKED_UI_ALIVE');
   await command.press('Enter');
   await expect(terminal.locator('.xterm-rows')).toContainText('MARKED_UI_ALIVE');

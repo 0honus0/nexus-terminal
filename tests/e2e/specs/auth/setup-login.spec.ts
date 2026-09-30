@@ -24,7 +24,7 @@ test.describe('initial setup', () => {
     const setupResponse = await setupResponsePromise;
     expect(setupResponse.status()).toBe(201);
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByTestId('app-header')).toHaveCount(0);
+    await expect(page.getByRole('banner')).toHaveCount(0);
 
     const setupStateAfterRegistration = await request.get('/api/v1/auth/needs-setup');
     expect(setupStateAfterRegistration.ok()).toBeTruthy();
@@ -121,7 +121,7 @@ test.describe('initial setup', () => {
 test('invalid password login stays anonymous and surfaces the real form error', async ({ page, context }) => {
   await page.goto('/login');
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByTestId('app-header')).toHaveCount(0);
+  await expect(page.getByRole('banner')).toHaveCount(0);
   await page.locator('#username').fill(E2E_ADMIN.username);
   await page.locator('#password').fill('Definitely-Wrong-E2E-Password!');
 
@@ -134,7 +134,7 @@ test('invalid password login stays anonymous and surfaces the real form error', 
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('alert')).toContainText(/\S+/);
-  await expect(page.getByTestId('app-header')).toHaveCount(0);
+  await expect(page.getByRole('banner')).toHaveCount(0);
   const status = await context.request.get('/api/v1/auth/status');
   expect(status.status()).toBe(401);
 });
@@ -142,7 +142,7 @@ test('invalid password login stays anonymous and surfaces the real form error', 
 test('logs in, establishes a server session, and opens the dashboard', async ({ page, context }) => {
   await page.goto('/login');
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByTestId('app-header')).toHaveCount(0);
+  await expect(page.getByRole('banner')).toHaveCount(0);
 
   await page.locator('#username').fill(E2E_ADMIN.username);
   await page.locator('#password').fill(E2E_ADMIN.password);
@@ -155,7 +155,7 @@ test('logs in, establishes a server session, and opens the dashboard', async ({ 
   const loginResponse = await loginResponsePromise;
   expect(loginResponse.status()).toBe(200);
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByTestId('app-header')).toBeVisible();
+  await expect(page.getByRole('banner')).toBeVisible();
 
   const authStatus = await context.request.get('/api/v1/auth/status');
   expect(authStatus.ok()).toBeTruthy();

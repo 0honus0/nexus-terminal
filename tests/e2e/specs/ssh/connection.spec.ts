@@ -16,7 +16,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
 
   await step('open add SSH connection form', async () => {
     await page.goto('/connections');
-    await page.getByTestId('connections-add-button').click();
+    await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Add New Connection' })).toBeVisible();
   });
 
@@ -33,11 +33,11 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
       (response) =>
         response.url().includes('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
     );
-    await page.getByTestId('connection-test-button').click();
+    await page.getByRole('button', { name: 'Test Connection', exact: true }).click();
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({ success: true });
-    const testResult = page.getByTestId('connection-test-result');
+    const testResult = page.locator('form footer span.text-success');
     await expect(testResult).toBeVisible();
     await expect(testResult).toHaveClass(/text-success/);
     await expect(testResult).toContainText('Success');
@@ -47,7 +47,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
     const createPromise = page.waitForResponse(
       (response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
     );
-    await page.getByTestId('connection-submit-button').click();
+    await page.locator('form button[type="submit"]').click();
     const response = await createPromise;
     expect(response.status()).toBe(201);
     await expect(page.getByText(E2E_SSH.name, { exact: true }).first()).toBeVisible();
@@ -60,17 +60,15 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
       const row = page.getByText(E2E_SSH.name, { exact: true }).first().locator('xpath=ancestor::li');
       await row.getByRole('button', { name: 'Connect', exact: true }).click();
       await expect(page).toHaveURL(/\/workspace$/);
-      await expect(page.getByTestId('terminal-tab-bar').getByRole('tab', { selected: true })).toHaveAttribute(
-        'data-session-state',
-        'connected',
-        { timeout: 10_000 },
-      );
+      await expect(page.getByRole('tab', { selected: true })).toHaveAttribute('data-session-state', 'connected', {
+        timeout: 10_000,
+      });
 
-      const initialLoading = page.locator('[data-testid="file-manager-loading-state"]:visible');
+      const initialLoading = page.locator('.file-manager-loading-state:visible');
       await expect(initialLoading).toHaveCount(1);
-      await expect(page.locator('[data-testid="file-manager-list"]:visible')).toHaveCount(0);
+      await expect(page.locator('.file-manager-root table:visible')).toHaveCount(0);
       await expect(page.getByText('Directory is empty', { exact: true })).toHaveCount(0);
-      await expect(page.locator('[data-testid="file-manager-list"]:visible tr[data-filename="seed.txt"]')).toBeVisible({
+      await expect(page.locator('.file-manager-root table:visible tr[data-filename="seed.txt"]')).toBeVisible({
         timeout: 20_000,
       });
     } finally {
@@ -79,14 +77,14 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
     }
 
     if (functionalScreenshotsEnabled()) {
-      const terminal = page.getByTestId('terminal');
-      const commandInput = page.getByTestId('command-input');
+      const terminal = page.getByRole('application', { name: 'Terminal', exact: true });
+      const commandInput = page.locator('.command-bar-command-input');
       await expect(terminal).toBeVisible({ timeout: 20_000 });
       await expect(commandInput).toBeEnabled({ timeout: 20_000 });
-      const embeddedFileManager = page.locator('[data-testid="file-manager-list"]').filter({ visible: true });
+      const embeddedFileManager = page.locator('.file-manager-root table').filter({ visible: true });
       await expect(embeddedFileManager).toHaveCount(1);
       await expect(embeddedFileManager.locator('tr[data-filename="seed.txt"]')).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByTestId('file-editor-view').filter({ visible: true })).toBeVisible();
+      await expect(page.locator('.file-editor-container').filter({ visible: true })).toBeVisible();
       await commandInput.fill('clear');
       await commandInput.press('Enter');
       await commandInput.fill("printf 'Nexus Terminal documentation screenshot\\n'");
@@ -97,7 +95,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
       await captureFunctionalScreenshot(page, 'ssh-terminal.png', { viewport: { width: 1440, height: 900 } });
     }
 
-    const embeddedFileManager = page.locator('[data-testid="file-manager-list"]').filter({ visible: true });
+    const embeddedFileManager = page.locator('.file-manager-root table').filter({ visible: true });
     await expect(embeddedFileManager.locator('tr[data-filename="seed.txt"]')).toBeVisible({ timeout: 20_000 });
   });
 });
@@ -139,12 +137,12 @@ test('Connect All waits for each Workspace binding before mounted file managers 
     });
 
     await page.goto('/connections');
-    await page.getByTestId('connections-search').fill(prefix);
-    await expect(page.locator('li[data-testid^="connection-row-"]')).toHaveCount(2);
+    await page.getByPlaceholder('Search connections...').fill(prefix);
+    await expect(page.locator('.connection-card')).toHaveCount(2);
     await page.getByRole('button', { name: 'Connect All', exact: true }).click();
     await expect(page).toHaveURL(/\/workspace$/);
 
-    const tabs = page.getByTestId('terminal-tab-bar').getByRole('tab');
+    const tabs = page.getByRole('tab');
     await expect(tabs).toHaveCount(2, { timeout: 20_000 });
     await expect
       .poll(() => tabs.evaluateAll((items) => items.map((item) => item.getAttribute('data-session-state'))), {
@@ -158,7 +156,7 @@ test('Connect All waits for each Workspace binding before mounted file managers 
     const firstTab = tabs.filter({ hasText: `${prefix} A` });
     const secondTab = tabs.filter({ hasText: `${prefix} B` });
     await firstTab.click();
-    const commandInput = page.getByTestId('command-input').filter({ visible: true });
+    const commandInput = page.locator('.command-bar-command-input').filter({ visible: true });
     await commandInput.fill('for i in $(seq 1 80); do echo NEXUS_BACKGROUND_BATCH_$i; sleep 0.03; done');
     await commandInput.press('Enter');
     await page.waitForTimeout(120);
@@ -166,7 +164,7 @@ test('Connect All waits for each Workspace binding before mounted file managers 
     await page.waitForTimeout(2_800);
     await firstTab.click();
     await expect
-      .poll(() => page.locator('[data-testid="terminal"]:visible .xterm-rows').innerText(), { timeout: 10_000 })
+      .poll(() => page.locator('.terminal-inner-container:visible .xterm-rows').innerText(), { timeout: 10_000 })
       .toContain('NEXUS_BACKGROUND_BATCH_80');
 
     expect(
