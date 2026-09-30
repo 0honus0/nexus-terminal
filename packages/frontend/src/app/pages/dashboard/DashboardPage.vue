@@ -524,8 +524,7 @@
                   type="search"
                   density="comfortable"
                   :placeholder="t('dashboard.searchConnectionsPlaceholder')"
-                  class="w-full"
-                  style="--ui-control-radius: 12px"
+                  class="dashboard-connection-search w-full"
                 >
                   <template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
                 </UiInput>
@@ -877,7 +876,19 @@
     box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
   }
 
+  .dashboard-connection-search {
+    background: var(--ui-fill-inset);
+  }
+
+  .dashboard-connection-search:hover {
+    background: var(--ui-fill-inset-hover);
+  }
+
   @media (max-width: 639px) {
+    .dashboard-connection-search {
+      --ui-control-radius: 8px;
+    }
+
     .dashboard-filter-select-gen2[data-ui-gen='2'] {
       --ui-control-padding-inline: 12px;
       --ui-control-gap: 8px;
