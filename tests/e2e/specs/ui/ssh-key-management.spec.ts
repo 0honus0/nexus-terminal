@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { expect, test, type APIRequestContext } from '../../support/fixtures';
+import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { configureSshE2eSettings, E2E_SSH } from '../../support/ssh';
 import { step } from '../../support/steps';
@@ -9,6 +9,10 @@ const ORIGINAL_NAME = 'Z-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarro
 const EDITED_NAME = 'A-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobileEdited';
 const SORT_PEER_NAME = 'M-E2EManagedSSHKeySortPeer';
 const CONNECTION_NAME = 'E2E SSH Auth Switch';
+const keyManager = (page: Page) =>
+  page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: /^(SSH Key Management|Add New SSH Key|Edit SSH Key)$/ }) });
 const PRIVATE_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
   type: 'pkcs1',
   format: 'pem',
@@ -54,25 +58,25 @@ test('SSH key management UI adds, renames without replacing private key, and del
 
   await step('open SSH key manager from the connection authentication form', async () => {
     await page.goto('/connections');
-    await page.getByTestId('connections-add-button').click();
-    const connectionForm = page.getByTestId('connection-form');
+    await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
+    const connectionForm = page.locator('form.connection-form');
     await expect(connectionForm).toBeVisible();
     await connectionForm.getByRole('button', { name: 'SSH Key', exact: true }).click();
     const selector = connectionForm.locator('#ssh-key-select');
     await expect(connectionForm.getByRole('button', { name: 'Saved SSH Key', exact: true })).toHaveCount(0);
     await expect(connectionForm.getByRole('button', { name: 'Direct Private Key', exact: true })).toHaveCount(0);
     await expect(connectionForm.getByText('Private Key Content', { exact: true })).toHaveCount(0);
-    const manageButton = connectionForm.getByTestId('ssh-key-manage-button');
+    const manageButton = connectionForm.getByRole('button', { name: 'Manage SSH Keys', exact: true });
     for (const control of [selector, manageButton]) {
       const box = await control.boundingBox();
       expect(box).not.toBeNull();
       expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(box!.x + box!.width).toBeLessThanOrEqual(320);
     }
-    await connectionForm.getByTestId('ssh-key-manage-button').click();
-    const modal = page.getByTestId('ssh-key-management-modal');
+    await manageButton.click();
+    const modal = keyManager(page);
     await expect(modal).toBeVisible();
-    const dialog = page.getByRole('dialog').filter({ has: modal });
+    const dialog = modal;
     const dialogBox = await dialog.boundingBox();
     expect(dialogBox).not.toBeNull();
     expect(dialogBox!.x).toBeGreaterThanOrEqual(0);
@@ -84,10 +88,10 @@ test('SSH key management UI adds, renames without replacing private key, and del
 
   let keyId = 0;
   await step('add a new key and persist encrypted credentials', async () => {
-    const modal = page.getByTestId('ssh-key-management-modal');
-    await modal.getByTestId('ssh-key-add').click();
+    const modal = keyManager(page);
+    await modal.getByRole('button', { name: 'Add Key', exact: true }).click();
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await modal.getByTestId('ssh-key-upload-button').click();
+    await modal.getByRole('button', { name: 'Choose Key File', exact: true }).click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles({
       name: 'id_e2e_uploaded',
@@ -97,7 +101,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
     await expect(modal.locator('#key-private')).toHaveValue(String(PRIVATE_KEY));
     await expect(modal.locator('#key-name')).toHaveValue('id_e2e_uploaded');
     await modal.locator('#key-name').fill(ORIGINAL_NAME);
-    await modal.getByTestId('ssh-key-submit').click();
+    await modal.getByRole('button', { name: 'Add Key', exact: true }).click();
 
     await expect
       .poll(async () => (await listKeys(context.request)).find((item) => item.name === ORIGINAL_NAME)?.id ?? 0, {
@@ -120,14 +124,14 @@ test('SSH key management UI adds, renames without replacing private key, and del
   });
 
   await step('edit allows a name-only change while the private key field stays empty', async () => {
-    const modal = page.getByTestId('ssh-key-management-modal');
+    const modal = keyManager(page);
     const row = modal.locator(`tr[data-key-id="${keyId}"]`);
-    await row.getByTestId('ssh-key-edit').click();
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(modal.locator('#key-name')).toHaveValue(ORIGINAL_NAME);
     await expect(modal.locator('#key-private')).toHaveValue('');
     await expect(modal.locator('#key-private')).not.toHaveAttribute('required', '');
     await modal.locator('#key-name').fill(EDITED_NAME);
-    await modal.getByTestId('ssh-key-submit').click();
+    await modal.getByRole('button', { name: 'Save Changes', exact: true }).click();
 
     await expect
       .poll(async () => (await listKeys(context.request)).find((item) => item.id === keyId)?.name ?? '', {
@@ -146,11 +150,11 @@ test('SSH key management UI adds, renames without replacing private key, and del
 
   let connectionId = 0;
   await step('connection authentication can switch from password to the saved key and back to password', async () => {
-    const modal = page.getByTestId('ssh-key-management-modal');
+    const modal = keyManager(page);
     await modal.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(modal).toBeHidden();
 
-    const form = page.getByTestId('connection-form');
+    const form = page.locator('form.connection-form');
     await expect(form).toBeVisible();
     await selectUiOption(form.locator('#ssh-key-select'), String(keyId));
     await form.locator('#conn-name').fill(CONNECTION_NAME);
@@ -160,7 +164,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
     const createPromise = page.waitForResponse(
       (response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
     );
-    await form.getByTestId('connection-submit-button').click();
+    await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
     const create = await createPromise;
     expect(create.status()).toBe(201);
     connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
@@ -178,8 +182,8 @@ test('SSH key management UI adds, renames without replacing private key, and del
     expect(keyConnectionTest.ok()).toBeTruthy();
     await expect(keyConnectionTest.json()).resolves.toMatchObject({ success: true });
 
-    const row = page.getByTestId(`connection-row-${connectionId}`);
-    await row.getByTestId('connection-row-edit').click();
+    const row = page.getByRole('listitem').filter({ has: page.getByText(CONNECTION_NAME, { exact: true }) });
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(form).toBeVisible();
     await form.getByRole('button', { name: 'Password', exact: true }).click();
     await form.locator('#conn-password').fill(E2E_SSH.password);
@@ -187,7 +191,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
       (response) =>
         response.url().endsWith(`/api/v1/connections/${connectionId}`) && response.request().method() === 'PUT',
     );
-    await form.getByTestId('connection-submit-button').click();
+    await form.getByRole('button', { name: 'Confirm Edit', exact: true }).click();
     expect((await updatePromise).ok()).toBeTruthy();
     await expect(form).toBeHidden({ timeout: 15_000 });
 
@@ -205,30 +209,30 @@ test('SSH key management UI adds, renames without replacing private key, and del
       connectionId = 0;
     }
     await page.goto('/connections');
-    await page.getByTestId('connections-add-button').click();
-    const connectionForm = page.getByTestId('connection-form');
+    await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
+    const connectionForm = page.locator('form.connection-form');
     await connectionForm.getByRole('button', { name: 'SSH Key', exact: true }).click();
-    await connectionForm.getByTestId('ssh-key-manage-button').click();
-    const modal = page.getByTestId('ssh-key-management-modal');
+    await connectionForm.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
+    const modal = keyManager(page);
     const row = modal.locator(`tr[data-key-id="${keyId}"]`);
     await expect(row).toContainText(EDITED_NAME);
     await page.route(`**/api/v1/ssh-keys/${keyId}`, async (route) => {
       if (route.request().method() === 'DELETE') await route.abort('failed');
       else await route.continue();
     });
-    await row.getByTestId('ssh-key-delete').click();
+    await row.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirm = page.getByRole('dialog', { name: 'Please confirm' });
     await expect(confirm).toContainText(EDITED_NAME);
     await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
-    await expect(modal.getByTestId('ssh-key-list-error')).toContainText('Network Error');
+    await expect(modal.locator('p.text-error')).toContainText('Network Error');
     await expect(row).toBeVisible();
     await page.unroute(`**/api/v1/ssh-keys/${keyId}`);
   });
 
   await step('delete removes the key from UI and persistence', async () => {
-    const modal = page.getByTestId('ssh-key-management-modal');
+    const modal = keyManager(page);
     const row = modal.locator(`tr[data-key-id="${keyId}"]`);
-    await row.getByTestId('ssh-key-delete').click();
+    await row.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirm = page.getByRole('dialog', { name: 'Please confirm' });
     await expect(confirm).toContainText(EDITED_NAME);
     await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
@@ -248,13 +252,13 @@ test('SSH key selector and manager surface key-list loading failures without ove
   await page.setViewportSize({ width: 320, height: 667 });
   await page.route('**/api/v1/ssh-keys', async (route) => route.abort('failed'));
   await page.goto('/connections');
-  await page.getByTestId('connections-add-button').click();
-  const form = page.getByTestId('connection-form');
+  await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
+  const form = page.locator('form.connection-form');
   await form.getByRole('button', { name: 'SSH Key', exact: true }).click();
-  await expect(form.getByTestId('ssh-key-selector-error')).toContainText('Network Error');
-  await form.getByTestId('ssh-key-manage-button').click();
-  const modal = page.getByTestId('ssh-key-management-modal');
-  await expect(modal.getByTestId('ssh-key-list-error')).toContainText('Network Error');
+  await expect(form.getByText('Failed to load SSH keys: Network Error', { exact: true })).toBeVisible();
+  await form.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
+  const modal = keyManager(page);
+  await expect(modal.locator('p.text-error')).toContainText('Network Error');
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
     .toBeLessThanOrEqual(1);
