@@ -262,6 +262,32 @@ export const providerPromptCacheHintScenario = async () => {
       'model capability gate must suppress prompt_cache_key when support is not frozen',
     );
 
+    globalThis.fetch = (async () =>
+      new Response(
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","content":[]}}\n\n',
+        { headers: { 'content-type': 'text/event-stream' } },
+      )) as typeof fetch;
+    await assert.rejects(() => streamOnce(requestFor('official-responses')), { message: 'PROVIDER_RESPONSE_INVALID' });
+    for (const status of [400, 401, 403, 429, 500, 503]) {
+      globalThis.fetch = (async () =>
+        new Response('{"error":{"message":"rejected"}}', {
+          status,
+          headers: { 'content-type': 'application/json' },
+        })) as typeof fetch;
+      await assert.rejects(() => streamOnce(requestFor('official-chat')), { message: `PROVIDER_HTTP_${status}` });
+    }
+    for (const [transport, code] of [
+      ['ENOTFOUND', 'PROVIDER_DNS_FAILED'],
+      ['ECONNRESET', 'PROVIDER_NETWORK_FAILED'],
+      ['CERT_HAS_EXPIRED', 'PROVIDER_TLS_FAILED'],
+      ['UND_ERR_CONNECT_TIMEOUT', 'PROVIDER_NETWORK_TIMEOUT'],
+    ]) {
+      globalThis.fetch = (async () => {
+        throw new TypeError('fetch failed', { cause: Object.assign(new Error('transport'), { code: transport }) });
+      }) as typeof fetch;
+      await assert.rejects(() => streamOnce(requestFor('official-chat')), { message: code });
+    }
+
     return [
       { name: 'official_cache_key_bytes', value: Buffer.byteLength(firstKey as string, 'utf8'), unit: 'bytes' },
       { name: 'chat_cached_input_tokens', value: firstUsage?.cachedInputTokens ?? 0, unit: 'tokens' },

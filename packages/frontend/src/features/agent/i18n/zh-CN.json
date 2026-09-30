@@ -1484,6 +1484,13 @@
       "limitReached": "最多可附加 {count} 个文件。"
     },
     "apiErrors": {
+      "providerResponse": "上游响应格式不兼容或流响应不完整，请检查提供商协议及上游通道。",
+      "providerDns": "无法解析提供商域名。",
+      "providerTls": "提供商 TLS 连接或证书校验失败。",
+      "providerNetwork": "连接提供商失败或连接中断。",
+      "providerRequest": "提供商请求失败，原因尚未分类。",
+      "providerRejected": "提供商拒绝了请求，请检查协议、模型和请求配置。",
+      "providerUpstream": "提供商服务端返回错误。",
       "validation": "请求参数无效，请检查后重试。",
       "notFound": "请求的 Agent 资源不存在。",
       "conflict": "Agent 资源已发生变化，请刷新后重试。",

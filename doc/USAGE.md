@@ -4,6 +4,17 @@
 
 ## 连接、代理与通知管理
 
+Agent 提供商的协议选择位于「模型与测试」弹窗顶部，保存成功后使用更新后的协议测试；外层提供商卡片不再重复显示协议选择。手机端协议选择占满可用宽度，模型操作保持紧凑两列。响应格式校验失败返回 `PROVIDER_RESPONSE_INVALID`，DNS/TLS/网络故障、超时及上游 HTTP 状态分别返回对应错误码，未知原因返回 `PROVIDER_REQUEST_FAILED`，不假称资源不可用；不自动降级协议，不伪造缺失的响应 ID。
+
+| 错误码                                                                                | 含义                                           |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `PROVIDER_RESPONSE_INVALID` / `PROVIDER_RESPONSE_EMPTY` / `PROVIDER_STREAM_TRUNCATED` | 格式不兼容、空响应或流未完成                   |
+| `PROVIDER_HTTP_<status>`                                                              | 上游实际 HTTP 错误状态，401、403、429 分别保留 |
+| `PROVIDER_DNS_FAILED` / `PROVIDER_TLS_FAILED` / `PROVIDER_NETWORK_FAILED`             | DNS、证书或网络连接故障                        |
+| `PROVIDER_NETWORK_TIMEOUT` / `PROVIDER_TEST_TIMEOUT` / `PROVIDER_DISCOVERY_TIMEOUT`   | 网络、测试或发现模型超时                       |
+| `PROVIDER_REQUEST_FAILED`                                                             | 尚未分类的请求失败                             |
+| `PROVIDER_UNAVAILABLE`                                                                | 提供商不存在或已停用                           |
+
 首页手机端快速连接的搜索与筛选栏随列表上滑，不固定遮挡连接卡片；快速连接和 SSH 资源列表滚动后提供悬浮回顶箭头，各自返回对应列表顶部。SSH 资源按主机去重后逐个请求，主机之间间隔 200ms，逐项更新结果，不在进入首页或刷新时同时发起所有主机请求；页面销毁时取消未完成请求与后续队列。
 
 顶部导航以圆角悬浮条展示，本体高 48px，上下各留 6px，使用主题顶部栏底色并随页面宽度延伸；所有页面的导航外侧留白与终端外框一致，桌面两侧各 8px，手机不额外留白。导航保留正常布局空间，不覆盖页面内容。宽屏菜单居中；窄屏通过页面选择菜单访问全部入口。终端仍可隐藏顶部导航。

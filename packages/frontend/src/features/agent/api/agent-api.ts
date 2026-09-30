@@ -118,7 +118,7 @@ import { createProviderApi } from './provider-api';
 import { createArtifactApi } from './artifact-api';
 import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
 
-export { AgentApiError, formatAgentApiError, toAgentApiError } from './agent-api-error';
+export { AgentApiError, formatAgentApiError, toAgentApiError, providerErrorCategory } from './agent-api-error';
 
 export type {
   AgentRunEnvironmentRunnerPluginDto,

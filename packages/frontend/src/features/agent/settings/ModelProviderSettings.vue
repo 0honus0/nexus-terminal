@@ -22,6 +22,7 @@
   import {
     agentApi,
     formatAgentApiError,
+    providerErrorCategory,
     type AgentDiscoveredProviderModelDto,
     type AgentModelRegistryStatusDto,
     type AgentProviderCreateRequestDto,
@@ -404,16 +405,7 @@
         );
       } else {
         const code = result.errorCode;
-        const category =
-          code === 'PROVIDER_HTTP_401'
-            ? 'authentication'
-            : code === 'PROVIDER_HTTP_403'
-              ? 'forbidden'
-              : code === 'PROVIDER_HTTP_429'
-                ? 'busy'
-                : code?.endsWith('TIMEOUT')
-                  ? 'timeout'
-                  : 'unavailable';
+        const category = providerErrorCategory(code ?? '') ?? 'unavailable';
         const message = `${t(`agent.apiErrors.${category}`)}${code && /^[A-Z0-9_]+$/.test(code) ? ` (${code})` : ''}`;
         testResults[key] = { state: 'error', message };
         operationFeedback.notifyError({
@@ -1550,22 +1542,6 @@
             <div
               class="flex items-center justify-between md:justify-end gap-2 sm:gap-2.5 shrink-0 pt-2.5 md:pt-0 border-t border-border/40 md:border-0 w-full md:w-auto"
             >
-              <!-- 协议选择器（紧凑排布） -->
-              <div class="min-w-0 flex-1 sm:flex-initial sm:w-[136px]">
-                <UiSelect
-                  density="compact"
-                  text-align="center"
-                  :hide-indicator="true"
-                  panel-class="!min-w-[136px]"
-                  class="w-full text-[11px]"
-                  :aria-label="$t('agent.settings.providers.protocol')"
-                  :disabled="busy"
-                  :model-value="provider.protocol"
-                  :options="protocolOptions"
-                  @update:model-value="(value: unknown) => emit('protocol', provider, protocolFromValue(value))"
-                />
-              </div>
-
               <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
                 <!-- 模型与测试（仅图标） -->
                 <UiButton
@@ -2457,6 +2433,20 @@
     @close="testModalOpen = false"
   >
     <div v-if="currentTestModalProvider" class="space-y-4">
+      <UiFormField :label="$t('agent.settings.providers.protocol')">
+        <UiSelect
+          density="compact"
+          class="w-full sm:max-w-64"
+          :aria-label="$t('agent.settings.providers.protocol')"
+          :disabled="busy || Object.values(testResults).some((result) => result.state === 'loading')"
+          :model-value="currentTestModalProvider.protocol"
+          :options="protocolOptions"
+          @update:model-value="
+            (value: unknown) =>
+              currentTestModalProvider && emit('protocol', currentTestModalProvider, protocolFromValue(value))
+          "
+        />
+      </UiFormField>
       <!-- 顶部概览与搜索栏 -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="text-xs text-text-secondary flex-1 min-w-0">
