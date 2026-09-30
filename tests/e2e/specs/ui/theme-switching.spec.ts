@@ -106,7 +106,7 @@ test('current appearance settings still apply when the terminal theme catalog fa
     await page.goto('/settings');
     await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
     await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-    await expect(page.getByTestId('window-theme-color-input')).toHaveValue(targetColor);
+    await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toHaveValue(targetColor);
   } finally {
     await page.unroute('**/api/v1/terminal-themes');
     expect(
@@ -135,7 +135,7 @@ test('appearance settings report a main appearance load failure and keep default
   await expect(
     page.getByText('Failed to load appearance settings. Current defaults remain available.', { exact: true }),
   ).toBeVisible();
-  await expect(page.getByTestId('window-theme-color-input')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toBeVisible();
 });
 
 test('PWA window title bar color updates immediately and persists across reload', async ({ page, context }) => {
@@ -178,14 +178,14 @@ test('PWA window title bar color updates immediately and persists across reload'
     await staleLoadStarted;
     await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
 
-    const input = page.getByTestId('window-theme-color-input');
+    const input = page.getByRole('textbox', { name: 'Title bar color', exact: true });
     await expect(input).toBeVisible();
     await input.fill(targetColor);
 
     const savePromise = page.waitForResponse(
       (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
     );
-    await page.getByTestId('window-theme-color-save').click();
+    await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Save', exact: true }).click();
     expect((await savePromise).ok()).toBeTruthy();
     await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 
@@ -205,7 +205,7 @@ test('PWA window title bar color updates immediately and persists across reload'
     await page.unrouteAll({ behavior: 'wait' });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-    await expect(page.getByTestId('window-theme-color-input')).toHaveValue(targetColor);
+    await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toHaveValue(targetColor);
     await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
   } finally {
     holdAppearanceLoads = false;

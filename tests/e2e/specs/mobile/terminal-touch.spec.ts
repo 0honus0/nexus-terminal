@@ -22,11 +22,11 @@ async function connectMobileTerminal(page: Page, request: Parameters<typeof logi
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
   await connectTestSshFromConnectionsPage(page, connectionId);
-  await expect(page.getByTestId('terminal')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('[data-font-size]')).toBeVisible({ timeout: 20_000 });
 }
 
 async function dispatchPinch(page: Page, startSpan: number, endSpan: number): Promise<void> {
-  const terminal = page.getByTestId('terminal').getByTestId('terminal-inner');
+  const terminal = page.locator('.terminal-inner-container');
   const box = await terminal.boundingBox();
   expect(box).toBeTruthy();
   const centerX = box!.x + box!.width / 2;
@@ -93,7 +93,7 @@ async function terminalTextPoint(page: Page, text: string): Promise<{ x: number;
   await expect
     .poll(
       async () => {
-        point = await page.getByTestId('terminal').evaluate((terminal, expected) => {
+        point = await page.locator('[data-font-size]').evaluate((terminal, expected) => {
           const rows = [...terminal.querySelectorAll<HTMLElement>('.xterm-rows > div')];
           const row = rows.find((candidate) => candidate.textContent?.trim() === expected);
           if (!row) return null;
@@ -118,7 +118,7 @@ async function terminalTextareaState(page: Page): Promise<{
   readOnly: boolean;
 }> {
   return page
-    .getByTestId('terminal')
+    .locator('[data-font-size]')
     .locator('.xterm-helper-textarea')
     .evaluate((element) => {
       const textarea = element as HTMLTextAreaElement;
@@ -135,7 +135,7 @@ async function longPressTerminal(
   point: { x: number; y: number },
   duringHold?: () => Promise<void>,
 ): Promise<void> {
-  const terminal = page.getByTestId('terminal').getByTestId('terminal-inner');
+  const terminal = page.locator('.terminal-inner-container');
   await terminal.evaluate((element, position) => {
     const target = element as HTMLElement;
     const touch = new Touch({
@@ -194,7 +194,7 @@ async function longPressTerminal(
 }
 
 async function swipeTerminal(page: Page, deltaY: number): Promise<void> {
-  const terminal = page.getByTestId('terminal').getByTestId('terminal-inner');
+  const terminal = page.locator('.terminal-inner-container');
   const box = await terminal.boundingBox();
   expect(box).toBeTruthy();
   const x = box!.x + box!.width / 2;
@@ -250,9 +250,9 @@ test('mobile single-finger drag follows native touch scrolling direction and ret
   context,
 }) => {
   await connectMobileTerminal(page, context.request);
-  const terminal = page.getByTestId('terminal');
+  const terminal = page.locator('[data-font-size]');
   const rows = terminal.locator('.xterm-rows');
-  const commandInput = page.getByTestId('command-input');
+  const commandInput = page.locator('.command-bar-command-input');
 
   await commandInput.fill(`i=1; while [ "$i" -le 120 ]; do printf 'MOBILE_SCROLL_%03d\\n' "$i"; i=$((i+1)); done`);
   await commandInput.press('Enter');
@@ -273,8 +273,8 @@ test('mobile single-finger drag follows native touch scrolling direction and ret
 
 test('mobile drag scrolls interactive alternate-screen terminal applications', async ({ page, context }) => {
   await connectMobileTerminal(page, context.request);
-  const rows = page.getByTestId('terminal').locator('.xterm-rows');
-  const commandInput = page.getByTestId('command-input');
+  const rows = page.locator('.terminal-inner-container .xterm-rows');
+  const commandInput = page.locator('.command-bar-command-input');
   await commandInput.fill(
     "printf '\\033[?1049hALT_READY\\n'; IFS= read -r -s -n 3; printf '\\033[?1049lALT_SCROLL_RECEIVED\\n'",
   );
@@ -286,8 +286,8 @@ test('mobile drag scrolls interactive alternate-screen terminal applications', a
 
 test('mobile drag reaches terminal applications that request mouse wheel events', async ({ page, context }) => {
   await connectMobileTerminal(page, context.request);
-  const rows = page.getByTestId('terminal').locator('.xterm-rows');
-  const commandInput = page.getByTestId('command-input');
+  const rows = page.locator('.terminal-inner-container .xterm-rows');
+  const commandInput = page.locator('.command-bar-command-input');
   await commandInput.fill(
     "printf '\\033[?1000h\\033[?1006hMOUSE_READY\\n'; IFS= read -r -s -d M; printf '\\033[?1000l\\033[?1006lMOUSE_SCROLL_RECEIVED\\n'",
   );
@@ -302,7 +302,7 @@ test('mobile pinch zoom persists the mobile terminal font size even when the tab
   context,
 }) => {
   await connectMobileTerminal(page, context.request);
-  const terminal = page.getByTestId('terminal');
+  const terminal = page.locator('[data-font-size]');
   await expect(terminal).toHaveAttribute('data-font-size', '14');
 
   await step('two-finger pinch updates the rendered xterm font size', async () => {
@@ -333,8 +333,8 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
   await enableClipboard(context);
   await connectMobileTerminal(page, context.request);
   const marker = 'MOBILE_TOUCH_COPY_MARKER';
-  const commandInput = page.getByTestId('command-input');
-  const rows = page.getByTestId('terminal').locator('.xterm-rows');
+  const commandInput = page.locator('.command-bar-command-input');
+  const rows = page.locator('.terminal-inner-container .xterm-rows');
   let originalTextareaState: Awaited<ReturnType<typeof terminalTextareaState>> | null = null;
 
   await step(
@@ -383,7 +383,7 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
   });
 
   await step('a later short tap restores normal terminal keyboard focus once selection mode is over', async () => {
-    const inner = page.getByTestId('terminal').getByTestId('terminal-inner');
+    const inner = page.locator('.terminal-inner-container');
     const box = await inner.boundingBox();
     expect(box).toBeTruthy();
     await page.touchscreen.tap(box!.x + Math.min(48, box!.width / 4), box!.y + Math.min(90, box!.height / 4));
@@ -400,13 +400,13 @@ test('mobile clipboard Paste normalizes CR line endings and executes through the
 }) => {
   await enableClipboard(context);
   await connectMobileTerminal(page, context.request);
-  const terminal = page.getByTestId('terminal');
+  const terminal = page.locator('[data-font-size]');
   const rows = terminal.locator('.xterm-rows');
 
   await page.evaluate((text) => navigator.clipboard.writeText(text), "printf 'MOBILE_TOUCH_PASTE_OK\\n'\r");
 
   await step('mobile context menu fallback exposes Paste even without a native browser menu', async () => {
-    const inner = terminal.getByTestId('terminal-inner');
+    const inner = terminal.locator('.terminal-inner-container');
     const box = await inner.boundingBox();
     expect(box).toBeTruthy();
     await inner.dispatchEvent('contextmenu', {

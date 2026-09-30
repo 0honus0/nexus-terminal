@@ -18,7 +18,7 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
   try {
     await page.goto('/settings');
     await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-    const whitelist = page.getByTestId('ip-whitelist-settings');
+    const whitelist = page.locator('section.ui-solid-panel').filter({ has: page.locator('#ipWhitelist') });
     await expect(whitelist).toBeVisible();
     await whitelist.scrollIntoViewIfNeeded();
     const beforeMetrics = await whitelist.evaluate((element) => {
@@ -52,7 +52,7 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
     await page.setViewportSize({ width: 1280, height: 720 });
 
     await step('save a multi-line whitelist through the IP control UI', async () => {
-      await whitelist.getByTestId('ip-whitelist-input').fill(WHITELIST);
+      await whitelist.locator('#ipWhitelist').fill(WHITELIST);
       const responsePromise = page.waitForResponse((response) => {
         if (!response.url().endsWith('/api/v1/settings') || response.request().method() !== 'PUT') return false;
         try {
@@ -62,7 +62,7 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
           return false;
         }
       });
-      await whitelist.getByTestId('ip-whitelist-save').click();
+      await whitelist.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await responsePromise).ok()).toBeTruthy();
       await expect(whitelist).toContainText('IP whitelist saved successfully.');
       const persisted = await context.request.get('/api/v1/settings');
@@ -72,23 +72,23 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
     await step('reload keeps the saved whitelist visible', async () => {
       await page.reload();
       await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-      await expect(page.getByTestId('ip-whitelist-input')).toHaveValue(WHITELIST);
+      await expect(page.locator('#ipWhitelist')).toHaveValue(WHITELIST);
     });
 
     await step('clear the whitelist through the UI and persist the empty allow-list', async () => {
-      const reloadedWhitelist = page.getByTestId('ip-whitelist-settings');
-      await reloadedWhitelist.getByTestId('ip-whitelist-input').fill('');
+      const reloadedWhitelist = page.locator('section.ui-solid-panel').filter({ has: page.locator('#ipWhitelist') });
+      await reloadedWhitelist.locator('#ipWhitelist').fill('');
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
-      await reloadedWhitelist.getByTestId('ip-whitelist-save').click();
+      await reloadedWhitelist.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await responsePromise).ok()).toBeTruthy();
       await expect(reloadedWhitelist).toContainText('IP whitelist saved successfully.');
       const persisted = await context.request.get('/api/v1/settings');
       expect(((await persisted.json()) as Record<string, string>).ipWhitelist).toBe('');
       await page.reload();
       await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-      await expect(page.getByTestId('ip-whitelist-input')).toHaveValue('');
+      await expect(page.locator('#ipWhitelist')).toHaveValue('');
     });
   } finally {
     const restore = await context.request.put('/api/v1/settings', {
