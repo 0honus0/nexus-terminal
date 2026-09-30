@@ -170,7 +170,7 @@
   <UiModal
     :visible="visible"
     :title="t(command ? 'quickCommands.form.titleEdit' : 'quickCommands.form.titleAdd')"
-    panel-class="quick-command-form-panel !max-h-none !max-w-none"
+    panel-class="!max-h-none !max-w-none"
     :panel-style="dialogStyle"
     content-class="!py-0"
     :close-on-backdrop="false"
@@ -335,14 +335,6 @@
 </template>
 
 <style scoped>
-  :global(.quick-command-form-panel) {
-    border-color: color-mix(in srgb, var(--border-color) 48%, transparent);
-    background-image: none;
-    box-shadow:
-      0 18px 46px -24px rgb(0 0 0 / 56%),
-      0 0 0 1px color-mix(in srgb, var(--border-color) 10%, transparent);
-  }
-
   .quick-resize {
     position: absolute;
     z-index: 20;
