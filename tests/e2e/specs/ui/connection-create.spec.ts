@@ -39,23 +39,23 @@ test.afterEach(async ({ context }) => {
 });
 
 test('connections page remains usable when connection tags fail to load', async ({ page, context }) => {
-  const connectionId = await ensureTestSshConnection(context.request);
+  await ensureTestSshConnection(context.request);
   await page.route('**/api/v1/tags', (route) => route.abort('failed'));
 
   await page.goto('/connections');
-  await expect(page.getByTestId(`connection-row-${connectionId}`)).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ has: page.getByText(E2E_SSH.name, { exact: true }) })).toBeVisible();
   await expect(
     page.getByText('Failed to load connection tags. Connections are still available.', { exact: true }),
   ).toBeVisible();
-  await expect(page.getByTestId('connections-add-button')).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Add New Connection', exact: true })).toBeEnabled();
 });
 
 test('direct connection form remains usable when the proxy catalog fails to load', async ({ page }) => {
   await page.route('**/api/v1/proxies', (route) => route.abort('failed'));
   await page.goto('/connections');
-  await page.getByTestId('connections-add-button').click();
+  await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 
-  const form = page.getByTestId('connection-form');
+  const form = page.locator('form.connection-form');
   await expect(form).toBeVisible();
   await expect(page.getByText('Failed to load proxies: Network Error', { exact: true })).toBeVisible();
   await form.locator('#conn-name').fill(FORM_NAME);
@@ -67,15 +67,15 @@ test('direct connection form remains usable when the proxy catalog fails to load
   const createPromise = page.waitForResponse(
     (response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
   );
-  await form.getByTestId('connection-submit-button').click();
+  await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
   expect((await createPromise).status()).toBe(201);
   await expect(form).toBeHidden({ timeout: 15_000 });
 });
 
 test('regular connection form tests and creates a persisted working SSH connection', async ({ page, context }) => {
   await page.goto('/connections');
-  await page.getByTestId('connections-add-button').click();
-  const form = page.getByTestId('connection-form');
+  await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
+  const form = page.locator('form.connection-form');
   await expect(form).toBeVisible();
 
   await form.locator('#conn-name').fill(FORM_NAME);
@@ -91,11 +91,11 @@ test('regular connection form tests and creates a persisted working SSH connecti
       (response) =>
         response.url().endsWith('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
     );
-    await form.getByTestId('connection-test-button').click();
+    await form.getByRole('button', { name: 'Test Connection', exact: true }).click();
     const response = await responsePromise;
     expect(response.status()).toBe(500);
     await expect(response.json()).resolves.toMatchObject({ success: false });
-    const result = form.getByTestId('connection-test-result');
+    const result = form.locator('footer span.text-error');
     await expect(result).toBeVisible();
     await expect(result).toHaveClass(/text-error/);
     await expect(result).toContainText('Failed');
@@ -108,11 +108,11 @@ test('regular connection form tests and creates a persisted working SSH connecti
       (response) =>
         response.url().endsWith('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
     );
-    await form.getByTestId('connection-test-button').click();
+    await form.getByRole('button', { name: 'Test Connection', exact: true }).click();
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({ success: true });
-    const result = form.getByTestId('connection-test-result');
+    const result = form.locator('footer span.text-success');
     await expect(result).toBeVisible();
     await expect(result).toHaveClass(/text-success/);
   });
@@ -122,12 +122,12 @@ test('regular connection form tests and creates a persisted working SSH connecti
     const createPromise = page.waitForResponse(
       (response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
     );
-    await form.getByTestId('connection-submit-button').click();
+    await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
     const create = await createPromise;
     expect(create.status()).toBe(201);
     connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
     await expect(form).toBeHidden({ timeout: 15_000 });
-    const row = page.getByTestId(`connection-row-${connectionId}`);
+    const row = page.getByRole('listitem').filter({ has: page.getByText(FORM_NAME, { exact: true }) });
     await expect(row).toContainText(FORM_NAME);
     await expect(row).toContainText('created through the browser form');
   });
@@ -139,7 +139,7 @@ test('regular connection form tests and creates a persisted working SSH connecti
   });
 
   await step('Clone creates a distinct saved row that preserves the working SSH credential', async () => {
-    const row = page.getByTestId(`connection-row-${connectionId}`);
+    const row = page.getByRole('listitem').filter({ has: page.getByText(FORM_NAME, { exact: true }) });
     const clonePromise = page.waitForResponse(
       (response) =>
         response.url().endsWith(`/api/v1/connections/${connectionId}/clone`) && response.request().method() === 'POST',
@@ -149,14 +149,16 @@ test('regular connection form tests and creates a persisted working SSH connecti
     expect(clone.status()).toBe(201);
     const cloneId = ((await clone.json()) as { connection: { id: number; name: string } }).connection.id;
     expect(cloneId).not.toBe(connectionId);
-    await expect(page.getByTestId(`connection-row-${cloneId}`)).toContainText(FORM_CLONE_NAME);
+    await expect(
+      page.getByRole('listitem').filter({ has: page.getByText(FORM_CLONE_NAME, { exact: true }) }),
+    ).toBeVisible();
     const cloneTest = await context.request.post(`/api/v1/connections/${cloneId}/test`);
     expect(cloneTest.ok()).toBeTruthy();
     await expect(cloneTest.json()).resolves.toMatchObject({ success: true });
   });
 
   await step('the row connect action routes the saved connection into Workspace', async () => {
-    const row = page.getByTestId(`connection-row-${connectionId}`);
+    const row = page.getByRole('listitem').filter({ has: page.getByText(FORM_NAME, { exact: true }) });
     await Promise.all([
       page.waitForURL(
         (url) => url.pathname.includes('/workspace') && url.searchParams.get('connectionId') === String(connectionId),
@@ -169,8 +171,8 @@ test('regular connection form tests and creates a persisted working SSH connecti
 test('script mode creates multiple connections, resolves tags, and preserves notes', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await page.goto('/connections');
-  await page.getByTestId('connections-add-button').click();
-  const form = page.getByTestId('connection-form');
+  await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
+  const form = page.locator('form.connection-form');
   await expect(form).toBeVisible();
 
   const scriptToggle = form.getByRole('switch', { name: 'Script Mode', exact: true });
@@ -197,7 +199,7 @@ test('script mode creates multiple connections, resolves tags, and preserves not
       }
     };
     page.on('response', countCreates);
-    await form.getByTestId('connection-submit-button').click();
+    await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
     await expect.poll(() => createCount, { timeout: 15_000 }).toBe(2);
     page.off('response', countCreates);
     await expect(form).toBeHidden({ timeout: 15_000 });
@@ -240,7 +242,7 @@ test('script mode creates multiple connections, resolves tags, and preserves not
       testedIds.add(Number(match[1]));
     };
     page.on('response', recordTest);
-    await page.getByTestId('connections-search').fill('E2E Script SSH');
+    await page.getByPlaceholder('Search connections...', { exact: true }).fill('E2E Script SSH');
     await page.getByRole('button', { name: 'Test All', exact: true }).click();
     await expect.poll(() => testedIds.size, { timeout: 15_000 }).toBe(2);
     page.off('response', recordTest);
