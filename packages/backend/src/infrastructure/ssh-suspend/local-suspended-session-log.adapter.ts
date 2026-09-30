@@ -9,6 +9,11 @@ import type {
 } from '../../modules/ssh-suspend/suspended-session-log.port';
 
 const MAX_BYTES = 100 * 1024 * 1024;
+// Compaction rewrites the whole retained file. Doing it on every append once the cap is
+// reached makes a continuously writing PTY copy ~100MB per chunk, starving the serialized
+// writer so `flush()`/the output chain never drain and resume stalls past the owner lease.
+// Let the file grow by this batch first, then trim a whole batch at once.
+const TRIM_BATCH_BYTES = 32 * 1024 * 1024;
 const SAFE = /^[A-Za-z0-9_-]{1,128}$/;
 interface Writer {
   tail: Promise<void>;
@@ -41,7 +46,7 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
       if (retained.length >= MAX_BYTES) {
         await fs.writeFile(file, retained, { mode: 0o600 });
         writer.size = retained.length;
-      } else if (writer.size + retained.length > MAX_BYTES) {
+      } else if (writer.size + retained.length > MAX_BYTES + TRIM_BATCH_BYTES) {
         const trimBytes = writer.size + retained.length - MAX_BYTES;
         const temporary = `${file}.trim-${process.pid}-${writer.revision}`;
         try {
