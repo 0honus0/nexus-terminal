@@ -1,9 +1,15 @@
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import FilePreviewDialog from './FilePreviewDialog.vue';
+  import PreviewSearchBar from './PreviewSearchBar.vue';
+  import {
+    activatePreviewSearchMatch,
+    clearPreviewSearchMatches,
+    highlightPreviewSearchMatches,
+  } from './previewDomSearch';
   import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
   import type { PreviewFile } from '../model/preview';
   import { resolveMarkdownDocumentLink } from '../providers/markdownDocumentLink';
@@ -14,6 +20,32 @@
   );
   const emit = defineEmits<{ close: []; edit: []; open: [path: string] }>();
   const { t } = useI18n();
+  const host = ref<HTMLElement | null>(null);
+  const searchOpen = ref(false);
+  const searchQuery = ref('');
+  const searchMatches = ref<HTMLElement[]>([]);
+  const searchIndex = ref(-1);
+  const focusMatch = (behavior: ScrollBehavior = 'auto') => {
+    const match = activatePreviewSearchMatch(searchMatches.value, searchIndex.value);
+    if (props.active) match?.scrollIntoView({ block: 'center', inline: 'nearest', behavior });
+  };
+  const refreshSearch = () => {
+    searchMatches.value = highlightPreviewSearchMatches(host.value, searchQuery.value);
+    searchIndex.value = searchMatches.value.length ? 0 : -1;
+    focusMatch();
+  };
+  const moveSearch = (delta: number) => {
+    if (!searchMatches.value.length) return;
+    searchIndex.value = (searchIndex.value + delta + searchMatches.value.length) % searchMatches.value.length;
+    focusMatch();
+  };
+  const closeSearch = () => {
+    searchOpen.value = false;
+    searchQuery.value = '';
+    searchMatches.value = [];
+    searchIndex.value = -1;
+    clearPreviewSearchMatches(host.value);
+  };
   const html = computed(() => {
     const rendered = marked.parse(new TextDecoder().decode(props.file.bytes), {
       async: false,
@@ -41,6 +73,13 @@
       FORBID_ATTR: ['srcset', 'style'],
     });
   });
+  watch([searchQuery, html], refreshSearch, { flush: 'post' });
+  watch(
+    () => props.active,
+    (active) => {
+      if (active) focusMatch();
+    },
+  );
 
   const handleLinkClick = (event: MouseEvent): void => {
     if (event.defaultPrevented || event.button !== 0) return;
@@ -63,6 +102,18 @@
     @close="emit('close')"
   >
     <template #toolbar>
+      <PreviewSearchBar
+        :open="searchOpen"
+        :query="searchQuery"
+        :current="searchIndex >= 0 ? searchIndex + 1 : 0"
+        :total="searchMatches.length"
+        :active="active"
+        @open="searchOpen = true"
+        @close="closeSearch"
+        @update:query="searchQuery = $event"
+        @previous="moveSearch(-1)"
+        @next="moveSearch(1)"
+      />
       <button
         type="button"
         class="flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8"
@@ -73,6 +124,7 @@
       </button>
     </template>
     <article
+      ref="host"
       class="markdown-preview mx-auto max-w-5xl px-5 py-6 md:px-10 md:py-8"
       @click="handleLinkClick"
       v-html="html"
@@ -84,6 +136,14 @@
   .markdown-preview {
     line-height: 1.72;
     overflow-wrap: anywhere;
+  }
+  .markdown-preview :deep(mark[data-preview-search-match]) {
+    background: color-mix(in srgb, var(--link-active-color) 25%, transparent);
+    color: inherit;
+  }
+  .markdown-preview :deep(mark[data-preview-search-active]) {
+    background: color-mix(in srgb, var(--link-active-color) 45%, transparent);
+    outline: 1px solid var(--link-active-color);
   }
   .markdown-preview :deep(h1),
   .markdown-preview :deep(h2),

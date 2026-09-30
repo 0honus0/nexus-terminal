@@ -416,11 +416,21 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
     await expect(dialog.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
+    await page.keyboard.press('Control+f');
+    const markdownSearch = previewSearchInput(dialog);
+    await expect(markdownSearch).toBeFocused();
+    await markdownSearch.fill('Nexus Markdown E2E');
+    await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('Nexus Markdown E2E');
+    await markdownSearch.fill('Nexus Markdown Refreshed');
+    await expect(previewSearchCount(dialog, '0/0')).toBeVisible();
     await replaceFixture(filename);
     await expect(dialog.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
     await expect(dialog.getByRole('heading', { name: 'Nexus Markdown Refreshed' })).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Refresh preview', exact: true }).click();
     await expect(dialog.getByRole('heading', { name: 'Nexus Markdown Refreshed' })).toBeVisible();
+    await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('Nexus Markdown Refreshed');
+    await markdownSearch.press('Escape');
+    await expect(dialog.locator('mark[data-preview-search-match]')).toHaveCount(0);
     await closePreview(page, filename);
   });
 
