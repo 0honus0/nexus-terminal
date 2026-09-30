@@ -93,7 +93,7 @@ export class ExecutionSession {
     await transport?.close();
   }
 
-  private transport(): RemoteExecutionTransport {
+  transport(): RemoteExecutionTransport {
     if (!this.transportValue || this.statusValue !== 'ready') {
       throw new Error(`Execution session ${this.id} is not attached.`);
     }

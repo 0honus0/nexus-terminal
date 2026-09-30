@@ -382,7 +382,9 @@ export class WorkspaceRuntimeSession {
 
   async markForSuspend(terminalSnapshot: () => Promise<string>): Promise<string> {
     const result = await this.adapters.suspend.mark(this.id, terminalSnapshot);
-    this.close('Workspace suspended');
+    this.markedForSuspend.value = true;
+    this.markedForSuspendAt.value = new Date().toISOString();
+    this.startSuspendOwnerHeartbeat();
     return result.suspendedSessionId;
   }
 

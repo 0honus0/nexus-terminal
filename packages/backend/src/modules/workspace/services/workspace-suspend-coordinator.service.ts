@@ -128,11 +128,40 @@ export class WorkspaceSuspendCoordinatorService {
     this.workspaces.requireSession(workspaceId).shell.pause();
     mark.shellPaused = true;
   }
-  async suspendNow(workspaceId: string, userId: number, initialBuffer?: string): Promise<{ suspendSessionId: string }> {
+  async markAttached(workspaceId: string, userId: number, ownerId: string, initialBuffer?: string) {
     await this.markForSuspend(workspaceId, userId, initialBuffer);
-    const result = await this.handleClientDisconnect(workspaceId);
-    if (!result.suspended || !result.suspendSessionId) throw new Error('会话挂起失败。');
-    return { suspendSessionId: result.suspendSessionId };
+    const mark = this.marks.get(workspaceId);
+    if (!mark || mark.userId !== userId) throw new Error('SUSPENDED_SESSION_OWNER_STALE');
+    mark.ready = mark.ready.then(async () => {
+      if (this.marks.get(workspaceId) !== mark) throw new Error('SUSPENDED_SESSION_OWNER_STALE');
+      if (mark.suspendSessionId) return;
+      const session = this.workspaces.requireSession(workspaceId);
+      const ownership = await this.suspended.registerAttached(
+        {
+          userId,
+          originalSessionId: workspaceId,
+          connectionId: session.connectionId,
+          connectionName: session.connectionName,
+          logIdentifier: mark.logIdentifier,
+          transport: this.workspaces.transport(workspaceId),
+          shell: session.shell,
+          checkpoint: mark.checkpoint,
+          ...this.toSuspendSnapshot(this.shellIntegration.snapshot(workspaceId)),
+        },
+        ownerId,
+        workspaceId,
+      );
+      mark.suspendSessionId = ownership.suspendSessionId;
+      mark.ownerId = ownerId;
+      mark.ownershipGeneration = ownership.generation;
+    });
+    await mark.ready;
+    if (this.marks.get(workspaceId) !== mark) throw new Error('SUSPENDED_SESSION_OWNER_STALE');
+    if (mark.shellPaused) {
+      this.workspaces.requireSession(workspaceId).shell.resume();
+      mark.shellPaused = false;
+    }
+    return { suspendSessionId: mark.suspendSessionId };
   }
 
   async unmarkForSuspend(workspaceId: string, userId: number): Promise<void> {

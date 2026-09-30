@@ -225,6 +225,10 @@ export class WorkspaceService {
     return { session, transport };
   }
 
+  transport(id: string): RemoteExecutionTransport {
+    return this.executionSessions.require(this.requireSession(id).executionSessionId).transport();
+  }
+
   async closeSession(id: string): Promise<void> {
     const session = this.sessions.delete(id);
     if (!session) return;

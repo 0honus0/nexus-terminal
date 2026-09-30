@@ -19,6 +19,69 @@ import {
   waitForBinaryText,
 } from '../../support/ws';
 
+test('marked attached workspace stays usable and another authorized socket can take over', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const original = await openWorkspaceSession(request, connectionId, `marked-attached-${crypto.randomUUID()}`);
+  const other = await openAuthenticatedWebSocket(request);
+  try {
+    await requestWorkspace(original.socket, 'suspend.prepare', {});
+    const marked = await requestWorkspace<{ suspendedSessionId: string }>(original.socket, 'suspend.commit', {});
+    await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toEqual('/');
+    await expect(requestWorkspace(original.socket, 'suspend.owner.renew')).resolves.toMatchObject({ generation: 1 });
+    const list = await requestWorkspace<Array<{ id: string; ownershipState: string; attachedWorkspaceId?: string }>>(
+      other,
+      'suspend.list',
+    );
+    expect(list.find((item) => item.id === marked.suspendedSessionId)).toMatchObject({
+      ownershipState: 'attached',
+      attachedWorkspaceId: original.workspaceId,
+    });
+    await expect(
+      requestWorkspace(other, 'suspend.resume', {
+        suspendedSessionId: marked.suspendedSessionId,
+        workspaceId: `no-takeover-${crypto.randomUUID()}`,
+      }),
+    ).rejects.toThrow();
+    await requestWorkspace(other, 'suspend.resume', {
+      suspendedSessionId: marked.suspendedSessionId,
+      workspaceId: `takeover-${crypto.randomUUID()}`,
+      takeover: true,
+    });
+    await expect(requestWorkspace(other, 'terminal.currentDirectory')).resolves.toEqual('/');
+    await expect(requestWorkspace(original.socket, 'terminal.input', { data: 'echo forbidden\r' })).rejects.toThrow();
+    await requestWorkspace(other, 'suspend.unmark');
+  } finally {
+    await closeWebSocket(original.socket);
+    await closeWebSocket(other);
+  }
+});
+
+test('marking suspend keeps the UI tab interactive and unmarking keeps the shell alive', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const terminal = page.getByTestId('terminal');
+  await expect(terminal).toBeVisible();
+  const activeTab = page.getByTestId('terminal-tab-bar').getByRole('tab', { selected: true });
+  await activeTab.click({ button: 'right' });
+  await page.getByRole('button', { name: 'Suspend Session', exact: true }).click();
+  await expect(activeTab).toBeVisible();
+  await expect(terminal).toBeVisible();
+  const command = page.getByTestId('command-input');
+  await command.fill('echo MARKED_UI_ALIVE');
+  await command.press('Enter');
+  await expect(terminal.locator('.xterm-rows')).toContainText('MARKED_UI_ALIVE');
+  await activeTab.click({ button: 'right' });
+  await page.getByRole('button', { name: 'Unmark Suspend', exact: true }).click();
+  await command.fill('echo UNMARKED_UI_ALIVE');
+  await command.press('Enter');
+  await expect(terminal.locator('.xterm-rows')).toContainText('UNMARKED_UI_ALIVE');
+});
+
 test('stale suspended-session resume logs structured not-found diagnostics', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -526,8 +589,8 @@ test('terminal output produced after marking is retained in suspended history', 
   const before = 'MARK_HISTORY_BEFORE';
   const after = 'MARK_HISTORY_AFTER';
 
-  // Queue output before the handoff, but make it arrive after suspend.mark has transferred
-  // ownership to the server. The old client socket is intentionally no longer writable afterward.
+  // Queue output before marking, then close the socket to hand the marked shell to the server.
+  // Delayed output must still be retained after the attachment closes.
   await requestWorkspace(workspace.socket, 'terminal.input', {
     data: `(sleep 0.5; printf '${after}\\n') &\r`,
   });

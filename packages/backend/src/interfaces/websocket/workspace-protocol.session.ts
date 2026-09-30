@@ -1090,12 +1090,12 @@ export class WorkspaceProtocolSession {
     const workspaceId = this.requireWorkspace();
     const terminalSnapshot = this.terminalSnapshot(payload);
     const request: WorkspaceSuspendMarkRequestDto = terminalSnapshot === undefined ? {} : { terminalSnapshot };
-    const result = await this.dependencies.suspendCoordinator.suspendNow(
+    const result = await this.dependencies.suspendCoordinator.markAttached(
       workspaceId,
       this.identity.userId,
+      this.consumerId,
       request.terminalSnapshot,
     );
-    this.unbindWorkspace();
     return { suspendedSessionId: result.suspendSessionId };
   }
 
@@ -1120,12 +1120,12 @@ export class WorkspaceProtocolSession {
 
   private async suspendCommit(payload: JsonRecord): Promise<WorkspaceSuspendMarkResponseDto> {
     const workspaceId = this.requireWorkspace();
-    const result = await this.dependencies.suspendCoordinator.suspendNow(
+    const result = await this.dependencies.suspendCoordinator.markAttached(
       workspaceId,
       this.identity.userId,
+      this.consumerId,
       this.terminalSnapshot(payload),
     );
-    this.unbindWorkspace();
     return { suspendedSessionId: result.suspendSessionId };
   }
 

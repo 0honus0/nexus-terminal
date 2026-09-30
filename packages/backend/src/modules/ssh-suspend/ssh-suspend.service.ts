@@ -102,7 +102,10 @@ export class SshSuspendService {
     return () => this.ownershipRevokedListeners.delete(listener);
   }
 
-  async takeOver(request: SuspendTakeoverRequest): Promise<string | null> {
+  async takeOver(
+    request: SuspendTakeoverRequest,
+    ownership?: { ownerId: string; workspaceId: string },
+  ): Promise<string | null> {
     if (!request.transport.isOpen || !request.shell.isOpen) {
       request.checkpoint?.dispose();
       await request.transport.close().catch(() => undefined);
@@ -115,8 +118,15 @@ export class SshSuspendService {
       connectionId: request.connectionId,
       suspendStartTime: new Date(now).toISOString(),
       backendSshStatus: 'hanging',
-      ownershipState: 'available',
-      ownershipGeneration: 0,
+      ownershipState: ownership ? 'attached' : 'available',
+      ownershipGeneration: ownership ? 1 : 0,
+      ...(ownership
+        ? {
+            ownerId: ownership.ownerId,
+            attachedWorkspaceId: ownership.workspaceId,
+            ownershipLeaseExpiresAt: now + this.ownerLeaseMs,
+          }
+        : {}),
       revokeRequested: false,
       checkpointRevision: 0,
       checkpointBytes: 0,
@@ -132,8 +142,18 @@ export class SshSuspendService {
       // Raw history/checkpoint are recovery aids. A healthy SSH transport remains suspendable.
     }
     this.userSessions(request.userId).set(suspendSessionId, record);
-    this.attachListeners(suspendSessionId, record);
+    if (!ownership) this.attachListeners(suspendSessionId, record);
     return suspendSessionId;
+  }
+
+  async registerAttached(
+    request: SuspendTakeoverRequest,
+    ownerId: string,
+    workspaceId: string,
+  ): Promise<{ suspendSessionId: string; generation: number }> {
+    const id = await this.takeOver(request, { ownerId, workspaceId });
+    if (!id) throw new Error('SUSPENDED_SESSION_TRANSPORT_CLOSED');
+    return { suspendSessionId: id, generation: 1 };
   }
 
   list(userId: number): SuspendedSessionInfo[] {
