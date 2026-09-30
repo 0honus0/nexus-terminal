@@ -584,8 +584,12 @@ export class WorkspaceRuntimeSession {
       this.reconnectInFlight = false;
       if (this.immediateReconnectRequested && !this.disposed && !this.closing && !this.markedForSuspend.value) {
         this.immediateReconnectRequested = false;
-        this.clearReconnectTimer();
-        void this.reconnect();
+        // A foreground kick can arrive while resume is already in flight. Once that
+        // attachment succeeds, replaying the kick would resume an already-bound socket.
+        if (this.state.value !== 'connected') {
+          this.clearReconnectTimer();
+          void this.reconnect();
+        }
       }
     }
   }

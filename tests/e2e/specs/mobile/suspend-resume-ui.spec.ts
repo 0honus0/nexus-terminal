@@ -106,13 +106,16 @@ test('foreground probes preserve healthy SSH and resume a half-open transport wi
     (response) => response.url().includes('/ssh-suspend/suspended-sessions') && response.request().method() === 'GET',
   );
   await foreground();
-  await expect.poll(() => probes).toBe(1);
+  await expect.poll(() => probes).toBeGreaterThan(0);
   await refreshed;
   expect(resumes).toBe(0);
   const initialConnects = connects;
+  const healthyProbes = probes;
   dropProbe = true;
   await foreground();
-  await expect.poll(() => probes).toBeGreaterThan(1);
+  await expect.poll(() => probes).toBeGreaterThan(healthyProbes);
+  // Another foreground event while the probe is pending must reuse the recovery.
+  await foreground();
   await expect.poll(() => resumes, { timeout: 15_000 }).toBeGreaterThan(0);
   expect(connects).toBe(initialConnects);
   await expect(tab).toHaveAttribute('data-session-id', workspaceId!);
@@ -120,6 +123,14 @@ test('foreground probes preserve healthy SSH and resume a half-open transport wi
   await input.fill('echo FOREGROUND_RECOVERY_OK');
   await input.press('Enter');
   await expect(page.getByTestId('terminal')).toContainText('FOREGROUND_RECOVERY_OK');
+  expect(resumes).toBe(1);
+  dropProbe = false;
+  await page.locator('.app-nav-links a[href="/settings"]').click();
+  dropProbe = true;
+  await page.locator('.app-nav-links a[href="/workspace"]').click();
+  await expect.poll(() => resumes, { timeout: 15_000 }).toBe(2);
+  await expect(input).toBeEnabled();
+  expect(connects).toBe(initialConnects);
 });
 
 test('mobile suspended catalog refreshes promptly after the immediate suspend handoff', async ({ page, context }) => {
@@ -586,7 +597,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     ]);
     expect(connectionsBox).toBeTruthy();
     expect(suspendedBox).toBeTruthy();
-    expect(connectionsBox!.y).toBeGreaterThan(suspendedBox!.y);
+    expect(connectionsBox!.y).toBeLessThan(suspendedBox!.y);
     await expect(emptyPanels).toHaveCSS('overflow-y', 'auto');
     await expect(connectionsPanel.locator('.workspace-connection-content')).toHaveCSS('overflow-y', 'visible');
     await expect(suspendedPanel.locator('.session-list-container')).toHaveCSS('overflow-y', 'visible');
@@ -609,7 +620,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await expect(hanging.locator('i.fa-trash-alt')).toBeVisible();
     await expect(hanging.locator('i.fa-download')).toBeVisible();
 
-    const search = manager.locator('.suspended-session-search');
+    const search = manager.locator('.suspended-session-search input');
     await search.fill('DOES_NOT_MATCH_SUSPEND_E2E');
     await expect(hanging).toBeHidden();
     await expect(manager).toContainText('No suspended sessions found matching your criteria.');

@@ -830,7 +830,7 @@
     if (!workspaceActive) return;
     await loadQueryActions();
     if (document.visibilityState === 'visible') {
-      void reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
+      void recoverForegroundSessions();
     }
   });
   onBeforeUnmount(() => {

@@ -148,6 +148,8 @@ flowchart TD
 
 ### 全局导航与会话展示
 
+重新挂载 Workspace 页面也执行前台存活核对。Session 的即时重连请求可在续接期间合并，成功进入 connected 后消耗待处理请求而不重复 resume；失败时仍允许即时重试。
+
 前台恢复事件（visibility、pageshow、online）由 View 转交 session owner。Session 通过 `WorkspaceSocket` 的单飞、有界 `workspace.ping` 检查当前 attachment，正常链路不替换；失效时仅以异常 close 分离 transport，不发送产品 `workspace.close`，再沿用普通续接或挂起目录核对。旧探测不能关闭新 socket，后台期间探测超时不触发主动断链；挂起静默恢复只接受 available owner，不自动 takeover。
 
 `app/shell/AppHeader.vue` 持有导航展示，公共悬浮材质与 `--app-header-height` 由 `foundation/ui` 提供。设置页和 Workspace 使用同一高度变量；根页面预留滚动条空间，避免路由切换引起导航横移。窄屏导航使用横向滚动的 RouterLink 标签，路由切换只调整标签容器的滚动位置，不滚动文档或终端，不引入独立 transport 或页面事实源。
