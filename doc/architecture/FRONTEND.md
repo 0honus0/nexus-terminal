@@ -148,7 +148,9 @@ flowchart TD
 
 ### 全局导航与会话展示
 
-公共确认与提示由 `shared/feedback/DialogHost` 持有交互，通过 `foundation/ui` 的 `ui-confirmation-panel` 配方与 `UiButton` 展示；上传冲突复用同一视觉配方及 `UiCheckbox`，策略仍由 transfers feature 持有。弹窗关闭、确认和业务执行边界保持不变。
+公共确认与提示由 `shared/feedback/DialogHost` 持有交互，通过 `foundation/ui/UiConfirmationPanel.vue` 统一面板、标题、状态图标、正文和操作区；上传冲突复用该组件及 `UiCheckbox`，策略仍由 transfers feature 持有。弹窗关闭、确认和业务执行边界保持不变。
+
+`UiActionGroup` 持有确认、管理、批量及卡片操作区的通用展示 contract，通过注入布局语义由 `UiButton` 自身选择尺寸配方，不从使用处深入覆盖子按钮。输入框与下拉框通过公共 density 选择密度，`touch` 提供 44px 控件；全局 CSS 仅提供基础元素、主题及可访问性基线，组件 focus 与结构由自身 owner 处理。UI 生产代码不提供测试专用标记或 props；`data-ui`、ARIA 和产品状态属性保留真实语义与行为用途。
 
 代理与通知管理的响应式卡片布局由 `foundation/ui/UiManagementCard.vue` 提供，通过默认插槽和 actions 插槽承载内容与操作；业务字段、文案与编辑删除行为仍由各 feature 持有。Workspace 偏好由 preferences feature 使用扁平分组展示，保存边界仍按分组划分。
 

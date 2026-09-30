@@ -540,7 +540,6 @@
       v-if="visible && minimized"
       ref="restoreButton"
       type="button"
-      :data-testid="connection?.type === 'VNC' ? 'vnc-window-restore' : 'rdp-window-restore'"
       class="fixed z-[100] flex h-[50px] w-[50px] cursor-grab items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 active:cursor-grabbing"
       :style="{ left: `${restorePosition.x}px`, top: `${restorePosition.y}px` }"
       :title="t('remoteDesktopModal.restoreWindow')"
@@ -552,7 +551,6 @@
   </Teleport>
 
   <UiOverlayPanel
-    :data-testid="connection?.type === 'VNC' ? 'vnc-modal' : 'remote-desktop-modal'"
     :visible="visible && !minimized"
     :keep-mounted="true"
     teleport
@@ -561,7 +559,6 @@
   >
     <div
       ref="panel"
-      :data-testid="connection?.type === 'VNC' ? 'vnc-panel' : 'remote-desktop-panel'"
       role="dialog"
       aria-modal="true"
       :aria-label="connection?.name || windowTitle"
@@ -573,11 +570,7 @@
           : 'rounded-lg border border-border bg-background shadow-xl'
       "
     >
-      <header
-        v-if="!fullscreen"
-        :data-testid="connection?.type === 'VNC' ? 'vnc-window-header' : 'rdp-window-header'"
-        class="flex shrink-0 items-center justify-between border-b border-border p-3"
-      >
+      <header v-if="!fullscreen" class="flex shrink-0 items-center justify-between border-b border-border p-3">
         <h3 class="min-w-0 truncate text-base font-semibold">
           <i
             :class="connection?.type === 'VNC' ? 'fas fa-plug' : 'fas fa-desktop'"
@@ -589,7 +582,6 @@
         <div class="ml-2 flex shrink-0 items-center space-x-1">
           <span class="rounded px-2 py-0.5 text-xs" :class="stateBadgeClass">{{ stateLabel }}</span>
           <button
-            :data-testid="connection?.type === 'VNC' ? 'vnc-browser-fullscreen' : 'rdp-browser-fullscreen'"
             type="button"
             class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
             :title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
@@ -599,7 +591,6 @@
             <i :class="fullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'" aria-hidden="true"></i>
           </button>
           <button
-            :data-testid="connection?.type === 'VNC' ? 'vnc-window-minimize' : 'rdp-window-minimize'"
             type="button"
             class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
             :title="t('common.minimize')"
@@ -609,7 +600,6 @@
             <i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
           </button>
           <button
-            :data-testid="connection?.type === 'VNC' ? 'vnc-window-close' : 'rdp-window-close'"
             type="button"
             class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
             :title="t('common.close')"
@@ -622,11 +612,7 @@
       </header>
 
       <div class="relative min-h-0 flex-1 overflow-hidden bg-black" :class="fullscreen ? 'h-full' : ''">
-        <div
-          ref="display"
-          :data-testid="connection?.type === 'VNC' ? 'vnc-display-container' : 'rdp-display-container'"
-          class="remote-display-container h-full w-full overflow-hidden"
-        ></div>
+        <div ref="display" class="remote-display-container h-full w-full overflow-hidden"></div>
         <textarea
           v-if="device.hasTouch.value"
           ref="mobileKeyboardInput"
@@ -664,7 +650,6 @@
 
       <footer
         v-if="!fullscreen"
-        :data-testid="connection?.type === 'VNC' ? 'vnc-window-footer' : 'rdp-window-footer'"
         class="flex shrink-0 gap-2 border-t border-border bg-header p-2 text-xs text-text-secondary"
         :class="device.isMobile.value ? 'flex-col items-stretch' : 'flex-wrap items-center justify-between'"
       >
@@ -793,7 +778,6 @@
 
       <UiResizeHandle
         v-if="!fullscreen && !device.isMobile.value"
-        :data-testid="connection?.type === 'VNC' ? 'vnc-window-resize' : 'rdp-window-resize'"
         class="absolute bottom-0 right-0 z-[1100]"
         :title="t('remoteDesktopModal.resize')"
         :aria-label="t('remoteDesktopModal.resize')"

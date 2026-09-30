@@ -248,7 +248,6 @@
 <template>
   <section
     ref="root"
-    data-testid="workspace-connection-list"
     class="workspace-connection-list flex min-h-0 flex-col text-foreground"
     :class="props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden'"
   >

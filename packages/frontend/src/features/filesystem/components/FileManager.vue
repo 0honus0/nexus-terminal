@@ -1408,7 +1408,6 @@
           <button
             v-if="!searchExpanded"
             type="button"
-            data-testid="file-manager-search-toggle"
             class="file-manager-action-button"
             :title="t('fileManager.searchPlaceholder')"
             :aria-label="t('fileManager.searchPlaceholder')"
@@ -1426,7 +1425,6 @@
             <input
               ref="searchInput"
               v-model="browser.searchQuery.value"
-              data-testid="file-manager-search-input"
               data-focus-id="fileManagerSearch"
               type="text"
               class="h-6 w-full min-w-0 rounded-md border border-border/70 bg-input py-0.5 pl-6 pr-6 text-xs text-foreground outline-none transition-colors duration-150 focus:border-primary focus:ring-1 focus:ring-primary/40"
@@ -1437,7 +1435,6 @@
             />
             <button
               type="button"
-              data-testid="file-manager-search-clear"
               class="absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
               :title="browser.searchQuery.value ? t('common.clear') : t('common.close')"
               :aria-label="browser.searchQuery.value ? t('common.clear') : t('common.close')"
@@ -1461,7 +1458,6 @@
         </button>
         <button
           v-if="!searchExpanded"
-          data-testid="file-upload-button"
           type="button"
           class="file-manager-action-button"
           :title="t('fileManager.actions.uploadFile')"
@@ -1508,7 +1504,6 @@
         <input
           ref="pathInput"
           v-model="pathDraft"
-          data-testid="file-manager-path-input"
           data-focus-id="fileManagerPathInput"
           type="text"
           class="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-medium text-link outline-none"
@@ -1561,7 +1556,6 @@
 
     <div
       v-if="(!browser.loaded.value && !browser.error.value) || browser.loading.value || browser.searching.value"
-      data-testid="file-manager-loading-state"
       class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
     >
       <UiSpinner />
@@ -1570,7 +1564,6 @@
     <div
       v-else
       ref="listScroller"
-      data-testid="file-manager-list"
       tabindex="0"
       :aria-label="t('fileManager.modalTitle')"
       class="min-h-0 flex-1 overflow-auto outline-none"
@@ -1784,21 +1777,12 @@
 
     <div
       v-if="dragging"
-      data-testid="file-upload-drop-overlay"
       class="pointer-events-none absolute inset-2 z-30 grid place-items-center rounded border-2 border-dashed border-primary bg-background/85 text-lg font-medium"
     >
       {{ t('fileManager.dropFilesHere') }}
     </div>
 
-    <UiContextMenu
-      v-if="context"
-      :visible="true"
-      :x="context.x"
-      :y="context.y"
-      auto-width
-      panel-test-id="file-manager-context-menu"
-      @close="context = null"
-    >
+    <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" auto-width @close="context = null">
       <template v-if="context.scope === 'entry'">
         <template v-if="device.isMobile.value || device.hasTouch.value">
           <button v-if="download" class="context-item" @click="download(contextEntries())">
@@ -1938,7 +1922,6 @@
             {{ t('fileManager.actions.sendFiles') }}
           </button>
           <button
-            data-testid="file-manager-compress-menu"
             class="context-item flex items-center justify-between"
             aria-haspopup="menu"
             :aria-expanded="Boolean(compressSubmenu)"
@@ -2012,7 +1995,7 @@
       :blocking-layer="false"
       @close="compressSubmenu = null"
     >
-      <div data-testid="file-manager-context-submenu" :data-side="compressSubmenu.side" class="w-full">
+      <div :data-side="compressSubmenu.side" class="w-full">
         <button class="context-item" @click="compressWithPreset('zip')">
           {{ t('fileManager.contextMenu.compressZip') }}
         </button>
@@ -2033,7 +2016,6 @@
       :z-index="100"
       :close-on-escape="true"
       panel-class="max-w-md flex flex-col p-5"
-      data-testid="file-manager-action-modal"
       :data-action-type="action || ''"
       role="dialog"
       :aria-modal="true"
@@ -2064,7 +2046,7 @@
           class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
           :placeholder="actionPlaceholder"
         />
-        <p v-if="createNameConflict" class="mt-1 text-xs text-error" data-testid="file-manager-create-conflict">
+        <p v-if="createNameConflict" class="mt-1 text-xs text-error">
           {{ t('fileManager.errors.entryExists', { name: value.trim() }) }}
         </p>
         <p
@@ -2086,7 +2068,6 @@
           {{ t('fileManager.modals.buttons.cancel') }}
         </button>
         <button
-          data-testid="file-manager-action-confirm"
           type="button"
           class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="actionConfirmDisabled"

@@ -100,18 +100,17 @@
     content-class="!overflow-hidden !py-0"
     @close="visible = false"
   >
-    <div data-testid="ssh-key-management-modal" class="flex max-h-[68vh] min-h-0 flex-col">
+    <div class="flex max-h-[68vh] min-h-0 flex-col">
       <template v-if="!showForm">
         <h3 class="mb-4 shrink-0 text-center text-xl font-semibold">{{ t('sshKeys.modal.title') }}</h3>
         <div class="mb-4 flex shrink-0 justify-end">
-          <UiButton data-testid="ssh-key-add" appearance="solid" tone="primary" :disabled="loading" @click="add"
+          <UiButton appearance="solid" tone="primary" :disabled="loading" @click="add"
             ><template #leading><i class="fas fa-plus !text-white" aria-hidden="true" /></template
             >{{ t('sshKeys.modal.addKey') }}</UiButton
           >
         </div>
         <p
           v-if="listError"
-          data-testid="ssh-key-list-error"
           class="mb-3 shrink-0 break-words rounded-md border border-error/30 bg-error/10 p-3 text-sm font-medium text-error"
         >
           {{ listError }}
@@ -147,7 +146,6 @@
                 </td>
                 <td class="space-x-2 px-3 py-4 text-right text-sm font-medium sm:px-6">
                   <button
-                    data-testid="ssh-key-edit"
                     type="button"
                     class="text-primary hover:text-link-hover disabled:opacity-50"
                     :disabled="loading"
@@ -156,7 +154,6 @@
                   >
                     <i class="fas fa-pencil-alt" aria-hidden="true" /></button
                   ><button
-                    data-testid="ssh-key-delete"
                     type="button"
                     class="text-error hover:opacity-80 disabled:opacity-50"
                     :disabled="loading"
@@ -185,14 +182,8 @@
           /></UiFormField>
           <UiFormField :label="t('sshKeys.modal.privateKey')">
             <div class="mb-2 flex flex-wrap items-center gap-2">
-              <input
-                ref="keyFileInput"
-                data-testid="ssh-key-file-input"
-                type="file"
-                class="hidden"
-                @change="loadKeyFile"
-              />
-              <UiButton data-testid="ssh-key-upload-button" type="button" :disabled="loading" @click="chooseKeyFile">
+              <input ref="keyFileInput" type="file" class="hidden" @change="loadKeyFile" />
+              <UiButton type="button" :disabled="loading" @click="chooseKeyFile">
                 <template #leading><i class="fas fa-upload" aria-hidden="true" /></template>
                 {{ t('sshKeys.modal.chooseKeyFile') }}
               </UiButton>
@@ -218,14 +209,9 @@
         </form>
         <div class="mt-4 flex shrink-0 justify-end space-x-3 border-t border-border/50 pt-5">
           <UiButton :disabled="loading" @click="reset">{{ t('sshKeys.modal.cancel') }}</UiButton
-          ><UiButton
-            data-testid="ssh-key-submit"
-            appearance="solid"
-            tone="primary"
-            :disabled="loading"
-            @click="submit"
-            >{{ editing ? t('sshKeys.modal.saveChanges') : t('sshKeys.modal.addKey') }}</UiButton
-          >
+          ><UiButton appearance="solid" tone="primary" :disabled="loading" @click="submit">{{
+            editing ? t('sshKeys.modal.saveChanges') : t('sshKeys.modal.addKey')
+          }}</UiButton>
         </div>
       </template>
     </div>

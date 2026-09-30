@@ -343,10 +343,7 @@
 </script>
 
 <template>
-  <section
-    class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs"
-    data-testid="agent-memory-settings"
-  >
+  <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
     <div
       class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 agent-settings-head"
     >

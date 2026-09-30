@@ -63,7 +63,6 @@
 
 <template>
   <header
-    data-testid="app-header"
     v-if="route.name !== 'Workspace' || preferences.values.value.navBarVisible"
     class="app-header sticky top-0 z-30 shrink-0"
   >

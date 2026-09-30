@@ -380,11 +380,7 @@
 </script>
 
 <template>
-  <form
-    data-testid="connection-form"
-    class="connection-form flex max-h-[82dvh] min-h-0 flex-col"
-    @submit.prevent="submit"
-  >
+  <form class="connection-form flex max-h-[82dvh] min-h-0 flex-col" @submit.prevent="submit">
     <h3 class="mb-5 shrink-0 text-lg font-semibold">
       {{ connection ? t('connections.form.titleEdit') : t('connections.form.title') }}
     </h3>
@@ -404,7 +400,6 @@
             }}</label>
             <div class="connection-form-segmented flex rounded-lg p-1">
               <button
-                data-testid="connection-type-ssh"
                 type="button"
                 class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'SSH' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
@@ -413,7 +408,6 @@
                 SSH
               </button>
               <button
-                data-testid="connection-type-rdp"
                 type="button"
                 class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'RDP' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
@@ -422,7 +416,6 @@
                 RDP
               </button>
               <button
-                data-testid="connection-type-vnc"
                 type="button"
                 class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'VNC' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
@@ -601,15 +594,10 @@
             </div>
           </template>
 
-          <div
-            v-if="form.type === 'RDP'"
-            data-testid="rdp-advanced-options"
-            class="space-y-3 rounded-md border border-border/70 bg-background/50 p-3"
-          >
+          <div v-if="form.type === 'RDP'" class="space-y-3 rounded-md border border-border/70 bg-background/50 p-3">
             <button
               type="button"
               role="switch"
-              data-testid="rdp-remote-app-toggle"
               :aria-checked="remoteAppEnabled"
               class="flex w-full items-center justify-between gap-3 rounded-md px-1 py-1 text-left text-sm font-medium"
               @click="remoteAppEnabled = !remoteAppEnabled"
@@ -624,15 +612,15 @@
                   :class="remoteAppEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'"
               /></span>
             </button>
-            <div v-if="remoteAppEnabled" data-testid="rdp-remote-app-fields" class="space-y-3">
+            <div v-if="remoteAppEnabled" class="space-y-3">
               <UiFormField :label="t('connections.form.remoteAppAlias')"
-                ><UiInput v-model="form.remoteApp" data-testid="rdp-remote-app-alias"
+                ><UiInput v-model="form.remoteApp"
               /></UiFormField>
               <UiFormField :label="`${t('connections.form.remoteAppDir')} (${t('connections.form.optional')})`"
-                ><UiInput v-model="form.remoteAppDirectory" data-testid="rdp-remote-app-dir"
+                ><UiInput v-model="form.remoteAppDirectory"
               /></UiFormField>
               <UiFormField :label="`${t('connections.form.remoteAppArgs')} (${t('connections.form.optional')})`"
-                ><UiInput v-model="form.remoteAppArguments" data-testid="rdp-remote-app-args"
+                ><UiInput v-model="form.remoteAppArguments"
               /></UiFormField>
             </div>
           </div>
@@ -654,7 +642,6 @@
         <div class="flex items-center justify-between">
           <h4 class="text-base font-semibold">{{ t('connections.form.sectionScriptMode') }}</h4>
           <button
-            data-testid="connection-script-toggle"
             type="button"
             role="switch"
             :aria-label="t('connections.form.sectionScriptMode')"
@@ -694,17 +681,11 @@
 
     <footer class="mt-7 flex shrink-0 flex-wrap items-center gap-4 border-t border-border/50 pt-5">
       <div v-if="!scriptMode && form.type === 'SSH'" class="flex min-w-0 items-center gap-2">
-        <UiButton
-          data-testid="connection-test-button"
-          type="button"
-          density="compact"
-          :loading="testing"
-          @click="test"
-          >{{ t('connections.form.testConnection') }}</UiButton
-        >
+        <UiButton type="button" density="compact" :loading="testing" @click="test">{{
+          t('connections.form.testConnection')
+        }}</UiButton>
         <span
           v-if="testResult"
-          data-testid="connection-test-result"
           class="inline-flex min-w-0 items-center gap-1 text-xs font-medium"
           :class="testResult.success ? 'text-success' : 'text-error'"
           :title="testResult.message"
@@ -723,7 +704,6 @@
       <div class="ml-auto flex space-x-3">
         <UiButton
           v-if="connection && !scriptMode"
-          data-testid="connection-delete-button"
           type="button"
           appearance="solid"
           tone="danger"
@@ -731,15 +711,9 @@
           @click="emit('delete')"
           >{{ t('connections.actions.delete') }}</UiButton
         >
-        <UiButton
-          data-testid="connection-submit-button"
-          type="submit"
-          appearance="solid"
-          tone="primary"
-          :loading="loading"
-          :disabled="testing"
-          >{{ connection ? t('connections.form.confirmEdit') : t('connections.form.confirm') }}</UiButton
-        >
+        <UiButton type="submit" appearance="solid" tone="primary" :loading="loading" :disabled="testing">{{
+          connection ? t('connections.form.confirmEdit') : t('connections.form.confirm')
+        }}</UiButton>
         <UiButton type="button" :disabled="loading || testing" @click="emit('cancel')">{{
           t('connections.form.cancel')
         }}</UiButton>

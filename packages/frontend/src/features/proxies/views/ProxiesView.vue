@@ -61,14 +61,7 @@
   <div class="p-4 text-foreground">
     <div class="mx-auto max-w-6xl">
       <h2 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">{{ t('proxies.title') }}</h2>
-      <UiButton
-        v-if="!modal"
-        data-testid="proxy-add-button"
-        type="button"
-        appearance="solid"
-        class="mb-4"
-        @click="openAdd"
-      >
+      <UiButton v-if="!modal" type="button" appearance="solid" class="mb-4" @click="openAdd">
         {{ t('proxies.addProxy') }}
       </UiButton>
 
@@ -89,7 +82,7 @@
           :description="t('proxies.noProxies')"
         />
         <div v-else class="mt-4 grid gap-4">
-          <UiManagementCard v-for="proxy in data.proxies.value" :key="proxy.id" :data-testid="`proxy-row-${proxy.id}`">
+          <UiManagementCard v-for="proxy in data.proxies.value" :key="proxy.id">
             <div class="min-w-0 flex-grow space-y-1">
               <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                 <strong class="min-w-0 break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>
@@ -107,7 +100,6 @@
             </div>
             <template #actions>
               <UiButton
-                data-testid="proxy-edit"
                 type="button"
                 appearance="soft"
                 @click="
@@ -117,13 +109,7 @@
               >
                 <i class="fas fa-pencil-alt mr-1 text-xs" aria-hidden="true" />{{ t('proxies.actions.edit') }}
               </UiButton>
-              <UiButton
-                data-testid="proxy-delete"
-                type="button"
-                appearance="ghost"
-                tone="danger"
-                @click="remove(proxy)"
-              >
+              <UiButton type="button" appearance="ghost" tone="danger" @click="remove(proxy)">
                 <i class="fas fa-trash-alt mr-1 text-xs" aria-hidden="true" />{{ t('proxies.actions.delete') }}
               </UiButton>
             </template>

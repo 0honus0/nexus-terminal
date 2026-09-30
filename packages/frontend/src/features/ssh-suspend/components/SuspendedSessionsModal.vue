@@ -23,7 +23,6 @@
 
 <template>
   <UiOverlayPanel
-    data-testid="suspended-sessions-modal"
     :visible="visible"
     teleport
     :close-on-escape="true"
@@ -66,7 +65,7 @@
     </div>
 
     <!-- 主面板内容区 -->
-    <div data-testid="suspended-sessions-modal-body" class="min-h-0 flex-1 overflow-y-auto p-3">
+    <div class="min-h-0 flex-1 overflow-y-auto p-3">
       <SuspendedSessionsPanel
         v-if="visible"
         :can-resume="canResume"

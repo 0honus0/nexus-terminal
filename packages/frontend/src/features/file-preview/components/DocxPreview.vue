@@ -127,10 +127,9 @@
       />
     </template>
 
-    <div data-testid="docx-preview" class="flex h-full min-h-[18rem] flex-col overflow-hidden">
+    <div class="flex h-full min-h-[18rem] flex-col overflow-hidden">
       <div
         ref="scroller"
-        data-testid="docx-preview-scroller"
         role="region"
         :aria-label="t('fileManager.preview.docx')"
         class="docx-scroller relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-black/10 p-3 md:p-6"
@@ -154,7 +153,6 @@
       </div>
       <PreviewHorizontalScrollbar
         :target="scroller"
-        test-id="docx-horizontal-scrollbar"
         :active="active"
         :label="t('fileManager.preview.horizontalScroll')"
       />

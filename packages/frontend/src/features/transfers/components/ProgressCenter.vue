@@ -211,7 +211,6 @@
     <div
       v-show="initialized"
       ref="panel"
-      data-testid="transfer-progress-center"
       class="transfer-progress-window fixed z-[60] flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
       :class="[
         `transfer-progress-window--${presentationMode}`,
@@ -228,14 +227,12 @@
             </h4>
             <span
               v-if="activeTasks.length"
-              data-testid="transfer-progress-speed"
               class="shrink-0 whitespace-nowrap rounded-md bg-black/5 px-2 py-1 text-xs tabular-nums text-text-secondary dark:bg-white/5"
             >
               {{ t('fileManager.uploadSpeed') }} {{ formatSpeed(aggregateSpeed) }}
             </span>
             <button
               type="button"
-              data-testid="transfer-progress-hide"
               class="progress-icon-button h-7 w-7"
               :title="t('progressCenter.hide')"
               :aria-label="t('progressCenter.hide')"
@@ -246,7 +243,6 @@
             <button
               v-if="activeTasks.length > 1"
               type="button"
-              data-testid="transfer-progress-cancel-all"
               class="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10"
               @click="emit('cancelAll')"
             >
@@ -268,7 +264,6 @@
             <span v-if="sorted[0]" class="archive-percent">{{ Math.round(sorted[0].progress) }}%</span>
             <button
               type="button"
-              data-testid="transfer-progress-hide"
               class="progress-icon-button h-7 w-7"
               :title="t('progressCenter.hide')"
               :aria-label="t('progressCenter.hide')"
@@ -285,17 +280,12 @@
             >{{ presentationMode === 'transfer' ? t('fileManager.transferTasks') : t('progressCenter.title') }}
           </h4>
           <div class="flex items-center gap-2">
-            <span
-              v-if="activeTasks.length"
-              data-testid="transfer-progress-speed"
-              class="whitespace-nowrap text-xs tabular-nums text-text-secondary"
-            >
+            <span v-if="activeTasks.length" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
               {{ t('fileManager.transferSpeed') }} {{ formatSpeed(aggregateSpeed) }}
             </span>
             <button
               v-if="activeTasks.length > 1"
               type="button"
-              data-testid="transfer-progress-cancel-all"
               class="rounded px-2 py-1 text-xs text-error hover:bg-error/10"
               @click="emit('cancelAll')"
             >
@@ -303,7 +293,6 @@
             </button>
             <button
               type="button"
-              data-testid="transfer-progress-hide"
               class="progress-icon-button h-6 w-6"
               :title="t('progressCenter.hide')"
               :aria-label="t('progressCenter.hide')"
@@ -324,7 +313,6 @@
         <li
           v-for="task in sorted"
           :key="task.id"
-          data-testid="transfer-progress-task"
           :data-task-id="task.id"
           :data-task-kind="task.kind"
           :data-task-status="task.status"
@@ -341,7 +329,6 @@
             </div>
             <progress
               v-if="!done(task.status)"
-              data-testid="transfer-progress-bar"
               :value="task.progress"
               max="100"
               class="legacy-progress mt-2 block h-1.5 w-full"
@@ -354,7 +341,6 @@
           <button
             v-if="!done(task.status)"
             type="button"
-            data-testid="transfer-progress-cancel"
             class="justify-self-end rounded-lg px-2 py-1 text-xs text-error hover:bg-error/10"
             @click="emit('cancel', task.id)"
           >
@@ -385,7 +371,6 @@
         <li
           v-for="task in sorted"
           :key="task.id"
-          data-testid="transfer-progress-task"
           :data-task-id="task.id"
           :data-task-kind="task.kind"
           :data-task-status="task.status"
@@ -402,7 +387,6 @@
               >
             </div>
             <div
-              data-testid="transfer-progress-bar"
               class="archive-progress-track"
               role="progressbar"
               aria-valuemin="0"
@@ -422,7 +406,6 @@
           <button
             v-if="!done(task.status)"
             type="button"
-            data-testid="transfer-progress-cancel"
             class="archive-stop-button"
             :disabled="task.status === 'cancelling'"
             @click="emit('cancel', task.id)"
@@ -442,7 +425,6 @@
         <li
           v-for="task in sorted"
           :key="task.id"
-          data-testid="transfer-progress-task"
           :data-task-id="task.id"
           :data-task-kind="task.kind"
           :data-task-status="task.status"
@@ -454,12 +436,7 @@
             >
             <span class="shrink-0 tabular-nums">{{ Math.round(task.progress * 10) / 10 }}%</span>
           </div>
-          <progress
-            data-testid="transfer-progress-bar"
-            :value="task.progress"
-            max="100"
-            class="legacy-progress block h-2 w-full"
-          ></progress>
+          <progress :value="task.progress" max="100" class="legacy-progress block h-2 w-full"></progress>
           <div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
             <span :class="task.status === 'error' ? 'text-error' : ''">{{
               task.error || task.errorKind ? taskError(task) : t(`progressCenter.status.${task.status}`)
@@ -475,12 +452,7 @@
             </span>
           </div>
           <div v-if="!done(task.status)" class="mt-1 flex justify-end">
-            <button
-              type="button"
-              data-testid="transfer-progress-cancel"
-              class="text-xs text-error hover:underline"
-              @click="emit('cancel', task.id)"
-            >
+            <button type="button" class="text-xs text-error hover:underline" @click="emit('cancel', task.id)">
               {{ t('common.cancel') }}
             </button>
           </div>
@@ -488,7 +460,6 @@
       </ul>
 
       <UiResizeHandle
-        data-testid="transfer-progress-resize"
         class="absolute bottom-0 right-0 z-10"
         :title="t('progressCenter.resize')"
         :aria-label="t('progressCenter.resize')"

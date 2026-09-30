@@ -139,7 +139,6 @@
 <template>
   <UiModal
     :visible="visible"
-    data-testid="batch-edit-modal"
     panel-class="!max-w-xl !max-h-[90vh] !p-6"
     content-class="!overflow-hidden !py-0"
     @close="emit('close')"
@@ -192,7 +191,7 @@
         <section class="rounded-md border border-border bg-background p-4">
           <div class="mb-2 flex items-center justify-between">
             <h4 class="text-base font-semibold">{{ t('connections.form.sectionAdvanced') }}</h4>
-            <UiCheckbox v-model="editAdvanced" data-testid="batch-edit-advanced-toggle" />
+            <UiCheckbox v-model="editAdvanced" />
           </div>
           <div v-if="editAdvanced" class="space-y-3">
             <UiFormField :label="t('connections.form.proxy')">
@@ -217,9 +216,7 @@
               <label class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
                 ><span>{{ t('connections.form.notes') }}</span
                 ><span class="flex items-center gap-2 text-xs font-normal"
-                  ><UiCheckbox v-model="editNotes" data-testid="batch-edit-notes-toggle" />{{
-                    t('connections.batchEdit.changeNotes')
-                  }}</span
+                  ><UiCheckbox v-model="editNotes" />{{ t('connections.batchEdit.changeNotes') }}</span
                 ></label
               >
               <UiTextarea v-if="editNotes" id="batch-notes" v-model="form.notes" :min-rows="3" />
@@ -236,7 +233,7 @@
       </div>
       <footer class="mt-4 flex shrink-0 justify-end space-x-3 border-t border-border/50 pt-5">
         <UiButton @click="emit('close')">{{ t('common.cancel') }}</UiButton>
-        <UiButton data-testid="batch-edit-save" appearance="solid" tone="primary" @click="save"
+        <UiButton appearance="solid" tone="primary" @click="save"
           ><template #leading><i class="fas fa-save" aria-hidden="true" /></template>{{ t('common.save') }}</UiButton
         >
       </footer>

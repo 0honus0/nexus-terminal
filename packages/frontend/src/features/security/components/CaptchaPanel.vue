@@ -61,22 +61,16 @@
 </script>
 
 <template>
-  <section data-testid="captcha-settings">
+  <section>
     <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.captcha.title') }}</h3>
     <p class="mb-4 text-sm text-text-secondary">{{ t('settings.captcha.description') }}</p>
     <form class="space-y-4" @submit.prevent="save">
       <label class="flex items-center text-sm">
-        <UiCheckbox
-          id="captchaEnabled"
-          v-model="form.enabled"
-          data-testid="captcha-enabled"
-          class="mr-2"
-          @update:model-value="handleEnabledChange"
-        />
+        <UiCheckbox id="captchaEnabled" v-model="form.enabled" class="mr-2" @update:model-value="handleEnabledChange" />
         <span>{{ t('settings.captcha.enableLabel') }}</span>
       </label>
       <UiFormField :label="t('settings.captcha.providerLabel')" for-id="captchaProvider">
-        <UiSelect id="captchaProvider" v-model="form.provider" data-testid="captcha-provider">
+        <UiSelect id="captchaProvider" v-model="form.provider">
           <option value="none">{{ t('settings.captcha.providerNone') }}</option>
           <option value="hcaptcha">hCaptcha</option>
           <option value="recaptcha">reCAPTCHA</option>
@@ -127,9 +121,7 @@
         </UiFormField>
       </div>
       <div class="flex items-center justify-between gap-4 pt-2">
-        <UiButton data-testid="captcha-save" type="submit" appearance="solid" tone="primary" :loading="loading">{{
-          t('common.save')
-        }}</UiButton>
+        <UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{ t('common.save') }}</UiButton>
         <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
       </div>
     </form>

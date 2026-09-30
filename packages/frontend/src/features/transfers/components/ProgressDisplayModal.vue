@@ -210,8 +210,6 @@
     preset="standard-modal"
     panel-class="!h-[min(80dvh,46rem)] !max-w-6xl !p-0"
     :panel-style="panelStyle"
-    panel-test-id="progress-display-dialog"
-    data-testid="progress-display-overlay"
     role="dialog"
     :aria-modal="true"
     :aria-label="t('progressCenter.title')"
@@ -220,7 +218,6 @@
     <section
       v-if="visible"
       ref="panelContent"
-      data-testid="progress-display-modal"
       data-progress-display-placement="overlay"
       class="progress-display-overlay flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
     >
@@ -228,7 +225,6 @@
         class="transfer-progress-panel mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden bg-background"
       >
         <div
-          data-testid="progress-display-drag-handle"
           class="transfer-progress-header relative flex-shrink-0 px-4 py-3 sm:px-6"
           :class="!mobile ? (drag.dragging.value ? 'cursor-grabbing select-none' : 'cursor-move') : ''"
           @pointerdown="drag.startDragging"
@@ -236,7 +232,6 @@
           <h3 class="m-0 text-center text-lg font-semibold">{{ t('progressCenter.title') }}</h3>
           <button
             type="button"
-            data-testid="transfer-progress-minimize"
             class="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
             :title="t('progressCenter.hide')"
             :aria-label="t('progressCenter.hide')"
@@ -249,15 +244,11 @@
         <div
           class="progress-display-content custom-scrollbar min-h-0 flex-grow space-y-4 overflow-y-auto px-4 pr-4 sm:px-6 sm:pr-8"
         >
-          <section data-testid="progress-display-hidden-section" class="space-y-3">
+          <section class="space-y-3">
             <div class="flex items-center justify-between gap-3">
               <div>
                 <h4 class="m-0 text-sm font-semibold">{{ t('progressCenter.hiddenTitle') }}</h4>
-                <p
-                  v-if="sources.length"
-                  data-testid="progress-display-hidden-hint"
-                  class="mb-0 mt-0.5 text-[11px] text-text-muted"
-                >
+                <p v-if="sources.length" class="mb-0 mt-0.5 text-[11px] text-text-muted">
                   {{ t('progressCenter.hiddenSourceHint') }}
                 </p>
               </div>
@@ -268,19 +259,13 @@
 
             <div
               v-if="!sources.length"
-              data-testid="progress-display-empty"
               class="rounded border border-dashed border-border px-3 py-5 text-center text-xs text-text-secondary"
             >
               {{ t('progressCenter.empty') }}
             </div>
 
-            <div v-else data-testid="hidden-progress-list" class="hidden-progress-source-grid">
-              <article
-                v-for="source in sources"
-                :key="source.id"
-                data-testid="hidden-progress-source"
-                class="hidden-progress-source-card"
-              >
+            <div v-else class="hidden-progress-source-grid">
+              <article v-for="source in sources" :key="source.id" class="hidden-progress-source-card">
                 <div class="hidden-progress-source-header">
                   <div class="min-w-0 flex-1">
                     <div class="flex min-w-0 items-center gap-2">
@@ -298,7 +283,6 @@
                     <button
                       v-if="source.restorable !== false"
                       type="button"
-                      data-testid="hidden-progress-restore"
                       class="rounded border border-border px-2 py-1 text-[11px] hover:border-primary hover:text-primary"
                       @click="emit('restore', source.id)"
                     >
@@ -307,7 +291,6 @@
                     <button
                       v-if="activeCount(source) > 0"
                       type="button"
-                      data-testid="hidden-progress-cancel-all"
                       class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-300"
                       @click="emit('cancelAll', source.id)"
                     >
@@ -316,13 +299,8 @@
                   </div>
                 </div>
 
-                <div data-testid="hidden-progress-source-list" class="hidden-progress-source-list custom-scrollbar">
-                  <div
-                    v-for="task in source.tasks"
-                    :key="task.id"
-                    data-testid="hidden-progress-task"
-                    class="hidden-progress-task-row"
-                  >
+                <div class="hidden-progress-source-list custom-scrollbar">
+                  <div v-for="task in source.tasks" :key="task.id" class="hidden-progress-task-row">
                     <div class="flex min-w-0 items-center gap-2">
                       <span class="shrink-0 rounded bg-border/60 px-1.5 py-0.5 text-[10px] font-medium">
                         {{ t(`progressCenter.kind.${task.kind}`) }}
@@ -336,7 +314,6 @@
                       <button
                         v-if="!done(task.status)"
                         type="button"
-                        data-testid="hidden-progress-cancel"
                         class="shrink-0 rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-[11px] text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-950/30 dark:text-red-300"
                         :disabled="task.status === 'cancelling'"
                         @click="emit('cancel', source.id, task.id)"
@@ -356,7 +333,6 @@
 
                     <div class="mt-1.5 flex items-center gap-2">
                       <div
-                        data-testid="hidden-progress-bar"
                         class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border"
                         role="progressbar"
                         aria-valuemin="0"
@@ -368,10 +344,7 @@
                           :style="{ width: `${normalizedProgress(task)}%` }"
                         ></div>
                       </div>
-                      <span
-                        data-testid="hidden-progress-percent"
-                        class="w-11 shrink-0 text-right text-[11px] tabular-nums text-text-secondary"
-                      >
+                      <span class="w-11 shrink-0 text-right text-[11px] tabular-nums text-text-secondary">
                         {{ normalizedProgress(task).toFixed(1) }}%
                       </span>
                     </div>
@@ -527,7 +500,6 @@
         <div class="mt-auto flex flex-shrink-0 items-center justify-end border-t border-border px-4 py-4 sm:px-6">
           <button
             type="button"
-            data-testid="progress-display-close"
             class="rounded-md bg-button px-4 py-2 text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
             @click="emit('close')"
           >

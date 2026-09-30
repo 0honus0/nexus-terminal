@@ -209,7 +209,6 @@
   <div
     v-if="visible"
     ref="panel"
-    data-testid="favorite-paths-popover"
     role="dialog"
     :aria-label="t('favoritePaths.title')"
     :style="panelStyle"
@@ -283,15 +282,7 @@
     </div>
   </div>
 
-  <UiContextMenu
-    v-if="context"
-    :visible="true"
-    :x="context.x"
-    :y="context.y"
-    :width="210"
-    panel-test-id="favorite-path-context-menu"
-    @close="context = null"
-  >
+  <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="210" @close="context = null">
     <button class="favorite-context-item" @mousedown.prevent @click="sendContextToTerminal">
       <i class="fas fa-terminal" aria-hidden="true"></i>
       <span>{{ t('favoritePaths.terminalAction') }}</span>

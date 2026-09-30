@@ -151,7 +151,6 @@
     @close="attemptClose"
   >
     <div
-      data-testid="workspace-layout-configurator"
       class="layout-configurator-dialog pointer-events-auto relative flex h-auto max-h-[90dvh] min-h-[600px] w-auto min-w-[800px] max-w-[95vw] cursor-default flex-col overflow-auto rounded-lg bg-background text-foreground shadow-xl"
       role="dialog"
       :aria-label="t('layoutConfigurator.title')"
@@ -185,7 +184,6 @@
           >
             <template #item="{ element: pane }">
               <li
-                :data-testid="`layout-available-pane-${pane}`"
                 class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-background-alt p-2 text-sm transition-colors hover:bg-header active:cursor-grabbing"
               >
                 <i class="fas fa-grip-vertical mr-2 text-text-alt" aria-hidden="true"></i>
@@ -257,7 +255,6 @@
               <draggable
                 v-model="leftSidebar"
                 tag="ul"
-                data-testid="layout-left-sidebar-list"
                 class="layout-sidebar-list m-0 min-h-[120px] flex-1 list-none overflow-y-auto rounded border border-dashed border-border-alt bg-background-alt p-2"
                 :item-key="(item: DragItem) => (typeof item === 'string' ? item : (item.component ?? item.id))"
                 :group="{ name: 'workspace-layout-items' }"
@@ -300,7 +297,6 @@
               <draggable
                 v-model="rightSidebar"
                 tag="ul"
-                data-testid="layout-right-sidebar-list"
                 class="layout-sidebar-list m-0 min-h-[120px] flex-1 list-none overflow-y-auto rounded border border-dashed border-border-alt bg-background-alt p-2"
                 :item-key="(item: DragItem) => (typeof item === 'string' ? item : (item.component ?? item.id))"
                 :group="{ name: 'workspace-layout-items' }"

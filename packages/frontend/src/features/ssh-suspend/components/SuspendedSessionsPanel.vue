@@ -166,7 +166,6 @@
 
 <template>
   <section
-    data-testid="suspended-sessions-view"
     class="suspended-sessions-panel flex min-h-0 flex-col"
     :class="props.pageScroll ? 'suspended-sessions-panel--page' : 'h-full'"
     role="region"
@@ -220,7 +219,6 @@
         <li
           v-for="(session, index) in filteredMarked"
           :key="`marked-${session.workspaceId}`"
-          :data-testid="`marked-suspended-session-${session.workspaceId}`"
           class="session-card group rounded-lg border border-border/80 bg-card/60 p-2.5 shadow-2xs hover:border-primary/40 hover:bg-card transition-all"
         >
           <!-- 顶行：左侧序号、图标与标题，右侧时间与状态徽章 -->
@@ -280,7 +278,6 @@
         <li
           v-for="(session, index) in data.filtered.value"
           :key="session.id"
-          :data-testid="`suspended-session-${session.id}`"
           :data-suspend-id="session.id"
           class="session-card group rounded-lg border border-border/80 bg-card/60 p-2.5 shadow-2xs hover:border-primary/40 hover:bg-card transition-all"
           :class="{ 'opacity-75': session.status !== 'active' }"

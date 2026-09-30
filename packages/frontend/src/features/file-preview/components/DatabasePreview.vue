@@ -213,7 +213,6 @@
 
     <div
       ref="previewRoot"
-      data-testid="database-preview"
       class="flex h-full min-h-0 w-full flex-col overflow-hidden outline-none"
       tabindex="-1"
       @keydown="handleGridKeydown"
@@ -222,28 +221,18 @@
         <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
       </div>
 
-      <div
-        v-else-if="error"
-        data-testid="database-preview-error"
-        role="alert"
-        class="m-4 rounded border border-error/40 bg-error/10 p-4 text-sm text-error"
-      >
+      <div v-else-if="error" role="alert" class="m-4 rounded border border-error/40 bg-error/10 p-4 text-sm text-error">
         <p>{{ t('fileManager.preview.databaseLoadFailed') }}</p>
         <p class="mt-1 break-words text-xs opacity-80">{{ error }}</p>
       </div>
 
-      <div
-        v-else-if="!tables.length"
-        data-testid="database-preview-empty"
-        class="grid min-h-0 flex-1 place-items-center p-6 text-sm text-text-secondary"
-      >
+      <div v-else-if="!tables.length" class="grid min-h-0 flex-1 place-items-center p-6 text-sm text-text-secondary">
         {{ t('fileManager.preview.databaseNoTables') }}
       </div>
 
       <template v-else>
         <div
           ref="scroller"
-          data-testid="database-scroll-container"
           role="region"
           :aria-label="t('fileManager.preview.database')"
           class="database-scroll-container min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
@@ -273,7 +262,6 @@
               <tr
                 v-for="(row, rowIndex) in rows"
                 :key="pageStart + rowIndex"
-                data-testid="database-data-row"
                 :data-database-row-index="rowIndex"
                 :class="{ 'database-search-active': isActiveSearchRow(rowIndex) }"
               >
@@ -297,10 +285,9 @@
         </div>
 
         <div
-          data-testid="database-pagination"
           class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-header px-2 py-1.5 text-xs sm:gap-3 sm:px-3"
         >
-          <span data-testid="database-page-range" class="min-w-0 truncate text-text-secondary">
+          <span class="min-w-0 truncate text-text-secondary">
             {{
               t('fileManager.preview.databasePageRange', {
                 start: pageRangeStart,
@@ -312,7 +299,6 @@
           <div class="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              data-testid="database-previous-page"
               class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
               :disabled="page <= 1"
               :aria-label="t('fileManager.preview.databasePreviousPage')"
@@ -322,13 +308,12 @@
             </button>
             <span class="text-text-secondary">
               {{ t('fileManager.preview.databasePage') }}
-              <strong data-testid="database-current-page" class="font-medium text-foreground">{{ page }}</strong>
+              <strong class="font-medium text-foreground">{{ page }}</strong>
               /
-              <strong data-testid="database-page-count" class="font-medium text-foreground">{{ pageCount }}</strong>
+              <strong class="font-medium text-foreground">{{ pageCount }}</strong>
             </span>
             <button
               type="button"
-              data-testid="database-next-page"
               class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
               :disabled="page >= pageCount"
               :aria-label="t('fileManager.preview.databaseNextPage')"
@@ -340,7 +325,6 @@
         </div>
 
         <div
-          data-testid="database-table-tabs"
           role="tablist"
           :aria-label="t('fileManager.preview.databaseTables')"
           class="database-table-tabs flex shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-header px-2 py-1.5"
@@ -366,7 +350,6 @@
 
         <PreviewHorizontalScrollbar
           :target="scroller"
-          test-id="database-horizontal-scrollbar"
           :active="active"
           :label="t('fileManager.preview.horizontalScroll')"
         />

@@ -4,7 +4,6 @@
   const props = withDefaults(
     defineProps<{
       target: HTMLElement | null;
-      testId: string;
       label: string;
       active?: boolean;
     }>(),
@@ -203,7 +202,6 @@
   <div
     v-show="hasOverflow"
     ref="trackRef"
-    :data-testid="props.testId"
     class="preview-horizontal-scrollbar shrink-0 overflow-x-scroll overflow-y-hidden border-t border-border bg-header"
     role="scrollbar"
     aria-orientation="horizontal"

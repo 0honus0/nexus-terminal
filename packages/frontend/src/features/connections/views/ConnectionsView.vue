@@ -11,7 +11,7 @@
     stringStorageCodec,
     writeStoredValue,
   } from '@/foundation/browser';
-  import { UiButton, UiInput, UiSelect, UiSwitch } from '@/foundation/ui';
+  import { UiActionGroup, UiButton, UiInput, UiSelect, UiSwitch } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
   import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
@@ -231,18 +231,12 @@
               <label for="batch-edit-toggle" class="mr-2 text-sm font-medium text-text-secondary">{{
                 t('connections.batchEdit.toggleLabel')
               }}</label>
-              <UiSwitch
-                v-model="batch"
-                id="batch-edit-toggle"
-                data-testid="batch-edit-toggle"
-                @update:model-value="selected = new Set()"
-              />
+              <UiSwitch v-model="batch" id="batch-edit-toggle" @update:model-value="selected = new Set()" />
             </div>
 
             <div class="w-full sm:min-w-32 sm:flex-1">
               <UiInput
                 v-model="search"
-                data-testid="connections-search"
                 type="text"
                 :placeholder="t('dashboard.searchConnectionsPlaceholder')"
                 class="w-full"
@@ -277,7 +271,6 @@
                 />
               </UiButton>
               <UiButton
-                data-testid="connections-add-button"
                 type="button"
                 appearance="solid"
                 icon-only
@@ -313,30 +306,17 @@
           </div>
         </header>
 
-        <div v-if="batch" class="connection-batch-toolbar border-b border-border/60 px-4 py-3">
-          <UiButton data-testid="batch-select-all" type="button" appearance="soft" density="compact" @click="selectAll">
+        <UiActionGroup v-if="batch" layout="batch" class="border-b border-border/60 px-4 py-3">
+          <UiButton type="button" appearance="soft" density="compact" @click="selectAll">
             {{ t('connections.batchEdit.selectAll') }} ({{ selected.size }})
           </UiButton>
-          <UiButton
-            data-testid="batch-deselect-all"
-            type="button"
-            appearance="soft"
-            density="compact"
-            @click="deselectAll"
-          >
+          <UiButton type="button" appearance="soft" density="compact" @click="deselectAll">
             {{ t('connections.batchEdit.deselectAll') }}
           </UiButton>
-          <UiButton
-            data-testid="batch-invert-selection"
-            type="button"
-            appearance="soft"
-            density="compact"
-            @click="invert"
-          >
+          <UiButton type="button" appearance="soft" density="compact" @click="invert">
             {{ t('connections.batchEdit.invertSelection') }}
           </UiButton>
           <UiButton
-            data-testid="batch-edit-selected"
             type="button"
             :disabled="selected.size === 0"
             appearance="solid"
@@ -346,7 +326,6 @@
             <i class="fas fa-edit" aria-hidden="true" />{{ t('connections.batchEdit.editSelected') }}
           </UiButton>
           <UiButton
-            data-testid="batch-delete-selected"
             type="button"
             :disabled="selected.size === 0"
             appearance="solid"
@@ -356,14 +335,13 @@
           >
             <i class="fas fa-trash-alt" aria-hidden="true" />{{ t('connections.batchEdit.deleteSelectedButton') }}
           </UiButton>
-        </div>
+        </UiActionGroup>
 
         <div class="p-4">
           <ul v-if="filtered.length" class="grid gap-4">
             <li
               v-for="c in filtered"
               :key="c.id"
-              :data-testid="`connection-row-${c.id}`"
               class="connection-card ui-solid-item flex flex-col items-stretch justify-between gap-3 rounded-xl p-4 lg:flex-row lg:items-center lg:gap-4"
               :class="[
                 selected.has(c.id) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : '',
@@ -420,13 +398,13 @@
                   >
                 </div>
               </div>
-              <div
+              <UiActionGroup
+                layout="card"
                 class="connection-card-actions grid shrink-0 grid-cols-4 gap-2"
                 :class="batch ? 'pointer-events-none' : ''"
               >
                 <UiButton
                   v-if="c.type === 'SSH'"
-                  data-testid="connection-row-test"
                   type="button"
                   density="comfortable"
                   :disabled="batch || testing.has(c.id)"
@@ -444,7 +422,6 @@
                   /><span v-if="!testing.has(c.id)">{{ t('connections.actions.test') }}</span>
                 </UiButton>
                 <UiButton
-                  data-testid="connection-row-edit"
                   type="button"
                   density="comfortable"
                   :disabled="batch"
@@ -473,7 +450,7 @@
                 >
                   {{ t('connections.actions.connect') }}
                 </UiButton>
-              </div>
+              </UiActionGroup>
             </li>
           </ul>
           <p v-else class="py-12 text-center text-text-secondary">{{ t('connections.noConnections') }}</p>
@@ -499,42 +476,11 @@
 </template>
 
 <style scoped>
-  .connection-batch-toolbar {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .connection-batch-toolbar :deep(.ui-button) {
-    grid-column: span 2;
-    min-width: 0;
-    min-height: 40px;
-    padding-inline: 6px;
-    white-space: normal;
-  }
-  .connection-batch-toolbar :deep(.ui-button:nth-last-child(-n + 2)) {
-    grid-column: span 3;
-  }
-  @media (min-width: 640px) {
-    .connection-batch-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-    }
-    .connection-batch-toolbar :deep(.ui-button:nth-child(4)) {
-      margin-left: auto;
-    }
-    .connection-batch-toolbar :deep(.ui-button) {
-      min-height: 28px;
-    }
-  }
   .connection-card {
     container-type: inline-size;
   }
   .connection-card-actions {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .connection-card-actions :deep(.ui-button) {
-    min-width: 0;
-    padding-inline: 0.375rem;
   }
   @container (max-width: 280px) {
     .connection-card-actions {

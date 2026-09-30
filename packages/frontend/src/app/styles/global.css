@@ -127,8 +127,8 @@ a {
     opacity: 1;
   }
 
-  input:focus:not(#agent-composer):not([data-no-highlight]):not(.no-highlight),
-  textarea:focus:not(#agent-composer):not([data-no-highlight]):not(.no-highlight) {
+  input:focus:not([data-no-highlight]):not(.no-highlight),
+  textarea:focus:not([data-no-highlight]):not(.no-highlight) {
     border-color: var(--input-focus-border-color);
     outline: 0;
     box-shadow: 0 0 0 2px var(--input-focus-glow);
@@ -169,14 +169,6 @@ pre {
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-color-secondary);
-}
-
-[data-no-highlight]:focus,
-[data-no-highlight]:focus-within,
-.no-highlight:focus,
-.no-highlight:focus-within {
-  box-shadow: none !important;
-  outline: none !important;
 }
 
 /*

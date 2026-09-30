@@ -167,7 +167,7 @@
 </script>
 
 <template>
-  <section data-testid="preferences-settings" class="workspace-preferences min-w-0">
+  <section class="workspace-preferences min-w-0">
     <header class="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="min-w-0">
         <h2 class="text-lg font-semibold text-foreground">{{ t('settings.workspace.title') }}</h2>
@@ -259,7 +259,7 @@
               <span>{{ t('settings.workspace.fileManagerShowDeleteConfirmationLabel') }}</span>
             </label>
           </div>
-          <div class="workspace-preferences__field lg:col-span-2" data-testid="spreadsheet-preview-pagination-setting">
+          <div class="workspace-preferences__field lg:col-span-2">
             <div class="mb-3 text-sm font-medium text-foreground">
               {{ t('settings.workspace.spreadsheetPreviewLimits.title') }}
             </div>
@@ -271,7 +271,6 @@
                 <UiInput
                   id="spreadsheetPreviewRowsPerPage"
                   v-model="form.spreadsheetPreviewRowsPerPage"
-                  data-testid="spreadsheet-preview-rows-per-page"
                   type="number"
                   min="10"
                   max="2000"
@@ -286,7 +285,6 @@
                 <UiInput
                   id="spreadsheetPreviewMaxColumns"
                   v-model="form.spreadsheetPreviewMaxColumns"
-                  data-testid="spreadsheet-preview-column-limit"
                   type="number"
                   min="5"
                   max="200"
@@ -305,7 +303,6 @@
             {{ groupMessages.files?.text }}
           </p>
           <UiButton
-            data-testid="spreadsheet-preview-pagination-save"
             type="submit"
             appearance="solid"
             tone="primary"
@@ -371,14 +368,13 @@
               {{ t('settings.workspace.showQuickCommandTagsDescription') }}
             </p>
           </div>
-          <div class="workspace-preferences__field" data-testid="quick-command-search-display-setting">
+          <div class="workspace-preferences__field">
             <label
               for="quickCommandsCollapsibleSearch"
               class="flex cursor-pointer items-start gap-2 text-sm font-medium"
               ><UiCheckbox
                 id="quickCommandsCollapsibleSearch"
                 v-model="form.quickCommandsCollapsibleSearch"
-                data-testid="quick-command-collapsible-search-toggle"
                 :disabled="savingGroup !== null"
                 class="mt-0.5"
               /><span>{{ t('settings.workspace.quickCommandsCollapsibleSearchLabel') }}</span></label
@@ -433,7 +429,6 @@
             {{ groupMessages.commands?.text }}
           </p>
           <UiButton
-            data-testid="quick-command-collapsible-search-save"
             type="submit"
             appearance="solid"
             tone="primary"

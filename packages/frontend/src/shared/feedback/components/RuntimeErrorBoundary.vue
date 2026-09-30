@@ -49,13 +49,7 @@
   <div v-if="!error" :key="generation" class="contents">
     <slot />
   </div>
-  <div
-    v-else
-    data-testid="runtime-error-boundary"
-    :data-runtime-boundary="scope"
-    class="flex min-h-0 flex-1 items-center justify-center p-4"
-    role="alert"
-  >
+  <div v-else :data-runtime-boundary="scope" class="flex min-h-0 flex-1 items-center justify-center p-4" role="alert">
     <div class="flex max-w-md flex-col items-center gap-3 text-center">
       <i class="fas fa-triangle-exclamation text-xl text-error" aria-hidden="true"></i>
       <p class="text-sm font-medium text-foreground">{{ t('common.errorOccurred') }}</p>

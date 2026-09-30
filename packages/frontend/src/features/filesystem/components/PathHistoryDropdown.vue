@@ -54,7 +54,6 @@
 <template>
   <div
     v-if="visible"
-    data-testid="path-history-dropdown"
     class="path-history-dropdown absolute right-0 top-full z-40 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border/50 bg-background text-sm shadow-lg"
     @mousedown.prevent
   >
@@ -81,15 +80,7 @@
       </li>
     </ul>
 
-    <UiContextMenu
-      v-if="context"
-      :visible="true"
-      :x="context.x"
-      :y="context.y"
-      :width="190"
-      panel-test-id="path-history-context-menu"
-      @close="context = null"
-    >
+    <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="190" @close="context = null">
       <button class="context-item" @mousedown.prevent.stop @click="copyContextPath">
         <i class="fas fa-copy" aria-hidden="true"></i>
         <span>{{ t('pathHistory.copy') }}</span>

@@ -25,7 +25,6 @@
 
 <template>
   <section
-    data-testid="workspace-start-page"
     class="workspace-start-page min-h-0 flex-1 overflow-y-auto bg-background"
     :class="mobile ? '' : 'mx-2 mb-2 rounded-b-md border border-t-0 border-border'"
   >

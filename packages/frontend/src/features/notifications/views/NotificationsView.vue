@@ -54,7 +54,7 @@
 </script>
 <template>
   <div class="p-4 text-foreground">
-    <div data-testid="notification-settings" class="mx-auto max-w-6xl p-0">
+    <div class="mx-auto max-w-6xl p-0">
       <h2 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">
         {{ t('settings.notifications.title') }}
       </h2>
@@ -62,14 +62,7 @@
       <div v-if="error" class="mb-4 rounded border-l-4 border-error bg-error/10 p-4 text-error">
         {{ error === 'notification-load-error' ? t('notificationController.errorFetchSettings') : error }}
       </div>
-      <UiButton
-        v-if="!error"
-        data-testid="notification-add-channel"
-        type="button"
-        appearance="solid"
-        class="mb-4"
-        @click="openAdd"
-      >
+      <UiButton v-if="!error" type="button" appearance="solid" class="mb-4" @click="openAdd">
         {{ t('settings.notifications.addChannel') }}
       </UiButton>
 

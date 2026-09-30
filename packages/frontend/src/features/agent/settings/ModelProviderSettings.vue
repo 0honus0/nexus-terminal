@@ -1272,7 +1272,7 @@
             :aria-label="$t('agent.settings.providers.defaultModel')"
             align="end"
             density="comfortable"
-            class="default-model-select"
+            fit-content
             panel-class="max-h-72 min-w-64 max-w-[min(480px,calc(100vw-24px))]"
             @update:model-value="selectDefaultModel"
           />
@@ -1444,7 +1444,6 @@
         <article
           v-for="provider in providers"
           :key="provider.id"
-          data-testid="agent-provider-card"
           :data-provider-id="provider.id"
           class="rounded-2xl border bg-card transition-all hover:border-primary/60 shadow-xs overflow-hidden"
           :class="provider.enabled ? 'border-border' : 'border-border/70 opacity-80'"
@@ -1836,7 +1835,6 @@
                       density="compact"
                       v-if="removableConfiguredModels(provider).length > 0"
                       type="button"
-                      data-testid="configured-models-remove-all"
                       :disabled="busy"
                       :title="$t('agent.settings.providers.removeAllModels')"
                       @click="confirmingRemoveAll = provider"
@@ -2055,8 +2053,7 @@
     :close-on-escape="!modalTesting"
     :focus-on-open="true"
     :restore-focus="true"
-    overlay-class="provider-add-overlay"
-    panel-class="provider-add-panel max-w-xl p-5 sm:p-6 rounded-2xl"
+    panel-class="ui-form-surface provider-add-panel max-w-xl p-5 sm:p-6 rounded-2xl"
     :panel-style="providerPanelStyle"
     @close="closeModal"
   >
@@ -2095,7 +2092,7 @@
               $t('agent.settings.providers.protocol')
             }}</span>
             <UiSelect
-              class="provider-modal-select w-full"
+              class="w-full"
               :model-value="form.protocol"
               :options="[
                 { value: 'chat-completions', label: $t('agent.settings.providers.protocolChat') },
@@ -2327,7 +2324,6 @@
                 :id="providerModelInputId"
                 v-model="form.modelId"
                 required
-                data-testid="agent-provider-model-id"
                 data-no-highlight
                 class="provider-modal-input h-8.5 w-full rounded-lg px-2.5 font-mono text-xs text-foreground outline-none"
                 :placeholder="$t('agent.settings.providers.modelPlaceholder')"

@@ -947,7 +947,6 @@
       <button
         v-for="pane in sidebars.left"
         :key="pane"
-        :data-testid="`sidebar-pane-${pane}`"
         type="button"
         class="mb-1 grid h-10 w-10 place-items-center text-lg text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
         :class="activeLeftSidebar === pane ? 'bg-primary text-white hover:bg-primary-dark hover:text-white' : ''"
@@ -962,12 +961,10 @@
     <aside
       v-if="!mobile && activeLeftSidebar"
       data-workspace-sidebar
-      data-testid="left-sidebar-panel"
       class="fixed top-0 bottom-0 left-0 z-[110] flex max-w-[80vw] flex-col overflow-hidden border-r border-border bg-background transition-transform duration-300 ease-in-out"
       :style="{ width: `${leftSidebarWidth}px` }"
     >
       <div
-        data-testid="left-sidebar-resize-handle"
         class="absolute inset-y-0 right-[-4px] z-20 w-[9px] cursor-col-resize"
         @pointerdown="leftResize.startResize"
       ></div>
@@ -1155,7 +1152,6 @@
     <aside
       v-if="!mobile && activeRightSidebar"
       data-workspace-sidebar
-      data-testid="right-sidebar-panel"
       class="fixed top-0 bottom-0 right-0 z-[110] flex max-w-[80vw] flex-col overflow-hidden border-l border-border bg-background transition-transform duration-300 ease-in-out"
       :style="{ width: `${rightSidebarWidth}px` }"
     >
@@ -1266,7 +1262,6 @@
       <button
         v-for="pane in sidebars.right"
         :key="pane"
-        :data-testid="`sidebar-pane-${pane}`"
         type="button"
         class="mb-1 grid h-10 w-10 place-items-center text-lg text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
         :class="activeRightSidebar === pane ? 'bg-primary text-white hover:bg-primary-dark hover:text-white' : ''"
@@ -1331,7 +1326,6 @@
     <div
       v-else-if="showProgressRestoreButton"
       ref="progressRestoreButton"
-      data-testid="transfer-progress-restore-anchor"
       class="z-30 touch-none select-none shadow-lg"
       :class="progressRestoreDrag.dragging.value ? 'cursor-grabbing' : 'cursor-move'"
       :style="progressRestoreButtonStyle"
@@ -1339,7 +1333,6 @@
       @dragstart.prevent
     >
       <UiButton
-        data-testid="transfer-progress-restore-button"
         class="select-none"
         density="compact"
         :class="progressRestoreDrag.dragging.value ? 'cursor-grabbing' : 'cursor-move'"
@@ -1364,10 +1357,8 @@
     />
 
     <UiOverlayPanel
-      data-testid="file-manager-modal"
       :data-workspace-id="session.id"
       :data-workspace-active="active !== false ? 'true' : undefined"
-      panel-test-id="file-manager-modal-panel"
       :visible="fileManagerPopupVisible"
       teleport
       :panel-class="fileManagerPopupPanelClass"
@@ -1382,7 +1373,6 @@
           {{ t('fileManager.modalTitle') }} ({{ editorScopeLabel }})
         </h2>
         <button
-          data-testid="file-manager-modal-close"
           type="button"
           class="text-text-secondary transition-colors hover:text-foreground"
           :title="t('common.close')"
@@ -1426,7 +1416,6 @@
       </div>
       <UiResizeHandle
         v-if="!mobile"
-        data-testid="file-manager-resize-handle"
         class="absolute bottom-0 right-0 z-40"
         :title="t('fileManager.resizePopup')"
         :aria-label="t('fileManager.resizePopup')"
@@ -1447,7 +1436,6 @@
     </UiOverlayPanel>
 
     <UiOverlayPanel
-      data-testid="document-popup"
       :data-workspace-id="session.id"
       :data-workspace-active="active !== false ? 'true' : undefined"
       :data-document-mode="documentMode"
@@ -1487,7 +1475,6 @@
         />
         <UiResizeHandle
           v-if="!mobile"
-          data-testid="document-popup-resize-handle"
           class="absolute bottom-0 right-0 z-30"
           :title="documentPopupResizeLabel"
           :aria-label="documentPopupResizeLabel"
@@ -1520,7 +1507,6 @@
       :z-index="1100"
       :close-on-escape="true"
       panel-class="max-w-md p-5"
-      data-testid="archive-password-modal"
       :data-mode="archiveDialog.kind"
       role="dialog"
       :aria-modal="true"
@@ -1568,7 +1554,6 @@
             }}</span>
             <input
               v-model="archivePassword"
-              data-testid="archive-password-input"
               :type="archiveShowPassword ? 'text' : 'password'"
               :autocomplete="archiveDialog.kind === 'compress' ? 'new-password' : 'current-password'"
               class="w-full rounded-md border border-border bg-input px-3 py-2 text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
@@ -1581,7 +1566,6 @@
             }}</span>
             <input
               v-model="archiveConfirmPassword"
-              data-testid="archive-password-confirm"
               :type="archiveShowPassword ? 'text' : 'password'"
               autocomplete="new-password"
               class="w-full rounded-md border border-border bg-input px-3 py-2 text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
@@ -1593,7 +1577,7 @@
             {{ t('fileManager.archivePassword.showPassword') }}
           </label>
 
-          <p v-if="archivePasswordError" data-testid="archive-password-error" class="text-sm text-error" role="alert">
+          <p v-if="archivePasswordError" class="text-sm text-error" role="alert">
             {{ archivePasswordError }}
           </p>
           <p class="text-xs text-text-secondary">{{ t('fileManager.archivePassword.compatibilityNotice') }}</p>
@@ -1608,7 +1592,6 @@
             {{ t('fileManager.modals.buttons.cancel') }}
           </button>
           <button
-            data-testid="archive-password-submit"
             type="submit"
             :disabled="archivePasswordInvalid"
             class="rounded-md bg-primary px-4 py-2 text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
@@ -1637,12 +1620,7 @@
       "
       @close="closeArchiveDialog"
     >
-      <form
-        data-testid="archive-password-modal"
-        :data-mode="archiveDialog?.kind"
-        class="space-y-4"
-        @submit.prevent="submitArchive"
-      >
+      <form :data-mode="archiveDialog?.kind" class="space-y-4" @submit.prevent="submitArchive">
         <div class="max-h-40 overflow-auto rounded border border-border p-2 text-sm">
           <div v-for="entry in archiveDialog?.entries ?? []" :key="entry.path" class="truncate">{{ entry.path }}</div>
         </div>
@@ -1663,7 +1641,6 @@
               <UiInput
                 id="archive-password"
                 v-model="archivePassword"
-                data-testid="archive-password-input"
                 :type="archiveShowPassword ? 'text' : 'password'"
               />
             </UiFormField>
@@ -1676,7 +1653,6 @@
               <UiInput
                 id="archive-password-confirm"
                 v-model="archiveConfirmPassword"
-                data-testid="archive-password-confirm"
                 :type="archiveShowPassword ? 'text' : 'password'"
               />
             </UiFormField>
@@ -1691,17 +1667,12 @@
           for-id="archive-password"
           required
         >
-          <UiInput
-            id="archive-password"
-            v-model="archivePassword"
-            data-testid="archive-password-input"
-            :type="archiveShowPassword ? 'text' : 'password'"
-          />
+          <UiInput id="archive-password" v-model="archivePassword" :type="archiveShowPassword ? 'text' : 'password'" />
         </UiFormField>
         <label v-if="archivePasswordAvailable" class="flex items-center gap-2 text-sm text-text-secondary">
           <UiCheckbox v-model="archiveShowPassword" />{{ t('fileManager.archivePassword.showPassword') }}
         </label>
-        <p v-if="archivePasswordError" data-testid="archive-password-error" class="text-sm text-error" role="alert">
+        <p v-if="archivePasswordError" class="text-sm text-error" role="alert">
           {{ archivePasswordError }}
         </p>
         <p v-if="archivePasswordAvailable" class="text-xs text-text-secondary">
@@ -1709,13 +1680,7 @@
         </p>
         <div class="flex justify-end gap-2">
           <UiButton type="button" @click="() => closeArchiveDialog()">{{ t('common.cancel') }}</UiButton>
-          <UiButton
-            data-testid="archive-password-submit"
-            type="submit"
-            appearance="solid"
-            tone="primary"
-            :disabled="archivePasswordInvalid"
-          >
+          <UiButton type="submit" appearance="solid" tone="primary" :disabled="archivePasswordInvalid">
             {{
               archivePasswordRequired
                 ? archiveDialog?.kind === 'compress'

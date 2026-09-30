@@ -35,7 +35,6 @@
         <option v-for="key in keys.keys.value" :key="key.id" :value="key.id">{{ key.name }}</option>
       </UiSelect>
       <button
-        data-testid="ssh-key-manage-button"
         type="button"
         class="shrink-0 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-text-secondary hover:bg-border disabled:opacity-50"
         :disabled="loading"
@@ -46,7 +45,7 @@
       </button>
     </div>
     <div v-if="loading" class="text-xs text-text-secondary">{{ t('sshKeys.selector.loadingKeys') }}</div>
-    <div v-else-if="loadError" data-testid="ssh-key-selector-error" class="break-words text-xs text-error">
+    <div v-else-if="loadError" class="break-words text-xs text-error">
       {{ loadError }}
     </div>
     <SshKeyManagementModal v-model="manage" />

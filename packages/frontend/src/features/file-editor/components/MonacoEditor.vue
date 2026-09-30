@@ -396,7 +396,6 @@
 <template>
   <div
     ref="root"
-    data-testid="monaco-editor"
     class="monaco-editor-container"
     :data-large-file="largeFile ? 'true' : 'false'"
     data-word-wrap="on"

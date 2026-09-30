@@ -2107,11 +2107,7 @@
       </header>
 
       <div class="relative min-h-0 flex-1">
-        <div
-          v-if="loading || (selectingThread && !threadContentReady)"
-          data-testid="agent-thread-loading"
-          class="flex h-full items-center justify-center"
-        >
+        <div v-if="loading || (selectingThread && !threadContentReady)" class="flex h-full items-center justify-center">
           <div class="flex flex-col items-center gap-3 text-text-secondary">
             <div
               class="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-card text-foreground"

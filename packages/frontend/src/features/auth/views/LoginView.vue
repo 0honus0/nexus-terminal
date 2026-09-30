@@ -129,8 +129,7 @@
                 name="username"
                 autocomplete="username"
                 required
-                density="comfortable"
-                class="auth-login-control auth-login-input rounded-lg"
+                density="touch"
                 :disabled="isBusy"
               />
             </UiFormField>
@@ -143,8 +142,7 @@
                 type="password"
                 autocomplete="current-password"
                 required
-                density="comfortable"
-                class="auth-login-control auth-login-input rounded-lg"
+                density="touch"
                 :disabled="isBusy"
               />
             </UiFormField>
@@ -164,8 +162,7 @@
               autocomplete="one-time-code"
               pattern="[0-9]{6}"
               required
-              density="comfortable"
-              class="auth-login-control auth-login-input rounded-lg"
+              density="touch"
               :disabled="isBusy"
             />
           </UiFormField>
@@ -178,9 +175,8 @@
             type="submit"
             appearance="solid"
             tone="primary"
-            density="comfortable"
+            density="touch"
             block
-            class="auth-login-control rounded-lg px-4"
             :disabled="captchaBlocked"
             :loading="isBusy"
           >
@@ -196,9 +192,8 @@
           <UiButton
             v-if="props.passkeyAvailable && !auth.pendingSecondFactor.value"
             type="button"
-            density="comfortable"
+            density="touch"
             block
-            class="auth-login-control rounded-lg px-4"
             :loading="isBusy"
             @click="startPasskey"
           >
@@ -231,17 +226,5 @@
     box-shadow:
       inset 0 0 0 1px color-mix(in srgb, var(--glass-rim) 24%, transparent),
       var(--glass-shadow);
-  }
-
-  .auth-login-control[data-ui-gen='2'] {
-    --ui-control-height: 44px;
-  }
-
-  .auth-login-input {
-    padding-inline: 0;
-  }
-
-  .auth-login-input :deep(.ui-input__control) {
-    padding-inline: var(--ui-control-padding-inline);
   }
 </style>

@@ -44,8 +44,7 @@
       name?: string;
       hideIndicator?: boolean;
       triggerClass?: string;
-      panelTestId?: string;
-      optionTestIdPrefix?: string;
+      fitContent?: boolean;
     }>(),
     {
       modelValue: null,
@@ -59,8 +58,7 @@
       panelClass: '',
       hideIndicator: true,
       triggerClass: '',
-      panelTestId: undefined,
-      optionTestIdPrefix: undefined,
+      fitContent: false,
     },
   );
 
@@ -156,6 +154,7 @@
     :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
     :data-state="open ? 'open' : 'closed'"
     class="ui-select"
+    :class="{ 'ui-select--fit-content': props.fitContent }"
   >
     <SelectRoot
       v-model:open="open"
@@ -193,7 +192,6 @@
         <SelectContent
           data-ui="select-panel"
           data-ui-gen="2"
-          :data-testid="props.panelTestId"
           :data-density="props.density"
           :data-hide-indicator="props.hideIndicator || undefined"
           :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
@@ -212,11 +210,6 @@
               v-for="(option, index) in resolvedOptions"
               :key="index"
               :data-value="option.value == null ? '' : String(option.value)"
-              :data-testid="
-                props.optionTestIdPrefix
-                  ? `${props.optionTestIdPrefix}-${option.value === '' ? 'all' : String(option.value)}`
-                  : undefined
-              "
               :value="internalOptionValue(option.value)"
               :disabled="option.disabled"
               :text-value="option.label"

@@ -231,7 +231,7 @@
       class="mx-auto max-w-[1600px] 2xl:max-w-[1720px] w-full h-full flex flex-col min-h-0 px-3 sm:px-5 lg:pl-6 lg:pr-8 xl:pl-8 xl:pr-10"
     >
       <!-- 移动端：目录总览视图 (Mobile Menu Catalog) -->
-      <div v-if="mobileView === 'menu'" class="space-y-6 lg:hidden py-4 sm:py-6" data-testid="settings-mobile-catalog">
+      <div v-if="mobileView === 'menu'" class="space-y-6 lg:hidden py-4 sm:py-6">
         <header class="px-1">
           <h1 class="text-xl font-bold tracking-tight text-foreground">{{ t('settings.title') }}</h1>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.mobile.settingsOverview') }}</p>

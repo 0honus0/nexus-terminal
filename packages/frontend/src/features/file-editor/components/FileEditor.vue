@@ -210,7 +210,7 @@
   });
 </script>
 <template>
-  <section ref="root" data-testid="file-editor-view" class="file-editor-container">
+  <section ref="root" class="file-editor-container">
     <div class="file-editor-tabs" role="tablist">
       <div
         v-for="tab in editorSession.tabs.value"
@@ -252,9 +252,9 @@
 
       <div class="editor-actions">
         <UiSelect
-          data-testid="file-editor-encoding"
           :model-value="selectedEncoding"
           class="encoding-select"
+          density="compact"
           match-trigger-width
           :title="t('fileManager.changeEncodingTooltip')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
@@ -263,9 +263,9 @@
           <option v-for="option in encodingOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
         </UiSelect>
         <UiSelect
-          data-testid="file-editor-line-ending"
           :model-value="currentLineEnding"
           class="encoding-select line-ending-select"
+          density="compact"
           match-trigger-width
           :title="t('fileEditor.lineEnding')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
@@ -287,7 +287,6 @@
         >
 
         <button
-          data-testid="file-editor-search"
           type="button"
           class="search-btn"
           :title="t('fileManager.preview.search')"
@@ -356,7 +355,7 @@
     </div>
 
     <div class="editor-content-area">
-      <div v-if="editorSession.loading.value" data-testid="file-editor-loading-state" class="editor-loading">
+      <div v-if="editorSession.loading.value" class="editor-loading">
         {{ t('fileManager.loadingFile') }}
       </div>
       <template v-else-if="editorSession.active.value">
@@ -589,13 +588,6 @@
     width: 8.5rem;
     max-width: 8.5rem;
     flex: 0 1 8.5rem;
-  }
-  .encoding-select :deep(.ui-select__trigger) {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    --ui-control-height: 28px;
-    --ui-control-font-size: 11px;
   }
   .line-ending-select {
     width: 5.5rem;

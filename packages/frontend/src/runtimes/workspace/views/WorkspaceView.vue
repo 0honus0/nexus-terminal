@@ -853,7 +853,6 @@
 
 <template>
   <main
-    data-testid="workspace-root"
     class="flex min-h-0 flex-col overflow-hidden bg-background"
     :class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-var(--app-header-height))]' : 'h-dvh'"
   >
@@ -908,7 +907,6 @@
     <div
       v-if="registry.orderedSessions.value.length"
       v-show="!connectionPickerVisible"
-      data-testid="workspace-session-region"
       class="relative min-h-0 flex-1"
       :class="
         device.isMobile.value ? '' : 'mx-2 mb-2 mt-0 overflow-hidden rounded-b-md border border-t-0 border-border'

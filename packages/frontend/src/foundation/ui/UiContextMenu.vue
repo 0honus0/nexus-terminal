@@ -11,7 +11,6 @@
       autoWidth?: boolean;
       margin?: number;
       zIndex?: number;
-      panelTestId?: string;
       blockingLayer?: boolean;
     }>(),
     { width: 220, autoWidth: false, margin: 8, zIndex: 130, blockingLayer: true },
@@ -86,7 +85,6 @@
     >
       <div
         ref="root"
-        :data-testid="props.panelTestId"
         data-ui="context-menu"
         data-ui-gen="2"
         class="ui-context-menu ui-glass-panel pointer-events-auto fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100dvw-1rem)] overflow-y-auto p-1 text-sm text-foreground"

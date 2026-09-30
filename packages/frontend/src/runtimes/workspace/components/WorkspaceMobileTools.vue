@@ -159,7 +159,6 @@
     :visible="quickCommandsVisible"
     teleport
     preset="standard-modal"
-    panel-test-id="quick-commands-dialog"
     :close-on-escape="true"
     role="dialog"
     :aria-modal="true"
@@ -193,7 +192,6 @@
   </UiOverlayPanel>
 
   <UiOverlayPanel
-    data-testid="status-monitor-modal"
     :visible="statusVisible"
     teleport
     :z-index="1000"

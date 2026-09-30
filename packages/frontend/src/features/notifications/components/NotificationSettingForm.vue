@@ -296,7 +296,6 @@
       <div class="border-t border-border/50 pt-4 text-center">
         <UiButton
           v-if="setting || canTest"
-          data-testid="notification-test"
           type="button"
           density="compact"
           :disabled="!canTest && !setting"

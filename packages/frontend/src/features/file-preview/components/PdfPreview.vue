@@ -556,7 +556,6 @@
         <span class="pdf-toolbar-divider mx-1 h-5 w-px bg-border"></span>
         <button
           type="button"
-          data-testid="pdf-previous-page"
           class="pdf-toolbar-button"
           :disabled="currentPage <= 1"
           :aria-label="t('fileManager.preview.pdfPreviousPage')"
@@ -565,7 +564,6 @@
           ‹
         </button>
         <input
-          data-testid="pdf-current-page"
           class="pdf-page-input h-8 w-14 rounded border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           type="number"
           min="1"
@@ -575,11 +573,10 @@
           @change="handlePageInput"
         />
         <span class="text-xs text-text-secondary"
-          >/ <span data-testid="pdf-page-count">{{ pageCount }}</span></span
+          >/ <span>{{ pageCount }}</span></span
         >
         <button
           type="button"
-          data-testid="pdf-next-page"
           class="pdf-toolbar-button"
           :disabled="currentPage >= pageCount"
           :aria-label="t('fileManager.preview.pdfNextPage')"
@@ -590,19 +587,15 @@
         <span class="pdf-toolbar-divider mx-1 h-5 w-px bg-border"></span>
         <button
           type="button"
-          data-testid="pdf-zoom-out"
           class="pdf-toolbar-button"
           :aria-label="t('fileManager.preview.pdfZoomOut')"
           @click="setZoom(displayedZoomPercent - 25)"
         >
           −
         </button>
-        <span data-testid="pdf-zoom-label" class="w-12 text-center text-xs text-text-secondary">
-          {{ Math.round(displayedZoomPercent) }}%
-        </span>
+        <span class="w-12 text-center text-xs text-text-secondary"> {{ Math.round(displayedZoomPercent) }}% </span>
         <button
           type="button"
-          data-testid="pdf-zoom-in"
           class="pdf-toolbar-button"
           :aria-label="t('fileManager.preview.pdfZoomIn')"
           @click="setZoom(displayedZoomPercent + 25)"
@@ -611,7 +604,6 @@
         </button>
         <button
           type="button"
-          data-testid="pdf-fit-width"
           class="pdf-fit-width ml-1 h-8 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           :class="fitWidth ? 'bg-primary/10 text-primary' : ''"
           :aria-pressed="fitWidth"
@@ -621,7 +613,6 @@
         </button>
         <button
           type="button"
-          data-testid="pdf-outline-toggle"
           class="pdf-toolbar-button"
           :class="{ 'pdf-toolbar-button-active': outlineVisible }"
           :aria-expanded="outlineVisible"
@@ -637,7 +628,6 @@
 
     <div
       ref="root"
-      data-testid="pdf-preview"
       class="pdf-preview-root relative flex h-full min-h-0 w-full overflow-hidden outline-none"
       tabindex="0"
       @keydown="handleKeydown"
@@ -650,7 +640,6 @@
         @click="outlineOpen = false"
       ></button>
       <aside
-        data-testid="pdf-outline-drawer"
         :aria-label="t('fileManager.preview.pdfOutline')"
         class="pdf-outline-drawer absolute inset-y-0 left-0 z-20 flex w-[min(82vw,18rem)] flex-col border-r border-border bg-header/95 shadow-xl sm:relative sm:inset-auto sm:z-auto sm:w-52 sm:shrink-0 sm:translate-x-0 sm:pointer-events-auto sm:shadow-none"
         :class="outlineOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'"
@@ -662,7 +651,6 @@
           <button
             v-if="!desktop"
             type="button"
-            data-testid="pdf-outline-close"
             class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-text-secondary hover:bg-border hover:text-foreground"
             :aria-label="t('common.close')"
             @click="outlineOpen = false"
@@ -670,7 +658,7 @@
             ×
           </button>
         </header>
-        <div data-testid="pdf-outline" class="min-h-0 flex-1 overflow-y-auto p-2">
+        <div class="min-h-0 flex-1 overflow-y-auto p-2">
           <PdfOutlineItems v-if="outline.length" :items="outline" @navigate="resolveOutlineDestination" />
           <p v-else class="px-2 py-3 text-xs text-text-secondary">{{ t('fileManager.preview.pdfNoOutline') }}</p>
         </div>
@@ -679,7 +667,6 @@
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div
           ref="scroller"
-          data-testid="pdf-page-scroller"
           role="region"
           :aria-label="t('fileManager.preview.pdfMeta', { pages: pageCount })"
           class="pdf-scroller min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-black/15 p-3 sm:p-6"
@@ -694,7 +681,6 @@
           <p v-else-if="error" class="p-4 text-error">{{ error }}</p>
           <div
             v-else-if="document"
-            data-testid="pdf-continuous-pages"
             class="pdf-pages-column flex min-h-full w-max min-w-full flex-col gap-3 sm:gap-4"
             :style="pinchScale !== 1 ? { transform: `scale(${pinchScale})` } : undefined"
           >
@@ -715,7 +701,6 @@
         </div>
         <PreviewHorizontalScrollbar
           :target="scroller"
-          test-id="pdf-horizontal-scrollbar"
           :active="active"
           :label="t('fileManager.preview.horizontalScroll')"
         />

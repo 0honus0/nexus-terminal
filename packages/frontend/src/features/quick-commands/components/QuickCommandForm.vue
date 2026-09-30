@@ -179,63 +179,29 @@
   >
     <template #panel-overlay>
       <template v-if="visible">
-        <div
-          data-testid="quick-command-resize-top"
-          class="quick-resize quick-resize--top"
-          @pointerdown.stop="resizeTop.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-right"
-          class="quick-resize quick-resize--right"
-          @pointerdown.stop="resizeRight.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-bottom"
-          class="quick-resize quick-resize--bottom"
-          @pointerdown.stop="resizeBottom.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-left"
-          class="quick-resize quick-resize--left"
-          @pointerdown.stop="resizeLeft.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-top-left"
-          class="quick-resize quick-resize--top-left"
-          @pointerdown.stop="resizeTopLeft.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-top-right"
-          class="quick-resize quick-resize--top-right"
-          @pointerdown.stop="resizeTopRight.startResize"
-        ></div>
+        <div class="quick-resize quick-resize--top" @pointerdown.stop="resizeTop.startResize"></div>
+        <div class="quick-resize quick-resize--right" @pointerdown.stop="resizeRight.startResize"></div>
+        <div class="quick-resize quick-resize--bottom" @pointerdown.stop="resizeBottom.startResize"></div>
+        <div class="quick-resize quick-resize--left" @pointerdown.stop="resizeLeft.startResize"></div>
+        <div class="quick-resize quick-resize--top-left" @pointerdown.stop="resizeTopLeft.startResize"></div>
+        <div class="quick-resize quick-resize--top-right" @pointerdown.stop="resizeTopRight.startResize"></div>
         <UiResizeHandle
-          data-testid="quick-command-resize-bottom-right"
           class="quick-resize absolute bottom-0 right-0 z-30"
           :title="t('quickCommands.form.resize')"
           :aria-label="t('quickCommands.form.resize')"
           @pointerdown.stop="resizeBottomRight.startResize"
         />
-        <div
-          data-testid="quick-command-resize-bottom-left"
-          class="quick-resize quick-resize--bottom-left"
-          @pointerdown.stop="resizeBottomLeft.startResize"
-        ></div>
+        <div class="quick-resize quick-resize--bottom-left" @pointerdown.stop="resizeBottomLeft.startResize"></div>
       </template>
     </template>
-    <form data-testid="quick-command-form" class="space-y-5 py-5" @submit.prevent="save">
+    <form class="space-y-5 py-5" @submit.prevent="save">
       <UiFormField :label="t('quickCommands.form.name')">
-        <UiInput
-          v-model="form.name"
-          data-testid="quick-command-name"
-          :placeholder="t('quickCommands.form.namePlaceholder')"
-        />
+        <UiInput v-model="form.name" :placeholder="t('quickCommands.form.namePlaceholder')" />
       </UiFormField>
 
       <UiFormField :label="t('quickCommands.form.command')">
         <UiTextarea
           v-model="form.command"
-          data-testid="quick-command-command"
           :min-rows="5"
           required
           class="min-h-[80px] whitespace-nowrap"
@@ -246,8 +212,6 @@
       <UiFormField :label="t('quickCommands.form.tags')">
         <UiTokenInput
           :model-value="form.tagIds.map(String)"
-          input-test-id="tag-input-text"
-          token-test-id="tag-chip"
           :options="options()"
           :placeholder="t('quickCommands.form.tagsPlaceholder')"
           :remove-token-label="t('quickCommands.tags.removeSelection')"
@@ -276,13 +240,11 @@
           >
             <UiInput
               v-model="variable.key"
-              :data-testid="`quick-command-variable-name-${index}`"
               :placeholder="t('quickCommands.form.variableNamePlaceholder')"
               @keydown.enter.prevent.stop
             />
             <UiTextarea
               v-model="variable.value"
-              :data-testid="`quick-command-variable-value-${index}`"
               :min-rows="2"
               class="min-h-[40px] resize-y"
               :placeholder="t('quickCommands.form.variableValuePlaceholder')"
@@ -298,7 +260,6 @@
           </div>
         </div>
         <button
-          data-testid="quick-command-variable-add"
           type="button"
           class="mt-3 w-full rounded-md border border-primary/50 px-4 py-2 text-sm text-primary transition-colors hover:bg-primary/10"
           @click="form.variables.push({ key: '', value: '' })"
@@ -309,24 +270,11 @@
 
       <div class="flex justify-end gap-3 border-t border-border pt-4">
         <UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
-        <UiButton
-          data-testid="quick-command-execute-draft"
-          type="button"
-          appearance="solid"
-          tone="success"
-          :disabled="!form.command.trim()"
-          @click="execute"
-        >
+        <UiButton type="button" appearance="solid" tone="success" :disabled="!form.command.trim()" @click="execute">
           <template #leading><i class="fas fa-play" aria-hidden="true"></i></template>
           {{ t('quickCommands.form.execute') }}
         </UiButton>
-        <UiButton
-          data-testid="quick-command-submit"
-          type="submit"
-          appearance="solid"
-          tone="primary"
-          :disabled="!form.command.trim()"
-        >
+        <UiButton type="submit" appearance="solid" tone="primary" :disabled="!form.command.trim()">
           {{ t('common.save') }}
         </UiButton>
       </div>

@@ -150,7 +150,6 @@
       tag="div"
       class="node-children-container"
       :class="[`children-direction-${modelValue.direction ?? 'horizontal'}`]"
-      :data-testid="`workspace-layout-children-${modelValue.id}`"
       :data-layout-direction="modelValue.direction ?? 'horizontal'"
       item-key="id"
       :group="{ name: 'workspace-layout-items' }"

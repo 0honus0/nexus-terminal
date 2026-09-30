@@ -91,7 +91,6 @@
   <button
     v-if="!props.open"
     type="button"
-    data-testid="preview-search-toggle"
     class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border text-sm text-text-secondary transition hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8 sm:w-8"
     :aria-label="t('fileManager.preview.search', 'Search in document')"
     :title="t('fileManager.preview.search', 'Search in document')"
@@ -102,13 +101,11 @@
 
   <div
     v-else
-    data-testid="preview-search-bar"
     class="flex h-9 min-w-0 max-w-[min(72vw,22rem)] items-center gap-1 rounded-lg border border-border bg-background px-1 shadow-sm sm:h-8"
   >
     <i class="fas fa-search shrink-0 px-1 text-xs text-text-alt" aria-hidden="true"></i>
     <input
       ref="inputRef"
-      data-testid="preview-search-input"
       type="search"
       :value="props.query"
       :placeholder="t('fileManager.preview.searchPlaceholder', 'Search document...')"
@@ -116,11 +113,7 @@
       @input="emit('update:query', ($event.currentTarget as HTMLInputElement).value)"
       @keydown="handleInputKeydown"
     />
-    <span
-      data-testid="preview-search-count"
-      class="min-w-10 shrink-0 text-center text-[11px] tabular-nums text-text-alt"
-      aria-live="polite"
-    >
+    <span class="min-w-10 shrink-0 text-center text-[11px] tabular-nums text-text-alt" aria-live="polite">
       <template v-if="props.busy">…</template>
       <template v-else-if="props.query.trim()"
         >{{ props.total > 0 ? Math.max(1, props.current) : 0 }}/{{ props.total }}</template
@@ -128,7 +121,6 @@
     </span>
     <button
       type="button"
-      data-testid="preview-search-previous"
       class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
       :disabled="props.busy || props.total === 0"
       :aria-label="t('fileManager.preview.searchPrevious', 'Previous match')"
@@ -139,7 +131,6 @@
     </button>
     <button
       type="button"
-      data-testid="preview-search-next"
       class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
       :disabled="props.busy || props.total === 0"
       :aria-label="t('fileManager.preview.searchNext', 'Next match')"
@@ -150,7 +141,6 @@
     </button>
     <button
       type="button"
-      data-testid="preview-search-close"
       class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-base text-text-secondary hover:bg-border hover:text-foreground"
       :aria-label="t('fileManager.preview.searchClose', 'Close search')"
       :title="t('fileManager.preview.searchClose', 'Close search')"

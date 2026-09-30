@@ -240,17 +240,12 @@
 </script>
 
 <template>
-  <section
-    ref="root"
-    data-testid="command-history-view"
-    class="command-history-root flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
-  >
+  <section ref="root" class="command-history-root flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
     <div
       class="command-history-controls flex shrink-0 items-center gap-2 border-b border-border/40 bg-background/80 px-2 py-1.5"
     >
       <button
         v-if="collapsibleSearch && !searchExpanded"
-        data-testid="command-history-search-toggle"
         type="button"
         class="history-control"
         :title="t('commandHistory.expandSearch')"
@@ -263,7 +258,6 @@
         v-if="searchExpanded"
         ref="searchInput"
         v-model="search"
-        data-testid="command-history-search"
         data-focus-id="commandHistorySearch"
         type="text"
         :placeholder="t('commandHistory.searchPlaceholder')"
@@ -302,7 +296,6 @@
     </div>
 
     <div
-      data-testid="command-history-list"
       class="command-history-list-area min-h-0 flex-1 overflow-y-auto p-2"
       :style="rowStyle"
       :data-row-scale="localScale.toFixed(2)"
@@ -344,7 +337,6 @@
                 aria-hidden="true"
               ></i>
               <button
-                data-testid="command-history-execute"
                 type="button"
                 class="command-history-command min-w-0 flex-1 truncate text-left font-mono text-xs text-foreground group-hover:text-foreground cursor-pointer transition-colors"
                 @click.stop="execute(entry)"
@@ -369,11 +361,11 @@
         <i class="fas fa-play" aria-hidden="true"></i>
         <span>{{ t('commandHistory.execute') }}</span>
       </button>
-      <button data-testid="command-history-copy" class="context-item" @click="copy(context.entry.command)">
+      <button class="context-item" @click="copy(context.entry.command)">
         <i class="fas fa-copy" aria-hidden="true"></i>
         <span>{{ t('commandHistory.copy') }}</span>
       </button>
-      <button data-testid="command-history-delete" class="context-item text-error" @click="remove(context.entry.id)">
+      <button class="context-item text-error" @click="remove(context.entry.id)">
         <i class="fas fa-trash-alt" aria-hidden="true"></i>
         <span>{{ t('commandHistory.delete') }}</span>
       </button>

@@ -19,7 +19,6 @@
       overlayClass?: string;
       panelClass?: string;
       panelStyle?: StyleValue;
-      panelTestId?: string;
       preset?: 'default' | 'standard-modal';
       surface?: boolean;
       role?: string;
@@ -40,7 +39,6 @@
       backdropTrigger: 'click',
       overlayClass: '',
       panelClass: '',
-      panelTestId: undefined,
       preset: 'default',
       surface: true,
       role: undefined,
@@ -154,7 +152,6 @@
       <div
         v-if="props.surface"
         ref="panelRef"
-        :data-testid="props.panelTestId"
         :data-overlay-panel-preset="props.preset"
         data-ui="overlay-panel"
         data-ui-gen="2"

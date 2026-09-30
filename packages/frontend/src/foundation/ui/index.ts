@@ -5,6 +5,8 @@ export { default as UiTokenInput } from './UiTokenInput.vue';
 export type { UiTokenOption } from './UiTokenInput.vue';
 export { default as UiBadge } from './UiBadge.vue';
 export { default as UiButton } from './UiButton.vue';
+export { default as UiActionGroup } from './UiActionGroup.vue';
+export { default as UiConfirmationPanel } from './UiConfirmationPanel.vue';
 export { default as UiCheckbox } from './UiCheckbox.vue';
 export { default as UiContextMenu } from './UiContextMenu.vue';
 export { default as UiDialog } from './UiDialog.vue';

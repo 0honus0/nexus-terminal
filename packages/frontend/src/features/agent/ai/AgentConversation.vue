@@ -419,7 +419,6 @@
     <div class="relative z-10 min-h-0 flex-1">
       <div
         ref="scroller"
-        data-testid="agent-conversation-scroller"
         class="agent-conversation-scroller h-full overflow-y-auto overscroll-contain px-5 py-5 touch-pan-y"
         @scroll.passive="handleScroll"
       >
@@ -812,6 +811,7 @@
         >
           <textarea
             id="agent-composer"
+            data-no-highlight
             :aria-label="$t('agent.conversation.placeholder')"
             :value="draft"
             rows="3"

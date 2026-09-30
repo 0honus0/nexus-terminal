@@ -413,7 +413,6 @@
     />
     <div
       v-if="node.component === 'terminal' && ['connecting', 'reconnecting'].includes(session.state.value)"
-      data-testid="terminal-connection-status"
       role="status"
       class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center"
     >

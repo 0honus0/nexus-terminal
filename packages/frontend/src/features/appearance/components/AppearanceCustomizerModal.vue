@@ -80,13 +80,11 @@
     <div
       v-if="props.visible"
       ref="root"
-      data-testid="style-customizer"
       class="fixed inset-0 z-[1000] flex items-center justify-center"
       @click.self="emit('close')"
     >
       <div
         ref="dialog"
-        data-testid="style-customizer-dialog"
         class="absolute flex h-full w-full flex-col overflow-hidden rounded-lg bg-background text-foreground shadow-[0px_0px_15px_rgb(0_0_0_/_0.15)] md:h-[85vh] md:max-h-[700px] md:w-[90%] md:max-w-[800px]"
       >
         <header
@@ -111,7 +109,6 @@
           >
             <button
               type="button"
-              data-testid="style-customizer-ui-tab"
               :class="[
                 'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
                 activeTab === 'ui'
@@ -124,7 +121,6 @@
             </button>
             <button
               type="button"
-              data-testid="style-customizer-terminal-tab"
               :class="[
                 'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
                 activeTab === 'terminal'
@@ -137,7 +133,6 @@
             </button>
             <button
               type="button"
-              data-testid="style-customizer-background-tab"
               :class="[
                 'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
                 activeTab === 'background'
@@ -150,7 +145,6 @@
             </button>
             <button
               type="button"
-              data-testid="style-customizer-other-tab"
               :class="[
                 'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
                 activeTab === 'other'
@@ -179,7 +173,6 @@
           <UiButton
             v-if="activeTab === 'ui'"
             type="button"
-            data-testid="ui-theme-reset"
             appearance="soft"
             tone="neutral"
             @click="uiPanel?.resetUiTheme()"
@@ -189,7 +182,6 @@
           <UiButton
             v-if="activeTab === 'ui'"
             type="button"
-            data-testid="ui-theme-save"
             appearance="solid"
             tone="primary"
             @click="uiPanel?.saveUiTheme()"
