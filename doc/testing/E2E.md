@@ -105,6 +105,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - connection creation coverage uses named actions, saved connection cards and inline test results while verifying real SSH authentication, credential-preserving clones, script imports and filtered bulk tests;
 - batch connection editing verifies persisted notes, failed-item selection after partial updates, lazy auxiliary catalogs and narrow-screen row selection through existing cards, switches and modal controls;
 - SSH key management coverage uses named dialogs and actions to verify file import, name-only edits, saved-key/password authentication switches, delete recovery and narrow-screen loading errors without exposing private-key details;
+- SSH reconnect coverage observes Workspace protocol requests, rendered terminal geometry and named connection-picker controls to verify initial failures, periodic/key-triggered recovery, hidden sessions, HTML backgrounds and mobile tab lifecycle;
 - multi-megabyte SFTP uploads completing every block before success;
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;
