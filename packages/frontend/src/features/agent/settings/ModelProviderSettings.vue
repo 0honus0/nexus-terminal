@@ -403,10 +403,22 @@
           `${provider.displayName} · ${modelId}: ${t('agent.settings.providers.testPassed')} (${latencyText})`,
         );
       } else {
-        testResults[key] = { state: 'error', message: t('agent.ui.testFailed') };
+        const code = result.errorCode;
+        const category =
+          code === 'PROVIDER_HTTP_401'
+            ? 'authentication'
+            : code === 'PROVIDER_HTTP_403'
+              ? 'forbidden'
+              : code === 'PROVIDER_HTTP_429'
+                ? 'busy'
+                : code?.endsWith('TIMEOUT')
+                  ? 'timeout'
+                  : 'unavailable';
+        const message = `${t(`agent.apiErrors.${category}`)}${code && /^[A-Z0-9_]+$/.test(code) ? ` (${code})` : ''}`;
+        testResults[key] = { state: 'error', message };
         operationFeedback.notifyError({
           operation: 'test-model',
-          message: `${provider.displayName} · ${modelId}: ${t('agent.settings.providers.testFailedMessage')}`,
+          message: `${provider.displayName} · ${modelId}: ${message}`,
           context: { providerId: provider.id, modelId },
         });
       }

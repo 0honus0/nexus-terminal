@@ -2060,8 +2060,8 @@
 .ui-button--action-model {
   min-width: 0;
   height: auto;
-  min-height: 44px;
-  padding-block: 8px;
+  min-height: 32px;
+  padding-block: 5px;
   white-space: normal;
   line-height: 1.4;
 }
