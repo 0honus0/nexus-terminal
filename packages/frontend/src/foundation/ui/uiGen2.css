@@ -1600,29 +1600,6 @@
   overflow-y: auto;
 }
 
-/* Navigation uses a text affordance and a content-sized detached menu. */
-.ui-select__trigger[data-presentation='navigation'] {
-  min-height: 44px;
-  padding-inline: 10px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  box-shadow: none;
-}
-
-.ui-select__panel[data-presentation='navigation'] {
-  width: max-content;
-  min-width: max(160px, var(--reka-select-trigger-width, 0px));
-  border-width: 1px;
-  border-radius: 12px;
-  background: var(--header-bg-color);
-}
-
-.ui-select__panel[data-presentation='navigation'] .ui-select__item {
-  min-height: 40px;
-  padding-inline: 12px;
-}
-
 .ui-select__item {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { nextTick, onMounted, ref, watch } from 'vue';
   import { RouterLink, useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
@@ -8,7 +8,6 @@
   import { usePreferences } from '@/features/preferences/public';
   import { releaseRepository, releaseRepositoryUrl } from '@/app/config/release';
   import { disposeWorkspaceRuntime } from '@/app/workspaceLifecycle';
-  import { UiSelect, type UiSelectValue } from '@/foundation/ui';
 
   const emit = defineEmits<{ customizeAppearance: [] }>();
   const router = useRouter();
@@ -18,6 +17,7 @@
   const preferences = usePreferences();
   const logoutError = ref<string | null>(null);
   const loggingOut = ref(false);
+  const navigationLinks = ref<HTMLElement | null>(null);
   const navigation = [
     { path: '/', label: 'nav.dashboard' },
     { path: '/workspace', label: 'nav.terminal' },
@@ -27,12 +27,18 @@
     { path: '/audit-logs', label: 'nav.auditLogs' },
     { path: '/settings', label: 'nav.settings' },
   ];
-  const navigationOptions = computed(() => navigation.map((item) => ({ value: item.path, label: t(item.label) })));
-  const navigate = (value: UiSelectValue): void => {
-    if (typeof value === 'string' && value !== route.path) void router.push(value);
+  const revealActivePage = async (): Promise<void> => {
+    await nextTick();
+    const strip = navigationLinks.value;
+    const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!strip || !active || strip.scrollWidth <= strip.clientWidth) return;
+    // Scroll only the navigation strip, never the document or the terminal below it.
+    strip.scrollTo({ left: active.offsetLeft - strip.clientWidth / 2 + active.offsetWidth / 2 });
   };
+  watch(() => route.path, revealActivePage);
 
   onMounted(() => {
+    void revealActivePage();
     if (auth.isAuthenticated.value)
       void preferences.load().catch((cause) => logger.error({ err: cause }, 'Failed to load header preferences'));
   });
@@ -63,22 +69,11 @@
       <RouterLink to="/" class="app-brand" :aria-label="t('nav.dashboard')">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="h-7 w-auto shrink-0" />
       </RouterLink>
-      <div class="app-nav-links">
+      <div ref="navigationLinks" class="app-nav-links">
         <RouterLink v-for="item in navigation" :key="item.path" class="nav-link inline-flex" :to="item.path">{{
           t(item.label)
         }}</RouterLink>
       </div>
-      <UiSelect
-        class="app-nav-picker"
-        presentation="navigation"
-        panel-test-id="app-navigation-menu"
-        :model-value="route.path"
-        :options="navigationOptions"
-        :aria-label="t('common.primaryNavigation')"
-        :placeholder="t('common.primaryNavigation')"
-        align="center"
-        @update:model-value="navigate"
-      />
 
       <div class="app-nav-tools flex shrink-0 items-center gap-1">
         <a
@@ -154,9 +149,6 @@
   .app-nav-tools {
     justify-self: end;
   }
-  .app-nav-picker {
-    display: none;
-  }
 
   .nav-link,
   .icon-link {
@@ -208,17 +200,34 @@
   @media (max-width: 1199px) {
     .app-navigation {
       grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 12px;
-      padding-inline: 12px;
+      gap: 6px;
+      padding-inline: 8px;
     }
     .app-nav-links {
+      position: relative;
+      min-width: 0;
+      overflow-x: auto;
+      padding: 4px;
+      gap: 4px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--nav-item-active-bg-color) 35%, transparent);
+      scrollbar-width: none;
+    }
+    .app-nav-links::-webkit-scrollbar {
       display: none;
     }
-    .app-nav-picker {
-      display: block;
-      width: auto;
-      max-width: 180px;
-      justify-self: center;
+    .app-nav-links .nav-link {
+      flex-shrink: 0;
+      min-height: 36px;
+      padding-inline: 12px;
+      border-radius: 9px;
+    }
+    .app-nav-links .nav-link.router-link-exact-active {
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 24%, transparent);
+    }
+    .app-nav-links .nav-link:focus-visible {
+      outline-offset: -2px;
     }
   }
   @media (max-width: 767px) {

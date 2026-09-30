@@ -45,7 +45,6 @@
       hideIndicator?: boolean;
       triggerClass?: string;
       panelTestId?: string;
-      presentation?: 'control' | 'navigation';
       optionTestIdPrefix?: string;
     }>(),
     {
@@ -61,7 +60,6 @@
       hideIndicator: true,
       triggerClass: '',
       panelTestId: undefined,
-      presentation: 'control',
       optionTestIdPrefix: undefined,
     },
   );
@@ -173,7 +171,6 @@
         :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
         :aria-invalid="props.invalid || undefined"
         class="ui-control ui-focusable ui-select__trigger"
-        :data-presentation="props.presentation"
         :class="[
           { 'ui-select__trigger--invalid': props.invalid, 'ui-select__trigger--disabled': props.disabled },
           props.triggerClass,
@@ -195,7 +192,6 @@
       <SelectPortal :to="portalTarget">
         <SelectContent
           data-ui="select-panel"
-          :data-presentation="props.presentation"
           data-ui-gen="2"
           :data-testid="props.panelTestId"
           :data-density="props.density"
@@ -204,7 +200,7 @@
           :data-match-trigger-width="props.matchTriggerWidth || undefined"
           position="popper"
           :align="props.align"
-          :side-offset="props.presentation === 'navigation' ? 6 : 0"
+          :side-offset="0"
           :collision-padding="12"
           :avoid-collisions="true"
           :body-lock="false"
