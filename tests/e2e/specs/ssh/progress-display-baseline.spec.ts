@@ -23,7 +23,7 @@ import {
 } from './progress-display.helpers';
 
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
-const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
+const menu = (page: Page): Locator => page.getByRole('menu');
 
 async function openFileManager(page: Page, context: BrowserContext): Promise<void> {
   await loginAsInitialAdmin(context.request);
@@ -55,7 +55,9 @@ async function goIntoFolder(page: Page, folder: string): Promise<void> {
   const targetPath = await target.getAttribute('data-file-path');
   expect(targetPath).toBeTruthy();
   await target.click();
-  await expect(page.getByTestId('file-manager-modal').getByTestId('file-manager-path-input')).toHaveValue(targetPath!);
+  await expect(
+    page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('.file-manager-path-input input'),
+  ).toHaveValue(targetPath!);
 }
 
 async function refreshFileManager(page: Page): Promise<void> {
@@ -65,12 +67,12 @@ async function refreshFileManager(page: Page): Promise<void> {
 
 async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, taskText: string): Promise<void> {
   const modal = await openDesktopProgressDisplay(page);
-  const source = modal.getByTestId('hidden-progress-source').filter({ hasText: taskText });
-  const task = source.getByTestId('hidden-progress-task').filter({ hasText: taskText });
+  const source = modal.locator('.hidden-progress-source-card').filter({ hasText: taskText });
+  const task = source.locator('.hidden-progress-task-row').filter({ hasText: taskText });
   await expect(source).toBeVisible();
   await expect(task).toBeVisible();
   await expect(task.getByRole('progressbar')).toBeVisible();
-  await source.getByTestId('hidden-progress-restore').click();
+  await source.getByRole('button', { name: 'Restore', exact: true }).click();
   await expect(modal).toBeHidden();
   await expect(popup).toBeVisible();
   await hideVisibleProgressCenter(page);
@@ -108,7 +110,7 @@ test('desktop Progress Display floats above the workspace without resizing the t
     await closeConnectedFileManager(page);
     await hideVisibleProgressCenter(page);
 
-    const terminal = page.getByTestId('terminal');
+    const terminal = page.locator('.terminal-inner-container');
     await expect(terminal).toBeVisible();
     const terminalRect = () =>
       terminal.evaluate((element) => {
@@ -125,8 +127,8 @@ test('desktop Progress Display floats above the workspace without resizing the t
     expect(Math.abs(after.height - before.height)).toBeLessThan(1);
 
     await step('desktop Progress Display drags freely and restores its last position', async () => {
-      const dialog = page.getByTestId('progress-display-dialog');
-      const handle = display.getByTestId('progress-display-drag-handle');
+      const dialog = display;
+      const handle = display.locator('.transfer-progress-header');
       const handleBox = await handle.boundingBox();
       const beforeDrag = await dialog.boundingBox();
       expect(handleBox).toBeTruthy();
@@ -146,7 +148,7 @@ test('desktop Progress Display floats above the workspace without resizing the t
 
       await closeProgressDisplay(display);
       display = await openDesktopProgressDisplay(page);
-      const restored = await page.getByTestId('progress-display-dialog').boundingBox();
+      const restored = await display.boundingBox();
       expect(restored).toBeTruthy();
       expect(Math.abs(restored!.x - moved!.x)).toBeLessThanOrEqual(2);
       expect(Math.abs(restored!.y - moved!.y)).toBeLessThanOrEqual(2);
@@ -199,12 +201,12 @@ test('existing copy progress popup hides and restores through Progress Display',
       await expect(center).toBeVisible({ timeout: 10_000 });
       const task = visibleProgressTask(page, sourceName);
       await expect(task).toContainText('Copy');
-      await expect(page.getByTestId('file-manager-modal')).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'File Manager', exact: true })).toBeVisible();
     });
 
     await step('the minimize-style action hides the popup and Progress Display restores it', async () => {
       const center = visibleProgressCenter(page);
-      await expect(center.getByTestId('transfer-progress-task')).toBeVisible();
+      await expect(center.locator('[data-task-id]')).toBeVisible();
       await hideVisibleProgressCenter(page);
       await openProgressDisplayAndRestorePopup(page, center, sourceName);
     });
@@ -294,15 +296,12 @@ test('existing archive progress popup hides and restores through Progress Displa
       const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
       await expect(compress).toBeVisible();
       await compress.hover();
-      await page
-        .getByTestId('file-manager-context-submenu')
-        .getByRole('button', { name: 'Compress to zip', exact: true })
-        .click();
+      await page.getByRole('menu').getByRole('button', { name: 'Compress to zip', exact: true }).click();
 
       const center = visibleProgressCenter(page);
       await expect(center).toBeVisible({ timeout: 10_000 });
       await expect(visibleProgressTask(page, 'archive-source.zip')).toContainText('Compress');
-      await expect(page.getByTestId('file-manager-modal')).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'File Manager', exact: true })).toBeVisible();
     });
 
     await step('the minimize-style action hides the archive popup and Progress Display restores it', async () => {
@@ -418,7 +417,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
     await slowStep(
       'the central display exposes a real partial multi-target task, method/error details and final remove action',
       async () => {
-        const display = page.getByTestId('progress-display-modal');
+        const display = page.getByRole('dialog', { name: 'Progress Display', exact: true });
         await expect(display).toBeVisible({ timeout: 10_000 });
         await expect(display.getByText('Cross-server transfer tasks', { exact: true })).toBeVisible();
 

@@ -24,6 +24,8 @@ The main E2E projects do not depend on `auth` to create shared state. Normal spe
 
 The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP filesystem is isolated under `tests/e2e/.tmp/ssh-root`, so GitHub Actions does not depend on any external SSH host.
 
+Local cross-server transfer scenarios require `ssh`, `scp`, `rsync` and `sshpass` on the host PATH, matching the E2E runner image. Missing tools must be supplied before running these scenarios, not worked around by weakening transfer assertions.
+
 Test support HTTP controls are limited to deterministic fixture setup and fault injection (for example remote file creation, artificial latency, or SSH availability). Test assertions use the Nexus HTTP/WebSocket/UI/ingress surfaces. Fake external services validate incoming requests directly and return success/failure instead of exposing captured internal request logs to specs.
 
 Functional/documentation screenshots are declared directly at real E2E checkpoints with `captureFunctionalScreenshot(page, filename)`. Screenshot capture remains opt-in for focused maintenance runs; the canonical E2E workflow does not mutate the repository or commit refreshed screenshots.
@@ -96,6 +98,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - extensionless text files opening and saving through the editor;
 - streamed previews for Unicode image names, Markdown, and XLSX files, plus stale symlink failure isolation;
 - cross-session copy and two-phase move semantics with transfer progress;
+- real SFTP navigation uses the actual list scroll container and rendered filename label to verify long-list scrolling, truncation, sorting, popup resizing and path history; shared Progress Display helpers distinguish the tab-bar manager from the per-session restore button and use task state, named actions and rendered source cards;
 - multi-megabyte SFTP uploads completing every block before success;
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;

@@ -37,7 +37,7 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
     });
 
     await step('the small hidden-progress button itself drags freely and remembers its position', async () => {
-      const button = page.getByTestId('transfer-progress-restore-button');
+      const button = page.getByRole('button', { name: /^Progress Display \(/ });
       await expect(button).toBeVisible();
       const before = await button.boundingBox();
       expect(before).toBeTruthy();
@@ -57,7 +57,7 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       await button.click();
       await expect(visibleProgressCenter(page)).toBeVisible();
       await hideVisibleProgressCenter(page);
-      const restored = await page.getByTestId('transfer-progress-restore-button').boundingBox();
+      const restored = await button.boundingBox();
       expect(restored).toBeTruthy();
       expect(Math.abs(restored!.x - moved!.x)).toBeLessThanOrEqual(2);
       expect(Math.abs(restored!.y - moved!.y)).toBeLessThanOrEqual(2);
@@ -71,14 +71,14 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
         await expect(task).toBeVisible();
         await expect(task).toContainText('Upload');
         await expect(task.getByRole('progressbar')).toBeVisible();
-        await expect(task.getByTestId('hidden-progress-percent')).toBeVisible();
+        await expect(task.getByText(/^\d+\.\d%$/)).toBeVisible();
         await expect(task.locator('[data-progress-session]')).toHaveCount(0);
         const source = hiddenSource(modal, filename);
         await expect(source).toBeVisible();
-        await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
-        await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
+        await expect(source.getByRole('button', { name: 'Restore', exact: true })).toBeEnabled();
+        await expect(task.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
 
-        await source.getByTestId('hidden-progress-restore').click();
+        await source.getByRole('button', { name: 'Restore', exact: true }).click();
         await expect(modal).toBeHidden();
         await expect(visibleProgressCenter(page)).toBeVisible();
         await hideVisibleProgressCenter(page);
@@ -91,12 +91,12 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
     );
 
     await slowStep('Cancel invokes the upload provider cancel callback and removes the hidden task', async () => {
-      const modal = page.getByTestId('progress-display-modal');
+      const modal = page.getByRole('dialog', { name: 'Progress Display', exact: true });
       const task = hiddenTask(modal, filename);
-      await task.getByTestId('hidden-progress-cancel').click();
+      await task.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(task).toBeHidden({ timeout: 10_000 });
-      await expect(page.getByTestId('transfer-progress-center')).toBeHidden();
-      await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
+      await expect(page.locator('.transfer-progress-window')).toBeHidden();
+      await expect(modal.getByText('There are no hidden progress tasks.', { exact: true })).toBeVisible();
 
       await closeProgressDisplay(modal);
       await reopenConnectedFileManager(page);
@@ -138,8 +138,8 @@ test('registered copy progress hides and cancels through the shared Progress Dis
       const task = hiddenTask(modal, sourceName);
       await expect(task).toBeVisible();
       await expect(task).toContainText('Copy');
-      await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
-      await task.getByTestId('hidden-progress-cancel').click();
+      await expect(task.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
+      await task.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(task).toBeHidden({ timeout: 10_000 });
       await closeProgressDisplay(modal);
       await reopenConnectedFileManager(page);
@@ -186,7 +186,7 @@ test('successful hidden upload auto-cleans its completed task from Progress Disp
     await expect(hidden).toBeVisible();
     await expect(hidden).toContainText('Completed', { timeout: 15_000 });
     await expect(hidden).toBeHidden({ timeout: 4_000 });
-    await expect(display.getByTestId('progress-display-empty')).toBeVisible();
+    await expect(display.getByText('There are no hidden progress tasks.', { exact: true })).toBeVisible();
 
     await closeProgressDisplay(display);
     await reopenConnectedFileManager(page);

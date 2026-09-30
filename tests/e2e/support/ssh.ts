@@ -120,7 +120,7 @@ const visibleFileManagerOpenButton = (page: Page): Locator =>
     .first();
 
 export function activeFileManagerList(page: Page): Locator {
-  return visibleFileManagerModal(page).locator('.file-manager-root table');
+  return visibleFileManagerModal(page).locator('.file-manager-root table').locator('..');
 }
 
 export function fileManagerRow(page: Page, filename: string): Locator {
@@ -155,24 +155,29 @@ export async function reopenConnectedFileManager(page: Page): Promise<void> {
 }
 
 async function openProgressDisplay(page: Page): Promise<Locator> {
-  const fileManagerModal = page.getByTestId('file-manager-modal');
+  const fileManagerModal = page.getByRole('dialog', { name: 'File Manager', exact: true });
   if (await fileManagerModal.isVisible()) {
     await closeConnectedFileManager(page);
   }
 
-  const toggle = page.getByTestId('transfer-progress-toggle');
+  const toggle = page.getByRole('button', { name: 'Progress Display', exact: true });
   await expect(toggle).toBeVisible();
   await toggle.click();
 
-  const display = page.getByTestId('progress-display-modal');
+  const display = page.getByRole('dialog', { name: 'Progress Display', exact: true });
   await expect(display).toBeVisible();
-  await expect(display).toHaveAttribute('data-progress-display-placement', 'overlay');
+  await expect(display.locator('[data-progress-display-placement]')).toHaveAttribute(
+    'data-progress-display-placement',
+    'overlay',
+  );
   await expect
     .poll(() =>
-      page.getByTestId('progress-display-overlay').evaluate((element) => ({
-        position: window.getComputedStyle(element).position,
-        zIndex: window.getComputedStyle(element).zIndex,
-      })),
+      display.evaluate((element) => {
+        const overlay = element.closest('[data-ui="overlay"]');
+        if (!overlay) throw new Error('Progress Display overlay is missing');
+        const style = window.getComputedStyle(overlay);
+        return { position: style.position, zIndex: style.zIndex };
+      }),
     )
     .toEqual({ position: 'fixed', zIndex: '1100' });
   return display;

@@ -31,7 +31,7 @@ test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconn
       const task = uploadProgressTask(activePage, filename);
       await expect(task, `cycle ${cycle}: upload task should start before teardown`).toBeVisible({ timeout: 10_000 });
       await closeConnectedFileManager(activePage);
-      await task.getByTestId('transfer-progress-cancel').click();
+      await task.getByRole('button', { name: 'Cancel', exact: true }).click();
 
       // Deliberately overlap browser transport loss, upload cancellation, Backend runtime teardown,
       // session clearing, and SSH-server reset. This is the churn that previously made a later
@@ -92,7 +92,7 @@ test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconn
       await connectTestSshFromConnectionsPage(activePage, connectionId);
       await openConnectedFileManager(activePage);
       await expect(
-        activePage.getByTestId('command-input'),
+        activePage.locator('.command-bar-command-input'),
         `cycle ${cycle}: fresh Workspace control socket should reconnect after teardown`,
       ).toBeEnabled();
       expect(freshConnect.requests, `cycle ${cycle}: reset must leave the first fresh workspace.connect usable`).toBe(

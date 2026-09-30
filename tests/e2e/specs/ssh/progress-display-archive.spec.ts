@@ -47,7 +47,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
       const modal = await openProgressDisplay(page);
       let task = hiddenTask(modal, 'archive-source.zip');
       await expect(task).toContainText('Compress');
-      await hiddenSource(modal, 'archive-source.zip').getByTestId('hidden-progress-restore').click();
+      await hiddenSource(modal, 'archive-source.zip').getByRole('button', { name: 'Restore', exact: true }).click();
       await expect(modal).toBeHidden();
       await expect(popup).toBeVisible();
       await hideVisibleProgressCenter(page);
@@ -56,7 +56,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
       const reopenedModal = await openProgressDisplay(page);
       task = hiddenTask(reopenedModal, 'archive-source.zip');
       await expect(task).toBeVisible();
-      await task.getByTestId('hidden-progress-cancel').click();
+      await task.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(task).toBeHidden({ timeout: 10_000 });
       await closeProgressDisplay(reopenedModal);
       await reopenConnectedFileManager(page);
@@ -92,8 +92,8 @@ test('registered archive progress supports hide, restore, and real cancel for co
         const modal = await openProgressDisplay(page);
         const task = hiddenTask(modal, 'archive-source.zip').filter({ hasText: 'Decompress' }).first();
         await expect(task).toContainText('Decompress');
-        await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
-        await task.getByTestId('hidden-progress-cancel').click();
+        await expect(task.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
+        await task.getByRole('button', { name: 'Cancel', exact: true }).click();
         await expect(task).toBeHidden({ timeout: 10_000 });
         await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
         await closeProgressDisplay(modal);
@@ -105,8 +105,8 @@ test('registered archive progress supports hide, restore, and real cancel for co
     );
 
     await step('completed and cancelled archive work auto-cleans the final progress entry', async () => {
-      await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0, { timeout: 10_000 });
-      await expect(page.getByTestId('transfer-progress-center')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^Progress Display \(/ })).toHaveCount(0, { timeout: 10_000 });
+      await expect(page.locator('.transfer-progress-window')).toHaveCount(0);
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
@@ -166,7 +166,7 @@ test('closing and reopening the file manager preserves an in-flight archive task
     await expect(popup).toBeVisible({ timeout: 10_000 });
     await expect(task).toHaveAttribute('data-task-kind', 'compress');
 
-    const fileManagerModal = page.getByTestId('file-manager-modal');
+    const fileManagerModal = page.getByRole('dialog', { name: 'File Manager', exact: true });
     await closeConnectedFileManager(page);
     await expect(popup).toBeVisible();
     await hideVisibleProgressCenter(page);
@@ -206,10 +206,10 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
 
   try {
     await connectTestSshFromConnectionsPage(page, connectionId);
-    const sidebarToggle = page.getByTestId('sidebar-pane-fileManager');
+    const sidebarToggle = page.getByRole('button', { name: 'File Manager', exact: true });
     await sidebarToggle.click();
-    const sidebar = page.getByTestId('right-sidebar-panel');
-    const sidebarList = sidebar.getByTestId('file-manager-list');
+    const sidebar = page.locator('[data-workspace-sidebar]');
+    const sidebarList = sidebar.locator('.file-manager-root table').locator('..');
     await expect(sidebarList).toBeVisible();
     const source = sidebarList.locator('tr[data-filename="archive-source.txt"]');
     await expect(source).toBeVisible({ timeout: 20_000 });
@@ -217,10 +217,7 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
     await source.click({ button: 'right' });
     const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
     await compress.hover();
-    await page
-      .getByTestId('file-manager-context-submenu')
-      .getByRole('button', { name: 'Compress to zip', exact: true })
-      .click();
+    await page.getByRole('menu').getByRole('button', { name: 'Compress to zip', exact: true }).click();
 
     const popup = visibleProgressCenter(page);
     const task = visibleProgressTask(page, 'archive-source.zip');
@@ -232,7 +229,7 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
     await expect(sidebarList).toBeHidden();
     await expect(popup).toBeVisible();
     await expect(task).toBeVisible();
-    await task.getByTestId('transfer-progress-cancel').click();
+    await task.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(task).toHaveAttribute('data-task-status', 'cancelled', { timeout: 10_000 });
     await sidebarToggle.click();
     await expect(sidebarList).toBeVisible();

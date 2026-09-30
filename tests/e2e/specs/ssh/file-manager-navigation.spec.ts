@@ -26,16 +26,16 @@ const LONG_LIST_COUNT = 260;
 const LONG_FILENAME = `zz-m11-long-name-${'x'.repeat(180)}.txt`;
 const M11_03A_EVIDENCE_DIR = process.env.M11_03A_EVIDENCE_DIR || '/tmp/nexus-m11-03a';
 
-const manager = (page: Page): Locator => page.getByTestId('file-manager-modal');
+const manager = (page: Page): Locator => page.getByRole('dialog', { name: 'File Manager', exact: true });
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 const parentRow = (page: Page): Locator => manager(page).locator('[data-file-parent]');
-const pathInput = (page: Page): Locator => manager(page).getByTestId('file-manager-path-input');
+const pathInput = (page: Page): Locator => manager(page).locator('.file-manager-path-input input');
 
 async function openSearchInput(page: Page): Promise<Locator> {
   const fileManager = manager(page);
-  const input = fileManager.getByTestId('file-manager-search-input');
+  const input = fileManager.getByPlaceholder('Search files...', { exact: true });
   if (!(await input.isVisible())) {
-    await fileManager.getByTestId('file-manager-search-toggle').click();
+    await fileManager.getByRole('button', { name: 'Search files...', exact: true }).click();
   }
   await expect(input).toBeVisible();
   return input;
@@ -81,7 +81,7 @@ async function fileListMetrics(page: Page, filename?: string): Promise<Record<st
     const target = targetFilename
       ? element.querySelector<HTMLTableRowElement>(`tr[data-filename="${targetFilename}"]`)
       : null;
-    const nameButton = target?.querySelector<HTMLButtonElement>('.file-row-name button');
+    const nameButton = target?.querySelector<HTMLElement>('.file-row-name-label');
     const rowBox = target?.getBoundingClientRect();
     const nameBox = nameButton?.getBoundingClientRect();
     return {
@@ -110,8 +110,8 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
   await openConnectedFileManager(page);
 
   await step('desktop File Manager popup resizes from the bottom-right and restores its saved size', async () => {
-    const panel = page.getByTestId('file-manager-modal-panel');
-    const resizeHandle = page.getByTestId('file-manager-resize-handle');
+    const panel = manager(page);
+    const resizeHandle = panel.getByLabel('Resize file manager window', { exact: true });
     await expect(panel).toBeVisible();
     await expect(resizeHandle).toBeVisible();
     const before = await panel.boundingBox();
@@ -174,7 +174,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(fileManager.locator('tr[data-file-path="/nested.txt"]')).toHaveCount(0);
 
     await recursiveResult.click({ button: 'right' });
-    const contextMenu = page.getByTestId('file-manager-context-menu');
+    const contextMenu = page.getByRole('menu');
     await expect(contextMenu).toBeVisible();
     await contextMenu.getByText('Rename', { exact: true }).first().click();
     const renameModal = page.getByRole('dialog', { name: /Rename / });
@@ -186,7 +186,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     const reopenedAfterRename = await openSearchInput(page);
     await reopenedAfterRename.fill('definitely-no-e2e-match');
     await expect(fileManager.getByText('No search results found', { exact: true })).toBeVisible();
-    const clearSearch = fileManager.getByTestId('file-manager-search-clear');
+    const clearSearch = fileManager.locator('.file-manager-search-box button');
     await expect(clearSearch).toBeVisible();
     await clearSearch.click();
     await expect(reopenedAfterRename).toHaveValue('');
@@ -199,9 +199,9 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     const recursivePdf = fileManager.locator('tr[data-file-path="/folder-seed/second-preview.pdf"]');
     await expect(recursivePdf).toBeVisible();
     await recursivePdf.dblclick();
-    const preview = page.getByTestId('document-popup');
+    const preview = page.locator('[data-document-mode="preview"]');
     await expect(preview).toHaveAttribute('data-document-mode', 'preview');
-    await expect(preview.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(preview.locator('.pdf-toolbar').getByText('3', { exact: true })).toBeVisible();
     await expect(pathInput(page)).toHaveValue('/');
     await preview.click({ position: { x: 2, y: 2 } });
     await expect(preview).toBeHidden();
@@ -209,8 +209,8 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
     const reopenedSearch = await openSearchInput(page);
     await reopenedSearch.press('Escape');
-    await expect(fileManager.getByTestId('file-manager-search-input')).toHaveCount(0);
-    await expect(fileManager.getByTestId('file-manager-search-toggle')).toBeVisible();
+    await expect(fileManager.getByPlaceholder('Search files...', { exact: true })).toHaveCount(0);
+    await expect(fileManager.getByRole('button', { name: 'Search files...', exact: true })).toBeVisible();
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 
@@ -221,7 +221,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(createDialog).toBeVisible();
     const input = createDialog.getByLabel('File name:', { exact: true });
     await input.fill('seed.txt');
-    await expect(createDialog.getByTestId('file-manager-create-conflict')).toHaveText(
+    await expect(createDialog.getByText('Entry "seed.txt" already exists.', { exact: true })).toHaveText(
       'Entry "seed.txt" already exists.',
     );
     await expect(createDialog.getByRole('button', { name: 'Create', exact: true })).toBeDisabled();
@@ -232,12 +232,12 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(createDialog).toBeHidden();
 
     await row(page, 'seed.txt').dblclick();
-    const editor = page.getByTestId('document-popup').getByTestId('file-editor-view');
+    const editor = page.locator('[data-document-mode="editor"] .file-editor-container');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect
       .poll(async () => await editor.locator('.monaco-editor .view-lines').innerText())
       .toContain('nexus-e2e-seed');
-    await page.getByTestId('document-popup').getByTitle('Close Editor', { exact: true }).first().click();
+    await page.locator('[data-document-mode="editor"]').getByTitle('Close Editor', { exact: true }).first().click();
     await expect(editor).toBeHidden();
   });
 
@@ -245,7 +245,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     const target = row(page, 'force-delete-e2e');
     await expect(target).toBeVisible();
     await target.click({ button: 'right' });
-    const contextMenu = page.getByTestId('file-manager-context-menu');
+    const contextMenu = page.getByRole('menu');
     await expect(contextMenu).toBeVisible();
     await contextMenu.getByText('Delete', { exact: true }).click();
     const confirm = page.getByRole('dialog', { name: 'Please confirm', exact: true });
@@ -265,7 +265,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(target).toHaveAttribute('data-filename', BACKSLASH_DELETE_FILENAME);
     await target.click({ button: 'right' });
 
-    const contextMenu = page.getByTestId('file-manager-context-menu');
+    const contextMenu = page.getByRole('menu');
     await expect(contextMenu).toBeVisible();
     await contextMenu.getByText('Delete', { exact: true }).click();
     const confirm = page.getByRole('dialog', { name: 'Please confirm', exact: true });
@@ -357,7 +357,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
   await step('Path history records, copies, deletes, and navigates through visited directories', async () => {
     await navigateViaPathInput(page, SPECIAL_PATH);
     await pathInput(page).click();
-    const historyDropdown = manager(page).getByTestId('path-history-dropdown');
+    const historyDropdown = manager(page).locator('.path-history-dropdown');
     await expect(historyDropdown).toBeVisible();
     const pathBox = await pathInput(page).boundingBox();
     expect(pathBox).toBeTruthy();
@@ -371,8 +371,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
         height: rect.height,
         top: rect.top,
         borderRadius: Number.parseFloat(style.borderTopLeftRadius),
-        hitTestVisible:
-          document.elementFromPoint(probeX, probeY)?.closest('[data-testid="path-history-dropdown"]') === element,
+        hitTestVisible: document.elementFromPoint(probeX, probeY)?.closest('.path-history-dropdown') === element,
       };
     });
     expect(historyMetrics.width).toBeGreaterThanOrEqual(280);
@@ -404,14 +403,14 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(folderHistory).toBeVisible();
     await expect(folderHistory.getByRole('button')).toHaveCount(0);
     await folderHistory.click({ button: 'right' });
-    let historyContext = page.getByTestId('path-history-context-menu');
+    let historyContext = page.getByRole('menu');
     await expect(historyContext).toBeVisible();
     await historyContext.getByRole('button', { name: 'Copy path', exact: true }).click();
     await expect(historyContext).toBeHidden();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(FAVORITE_PATH);
 
     await folderHistory.click({ button: 'right' });
-    historyContext = page.getByTestId('path-history-context-menu');
+    historyContext = page.getByRole('menu');
     await expect(historyContext).toBeVisible();
     await historyContext.getByRole('button', { name: 'Delete this history entry', exact: true }).click();
     await expect(folderHistory).toHaveCount(0);
@@ -468,7 +467,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     expect(favoritePathButtonBox!.width).toBeGreaterThan(favoriteItemBox!.width - 20);
 
     await favoriteItem.click({ button: 'right' });
-    let favoriteContext = page.getByTestId('favorite-path-context-menu');
+    let favoriteContext = page.getByRole('menu');
     await expect(favoriteContext).toBeVisible();
     await expect(favoriteContext.getByRole('button')).toHaveCount(3);
     await expect(favoriteContext.getByRole('button', { name: 'Change terminal directory', exact: true })).toBeVisible();
@@ -484,7 +483,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(editDialog).toBeHidden();
 
     await favoriteItem.click({ button: 'right' });
-    favoriteContext = page.getByTestId('favorite-path-context-menu');
+    favoriteContext = page.getByRole('menu');
     await favoriteContext.getByRole('button', { name: 'Change terminal directory', exact: true }).click();
     await expect(favorites).toBeHidden();
     await manager(page).getByRole('button', { name: 'Sync current path from terminal', exact: true }).click();
@@ -499,7 +498,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     favorites = await openFavorites();
     favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
     await favoriteItem.click({ button: 'right' });
-    favoriteContext = page.getByTestId('favorite-path-context-menu');
+    favoriteContext = page.getByRole('menu');
     await favoriteContext.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirmDialog = page.getByRole('dialog', { name: 'Please confirm', exact: true });
     await expect(confirmDialog).toBeVisible();
@@ -517,7 +516,7 @@ test('entry context Paste always targets the current File Manager directory', as
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
 
-  const contextMenu = page.getByTestId('file-manager-context-menu');
+  const contextMenu = page.getByRole('menu');
 
   await step('a normal file row exposes Paste and pastes into the directory being viewed', async () => {
     await row(page, 'copy-source.txt').click({ button: 'right' });
@@ -595,7 +594,7 @@ test('refreshes and sorts a long remote list while keeping a long filename actio
     expect(afterMetrics.rowBottom).toBeLessThanOrEqual(viewport!.height);
 
     await target.click({ button: 'right' });
-    const contextMenu = page.getByTestId('file-manager-context-menu');
+    const contextMenu = page.getByRole('menu');
     await expect(contextMenu).toBeVisible();
     await expect(contextMenu.getByText('Rename', { exact: true })).toBeVisible();
     const menuBox = await contextMenu.boundingBox();
@@ -716,9 +715,9 @@ test.describe('remote drag move on touch-capable desktop', () => {
 
     expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
 
-    const list = page.locator('[data-testid="file-manager-list"]:visible').first();
+    const list = page.locator('.file-manager-root table:visible').first().locator('..');
     const embeddedRow = (filename: string) => list.locator(`tr[data-filename="${filename}"]`);
-    const embeddedPathInput = page.locator('[data-testid="file-manager-path-input"]:visible').first();
+    const embeddedPathInput = page.locator('.file-manager-path-input input:visible').first();
     const source = embeddedRow('.hermes.zip');
     const destination = embeddedRow('Temp');
     await expect(list).toBeVisible();
