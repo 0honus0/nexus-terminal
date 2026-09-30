@@ -1,4 +1,4 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue';
+import { computed, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue';
 import { apiErrorMessage } from '@/client/http';
 import { systemOverviewApi } from '../api/systemOverviewApi';
 import type { ResourceStatusDto, SshResourceStatusDto } from '../model/systemOverview';
@@ -31,6 +31,18 @@ export const useSystemOverview = (): SystemOverviewController => {
   const localError = ref<string | null>(null);
   const remoteError = ref<string | null>(null);
   const loading = computed(() => localLoading.value || remoteLoading.value);
+  const remoteAbort = new AbortController();
+  onScopeDispose(() => remoteAbort.abort());
+  const waitForNextHost = (): Promise<void> =>
+    new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        remoteAbort.signal.removeEventListener('abort', finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, 200);
+      remoteAbort.signal.addEventListener('abort', finish, { once: true });
+    });
 
   const loadLocal = async (): Promise<void> => {
     if (localLoading.value) return;
@@ -46,12 +58,14 @@ export const useSystemOverview = (): SystemOverviewController => {
   };
 
   const loadRemote = async (targets: () => Promise<SshResourceTarget[]>): Promise<void> => {
-    if (remoteLoading.value) return;
+    if (remoteLoading.value || remoteAbort.signal.aborted) return;
     remoteLoading.value = true;
     remoteError.value = null;
     try {
       const unique = new Map<string, SshResourceTarget>();
-      for (const target of await targets()) {
+      const items = await targets();
+      if (remoteAbort.signal.aborted) return;
+      for (const target of items) {
         const key = `${target.host.trim().toLowerCase()}:${target.port}`;
         if (!unique.has(key)) unique.set(key, target);
       }
@@ -74,22 +88,25 @@ export const useSystemOverview = (): SystemOverviewController => {
       const update = (key: string, value: SshResourceStatusDto) => {
         remote.value = remote.value.map((resource) => (resource.key === key ? value : resource));
       };
-      await Promise.all(
-        [...unique].map(async ([key, target]) => {
-          try {
-            update(key, await systemOverviewApi.ssh(target.id));
-          } catch (cause) {
-            const current = remote.value.find((resource) => resource.key === key);
-            if (current)
-              update(key, {
-                ...current,
-                status: undefined,
-                error: apiErrorMessage(cause, ''),
-                checkedAt: Date.now(),
-              });
-          }
-        }),
-      );
+      for (const [key, target] of unique) {
+        if (remoteAbort.signal.aborted) break;
+        try {
+          const result = await systemOverviewApi.ssh(target.id, remoteAbort.signal);
+          if (remoteAbort.signal.aborted) break;
+          update(key, result);
+        } catch (cause) {
+          if (remoteAbort.signal.aborted) break;
+          const current = remote.value.find((resource) => resource.key === key);
+          if (current)
+            update(key, {
+              ...current,
+              status: undefined,
+              error: apiErrorMessage(cause, ''),
+              checkedAt: Date.now(),
+            });
+        }
+        await waitForNextHost();
+      }
     } catch (cause) {
       remoteError.value = apiErrorMessage(cause, '');
     } finally {

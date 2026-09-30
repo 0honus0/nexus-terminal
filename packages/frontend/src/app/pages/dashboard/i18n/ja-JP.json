@@ -1,5 +1,6 @@
 {
   "dashboard": {
+    "backToTop": "先頭に戻る",
     "recentConnections": "最近の接続",
     "lastConnected": "最終接続:",
     "noRecentConnections": "最近の接続記録はありません",

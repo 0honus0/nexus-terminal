@@ -1,5 +1,6 @@
 {
   "dashboard": {
+    "backToTop": "Back to top",
     "recentConnections": "Recent Connections",
     "lastConnected": "Last connected:",
     "noRecentConnections": "No recent connection records",

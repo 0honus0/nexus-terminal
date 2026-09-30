@@ -2,7 +2,7 @@
   import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiInput, UiSelect, UiSpinner } from '@/foundation/ui';
+  import { UiButton, UiInput, UiSelect, UiSpinner, UiScrollArea } from '@/foundation/ui';
   import DashboardHostCard from './DashboardHostCard.vue';
   import {
     numberStorageCodec,
@@ -516,12 +516,12 @@
             </div>
           </header>
 
-          <div
-            class="h-[clamp(300px,42vh,440px)] min-h-0 overflow-y-auto overscroll-auto xl:h-auto xl:flex-1"
-            style="scrollbar-gutter: stable both-edges"
+          <UiScrollArea
+            class="h-[clamp(300px,42vh,440px)] xl:h-auto xl:flex-1"
+            :back-to-top-label="t('dashboard.backToTop')"
           >
             <div
-              class="dashboard-toolbar sticky top-2 z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
+              class="dashboard-toolbar sm:sticky sm:top-2 sm:z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
             >
               <label class="col-span-3 min-w-0 sm:col-span-1"
                 ><span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder') }}</span>
@@ -623,7 +623,7 @@
                 <template v-else>{{ t('dashboard.noConnections') }}</template>
               </div>
             </div>
-          </div>
+          </UiScrollArea>
         </section>
 
         <section
@@ -654,95 +654,103 @@
               }}</span>
             </div>
           </header>
-          <div
-            class="h-[clamp(300px,42vh,440px)] min-h-0 space-y-2 overflow-y-auto overscroll-auto px-2 pb-2 xl:h-auto xl:flex-1"
-            style="scrollbar-gutter: stable"
+          <UiScrollArea
+            class="h-[clamp(300px,42vh,440px)] xl:h-auto xl:flex-1"
+            :back-to-top-label="t('dashboard.backToTop')"
           >
-            <div
-              v-if="resources.remoteLoading.value && resources.remote.value.length === 0"
-              class="grid h-full min-h-0 place-items-center"
-            >
-              <UiSpinner />
-            </div>
-            <DashboardHostCard
-              v-for="remote in resources.remote.value"
-              :key="remote.key"
-              as="article"
-              title-tag="h3"
-              :name="remote.name"
-              :address="`${remote.username}@${remote.host}:${remote.port}`"
-              :status-dot-class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
-              :accent-class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
-            >
-              <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-1.5 sm:mt-3.5 sm:gap-4">
-                <div>
-                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span>
-                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-                      percent(remote.status.cpuPercent)
-                    }}</strong>
+            <div class="space-y-2 px-2 pb-2">
+              <div
+                v-if="resources.remoteLoading.value && resources.remote.value.length === 0"
+                class="grid h-full min-h-0 place-items-center"
+              >
+                <UiSpinner />
+              </div>
+              <DashboardHostCard
+                v-for="remote in resources.remote.value"
+                :key="remote.key"
+                as="article"
+                title-tag="h3"
+                :name="remote.name"
+                :address="`${remote.username}@${remote.host}:${remote.port}`"
+                :status-dot-class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
+                :accent-class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
+              >
+                <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-1.5 sm:mt-3.5 sm:gap-4">
+                  <div>
+                    <div class="flex items-baseline justify-between gap-1 sm:gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.cpu')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                        percent(remote.status.cpuPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
+                      <div
+                        class="h-full rounded-full bg-primary"
+                        :style="{ width: percent(remote.status.cpuPercent) }"
+                      ></div>
+                    </div>
                   </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
+                  <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
+                    <div class="flex items-baseline justify-between gap-1 sm:gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.memory')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                        percent(remote.status.memPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
+                      <div
+                        class="h-full rounded-full bg-success"
+                        :style="{ width: percent(remote.status.memPercent) }"
+                      ></div>
+                    </div>
                     <div
-                      class="h-full rounded-full bg-primary"
-                      :style="{ width: percent(remote.status.cpuPercent) }"
-                    ></div>
-                  </div>
-                </div>
-                <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
-                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{
-                      t('dashboard.resources.memory')
-                    }}</span>
-                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-                      percent(remote.status.memPercent)
-                    }}</strong>
-                  </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
-                    <div
-                      class="h-full rounded-full bg-success"
-                      :style="{ width: percent(remote.status.memPercent) }"
-                    ></div>
-                  </div>
-                  <div class="mt-1 truncate text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]">
-                    {{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}
-                  </div>
-                </div>
-                <div :title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`">
-                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span>
-                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-                      percent(remote.status.diskPercent)
-                    }}</strong>
-                  </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
-                    <div
-                      class="h-full rounded-full bg-warning"
-                      :style="{ width: percent(remote.status.diskPercent) }"
-                    ></div>
-                  </div>
-                  <div
-                    class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
-                  >
-                    <span class="max-w-full truncate">{{ formatDisk(remote.status.diskUsed) }}</span>
-                    <span class="max-w-full truncate text-text-secondary/75"
-                      >/ {{ formatDisk(remote.status.diskTotal) }}</span
+                      class="mt-1 truncate text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
                     >
+                      {{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}
+                    </div>
+                  </div>
+                  <div :title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`">
+                    <div class="flex items-baseline justify-between gap-1 sm:gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.disk')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                        percent(remote.status.diskPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
+                      <div
+                        class="h-full rounded-full bg-warning"
+                        :style="{ width: percent(remote.status.diskPercent) }"
+                      ></div>
+                    </div>
+                    <div
+                      class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
+                    >
+                      <span class="max-w-full truncate">{{ formatDisk(remote.status.diskUsed) }}</span>
+                      <span class="max-w-full truncate text-text-secondary/75"
+                        >/ {{ formatDisk(remote.status.diskTotal) }}</span
+                      >
+                    </div>
                   </div>
                 </div>
+                <div v-else-if="remote.error" class="mt-3 truncate text-xs text-error" :title="remote.error">
+                  {{ remote.error }}
+                </div>
+                <div v-else class="mt-3 text-xs text-text-secondary">{{ t('dashboard.resources.waiting') }}</div>
+              </DashboardHostCard>
+              <div
+                v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
+                class="flex h-full min-h-0 items-center justify-center px-4 text-center text-xs text-text-secondary"
+              >
+                {{ resources.remoteError.value || t('dashboard.resources.noRemoteSessions') }}
               </div>
-              <div v-else-if="remote.error" class="mt-3 truncate text-xs text-error" :title="remote.error">
-                {{ remote.error }}
-              </div>
-              <div v-else class="mt-3 text-xs text-text-secondary">{{ t('dashboard.resources.waiting') }}</div>
-            </DashboardHostCard>
-            <div
-              v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
-              class="flex h-full min-h-0 items-center justify-center px-4 text-center text-xs text-text-secondary"
-            >
-              {{ resources.remoteError.value || t('dashboard.resources.noRemoteSessions') }}
             </div>
-          </div>
+          </UiScrollArea>
         </section>
       </div>
 

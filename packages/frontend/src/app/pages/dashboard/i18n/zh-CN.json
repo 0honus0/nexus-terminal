@@ -1,5 +1,6 @@
 {
   "dashboard": {
+    "backToTop": "回到顶部",
     "recentConnections": "最近连接",
     "lastConnected": "上次连接:",
     "noRecentConnections": "没有最近连接记录",
