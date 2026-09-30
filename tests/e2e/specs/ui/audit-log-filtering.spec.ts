@@ -24,28 +24,30 @@ async function capturePaginationEvidence(
   testInfo: TestInfo,
   name: 'before' | 'after',
 ): Promise<void> {
-  const metrics = await page.evaluate(() => {
-    const view = document.querySelector<HTMLElement>('[data-testid="audit-log-view"]');
-    const title = view?.querySelector<HTMLElement>('h1');
-    const filter = view?.querySelector<HTMLElement>('[data-testid="audit-apply-filter"]');
-    const table = view?.querySelector<HTMLElement>('table');
-    const tableScroller = view?.querySelector<HTMLElement>('[class*="overflow-x-auto"]');
-    return {
-      language: document.documentElement.lang,
-      viewport: {
-        width: document.documentElement.clientWidth,
-        height: document.documentElement.clientHeight,
-      },
-      pageScrollWidth: document.documentElement.scrollWidth,
-      bodyScrollWidth: document.body.scrollWidth,
-      viewPadding: view ? getComputedStyle(view).padding : '',
-      titleFontSize: title ? getComputedStyle(title).fontSize : '',
-      filterHeight: filter?.getBoundingClientRect().height ?? 0,
-      tableWidth: table?.getBoundingClientRect().width ?? 0,
-      tableScrollerWidth: tableScroller?.getBoundingClientRect().width ?? 0,
-      tableScrollWidth: tableScroller?.scrollWidth ?? 0,
-    };
-  });
+  const metrics = await page
+    .getByRole('heading', { name: 'Audit Logs', exact: true })
+    .locator('../..')
+    .evaluate((view) => {
+      const title = view?.querySelector<HTMLElement>('h1');
+      const filter = view?.querySelector<HTMLElement>('button');
+      const table = view?.querySelector<HTMLElement>('table');
+      const tableScroller = view?.querySelector<HTMLElement>('[class*="overflow-x-auto"]');
+      return {
+        language: document.documentElement.lang,
+        viewport: {
+          width: document.documentElement.clientWidth,
+          height: document.documentElement.clientHeight,
+        },
+        pageScrollWidth: document.documentElement.scrollWidth,
+        bodyScrollWidth: document.body.scrollWidth,
+        viewPadding: view ? getComputedStyle(view).padding : '',
+        titleFontSize: title ? getComputedStyle(title).fontSize : '',
+        filterHeight: filter?.getBoundingClientRect().height ?? 0,
+        tableWidth: table?.getBoundingClientRect().width ?? 0,
+        tableScrollerWidth: tableScroller?.getBoundingClientRect().width ?? 0,
+        tableScrollWidth: tableScroller?.scrollWidth ?? 0,
+      };
+    });
   const screenshotPath = testInfo.outputPath(`audit-pagination-${name}.png`);
   const metricsPath = testInfo.outputPath(`audit-pagination-${name}.metrics.json`);
   await page.screenshot({ path: screenshotPath, fullPage: true });
@@ -86,21 +88,21 @@ test('audit log UI filters by action type and details search term', async ({ pag
 
   try {
     await page.goto('/audit-logs');
-    const view = page.getByTestId('audit-log-view');
+    const view = page.getByRole('heading', { name: 'Audit Logs', exact: true }).locator('../..');
     await expect(view).toBeVisible();
 
     await step('filter to proxy creation events and the unique audit details', async () => {
-      await selectUiOption(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
-      await view.getByTestId('audit-search').fill(PROXY_NAME);
-      await view.getByTestId('audit-apply-filter').click();
+      await selectUiOption(view.getByRole('combobox', { name: 'Action Type', exact: true }), 'PROXY_CREATED');
+      await view.getByLabel('Search', { exact: true }).fill(PROXY_NAME);
+      await view.getByRole('button', { name: 'Filter', exact: true }).click();
       const row = view.locator('tr[data-audit-id]').filter({ hasText: PROXY_NAME });
       await expect(row).toHaveCount(1, { timeout: 15_000 });
       await expect(row).toContainText(PROXY_NAME);
     });
 
     await step('changing the search term to an unrelated value returns no matching rows', async () => {
-      await view.getByTestId('audit-search').fill('E2E-AUDIT-NOT-PRESENT');
-      await view.getByTestId('audit-apply-filter').click();
+      await view.getByLabel('Search', { exact: true }).fill('E2E-AUDIT-NOT-PRESENT');
+      await view.getByRole('button', { name: 'Filter', exact: true }).click();
       await expect(view.locator('tr[data-audit-id]')).toHaveCount(0, { timeout: 15_000 });
     });
   } finally {
@@ -120,10 +122,10 @@ test('audit log keeps long details scrollable on a narrow screen', async ({ page
   try {
     await page.setViewportSize({ width: 320, height: 667 });
     await page.goto('/audit-logs');
-    const view = page.getByTestId('audit-log-view');
+    const view = page.getByRole('heading', { name: 'Audit Logs', exact: true }).locator('../..');
     await expect(view).toBeVisible();
-    await view.getByTestId('audit-search').fill(longName);
-    await view.getByTestId('audit-apply-filter').click();
+    await view.getByLabel('Search', { exact: true }).fill(longName);
+    await view.getByRole('button', { name: 'Filter', exact: true }).click();
     const row = view.locator('tr[data-audit-id]').filter({ hasText: longName });
     await expect(row).toHaveCount(1, { timeout: 15_000 });
     const details = row.locator('pre');
@@ -199,7 +201,7 @@ test('audit log pagination resets on filters and retains active filters across p
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/audit-logs');
-    const view = page.getByTestId('audit-log-view');
+    const view = page.getByRole('heading', { name: 'Audit Logs', exact: true }).locator('../..');
     await expect(view).toBeVisible();
     await expect(view.getByRole('heading', { name: 'Audit Logs', exact: true })).toBeVisible();
     await expect(view.locator('tr[data-audit-id]')).toHaveCount(50, { timeout: 15_000 });
@@ -218,15 +220,15 @@ test('audit log pagination resets on filters and retains active filters across p
     const paginationInfo = (value: string) => view.getByText(value, { exact: true });
 
     await step('apply action and details filters on page one', async () => {
-      await selectUiOption(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
-      await view.getByTestId('audit-search').fill(PAGINATION_PREFIX);
+      await selectUiOption(view.getByRole('combobox', { name: 'Action Type', exact: true }), 'PROXY_CREATED');
+      await view.getByLabel('Search', { exact: true }).fill(PAGINATION_PREFIX);
       const responsePromise = waitForAuditRequest(0, PAGINATION_PREFIX);
-      await view.getByTestId('audit-apply-filter').click();
+      await view.getByRole('button', { name: 'Filter', exact: true }).click();
       expect((await responsePromise).ok()).toBeTruthy();
       await expect(paginationInfo(`Page 1 of 2 (${PAGINATION_COUNT} total logs)`)).toBeVisible();
       await expect(view.locator('tr[data-audit-id]')).toHaveCount(50);
-      await expect(view.getByTestId('audit-search')).toHaveValue(PAGINATION_PREFIX);
-      await expectUiSelectValue(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
+      await expect(view.getByLabel('Search', { exact: true })).toHaveValue(PAGINATION_PREFIX);
+      await expectUiSelectValue(view.getByRole('combobox', { name: 'Action Type', exact: true }), 'PROXY_CREATED');
     });
 
     await step('move to page two while retaining both active filters', async () => {
@@ -236,21 +238,21 @@ test('audit log pagination resets on filters and retains active filters across p
       expect((await responsePromise).ok()).toBeTruthy();
       await expect(paginationInfo(`Page 2 of 2 (${PAGINATION_COUNT} total logs)`)).toBeVisible();
       await expect(view.locator('tr[data-audit-id]')).toHaveCount(1);
-      await expect(view.getByTestId('audit-search')).toHaveValue(PAGINATION_PREFIX);
-      await expectUiSelectValue(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
+      await expect(view.getByLabel('Search', { exact: true })).toHaveValue(PAGINATION_PREFIX);
+      await expectUiSelectValue(view.getByRole('combobox', { name: 'Action Type', exact: true }), 'PROXY_CREATED');
       await expect(view.locator('tr[data-audit-id]').first()).toContainText(PAGINATION_PREFIX);
     });
 
     await step('changing the search term returns to page one with the retained action filter', async () => {
       const uniqueName = `${PAGINATION_PREFIX} 01`;
-      await view.getByTestId('audit-search').fill(uniqueName);
+      await view.getByLabel('Search', { exact: true }).fill(uniqueName);
       const responsePromise = waitForAuditRequest(0, uniqueName);
-      await view.getByTestId('audit-apply-filter').click();
+      await view.getByRole('button', { name: 'Filter', exact: true }).click();
       expect((await responsePromise).ok()).toBeTruthy();
       await expect(paginationInfo('Page 1 of 1 (1 total logs)')).toBeVisible();
       await expect(view.locator('tr[data-audit-id]')).toHaveCount(1);
       await expect(view.locator('tr[data-audit-id]').first()).toContainText(uniqueName);
-      await expectUiSelectValue(view.getByTestId('audit-action-type'), 'PROXY_CREATED');
+      await expectUiSelectValue(view.getByRole('combobox', { name: 'Action Type', exact: true }), 'PROXY_CREATED');
     });
 
     await capturePaginationEvidence(page, testInfo, 'after');
