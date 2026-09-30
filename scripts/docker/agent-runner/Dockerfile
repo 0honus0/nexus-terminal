@@ -32,9 +32,10 @@ RUN apt-get update \
 FROM node:${NODE_VERSION}-${DEBIAN_SUITE} AS builder
 ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
-RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/agent-runner/package.json ./packages/agent-runner/package.json
+RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")" \
+    && npm install --global "pnpm@${PNPM_VERSION}"
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/agent-runner
 COPY packages/agent-runner/tsconfig.json ./packages/agent-runner/tsconfig.json

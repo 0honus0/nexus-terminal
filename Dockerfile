@@ -5,9 +5,10 @@ ARG ALPINE_VERSION=3.24
 FROM node:${NODE_VERSION}-alpine AS workspace-base
 ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
-RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/protocol/package.json ./packages/protocol/package.json
+RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")" \
+    && npm install --global "pnpm@${PNPM_VERSION}"
 
 FROM workspace-base AS backend-builder
 RUN apk add --no-cache python3 py3-setuptools make g++

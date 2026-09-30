@@ -25,7 +25,7 @@ const e2ePluginPublisherKeyId = `ed25519:${createHash('sha256')
 const inheritedEnv = Object.fromEntries(
   Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
 );
-const pnpmCommand = process.env.NEXUS_E2E_PNPM_COMMAND ?? 'corepack pnpm';
+const pnpmCommand = process.env.NEXUS_E2E_PNPM_COMMAND ?? 'pnpm';
 
 const pluginRepositoryEnv: Record<string, string> = {
   ...inheritedEnv,
