@@ -38,6 +38,13 @@
 }
 .file-manager-path-input input {
   width: 100%;
+  /* Preserve descender room inside the 24px inner height; only shift the text. */
+  height: auto;
+  min-height: 0;
+  line-height: 1.5;
+  padding-block: 2px;
+  position: relative;
+  top: -1px;
   background: transparent !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
