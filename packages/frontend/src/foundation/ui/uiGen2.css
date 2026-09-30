@@ -20,10 +20,8 @@
   --glass-backdrop-filter: blur(28px) saturate(185%);
   --glass-control-filter: blur(16px) saturate(170%);
   /* Mixing in the theme border keeps edges visible when a light panel sits on a light page. */
-  --glass-border-color: color-mix(in srgb, var(--border-color) 45%, transparent);
-  --glass-inset-highlight:
-    inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 8%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--glass-rim) 4%, transparent);
+  --glass-border-color: color-mix(in srgb, var(--border-color) 35%, transparent);
+  --glass-inset-highlight: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 8%, transparent);
   --glass-rim-shadow:
     var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 5%, transparent),
     inset -1px 0 0 color-mix(in srgb, var(--glass-rim) 3%, transparent);
@@ -31,8 +29,7 @@
     135deg,
     color-mix(in srgb, var(--glass-rim) 14%, transparent) 0%,
     transparent 38%,
-    transparent 72%,
-    color-mix(in srgb, var(--glass-rim) 6%, transparent) 100%
+    transparent 100%
   );
   --glass-shadow:
     var(--glass-rim-shadow), 0 1px 2px rgb(0 0 0 / 6%),
