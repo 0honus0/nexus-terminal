@@ -99,8 +99,7 @@
   <UiModal
     :visible="visible"
     :z-index="150"
-    overlay-class="connection-editor-overlay"
-    panel-class="connection-editor-panel !max-w-3xl !max-h-[92dvh] !p-4 sm:!p-6 lg:!p-7"
+    panel-class="ui-form-surface !max-w-3xl !max-h-[92dvh] !p-4 sm:!p-6 lg:!p-7"
     content-class="!overflow-hidden !py-0"
     @close="emit('close')"
   >
@@ -114,17 +113,3 @@
     />
   </UiModal>
 </template>
-
-<style scoped>
-  :global(.connection-editor-overlay) {
-    background-color: rgb(15 23 42 / 24%);
-  }
-
-  :global(.connection-editor-panel) {
-    border-color: color-mix(in srgb, var(--border-color) 68%, transparent);
-    background: var(--app-bg-color);
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
-      0 18px 48px -24px rgb(15 23 42 / 38%);
-  }
-</style>

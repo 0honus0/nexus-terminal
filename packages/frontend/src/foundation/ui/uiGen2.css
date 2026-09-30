@@ -232,6 +232,29 @@
   color: var(--ui-text);
 }
 
+/* Configuration forms share an opaque surface instead of stacking glass cards. */
+.ui-form-surface,
+.ui-overlay-panel.ui-form-surface {
+  background: var(--app-bg-color);
+  background-image: none;
+  color: var(--text-color);
+  border: 1px solid var(--glass-border-color);
+  box-shadow: 0 16px 48px -24px rgb(0 0 0 / 28%);
+}
+
+.ui-form-section {
+  min-width: 0;
+  padding-block: 0.25rem;
+}
+
+.ui-form-section > h4 {
+  margin-bottom: 0.75rem;
+  border: 0;
+  padding: 0;
+  color: var(--text-color);
+  font-size: 0.875rem;
+}
+
 .ui-surface--plain {
   background: transparent;
 }

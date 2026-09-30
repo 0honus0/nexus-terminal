@@ -96,8 +96,8 @@
             class="ui-solid-item flex flex-col items-stretch justify-between gap-3 rounded-xl p-4 sm:flex-row sm:items-start sm:gap-4"
           >
             <div class="min-w-0 flex-grow space-y-1">
-              <strong class="block break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>
-              <div class="flex items-center space-x-2">
+              <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <strong class="min-w-0 break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>
                 <span
                   class="rounded-full border border-border/60 bg-card/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
                   >{{ proxy.type }}</span
@@ -144,7 +144,7 @@
       <UiModal
         :visible="modal"
         :close-on-backdrop="false"
-        panel-class="w-[calc(100vw-2rem)] max-w-lg sm:min-w-[350px]"
+        panel-class="ui-form-surface w-[calc(100vw-2rem)] max-w-lg sm:min-w-[350px]"
         content-class="!py-0"
         @close="modal = false"
       >

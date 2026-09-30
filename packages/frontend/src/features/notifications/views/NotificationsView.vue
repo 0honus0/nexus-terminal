@@ -89,8 +89,8 @@
           class="ui-solid-item flex flex-col items-start justify-between gap-4 rounded-xl p-4 sm:flex-row"
         >
           <div class="min-w-0 flex-grow">
-            <strong class="mb-1 block break-words text-base font-semibold text-foreground">{{ item.name }}</strong>
-            <div class="mb-2 flex items-center space-x-2">
+            <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <strong class="min-w-0 break-words text-base font-semibold text-foreground">{{ item.name }}</strong>
               <span
                 class="rounded-full border border-border/60 bg-card/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
                 >{{ t(`settings.notifications.types.${item.channelType}`) }}</span
@@ -130,7 +130,7 @@
         </article>
       </div>
 
-      <div v-if="formVisible" class="ui-solid-inset mt-6 rounded-xl p-6">
+      <div v-if="formVisible" class="ui-form-surface mt-6 rounded-xl p-4 sm:p-6">
         <NotificationSettingForm :visible="formVisible" :setting="editing" @close="formVisible = false" @save="save" />
       </div>
     </div>

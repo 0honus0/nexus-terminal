@@ -171,7 +171,7 @@
 </script>
 <template>
   <form v-if="visible" class="space-y-6 text-foreground" @submit.prevent="submit">
-    <h3 class="mb-4 border-b border-border pb-2 text-lg font-semibold">
+    <h3 class="mb-4 text-lg font-semibold">
       {{ t(setting ? 'settings.notifications.form.editTitle' : 'settings.notifications.form.addTitle') }}
     </h3>
 
@@ -196,8 +196,8 @@
       </UiFormField>
     </div>
 
-    <section class="mt-4 space-y-4 rounded-md border border-border bg-header/30 p-4">
-      <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
+    <section class="ui-form-section mt-4 space-y-4">
+      <h4 class="mb-3 text-sm font-semibold">
         {{ t(`settings.notifications.types.${form.channelType}`) }} {{ t('common.settings') }}
       </h4>
       <template v-if="form.channelType === 'webhook'">

@@ -385,14 +385,14 @@
     class="connection-form flex max-h-[82dvh] min-h-0 flex-col"
     @submit.prevent="submit"
   >
-    <h3 class="mb-7 shrink-0 text-center text-xl font-semibold">
+    <h3 class="mb-5 shrink-0 text-lg font-semibold">
       {{ connection ? t('connections.form.titleEdit') : t('connections.form.title') }}
     </h3>
 
     <div class="flex-grow space-y-7 overflow-y-auto pr-1 sm:pr-3">
       <template v-if="!scriptMode">
-        <section class="connection-form-section space-y-5 rounded-xl p-4 sm:p-5">
-          <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
+        <section class="ui-form-section space-y-5">
+          <h4 class="mb-3 text-sm font-semibold">
             {{ t('connections.form.sectionBasic') }}
           </h4>
           <UiFormField :label="`${t('connections.form.name')} (${t('connections.form.optional')})`">
@@ -445,7 +445,7 @@
           </div>
         </section>
 
-        <section class="connection-form-section space-y-5 rounded-xl p-4 sm:p-5">
+        <section class="ui-form-section space-y-5">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAuth') }}
           </h4>
@@ -508,7 +508,7 @@
           </UiFormField>
         </section>
 
-        <section class="connection-form-section space-y-5 rounded-xl p-4 sm:p-5">
+        <section class="ui-form-section space-y-5">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAdvanced') }}
           </h4>
@@ -650,7 +650,7 @@
         </section>
       </template>
 
-      <section v-if="!connection" class="connection-form-section mt-7 space-y-5 rounded-xl p-4 sm:p-5">
+      <section v-if="!connection" class="ui-form-section mt-7 space-y-5">
         <div class="flex items-center justify-between">
           <h4 class="text-base font-semibold">{{ t('connections.form.sectionScriptMode') }}</h4>
           <button
@@ -718,12 +718,6 @@
             · {{ testResult.message }}
           </span>
         </span>
-        <span class="group relative"
-          ><i class="fas fa-info-circle cursor-help text-text-secondary" aria-hidden="true" /><span
-            class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-max max-w-xs -translate-x-1/2 rounded bg-gray-800 p-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
-            >{{ t('connections.test.latencyTooltip') }}</span
-          ></span
-        >
       </div>
       <div v-else class="flex-1" />
       <div class="ml-auto flex space-x-3">
@@ -750,41 +744,14 @@
           t('connections.form.cancel')
         }}</UiButton>
       </div>
+      <p v-if="!scriptMode && form.type === 'SSH'" class="w-full text-xs leading-relaxed text-text-secondary">
+        <i class="fas fa-info-circle mr-1.5" aria-hidden="true"></i>{{ t('connections.test.latencyTooltip') }}
+      </p>
     </footer>
   </form>
 </template>
 
 <style scoped>
-  .connection-form-section {
-    border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
-    background: color-mix(in srgb, var(--card-bg-color) 66%, var(--app-bg-color));
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
-  }
-
-  .connection-form :deep(.ui-input),
-  .connection-form :deep(.ui-textarea),
-  .connection-form :deep(.ui-select__trigger) {
-    border-color: color-mix(in srgb, var(--border-color) 62%, transparent);
-    background: color-mix(in srgb, var(--app-bg-color) 92%, var(--card-bg-color)) !important;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 6%, transparent);
-  }
-
-  .connection-form :deep(.ui-input:hover),
-  .connection-form :deep(.ui-textarea:hover),
-  .connection-form :deep(.ui-select__trigger:not(:disabled):hover) {
-    border-color: color-mix(in srgb, var(--border-hover-color) 72%, transparent);
-  }
-
-  .connection-form :deep(.ui-input:focus-within),
-  .connection-form :deep(.ui-textarea:focus-within),
-  .connection-form :deep(.ui-select__trigger:focus-visible),
-  .connection-form :deep(.ui-select__trigger[data-state='open']) {
-    border-color: color-mix(in srgb, var(--link-active-color) 58%, var(--border-color));
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--link-active-color) 10%, transparent);
-  }
-
   .connection-form-segmented {
     gap: 0.25rem;
     border: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
