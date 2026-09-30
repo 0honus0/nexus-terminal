@@ -52,7 +52,9 @@
   let previouslyFocused: HTMLElement | null = null;
   let backdropPointerStarted = false;
   const panelPresetClass = computed(() =>
-    props.preset === 'standard-modal' ? 'max-h-[85dvh] min-h-0 max-w-lg flex flex-col overflow-hidden p-4' : '',
+    props.preset === 'standard-modal'
+      ? 'ui-form-surface max-h-[85dvh] min-h-0 max-w-lg flex flex-col overflow-hidden p-4'
+      : '',
   );
 
   const handleOverlayPointerDown = (event: PointerEvent) => {

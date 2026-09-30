@@ -146,6 +146,8 @@ flowchart TD
 
 ## 状态与生命周期
 
+`UiOverlayPanel` 的 standard-modal preset 使用公共 `ui-form-surface` 不透明主题材质，`UiModal` 及其他标准弹窗统一生效；默认浮层仍可使用玻璃材质，避免遮罩穿透标准模态面板降低对比度。
+
 Dashboard 的快速连接和 SSH 资源共用 `foundation/ui/UiScrollArea`，公共组件持有内部滚动与回顶按钮，不拦截纵向触摸；手机搜索栏为普通流布局。`features/system-overview/useSystemOverview` 持有去重后的 SSH 资源串行采集队列和取消生命周期，单次刷新仍保持单飞，API adapter 传递 AbortSignal。
 
 ### 全局导航与会话展示
