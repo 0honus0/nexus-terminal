@@ -111,6 +111,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - file upload scenarios verify clipboard/file-picker/folder uploads, remote bytes, conflict decisions, delayed SFTP acknowledgements, stream concurrency and hidden progress restoration/cancellation through existing file-manager and progress controls;
 - custom terminal theme and Workspace tag-management scenarios use current editor, token-input and named manager controls while retaining theme persistence/deletion and narrow-screen tag association assertions;
 - backup and IP-control scenarios verify real export/import and persisted blacklist policy through named settings controls; mobile touch coverage retains RDP mode persistence without reconnect, live SSH Ctrl input, dormant progress, single-tap navigation and multi-select/editor behavior using current product surfaces;
+- notification channel and tagged quick-command scenarios retain persistence, narrow-screen geometry and live SSH variable substitution through current controls; suspended-history recovery waits for available ownership, and fullscreen checkpoint scenarios synchronize with real shell readiness before freezing terminal state;
 - multi-megabyte SFTP uploads completing every block before success;
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;

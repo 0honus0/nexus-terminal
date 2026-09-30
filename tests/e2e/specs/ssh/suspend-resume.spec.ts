@@ -136,9 +136,9 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 
   try {
     await page.goto('/workspace?openSuspended=1');
-    const modal = page.getByTestId('suspended-sessions-modal');
+    const modal = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
     await expect(modal).toBeVisible({ timeout: 20_000 });
-    const row = modal.getByTestId(`suspended-session-${suspended!.id}`);
+    const row = modal.locator(`[data-suspend-id="${suspended!.id}"]`);
     await expect(row).toBeVisible({ timeout: 20_000 });
     const resumeButton = row.getByRole('button', { name: 'Resume', exact: true });
     await expect(resumeButton).toBeVisible();
@@ -308,11 +308,11 @@ test('resumed terminal preserves SGR wheel encoding requested by the remote TUI'
   });
 
   await page.goto('/workspace?openSuspended=1');
-  const modal = page.getByTestId('suspended-sessions-modal');
+  const modal = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
   await expect(modal).toBeVisible({ timeout: 20_000 });
-  await modal.getByTestId(`suspended-session-${suspended!.id}`).getByRole('button', { name: 'Resume' }).click();
+  await modal.locator(`[data-suspend-id="${suspended!.id}"]`).getByRole('button', { name: 'Resume' }).click();
   await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
-  const terminal = page.locator('[data-testid="terminal"]:visible').first();
+  const terminal = page.locator('.terminal-inner-container:visible').first();
   await expect(terminal).toBeVisible();
   const box = await terminal.boundingBox();
   expect(box).toBeTruthy();
@@ -333,6 +333,12 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
   const resumedRows = 20;
   const snapshot = `\x1b[?1049h\x1b[2J\x1b[HRESIZE_BASELINE\x1b[${originalRows};1HSTATUS_${originalColumns}x${originalRows}`;
 
+  // workspace.connect acknowledges attachment before the remote shell finishes startup.
+  // Drain startup output through a real shell round trip before freezing the fullscreen image.
+  const readyMarker = `RESIZE_READY_${crypto.randomUUID().replaceAll('-', '')}`;
+  const ready = waitForBinaryText(original.socket, readyMarker);
+  await requestWorkspace(original.socket, 'terminal.input', { data: `printf '${readyMarker}\\n'\n` });
+  await ready;
   await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
   await closeWebSocket(original.socket);
 
@@ -658,12 +664,16 @@ test('resume sends only the newest cached tail and pages older terminal history 
       id: string;
       originalWorkspaceId: string;
       status: 'active' | 'disconnected';
+      ownershipState: 'available' | 'resuming' | 'attached';
     };
     let suspended: SuspendedSession | undefined;
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === original.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -817,9 +827,9 @@ test('resumed terminal pages older history through a bounded window and restores
 
   try {
     await connectTestSshFromConnectionsPage(page, connectionId);
-    const suspendedPanel = page.getByTestId('suspended-sessions-view').filter({ visible: true }).first();
+    const suspendedPanel = page.locator('.suspended-sessions-panel:visible').first();
     await expect(suspendedPanel).toBeVisible({ timeout: 20_000 });
-    const suspendedRow = suspendedPanel.getByTestId(`suspended-session-${suspended!.id}`);
+    const suspendedRow = suspendedPanel.locator(`[data-suspend-id="${suspended!.id}"]`);
     await expect(suspendedRow).toBeVisible({ timeout: 20_000 });
     let historyRequestCount = 0;
     let historyResponseCount = 0;
@@ -852,7 +862,7 @@ test('resumed terminal pages older history through a bounded window and restores
     await suspendedRow.getByRole('button', { name: 'Resume', exact: true }).click();
     await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
 
-    const terminals = page.locator('[data-testid="terminal"]:visible');
+    const terminals = page.locator('.terminal-inner-container:visible');
     await expect(terminals).toHaveCount(1, { timeout: 20_000 });
     const terminal = terminals.first();
     const rows = terminal.locator('.xterm-rows');

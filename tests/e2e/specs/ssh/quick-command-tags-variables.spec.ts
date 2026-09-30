@@ -59,8 +59,8 @@ test('quick command tags and saved variables survive persistence, grouping, rena
   let tagId = 0;
 
   try {
-    const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-    const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
+    const quickView = page.locator('.quick-commands-root:visible').first();
+    const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
     await expect(quickView).toBeVisible({ timeout: 20_000 });
 
     await step(
@@ -87,16 +87,16 @@ test('quick command tags and saved variables survive persistence, grouping, rena
     );
 
     await step('create a tagged command with a persisted substitution variable', async () => {
-      await quickView.getByTestId('quick-command-add').click();
-      const form = page.getByTestId('quick-command-form');
+      await quickView.getByRole('button', { name: 'Add', exact: true }).click();
+      const form = page.getByRole('dialog', { name: 'Add Quick Command', exact: true });
       await expect(form).toBeVisible();
-      await form.getByTestId('quick-command-name').fill(COMMAND_NAME);
-      await form.getByTestId('quick-command-command').fill("printf 'QC_TAG_VARIABLE_%s\\n' '${WHO}'");
-      await form.getByTestId('quick-command-variable-add').click();
-      await form.getByTestId('quick-command-variable-name-0').fill('WHO');
-      await form.getByTestId('quick-command-variable-value-0').fill('NEXUS');
+      await form.getByPlaceholder('Optional, for quick identification', { exact: true }).fill(COMMAND_NAME);
+      await form.locator('textarea').fill("printf 'QC_TAG_VARIABLE_%s\\n' '${WHO}'");
+      await form.getByRole('button', { name: '+ Add Variable', exact: true }).click();
+      await form.getByPlaceholder('Variable Name', { exact: true }).fill('WHO');
+      await form.getByPlaceholder('Variable Value', { exact: true }).fill('NEXUS');
 
-      const tagInput = form.getByTestId('tag-input-text');
+      const tagInput = form.getByPlaceholder('Select or create tags...', { exact: true });
       await tagInput.fill(TAG_NAME);
       await tagInput.press('Enter');
       await expect
@@ -115,8 +115,8 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 
       const tags = await context.request.get('/api/v1/quick-command-tags');
       tagId = ((await tags.json()) as Array<{ id: number; name: string }>).find((item) => item.name === TAG_NAME)!.id;
-      await expect(form.getByTestId('tag-chip').filter({ hasText: TAG_NAME })).toBeVisible();
-      await form.getByTestId('quick-command-submit').click();
+      await expect(form.locator('.ui-token-input__token').filter({ hasText: TAG_NAME })).toBeVisible();
+      await form.getByRole('button', { name: 'Save', exact: true }).click();
       await expect(form).toBeHidden({ timeout: 15_000 });
 
       await expect
@@ -140,10 +140,12 @@ test('quick command tags and saved variables survive persistence, grouping, rena
       async () => {
         await page.setViewportSize({ width: 900, height: 700 });
         const controls = quickView.locator('.quick-commands-controls');
-        const list = quickView.getByTestId('quick-command-list');
-        const group = quickView.getByTestId(`quick-command-group-${tagId}`);
-        const header = group.getByTestId('quick-command-group-header');
-        const name = group.getByTestId('quick-command-group-name');
+        const list = quickView.locator('.quick-command-list-area');
+        const group = quickView
+          .locator('.quick-command-group-card')
+          .filter({ has: page.getByRole('button', { name: TAG_NAME, exact: true }) });
+        const header = group.locator('.quick-command-group-header');
+        const name = group.getByRole('button', { name: TAG_NAME, exact: true });
         await expect(group).toBeVisible();
 
         await list.evaluate((element) => element.style.setProperty('--quick-row-scale', '2.5'));
@@ -168,9 +170,11 @@ test('quick command tags and saved variables survive persistence, grouping, rena
     );
 
     await step('only the tag text enters edit mode while the empty header area toggles the group', async () => {
-      const group = quickView.getByTestId(`quick-command-group-${tagId}`);
-      const header = group.getByTestId('quick-command-group-header');
-      const name = group.getByTestId('quick-command-group-name');
+      const group = quickView
+        .locator('.quick-command-group-card')
+        .filter({ has: page.locator(`[data-command-id="${commandId}"]`) });
+      const header = group.locator('.quick-command-group-header');
+      const name = group.getByRole('button', { name: TAG_NAME, exact: true });
       const toggle = group.locator('button[aria-expanded]').first();
       await expect(header).toBeVisible();
       await expect(name).toBeVisible();
@@ -192,14 +196,14 @@ test('quick command tags and saved variables survive persistence, grouping, rena
         selected: element.classList.contains('bg-primary/20'),
         userSelect: getComputedStyle(element).userSelect,
         fontSize: Number.parseFloat(
-          getComputedStyle(element.querySelector<HTMLElement>('[data-testid="quick-command-execute"]')!).fontSize,
+          getComputedStyle(element.querySelector<HTMLElement>('.quick-command-display-text')!).fontSize,
         ),
         fontWeight: Number.parseInt(
-          getComputedStyle(element.querySelector<HTMLElement>('[data-testid="quick-command-execute"]')!).fontWeight,
+          getComputedStyle(element.querySelector<HTMLElement>('.quick-command-display-text')!).fontWeight,
           10,
         ),
         monospaceClass: element
-          .querySelector<HTMLElement>('[data-testid="quick-command-execute"]')!
+          .querySelector<HTMLElement>('.quick-command-display-text')!
           .classList.contains('font-mono'),
       }));
       expect(rowPresentation.selected).toBe(false);
@@ -209,7 +213,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
       expect(rowPresentation.monospaceClass).toBe(false);
 
       await name.click();
-      const input = group.getByTestId('quick-command-group-rename-input');
+      const input = group.getByRole('textbox');
       await expect(input).toBeVisible();
       await input.press('Escape');
       await expect(input).toHaveCount(0);
@@ -218,13 +222,15 @@ test('quick command tags and saved variables survive persistence, grouping, rena
     await slowStep(
       'the saved variable is substituted when the grouped command executes in the live terminal',
       async () => {
-        const group = quickView.getByTestId(`quick-command-group-${tagId}`);
+        const group = quickView
+          .locator('.quick-command-group-card')
+          .filter({ has: page.locator(`[data-command-id="${commandId}"]`) });
         await expect(group).toContainText(TAG_NAME, { timeout: 15_000 });
         const groupToggle = group.locator('button[aria-expanded]').first();
         if ((await groupToggle.getAttribute('aria-expanded')) === 'false') await groupToggle.click();
         const row = quickView.locator(`[data-command-id="${commandId}"]`);
         await expect(row).toBeVisible();
-        await row.getByTestId('quick-command-execute').click();
+        await row.locator('.quick-command-display-text').click();
         await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('QC_TAG_VARIABLE_NEXUS');
 
         const response = await context.request.get('/api/v1/quick-commands');
@@ -242,9 +248,11 @@ test('quick command tags and saved variables survive persistence, grouping, rena
     );
 
     await step('inline tag rename persists and keeps the command in the renamed group', async () => {
-      const group = quickView.getByTestId(`quick-command-group-${tagId}`);
-      await group.getByTestId('quick-command-group-name').click();
-      const input = group.getByTestId('quick-command-group-rename-input');
+      const group = quickView
+        .locator('.quick-command-group-card')
+        .filter({ has: page.locator(`[data-command-id="${commandId}"]`) });
+      await group.getByRole('button', { name: TAG_NAME, exact: true }).click();
+      const input = group.getByRole('textbox');
       await expect(input).toBeVisible();
       await input.fill(RENAMED_TAG);
       await input.press('Enter');
@@ -259,7 +267,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
           );
         })
         .toBe(RENAMED_TAG);
-      await expect(group.getByTestId('quick-command-group-name')).toHaveText(RENAMED_TAG);
+      await expect(group.getByRole('button', { name: RENAMED_TAG, exact: true })).toHaveText(RENAMED_TAG);
     });
   } finally {
     await cleanup(context.request);
