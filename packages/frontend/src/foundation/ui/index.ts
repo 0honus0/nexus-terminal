@@ -14,6 +14,7 @@ export { default as UiDialog } from './UiDialog.vue';
 export { default as UiEmptyState } from './UiEmptyState.vue';
 export { default as UiFormField } from './UiFormField.vue';
 export { default as UiInfoHint } from './UiInfoHint.vue';
+export { default as UiTooltip } from './UiTooltip.vue';
 export { default as UiInput } from './UiInput.vue';
 export { default as UiModal } from './UiModal.vue';
 export { default as UiManagementCard } from './UiManagementCard.vue';
