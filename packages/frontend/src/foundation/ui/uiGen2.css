@@ -8,11 +8,10 @@
 :root {
   /*
    * Liquid Glass material (iOS 26/27 style): very translucent fills over a strong blur,
-   * a specular rim that is brightest on the top edge, and a diagonal sheen. Rim and sheen
-   * derive from the theme background, so light themes get bright white edges and dark
-   * themes get quieter silver ones without per-theme overrides.
+   * a subtle top rim and a diagonal sheen. Rim and sheen derive from the theme
+   * background without adding a bright outline to dark panels.
    */
-  --glass-rim: color-mix(in srgb, var(--app-bg-color) 45%, rgb(255 255 255));
+  --glass-rim: color-mix(in srgb, var(--app-bg-color) 85%, rgb(255 255 255));
   --glass-fill: color-mix(in srgb, var(--card-bg-color) 42%, transparent);
   --glass-nav-fill: color-mix(in srgb, var(--header-bg-color) 55%, transparent);
   --glass-inset-fill: color-mix(in srgb, var(--input-bg-color) 34%, transparent);
@@ -21,13 +20,9 @@
   --glass-backdrop-filter: blur(28px) saturate(185%);
   --glass-control-filter: blur(16px) saturate(170%);
   /* Mixing in the theme border keeps edges visible when a light panel sits on a light page. */
-  --glass-border-color: color-mix(
-    in srgb,
-    var(--border-color) 55%,
-    color-mix(in srgb, var(--glass-rim) 30%, transparent)
-  );
+  --glass-border-color: color-mix(in srgb, var(--border-color) 65%, transparent);
   --glass-inset-highlight:
-    inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 55%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 18%, transparent),
     inset 0 -1px 0 color-mix(in srgb, var(--glass-rim) 12%, transparent);
   --glass-rim-shadow:
     var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 14%, transparent),
@@ -264,6 +259,8 @@
 }
 
 .ui-overlay-panel {
+  /* The panel receives programmatic focus, but is not an interactive control. */
+  outline: none;
   border-radius: var(--ui-panel-radius);
   border-color: var(--glass-border-color);
   background-color: var(--glass-fill);
