@@ -226,9 +226,9 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
 
   await step('Dark Mode applies immediately and is persisted by the appearance API', async () => {
     await page.getByTitle('Customize Style').click();
-    const customizer = page.getByTestId('style-customizer');
+    const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
     await expect(customizer).toBeVisible();
-    await customizer.getByTestId('theme-dark-mode').click();
+    await customizer.getByRole('button', { name: 'Dark Mode', exact: true }).click();
     await expect.poll(() => appBackground(page)).toBe('#212529');
 
     const originalViewport = page.viewportSize();
@@ -264,8 +264,8 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
 
   await step('Default Mode restores the default theme and persists the reset', async () => {
     await page.getByTitle('Customize Style').click();
-    const customizer = page.getByTestId('style-customizer');
-    await customizer.getByTestId('theme-default-mode').click();
+    const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+    await customizer.getByRole('button', { name: 'Default Mode', exact: true }).click();
     await expect.poll(() => appBackground(page)).toBe('#ffffff');
 
     const response = await context.request.get('/api/v1/appearance');
@@ -293,9 +293,9 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
     await page.goto('/');
     await expect.poll(() => appBackground(page)).toBe('#212529');
 
-    const search = page.getByTestId('dashboard-connection-search');
-    const tag = page.getByTestId('dashboard-tag-filter');
-    const sort = page.getByTestId('dashboard-sort-by');
+    const search = page.locator('.dashboard-connection-search input');
+    const tag = page.getByRole('combobox', { name: 'Filter by tag', exact: true });
+    const sort = page.getByRole('combobox', { name: 'Sort by', exact: true });
     await expect(search).toBeVisible();
     await expect(tag).toBeVisible();
     await expect(sort).toBeVisible();
@@ -365,8 +365,8 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
       .toEqual(['#1e293b', '#f8fafc']);
 
     await page.getByTitle('Customize Style').click();
-    const customizer = page.getByTestId('style-customizer');
-    const jsonEditor = customizer.getByTestId('ui-theme-json');
+    const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+    const jsonEditor = customizer.locator('textarea');
     await expect(jsonEditor).toBeVisible();
     const normalizedDraft = JSON.parse(await jsonEditor.inputValue()) as Record<string, string>;
     expect(normalizedDraft['--input-bg-color']).toBe('#1e293b');
@@ -376,7 +376,7 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
     const save = page.waitForResponse(
       (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
     );
-    await customizer.getByTestId('ui-theme-save').click();
+    await customizer.getByRole('button', { name: 'Save UI Theme', exact: true }).click();
     expect((await save).ok()).toBeTruthy();
     const persisted = await appearance(context.request);
     const persistedTheme = JSON.parse(String(persisted.customUiTheme ?? '{}')) as Record<string, string>;

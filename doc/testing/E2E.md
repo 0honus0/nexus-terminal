@@ -100,6 +100,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;
 - settings regressions locate IP whitelist and logging forms through their labelled controls and verify persisted API values; appearance title-bar tests use the accessible color textbox and document theme state;
+- dark/default UI theme switching and legacy input-token normalization use the rendered appearance editor and named Dashboard controls, while retaining contrast, persistence and viewport assertions;
 - desktop and mobile no-session Workspace coverage verifies the unified start page, both connection and suspended-session panels, and page-owned vertical scrolling without horizontal overflow;
 - mobile global navigation remains horizontally swipeable when constrained while its native scrollbar track/thumb stays hidden;
 - mobile terminal long-press selection suppresses the xterm helper textarea's soft-keyboard focus during hold/menu/copy, restores its input attributes after Copy without refocusing, and restores normal focus on a later short tap;
