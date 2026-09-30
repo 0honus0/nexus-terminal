@@ -532,12 +532,13 @@
       if (connection.type !== 'SSH') throw new Error(t('workspace.errors.suspendedConnectionNotSsh'));
       if (shouldReplace) await registry.resumeReplacing(suspended, connection, replacement!.id, { takeover });
       else await registry.resume(suspended, connection, { takeover });
-      connectionPickerVisible.value = false;
-      suspendedVisible.value = false;
-      if (!options.silent)
+      if (!options.silent) {
+        connectionPickerVisible.value = false;
+        suspendedVisible.value = false;
         feedback.notifySuccess(
           t('sshSuspend.notifications.resumeSuccess', { name: suspended.customName ?? suspended.connectionName }),
         );
+      }
       return true;
     } catch (cause) {
       logger.debug(
@@ -603,7 +604,7 @@
   };
 
   const reconcileDisconnectedWorkspaceSessions = (options: { kickOrdinary?: boolean } = {}): Promise<void> => {
-    if (!workspaceActive) return Promise.resolve();
+    if (!workspaceActive || document.visibilityState !== 'visible') return Promise.resolve();
 
     if (options.kickOrdinary) {
       for (const session of registry.orderedSessions.value) {
@@ -637,7 +638,7 @@
       if (!candidates.size) return;
 
       for (let attempt = 0; attempt < SESSION_RECONCILE_ATTEMPTS && candidates.size; attempt += 1) {
-        if (!workspaceActive) return;
+        if (!workspaceActive || document.visibilityState !== 'visible') return;
         for (const workspaceId of [...candidates]) {
           const session = registry.sessions.get(workspaceId);
           if (
@@ -651,7 +652,7 @@
         if (!candidates.size) break;
 
         const refreshed = await refreshSuspendedSessionsCatalog();
-        if (!workspaceActive) return;
+        if (!workspaceActive || document.visibilityState !== 'visible') return;
         if (refreshed.ok) {
           for (const workspaceId of [...candidates]) {
             const suspended = findSuspendedSessionByOriginalWorkspace(workspaceId);
@@ -719,11 +720,19 @@
 
   const handleDocumentVisibilityChange = () => {
     if (document.visibilityState !== 'visible') return;
-    void reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
+    void recoverForegroundSessions();
+  };
+
+  const recoverForegroundSessions = async () => {
+    if (!workspaceActive || document.visibilityState !== 'visible') return;
+    await Promise.all(registry.orderedSessions.value.map((session) => session.recoverForeground()));
+    if (!workspaceActive || document.visibilityState !== 'visible') return;
+    await refreshSuspendedSessionsCatalog();
+    await reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
   };
 
   const handleBrowserOnline = () => {
-    void reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
+    if (document.visibilityState === 'visible') void recoverForegroundSessions();
   };
 
   const saveSidebarWidth = (pane: string, width: string) => {
@@ -808,6 +817,7 @@
     window.addEventListener('keyup', handleGlobalKeyup);
     document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
     window.addEventListener('online', handleBrowserOnline);
+    window.addEventListener('pageshow', handleDocumentVisibilityChange);
     stopServerTransferPolling = serverTransfers.startPolling();
     // The layout is needed before mounting a terminal; the remaining settings can settle while
     // the provisional session connects. Appearance changes are reactive, including its background.
@@ -829,6 +839,7 @@
     window.removeEventListener('keydown', handleGlobalKeydown);
     window.removeEventListener('keyup', handleGlobalKeyup);
     window.removeEventListener('online', handleBrowserOnline);
+    window.removeEventListener('pageshow', handleDocumentVisibilityChange);
     document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
     stopServerTransferPolling?.();
     void statusScaleSaver.dispose({ flush: true });

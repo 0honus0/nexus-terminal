@@ -415,6 +415,13 @@ export class WorkspaceRuntimeSession {
     void this.reconnect();
   }
 
+  async recoverForeground(): Promise<void> {
+    if (this.disposed || this.closing || this.terminalEnded) return;
+    if (this.state.value === 'connected') await this.socket.checkLiveness();
+    if (this.disposed || this.closing || document.visibilityState !== 'visible') return;
+    if (this.state.value !== 'connected') this.reconnectNow();
+  }
+
   close(reason = 'Workspace closed'): void {
     if (this.disposed) return;
     const context = {

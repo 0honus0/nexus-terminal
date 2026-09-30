@@ -450,6 +450,7 @@ export interface WorkspaceTransferEventMapDto {
 }
 
 export interface WorkspaceCoreRequestMapDto {
+  'workspace.ping': Record<string, never>;
   'workspace.connect': WorkspaceConnectRequestDto;
   'workspace.resume': WorkspaceResumeRequestDto;
   'workspace.close': WorkspaceCloseRequestDto;
@@ -465,6 +466,7 @@ export interface WorkspaceCoreRequestMapDto {
 }
 
 export interface WorkspaceCoreResponseMapDto {
+  'workspace.ping': null;
   'workspace.connect': WorkspaceConnectResponseDto;
   'workspace.resume': WorkspaceResumeResponseDto;
   'workspace.close': null;

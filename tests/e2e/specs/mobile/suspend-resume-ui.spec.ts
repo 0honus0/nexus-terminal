@@ -72,6 +72,56 @@ async function dragTerminalDown(page: Page): Promise<void> {
   );
 }
 
+test('foreground probes preserve healthy SSH and resume a half-open transport without a fresh login', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  let dropProbe = false;
+  let connects = 0;
+  let resumes = 0;
+  let probes = 0;
+  await page.routeWebSocket('**/ws/workspace', (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      if (typeof message === 'string') {
+        const frame = JSON.parse(message) as { type?: string };
+        if (frame.type === 'workspace.connect') connects += 1;
+        if (frame.type === 'workspace.resume') resumes += 1;
+        if (frame.type === 'workspace.ping') {
+          probes += 1;
+          if (dropProbe) return;
+        }
+      }
+      server.send(message);
+    });
+  });
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const tab = page.getByTestId('terminal-tab-bar').locator('[data-session-id]').first();
+  const workspaceId = await tab.getAttribute('data-session-id');
+  const foreground = () => page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+  const refreshed = page.waitForResponse(
+    (response) => response.url().includes('/ssh-suspend/suspended-sessions') && response.request().method() === 'GET',
+  );
+  await foreground();
+  await expect.poll(() => probes).toBe(1);
+  await refreshed;
+  expect(resumes).toBe(0);
+  const initialConnects = connects;
+  dropProbe = true;
+  await foreground();
+  await expect.poll(() => probes).toBeGreaterThan(1);
+  await expect.poll(() => resumes, { timeout: 15_000 }).toBeGreaterThan(0);
+  expect(connects).toBe(initialConnects);
+  await expect(tab).toHaveAttribute('data-session-id', workspaceId!);
+  const input = page.getByTestId('command-input');
+  await input.fill('echo FOREGROUND_RECOVERY_OK');
+  await input.press('Enter');
+  await expect(page.getByTestId('terminal')).toContainText('FOREGROUND_RECOVERY_OK');
+});
+
 test('mobile suspended catalog refreshes promptly after the immediate suspend handoff', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -337,6 +387,8 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
     expect(maxTabs).toBe(1);
     await expect(tabBar.locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first()).toBeVisible();
 
+    await tabBar.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
+    await expect(page.getByTestId('workspace-start-page')).toBeVisible();
     const browserSocketClosed = await page.evaluate(() => {
       const sockets = (window as typeof window & { __e2eWorkspaceSockets?: WebSocket[] }).__e2eWorkspaceSockets ?? [];
       const socket = [...sockets].reverse().find((candidate) => candidate.readyState === WebSocket.OPEN);
@@ -345,6 +397,7 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
       return true;
     });
     expect(browserSocketClosed).toBeTruthy();
+    await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
 
     await expect
       .poll(
@@ -374,6 +427,7 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
     const recoveredSessionId = (await recoveredTab.getAttribute('data-session-id')) ?? '';
     expect(recoveredSessionId).not.toBe('');
     expect(recoveredSessionId).not.toBe(resumedSessionId);
+    await expect(page.getByTestId('workspace-start-page')).toBeVisible();
     await expect
       .poll(async () => {
         const record = (await suspendedSessions(context.request)).find((session) => session.id === suspended!.id);
@@ -381,6 +435,7 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
       })
       .toBe(recoveredSessionId);
 
+    await recoveredTab.click();
     await page.getByTestId('open-suspended-sessions-button').click();
     const recoveredManager = page.getByRole('dialog', { name: 'Suspended SSH Sessions', exact: true });
     await expect(recoveredManager).toBeVisible();

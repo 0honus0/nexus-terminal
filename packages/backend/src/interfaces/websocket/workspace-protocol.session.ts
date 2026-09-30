@@ -523,6 +523,9 @@ export class WorkspaceProtocolSession {
 
   private async route(type: string, payload: JsonRecord, requestId?: string): Promise<unknown> {
     switch (type) {
+      case 'workspace.ping':
+        this.requireWorkspace();
+        return null;
       case 'workspace.connect':
         return this.connect(payload);
       case 'workspace.resume':
