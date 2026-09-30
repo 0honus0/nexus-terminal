@@ -379,96 +379,102 @@
             </div>
           </div>
 
-          <div
-            class="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-5 lg:justify-end"
-          >
-            <div
-              data-testid="dashboard-overview-stats"
-              class="flex items-end justify-between gap-7 px-1 sm:justify-start"
-            >
-              <div>
-                <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
-                  connections.connections.value.length
-                }}</strong>
-                <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.totalConnections') }}</div>
+          <div class="dashboard-overview-metrics min-w-0 w-full lg:w-[520px]">
+            <div class="dashboard-overview-metrics-layout">
+              <div
+                data-testid="dashboard-overview-stats"
+                class="dashboard-overview-counts flex items-end justify-between gap-7 px-1"
+              >
+                <div>
+                  <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
+                    connections.connections.value.length
+                  }}</strong>
+                  <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.totalConnections') }}</div>
+                </div>
+                <div>
+                  <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
+                    tags.tags.value.length
+                  }}</strong>
+                  <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.tagCount') }}</div>
+                </div>
               </div>
-              <div>
-                <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
-                  tags.tags.value.length
-                }}</strong>
-                <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.tagCount') }}</div>
-              </div>
-            </div>
 
-            <div
-              v-if="preferences.values.value.dashboardShowLocalResources"
-              data-testid="dashboard-local-resources"
-              class="min-w-0 border-t border-border pt-3 sm:min-w-[300px] sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
-                  {{ t('dashboard.resources.local') }}
+              <div
+                v-if="preferences.values.value.dashboardShowLocalResources"
+                data-testid="dashboard-local-resources"
+                class="dashboard-overview-local min-w-0 border-t border-border pt-3"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <div
+                    class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary"
+                  >
+                    {{ t('dashboard.resources.local') }}
+                  </div>
+                  <span class="flex items-center gap-1.5 text-[11px] text-text-secondary"
+                    ><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span
+                    >{{ t('dashboard.resources.live') }}</span
+                  >
                 </div>
-                <span class="flex items-center gap-1.5 text-[11px] text-text-secondary"
-                  ><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span
-                  >{{ t('dashboard.resources.live') }}</span
-                >
-              </div>
-              <div v-if="resources.local.value" class="mt-2 grid grid-cols-3 gap-4">
-                <div>
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span>
-                    <strong class="text-base font-semibold tabular-nums">{{
-                      percent(resources.local.value.cpuPercent)
-                    }}</strong>
+                <div v-if="resources.local.value" class="mt-2 grid grid-cols-3 gap-4">
+                  <div>
+                    <div class="flex items-baseline justify-between gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.cpu')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums">{{
+                        percent(resources.local.value.cpuPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                      <div
+                        class="h-full rounded-full bg-primary"
+                        :style="{ width: percent(resources.local.value.cpuPercent) }"
+                      ></div>
+                    </div>
                   </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
-                    <div
-                      class="h-full rounded-full bg-primary"
-                      :style="{ width: percent(resources.local.value.cpuPercent) }"
-                    ></div>
+                  <div
+                    :title="`${formatMemory(resources.local.value.memUsed)} / ${formatMemory(resources.local.value.memTotal)}`"
+                  >
+                    <div class="flex items-baseline justify-between gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.memory')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums">{{
+                        percent(resources.local.value.memPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                      <div
+                        class="h-full rounded-full bg-success"
+                        :style="{ width: percent(resources.local.value.memPercent) }"
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex items-baseline justify-between gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.disk')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums">{{
+                        percent(resources.local.value.diskPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                      <div
+                        class="h-full rounded-full bg-warning"
+                        :style="{ width: percent(resources.local.value.diskPercent) }"
+                      ></div>
+                    </div>
                   </div>
                 </div>
-                <div
-                  :title="`${formatMemory(resources.local.value.memUsed)} / ${formatMemory(resources.local.value.memTotal)}`"
-                >
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{
-                      t('dashboard.resources.memory')
-                    }}</span>
-                    <strong class="text-base font-semibold tabular-nums">{{
-                      percent(resources.local.value.memPercent)
-                    }}</strong>
-                  </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
-                    <div
-                      class="h-full rounded-full bg-success"
-                      :style="{ width: percent(resources.local.value.memPercent) }"
-                    ></div>
-                  </div>
+                <div v-else-if="resources.localError.value" class="py-2 text-[11px] text-error">
+                  {{ resources.localError.value }}
                 </div>
-                <div>
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span>
-                    <strong class="text-base font-semibold tabular-nums">{{
-                      percent(resources.local.value.diskPercent)
-                    }}</strong>
-                  </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
-                    <div
-                      class="h-full rounded-full bg-warning"
-                      :style="{ width: percent(resources.local.value.diskPercent) }"
-                    ></div>
-                  </div>
+                <div v-else class="grid min-h-10 place-items-center py-2 text-[11px] text-text-secondary">
+                  <UiSpinner v-if="resources.localLoading.value" density="compact" /><span v-else>{{
+                    t('dashboard.resources.unavailable')
+                  }}</span>
                 </div>
-              </div>
-              <div v-else-if="resources.localError.value" class="py-2 text-[11px] text-error">
-                {{ resources.localError.value }}
-              </div>
-              <div v-else class="grid min-h-10 place-items-center py-2 text-[11px] text-text-secondary">
-                <UiSpinner v-if="resources.localLoading.value" density="compact" /><span v-else>{{
-                  t('dashboard.resources.unavailable')
-                }}</span>
               </div>
             </div>
           </div>
@@ -840,6 +846,35 @@
 </template>
 
 <style scoped>
+  .dashboard-overview-metrics {
+    container-type: inline-size;
+  }
+  .dashboard-overview-metrics-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  @container (min-width: 520px) {
+    .dashboard-overview-metrics-layout {
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 1.25rem;
+    }
+    .dashboard-overview-counts {
+      flex-shrink: 0;
+      justify-content: flex-start;
+    }
+    .dashboard-overview-local {
+      flex: 1;
+      min-width: 300px;
+      border-top: 0;
+      border-left: 1px solid var(--border-color);
+      padding-top: 0;
+      padding-left: 1.25rem;
+    }
+  }
+
   .dashboard-surface {
     border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
     border-radius: 16px;
