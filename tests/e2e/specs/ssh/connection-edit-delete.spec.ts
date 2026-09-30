@@ -44,7 +44,9 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
   const connectionId = await createConnection(context.request);
   await page.goto('/connections');
 
-  const row = page.getByTestId(`connection-row-${connectionId}`);
+  const row = page
+    .getByRole('listitem')
+    .filter({ has: page.getByText(/^(E2E SSH Lifecycle|E2E SSH Lifecycle Edited)$/) });
   await expect(row).toContainText(ORIGINAL_NAME);
 
   await slowStep('saved connection test reaches the real SSH server', async () => {
@@ -52,15 +54,15 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
       (response) =>
         response.url().includes(`/api/v1/connections/${connectionId}/test`) && response.request().method() === 'POST',
     );
-    await row.getByTestId('connection-row-test').click();
+    await row.getByRole('button', { name: 'Test', exact: true }).click();
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({ success: true });
   });
 
   await step('edit changes only the name and leaves the stored password untouched', async () => {
-    await row.getByTestId('connection-row-edit').click();
-    const form = page.getByTestId('connection-form');
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
+    const form = page.locator('form.connection-form');
     await expect(form).toBeVisible();
     await expect(form.locator('#conn-name')).toHaveValue(ORIGINAL_NAME);
     await expect(form.locator('#conn-password')).toHaveValue('');
@@ -70,7 +72,7 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
       (response) =>
         response.url().endsWith(`/api/v1/connections/${connectionId}`) && response.request().method() === 'PUT',
     );
-    await form.getByTestId('connection-submit-button').click();
+    await form.getByRole('button', { name: 'Confirm Edit', exact: true }).click();
     const update = await updatePromise;
     expect(update.ok()).toBeTruthy();
     await expect(form).toBeHidden({ timeout: 15_000 });
@@ -82,16 +84,16 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
       (response) =>
         response.url().includes(`/api/v1/connections/${connectionId}/test`) && response.request().method() === 'POST',
     );
-    await row.getByTestId('connection-row-test').click();
+    await row.getByRole('button', { name: 'Test', exact: true }).click();
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({ success: true });
   });
 
   await step('delete from the edit form removes the connection from UI and persistence', async () => {
-    await row.getByTestId('connection-row-edit').click();
-    const form = page.getByTestId('connection-form');
-    await form.getByTestId('connection-delete-button').click();
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
+    const form = page.locator('form.connection-form');
+    await form.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirm = page.getByRole('dialog').filter({ hasText: EDITED_NAME });
     await expect(confirm).toBeVisible();
     await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
