@@ -109,6 +109,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - saved connection lifecycle coverage verifies real SSH tests before and after a name-only edit and confirmed deletion from both the visible list and persistence using named card/form actions;
 - collapsible quick-command search coverage verifies default visibility, group-save persistence, search focus/Escape behavior and centered controls across sidebar widths using the existing panel and named controls;
 - file upload scenarios verify clipboard/file-picker/folder uploads, remote bytes, conflict decisions, delayed SFTP acknowledgements, stream concurrency and hidden progress restoration/cancellation through existing file-manager and progress controls;
+- custom terminal theme and Workspace tag-management scenarios use current editor, token-input and named manager controls while retaining theme persistence/deletion and narrow-screen tag association assertions;
 - multi-megabyte SFTP uploads completing every block before success;
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;

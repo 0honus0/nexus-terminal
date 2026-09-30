@@ -175,22 +175,22 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
       const primaryRow = list.locator(`li[data-connection-id="${primaryId}"]`);
       await primaryRow.click({ button: 'right' });
       await page.getByRole('button', { name: 'Edit', exact: true }).click();
-      const form = page.getByTestId('connection-form');
+      const form = page.locator('form.connection-form');
       await expect(form).toBeVisible();
-      const tagInput = form.getByTestId('tag-input-text');
+      const tagInput = form.getByPlaceholder('Type to search or create tags...', { exact: true });
       await tagInput.fill(WORKSPACE_TAG);
       await tagInput.press('Enter');
       await expect
         .poll(async () => (await listTags(context.request)).find((tag) => tag.name === WORKSPACE_TAG)?.id ?? 0)
         .toBeGreaterThan(0);
       tagId = (await listTags(context.request)).find((tag) => tag.name === WORKSPACE_TAG)!.id;
-      await expect(form.getByTestId('tag-chip').filter({ hasText: WORKSPACE_TAG })).toBeVisible();
+      await expect(form.locator('.ui-token-input__token').filter({ hasText: WORKSPACE_TAG })).toBeVisible();
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
         .toBeLessThanOrEqual(1);
 
       await tagInput.press('Backspace');
-      await expect(form.getByTestId('tag-chip').filter({ hasText: WORKSPACE_TAG })).toHaveCount(0);
+      await expect(form.locator('.ui-token-input__token').filter({ hasText: WORKSPACE_TAG })).toHaveCount(0);
       expect((await listTags(context.request)).filter((tag) => tag.name === WORKSPACE_TAG)).toHaveLength(1);
 
       await tagInput.fill(WORKSPACE_TAG);
@@ -198,14 +198,14 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
       await tagInput.press('ArrowDown');
       await expect(tagInput).toHaveAttribute('aria-expanded', 'true');
       await tagInput.press('Enter');
-      await expect(form.getByTestId('tag-chip').filter({ hasText: WORKSPACE_TAG })).toBeVisible();
+      await expect(form.locator('.ui-token-input__token').filter({ hasText: WORKSPACE_TAG })).toBeVisible();
       expect((await listTags(context.request)).filter((tag) => tag.name === WORKSPACE_TAG)).toHaveLength(1);
 
       const save = page.waitForResponse(
         (response) =>
           response.url().endsWith(`/api/v1/connections/${primaryId}`) && response.request().method() === 'PUT',
       );
-      await form.getByTestId('connection-submit-button').click();
+      await form.getByRole('button', { name: 'Confirm Edit', exact: true }).click();
       expect((await save).ok()).toBeTruthy();
       await expect(form).toBeHidden({ timeout: 15_000 });
       expect(await connectionTagIds(context.request, primaryId)).toContain(tagId);
@@ -217,9 +217,7 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
     await expect(group).toBeVisible();
     await group.locator('header').hover();
     await group.getByTitle('Manage Tag').click();
-    const content = page.getByTestId('workspace-tag-group-manager');
-    await expect(content).toBeVisible();
-    const dialog = page.getByRole('dialog').filter({ has: content });
+    const dialog = page.getByRole('dialog', { name: /^Manage Tag Connections/ });
     await expect(dialog).toBeVisible();
     const box = await dialog.boundingBox();
     expect(box).not.toBeNull();
@@ -233,10 +231,10 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 
   await step('group manager renames the tag and assigns the filtered secondary connection', async () => {
     const manager = await openManager(WORKSPACE_TAG);
-    await manager.getByRole('textbox', { name: 'Tag Name' }).fill(WORKSPACE_TAG_RENAMED);
-    await manager.getByTestId('tag-group-search').fill('Search Secondary');
-    await manager.getByTestId('tag-group-select-all').click();
-    await manager.getByTestId('tag-group-save').click();
+    await manager.getByRole('textbox', { name: 'Tag name', exact: true }).fill(WORKSPACE_TAG_RENAMED);
+    await manager.getByPlaceholder('Search connections...', { exact: true }).fill('Search Secondary');
+    await manager.getByRole('button', { name: 'Select All', exact: true }).click();
+    await manager.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(manager).toBeHidden({ timeout: 15_000 });
     await expect
       .poll(async () => (await listTags(context.request)).find((tag) => tag.id === tagId)?.name ?? '')
@@ -247,9 +245,9 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 
   await step('filtered deselect removes one connection without deleting the tag', async () => {
     const manager = await openManager(WORKSPACE_TAG_RENAMED);
-    await manager.getByTestId('tag-group-search').fill('127.0.0.1');
-    await manager.getByTestId('tag-group-deselect-all').click();
-    await manager.getByTestId('tag-group-save').click();
+    await manager.getByPlaceholder('Search connections...', { exact: true }).fill('127.0.0.1');
+    await manager.getByRole('button', { name: 'Deselect All', exact: true }).click();
+    await manager.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(manager).toBeHidden({ timeout: 15_000 });
     await expect.poll(async () => (await connectionTagIds(context.request, primaryId)).includes(tagId)).toBeFalsy();
     expect(await connectionTagIds(context.request, secondaryId)).toContain(tagId);
@@ -258,7 +256,7 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 
   await step('global delete is separately confirmed and removes the remaining association', async () => {
     const manager = await openManager(WORKSPACE_TAG_RENAMED);
-    await manager.getByTestId('tag-group-delete').click();
+    await manager.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirm = page.getByRole('dialog', { name: 'Please confirm' });
     await expect(confirm).toBeVisible();
     await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
