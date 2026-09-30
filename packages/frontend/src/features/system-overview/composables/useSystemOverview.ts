@@ -88,14 +88,14 @@ export const useSystemOverview = (): SystemOverviewController => {
       const update = (key: string, value: SshResourceStatusDto) => {
         remote.value = remote.value.map((resource) => (resource.key === key ? value : resource));
       };
-      for (const [key, target] of unique) {
-        if (remoteAbort.signal.aborted) break;
+      const pending = [...unique.entries()];
+      const loadHost = async (key: string, target: SshResourceTarget): Promise<void> => {
         try {
           const result = await systemOverviewApi.ssh(target.id, remoteAbort.signal);
-          if (remoteAbort.signal.aborted) break;
+          if (remoteAbort.signal.aborted) return;
           update(key, result);
         } catch (cause) {
-          if (remoteAbort.signal.aborted) break;
+          if (remoteAbort.signal.aborted) return;
           const current = remote.value.find((resource) => resource.key === key);
           if (current)
             update(key, {
@@ -105,8 +105,19 @@ export const useSystemOverview = (): SystemOverviewController => {
               checkedAt: Date.now(),
             });
         }
-        await waitForNextHost();
-      }
+      };
+      // Independent hosts must publish independently; bound simultaneous probes rather
+      // than waiting for a slow host before even starting the next one.
+      await Promise.all(
+        Array.from({ length: Math.min(4, pending.length) }, async () => {
+          while (!remoteAbort.signal.aborted) {
+            const next = pending.shift();
+            if (!next) return;
+            await loadHost(...next);
+            if (pending.length) await waitForNextHost();
+          }
+        }),
+      );
     } catch (cause) {
       remoteError.value = apiErrorMessage(cause, '');
     } finally {

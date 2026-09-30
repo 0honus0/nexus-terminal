@@ -36,6 +36,8 @@ Remote-desktop regressions exercise RemoteApp persistence, route-preserving RDP/
 
 CAPTCHA and proxy lifecycle coverage uses settings headings, form controls and management cards while retaining public-configuration secrecy and explicit credential-update assertions. Panel scaling and advanced mobile touch coverage uses rendered scale state, accessible menus/document actions and the real terminal surface to verify persistence races, archive creation, CodeMirror editing and virtual-keyboard escape sequences without production test markers.
 
+Dashboard and mobile suspend/resume coverage targets host cards, public connection timestamps, tab semantics and suspend identifiers. It retains assertions for independent resource loading, persisted filters, catalog refresh, single-tab recovery, original-shell continuity and older-history touch scrolling.
+
 Test support HTTP controls are limited to deterministic fixture setup and fault injection (for example remote file creation, artificial latency, or SSH availability). Test assertions use the Nexus HTTP/WebSocket/UI/ingress surfaces. Fake external services validate incoming requests directly and return success/failure instead of exposing captured internal request logs to specs.
 
 Functional/documentation screenshots are declared directly at real E2E checkpoints with `captureFunctionalScreenshot(page, filename)`. Screenshot capture remains opt-in for focused maintenance runs; the canonical E2E workflow does not mutate the repository or commit refreshed screenshots.
