@@ -1,5 +1,11 @@
 {
   "workspace": {
+    "start": {
+      "title": "Connections & sessions",
+      "description": "Resume a suspended session or choose a connection to open a terminal.",
+      "connections": "Start a connection",
+      "back": "Back to terminal"
+    },
     "terminal": {
       "reconnectingMsg": "Attempting to reconnect..."
     },

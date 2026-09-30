@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiContextMenu } from '@/foundation/ui';
+  import { UiContextMenu, UiInput } from '@/foundation/ui';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { loadConnectionEditorModal, useConnections, type ConnectionDto } from '@/features/connections/public';
   import { useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
@@ -10,17 +10,19 @@
   import { focusRegistry } from '@/shared/focus/public';
 
   const ConnectionEditorModal = defineAsyncComponent(loadConnectionEditorModal);
-  const props = withDefaults(defineProps<{ showTags?: boolean; activeConnectionId?: number | null }>(), {
-    showTags: true,
-    activeConnectionId: null,
-  });
+  const props = withDefaults(
+    defineProps<{ showTags?: boolean; activeConnectionId?: number | null; pageScroll?: boolean }>(),
+    {
+      showTags: true,
+      activeConnectionId: null,
+    },
+  );
   const emit = defineEmits<{ open: [connection: ConnectionDto]; openMany: [connections: ConnectionDto[]] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
   const data = useConnections();
   const tags = useConnectionTags();
   const root = ref<HTMLElement | null>(null);
-  const searchInput = ref<{ focus?: () => void } | null>(null);
   const search = ref('');
   const highlightedId = ref<number | null>(null);
   const managerTag = ref<ConnectionTagDto | null>(null);
@@ -66,7 +68,7 @@
     unregisterFocus = focusRegistry.register(
       'connectionListSearch',
       () => {
-        searchInput.value?.focus?.();
+        root.value?.querySelector<HTMLInputElement>('[data-focus-id="connectionListSearch"]')?.focus();
         return true;
       },
       () => Boolean(root.value?.getClientRects().length),
@@ -247,21 +249,34 @@
   <section
     ref="root"
     data-testid="workspace-connection-list"
-    class="workspace-connection-list flex h-full min-h-0 flex-col overflow-hidden text-foreground"
+    class="workspace-connection-list flex min-h-0 flex-col text-foreground"
+    :class="props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden'"
   >
-    <div class="workspace-connection-toolbar flex p-2">
-      <input
-        ref="searchInput"
+    <div class="workspace-connection-toolbar flex items-center gap-2" :class="props.pageScroll ? 'mb-3 pb-3' : 'p-2'">
+      <UiInput
         v-model="search"
         data-focus-id="connectionListSearch"
         type="text"
+        :aria-label="t('workspaceConnectionList.searchPlaceholder')"
         :placeholder="t('workspaceConnectionList.searchPlaceholder')"
-        class="workspace-connection-search min-w-0 flex-1 rounded-lg px-4 py-1.5 text-sm text-foreground outline-none"
+        class="workspace-connection-search min-w-0 flex-1"
         @keydown="handleSearchKeydown"
-      />
+      >
+        <template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
+        <template v-if="search" #trailing>
+          <button
+            type="button"
+            :aria-label="t('common.clear')"
+            class="cursor-pointer hover:text-foreground"
+            @click="search = ''"
+          >
+            <i class="fas fa-times-circle text-xs" aria-hidden="true"></i>
+          </button>
+        </template>
+      </UiInput>
       <button
         type="button"
-        class="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-0 bg-primary text-sm font-semibold text-white shadow-md transition-colors duration-200 hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-0 bg-primary text-sm font-semibold text-white transition-colors duration-200 hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
         :title="t('connections.addConnection')"
         :aria-label="t('connections.addConnection')"
         @click="addConnection"
@@ -277,7 +292,11 @@
       <i class="fas fa-exclamation-triangle mr-2" aria-hidden="true"></i>{{ loadError }}
     </div>
 
-    <div v-else class="workspace-connection-content min-h-0 flex-1 overflow-y-auto p-2">
+    <div
+      v-else
+      class="workspace-connection-content min-h-0"
+      :class="props.pageScroll ? '' : 'flex-1 overflow-y-auto p-2'"
+    >
       <div
         v-if="data.connections.value.length && !filtered.length && search"
         class="p-6 text-center text-text-secondary"
@@ -435,24 +454,11 @@
   .workspace-connection-list {
     background: var(--app-bg-color);
   }
-  .workspace-connection-toolbar {
-    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
-    background: color-mix(in srgb, var(--card-bg-color) 64%, var(--app-bg-color));
-  }
-  .workspace-connection-search {
-    border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
-    background: color-mix(in srgb, var(--input-bg-color) 72%, var(--app-bg-color));
-    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 6%, transparent);
-  }
-  .workspace-connection-search:hover {
-    border-color: color-mix(in srgb, var(--border-hover-color) 72%, transparent);
-  }
-  .workspace-connection-search:focus {
-    border-color: color-mix(in srgb, var(--link-active-color) 58%, var(--border-color));
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--link-active-color) 10%, transparent);
-  }
   .workspace-connection-content {
     background: var(--app-bg-color);
+  }
+  .workspace-connection-list--page .workspace-connection-item {
+    margin-block: 0.375rem;
   }
   .workspace-connection-group:hover {
     background: color-mix(in srgb, var(--card-bg-color) 78%, var(--app-bg-color));

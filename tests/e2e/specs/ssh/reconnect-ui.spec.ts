@@ -172,7 +172,7 @@ test('initial SSH failure removes its connecting tab without automatic retry', a
 
     const tabs = page.getByTestId('terminal-tab-bar').getByRole('tab');
     await expect(tabs).toHaveCount(0, { timeout: 15_000 });
-    await expect(page.getByTestId('no-session-placeholder')).toBeVisible();
+    await expect(page.getByTestId('workspace-start-page')).toBeVisible();
 
     expect(
       await page.evaluate(
@@ -606,7 +606,7 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
       await step('close the final tab and return to the real empty Workspace state', async () => {
         await tabForName(MULTI_SESSION_NAMES[1]).getByRole('button', { name: 'Close Tab', exact: true }).click();
         await expect(tabs).toHaveCount(0);
-        await expect(page.getByTestId('no-session-placeholder')).toBeVisible();
+        await expect(page.getByTestId('workspace-start-page')).toBeVisible();
         await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
         const list = page.getByTestId('workspace-connection-list');
         await expect(list).toBeVisible();

@@ -1,15 +1,19 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { UiInput } from '@/foundation/ui';
   import { apiErrorMessage } from '@/client/http';
   import { useFeedback } from '@/shared/feedback/public';
   import { useSuspendedSessions } from '../composables/useSuspendedSessions';
   import type { MarkedSuspendedSessionState, SuspendedSessionDto } from '../model/sshSuspend';
 
-  const props = withDefaults(defineProps<{ canResume?: boolean; markedSessions?: MarkedSuspendedSessionState[] }>(), {
-    canResume: false,
-    markedSessions: () => [],
-  });
+  const props = withDefaults(
+    defineProps<{ canResume?: boolean; markedSessions?: MarkedSuspendedSessionState[]; pageScroll?: boolean }>(),
+    {
+      canResume: false,
+      markedSessions: () => [],
+    },
+  );
   const emit = defineEmits<{
     resume: [session: SuspendedSessionDto];
     resumeMarked: [workspaceId: string];
@@ -163,35 +167,35 @@
 <template>
   <section
     data-testid="suspended-sessions-view"
-    class="suspended-sessions-panel flex h-full min-h-0 flex-col"
+    class="suspended-sessions-panel flex min-h-0 flex-col"
+    :class="props.pageScroll ? 'suspended-sessions-panel--page' : 'h-full'"
     role="region"
     :aria-label="t('suspendedSshSessions.modalTitle')"
   >
-    <!-- 紧凑搜索栏 -->
-    <div class="view-header mb-2 shrink-0">
-      <div class="relative w-full">
-        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-text-secondary/60">
-          <i class="fas fa-search text-[10px]" aria-hidden="true"></i>
-        </span>
-        <input
-          v-model="data.search.value"
-          type="text"
-          :placeholder="t('suspendedSshSessions.searchPlaceholder')"
-          class="suspended-session-search h-7 w-full rounded-lg border border-border/80 bg-input/40 pl-7 pr-7 text-xs text-foreground placeholder:text-text-secondary/50 transition-colors focus:border-primary focus:bg-background focus:outline-none"
-        />
-        <button
-          v-if="data.search.value"
-          type="button"
-          class="absolute inset-y-0 right-0 flex items-center pr-2 text-text-secondary/60 hover:text-foreground cursor-pointer"
-          @click="data.search.value = ''"
-        >
-          <i class="fas fa-times-circle text-[10px]" aria-hidden="true"></i>
-        </button>
-      </div>
+    <div class="view-header shrink-0" :class="props.pageScroll ? 'mb-3 pb-3' : 'mb-2'">
+      <UiInput
+        v-model="data.search.value"
+        type="text"
+        :aria-label="t('suspendedSshSessions.searchPlaceholder')"
+        :placeholder="t('suspendedSshSessions.searchPlaceholder')"
+        class="suspended-session-search w-full"
+      >
+        <template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
+        <template v-if="data.search.value" #trailing>
+          <button
+            type="button"
+            :aria-label="t('common.clear')"
+            class="cursor-pointer hover:text-foreground"
+            @click="data.search.value = ''"
+          >
+            <i class="fas fa-times-circle text-xs" aria-hidden="true"></i>
+          </button>
+        </template>
+      </UiInput>
     </div>
 
     <!-- 列表容器 -->
-    <div class="session-list-container min-h-0 flex-1 overflow-y-auto">
+    <div class="session-list-container min-h-0" :class="props.pageScroll ? '' : 'flex-1 overflow-y-auto'">
       <div
         v-if="data.loading.value && !filteredMarked.length"
         class="suspended-session-loading flex flex-col items-center justify-center py-6 text-center text-text-secondary"
@@ -401,6 +405,14 @@
 
   .session-card {
     transition: all 0.15s ease-in-out;
+  }
+  .suspended-sessions-panel--page .session-card {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+  .suspended-sessions-panel--page .session-card:hover {
+    background: color-mix(in srgb, var(--link-active-color) 6%, transparent);
   }
 
   .status-badge {

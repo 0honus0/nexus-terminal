@@ -3,7 +3,6 @@
   import { useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
-  import { UiOverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { createLatestValueSaver } from '@/foundation/async';
   import { useFeedback } from '@/shared/feedback/public';
@@ -24,12 +23,11 @@
   import type { WorkspaceRemoteFileEntryDto } from '@/features/filesystem/public';
   import {
     loadSuspendedSessionsModal,
-    loadSuspendedSessionsPanel,
     findSuspendedSessionByOriginalWorkspace,
     refreshSuspendedSessionsCatalog,
     type SuspendedSessionDto,
   } from '@/features/ssh-suspend/public';
-  import WorkspaceConnectionList from '../components/WorkspaceConnectionList.vue';
+  import WorkspaceStartPage from '../components/WorkspaceStartPage.vue';
   import WorkspaceTabBar from '../components/WorkspaceTabBar.vue';
   import { provideWorkspaceUiState } from '../state/workspaceUiState';
   import { workspaceRuntimeRegistry, type WorkspaceRuntimeSession } from '../session';
@@ -40,7 +38,6 @@
 
   const ProgressDisplayModal = defineAsyncComponent(loadProgressDisplayModal);
   const SuspendedSessionsModal = defineAsyncComponent(loadSuspendedSessionsModal);
-  const SuspendedSessionsPanel = defineAsyncComponent(loadSuspendedSessionsPanel);
   const WorkspaceLayoutConfigurator = defineAsyncComponent(
     () => import('../components/WorkspaceLayoutConfigurator.vue'),
   );
@@ -368,6 +365,7 @@
     opening.value = true;
     try {
       await registry.open(connection);
+      connectionPickerVisible.value = false;
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return;
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
@@ -380,11 +378,9 @@
     for (const connection of connections) await openConnection(connection);
   };
   const openConnectionFromPicker = async (connection: ConnectionDto): Promise<void> => {
-    connectionPickerVisible.value = false;
     await openConnection(connection);
   };
   const openConnectionsFromPicker = async (connections: ConnectionDto[]): Promise<void> => {
-    connectionPickerVisible.value = false;
     await openConnections(connections);
   };
 
@@ -426,6 +422,7 @@
   const preparingSessionId = ref<string | null>(null);
   let activationGeneration = 0;
   const activateSession = (id: string) => {
+    connectionPickerVisible.value = false;
     const generation = ++activationGeneration;
     if (id === registry.activeId.value) {
       preparingSessionId.value = null;
@@ -533,6 +530,7 @@
       if (connection.type !== 'SSH') throw new Error(t('workspace.errors.suspendedConnectionNotSsh'));
       if (shouldReplace) await registry.resumeReplacing(suspended, connection, replacement!.id, { takeover });
       else await registry.resume(suspended, connection, { takeover });
+      connectionPickerVisible.value = false;
       suspendedVisible.value = false;
       if (!options.silent)
         feedback.notifySuccess(
@@ -574,6 +572,7 @@
     }
     if (session.state.value === 'connected') {
       registry.activate(workspaceId);
+      connectionPickerVisible.value = false;
       suspendedVisible.value = false;
       return;
     }
@@ -862,6 +861,7 @@
       @toggle-header="toggleHeader"
       @open-progress="progressDisplayVisible = true"
       @open-layout-configurator="layoutConfiguratorVisible = true"
+      @open-suspended="suspendedVisible = !connectionPickerVisible && Boolean(registry.orderedSessions.value.length)"
     />
 
     <ProgressDisplayModal
@@ -879,76 +879,22 @@
       @remove="removeProgressTask"
     />
 
-    <UiOverlayPanel
-      :visible="connectionPickerVisible"
-      :close-on-escape="true"
-      overlay-class="workspace-connection-picker-overlay"
-      panel-class="workspace-connection-picker-panel max-h-[80dvh] max-w-md p-6"
-      @close="connectionPickerVisible = false"
-    >
-      <button
-        type="button"
-        class="absolute right-2 top-2 p-1 text-text-secondary hover:text-foreground"
-        :aria-label="t('common.close')"
-        @click="connectionPickerVisible = false"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-      <h3 class="mb-4 text-center text-lg font-semibold">{{ t('terminalTabBar.selectServerTitle') }}</h3>
-      <div class="workspace-connection-picker-body max-h-[calc(80dvh-7rem)] overflow-y-auto rounded-xl">
-        <WorkspaceConnectionList @open="openConnectionFromPicker" @open-many="openConnectionsFromPicker" />
-      </div>
-    </UiOverlayPanel>
-
-    <template v-if="!registry.orderedSessions.value.length">
-      <div
-        v-if="device.isMobile.value"
-        data-testid="mobile-empty-workspace-panels"
-        class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(16rem,1fr)_minmax(16rem,1fr)] gap-4 overflow-y-auto p-4"
-      >
-        <section
-          data-testid="mobile-empty-connections-panel"
-          class="min-h-0 overflow-hidden rounded-lg border border-border"
-        >
-          <WorkspaceConnectionList @open="openConnection" @open-many="openConnections" />
-        </section>
-        <section
-          data-testid="mobile-empty-suspended-panel"
-          class="min-h-0 overflow-hidden rounded-lg border border-border"
-        >
-          <SuspendedSessionsPanel
-            :can-resume="true"
-            :marked-sessions="markedSuspendedSessions"
-            @resume="resumeSuspended"
-            @resume-marked="resumeMarkedSession"
-            @unmark="toggleSuspendMark"
-          />
-        </section>
-      </div>
-      <section
-        v-else
-        data-testid="no-session-placeholder"
-        class="mx-2 mb-2 mt-0 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-b-md border border-t-0 border-border bg-header p-4 text-center text-text-secondary"
-      >
-        <div class="flex flex-col items-center justify-center p-8">
-          <i class="fas fa-plug mb-3 text-4xl text-text-secondary" aria-hidden="true"></i>
-          <span class="mb-2 text-lg font-medium text-text-secondary">{{ t('layout.noActiveSession.title') }}</span>
-          <p class="mt-2 text-xs text-text-secondary">{{ t('layout.noActiveSession.message') }}</p>
-        </div>
-      </section>
-    </template>
+    <WorkspaceStartPage
+      v-if="!registry.orderedSessions.value.length || connectionPickerVisible"
+      :mobile="device.isMobile.value"
+      :marked-sessions="markedSuspendedSessions"
+      :can-return="Boolean(registry.orderedSessions.value.length)"
+      @open="openConnectionFromPicker"
+      @open-many="openConnectionsFromPicker"
+      @resume="resumeSuspended"
+      @resume-marked="resumeMarkedSession"
+      @unmark="toggleSuspendMark"
+      @back="connectionPickerVisible = false"
+    />
 
     <div
-      v-else
+      v-if="registry.orderedSessions.value.length"
+      v-show="!connectionPickerVisible"
       data-testid="workspace-session-region"
       class="relative min-h-0 flex-1"
       :class="
@@ -1044,7 +990,7 @@
       @close="focusConfiguratorVisible = false"
     />
     <SuspendedSessionsModal
-      v-if="suspendedVisible"
+      v-if="suspendedVisible && registry.orderedSessions.value.length && !connectionPickerVisible"
       :visible="true"
       :can-resume="true"
       :marked-sessions="markedSuspendedSessions"
@@ -1055,25 +1001,3 @@
     />
   </main>
 </template>
-
-<style scoped>
-  :global(.workspace-connection-picker-overlay) {
-    background-color: rgb(15 23 42 / 24%);
-    -webkit-backdrop-filter: blur(1.5px) saturate(105%);
-    backdrop-filter: blur(1.5px) saturate(105%);
-  }
-
-  :global(.workspace-connection-picker-panel) {
-    border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
-    background: var(--app-bg-color);
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
-      0 18px 48px -24px rgb(15 23 42 / 38%);
-  }
-
-  .workspace-connection-picker-body {
-    border: 1px solid color-mix(in srgb, var(--border-color) 64%, transparent);
-    background: color-mix(in srgb, var(--card-bg-color) 72%, var(--app-bg-color));
-    overflow: hidden auto;
-  }
-</style>

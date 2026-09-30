@@ -97,9 +97,11 @@ test('mobile suspended catalog refreshes promptly after the immediate suspend ha
   try {
     await tab.click({ button: 'right' });
     await page.getByText('Suspend Session', { exact: true }).click();
+    await expect(tab).toHaveCount(1);
+    await tab.getByRole('button', { name: 'Close Tab', exact: true }).click();
     await expect(tab).toHaveCount(0);
 
-    const emptySuspendedPanel = page.getByTestId('mobile-empty-suspended-panel');
+    const emptySuspendedPanel = page.getByTestId('workspace-start-page');
     await expect(emptySuspendedPanel).toBeVisible();
     const handedOffRow = emptySuspendedPanel
       .locator('[data-testid^="suspended-session-"]')
@@ -272,6 +274,8 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
   try {
     await tab.click({ button: 'right' });
     await page.getByText('Suspend Session', { exact: true }).click();
+    await expect(tab).toHaveCount(1);
+    await tab.getByRole('button', { name: 'Close Tab', exact: true }).click();
     await expect(tab).toHaveCount(0);
 
     let suspended: SuspendedSession | undefined;
@@ -287,7 +291,7 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
       )
       .toBeTruthy();
 
-    const manager = page.getByTestId('mobile-empty-suspended-panel');
+    const manager = page.getByTestId('workspace-start-page');
     await expect(manager).toBeVisible();
     const hanging = manager.getByTestId(`suspended-session-${suspended!.id}`);
     await expect(hanging).toBeVisible({ timeout: 20_000 });
@@ -443,6 +447,8 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await commandInput.press('Enter');
     await tab.click({ button: 'right' });
     await page.getByText('Suspend Session', { exact: true }).click();
+    await expect(tab).toHaveCount(1);
+    await tab.getByRole('button', { name: 'Close Tab', exact: true }).click();
     await expect(tab).toHaveCount(0);
 
     await expect
@@ -509,9 +515,9 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
       )
       .toBeTruthy();
 
-    const emptyPanels = page.getByTestId('mobile-empty-workspace-panels');
-    const connectionsPanel = page.getByTestId('mobile-empty-connections-panel');
-    const suspendedPanel = page.getByTestId('mobile-empty-suspended-panel');
+    const emptyPanels = page.getByTestId('workspace-start-page');
+    const connectionsPanel = emptyPanels.getByTestId('workspace-connection-list');
+    const suspendedPanel = emptyPanels.getByTestId('suspended-sessions-view');
     await expect(emptyPanels).toBeVisible();
     const [connectionsBox, suspendedBox] = await Promise.all([
       connectionsPanel.boundingBox(),
@@ -519,15 +525,10 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     ]);
     expect(connectionsBox).toBeTruthy();
     expect(suspendedBox).toBeTruthy();
-    expect(connectionsBox!.height).toBeGreaterThanOrEqual(255);
-    expect(suspendedBox!.height).toBeGreaterThanOrEqual(255);
-    expect(Math.abs(connectionsBox!.height - suspendedBox!.height)).toBeLessThanOrEqual(1);
-    await expect(page.getByTestId('workspace-connection-list').locator('.min-h-0.flex-1.overflow-y-auto')).toHaveCSS(
-      'overflow-y',
-      'auto',
-    );
-    const embeddedSuspended = suspendedPanel.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
-    await expect(embeddedSuspended.locator('.session-list-container')).toHaveCSS('overflow-y', 'auto');
+    expect(connectionsBox!.y).toBeGreaterThan(suspendedBox!.y);
+    await expect(emptyPanels).toHaveCSS('overflow-y', 'auto');
+    await expect(connectionsPanel.locator('.workspace-connection-content')).toHaveCSS('overflow-y', 'visible');
+    await expect(suspendedPanel.locator('.session-list-container')).toHaveCSS('overflow-y', 'visible');
   });
 
   await slowStep('Suspended Sessions UI resumes the hanging shell instead of opening a new SSH shell', async () => {
