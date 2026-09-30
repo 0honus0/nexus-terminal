@@ -6,6 +6,7 @@ import type {
   SuspendedTerminalCheckpointSnapshot,
   SuspendedTerminalViewport,
 } from '../../modules/ssh-suspend/suspended-terminal-checkpoint.port';
+import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from './terminal-runtime-mode-tracker';
 
 const MAX_CHECKPOINT_BYTES = 4 * 1024 * 1024;
 const MAX_SCROLLBACK_LINES = 1000;
@@ -18,6 +19,7 @@ const validViewport = (viewport: SuspendedTerminalViewport): SuspendedTerminalVi
 class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
   private terminal: Terminal;
   private addon: SerializeAddon;
+  private runtimeModes: TerminalRuntimeModeTracker;
   private chain: Promise<void> = Promise.resolve();
   private disposed = false;
 
@@ -25,6 +27,7 @@ class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
     const normalized = validViewport(viewport);
     this.terminal = this.createTerminal(normalized);
     this.addon = this.createAddon(this.terminal);
+    this.runtimeModes = trackTerminalRuntimeModes(this.terminal);
     if (snapshot) this.chain = this.writeToTerminal(snapshot);
   }
 
@@ -42,9 +45,11 @@ class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
   reset(snapshot: string, viewport: SuspendedTerminalViewport): Promise<void> {
     const normalized = validViewport(viewport);
     return this.enqueue(async () => {
+      this.runtimeModes.dispose();
       this.terminal.dispose();
       this.terminal = this.createTerminal(normalized);
       this.addon = this.createAddon(this.terminal);
+      this.runtimeModes = trackTerminalRuntimeModes(this.terminal);
       if (snapshot) await this.writeToTerminal(snapshot);
     });
   }
@@ -52,7 +57,7 @@ class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
   async snapshot(): Promise<SuspendedTerminalCheckpointSnapshot> {
     await this.chain;
     if (this.disposed) throw new Error('Suspended terminal checkpoint is disposed.');
-    const data = this.addon.serialize({ scrollback: 0 });
+    const data = `${this.addon.serialize({ scrollback: 0 })}${this.runtimeModes.restoreSuffix()}`;
     if (Buffer.byteLength(data, 'utf8') > MAX_CHECKPOINT_BYTES) {
       throw new Error('Suspended terminal checkpoint exceeds the bounded snapshot size.');
     }
@@ -62,7 +67,12 @@ class XtermSuspendedTerminalCheckpoint implements SuspendedTerminalCheckpoint {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    void this.chain.catch(() => undefined).then(() => this.terminal.dispose());
+    void this.chain
+      .catch(() => undefined)
+      .then(() => {
+        this.runtimeModes.dispose();
+        this.terminal.dispose();
+      });
   }
 
   private enqueue(operation: () => Promise<void>): Promise<void> {

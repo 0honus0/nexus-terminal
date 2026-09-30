@@ -1,45 +1,21 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { step } from '../../support/steps';
 
-test('empty desktop Workspace keeps the arch-style centered placeholder without a forced connection pane', async ({
-  page,
-  context,
-}) => {
-  await loginAsInitialAdmin(context.request);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/workspace');
-
-  await step('desktop empty state does not reserve a fixed connection sidebar', async () => {
-    await expect(page.getByTestId('no-session-placeholder')).toBeVisible();
-    await expect(page.getByTestId('no-session-connection-pane')).toHaveCount(0);
-    await expect(page.getByTestId('workspace-connection-list')).toHaveCount(0);
-  });
-
-  await step('desktop tab bar and empty Workspace content share the same outer edges', async () => {
-    const workspaceBox = await page.getByTestId('workspace-root').boundingBox();
-    const tabBarBox = await page.getByTestId('terminal-tab-bar').boundingBox();
-    const placeholderBox = await page.getByTestId('no-session-placeholder').boundingBox();
-    expect(workspaceBox).toBeTruthy();
-    expect(tabBarBox).toBeTruthy();
-    expect(placeholderBox).toBeTruthy();
-    expect(Math.abs(tabBarBox!.x - workspaceBox!.x - 8)).toBeLessThanOrEqual(1);
-    expect(Math.abs(workspaceBox!.x + workspaceBox!.width - tabBarBox!.x - tabBarBox!.width - 8)).toBeLessThanOrEqual(
-      1,
-    );
-    expect(Math.abs(tabBarBox!.y - workspaceBox!.y - 8)).toBeLessThanOrEqual(1);
-    expect(Math.abs(tabBarBox!.x - placeholderBox!.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(tabBarBox!.x + tabBarBox!.width - (placeholderBox!.x + placeholderBox!.width))).toBeLessThanOrEqual(
-      1,
-    );
-    expect(Math.abs(placeholderBox!.y - (tabBarBox!.y + tabBarBox!.height))).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs(workspaceBox!.y + workspaceBox!.height - placeholderBox!.y - placeholderBox!.height - 8),
-    ).toBeLessThanOrEqual(1);
-  });
-
-  await step('new-session control still opens the connection picker on demand', async () => {
+for (const width of [393, 1440]) {
+  test(`Workspace uses one connection and session start page at ${width}px`, async ({ page, context }) => {
+    await loginAsInitialAdmin(context.request);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/workspace');
+    const start = page.locator('.workspace-start-page');
+    await expect(start).toBeVisible();
+    await expect(start.locator('.workspace-connection-list')).toBeVisible();
+    await expect(start.locator('.suspended-sessions-panel')).toBeVisible();
+    await expect(start).toHaveCSS('overflow-y', 'auto');
+    await expect(start.locator('.session-list-container')).toHaveCSS('overflow-y', 'visible');
+    await expect(start.locator('.workspace-connection-content')).toHaveCSS('overflow-y', 'visible');
     await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
-    await expect(page.getByTestId('workspace-connection-list')).toBeVisible();
+    await expect(page.locator('.workspace-start-page')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Suspended SSH Sessions', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   });
-});
+}

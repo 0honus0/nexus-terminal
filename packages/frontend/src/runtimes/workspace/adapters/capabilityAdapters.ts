@@ -878,10 +878,6 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
         'Workspace transfer channel marked disconnected',
       );
       workspaceAvailable = false;
-      for (const [id] of activeRemoteOperations) {
-        emit({ type: 'error', id, errorKind: 'workspace_connection_closed' });
-      }
-      activeRemoteOperations.clear();
       if (!uploads.size) return;
       recoveryPending = true;
       queuedUploads.splice(0);
@@ -945,9 +941,18 @@ export const createDockerChannel = (socket: WorkspaceSocket): DockerChannel => (
 });
 
 export const createSshSuspendChannel = (socket: WorkspaceSocket): SshSuspendChannel => ({
-  mark: (_workspaceId, terminalSnapshot) => {
-    const request: WorkspaceSuspendMarkRequestDto = terminalSnapshot ? { terminalSnapshot } : {};
-    return socket.request('suspend.mark', request);
+  async mark(_workspaceId, terminalSnapshot) {
+    const initialSnapshot = await terminalSnapshot();
+    const prepare: WorkspaceSuspendMarkRequestDto = initialSnapshot ? { terminalSnapshot: initialSnapshot } : {};
+    try {
+      await socket.request('suspend.prepare', prepare);
+      const finalSnapshot = await terminalSnapshot();
+      const commit: WorkspaceSuspendMarkRequestDto = finalSnapshot ? { terminalSnapshot: finalSnapshot } : {};
+      return await socket.request('suspend.commit', commit);
+    } catch (error) {
+      await socket.request('suspend.unmark', {}).catch(() => null);
+      throw error;
+    }
   },
   async unmark(_workspaceId) {
     const request: WorkspaceSuspendUnmarkRequestDto = {};

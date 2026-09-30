@@ -19,6 +19,7 @@ interface AgentHubState {
   recentAppIds: string[];
   hubView: 'conversation' | 'files';
   launcherPosition: { right: number; bottom: number };
+  launcherDock: 'left' | 'right' | null;
   /** §7.2-c: drives the desktop sidebar column and the narrow overlay drawer alike. */
   threadSidebarVisible: boolean;
   taskRailVisible: boolean;
@@ -46,6 +47,7 @@ const createDefaultState = (): AgentHubState => ({
   recentAppIds: [],
   hubView: 'conversation',
   launcherPosition: { ...DEFAULT_LAUNCHER_POSITION },
+  launcherDock: null,
   threadSidebarVisible: true,
   taskRailVisible: false,
 });
@@ -87,8 +89,14 @@ export const createAgentWindowManager = () => {
 
   const clampLauncherPosition = (position: { right: number; bottom: number }): { right: number; bottom: number } => {
     const screen = viewport();
+    const width = window.innerWidth;
     return {
-      right: Math.max(12, Math.min(position.right, Math.max(12, screen.width - 72))),
+      right:
+        state.launcherDock === 'right'
+          ? 0
+          : state.launcherDock === 'left'
+            ? Math.max(0, width - 44)
+            : Math.max(0, Math.min(position.right, Math.max(0, width - 44))),
       bottom: Math.max(12, Math.min(position.bottom, Math.max(12, screen.height - 72))),
     };
   };
@@ -168,7 +176,12 @@ export const createAgentWindowManager = () => {
       logger.debug({ visible, ...logContext() }, 'Agent floating window task rail toggled');
     },
     setLauncherPosition(position: { right: number; bottom: number }): void {
+      state.launcherDock = null;
       preferredLauncherPosition = { ...position };
+      state.launcherPosition = clampLauncherPosition(preferredLauncherPosition);
+    },
+    dockLauncher(side: 'left' | 'right'): void {
+      state.launcherDock = side;
       state.launcherPosition = clampLauncherPosition(preferredLauncherPosition);
     },
     clampLauncherPosition(): void {
@@ -204,6 +217,9 @@ export const createAgentWindowManager = () => {
         const launcher = stored.launcherPosition;
         if (launcher && Number.isFinite(launcher.right) && Number.isFinite(launcher.bottom)) {
           this.setLauncherPosition(launcher);
+          if (stored.launcherDock === 'left' || stored.launcherDock === 'right') {
+            this.dockLauncher(stored.launcherDock);
+          }
         }
         logger.debug({ userId, ...logContext() }, 'Agent floating window layout restored');
       } catch (cause) {
@@ -217,6 +233,7 @@ export const createAgentWindowManager = () => {
           bounds: preferredBounds,
           maximized: state.maximized,
           launcherPosition: preferredLauncherPosition,
+          launcherDock: state.launcherDock,
           recentAppIds: state.recentAppIds,
           hubView: state.hubView,
           threadSidebarVisible: state.threadSidebarVisible,
@@ -257,14 +274,21 @@ export const createAgentWindowManager = () => {
       preferredBounds = { ...next };
       state.bounds = next;
     },
-    resize(width: number, height: number): void {
+    resize(width: number, height: number, origin: AgentHubBounds = state.bounds): void {
       const screen = viewport();
-      const maxWidth = Math.max(1, screen.width - state.bounds.x);
-      const maxHeight = Math.max(1, screen.height - state.bounds.y);
+      const centerX = origin.x + origin.width / 2;
+      const centerY = origin.y + origin.height / 2;
+      // Resize symmetrically around the current window center, stopping when
+      // either edge reaches the viewport instead of shifting the center.
+      const maxWidth = Math.max(1, 2 * Math.min(centerX, screen.width - centerX));
+      const maxHeight = Math.max(1, 2 * Math.min(centerY, screen.height - centerY));
+      const nextWidth = Math.min(Math.max(width, Math.min(MIN_WIDTH, maxWidth)), maxWidth);
+      const nextHeight = Math.min(Math.max(height, Math.min(MIN_HEIGHT, maxHeight)), maxHeight);
       const next = clampBounds({
-        ...state.bounds,
-        width: Math.min(Math.max(width, Math.min(MIN_WIDTH, maxWidth)), maxWidth),
-        height: Math.min(Math.max(height, Math.min(MIN_HEIGHT, maxHeight)), maxHeight),
+        x: centerX - nextWidth / 2,
+        y: centerY - nextHeight / 2,
+        width: nextWidth,
+        height: nextHeight,
       });
       preferredBounds = { ...next };
       state.bounds = next;

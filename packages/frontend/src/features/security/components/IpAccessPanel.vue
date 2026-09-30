@@ -115,7 +115,7 @@
 
 <template>
   <div class="space-y-6">
-    <section data-testid="ip-whitelist-settings" class="ui-solid-panel overflow-hidden rounded-xl">
+    <section class="ui-solid-panel overflow-hidden rounded-xl">
       <h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
         {{ t('settings.ipWhitelist.title') }}
       </h2>
@@ -126,7 +126,6 @@
             <UiTextarea
               id="ipWhitelist"
               v-model="policy.whitelist"
-              data-testid="ip-whitelist-input"
               :min-rows="4"
               class="font-mono"
               :disabled="loading"
@@ -134,27 +133,21 @@
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.ipWhitelist.hint') }}</p>
           </UiFormField>
           <div class="flex items-center justify-between gap-4">
-            <UiButton
-              data-testid="ip-whitelist-save"
-              type="submit"
-              appearance="solid"
-              tone="primary"
-              :loading="loading"
-              >{{ t('common.save') }}</UiButton
-            >
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
+              t('common.save')
+            }}</UiButton>
             <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
           </div>
         </form>
       </div>
     </section>
 
-    <section data-testid="ip-blacklist-settings" class="ui-solid-panel overflow-hidden rounded-xl">
+    <section class="ui-solid-panel overflow-hidden rounded-xl">
       <div class="flex items-center justify-between border-b border-border/60 px-6 py-4">
         <h2 class="text-lg font-semibold text-foreground">{{ t('settings.ipBlacklist.title') }}</h2>
         <label class="flex items-center gap-2 text-sm">
           <UiCheckbox
             :model-value="policy.blacklistEnabled"
-            data-testid="ip-blacklist-toggle"
             :disabled="loading"
             role="switch"
             :aria-checked="String(policy.blacklistEnabled)"
@@ -175,7 +168,6 @@
               <UiInput
                 id="maxLoginAttempts"
                 v-model="policy.maxLoginAttempts"
-                data-testid="ip-blacklist-max-attempts"
                 type="number"
                 min="1"
                 :disabled="loading"
@@ -189,20 +181,14 @@
               <UiInput
                 id="loginBanDuration"
                 v-model="policy.loginBanDuration"
-                data-testid="ip-blacklist-ban-duration"
                 type="number"
                 min="1"
                 :disabled="loading"
               />
             </UiFormField>
-            <UiButton
-              data-testid="ip-blacklist-save"
-              type="submit"
-              appearance="solid"
-              tone="primary"
-              :loading="loading"
-              >{{ t('common.save') }}</UiButton
-            >
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
+              t('common.save')
+            }}</UiButton>
           </form>
           <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
           <hr class="border-border/50" />

@@ -21,7 +21,7 @@ test('archive remains cancelled while remote command preparation is stalled', as
     const task = visibleProgressTask(page, 'archive-source.zip');
     await expect(popup).toBeVisible({ timeout: 10_000 });
     await closeConnectedFileManager(page);
-    await task.getByTestId('transfer-progress-cancel').click();
+    await task.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(task).toHaveAttribute('data-task-status', 'cancelled', { timeout: 10_000 });
     await expect(popup).toBeHidden({ timeout: 4_000 });
 

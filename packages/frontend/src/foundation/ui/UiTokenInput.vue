@@ -16,8 +16,6 @@
       allowOptionDelete?: boolean;
       removeTokenLabel?: string;
       deleteOptionLabel?: string;
-      inputTestId?: string;
-      tokenTestId?: string;
     }>(),
     {
       options: () => [],
@@ -133,7 +131,6 @@
       <span
         v-for="value in model"
         :key="String(value)"
-        :data-testid="props.tokenTestId"
         class="ui-token-input__token inline-flex items-center whitespace-nowrap rounded px-2 py-0.5 text-sm"
       >
         {{ labelFor(value) }}
@@ -162,7 +159,6 @@
       <input
         ref="tokenInput"
         v-model="query"
-        :data-testid="props.inputTestId"
         type="text"
         class="ui-token-input__input min-w-[100px] flex-grow border-none bg-transparent p-0.5 text-sm outline-none"
         :placeholder="placeholder"

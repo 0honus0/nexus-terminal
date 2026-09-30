@@ -9,6 +9,7 @@
   import { SecuritySettingsPanel } from '@/features/security/public';
   import { useAuthSession } from '@/features/auth/public';
   import { supportedLocales } from '@/app/i18n';
+  import { useHorizontalDragScroll } from '@/foundation/interaction';
   import AboutPanel from './AboutPanel.vue';
   import packageJson from '../../../../package.json';
 
@@ -27,6 +28,7 @@
   const mobileView = ref<'menu' | 'detail'>('detail');
   const currentVersion = packageJson.version;
   const contentContainer = ref<HTMLElement | null>(null);
+  const settingsTabsDrag = useHorizontalDragScroll();
 
   watch(
     active,
@@ -219,16 +221,17 @@
 
 <template>
   <main
-    class="settings-page min-h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-3.5rem)] lg:min-h-0 lg:max-h-[calc(100dvh-3.5rem)] lg:overflow-hidden text-foreground flex flex-col"
+    class="settings-page min-h-[calc(100dvh-var(--app-header-height))] lg:h-[calc(100dvh-var(--app-header-height))] lg:min-h-0 lg:max-h-[calc(100dvh-var(--app-header-height))] lg:overflow-hidden text-foreground flex flex-col"
     :class="{
-      'h-[calc(100dvh-3.5rem)] max-h-[calc(100dvh-3.5rem)] overflow-hidden': mobileView === 'detail',
+      'h-[calc(100dvh-var(--app-header-height))] max-h-[calc(100dvh-var(--app-header-height))] overflow-hidden':
+        mobileView === 'detail',
     }"
   >
     <div
       class="mx-auto max-w-[1600px] 2xl:max-w-[1720px] w-full h-full flex flex-col min-h-0 px-3 sm:px-5 lg:pl-6 lg:pr-8 xl:pl-8 xl:pr-10"
     >
       <!-- 移动端：目录总览视图 (Mobile Menu Catalog) -->
-      <div v-if="mobileView === 'menu'" class="space-y-6 lg:hidden py-4 sm:py-6" data-testid="settings-mobile-catalog">
+      <div v-if="mobileView === 'menu'" class="space-y-6 lg:hidden py-4 sm:py-6">
         <header class="px-1">
           <h1 class="text-xl font-bold tracking-tight text-foreground">{{ t('settings.title') }}</h1>
           <p class="mt-1 text-xs text-text-secondary">{{ t('settings.mobile.settingsOverview') }}</p>
@@ -297,7 +300,14 @@
 
           <!-- 居中设置项（无遮挡时居中，放不下时右侧隐藏/可滑动） -->
           <div
-            class="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar py-0.5"
+            class="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar py-0.5 cursor-grab select-none"
+            @pointerdown="settingsTabsDrag.pointerdown"
+            @pointermove="settingsTabsDrag.pointermove"
+            @pointerup="settingsTabsDrag.pointerup"
+            @pointercancel="settingsTabsDrag.pointercancel"
+            @lostpointercapture="settingsTabsDrag.lostpointercapture"
+            @click.capture="settingsTabsDrag.click"
+            @dragstart.prevent
             role="tablist"
             :aria-label="t('settings.sectionsAriaLabel')"
           >
@@ -523,6 +533,22 @@
 <style scoped>
   .settings-page {
     background: var(--app-bg-color);
+  }
+
+  /* Settings actions are used repeatedly across long forms. Give the shared buttons a larger
+   * visual and pointer target here without increasing buttons in dense Workspace toolbars. */
+  .settings-page :deep([data-ui='button']:not([data-density='compact']):not([data-density='comfortable'])) {
+    --ui-control-height: 38px;
+    --ui-control-padding-inline: 14px;
+    --ui-control-gap: 8px;
+    --ui-control-font-size: 13px;
+  }
+
+  .settings-page :deep([data-ui='button'][data-density='compact']) {
+    --ui-control-height: 34px;
+    --ui-control-padding-inline: 11px;
+    --ui-control-gap: 7px;
+    --ui-control-font-size: 12px;
   }
 
   .settings-icon-tile {

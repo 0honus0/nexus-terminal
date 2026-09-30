@@ -46,8 +46,8 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
   await connectTestSshFromConnectionsPage(page, connectionId);
 
   await step('terminal stays mounted instead of being collapsed by the mobile command bar', async () => {
-    const terminal = page.getByTestId('terminal');
-    const commandBar = page.getByTestId('command-input-bar');
+    const terminal = page.getByRole('application', { name: 'Terminal', exact: true });
+    const commandBar = page.locator('.command-bar-root');
     await expect(terminal).toBeVisible({ timeout: 20_000 });
     await expect(commandBar).toBeVisible();
     const terminalBox = await terminal.boundingBox();
@@ -59,7 +59,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     expect(commandBarBox!.height).toBeLessThan(terminalBox!.height / 2);
 
     if (functionalScreenshotsEnabled()) {
-      const commandInput = page.getByTestId('command-input');
+      const commandInput = page.locator('.command-bar-command-input');
       await commandInput.fill('clear');
       await commandInput.press('Enter');
       await commandInput.fill("printf 'Nexus mobile SSH\\n'");
@@ -78,7 +78,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     const modal = page.getByRole('dialog', { name: 'Status Monitor', exact: true });
     await expect(modal).toBeVisible();
     await expect.poll(() => countStatusControls('status.start'), { timeout: 15_000 }).toBeGreaterThan(startsBeforeOpen);
-    const monitor = modal.getByTestId('status-monitor');
+    const monitor = modal.locator('.status-monitor');
     await expect(monitor.locator('.metric-cpu')).toHaveAttribute('title', /Nexus Virtual CPU/, { timeout: 15_000 });
     await expect(monitor).toContainText('CPU');
     await expect(monitor.getByText('Online', { exact: true })).toBeVisible();
@@ -118,13 +118,9 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     await expect
       .poll(() => countStatusControls('status.start'), { timeout: 15_000 })
       .toBeGreaterThan(startsBeforeReopen);
-    await expect(modal.getByTestId('status-monitor').locator('.metric-cpu')).toHaveAttribute(
-      'title',
-      /Nexus Virtual CPU/,
-      {
-        timeout: 15_000,
-      },
-    );
+    await expect(modal.locator('.status-monitor .metric-cpu')).toHaveAttribute('title', /Nexus Virtual CPU/, {
+      timeout: 15_000,
+    });
     await modal.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(modal).toBeHidden();
   });
@@ -152,7 +148,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     const longNameRow = activeFileManagerList(page).locator(`tr[data-filename="${MOBILE_LONG_FILENAME}"]`).first();
     await expect(longNameRow).toBeVisible();
     const longNameGeometry = await longNameRow.evaluate((row) => {
-      const nameButton = row.querySelector<HTMLElement>('.file-row-name-button');
+      const nameButton = row.querySelector<HTMLElement>('.file-row-name-label');
       const name = nameButton?.getBoundingClientRect();
       if (!nameButton || !name) return null;
       return {
@@ -188,7 +184,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
       clientX: point.x,
       clientY: point.y,
     });
-    const menu = page.getByTestId('file-manager-context-menu');
+    const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
     await expect(menu.getByText('Copy', { exact: true })).toBeVisible();
     await expect(menu.getByText('Rename', { exact: true })).toBeVisible();

@@ -77,7 +77,7 @@ async function terminalTextPoint(page: Page, text: string): Promise<{ x: number;
   await expect
     .poll(
       async () => {
-        point = await page.getByTestId('terminal').evaluate((terminal, expected) => {
+        point = await page.locator('[data-font-size]').evaluate((terminal, expected) => {
           const rows = [...terminal.querySelectorAll<HTMLElement>('.xterm-rows > div')];
           const row = rows.find((candidate) => candidate.textContent?.trim() === expected);
           if (!row) return null;
@@ -98,10 +98,10 @@ async function terminalTextPoint(page: Page, text: string): Promise<{ x: number;
 
 async function captureTerminalEvidence(page: Page, testInfo: TestInfo, name: 'before' | 'after'): Promise<void> {
   const metrics = await page.evaluate(() => {
-    const terminal = document.querySelector<HTMLElement>('[data-testid="terminal"]');
-    const inner = terminal?.querySelector<HTMLElement>('[data-testid="terminal-inner"]');
-    const commandBar = document.querySelector<HTMLElement>('[data-testid="command-input-bar"]');
-    const commandInput = commandBar?.querySelector<HTMLElement>('[data-testid="command-input"]');
+    const terminal = document.querySelector<HTMLElement>('[data-font-size]');
+    const inner = terminal?.querySelector<HTMLElement>('.terminal-inner-container');
+    const commandBar = document.querySelector<HTMLElement>('.command-bar-root');
+    const commandInput = commandBar?.querySelector<HTMLElement>('.command-bar-command-input');
     const rect = (element: Element | null) => {
       if (!element) return null;
       const box = element.getBoundingClientRect();
@@ -178,8 +178,8 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const terminal = page.getByTestId('terminal');
-  const commandInput = page.getByTestId('command-input');
+  const terminal = page.locator('[data-font-size]');
+  const commandInput = page.locator('.command-bar-command-input');
 
   await step('terminal remains mounted after workspace connection', async () => {
     await expect(terminal).toBeVisible({ timeout: 20_000 });
@@ -195,9 +195,9 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   });
 
   await step('desktop tab bar aligns with the active Workspace content region', async () => {
-    const workspaceBox = await page.getByTestId('workspace-root').boundingBox();
-    const tabBarBox = await page.getByTestId('terminal-tab-bar').boundingBox();
-    const sessionRegionBox = await page.getByTestId('workspace-session-region').boundingBox();
+    const workspaceBox = await page.locator('main').boundingBox();
+    const tabBarBox = await page.locator('.terminal-tab-shell').getByRole('tablist').boundingBox();
+    const sessionRegionBox = await page.locator('main > div.relative.min-h-0.flex-1').boundingBox();
     expect(workspaceBox).toBeTruthy();
     expect(tabBarBox).toBeTruthy();
     expect(sessionRegionBox).toBeTruthy();
@@ -216,17 +216,20 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     ).toBeLessThanOrEqual(1);
     await expect
       .poll(() =>
-        page.getByTestId('terminal-tab-bar').evaluate((element) => {
-          const style = getComputedStyle(element);
-          return {
-            left: style.borderLeftWidth,
-            right: style.borderRightWidth,
-            bottom: style.borderBottomWidth,
-            top: style.borderTopWidth,
-            topLeftRadius: style.borderTopLeftRadius,
-            topRightRadius: style.borderTopRightRadius,
-          };
-        }),
+        page
+          .locator('.terminal-tab-shell')
+          .getByRole('tablist')
+          .evaluate((element) => {
+            const style = getComputedStyle(element);
+            return {
+              left: style.borderLeftWidth,
+              right: style.borderRightWidth,
+              bottom: style.borderBottomWidth,
+              top: style.borderTopWidth,
+              topLeftRadius: style.borderTopLeftRadius,
+              topRightRadius: style.borderTopRightRadius,
+            };
+          }),
       )
       .toEqual({
         left: '1px',
@@ -238,7 +241,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       });
     await expect
       .poll(() =>
-        page.getByTestId('workspace-session-region').evaluate((element) => {
+        page.locator('main > div.relative.min-h-0.flex-1').evaluate((element) => {
           const style = getComputedStyle(element);
           return {
             left: style.borderLeftWidth,
@@ -284,7 +287,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   });
 
   await step('shared Progress Display stays dormant until there is hidden transfer work', async () => {
-    await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Progress Display', exact: true })).toHaveCount(0);
   });
 
   await step('interactive keystrokes use the low-latency terminal input path', async () => {
@@ -369,7 +372,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       const compositionAfter = await terminal.boundingBox();
       expect(compositionAfter).toEqual(before);
       expect(await terminal.evaluate((element) => element.scrollLeft)).toBe(0);
-      expect(await terminal.getByTestId('terminal-inner').evaluate((element) => element.scrollLeft)).toBe(0);
+      expect(await terminal.locator('.terminal-inner-container').evaluate((element) => element.scrollLeft)).toBe(0);
       await input.evaluate((element) => {
         element.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
       });
@@ -390,7 +393,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   );
 
   await step('terminal Ctrl+wheel ignores tiny direction reversals and changes only on a full step', async () => {
-    const inner = terminal.getByTestId('terminal-inner');
+    const inner = terminal.locator('.terminal-inner-container');
     const initial = Number(await terminal.getAttribute('data-font-size'));
     expect(initial).toBeGreaterThan(0);
 
@@ -406,7 +409,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   });
 
   await step('command bar omits the send-to-all shortcut', async () => {
-    const commandBar = page.getByTestId('command-input-bar');
+    const commandBar = page.locator('.command-bar-root');
     await expect(commandBar.locator('.fa-share-alt')).toHaveCount(0);
   });
 
@@ -446,9 +449,9 @@ test('Ctrl+C interrupts a long-running terminal output stream', async ({ page, c
   });
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const terminal = page.getByTestId('terminal');
+  const terminal = page.locator('[data-font-size]');
   const rows = terminal.locator('.xterm-rows');
-  const commandInput = page.getByTestId('command-input');
+  const commandInput = page.locator('.command-bar-command-input');
   await commandInput.fill(
     'saved_stty=$(stty -g); stty -isig; INTERRUPT_FINISHED=yes; (i=0; while :; do batch=0; while [ $batch -lt 20 ]; do printf \'INTERRUPT_STREAM_%06d\\n\' "$i"; i=$((i+1)); batch=$((batch+1)); done; sleep 0.01; done) & producer=$!; while IFS= read -r -n 1 key; do if [ "$key" = $\'\\003\' ]; then INTERRUPT_FINISHED=no; break; fi; done; kill "$producer"; wait "$producer" 2>/dev/null; stty "$saved_stty"; printf \'INTERRUPT_ACK\\n\'',
   );
@@ -474,9 +477,9 @@ test('large terminal scrollback follows rapid scrollbar drags back to the newest
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const terminal = page.getByTestId('terminal');
+  const terminal = page.locator('[data-font-size]');
   const rows = terminal.locator('.xterm-rows');
-  const commandInput = page.getByTestId('command-input');
+  const commandInput = page.locator('.command-bar-command-input');
   const bottomMarker = 'RAPID_SCROLL_BOTTOM';
   await commandInput.fill(
     `i=1; while [ $i -le 12000 ]; do printf 'RAPID_SCROLL_%05d\\n' "$i"; i=$((i+1)); done; printf '${bottomMarker}\\n'`,
@@ -535,8 +538,8 @@ test('desktop terminal right-click copies a selection then pastes when no select
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const terminal = page.getByTestId('terminal');
-  const commandInput = page.getByTestId('command-input');
+  const terminal = page.locator('[data-font-size]');
+  const commandInput = page.locator('.command-bar-command-input');
   const rows = terminal.locator('.xterm-rows');
   const copyMarker = 'DESKTOP_RIGHT_CLICK_COPY_MARKER';
 
@@ -553,13 +556,34 @@ test('desktop terminal right-click copies a selection then pastes when no select
   await step('the same right-click path pastes after the copied selection was cleared', async () => {
     const pasteCommand = "printf 'DESKTOP_RIGHT_CLICK_PASTE_OK\\n'\r";
     await page.evaluate((text) => navigator.clipboard.writeText(text), pasteCommand);
-    const inner = terminal.getByTestId('terminal-inner');
+    const inner = terminal.locator('.terminal-inner-container');
     const box = await inner.boundingBox();
     expect(box).toBeTruthy();
     await page.mouse.click(box!.x + Math.min(40, box!.width / 4), box!.y + Math.min(100, box!.height / 3), {
       button: 'right',
     });
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('DESKTOP_RIGHT_CLICK_PASTE_OK');
+  });
+
+  await step('mouse-aware apps keep right-click and use keyboard clipboard shortcuts', async () => {
+    const mouseMarker = 'DESKTOP_MOUSE_REPORTING_COPY_MARKER';
+    await commandInput.fill(`printf '\\n${mouseMarker}\\n\\033[?1000h\\033[?1006h'; cat -v`);
+    await commandInput.press('Enter');
+    await expect.poll(async () => rows.innerText()).toContain(mouseMarker);
+    const point = await terminalTextPoint(page, mouseMarker);
+    await page.mouse.click(point.x, point.y, { button: 'right' });
+    await expect.poll(async () => rows.innerText()).toMatch(/\^\[\[<2;/);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).not.toBe(mouseMarker);
+
+    await page.keyboard.down('Shift');
+    await page.mouse.dblclick(point.x, point.y);
+    await page.keyboard.up('Shift');
+    await page.keyboard.press('Control+Shift+C');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(mouseMarker);
+
+    await page.evaluate(() => navigator.clipboard.writeText('DESKTOP_MOUSE_REPORTING_PASTE_OK'));
+    await page.keyboard.press('Control+Shift+V');
+    await expect.poll(async () => rows.innerText()).toContain('DESKTOP_MOUSE_REPORTING_PASTE_OK');
   });
 });
 
@@ -575,10 +599,10 @@ test('terminal font-size wheel change persists when the session is closed before
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const terminal = page.getByTestId('terminal');
+  const terminal = page.locator('[data-font-size]');
   await expect(terminal).toBeVisible({ timeout: 20_000 });
   await expect(terminal).toHaveAttribute('data-font-size', '14');
-  const inner = terminal.getByTestId('terminal-inner');
+  const inner = terminal.locator('.terminal-inner-container');
   await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: -80, deltaMode: 0 });
   await expect(terminal).toHaveAttribute('data-font-size', '15');
 
@@ -610,8 +634,8 @@ test('rapid terminal Ctrl+wheel keeps the newest rendered size while older appea
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const terminal = page.getByTestId('terminal');
-  const inner = terminal.getByTestId('terminal-inner');
+  const terminal = page.locator('[data-font-size]');
+  const inner = terminal.locator('.terminal-inner-container');
   await expect(terminal).toHaveAttribute('data-font-size', '14');
   const held = await holdFirstTwoTerminalFontWrites(page);
 
@@ -680,9 +704,9 @@ test('desktop touch hardware keeps the legacy desktop Workspace classification',
   expect(capabilities.maxTouchPoints).toBe(5);
   expect(capabilities.coarsePointer).toBe(true);
 
-  const tabBar = page.getByTestId('terminal-tab-bar');
+  const tabBar = page.locator('.terminal-tab-shell');
   await expect(tabBar.getByRole('button', { name: 'Configure Layout', exact: true })).toBeVisible();
-  await expect(page.getByTestId('command-input')).toBeVisible();
+  await expect(page.locator('.command-bar-command-input')).toBeVisible();
 });
 
 test('a failed logout still releases live Workspace sessions before reporting the error', async ({ page, context }) => {
@@ -693,7 +717,7 @@ test('a failed logout still releases live Workspace sessions before reporting th
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const tabBar = page.getByTestId('terminal-tab-bar');
+  const tabBar = page.locator('.terminal-tab-shell');
   await expect(tabBar.getByRole('tab')).toHaveCount(1);
   await page.route('**/api/v1/auth/logout', async (route) => route.abort('failed'));
 
@@ -701,7 +725,7 @@ test('a failed logout still releases live Workspace sessions before reporting th
   await expect(page.getByRole('alert')).not.toHaveText('');
   await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
   await expect(tabBar.getByRole('tab')).toHaveCount(0);
-  await expect(page.getByText('No Active Session', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();
 
   const status = await context.request.get('/api/v1/auth/status');
   expect(status.ok()).toBeTruthy();
@@ -725,7 +749,7 @@ test('a protected API 401 invalidates the local session and releases the live Wo
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const tabBar = page.getByTestId('terminal-tab-bar');
+  const tabBar = page.locator('.terminal-tab-shell');
   await expect(tabBar.getByRole('tab')).toHaveCount(1);
   await expect(tabBar.getByRole('button', { name: 'Hide', exact: true })).toBeVisible();
 

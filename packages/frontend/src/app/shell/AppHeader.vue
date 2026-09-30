@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { nextTick, onMounted, ref, watch } from 'vue';
   import { RouterLink, useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
@@ -8,6 +8,7 @@
   import { usePreferences } from '@/features/preferences/public';
   import { releaseRepository, releaseRepositoryUrl } from '@/app/config/release';
   import { disposeWorkspaceRuntime } from '@/app/workspaceLifecycle';
+  import { useHorizontalDragScroll } from '@/foundation/interaction';
 
   const emit = defineEmits<{ customizeAppearance: [] }>();
   const router = useRouter();
@@ -17,43 +18,32 @@
   const preferences = usePreferences();
   const logoutError = ref<string | null>(null);
   const loggingOut = ref(false);
-  const nav = ref<HTMLElement | null>(null);
-  const underline = ref<HTMLElement | null>(null);
-
-  const updateUnderline = async (): Promise<void> => {
+  const navigationLinks = ref<HTMLElement | null>(null);
+  const navigationDrag = useHorizontalDragScroll();
+  const navigation = [
+    { path: '/', label: 'nav.dashboard' },
+    { path: '/workspace', label: 'nav.terminal' },
+    { path: '/connections', label: 'nav.connections' },
+    { path: '/proxies', label: 'nav.proxies' },
+    { path: '/notifications', label: 'nav.notifications' },
+    { path: '/audit-logs', label: 'nav.auditLogs' },
+    { path: '/settings', label: 'nav.settings' },
+  ];
+  const revealActivePage = async (): Promise<void> => {
     await nextTick();
-    if (!nav.value || !underline.value) return;
-    const active = nav.value.querySelector<HTMLElement>('.router-link-exact-active');
-    if (!active || active.offsetWidth === 0) {
-      underline.value.style.opacity = '0';
-      return;
-    }
-    const scroller = active.parentElement;
-    if (scroller && scroller.scrollWidth > scroller.clientWidth) {
-      const activeStart = active.offsetLeft;
-      const activeEnd = activeStart + active.offsetWidth;
-      const visibleStart = scroller.scrollLeft;
-      const visibleEnd = visibleStart + scroller.clientWidth;
-      if (activeStart < visibleStart) scroller.scrollLeft = activeStart;
-      else if (activeEnd > visibleEnd) scroller.scrollLeft = activeEnd - scroller.clientWidth;
-    }
-    const navRect = nav.value.getBoundingClientRect();
-    const activeRect = active.getBoundingClientRect();
-    underline.value.style.left = `${activeRect.left - navRect.left}px`;
-    underline.value.style.width = `${activeRect.width}px`;
-    underline.value.style.opacity = '1';
+    const strip = navigationLinks.value;
+    const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!strip || !active || strip.scrollWidth <= strip.clientWidth) return;
+    // Scroll only the navigation strip, never the document or the terminal below it.
+    strip.scrollTo({ left: active.offsetLeft - strip.clientWidth / 2 + active.offsetWidth / 2 });
   };
-
-  const handleResize = (): void => void updateUnderline();
+  watch(() => route.path, revealActivePage);
 
   onMounted(() => {
+    void revealActivePage();
     if (auth.isAuthenticated.value)
       void preferences.load().catch((cause) => logger.error({ err: cause }, 'Failed to load header preferences'));
-    window.addEventListener('resize', handleResize);
-    void updateUnderline();
   });
-  onBeforeUnmount(() => window.removeEventListener('resize', handleResize));
-  watch(() => route.fullPath, updateUnderline);
 
   const logout = async (): Promise<void> => {
     if (loggingOut.value) return;
@@ -73,27 +63,30 @@
 
 <template>
   <header
-    data-testid="app-header"
     v-if="route.name !== 'Workspace' || preferences.values.value.navBarVisible"
-    class="ui-glass-nav sticky top-0 z-30 flex h-11 items-center border-x-0 border-t-0 pl-3 pr-4 sm:pr-6"
+    class="app-header sticky top-0 z-30 shrink-0"
   >
-    <nav
-      ref="nav"
-      class="relative flex min-w-0 w-full items-center gap-1 overflow-x-clip"
-      :aria-label="t('common.primaryNavigation')"
-    >
-      <div class="app-nav-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+    <nav class="ui-floating-nav app-navigation" :aria-label="t('common.primaryNavigation')">
+      <RouterLink to="/" class="app-brand" :aria-label="t('nav.dashboard')">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="h-7 w-auto shrink-0" />
-        <RouterLink class="nav-link inline-flex" to="/">{{ t('nav.dashboard') }}</RouterLink>
-        <RouterLink class="nav-link inline-flex" to="/workspace">{{ t('nav.terminal') }}</RouterLink>
-        <RouterLink class="nav-link hidden md:inline-flex" to="/connections">{{ t('nav.connections') }}</RouterLink>
-        <RouterLink class="nav-link hidden md:inline-flex" to="/proxies">{{ t('nav.proxies') }}</RouterLink>
-        <RouterLink class="nav-link hidden md:inline-flex" to="/notifications">{{ t('nav.notifications') }}</RouterLink>
-        <RouterLink class="nav-link hidden md:inline-flex" to="/audit-logs">{{ t('nav.auditLogs') }}</RouterLink>
-        <RouterLink class="nav-link inline-flex" to="/settings">{{ t('nav.settings') }}</RouterLink>
+      </RouterLink>
+      <div
+        ref="navigationLinks"
+        class="app-nav-links"
+        @pointerdown="navigationDrag.pointerdown"
+        @pointermove="navigationDrag.pointermove"
+        @pointerup="navigationDrag.pointerup"
+        @pointercancel="navigationDrag.pointercancel"
+        @lostpointercapture="navigationDrag.lostpointercapture"
+        @click.capture="navigationDrag.click"
+        @dragstart.prevent
+      >
+        <RouterLink v-for="item in navigation" :key="item.path" class="nav-link inline-flex" :to="item.path">{{
+          t(item.label)
+        }}</RouterLink>
       </div>
 
-      <div class="flex shrink-0 items-center gap-1">
+      <div class="app-nav-tools flex shrink-0 items-center gap-1">
         <a
           class="icon-link hidden md:inline-flex"
           :href="releaseRepositoryUrl"
@@ -123,37 +116,56 @@
         }}</RouterLink>
         <a
           v-else
-          class="nav-link inline-flex"
+          class="icon-link inline-flex"
           href="/login"
+          :title="t('nav.logout')"
+          :aria-label="t('nav.logout')"
           :aria-busy="loggingOut || undefined"
           @click.prevent="logout"
         >
-          {{ t('nav.logout') }}
+          <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
         </a>
       </div>
-      <div ref="underline" class="nav-underline" aria-hidden="true"></div>
     </nav>
     <p v-if="logoutError" class="sr-only" role="alert">{{ logoutError }}</p>
   </header>
 </template>
 
 <style scoped>
-  .app-nav-scroll {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+  .app-header {
+    height: var(--app-header-height);
+    padding: calc(6px + env(safe-area-inset-top, 0px)) 8px 6px;
   }
-
-  .app-nav-scroll::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
+  .app-navigation {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    height: 48px;
+    margin-inline: auto;
+    padding-inline: 16px;
+  }
+  .app-brand {
+    display: inline-flex;
+    justify-self: start;
+    align-items: center;
+    min-height: 44px;
+  }
+  .app-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .app-nav-tools {
+    justify-self: end;
   }
 
   .nav-link,
   .icon-link {
     align-items: center;
     justify-content: center;
-    border-radius: 0.375rem;
+    border-radius: 0.625rem;
     color: var(--text-color-secondary);
     text-decoration: none;
     transition:
@@ -162,8 +174,9 @@
   }
 
   .nav-link {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.8125rem;
+    min-height: 36px;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
     font-weight: 500;
     white-space: nowrap;
   }
@@ -171,7 +184,8 @@
   .icon-link {
     border: 0;
     background: transparent;
-    padding: 0.25rem;
+    width: 36px;
+    height: 36px;
     font-size: 0.9375rem;
     line-height: 1;
     color: var(--icon-color);
@@ -188,18 +202,60 @@
     background: var(--nav-item-active-bg-color);
   }
 
-  .nav-underline {
-    position: absolute;
-    bottom: 0;
-    height: 2px;
-    border-radius: 9999px;
-    background: var(--link-active-color);
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(2px);
-    transition:
-      left 300ms ease,
-      width 300ms ease,
-      opacity 150ms ease;
+  .nav-link:focus-visible,
+  .icon-link:focus-visible,
+  .app-brand:focus-visible {
+    outline: 2px solid var(--link-active-color);
+    outline-offset: 2px;
+  }
+  @media (max-width: 1199px) {
+    .app-navigation {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 6px;
+      padding-inline: 8px;
+    }
+    .app-nav-links {
+      position: relative;
+      min-width: 0;
+      overflow-x: auto;
+      padding: 4px;
+      gap: 4px;
+      border-radius: 12px;
+      background: transparent;
+      cursor: grab;
+      user-select: none;
+      scrollbar-width: none;
+    }
+    .app-nav-links::-webkit-scrollbar {
+      display: none;
+    }
+    .app-nav-links .nav-link {
+      flex-shrink: 0;
+      min-height: 36px;
+      padding-inline: 12px;
+      border-radius: 9px;
+    }
+    .app-nav-links .nav-link.router-link-exact-active {
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 24%, transparent);
+    }
+    .app-nav-links .nav-link:focus-visible {
+      outline-offset: -2px;
+    }
+  }
+  @media (max-width: 767px) {
+    .app-header {
+      padding-inline: 0;
+    }
+    .icon-link {
+      width: 44px;
+      height: 44px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nav-link,
+    .icon-link {
+      transition: none;
+    }
   }
 </style>

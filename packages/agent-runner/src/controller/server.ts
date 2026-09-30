@@ -409,14 +409,13 @@ export class RunnerControllerServer {
           .workspaces()
           .filter((workspace) => !['deleted', 'failed'].includes(workspace.status));
         const packs = catalog.packs.map((pack) => {
-          const contentDigest = pack.contentDigestByArch[process.arch] ?? '';
-          const ref = { familyId: pack.familyId, versionId: pack.versionId, contentDigest };
-          const supported = Boolean(contentDigest) && pack.supportedArchitectures.includes(process.arch);
+          const ref = { familyId: pack.familyId, versionId: pack.versionId };
+          const supported =
+            Boolean(pack.downloadRefByArch[process.arch]) && pack.supportedArchitectures.includes(process.arch);
           return {
             familyId: pack.familyId,
             versionId: pack.versionId,
             displayName: pack.displayName,
-            contentDigest,
             diskBytes: pack.diskBytes,
             status: supported ? pack.status : ('unavailable' as const),
             installed: supported && this.dependencies.installer.installed(ref),
@@ -425,10 +424,7 @@ export class RunnerControllerServer {
               supported &&
               active.some((workspace) =>
                 workspace.toolchain.some(
-                  (candidate) =>
-                    candidate.familyId === ref.familyId &&
-                    candidate.versionId === ref.versionId &&
-                    candidate.contentDigest === ref.contentDigest,
+                  (candidate) => candidate.familyId === ref.familyId && candidate.versionId === ref.versionId,
                 ),
               ),
           };
@@ -1166,23 +1162,20 @@ export class RunnerControllerServer {
         result = await this.withToolchainAdminCommand(async () => {
           if (action === 'cacheCleanup') return this.dependencies.cleanup.cacheCleanup();
           if (action === 'packInstall') {
-            const packs = command.packs as Array<{ familyId: string; versionId: string; contentDigest: string }>;
+            const packs = command.packs as Array<{ familyId: string; versionId: string }>;
             await this.dependencies.installer.ensure(packs, commandId);
             if (packs.some((ref) => !this.dependencies.installer.installed(ref))) {
               throw new Error('WORKSPACE_TOOLCHAIN_POSTCONDITION_FAILED');
             }
             return { installed: packs.length };
           }
-          const ref = command.pack as { familyId: string; versionId: string; contentDigest: string };
+          const ref = command.pack as { familyId: string; versionId: string };
           const inUse = this.dependencies.journal
             .workspaces()
             .filter((workspace) => !['deleted', 'failed'].includes(workspace.status))
             .some((workspace) =>
               workspace.toolchain.some(
-                (candidate) =>
-                  candidate.familyId === ref.familyId &&
-                  candidate.versionId === ref.versionId &&
-                  candidate.contentDigest === ref.contentDigest,
+                (candidate) => candidate.familyId === ref.familyId && candidate.versionId === ref.versionId,
               ),
             );
           if (inUse) throw new Error('WORKSPACE_TOOLCHAIN_IN_USE');
@@ -1309,12 +1302,8 @@ export class RunnerControllerServer {
     } else if (action === 'packUninstall') {
       const pack = command.pack;
       if (!pack || typeof pack !== 'object' || Array.isArray(pack)) throw new Error('VALIDATION_FAILED');
-      const ref = pack as { familyId?: unknown; versionId?: unknown; contentDigest?: unknown };
-      if (
-        typeof ref.familyId !== 'string' ||
-        typeof ref.versionId !== 'string' ||
-        typeof ref.contentDigest !== 'string'
-      ) {
+      const ref = pack as { familyId?: unknown; versionId?: unknown };
+      if (typeof ref.familyId !== 'string' || typeof ref.versionId !== 'string') {
         throw new Error('VALIDATION_FAILED');
       }
     }

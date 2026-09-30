@@ -69,10 +69,7 @@
 </script>
 
 <template>
-  <section
-    data-testid="data-management-settings"
-    class="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-  >
+  <section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
     <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ t('settings.category.dataManagement') }}
     </h2>
@@ -82,17 +79,10 @@
         <p class="mb-4 max-w-3xl text-sm text-text-secondary">{{ t('settings.backup.description') }}</p>
         <form class="space-y-3" @submit.prevent="exportBackup">
           <UiFormField :label="t('settings.backup.currentPassword')" class="max-w-md">
-            <UiInput
-              v-model="exportPassword"
-              data-testid="backup-export-password"
-              type="password"
-              autocomplete="current-password"
-              required
-            />
+            <UiInput v-model="exportPassword" type="password" autocomplete="current-password" required />
           </UiFormField>
           <div class="flex flex-wrap items-center gap-3">
             <UiButton
-              data-testid="backup-export"
               type="submit"
               appearance="solid"
               tone="primary"
@@ -118,7 +108,6 @@
           <UiFormField :label="t('settings.backup.backupFile')" class="max-w-xl">
             <input
               ref="importInput"
-              data-testid="backup-import-file"
               type="file"
               accept=".nexus-backup,application/octet-stream"
               required
@@ -127,18 +116,11 @@
             />
           </UiFormField>
           <UiFormField :label="t('settings.backup.backupPassword')" class="max-w-md">
-            <UiInput v-model="importPassword" data-testid="backup-import-password" type="password" autocomplete="off" />
+            <UiInput v-model="importPassword" type="password" autocomplete="off" />
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.backup.backupPasswordHelp') }}</p>
           </UiFormField>
           <div class="flex flex-wrap items-center gap-3">
-            <UiButton
-              data-testid="backup-import"
-              type="submit"
-              appearance="solid"
-              tone="primary"
-              :loading="importLoading"
-              :disabled="!importFile"
-            >
+            <UiButton type="submit" appearance="solid" tone="primary" :loading="importLoading" :disabled="!importFile">
               <template #leading
                 ><i :class="importLoading ? 'fas fa-spinner fa-spin' : 'fas fa-upload'" aria-hidden="true"></i
               ></template>

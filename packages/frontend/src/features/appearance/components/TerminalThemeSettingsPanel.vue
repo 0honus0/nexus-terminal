@@ -173,7 +173,7 @@
 </script>
 
 <template>
-  <section data-testid="terminal-style-settings">
+  <section>
     <template v-if="!editorVisible">
       <h4 class="mb-2 mt-6 text-base font-semibold text-foreground">
         {{ t('styleCustomizer.terminalThemeSelection') }}
@@ -183,15 +183,13 @@
         class="mb-4 flex flex-col items-start gap-1 py-2 text-sm md:flex-row md:items-center md:gap-3 md:text-[0.95rem]"
       >
         <span class="text-text-secondary">{{ t('styleCustomizer.activeTheme') }}:</span>
-        <strong data-testid="terminal-active-theme-name" class="font-semibold text-foreground">
+        <strong class="font-semibold text-foreground">
           {{ activeTheme?.name || t('styleCustomizer.defaultTheme') }}
         </strong>
       </div>
 
       <div class="mb-6 mt-4 flex flex-wrap items-center gap-2 border-b border-dashed border-border pb-4">
-        <UiButton data-testid="terminal-theme-add" density="compact" @click="openCreate">{{
-          t('styleCustomizer.addNewTheme')
-        }}</UiButton>
+        <UiButton density="compact" @click="openCreate">{{ t('styleCustomizer.addNewTheme') }}</UiButton>
         <UiButton density="compact" @click="importInput?.click()">{{ t('styleCustomizer.importTheme') }}</UiButton>
         <UiButton density="compact" :disabled="!activeTheme" @click="exportActive">{{
           t('styleCustomizer.exportActiveTheme')
@@ -200,11 +198,7 @@
       </div>
 
       <div class="mb-4">
-        <UiInput
-          v-model="search"
-          data-testid="terminal-theme-search"
-          :placeholder="t('styleCustomizer.searchThemePlaceholder')"
-        />
+        <UiInput v-model="search" :placeholder="t('styleCustomizer.searchThemePlaceholder')" />
       </div>
 
       <ul
@@ -217,7 +211,6 @@
           v-for="(theme, index) in filteredThemes"
           v-else
           :key="theme.id"
-          :data-testid="`terminal-theme-row-${theme.id}`"
           :class="[
             'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 ease-in-out md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
             index < filteredThemes.length - 1 ? 'border-b border-border' : '',
@@ -235,7 +228,6 @@
           </span>
           <div class="flex flex-wrap justify-start gap-2 md:justify-end">
             <button
-              data-testid="terminal-theme-apply"
               type="button"
               :disabled="theme.id === store.settings.activeTerminalThemeId"
               :class="[
@@ -249,7 +241,6 @@
               {{ t('styleCustomizer.applyButton') }}
             </button>
             <button
-              data-testid="terminal-theme-edit"
               type="button"
               :class="[
                 'whitespace-nowrap rounded border px-3 py-1.5 text-xs transition-colors duration-200 ease-in-out md:text-sm',
@@ -263,7 +254,6 @@
             </button>
             <button
               v-if="!theme.preset"
-              data-testid="terminal-theme-delete"
               type="button"
               class="whitespace-nowrap rounded border border-error/30 bg-error/10 px-3 py-1.5 text-xs text-error transition-colors duration-200 ease-in-out hover:bg-error/20 md:text-sm"
               @click="removeTheme(theme)"
@@ -275,7 +265,7 @@
       </ul>
     </template>
 
-    <section v-else data-testid="terminal-theme-editor">
+    <section v-else>
       <h3 class="mb-4 mt-0 border-b border-border pb-2 text-lg font-semibold text-foreground">
         {{ editingTheme ? t('styleCustomizer.editThemeTitle') : t('styleCustomizer.newThemeTitle') }}
       </h3>
@@ -284,7 +274,7 @@
         <label class="block w-full overflow-hidden text-ellipsis text-left text-sm font-medium text-foreground md:mb-0">
           {{ t('styleCustomizer.themeName') }}:
         </label>
-        <UiInput v-model="themeName" data-testid="terminal-theme-name" />
+        <UiInput v-model="themeName" />
       </div>
 
       <hr class="my-4 border-border md:my-8" />
@@ -320,7 +310,6 @@
       <UiFormField :label="t('styleCustomizer.terminalThemeJsonEditorTitle')" class="mt-4">
         <UiTextarea
           v-model="themeJson"
-          data-testid="terminal-theme-json"
           class="min-h-[150px] resize-y whitespace-pre-wrap break-words font-mono text-sm leading-snug md:min-h-[200px]"
           spellcheck="false"
           @focus="rawThemeEditing = true"
@@ -332,10 +321,8 @@
       </UiFormField>
 
       <div class="mt-4 flex justify-end gap-2 border-t border-border pt-4">
-        <UiButton data-testid="terminal-theme-cancel" @click="editorVisible = false">{{ t('common.cancel') }}</UiButton>
-        <UiButton data-testid="terminal-theme-save" appearance="solid" tone="primary" @click="saveTheme">{{
-          t('common.save')
-        }}</UiButton>
+        <UiButton @click="editorVisible = false">{{ t('common.cancel') }}</UiButton>
+        <UiButton appearance="solid" tone="primary" @click="saveTheme">{{ t('common.save') }}</UiButton>
       </div>
     </section>
   </section>

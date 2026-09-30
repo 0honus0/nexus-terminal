@@ -9,6 +9,11 @@ import type {
 } from '../../modules/ssh-suspend/suspended-session-log.port';
 
 const MAX_BYTES = 100 * 1024 * 1024;
+// Compaction rewrites the whole retained file. Doing it on every append once the cap is
+// reached makes a continuously writing PTY copy ~100MB per chunk, starving the serialized
+// writer so `flush()`/the output chain never drain and resume stalls past the owner lease.
+// Let the file grow by this batch first, then trim a whole batch at once.
+const TRIM_BATCH_BYTES = 32 * 1024 * 1024;
 const SAFE = /^[A-Za-z0-9_-]{1,128}$/;
 interface Writer {
   tail: Promise<void>;
@@ -41,7 +46,7 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
       if (retained.length >= MAX_BYTES) {
         await fs.writeFile(file, retained, { mode: 0o600 });
         writer.size = retained.length;
-      } else if (writer.size + retained.length > MAX_BYTES) {
+      } else if (writer.size + retained.length > MAX_BYTES + TRIM_BATCH_BYTES) {
         const trimBytes = writer.size + retained.length - MAX_BYTES;
         const temporary = `${file}.trim-${process.pid}-${writer.revision}`;
         try {
@@ -57,7 +62,7 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
         await fs.appendFile(file, retained, { mode: 0o600 });
         writer.size += retained.length;
       }
-      endOffset = writer.size;
+      endOffset = Math.min(writer.size, MAX_BYTES);
     });
     return endOffset;
   }
@@ -79,7 +84,8 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return Readable.from([]);
       throw error;
     }
-    return createReadStream(file, { highWaterMark: 64 * 1024 });
+    const physicalBytes = (await fs.stat(file)).size;
+    return createReadStream(file, { start: Math.max(0, physicalBytes - MAX_BYTES), highWaterMark: 64 * 1024 });
   }
   position(id: string): Promise<number> {
     return this.size(id);
@@ -137,7 +143,7 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
     const file = this.file(id);
     await this.flush(id);
     try {
-      return (await fs.stat(file)).size;
+      return Math.min((await fs.stat(file)).size, MAX_BYTES);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
       throw error;
@@ -157,6 +163,9 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
     let startOffset = Math.max(0, endOffset - Math.max(1, Math.floor(maxBytes)));
     const handle = await fs.open(file, 'r');
     try {
+      // Batch compaction slack is physical storage only; public offsets and exports still
+      // describe the newest MAX_BYTES, just as they did before compaction was amortized.
+      const physicalStart = Math.max(0, (await handle.stat()).size - MAX_BYTES);
       // Prefer a line boundary so a lazily loaded page does not begin in the middle of
       // ordinary terminal text or a UTF-8 sequence. The previous page still includes
       // the newline itself, so advancing to the next byte does not create a gap.
@@ -164,14 +173,14 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
         const probeLength = Math.min(4096, endOffset - startOffset);
         if (probeLength > 0) {
           const probe = Buffer.allocUnsafe(probeLength);
-          const { bytesRead } = await handle.read(probe, 0, probeLength, startOffset);
+          const { bytesRead } = await handle.read(probe, 0, probeLength, physicalStart + startOffset);
           const newline = probe.subarray(0, bytesRead).indexOf(0x0a);
           if (newline >= 0 && startOffset + newline + 1 < endOffset) startOffset += newline + 1;
         }
       }
       const length = endOffset - startOffset;
       const data = Buffer.allocUnsafe(length);
-      const { bytesRead } = await handle.read(data, 0, length, startOffset);
+      const { bytesRead } = await handle.read(data, 0, length, physicalStart + startOffset);
       return {
         data: data.subarray(0, bytesRead),
         startOffset,

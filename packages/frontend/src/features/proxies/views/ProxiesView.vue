@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiEmptyState, UiModal } from '@/foundation/ui';
+  import { UiButton, UiEmptyState, UiManagementCard, UiModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import ProxyForm from '../components/ProxyForm.vue';
   import { useProxies } from '../composables/useProxies';
@@ -61,14 +61,7 @@
   <div class="p-4 text-foreground">
     <div class="mx-auto max-w-6xl">
       <h2 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">{{ t('proxies.title') }}</h2>
-      <UiButton
-        v-if="!modal"
-        data-testid="proxy-add-button"
-        type="button"
-        appearance="solid"
-        class="mb-4"
-        @click="openAdd"
-      >
+      <UiButton v-if="!modal" type="button" appearance="solid" class="mb-4" @click="openAdd">
         {{ t('proxies.addProxy') }}
       </UiButton>
 
@@ -89,15 +82,10 @@
           :description="t('proxies.noProxies')"
         />
         <div v-else class="mt-4 grid gap-4">
-          <article
-            v-for="proxy in data.proxies.value"
-            :key="proxy.id"
-            :data-testid="`proxy-row-${proxy.id}`"
-            class="ui-solid-item flex flex-col items-stretch justify-between gap-3 rounded-xl p-4 sm:flex-row sm:items-start sm:gap-4"
-          >
+          <UiManagementCard v-for="proxy in data.proxies.value" :key="proxy.id">
             <div class="min-w-0 flex-grow space-y-1">
-              <strong class="block break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>
-              <div class="flex items-center space-x-2">
+              <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <strong class="min-w-0 break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>
                 <span
                   class="rounded-full border border-border/60 bg-card/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
                   >{{ proxy.type }}</span
@@ -109,42 +97,30 @@
               <div v-if="proxy.username" class="break-all text-sm text-text-secondary sm:break-normal">
                 <i class="fas fa-user mr-1 text-xs opacity-70" aria-hidden="true" /> {{ proxy.username }}
               </div>
-              <div class="pt-1 text-xs text-text-secondary">
-                <i class="fas fa-clock mr-1 opacity-70" aria-hidden="true" />
-                {{ new Date(proxy.updatedAt * 1000).toLocaleString() }}
-              </div>
             </div>
-            <div
-              class="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 pt-1 sm:flex-nowrap sm:justify-start"
-            >
-              <button
-                data-testid="proxy-edit"
+            <template #actions>
+              <UiButton
                 type="button"
-                class="text-sm font-medium text-link hover:text-link-hover hover:underline"
+                appearance="soft"
                 @click="
                   editing = proxy;
                   modal = true;
                 "
               >
                 <i class="fas fa-pencil-alt mr-1 text-xs" aria-hidden="true" />{{ t('proxies.actions.edit') }}
-              </button>
-              <button
-                data-testid="proxy-delete"
-                type="button"
-                class="text-sm font-medium text-error hover:opacity-80 hover:underline"
-                @click="remove(proxy)"
-              >
+              </UiButton>
+              <UiButton type="button" appearance="ghost" tone="danger" @click="remove(proxy)">
                 <i class="fas fa-trash-alt mr-1 text-xs" aria-hidden="true" />{{ t('proxies.actions.delete') }}
-              </button>
-            </div>
-          </article>
+              </UiButton>
+            </template>
+          </UiManagementCard>
         </div>
       </div>
 
       <UiModal
         :visible="modal"
         :close-on-backdrop="false"
-        panel-class="w-[calc(100vw-2rem)] max-w-lg sm:min-w-[350px]"
+        panel-class="ui-form-surface w-[calc(100vw-2rem)] max-w-lg sm:min-w-[350px]"
         content-class="!py-0"
         @close="modal = false"
       >

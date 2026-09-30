@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiContextMenu, UiSelect } from '@/foundation/ui';
+  import { UiButton, UiContextMenu, UiSelect } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { focusRegistry } from '@/shared/focus/public';
   import { useFeedback } from '@/shared/feedback/public';
@@ -210,7 +210,7 @@
   });
 </script>
 <template>
-  <section ref="root" data-testid="file-editor-view" class="file-editor-container">
+  <section ref="root" class="file-editor-container">
     <div class="file-editor-tabs" role="tablist">
       <div
         v-for="tab in editorSession.tabs.value"
@@ -252,9 +252,10 @@
 
       <div class="editor-actions">
         <UiSelect
-          data-testid="file-editor-encoding"
           :model-value="selectedEncoding"
           class="encoding-select"
+          density="compact"
+          match-trigger-width
           :title="t('fileManager.changeEncodingTooltip')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @update:model-value="changeEncoding"
@@ -262,9 +263,10 @@
           <option v-for="option in encodingOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
         </UiSelect>
         <UiSelect
-          data-testid="file-editor-line-ending"
           :model-value="currentLineEnding"
           class="encoding-select line-ending-select"
+          density="compact"
+          match-trigger-width
           :title="t('fileEditor.lineEnding')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @update:model-value="changeLineEnding"
@@ -285,7 +287,6 @@
         >
 
         <button
-          data-testid="file-editor-search"
           type="button"
           class="search-btn"
           :title="t('fileManager.preview.search')"
@@ -294,18 +295,27 @@
         >
           <i class="fas fa-search" aria-hidden="true"></i>
         </button>
-        <button
+        <UiButton
           type="button"
-          class="save-btn"
+          class="editor-action-button"
+          density="compact"
           :title="t('fileEditor.refreshRemote')"
           :disabled="editorSession.loading.value || editorSession.active.value.saveState === 'saving'"
           @click="reload"
         >
           {{ t('fileManager.actions.refresh') }}
-        </button>
-        <button type="button" class="save-btn" :disabled="saveDisabled" @click="triggerSave">
+        </UiButton>
+        <UiButton
+          type="button"
+          class="editor-action-button"
+          appearance="solid"
+          tone="primary"
+          density="compact"
+          :disabled="saveDisabled"
+          @click="triggerSave"
+        >
           {{ t('fileManager.actions.save') }}
-        </button>
+        </UiButton>
         <button
           v-if="showCloseButton && !device.isMobile.value"
           type="button"
@@ -345,7 +355,7 @@
     </div>
 
     <div class="editor-content-area">
-      <div v-if="editorSession.loading.value" data-testid="file-editor-loading-state" class="editor-loading">
+      <div v-if="editorSession.loading.value" class="editor-loading">
         {{ t('fileManager.loadingFile') }}
       </div>
       <template v-else-if="editorSession.active.value">
@@ -575,48 +585,32 @@
   }
 
   .encoding-select {
-    width: auto;
-    max-width: 12rem;
-    flex: 0 1 auto;
-  }
-  .encoding-select :deep(.ui-select__trigger) {
-    width: auto;
-    min-width: 0;
-    max-width: 100%;
-    --ui-control-height: 28px;
-    --ui-control-font-size: 11px;
+    width: 8.5rem;
+    max-width: 8.5rem;
+    flex: 0 1 8.5rem;
   }
   .line-ending-select {
+    width: 5.5rem;
     max-width: 5.5rem;
+    flex-basis: 5.5rem;
   }
   .editor-header.is-mobile .encoding-select {
+    width: 7rem;
     min-width: 0;
     max-width: 7rem;
-    flex: 0 1 auto;
+    flex-basis: 7rem;
   }
   .editor-header.is-mobile .line-ending-select {
+    width: 4.5rem;
     max-width: 4.5rem;
+    flex-basis: 4.5rem;
   }
 
-  .save-btn {
-    padding: 0.4rem 0.8rem;
-    cursor: pointer;
-    border: 0;
-    border-radius: 3px;
-    background-color: #4caf50;
-    color: #fff;
-    font-size: 0.9em;
+  .editor-action-button {
+    --ui-control-padding-inline: 14px;
   }
-  .save-btn:disabled {
-    cursor: not-allowed;
-    background-color: #aaa;
-  }
-  .save-btn:hover:not(:disabled) {
-    background-color: #45a049;
-  }
-  .editor-header.is-mobile .save-btn {
+  .editor-header.is-mobile .editor-action-button {
     flex: 0 0 auto;
-    padding: 0.4rem 0.65rem;
     white-space: nowrap;
   }
   .search-btn {

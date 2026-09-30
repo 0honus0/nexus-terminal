@@ -372,7 +372,7 @@
         {{ t('styleCustomizer.backgroundSettings') }}
       </h3>
 
-      <div data-testid="page-background-settings" class="space-y-3 rounded border border-border p-4">
+      <div class="space-y-3 rounded border border-border p-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="min-w-0">
             <h4 class="m-0 text-base font-semibold text-foreground">{{ t('styleCustomizer.pageBackground') }}</h4>
@@ -381,16 +381,11 @@
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <UiButton
-              data-testid="page-background-upload-button"
-              density="compact"
-              @click="pageBackgroundInput?.click()"
-            >
+            <UiButton density="compact" @click="pageBackgroundInput?.click()">
               {{ t('styleCustomizer.uploadPageBg') }}
             </UiButton>
             <UiButton
               v-if="store.settings.pageBackgroundImage"
-              data-testid="page-background-remove"
               density="compact"
               appearance="solid"
               tone="danger"
@@ -402,7 +397,6 @@
         </div>
         <input
           ref="pageBackgroundInput"
-          data-testid="page-background-file"
           type="file"
           accept="image/*"
           class="hidden"
@@ -416,7 +410,6 @@
         <h4 class="m-0 text-base font-semibold text-foreground">{{ t('styleCustomizer.terminalBackground') }}</h4>
         <button
           type="button"
-          data-testid="terminal-background-toggle"
           :class="[
             'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
             form.terminalBackgroundEnabled ? 'bg-primary' : 'bg-gray-300',
@@ -461,7 +454,6 @@
             t('styleCustomizer.uploadTerminalBg')
           }}</UiButton>
           <UiButton
-            data-testid="terminal-background-remove"
             density="compact"
             appearance="solid"
             tone="danger"
@@ -472,7 +464,6 @@
           </UiButton>
           <input
             ref="terminalBackgroundInput"
-            data-testid="terminal-background-file"
             type="file"
             accept="image/*"
             class="hidden"
@@ -487,7 +478,6 @@
           <div class="flex items-center gap-3">
             <input
               v-model.number="form.terminalBackgroundOverlayOpacity"
-              data-testid="terminal-background-overlay"
               type="range"
               min="0"
               max="1"
@@ -497,12 +487,7 @@
             <span class="min-w-[3em] text-right text-sm text-foreground">{{
               form.terminalBackgroundOverlayOpacity.toFixed(2)
             }}</span>
-            <UiButton
-              data-testid="terminal-background-overlay-save"
-              density="compact"
-              @click="saveBackgroundOverlayOpacity"
-              >{{ t('common.save') }}</UiButton
-            >
+            <UiButton density="compact" @click="saveBackgroundOverlayOpacity">{{ t('common.save') }}</UiButton>
           </div>
         </div>
 
@@ -522,7 +507,6 @@
         <div class="mb-4 flex border-b border-border">
           <button
             type="button"
-            data-testid="html-theme-local-tab"
             :class="[
               '-mb-px border-b-2 px-4 py-2 transition-colors duration-150',
               htmlThemeTab === 'local'
@@ -535,7 +519,6 @@
           </button>
           <button
             type="button"
-            data-testid="html-theme-remote-tab"
             :class="[
               '-mb-px border-b-2 px-4 py-2 transition-colors duration-150',
               htmlThemeTab === 'remote'
@@ -552,11 +535,10 @@
           <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <UiInput
               v-model="localSearch"
-              data-testid="html-theme-local-search"
               class="min-w-0 flex-grow"
               :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')"
             />
-            <UiButton data-testid="html-theme-add" density="compact" class="shrink-0" @click="openNewPreset">{{
+            <UiButton density="compact" class="shrink-0" @click="openNewPreset">{{
               t('styleCustomizer.addNewTheme')
             }}</UiButton>
           </div>
@@ -568,7 +550,6 @@
             <li
               v-for="(theme, index) in filteredLocalThemes"
               :key="theme.name"
-              :data-testid="`html-theme-local-row-${theme.name}`"
               :class="[
                 'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 hover:bg-header md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
                 index < filteredLocalThemes.length - 1 ? 'border-b border-border' : '',
@@ -588,15 +569,12 @@
                 </span>
               </div>
               <div class="flex flex-wrap justify-start gap-2 md:justify-end">
-                <UiButton data-testid="html-theme-apply" density="compact" @click="applyLocalPreset(theme)">{{
+                <UiButton density="compact" @click="applyLocalPreset(theme)">{{
                   t('styleCustomizer.applyButton')
                 }}</UiButton>
-                <UiButton data-testid="html-theme-edit" density="compact" @click="openLocalPreset(theme)">{{
-                  t('common.edit')
-                }}</UiButton>
+                <UiButton density="compact" @click="openLocalPreset(theme)">{{ t('common.edit') }}</UiButton>
                 <UiButton
                   v-if="theme.type === 'custom'"
-                  data-testid="html-theme-delete"
                   density="compact"
                   appearance="solid"
                   tone="danger"
@@ -619,25 +597,17 @@
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
               <UiInput
                 v-model="remoteRepositoryUrl"
-                data-testid="html-theme-remote-repository"
                 class="min-w-0 flex-grow"
                 :placeholder="t('styleCustomizer.remoteRepoUrlPlaceholder')"
               />
-              <UiButton data-testid="html-theme-remote-save" density="compact" @click="saveRemoteRepository">{{
-                t('common.save')
+              <UiButton density="compact" @click="saveRemoteRepository">{{ t('common.save') }}</UiButton>
+              <UiButton density="compact" :disabled="!remoteRepositoryUrl || loadingRemote" @click="loadRemoteThemes">{{
+                loadingRemote ? t('common.loading') : t('styleCustomizer.loadRemoteThemes')
               }}</UiButton>
-              <UiButton
-                data-testid="html-theme-remote-load"
-                density="compact"
-                :disabled="!remoteRepositoryUrl || loadingRemote"
-                @click="loadRemoteThemes"
-                >{{ loadingRemote ? t('common.loading') : t('styleCustomizer.loadRemoteThemes') }}</UiButton
-              >
             </div>
           </UiFormField>
           <UiInput
             v-model="remoteSearch"
-            data-testid="html-theme-remote-search"
             class="my-4"
             :placeholder="t('styleCustomizer.searchRemoteThemesPlaceholder')"
           />
@@ -648,7 +618,6 @@
             <li
               v-for="(theme, index) in filteredRemoteThemes"
               :key="theme.name"
-              :data-testid="`html-theme-remote-row-${theme.name}`"
               :class="[
                 'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 hover:bg-header md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
                 index < filteredRemoteThemes.length - 1 ? 'border-b border-border' : '',
@@ -658,13 +627,9 @@
                 theme.name.replace(/\.html$/i, '')
               }}</span>
               <div class="flex justify-start md:justify-end">
-                <UiButton
-                  data-testid="html-theme-remote-apply"
-                  density="compact"
-                  :disabled="!theme.downloadUrl"
-                  @click="applyRemotePreset(theme)"
-                  >{{ t('styleCustomizer.applyButton') }}</UiButton
-                >
+                <UiButton density="compact" :disabled="!theme.downloadUrl" @click="applyRemotePreset(theme)">{{
+                  t('styleCustomizer.applyButton')
+                }}</UiButton>
               </div>
             </li>
           </ul>
@@ -690,24 +655,14 @@
       >
         <div class="space-y-4">
           <UiFormField :label="t('styleCustomizer.presetName')">
-            <UiInput
-              v-model="presetName"
-              data-testid="html-theme-preset-name"
-              :placeholder="t('styleCustomizer.presetNamePlaceholder')"
-            />
+            <UiInput v-model="presetName" :placeholder="t('styleCustomizer.presetNamePlaceholder')" />
           </UiFormField>
           <UiFormField :label="t('styleCustomizer.presetContent')">
-            <UiTextarea
-              v-model="presetContent"
-              data-testid="html-theme-preset-content"
-              class="min-h-80 font-mono text-xs"
-            />
+            <UiTextarea v-model="presetContent" class="min-h-80 font-mono text-xs" />
           </UiFormField>
           <div class="flex justify-end gap-2">
             <UiButton @click="presetEditorVisible = false">{{ t('common.cancel') }}</UiButton>
-            <UiButton data-testid="html-theme-preset-save" appearance="solid" tone="primary" @click="saveLocalPreset">{{
-              t('common.save')
-            }}</UiButton>
+            <UiButton appearance="solid" tone="primary" @click="saveLocalPreset">{{ t('common.save') }}</UiButton>
           </div>
         </div>
       </UiModal>
@@ -774,47 +729,42 @@
         <div class="space-y-3 rounded border border-border p-4">
           <h3 class="font-semibold">{{ t('styleCustomizer.textStrokeSettings') }}</h3>
           <label class="flex items-center gap-2">
-            <UiCheckbox v-model="form.terminalTextStrokeEnabled" data-testid="terminal-text-stroke-enabled" />
+            <UiCheckbox v-model="form.terminalTextStrokeEnabled" />
             {{ t('styleCustomizer.enableTextStroke') }}
           </label>
           <UiFormField :label="t('styleCustomizer.textStrokeWidth')">
-            <UiInput v-model="form.terminalTextStrokeWidth" data-testid="terminal-text-stroke-width" type="number" />
+            <UiInput v-model="form.terminalTextStrokeWidth" type="number" />
           </UiFormField>
           <UiFormField :label="t('styleCustomizer.textStrokeColor')">
-            <UiInput v-model="form.terminalTextStrokeColor" data-testid="terminal-text-stroke-color" />
+            <UiInput v-model="form.terminalTextStrokeColor" />
           </UiFormField>
         </div>
 
         <div class="space-y-3 rounded border border-border p-4">
           <h3 class="font-semibold">{{ t('styleCustomizer.textShadowSettings') }}</h3>
           <label class="flex items-center gap-2">
-            <UiCheckbox v-model="form.terminalTextShadowEnabled" data-testid="terminal-text-shadow-enabled" />
+            <UiCheckbox v-model="form.terminalTextShadowEnabled" />
             {{ t('styleCustomizer.enableTextShadow') }}
           </label>
           <div class="grid grid-cols-3 gap-2">
             <UiFormField :label="t('styleCustomizer.textShadowOffsetX')">
-              <UiInput v-model="form.terminalTextShadowOffsetX" data-testid="terminal-text-shadow-x" type="number" />
+              <UiInput v-model="form.terminalTextShadowOffsetX" type="number" />
             </UiFormField>
             <UiFormField :label="t('styleCustomizer.textShadowOffsetY')">
-              <UiInput v-model="form.terminalTextShadowOffsetY" data-testid="terminal-text-shadow-y" type="number" />
+              <UiInput v-model="form.terminalTextShadowOffsetY" type="number" />
             </UiFormField>
             <UiFormField :label="t('styleCustomizer.textShadowBlur')">
-              <UiInput v-model="form.terminalTextShadowBlur" data-testid="terminal-text-shadow-blur" type="number" />
+              <UiInput v-model="form.terminalTextShadowBlur" type="number" />
             </UiFormField>
           </div>
           <UiFormField :label="t('styleCustomizer.textShadowColor')">
-            <UiInput v-model="form.terminalTextShadowColor" data-testid="terminal-text-shadow-color" />
+            <UiInput v-model="form.terminalTextShadowColor" />
           </UiFormField>
         </div>
       </div>
-      <UiButton
-        v-if="showTextEffects"
-        data-testid="terminal-text-effects-save"
-        appearance="solid"
-        tone="primary"
-        @click="saveVisuals"
-        >{{ t('common.save') }}</UiButton
-      >
+      <UiButton v-if="showTextEffects" appearance="solid" tone="primary" @click="saveVisuals">{{
+        t('common.save')
+      }}</UiButton>
 
       <div v-if="showBackground" class="grid gap-6 xl:grid-cols-2">
         <div class="space-y-3 rounded border border-border p-4">
@@ -898,24 +848,14 @@
       >
         <div class="space-y-4">
           <UiFormField :label="t('styleCustomizer.presetName')">
-            <UiInput
-              v-model="presetName"
-              data-testid="html-theme-preset-name"
-              :placeholder="t('styleCustomizer.presetNamePlaceholder')"
-            />
+            <UiInput v-model="presetName" :placeholder="t('styleCustomizer.presetNamePlaceholder')" />
           </UiFormField>
           <UiFormField :label="t('styleCustomizer.presetContent')">
-            <UiTextarea
-              v-model="presetContent"
-              data-testid="html-theme-preset-content"
-              class="min-h-80 font-mono text-xs"
-            />
+            <UiTextarea v-model="presetContent" class="min-h-80 font-mono text-xs" />
           </UiFormField>
           <div class="flex justify-end gap-2">
             <UiButton @click="presetEditorVisible = false">{{ t('common.cancel') }}</UiButton>
-            <UiButton data-testid="html-theme-preset-save" appearance="solid" tone="primary" @click="saveLocalPreset">{{
-              t('common.save')
-            }}</UiButton>
+            <UiButton appearance="solid" tone="primary" @click="saveLocalPreset">{{ t('common.save') }}</UiButton>
           </div>
         </div>
       </UiModal>

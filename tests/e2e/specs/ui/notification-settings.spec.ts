@@ -26,11 +26,11 @@ test('notification settings create, edit, persist, and delete a webhook channel 
   await cleanupChannel(context.request);
   await page.goto('/notifications');
 
-  const settings = page.getByTestId('notification-settings');
+  const settings = page.getByRole('heading', { name: 'Notification Settings', exact: true }).locator('..');
   await expect(settings).toBeVisible({ timeout: 20_000 });
 
   await step('add a webhook notification channel', async () => {
-    await settings.getByTestId('notification-add-channel').click();
+    await settings.getByRole('button', { name: 'Add Notification Channel', exact: true }).click();
     await page.locator('#setting-name').fill(CHANNEL_NAME);
     await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
     await page.locator('#webhook-url').fill(`${E2E_SSH.controlUrl}/e2e-notification-webhook`);
@@ -115,7 +115,7 @@ test('notification settings keep long provider and event content readable on a n
   expect(create.status()).toBe(201);
   await page.setViewportSize({ width: 320, height: 667 });
   await page.goto('/notifications');
-  const settings = page.getByTestId('notification-settings');
+  const settings = page.getByRole('heading', { name: 'Notification Settings', exact: true }).locator('..');
   const card = settings.locator('article').filter({ hasText: longName });
   await expect(card).toBeVisible({ timeout: 15_000 });
   await page.screenshot({ path: testInfo.outputPath('notifications-narrow-after.png'), fullPage: true });
@@ -177,7 +177,7 @@ test('notification settings empty and error states stay within a narrow viewport
 
   await page.setViewportSize({ width: 320, height: 667 });
   await page.goto('/notifications');
-  const settings = page.getByTestId('notification-settings');
+  const settings = page.getByRole('heading', { name: 'Notification Settings', exact: true }).locator('..');
   await expect(settings.getByText('No notification channels configured yet.', { exact: true })).toBeVisible();
   const emptyMetrics = await page.evaluate(() => ({
     viewportWidth: document.documentElement.clientWidth,

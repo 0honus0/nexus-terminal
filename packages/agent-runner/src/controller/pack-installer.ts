@@ -30,8 +30,7 @@ const digestMismatch = (pack: CatalogPack, ref: ToolchainPackRef, phase: string,
     versionId: pack.versionId,
     architecture: process.arch,
     phase,
-    expectedDigest: pack.contentDigestByArch[process.arch] ?? null,
-    providedDigest: ref.contentDigest,
+    expectedDigest: pack.archiveDigestByArch?.[process.arch] ?? null,
     actualDigest: actualDigest ?? null,
   });
   return new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
@@ -175,34 +174,6 @@ const safeSymlink = (root: string, linkPath: string): string => {
   return target.replace(/\\/g, '/');
 };
 
-const normalizedTreeDigest = (root: string): string => {
-  const hash = createHash('sha256');
-  const visit = (current: string): void => {
-    const entries = fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      const target = path.join(current, entry.name);
-      const relative = path.relative(root, target).split(path.sep).join('/');
-      const stat = fs.lstatSync(target);
-      if (stat.isSymbolicLink()) {
-        const link = safeSymlink(root, target);
-        hash.update(`L\0${relative}\0${0}\0`);
-        hash.update(createHash('sha256').update(link).digest());
-        continue;
-      }
-      if (stat.isDirectory()) {
-        hash.update(`D\0${relative}\0${0}\0`);
-        visit(target);
-        continue;
-      }
-      if (!stat.isFile()) throw new Error('WORKSPACE_TOOLCHAIN_TREE_UNSAFE');
-      hash.update(`F\0${relative}\0${stat.mode & 0o111 ? 1 : 0}\0`);
-      hash.update(createHash('sha256').update(fs.readFileSync(target)).digest());
-    }
-  };
-  visit(root);
-  return `sha256:${hash.digest('hex')}`;
-};
-
 const relocateTextTree = (root: string, sourcePrefix: string, targetPrefix: string): void => {
   const sourceBytes = Buffer.from(sourcePrefix);
   const visit = (current: string): void => {
@@ -311,8 +282,7 @@ export class PackInstaller {
   async uninstall(ref: ToolchainPackRef): Promise<void> {
     await this.mutations.run(() => {
       const pack = this.catalog.pack(ref.familyId, ref.versionId);
-      const expected = pack.contentDigestByArch[process.arch];
-      if (!expected || expected !== ref.contentDigest) throw digestMismatch(pack, ref, 'catalog-reference');
+      if (!pack.supportedArchitectures.includes(process.arch)) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
       this.store.remove(ref);
     });
   }
@@ -323,10 +293,7 @@ export class PackInstaller {
         const expanded = this.expandDependencies(refs);
         for (const ref of expanded) {
           const pack = this.catalog.pack(ref.familyId, ref.versionId);
-          const expected = pack.contentDigestByArch[process.arch];
-          if (!expected || expected !== ref.contentDigest || !/^sha256:[a-f0-9]{64}$/.test(expected)) {
-            throw digestMismatch(pack, ref, 'catalog-reference');
-          }
+          if (!pack.supportedArchitectures.includes(process.arch)) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
           if (!this.store.installed(ref)) await this.installOne(pack, ref, commandId);
           this.store.activate(ref);
         }
@@ -342,18 +309,16 @@ export class PackInstaller {
     const visiting = new Set<string>();
     const complete = new Set<string>();
     const visit = (ref: ToolchainPackRef): void => {
-      const key = `${ref.familyId}/${ref.versionId}/${ref.contentDigest}`;
+      const key = `${ref.familyId}/${ref.versionId}`;
       if (complete.has(key)) return;
       if (visiting.has(key)) throw new Error('WORKSPACE_TOOLCHAIN_DEPENDENCY_CYCLE');
       visiting.add(key);
       const pack = this.catalog.pack(ref.familyId, ref.versionId);
-      const expected = pack.contentDigestByArch[process.arch];
-      if (!expected || expected !== ref.contentDigest) throw digestMismatch(pack, ref, 'catalog-reference');
+      if (!pack.supportedArchitectures.includes(process.arch)) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
       for (const dependency of pack.dependencies) {
         const child = this.catalog.pack(dependency.familyId, dependency.versionId);
-        const digest = child.contentDigestByArch[process.arch];
-        if (!digest) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
-        visit({ familyId: dependency.familyId, versionId: dependency.versionId, contentDigest: digest });
+        if (!child.supportedArchitectures.includes(process.arch)) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
+        visit({ familyId: dependency.familyId, versionId: dependency.versionId });
       }
       visiting.delete(key);
       complete.add(key);
@@ -393,7 +358,10 @@ export class PackInstaller {
       directory,
       `${safeSegment(pack.familyId)}-${safeSegment(pack.versionId)}-${safeSegment(process.arch)}.tar`,
     );
-    if (fs.existsSync(archive) && (await hashFile(archive)) === ref.contentDigest) return archive;
+    const expectedDigest = pack.archiveDigestByArch?.[process.arch];
+    if (!expectedDigest || !/^sha256:[a-f0-9]{64}$/.test(expectedDigest))
+      throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_INVALID');
+    if (fs.existsSync(archive) && (await hashFile(archive)) === expectedDigest) return archive;
     const temporary = `${archive}.part`;
     fs.rmSync(temporary, { force: true });
     fs.copyFileSync(this.sourcePath(pack), temporary, fs.constants.COPYFILE_EXCL);
@@ -403,7 +371,7 @@ export class PackInstaller {
       throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_INVALID');
     }
     const digest = await hashFile(temporary);
-    if (digest !== ref.contentDigest) {
+    if (digest !== expectedDigest) {
       fs.rmSync(temporary, { force: true });
       throw digestMismatch(pack, ref, 'downloaded-archive', digest);
     }
@@ -543,8 +511,6 @@ export class PackInstaller {
       };
       fs.writeFileSync(path.join(materialized, 'pack.json'), `${JSON.stringify(manifest)}\n`, { mode: 0o644 });
       this.verifyManifest(materialized, pack);
-      const digest = normalizedTreeDigest(materialized);
-      if (digest !== ref.contentDigest) throw digestMismatch(pack, ref, 'mise-tree', digest);
       this.store.writeMarker(materialized, ref, Math.floor(Date.now() / 1000));
       lockAndSyncTree(materialized);
       this.store.commit(materialized, ref);

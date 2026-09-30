@@ -380,19 +380,15 @@
 </script>
 
 <template>
-  <form
-    data-testid="connection-form"
-    class="connection-form flex max-h-[78vh] min-h-0 flex-col"
-    @submit.prevent="submit"
-  >
-    <h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
+  <form class="connection-form flex max-h-[82dvh] min-h-0 flex-col" @submit.prevent="submit">
+    <h3 class="mb-5 shrink-0 text-lg font-semibold">
       {{ connection ? t('connections.form.titleEdit') : t('connections.form.title') }}
     </h3>
 
-    <div class="flex-grow space-y-6 overflow-y-auto pr-2">
+    <div class="flex-grow space-y-7 overflow-y-auto pr-1 sm:pr-3">
       <template v-if="!scriptMode">
-        <section class="connection-form-section space-y-4 rounded-xl p-4">
-          <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
+        <section class="ui-form-section space-y-5">
+          <h4 class="mb-3 text-sm font-semibold">
             {{ t('connections.form.sectionBasic') }}
           </h4>
           <UiFormField :label="`${t('connections.form.name')} (${t('connections.form.optional')})`">
@@ -404,7 +400,6 @@
             }}</label>
             <div class="connection-form-segmented flex rounded-lg p-1">
               <button
-                data-testid="connection-type-ssh"
                 type="button"
                 class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'SSH' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
@@ -413,7 +408,6 @@
                 SSH
               </button>
               <button
-                data-testid="connection-type-rdp"
                 type="button"
                 class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'RDP' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
@@ -422,7 +416,6 @@
                 RDP
               </button>
               <button
-                data-testid="connection-type-vnc"
                 type="button"
                 class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
                 :class="form.type === 'VNC' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
@@ -445,7 +438,7 @@
           </div>
         </section>
 
-        <section class="connection-form-section space-y-4 rounded-xl p-4">
+        <section class="ui-form-section space-y-5">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAuth') }}
           </h4>
@@ -508,7 +501,7 @@
           </UiFormField>
         </section>
 
-        <section class="connection-form-section space-y-4 rounded-xl p-4">
+        <section class="ui-form-section space-y-5">
           <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
             {{ t('connections.form.sectionAdvanced') }}
           </h4>
@@ -601,15 +594,10 @@
             </div>
           </template>
 
-          <div
-            v-if="form.type === 'RDP'"
-            data-testid="rdp-advanced-options"
-            class="space-y-3 rounded-md border border-border/70 bg-background/50 p-3"
-          >
+          <div v-if="form.type === 'RDP'" class="space-y-3 rounded-md border border-border/70 bg-background/50 p-3">
             <button
               type="button"
               role="switch"
-              data-testid="rdp-remote-app-toggle"
               :aria-checked="remoteAppEnabled"
               class="flex w-full items-center justify-between gap-3 rounded-md px-1 py-1 text-left text-sm font-medium"
               @click="remoteAppEnabled = !remoteAppEnabled"
@@ -624,15 +612,15 @@
                   :class="remoteAppEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'"
               /></span>
             </button>
-            <div v-if="remoteAppEnabled" data-testid="rdp-remote-app-fields" class="space-y-3">
+            <div v-if="remoteAppEnabled" class="space-y-3">
               <UiFormField :label="t('connections.form.remoteAppAlias')"
-                ><UiInput v-model="form.remoteApp" data-testid="rdp-remote-app-alias"
+                ><UiInput v-model="form.remoteApp"
               /></UiFormField>
               <UiFormField :label="`${t('connections.form.remoteAppDir')} (${t('connections.form.optional')})`"
-                ><UiInput v-model="form.remoteAppDirectory" data-testid="rdp-remote-app-dir"
+                ><UiInput v-model="form.remoteAppDirectory"
               /></UiFormField>
               <UiFormField :label="`${t('connections.form.remoteAppArgs')} (${t('connections.form.optional')})`"
-                ><UiInput v-model="form.remoteAppArguments" data-testid="rdp-remote-app-args"
+                ><UiInput v-model="form.remoteAppArguments"
               /></UiFormField>
             </div>
           </div>
@@ -650,11 +638,10 @@
         </section>
       </template>
 
-      <section v-if="!connection" class="connection-form-section mt-6 space-y-4 rounded-xl p-4">
+      <section v-if="!connection" class="ui-form-section mt-7 space-y-5">
         <div class="flex items-center justify-between">
           <h4 class="text-base font-semibold">{{ t('connections.form.sectionScriptMode') }}</h4>
           <button
-            data-testid="connection-script-toggle"
             type="button"
             role="switch"
             :aria-label="t('connections.form.sectionScriptMode')"
@@ -692,19 +679,13 @@
       </p>
     </div>
 
-    <footer class="mt-6 flex shrink-0 flex-wrap items-center gap-3 border-t border-border/50 pt-5">
+    <footer class="mt-7 flex shrink-0 flex-wrap items-center gap-4 border-t border-border/50 pt-5">
       <div v-if="!scriptMode && form.type === 'SSH'" class="flex min-w-0 items-center gap-2">
-        <UiButton
-          data-testid="connection-test-button"
-          type="button"
-          density="compact"
-          :loading="testing"
-          @click="test"
-          >{{ t('connections.form.testConnection') }}</UiButton
-        >
+        <UiButton type="button" density="compact" :loading="testing" @click="test">{{
+          t('connections.form.testConnection')
+        }}</UiButton>
         <span
           v-if="testResult"
-          data-testid="connection-test-result"
           class="inline-flex min-w-0 items-center gap-1 text-xs font-medium"
           :class="testResult.success ? 'text-success' : 'text-error'"
           :title="testResult.message"
@@ -718,18 +699,11 @@
             · {{ testResult.message }}
           </span>
         </span>
-        <span class="group relative"
-          ><i class="fas fa-info-circle cursor-help text-text-secondary" aria-hidden="true" /><span
-            class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-max max-w-xs -translate-x-1/2 rounded bg-gray-800 p-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
-            >{{ t('connections.test.latencyTooltip') }}</span
-          ></span
-        >
       </div>
       <div v-else class="flex-1" />
       <div class="ml-auto flex space-x-3">
         <UiButton
           v-if="connection && !scriptMode"
-          data-testid="connection-delete-button"
           type="button"
           appearance="solid"
           tone="danger"
@@ -737,54 +711,21 @@
           @click="emit('delete')"
           >{{ t('connections.actions.delete') }}</UiButton
         >
-        <UiButton
-          data-testid="connection-submit-button"
-          type="submit"
-          appearance="solid"
-          tone="primary"
-          :loading="loading"
-          :disabled="testing"
-          >{{ connection ? t('connections.form.confirmEdit') : t('connections.form.confirm') }}</UiButton
-        >
+        <UiButton type="submit" appearance="solid" tone="primary" :loading="loading" :disabled="testing">{{
+          connection ? t('connections.form.confirmEdit') : t('connections.form.confirm')
+        }}</UiButton>
         <UiButton type="button" :disabled="loading || testing" @click="emit('cancel')">{{
           t('connections.form.cancel')
         }}</UiButton>
       </div>
+      <p v-if="!scriptMode && form.type === 'SSH'" class="w-full text-xs leading-relaxed text-text-secondary">
+        <i class="fas fa-info-circle mr-1.5" aria-hidden="true"></i>{{ t('connections.test.latencyTooltip') }}
+      </p>
     </footer>
   </form>
 </template>
 
 <style scoped>
-  .connection-form-section {
-    border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
-    background: color-mix(in srgb, var(--card-bg-color) 66%, var(--app-bg-color));
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
-  }
-
-  .connection-form :deep(.ui-input),
-  .connection-form :deep(.ui-textarea),
-  .connection-form :deep(.ui-select__trigger) {
-    border-color: color-mix(in srgb, var(--border-color) 62%, transparent);
-    background: color-mix(in srgb, var(--app-bg-color) 92%, var(--card-bg-color)) !important;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 6%, transparent);
-  }
-
-  .connection-form :deep(.ui-input:hover),
-  .connection-form :deep(.ui-textarea:hover),
-  .connection-form :deep(.ui-select__trigger:not(:disabled):hover) {
-    border-color: color-mix(in srgb, var(--border-hover-color) 72%, transparent);
-  }
-
-  .connection-form :deep(.ui-input:focus-within),
-  .connection-form :deep(.ui-textarea:focus-within),
-  .connection-form :deep(.ui-select__trigger:focus-visible),
-  .connection-form :deep(.ui-select__trigger[data-state='open']) {
-    border-color: color-mix(in srgb, var(--link-active-color) 58%, var(--border-color));
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--link-active-color) 10%, transparent);
-  }
-
   .connection-form-segmented {
     gap: 0.25rem;
     border: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
@@ -798,10 +739,6 @@
     border-radius: 0.5rem !important;
     background: transparent !important;
     color: var(--text-color-secondary) !important;
-    transition:
-      background-color 140ms ease,
-      color 140ms ease,
-      box-shadow 140ms ease;
   }
 
   .connection-form-segment:hover {

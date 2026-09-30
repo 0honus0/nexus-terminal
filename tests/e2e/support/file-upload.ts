@@ -41,7 +41,7 @@ export async function dragLocalFiles(page: Page, files: DragFileDescriptor[]): P
   try {
     const list = activeFileManagerList(page);
     await list.dispatchEvent('dragenter', { dataTransfer });
-    const overlay = page.getByTestId('file-upload-drop-overlay');
+    const overlay = page.getByText('Drop files here to upload', { exact: true });
     await expect(overlay).toBeVisible();
     await overlay.dispatchEvent('drop', { dataTransfer });
     await expect(overlay).toBeHidden();
@@ -51,7 +51,7 @@ export async function dragLocalFiles(page: Page, files: DragFileDescriptor[]): P
 }
 
 export function uploadProgressTask(page: Page, name?: string) {
-  const progressCenter = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
-  const tasks = progressCenter.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+  const progressCenter = page.locator('.transfer-progress-window:visible').first();
+  const tasks = progressCenter.locator('[data-task-kind="upload"]');
   return name ? tasks.filter({ hasText: name }).first() : tasks.first();
 }

@@ -40,8 +40,29 @@ export interface WorkspaceConnectResponseDto {
   connectionId: number;
   connectionName: string;
   binaryProtocolVersion: number;
+  resumeToken: string;
+  attachmentGeneration: number;
+  terminalOffset: number;
   lastConnectedAt?: number;
 }
+
+export interface WorkspaceResumeRequestDto {
+  workspaceId: string;
+  connectionId: number;
+  resumeToken: string;
+  attachmentGeneration: number;
+  terminalOffset: number;
+  viewport?: WorkspaceTerminalViewportDto;
+}
+
+export interface WorkspaceResumeResponseDto extends WorkspaceConnectResponseDto {
+  replayedBytes: number;
+}
+
+export type WorkspaceCloseRequestDto = Pick<
+  WorkspaceResumeRequestDto,
+  'workspaceId' | 'connectionId' | 'resumeToken' | 'attachmentGeneration'
+>;
 
 export interface WorkspaceTerminalInputRequestDto {
   data: string;
@@ -429,7 +450,10 @@ export interface WorkspaceTransferEventMapDto {
 }
 
 export interface WorkspaceCoreRequestMapDto {
+  'workspace.ping': Record<string, never>;
   'workspace.connect': WorkspaceConnectRequestDto;
+  'workspace.resume': WorkspaceResumeRequestDto;
+  'workspace.close': WorkspaceCloseRequestDto;
   'terminal.input': WorkspaceTerminalInputRequestDto;
   'terminal.resize': WorkspaceTerminalResizeRequestDto;
   'terminal.currentDirectory': Record<string, never>;
@@ -442,7 +466,10 @@ export interface WorkspaceCoreRequestMapDto {
 }
 
 export interface WorkspaceCoreResponseMapDto {
+  'workspace.ping': null;
   'workspace.connect': WorkspaceConnectResponseDto;
+  'workspace.resume': WorkspaceResumeResponseDto;
+  'workspace.close': null;
   'terminal.input': null;
   'terminal.resize': null;
   'terminal.currentDirectory': WorkspaceTerminalCurrentDirectoryResponseDto;
@@ -472,6 +499,14 @@ export interface WorkspaceSuspendMarkRequestDto {
 export interface WorkspaceSuspendMarkResponseDto {
   suspendedSessionId: string;
 }
+
+export type WorkspaceSuspendPrepareRequestDto = WorkspaceSuspendMarkRequestDto;
+
+export type WorkspaceSuspendPrepareResponseDto = null;
+
+export type WorkspaceSuspendCommitRequestDto = WorkspaceSuspendMarkRequestDto;
+
+export type WorkspaceSuspendCommitResponseDto = WorkspaceSuspendMarkResponseDto;
 
 export type WorkspaceSuspendUnmarkRequestDto = Record<string, never>;
 
@@ -533,6 +568,8 @@ export interface WorkspaceSuspendRevokedEventDto {
 
 export interface WorkspaceSuspendRequestMapDto {
   'suspend.mark': WorkspaceSuspendMarkRequestDto;
+  'suspend.prepare': WorkspaceSuspendPrepareRequestDto;
+  'suspend.commit': WorkspaceSuspendCommitRequestDto;
   'suspend.unmark': WorkspaceSuspendUnmarkRequestDto;
   'suspend.list': Record<string, never>;
   'suspend.resume': WorkspaceSuspendResumeRequestDto;
@@ -546,6 +583,8 @@ export interface WorkspaceSuspendRequestMapDto {
 
 export interface WorkspaceSuspendResponseMapDto {
   'suspend.mark': WorkspaceSuspendMarkResponseDto;
+  'suspend.prepare': WorkspaceSuspendPrepareResponseDto;
+  'suspend.commit': WorkspaceSuspendCommitResponseDto;
   'suspend.unmark': null;
   'suspend.list': WorkspaceSuspendListResponseDto;
   'suspend.resume': WorkspaceSuspendResumeResponseDto;

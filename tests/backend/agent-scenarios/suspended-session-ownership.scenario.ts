@@ -77,7 +77,7 @@ export const suspendedSessionOwnershipScenario = async () => {
       shellOpen = false;
     },
   };
-  const suspended = new SshSuspendService(logStore as never, {
+  const suspended = new SshSuspendService(logStore as never, { render: async (source) => source } as never, {
     now: () => now,
     ownerLeaseMs: 1_000,
     ownerSweepMs: 60_000,

@@ -90,7 +90,7 @@
 </script>
 
 <template>
-  <section ref="root" data-testid="file-preview-view" class="relative flex h-full min-h-0 flex-col bg-background">
+  <section ref="root" class="relative flex h-full min-h-0 flex-col bg-background">
     <template v-for="tab in preview.tabs.value" :key="tab.id">
       <div v-show="preview.activeId.value === tab.id" class="absolute inset-0 min-h-0">
         <UiSpinner v-if="tab.loading" class="m-6" />
@@ -103,7 +103,6 @@
         >
           <div class="flex h-full min-h-[18rem] items-center justify-center p-6">
             <div
-              data-testid="file-preview-error"
               class="flex max-w-xl flex-col items-center gap-4 rounded-md border border-error/40 bg-error/10 p-5 text-center text-sm text-error"
               role="alert"
             >
@@ -114,7 +113,6 @@
               </div>
               <button
                 type="button"
-                data-testid="file-preview-retry"
                 class="inline-flex min-h-11 items-center gap-2 rounded-md border border-error/50 px-3 py-2 text-sm hover:bg-error/10 focus:outline-none focus:ring-1 focus:ring-error disabled:cursor-wait disabled:opacity-60"
                 :disabled="tab.refreshing"
                 :aria-busy="tab.refreshing"
@@ -181,7 +179,6 @@
     </template>
     <div
       v-if="loadingTab"
-      data-testid="file-preview-loading"
       class="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70"
       role="dialog"
       aria-modal="true"

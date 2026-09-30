@@ -178,7 +178,7 @@
           :key="pill"
           type="button"
           tabindex="-1"
-          class="inline-flex h-6 min-w-6 items-center justify-center rounded px-1.5 font-mono text-[11px] font-semibold text-text-secondary/80 hover:bg-header hover:text-foreground active:scale-95 transition-all cursor-pointer select-none"
+          class="inline-flex h-6 min-w-6 items-center justify-center rounded px-1.5 font-mono text-[11px] font-semibold text-text-secondary/80 hover:bg-header hover:text-foreground transition-colors cursor-pointer select-none"
           :class="{
             'bg-primary/15 text-primary font-bold ring-1 ring-primary/30 shadow-xs': isPillActive(pill),
           }"

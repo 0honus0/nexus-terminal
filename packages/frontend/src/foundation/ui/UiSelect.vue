@@ -19,6 +19,8 @@
 
   const attrs = useAttrs();
   const slots = useSlots();
+  const root = ref<HTMLElement | null>(null);
+  const portalTarget = computed(() => root.value?.closest<HTMLElement>('[data-ui="overlay"]') ?? 'body');
   const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style }));
   const triggerAttrs = computed(() => {
     const { class: _class, style: _style, ...rest } = attrs;
@@ -42,8 +44,7 @@
       name?: string;
       hideIndicator?: boolean;
       triggerClass?: string;
-      panelTestId?: string;
-      optionTestIdPrefix?: string;
+      fitContent?: boolean;
     }>(),
     {
       modelValue: null,
@@ -57,8 +58,7 @@
       panelClass: '',
       hideIndicator: true,
       triggerClass: '',
-      panelTestId: undefined,
-      optionTestIdPrefix: undefined,
+      fitContent: false,
     },
   );
 
@@ -144,6 +144,7 @@
 
 <template>
   <div
+    ref="root"
     v-bind="rootAttrs"
     data-ui="select"
     data-ui-gen="2"
@@ -153,6 +154,7 @@
     :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
     :data-state="open ? 'open' : 'closed'"
     class="ui-select"
+    :class="{ 'ui-select--fit-content': props.fitContent }"
   >
     <SelectRoot
       v-model:open="open"
@@ -186,11 +188,10 @@
           </svg>
         </SelectIcon>
       </SelectTrigger>
-      <SelectPortal>
+      <SelectPortal :to="portalTarget">
         <SelectContent
           data-ui="select-panel"
           data-ui-gen="2"
-          :data-testid="props.panelTestId"
           :data-density="props.density"
           :data-hide-indicator="props.hideIndicator || undefined"
           :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
@@ -209,11 +210,6 @@
               v-for="(option, index) in resolvedOptions"
               :key="index"
               :data-value="option.value == null ? '' : String(option.value)"
-              :data-testid="
-                props.optionTestIdPrefix
-                  ? `${props.optionTestIdPrefix}-${option.value === '' ? 'all' : String(option.value)}`
-                  : undefined
-              "
               :value="internalOptionValue(option.value)"
               :disabled="option.disabled"
               :text-value="option.label"

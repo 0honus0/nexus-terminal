@@ -27,17 +27,20 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
   try {
     await page.goto('/');
     await page.getByTitle('Customize Style').click();
-    const customizer = page.getByTestId('style-customizer');
+    const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
     await expect(customizer).toBeVisible();
-    await customizer.getByTestId('style-customizer-terminal-tab').click();
-    await expect(customizer.getByTestId('terminal-style-settings')).toBeVisible();
+    await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+    await expect(customizer.getByRole('button', { name: 'New Theme', exact: true })).toBeVisible();
 
     await step('create a custom terminal theme from the visual editor', async () => {
-      await customizer.getByTestId('terminal-theme-add').click();
-      const editor = page.getByTestId('terminal-theme-editor');
+      await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
+      const editor = customizer
+        .locator('section')
+        .filter({ has: page.getByRole('heading', { name: 'New Terminal Theme', exact: true }) })
+        .last();
       await expect(editor).toBeVisible();
-      await editor.getByTestId('terminal-theme-name').fill(THEME_NAME);
-      await editor.getByTestId('terminal-theme-json').fill(
+      await editor.getByRole('textbox').first().fill(THEME_NAME);
+      await editor.locator('textarea').fill(
         JSON.stringify(
           {
             background: '#101820',
@@ -53,24 +56,29 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
       const createPromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/terminal-themes') && response.request().method() === 'POST',
       );
-      await editor.getByTestId('terminal-theme-save').click();
+      await editor.getByRole('button', { name: 'Save', exact: true }).click();
       const create = await createPromise;
       expect(create.status()).toBe(201);
       createdThemeId = Number(((await create.json()) as { id?: string }).id);
       expect(createdThemeId).toBeGreaterThan(0);
       await expect(editor).toBeHidden({ timeout: 15_000 });
 
-      await customizer.getByTestId('terminal-theme-search').fill(THEME_NAME);
-      await expect(customizer.getByTestId(`terminal-theme-row-${createdThemeId}`)).toBeVisible();
+      await customizer.getByPlaceholder('Search theme name...', { exact: true }).fill(THEME_NAME);
+      await expect(
+        customizer.getByRole('listitem').filter({ has: page.getByText(THEME_NAME, { exact: true }) }),
+      ).toBeVisible();
     });
 
     await step('edit updates both the theme name and colors through the same UI', async () => {
-      const row = customizer.getByTestId(`terminal-theme-row-${createdThemeId}`);
-      await row.getByTestId('terminal-theme-edit').click();
-      const editor = page.getByTestId('terminal-theme-editor');
+      const row = customizer.getByRole('listitem').filter({ has: page.getByText(THEME_NAME, { exact: true }) });
+      await row.getByRole('button', { name: 'Edit', exact: true }).click();
+      const editor = customizer
+        .locator('section')
+        .filter({ has: page.getByRole('heading', { name: 'Edit Terminal Theme', exact: true }) })
+        .last();
       await expect(editor).toBeVisible();
-      await editor.getByTestId('terminal-theme-name').fill(EDITED_THEME_NAME);
-      await editor.getByTestId('terminal-theme-json').fill(
+      await editor.getByRole('textbox').first().fill(EDITED_THEME_NAME);
+      await editor.locator('textarea').fill(
         JSON.stringify(
           {
             background: '#202830',
@@ -87,7 +95,7 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
         (response) =>
           response.url().endsWith(`/api/v1/terminal-themes/${createdThemeId}`) && response.request().method() === 'PUT',
       );
-      await editor.getByTestId('terminal-theme-save').click();
+      await editor.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await updatePromise).ok()).toBeTruthy();
       await expect(editor).toBeHidden({ timeout: 15_000 });
 
@@ -100,12 +108,12 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
     });
 
     await step('apply persists the custom theme across a full reload', async () => {
-      await customizer.getByTestId('terminal-theme-search').fill(EDITED_THEME_NAME);
-      const row = customizer.getByTestId(`terminal-theme-row-${createdThemeId}`);
+      await customizer.getByPlaceholder('Search theme name...', { exact: true }).fill(EDITED_THEME_NAME);
+      const row = customizer.getByRole('listitem').filter({ has: page.getByText(EDITED_THEME_NAME, { exact: true }) });
       const appearanceSave = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
-      await row.getByTestId('terminal-theme-apply').click();
+      await row.getByRole('button', { name: 'Apply', exact: true }).click();
       expect((await appearanceSave).ok()).toBeTruthy();
 
       await expect
@@ -118,23 +126,26 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByTitle('Customize Style').click();
-      const reloadedCustomizer = page.getByTestId('style-customizer');
-      await reloadedCustomizer.getByTestId('style-customizer-terminal-tab').click();
-      await reloadedCustomizer.getByTestId('terminal-theme-search').fill(EDITED_THEME_NAME);
-      const reloadedRow = reloadedCustomizer.getByTestId(`terminal-theme-row-${createdThemeId}`);
+      const reloadedCustomizer = page
+        .getByRole('heading', { name: 'Appearance Customizer', exact: true })
+        .locator('../..');
+      await reloadedCustomizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+      await reloadedCustomizer.getByPlaceholder('Search theme name...', { exact: true }).fill(EDITED_THEME_NAME);
+      const reloadedRow = reloadedCustomizer
+        .getByRole('listitem')
+        .filter({ has: page.getByText(EDITED_THEME_NAME, { exact: true }) });
       await expect(reloadedRow).toBeVisible();
-      await expect(reloadedRow.getByTestId('terminal-theme-apply')).toBeDisabled();
+      await expect(reloadedRow.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
     });
 
     await step('deleting an active custom theme removes it and falls back to another theme', async () => {
-      const customizerAfterReload = page.getByTestId('style-customizer');
-      const row = customizerAfterReload.getByTestId(`terminal-theme-row-${createdThemeId}`);
+      const row = customizer.getByRole('listitem').filter({ has: page.getByText(EDITED_THEME_NAME, { exact: true }) });
       const deletePromise = page.waitForResponse(
         (response) =>
           response.url().endsWith(`/api/v1/terminal-themes/${createdThemeId}`) &&
           response.request().method() === 'DELETE',
       );
-      await row.getByTestId('terminal-theme-delete').click();
+      await row.getByRole('button', { name: 'Delete', exact: true }).click();
       const confirm = page.getByRole('dialog', { name: 'Please confirm' });
       await expect(confirm).toBeVisible();
       await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();

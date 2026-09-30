@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
+  import { UiResizeHandle } from '@/foundation/ui';
   import type { TransferTask } from '../model/transfer';
   import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
 
@@ -31,8 +32,8 @@
     }),
     legacyKeys: ['nexus.transfer-progress-window'],
   } as const;
-  const MIN_WIDTH = 340;
-  const MIN_HEIGHT = 190;
+  const MIN_WIDTH = 280;
+  const MIN_HEIGHT = 130;
 
   const props = withDefaults(defineProps<{ tasks: TransferTask[]; sourceLabel?: string; teleport?: boolean }>(), {
     teleport: true,
@@ -40,8 +41,8 @@
   const emit = defineEmits<{ cancel: [id: string]; cancelAll: []; remove: [id: string]; hide: [] }>();
   const { t } = useI18n();
   const panel = ref<HTMLElement | null>(null);
-  const width = ref(440);
-  const height = ref(300);
+  const width = ref(360);
+  const height = ref(190);
   const position = ref({ x: 16, y: 16 });
   const initialized = ref(false);
   const aggregateSpeed = ref(0);
@@ -155,8 +156,8 @@
     }
 
     if (!restored) {
-      width.value = Math.min(440, availableWidth());
-      height.value = Math.min(300, availableHeight());
+      width.value = Math.min(360, availableWidth());
+      height.value = Math.min(190, availableHeight());
       position.value = {
         x: Math.max(8, window.innerWidth - width.value - 16),
         y: Math.max(8, window.innerHeight - height.value - 16),
@@ -210,7 +211,6 @@
     <div
       v-show="initialized"
       ref="panel"
-      data-testid="transfer-progress-center"
       class="transfer-progress-window fixed z-[60] flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
       :class="[
         `transfer-progress-window--${presentationMode}`,
@@ -221,20 +221,18 @@
     >
       <header class="transfer-progress-header shrink-0" @pointerdown="drag.startDragging">
         <template v-if="presentationMode === 'upload'">
-          <div class="flex min-w-0 flex-1 items-center gap-2">
+          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
               <span v-if="sourceLabel">{{ sourceLabel }} · </span>{{ t('fileManager.uploadTasks') }}
             </h4>
             <span
               v-if="activeTasks.length"
-              data-testid="transfer-progress-speed"
               class="shrink-0 whitespace-nowrap rounded-md bg-black/5 px-2 py-1 text-xs tabular-nums text-text-secondary dark:bg-white/5"
             >
               {{ t('fileManager.uploadSpeed') }} {{ formatSpeed(aggregateSpeed) }}
             </span>
             <button
               type="button"
-              data-testid="transfer-progress-hide"
               class="progress-icon-button h-7 w-7"
               :title="t('progressCenter.hide')"
               :aria-label="t('progressCenter.hide')"
@@ -245,8 +243,7 @@
             <button
               v-if="activeTasks.length > 1"
               type="button"
-              data-testid="transfer-progress-cancel-all"
-              class="shrink-0 rounded-md border border-red-300 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:bg-red-950/30 dark:text-red-300"
+              class="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10"
               @click="emit('cancelAll')"
             >
               {{ t('fileManager.actions.cancelAll') }} ({{ activeTasks.length }})
@@ -267,7 +264,6 @@
             <span v-if="sorted[0]" class="archive-percent">{{ Math.round(sorted[0].progress) }}%</span>
             <button
               type="button"
-              data-testid="transfer-progress-hide"
               class="progress-icon-button h-7 w-7"
               :title="t('progressCenter.hide')"
               :aria-label="t('progressCenter.hide')"
@@ -284,17 +280,12 @@
             >{{ presentationMode === 'transfer' ? t('fileManager.transferTasks') : t('progressCenter.title') }}
           </h4>
           <div class="flex items-center gap-2">
-            <span
-              v-if="activeTasks.length"
-              data-testid="transfer-progress-speed"
-              class="whitespace-nowrap text-xs tabular-nums text-text-secondary"
-            >
+            <span v-if="activeTasks.length" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
               {{ t('fileManager.transferSpeed') }} {{ formatSpeed(aggregateSpeed) }}
             </span>
             <button
               v-if="activeTasks.length > 1"
               type="button"
-              data-testid="transfer-progress-cancel-all"
               class="rounded px-2 py-1 text-xs text-error hover:bg-error/10"
               @click="emit('cancelAll')"
             >
@@ -302,7 +293,6 @@
             </button>
             <button
               type="button"
-              data-testid="transfer-progress-hide"
               class="progress-icon-button h-6 w-6"
               :title="t('progressCenter.hide')"
               :aria-label="t('progressCenter.hide')"
@@ -323,22 +313,25 @@
         <li
           v-for="task in sorted"
           :key="task.id"
-          data-testid="transfer-progress-task"
           :data-task-id="task.id"
           :data-task-kind="task.kind"
           :data-task-status="task.status"
           class="upload-task-row mb-1.5 text-xs last:mb-0"
         >
-          <span class="min-w-0 truncate" :title="task.label"
-            >{{ task.label }} ({{ t(`progressCenter.status.${task.status}`) }})</span
-          >
           <div class="min-w-0">
+            <div class="truncate font-medium" :title="task.label">{{ currentFilename(task) }}</div>
+            <div class="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-text-secondary">
+              <span>{{ t(`progressCenter.status.${task.status}`) }}</span>
+              <span class="tabular-nums"
+                >{{ formatBytes(task.bytesWritten)
+                }}<template v-if="task.totalBytes > 0"> / {{ formatBytes(task.totalBytes) }}</template></span
+              >
+            </div>
             <progress
               v-if="!done(task.status)"
-              data-testid="transfer-progress-bar"
               :value="task.progress"
               max="100"
-              class="legacy-progress block h-2 w-full"
+              class="legacy-progress mt-2 block h-1.5 w-full"
             ></progress>
           </div>
           <span v-if="!done(task.status)" class="text-right text-xs tabular-nums text-text-secondary">
@@ -348,8 +341,7 @@
           <button
             v-if="!done(task.status)"
             type="button"
-            data-testid="transfer-progress-cancel"
-            class="justify-self-end rounded border border-red-300 bg-red-100 px-1.5 py-0.5 text-xs text-red-700 hover:bg-red-200"
+            class="justify-self-end rounded-lg px-2 py-1 text-xs text-error hover:bg-error/10"
             @click="emit('cancel', task.id)"
           >
             {{ t('common.cancel') }}
@@ -363,8 +355,10 @@
           >
             <i class="fas fa-times" aria-hidden="true"></i>
           </button>
-          <span v-if="task.error || task.errorKind" class="col-span-4 text-xs text-error">{{ taskError(task) }}</span>
-          <span v-else-if="task.warning || task.warningKind" class="col-span-4 text-xs text-warning">{{
+          <span v-if="task.error || task.errorKind" class="col-span-3 break-words text-xs text-error">{{
+            taskError(task)
+          }}</span>
+          <span v-else-if="task.warning || task.warningKind" class="col-span-3 break-words text-xs text-warning">{{
             taskWarning(task)
           }}</span>
         </li>
@@ -377,7 +371,6 @@
         <li
           v-for="task in sorted"
           :key="task.id"
-          data-testid="transfer-progress-task"
           :data-task-id="task.id"
           :data-task-kind="task.kind"
           :data-task-status="task.status"
@@ -394,7 +387,6 @@
               >
             </div>
             <div
-              data-testid="transfer-progress-bar"
               class="archive-progress-track"
               role="progressbar"
               aria-valuemin="0"
@@ -414,7 +406,6 @@
           <button
             v-if="!done(task.status)"
             type="button"
-            data-testid="transfer-progress-cancel"
             class="archive-stop-button"
             :disabled="task.status === 'cancelling'"
             @click="emit('cancel', task.id)"
@@ -434,7 +425,6 @@
         <li
           v-for="task in sorted"
           :key="task.id"
-          data-testid="transfer-progress-task"
           :data-task-id="task.id"
           :data-task-kind="task.kind"
           :data-task-status="task.status"
@@ -446,12 +436,7 @@
             >
             <span class="shrink-0 tabular-nums">{{ Math.round(task.progress * 10) / 10 }}%</span>
           </div>
-          <progress
-            data-testid="transfer-progress-bar"
-            :value="task.progress"
-            max="100"
-            class="legacy-progress block h-2 w-full"
-          ></progress>
+          <progress :value="task.progress" max="100" class="legacy-progress block h-2 w-full"></progress>
           <div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
             <span :class="task.status === 'error' ? 'text-error' : ''">{{
               task.error || task.errorKind ? taskError(task) : t(`progressCenter.status.${task.status}`)
@@ -467,26 +452,19 @@
             </span>
           </div>
           <div v-if="!done(task.status)" class="mt-1 flex justify-end">
-            <button
-              type="button"
-              data-testid="transfer-progress-cancel"
-              class="text-xs text-error hover:underline"
-              @click="emit('cancel', task.id)"
-            >
+            <button type="button" class="text-xs text-error hover:underline" @click="emit('cancel', task.id)">
               {{ t('common.cancel') }}
             </button>
           </div>
         </li>
       </ul>
 
-      <button
-        type="button"
-        data-testid="transfer-progress-resize"
-        class="transfer-progress-resize"
+      <UiResizeHandle
+        class="absolute bottom-0 right-0 z-10"
         :title="t('progressCenter.resize')"
         :aria-label="t('progressCenter.resize')"
         @pointerdown.stop="resize.startResize"
-      ></button>
+      />
     </div>
   </Teleport>
 </template>
@@ -494,39 +472,29 @@
 <style scoped>
   .transfer-progress-window {
     box-sizing: border-box;
-    min-width: min(340px, calc(100vw - 16px));
-    min-height: min(190px, calc(100vh - 16px));
+    min-width: min(280px, calc(100vw - 16px));
+    min-height: min(130px, calc(100vh - 16px));
     max-width: calc(100vw - 16px);
     max-height: calc(100vh - 16px);
-    border-radius: 10px;
+    border-radius: 14px;
+    background: var(--glass-panel-fill);
   }
   .transfer-progress-window--archive {
-    border-color: color-mix(in srgb, var(--border-color) 75%, var(--link-active-color, #007bff));
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--app-bg-color) 94%, transparent);
-    backdrop-filter: blur(12px);
+    border-color: var(--border-color);
   }
   .transfer-progress-header {
     display: flex;
     min-height: 45px;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     border-bottom: 1px solid var(--border-color);
-    padding: 10px 12px;
+    padding: 8px 10px;
     cursor: grab;
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--link-active-color, #007bff) 12%, transparent),
-      color-mix(in srgb, var(--header-bg-color) 92%, transparent)
-    );
+    background: var(--glass-nav-fill);
   }
   .transfer-progress-window--archive .transfer-progress-header {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--link-active-color, #007bff) 16%, transparent),
-      transparent
-    );
+    background: var(--glass-nav-fill);
   }
   .dragging .transfer-progress-header {
     cursor: grabbing;
@@ -547,28 +515,29 @@
   }
   .upload-task-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 7rem 3.25rem auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     column-gap: 0.5rem;
     row-gap: 0.25rem;
+    padding-block: 6px;
   }
   .legacy-progress {
     appearance: none;
     overflow: hidden;
     border-radius: 999px;
-    background: #d1d5db;
+    background: var(--border-color);
   }
   .legacy-progress::-webkit-progress-bar {
     border-radius: 999px;
-    background: #d1d5db;
+    background: var(--border-color);
   }
   .legacy-progress::-webkit-progress-value {
     border-radius: 999px;
-    background: #2563eb;
+    background: var(--link-active-color);
   }
   .legacy-progress::-moz-progress-bar {
     border-radius: 999px;
-    background: #2563eb;
+    background: var(--link-active-color);
   }
   .archive-icon {
     display: grid;
@@ -629,16 +598,16 @@
     align-items: center;
     justify-content: center;
     gap: 7px;
-    border: 1px solid rgba(239, 68, 68, 0.4);
+    border: 1px solid color-mix(in srgb, var(--color-error) 40%, transparent);
     border-radius: 8px;
-    background: rgba(239, 68, 68, 0.12);
+    background: color-mix(in srgb, var(--color-error) 12%, transparent);
     padding: 7px 10px;
-    color: rgb(248, 113, 113);
+    color: var(--color-error);
     font-size: 12px;
     font-weight: 600;
   }
   .archive-stop-button:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.2);
+    background: color-mix(in srgb, var(--color-error) 20%, transparent);
   }
   .archive-stop-button:disabled {
     cursor: wait;
@@ -658,36 +627,9 @@
     scrollbar-width: thin;
     scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
   }
-  .transfer-progress-resize {
-    position: absolute;
-    right: 2px;
-    bottom: 2px;
-    width: 18px;
-    height: 18px;
-    border: 0;
-    background: transparent;
-    cursor: nwse-resize;
-    opacity: 0.55;
-  }
-  .transfer-progress-resize::before,
-  .transfer-progress-resize::after {
-    content: '';
-    position: absolute;
-    right: 3px;
-    bottom: 3px;
-    width: 8px;
-    height: 1px;
-    background: var(--text-color-secondary, currentColor);
-    transform: rotate(-45deg);
-    transform-origin: right center;
-  }
-  .transfer-progress-resize::after {
-    right: 6px;
-    width: 5px;
-  }
   @media (max-width: 520px) {
     .upload-task-row {
-      grid-template-columns: minmax(0, 1fr) 5.75rem 2.75rem auto;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       column-gap: 0.35rem;
     }
   }

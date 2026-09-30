@@ -5,10 +5,12 @@
   import {
     UiModal,
     UiButton,
+    UiActionGroup,
     UiCheckbox,
     UiEmptyState,
     UiInfoHint,
     UiPopover,
+    UiResizeHandle,
     UiSelect,
     type UiSelectOption,
   } from '@/foundation/ui';
@@ -20,6 +22,7 @@
   import {
     agentApi,
     formatAgentApiError,
+    providerErrorCategory,
     type AgentDiscoveredProviderModelDto,
     type AgentModelRegistryStatusDto,
     type AgentProviderCreateRequestDto,
@@ -59,7 +62,6 @@
 
   const emit = defineEmits<{
     toggle: [provider: AgentProviderViewDto, enabled: boolean];
-    protocol: [provider: AgentProviderViewDto, protocol: AgentProviderViewDto['protocol']];
     discover: [provider: AgentProviderViewDto];
     defaultModel: [providerId: string, modelId: string];
     delete: [provider: AgentProviderViewDto];
@@ -188,11 +190,6 @@
 
   const protocolFromValue = (value: unknown): AgentProviderViewDto['protocol'] =>
     value === 'responses' ? 'responses' : 'chat-completions';
-
-  const protocolOptions = computed<UiSelectOption[]>(() => [
-    { value: 'chat-completions', label: t('agent.settings.providers.protocolChat') },
-    { value: 'responses', label: t('agent.settings.providers.protocolResponses') },
-  ]);
 
   const form = reactive({
     displayName: '',
@@ -401,10 +398,13 @@
           `${provider.displayName} · ${modelId}: ${t('agent.settings.providers.testPassed')} (${latencyText})`,
         );
       } else {
-        testResults[key] = { state: 'error', message: t('agent.ui.testFailed') };
+        const code = result.errorCode;
+        const category = providerErrorCategory(code ?? '') ?? 'unavailable';
+        const message = `${t(`agent.apiErrors.${category}`)}${code && /^[A-Z0-9_]+$/.test(code) ? ` (${code})` : ''}`;
+        testResults[key] = { state: 'error', message };
         operationFeedback.notifyError({
           operation: 'test-model',
-          message: `${provider.displayName} · ${modelId}: ${t('agent.settings.providers.testFailedMessage')}`,
+          message: `${provider.displayName} · ${modelId}: ${message}`,
           context: { providerId: provider.id, modelId },
         });
       }
@@ -1271,7 +1271,7 @@
             :aria-label="$t('agent.settings.providers.defaultModel')"
             align="end"
             density="comfortable"
-            class="default-model-select"
+            fit-content
             panel-class="max-h-72 min-w-64 max-w-[min(480px,calc(100vw-24px))]"
             @update:model-value="selectDefaultModel"
           />
@@ -1443,7 +1443,6 @@
         <article
           v-for="provider in providers"
           :key="provider.id"
-          data-testid="agent-provider-card"
           :data-provider-id="provider.id"
           class="rounded-2xl border bg-card transition-all hover:border-primary/60 shadow-xs overflow-hidden"
           :class="provider.enabled ? 'border-border' : 'border-border/70 opacity-80'"
@@ -1537,22 +1536,6 @@
             <div
               class="flex items-center justify-between md:justify-end gap-2 sm:gap-2.5 shrink-0 pt-2.5 md:pt-0 border-t border-border/40 md:border-0 w-full md:w-auto"
             >
-              <!-- 协议选择器（紧凑排布） -->
-              <div class="min-w-0 flex-1 sm:flex-initial sm:w-[136px]">
-                <UiSelect
-                  density="compact"
-                  text-align="center"
-                  :hide-indicator="true"
-                  panel-class="!min-w-[136px]"
-                  class="w-full text-[11px]"
-                  :aria-label="$t('agent.settings.providers.protocol')"
-                  :disabled="busy"
-                  :model-value="provider.protocol"
-                  :options="protocolOptions"
-                  @update:model-value="(value: unknown) => emit('protocol', provider, protocolFromValue(value))"
-                />
-              </div>
-
               <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
                 <!-- 模型与测试（仅图标） -->
                 <UiButton
@@ -1835,7 +1818,6 @@
                       density="compact"
                       v-if="removableConfiguredModels(provider).length > 0"
                       type="button"
-                      data-testid="configured-models-remove-all"
                       :disabled="busy"
                       :title="$t('agent.settings.providers.removeAllModels')"
                       @click="confirmingRemoveAll = provider"
@@ -2035,7 +2017,7 @@
         </UiButton>
         <button
           type="button"
-          class="rounded-lg bg-error px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-error/90 active:scale-95 disabled:opacity-50 cursor-pointer"
+          class="rounded-lg bg-error px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-error/90 disabled:opacity-50 cursor-pointer"
           :disabled="busy"
           @click="confirmDelete"
         >
@@ -2054,23 +2036,17 @@
     :close-on-escape="!modalTesting"
     :focus-on-open="true"
     :restore-focus="true"
-    overlay-class="provider-add-overlay"
-    panel-class="provider-add-panel max-w-xl p-5 sm:p-6 rounded-2xl"
+    panel-class="ui-form-surface provider-add-panel max-w-xl p-5 sm:p-6 rounded-2xl"
     :panel-style="providerPanelStyle"
     @close="closeModal"
   >
     <template #panel-overlay>
-      <button
-        type="button"
-        class="provider-add-resize-handle absolute bottom-0 right-0 z-40 h-6 w-6 touch-none select-none cursor-nwse-resize rounded-br-2xl bg-transparent text-text-secondary/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+      <UiResizeHandle
+        class="provider-add-resize-handle absolute bottom-0 right-0 z-40"
         :title="$t('agent.settings.providers.resize')"
         :aria-label="$t('agent.settings.providers.resize')"
         @pointerdown.stop="startProviderPanelResize"
-      >
-        <svg class="absolute bottom-1 right-1 h-3 w-3" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <path d="M10.5 1.5a9 9 0 0 1-9 9" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" />
-        </svg>
-      </button>
+      />
     </template>
 
     <div class="space-y-4">
@@ -2099,7 +2075,7 @@
               $t('agent.settings.providers.protocol')
             }}</span>
             <UiSelect
-              class="provider-modal-select w-full"
+              class="w-full"
               :model-value="form.protocol"
               :options="[
                 { value: 'chat-completions', label: $t('agent.settings.providers.protocolChat') },
@@ -2331,7 +2307,6 @@
                 :id="providerModelInputId"
                 v-model="form.modelId"
                 required
-                data-testid="agent-provider-model-id"
                 data-no-highlight
                 class="provider-modal-input h-8.5 w-full rounded-lg px-2.5 font-mono text-xs text-foreground outline-none"
                 :placeholder="$t('agent.settings.providers.modelPlaceholder')"
@@ -2478,7 +2453,7 @@
         <div
           v-for="model in filteredTestModalModels"
           :key="model.id"
-          class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-header/20 p-3 text-xs transition-all hover:border-border/90 hover:bg-header/35"
+          class="flex flex-col gap-3 rounded-xl border border-border/70 bg-header/20 p-3 text-xs transition-all hover:border-border/90 hover:bg-header/35"
         >
           <!-- 左侧信息 -->
           <div class="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
@@ -2489,7 +2464,9 @@
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="font-mono text-xs font-bold text-foreground truncate">{{ model.id }}</span>
+                <span class="min-w-0 max-w-full font-mono text-xs font-bold text-foreground [overflow-wrap:anywhere]">{{
+                  model.id
+                }}</span>
                 <span
                   v-if="currentTestModalProvider.id === defaultProviderId && model.id === defaultModelId"
                   class="inline-flex items-center gap-1 rounded-md bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[11px] font-semibold text-primary"
@@ -2547,8 +2524,8 @@
             </div>
           </div>
 
-          <!-- 右侧操作与测试 -->
-          <div class="flex flex-col gap-1.5 w-full sm:w-56 sm:shrink-0 justify-center">
+          <!-- 信息下方的操作与测试反馈 -->
+          <div class="flex min-w-0 flex-col gap-2 w-full border-t border-border/50 pt-3">
             <!-- 测试反馈微芯片 -->
             <span
               v-if="testResults[testKey(currentTestModalProvider, model.id)]"
@@ -2571,11 +2548,13 @@
                 "
                 class="text-[11px]"
               ></i>
-              <span class="truncate">{{ testResults[testKey(currentTestModalProvider, model.id)]?.message }}</span>
+              <span class="min-w-0 [overflow-wrap:anywhere]">{{
+                testResults[testKey(currentTestModalProvider, model.id)]?.message
+              }}</span>
             </span>
 
-            <!-- 2x2 按钮网格：两个一组、定长定宽、两行 -->
-            <div class="grid grid-cols-2 gap-1.5 w-full">
+            <!-- 桌面四列，手机两列，尺寸由公共操作组持有 -->
+            <UiActionGroup layout="model">
               <!-- 设为默认模型 / 当前默认 -->
               <UiButton
                 appearance="soft"
@@ -2666,7 +2645,7 @@
                 <i class="fa-regular fa-trash-can text-[10px]"></i>
                 <span>{{ $t('agent.settings.providers.removeModel') }}</span>
               </UiButton>
-            </div>
+            </UiActionGroup>
           </div>
         </div>
 

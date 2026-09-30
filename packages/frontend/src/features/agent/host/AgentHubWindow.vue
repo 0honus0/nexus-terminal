@@ -2,7 +2,7 @@
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { logger } from '@/client/logging/logger';
   import { structurallyEqual } from '@/foundation/data';
-  import { overlayStack, type OverlayStackRegistration } from '@/foundation/ui';
+  import { overlayStack, UiResizeHandle, type OverlayStackRegistration } from '@/foundation/ui';
   import type { AgentAppSummaryDto, AgentHostSummaryDto } from '../api/agent-api';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
@@ -316,7 +316,7 @@
     if (!delta) return;
     event.preventDefault();
     event.stopPropagation();
-    agentWindowManager.resize(state.bounds.width + delta.dx, state.bounds.height + delta.dy);
+    agentWindowManager.resize(state.bounds.width + delta.dx * 2, state.bounds.height + delta.dy * 2);
     emit('layoutChange');
   };
 
@@ -416,7 +416,9 @@
       if (e.pointerId !== undefined && pointerId !== undefined && e.pointerId !== pointerId) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      agentWindowManager.resize(startBounds.width + dx, startBounds.height + dy);
+      // Both edges move around the center, so doubling the size delta keeps
+      // the bottom-right handle moving 1:1 with the pointer.
+      agentWindowManager.resize(startBounds.width + dx * 2, startBounds.height + dy * 2, startBounds);
     };
 
     const cleanup = () => {
@@ -933,20 +935,15 @@
       </div>
     </div>
 
-    <button
+    <UiResizeHandle
       v-if="!state.maximized"
-      type="button"
-      class="absolute bottom-0 right-0 z-40 flex h-6 w-6 touch-none select-none cursor-nwse-resize items-end justify-end rounded-tl-md rounded-br-2xl p-0.5 text-text-secondary/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+      class="absolute bottom-0 right-0 z-40"
       :title="$t('agent.hub.resizeHint')"
       :aria-label="$t('agent.hub.resize')"
       :aria-keyshortcuts="'ArrowLeft ArrowRight ArrowUp ArrowDown'"
       @pointerdown="handleResizePointerDown"
       @keydown="handleResizeKeydown"
-    >
-      <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-        <path d="M10.4 1.6A8.8 8.8 0 0 1 1.6 10.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-      </svg>
-    </button>
+    />
   </section>
 </template>
 

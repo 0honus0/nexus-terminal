@@ -61,24 +61,20 @@ const findPack = (catalog: WorkspaceRuntimeCatalog, familyId: string, versionId:
   const version = versionId.trim();
   if (!family || !version || family.length > 128 || version.length > 128) throw new Error('VALIDATION_FAILED');
   const pack = catalog.packs.find((candidate) => candidate.familyId === family && candidate.versionId === version);
-  if (!pack || pack.status === 'unavailable' || !pack.contentDigest) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
+  if (!pack || pack.status === 'unavailable') throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
   return pack;
 };
 
 const packRef = (pack: ToolchainCatalogPack): ToolchainPackRef => ({
   familyId: pack.familyId,
   versionId: pack.versionId,
-  contentDigest: pack.contentDigest,
 });
 
 const uniqueRefs = (refs: readonly ToolchainPackRef[]): ToolchainPackRef[] => {
   const values = new Map<string, ToolchainPackRef>();
-  for (const ref of refs) values.set(`${ref.familyId}\u0000${ref.versionId}\u0000${ref.contentDigest}`, ref);
+  for (const ref of refs) values.set(`${ref.familyId}\u0000${ref.versionId}`, ref);
   return [...values.values()].sort(
-    (a, b) =>
-      a.familyId.localeCompare(b.familyId) ||
-      a.versionId.localeCompare(b.versionId) ||
-      a.contentDigest.localeCompare(b.contentDigest),
+    (a, b) => a.familyId.localeCompare(b.familyId) || a.versionId.localeCompare(b.versionId),
   );
 };
 
@@ -135,19 +131,13 @@ export class WorkspaceRuntimeManagementService {
     const plan = setupPlan(catalog, settings.requestedSettings.workspaceRuntime, selections);
     const missingPacks = plan.packs.filter((ref) => {
       const candidate = catalog.packs.find(
-        (pack) =>
-          pack.familyId === ref.familyId &&
-          pack.versionId === ref.versionId &&
-          pack.contentDigest === ref.contentDigest,
+        (pack) => pack.familyId === ref.familyId && pack.versionId === ref.versionId,
       );
       return !candidate?.installed;
     });
     const installBytes = missingPacks.reduce((total, ref) => {
       const candidate = catalog.packs.find(
-        (pack) =>
-          pack.familyId === ref.familyId &&
-          pack.versionId === ref.versionId &&
-          pack.contentDigest === ref.contentDigest,
+        (pack) => pack.familyId === ref.familyId && pack.versionId === ref.versionId,
       );
       return total + (candidate?.diskBytes ?? 0);
     }, 0);
@@ -250,7 +240,6 @@ export class WorkspaceRuntimeManagementService {
       payload: asJson({
         familyId: pack.familyId,
         versionId: pack.versionId,
-        contentDigest: pack.contentDigest,
         enabledVersionIds: remainingEnabled,
         defaultVersionId: replacementDefaultVersionId,
       }),
@@ -277,9 +266,7 @@ export class WorkspaceRuntimeManagementService {
     const payload = record(confirmation.payload);
     const familyId = String(payload.familyId ?? '');
     const versionId = String(payload.versionId ?? '');
-    const expectedDigest = String(payload.contentDigest ?? '');
     const pack = findPack(catalog, familyId, versionId);
-    if (pack.contentDigest !== expectedDigest) throw new Error('CATALOG_REVISION_CONFLICT');
     if (pack.inUse) throw new Error('WORKSPACE_TOOLCHAIN_IN_USE');
     const next = structuredClone(settings.requestedSettings.workspaceRuntime);
     next.toolVersions[familyId] = {

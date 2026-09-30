@@ -8,6 +8,7 @@
     UiFormField,
     UiInput,
     UiModal,
+    UiResizeHandle,
     UiTextarea,
     UiTokenInput,
     type UiTokenOption,
@@ -178,61 +179,29 @@
   >
     <template #panel-overlay>
       <template v-if="visible">
-        <div
-          data-testid="quick-command-resize-top"
-          class="quick-resize quick-resize--top"
-          @pointerdown.stop="resizeTop.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-right"
-          class="quick-resize quick-resize--right"
-          @pointerdown.stop="resizeRight.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-bottom"
-          class="quick-resize quick-resize--bottom"
-          @pointerdown.stop="resizeBottom.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-left"
-          class="quick-resize quick-resize--left"
-          @pointerdown.stop="resizeLeft.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-top-left"
-          class="quick-resize quick-resize--top-left"
-          @pointerdown.stop="resizeTopLeft.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-top-right"
-          class="quick-resize quick-resize--top-right"
-          @pointerdown.stop="resizeTopRight.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-bottom-right"
-          class="quick-resize quick-resize--bottom-right"
+        <div class="quick-resize quick-resize--top" @pointerdown.stop="resizeTop.startResize"></div>
+        <div class="quick-resize quick-resize--right" @pointerdown.stop="resizeRight.startResize"></div>
+        <div class="quick-resize quick-resize--bottom" @pointerdown.stop="resizeBottom.startResize"></div>
+        <div class="quick-resize quick-resize--left" @pointerdown.stop="resizeLeft.startResize"></div>
+        <div class="quick-resize quick-resize--top-left" @pointerdown.stop="resizeTopLeft.startResize"></div>
+        <div class="quick-resize quick-resize--top-right" @pointerdown.stop="resizeTopRight.startResize"></div>
+        <UiResizeHandle
+          class="quick-resize absolute bottom-0 right-0 z-30"
+          :title="t('quickCommands.form.resize')"
+          :aria-label="t('quickCommands.form.resize')"
           @pointerdown.stop="resizeBottomRight.startResize"
-        ></div>
-        <div
-          data-testid="quick-command-resize-bottom-left"
-          class="quick-resize quick-resize--bottom-left"
-          @pointerdown.stop="resizeBottomLeft.startResize"
-        ></div>
+        />
+        <div class="quick-resize quick-resize--bottom-left" @pointerdown.stop="resizeBottomLeft.startResize"></div>
       </template>
     </template>
-    <form data-testid="quick-command-form" class="space-y-5 py-5" @submit.prevent="save">
+    <form class="space-y-5 py-5" @submit.prevent="save">
       <UiFormField :label="t('quickCommands.form.name')">
-        <UiInput
-          v-model="form.name"
-          data-testid="quick-command-name"
-          :placeholder="t('quickCommands.form.namePlaceholder')"
-        />
+        <UiInput v-model="form.name" :placeholder="t('quickCommands.form.namePlaceholder')" />
       </UiFormField>
 
       <UiFormField :label="t('quickCommands.form.command')">
         <UiTextarea
           v-model="form.command"
-          data-testid="quick-command-command"
           :min-rows="5"
           required
           class="min-h-[80px] whitespace-nowrap"
@@ -243,8 +212,6 @@
       <UiFormField :label="t('quickCommands.form.tags')">
         <UiTokenInput
           :model-value="form.tagIds.map(String)"
-          input-test-id="tag-input-text"
-          token-test-id="tag-chip"
           :options="options()"
           :placeholder="t('quickCommands.form.tagsPlaceholder')"
           :remove-token-label="t('quickCommands.tags.removeSelection')"
@@ -273,13 +240,11 @@
           >
             <UiInput
               v-model="variable.key"
-              :data-testid="`quick-command-variable-name-${index}`"
               :placeholder="t('quickCommands.form.variableNamePlaceholder')"
               @keydown.enter.prevent.stop
             />
             <UiTextarea
               v-model="variable.value"
-              :data-testid="`quick-command-variable-value-${index}`"
               :min-rows="2"
               class="min-h-[40px] resize-y"
               :placeholder="t('quickCommands.form.variableValuePlaceholder')"
@@ -295,7 +260,6 @@
           </div>
         </div>
         <button
-          data-testid="quick-command-variable-add"
           type="button"
           class="mt-3 w-full rounded-md border border-primary/50 px-4 py-2 text-sm text-primary transition-colors hover:bg-primary/10"
           @click="form.variables.push({ key: '', value: '' })"
@@ -306,22 +270,11 @@
 
       <div class="flex justify-end gap-3 border-t border-border pt-4">
         <UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
-        <button
-          data-testid="quick-command-execute-draft"
-          type="button"
-          class="execute-action"
-          :disabled="!form.command.trim()"
-          @click="execute"
-        >
-          <i class="fas fa-play mr-1" aria-hidden="true"></i>{{ t('quickCommands.form.execute') }}
-        </button>
-        <UiButton
-          data-testid="quick-command-submit"
-          type="submit"
-          appearance="solid"
-          tone="primary"
-          :disabled="!form.command.trim()"
-        >
+        <UiButton type="button" appearance="solid" tone="success" :disabled="!form.command.trim()" @click="execute">
+          <template #leading><i class="fas fa-play" aria-hidden="true"></i></template>
+          {{ t('quickCommands.form.execute') }}
+        </UiButton>
+        <UiButton type="submit" appearance="solid" tone="primary" :disabled="!form.command.trim()">
           {{ t('common.save') }}
         </UiButton>
       </div>
@@ -330,25 +283,6 @@
 </template>
 
 <style scoped>
-  .execute-action {
-    border-radius: 0.5rem;
-    background: var(--status-success-color, #28a745);
-    padding: 0.5rem 1.25rem;
-    color: white;
-    font-size: 0.875rem;
-    font-weight: 600;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
-    transition:
-      opacity 0.15s ease,
-      filter 0.15s ease;
-  }
-  .execute-action:hover:not(:disabled) {
-    filter: brightness(0.95);
-  }
-  .execute-action:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
   .quick-resize {
     position: absolute;
     z-index: 20;
@@ -383,7 +317,6 @@
   }
   .quick-resize--top-left,
   .quick-resize--top-right,
-  .quick-resize--bottom-right,
   .quick-resize--bottom-left {
     width: 14px;
     height: 14px;
@@ -397,11 +330,6 @@
     top: 0;
     right: 0;
     cursor: nesw-resize;
-  }
-  .quick-resize--bottom-right {
-    right: 0;
-    bottom: 0;
-    cursor: nwse-resize;
   }
   .quick-resize--bottom-left {
     bottom: 0;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { defineAsyncComponent, ref, watch } from 'vue';
-  import { Splitpanes, Pane } from 'splitpanes';
+  import { useI18n } from 'vue-i18n';
+  import { Splitpanes, Pane, type SplitpanesResizedPayload } from 'splitpanes';
   import 'splitpanes/dist/splitpanes.css';
   import { loadTerminalView, type TerminalChannel, type TerminalVisualOptions } from '@/features/terminal/public';
   import {
@@ -27,6 +28,7 @@
   import type { WorkspaceRuntimeSession } from '../session';
 
   const TerminalView = defineAsyncComponent(loadTerminalView);
+  const { t } = useI18n();
   const FileManager = defineAsyncComponent(loadFileManager);
   const FileEditor = defineAsyncComponent(loadFileEditor);
   const FilePreview = defineAsyncComponent(loadFilePreview);
@@ -40,7 +42,7 @@
     focus?: () => void;
     fit?: () => void;
     clear?: () => void;
-    serialize?: () => string;
+    serialize?: () => Promise<string>;
     openSearch?: () => void;
     findNext?: () => void;
     findPrevious?: () => void;
@@ -146,8 +148,10 @@
 
   const executeQuick = (intent: ExecuteCommandIntent) => emit('command', intent.command, Boolean(intent.allSessions));
   const executeHistory = (intent: ExecuteHistoryIntent) => emit('command', intent.command, Boolean(intent.allSessions));
-  const handleLayoutResize = (payload: { panes: Array<{ size: number }> }): void => {
-    if (props.layoutLocked || props.node.type !== 'container') return;
+  const handleLayoutResize = (payload: SplitpanesResizedPayload): void => {
+    // Splitpanes also emits `resized` while panes register or reconcile. Only an
+    // explicit splitter interaction owns and persists Workspace layout sizes.
+    if (!payload.event || props.layoutLocked || props.node.type !== 'container') return;
     const sizes = payload.panes.map((pane) => pane.size);
     if (sizes.length !== (props.node.children?.length ?? 0) || sizes.some((size) => !Number.isFinite(size))) return;
     emit('layoutResize', props.node.id, sizes);
@@ -257,7 +261,7 @@
     </Pane>
   </Splitpanes>
 
-  <section v-else class="flex h-full min-h-0 flex-col overflow-hidden border border-border/60 bg-background">
+  <section v-else class="relative flex h-full min-h-0 flex-col overflow-hidden border border-border/60 bg-background">
     <WorkspaceConnectionList
       v-if="node.component === 'connections'"
       :show-tags="showConnectionTags"
@@ -270,6 +274,7 @@
       ref="terminalRef"
       :active="active !== false"
       class="min-h-0 flex-1"
+      :input-enabled="session.hasConnected.value"
       :channel="terminalChannel ?? session.adapters.terminal"
       :font-family="terminalFontFamily"
       :font-size="terminalFontSize"
@@ -289,7 +294,7 @@
       :quick-commands-grouped="showQuickCommandTags"
       :show-file-manager-button="popupFileManager"
       :show-editor-button="popupDocuments"
-      :ready="session.hasConnected.value"
+      :ready="session.state.value === 'connected'"
       :terminal-search-open="session.terminalState.searchOpen.value"
       :terminal-search-term="session.terminalState.searchTerm.value"
       @update:model-value="session.setCommandDraft($event)"
@@ -406,6 +411,16 @@
       @resume-marked="emit('resumeMarkedSuspended', $event)"
       @unmark="emit('unmarkSuspended', $event)"
     />
+    <div
+      v-if="node.component === 'terminal' && ['connecting', 'reconnecting'].includes(session.state.value)"
+      role="status"
+      class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center"
+    >
+      <span class="rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-foreground shadow-sm">
+        <i class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>
+        {{ t(`workspace.sessionState.${session.state.value}`) }}
+      </span>
+    </div>
   </section>
 </template>
 

@@ -122,7 +122,7 @@
     content-class="!py-0"
     @close="emit('close')"
   >
-    <div v-if="tag" data-testid="workspace-tag-group-manager" class="flex min-h-0 flex-col py-4">
+    <div v-if="tag" class="flex min-h-0 flex-col py-4">
       <div class="space-y-3 border-b border-border/50 px-4 pb-4">
         <label class="grid gap-1.5 text-sm text-text-secondary">
           <span>{{ t('workspaceConnectionList.manageTags.tagName') }}</span>
@@ -134,22 +134,16 @@
             v-model="search"
             type="text"
             :placeholder="t('workspaceConnectionList.manageTags.searchPlaceholder')"
-            data-testid="tag-group-search"
             class="min-w-0 w-full flex-1 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
           <div class="grid min-w-0 grid-cols-3 gap-2 sm:flex sm:shrink-0">
-            <button data-testid="tag-group-select-all" type="button" class="selection-action" @click="selectVisible">
+            <button type="button" class="selection-action" @click="selectVisible">
               {{ t('workspaceConnectionList.manageTags.selectAll') }}
             </button>
-            <button
-              data-testid="tag-group-deselect-all"
-              type="button"
-              class="selection-action"
-              @click="deselectVisible"
-            >
+            <button type="button" class="selection-action" @click="deselectVisible">
               {{ t('workspaceConnectionList.manageTags.deselectAll') }}
             </button>
-            <button data-testid="tag-group-invert" type="button" class="selection-action" @click="invertVisible">
+            <button type="button" class="selection-action" @click="invertVisible">
               {{ t('workspaceConnectionList.manageTags.invertSelection') }}
             </button>
           </div>
@@ -194,22 +188,11 @@
 
     <template #footer>
       <div v-if="tag" class="flex flex-wrap justify-end gap-2 sm:gap-3">
-        <button
-          data-testid="tag-group-delete"
-          type="button"
-          class="footer-action footer-action--danger"
-          @click="removeTag"
-        >
+        <button type="button" class="footer-action footer-action--danger" @click="removeTag">
           {{ t('common.delete') }}
         </button>
         <button type="button" class="footer-action" @click="emit('close')">{{ t('common.cancel') }}</button>
-        <button
-          data-testid="tag-group-save"
-          type="button"
-          class="footer-action footer-action--primary"
-          :disabled="saving"
-          @click="save"
-        >
+        <button type="button" class="footer-action footer-action--primary" :disabled="saving" @click="save">
           <i v-if="saving" class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>{{ t('common.save') }}
         </button>
       </div>

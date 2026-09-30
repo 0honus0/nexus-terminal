@@ -4,7 +4,7 @@ import type { ServerStatus } from '../../../platform/system/server-status.port';
 import type { SshResourceStatusService } from '../../../modules/system/ssh-resource-status.service';
 import type { SystemStatusService } from '../../../modules/system/system-status.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
-import { errorMessage } from '../shared/http-utils';
+import { errorMessage, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
 const remoteResourceStatusDto = (status: ServerStatus): RemoteResourceStatusDto => ({ ...status });
@@ -50,6 +50,26 @@ export const createSystemRouter = (dependencies: {
         s.json(payload);
       } catch (error) {
         s.status(500).json({ message: errorMessage(error) });
+      }
+    }),
+  );
+  r.get(
+    '/ssh-resources/:connectionId',
+    route(async (request, response) => {
+      const connectionId = parsePositiveId(String(request.params.connectionId));
+      if (!connectionId) {
+        response.status(400).json({ message: 'Invalid connection ID.' });
+        return;
+      }
+      try {
+        const resource = await dependencies.sshResourceStatus.getSshResourceStatus(connectionId);
+        if (!resource) {
+          response.status(404).json({ message: 'SSH connection not found.' });
+          return;
+        }
+        response.json(sshResourceStatusDto(resource));
+      } catch (error) {
+        response.status(500).json({ message: errorMessage(error) });
       }
     }),
   );

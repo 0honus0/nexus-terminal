@@ -192,15 +192,15 @@ export const workspaceRuntimeRegistry = {
     const session = new WorkspaceRuntimeSession(connection, {
       onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
     });
+    add(session);
     try {
       await session.connect(viewport);
-      // Initial connection is provisional: only publish the runtime after the backend has confirmed
-      // the Workspace binding. Terminal output received before mount is buffered by the channel.
-      return add(session);
+      if (sessions.get(session.id) !== session) throw new DOMException('Workspace closed', 'AbortError');
+      return session;
     } catch (error) {
-      // Failed initial connections are not sessions. Dispose cancels any reconnect timer that a
-      // terminal/transport failure may have scheduled before connect() rejected.
-      session.dispose('Initial Workspace connection failed');
+      if (sessions.get(session.id) !== session) throw new DOMException('Workspace closed', 'AbortError');
+      // The provisional tab is visible while connecting, then removed if the first bind fails.
+      removeRuntime(session.id, 'Initial Workspace connection failed');
       throw error;
     }
   },

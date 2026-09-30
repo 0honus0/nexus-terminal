@@ -7,17 +7,15 @@ ARG PNPM_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-    COREPACK_HOME=/opt/corepack \
     PNPM_HOME=/opt/pnpm \
     PNPM_CONFIG_STORE_DIR=/opt/pnpm/store \
     PNPM_CONFIG_SIDE_EFFECTS_CACHE=true \
     XDG_CACHE_HOME=/opt/pnpm/cache \
     npm_config_nodedir=/usr/local \
     E2E_RUNNER_FINGERPRINT=${E2E_RUNNER_FINGERPRINT} \
-    PATH=/opt/pnpm:/opt/corepack:${PATH}
+    PATH=/opt/pnpm:${PATH}
 
-RUN corepack enable \
-  && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
+RUN npm install --global "pnpm@${PNPM_VERSION}" \
   && pnpm dlx "playwright@${PLAYWRIGHT_VERSION}" install --with-deps --only-shell chromium \
   && apt-get update \
   && apt-get install -y --no-install-recommends bzip2 ca-certificates git openssh-client rsync sshpass unzip zip \

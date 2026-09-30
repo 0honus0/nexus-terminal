@@ -47,8 +47,6 @@
     :placeholder="t('tags.inputPlaceholder')"
     :remove-token-label="t('tags.removeSelection')"
     :delete-option-label="t('tags.deleteTagGlobally')"
-    input-test-id="tag-input-text"
-    token-test-id="tag-chip"
     allow-custom
     allow-option-delete
     @create="create"

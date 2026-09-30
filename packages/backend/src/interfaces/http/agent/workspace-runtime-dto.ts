@@ -51,7 +51,6 @@ export const workspaceRuntimeCatalogDto = (value: Catalog): AgentWorkspaceRuntim
   packs: value.packs.map((pack) => ({
     familyId: pack.familyId,
     versionId: pack.versionId,
-    contentDigest: pack.contentDigest,
     displayName: pack.displayName,
     diskBytes: pack.diskBytes,
     status: pack.status,

@@ -2,13 +2,17 @@
 
 > 状态：Current architecture baseline
 >
-> 适用分支：`main`
->
-> 本文件是 Nexus Agent 的**唯一长期架构文档**。软件行为需求以 [`software-requirements/requirements/agent.md`](software-requirements/requirements/agent.md) 为准；强制工程约束以 [`software-requirements/engineering-constraints.md`](software-requirements/engineering-constraints.md) 为准。历史实现过程、重构 review 和阶段施工记录不再作为规范源。
+> 本文件是 Nexus Agent 的**唯一长期架构文档**。软件行为需求以 [`USAGE.md`](USAGE.md#agent) 为准；强制开发约束以根目录 [`AGENTS.md`](../AGENTS.md) 为准。Bug 修复与需求变更同步维护 USAGE，涉及 Agent owner 或 contract 的变化同步维护本文。
 
 ## 1. 产品定位
 
+提供商 SDK 错误由 infrastructure 的 `providers/provider-error.ts` 表驱动映射，保留 HTTP 状态、DNS、TLS、网络超时、响应校验失败的区别；不记录上游响应正文或凭据。HTTP 错误规则保留具体模型错误码；前端 `agent-api-error.ts` 用统一分类表本地化，模型测试复用同一张表。每个模型的可选 protocol 由能力配置通过既有 models 更新 contract 保存到 models JSON，解析后由 SDK adapter 优先使用；未设置时沿用提供商默认协议，测试、正式调用和 continuation 使用同一有效协议。
+
 Nexus Agent 是 Nexus Terminal 内的全局智能执行层，不是一个独立页面，也不是 Workspace Terminal 的包装层。
+
+Agent UI 复用 `foundation/ui` 的公共样式与组件 contract；模型选择框通过 `UiSelect.fitContent` 适配内容宽度，提供商表单使用公共表单材质，不从 Agent CSS 深入覆盖公共下拉控件。UI 测试专用标记与 props 不进入生产代码，开发约束见根目录 `AGENTS.md`。
+
+已配模型与连通测试卡片由 providers UI 展示模型和反馈，通过公共 `UiActionGroup` 的 model 布局承载底部操作，桌面四列、手机两列；模型名称不截断，业务测试与模型配置行为仍由 providers owner 持有。
 
 核心产品模型：
 
@@ -614,6 +618,7 @@ Nexus 当前是单用户应用。Workspace/Generation/Toolchain 的职责是组�
 - Workspace 项目文件持久且彼此独立；
 - Generation 冻结一次 Workspace Profile/runtime 选择；
 - Node/Python/Go Tool Pack 全局不可变共享，通过当前 generation 的 PATH 选择；
+- Node/Python/Go 的支持版本和架构由 `scripts/docker/agent-runner/catalog/catalog.json` 提供供用户选择；Runner 统一交给 mise 按指定版本安装，保留上游校验与安装后版本检查，不固定预编译构建来源或预设安装树摘要，也不引入选择指纹。工具链引用只有 familyId/versionId，安装缓存按类型、版本和 Runner 架构管理；已安装工具链不自动替换，使用中不允许卸载；
 - `/workspace/deps`、`/workspace/build` 等逻辑路径映射到按 toolchain fingerprint 分区的 Runner data root；
 - job、ACP、Terminal 和 Runner Plugin 都是 Runner 原生子进程；job/ACP/Runner Plugin 由独立 process group 管理并随 owner 生命周期整组回收，Terminal 使用真实 PTY foreground process group 处理交互 signal；
 - Host Runner 子进程共享宿主安全上下文；Docker Runner 子进程共享同一个 Runner 容器安全上下文；
@@ -924,7 +929,7 @@ Agent 复用 Platform capability，不复用 Workspace runtime transport owner�
 - Root dispatcher process-local；
 - Subagent work durable SQLite claim queue。
 
-Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #44，其中 #35–44 完成 typed target grant、File/Shell capability 与历史 durable execution semantic 的一次性破坏性迁移。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
+Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #48，其中 #35–44 完成 typed target grant、File/Shell capability 与历史 durable execution semantic 的一次性破坏性迁移，#48 将旧版持久化 Agent Settings 中已移除的字段清理并补齐 `model.fallbackModels`。运行时仍严格校验 Settings，不接受旧字段。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
 
 如果未来进入多 Backend 实例，不允许只把 Root queue 换成 Redis 就宣称支持分布式。必须同时设计：
 
@@ -967,6 +972,13 @@ GitHub Actions 的 canonical E2E workflow 使用 Node 24：串行执行仓库检
 `pnpm run check` 串行执行 Frontend/Agent ESLint 与 Frontend type check。架构、生命周期、国际化和模块边界由根目录 `AGENTS.md` 约束 AI 开发与审查，不再通过读取源码文本的回归脚本门禁。Agent deterministic scenarios 位于 `tests/backend/agent-scenarios`，用户可达 Agent E2E 位于 `tests/e2e/specs/agent`。
 
 依赖更新 workflow 更新根 workspace 后显式触发同一 E2E workflow，不维护第二套 E2E 流程。
+
+### 跨产品集成验证与恢复边界
+
+- E2E 等待真实业务完成状态：按钮变化、socket 关闭或请求返回不等于操作完成。挂起恢复等待公开 ownership 状态；终端快照前以真实 shell 往返确认就绪；其他异步操作验证终态或实际恢复结果。
+- 自动清理的任务记录使用统一等待条件：持续验证所有剩余记录均到达终态，或清理后出现空态，不先判断记录是否存在再固定等待某个分支。“取消中”不视为取消完成。
+- UI E2E 使用可访问角色、名称、关联 label 和真实产品状态；不得为修复测试恢复生产测试专用标记。现有组件结构可用于滚动和几何验证，断言仍验证真实交互、持久化与副作用。
+- 挂起日志的物理压缩缓冲与公开历史边界分离：分批压缩的额外空间不扩大用户可读范围，读取、分页 offset 和导出仍限最近 100MiB。分批压缩是摊销优化，不是每次 append 严格 O(1)，也不保证任意持续输出速率下都不积压；日志实现仍由 Workspace/Backend owner 持有，Agent 不复制其状态。
 
 Agent 改动需保持：
 

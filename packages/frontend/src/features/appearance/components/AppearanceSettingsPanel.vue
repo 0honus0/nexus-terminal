@@ -57,10 +57,7 @@
 </script>
 
 <template>
-  <section
-    data-testid="appearance-settings-panel"
-    class="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-  >
+  <section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
     <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ t('settings.category.appearance') }}
     </h2>
@@ -88,7 +85,6 @@
         </label>
         <div class="flex flex-wrap items-center gap-3">
           <input
-            data-testid="window-theme-color-picker"
             type="color"
             :value="draft"
             class="h-10 w-14 cursor-pointer rounded border border-border bg-background"
@@ -97,7 +93,6 @@
           <UiInput
             id="windowThemeColorInput"
             v-model="draft"
-            data-testid="window-theme-color-input"
             maxlength="7"
             spellcheck="false"
             autocomplete="off"
@@ -105,27 +100,20 @@
             @input="status = null"
             @keyup.enter="save"
           />
-          <UiButton
-            data-testid="window-theme-color-save"
-            appearance="solid"
-            tone="primary"
-            :disabled="saving || !valid"
-            :loading="saving"
-            @click="save"
-          >
+          <UiButton appearance="solid" tone="primary" :disabled="saving || !valid" :loading="saving" @click="save">
             {{ t('settings.appearance.windowThemeColor.save') }}
           </UiButton>
-          <UiButton data-testid="window-theme-color-reset" :disabled="saving" @click="reset">
+          <UiButton :disabled="saving" @click="reset">
             {{ t('settings.appearance.windowThemeColor.reset') }}
           </UiButton>
         </div>
-        <p v-if="!valid" class="mt-2 text-sm text-error" data-testid="window-theme-color-invalid">
+        <p v-if="!valid" class="mt-2 text-sm text-error">
           {{ t('settings.appearance.windowThemeColor.invalid') }}
         </p>
-        <p v-else-if="status === 'saved'" class="mt-2 text-sm text-success" data-testid="window-theme-color-saved">
+        <p v-else-if="status === 'saved'" class="mt-2 text-sm text-success">
           {{ t('settings.appearance.windowThemeColor.saved') }}
         </p>
-        <p v-else-if="status === 'error'" class="mt-2 text-sm text-error" data-testid="window-theme-color-error">
+        <p v-else-if="status === 'error'" class="mt-2 text-sm text-error">
           {{ t('settings.appearance.windowThemeColor.saveFailed') }}
         </p>
       </div>

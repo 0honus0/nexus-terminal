@@ -8,11 +8,10 @@
 :root {
   /*
    * Liquid Glass material (iOS 26/27 style): very translucent fills over a strong blur,
-   * a specular rim that is brightest on the top edge, and a diagonal sheen. Rim and sheen
-   * derive from the theme background, so light themes get bright white edges and dark
-   * themes get quieter silver ones without per-theme overrides.
+   * a subtle top rim and a diagonal sheen. Rim and sheen derive from the theme
+   * background without adding a bright outline to dark panels.
    */
-  --glass-rim: color-mix(in srgb, var(--app-bg-color) 45%, rgb(255 255 255));
+  --glass-rim: color-mix(in srgb, var(--app-bg-color) 85%, rgb(255 255 255));
   --glass-fill: color-mix(in srgb, var(--card-bg-color) 42%, transparent);
   --glass-nav-fill: color-mix(in srgb, var(--header-bg-color) 55%, transparent);
   --glass-inset-fill: color-mix(in srgb, var(--input-bg-color) 34%, transparent);
@@ -21,27 +20,18 @@
   --glass-backdrop-filter: blur(28px) saturate(185%);
   --glass-control-filter: blur(16px) saturate(170%);
   /* Mixing in the theme border keeps edges visible when a light panel sits on a light page. */
-  --glass-border-color: color-mix(
-    in srgb,
-    var(--border-color) 55%,
-    color-mix(in srgb, var(--glass-rim) 30%, transparent)
-  );
-  --glass-inset-highlight:
-    inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 55%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--glass-rim) 12%, transparent);
+  --glass-border-color: color-mix(in srgb, var(--border-color) 35%, transparent);
+  --glass-inset-highlight: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 8%, transparent);
   --glass-rim-shadow:
-    var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 14%, transparent),
-    inset -1px 0 0 color-mix(in srgb, var(--glass-rim) 8%, transparent);
+    var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 5%, transparent),
+    inset -1px 0 0 color-mix(in srgb, var(--glass-rim) 3%, transparent);
   --glass-sheen-image: linear-gradient(
     135deg,
     color-mix(in srgb, var(--glass-rim) 14%, transparent) 0%,
     transparent 38%,
-    transparent 72%,
-    color-mix(in srgb, var(--glass-rim) 6%, transparent) 100%
+    transparent 100%
   );
-  --glass-shadow:
-    var(--glass-rim-shadow), 0 1px 2px rgb(0 0 0 / 6%),
-    0 24px 56px -26px color-mix(in srgb, var(--text-color) 36%, transparent);
+  --glass-shadow: var(--glass-rim-shadow), 0 1px 2px rgb(0 0 0 / 6%), 0 24px 56px -26px rgb(0 0 0 / 24%);
 }
 
 @layer components {
@@ -156,8 +146,8 @@
 
   --ui-text: var(--text-color);
   --ui-text-muted: var(--text-color-secondary);
-  --ui-hairline: color-mix(in srgb, var(--border-color) 62%, transparent);
-  --ui-hairline-strong: color-mix(in srgb, var(--border-color) 88%, transparent);
+  --ui-hairline: var(--glass-border-color);
+  --ui-hairline-strong: color-mix(in srgb, var(--border-color) 55%, transparent);
   --ui-fill-raised: color-mix(in srgb, var(--card-bg-color) 58%, transparent);
   --ui-fill-inset: color-mix(in srgb, var(--input-bg-color) 48%, transparent);
   --ui-fill-inset-hover: color-mix(in srgb, var(--input-bg-color) 62%, transparent);
@@ -165,14 +155,13 @@
   --ui-fill-soft-hover: color-mix(in srgb, var(--card-bg-color) 32%, transparent);
   --ui-glass-filter: blur(14px) saturate(155%);
   --ui-glass-control-filter: blur(8px) saturate(145%);
-  --ui-glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 45%, transparent);
+  --ui-glass-highlight: var(--glass-inset-highlight);
 
   --ui-shadow-raised:
     0 1px 1px color-mix(in srgb, var(--text-color) 6%, transparent),
     0 6px 20px -14px color-mix(in srgb, var(--text-color) 24%, transparent);
   --ui-shadow-inset:
-    inset 0 1px 2px color-mix(in srgb, var(--text-color) 9%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--app-bg-color) 24%, transparent);
+    inset 0 1px 2px rgb(0 0 0 / 8%), inset 0 0 0 1px color-mix(in srgb, var(--app-bg-color) 24%, transparent);
 
   --ui-focus-color: color-mix(in srgb, var(--link-active-color) 72%, var(--border-color));
   --ui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--link-active-color) 18%, transparent);
@@ -201,6 +190,13 @@
   --ui-control-padding-inline: 13px;
   --ui-control-gap: 8px;
   --ui-control-font-size: 13px;
+}
+
+[data-ui-gen='2'][data-density='touch'] {
+  --ui-control-height: 44px;
+  --ui-control-padding-inline: 13px;
+  --ui-control-gap: 8px;
+  --ui-control-font-size: 14px;
 }
 
 [data-ui-gen='2'][data-tone='primary'] {
@@ -239,8 +235,43 @@
   --ui-tone-border: color-mix(in srgb, var(--status-error-color) 30%, var(--border-color));
 }
 
+:root {
+  --app-header-height: calc(60px + env(safe-area-inset-top, 0px));
+}
+
+.ui-floating-nav {
+  border: 1px solid var(--glass-border-color);
+  border-radius: 14px;
+  background: var(--header-bg-color);
+  color: var(--text-color);
+  box-shadow: 0 4px 12px -8px rgb(0 0 0 / 24%);
+}
+
 .ui-surface {
   color: var(--ui-text);
+}
+
+/* Configuration forms share an opaque surface instead of stacking glass cards. */
+.ui-form-surface,
+.ui-overlay-panel.ui-form-surface {
+  background: var(--app-bg-color);
+  background-image: none;
+  color: var(--text-color);
+  border: 1px solid var(--glass-border-color);
+  box-shadow: 0 16px 48px -24px rgb(0 0 0 / 28%);
+}
+
+.ui-form-section {
+  min-width: 0;
+  padding-block: 0.25rem;
+}
+
+.ui-form-section > h4 {
+  margin-bottom: 0.75rem;
+  border: 0;
+  padding: 0;
+  color: var(--text-color);
+  font-size: 0.875rem;
 }
 
 .ui-surface--plain {
@@ -264,6 +295,8 @@
 }
 
 .ui-overlay-panel {
+  /* The panel receives programmatic focus, but is not an interactive control. */
+  outline: none;
   border-radius: var(--ui-panel-radius);
   border-color: var(--glass-border-color);
   background-color: var(--glass-fill);
@@ -552,8 +585,7 @@
     background-color var(--ui-motion-duration) var(--ui-motion-ease),
     border-color var(--ui-motion-duration) var(--ui-motion-ease),
     color var(--ui-motion-duration) var(--ui-motion-ease),
-    box-shadow var(--ui-motion-duration) var(--ui-motion-ease),
-    transform var(--ui-motion-duration) var(--ui-motion-ease);
+    box-shadow var(--ui-motion-duration) var(--ui-motion-ease);
 }
 
 .ui-focusable:focus-visible {
@@ -593,10 +625,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.ui-button:not(:disabled):active {
-  transform: scale(0.98);
-}
-
 .ui-button--block {
   width: 100%;
 }
@@ -618,7 +646,7 @@
   );
   -webkit-backdrop-filter: var(--glass-control-filter);
   backdrop-filter: var(--glass-control-filter);
-  border-color: color-mix(in srgb, var(--glass-rim) 24%, transparent);
+  border-color: var(--ui-hairline);
   box-shadow:
     var(--glass-inset-highlight),
     0 1px 2px rgb(0 0 0 / 5%),
@@ -644,18 +672,16 @@
 .ui-button--soft:not(:disabled):hover,
 .ui-button--glass:not(:disabled):hover {
   background-color: var(--ui-button-glass-fill-hover);
-  border-color: color-mix(in srgb, var(--glass-rim) 38%, transparent);
+  border-color: var(--ui-hairline-strong);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 60%, transparent),
     0 2px 4px rgb(0 0 0 / 7%),
     0 12px 22px -14px rgb(0 0 0 / 28%);
-  transform: translateY(-0.5px);
 }
 
 .ui-button--solid:not(:disabled):active,
 .ui-button--soft:not(:disabled):active,
 .ui-button--glass:not(:disabled):active {
-  transform: translateY(0);
   background-color: color-mix(in srgb, var(--card-bg-color) 68%, transparent);
   box-shadow:
     inset 0 1px 2px rgb(0 0 0 / 10%),
@@ -684,30 +710,30 @@
   border-color: color-mix(in srgb, var(--status-success-color) 55%, var(--border-color));
 }
 
-/* Primary stays neutral rather than purple. Solid primary inverts the neutral ink so the main
-   action reads as the strongest control; soft/glass primary keeps the quiet glass fill. */
+/* Soft and glass primary actions keep the quiet neutral treatment. Solid primary actions use
+   the theme's action color so the main action stays consistent across product surfaces. */
 [data-ui-gen='2'][data-ui='button'][data-tone='primary']:not(.ui-button--solid) {
   color: var(--ui-text);
 }
 
 .ui-button--solid[data-tone='primary']:not(:disabled) {
-  --ui-button-glass-fill: var(--text-color);
-  --ui-button-glass-fill-hover: color-mix(in srgb, var(--text-color) 86%, var(--app-bg-color));
-  border-color: transparent;
-  color: var(--app-bg-color);
+  --ui-button-glass-fill: var(--button-bg-color);
+  --ui-button-glass-fill-hover: var(--button-hover-bg-color);
+  border-color: color-mix(in srgb, var(--button-hover-bg-color) 55%, var(--button-bg-color));
+  color: var(--button-text-color);
   background-image: none;
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--app-bg-color) 22%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 18%),
     0 1px 2px rgb(0 0 0 / 8%),
-    0 10px 20px -14px color-mix(in srgb, var(--text-color) 55%, transparent);
+    0 10px 20px -14px color-mix(in srgb, var(--button-bg-color) 55%, transparent);
 }
 
 .ui-button--solid[data-tone='primary']:not(:disabled):hover {
-  border-color: transparent;
+  border-color: var(--button-hover-bg-color);
 }
 
 .ui-button--solid[data-tone='primary']:not(:disabled):active {
-  background-color: color-mix(in srgb, var(--text-color) 78%, var(--app-bg-color));
+  background-color: var(--button-hover-bg-color);
 }
 
 .ui-button--ghost {
@@ -738,12 +764,12 @@
 
 .ui-button:disabled {
   cursor: not-allowed;
-  border-color: color-mix(in srgb, var(--border-color) 22%, transparent);
-  background: color-mix(in srgb, var(--card-bg-color) 12%, transparent);
+  border-color: var(--ui-disabled-border);
+  background: var(--ui-disabled-fill);
   color: var(--ui-disabled-text);
   box-shadow: none;
   transform: none;
-  opacity: 0.55;
+  opacity: 1;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
@@ -758,11 +784,60 @@
   animation: ui-gen2-spin 700ms linear infinite;
 }
 
+.ui-resize-handle {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  place-items: end;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color-secondary) 78%, transparent);
+  cursor: nwse-resize;
+  opacity: 0.72;
+  touch-action: none;
+  user-select: none;
+  transition:
+    color var(--ui-motion-duration) var(--ui-motion-ease),
+    opacity var(--ui-motion-duration) var(--ui-motion-ease);
+}
+
+.ui-resize-handle:hover {
+  color: var(--text-color);
+  opacity: 1;
+}
+
+.ui-resize-handle:focus-visible {
+  outline: none;
+  color: var(--link-active-color);
+  opacity: 1;
+}
+
+.ui-resize-handle:disabled {
+  cursor: default;
+  opacity: 0.32;
+}
+
+.ui-resize-handle__icon {
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+.ui-resize-handle__icon path {
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+}
+
 .ui-input {
   display: flex;
   width: 100%;
   min-width: 0;
   height: var(--ui-control-height);
+  overflow: hidden;
   align-items: center;
   gap: var(--ui-control-gap);
   padding-inline: var(--ui-control-padding-inline);
@@ -809,6 +884,7 @@
   height: 100%;
   flex: 1;
   border: 0;
+  border-radius: calc(var(--ui-control-radius) - 1px);
   outline: 0;
   padding: 0;
   background: inherit;
@@ -816,6 +892,16 @@
   font: inherit;
   font-size: var(--ui-control-font-size);
   box-shadow: none;
+}
+
+.ui-input__control:autofill,
+.ui-input__control:-webkit-autofill,
+.ui-input__control:-webkit-autofill:hover,
+.ui-input__control:-webkit-autofill:focus,
+.ui-input__control:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--input-text-color);
+  caret-color: var(--input-text-color);
+  box-shadow: 0 0 0 1000px var(--input-bg-color) inset !important;
 }
 
 .ui-input__control::placeholder {
@@ -1328,10 +1414,6 @@
   box-shadow: 0 1px 3px 0 color-mix(in srgb, var(--ui-tone-solid) 28%, transparent);
 }
 
-.ui-checkbox:not(:disabled):active {
-  transform: scale(0.95);
-}
-
 .ui-checkbox__indicator {
   display: flex;
   width: 100%;
@@ -1402,7 +1484,7 @@
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
   border-color: var(--glass-border-color);
-  border-bottom-color: color-mix(in srgb, var(--border-color) 45%, transparent);
+  border-bottom-color: var(--glass-border-color);
   background-color: var(--glass-fill);
   -webkit-backdrop-filter: var(--glass-backdrop-filter);
   backdrop-filter: var(--glass-backdrop-filter);
@@ -1439,6 +1521,20 @@
   white-space: nowrap;
 }
 
+.ui-select--fit-content {
+  width: auto;
+  max-width: 100%;
+}
+.ui-select--fit-content .ui-select__trigger {
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+.ui-select--fit-content .ui-select__value {
+  flex: 0 1 auto;
+  max-width: min(340px, calc(100vw - 160px));
+}
+
 .ui-select__value[data-placeholder] {
   color: color-mix(in srgb, var(--ui-text-muted) 78%, transparent);
 }
@@ -1470,16 +1566,11 @@
   max-width: min(var(--reka-select-content-available-width, calc(100vw - 24px)), calc(100vw - 24px));
   overflow: hidden;
   padding: 4px;
-  border: 1px solid var(--glass-border-color);
   border-top-width: 0;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
   border-bottom-left-radius: var(--ui-control-radius);
   border-bottom-right-radius: var(--ui-control-radius);
-  background-color: var(--glass-fill);
-  -webkit-backdrop-filter: var(--glass-backdrop-filter);
-  backdrop-filter: var(--glass-backdrop-filter);
-  box-shadow: var(--glass-shadow);
   color: var(--ui-text);
   outline: none;
   overscroll-behavior: contain;
@@ -1554,9 +1645,9 @@
 .ui-select__item:focus,
 .ui-select__item:focus-visible,
 .ui-select__item.ui-focusable:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
-  border: none !important;
+  outline: none;
+  box-shadow: none;
+  border: none;
 }
 
 .ui-select__panel[data-density='compact'] .ui-select__item {
@@ -1576,22 +1667,22 @@
 }
 
 .ui-select__item[data-highlighted] {
-  background: var(--ui-fill-soft-hover);
+  background: color-mix(in srgb, var(--link-active-color) 30%, var(--card-bg-color));
   color: var(--ui-text);
 }
 
 .ui-select__item[data-state='checked'] {
-  background: color-mix(in srgb, var(--link-active-color) 14%, transparent);
-  color: var(--link-active-color);
-  font-weight: 500;
+  background: color-mix(in srgb, var(--link-active-color) 72%, black);
+  color: white;
+  font-weight: 600;
   border: none;
   box-shadow: none;
   outline: none;
 }
 
 .ui-select__item[data-state='checked'][data-highlighted] {
-  background: color-mix(in srgb, var(--link-active-color) 20%, transparent);
-  color: var(--link-active-color);
+  background: color-mix(in srgb, var(--link-active-color) 80%, black);
+  color: white;
 }
 
 .ui-select__item[data-disabled] {
@@ -1856,5 +1947,155 @@
     outline: 2px solid Highlight;
     outline-offset: 2px;
     box-shadow: none;
+  }
+}
+.ui-confirmation-panel {
+  max-width: 440px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border-radius: 16px;
+}
+
+.ui-confirmation-panel__body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 24px;
+  overflow-wrap: anywhere;
+}
+
+.ui-action-group[data-layout='confirmation'] {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.ui-button--action-confirmation {
+  min-height: 44px;
+  min-width: 96px;
+}
+
+@media (max-width: 639px) {
+  .ui-confirmation-panel__body {
+    padding: 20px;
+  }
+  .ui-action-group[data-layout='confirmation'] {
+    padding: 16px 20px;
+  }
+  .ui-button--action-confirmation {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.ui-confirmation-panel__icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--link-active-color);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.ui-confirmation-panel__icon[data-tone='danger'] {
+  color: var(--status-error-color);
+}
+.ui-confirmation-panel__icon[data-tone='warning'] {
+  color: var(--status-warning-color);
+}
+.ui-confirmation-panel__icon i {
+  color: inherit;
+}
+.ui-confirmation-panel__title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.ui-confirmation-panel__description {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ui-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ui-confirmation-panel__content {
+  padding: 0 24px 20px;
+}
+.ui-action-group[data-layout='management'] {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+.ui-action-group[data-layout='batch'] {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+.ui-button--action-batch {
+  grid-column: span 2;
+  min-width: 0;
+  min-height: 40px;
+  padding-inline: 6px;
+  white-space: normal;
+}
+.ui-button--action-batch:nth-last-child(-n + 2) {
+  grid-column: span 3;
+}
+.ui-button--action-card {
+  min-width: 0;
+  padding-inline: 6px;
+}
+.ui-action-group[data-layout='model'] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.ui-button--action-model {
+  min-width: 0;
+  height: auto;
+  min-height: 32px;
+  padding-block: 5px;
+  white-space: normal;
+  line-height: 1.4;
+}
+@media (min-width: 640px) {
+  .ui-action-group[data-layout='model'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .ui-button--action-model {
+    min-height: 32px;
+  }
+  .ui-action-group[data-layout='management'] {
+    flex-shrink: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .ui-button--action-management {
+    min-height: 44px;
+    min-width: 96px;
+    padding-inline: 18px;
+    font-size: 14px;
+  }
+  .ui-action-group[data-layout='batch'] {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .ui-button--action-batch {
+    min-height: 28px;
+  }
+  .ui-button--action-batch:nth-child(4) {
+    margin-left: auto;
+  }
+}
+@media (max-width: 639px) {
+  .ui-confirmation-panel__content {
+    padding: 0 20px 20px;
   }
 }

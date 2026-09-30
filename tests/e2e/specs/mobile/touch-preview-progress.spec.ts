@@ -21,7 +21,7 @@ async function connectMobileSsh(page: Page, request: Parameters<typeof loginAsIn
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
   await connectTestSshFromConnectionsPage(page, connectionId);
-  await expect(page.getByTestId('terminal')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.terminal-inner-container')).toBeVisible({ timeout: 20_000 });
 }
 
 async function tapFileManagerRow(page: Page, filename: string): Promise<void> {
@@ -35,7 +35,9 @@ const pdfPage = (dialog: Locator, pageNumber: number): Locator => dialog.locator
 const pdfCurrentPage = (dialog: Locator): Locator =>
   dialog.getByRole('spinbutton', { name: 'Current page', exact: true });
 const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
-const pdfZoomLabel = (dialog: Locator): Locator => dialog.getByTestId('pdf-zoom-label');
+const documentPopup = (page: Page): Locator =>
+  page.locator('[data-document-mode="preview"][data-workspace-active="true"]:visible').first();
+const pdfZoomLabel = (dialog: Locator): Locator => dialog.locator('.pdf-toolbar:visible').getByText(/^\s*\d+%\s*$/);
 const previewHorizontalScrollbar = (dialog: Locator): Locator =>
   dialog.getByRole('scrollbar', { name: 'Horizontal scroll', exact: true });
 const spreadsheetScroller = (dialog: Locator): Locator =>
@@ -172,7 +174,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
 
   await slowStep('single tap opens the spreadsheet preview with both sheet tabs visible', async () => {
     await tapFileManagerRow(page, filename);
-    const dialog = page.getByTestId('document-popup');
+    const dialog = documentPopup(page);
     await expect(dialog).toBeVisible({ timeout: 20_000 });
     const preview = spreadsheetScroller(dialog).locator('..');
     const tabs = worksheetTabs(dialog);
@@ -195,7 +197,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   });
 
   await step('tapping the second sheet replaces the narrow-grid content and resets scroll offsets', async () => {
-    const dialog = page.getByTestId('document-popup');
+    const dialog = documentPopup(page);
     const scroller = spreadsheetScroller(dialog);
     const dimensions = await scroller.evaluate((element) => ({
       scrollWidth: element.scrollWidth,
@@ -238,9 +240,9 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
 
   const filename = 'preview.pdf';
   await tapFileManagerRow(page, filename);
-  const dialog = page.getByTestId('document-popup');
+  const dialog = documentPopup(page);
   await expect(dialog).toBeVisible({ timeout: 20_000 });
-  await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+  await expect(dialog.locator('.pdf-toolbar:visible .pdf-page-input + span > span')).toHaveText('3');
   await expect(dialog.locator('[data-pdf-page]')).toHaveCount(3);
 
   const closeButton = dialog.getByTitle('Close preview', { exact: true });
@@ -249,9 +251,9 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   expect(closeBox!.width).toBeGreaterThanOrEqual(40);
   expect(closeBox!.height).toBeGreaterThanOrEqual(40);
 
-  const zoomInButton = dialog.getByTestId('pdf-zoom-in');
-  const nextPageButton = dialog.getByTestId('pdf-next-page');
-  const outlineToggle = dialog.getByTestId('pdf-outline-toggle');
+  const zoomInButton = dialog.getByRole('button', { name: 'Zoom in', exact: true });
+  const nextPageButton = dialog.getByRole('button', { name: 'Next page', exact: true });
+  const outlineToggle = dialog.getByRole('button', { name: 'Outline', exact: true });
   await expect(zoomInButton).toBeVisible();
   await expect(nextPageButton).toBeVisible();
   await expect(outlineToggle).toBeVisible();
@@ -267,7 +269,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   const scrollerBoxBeforeDrawer = await scroller.boundingBox();
   expect(scrollerBoxBeforeDrawer).toBeTruthy();
 
-  const outlineDrawer = dialog.getByTestId('pdf-outline-drawer');
+  const outlineDrawer = dialog.locator('.pdf-outline-drawer');
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
   await outlineToggle.click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
@@ -350,7 +352,7 @@ test('mobile DOCX touch-pans wide content without a desktop scrollbar track', as
 
   const filename = 'preview.docx';
   await tapFileManagerRow(page, filename);
-  const dialog = page.getByTestId('document-popup');
+  const dialog = documentPopup(page);
   await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
   const scroller = docxScroller(dialog);
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
@@ -382,7 +384,7 @@ test('mobile preview close button clears cached state when popup file editing is
 
   const filename = 'preview.xlsx';
   await tapFileManagerRow(page, filename);
-  const dialog = page.getByTestId('document-popup');
+  const dialog = documentPopup(page);
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   const tabCloseButton = dialog.getByRole('button', { name: 'Close tab preview.xlsx', exact: true });
   const tabCloseBox = await tabCloseButton.boundingBox();
@@ -396,9 +398,9 @@ test('mobile preview close button clears cached state when popup file editing is
   await expect(dialog).toBeHidden();
 
   await tapFileManagerRow(page, filename);
-  const reopened = page.getByTestId('document-popup');
+  const reopened = documentPopup(page);
   await expect(reopened).toBeVisible({ timeout: 20_000 });
-  await expect(reopened.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
+  await expect(reopened.getByRole('tablist', { name: 'Open previews', exact: true }).getByRole('tab')).toHaveCount(1);
   await expect(worksheetTab(reopened, 'E2E')).toHaveAttribute('aria-selected', 'true');
   await expect(worksheetTab(reopened, 'Second')).toHaveAttribute('aria-selected', 'false');
 });
@@ -427,15 +429,15 @@ test('mobile upload progress stays inside the viewport and restores from Progres
           })),
         );
 
-        const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+        const popup = page.locator('.transfer-progress-window:visible').first();
         await expect(popup).toBeVisible({ timeout: 10_000 });
         await expect(popup).toContainText('E2E SSH · Upload Tasks');
         await expect(popup).toContainText(filenames[0]);
         await expect(popup).toContainText(filenames[1]);
-        await expect(popup.getByTestId('transfer-progress-speed')).toBeVisible();
-        await expect(popup.getByTestId('transfer-progress-hide')).toBeVisible();
-        await expect(popup.getByTestId('transfer-progress-cancel-all')).toBeVisible();
-        await expect(popup.getByTestId('transfer-progress-resize')).toBeVisible();
+        await expect(popup.getByText(/^Total speed /)).toBeVisible();
+        await expect(popup.getByRole('button', { name: 'Hide progress', exact: true })).toBeVisible();
+        await expect(popup.getByRole('button', { name: /^Cancel all/ })).toBeVisible();
+        await expect(popup.getByLabel('Resize progress window', { exact: true })).toBeVisible();
 
         const [popupBox, viewport] = await Promise.all([popup.boundingBox(), Promise.resolve(page.viewportSize())]);
         expect(popupBox).toBeTruthy();
@@ -443,7 +445,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
         expectBoxInsideViewport(popupBox!, viewport!);
         await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
-        const resizeHandle = popup.getByTestId('transfer-progress-resize');
+        const resizeHandle = popup.getByLabel('Resize progress window', { exact: true });
         const resizeBox = await resizeHandle.boundingBox();
         expect(resizeBox).toBeTruthy();
         const resizeStart = { x: resizeBox!.x + resizeBox!.width / 2, y: resizeBox!.y + resizeBox!.height / 2 };
@@ -506,7 +508,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
         expect(draggedBox!.y).toBeLessThanOrEqual(9);
 
         await closeConnectedFileManager(page);
-        await popup.getByTestId('transfer-progress-hide').click();
+        await popup.getByRole('button', { name: 'Hide progress', exact: true }).click();
         await expect(popup).toBeHidden();
       },
     );
@@ -515,9 +517,9 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       // Close File Manager so the workspace toggle is accessible. The FileManager
       // instance remains mounted via v-show while Progress Display opens as an overlay.
       const progressDisplay = await openMobileProgressDisplay(page);
-      const source = progressDisplay.getByTestId('hidden-progress-source').filter({ hasText: filenames[0] });
+      const source = progressDisplay.getByRole('article').filter({ hasText: filenames[0] });
       await expect(source).toBeVisible();
-      await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
+      await expect(source.getByRole('button', { name: 'Restore', exact: true })).toBeEnabled();
 
       const progressPanel = progressDisplay;
       const [displayBox, viewport] = await Promise.all([
@@ -529,13 +531,13 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       expectBoxInsideViewport(displayBox!, viewport!);
       await captureFunctionalScreenshot(page, 'mobile-progress-display.png');
 
-      await source.getByTestId('hidden-progress-restore').click();
+      await source.getByRole('button', { name: 'Restore', exact: true }).click();
       await expect(progressDisplay).toBeHidden();
-      const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+      const popup = page.locator('.transfer-progress-window:visible').first();
       await expect(popup).toBeVisible();
-      const uploadTasks = popup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+      const uploadTasks = popup.locator('[data-task-kind="upload"]');
       await expect(uploadTasks).toHaveCount(filenames.length);
-      await popup.getByTestId('transfer-progress-cancel-all').click();
+      await popup.getByRole('button', { name: /^Cancel all/ }).click();
       // Cancellation is two-phase while an in-flight SFTP WRITE is deliberately stalled.
       // Terminal rows may be retained as `cancelled` or pruned by the progress center before
       // this poll samples them, so accept either settled UI representation. The remote-file
@@ -553,7 +555,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
         .toBe(true);
 
       await reopenConnectedFileManager(page);
-      const fileManager = page.getByTestId('file-manager-modal').filter({ visible: true }).first();
+      const fileManager = page.getByRole('dialog', { name: 'File Manager', exact: true });
       await fileManager.getByRole('button', { name: 'Refresh', exact: true }).click();
       for (const filename of filenames) {
         await expect(fileManagerRow(page, filename)).toHaveCount(0);

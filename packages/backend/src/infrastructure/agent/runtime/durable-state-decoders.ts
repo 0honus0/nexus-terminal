@@ -203,7 +203,6 @@ export const decodeRunEnvironment = (value: unknown): AgentRunEnvironmentSnapsho
       return {
         familyId: durableString(row.familyId) as string,
         versionId: durableString(row.versionId) as string,
-        contentDigest: durableString(row.contentDigest) as string,
       };
     }),
     runnerPlugins: record.runnerPlugins.map((item) => {

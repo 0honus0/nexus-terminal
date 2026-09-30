@@ -47,45 +47,22 @@
 </script>
 
 <template>
-  <section data-testid="change-password-settings">
+  <section>
     <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.changePassword.title') }}</h3>
     <form class="space-y-4" @submit.prevent="submit">
       <UiFormField :label="t('settings.changePassword.currentPassword')" for-id="currentPassword">
-        <UiInput
-          id="currentPassword"
-          v-model="currentPassword"
-          data-testid="change-password-current"
-          type="password"
-          autocomplete="current-password"
-        />
+        <UiInput id="currentPassword" v-model="currentPassword" type="password" autocomplete="current-password" />
       </UiFormField>
       <UiFormField :label="t('settings.changePassword.newPassword')" for-id="newPassword">
-        <UiInput
-          id="newPassword"
-          v-model="newPassword"
-          data-testid="change-password-new"
-          type="password"
-          autocomplete="new-password"
-        />
+        <UiInput id="newPassword" v-model="newPassword" type="password" autocomplete="new-password" />
       </UiFormField>
       <UiFormField :label="t('settings.changePassword.confirmPassword')" for-id="confirmPassword">
-        <UiInput
-          id="confirmPassword"
-          v-model="confirmPassword"
-          data-testid="change-password-confirm"
-          type="password"
-          autocomplete="new-password"
-        />
+        <UiInput id="confirmPassword" v-model="confirmPassword" type="password" autocomplete="new-password" />
       </UiFormField>
       <div class="flex items-center justify-between gap-4">
-        <UiButton
-          data-testid="change-password-submit"
-          type="submit"
-          appearance="solid"
-          tone="primary"
-          :loading="loading"
-          >{{ t('settings.changePassword.submit') }}</UiButton
-        >
+        <UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
+          t('settings.changePassword.submit')
+        }}</UiButton>
         <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm" role="status">
           {{ message }}
         </p>

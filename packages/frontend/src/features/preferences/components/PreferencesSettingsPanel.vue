@@ -131,7 +131,7 @@
 </script>
 
 <template>
-  <section data-testid="preferences-settings" class="ui-solid-panel overflow-hidden rounded-xl">
+  <section class="ui-solid-panel overflow-hidden rounded-xl">
     <h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
       {{ props.section === 'system' ? t('settings.category.system') : t('settings.workspace.title') }}
     </h2>
@@ -194,7 +194,6 @@
       <hr class="border-border/50" />
 
       <form
-        data-testid="logging-settings-form"
         class="space-y-4"
         @submit.prevent="
           savePatch('logging', { frontendLogLevel: form.frontendLogLevel, backendLogLevel: form.backendLogLevel })
@@ -503,7 +502,7 @@
 
       <hr class="border-border" />
 
-      <section class="settings-section-content" data-testid="quick-command-search-display-setting">
+      <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">
           {{ t('settings.workspace.quickCommandsCollapsibleSearchTitle') }}
         </h3>
@@ -520,7 +519,6 @@
             <UiCheckbox
               id="quickCommandsCollapsibleSearch"
               v-model="form.quickCommandsCollapsibleSearch"
-              data-testid="quick-command-collapsible-search-toggle"
               :disabled="savingSection !== null"
             />
             {{ t('settings.workspace.quickCommandsCollapsibleSearchLabel') }}
@@ -533,7 +531,6 @@
               type="submit"
               appearance="solid"
               tone="primary"
-              data-testid="quick-command-collapsible-search-save"
               :loading="savingSection === 'quick-command-search'"
               >{{ t('common.save') }}</UiButton
             >
@@ -632,7 +629,7 @@
 
       <hr class="border-border" />
 
-      <section class="settings-section-content" data-testid="spreadsheet-preview-pagination-setting">
+      <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">
           {{ t('settings.workspace.spreadsheetPreviewLimits.title') }}
         </h3>
@@ -653,7 +650,6 @@
               <UiInput
                 id="spreadsheetPreviewRowsPerPage"
                 v-model="form.spreadsheetPreviewRowsPerPage"
-                data-testid="spreadsheet-preview-rows-per-page"
                 type="number"
                 min="10"
                 max="2000"
@@ -668,7 +664,6 @@
               <UiInput
                 id="spreadsheetPreviewMaxColumns"
                 v-model="form.spreadsheetPreviewMaxColumns"
-                data-testid="spreadsheet-preview-column-limit"
                 type="number"
                 min="5"
                 max="200"
@@ -683,7 +678,6 @@
               type="submit"
               appearance="solid"
               tone="primary"
-              data-testid="spreadsheet-preview-pagination-save"
               :loading="savingSection === 'spreadsheet-preview'"
               >{{ t('common.save') }}</UiButton
             >

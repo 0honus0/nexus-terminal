@@ -1,4 +1,5 @@
 name: Publish container image
+run-name: Publish images (${{ github.event_name == 'release' && 'release' || inputs.channel || 'dev' }}, ${{ github.event_name == 'release' && 'all' || inputs.architecture || 'amd' }}, ${{ github.event_name == 'release' && 'all' || inputs.target || 'all' }})
 
 on:
   release:
@@ -44,7 +45,7 @@ on:
 permissions:
   contents: read
   packages: write
-  checks: read
+  actions: read
 
 concurrency:
   group: publish-ghcr-${{ github.ref }}
@@ -171,30 +172,17 @@ jobs:
             exit 1
           fi
 
-          checks="$(gh api \
+          runs="$(gh api \
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
-            "/repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs?status=completed&per_page=100")"
-          required_checks=(
-            'Checks, format, and build'
-            'Docker deployment smoke'
-            'Playwright (auth)'
-            'Playwright (http)'
-            'Playwright (agent)'
-            'Playwright (websocket)'
-            'Playwright (ui)'
-            'Playwright (ssh)'
-            'Playwright (mobile)'
-          )
-          for required_check in "${required_checks[@]}"; do
-            successful="$(jq --arg name "$required_check" \
-              '[.check_runs[] | select(.name == $name and .conclusion == "success" and .app.slug == "github-actions")] | length' \
-              <<< "$checks")"
-            if [[ "$successful" -lt 1 ]]; then
-              echo "Current main commit has no successful '$required_check' check: $SOURCE_SHA" >&2
-              exit 1
-            fi
-          done
+            "/repos/$GITHUB_REPOSITORY/actions/workflows/e2e.yml/runs?head_sha=$SOURCE_SHA&branch=main&status=completed&per_page=100")"
+          successful="$(jq --arg sha "$SOURCE_SHA" \
+            '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .conclusion == "success")] | length' \
+            <<< "$runs")"
+          if [[ "$successful" -lt 1 ]]; then
+            echo "Current main commit has no successful complete E2E workflow (checks, all Playwright shards, and Docker smoke): $SOURCE_SHA" >&2
+            exit 1
+          fi
 
       - name: Select image architecture
         id: architecture
@@ -275,7 +263,7 @@ jobs:
           done
 
   publish:
-    name: Publish Unified Image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
+    name: Publish Unified Image
     needs: prepare
     if: needs.prepare.outputs.target == 'nexus' || needs.prepare.outputs.target == 'all'
     runs-on: ubuntu-latest
@@ -326,7 +314,7 @@ jobs:
 
   # Agent Runner 使用独立镜像发布，tag 与主镜像保持一致，便于 Compose/宿主部署锁定同一版本。
   publish-runner:
-    name: Publish Agent Runner Image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
+    name: Publish Agent Runner Image
     needs: prepare
     if: needs.prepare.outputs.target == 'runner' || needs.prepare.outputs.target == 'all'
     runs-on: ubuntu-latest

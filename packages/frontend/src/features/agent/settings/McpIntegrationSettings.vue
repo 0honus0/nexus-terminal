@@ -565,7 +565,7 @@
       <button
         type="button"
         :disabled="disabled || !agentAvailable"
-        class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-primary/5 hover:border-primary/45 py-2.5 text-xs text-text-secondary hover:text-primary transition-all duration-200 cursor-pointer select-none active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
+        class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-primary/5 hover:border-primary/45 py-2.5 text-xs text-text-secondary hover:text-primary transition-colors duration-200 cursor-pointer select-none disabled:pointer-events-none disabled:opacity-40"
         @click="openAddModal"
       >
         <i

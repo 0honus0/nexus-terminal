@@ -66,10 +66,8 @@ export class SpaceReporter {
     }, 0);
     const active = workspaces.filter((workspace) => !['deleted', 'failed'].includes(workspace.status));
     const byPack = this.catalog.load().packs.flatMap((pack) => {
-      const digest = pack.contentDigestByArch[process.arch];
-      if (!digest) return [];
-      const digestPath = digest.replace(/^sha256:/, '');
-      const bytes = size(path.join(this.root, 'packs', pack.familyId, pack.versionId, digestPath));
+      if (!pack.supportedArchitectures.includes(process.arch)) return [];
+      const bytes = size(path.join(this.root, 'packs', pack.familyId, pack.versionId, process.arch));
       return [
         {
           familyId: pack.familyId,
@@ -77,10 +75,7 @@ export class SpaceReporter {
           bytes,
           inUse: active.some((workspace) =>
             workspace.toolchain.some(
-              (candidate) =>
-                candidate.familyId === pack.familyId &&
-                candidate.versionId === pack.versionId &&
-                candidate.contentDigest === digest,
+              (candidate) => candidate.familyId === pack.familyId && candidate.versionId === pack.versionId,
             ),
           ),
         },

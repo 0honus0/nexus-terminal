@@ -242,7 +242,7 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
       data: { modelId: 'e2e-model' },
     });
     expect(failed.ok(), await failed.text()).toBeTruthy();
-    await expect(failed.json()).resolves.toMatchObject({ data: { ok: false, errorCode: 'PROVIDER_AUTH_FAILED' } });
+    await expect(failed.json()).resolves.toMatchObject({ data: { ok: false, errorCode: 'PROVIDER_HTTP_401' } });
 
     const restored = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
       headers,

@@ -78,7 +78,7 @@
   const { t } = useI18n();
 </script>
 <template>
-  <div data-testid="proxy-form" class="p-2">
+  <div class="p-2">
     <h3 class="mb-6 text-center text-lg font-semibold">
       {{ proxy ? t('proxies.form.titleEdit') : t('proxies.form.title') }}
     </h3>
@@ -105,9 +105,7 @@
         ><UiInput id="proxy-password" v-model="form.password" type="password" autocomplete="new-password" />
         <p v-if="proxy" class="mt-1 text-xs text-text-secondary">{{ t('proxies.form.passwordUpdateNote') }}</p>
         <label v-if="proxy" class="mt-2 flex cursor-pointer select-none items-center gap-2 text-sm text-text-secondary"
-          ><UiCheckbox v-model="form.clearPassword" data-testid="proxy-clear-password" />{{
-            t('proxies.form.clearStoredPassword')
-          }}</label
+          ><UiCheckbox v-model="form.clearPassword" />{{ t('proxies.form.clearStoredPassword') }}</label
         ></UiFormField
       >
       <p
@@ -117,9 +115,7 @@
         {{ error }}
       </p>
       <div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
-        <UiButton data-testid="proxy-submit" type="submit" appearance="solid" tone="primary" :loading="loading">{{
-          t('common.save')
-        }}</UiButton
+        <UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{ t('common.save') }}</UiButton
         ><UiButton type="button" :disabled="loading" @click="emit('cancel')">{{ t('proxies.form.cancel') }}</UiButton>
       </div>
     </form>

@@ -72,10 +72,7 @@
 </script>
 
 <template>
-  <section
-    data-testid="docker-manager"
-    class="docker-manager flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
-  >
+  <section class="docker-manager flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
     <div v-if="connecting" class="docker-state">
       <i class="fas fa-spinner fa-spin mb-3 text-4xl" aria-hidden="true"></i>
       <p class="mb-1 mt-2 font-medium">{{ t('dockerManager.waitingForSsh') }}</p>
@@ -144,14 +141,12 @@
         <tbody class="docker-body">
           <template v-for="container in docker.containers.value" :key="container.id">
             <tr
-              :data-testid="`docker-row-${container.id}`"
               class="docker-row relative mb-4 rounded border border-border bg-background p-3 shadow-sm transition-colors duration-150 hover:bg-header/30"
               :class="{ expanded: docker.expandedContainerIds.value.has(container.id) }"
             >
               <td class="docker-expand-cell w-8 border-b border-border px-2 py-2 text-center align-middle">
                 <button
                   type="button"
-                  data-testid="docker-expand"
                   class="p-1 text-xs text-text-secondary transition-colors duration-150 hover:text-foreground"
                   :title="
                     docker.expandedContainerIds.value.has(container.id) ? t('common.collapse') : t('common.expand')
@@ -217,7 +212,6 @@
                   </button>
                   <button
                     type="button"
-                    data-testid="docker-stop"
                     class="docker-action docker-touch-target hover:text-yellow-500"
                     :disabled="container.state !== 'running'"
                     :title="t('dockerManager.action.stop')"

@@ -6,6 +6,21 @@ import { step } from '../../support/steps';
 const NAMES = ['E2E Batch SSH A', 'E2E Batch SSH B'];
 const NOTES = 'updated-by-batch-e2e';
 
+const connectionCard = (page: Page, name: string) =>
+  page.getByRole('listitem').filter({ has: page.getByText(name, { exact: true }) });
+const batchModal = (page: Page) =>
+  page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: /^Batch Edit Connections/ }) });
+async function editNotes(page: Page, notes: string): Promise<void> {
+  const modal = batchModal(page);
+  const advanced = modal
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Advanced Options', exact: true }) });
+  await advanced.getByRole('checkbox').check();
+  await advanced.getByRole('checkbox', { name: /Change notes/ }).check();
+  await modal.locator('#batch-notes').fill(notes);
+  await modal.getByRole('button', { name: 'Save', exact: true }).click();
+}
+
 async function cleanup(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
@@ -40,20 +55,20 @@ async function runBatchConnectionEdit(page: Page, context: BrowserContext): Prom
     await page.goto('/connections');
 
     await step('select two connections in batch mode', async () => {
-      await page.getByTestId('batch-edit-toggle').click();
-      await expect(page.getByTestId('batch-edit-toggle')).toHaveAttribute('aria-checked', 'true');
-      for (const id of ids) await page.getByTestId(`connection-row-${id}`).click();
-      await expect(page.getByTestId('batch-edit-selected')).toBeEnabled();
+      await page.getByRole('switch', { name: 'Batch Edit', exact: true }).click();
+      await expect(page.getByRole('switch', { name: 'Batch Edit', exact: true })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+      for (const name of NAMES) await connectionCard(page, name).click();
+      await expect(page.getByRole('button', { name: 'Edit Selected', exact: true })).toBeEnabled();
     });
 
     await step('batch edit writes the same notes to both connections', async () => {
-      await page.getByTestId('batch-edit-selected').click();
-      const modal = page.getByTestId('batch-edit-modal');
+      await page.getByRole('button', { name: 'Edit Selected', exact: true }).click();
+      const modal = batchModal(page);
       await expect(modal).toBeVisible();
-      await modal.getByTestId('batch-edit-advanced-toggle').check();
-      await modal.getByTestId('batch-edit-notes-toggle').check();
-      await modal.locator('#batch-notes').fill(NOTES);
-      await modal.getByTestId('batch-edit-save').click();
+      await editNotes(page, NOTES);
       await expect(modal).toBeHidden({ timeout: 15_000 });
 
       for (const id of ids) {
@@ -82,24 +97,21 @@ test('batch edit reports partial failure and keeps only the failed item selected
 
   try {
     await page.goto('/connections');
-    await page.getByTestId('batch-edit-toggle').click();
-    for (const id of ids) await page.getByTestId(`connection-row-${id}`).click();
-    await expect(page.getByTestId('batch-edit-selected')).toBeEnabled();
+    await page.getByRole('switch', { name: 'Batch Edit', exact: true }).click();
+    for (const name of NAMES) await connectionCard(page, name).click();
+    await expect(page.getByRole('button', { name: 'Edit Selected', exact: true })).toBeEnabled();
 
     expect((await context.request.delete(`/api/v1/connections/${ids[1]}`)).ok()).toBeTruthy();
 
-    await page.getByTestId('batch-edit-selected').click();
-    const modal = page.getByTestId('batch-edit-modal');
+    await page.getByRole('button', { name: 'Edit Selected', exact: true }).click();
+    const modal = batchModal(page);
     await expect(modal).toBeVisible();
-    await modal.getByTestId('batch-edit-advanced-toggle').check();
-    await modal.getByTestId('batch-edit-notes-toggle').check();
-    await modal.locator('#batch-notes').fill('partial-update-survivor');
-    await modal.getByTestId('batch-edit-save').click();
+    await editNotes(page, 'partial-update-survivor');
 
     await expect(page.getByText('Batch update: 1 succeeded, 1 failed. Failed items remain selected.')).toBeVisible();
     await expect(modal).toBeVisible();
-    await expect(page.getByTestId(`connection-row-${ids[0]}`)).not.toHaveClass(/ring-2/);
-    await expect(page.getByTestId(`connection-row-${ids[1]}`)).toHaveClass(/ring-2/);
+    await expect(connectionCard(page, NAMES[0])).not.toHaveClass(/ring-2/);
+    await expect(connectionCard(page, NAMES[1])).toHaveClass(/ring-2/);
 
     const survivor = await context.request.get(`/api/v1/connections/${ids[0]}`);
     expect(survivor.ok()).toBeTruthy();
@@ -133,20 +145,17 @@ test('batch edit loads auxiliary catalogs only when opened and remains usable wh
     expect(proxyRequests).toBe(0);
     expect(keyRequests).toBe(0);
 
-    await page.getByTestId('batch-edit-toggle').click();
-    await page.getByTestId(`connection-row-${id}`).click();
-    await page.getByTestId('batch-edit-selected').click();
-    const modal = page.getByTestId('batch-edit-modal');
+    await page.getByRole('switch', { name: 'Batch Edit', exact: true }).click();
+    await connectionCard(page, NAMES[0]).click();
+    await page.getByRole('button', { name: 'Edit Selected', exact: true }).click();
+    const modal = batchModal(page);
     await expect(modal).toBeVisible();
     await expect.poll(() => proxyRequests).toBeGreaterThan(0);
     await expect.poll(() => keyRequests).toBeGreaterThan(0);
     await expect(page.getByText('Failed to load proxies: Network Error', { exact: true })).toBeVisible();
     await expect(page.getByText('Failed to load SSH keys: Network Error', { exact: true })).toBeVisible();
 
-    await modal.getByTestId('batch-edit-advanced-toggle').check();
-    await modal.getByTestId('batch-edit-notes-toggle').check();
-    await modal.locator('#batch-notes').fill('aux-catalog-failure-still-usable');
-    await modal.getByTestId('batch-edit-save').click();
+    await editNotes(page, 'aux-catalog-failure-still-usable');
     await expect(modal).toBeHidden({ timeout: 15_000 });
     const persisted = await context.request.get(`/api/v1/connections/${id}`);
     expect(persisted.ok()).toBeTruthy();

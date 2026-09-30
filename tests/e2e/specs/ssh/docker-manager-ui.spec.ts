@@ -44,18 +44,21 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
   await connectTestSshFromConnectionsPage(page, connectionId);
 
   await step('the baseline sidebar behavior auto-collapses when the workspace is clicked', async () => {
-    await page.getByTestId('sidebar-pane-connections').click();
-    const sidebar = page.getByTestId('left-sidebar-panel');
+    await page.locator('nav[data-workspace-sidebar]').getByRole('button', { name: 'Connections', exact: true }).click();
+    const sidebar = page.locator('aside[data-workspace-sidebar]');
     await expect(sidebar).toBeVisible();
-    await page.getByTestId('terminal').click();
+    await page.locator('.terminal-inner-container').click();
     await expect(sidebar).toBeHidden();
   });
 
   await slowStep('open Docker manager and render the deterministic remote container', async () => {
-    await page.getByTestId('sidebar-pane-dockerManager').click();
-    const manager = page.getByTestId('docker-manager');
+    await page
+      .locator('nav[data-workspace-sidebar]')
+      .getByRole('button', { name: 'Docker Manager', exact: true })
+      .click();
+    const manager = page.locator('.docker-manager');
     await expect(manager).toBeVisible();
-    const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
+    const row = manager.locator('.docker-row').filter({ hasText: 'nexus-e2e-container' });
     await expect(row).toBeVisible({ timeout: 20_000 });
     await expect(row).toContainText('nexus-e2e-container');
     await expect(row).toContainText('alpine:latest');
@@ -66,9 +69,12 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     await expect(row.locator('i.fa-trash-alt')).toBeVisible();
     await expect(row.locator('i.fa-terminal')).toBeVisible();
     await expect(row.locator('i.fa-file-alt')).toBeVisible();
-    await expect(row.getByTestId('docker-expand')).toHaveAttribute('aria-label', 'Collapse');
+    await expect(row.getByRole('button', { name: 'Collapse', exact: true }).filter({ visible: true })).toHaveAttribute(
+      'aria-label',
+      'Collapse',
+    );
 
-    const sidebar = page.getByTestId('left-sidebar-panel');
+    const sidebar = page.locator('aside[data-workspace-sidebar]');
     await expect(sidebar).toBeVisible();
     await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(349);
     const sidebarBox = await sidebar.boundingBox();
@@ -79,7 +85,7 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     ).toBe('0px');
     await captureFunctionalScreenshot(page, 'docker-manager-sidebar-running.png');
 
-    const handle = page.getByTestId('left-sidebar-resize-handle');
+    const handle = sidebar.locator('.cursor-col-resize');
     const handleBox = await handle.boundingBox();
     expect(handleBox).not.toBeNull();
     if (!handleBox) throw new Error('Docker sidebar resize handle has no geometry');
@@ -132,8 +138,8 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
   await step(
     'the default-expand preference is applied and users can collapse then restore live Docker stats',
     async () => {
-      const manager = page.getByTestId('docker-manager');
-      const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
+      const manager = page.locator('.docker-manager');
+      const row = manager.locator('.docker-row').filter({ hasText: 'nexus-e2e-container' });
       await expect(manager).toContainText('12.34%');
       const collapse = row.getByRole('button', { name: 'Collapse', exact: true }).filter({ visible: true }).first();
       await expect(collapse).toBeVisible();
@@ -151,7 +157,7 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
   );
 
   await step('Enter and Logs route terminal command intents through the owning Workspace session', async () => {
-    const row = page.getByTestId('docker-manager').getByTestId(`docker-row-${CONTAINER_ID}`);
+    const row = page.locator('.docker-manager .docker-row').filter({ hasText: 'nexus-e2e-container' });
     await row.getByRole('button', { name: 'Enter', exact: true }).click();
     await expect
       .poll(() =>
@@ -177,8 +183,8 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
   });
 
   await slowStep('restart, stop, and start refresh the container state after real remote Docker commands', async () => {
-    const manager = page.getByTestId('docker-manager');
-    const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
+    const manager = page.locator('.docker-manager');
+    const row = manager.locator('.docker-row').filter({ hasText: 'nexus-e2e-container' });
 
     await row.getByRole('button', { name: 'Restart', exact: true }).click();
     await expect
@@ -193,7 +199,7 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
       )
       .toBeTruthy();
 
-    await row.getByTestId('docker-stop').click();
+    await row.getByRole('button', { name: 'Stop', exact: true }).click();
     await expect
       .poll(
         () =>
@@ -228,8 +234,8 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
   });
 
   await slowStep('remove is destructive-confirmed and the accepted action refreshes the container away', async () => {
-    const manager = page.getByTestId('docker-manager');
-    const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
+    const manager = page.locator('.docker-manager');
+    const row = manager.locator('.docker-row').filter({ hasText: 'nexus-e2e-container' });
     const removeButton = row.getByRole('button', { name: 'Remove', exact: true });
     const removeFrame = (message: any) =>
       message.type === 'docker.command' &&
@@ -325,15 +331,17 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         const filePane = fileSplit.locator(':scope > .splitpanes__pane').filter({ has: fileManager }).first();
         const firstAction = fileManager.locator('.file-manager-action-button').first();
 
-        const suspendedPanel = page.getByTestId('suspended-sessions-view').filter({ visible: true }).first();
-        const suspendedSearch = suspendedPanel.locator('.suspended-session-search');
+        const suspendedPanel = page
+          .getByRole('region', { name: 'Suspended SSH Sessions', exact: true })
+          .filter({ visible: true })
+          .first();
+        const suspendedSearch = suspendedPanel.locator('.suspended-session-search input');
         await expect(suspendedPanel).toBeVisible();
         await expect(suspendedSearch).toBeVisible();
         await expect(suspendedSearch).toHaveAttribute('type', 'text');
         await expect(suspendedSearch).toHaveCSS('text-align', 'start');
-        await expect
-          .poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).paddingRight))
-          .toBe('28px');
+        await expect(suspendedSearch).toHaveCSS('padding-right', '0px');
+        await expect(suspendedPanel.locator('.suspended-session-search .ui-input__adornment')).toBeVisible();
 
         await page.setViewportSize({ width: 1440, height: 1200 });
         await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeGreaterThan(340);
@@ -352,7 +360,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeLessThan(340);
         await expect.poll(async () => (await firstAction.boundingBox())?.height ?? 99).toBeLessThanOrEqual(25);
         await expect
-          .poll(async () => (await fileManager.getByTestId('file-manager-path-input').boundingBox())?.height ?? 99)
+          .poll(async () => (await fileManager.locator('.file-manager-path-input').boundingBox())?.height ?? 99)
           .toBeLessThanOrEqual(26);
         const compactSplitBox = await fileSplit.boundingBox();
         const compactPaneBox = await filePane.boundingBox();
@@ -362,7 +370,9 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         expect(Math.abs(compactRatio - expandedRatio)).toBeLessThan(0.03);
 
         await page.setViewportSize({ width: 1440, height: 320 });
-        await expect.poll(async () => (await suspendedSearch.boundingBox())?.height ?? 99).toBe(28);
+        await expect
+          .poll(async () => (await suspendedPanel.locator('.suspended-session-search').boundingBox())?.height ?? 99)
+          .toBe(32);
         await expect.poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).fontSize)).toBe('12px');
         expect(expandedSuspendedFontSize).toBe(12);
         await expect
@@ -374,13 +384,16 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           .toBeLessThanOrEqual(8);
 
         await page.setViewportSize({ width: 1440, height: 900 });
-        const suspendedSession = suspendedPanel.getByTestId(`suspended-session-${utilitySuspendedId}`);
+        const suspendedSession = suspendedPanel.locator(`[data-suspend-id="${utilitySuspendedId}"]`);
         await expect(suspendedSession).toBeVisible({ timeout: 15_000 });
         try {
           // Force the right utility pane into the minimum-width card state. Medium narrow panes
           // keep icon actions beside the text; only this tighter band stacks them underneath.
           await page.setViewportSize({ width: 880, height: 650 });
-          const compactSuspendedPanel = page.getByTestId('suspended-sessions-view').filter({ visible: true }).first();
+          const compactSuspendedPanel = page
+            .getByRole('region', { name: 'Suspended SSH Sessions', exact: true })
+            .filter({ visible: true })
+            .first();
           const compactSuspendedSession = compactSuspendedPanel.locator('.session-card').first();
           await expect(compactSuspendedSession).toBeVisible({ timeout: 15_000 });
           await expect
@@ -403,7 +416,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           await expect(compactSuspendedSession.locator('.session-action').first()).toBeVisible();
 
           await page.setViewportSize({ width: 1000, height: 320 });
-          const shortSuspendedPanel = page.getByTestId('suspended-sessions-view').filter({ visible: true }).first();
+          const shortSuspendedPanel = page
+            .getByRole('region', { name: 'Suspended SSH Sessions', exact: true })
+            .filter({ visible: true })
+            .first();
           await expect
             .poll(async () => (await shortSuspendedPanel.boundingBox())?.height ?? 999)
             .toBeLessThanOrEqual(280);
@@ -428,14 +444,14 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 
       await page.mouse.move(beforeSplitter!.x + beforeSplitter!.width / 2, resizeY);
       await page.mouse.down();
-      await page.mouse.move(beforePane!.x + 320, resizeY, { steps: 10 });
+      await page.mouse.move(beforePane!.x + 220, resizeY, { steps: 10 });
       await page.mouse.up();
-      await expect.poll(async () => (await centerPane.boundingBox())?.width ?? 999).toBeLessThanOrEqual(360);
+      await expect.poll(async () => (await centerPane.boundingBox())?.width ?? 999).toBeLessThanOrEqual(250);
 
-      const list = fileManager.getByTestId('file-manager-list');
+      const list = fileManager.locator('[data-row-scale]');
       await expect(list).toBeVisible();
       const narrowMetrics = await fileManager.evaluate((element) => {
-        const list = element.querySelector<HTMLElement>('[data-testid="file-manager-list"]');
+        const list = element.querySelector<HTMLElement>('[data-row-scale]');
         const row = element.querySelector<HTMLTableRowElement>(
           'tr[data-filename]:not([data-filename=".."]):not([data-filename=""])',
         );
@@ -457,7 +473,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       expect(narrowMetrics.iconNameGap).not.toBeNull();
       expect(narrowMetrics.iconNameGap as number).toBeLessThanOrEqual(12);
       expect(narrowMetrics.permissionsCellCount).toBe(0);
-      expect(narrowMetrics.modifiedCellCount).toBe(1);
+      expect(narrowMetrics.modifiedCellCount).toBe(0);
       const pathMetrics = await fileManager.evaluate((element) => {
         const toolbar = element.querySelector<HTMLElement>('.file-manager-toolbar')!;
         const actions = element.querySelector<HTMLElement>('.file-manager-actions')!;
@@ -495,8 +511,9 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           toolbarPaddingRight: Number.parseFloat(toolbarStyle.paddingRight),
           actionsWidth: actionsRect.width,
           toolbarWidth: toolbarRect.width,
+          actionsDisplay: actionsStyle.display,
+          actionsGridColumns: actionsStyle.gridTemplateColumns,
           actionsJustify: actionsStyle.justifyContent,
-          actionsWrap: actionsStyle.flexWrap,
           rowEdgeGaps,
           pathWidth: path.getBoundingClientRect().width,
           pathBackground: pathStyle.backgroundColor,
@@ -512,12 +529,20 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       const toolbarInnerWidth =
         pathMetrics.toolbarWidth - pathMetrics.toolbarPaddingLeft - pathMetrics.toolbarPaddingRight;
       expect(Math.abs(pathMetrics.actionsWidth - toolbarInnerWidth)).toBeLessThan(2);
+      expect(pathMetrics.actionsDisplay).toBe('grid');
+      const actionColumnCount = pathMetrics.actionsGridColumns
+        .split(' ')
+        .filter((track) => Number.parseFloat(track) > 0).length;
+      expect(actionColumnCount).toBeGreaterThan(1);
       expect(pathMetrics.actionsJustify).toBe('space-between');
-      expect(pathMetrics.actionsWrap).toBe('nowrap');
-      expect(pathMetrics.rowEdgeGaps.length).toBeGreaterThan(0);
-      for (const row of pathMetrics.rowEdgeGaps.filter((entry) => entry.count > 1)) {
+      expect(pathMetrics.rowEdgeGaps.length).toBeGreaterThanOrEqual(2);
+      for (const [index, row] of pathMetrics.rowEdgeGaps.entries()) {
+        expect(row.count).toBeLessThanOrEqual(actionColumnCount);
         expect(Math.abs(row.left)).toBeLessThan(2);
-        expect(row.right).toBeGreaterThanOrEqual(-1);
+        if (index === 0) {
+          expect(row.count).toBe(actionColumnCount);
+          expect(Math.abs(row.right)).toBeLessThan(2);
+        }
       }
       expect(Math.abs(pathMetrics.pathWidth - toolbarInnerWidth)).toBeLessThan(2);
       expect(pathMetrics.pathBackground).not.toBe('rgba(0, 0, 0, 0)');
@@ -529,7 +554,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       expect(delayResponse.ok).toBeTruthy();
       try {
         await fileManager.getByTitle('Refresh', { exact: true }).click();
-        const loading = fileManager.getByTestId('file-manager-loading-state');
+        const loading = fileManager.locator('.file-manager-loading-state');
         await expect(loading).toBeVisible();
         const loadingBox = await loading.boundingBox();
         const spinnerBox = await loading.locator(':scope > *').first().boundingBox();
@@ -564,18 +589,18 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
     await expect(firstSplitter).toBeVisible();
 
     await step('the layout configurator previews horizontal and vertical container directions', async () => {
-      await page.getByTestId('terminal-tab-bar').getByRole('button', { name: 'Configure Layout', exact: true }).click();
+      await page.locator('.terminal-tab-shell').getByRole('button', { name: 'Configure Layout', exact: true }).click();
       const configurator = page.getByRole('dialog', { name: 'Layout Configurator', exact: true });
       await expect(configurator).toBeVisible();
       await expect(configurator.locator('input[type="number"]')).toHaveCount(0);
       await expect(configurator.locator('.drag-handle-node').first()).toBeVisible();
       await expect(configurator.getByTitle('Add Horizontal Container').first()).toContainText('H');
       await expect(configurator.getByTitle('Add Vertical Container').first()).toContainText('V');
-      await expect(configurator.getByTestId('layout-left-sidebar-list')).toBeVisible();
-      const rightSidebar = configurator.getByTestId('layout-right-sidebar-list');
+      await expect(configurator.locator('.layout-sidebar-list').nth(0)).toBeVisible();
+      const rightSidebar = configurator.locator('.layout-sidebar-list').nth(1);
       await expect(rightSidebar).toBeVisible();
 
-      const availableEditor = configurator.getByTestId('layout-available-pane-editor');
+      const availableEditor = configurator.locator('.layout-available-panes li').filter({ hasText: /^Editor$/ });
       await expect(availableEditor).toBeVisible();
       await availableEditor.dragTo(rightSidebar);
       const draggedEditor = rightSidebar.locator('li').filter({ hasText: 'Editor' }).first();
@@ -583,7 +608,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       await draggedEditor.getByRole('button', { name: 'Remove', exact: true }).click();
       await expect(draggedEditor).toHaveCount(0);
 
-      const horizontal = configurator.getByTestId('workspace-layout-children-workspace-layout-root');
+      const horizontal = configurator.locator('[data-node-id="workspace-layout-root"] > [data-layout-direction]');
       await expect(horizontal).toHaveAttribute('data-layout-direction', 'horizontal');
       const horizontalChildren = horizontal.locator(':scope > [data-layout-child-id]');
       await expect(horizontalChildren).toHaveCount(3);
@@ -598,7 +623,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       expect(horizontalBoxes[1]!.x).toBeGreaterThan(horizontalBoxes[0]!.x);
       expect(horizontalBoxes[2]!.x).toBeGreaterThan(horizontalBoxes[1]!.x);
 
-      const vertical = configurator.getByTestId('workspace-layout-children-left');
+      const vertical = configurator.locator('[data-node-id="left"] > [data-layout-direction]');
       await expect(vertical).toHaveAttribute('data-layout-direction', 'vertical');
       const verticalChildren = vertical.locator(':scope > [data-layout-child-id]');
       await expect(verticalChildren).toHaveCount(3);
@@ -634,7 +659,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
     });
 
     await step('locking from the real layout configurator prevents splitter edits', async () => {
-      await page.getByTestId('terminal-tab-bar').getByRole('button', { name: 'Configure Layout', exact: true }).click();
+      await page.locator('.terminal-tab-shell').getByRole('button', { name: 'Configure Layout', exact: true }).click();
       const lockSwitch = page.getByRole('switch', { name: 'Lock Layout', exact: true });
       await expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
       await lockSwitch.click();
@@ -665,7 +690,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
     });
 
     await step('the tab-bar eye action hides and restores the persisted top navigation', async () => {
-      const tabBar = page.getByTestId('terminal-tab-bar');
+      const tabBar = page.locator('.terminal-tab-shell');
       const header = page.locator('#app > div > header');
       await expect(header).toBeVisible();
       await tabBar.getByRole('button', { name: 'Hide', exact: true }).click();

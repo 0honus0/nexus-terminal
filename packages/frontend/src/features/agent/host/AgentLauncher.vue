@@ -8,6 +8,7 @@
   const { windowManager: agentWindowManager } = useAgentHostState();
 
   const position = computed(() => agentWindowManager.state.launcherPosition);
+  const dock = computed(() => agentWindowManager.state.launcherDock);
 
   const DRAG_START_PX = 6;
 
@@ -16,6 +17,7 @@
   let originY = 0;
   let startRight = 0;
   let startBottom = 0;
+  let startDock: 'left' | 'right' | null = null;
   let hasMoved = false;
 
   const dragging = ref(false);
@@ -27,7 +29,7 @@
   });
 
   const clamp = (right: number, bottom: number) => ({
-    right: Math.max(12, Math.min(right, Math.max(12, window.innerWidth - 72))),
+    right: Math.max(0, Math.min(right, Math.max(0, window.innerWidth - 44))),
     bottom: Math.max(12, Math.min(bottom, Math.max(12, window.innerHeight - 72))),
   });
 
@@ -36,8 +38,9 @@
     pointerId = event.pointerId;
     originX = event.clientX;
     originY = event.clientY;
-    startRight = position.value.right;
+    startRight = window.innerWidth - (event.currentTarget as HTMLElement).getBoundingClientRect().right;
     startBottom = position.value.bottom;
+    startDock = dock.value;
     hasMoved = false;
     dragging.value = false;
     try {
@@ -72,6 +75,9 @@
     dragging.value = false;
 
     if (wasDragging) {
+      const right = position.value.right;
+      const left = window.innerWidth - right - 44;
+      if (Math.min(right, left) <= 28) agentWindowManager.dockLauncher(right <= left ? 'right' : 'left');
       if (hasMoved) emit('layoutChange');
       return;
     }
@@ -92,7 +98,10 @@
     const wasDragging = dragging.value;
     pointerId = null;
     dragging.value = false;
-    if (wasDragging && hasMoved) agentWindowManager.setLauncherPosition(clamp(startRight, startBottom));
+    if (wasDragging && hasMoved) {
+      agentWindowManager.setLauncherPosition(clamp(startRight, startBottom));
+      if (startDock) agentWindowManager.dockLauncher(startDock);
+    }
     hasMoved = true;
   };
 
@@ -124,19 +133,20 @@
 
 <template>
   <div
-    class="fixed z-30 flex items-center gap-2"
-    :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }"
+    class="fixed z-30 h-11 w-11"
+    :class="{ 'overflow-hidden': dock !== null }"
+    :style="{
+      left: dock === 'left' ? '0px' : dock === 'right' ? 'calc(100vw - 44px)' : undefined,
+      right: dock ? undefined : `${position.right}px`,
+      bottom: `${position.bottom}px`,
+    }"
   >
-    <!-- 全局悬浮 Agent 呼出按钮（圆形微质感中性毛玻璃，非通体紫色，精致 AI 星芒矢量图标） -->
     <button
       type="button"
       data-agent-launcher-trigger
-      class="group relative flex h-9 w-9 sm:h-11 sm:w-11 touch-none select-none items-center justify-center rounded-full border border-border/80 bg-card/92 text-foreground shadow-[0_4px_20px_rgba(0,0,0,0.12)] backdrop-blur-xl ring-1 ring-white/20 dark:ring-white/8 transition-all duration-200 hover:border-primary/50 hover:shadow-[0_6px_24px_color-mix(in_srgb,var(--color-primary)_22%,transparent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:cursor-not-allowed disabled:opacity-50"
-      :class="
-        dragging
-          ? 'scale-110 cursor-grabbing ring-2 ring-primary/60 shadow-2xl rotate-3'
-          : 'cursor-pointer hover:scale-105 active:scale-95'
-      "
+      class="agent-launcher touch-none select-none"
+      :class="{ 'is-dragging': dragging }"
+      :data-dock="dock"
       :aria-label="$t('agent.launcher.open')"
       :title="`${$t('agent.launcher.open')} · ${$t('agent.launcher.dragHint')}`"
       :disabled="paused"
@@ -147,63 +157,21 @@
       @contextmenu="onContextMenu"
       @keydown="keydown"
     >
-      <!-- 内部微弱径向漫射光晕 -->
-      <span
-        class="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_35%,color-mix(in_srgb,var(--color-primary)_12%,transparent)_0%,transparent_70%)] opacity-80 group-hover:opacity-100 transition-opacity"
-        aria-hidden="true"
-      ></span>
-      <!-- 顶层晶体微弧光切面 -->
-      <span
-        class="pointer-events-none absolute inset-x-2.5 top-0.5 h-2 rounded-t-full bg-gradient-to-b from-white/35 dark:from-white/15 to-transparent"
-        aria-hidden="true"
-      ></span>
-
-      <!-- 核心图标：高精度精致 AI 智能星芒（告别粗硬魔法棒，呈现极具未来感的晶体微光） -->
-      <div class="relative flex items-center justify-center pointer-events-none">
-        <span
-          class="absolute inset-0 rounded-full bg-primary/20 blur-[5px] transition-all duration-300 group-hover:bg-primary/35 group-hover:blur-[7px]"
-          aria-hidden="true"
-        ></span>
-        <svg
-          class="relative h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6"
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <defs>
-            <linearGradient
-              id="nexus-agent-launcher-core-grad"
-              x1="2"
-              y1="2"
-              x2="20"
-              y2="21"
-              gradientUnits="userSpaceOnUse"
-            >
-              <stop offset="0%" stop-color="var(--color-primary, #a855f7)" />
-              <stop offset="100%" stop-color="#38bdf8" />
-            </linearGradient>
-            <linearGradient
-              id="nexus-agent-launcher-sparkle-grad"
-              x1="14"
-              y1="2"
-              x2="22"
-              y2="10"
-              gradientUnits="userSpaceOnUse"
-            >
-              <stop offset="0%" stop-color="#38bdf8" />
-              <stop offset="100%" stop-color="var(--color-primary, #a855f7)" />
-            </linearGradient>
-          </defs>
+      <div class="flex items-center justify-center pointer-events-none">
+        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path
-            d="M10 2.5C10 7.47 5.97 11.5 1 11.5C5.97 11.5 10 15.53 10 20.5C10 15.53 14.03 11.5 19 11.5C14.03 11.5 10 7.47 10 2.5Z"
-            fill="url(#nexus-agent-launcher-core-grad)"
+            d="M6 4h12a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7l-5 3v-3a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
           />
           <path
-            d="M18.5 2.5C18.5 4.71 16.71 6.5 14.5 6.5C16.71 6.5 18.5 8.29 18.5 10.5C18.5 8.29 20.29 6.5 22.5 6.5C20.29 6.5 18.5 4.71 18.5 2.5Z"
-            fill="url(#nexus-agent-launcher-sparkle-grad)"
+            d="m7 9 3 2.5L7 14m6 0h4"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
           />
-          <circle cx="4.5" cy="18.5" r="1.1" fill="#38bdf8" opacity="0.85" />
         </svg>
       </div>
 
@@ -217,3 +185,61 @@
     </button>
   </div>
 </template>
+
+<style scoped>
+  .agent-launcher {
+    position: relative;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border: 1px solid var(--color-primary);
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-primary-foreground, #fff);
+    box-shadow:
+      var(--ui-glass-highlight),
+      0 4px 16px rgb(0 0 0 / 14%);
+    cursor: pointer;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      transform 150ms ease;
+  }
+  .agent-launcher:hover {
+    border-color: var(--link-active-color);
+    background: var(--color-primary);
+  }
+  .agent-launcher:focus-visible {
+    outline: 2px solid var(--link-active-color);
+    outline-offset: 3px;
+  }
+  .agent-launcher.is-dragging {
+    cursor: grabbing;
+    border-color: var(--link-active-color);
+  }
+  .agent-launcher[data-dock='right'] {
+    transform: translateX(50%);
+  }
+  .agent-launcher[data-dock='left'] {
+    transform: translateX(-50%);
+  }
+  .agent-launcher[data-dock]:focus-visible,
+  .agent-launcher.is-dragging {
+    transform: none;
+  }
+  @media (hover: hover) {
+    .agent-launcher[data-dock]:hover {
+      transform: none;
+    }
+  }
+  .agent-launcher:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .agent-launcher {
+      transition: none;
+    }
+  }
+</style>

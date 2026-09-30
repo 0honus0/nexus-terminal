@@ -39,21 +39,21 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
     );
     await page.getByRole('tab', { name: 'Security', exact: true }).click();
     expect((await captchaLoadPromise).ok()).toBeTruthy();
-    const captcha = page.getByTestId('captcha-settings');
+    const captcha = page.getByRole('heading', { name: 'CAPTCHA Settings', exact: true }).locator('..');
     await expect(captcha).toBeVisible();
-    await expect(captcha.getByTestId('captcha-save')).toBeEnabled();
-    await expect(page.getByTestId('change-password-settings')).toBeVisible();
+    await expect(captcha.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+    await expect(page.getByRole('heading', { name: 'Change Password', exact: true })).toBeVisible();
     await captureFunctionalScreenshot(page, 'security-settings.png', { viewport: { width: 1440, height: 900 } });
 
     await step('enable hCaptcha and save provider keys through the UI', async () => {
-      await captcha.getByTestId('captcha-enabled').check();
-      await selectUiOption(captcha.getByTestId('captcha-provider'), 'hcaptcha');
+      await captcha.getByRole('checkbox', { name: 'Enable CAPTCHA on Login Page' }).check();
+      await selectUiOption(captcha.locator('#captchaProvider'), 'hcaptcha');
       await captcha.locator('#hcaptchaSiteKey').fill(HCAPTCHA_SITE_KEY);
       await captcha.locator('#hcaptchaSecretKey').fill('e2e-hcaptcha-secret');
       const savePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'PUT',
       );
-      await captcha.getByTestId('captcha-save').click();
+      await captcha.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await savePromise).ok()).toBeTruthy();
 
       const publicConfig = await context.request.get('/api/v1/settings/captcha');
@@ -70,23 +70,23 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
     await step('reload keeps the saved provider visible without exposing the secret', async () => {
       await page.reload();
       await page.getByRole('tab', { name: 'Security', exact: true }).click();
-      const reloaded = page.getByTestId('captcha-settings');
-      await expect(reloaded.getByTestId('captcha-enabled')).toBeChecked();
-      await expectUiSelectValue(reloaded.getByTestId('captcha-provider'), 'hcaptcha');
+      const reloaded = captcha;
+      await expect(reloaded.getByRole('checkbox', { name: 'Enable CAPTCHA on Login Page' })).toBeChecked();
+      await expectUiSelectValue(reloaded.locator('#captchaProvider'), 'hcaptcha');
       await expect(reloaded.locator('#hcaptchaSiteKey')).toHaveValue(HCAPTCHA_SITE_KEY);
       await expect(reloaded.locator('#hcaptchaSecretKey')).toHaveAttribute('type', 'password');
       await expect(reloaded.locator('#hcaptchaSecretKey')).toHaveValue('');
     });
 
     await step('switch to reCAPTCHA and persist its public configuration through the UI', async () => {
-      const reloaded = page.getByTestId('captcha-settings');
-      await selectUiOption(reloaded.getByTestId('captcha-provider'), 'recaptcha');
+      const reloaded = captcha;
+      await selectUiOption(reloaded.locator('#captchaProvider'), 'recaptcha');
       await reloaded.locator('#recaptchaSiteKey').fill(RECAPTCHA_SITE_KEY);
       await reloaded.locator('#recaptchaSecretKey').fill('e2e-recaptcha-secret');
       const savePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'PUT',
       );
-      await reloaded.getByTestId('captcha-save').click();
+      await reloaded.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await savePromise).ok()).toBeTruthy();
       await expect(reloaded.locator('#recaptchaSecretKey')).toHaveValue('');
 
@@ -104,22 +104,22 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
     await step('reload keeps reCAPTCHA public configuration without exposing its secret', async () => {
       await page.reload();
       await page.getByRole('tab', { name: 'Security', exact: true }).click();
-      const reloaded = page.getByTestId('captcha-settings');
-      await expect(reloaded.getByTestId('captcha-enabled')).toBeChecked();
-      await expectUiSelectValue(reloaded.getByTestId('captcha-provider'), 'recaptcha');
+      const reloaded = captcha;
+      await expect(reloaded.getByRole('checkbox', { name: 'Enable CAPTCHA on Login Page' })).toBeChecked();
+      await expectUiSelectValue(reloaded.locator('#captchaProvider'), 'recaptcha');
       await expect(reloaded.locator('#recaptchaSiteKey')).toHaveValue(RECAPTCHA_SITE_KEY);
       await expect(reloaded.locator('#recaptchaSecretKey')).toHaveAttribute('type', 'password');
       await expect(reloaded.locator('#recaptchaSecretKey')).toHaveValue('');
     });
 
     await step('disable CAPTCHA through the UI and persist the safe default', async () => {
-      const reloaded = page.getByTestId('captcha-settings');
-      await reloaded.getByTestId('captcha-enabled').uncheck();
-      await expectUiSelectValue(reloaded.getByTestId('captcha-provider'), 'none');
+      const reloaded = captcha;
+      await reloaded.getByRole('checkbox', { name: 'Enable CAPTCHA on Login Page' }).uncheck();
+      await expectUiSelectValue(reloaded.locator('#captchaProvider'), 'none');
       const savePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'PUT',
       );
-      await reloaded.getByTestId('captcha-save').click();
+      await reloaded.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await savePromise).ok()).toBeTruthy();
       const publicConfig = await context.request.get('/api/v1/settings/captcha');
       await expect(publicConfig.json()).resolves.toMatchObject({ enabled: false, provider: 'none' });

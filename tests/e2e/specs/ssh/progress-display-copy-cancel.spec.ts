@@ -32,13 +32,13 @@ test('copy remains cancelled after a long remote write stall', async ({ page, co
     await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'Paste');
 
-    await expect(page.getByTestId('transfer-progress-center')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.transfer-progress-window')).toBeVisible({ timeout: 10_000 });
     await closeConnectedFileManager(page);
     await hideVisibleProgressCenter(page);
     const modal = await openProgressDisplay(page);
     const task = hiddenTask(modal, sourceName);
     await expect(task).toBeVisible();
-    await task.getByTestId('hidden-progress-cancel').click();
+    await task.getByRole('button', { name: 'Cancel', exact: true }).click();
     await closeProgressDisplay(modal);
 
     // Old code forgot cancellation after 30s. Keep the first write blocked beyond that

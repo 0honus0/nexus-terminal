@@ -1,5 +1,11 @@
 {
   "workspace": {
+    "start": {
+      "title": "接続とセッション",
+      "description": "保留中のセッションを再開するか、接続を選んでターミナルを開きます。",
+      "connections": "接続を開始",
+      "back": "ターミナルに戻る"
+    },
     "terminal": {
       "reconnectingMsg": "再接続を試行中..."
     },

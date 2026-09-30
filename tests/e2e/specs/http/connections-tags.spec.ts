@@ -140,12 +140,21 @@ test('new SSH connections appear in resource status immediately', async ({ reque
         connectionId: number;
         host: string;
         port: number;
+        checkedAt: number;
         status?: { cpuPercent: number };
       }>;
       const resource = resources.find((item) => item.host === host && item.port === port);
       expect(resource).toBeDefined();
       expect(resource?.connectionId).toBe(connectionId);
       expect(resource?.status?.cpuPercent).toBeGreaterThanOrEqual(0);
+
+      const individual = await request.get(`/api/v1/system/ssh-resources/${connectionId}`);
+      expect(individual.ok()).toBeTruthy();
+      await expect(individual.json()).resolves.toMatchObject({
+        key: `${host.toLowerCase()}:${port}`,
+        connectionId,
+        checkedAt: resource?.checkedAt,
+      });
     });
   } finally {
     if (connectionId) {

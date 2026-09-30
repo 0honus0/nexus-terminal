@@ -28,6 +28,7 @@
     toggleHeader: [];
     openProgress: [];
     openLayoutConfigurator: [];
+    openSuspended: [];
   }>();
 
   const context = shallowRef<{ session: WorkspaceRuntimeSession; x: number; y: number } | null>(null);
@@ -121,7 +122,6 @@
 <template>
   <div class="terminal-tab-shell shrink-0">
     <div
-      data-testid="terminal-tab-bar"
       role="tablist"
       :class="[
         'flex overflow-hidden border border-border bg-header',
@@ -133,7 +133,6 @@
           <li
             v-for="session in props.sessions"
             :key="session.id"
-            :data-testid="`terminal-tab-${session.id}`"
             :data-session-id="session.id"
             :data-session-state="session.state.value"
             :data-session-status="session.statusMessage.value"
@@ -210,6 +209,15 @@
       <div class="ml-auto flex h-full shrink-0 items-center">
         <button
           type="button"
+          class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors hover:bg-border hover:text-foreground"
+          :title="t('suspendedSshSessions.modalTitle')"
+          :aria-label="t('suspendedSshSessions.modalTitle')"
+          @click="emit('openSuspended')"
+        >
+          <i class="fas fa-pause-circle text-sm" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
           class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
           :title="t(props.navBarVisible ? 'header.hide' : 'header.show')"
           :aria-label="t(props.navBarVisible ? 'header.hide' : 'header.show')"
@@ -219,7 +227,6 @@
         </button>
         <button
           v-if="props.progressTaskCount > 0"
-          data-testid="transfer-progress-toggle"
           type="button"
           class="relative flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
           :title="t('terminalTabBar.progressDisplay')"

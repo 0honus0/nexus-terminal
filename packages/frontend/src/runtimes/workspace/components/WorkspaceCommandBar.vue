@@ -251,7 +251,6 @@
 <template>
   <form
     ref="root"
-    data-testid="command-input-bar"
     class="command-bar-root flex w-full items-center overflow-hidden bg-background"
     :class="mobile ? 'command-bar-root--mobile h-auto min-h-[2.35rem]' : 'h-full min-h-0'"
     @submit.prevent="submit"
@@ -262,7 +261,6 @@
       <input
         ref="commandInput"
         v-model="activeInput"
-        data-testid="command-input"
         :data-focus-id="terminalSearchOpen ? 'terminalSearch' : 'commandInput'"
         type="text"
         :placeholder="t(terminalSearchOpen ? 'commandInputBar.searchPlaceholder' : 'commandInputBar.placeholder')"
@@ -299,7 +297,6 @@
             <i class="fas fa-bolt" aria-hidden="true"></i>
           </button>
           <button
-            data-testid="open-status-monitor-button"
             type="button"
             class="command-bar-button"
             :title="t('layout.pane.statusMonitor')"
@@ -309,7 +306,6 @@
             <i class="fas fa-tachometer-alt" aria-hidden="true"></i>
           </button>
           <button
-            data-testid="open-suspended-sessions-button"
             type="button"
             class="command-bar-button"
             :title="t('suspendedSshSessions.modalTitle')"
@@ -319,7 +315,6 @@
             <i class="fas fa-pause-circle" aria-hidden="true"></i>
           </button>
           <button
-            data-testid="toggle-virtual-keyboard"
             type="button"
             class="command-bar-button"
             :title="t(virtualKeyboardVisible ? 'commandInputBar.hideKeyboard' : 'commandInputBar.showKeyboard')"
@@ -372,7 +367,6 @@
         </template>
         <button
           v-if="showFileManagerButton"
-          data-testid="open-file-manager-button"
           type="button"
           class="command-bar-button"
           :title="t('layout.pane.fileManager')"
@@ -422,7 +416,6 @@
             <i class="fas fa-arrow-down" aria-hidden="true"></i>
           </button>
           <button
-            data-testid="mobile-docker-pane-toggle"
             type="button"
             class="command-bar-button"
             :class="{ 'is-active': dockerPaneActive }"
@@ -435,7 +428,6 @@
           </button>
           <button
             v-if="nonTerminalPaneActive && !dockerPaneActive"
-            data-testid="mobile-terminal-pane-return"
             type="button"
             class="command-bar-button"
             :title="t('layout.pane.terminal')"

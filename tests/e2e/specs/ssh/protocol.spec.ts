@@ -5,6 +5,7 @@ import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../
 import {
   closeWebSocket,
   type E2eWebSocket,
+  openAuthenticatedWebSocket,
   openWorkspaceSession,
   requestWorkspace,
   requestWorkspaceBinary,
@@ -141,6 +142,187 @@ test('duplicate workspace.connect is rejected without breaking filesystem access
     });
   } finally {
     await closeWebSocket(workspace.socket);
+  }
+});
+
+test('detached workspace resumes only with its credential and replays missed terminal output', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `resume-${crypto.randomUUID()}`);
+
+  await requestWorkspace(workspace.socket, 'terminal.input', {
+    data: "sleep 1; printf 'NEXUS_DETACHED_REPLAY\\n'\n",
+  });
+  workspace.socket.terminate();
+
+  const replacement = await openAuthenticatedWebSocket(request);
+  try {
+    await expect(
+      requestWorkspace(replacement, 'workspace.connect', {
+        workspaceId: workspace.workspaceId,
+        connectionId,
+        viewport: { columns: 100, rows: 30 },
+      }),
+    ).rejects.toThrow(/already exists/i);
+  } finally {
+    await closeWebSocket(replacement);
+  }
+
+  const rejected = await openAuthenticatedWebSocket(request);
+  try {
+    await expect(
+      requestWorkspace(rejected, 'workspace.resume', {
+        workspaceId: workspace.workspaceId,
+        connectionId,
+        resumeToken: `${workspace.resumeToken}x`,
+        attachmentGeneration: workspace.attachmentGeneration,
+        terminalOffset: workspace.terminalOffset,
+      }),
+    ).rejects.toThrow(/WORKSPACE_RESUME_REJECTED/);
+  } finally {
+    await closeWebSocket(rejected);
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1_300));
+  const resumed = await openAuthenticatedWebSocket(request);
+  try {
+    const replay = waitForBinaryText(resumed, 'NEXUS_DETACHED_REPLAY', 10_000);
+    const result = await requestWorkspace<{
+      resumeToken: string;
+      attachmentGeneration: number;
+      replayedBytes: number;
+    }>(resumed, 'workspace.resume', {
+      workspaceId: workspace.workspaceId,
+      connectionId,
+      resumeToken: workspace.resumeToken,
+      attachmentGeneration: workspace.attachmentGeneration,
+      terminalOffset: workspace.terminalOffset,
+      viewport: { columns: 100, rows: 30 },
+    });
+    await expect(replay).resolves.toContain('NEXUS_DETACHED_REPLAY');
+    expect(result.replayedBytes).toBeGreaterThan(0);
+    expect(result.resumeToken).toBe(workspace.resumeToken);
+    expect(result.attachmentGeneration).toBe(workspace.attachmentGeneration);
+
+    const stale = await openAuthenticatedWebSocket(request);
+    try {
+      await expect(
+        requestWorkspace(stale, 'workspace.resume', {
+          workspaceId: workspace.workspaceId,
+          connectionId,
+          resumeToken: workspace.resumeToken,
+          attachmentGeneration: workspace.attachmentGeneration,
+          terminalOffset: workspace.terminalOffset,
+        }),
+      ).rejects.toThrow(/WORKSPACE_RESUME_REJECTED/);
+    } finally {
+      await closeWebSocket(stale);
+    }
+
+    await requestWorkspace(resumed, 'workspace.close', {
+      workspaceId: workspace.workspaceId,
+      connectionId,
+      resumeToken: workspace.resumeToken,
+      attachmentGeneration: workspace.attachmentGeneration,
+    });
+  } finally {
+    await closeWebSocket(resumed);
+  }
+});
+
+test('detached workspace keeps archive work running and replays its outcome on resume', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `resume-archive-${crypto.randomUUID()}`);
+  const requestId = `archive-${crypto.randomUUID()}`;
+  const destination = `/detached-${crypto.randomUUID()}.zip`;
+
+  await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=1000`, { method: 'POST' });
+  try {
+    await requestWorkspace(
+      workspace.socket,
+      'transfer.compress',
+      { sources: ['/archive-source.txt'], destination, format: 'zip' },
+      requestId,
+    );
+    workspace.socket.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 1_300));
+
+    const resumed = await openAuthenticatedWebSocket(request);
+    try {
+      const outcome = waitForJson(
+        resumed,
+        (message) => message.type === 'transfer.archive' && message.payload?.requestId === requestId,
+        10_000,
+      );
+      await requestWorkspace(resumed, 'workspace.resume', {
+        workspaceId: workspace.workspaceId,
+        connectionId,
+        resumeToken: workspace.resumeToken,
+        attachmentGeneration: workspace.attachmentGeneration,
+        terminalOffset: workspace.terminalOffset,
+      });
+      const event = (await outcome).payload as ArchiveResult;
+      test.skip(event.code === 'COMMAND_NOT_FOUND', 'zip is not installed in this test environment');
+      expect(event.type, JSON.stringify(event)).toBe('completed');
+      const archive = await requestWorkspaceBinary(resumed, 'filesystem.readBinary', { path: destination });
+      expect(archive.bytes.byteLength).toBeGreaterThan(0);
+      await requestWorkspace(resumed, 'workspace.close', {
+        workspaceId: workspace.workspaceId,
+        connectionId,
+        resumeToken: workspace.resumeToken,
+        attachmentGeneration: workspace.attachmentGeneration,
+      });
+    } finally {
+      await closeWebSocket(resumed);
+    }
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
+    await closeWebSocket(workspace.socket).catch(() => undefined);
+  }
+});
+
+test('credentialed close releases a detached workspace immediately', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `close-detached-${crypto.randomUUID()}`);
+  workspace.socket.terminate();
+
+  const closer = await openAuthenticatedWebSocket(request);
+  try {
+    await requestWorkspace(closer, 'workspace.close', {
+      workspaceId: workspace.workspaceId,
+      connectionId,
+      resumeToken: workspace.resumeToken,
+      attachmentGeneration: workspace.attachmentGeneration,
+    });
+  } finally {
+    await closeWebSocket(closer);
+  }
+
+  const stale = await openAuthenticatedWebSocket(request);
+  try {
+    await expect(
+      requestWorkspace(stale, 'workspace.resume', {
+        workspaceId: workspace.workspaceId,
+        connectionId,
+        resumeToken: workspace.resumeToken,
+        attachmentGeneration: workspace.attachmentGeneration,
+        terminalOffset: workspace.terminalOffset,
+      }),
+    ).rejects.toThrow(/WORKSPACE_RESUME_REJECTED/);
+  } finally {
+    await closeWebSocket(stale);
+  }
+
+  const replacement = await openWorkspaceSession(request, connectionId, workspace.workspaceId);
+  try {
+    await expect(requestWorkspace(replacement.socket, 'terminal.currentDirectory')).resolves.toEqual('/');
+  } finally {
+    await closeWebSocket(replacement.socket);
   }
 });
 

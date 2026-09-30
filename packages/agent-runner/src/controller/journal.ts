@@ -68,7 +68,6 @@ const decodeToolchain = (value: unknown): WorkspaceRecord['toolchain'] => {
     return {
       familyId: stringValue(record.familyId) as string,
       versionId: stringValue(record.versionId) as string,
-      contentDigest: stringValue(record.contentDigest) as string,
     };
   });
 };

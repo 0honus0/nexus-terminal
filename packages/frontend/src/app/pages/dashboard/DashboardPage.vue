@@ -2,7 +2,7 @@
   import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiInput, UiSelect, UiSpinner } from '@/foundation/ui';
+  import { UiButton, UiInput, UiSelect, UiSpinner, UiScrollArea } from '@/foundation/ui';
   import DashboardHostCard from './DashboardHostCard.vue';
   import {
     numberStorageCodec,
@@ -18,6 +18,7 @@
   import { usePreferences } from '@/features/preferences/public';
   import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { useSuspendedSessions } from '@/features/ssh-suspend/public';
+  import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -113,10 +114,12 @@
       remoteDesktopLauncher.open({ id: item.id, name: item.name || item.host, type: item.type });
       return;
     }
+    preloadWorkspaceTerminalSurface();
     return router.push({ name: 'Workspace', query: { connectionId: String(item.id) } });
   };
   const openSuspendedSessions = () => router.push({ name: 'Workspace', query: { openSuspended: '1' } });
 
+  const relativeTimeFormatter = computed(() => new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' }));
   const formatRelativeTime = (timestamp: number | null | undefined): string => {
     if (!timestamp) return t('connections.status.never');
     try {
@@ -136,7 +139,7 @@
                   : absoluteSeconds < 31557600
                     ? [2629800, 'month']
                     : [31557600, 'year'];
-      return new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' }).format(Math.round(seconds / scale), unit);
+      return relativeTimeFormatter.value.format(Math.round(seconds / scale), unit);
     } catch {
       return String(timestamp);
     }
@@ -184,7 +187,8 @@
     if (!document.hidden) void resources.loadLocal();
   };
   const refreshRemote = () => {
-    if (!document.hidden) void resources.loadRemote();
+    if (!document.hidden)
+      void resources.loadRemote(() => connections.load().then((items) => items.filter((item) => item.type === 'SSH')));
   };
   const scheduleLocalRefresh = () => {
     window.clearInterval(localRefreshTimer);
@@ -253,15 +257,19 @@
 
   const refreshDashboardData = async (initial = false) => {
     if (initial) loading.value = !connections.loaded.value || !tags.loaded.value;
-    const [, , audit] = await Promise.allSettled([
+    const catalog = Promise.allSettled([
       initial ? connections.load() : connections.revalidate(),
       initial ? tags.load() : tags.revalidate(),
-      auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }),
+    ]).then(() => {
+      if (initial) loading.value = false;
+    });
+    const [, , audit] = await Promise.allSettled([
+      catalog,
       preferences.load(),
+      auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }),
       suspended.load({ silent: true, force: true }),
     ]);
     if (audit.status === 'fulfilled') activity.value = audit.value.logs.slice(0, MAX_RECENT_LOGS);
-    if (initial) loading.value = false;
   };
 
   const activateDashboard = () => {
@@ -307,12 +315,9 @@
 </script>
 
 <template>
-  <main
-    data-testid="dashboard-view"
-    class="dashboard-page min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6"
-  >
+  <main class="dashboard-page min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6">
     <div class="dashboard-layout mx-auto flex w-full max-w-[1680px] flex-col gap-5">
-      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-4">
+      <section class="border-b border-border/70 pb-4">
         <div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div class="min-w-0">
             <div class="flex min-w-0 items-center gap-3">
@@ -347,7 +352,6 @@
               </UiButton>
               <UiButton
                 v-if="activeSuspendedSessions.length"
-                data-testid="dashboard-suspended-sessions"
                 density="compact"
                 appearance="soft"
                 tone="neutral"
@@ -362,7 +366,6 @@
             </div>
             <div v-else-if="activeSuspendedSessions.length" class="mt-3 hidden lg:flex">
               <UiButton
-                data-testid="dashboard-suspended-sessions"
                 density="compact"
                 appearance="soft"
                 tone="neutral"
@@ -376,96 +379,98 @@
             </div>
           </div>
 
-          <div
-            class="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-5 lg:justify-end"
-          >
-            <div
-              data-testid="dashboard-overview-stats"
-              class="flex items-end justify-between gap-7 px-1 sm:justify-start"
-            >
-              <div>
-                <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
-                  connections.connections.value.length
-                }}</strong>
-                <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.totalConnections') }}</div>
+          <div class="dashboard-overview-metrics min-w-0 w-full lg:w-[520px]">
+            <div class="dashboard-overview-metrics-layout">
+              <div class="dashboard-overview-counts flex items-end justify-between gap-7 px-1">
+                <div>
+                  <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
+                    connections.connections.value.length
+                  }}</strong>
+                  <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.totalConnections') }}</div>
+                </div>
+                <div>
+                  <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
+                    tags.tags.value.length
+                  }}</strong>
+                  <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.tagCount') }}</div>
+                </div>
               </div>
-              <div>
-                <strong class="block text-2xl font-semibold leading-none tabular-nums">{{
-                  tags.tags.value.length
-                }}</strong>
-                <div class="mt-1.5 text-[11px] text-text-secondary">{{ t('dashboard.tagCount') }}</div>
-              </div>
-            </div>
 
-            <div
-              v-if="preferences.values.value.dashboardShowLocalResources"
-              data-testid="dashboard-local-resources"
-              class="min-w-0 border-t border-border pt-3 sm:min-w-[300px] sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
-                  {{ t('dashboard.resources.local') }}
+              <div
+                v-if="preferences.values.value.dashboardShowLocalResources"
+                class="dashboard-overview-local min-w-0 border-t border-border pt-3"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <div
+                    class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary"
+                  >
+                    {{ t('dashboard.resources.local') }}
+                  </div>
+                  <span class="flex items-center gap-1.5 text-[11px] text-text-secondary"
+                    ><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span
+                    >{{ t('dashboard.resources.live') }}</span
+                  >
                 </div>
-                <span class="flex items-center gap-1.5 text-[11px] text-text-secondary"
-                  ><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span
-                  >{{ t('dashboard.resources.live') }}</span
-                >
-              </div>
-              <div v-if="resources.local.value" class="mt-2 grid grid-cols-3 gap-4">
-                <div>
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span>
-                    <strong class="text-base font-semibold tabular-nums">{{
-                      percent(resources.local.value.cpuPercent)
-                    }}</strong>
+                <div v-if="resources.local.value" class="mt-2 grid grid-cols-3 gap-4">
+                  <div>
+                    <div class="flex items-baseline justify-between gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.cpu')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums">{{
+                        percent(resources.local.value.cpuPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                      <div
+                        class="h-full rounded-full bg-primary"
+                        :style="{ width: percent(resources.local.value.cpuPercent) }"
+                      ></div>
+                    </div>
                   </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
-                    <div
-                      class="h-full rounded-full bg-primary"
-                      :style="{ width: percent(resources.local.value.cpuPercent) }"
-                    ></div>
+                  <div
+                    :title="`${formatMemory(resources.local.value.memUsed)} / ${formatMemory(resources.local.value.memTotal)}`"
+                  >
+                    <div class="flex items-baseline justify-between gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.memory')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums">{{
+                        percent(resources.local.value.memPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                      <div
+                        class="h-full rounded-full bg-success"
+                        :style="{ width: percent(resources.local.value.memPercent) }"
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex items-baseline justify-between gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.disk')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums">{{
+                        percent(resources.local.value.diskPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                      <div
+                        class="h-full rounded-full bg-warning"
+                        :style="{ width: percent(resources.local.value.diskPercent) }"
+                      ></div>
+                    </div>
                   </div>
                 </div>
-                <div
-                  :title="`${formatMemory(resources.local.value.memUsed)} / ${formatMemory(resources.local.value.memTotal)}`"
-                >
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{
-                      t('dashboard.resources.memory')
-                    }}</span>
-                    <strong class="text-base font-semibold tabular-nums">{{
-                      percent(resources.local.value.memPercent)
-                    }}</strong>
-                  </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
-                    <div
-                      class="h-full rounded-full bg-success"
-                      :style="{ width: percent(resources.local.value.memPercent) }"
-                    ></div>
-                  </div>
+                <div v-else-if="resources.localError.value" class="py-2 text-[11px] text-error">
+                  {{ resources.localError.value }}
                 </div>
-                <div>
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span>
-                    <strong class="text-base font-semibold tabular-nums">{{
-                      percent(resources.local.value.diskPercent)
-                    }}</strong>
-                  </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
-                    <div
-                      class="h-full rounded-full bg-warning"
-                      :style="{ width: percent(resources.local.value.diskPercent) }"
-                    ></div>
-                  </div>
+                <div v-else class="grid min-h-10 place-items-center py-2 text-[11px] text-text-secondary">
+                  <UiSpinner v-if="resources.localLoading.value" density="compact" /><span v-else>{{
+                    t('dashboard.resources.unavailable')
+                  }}</span>
                 </div>
-              </div>
-              <div v-else-if="resources.localError.value" class="py-2 text-[11px] text-error">
-                {{ resources.localError.value }}
-              </div>
-              <div v-else class="grid min-h-10 place-items-center py-2 text-[11px] text-text-secondary">
-                <UiSpinner v-if="resources.localLoading.value" density="compact" /><span v-else>{{
-                  t('dashboard.resources.unavailable')
-                }}</span>
               </div>
             </div>
           </div>
@@ -473,7 +478,6 @@
       </section>
 
       <div
-        data-testid="dashboard-workspace"
         class="dashboard-workspace"
         :class="
           preferences.values.value.dashboardShowRemoteResources
@@ -481,10 +485,7 @@
             : 'grid grid-cols-1'
         "
       >
-        <section
-          data-testid="dashboard-connections"
-          class="dashboard-surface order-1 flex min-w-0 flex-col overflow-hidden xl:mr-4"
-        >
+        <section class="dashboard-surface order-1 flex min-w-0 flex-col overflow-hidden xl:mr-4">
           <header class="shrink-0 px-4 pb-3 pt-4">
             <div class="flex items-center justify-between gap-3">
               <div class="flex min-w-0 items-center gap-2.5">
@@ -498,31 +499,38 @@
                   <p class="truncate text-xs text-text-secondary">{{ t('dashboard.quickConnectHint') }}</p>
                 </div>
               </div>
-              <span class="shrink-0 text-xs text-text-secondary"
-                >{{ filtered.length }} / {{ connections.connections.value.length }}</span
-              >
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="text-xs text-text-secondary"
+                  >{{ filtered.length }} / {{ connections.connections.value.length }}</span
+                >
+                <RouterLink
+                  to="/connections"
+                  :aria-label="t('dashboard.viewAllConnections')"
+                  :title="t('dashboard.viewAllConnections')"
+                  class="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium text-link transition-colors hover:bg-primary/10 hover:text-link-hover hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
+                >
+                  <span class="hidden sm:inline">{{ t('dashboard.viewAllConnections') }}</span>
+                  <i class="fas fa-arrow-right text-xs" aria-hidden="true"></i>
+                </RouterLink>
+              </div>
             </div>
           </header>
 
-          <div
-            data-testid="dashboard-connection-list"
-            class="h-[clamp(300px,42vh,440px)] min-h-0 overflow-y-auto overscroll-auto xl:h-auto xl:flex-1"
-            style="scrollbar-gutter: stable both-edges"
+          <UiScrollArea
+            class="h-[clamp(300px,42vh,440px)] xl:h-auto xl:flex-1"
+            :back-to-top-label="t('dashboard.backToTop')"
           >
             <div
-              data-testid="dashboard-connection-toolbar"
-              class="dashboard-toolbar sticky top-2 z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
+              class="dashboard-toolbar sm:sticky sm:top-2 sm:z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
             >
               <label class="col-span-3 min-w-0 sm:col-span-1"
                 ><span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder') }}</span>
                 <UiInput
                   v-model="search"
-                  data-testid="dashboard-connection-search"
                   type="search"
                   density="comfortable"
                   :placeholder="t('dashboard.searchConnectionsPlaceholder')"
-                  class="w-full"
-                  style="--ui-control-radius: 12px"
+                  class="dashboard-connection-search w-full"
                 >
                   <template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
                 </UiInput>
@@ -530,9 +538,6 @@
               <div class="min-w-0 sm:min-w-32">
                 <UiSelect
                   v-model="tagId"
-                  data-testid="dashboard-tag-filter"
-                  panel-test-id="dashboard-tag-filter-menu"
-                  option-test-id-prefix="dashboard-tag-filter-option"
                   :options="tagFilterOptions"
                   class="dashboard-filter-select-gen2 text-xs sm:text-sm"
                   style="--ui-control-height: 2.375rem"
@@ -544,9 +549,6 @@
               <div class="min-w-0 sm:min-w-32">
                 <UiSelect
                   v-model="sort"
-                  data-testid="dashboard-sort-by"
-                  panel-test-id="dashboard-sort-by-menu"
-                  option-test-id-prefix="dashboard-sort-by-option"
                   :options="sortOptions"
                   class="dashboard-filter-select-gen2 text-xs sm:text-sm"
                   style="--ui-control-height: 2.375rem"
@@ -556,7 +558,6 @@
                 />
               </div>
               <UiButton
-                data-testid="dashboard-sort-order"
                 appearance="soft"
                 tone="neutral"
                 icon-only
@@ -580,7 +581,6 @@
                 <DashboardHostCard
                   v-for="item in filtered"
                   :key="item.id"
-                  :data-testid="`dashboard-connection-row-${item.id}`"
                   :data-last-connected-at="item.lastConnectedAt ?? 0"
                   as="li"
                   title-tag="span"
@@ -603,7 +603,6 @@
                   </template>
                   <template #action>
                     <UiButton
-                      :data-testid="`dashboard-connect-${item.id}`"
                       type="button"
                       appearance="soft"
                       tone="neutral"
@@ -624,20 +623,11 @@
                 <template v-else>{{ t('dashboard.noConnections') }}</template>
               </div>
             </div>
-          </div>
-          <div class="shrink-0 border-t border-border/70 px-4 py-2.5 text-right">
-            <RouterLink
-              data-testid="dashboard-connections-link"
-              to="/connections"
-              class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
-              >{{ t('dashboard.viewAllConnections') }} →</RouterLink
-            >
-          </div>
+          </UiScrollArea>
         </section>
 
         <section
           v-if="preferences.values.value.dashboardShowRemoteResources"
-          data-testid="dashboard-system-resources"
           class="dashboard-surface order-2 flex min-w-0 flex-col overflow-hidden xl:ml-4"
         >
           <header class="flex shrink-0 flex-col gap-2 px-4 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -657,118 +647,114 @@
               <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary"
                 >{{ resources.remote.value.length }} {{ t('dashboard.resources.remote') }}</span
               >
-              <span
-                data-testid="dashboard-remote-refresh-interval"
-                class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success"
-                >{{
-                  t('dashboard.resources.snapshot', {
-                    seconds: preferences.values.value.remoteHostRefreshIntervalSeconds,
-                  })
-                }}</span
-              >
+              <span class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success">{{
+                t('dashboard.resources.snapshot', {
+                  seconds: preferences.values.value.remoteHostRefreshIntervalSeconds,
+                })
+              }}</span>
             </div>
           </header>
-          <div
-            data-testid="dashboard-ssh-resource-list"
-            class="h-[clamp(300px,42vh,440px)] min-h-0 space-y-2 overflow-y-auto overscroll-auto px-2 pb-2 xl:h-auto xl:flex-1"
-            style="scrollbar-gutter: stable"
+          <UiScrollArea
+            class="h-[clamp(300px,42vh,440px)] xl:h-auto xl:flex-1"
+            :back-to-top-label="t('dashboard.backToTop')"
           >
-            <div
-              v-if="resources.remoteLoading.value && resources.remote.value.length === 0"
-              data-testid="dashboard-remote-resources-loading"
-              class="grid h-full min-h-0 place-items-center"
-            >
-              <UiSpinner />
-            </div>
-            <DashboardHostCard
-              v-for="remote in resources.remote.value"
-              :key="remote.key"
-              :data-testid="`dashboard-remote-resource-${remote.key}`"
-              as="article"
-              title-tag="h3"
-              :name="remote.name"
-              :address="`${remote.username}@${remote.host}:${remote.port}`"
-              type="SSH"
-              :status-dot-class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
-              :accent-class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
-            >
-              <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-1.5 sm:mt-3.5 sm:gap-4">
-                <div>
-                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.cpu') }}</span>
-                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-                      percent(remote.status.cpuPercent)
-                    }}</strong>
+            <div class="space-y-2 px-2 pb-2">
+              <div
+                v-if="resources.remoteLoading.value && resources.remote.value.length === 0"
+                class="grid h-full min-h-0 place-items-center"
+              >
+                <UiSpinner />
+              </div>
+              <DashboardHostCard
+                v-for="remote in resources.remote.value"
+                :key="remote.key"
+                as="article"
+                title-tag="h3"
+                :name="remote.name"
+                :address="`${remote.username}@${remote.host}:${remote.port}`"
+                :status-dot-class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
+                :accent-class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
+              >
+                <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-1.5 sm:mt-3.5 sm:gap-4">
+                  <div>
+                    <div class="flex items-baseline justify-between gap-1 sm:gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.cpu')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                        percent(remote.status.cpuPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
+                      <div
+                        class="h-full rounded-full bg-primary"
+                        :style="{ width: percent(remote.status.cpuPercent) }"
+                      ></div>
+                    </div>
                   </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
+                  <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
+                    <div class="flex items-baseline justify-between gap-1 sm:gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.memory')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                        percent(remote.status.memPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
+                      <div
+                        class="h-full rounded-full bg-success"
+                        :style="{ width: percent(remote.status.memPercent) }"
+                      ></div>
+                    </div>
                     <div
-                      class="h-full rounded-full bg-primary"
-                      :style="{ width: percent(remote.status.cpuPercent) }"
-                    ></div>
-                  </div>
-                </div>
-                <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
-                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{
-                      t('dashboard.resources.memory')
-                    }}</span>
-                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-                      percent(remote.status.memPercent)
-                    }}</strong>
-                  </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
-                    <div
-                      class="h-full rounded-full bg-success"
-                      :style="{ width: percent(remote.status.memPercent) }"
-                    ></div>
-                  </div>
-                  <div
-                    data-testid="dashboard-remote-disk-detail"
-                    class="mt-1 truncate text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
-                  >
-                    {{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}
-                  </div>
-                </div>
-                <div :title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`">
-                  <div class="flex items-baseline justify-between gap-1 sm:gap-2">
-                    <span class="text-[11px] font-medium text-text-secondary">{{ t('dashboard.resources.disk') }}</span>
-                    <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-                      percent(remote.status.diskPercent)
-                    }}</strong>
-                  </div>
-                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
-                    <div
-                      class="h-full rounded-full bg-warning"
-                      :style="{ width: percent(remote.status.diskPercent) }"
-                    ></div>
-                  </div>
-                  <div
-                    class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
-                  >
-                    <span class="max-w-full truncate">{{ formatDisk(remote.status.diskUsed) }}</span>
-                    <span class="max-w-full truncate text-text-secondary/75"
-                      >/ {{ formatDisk(remote.status.diskTotal) }}</span
+                      class="mt-1 truncate text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
                     >
+                      {{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}
+                    </div>
+                  </div>
+                  <div :title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`">
+                    <div class="flex items-baseline justify-between gap-1 sm:gap-2">
+                      <span class="text-[11px] font-medium text-text-secondary">{{
+                        t('dashboard.resources.disk')
+                      }}</span>
+                      <strong class="text-base font-semibold tabular-nums sm:text-lg">{{
+                        percent(remote.status.diskPercent)
+                      }}</strong>
+                    </div>
+                    <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
+                      <div
+                        class="h-full rounded-full bg-warning"
+                        :style="{ width: percent(remote.status.diskPercent) }"
+                      ></div>
+                    </div>
+                    <div
+                      class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
+                    >
+                      <span class="max-w-full truncate">{{ formatDisk(remote.status.diskUsed) }}</span>
+                      <span class="max-w-full truncate text-text-secondary/75"
+                        >/ {{ formatDisk(remote.status.diskTotal) }}</span
+                      >
+                    </div>
                   </div>
                 </div>
+                <div v-else-if="remote.error" class="mt-3 truncate text-xs text-error" :title="remote.error">
+                  {{ remote.error }}
+                </div>
+                <div v-else class="mt-3 text-xs text-text-secondary">{{ t('dashboard.resources.waiting') }}</div>
+              </DashboardHostCard>
+              <div
+                v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
+                class="flex h-full min-h-0 items-center justify-center px-4 text-center text-xs text-text-secondary"
+              >
+                {{ resources.remoteError.value || t('dashboard.resources.noRemoteSessions') }}
               </div>
-              <div v-else-if="remote.error" class="mt-3 truncate text-xs text-error" :title="remote.error">
-                {{ remote.error }}
-              </div>
-              <div v-else class="mt-3 text-xs text-text-secondary">{{ t('dashboard.resources.waiting') }}</div>
-            </DashboardHostCard>
-            <div
-              v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
-              data-testid="dashboard-remote-resources"
-              class="flex h-full min-h-0 items-center justify-center px-4 text-center text-xs text-text-secondary"
-            >
-              {{ resources.remoteError.value || t('dashboard.resources.noRemoteSessions') }}
             </div>
-          </div>
+          </UiScrollArea>
         </section>
       </div>
 
-      <aside data-testid="dashboard-recent-activity" class="border-t border-border/70 pt-5">
+      <aside class="border-t border-border/70 pt-5">
         <header class="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex min-w-0 items-center gap-2.5">
             <span
@@ -783,10 +769,7 @@
           </div>
           <div class="flex items-center gap-3">
             <span class="text-xs tabular-nums text-text-secondary">{{ activity.length }}</span
-            ><RouterLink
-              data-testid="dashboard-audit-link"
-              to="/audit-logs"
-              class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
+            ><RouterLink to="/audit-logs" class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
               >{{ t('dashboard.viewFullAuditLog') }} →</RouterLink
             >
           </div>
@@ -835,6 +818,35 @@
 </template>
 
 <style scoped>
+  .dashboard-overview-metrics {
+    container-type: inline-size;
+  }
+  .dashboard-overview-metrics-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  @container (min-width: 520px) {
+    .dashboard-overview-metrics-layout {
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 1.25rem;
+    }
+    .dashboard-overview-counts {
+      flex-shrink: 0;
+      justify-content: flex-start;
+    }
+    .dashboard-overview-local {
+      flex: 1;
+      min-width: 300px;
+      border-top: 0;
+      border-left: 1px solid var(--border-color);
+      padding-top: 0;
+      padding-left: 1.25rem;
+    }
+  }
+
   .dashboard-surface {
     border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
     border-radius: 16px;
@@ -875,7 +887,19 @@
     box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
   }
 
+  .dashboard-connection-search {
+    background: var(--ui-fill-inset);
+  }
+
+  .dashboard-connection-search:hover {
+    background: var(--ui-fill-inset-hover);
+  }
+
   @media (max-width: 639px) {
+    .dashboard-connection-search {
+      --ui-control-radius: 8px;
+    }
+
     .dashboard-filter-select-gen2[data-ui-gen='2'] {
       --ui-control-padding-inline: 12px;
       --ui-control-gap: 8px;

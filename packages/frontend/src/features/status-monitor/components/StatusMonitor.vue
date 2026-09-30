@@ -229,12 +229,7 @@
 </script>
 
 <template>
-  <section
-    data-testid="status-monitor"
-    :data-status-scale="localScale.toFixed(2)"
-    class="status-monitor h-full min-h-0"
-    @wheel="handleWheel"
-  >
+  <section :data-status-scale="localScale.toFixed(2)" class="status-monitor h-full min-h-0" @wheel="handleWheel">
     <div
       :style="scaleStyle"
       :data-status-scale="localScale.toFixed(2)"

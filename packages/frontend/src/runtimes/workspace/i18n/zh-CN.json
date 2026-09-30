@@ -1,5 +1,11 @@
 {
   "workspace": {
+    "start": {
+      "title": "连接与会话",
+      "description": "恢复挂起会话，或选择连接开启新的终端。",
+      "connections": "发起连接",
+      "back": "返回当前终端"
+    },
     "terminal": {
       "reconnectingMsg": "正在尝试重新连接..."
     },

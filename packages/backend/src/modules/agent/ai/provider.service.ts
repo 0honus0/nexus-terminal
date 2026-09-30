@@ -39,6 +39,7 @@ const validateModel = (
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
     'id',
+    'protocol',
     'contextWindow',
     'maxOutputTokens',
     'supportsTools',
@@ -56,6 +57,8 @@ const validateModel = (
     'reasoningMandatory',
   ]);
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
+  if (raw.protocol !== undefined && raw.protocol !== 'responses' && raw.protocol !== 'chat-completions')
+    throw new Error('VALIDATION_FAILED');
   if (
     !nonEmptyString(raw.id) ||
     !positiveInteger(raw.contextWindow) ||
@@ -108,6 +111,7 @@ const validateModel = (
     providerCapabilities,
   );
   const model: PersistedProviderModelConfig = {
+    ...(raw.protocol === undefined ? {} : { protocol: raw.protocol as 'responses' | 'chat-completions' }),
     id,
     ...(Object.keys(capabilityOverrides).length ? { capabilityOverrides } : {}),
   };

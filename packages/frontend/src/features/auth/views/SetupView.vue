@@ -49,7 +49,7 @@
 
 <template>
   <div class="auth-page flex min-h-dvh items-center justify-center overflow-y-auto p-4">
-    <div class="ui-glass-panel flex w-full max-w-4xl overflow-hidden rounded-2xl">
+    <div class="auth-setup-panel ui-glass-panel flex w-full max-w-4xl overflow-hidden rounded-2xl">
       <section class="auth-brand-pane hidden w-2/5 flex-col items-center justify-center p-10 text-white md:flex">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
         <h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>
@@ -75,7 +75,7 @@
               autocomplete="username"
               required
               density="comfortable"
-              class="rounded-lg py-3"
+              class="auth-setup-control rounded-lg"
               :placeholder="t('auth.setup.usernamePlaceholder')"
               :disabled="isLoading"
             />
@@ -90,7 +90,7 @@
               autocomplete="new-password"
               required
               density="comfortable"
-              class="rounded-lg py-3"
+              class="auth-setup-control rounded-lg"
               :placeholder="t('auth.setup.passwordPlaceholder')"
               :disabled="isLoading"
             />
@@ -105,7 +105,7 @@
               autocomplete="new-password"
               required
               density="comfortable"
-              class="rounded-lg py-3"
+              class="auth-setup-control rounded-lg"
               :placeholder="t('auth.setup.confirmPasswordPlaceholder')"
               :disabled="isLoading"
             />
@@ -132,7 +132,7 @@
             tone="primary"
             density="comfortable"
             block
-            class="rounded-lg px-4 py-3"
+            class="auth-setup-control rounded-lg px-4"
             :loading="isLoading"
           >
             {{ isLoading ? t('auth.setup.settingUp') : t('auth.setup.submitButton') }}
@@ -156,5 +156,16 @@
       color-mix(in srgb, var(--link-color) 72%, transparent);
     border-right: 1px solid rgb(255 255 255 / 20%);
     box-shadow: inset -1px 0 0 rgb(0 0 0 / 8%);
+  }
+
+  .auth-setup-panel {
+    border-color: color-mix(in srgb, var(--border-color) 82%, var(--glass-rim));
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--glass-rim) 24%, transparent),
+      var(--glass-shadow);
+  }
+
+  .auth-setup-control[data-ui-gen='2'] {
+    --ui-control-height: 44px;
   }
 </style>

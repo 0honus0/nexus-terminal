@@ -12,11 +12,10 @@ import {
 } from '../../support/ssh';
 
 export const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
-export const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
-export const visibleProgressCenter = (page: Page): Locator =>
-  page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+export const menu = (page: Page): Locator => page.getByRole('menu');
+export const visibleProgressCenter = (page: Page): Locator => page.locator('.transfer-progress-window:visible').first();
 export const visibleProgressTask = (page: Page, text: string): Locator =>
-  visibleProgressCenter(page).getByTestId('transfer-progress-task').filter({ hasText: text }).first();
+  visibleProgressCenter(page).locator('[data-task-id]').filter({ hasText: text }).first();
 
 export async function hideVisibleProgressCenter(page: Page): Promise<void> {
   const center = visibleProgressCenter(page);
@@ -46,10 +45,7 @@ export async function startZipCompression(page: Page, filename: string): Promise
   const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
   await expect(compress).toBeVisible();
   await compress.hover();
-  await page
-    .getByTestId('file-manager-context-submenu')
-    .getByRole('button', { name: 'Compress to zip', exact: true })
-    .click();
+  await page.getByRole('menu').getByRole('button', { name: 'Compress to zip', exact: true }).click();
 }
 
 export async function clickMenuItem(page: Page, label: string): Promise<void> {
@@ -66,16 +62,18 @@ export async function goIntoFolder(page: Page, folder: string): Promise<void> {
   const targetPath = await target.getAttribute('data-file-path');
   expect(targetPath).toBeTruthy();
   await target.click();
-  await expect(page.getByTestId('file-manager-modal').getByTestId('file-manager-path-input')).toHaveValue(targetPath!);
+  await expect(
+    page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('.file-manager-path-input input'),
+  ).toHaveValue(targetPath!);
 }
 
 export async function goToParent(page: Page): Promise<void> {
-  await page.getByTestId('file-manager-modal').locator('[data-file-parent]').click();
+  await page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('[data-file-parent]').click();
   await expect(row(page, 'seed.txt')).toBeVisible();
 }
 
 export async function refreshFileManager(page: Page): Promise<void> {
-  const modal = page.getByTestId('file-manager-modal');
+  const modal = page.getByRole('dialog', { name: 'File Manager', exact: true });
   await expect(modal).toBeVisible();
   await modal.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(activeFileManagerList(page)).toBeVisible();
@@ -98,7 +96,7 @@ export async function dragLocalFile(page: Page, name: string, size: number, fill
   try {
     const list = activeFileManagerList(page);
     await list.dispatchEvent('dragenter', { dataTransfer });
-    const overlay = page.getByTestId('file-upload-drop-overlay');
+    const overlay = page.getByText('Drop files here to upload', { exact: true });
     await expect(overlay).toBeVisible();
     await overlay.dispatchEvent('drop', { dataTransfer });
     await expect(overlay).toBeHidden();
@@ -112,14 +110,14 @@ export async function openProgressDisplay(page: Page): Promise<Locator> {
 }
 
 export function hiddenSource(modal: Locator, text: string): Locator {
-  return modal.getByTestId('hidden-progress-source').filter({ hasText: text });
+  return modal.locator('.hidden-progress-source-card').filter({ hasText: text });
 }
 
 export function hiddenTask(modal: Locator, text: string): Locator {
-  return modal.getByTestId('hidden-progress-task').filter({ hasText: text });
+  return modal.locator('.hidden-progress-task-row').filter({ hasText: text });
 }
 
 export async function closeProgressDisplay(modal: Locator): Promise<void> {
-  await modal.getByTestId('progress-display-close').click();
+  await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
   await expect(modal).toBeHidden();
 }

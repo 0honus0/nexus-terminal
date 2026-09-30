@@ -155,7 +155,7 @@ test('preferences settings report a main settings load failure and keep the form
 
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
-  await expect(page.getByTestId('preferences-settings')).toBeVisible();
+  await expect(page.locator('#settings-panel-workspace')).toBeVisible();
   await expect(page.getByText('Failed to load preferences: Network Error', { exact: true }).first()).toBeVisible();
   await expect(page.locator('#showPopupFileManager')).toBeVisible();
 });
@@ -220,7 +220,7 @@ test('dashboard local and remote resource cards can be configured independently'
 
     await step('dashboard reflects the dedicated SSH refresh interval', async () => {
       await page.goto('/');
-      await expect(page.getByTestId('dashboard-system-resources')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'SSH resources', exact: true })).toBeVisible();
       await page.goto('/settings');
       await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
       await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
@@ -354,7 +354,7 @@ test('system settings persist frontend and backend log levels through the UI', a
     await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
     const frontend = page.locator('#frontendLogLevelSelect');
     const backend = page.locator('#backendLogLevelSelect');
-    const form = page.getByTestId('logging-settings-form');
+    const form = page.locator('form').filter({ has: frontend });
     await expectUiSelectValue(frontend, 'info');
     await expectUiSelectValue(backend, 'info');
 

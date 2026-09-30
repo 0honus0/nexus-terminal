@@ -64,7 +64,7 @@
 </script>
 
 <template>
-  <div data-testid="audit-log-view" class="bg-background p-4 text-foreground">
+  <div class="bg-background p-4 text-foreground">
     <div class="mx-auto max-w-7xl">
       <h1 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">{{ t('auditLog.title') }}</h1>
 
@@ -76,7 +76,6 @@
           <UiInput
             id="search-term"
             v-model="searchDraft"
-            data-testid="audit-search"
             type="text"
             :placeholder="t('auditLog.searchPlaceholder')"
             @keyup.enter="applyFilters"
@@ -86,7 +85,7 @@
           <label for="action-type" class="mb-1 block text-sm font-medium text-text-secondary">{{
             t('auditLog.table.actionType')
           }}</label>
-          <UiSelect id="action-type" v-model="actionTypeDraft" data-testid="audit-action-type">
+          <UiSelect id="action-type" v-model="actionTypeDraft">
             <option value="">{{ t('common.all') }}</option>
             <option v-for="type in auditActionTypes" :key="type" :value="type">
               {{ t(`auditLog.actions.${type}`, type) }}
@@ -94,7 +93,7 @@
           </UiSelect>
         </div>
         <div class="self-end">
-          <UiButton data-testid="audit-apply-filter" type="button" appearance="solid" @click="applyFilters">
+          <UiButton type="button" appearance="solid" @click="applyFilters">
             {{ t('common.filter') }}
           </UiButton>
         </div>

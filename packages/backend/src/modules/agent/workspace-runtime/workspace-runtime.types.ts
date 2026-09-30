@@ -16,7 +16,6 @@ export type WorkspaceStatus =
 export interface ToolchainPackRef {
   familyId: string;
   versionId: string;
-  contentDigest: string;
 }
 
 export type WorkspaceAcpProfile = AgentRunEnvironmentAcpProfile;
@@ -36,7 +35,6 @@ export interface ToolchainCatalogPack {
   familyId: string;
   versionId: string;
   displayName: string;
-  contentDigest: string;
   diskBytes: number;
   status: 'supported' | 'deprecated' | 'unavailable';
   installed: boolean;

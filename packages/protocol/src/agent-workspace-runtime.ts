@@ -6,7 +6,6 @@ import type { AgentRunEnvironmentSelectionDto, AgentRunEnvironmentSnapshotDto } 
 export interface AgentToolchainPackRefDto {
   familyId: string;
   versionId: string;
-  contentDigest: string;
 }
 
 export interface AgentWorkspaceRecipeDto {

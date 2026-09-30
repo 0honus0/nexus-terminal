@@ -598,7 +598,7 @@
             </div>
             <button
               type="button"
-              class="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.055] text-text-secondary transition-[background-color,color,transform] hover:bg-primary/10 hover:text-primary active:scale-95 disabled:opacity-50"
+              class="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.055] text-text-secondary transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
               :disabled="busy"
               :title="$t('agent.files.searchAction')"
               @click="load"

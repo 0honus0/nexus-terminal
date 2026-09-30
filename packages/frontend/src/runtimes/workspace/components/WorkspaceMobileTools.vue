@@ -87,6 +87,7 @@
     quickCommandsVisible.value = false;
   };
   const sendTerminalInput = (value: string) => {
+    if (!props.commandReady) return;
     emit('interaction');
     void props.terminalChannel.sendInput(value);
   };
@@ -146,7 +147,7 @@
       @terminal-input="sendTerminalInput"
     />
     <VirtualKeyboard
-      v-if="keyboardVisible && pane === 'terminal'"
+      v-if="keyboardVisible && pane === 'terminal' && commandReady"
       :modifiers="modifiers"
       :application-cursor-keys="applicationCursorKeys"
       @toggle-modifier="emit('toggleModifier', $event)"
@@ -158,7 +159,6 @@
     :visible="quickCommandsVisible"
     teleport
     preset="standard-modal"
-    panel-test-id="quick-commands-dialog"
     :close-on-escape="true"
     role="dialog"
     :aria-modal="true"
@@ -192,7 +192,6 @@
   </UiOverlayPanel>
 
   <UiOverlayPanel
-    data-testid="status-monitor-modal"
     :visible="statusVisible"
     teleport
     :z-index="1000"
@@ -205,7 +204,7 @@
   >
     <button
       type="button"
-      class="absolute right-2 top-2 z-20 grid h-8 w-8 place-items-center rounded-lg border border-border/60 bg-background/80 text-text-secondary active:scale-95"
+      class="absolute right-2 top-2 z-20 grid h-8 w-8 place-items-center rounded-lg border border-border/60 bg-background/80 text-text-secondary"
       :title="t('common.close')"
       :aria-label="t('common.close')"
       @click="statusVisible = false"

@@ -1,6 +1,6 @@
 # Nexus Backend Architecture
 
-本文描述当前 Backend 的分层、owner 与运行时边界。产品需求见 [软件需求](../software-requirements/README.md)，Agent 细节见 [Agent 架构](../AGENT.md)，强制规则见 [Engineering Constraints](../software-requirements/engineering-constraints.md)。
+本文描述当前 Backend 的分层、owner 与运行时边界。实际产品需求见 [USAGE](../USAGE.md)，Agent 细节见 [Agent 架构](../AGENT.md)，开发规则见根目录 [AGENTS.md](../../AGENTS.md)。
 
 ## 技术基线
 
@@ -9,6 +9,7 @@
 - SQLite 持久化，数据库访问由 Infrastructure adapter 实现。
 - SSH/SFTP、Guacamole、通知、认证和 Agent Runner 通过明确 port/adapter 接入。
 - 对外 HTTP contract 使用 camelCase；数据库列名只存在于 repository/infrastructure 边界。
+- `packages/protocol/src` 持有跨 Frontend、Backend 与 Runner 的公共 wire DTO；输入在 Interface decode/validation，输出在边界映射，不在网络 adapter 复制协议类型。
 
 ## 源码布局
 
@@ -89,9 +90,11 @@ flowchart TD
   Config[config] --> Shared
 ```
 
-允许的静态依赖以 [EC-ARCH-001](../software-requirements/engineering-constraints.md#ec-arch-001) 为准。Infrastructure 对 Module 的依赖只允许用于实现 Module-owned `*.port` / `*.types` contract，并优先使用 type-only import。
+允许的静态依赖以根目录 [AGENTS.md](../../AGENTS.md) 为准。Infrastructure 对 Module 的依赖只允许用于实现 Module-owned `*.port` / `*.types` contract，并优先使用 type-only import。
 
 ## Workspace 与远程能力
+
+`workspace.ping` 在已绑定的 Workspace 协议 session 上返回空响应，已关闭或所有权撤销的协议 session 不处理请求；不调用 SSH 命令、不创建新会话，也不执行挂起接管。浏览器存活探测失败使用异常 transport close，继续遵循既有普通续接和挂起保留边界。
 
 `modules/workspace` 持有 Workspace session registry、session 生命周期、事件 hub 和用户可见用例。`platform/execution`、`platform/filesystem` 与 SSH Infrastructure 提供执行和文件能力。
 
@@ -105,7 +108,9 @@ flowchart TD
 - SSH suspend module：挂起 catalog 与恢复事务；
 - Interfaces：HTTP/WebSocket streaming、认证和 backpressure。
 
-恢复挂起 SSH 会话时，Backend 负责 prepare、有限尾部回放、transport 交接、commit/rollback 与更早历史分页。Frontend 只负责 Runtime tab 的创建、替换与展示。
+挂起标记不关闭活动 Workspace。`workspace-suspend-coordinator.service.ts` 管理标记、终端输出日志与 checkpoint；标签关闭或连接断开后由 Backend 接管原 SSH/PTY。普通弱网续接校验原发起端恢复凭据，挂起会话恢复或确认接管则校验会话访问权限，不要求原设备凭据。恢复时 Backend 负责 prepare、有限尾部回放、transport 交接、commit/rollback 与更早历史分页；Frontend 只负责 Runtime tab 的创建、替换与展示。取消标记涉及输出队列排空与存储清理，请求超时不能作为确定取消失败的证据。
+
+挂起原始日志由 `local-suspended-session-log.adapter.ts` 串行写入。可读取历史、分页 offset 和导出最多覆盖最近 100MiB；物理文件允许额外 32MiB 压缩缓冲，超过阈值才裁剪回 100MiB，不按每个 PTY chunk 重写完整保留文件。压缩通过临时文件和 rename 提交；恢复先暂停 shell、解绑输出 listener，再排空既有输出队列，不能用延长 owner lease 掩盖日志写入积压。
 
 ## Remote Desktop
 
@@ -118,6 +123,8 @@ Agent Core 位于 `modules/agent`，具体 provider、plugin、Runner、browser 
 Backend 持有用户、App、Thread、Run、Ledger、Plan、approval、lease、artifact、memory、checkpoint、policy 与 durable mutation authority。Runner 只执行已冻结的 Workspace generation 和 execution input；它不成为 Backend durable state 的第二 owner。
 
 Backend 到 Runner 的所有 HTTP/WebSocket 调用集中在 Runner adapter，使用 Bearer token 与 `X-Nexus-Agent-Protocol: 2026-09-13`。Provision 发送冻结 profile；后续 lifecycle/job 调用使用 Workspace id、generation 与必要执行输入。
+
+Workspace 工具链引用仅包含 familyId/versionId，架构由 Runner 决定；支持版本与架构来自 Runner catalog JSON。Node/Python/Go 共用 mise materializer，检查可执行文件和实际版本，不维护预编译来源 lock、预设安装树摘要或选择指纹。安装缓存按类型、版本、架构组织，保留不可变共享与使用中卸载保护；Backend 只消费 catalog 和生命周期 contract，不复制安装状态。内置 base-tools 的仓库随附 archive 仍做完整性校验，不属于语言版本来源锁定。
 
 Plugin package、immutable installed version、AppStorage、Workspace 和 Artifact 分别维护生命周期。Frontend target 在隔离 surface 中运行；backend/runner target 通过受控进程和版本化 SDK/IPC 运行。Plugin 不能把 Host authority function 注入 Tool catalog。
 

@@ -29,8 +29,11 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
   try {
     await page.goto('/settings');
     await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-    const blacklist = page.getByTestId('ip-blacklist-settings');
-    const toggle = blacklist.getByTestId('ip-blacklist-toggle');
+    const blacklist = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'IP Blacklist Management', exact: true }) })
+      .last();
+    const toggle = blacklist.getByRole('checkbox');
     await expect(blacklist).toBeVisible();
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     await blacklist.scrollIntoViewIfNeeded();
@@ -78,7 +81,7 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
     await step('disable and re-enable the blacklist switch through the UI', async () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-checked', 'false');
-      await expect(blacklist.getByTestId('ip-blacklist-max-attempts')).toHaveCount(0);
+      await expect(blacklist.locator('#maxLoginAttempts')).toHaveCount(0);
       await expect(blacklist).toContainText('Disabled');
       await expect
         .poll(async () => {
@@ -98,33 +101,33 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
     });
 
     await step('keep invalid blacklist thresholds local with visible validation errors', async () => {
-      await blacklist.getByTestId('ip-blacklist-max-attempts').fill('');
+      await blacklist.locator('#maxLoginAttempts').fill('');
       const invalidMaxResponse = page
         .waitForRequest((request) => request.url().endsWith('/api/v1/settings') && request.method() === 'PUT', {
           timeout: 1_000,
         })
         .catch(() => undefined);
-      await blacklist.getByTestId('ip-blacklist-save').click();
+      await blacklist.getByRole('button', { name: 'Save', exact: true }).click();
       await expect(blacklist).toContainText('Max failed attempts must be a positive integer.');
       expect(await invalidMaxResponse).toBeUndefined();
 
-      await blacklist.getByTestId('ip-blacklist-max-attempts').fill('5');
-      await blacklist.getByTestId('ip-blacklist-ban-duration').fill('');
+      await blacklist.locator('#maxLoginAttempts').fill('5');
+      await blacklist.locator('#loginBanDuration').fill('');
       const invalidDurationResponse = page
         .waitForRequest((request) => request.url().endsWith('/api/v1/settings') && request.method() === 'PUT', {
           timeout: 1_000,
         })
         .catch(() => undefined);
-      await blacklist.getByTestId('ip-blacklist-save').click();
+      await blacklist.getByRole('button', { name: 'Save', exact: true }).click();
       await expect(blacklist).toContainText('Ban duration must be a positive integer (seconds).');
       expect(await invalidDurationResponse).toBeUndefined();
-      await blacklist.getByTestId('ip-blacklist-ban-duration').fill('300');
+      await blacklist.locator('#loginBanDuration').fill('300');
     });
 
     await step('save login failure threshold and ban duration', async () => {
-      await blacklist.getByTestId('ip-blacklist-max-attempts').fill('2');
-      await blacklist.getByTestId('ip-blacklist-ban-duration').fill('420');
-      await blacklist.getByTestId('ip-blacklist-save').click();
+      await blacklist.locator('#maxLoginAttempts').fill('2');
+      await blacklist.locator('#loginBanDuration').fill('420');
+      await blacklist.getByRole('button', { name: 'Save', exact: true }).click();
       await expect
         .poll(async () => {
           const response = await context.request.get('/api/v1/settings');
@@ -150,7 +153,7 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
 
       await page.reload();
       await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-      const reloaded = page.getByTestId('ip-blacklist-settings');
+      const reloaded = blacklist;
       const row = reloaded.locator('tbody tr').filter({ hasText: TEST_BLOCKED_IP });
       await expect(row).toBeVisible();
       await row.getByRole('button', { name: 'Remove', exact: true }).click();
@@ -171,9 +174,9 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
     await step('reload keeps the saved blacklist thresholds visible', async () => {
       await page.reload();
       await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-      const reloaded = page.getByTestId('ip-blacklist-settings');
-      await expect(reloaded.getByTestId('ip-blacklist-max-attempts')).toHaveValue('2');
-      await expect(reloaded.getByTestId('ip-blacklist-ban-duration')).toHaveValue('420');
+      const reloaded = blacklist;
+      await expect(reloaded.locator('#maxLoginAttempts')).toHaveValue('2');
+      await expect(reloaded.locator('#loginBanDuration')).toHaveValue('420');
       await reloaded.scrollIntoViewIfNeeded();
       await captureFunctionalScreenshot(page, 'security-ip-blacklist-updated.png', {
         viewport: { width: 1440, height: 900 },

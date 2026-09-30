@@ -92,6 +92,10 @@ export class TerminalStreamTransport {
     await this.waitForDrain();
   }
 
+  drain(): Promise<void> {
+    return this.waitForDrain();
+  }
+
   unbind(): void {
     this.clearQueue();
     this.clearTimer();

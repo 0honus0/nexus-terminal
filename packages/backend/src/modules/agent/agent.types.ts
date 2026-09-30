@@ -22,7 +22,6 @@ export interface AgentRunEnvironmentSelection extends AgentWorkspaceEnvironmentS
 export interface AgentRunEnvironmentToolchainPack {
   familyId: string;
   versionId: string;
-  contentDigest: string;
 }
 
 export interface AgentRunEnvironmentRunnerPlugin {

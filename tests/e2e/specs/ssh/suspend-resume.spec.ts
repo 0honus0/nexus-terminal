@@ -19,6 +19,69 @@ import {
   waitForBinaryText,
 } from '../../support/ws';
 
+test('marked attached workspace stays usable and another authorized socket can take over', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const original = await openWorkspaceSession(request, connectionId, `marked-attached-${crypto.randomUUID()}`);
+  const other = await openAuthenticatedWebSocket(request);
+  try {
+    await requestWorkspace(original.socket, 'suspend.prepare', {});
+    const marked = await requestWorkspace<{ suspendedSessionId: string }>(original.socket, 'suspend.commit', {});
+    await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toEqual('/');
+    await expect(requestWorkspace(original.socket, 'suspend.owner.renew')).resolves.toMatchObject({ generation: 1 });
+    const list = await requestWorkspace<Array<{ id: string; ownershipState: string; attachedWorkspaceId?: string }>>(
+      other,
+      'suspend.list',
+    );
+    expect(list.find((item) => item.id === marked.suspendedSessionId)).toMatchObject({
+      ownershipState: 'attached',
+      attachedWorkspaceId: original.workspaceId,
+    });
+    await expect(
+      requestWorkspace(other, 'suspend.resume', {
+        suspendedSessionId: marked.suspendedSessionId,
+        workspaceId: `no-takeover-${crypto.randomUUID()}`,
+      }),
+    ).rejects.toThrow();
+    await requestWorkspace(other, 'suspend.resume', {
+      suspendedSessionId: marked.suspendedSessionId,
+      workspaceId: `takeover-${crypto.randomUUID()}`,
+      takeover: true,
+    });
+    await expect(requestWorkspace(other, 'terminal.currentDirectory')).resolves.toEqual('/');
+    await expect(requestWorkspace(original.socket, 'terminal.input', { data: 'echo forbidden\r' })).rejects.toThrow();
+    await requestWorkspace(other, 'suspend.unmark');
+  } finally {
+    await closeWebSocket(original.socket);
+    await closeWebSocket(other);
+  }
+});
+
+test('marking suspend keeps the UI tab interactive and unmarking keeps the shell alive', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const terminal = page.getByRole('application', { name: 'Terminal', exact: true });
+  await expect(terminal).toBeVisible();
+  const activeTab = page.getByRole('tab', { selected: true });
+  await activeTab.click({ button: 'right' });
+  await page.getByRole('button', { name: 'Suspend Session', exact: true }).click();
+  await expect(activeTab).toBeVisible();
+  await expect(terminal).toBeVisible();
+  const command = page.locator('.command-bar-command-input');
+  await command.fill('echo MARKED_UI_ALIVE');
+  await command.press('Enter');
+  await expect(terminal.locator('.xterm-rows')).toContainText('MARKED_UI_ALIVE');
+  await activeTab.click({ button: 'right' });
+  await page.getByRole('button', { name: 'Unmark Suspend', exact: true }).click();
+  await command.fill('echo UNMARKED_UI_ALIVE');
+  await command.press('Enter');
+  await expect(terminal.locator('.xterm-rows')).toContainText('UNMARKED_UI_ALIVE');
+});
+
 test('stale suspended-session resume logs structured not-found diagnostics', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -73,9 +136,9 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 
   try {
     await page.goto('/workspace?openSuspended=1');
-    const modal = page.getByTestId('suspended-sessions-modal');
+    const modal = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
     await expect(modal).toBeVisible({ timeout: 20_000 });
-    const row = modal.getByTestId(`suspended-session-${suspended!.id}`);
+    const row = modal.locator(`[data-suspend-id="${suspended!.id}"]`);
     await expect(row).toBeVisible({ timeout: 20_000 });
     const resumeButton = row.getByRole('button', { name: 'Resume', exact: true });
     await expect(resumeButton).toBeVisible();
@@ -196,6 +259,123 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
     }
   } finally {
     await closeWebSocket(recoverySocket);
+  }
+});
+
+test('resumed terminal preserves SGR wheel encoding requested by the remote TUI', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  const original = await openWorkspaceSession(context.request, connectionId, `suspend-mouse-${crypto.randomUUID()}`);
+  await requestWorkspace(original.socket, 'suspend.mark', {
+    terminalSnapshot: '\x1b[?1000h\x1b[?1006hMOUSE_MODE_READY\r\n',
+  });
+  await closeWebSocket(original.socket);
+
+  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  let suspended: SuspendedSession | undefined;
+  const catalogSocket = await openAuthenticatedWebSocket(context.request);
+  try {
+    for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
+      const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
+      suspended = list.find(
+        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+      );
+      if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  } finally {
+    await closeWebSocket(catalogSocket);
+  }
+  expect(suspended).toBeTruthy();
+
+  const terminalInput: string[] = [];
+  let historyRequestCount = 0;
+  page.on('websocket', (socket) => {
+    socket.on('framesent', ({ payload }) => {
+      if (typeof payload !== 'string') return;
+      try {
+        const message = JSON.parse(payload) as { type?: string; payload?: { data?: unknown } };
+        if (message.type === 'terminal.input' && typeof message.payload?.data === 'string') {
+          terminalInput.push(message.payload.data);
+        } else if (message.type === 'suspend.history.previous') {
+          historyRequestCount += 1;
+        }
+      } catch {
+        // Ignore non-protocol frames from other sockets on the page.
+      }
+    });
+  });
+
+  await page.goto('/workspace?openSuspended=1');
+  const modal = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
+  await expect(modal).toBeVisible({ timeout: 20_000 });
+  await modal.locator(`[data-suspend-id="${suspended!.id}"]`).getByRole('button', { name: 'Resume' }).click();
+  await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
+  const terminal = page.locator('.terminal-inner-container:visible').first();
+  await expect(terminal).toBeVisible();
+  const box = await terminal.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  for (let attempt = 0; attempt < 3; attempt += 1) await page.mouse.wheel(0, -350);
+  await expect.poll(() => terminalInput.some((data) => /\x1b\[<64;\d+;\d+M/.test(data)), { timeout: 5_000 }).toBe(true);
+  expect(historyRequestCount).toBe(0);
+});
+
+test('resizing a suspended fullscreen terminal is ordered after its checkpoint', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const original = await openWorkspaceSession(request, connectionId, `suspend-resize-${crypto.randomUUID()}`);
+  const originalColumns = 100;
+  const originalRows = 30;
+  const resumedColumns = 140;
+  const resumedRows = 20;
+  const snapshot = `\x1b[?1049h\x1b[2J\x1b[HRESIZE_BASELINE\x1b[${originalRows};1HSTATUS_${originalColumns}x${originalRows}`;
+
+  // workspace.connect acknowledges attachment before the remote shell finishes startup.
+  // Drain startup output through a real shell round trip before freezing the fullscreen image.
+  const readyMarker = `RESIZE_READY_${crypto.randomUUID().replaceAll('-', '')}`;
+  const ready = waitForBinaryText(original.socket, readyMarker);
+  await requestWorkspace(original.socket, 'terminal.input', { data: `printf '${readyMarker}\\n'\n` });
+  await ready;
+  await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
+  await closeWebSocket(original.socket);
+
+  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  const recovery = await openAuthenticatedWebSocket(request);
+  try {
+    let suspended: SuspendedSession | undefined;
+    for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
+      const list = await requestWorkspace<SuspendedSession[]>(recovery, 'suspend.list');
+      suspended = list.find(
+        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+      );
+      if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(suspended).toBeTruthy();
+
+    const initialChunks: Buffer[] = [];
+    const onInitialMessage = (data: Buffer, isBinary: boolean) => {
+      if (!isBinary) return;
+      const frame = decodeWorkspaceBinaryFrame(Buffer.from(data));
+      if (frame.type === 1) initialChunks.push(frame.payload);
+    };
+    recovery.on('message', onInitialMessage);
+    await requestWorkspace(recovery, 'suspend.resume', {
+      suspendedSessionId: suspended!.id,
+      workspaceId: `resized-${crypto.randomUUID()}`,
+      viewport: { columns: resumedColumns, rows: resumedRows },
+    });
+    recovery.off('message', onInitialMessage);
+    const cached = Buffer.concat(initialChunks).toString('utf8');
+    expect(cached).toContain('RESIZE_BASELINE');
+    expect(cached).toContain(`STATUS_${originalColumns}x${originalRows}`);
+    expect(cached).not.toContain(`STATUS_${resumedColumns}x${resumedRows}`);
+
+    await requestWorkspace(recovery, 'suspend.unmark');
+  } finally {
+    await closeWebSocket(recovery);
   }
 });
 
@@ -415,13 +595,15 @@ test('terminal output produced after marking is retained in suspended history', 
   const before = 'MARK_HISTORY_BEFORE';
   const after = 'MARK_HISTORY_AFTER';
 
-  // Queue output before the handoff, but make it arrive after suspend.mark has transferred
-  // ownership to the server. The old client socket is intentionally no longer writable afterward.
+  // Queue output before marking, then close the socket to hand the marked shell to the server.
+  // Delayed output must still be retained after the attachment closes.
   await requestWorkspace(workspace.socket, 'terminal.input', {
     data: `(sleep 0.5; printf '${after}\\n') &\r`,
   });
   await new Promise((resolve) => setTimeout(resolve, 75));
-  await requestWorkspace(workspace.socket, 'suspend.mark', { terminalSnapshot: `${before}\r\n` });
+  await requestWorkspace(workspace.socket, 'suspend.mark', {
+    terminalSnapshot: `STALE_HISTORY_TEXT\r\x1b[31m${before}\x1b[0m\x1b[K\r\n\x1b[?1000h\x1b[?1006h`,
+  });
   await closeWebSocket(workspace.socket);
 
   const verifier = await openAuthenticatedWebSocket(request);
@@ -449,6 +631,8 @@ test('terminal output produced after marking is retained in suspended history', 
       )
       .toContain(after);
     expect(text).toContain(before);
+    expect(text).not.toContain('STALE_HISTORY_TEXT');
+    expect(text).not.toContain('\x1b[');
     expect((await request.delete(`/api/v1/ssh-suspend/terminate/${suspended!.id}`)).ok()).toBeTruthy();
   } finally {
     await closeWebSocket(verifier);
@@ -480,12 +664,16 @@ test('resume sends only the newest cached tail and pages older terminal history 
       id: string;
       originalWorkspaceId: string;
       status: 'active' | 'disconnected';
+      ownershipState: 'available' | 'resuming' | 'attached';
     };
     let suspended: SuspendedSession | undefined;
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === original.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -639,9 +827,9 @@ test('resumed terminal pages older history through a bounded window and restores
 
   try {
     await connectTestSshFromConnectionsPage(page, connectionId);
-    const suspendedPanel = page.getByTestId('suspended-sessions-view').filter({ visible: true }).first();
+    const suspendedPanel = page.locator('.suspended-sessions-panel:visible').first();
     await expect(suspendedPanel).toBeVisible({ timeout: 20_000 });
-    const suspendedRow = suspendedPanel.getByTestId(`suspended-session-${suspended!.id}`);
+    const suspendedRow = suspendedPanel.locator(`[data-suspend-id="${suspended!.id}"]`);
     await expect(suspendedRow).toBeVisible({ timeout: 20_000 });
     let historyRequestCount = 0;
     let historyResponseCount = 0;
@@ -674,7 +862,7 @@ test('resumed terminal pages older history through a bounded window and restores
     await suspendedRow.getByRole('button', { name: 'Resume', exact: true }).click();
     await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
 
-    const terminals = page.locator('[data-testid="terminal"]:visible');
+    const terminals = page.locator('.terminal-inner-container:visible');
     await expect(terminals).toHaveCount(1, { timeout: 20_000 });
     const terminal = terminals.first();
     const rows = terminal.locator('.xterm-rows');

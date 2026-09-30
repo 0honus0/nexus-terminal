@@ -69,7 +69,6 @@
   >
     <div
       v-if="active && session.tabs.value.length"
-      data-testid="file-preview-tabs"
       role="tablist"
       :aria-label="t('fileManager.preview.openFiles')"
       class="file-preview-tabs flex shrink-0 overflow-x-auto border-b border-border bg-header"
@@ -115,7 +114,6 @@
       <slot name="toolbar" />
       <button
         type="button"
-        data-testid="file-preview-refresh"
         class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-wait disabled:opacity-60 sm:h-8 sm:w-8"
         :disabled="isRefreshing"
         :aria-busy="isRefreshing"

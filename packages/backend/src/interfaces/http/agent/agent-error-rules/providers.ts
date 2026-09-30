@@ -34,14 +34,21 @@ export const providerErrorRules: readonly AgentErrorRule[] = [
       'MODEL_TOOL_ARGUMENTS_TOO_LARGE',
       'MODEL_TOOL_RESULT_INVALID',
     ],
-    {
-      status: 422,
-      code: 'MODEL_CAPABILITY_UNSUPPORTED',
-      message: 'Model capability is unavailable.',
-    },
+    rawCode(422, 'Model capability or output is invalid.'),
   ),
   onCodes(['PROVIDER_AUTH_FAILED'], rawCode(422, 'Provider credentials were rejected.')),
-  onCodes(['PROVIDER_DISCOVERY_TIMEOUT', 'PROVIDER_TEST_TIMEOUT'], rawCode(503, 'Provider model discovery timed out.')),
+  onCodes(
+    ['PROVIDER_DISCOVERY_TIMEOUT', 'PROVIDER_TEST_TIMEOUT', 'PROVIDER_NETWORK_TIMEOUT'],
+    rawCode(504, 'Provider request timed out.'),
+  ),
+  onCodes(
+    ['PROVIDER_RESPONSE_INVALID', 'PROVIDER_RESPONSE_EMPTY', 'PROVIDER_STREAM_TRUNCATED'],
+    rawCode(502, 'Provider returned an invalid or incomplete response.'),
+  ),
+  onCodes(
+    ['PROVIDER_DNS_FAILED', 'PROVIDER_TLS_FAILED', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_REQUEST_FAILED'],
+    rawCode(502, 'Provider request failed.'),
+  ),
   onCodes(
     ['PROVIDER_MODELS_RESPONSE_INVALID', 'PROVIDER_MODELS_RESPONSE_TOO_LARGE', 'PROVIDER_CAPABILITY_METADATA_INVALID'],
     rawCode(502, 'Provider returned an invalid model catalog.'),

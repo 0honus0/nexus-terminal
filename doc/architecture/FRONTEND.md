@@ -1,6 +1,6 @@
 # Nexus Terminal Frontend Architecture
 
-本文描述当前 Frontend 的目录、状态 owner、依赖方向和运行时边界。产品需求见 [软件需求](../software-requirements/README.md)，强制工程规则见 [Engineering Constraints](../software-requirements/engineering-constraints.md)。
+本文描述当前 Frontend 的目录、状态 owner、依赖方向和运行时边界。实际产品需求见 [USAGE](../USAGE.md)，开发规则见根目录 [AGENTS.md](../../AGENTS.md)。
 
 ## 技术基线
 
@@ -9,6 +9,7 @@
 - HTTP 数据通过 `client/` 进入应用，业务代码使用 camelCase contract。
 - 终端、上传和 Workspace 使用明确的 WebSocket protocol/session owner。
 - Foundation UI 统一使用 `Ui*` 组件；自定义窗口表面使用 `UiOverlayPanel` 组合。
+- `packages/protocol/src` 是 HTTP、WebSocket 与 Runner wire DTO 的唯一公共 owner，网络 adapter 直接使用规范 DTO，不在 Frontend 重复声明兼容类型。
 
 ## 源码布局
 
@@ -145,6 +146,28 @@ flowchart TD
 
 ## 状态与生命周期
 
+`UiOverlayPanel` 的 standard-modal preset 使用公共 `ui-form-surface` 不透明主题材质，`UiModal` 及其他标准弹窗统一生效；默认浮层仍可使用玻璃材质，避免遮罩穿透标准模态面板降低对比度。
+
+Dashboard 的快速连接和 SSH 资源共用 `foundation/ui/UiScrollArea`，公共组件持有内部滚动与回顶按钮，不拦截纵向触摸；手机搜索栏为普通流布局。`features/system-overview/useSystemOverview` 持有去重后的 SSH 资源采集队列和取消生命周期，以最多四个并发 worker 独立更新主机结果，worker 在后续探测间保留 200ms 间隔；单次刷新仍保持单飞，API adapter 传递 AbortSignal。
+
+### 全局导航与会话展示
+
+公共确认与提示由 `shared/feedback/DialogHost` 持有交互，通过 `foundation/ui/UiConfirmationPanel.vue` 统一面板、标题、状态图标、正文和操作区；上传冲突复用该组件及 `UiCheckbox`，策略仍由 transfers feature 持有。弹窗关闭、确认和业务执行边界保持不变。
+
+`UiActionGroup` 持有确认、管理、批量及卡片操作区的通用展示 contract，通过注入布局语义由 `UiButton` 自身选择尺寸配方，不从使用处深入覆盖子按钮。输入框与下拉框通过公共 density 选择密度，`touch` 提供 44px 控件；全局 CSS 仅提供基础元素、主题及可访问性基线，组件 focus 与结构由自身 owner 处理。UI 生产代码不提供测试专用标记或 props；`data-ui`、ARIA 和产品状态属性保留真实语义与行为用途。
+
+代理与通知管理的响应式卡片布局由 `foundation/ui/UiManagementCard.vue` 提供，通过默认插槽和 actions 插槽承载内容与操作；业务字段、文案与编辑删除行为仍由各 feature 持有。Workspace 偏好由 preferences feature 使用扁平分组展示，保存边界仍按分组划分。
+
+顶部导航与窄屏设置功能栏共用 `foundation/interaction/useHorizontalDragScroll`，仅为鼠标提供阈值拖动和拖后点击抑制；触摸与触控板保留原生滚动，不拦截纵向触摸手势。Pointer capture 由该 interaction owner 释放。
+
+重新挂载 Workspace 页面也执行前台存活核对。Session 的即时重连请求可在续接期间合并，成功进入 connected 后消耗待处理请求而不重复 resume；失败时仍允许即时重试。
+
+前台恢复事件（visibility、pageshow、online）由 View 转交 session owner。Session 通过 `WorkspaceSocket` 的单飞、有界 `workspace.ping` 检查当前 attachment，正常链路不替换；失效时仅以异常 close 分离 transport，不发送产品 `workspace.close`，再沿用普通续接或挂起目录核对。旧探测不能关闭新 socket，后台期间探测超时不触发主动断链；挂起静默恢复只接受 available owner，不自动 takeover。
+
+`app/shell/AppHeader.vue` 持有导航展示，公共悬浮材质与 `--app-header-height` 由 `foundation/ui` 提供。设置页和 Workspace 使用同一高度变量；根页面预留滚动条空间，避免路由切换引起导航横移。窄屏导航使用横向滚动的 RouterLink 标签，路由切换只调整标签容器的滚动位置，不滚动文档或终端，不引入独立 transport 或页面事实源。
+
+Workspace 无会话和新建连接入口共用 `WorkspaceStartPage`。显示启动页仅隐藏已有 session region，不卸载后台终端；发起 SSH 连接时立即进入等待界面，旧连接完成不关闭用户后来打开的启动页。挂起 catalog 由 `features/ssh-suspend` 持有，成功取消标记后刷新目录，不在 view 复制服务端列表。
+
 状态放在最小且真实的 owner 中：
 
 | 状态                                   | Owner                                 |
@@ -175,6 +198,8 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 ## Agent frontend
 
 `features/agent` 提供全局悬浮 Host、设置、历史、运行详情、approval、artifact、plugin App surface 与 onboarding。Agent 不属于 Workspace Runtime；需要 Workspace、terminal 或文件能力时使用 Backend contract 或 app 提供的 capability，不读取 Workspace 私有 state。
+
+Agent launcher 的位置与左右贴边状态由 `host/window-manager.ts` 统一持有和持久化，视口变化按贴边侧重新定位；`AgentLauncher.vue` 只负责拖动、边缘吸附触发和半隐藏展示，悬停/聚焦展开不改写保存的位置。
 
 Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 MessagePort 通信。它不能获得主应用 session cookie、HTTP client 或 Vue owner 实例。完整 Agent 设计见 [Agent 架构](../AGENT.md)。
 

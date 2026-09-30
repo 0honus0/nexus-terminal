@@ -1,5 +1,8 @@
 <script setup lang="ts">
+  import { inject } from 'vue';
+  import { actionLayoutKey } from './actionLayout';
   import type { UiAppearance, UiDensity, UiTone } from './uiTypes';
+  const actionLayout = inject(actionLayoutKey, null);
 
   const props = withDefaults(
     defineProps<{
@@ -40,6 +43,7 @@
       `ui-button--${props.appearance}`,
       props.block && 'ui-button--block',
       props.iconOnly && 'ui-button--icon-only',
+      actionLayout && `ui-button--action-${actionLayout}`,
     ]"
   >
     <span v-if="props.loading" class="ui-button__spinner" aria-hidden="true"></span>

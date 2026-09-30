@@ -296,7 +296,7 @@
       <div class="flex min-w-0 items-center gap-2">
         <button
           type="button"
-          class="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2 text-xs font-medium text-text-secondary shadow-2xs transition-all hover:border-border hover:bg-header hover:text-foreground active:scale-95"
+          class="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2 text-xs font-medium text-text-secondary shadow-2xs transition-colors hover:border-border hover:bg-header hover:text-foreground"
           :title="$t('agent.tasks.backToTasks')"
           :aria-label="$t('agent.tasks.backToTasks')"
           @click="emit('back')"

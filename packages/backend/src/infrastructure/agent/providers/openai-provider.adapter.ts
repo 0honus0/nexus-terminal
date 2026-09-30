@@ -18,6 +18,7 @@ import {
 } from './openai-provider-continuation';
 import { parseOpenAiCompatibleCapabilityMetadata } from './openai-provider-capability-metadata';
 import { readBoundedResponse } from './bounded-response';
+import { mapProviderError, providerHttpError } from './provider-error';
 
 const MAX_MODELS_RESPONSE_BYTES = 1024 * 1024;
 const MAX_TOOL_ARGUMENT_BYTES = 32 * 1024;
@@ -56,34 +57,6 @@ const promptCacheKeyFor = (request: ModelRequest): string | undefined => {
 
 const providerUrl = (baseUrl: string, path: string): string =>
   `${baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-
-const providerHttpError = (status: number, retryAfter?: string | null): Error => {
-  const error = new Error(`PROVIDER_HTTP_${status || 'ERROR'}`) as Error & { retryAfterMs?: number };
-  if (retryAfter) {
-    const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) error.retryAfterMs = Math.min(30_000, Math.ceil(seconds * 1000));
-  }
-  return error;
-};
-
-const mapProviderError = (error: unknown, signal?: AbortSignal): Error => {
-  if (signal?.aborted) {
-    const reason = signal.reason;
-    return reason instanceof Error ? reason : new Error('ABORTED');
-  }
-  if (error && typeof error === 'object') {
-    const statusCode = 'statusCode' in error && typeof error.statusCode === 'number' ? error.statusCode : undefined;
-    if (statusCode === 401 || statusCode === 403) return new Error('PROVIDER_AUTH_FAILED');
-    if (statusCode) {
-      const headers =
-        'responseHeaders' in error && error.responseHeaders && typeof error.responseHeaders === 'object'
-          ? (error.responseHeaders as Record<string, string>)
-          : undefined;
-      return providerHttpError(statusCode, headers?.['retry-after']);
-    }
-  }
-  return error instanceof Error ? error : new Error('PROVIDER_UNAVAILABLE');
-};
 
 const parseToolInput = (value: string): unknown => {
   try {
@@ -263,7 +236,6 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
     } catch (error) {
       throw mapProviderError(error, signal);
     }
-    if (response.status === 401 || response.status === 403) throw new Error('PROVIDER_AUTH_FAILED');
     if (!response.ok) throw providerHttpError(response.status, response.headers.get('retry-after'));
     const declaredLength = Number(response.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredLength) && declaredLength > MAX_MODELS_RESPONSE_BYTES) {
@@ -327,6 +299,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
     if (provider.version !== request.configurationVersion) throw new Error('PROVIDER_CONFIGURATION_STALE');
     const model = provider.models.find((candidate) => candidate.id === request.modelId);
     if (!model) throw new Error('MODEL_NOT_FOUND');
+    const protocol = model.protocol ?? provider.protocol;
     const capabilities = request.capabilitySnapshot ?? model;
     if (request.tools?.length && !capabilities.supportsTools) throw new Error('MODEL_CAPABILITY_UNSUPPORTED');
     if (
@@ -359,14 +332,14 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
               fetch: sdkFetch(Boolean(credential)),
             });
             const languageModel =
-              provider.protocol === 'responses' ? openai.responses(request.modelId) : openai.chat(request.modelId);
+              protocol === 'responses' ? openai.responses(request.modelId) : openai.chat(request.modelId);
             logger.info(
               {
                 userId: request.userId,
                 providerId: request.providerId,
                 modelId: request.modelId,
                 configurationVersion: request.configurationVersion,
-                protocol: provider.protocol,
+                protocol,
                 ...modelRequestToolDiagnostics(request),
               },
               'Agent provider model request prepared',
@@ -376,15 +349,15 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
                 ? promptCacheKeyFor(request)
                 : undefined;
             const forceReasoning =
-              provider.protocol === 'responses' &&
+              protocol === 'responses' &&
               request.reasoningEffort !== undefined &&
               Boolean(capabilities.reasoningEfforts?.includes(request.reasoningEffort));
             return languageModel.doStream({
-              prompt: promptFor(request, provider.protocol) as never,
+              prompt: promptFor(request, protocol) as never,
               maxOutputTokens: request.maxOutputTokens,
               providerOptions: {
                 openai: {
-                  ...(provider.protocol === 'responses' ? { store: false } : {}),
+                  ...(protocol === 'responses' ? { store: false } : {}),
                   ...(promptCacheKey === undefined ? {} : { promptCacheKey }),
                   ...(forceReasoning ? { forceReasoning: true } : {}),
                   ...(request.reasoningEffort === undefined ? {} : { reasoningEffort: request.reasoningEffort }),
@@ -409,7 +382,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
             providerId: request.providerId,
             modelId: request.modelId,
             configurationVersion: request.configurationVersion,
-            protocol: provider.protocol,
+            protocol,
             errorCode,
           },
           'Agent provider stream start failed',
@@ -435,7 +408,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
     try {
       for await (const part of result.stream) {
         if (part.type === 'reasoning-start' || part.type === 'reasoning-end') {
-          if (provider.protocol === 'responses') continuationCollector.recordReasoning(part.providerMetadata);
+          if (protocol === 'responses') continuationCollector.recordReasoning(part.providerMetadata);
           continue;
         }
         if (part.type === 'reasoning-delta') {
@@ -461,7 +434,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
         if (part.type === 'tool-call') {
           const index = indexFor(part.toolCallId);
           toolNames.set(part.toolCallId, part.toolName);
-          if (provider.protocol === 'responses') {
+          if (protocol === 'responses') {
             continuationCollector.recordToolCall(part.toolCallId, part.providerMetadata);
           }
           if (!sawToolDelta.has(part.toolCallId)) {
@@ -484,7 +457,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
             providerId: request.providerId,
             modelId: request.modelId,
             configurationVersion: request.configurationVersion,
-            protocol: provider.protocol,
+            protocol,
           });
           logger.info(
             {
@@ -492,7 +465,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
               providerId: request.providerId,
               modelId: request.modelId,
               configurationVersion: request.configurationVersion,
-              protocol: provider.protocol,
+              protocol,
               finishReason: finishReasonFrom(part.finishReason),
               emittedToolCallCount: toolIndexes.size,
               emittedToolCalls: [...toolIndexes.entries()].map(([id, index]) => ({
@@ -521,7 +494,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
           providerId: request.providerId,
           modelId: request.modelId,
           configurationVersion: request.configurationVersion,
-          protocol: provider.protocol,
+          protocol,
           errorCode,
         },
         'Agent provider stream failed',

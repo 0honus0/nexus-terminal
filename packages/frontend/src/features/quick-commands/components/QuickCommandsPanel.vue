@@ -279,17 +279,12 @@
 </script>
 
 <template>
-  <section
-    ref="root"
-    data-testid="quick-commands-view"
-    class="quick-commands-root flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
-  >
+  <section ref="root" class="quick-commands-root flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
     <div
       class="quick-commands-controls flex shrink-0 items-center gap-2 border-b border-border/40 bg-background/80 px-2 py-1.5"
     >
       <button
         v-if="collapsibleSearch && !searchExpanded"
-        data-testid="quick-command-search-toggle"
         type="button"
         class="quick-control"
         :title="t('quickCommands.expandSearch')"
@@ -302,7 +297,6 @@
         v-if="searchExpanded"
         ref="searchInput"
         v-model="search"
-        data-testid="quick-command-search"
         data-focus-id="quickCommandsSearch"
         type="text"
         :placeholder="t('quickCommands.searchPlaceholder')"
@@ -339,7 +333,6 @@
         <i :class="['fas', displayMode === 'name' ? 'fa-tag' : 'fa-terminal']" aria-hidden="true"></i>
       </button>
       <button
-        data-testid="quick-command-add"
         type="button"
         class="quick-control quick-control--primary"
         :title="t('quickCommands.add')"
@@ -351,7 +344,6 @@
     </div>
 
     <div
-      data-testid="quick-command-list"
       ref="list"
       class="quick-command-list-area min-h-0 flex-1 overflow-y-auto p-2"
       :style="rowStyle"
@@ -360,7 +352,6 @@
     >
       <p
         v-if="tagLoadError"
-        data-testid="quick-command-tag-load-warning"
         class="mb-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning"
         role="alert"
       >
@@ -406,17 +397,12 @@
         <section
           v-for="group in groups"
           :key="group.id ?? 'untagged'"
-          :data-testid="`quick-command-group-${group.id ?? 'untagged'}`"
-          class="quick-command-group-card mb-2.5 last:mb-0 overflow-hidden rounded-xl border border-border/60 bg-card/40 shadow-2xs transition-all duration-200 hover:border-border/80"
+          class="quick-command-group-card mb-2 last:mb-0 overflow-hidden rounded-lg border border-border/60 bg-card/40 shadow-2xs transition-colors duration-200 hover:border-border/80"
         >
-          <!-- 组头：协调统一的高度（38px），带卡片背景、折叠箭头动画、分类图标徽章、标题及数量胶囊 -->
+          <!-- 组头高度固定，展开时只显示或隐藏列表，避免边框参与布局动画。 -->
           <div
-            data-testid="quick-command-group-header"
-            class="quick-command-group-header group flex select-none items-center justify-between bg-card/90 dark:bg-card/60 px-3 py-2 font-semibold text-foreground transition-all duration-150 hover:bg-header/70 cursor-pointer"
-            :class="[
-              compact ? 'quick-command-group-header--compact' : '',
-              expanded[group.name] !== false ? 'border-b border-border/40' : '',
-            ]"
+            class="quick-command-group-header group flex select-none items-center justify-between bg-card/90 dark:bg-card/60 px-2.5 py-1.5 font-semibold text-foreground transition-colors duration-150 hover:bg-header/70 cursor-pointer"
+            :class="{ 'quick-command-group-header--compact': compact }"
             @click="store.toggle(group.name)"
           >
             <div class="flex items-center gap-1.5 min-w-0 flex-1">
@@ -435,8 +421,7 @@
               <UiInput
                 v-if="editingTagId === (group.id ?? 'untagged')"
                 v-model="tagDraft"
-                data-testid="quick-command-group-rename-input"
-                class="min-w-0 flex-1 h-6 text-xs"
+                class="min-w-0 flex-1 h-6 text-sm"
                 autofocus
                 :placeholder="
                   group.id === null ? t('quickCommands.tags.createFromUntagged') : t('quickCommands.tags.renameHint')
@@ -449,8 +434,7 @@
               <button
                 v-else
                 type="button"
-                data-testid="quick-command-group-name"
-                class="inline-flex items-center min-w-0 shrink truncate text-left text-xs font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer leading-none py-0.5"
+                class="inline-flex items-center min-w-0 shrink truncate text-left text-sm font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer leading-none py-0.5"
                 :title="t('quickCommands.tags.clickToEditTag')"
                 @click.stop="startTagEdit(group)"
               >
@@ -469,7 +453,7 @@
           <!-- 指令条目列表 -->
           <ul
             v-show="expanded[group.name] !== false"
-            class="quick-command-group-list m-0 list-none p-1.5 space-y-1 bg-background/20"
+            class="quick-command-group-list m-0 list-none p-1 space-y-1 bg-background/20"
           >
             <li
               v-for="command in group.commands"
@@ -485,7 +469,6 @@
             >
               <div class="flex items-center gap-2 min-w-0 flex-1">
                 <span
-                  data-testid="quick-command-execute"
                   class="quick-command-display-text truncate text-xs font-medium text-foreground group-hover:text-foreground"
                   :title="displayText(command)"
                 >
@@ -520,7 +503,6 @@
           >
             <div class="flex items-center gap-2 min-w-0 flex-1">
               <span
-                data-testid="quick-command-execute"
                 class="quick-command-display-text truncate text-xs font-medium text-foreground group-hover:text-foreground"
                 :title="displayText(command)"
               >
@@ -599,13 +581,12 @@
   }
   .quick-command-group-header {
     min-width: 0;
-    min-height: calc(var(--quick-row-scale) * 2.375rem);
-    font-size: calc(0.85rem * max(0.9, var(--quick-row-scale) * 0.5 + 0.5));
+    min-height: calc(var(--quick-row-scale) * 2.125rem);
     line-height: 1.25;
   }
   .quick-command-group-header--compact {
-    min-height: calc(var(--quick-row-scale) * 1.875rem);
-    padding-block: calc(var(--quick-row-scale) * 0.25rem);
+    min-height: calc(var(--quick-row-scale) * 1.75rem);
+    padding-block: calc(var(--quick-row-scale) * 0.1875rem);
   }
   .quick-command-row {
     min-height: var(--quick-row-min-height);
@@ -633,7 +614,7 @@
       padding: 0.125rem 0.35rem 0.35rem;
     }
     .quick-command-group-header {
-      min-height: 2.375rem;
+      min-height: 2.125rem;
       align-items: center;
       padding: 0.25rem 0.5rem;
     }

@@ -34,7 +34,7 @@
     "iconv-lite": "^0.7.3",
     "ipaddr.js": "^2.5.0",
     "multer": "^2.3.0",
-    "nodemailer": "^10.0.1",
+    "nodemailer": "^10.0.12",
     "pino": "catalog:",
     "puppeteer-core": "catalog:",
     "qrcode": "^1.5.4",

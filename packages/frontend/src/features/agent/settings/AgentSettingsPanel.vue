@@ -526,21 +526,6 @@
       });
     });
 
-  const changeProviderProtocol = (provider: AgentProviderViewDto, protocol: AgentProviderViewDto['protocol']) =>
-    execute('change-provider-protocol', ['providers'], async () => {
-      const previous = provider;
-      providers.value = providers.value.map((candidate) =>
-        candidate.id === provider.id ? { ...candidate, protocol } : candidate,
-      );
-      try {
-        const updated = await agentApi.updateProvider(provider, { protocol });
-        providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
-      } catch (cause) {
-        providers.value = providers.value.map((candidate) => (candidate.id === previous.id ? previous : candidate));
-        throw cause;
-      }
-    });
-
   const deleteProvider = (provider: AgentProviderViewDto) =>
     execute('delete-provider', ['providers', 'settings-write'], async () => {
       await agentApi.deleteProvider(provider.id, provider.version);
@@ -763,7 +748,6 @@
               :fallback-models="settings.requestedSettings.model.fallbackModels"
               :create-provider="createProvider"
               @toggle="toggleProvider"
-              @protocol="changeProviderProtocol"
               @discover="discoverProviderModels"
               :add-provider-model="addProviderModel"
               :update-provider-models="updateProviderModels"
@@ -1086,11 +1070,7 @@
               :disabled="featureOperationBusy"
               @click="confirmRecommendedInstall"
             >
-              <i
-                v-if="!featureOperationBusy"
-                class="fa-solid fa-download text-xs transition-transform group-hover:-translate-y-0.5"
-                aria-hidden="true"
-              ></i>
+              <i v-if="!featureOperationBusy" class="fa-solid fa-download text-xs" aria-hidden="true"></i>
               <i v-else class="fa-solid fa-circle-notch fa-spin text-xs" aria-hidden="true"></i>
               <span>{{
                 featureOperationBusy

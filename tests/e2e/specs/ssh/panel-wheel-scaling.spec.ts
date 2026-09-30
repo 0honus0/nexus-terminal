@@ -150,7 +150,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
   await connectTestSshFromConnectionsPage(page, connectionId);
 
   await slowStep('server status supports bounded Ctrl+wheel zoom without changing the pane footprint', async () => {
-    const monitor = page.getByTestId('status-monitor').filter({ visible: true }).first();
+    const monitor = page.locator('.status-monitor:visible').first();
     await expect(monitor).toBeVisible({ timeout: 20_000 });
     await expect(monitor).toContainText('CPU', { timeout: 20_000 });
     await expect(monitor).toHaveAttribute('data-status-scale', '1.00');
@@ -232,9 +232,9 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
   await step(
     'quick commands reacts noticeably to one wheel notch and does not bounce back after persistence',
     async () => {
-      const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+      const quickView = page.locator('.quick-commands-root:visible').first();
       await expect(quickView).toBeVisible({ timeout: 20_000 });
-      const list = quickView.getByTestId('quick-command-list');
+      const list = quickView.locator('.quick-command-list-area');
       const row = quickView.locator(`[data-command-id="${quickCommandId}"]`);
       await expect(row).toBeVisible({ timeout: 20_000 });
       await expect(list).toHaveAttribute('data-row-scale', '1.00');
@@ -259,7 +259,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
   await slowStep('file manager keeps its visible columns stable while repeatedly shrinking rows', async () => {
     await openConnectedFileManager(page);
     const list = activeFileManagerList(page);
-    const fileManagerModal = page.getByTestId('file-manager-modal');
+    const fileManagerModal = page.getByRole('dialog', { name: 'File Manager', exact: true });
     const nameHeader = fileManagerModal.locator('.file-table-header-name');
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
     await expect(nameHeader).toBeVisible();
@@ -342,8 +342,8 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-  const list = quickView.getByTestId('quick-command-list');
+  const quickView = page.locator('.quick-commands-root:visible').first();
+  const list = quickView.locator('.quick-command-list-area');
   await expect(quickView.locator(`[data-command-id="${quickCommandId}"]`)).toBeVisible({ timeout: 20_000 });
   await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
@@ -383,14 +383,14 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
     const connectionId = await ensureTestSshConnection(context.request);
     await connectTestSshFromConnectionsPage(page, connectionId);
 
-    const sidebarToggle = page.getByTestId('sidebar-pane-fileManager');
+    const sidebarToggle = page.getByRole('button', { name: 'File Manager', exact: true });
     await sidebarToggle.click();
     const sidebar = page
       .locator('[data-workspace-sidebar]')
-      .filter({ has: page.getByTestId('file-manager-list') })
+      .filter({ has: page.locator('[data-row-scale]') })
       .filter({ visible: true })
       .first();
-    const list = sidebar.getByTestId('file-manager-list');
+    const list = sidebar.locator('[data-row-scale]');
     await expect(list).toBeVisible();
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
@@ -415,7 +415,7 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
     expect((await persisted).ok()).toBeTruthy();
 
     await sidebarToggle.click();
-    const reopenedList = sidebar.getByTestId('file-manager-list');
+    const reopenedList = sidebar.locator('[data-row-scale]');
     await expect(reopenedList).toBeVisible();
     await expect(reopenedList).toHaveAttribute('data-row-scale', '0.92');
   } finally {
@@ -449,8 +449,8 @@ test('rapid panel scaling persists the newest value when save responses arrive o
   await connectTestSshFromConnectionsPage(page, connectionId);
 
   await step('Quick Commands ignores the late response from the older scale save', async () => {
-    const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-    const list = quickView.getByTestId('quick-command-list');
+    const quickView = page.locator('.quick-commands-root:visible').first();
+    const list = quickView.locator('.quick-command-list-area');
     await expect(quickView.locator(`[data-command-id="${quickCommandId}"]`)).toBeVisible({ timeout: 20_000 });
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
@@ -475,7 +475,7 @@ test('rapid panel scaling persists the newest value when save responses arrive o
   });
 
   await step('Status Monitor ignores the late response from the older scale save', async () => {
-    const monitor = page.getByTestId('status-monitor').filter({ visible: true }).first();
+    const monitor = page.locator('.status-monitor:visible').first();
     await expect(monitor).toBeVisible();
     await expect(monitor).toHaveAttribute('data-status-scale', '1.00');
 

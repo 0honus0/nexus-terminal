@@ -108,7 +108,6 @@ export const decodeCatalog = (value: unknown): WorkspaceRuntimeCatalog => {
         familyId: stringValue(pack.familyId) as string,
         versionId: stringValue(pack.versionId) as string,
         displayName: stringValue(pack.displayName) as string,
-        contentDigest: stringValue(pack.contentDigest) as string,
         diskBytes: integerValue(pack.diskBytes),
         status: pack.status as WorkspaceRuntimeCatalog['packs'][number]['status'],
         installed: booleanValue(pack.installed),

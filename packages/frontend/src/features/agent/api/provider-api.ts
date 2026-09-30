@@ -19,6 +19,7 @@ import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 
 const providerModelInput = (model: AgentProviderModelInputDto): AgentProviderModelInputDto => ({
   id: model.id,
+  ...(model.protocol === undefined ? {} : { protocol: model.protocol }),
   contextWindow: model.contextWindow,
   maxOutputTokens: model.maxOutputTokens,
   supportsTools: model.supportsTools,

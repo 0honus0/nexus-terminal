@@ -31,6 +31,16 @@ export const publicAgentErrorTaxonomyScenario = async () => {
     });
 
   const cases: Array<{ producer: string; raw: string; status: number; code: string }> = [
+    ...[
+      'PROVIDER_RESPONSE_INVALID',
+      'PROVIDER_STREAM_TRUNCATED',
+      'PROVIDER_DNS_FAILED',
+      'PROVIDER_TLS_FAILED',
+      'PROVIDER_NETWORK_FAILED',
+      'PROVIDER_REQUEST_FAILED',
+    ].map((code) => ({ producer: 'provider precise error', raw: code, status: 502, code })),
+    { producer: 'provider timeout', raw: 'PROVIDER_TEST_TIMEOUT', status: 504, code: 'PROVIDER_TEST_TIMEOUT' },
+    { producer: 'model missing', raw: 'MODEL_NOT_FOUND', status: 422, code: 'MODEL_NOT_FOUND' },
     {
       producer: 'capability grant scope validation',
       raw: 'APP_GRANT_SCOPE_INVALID',

@@ -52,7 +52,7 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
   await expect(launcher).toBeVisible();
   await expect(hub).toHaveCount(0);
 
-  await page.getByTestId('connections-add-button').click({ trial: true });
+  await page.getByRole('button', { name: 'Add New Connection', exact: true }).click({ trial: true });
 
   await launcher.click();
   await expect(hub).toBeVisible();
@@ -100,8 +100,71 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
   await expect(hub).toBeVisible();
 });
 
+test('Agent launcher docks on either edge, restores its side and expands on focus', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  await page.goto('/connections');
+  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(launcher).toBeVisible();
+
+  for (const side of ['left', 'right'] as const) {
+    const initial = (await launcher.boundingBox())!;
+    const width = await page.evaluate(() => document.documentElement.clientWidth);
+    await page.mouse.move(initial.x + initial.width / 2, initial.y + initial.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(side === 'left' ? 22 : width - 22, initial.y + initial.height / 2 - 40, { steps: 5 });
+    await page.mouse.up();
+    await page.mouse.move(width / 2, 50);
+    await expect(hub).toHaveCount(0);
+    await page.reload();
+    await expect(launcher).toBeVisible();
+    const restoredWidth = await page.evaluate(() => innerWidth);
+    const hiddenX = side === 'left' ? -22 : restoredWidth - 22;
+    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(hiddenX);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await launcher.focus();
+    await expect
+      .poll(async () => Math.round((await launcher.boundingBox())!.x))
+      .toBe(side === 'left' ? 0 : restoredWidth - 44);
+    await launcher.evaluate((button) => (button as HTMLButtonElement).blur());
+    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(hiddenX);
+    await launcher.click({ button: 'right' });
+  }
+  await launcher.press('Enter');
+  await expect(hub).toBeVisible();
+});
+
 test.describe('touch Agent launcher', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test('touch launcher docks half-hidden and opens from its exposed half', async ({ page, context }) => {
+    await loginAsInitialAdmin(context.request);
+    await setUiLanguage(context.request);
+    await enableAgentWithRecommendedNexusAgent(context.request);
+    await page.goto('/connections');
+    const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+    const hub = page.locator('section[aria-label="Agent"]');
+    await expect(launcher).toBeVisible();
+    const initial = (await launcher.boundingBox())!;
+    const y = initial.y + 22 - 60;
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: initial.x + 22, y: initial.y + 22 }],
+    });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 22, y }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect(hub).toHaveCount(0);
+    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
+    await page.reload();
+    await expect(launcher).toBeVisible();
+    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
+    await page.touchscreen.tap(11, (await launcher.boundingBox())!.y + 22);
+    await expect(hub).toBeVisible();
+    await cdp.detach();
+  });
 
   test('touch drag moves the launcher without opening the Hub', async ({ page, context }) => {
     await loginAsInitialAdmin(context.request);
@@ -167,11 +230,89 @@ test('Agent Hub native buttons keep a 24px physical pointer-target floor', async
   );
   expect(undersized).toEqual([]);
 
-  const resizeHandle = hub.locator('button.cursor-nwse-resize');
+  const resizeHandle = hub.locator('button[data-ui="resize-handle"]');
   const resizeBox = await resizeHandle.boundingBox();
   expect(resizeBox).toBeTruthy();
   expect(resizeBox!.width).toBeGreaterThanOrEqual(24);
   expect(resizeBox!.height).toBeGreaterThanOrEqual(24);
+});
+
+test('Agent Hub resizing keeps its current center and its bottom-right handle follows the pointer', async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  await page.goto('/connections');
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(hub).toBeVisible();
+  const handle = hub.locator('button[data-ui="resize-handle"]');
+  const bounds = async () => {
+    const box = await hub.boundingBox();
+    expect(box).toBeTruthy();
+    return box!;
+  };
+  const resize = async (dx: number, dy: number) => {
+    const box = await handle.boundingBox();
+    expect(box).toBeTruthy();
+    const x = box!.x + box!.width / 2;
+    const y = box!.y + box!.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 8 });
+    await page.mouse.up();
+  };
+  const expectCenteredSize = async (before: Awaited<ReturnType<typeof bounds>>, dw: number, dh: number) => {
+    await expect.poll(async () => (await bounds()).width).toBeCloseTo(before.width + dw, 0);
+    await expect.poll(async () => (await bounds()).height).toBeCloseTo(before.height + dh, 0);
+    const after = await bounds();
+    expect(after.x + after.width / 2).toBeCloseTo(before.x + before.width / 2, 0);
+    expect(after.y + after.height / 2).toBeCloseTo(before.y + before.height / 2, 0);
+    return after;
+  };
+
+  const initial = await bounds();
+  await resize(-80, -60);
+  const shrunk = await expectCenteredSize(initial, -160, -120);
+  expect(shrunk.x + shrunk.width).toBeCloseTo(initial.x + initial.width - 80, 0);
+  expect(shrunk.y + shrunk.height).toBeCloseTo(initial.y + initial.height - 60, 0);
+
+  // Moving the window establishes a new center; resizing must not snap back
+  // to the viewport center or the position from the previous resize.
+  const header = hub.locator('header').first();
+  const headerBox = await header.boundingBox();
+  expect(headerBox).toBeTruthy();
+  const headerX = headerBox!.x + 24;
+  const headerY = headerBox!.y + headerBox!.height / 2;
+  await page.mouse.move(headerX, headerY);
+  await page.mouse.down();
+  await page.mouse.move(headerX + 40, headerY + 60, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await bounds()).x).toBeCloseTo(shrunk.x + 40, 0);
+  const moved = await bounds();
+  await resize(30, 20);
+  const grown = await expectCenteredSize(moved, 60, 40);
+
+  await handle.focus();
+  await page.keyboard.press('ArrowLeft');
+  const keyboardResized = await expectCenteredSize(grown, -32, 0);
+  await resize(500, 500);
+  const maxWidth =
+    2 * Math.min(keyboardResized.x + keyboardResized.width / 2, 1440 - keyboardResized.x - keyboardResized.width / 2);
+  const maxHeight =
+    2 * Math.min(keyboardResized.y + keyboardResized.height / 2, 1000 - keyboardResized.y - keyboardResized.height / 2);
+  const limited = await expectCenteredSize(
+    keyboardResized,
+    maxWidth - keyboardResized.width,
+    maxHeight - keyboardResized.height,
+  );
+  expect(limited.x).toBeGreaterThanOrEqual(0);
+  expect(limited.y).toBeGreaterThanOrEqual(0);
+  expect(limited.x + limited.width).toBeLessThanOrEqual(1440);
+  expect(limited.y + limited.height).toBeLessThanOrEqual(1000);
 });
 
 test('Agent window state resets every user-scoped layout field before an empty user restore', async ({
@@ -193,6 +334,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
           recentAppIds: string[];
           hubView: string;
           launcherPosition: { right: number; bottom: number };
+          launcherDock: 'left' | 'right' | null;
           threadSidebarVisible: boolean;
           taskRailVisible: boolean;
         };
@@ -202,6 +344,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
         setThreadSidebarVisible(visible: boolean): void;
         setTaskRailVisible(visible: boolean): void;
         setLauncherPosition(position: { right: number; bottom: number }): void;
+        dockLauncher(side: 'left' | 'right'): void;
         setBounds(bounds: { x: number; y: number; width: number; height: number }): void;
         toggleMaximize(): void;
         reset(): void;
@@ -217,6 +360,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
       agentWindowManager.setThreadSidebarVisible(false);
       agentWindowManager.setTaskRailVisible(true);
       agentWindowManager.setLauncherPosition({ right: 111, bottom: 222 });
+      agentWindowManager.dockLauncher('left');
       agentWindowManager.setBounds({ x: 12, y: 18, width: 700, height: 600 });
       agentWindowManager.toggleMaximize();
     };
@@ -242,6 +386,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
     recentAppIds: [],
     hubView: 'conversation',
     launcherPosition: { right: 22, bottom: 24 },
+    launcherDock: null,
     threadSidebarVisible: true,
     taskRailVisible: false,
   };
@@ -386,10 +531,10 @@ test('Agent revisits a loaded conversation without blocking on a fresh history r
 
   await firstThread.click();
   await expect(firstThread).toHaveAttribute('aria-current', 'true');
-  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
   await secondThread.click();
   await expect(secondThread).toHaveAttribute('aria-current', 'true');
-  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
 
   holdFirstRefresh = true;
   await firstThread.click();
@@ -397,7 +542,7 @@ test('Agent revisits a loaded conversation without blocking on a fresh history r
   await expect(firstThread).toHaveAttribute('aria-current', 'true');
   // The authoritative ledger/run refresh is deliberately stalled, but the cached conversation
   // must remain visible instead of regressing to the full-screen loading state.
-  await expect(hub.getByTestId('agent-thread-loading')).toBeHidden();
+  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
 
   releaseRefresh?.();
   await expect(firstThread).toBeEnabled();
@@ -548,6 +693,7 @@ test('Agent feature enable opens one global floating window that survives route 
   expect(connectionsBounds).toEqual(settingsBounds);
 
   await page
+    .locator('.app-nav-links')
     .getByRole('link', { name: 'Dashboard', exact: true })
     .evaluate((element) => (element as HTMLAnchorElement).click());
   await expect(page).toHaveURL(/\/$/);
@@ -585,7 +731,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await providerField('Display name').fill('Settings UI Provider');
   await providerField('Base URL').fill(`${E2E_URLS.openAiProviderOrigin}/v1`);
   await providerField('Credential').fill('e2e-provider-secret');
-  await addProvider.getByTestId('agent-provider-model-id').fill('e2e-model');
+  await addProvider.getByRole('textbox', { name: 'Model ID *', exact: true }).fill('e2e-model');
   await providerField('Context window').fill('8192');
   await providerField('Maximum output tokens').fill('128');
   await addProvider.getByRole('button', { name: 'Save & Add', exact: true }).click();
@@ -593,7 +739,12 @@ test('Agent settings surface exposes the production control plane and captures f
   const providerName = providersSection.getByText('Settings UI Provider', { exact: true });
   await expect(providerName).toBeVisible();
   const providerCard = providerName.locator('xpath=ancestor::article[1]');
-  const protocolSelect = providerCard.getByLabel('Protocol', { exact: true });
+  await expect(providerCard.getByLabel('Protocol', { exact: true })).toHaveCount(0);
+  await providerCard.getByRole('button', { name: 'Models & test (1)', exact: true }).click();
+  const protocolModels = page.getByRole('dialog', { name: 'Configured models & test', exact: true });
+  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
+  const protocolDialog = page.getByRole('dialog', { name: 'Model capabilities', exact: true });
+  const protocolSelect = protocolDialog.getByLabel('Protocol', { exact: true });
   await expect(protocolSelect).toContainText('Chat Completions');
   await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
     if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"responses"')) {
@@ -606,8 +757,12 @@ test('Agent settings surface exposes the production control plane and captures f
   );
   await pickGen2Option(protocolSelect, 'Responses API');
   await expect(protocolSelect).toContainText('Responses API');
+  await protocolDialog.getByRole('button', { name: 'Save', exact: true }).click();
   expect((await protocolSaved).ok()).toBeTruthy();
+  await expect(protocolDialog).toBeHidden();
   await page.unroute('**/api/v1/agent/ai/providers/*');
+  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
+  await expect(protocolSelect).toContainText('Responses API');
 
   await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
     if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"chat-completions"')) {
@@ -625,12 +780,18 @@ test('Agent settings surface exposes the production control plane and captures f
     (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
   );
   await pickGen2Option(protocolSelect, 'Chat Completions');
+  await protocolDialog.getByRole('button', { name: 'Save', exact: true }).click();
   expect((await failedProtocolPatch).status()).toBe(500);
-  await expect(protocolSelect).toContainText('Responses API');
+  await expect(protocolDialog).toBeVisible();
   const errorToast = page.locator('.bg-red-600').last();
   await expect(errorToast).toBeVisible();
   await expect(errorToast).toBeHidden({ timeout: 7_500 });
   await page.unroute('**/api/v1/agent/ai/providers/*');
+  await protocolDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
+  await expect(protocolSelect).toContainText('Responses API');
+  await protocolDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await protocolModels.getByRole('button', { name: 'Close', exact: true }).click();
 
   const defaultModel = providersSection.getByRole('combobox', {
     name: 'Default model for new runs',
@@ -713,7 +874,7 @@ test('Agent settings surface exposes the production control plane and captures f
   const configuredModelsPanel = providersSection
     .getByText('Configured models', { exact: true })
     .locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
-  await expect(configuredModelsPanel.getByTestId('configured-models-remove-all')).toHaveCount(1);
+  await expect(configuredModelsPanel.getByRole('button', { name: 'Remove all', exact: true })).toHaveCount(1);
   await expect(configuredModelsPanel.getByRole('checkbox', { name: 'Select all', exact: true })).toHaveCount(0);
   await expect(configuredModelsPanel.getByRole('button', { name: /Remove selected/ })).toHaveCount(0);
 
@@ -905,7 +1066,9 @@ test('fallback settings drop stale models and provider deletion repairs the defa
   const providersSection = page
     .getByRole('heading', { name: 'Model providers', exact: true })
     .locator('xpath=ancestor::section[1]');
-  const primaryCard = providersSection.locator(`[data-testid="agent-provider-card"][data-provider-id="${primary.id}"]`);
+  const primaryCard = providersSection
+    .locator('article')
+    .filter({ has: page.getByText('Fallback Primary', { exact: true }) });
   await expect(primaryCard).toBeVisible();
   await expect(primaryCard.getByText('Fallback Primary', { exact: true })).toBeVisible();
   await expect(providersSection.getByText('stale-fallback', { exact: true })).toHaveCount(0);

@@ -26,7 +26,7 @@
   height: 1.625rem;
   padding: 0 0.35rem 0 0.5rem;
   background: var(--input-bg-color);
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  border: 1px solid var(--input-bg-color);
   border-radius: 0.375rem;
   transition:
     border-color 0.15s ease,
@@ -38,7 +38,16 @@
 }
 .file-manager-path-input input {
   width: 100%;
+  /* Preserve descender room inside the 24px inner height; only shift the text. */
+  height: auto;
+  min-height: 0;
+  line-height: 1.5;
+  padding-block: 2px;
+  position: relative;
+  top: -1px;
   background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   box-shadow: none !important;
 }
 .file-manager-path-favorite-btn,
@@ -76,29 +85,17 @@
 .file-manager-actions {
   width: 100%;
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 1.625rem);
   align-items: center;
-  justify-content: flex-start;
-  gap: 0.25rem;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
 }
 .file-manager-actions.is-searching {
+  display: flex;
   justify-content: stretch;
 }
-.file-manager-actions.is-wide:not(.is-searching) {
-  justify-content: space-between;
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-}
-
-@container file-manager-pane (min-width: 280px) {
-  .file-manager-actions:not(.is-searching) {
-    justify-content: space-between;
-    flex-wrap: nowrap;
-    gap: 0.25rem;
-  }
-}
-
 .file-manager-action-button {
   display: inline-flex;
   width: 1.625rem;
@@ -136,17 +133,6 @@
   cursor: not-allowed;
   opacity: 0.45;
 }
-.file-manager-action-button--primary {
-  background: color-mix(in srgb, var(--primary-color) 12%, var(--card-bg-color, var(--app-bg-color)));
-  border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
-  color: var(--primary-color);
-}
-.file-manager-action-button--primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--primary-color) 20%, var(--card-bg-color, var(--app-bg-color)));
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-}
-
 .file-manager-search-slot {
   display: flex;
   align-items: center;
@@ -199,11 +185,11 @@
 }
 .file-table-header-permissions {
   padding-left: 0.4rem;
-  padding-right: 0.4rem;
+  padding-right: 0.65rem;
   text-align: left;
 }
 .file-table-header-modified {
-  padding-left: 0.4rem;
+  padding-left: 0.65rem;
   padding-right: 0.6rem;
   text-align: left;
 }
@@ -232,6 +218,7 @@
   padding-left: 0.5rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
   font-size: calc(0.75rem * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
+  line-height: 1.5;
   vertical-align: middle;
 }
 .file-row-name {
@@ -245,22 +232,43 @@
 }
 .file-row-permissions {
   padding-left: 0.4rem;
-  padding-right: 0.4rem;
+  padding-right: 0.65rem;
+  font-size: calc(0.625rem * max(1, var(--file-row-scale) * 0.2 + 0.8));
   text-align: left;
 }
 .file-row-modified {
-  padding-left: 0.4rem;
+  padding-left: 0.65rem;
   padding-right: 0.6rem;
+  font-size: calc(0.625rem * max(1, var(--file-row-scale) * 0.2 + 0.8));
   text-align: left;
 }
+.file-row-name-container,
+.file-row-parent-content {
+  min-height: 1.5em;
+  line-height: 1.5;
+}
 .file-row-icon {
-  font-size: calc(0.85rem * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
+  display: inline-flex;
+  height: 1rem;
   width: 1rem;
-  text-align: center;
+  align-items: center;
+  justify-content: center;
+  font-size: inherit;
+  line-height: 1rem;
+}
+.file-row-name-label {
+  font-size: inherit;
+  line-height: 1.5;
+  padding-block: 2px;
+  position: relative;
+  top: -1px;
 }
 .file-row-name-button {
+  display: flex;
+  align-items: center;
   background: transparent;
   border: none;
+  outline: none;
   padding: 0;
   color: inherit;
   font: inherit;
@@ -318,9 +326,8 @@
     gap: 0.25rem;
   }
   .file-manager-actions {
-    gap: 0.25rem;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    grid-template-columns: repeat(auto-fit, 1.5rem);
+    row-gap: 0.25rem;
   }
   .file-manager-path-input {
     min-height: 1.5rem;

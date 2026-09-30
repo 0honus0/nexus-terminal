@@ -15,7 +15,7 @@ async function captureEvidence(
     () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
   );
   const metrics = await page.evaluate(() => {
-    const panel = document.querySelector('[data-testid="data-management-settings"]');
+    const panel = document.querySelector('[role="tabpanel"][aria-label="Data Management"]');
     const panelRect = panel?.getBoundingClientRect();
     const overflowing = [...document.querySelectorAll('*')]
       .map((element) => {
@@ -23,7 +23,6 @@ async function captureEvidence(
         const rect = htmlElement.getBoundingClientRect();
         return {
           tag: htmlElement.tagName,
-          testId: htmlElement.dataset.testid ?? '',
           className: htmlElement.className,
           text: (htmlElement.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 80),
           x: rect.x,
@@ -75,7 +74,7 @@ test('data management UI exports a real backup file and imports it through the f
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Data Management', exact: true }).click();
-  const section = page.getByTestId('data-management-settings');
+  const section = page.getByRole('tabpanel', { name: 'Data Management', exact: true });
   await expect(section).toBeVisible();
   await section.scrollIntoViewIfNeeded();
 
@@ -88,7 +87,7 @@ test('data management UI exports a real backup file and imports it through the f
     expect(connectionsExport.ok()).toBeFalsy();
     expect(connectionsExport.headers()['content-type'] ?? '').not.toContain('application/zip');
 
-    const fileInput = section.getByTestId('backup-import-file');
+    const fileInput = section.locator('input[type="file"]');
     const fileChrome = await fileInput.evaluate((element) => {
       const style = getComputedStyle(element);
       return {
@@ -124,12 +123,12 @@ test('data management UI exports a real backup file and imports it through the f
 
   let backupPath = '';
   await slowStep('export downloads a non-empty encrypted .nexus-backup file', async () => {
-    await section.getByTestId('backup-export-password').fill(E2E_ADMIN.password);
+    await section.locator('form').first().locator('input[type="password"]').fill(E2E_ADMIN.password);
     const downloadPromise = page.waitForEvent('download');
     const responsePromise = page.waitForResponse(
       (response) => response.url().endsWith('/api/v1/settings/backup/export') && response.request().method() === 'POST',
     );
-    await section.getByTestId('backup-export').click();
+    await section.getByRole('button', { name: 'Export backup', exact: true }).click();
     const download = await downloadPromise;
     expect((await responsePromise).ok()).toBeTruthy();
     expect(download.suggestedFilename()).toMatch(/\.nexus-backup$/);
@@ -154,11 +153,11 @@ test('data management UI exports a real backup file and imports it through the f
   });
 
   await slowStep('import submits the downloaded backup through the real UI file picker', async () => {
-    await section.getByTestId('backup-import-file').setInputFiles(backupPath);
+    await section.locator('input[type="file"]').setInputFiles(backupPath);
     const importPromise = page.waitForResponse(
       (response) => response.url().endsWith('/api/v1/settings/backup/import') && response.request().method() === 'POST',
     );
-    await section.getByTestId('backup-import').click();
+    await section.getByRole('button', { name: 'Import backup', exact: true }).click();
     const response = await importPromise;
     expect(response.ok()).toBeTruthy();
     const body = (await response.json()) as { restoredRows?: number; restoredFiles?: number };
@@ -174,7 +173,7 @@ test('data management UI exports a real backup file and imports it through the f
     expect(status.ok()).toBeTruthy();
     await expect(status.json()).resolves.toMatchObject({ isAuthenticated: true });
     await page.getByRole('tab', { name: 'Data Management', exact: true }).click();
-    const reloadedSection = page.getByTestId('data-management-settings');
+    const reloadedSection = page.getByRole('tabpanel', { name: 'Data Management', exact: true });
     await expect(reloadedSection).toBeVisible();
     await reloadedSection.scrollIntoViewIfNeeded();
     await captureEvidence(page, testInfo, 'after');

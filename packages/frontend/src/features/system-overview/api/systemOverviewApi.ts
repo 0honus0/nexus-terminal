@@ -5,7 +5,7 @@ export const systemOverviewApi = {
   async local(): Promise<ResourceStatusDto> {
     return (await httpClient.get<ResourceStatusDto>('/system/status')).data;
   },
-  async ssh(): Promise<SshResourceStatusDto[]> {
-    return (await httpClient.get<SshResourceStatusDto[]>('/system/ssh-resources')).data;
+  async ssh(connectionId: number, signal?: AbortSignal): Promise<SshResourceStatusDto> {
+    return (await httpClient.get<SshResourceStatusDto>(`/system/ssh-resources/${connectionId}`, { signal })).data;
   },
 };

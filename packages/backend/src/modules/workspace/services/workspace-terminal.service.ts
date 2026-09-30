@@ -6,6 +6,7 @@ import type { WorkspaceShellIntegrationService } from './workspace-shell-integra
 
 const MAX_INPUT_BYTES = 256 * 1024;
 const MAX_QUEUED_INPUT_BYTES = 1024 * 1024;
+const MAX_RECONNECT_JOURNAL_BYTES = 8 * 1024 * 1024;
 interface InputItem {
   data: string;
   sequence?: number;
@@ -21,6 +22,11 @@ interface TerminalState {
   columns?: number;
   rows?: number;
   consumerBackpressure: boolean;
+  reconnectPaused: boolean;
+  journal: Buffer[];
+  journalBytes: number;
+  journalStartOffset: number;
+  terminalOffset: number;
 }
 
 /** Owns shell byte flow/backpressure. WebSocket framing and terminal output ACKs stay in Interfaces. */
@@ -41,6 +47,11 @@ export class WorkspaceTerminalService {
         waitingForDrain: false,
         unsubscribers: [],
         consumerBackpressure: false,
+        reconnectPaused: false,
+        journal: [],
+        journalBytes: 0,
+        journalStartOffset: 0,
+        terminalOffset: 0,
         columns: viewport.columns,
         rows: viewport.rows,
       };
@@ -116,6 +127,31 @@ export class WorkspaceTerminalService {
     if (!state?.columns || !state.rows) return null;
     return { columns: state.columns, rows: state.rows };
   }
+  offset(sessionId: string): number {
+    return this.requireState(sessionId).terminalOffset;
+  }
+  pauseForReconnect(sessionId: string): void {
+    const state = this.requireState(sessionId);
+    if (state.reconnectPaused) return;
+    state.reconnectPaused = true;
+    this.sessions.require(sessionId).shell.pause();
+  }
+  resumeAfterReconnect(sessionId: string): void {
+    const state = this.requireState(sessionId);
+    if (!state.reconnectPaused) return;
+    state.reconnectPaused = false;
+    if (!state.consumerBackpressure) this.sessions.require(sessionId).shell.resume();
+  }
+  replayFrom(sessionId: string, offset: number): Buffer {
+    const state = this.requireState(sessionId);
+    if (!Number.isSafeInteger(offset) || offset < state.journalStartOffset || offset > state.terminalOffset) {
+      throw new Error('WORKSPACE_TERMINAL_REPLAY_UNAVAILABLE');
+    }
+    if (offset === state.terminalOffset) return Buffer.alloc(0);
+    const skip = offset - state.journalStartOffset;
+    const journal = Buffer.concat(state.journal, state.journalBytes);
+    return journal.subarray(skip);
+  }
   setConsumerBackpressure(sessionId: string, active: boolean): void {
     const state = this.requireState(sessionId);
     if (state.consumerBackpressure === active) return;
@@ -172,10 +208,30 @@ export class WorkspaceTerminalService {
     if (filterStartedAt !== 0n) {
       runtimePerformanceMetrics.recordTerminalMarkerFilter(process.hrtime.bigint() - filterStartedAt);
     }
-    if (visible.byteLength) this.events.publish(id, { type: 'terminal-output', data: visible });
+    if (visible.byteLength) this.publishOutput(id, _state, visible);
   }
   private forwardStderr(id: string, _state: TerminalState, data: Uint8Array) {
-    if (data.byteLength) this.events.publish(id, { type: 'terminal-output', data, stderr: true });
+    if (data.byteLength) this.publishOutput(id, _state, data, true);
+  }
+  private publishOutput(id: string, state: TerminalState, data: Uint8Array, stderr = false): void {
+    const copy = Buffer.from(data);
+    state.journal.push(copy);
+    state.journalBytes += copy.byteLength;
+    state.terminalOffset += copy.byteLength;
+    while (state.journalBytes > MAX_RECONNECT_JOURNAL_BYTES) {
+      const excess = state.journalBytes - MAX_RECONNECT_JOURNAL_BYTES;
+      const first = state.journal[0]!;
+      if (first.byteLength <= excess) {
+        state.journal.shift();
+        state.journalBytes -= first.byteLength;
+        state.journalStartOffset += first.byteLength;
+      } else {
+        state.journal[0] = first.subarray(excess);
+        state.journalBytes -= excess;
+        state.journalStartOffset += excess;
+      }
+    }
+    this.events.publish(id, { type: 'terminal-output', data, ...(stderr ? { stderr: true } : {}) });
   }
   private flush(_id: string, _state: TerminalState) {
     // Byte-oriented marker filtering keeps only bounded ASCII marker remainders.

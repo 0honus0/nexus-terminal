@@ -12,6 +12,7 @@
   import '@xterm/xterm/css/xterm.css';
   import type { TerminalChannel } from '../ports/terminal-channel';
   import type { TerminalVisualOptions } from '../model/terminal';
+  import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
   import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
   import {
     createTerminalSessionState,
@@ -23,6 +24,7 @@
     defineProps<{
       channel: TerminalChannel;
       active?: boolean;
+      inputEnabled?: boolean;
       fontFamily?: string;
       fontSize?: number;
       theme?: Record<string, string>;
@@ -31,7 +33,7 @@
       visual?: TerminalVisualOptions;
       state?: TerminalSessionState;
     }>(),
-    { active: true, fontSize: 14, scrollback: 5000, rightClickCopyPaste: true },
+    { active: true, inputEnabled: true, fontSize: 14, scrollback: 5000, rightClickCopyPaste: true },
   );
   const emit = defineEmits<{
     ready: [];
@@ -48,10 +50,13 @@
   const searchOpen = terminalState.searchOpen;
   const searchTerm = terminalState.searchTerm;
   const renderedFontSize = ref(props.fontSize);
+  const backgroundReady = ref(false);
+  const backgroundFrame = ref<HTMLIFrameElement | null>(null);
   let terminal: Terminal | undefined;
   let fit: FitAddon | undefined;
   let searchAddon: SearchAddon | undefined;
   let serializeAddon: SerializeAddon | undefined;
+  let runtimeModes: TerminalRuntimeModeTracker | undefined;
   let resizeObserver: ResizeObserver | undefined;
   const cleanup: Array<() => void> = [];
   const HISTORY_LIVE_SCROLLBACK_LINES = 20_000;
@@ -115,6 +120,26 @@
   });
   let lastColumns = 0;
   let lastRows = 0;
+  const revealBackgroundWhenSized = () => {
+    const element = root.value;
+    if (!props.active || !element || element.clientWidth <= 0 || element.clientHeight <= 0) return;
+    backgroundReady.value = true;
+  };
+  watch(
+    [backgroundFrame, sandboxedCustomHtml],
+    ([frame, html], _previous, onCleanup) => {
+      if (!frame || !html) return;
+      const loadWhenSized = () => {
+        if (frame.clientWidth > 0 && frame.clientHeight > 0 && frame.getAttribute('srcdoc') !== html)
+          frame.srcdoc = html;
+      };
+      const observer = new ResizeObserver(loadWhenSized);
+      observer.observe(frame);
+      loadWhenSized();
+      onCleanup(() => observer.disconnect());
+    },
+    { flush: 'post' },
+  );
   const fitAndResize = () => {
     const element = root.value;
     if (!terminal || !fit || !element) return;
@@ -123,6 +148,7 @@
     // before resizing, so restoring the tab later exposes a visible redraw/blank strip. Keep the
     // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
     if (element.clientWidth <= 0 || element.clientHeight <= 0) return;
+    revealBackgroundWhenSized();
     fit.fit();
     if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
     if (element.scrollLeft !== 0) element.scrollLeft = 0;
@@ -191,7 +217,7 @@
 
   const liveReplaySnapshot = (): string => {
     if (!historyBrowsing) {
-      return terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : '';
+      return `${terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : ''}${runtimeModes?.restoreSuffix() ?? ''}`;
     }
     return `${historyLiveSnapshot}${deferredTerminalOutputReplay()}`;
   };
@@ -236,7 +262,11 @@
     if (!terminal || !serializeAddon || newPage.byteLength === 0 || historyRebuilding) return;
     const enteringHistory = !historyBrowsing;
     if (enteringHistory) {
-      historyLiveSnapshot = serializeTerminalSnapshot(terminal, serializeAddon, HISTORY_LIVE_SNAPSHOT_MAX_BYTES);
+      historyLiveSnapshot = `${serializeTerminalSnapshot(
+        terminal,
+        serializeAddon,
+        HISTORY_LIVE_SNAPSHOT_MAX_BYTES,
+      )}${runtimeModes?.restoreSuffix() ?? ''}`;
       const continuation = currentHistoryContinuation();
       historyWindowChunks = continuation.byteLength ? [continuation] : [];
       historyBrowsing = true;
@@ -248,6 +278,7 @@
     try {
       terminal.options.scrollback = HISTORY_WINDOW_SCROLLBACK_LINES;
       terminal.reset();
+      runtimeModes?.reset();
       const [pageChunk, ...continuation] = historyWindowChunks;
       if (pageChunk) await writeTerminal(pageChunk);
       if (!terminal) return;
@@ -282,6 +313,7 @@
         historyWindowChunks = [];
         terminal.options.scrollback = liveScrollbackLimit();
         terminal.reset();
+        runtimeModes?.reset();
         if (snapshot) await writeTerminal(snapshot);
         await props.channel.resetPreviousOutput?.().catch(() => false);
         while (deferredTerminalOutput.length) {
@@ -325,12 +357,14 @@
   };
 
   const historyLoadThreshold = (): number => Math.max(4, Math.ceil((terminal?.rows ?? 24) * 0.2));
+  const remoteMouseReportingActive = (): boolean => terminal?.modes.mouseTrackingMode !== 'none';
   const copySelection = async () => {
     if (terminal?.hasSelection()) await writeClipboardText(terminal.getSelection());
   };
   const paste = async () => {
+    if (!props.inputEnabled) return;
     const text = await navigator.clipboard.readText();
-    if (text) terminal?.paste(text.replace(/\r\n?/g, '\n'));
+    if (text && props.inputEnabled) terminal?.paste(text.replace(/\r\n?/g, '\n'));
   };
   const selectAll = () => terminal?.selectAll();
   const clearTerminal = () => {
@@ -758,7 +792,7 @@
       openMobileClipboardMenu(event.clientX, event.clientY);
       return;
     }
-    if (!props.rightClickCopyPaste) return;
+    if (!props.rightClickCopyPaste || remoteMouseReportingActive()) return;
     event.preventDefault();
     if (terminal?.hasSelection()) {
       try {
@@ -776,6 +810,13 @@
     } catch {
       // Clipboard permissions are browser-controlled.
     }
+  };
+
+  const handleRightMouseDown = (event: MouseEvent): void => {
+    if (device.isMobile.value || !props.rightClickCopyPaste || remoteMouseReportingActive() || event.button !== 2)
+      return;
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const resolveWheelScale = createWheelScaleResolver({
@@ -810,7 +851,11 @@
       applyFontSize(change.next);
       return;
     }
-    if (event.deltaY < 0 && (terminal?.buffer.active.viewportY ?? Number.POSITIVE_INFINITY) <= historyLoadThreshold()) {
+    if (
+      !remoteMouseReportingActive() &&
+      event.deltaY < 0 &&
+      (terminal?.buffer.active.viewportY ?? Number.POSITIVE_INFINITY) <= historyLoadThreshold()
+    ) {
       void loadPreviousOutput();
     }
   };
@@ -949,6 +994,26 @@
     pendingOutputBytes = 0;
     terminal.write(batch, showLatest ? () => terminal?.scrollToBottom() : undefined);
   };
+  const drainPendingOutput = async (): Promise<void> => {
+    clearOutputSchedule();
+    if (pendingOutput.length) {
+      const batch = new Uint8Array(pendingOutputBytes);
+      let offset = 0;
+      for (const chunk of pendingOutput) {
+        batch.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      pendingOutput = [];
+      pendingOutputBytes = 0;
+      await writeTerminal(batch);
+    } else {
+      await writeTerminal('');
+    }
+  };
+  const serializeAfterDrain = async (): Promise<string> => {
+    await drainPendingOutput();
+    return liveReplaySnapshot();
+  };
   const scheduleOutputFlush = (): void => {
     if (outputFrame !== undefined || outputTimer !== undefined) return;
     if (props.active) outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
@@ -970,6 +1035,8 @@
   watch(
     () => props.active,
     (active) => {
+      if (!active) backgroundReady.value = false;
+      else fitAndResize();
       if (active && pendingOutput.length) flushPendingOutput();
     },
     { flush: 'post' },
@@ -1045,6 +1112,8 @@
   };
 
   onMounted(() => {
+    // Start the sandboxed background while xterm initializes; its own script can draw in parallel.
+    revealBackgroundWhenSized();
     terminal = new Terminal({
       convertEol: true,
       scrollOnUserInput: true,
@@ -1052,6 +1121,7 @@
       cursorStyle: 'block',
       cursorInactiveStyle: 'block',
       allowTransparency: true,
+      disableStdin: !props.inputEnabled,
       fontFamily: props.fontFamily,
       fontSize: renderedFontSize.value,
       scrollback: props.scrollback,
@@ -1065,6 +1135,8 @@
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(root.value!);
+    runtimeModes = trackTerminalRuntimeModes(terminal);
+    cleanup.push(() => runtimeModes?.dispose());
     cleanup.push(setupImeCompositionBoundsProtection());
     historyLastViewportY = terminal.buffer.active.viewportY;
     const backgroundOsc = terminal.parser.registerOscHandler(11, (data) =>
@@ -1123,6 +1195,7 @@
     fitAndResize();
     cleanup.push(
       terminal.onData((data) => {
+        if (!props.inputEnabled) return;
         emit('interaction');
         if (data === '\x03') {
           void props.channel.sendInput(data);
@@ -1163,11 +1236,19 @@
       }).dispose,
     );
     root.value?.addEventListener('contextmenu', handleContextMenu);
+    root.value?.addEventListener('mousedown', handleRightMouseDown, true);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
     resizeObserver = new ResizeObserver(fitAndResize);
     resizeObserver.observe(root.value!);
     emit('ready');
   });
+
+  watch(
+    () => props.inputEnabled,
+    (enabled) => {
+      if (terminal) terminal.options.disableStdin = !enabled;
+    },
+  );
 
   watch(
     () => [props.fontFamily, props.fontSize, resolvedTheme.value, props.scrollback] as const,
@@ -1194,6 +1275,7 @@
       root.value.removeEventListener('touchend', handleTouchEnd);
       root.value.removeEventListener('touchcancel', handleTouchEnd);
       root.value.removeEventListener('contextmenu', handleContextMenu);
+      root.value.removeEventListener('mousedown', handleRightMouseDown, true);
     }
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
     clearMobileLongPressTimer();
@@ -1213,7 +1295,7 @@
     focus: () => terminal?.focus(),
     fit: fitAndResize,
     clear: clearTerminal,
-    serialize: liveReplaySnapshot,
+    serialize: serializeAfterDrain,
     openSearch,
     findNext,
     findPrevious,
@@ -1228,7 +1310,6 @@
 <template>
   <div
     ref="wrapper"
-    data-testid="terminal"
     class="relative h-full min-h-0 w-full overflow-hidden"
     :class="{ 'has-text-stroke': visual?.textStroke?.enabled, 'has-text-shadow': visual?.textShadow?.enabled }"
     :style="terminalStyle"
@@ -1244,17 +1325,17 @@
       class="terminal-background-overlay"
       :style="{ backgroundColor: `rgba(0,0,0,${visual.backgroundOverlayOpacity ?? 0})` }"
     ></div>
+    <!-- Custom backgrounds may size themselves only once, so start them after the session is visible. -->
     <iframe
-      v-if="sandboxedCustomHtml"
+      v-if="active && backgroundReady && sandboxedCustomHtml"
+      ref="backgroundFrame"
       class="terminal-custom-html"
       sandbox="allow-scripts"
-      :srcdoc="sandboxedCustomHtml"
       tabindex="-1"
       aria-hidden="true"
     ></iframe>
     <div
       ref="root"
-      data-testid="terminal-inner"
       class="terminal-inner-container relative z-10 h-full min-h-0 w-full"
       :class="{ 'terminal-transparent': hasVisualBackground, 'terminal-mobile-touch': device.isMobile.value }"
       role="application"

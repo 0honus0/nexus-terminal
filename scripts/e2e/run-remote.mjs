@@ -1,5 +1,5 @@
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,38 +91,8 @@ try {
   const playwrightArgs = process.argv.slice(2);
   if (playwrightArgs[0] === '--') playwrightArgs.shift();
 
-  const resolveRunner = () => {
-    const isWindows = process.platform === 'win32';
-    const corepackCmd = isWindows ? 'corepack.cmd' : 'corepack';
-    const pnpmCmd = isWindows ? 'pnpm.cmd' : 'pnpm';
-
-    try {
-      const probe = spawnSync(corepackCmd, ['--version'], { stdio: 'ignore' });
-      if (probe.status === 0) {
-        return {
-          command: corepackCmd,
-          args: ['pnpm', '--filter', '@nexus-terminal/e2e', 'exec', 'playwright', 'test', ...playwrightArgs],
-        };
-      }
-    } catch {}
-
-    const knownCorepackPaths = ['/opt/webcodex-node/bin/corepack', '/usr/local/bin/corepack'];
-    for (const corepackPath of knownCorepackPaths) {
-      if (existsSync(corepackPath)) {
-        return {
-          command: corepackPath,
-          args: ['pnpm', '--filter', '@nexus-terminal/e2e', 'exec', 'playwright', 'test', ...playwrightArgs],
-        };
-      }
-    }
-
-    return {
-      command: pnpmCmd,
-      args: ['--filter', '@nexus-terminal/e2e', 'exec', 'playwright', 'test', ...playwrightArgs],
-    };
-  };
-
-  const { command: runnerCommand, args: runnerArgs } = resolveRunner();
+  const runnerCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+  const runnerArgs = ['--filter', '@nexus-terminal/e2e', 'exec', 'playwright', 'test', ...playwrightArgs];
   const child = spawn(runnerCommand, runnerArgs, {
     cwd: repoRoot,
     env,

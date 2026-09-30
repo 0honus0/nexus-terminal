@@ -60,30 +60,46 @@ type AgentApiErrorCategory =
   | 'timeout'
   | 'authentication'
   | 'busy';
+const providerErrorTable: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^PROVIDER_(?:RESPONSE_INVALID|RESPONSE_EMPTY|STREAM_TRUNCATED)$/, 'providerResponse'],
+  [/^PROVIDER_DNS_FAILED$/, 'providerDns'],
+  [/^PROVIDER_TLS_FAILED$/, 'providerTls'],
+  [/^PROVIDER_NETWORK_FAILED$/, 'providerNetwork'],
+  [/^PROVIDER_REQUEST_FAILED$/, 'providerRequest'],
+  [/^PROVIDER_(?:HTTP_401|AUTH_FAILED)$/, 'authentication'],
+  [/^PROVIDER_HTTP_403$/, 'forbidden'],
+  [/^PROVIDER_HTTP_429$/, 'busy'],
+  [/^PROVIDER_(?:HTTP_(?:408|504)|\w+_TIMEOUT)$/, 'timeout'],
+  [/^PROVIDER_HTTP_4\d\d$/, 'providerRejected'],
+  [/^PROVIDER_HTTP_5\d\d$/, 'providerUpstream'],
+];
+export const providerErrorCategory = (code: string): string | null =>
+  providerErrorTable.find(([pattern]) => pattern.test(code))?.[1] ?? null;
 
 const classifyAgentApiError = (code: string): AgentApiErrorCategory | null => {
-  if (/(?:AUTH_FAILED|UNAUTHORIZED|CREDENTIAL_STALE)$/.test(code)) return 'authentication';
-  if (/(?:FORBIDDEN|DENIED|UNTRUSTED|NOT_AUTHORIZED)$/.test(code)) return 'forbidden';
-  if (/(?:QUOTA_EXCEEDED|LIMIT_EXCEEDED|BUDGET_EXCEEDED|HARD_LIMIT_EXCEEDED)$/.test(code)) return 'quota';
-  if (/(?:TOO_LARGE|PAYLOAD_TOO_LARGE|ARCHIVE_TOO_MANY_FILES)$/.test(code)) return 'tooLarge';
-  if (/(?:TIMEOUT|DEADLINE_EXCEEDED)$/.test(code)) return 'timeout';
-  if (/(?:BUSY|QUEUE_FULL|IN_PROGRESS)$/.test(code)) return 'busy';
-  if (/(?:NOT_FOUND|MISSING)$/.test(code)) return 'notFound';
-  if (/(?:CONFLICT|STALE|CHANGED|IMMUTABLE|ALREADY_|NO_CHANGE|RECONCILIATION_REQUIRED)$/.test(code)) return 'conflict';
-  if (/(?:UNAVAILABLE|DISABLED|NOT_READY|NOT_CONFIGURED|UNSUPPORTED)$/.test(code)) return 'unavailable';
-  if (
-    /(?:INVALID|VALIDATION_FAILED|REQUIRED|MISMATCH|UNSAFE|TOO_DEEP|DUPLICATE_PATH|SCHEMA_VERSION_UNSUPPORTED)$/.test(
-      code,
-    )
-  )
-    return 'validation';
-  return null;
+  return agentErrorTable.find(([pattern]) => pattern.test(code))?.[1] ?? null;
 };
+
+const agentErrorTable: ReadonlyArray<readonly [RegExp, AgentApiErrorCategory]> = [
+  [/(?:AUTH_FAILED|UNAUTHORIZED|CREDENTIAL_STALE)$/, 'authentication'],
+  [/(?:FORBIDDEN|DENIED|UNTRUSTED|NOT_AUTHORIZED)$/, 'forbidden'],
+  [/(?:QUOTA_EXCEEDED|LIMIT_EXCEEDED|BUDGET_EXCEEDED|HARD_LIMIT_EXCEEDED)$/, 'quota'],
+  [/(?:TOO_LARGE|PAYLOAD_TOO_LARGE|ARCHIVE_TOO_MANY_FILES)$/, 'tooLarge'],
+  [/(?:TIMEOUT|DEADLINE_EXCEEDED)$/, 'timeout'],
+  [/(?:BUSY|QUEUE_FULL|IN_PROGRESS)$/, 'busy'],
+  [/(?:NOT_FOUND|MISSING)$/, 'notFound'],
+  [/(?:CONFLICT|STALE|CHANGED|IMMUTABLE|ALREADY_|NO_CHANGE|RECONCILIATION_REQUIRED)$/, 'conflict'],
+  [/(?:UNAVAILABLE|DISABLED|NOT_READY|NOT_CONFIGURED|UNSUPPORTED)$/, 'unavailable'],
+  [
+    /(?:INVALID|VALIDATION_FAILED|REQUIRED|MISMATCH|UNSAFE|TOO_DEEP|DUPLICATE_PATH|SCHEMA_VERSION_UNSUPPORTED)$/,
+    'validation',
+  ],
+];
 
 export const formatAgentApiError = (cause: unknown, fallback: string, t?: AgentErrorTranslator): string => {
   const error = toAgentApiError(cause);
   if (error.status === undefined) return error.message || fallback;
-  const category = classifyAgentApiError(error.code);
+  const category = providerErrorCategory(error.code) ?? classifyAgentApiError(error.code);
   if (category && t) return t(`agent.apiErrors.${category}`);
   return fallback;
 };

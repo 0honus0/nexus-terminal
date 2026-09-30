@@ -215,14 +215,12 @@
     <div
       v-if="activeSheet || parseError"
       ref="previewRoot"
-      data-testid="spreadsheet-preview"
       class="flex h-full min-h-0 w-full flex-col overflow-hidden outline-none"
       tabindex="-1"
       @keydown="handleGridKeydown"
     >
       <div
         v-if="parseError"
-        data-testid="spreadsheet-preview-error"
         role="alert"
         class="m-4 shrink-0 rounded border border-error/40 bg-error/10 p-4 text-sm text-error"
       >
@@ -233,7 +231,6 @@
       <template v-if="activeSheet">
         <div
           ref="scroller"
-          data-testid="spreadsheet-scroll-container"
           role="region"
           :aria-label="t('fileManager.preview.spreadsheet')"
           class="spreadsheet-scroll-container min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
@@ -243,7 +240,6 @@
               <tr
                 v-for="(row, rowIndex) in pageRows"
                 :key="pageStart + rowIndex"
-                data-testid="spreadsheet-data-row"
                 :class="{ 'spreadsheet-header-row': page === 1 && rowIndex === 0 }"
                 :style="rowStyle(rowIndex)"
               >
@@ -274,7 +270,6 @@
 
           <div
             v-if="columnsTruncated"
-            data-testid="spreadsheet-preview-limit-notice"
             role="status"
             class="sticky bottom-0 border-t border-border bg-header/95 px-4 py-2 text-xs text-text-secondary backdrop-blur"
           >
@@ -290,10 +285,9 @@
 
         <div
           v-if="pageCount > 1"
-          data-testid="spreadsheet-pagination"
           class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-header px-2 py-1.5 text-xs sm:gap-3 sm:px-3"
         >
-          <span data-testid="spreadsheet-page-range" class="min-w-0 truncate text-text-secondary">
+          <span class="min-w-0 truncate text-text-secondary">
             {{
               t('fileManager.preview.spreadsheetPageRange', {
                 start: pageRangeStart,
@@ -305,7 +299,6 @@
           <div class="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              data-testid="spreadsheet-previous-page"
               class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
               :disabled="page <= 1"
               :aria-label="t('fileManager.preview.spreadsheetPreviousPage')"
@@ -315,13 +308,12 @@
             </button>
             <span class="text-text-secondary">
               {{ t('fileManager.preview.spreadsheetPage') }}
-              <strong data-testid="spreadsheet-current-page" class="font-medium text-foreground">{{ page }}</strong>
+              <strong class="font-medium text-foreground">{{ page }}</strong>
               /
-              <strong data-testid="spreadsheet-page-count" class="font-medium text-foreground">{{ pageCount }}</strong>
+              <strong class="font-medium text-foreground">{{ pageCount }}</strong>
             </span>
             <button
               type="button"
-              data-testid="spreadsheet-next-page"
               class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
               :disabled="page >= pageCount"
               :aria-label="t('fileManager.preview.spreadsheetNextPage')"
@@ -333,7 +325,6 @@
         </div>
 
         <div
-          data-testid="spreadsheet-sheet-tabs"
           role="tablist"
           :aria-label="t('fileManager.preview.worksheet')"
           class="spreadsheet-sheet-tabs flex shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-header px-2 py-1.5"
@@ -343,7 +334,6 @@
             :key="`${sheet.name}-${index}`"
             type="button"
             role="tab"
-            :data-testid="`spreadsheet-sheet-${index}`"
             class="min-h-11 max-w-48 shrink-0 truncate rounded border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-primary sm:min-h-0"
             :class="
               index === sheetIndex
@@ -361,7 +351,6 @@
 
         <PreviewHorizontalScrollbar
           :target="scroller"
-          test-id="spreadsheet-horizontal-scrollbar"
           :active="active"
           :label="t('fileManager.preview.horizontalScroll')"
         />

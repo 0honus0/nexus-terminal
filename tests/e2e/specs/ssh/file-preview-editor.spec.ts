@@ -18,15 +18,15 @@ const row = (page: Page, filename: string) => fileManagerRow(page, filename);
 const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus.file-editor.desktop-popup-size';
 
 const documentPopup = (page: Page): Locator =>
-  page.locator('[data-testid="document-popup"][data-workspace-active="true"]:visible').first();
+  page.locator('[data-document-mode][data-workspace-active="true"]:visible').first();
 const closeFileManagerPopup = async (page: Page): Promise<void> => {
-  const modal = page.getByTestId('file-manager-modal');
+  const modal = page.getByRole('dialog', { name: 'File Manager', exact: true });
   if (!(await modal.isVisible().catch(() => false))) return;
-  await modal.getByTestId('file-manager-modal-close').click();
+  await modal.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(modal).toBeHidden();
 };
-const editorView = (page: Page): Locator => documentPopup(page).getByTestId('file-editor-view');
-const previewView = (page: Page): Locator => documentPopup(page).getByTestId('file-preview-view');
+const editorView = (page: Page): Locator => documentPopup(page).locator('.file-editor-container');
+const previewView = (page: Page): Locator => documentPopup(page).locator('[data-file-preview-dialog]');
 
 const pdfScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: /^PDF · \d+ pages$/ });
 const pdfPage = (dialog: Locator, pageNumber: number): Locator => dialog.locator(`[data-pdf-page="${pageNumber}"]`);
@@ -49,9 +49,11 @@ const waitForScrollToSettle = async (scroller: Locator): Promise<void> => {
       }),
   );
 };
-const visiblePdfPageCount = (dialog: Locator): Locator => dialog.locator('[data-testid="pdf-page-count"]:visible');
+const visiblePdfPageCount = (dialog: Locator): Locator =>
+  dialog.locator('.pdf-toolbar:visible .pdf-page-input + span > span');
 const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
-const pdfZoomLabel = (dialog: Locator): Locator => dialog.getByTestId('pdf-zoom-label');
+const pdfZoomLabel = (dialog: Locator): Locator =>
+  dialog.getByRole('button', { name: 'Zoom out', exact: true }).locator('xpath=following-sibling::span[1]');
 const previewHorizontalScrollbar = (dialog: Locator): Locator =>
   dialog.getByRole('scrollbar', { name: 'Horizontal scroll', exact: true });
 const spreadsheetScroller = (dialog: Locator): Locator =>
@@ -72,25 +74,30 @@ const expectOverlayToCoverWorkspaceRail = async (
   testId: 'file-manager-modal' | 'document-popup',
   expectedZIndex: number,
 ): Promise<void> => {
-  const overlay = page.getByTestId(testId);
+  const overlay =
+    testId === 'document-popup'
+      ? documentPopup(page)
+      : page
+          .getByRole('dialog', { name: 'File Manager', exact: true })
+          .locator('xpath=ancestor::*[@data-ui="overlay"][1]');
   await expect(overlay).toHaveCSS('z-index', String(expectedZIndex));
   await expect
     .poll(() =>
-      page.evaluate((id) => {
+      overlay.evaluate((element) => {
         const topmost = document.elementFromPoint(18, 160);
-        return Boolean(topmost?.closest(`[data-testid="${id}"]`));
-      }, testId),
+        return Boolean(topmost && element.contains(topmost));
+      }),
     )
     .toBe(true);
 };
 
 async function openConnectionFromWorkspacePicker(page: Page, connectionId: number): Promise<void> {
-  const tabs = page.getByTestId('terminal-tab-bar').getByRole('tab');
+  const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
   const previousTabCount = await tabs.count();
   await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
-  const picker = page.getByRole('heading', { name: 'Select server to connect', exact: true });
+  const picker = page.getByRole('heading', { name: 'Connections & sessions', exact: true });
   await expect(picker).toBeVisible();
-  const connection = page.locator(`[data-testid="workspace-connection-list"] [data-connection-id="${connectionId}"]`);
+  const connection = page.locator(`.workspace-connection-list [data-connection-id="${connectionId}"]`);
   await expect(connection).toBeVisible();
   await connection.click();
   await expect(picker).toBeHidden();
@@ -98,12 +105,12 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
   // Initial Workspace connections are provisional and are only published after the backend
   // confirms the SSH binding. The previous active session remains usable while that happens.
   await expect(tabs).toHaveCount(previousTabCount + 1, { timeout: 20_000 });
-  await expect(page.getByTestId('terminal-tab-bar').getByRole('tab', { selected: true })).toHaveAttribute(
+  await expect(page.locator('.terminal-tab-shell').getByRole('tab', { selected: true })).toHaveAttribute(
     'data-session-state',
     'connected',
     { timeout: 20_000 },
   );
-  await expect(page.locator('[data-testid="command-input"]:visible')).toBeEnabled();
+  await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
 }
 
 async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {
@@ -165,7 +172,7 @@ for (const shared of [true, false] as const) {
     expect(created.status()).toBe(201);
     const peerId = ((await created.json()) as { connection: { id: number } }).connection.id;
 
-    const terminalTabs = page.getByTestId('terminal-tab-bar').getByRole('tab');
+    const terminalTabs = page.locator('.terminal-tab-shell').getByRole('tab');
     const editorTabs = () => editorView(page).locator('.file-editor-tabs').getByRole('tab');
 
     try {
@@ -221,36 +228,68 @@ test('SQLite database preview browses tables and searches the active table', asy
 
   await row(page, 'preview.db').dblclick();
   const dialog = previewView(page);
-  const database = dialog.getByTestId('database-preview');
+  const database = dialog.locator('.database-scroll-container').locator('..');
   await expect(database).toBeVisible({ timeout: 20_000 });
 
   const tableTabs = database.getByRole('tablist', { name: 'Database tables', exact: true });
   await expect(tableTabs.getByRole('tab', { name: 'audit_log', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(database.getByTestId('database-data-row')).toHaveCount(3);
+  await expect(database.locator('tbody > tr')).toHaveCount(3);
   await expect(database).toContainText('Alice signed in');
 
   await tableTabs.getByRole('tab', { name: 'users', exact: true }).click();
-  await expect(database.getByTestId('database-data-row')).toHaveCount(4);
+  await expect(database.locator('tbody > tr')).toHaveCount(4);
   await expect(database).toContainText('alice@example.com');
   await expect(database).toContainText('Shenzhen');
 
-  await dialog.getByTestId('preview-search-toggle').click();
+  await dialog.getByRole('button', { name: 'Search in document', exact: true }).click();
   const search = previewSearchInput(dialog);
   await search.fill('example.com');
   await expect(previewSearchCount(dialog, '1/3')).toBeVisible();
-  await expect(database.getByTestId('database-data-row')).toHaveCount(3);
+  await expect(database.locator('tbody > tr')).toHaveCount(3);
   await expect(database.locator('.database-search-match')).toHaveCount(3);
 
-  await dialog.getByTestId('preview-search-next').click();
+  await dialog.getByRole('button', { name: 'Next match', exact: true }).click();
   await expect(previewSearchCount(dialog, '2/3')).toBeVisible();
 
   await tableTabs.getByRole('tab', { name: 'audit_log', exact: true }).click();
-  await expect(database.getByTestId('database-data-row')).toHaveCount(0);
+  await expect(database.locator('tbody > tr')).toHaveCount(0);
 
   await search.fill('Carol');
   await expect(previewSearchCount(dialog, '1/1')).toBeVisible();
-  await expect(database.getByTestId('database-data-row')).toHaveCount(1);
+  await expect(database.locator('tbody > tr')).toHaveCount(1);
   await expect(database).toContainText('Carol changed profile');
+});
+
+test('file editor menus show complete encoding and line-ending choices', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+  await row(page, 'seed.txt').dblclick();
+  const editor = editorView(page);
+  await expect(editor).toBeVisible();
+
+  for (const [control, optionValue, selectedValue] of [
+    ['.encoding-select:not(.line-ending-select)', 'utf-16le', 'utf-8'],
+    ['.line-ending-select', 'crlf', 'lf'],
+  ] as const) {
+    await editor.locator(control).click();
+    const option = page.locator(`[role="option"][data-value="${optionValue}"]`);
+    await expect(option).toBeVisible();
+    const triggerBox = await editor.locator(control).boundingBox();
+    const menuBox = await page.locator('[data-ui="select-panel"][data-state="open"]').boundingBox();
+    expect(triggerBox).toBeTruthy();
+    expect(menuBox).toBeTruthy();
+    expect(Math.abs(menuBox!.width - triggerBox!.width)).toBeLessThanOrEqual(1);
+    const labelOverflow = await option
+      .locator('.ui-select__item-label')
+      .evaluate((label) => Math.max(0, label.scrollWidth - label.clientWidth));
+    expect(labelOverflow).toBeLessThanOrEqual(1);
+    await page.locator(`[role="option"][data-value="${selectedValue}"]`).click();
+    await expectUiSelectValue(editor.locator(control).getByRole('combobox'), selectedValue);
+  }
 });
 
 test('file previews and text editor protect historical file-opening regressions', async ({ page, context }) => {
@@ -274,7 +313,7 @@ test('file previews and text editor protect historical file-opening regressions'
     expect(delayResponse.ok).toBeTruthy();
     try {
       await row(page, 'plainfile').dblclick();
-      const loading = page.getByTestId('file-editor-loading-state').filter({ visible: true }).first();
+      const loading = page.locator('.editor-loading:visible').first();
       await expect(loading).toBeVisible();
       await expect(loading).toContainText(/loading/i);
       await expect(loading.locator('.animate-spin')).toHaveCount(0);
@@ -292,7 +331,7 @@ test('file previews and text editor protect historical file-opening regressions'
 
   await step('desktop text editor exposes Monaco search from the editor toolbar', async () => {
     const editor = editorView(page);
-    const searchButton = editor.getByTestId('file-editor-search');
+    const searchButton = editor.getByRole('button', { name: 'Search in document', exact: true });
     await expect(searchButton).toBeVisible();
     await searchButton.click();
     const findWidget = editor.locator('.monaco-editor .find-widget');
@@ -427,8 +466,10 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'long-line-e2e.txt').dblclick();
     const editor = editorView(page);
     await expect(editor).toBeVisible();
-    const monaco = editor.getByTestId('monaco-editor');
-    await expect(monaco).toHaveAttribute('data-word-wrap', 'on');
+    const monaco = editor.locator('.monaco-editor');
+    await expect
+      .poll(() => monaco.locator('.view-lines').evaluate((element) => element.scrollWidth - element.clientWidth))
+      .toBeLessThanOrEqual(1);
     await expect.poll(async () => monaco.locator('.view-lines .view-line').count()).toBeGreaterThan(1);
     const renderedLineNumbers = (await monaco.locator('.margin-view-overlays .line-numbers').allTextContents())
       .map((value) => value.trim())
@@ -441,8 +482,8 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'large-editor-e2e.txt').dblclick();
     const editor = editorView(page);
     await expect(editor).toBeVisible({ timeout: 20_000 });
-    const monaco = editor.getByTestId('monaco-editor');
-    await expect(monaco).toHaveAttribute('data-large-file', 'true');
+    const monaco = editor.locator('.monaco-editor');
+    await expect(monaco.locator('.minimap')).toBeHidden();
     await expect
       .poll(async () => await monaco.locator('.view-lines').innerText(), { timeout: 20_000 })
       .toContain('large-file-performance-line');
@@ -453,8 +494,8 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'utf16-crlf.txt').dblclick();
     const editor = editorView(page);
     await expect(editor).toBeVisible();
-    const encoding = editor.getByTestId('file-editor-encoding');
-    const lineEnding = editor.getByTestId('file-editor-line-ending');
+    const encoding = editor.locator('.encoding-select:not(.line-ending-select)').getByRole('combobox');
+    const lineEnding = editor.locator('.line-ending-select').getByRole('combobox');
     const viewLines = editor.locator('.monaco-editor .view-lines');
 
     await expect.poll(async () => viewLines.innerText()).toContain('ENCODING_E2E');
@@ -475,7 +516,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'utf16-crlf.txt').dblclick();
     const reopened = editorView(page);
     await expect(reopened).toBeVisible();
-    await expectUiSelectValue(reopened.getByTestId('file-editor-line-ending'), 'lf');
+    await expectUiSelectValue(reopened.locator('.line-ending-select').getByRole('combobox'), 'lf');
     await expect.poll(async () => reopened.locator('.monaco-editor .view-lines').innerText()).toContain('SECOND_LINE');
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
@@ -484,7 +525,10 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'gb18030-low-confidence.txt').dblclick();
     const editor = editorView(page);
     await expect(editor).toBeVisible();
-    await expectUiSelectValue(editor.getByTestId('file-editor-encoding'), 'gb18030');
+    await expectUiSelectValue(
+      editor.locator('.encoding-select:not(.line-ending-select)').getByRole('combobox'),
+      'gb18030',
+    );
     await expect.poll(async () => editor.locator('.monaco-editor .view-lines').innerText()).toContain('中文测试');
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
@@ -512,11 +556,16 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(dialog.getByRole('heading', { name: 'Linked Markdown E2E', exact: true })).toBeVisible();
     await expect(dialog).toContainText('linked-preview-ok');
     await expect(
-      dialog.getByTestId('file-preview-tabs').getByRole('tab', { name: 'linked-e2e.md', exact: true }),
+      dialog
+        .getByRole('tablist', { name: 'Open previews', exact: true })
+        .getByRole('tab', { name: 'linked-e2e.md', exact: true }),
     ).toHaveAttribute('aria-selected', 'true');
     expect(page.url()).toBe(workspaceUrl);
 
-    await dialog.getByTestId('file-preview-tabs').getByRole('tab', { name: filename, exact: true }).click();
+    await dialog
+      .getByRole('tablist', { name: 'Open previews', exact: true })
+      .getByRole('tab', { name: filename, exact: true })
+      .click();
     await expect(dialog.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
     await expect(dialog.getByRole('link', { name: 'External docs', exact: true })).toHaveAttribute(
       'href',
@@ -538,10 +587,10 @@ test('file previews and text editor protect historical file-opening regressions'
     const dialog = documentPopup(page);
     await expect(dialog).toBeVisible({ timeout: 20_000 });
 
-    const preview = dialog.getByTestId('pdf-preview');
+    const preview = dialog.locator('.pdf-preview-root');
     const scroller = pdfScroller(dialog);
     await expect(preview).toBeVisible();
-    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(visiblePdfPageCount(dialog)).toHaveText('3');
     await expect(dialog.locator('[data-pdf-page]')).toHaveCount(3);
 
     const firstPage = pdfPage(dialog, 1);
@@ -554,11 +603,10 @@ test('file previews and text editor protect historical file-opening regressions'
     await page.keyboard.press('Control+f');
     const pdfSearch = previewSearchInput(dialog);
     await expect(pdfSearch).toBeFocused();
-    const searchCornerMetrics = await dialog.getByTestId('preview-search-bar').evaluate((element) => ({
+    const searchCornerMetrics = await previewSearchControls(dialog).evaluate((element) => ({
       barRadius: Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
       inputRadius: Number.parseFloat(
-        getComputedStyle(element.querySelector<HTMLInputElement>('[data-testid="preview-search-input"]')!)
-          .borderTopLeftRadius,
+        getComputedStyle(element.querySelector<HTMLInputElement>('input')!).borderTopLeftRadius,
       ),
     }));
     expect(searchCornerMetrics.barRadius).toBeGreaterThan(0);
@@ -567,7 +615,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(previewSearchCount(dialog, '1/2')).toHaveText('1/2');
     await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('target');
-    await dialog.getByTestId('preview-search-next').click();
+    await dialog.getByRole('button', { name: 'Next match', exact: true }).click();
     await expect(previewSearchCount(dialog, '2/2')).toHaveText('2/2');
     await expect(pdfCurrentPage(dialog)).toHaveValue('3');
     await dialog.getByTitle('Close search', { exact: true }).click();
@@ -619,7 +667,7 @@ test('file previews and text editor protect historical file-opening regressions'
 
     const zoom = pdfZoomLabel(dialog);
     const beforeZoom = await zoom.textContent();
-    await dialog.getByTestId('pdf-zoom-in').click();
+    await dialog.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await expect(zoom).not.toHaveText(beforeZoom ?? '');
     await dialog.getByRole('button', { name: 'Fit width', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Fit width', exact: true })).toHaveAttribute(
@@ -705,7 +753,7 @@ test('desktop preview popup shares persisted resize geometry across image PDF an
   await openConnectedFileManager(page);
 
   const panel = (): Locator => documentPopup(page).getByRole('dialog');
-  const resizeHandle = (): Locator => documentPopup(page).getByTestId('document-popup-resize-handle');
+  const resizeHandle = (): Locator => documentPopup(page).getByLabel(/Resize (preview|editor) window/);
   const resizeBy = async (deltaX: number, deltaY: number) => {
     const before = await panel().boundingBox();
     const handleBox = await resizeHandle().boundingBox();
@@ -754,7 +802,7 @@ test('desktop preview popup shares persisted resize geometry across image PDF an
     async () => {
       await row(page, 'preview.pdf').dblclick();
       const dialog = documentPopup(page);
-      await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3', { timeout: 20_000 });
+      await expect(visiblePdfPageCount(dialog)).toHaveText('3', { timeout: 20_000 });
       const restored = await panel().boundingBox();
       expect(restored).toBeTruthy();
       expect(restored!.width).toBeCloseTo(imageResizedWidth, 0);
@@ -765,8 +813,8 @@ test('desktop preview popup shares persisted resize geometry across image PDF an
       pdfResizedHeight = after.height;
       expect(after.width).toBeGreaterThan(restored!.width + 80);
       expect(after.height).toBeGreaterThan(restored!.height + 50);
-      await expect(dialog.getByTestId('pdf-preview')).toBeVisible();
-      await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+      await expect(dialog.locator('.pdf-preview-root')).toBeVisible();
+      await expect(visiblePdfPageCount(dialog)).toHaveText('3');
       await hidePopup();
       await reopenWorkspace();
     },
@@ -776,7 +824,7 @@ test('desktop preview popup shares persisted resize geometry across image PDF an
     await row(page, 'preview.docx').dblclick();
     const dialog = documentPopup(page);
     await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
-    await expect(dialog.getByTestId('docx-preview')).toBeVisible();
+    await expect(docxScroller(dialog)).toBeVisible();
     await expect(resizeHandle()).toBeVisible();
     const restored = await panel().boundingBox();
     expect(restored).toBeTruthy();
@@ -866,12 +914,15 @@ test('preview workspace backdrop hiding preserves tabs across directories when p
   await openConnectedFileManager(page);
 
   await slowStep('hide the first PDF by clicking the preview backdrop rather than closing its tab', async () => {
-    const fileList = page.getByTestId('file-manager-modal').getByTestId('file-manager-list');
+    const fileList = page
+      .getByRole('dialog', { name: 'File Manager', exact: true })
+      .locator('.file-table')
+      .locator('..');
     await fileList.focus();
     await expect(fileList).toBeFocused();
     await row(page, 'preview.pdf').dblclick();
     const dialog = documentPopup(page);
-    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(visiblePdfPageCount(dialog)).toHaveText('3');
     await dialog.click({ position: { x: 2, y: 2 } });
     await expect(dialog).toBeHidden();
     await expect(fileList).toBeFocused();
@@ -883,7 +934,7 @@ test('preview workspace backdrop hiding preserves tabs across directories when p
     await row(page, 'second-preview.pdf').dblclick();
     const secondDialog = documentPopup(page);
     await expect(visiblePdfPageCount(secondDialog)).toHaveText('3');
-    const tabs = secondDialog.getByTestId('file-preview-tabs');
+    const tabs = secondDialog.getByRole('tablist', { name: 'Open previews', exact: true });
     await expect(tabs.getByRole('tab')).toHaveCount(2);
     await expect(tabs.getByRole('tab', { name: 'preview.pdf', exact: true })).toBeVisible();
     await expect(tabs.getByRole('tab', { name: 'second-preview.pdf', exact: true })).toHaveAttribute(

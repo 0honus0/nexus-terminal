@@ -170,12 +170,12 @@
   type ColumnKey = 'name' | 'permissions' | 'modified';
   const minimumColumnWidths: Record<ColumnKey, number> = {
     name: 80,
-    permissions: 70,
+    permissions: 82,
     modified: 80,
   };
   const defaultColumnWidths: Record<ColumnKey, number> = {
     name: 200,
-    permissions: 76,
+    permissions: 88,
     modified: 92,
   };
   const initialColumnWidth = (key: ColumnKey): number => {
@@ -190,8 +190,8 @@
     permissions: initialColumnWidth('permissions'),
     modified: initialColumnWidth('modified'),
   });
-  const showPermissions = computed(() => listViewportWidth.value >= 400);
-  const showModified = computed(() => listViewportWidth.value >= 260);
+  const showPermissions = computed(() => listViewportWidth.value >= 560);
+  const showModified = computed(() => listViewportWidth.value >= 400);
   const isLarge = computed(() => showPermissions.value);
   const isMedium = computed(() => !showPermissions.value && showModified.value);
   const isSmall = computed(() => !showModified.value);
@@ -651,6 +651,7 @@
       else void activate(entry);
       return;
     }
+    listScroller.value?.focus({ preventScroll: true });
     if (event.ctrlKey || event.metaKey) {
       browser.select(entry, 'toggle');
       return;
@@ -1370,10 +1371,7 @@
     @drop.prevent="dropFiles"
   >
     <header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2">
-      <div
-        class="file-manager-actions flex min-w-0 items-center"
-        :class="{ 'is-searching': searchExpanded, 'is-wide': listViewportWidth >= 280 }"
-      >
+      <div class="file-manager-actions flex min-w-0 items-center" :class="{ 'is-searching': searchExpanded }">
         <button
           v-if="!searchExpanded"
           type="button"
@@ -1410,7 +1408,6 @@
           <button
             v-if="!searchExpanded"
             type="button"
-            data-testid="file-manager-search-toggle"
             class="file-manager-action-button"
             :title="t('fileManager.searchPlaceholder')"
             :aria-label="t('fileManager.searchPlaceholder')"
@@ -1428,7 +1425,6 @@
             <input
               ref="searchInput"
               v-model="browser.searchQuery.value"
-              data-testid="file-manager-search-input"
               data-focus-id="fileManagerSearch"
               type="text"
               class="h-6 w-full min-w-0 rounded-md border border-border/70 bg-input py-0.5 pl-6 pr-6 text-xs text-foreground outline-none transition-colors duration-150 focus:border-primary focus:ring-1 focus:ring-primary/40"
@@ -1439,7 +1435,6 @@
             />
             <button
               type="button"
-              data-testid="file-manager-search-clear"
               class="absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
               :title="browser.searchQuery.value ? t('common.clear') : t('common.close')"
               :aria-label="browser.searchQuery.value ? t('common.clear') : t('common.close')"
@@ -1463,9 +1458,8 @@
         </button>
         <button
           v-if="!searchExpanded"
-          data-testid="file-upload-button"
           type="button"
-          class="file-manager-action-button file-manager-action-button--primary"
+          class="file-manager-action-button"
           :title="t('fileManager.actions.uploadFile')"
           :aria-label="t('fileManager.actions.uploadFile')"
           @click="emit('upload', browser.path.value)"
@@ -1505,14 +1499,11 @@
         </button>
       </div>
 
-      <div
-        class="file-manager-path-input relative flex min-w-0 items-center rounded-md border border-border/70 bg-input px-2 py-0.5"
-      >
+      <div class="file-manager-path-input relative flex min-w-0 items-center">
         <i class="fas fa-folder mr-1.5 shrink-0 text-xs text-text-secondary pointer-events-none" aria-hidden="true"></i>
         <input
           ref="pathInput"
           v-model="pathDraft"
-          data-testid="file-manager-path-input"
           data-focus-id="fileManagerPathInput"
           type="text"
           class="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-medium text-link outline-none"
@@ -1565,7 +1556,6 @@
 
     <div
       v-if="(!browser.loaded.value && !browser.error.value) || browser.loading.value || browser.searching.value"
-      data-testid="file-manager-loading-state"
       class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
     >
       <UiSpinner />
@@ -1574,10 +1564,9 @@
     <div
       v-else
       ref="listScroller"
-      data-testid="file-manager-list"
       tabindex="0"
       :aria-label="t('fileManager.modalTitle')"
-      class="min-h-0 flex-1 overflow-auto"
+      class="min-h-0 flex-1 overflow-auto outline-none"
       :style="rowStyle"
       :data-row-scale="renderedRowScale.toFixed(2)"
       @wheel="scaleRows"
@@ -1687,13 +1676,13 @@
             @contextmenu.stop="openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))"
           >
             <td class="file-row-cell file-row-name text-left">
-              <span class="file-row-parent-content inline-flex min-w-0 items-center gap-2">
-                <i class="fas fa-level-up-alt shrink-0 text-xs text-primary" aria-hidden="true"></i>
-                <span class="font-medium text-xs">..</span>
+              <span class="file-row-parent-content inline-flex min-w-0 items-center gap-2.5">
+                <i class="file-row-icon fas fa-level-up-alt shrink-0 text-text-secondary" aria-hidden="true"></i>
+                <span class="file-row-name-label font-medium">..</span>
               </span>
             </td>
-            <td v-if="showPermissions" class="file-row-cell file-row-permissions font-mono text-xs text-left"></td>
-            <td v-if="showModified" class="file-row-cell file-row-modified text-xs text-left"></td>
+            <td v-if="showPermissions" class="file-row-cell file-row-permissions font-mono text-left"></td>
+            <td v-if="showModified" class="file-row-cell file-row-modified text-left"></td>
           </tr>
           <tr v-if="browser.visible.value.length === 0">
             <td :colspan="visibleColumnCount" class="px-4 py-6 text-center italic text-text-secondary">
@@ -1708,9 +1697,10 @@
             :key="entry.path"
             :data-filename="entry.name"
             :data-file-path="entry.path"
+            tabindex="-1"
             class="file-row select-none touch-pan-y transition-colors duration-150"
             :class="[
-              browser.selected.value.has(entry.path) ? 'bg-primary text-white' : 'hover:bg-header/50',
+              browser.selected.value.has(entry.path) ? 'bg-primary/10 text-primary' : 'hover:bg-header/50',
               remoteDragTarget === entry.path ? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary' : '',
               entry.metadata.isDirectory || entry.metadata.isFile || entry.metadata.isSymbolicLink
                 ? 'cursor-pointer'
@@ -1735,40 +1725,40 @@
               class="file-row-cell file-row-name truncate text-left"
               :class="entry.metadata.isDirectory ? 'font-medium' : ''"
             >
-              <div class="file-row-name-container flex min-w-0 items-center gap-2">
+              <div class="file-row-name-container flex min-w-0 items-center gap-2.5">
                 <i
                   :class="[
-                    'file-row-icon shrink-0 text-xs transition-colors duration-150',
+                    'file-row-icon shrink-0 transition-colors duration-150',
                     entry.metadata.isDirectory
-                      ? 'fas fa-folder text-primary'
+                      ? 'fas fa-folder'
                       : entry.metadata.isSymbolicLink
-                        ? 'fas fa-link text-cyan-500'
-                        : `${getFileIconClass(entry.name)} text-text-secondary`,
-                    browser.selected.value.has(entry.path) ? '!text-white' : '',
+                        ? 'fas fa-link'
+                        : getFileIconClass(entry.name),
+                    browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary',
                   ]"
                   aria-hidden="true"
                 ></i>
                 <button
                   type="button"
-                  class="file-row-name-button min-w-0 flex-1 truncate text-left"
+                  class="file-row-name-button min-w-0 flex-1 text-left"
                   :data-file-path="entry.path"
                   @mousedown="preserveListFocusOnMouseOpen"
                 >
-                  <span class="file-row-name-label truncate text-xs">{{ displayEntryName(entry) }}</span>
+                  <span class="file-row-name-label truncate">{{ displayEntryName(entry) }}</span>
                 </button>
               </div>
             </td>
             <td
               v-if="showPermissions"
-              class="file-row-cell file-row-permissions truncate font-mono text-xs text-left"
-              :class="browser.selected.value.has(entry.path) ? 'text-white' : 'text-text-secondary'"
+              class="file-row-cell file-row-permissions truncate font-mono text-left"
+              :class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
             >
               {{ formatMode(entry.metadata.mode) }}
             </td>
             <td
               v-if="showModified"
-              class="file-row-cell file-row-modified truncate text-xs text-left tabular-nums"
-              :class="browser.selected.value.has(entry.path) ? 'text-white' : 'text-text-secondary'"
+              class="file-row-cell file-row-modified truncate text-left tabular-nums"
+              :class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
               :title="new Date(entry.metadata.modifiedAt).toLocaleString()"
             >
               {{ formatCompactModified(entry.metadata.modifiedAt) }}
@@ -1787,21 +1777,12 @@
 
     <div
       v-if="dragging"
-      data-testid="file-upload-drop-overlay"
       class="pointer-events-none absolute inset-2 z-30 grid place-items-center rounded border-2 border-dashed border-primary bg-background/85 text-lg font-medium"
     >
       {{ t('fileManager.dropFilesHere') }}
     </div>
 
-    <UiContextMenu
-      v-if="context"
-      :visible="true"
-      :x="context.x"
-      :y="context.y"
-      auto-width
-      panel-test-id="file-manager-context-menu"
-      @close="context = null"
-    >
+    <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" auto-width @close="context = null">
       <template v-if="context.scope === 'entry'">
         <template v-if="device.isMobile.value || device.hasTouch.value">
           <button v-if="download" class="context-item" @click="download(contextEntries())">
@@ -1941,7 +1922,6 @@
             {{ t('fileManager.actions.sendFiles') }}
           </button>
           <button
-            data-testid="file-manager-compress-menu"
             class="context-item flex items-center justify-between"
             aria-haspopup="menu"
             :aria-expanded="Boolean(compressSubmenu)"
@@ -2015,7 +1995,7 @@
       :blocking-layer="false"
       @close="compressSubmenu = null"
     >
-      <div data-testid="file-manager-context-submenu" :data-side="compressSubmenu.side" class="w-full">
+      <div :data-side="compressSubmenu.side" class="w-full">
         <button class="context-item" @click="compressWithPreset('zip')">
           {{ t('fileManager.contextMenu.compressZip') }}
         </button>
@@ -2036,7 +2016,6 @@
       :z-index="100"
       :close-on-escape="true"
       panel-class="max-w-md flex flex-col p-5"
-      data-testid="file-manager-action-modal"
       :data-action-type="action || ''"
       role="dialog"
       :aria-modal="true"
@@ -2067,7 +2046,7 @@
           class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
           :placeholder="actionPlaceholder"
         />
-        <p v-if="createNameConflict" class="mt-1 text-xs text-error" data-testid="file-manager-create-conflict">
+        <p v-if="createNameConflict" class="mt-1 text-xs text-error">
           {{ t('fileManager.errors.entryExists', { name: value.trim() }) }}
         </p>
         <p
@@ -2089,7 +2068,6 @@
           {{ t('fileManager.modals.buttons.cancel') }}
         </button>
         <button
-          data-testid="file-manager-action-confirm"
           type="button"
           class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="actionConfirmDisabled"

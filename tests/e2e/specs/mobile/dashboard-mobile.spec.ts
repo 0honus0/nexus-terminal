@@ -8,6 +8,24 @@ const MOBILE_NAMES = [
   'E2E Mobile Dashboard Connection Beta With A Long Name',
 ];
 
+const dashboardPanel = (page: Page, name: RegExp): Locator =>
+  page
+    .locator('.dashboard-page section')
+    .filter({ has: page.getByRole('heading', { name }) })
+    .last();
+const connectionPanel = (page: Page): Locator => dashboardPanel(page, /^(Quick connect|快速连接)$/);
+const remotePanel = (page: Page): Locator => dashboardPanel(page, /^(SSH resources|SSH Resources|SSH 资源)$/);
+const activityPanel = (page: Page): Locator => page.locator('.dashboard-page aside');
+const tagFilter = (page: Page): Locator => page.getByRole('combobox', { name: /^(Filter by tag|按标签筛选)$/ });
+const sortFilter = (page: Page): Locator => page.getByRole('combobox', { name: /^(Sort by|排序方式)$/ });
+const sortOrder = (page: Page): Locator =>
+  connectionPanel(page).getByRole('button', { name: /Ascending|Descending|升序|降序/ });
+const connectionRow = (page: Page, name: string): Locator =>
+  connectionPanel(page)
+    .getByRole('listitem')
+    .filter({ has: page.getByText(name, { exact: true }) });
+const connectButton = (row: Locator): Locator => row.getByRole('button', { name: /^(Connect|连接)$/ });
+
 async function expectHorizontallyInside(locator: Locator, viewportWidth: number): Promise<void> {
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
@@ -75,7 +93,7 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
   });
   expect(normalizedSettings.ok()).toBeTruthy();
 
-  const connectionId = await ensureTestSshConnection(context.request);
+  await ensureTestSshConnection(context.request);
 
   try {
     await switchInterfaceToChinese(page);
@@ -86,9 +104,9 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       await page.setViewportSize(viewport);
       await page.goto('/');
 
-      const dashboard = page.getByTestId('dashboard-view');
+      const dashboard = page.locator('.dashboard-page');
       await expect(dashboard).toBeVisible();
-      const navScroller = page.locator('header .app-nav-scroll').first();
+      const navScroller = page.locator('header .app-nav-links').first();
       await expect(navScroller).toBeVisible();
       const navMetrics = await navScroller.evaluate((element) => ({
         clientWidth: element.clientWidth,
@@ -110,10 +128,10 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
         expect(navMetrics.scrollWidth).toBeLessThanOrEqual(navMetrics.clientWidth + 1);
         await expect.poll(() => navScroller.evaluate((element) => element.scrollLeft)).toBe(0);
       }
-      await expect(dashboard.getByTestId('dashboard-local-resources')).toBeVisible();
-      await expect(dashboard.getByTestId('dashboard-system-resources')).toBeVisible();
-      await expect(dashboard.getByTestId('dashboard-connection-list')).toBeVisible();
-      await expect(dashboard.getByTestId('dashboard-ssh-resource-list')).toBeVisible();
+      await expect(dashboard.locator('.dashboard-overview-local')).toBeVisible();
+      await expect(remotePanel(page)).toBeVisible();
+      await expect(connectionPanel(page)).toBeVisible();
+      await expect(remotePanel(page).locator('.ui-scroll-area')).toBeVisible();
 
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
@@ -121,27 +139,27 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
 
       for (const locator of [
         dashboard,
-        dashboard.getByTestId('dashboard-overview'),
-        dashboard.getByTestId('dashboard-local-resources'),
-        dashboard.getByTestId('dashboard-connection-list'),
-        dashboard.getByTestId('dashboard-system-resources'),
-        dashboard.getByTestId('dashboard-ssh-resource-list'),
-        dashboard.getByTestId('dashboard-recent-activity'),
+        dashboard.locator('section').first(),
+        dashboard.locator('.dashboard-overview-local'),
+        connectionPanel(page),
+        remotePanel(page),
+        remotePanel(page).locator('.ui-scroll-area'),
+        activityPanel(page),
       ]) {
         await expectHorizontallyInside(locator, viewport.width);
       }
 
-      const statsBox = await dashboard.getByTestId('dashboard-overview-stats').boundingBox();
-      const localResourcesBox = await dashboard.getByTestId('dashboard-local-resources').boundingBox();
+      const statsBox = await dashboard.locator('.dashboard-overview-counts').boundingBox();
+      const localResourcesBox = await dashboard.locator('.dashboard-overview-local').boundingBox();
       expect(statsBox).not.toBeNull();
       expect(localResourcesBox).not.toBeNull();
       expect(localResourcesBox!.y).toBeGreaterThanOrEqual(statsBox!.y + statsBox!.height - 1);
 
-      const toolbar = dashboard.getByTestId('dashboard-connection-toolbar');
-      const searchBox = await dashboard.getByTestId('dashboard-connection-search').boundingBox();
-      const tagBox = await dashboard.getByTestId('dashboard-tag-filter').boundingBox();
-      const sortBox = await dashboard.getByTestId('dashboard-sort-by').boundingBox();
-      const orderBox = await dashboard.getByTestId('dashboard-sort-order').boundingBox();
+      const toolbar = dashboard.locator('.dashboard-toolbar');
+      const searchBox = await connectionPanel(page).getByRole('searchbox').boundingBox();
+      const tagBox = await tagFilter(page).boundingBox();
+      const sortBox = await sortFilter(page).boundingBox();
+      const orderBox = await sortOrder(page).boundingBox();
       const toolbarBox = await toolbar.boundingBox();
       expect(searchBox).not.toBeNull();
       expect(tagBox).not.toBeNull();
@@ -151,10 +169,7 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       expect(tagBox!.y).toBeGreaterThan(searchBox!.y + searchBox!.height - 1);
       expect(Math.abs(tagBox!.y - sortBox!.y)).toBeLessThanOrEqual(1);
       expect(Math.abs(tagBox!.y - orderBox!.y)).toBeLessThanOrEqual(1);
-      for (const control of [
-        dashboard.getByTestId('dashboard-tag-filter'),
-        dashboard.getByTestId('dashboard-sort-by'),
-      ]) {
+      for (const control of [tagFilter(page), sortFilter(page)]) {
         const geometry = await control.evaluate((element) => {
           const box = element.getBoundingClientRect();
           const label = element.querySelector(':scope > span')?.getBoundingClientRect();
@@ -170,9 +185,8 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
         expect(Math.abs(geometry.labelCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
         expect(Math.abs(geometry.chevronCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
       }
-      const tagFilter = dashboard.getByTestId('dashboard-tag-filter');
-      await tagFilter.click();
-      const tagMenu = page.getByTestId('dashboard-tag-filter-menu');
+      await tagFilter(page).click();
+      const tagMenu = page.getByRole('listbox');
       await expect(tagMenu).toBeVisible();
       const firstOption = tagMenu.getByRole('option').first();
       const optionGeometry = await firstOption.evaluate((element) => {
@@ -200,20 +214,20 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       expect(Math.abs(filterLeftGap - filterRightGap)).toBeLessThanOrEqual(1);
       await expectHorizontallyInside(toolbar, viewport.width);
 
-      const connectionRow = dashboard.getByTestId(`dashboard-connection-row-${connectionId}`);
-      const connectButton = dashboard.getByTestId(`dashboard-connect-${connectionId}`);
-      await expect(connectionRow).toBeVisible();
-      const rowBox = await connectionRow.boundingBox();
-      const connectBox = await connectButton.boundingBox();
+      const row = connectionRow(page, 'E2E SSH');
+      const connect = connectButton(row);
+      await expect(row).toBeVisible();
+      const rowBox = await row.boundingBox();
+      const connectBox = await connect.boundingBox();
       expect(rowBox).not.toBeNull();
       expect(connectBox).not.toBeNull();
-      const rowPadding = await connectionRow.evaluate((element) => {
+      const rowPadding = await row.evaluate((element) => {
         const style = getComputedStyle(element);
         return Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
       });
       expect(connectBox!.width).toBeGreaterThanOrEqual(rowBox!.width - rowPadding - 2);
       expect(connectBox!.y).toBeGreaterThan(rowBox!.y + 20);
-      await expectHorizontallyInside(connectionRow, viewport.width);
+      await expectHorizontallyInside(row, viewport.width);
     }
   } finally {
     const restoreSettings = await context.request.put('/api/v1/settings', {
@@ -252,16 +266,16 @@ test('mobile dashboard keeps empty and multi-connection states usable when resou
     ]) {
       await page.setViewportSize(viewport);
       await page.goto('/');
-      const dashboard = page.getByTestId('dashboard-view');
+      const dashboard = page.locator('.dashboard-page');
       await expect(dashboard).toBeVisible();
-      await expect(dashboard.getByTestId('dashboard-system-resources')).toHaveCount(0);
-      await expect(dashboard.getByTestId('dashboard-local-resources')).toHaveCount(0);
+      await expect(remotePanel(page)).toHaveCount(0);
+      await expect(dashboard.locator('.dashboard-overview-local')).toHaveCount(0);
       await expect(dashboard.getByText(/No connection records|没有连接记录|接続記録がありません/)).toBeVisible();
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
         .toBeLessThanOrEqual(1);
-      await expectHorizontallyInside(dashboard.getByTestId('dashboard-connection-list'), viewport.width);
-      await expectHorizontallyInside(dashboard.getByTestId('dashboard-recent-activity'), viewport.width);
+      await expectHorizontallyInside(connectionPanel(page), viewport.width);
+      await expectHorizontallyInside(activityPanel(page), viewport.width);
     }
 
     const ids = [
@@ -275,25 +289,25 @@ test('mobile dashboard keeps empty and multi-connection states usable when resou
     ]) {
       await page.setViewportSize(viewport);
       await page.goto('/');
-      const dashboard = page.getByTestId('dashboard-view');
-      await expect(dashboard.getByTestId('dashboard-system-resources')).toHaveCount(0);
-      await expect(dashboard.getByTestId('dashboard-local-resources')).toHaveCount(0);
+      const dashboard = page.locator('.dashboard-page');
+      await expect(remotePanel(page)).toHaveCount(0);
+      await expect(dashboard.locator('.dashboard-overview-local')).toHaveCount(0);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
         .toBeLessThanOrEqual(1);
 
-      const search = dashboard.getByTestId('dashboard-connection-search');
-      const tag = dashboard.getByTestId('dashboard-tag-filter');
-      const sort = dashboard.getByTestId('dashboard-sort-by');
-      const order = dashboard.getByTestId('dashboard-sort-order');
+      const search = connectionPanel(page).getByRole('searchbox');
+      const tag = tagFilter(page);
+      const sort = sortFilter(page);
+      const order = sortOrder(page);
       for (const control of [search, tag, sort, order]) {
         await expect(control).toBeVisible();
         await expectHorizontallyInside(control, viewport.width);
       }
 
-      for (const id of ids) {
-        const row = dashboard.getByTestId(`dashboard-connection-row-${id}`);
-        const connect = dashboard.getByTestId(`dashboard-connect-${id}`);
+      for (const name of MOBILE_NAMES) {
+        const row = connectionRow(page, name);
+        const connect = connectButton(row);
         await expect(row).toBeVisible();
         await expect(connect).toBeVisible();
         await expectHorizontallyInside(row, viewport.width);
@@ -301,15 +315,15 @@ test('mobile dashboard keeps empty and multi-connection states usable when resou
       }
 
       await search.fill('mobile-dashboard-beta-user');
-      await expect(dashboard.getByTestId(`dashboard-connection-row-${ids[0]}`)).toHaveCount(0);
-      await expect(dashboard.getByTestId(`dashboard-connection-row-${ids[1]}`)).toBeVisible();
+      await expect(connectionRow(page, MOBILE_NAMES[0])).toHaveCount(0);
+      await expect(connectionRow(page, MOBILE_NAMES[1])).toBeVisible();
       await search.fill('');
 
       await Promise.all([
         page.waitForURL(
           (url) => url.pathname.includes('/workspace') && url.searchParams.get('connectionId') === String(ids[0]),
         ),
-        dashboard.getByTestId(`dashboard-connect-${ids[0]}`).click(),
+        connectButton(connectionRow(page, MOBILE_NAMES[0])).click(),
       ]);
       await page.goto('/');
     }

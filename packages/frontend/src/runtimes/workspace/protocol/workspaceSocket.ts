@@ -100,6 +100,7 @@ export class WorkspaceSocket {
   private readonly errorHandlers = new Set<(message: string) => void>();
   private opening?: Promise<void>;
   private rejectOpening?: (error: Error) => void;
+  private probe?: Promise<void>;
 
   constructor(private readonly logContext: WorkspaceSocketLogContext = {}) {}
 
@@ -109,6 +110,33 @@ export class WorkspaceSocket {
 
   get connected(): boolean {
     return this.socket?.readyState === WebSocket.OPEN;
+  }
+
+  /** Probe only the current attachment; never open a new, unbound socket. */
+  checkLiveness(): Promise<void> {
+    if (this.probe) return this.probe;
+    const socket = this.socket;
+    if (!socket || !this.connected) return Promise.resolve();
+    const task = this.requestInternal('workspace.ping', crypto.randomUUID(), {}, false, 5_000, socket)
+      .then(() => undefined)
+      .catch(() => {
+        if (this.socket !== socket || document.visibilityState !== 'visible') return;
+        this.socket = undefined;
+        this.rejectPending(new Error('Workspace transport liveness check failed.'));
+        // An abnormal transport close preserves ordinary-session reconnect credentials/PTY.
+        try {
+          socket.close(4000, 'Workspace transport liveness check failed');
+        } catch {
+          // A frozen browser may already have discarded the underlying transport.
+        } finally {
+          for (const handler of this.closeHandlers) handler();
+        }
+      })
+      .finally(() => {
+        if (this.probe === task) this.probe = undefined;
+      });
+    this.probe = task;
+    return task;
   }
 
   async open(): Promise<void> {
@@ -291,10 +319,13 @@ export class WorkspaceSocket {
     requestId: string,
     payload: object,
     expectBinary: boolean,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+    expectedSocket?: WebSocket,
   ): Promise<T | { data: T; bytes: Uint8Array }> {
     if (!requestId) throw new Error('Workspace requestId is required.');
     if (this.pending.has(requestId)) throw new Error(`Workspace request is already pending: ${requestId}`);
     await this.open();
+    if (expectedSocket && this.socket !== expectedSocket) throw new Error('Workspace probe transport was superseded.');
     return new Promise<T | { data: T; bytes: Uint8Array }>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         this.pending.delete(requestId);
@@ -308,7 +339,7 @@ export class WorkspaceSocket {
           'Workspace request timed out',
         );
         reject(new Error(`Workspace request timed out: ${type}`));
-      }, REQUEST_TIMEOUT_MS);
+      }, timeoutMs);
       this.pending.set(requestId, {
         operation: type,
         resolve: (value) => resolve(value as T | { data: T; bytes: Uint8Array }),

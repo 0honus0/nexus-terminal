@@ -306,6 +306,7 @@ const providerModelInput = (value: unknown): AgentProviderModelInputDto => {
   if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
   const allowed = [
     'id',
+    'protocol',
     'contextWindow',
     'maxOutputTokens',
     'supportsTools',
@@ -317,6 +318,8 @@ const providerModelInput = (value: unknown): AgentProviderModelInputDto => {
     'reasoningMandatory',
   ] as const;
   if (!hasOnlyKeys(value, allowed)) throw new Error('VALIDATION_FAILED');
+  if (value.protocol !== undefined && value.protocol !== 'responses' && value.protocol !== 'chat-completions')
+    throw new Error('VALIDATION_FAILED');
   if (
     !nonEmptyString(value.id) ||
     !positiveInteger(value.contextWindow) ||
@@ -350,6 +353,7 @@ const providerModelInput = (value: unknown): AgentProviderModelInputDto => {
   }
   return {
     id: value.id,
+    ...(value.protocol === undefined ? {} : { protocol: value.protocol as 'responses' | 'chat-completions' }),
     contextWindow: value.contextWindow,
     maxOutputTokens: value.maxOutputTokens,
     supportsTools: value.supportsTools,
@@ -457,6 +461,7 @@ const providerPatchInput = async (
 
 const providerModelDto = (model: ProviderView['models'][number]): AgentProviderModelDto => ({
   id: model.id,
+  ...(model.protocol === undefined ? {} : { protocol: model.protocol }),
   contextWindow: model.contextWindow,
   maxOutputTokens: model.maxOutputTokens,
   supportsTools: model.supportsTools,

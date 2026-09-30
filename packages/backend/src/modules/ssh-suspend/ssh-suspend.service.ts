@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { RemoteExecutionTransport, RemoteShellSession } from '../../platform/execution/remote-execution.port';
 import type { SuspendedSessionLogStore } from './suspended-session-log.port';
+import type { SuspendedTerminalLogExporter } from './suspended-terminal-log-export.port';
 import type { SuspendedTerminalCheckpoint, SuspendedTerminalViewport } from './suspended-terminal-checkpoint.port';
 import type {
   PreparedResumeSession,
@@ -80,6 +81,7 @@ export class SshSuspendService {
 
   constructor(
     private readonly logs: SuspendedSessionLogStore,
+    private readonly logExporter: SuspendedTerminalLogExporter,
     options: SshSuspendServiceOptions = {},
   ) {
     this.now = options.now ?? Date.now;
@@ -100,7 +102,10 @@ export class SshSuspendService {
     return () => this.ownershipRevokedListeners.delete(listener);
   }
 
-  async takeOver(request: SuspendTakeoverRequest): Promise<string | null> {
+  async takeOver(
+    request: SuspendTakeoverRequest,
+    ownership?: { ownerId: string; workspaceId: string },
+  ): Promise<string | null> {
     if (!request.transport.isOpen || !request.shell.isOpen) {
       request.checkpoint?.dispose();
       await request.transport.close().catch(() => undefined);
@@ -113,8 +118,15 @@ export class SshSuspendService {
       connectionId: request.connectionId,
       suspendStartTime: new Date(now).toISOString(),
       backendSshStatus: 'hanging',
-      ownershipState: 'available',
-      ownershipGeneration: 0,
+      ownershipState: ownership ? 'attached' : 'available',
+      ownershipGeneration: ownership ? 1 : 0,
+      ...(ownership
+        ? {
+            ownerId: ownership.ownerId,
+            attachedWorkspaceId: ownership.workspaceId,
+            ownershipLeaseExpiresAt: now + this.ownerLeaseMs,
+          }
+        : {}),
       revokeRequested: false,
       checkpointRevision: 0,
       checkpointBytes: 0,
@@ -130,8 +142,18 @@ export class SshSuspendService {
       // Raw history/checkpoint are recovery aids. A healthy SSH transport remains suspendable.
     }
     this.userSessions(request.userId).set(suspendSessionId, record);
-    this.attachListeners(suspendSessionId, record);
+    if (!ownership) this.attachListeners(suspendSessionId, record);
     return suspendSessionId;
+  }
+
+  async registerAttached(
+    request: SuspendTakeoverRequest,
+    ownerId: string,
+    workspaceId: string,
+  ): Promise<{ suspendSessionId: string; generation: number }> {
+    const id = await this.takeOver(request, { ownerId, workspaceId });
+    if (!id) throw new Error('SUSPENDED_SESSION_TRANSPORT_CLOSED');
+    return { suspendSessionId: id, generation: 1 };
   }
 
   list(userId: number): SuspendedSessionInfo[] {
@@ -172,10 +194,6 @@ export class SshSuspendService {
     this.detachListeners(record);
     try {
       await record.outputChain.catch(() => undefined);
-      if (viewport) {
-        record.shell.resize(viewport.columns, viewport.rows);
-        await record.checkpoint?.resize(viewport);
-      }
       await this.logs.flush(record.logIdentifier);
       const offset = await this.logs.position(record.logIdentifier);
       const terminalCheckpoint = await this.refreshCheckpoint(record, offset, true).catch(() => undefined);
@@ -187,9 +205,9 @@ export class SshSuspendService {
         originalConnectionId: record.connectionId,
         checkpoint: record.checkpoint,
         terminalCheckpoint,
-        viewport: terminalCheckpoint
-          ? { columns: terminalCheckpoint.columns, rows: terminalCheckpoint.rows }
-          : viewport,
+        viewport:
+          viewport ??
+          (terminalCheckpoint ? { columns: terminalCheckpoint.columns, rows: terminalCheckpoint.rows } : undefined),
         shellPid: record.shellPid,
         shellKind: record.shellKind,
         shellIntegrationReady: record.shellIntegrationReady,
@@ -435,7 +453,10 @@ export class SshSuspendService {
       const safe = base.replace(/[^\w.-]/g, '_');
       const timestamp = new Date(record.suspendStartTime).toISOString().replace(/[:.]/g, '-');
       return {
-        stream: await this.logs.openRead(record.logIdentifier),
+        stream: await this.logExporter.render(await this.logs.openRead(record.logIdentifier), {
+          columns: record.latestCheckpoint?.columns ?? 80,
+          rows: record.latestCheckpoint?.rows ?? 24,
+        }),
         filename: `ssh_log_${safe}_${record.logIdentifier}_${timestamp}.log`,
       };
     } catch {

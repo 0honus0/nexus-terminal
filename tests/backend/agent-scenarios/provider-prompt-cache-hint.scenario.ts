@@ -1,8 +1,26 @@
 import assert from 'node:assert/strict';
+import { decodePersistedProviderModels } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-provider.repository';
+import { resolveProviderModelConfig } from '../../../packages/backend/src/modules/agent/ai/model-capability-resolver';
 import { OpenAiProviderAdapter } from '../../../packages/backend/src/infrastructure/agent/providers/openai-provider.adapter';
 import type { ModelRequest, TokenUsage } from '../../../packages/backend/src/modules/agent/ai/model.types';
 
 export const providerPromptCacheHintScenario = async () => {
+  const persisted = decodePersistedProviderModels(
+    JSON.stringify([
+      {
+        id: 'protocol-model',
+        protocol: 'responses',
+        capabilityOverrides: { contextWindow: 4096, maxOutputTokens: 256, supportsTools: false },
+      },
+      { id: 'default-model', capabilityOverrides: { contextWindow: 4096, maxOutputTokens: 256, supportsTools: false } },
+    ]),
+  );
+  assert.equal(resolveProviderModelConfig(persisted[0]).protocol, 'responses');
+  assert.equal(resolveProviderModelConfig(persisted[1]).protocol, undefined);
+  assert.throws(
+    () => decodePersistedProviderModels('[{"id":"invalid","protocol":"invalid"}]'),
+    /AGENT_DURABLE_STATE_INVALID/,
+  );
   const capturedBodies: Array<{ url: string; body: Record<string, unknown> }> = [];
   const originalFetch = globalThis.fetch;
   const chatStreamBody = [
@@ -261,6 +279,39 @@ export const providerPromptCacheHintScenario = async () => {
       false,
       'model capability gate must suppress prompt_cache_key when support is not frozen',
     );
+
+    const customProvider = providers.get('custom-responses')!;
+    const customModels = customProvider.models as Array<Record<string, unknown>>;
+    customModels[0].protocol = 'chat-completions';
+    await streamOnce(requestFor('custom-responses', 'proxy-reasoner'));
+    assert.ok(capturedBodies.at(-1)?.url.endsWith('/chat/completions'), 'model protocol overrides provider default');
+    delete customModels[0].protocol;
+
+    globalThis.fetch = (async () =>
+      new Response(
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","content":[]}}\n\n',
+        { headers: { 'content-type': 'text/event-stream' } },
+      )) as typeof fetch;
+    await assert.rejects(() => streamOnce(requestFor('official-responses')), { message: 'PROVIDER_RESPONSE_INVALID' });
+    for (const status of [400, 401, 403, 429, 500, 503]) {
+      globalThis.fetch = (async () =>
+        new Response('{"error":{"message":"rejected"}}', {
+          status,
+          headers: { 'content-type': 'application/json' },
+        })) as typeof fetch;
+      await assert.rejects(() => streamOnce(requestFor('official-chat')), { message: `PROVIDER_HTTP_${status}` });
+    }
+    for (const [transport, code] of [
+      ['ENOTFOUND', 'PROVIDER_DNS_FAILED'],
+      ['ECONNRESET', 'PROVIDER_NETWORK_FAILED'],
+      ['CERT_HAS_EXPIRED', 'PROVIDER_TLS_FAILED'],
+      ['UND_ERR_CONNECT_TIMEOUT', 'PROVIDER_NETWORK_TIMEOUT'],
+    ]) {
+      globalThis.fetch = (async () => {
+        throw new TypeError('fetch failed', { cause: Object.assign(new Error('transport'), { code: transport }) });
+      }) as typeof fetch;
+      await assert.rejects(() => streamOnce(requestFor('official-chat')), { message: code });
+    }
 
     return [
       { name: 'official_cache_key_bytes', value: Buffer.byteLength(firstKey as string, 'utf8'), unit: 'bytes' },
