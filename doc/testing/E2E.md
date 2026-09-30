@@ -118,6 +118,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - connection update/clone/delete with preserved encrypted credentials and tag associations;
 - RDP/VNC conditional forms and filtered bulk selection/deletion use named controls and connection cards, with API checks for saved connection fields and exact deletion results;
 - command-history search, clipboard copy, replay and individual deletion are exercised through real SSH output and persisted history IDs;
+- notification delivery tests use localized Add/Test controls and real webhook/SMTP receivers to verify unsaved delivery, localized event content, HTML email and persisted channel error recovery;
 
 For optional focused local browser debugging, install Chromium when the host already has (or can install) the required system libraries:
 

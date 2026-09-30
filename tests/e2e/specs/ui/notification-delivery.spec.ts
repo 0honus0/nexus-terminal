@@ -61,8 +61,8 @@ test('notification test button performs a real webhook POST with configured head
   const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
   expect(language.ok()).toBeTruthy();
   await page.goto('/notifications');
-  const settings = page.getByTestId('notification-settings');
-  await settings.getByTestId('notification-add-channel').click();
+  const settings = page.getByRole('heading', { name: 'Notification Settings', exact: true }).locator('..');
+  await settings.getByRole('button', { name: 'Add Notification Channel', exact: true }).click();
   await page.locator('#setting-name').fill('E2E Unsaved Webhook Delivery');
   await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
   await page.locator('#webhook-url').fill(STRICT_WEBHOOK_URL);
@@ -77,7 +77,7 @@ test('notification test button performs a real webhook POST with configured head
         (response) =>
           response.url().endsWith('/api/v1/notifications/test-unsaved') && response.request().method() === 'POST',
       );
-      await page.getByTestId('notification-test').click();
+      await page.getByRole('button', { name: 'Test Notification', exact: true }).click();
       expect((await responsePromise).ok()).toBeTruthy();
     },
   );
@@ -89,8 +89,7 @@ test('notification test localizes user-facing content while preserving the raw e
   expect(language.ok()).toBeTruthy();
 
   await page.goto('/notifications');
-  const settings = page.getByTestId('notification-settings');
-  await settings.getByTestId('notification-add-channel').click();
+  await page.getByRole('button', { name: '添加通知渠道', exact: true }).click();
   await page.locator('#setting-name').fill('E2E Localized Webhook Delivery');
   await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
   await page.locator('#webhook-url').fill(`${STRICT_WEBHOOK_URL}?locale=zh-CN`);
@@ -104,7 +103,7 @@ test('notification test localizes user-facing content while preserving the raw e
     (response) =>
       response.url().endsWith('/api/v1/notifications/test-unsaved') && response.request().method() === 'POST',
   );
-  await page.getByTestId('notification-test').click();
+  await page.getByRole('button', { name: '测试通知', exact: true }).click();
   const response = await responsePromise;
   expect(response.ok()).toBeTruthy();
   const result = (await response.json()) as { success: boolean; message: string };
@@ -118,8 +117,7 @@ test('email notification test preserves legacy HTML body-template rendering', as
   expect(language.ok()).toBeTruthy();
 
   await page.goto('/notifications');
-  const settings = page.getByTestId('notification-settings');
-  await settings.getByTestId('notification-add-channel').click();
+  await page.getByRole('button', { name: 'Add Notification Channel', exact: true }).click();
   await page.locator('#setting-name').fill('E2E HTML Email Delivery');
   await selectUiOption(page.locator('#setting-channel-type'), 'email');
   const field = (label: string) => page.locator('label').filter({ hasText: label }).locator('..');
@@ -135,7 +133,7 @@ test('email notification test preserves legacy HTML body-template rendering', as
     (response) =>
       response.url().endsWith('/api/v1/notifications/test-unsaved') && response.request().method() === 'POST',
   );
-  await page.getByTestId('notification-test').click();
+  await page.getByRole('button', { name: 'Test Notification', exact: true }).click();
   const response = await responsePromise;
   expect(response.ok()).toBeTruthy();
   expect(await response.json()).toMatchObject({ success: true });
@@ -165,12 +163,12 @@ test('notification settings complete a real CRUD, event persistence, and deliver
   expect((await languageSavePromise).ok()).toBeTruthy();
   await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('en-US');
   await page.goto('/notifications');
-  const settings = page.getByTestId('notification-settings');
+  const settings = page.getByRole('heading', { name: 'Notification Settings', exact: true }).locator('..');
   await expect(settings).toBeVisible({ timeout: 20_000 });
   await captureEvidence(page, testInfo, 'before');
 
   await step('create an enabled webhook and select notification events', async () => {
-    await settings.getByTestId('notification-add-channel').click();
+    await settings.getByRole('button', { name: 'Add Notification Channel', exact: true }).click();
     await page.locator('#setting-name').fill(CRUD_CHANNEL_NAME);
     await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
     await page.locator('#webhook-url').fill(STRICT_WEBHOOK_URL);
@@ -223,7 +221,7 @@ test('notification settings complete a real CRUD, event persistence, and deliver
       (response) =>
         response.url().match(/\/api\/v1\/notifications\/\d+\/test$/) !== null && response.request().method() === 'POST',
     );
-    await page.getByTestId('notification-test').click();
+    await page.getByRole('button', { name: 'Test Notification', exact: true }).click();
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     const result = (await response.json()) as { success: boolean; message: string };
@@ -259,7 +257,7 @@ test('notification settings complete a real CRUD, event persistence, and deliver
       (response) =>
         response.url().match(/\/api\/v1\/notifications\/\d+\/test$/) !== null && response.request().method() === 'POST',
     );
-    await page.getByTestId('notification-test').click();
+    await page.getByRole('button', { name: 'Test Notification', exact: true }).click();
     const response = await responsePromise;
     expect(response.status()).toBe(400);
     const result = (await response.json()) as { success: boolean; message: string };
