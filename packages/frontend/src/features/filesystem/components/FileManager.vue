@@ -1745,7 +1745,7 @@
                 ></i>
                 <button
                   type="button"
-                  class="file-row-name-button min-w-0 flex-1 truncate text-left"
+                  class="file-row-name-button min-w-0 flex-1 text-left"
                   :data-file-path="entry.path"
                   @mousedown="preserveListFocusOnMouseOpen"
                 >
