@@ -90,6 +90,7 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 - 首次启用 Agent 时按 onboarding 安装推荐的 first-party Plugin，并在 Settings 中配置 Provider、模型和 Runner。
 - Agent launcher 在认证后显示；打开 Host 后可创建 Thread、设置 Goal、提交输入并查看 Plan、approval、artifact 和运行历史。
+- 桌面 Agent 窗口可拖动标题栏调整位置；右下角缩放手柄围绕窗口当前中心对称扩展或收缩，并跟随鼠标移动。任一边缘到达屏幕边界后停止该方向的扩展；键盘方向键调整大小采用同样的居中缩放方式。
 - Run 执行期间可以继续提交输入。输入会进入 durable queue，并按当前 Run 状态打断或留待后续消费。
 - Environment 选择器决定下一次 Run 使用的 Workspace、Toolchain 和 target；服务端会验证并冻结本次执行配置。
 - Workspace Terminal、ACP、Browser 和 Runner Plugin 依赖可用的 Agent Runner。Runner 不可用时，普通 SSH/文件管理/远程桌面仍可使用。

@@ -167,11 +167,89 @@ test('Agent Hub native buttons keep a 24px physical pointer-target floor', async
   );
   expect(undersized).toEqual([]);
 
-  const resizeHandle = hub.locator('button.cursor-nwse-resize');
+  const resizeHandle = hub.locator('button[data-ui="resize-handle"]');
   const resizeBox = await resizeHandle.boundingBox();
   expect(resizeBox).toBeTruthy();
   expect(resizeBox!.width).toBeGreaterThanOrEqual(24);
   expect(resizeBox!.height).toBeGreaterThanOrEqual(24);
+});
+
+test('Agent Hub resizing keeps its current center and its bottom-right handle follows the pointer', async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  await page.goto('/connections');
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(hub).toBeVisible();
+  const handle = hub.locator('button[data-ui="resize-handle"]');
+  const bounds = async () => {
+    const box = await hub.boundingBox();
+    expect(box).toBeTruthy();
+    return box!;
+  };
+  const resize = async (dx: number, dy: number) => {
+    const box = await handle.boundingBox();
+    expect(box).toBeTruthy();
+    const x = box!.x + box!.width / 2;
+    const y = box!.y + box!.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 8 });
+    await page.mouse.up();
+  };
+  const expectCenteredSize = async (before: Awaited<ReturnType<typeof bounds>>, dw: number, dh: number) => {
+    await expect.poll(async () => (await bounds()).width).toBeCloseTo(before.width + dw, 0);
+    await expect.poll(async () => (await bounds()).height).toBeCloseTo(before.height + dh, 0);
+    const after = await bounds();
+    expect(after.x + after.width / 2).toBeCloseTo(before.x + before.width / 2, 0);
+    expect(after.y + after.height / 2).toBeCloseTo(before.y + before.height / 2, 0);
+    return after;
+  };
+
+  const initial = await bounds();
+  await resize(-80, -60);
+  const shrunk = await expectCenteredSize(initial, -160, -120);
+  expect(shrunk.x + shrunk.width).toBeCloseTo(initial.x + initial.width - 80, 0);
+  expect(shrunk.y + shrunk.height).toBeCloseTo(initial.y + initial.height - 60, 0);
+
+  // Moving the window establishes a new center; resizing must not snap back
+  // to the viewport center or the position from the previous resize.
+  const header = hub.locator('header').first();
+  const headerBox = await header.boundingBox();
+  expect(headerBox).toBeTruthy();
+  const headerX = headerBox!.x + 24;
+  const headerY = headerBox!.y + headerBox!.height / 2;
+  await page.mouse.move(headerX, headerY);
+  await page.mouse.down();
+  await page.mouse.move(headerX + 40, headerY + 60, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await bounds()).x).toBeCloseTo(shrunk.x + 40, 0);
+  const moved = await bounds();
+  await resize(30, 20);
+  const grown = await expectCenteredSize(moved, 60, 40);
+
+  await handle.focus();
+  await page.keyboard.press('ArrowLeft');
+  const keyboardResized = await expectCenteredSize(grown, -32, 0);
+  await resize(500, 500);
+  const maxWidth =
+    2 * Math.min(keyboardResized.x + keyboardResized.width / 2, 1440 - keyboardResized.x - keyboardResized.width / 2);
+  const maxHeight =
+    2 * Math.min(keyboardResized.y + keyboardResized.height / 2, 1000 - keyboardResized.y - keyboardResized.height / 2);
+  const limited = await expectCenteredSize(
+    keyboardResized,
+    maxWidth - keyboardResized.width,
+    maxHeight - keyboardResized.height,
+  );
+  expect(limited.x).toBeGreaterThanOrEqual(0);
+  expect(limited.y).toBeGreaterThanOrEqual(0);
+  expect(limited.x + limited.width).toBeLessThanOrEqual(1440);
+  expect(limited.y + limited.height).toBeLessThanOrEqual(1000);
 });
 
 test('Agent window state resets every user-scoped layout field before an empty user restore', async ({

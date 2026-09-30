@@ -257,14 +257,21 @@ export const createAgentWindowManager = () => {
       preferredBounds = { ...next };
       state.bounds = next;
     },
-    resize(width: number, height: number): void {
+    resize(width: number, height: number, origin: AgentHubBounds = state.bounds): void {
       const screen = viewport();
-      const maxWidth = Math.max(1, screen.width - state.bounds.x);
-      const maxHeight = Math.max(1, screen.height - state.bounds.y);
+      const centerX = origin.x + origin.width / 2;
+      const centerY = origin.y + origin.height / 2;
+      // Resize symmetrically around the current window center, stopping when
+      // either edge reaches the viewport instead of shifting the center.
+      const maxWidth = Math.max(1, 2 * Math.min(centerX, screen.width - centerX));
+      const maxHeight = Math.max(1, 2 * Math.min(centerY, screen.height - centerY));
+      const nextWidth = Math.min(Math.max(width, Math.min(MIN_WIDTH, maxWidth)), maxWidth);
+      const nextHeight = Math.min(Math.max(height, Math.min(MIN_HEIGHT, maxHeight)), maxHeight);
       const next = clampBounds({
-        ...state.bounds,
-        width: Math.min(Math.max(width, Math.min(MIN_WIDTH, maxWidth)), maxWidth),
-        height: Math.min(Math.max(height, Math.min(MIN_HEIGHT, maxHeight)), maxHeight),
+        x: centerX - nextWidth / 2,
+        y: centerY - nextHeight / 2,
+        width: nextWidth,
+        height: nextHeight,
       });
       preferredBounds = { ...next };
       state.bounds = next;

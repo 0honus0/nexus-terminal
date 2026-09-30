@@ -316,7 +316,7 @@
     if (!delta) return;
     event.preventDefault();
     event.stopPropagation();
-    agentWindowManager.resize(state.bounds.width + delta.dx, state.bounds.height + delta.dy);
+    agentWindowManager.resize(state.bounds.width + delta.dx * 2, state.bounds.height + delta.dy * 2);
     emit('layoutChange');
   };
 
@@ -416,7 +416,9 @@
       if (e.pointerId !== undefined && pointerId !== undefined && e.pointerId !== pointerId) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      agentWindowManager.resize(startBounds.width + dx, startBounds.height + dy);
+      // Both edges move around the center, so doubling the size delta keeps
+      // the bottom-right handle moving 1:1 with the pointer.
+      agentWindowManager.resize(startBounds.width + dx * 2, startBounds.height + dy * 2, startBounds);
     };
 
     const cleanup = () => {
