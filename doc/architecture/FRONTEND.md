@@ -148,6 +148,8 @@ flowchart TD
 
 ### 全局导航与会话展示
 
+公共确认与提示由 `shared/feedback/DialogHost` 持有交互，通过 `foundation/ui` 的 `ui-confirmation-panel` 配方与 `UiButton` 展示；上传冲突复用同一视觉配方及 `UiCheckbox`，策略仍由 transfers feature 持有。弹窗关闭、确认和业务执行边界保持不变。
+
 代理与通知管理的响应式卡片布局由 `foundation/ui/UiManagementCard.vue` 提供，通过默认插槽和 actions 插槽承载内容与操作；业务字段、文案与编辑删除行为仍由各 feature 持有。Workspace 偏好由 preferences feature 使用扁平分组展示，保存边界仍按分组划分。
 
 顶部导航与窄屏设置功能栏共用 `foundation/interaction/useHorizontalDragScroll`，仅为鼠标提供阈值拖动和拖后点击抑制；触摸与触控板保留原生滚动，不拦截纵向触摸手势。Pointer capture 由该 interaction owner 释放。

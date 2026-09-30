@@ -1928,3 +1928,43 @@
     box-shadow: none;
   }
 }
+.ui-confirmation-panel {
+  max-width: 440px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border-radius: 16px;
+}
+
+.ui-confirmation-panel__body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 24px;
+  overflow-wrap: anywhere;
+}
+
+.ui-confirmation-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.ui-confirmation-panel__actions .ui-button {
+  min-height: 44px;
+  min-width: 96px;
+}
+
+@media (max-width: 639px) {
+  .ui-confirmation-panel__body {
+    padding: 20px;
+  }
+  .ui-confirmation-panel__actions {
+    padding: 16px 20px;
+  }
+  .ui-confirmation-panel__actions .ui-button {
+    flex: 1;
+    min-width: 0;
+  }
+}
