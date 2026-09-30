@@ -21,7 +21,7 @@ async function connectMobileSsh(page: Page, request: Parameters<typeof loginAsIn
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
   await connectTestSshFromConnectionsPage(page, connectionId);
-  await expect(page.getByTestId('terminal')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.terminal-inner-container')).toBeVisible({ timeout: 20_000 });
 }
 
 async function tapFileManagerRow(page: Page, filename: string): Promise<void> {
@@ -60,7 +60,7 @@ async function longPressFile(page: Page, filename: string): Promise<Locator> {
     clientY: point.y,
   });
 
-  const menu = page.getByTestId('file-manager-context-menu');
+  const menu = page.getByRole('menu');
   await expect(menu).toBeVisible();
   return menu;
 }
@@ -90,12 +90,12 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
       'Change Permissions',
       'RefreshF5',
     ]);
-    await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
+    await expect(page.getByRole('menu')).toHaveCount(1);
     await captureFunctionalScreenshot(page, 'mobile-context-menu.png');
   });
 
   await slowStep('tapping the flattened ZIP action writes the archive over SFTP', async () => {
-    await page.getByTestId('file-manager-context-menu').getByText('Compress to zip', { exact: true }).click();
+    await page.getByRole('menu').getByText('Compress to zip', { exact: true }).click();
     await expect(fileManagerRow(page, 'archive-source.zip')).toBeVisible({ timeout: 30_000 });
   });
 });
@@ -129,10 +129,10 @@ test('mobile long-press file menu stays inside narrow 320 and 375 viewports', as
     ]) {
       await expect(menu.getByRole('button').filter({ hasText: label }).first()).toBeVisible();
     }
-    await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
+    await expect(page.getByRole('menu')).toHaveCount(1);
 
     const menuBox = await menu.boundingBox();
-    const fileManager = page.getByTestId('file-manager-modal');
+    const fileManager = page.getByRole('dialog', { name: 'File Manager', exact: true });
     const fileManagerBox = await fileManager.boundingBox();
     const menuMetrics = await menu.evaluate((element) => ({
       clientWidth: element.clientWidth,
@@ -169,8 +169,8 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
 
   await slowStep('single tap opens an inset mobile editor', async () => {
     await tapFileManagerRow(page, 'plainfile');
-    const documentPopup = page.getByTestId('document-popup');
-    const editor = documentPopup.getByTestId('file-editor-view');
+    const documentPopup = page.locator('[data-document-mode][data-workspace-active="true"]:visible').first();
+    const editor = documentPopup.locator('.file-editor-container');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
     await expect(documentPopup.getByTitle('Resize editor window', { exact: true })).toHaveCount(0);
@@ -186,7 +186,7 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
       .poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
       .toContain('plain-no-extension');
 
-    const searchBox = await editor.getByTestId('file-editor-search').boundingBox();
+    const searchBox = await editor.getByRole('button', { name: 'Search in document', exact: true }).boundingBox();
     const refreshBox = await editor.getByRole('button', { name: 'Refresh', exact: true }).boundingBox();
     const saveBox = await editor.getByRole('button', { name: 'Save', exact: true }).boundingBox();
     const actionsBox = await editor.locator('.editor-actions').boundingBox();
@@ -219,8 +219,10 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
   });
 
   await step('Search opens CodeMirror search UI and decorates the matching text', async () => {
-    const editor = page.getByTestId('document-popup').getByTestId('file-editor-view');
-    await editor.getByTitle('Search').click();
+    const editor = page
+      .locator('[data-document-mode][data-workspace-active="true"]:visible .file-editor-container')
+      .first();
+    await editor.getByRole('button', { name: 'Search in document', exact: true }).click();
     const searchPanel = editor.locator('.cm-panel.cm-search');
     await expect(searchPanel).toBeVisible();
     const searchInput = searchPanel.locator('input[name="search"]');
@@ -233,12 +235,12 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
   });
 
   await step('closing the popup returns to the terminal instead of leaving an empty editor pane', async () => {
-    const documentPopup = page.getByTestId('document-popup');
-    const editor = documentPopup.getByTestId('file-editor-view');
+    const documentPopup = page.locator('[data-document-mode][data-workspace-active="true"]:visible').first();
+    const editor = documentPopup.locator('.file-editor-container');
     await editor.getByTitle('Close Editor', { exact: true }).click();
     await expect(documentPopup).toBeHidden();
-    await expect(page.locator('[data-testid="file-editor-view"]:visible')).toHaveCount(0);
-    await expect(page.getByTestId('terminal')).toBeVisible();
+    await expect(page.locator('.file-editor-container:visible')).toHaveCount(0);
+    await expect(page.locator('.terminal-inner-container')).toBeVisible();
   });
 });
 
@@ -249,23 +251,23 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
 
   await slowStep('single tap keeps Markdown preview-first behavior on mobile', async () => {
     await tapFileManagerRow(page, filename);
-    const preview = page.getByTestId('document-popup');
+    const preview = page.locator('[data-document-mode][data-workspace-active="true"]:visible').first();
     await expect(preview).toBeVisible({ timeout: 20_000 });
     await expect(preview.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
     await expect(preview.locator('strong')).toHaveText('preview-ok');
     const editBox = await preview.getByRole('button', { name: 'Edit', exact: true }).boundingBox();
     expect(editBox).toBeTruthy();
     expect(editBox!.height).toBeGreaterThanOrEqual(40);
-    await expect(page.getByTestId('document-popup').getByTestId('file-editor-view')).toBeHidden();
+    await expect(preview.locator('.file-editor-container')).toBeHidden();
     await captureFunctionalScreenshot(page, 'mobile-markdown-preview.png');
   });
 
   await slowStep('Edit switches the preview to mobile CodeMirror and Save persists real SFTP bytes', async () => {
-    const preview = page.getByTestId('document-popup');
+    const preview = page.locator('[data-document-mode][data-workspace-active="true"]:visible').first();
     await preview.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(preview).toHaveAttribute('data-document-mode', 'editor');
 
-    const editor = preview.getByTestId('file-editor-view');
+    const editor = preview.locator('.file-editor-container');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
     await expect(editor.locator('.monaco-editor')).toHaveCount(0);
@@ -286,7 +288,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
 
   await step('reopening the file renders the just-saved Markdown preview', async () => {
     await tapFileManagerRow(page, filename);
-    const preview = page.getByTestId('document-popup');
+    const preview = page.locator('[data-document-mode][data-workspace-active="true"]:visible').first();
     await expect(preview.getByRole('heading', { name: 'Mobile Markdown E2E' })).toBeVisible({ timeout: 20_000 });
     await expect(preview.locator('strong')).toHaveText('mobile-save-ok');
   });
@@ -298,9 +300,9 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
 }) => {
   await connectMobileSsh(page, context.request);
 
-  const commandInput = page.getByTestId('command-input');
-  const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
-  await page.getByTestId('toggle-virtual-keyboard').click();
+  const commandInput = page.locator('.command-bar-command-input');
+  const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
+  await page.getByRole('button', { name: 'Show virtual keyboard', exact: true }).click();
   const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
   await expect(keyboard).toBeVisible();
 
@@ -373,9 +375,9 @@ test('mobile virtual keyboard follows application cursor mode, pages function ke
 }) => {
   await connectMobileSsh(page, context.request);
 
-  const commandInput = page.getByTestId('command-input');
-  const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
-  await page.getByTestId('toggle-virtual-keyboard').click();
+  const commandInput = page.locator('.command-bar-command-input');
+  const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
+  await page.getByRole('button', { name: 'Show virtual keyboard', exact: true }).click();
   const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
   await expect(keyboard).toBeVisible();
 
