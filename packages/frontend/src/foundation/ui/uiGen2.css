@@ -228,6 +228,18 @@
   --ui-tone-border: color-mix(in srgb, var(--status-error-color) 30%, var(--border-color));
 }
 
+:root {
+  --app-header-height: calc(60px + env(safe-area-inset-top, 0px));
+}
+
+.ui-floating-nav {
+  border: 1px solid var(--glass-border-color);
+  border-radius: 14px;
+  background: var(--header-bg-color);
+  color: var(--text-color);
+  box-shadow: 0 4px 12px -8px rgb(0 0 0 / 24%);
+}
+
 .ui-surface {
   color: var(--ui-text);
 }

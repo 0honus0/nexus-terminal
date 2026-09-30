@@ -219,9 +219,10 @@
 
 <template>
   <main
-    class="settings-page min-h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-3.5rem)] lg:min-h-0 lg:max-h-[calc(100dvh-3.5rem)] lg:overflow-hidden text-foreground flex flex-col"
+    class="settings-page min-h-[calc(100dvh-var(--app-header-height))] lg:h-[calc(100dvh-var(--app-header-height))] lg:min-h-0 lg:max-h-[calc(100dvh-var(--app-header-height))] lg:overflow-hidden text-foreground flex flex-col"
     :class="{
-      'h-[calc(100dvh-3.5rem)] max-h-[calc(100dvh-3.5rem)] overflow-hidden': mobileView === 'detail',
+      'h-[calc(100dvh-var(--app-header-height))] max-h-[calc(100dvh-var(--app-header-height))] overflow-hidden':
+        mobileView === 'detail',
     }"
   >
     <div

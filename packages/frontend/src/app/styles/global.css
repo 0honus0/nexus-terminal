@@ -2,6 +2,10 @@
 @import './tokens.css';
 @import '../../foundation/ui/uiGen2.css';
 
+html {
+  scrollbar-gutter: stable;
+}
+
 html,
 body,
 #app {

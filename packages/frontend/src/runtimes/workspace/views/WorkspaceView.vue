@@ -844,7 +844,7 @@
   <main
     data-testid="workspace-root"
     class="flex min-h-0 flex-col overflow-hidden bg-background"
-    :class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-2.75rem)]' : 'h-dvh'"
+    :class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-var(--app-header-height))]' : 'h-dvh'"
   >
     <WorkspaceTabBar
       :sessions="registry.orderedSessions.value"
