@@ -49,7 +49,7 @@
   });
   const ctrl: KeyDefinition = { kind: 'modifier', id: 'ctrl', modifier: 'ctrl', label: 'Ctrl' };
   const alt: KeyDefinition = { kind: 'modifier', id: 'alt', modifier: 'alt', label: 'Alt' };
-  const shift: KeyDefinition = { kind: 'modifier', id: 'shift', modifier: 'shift', label: '⇧' };
+  const shift: KeyDefinition = { kind: 'modifier', id: 'shift', modifier: 'shift', label: 'Shift' };
   const fn: KeyDefinition = { kind: 'page', id: 'fn' };
   const escape = key('escape', { label: 'Esc' });
   const tab = key('tab', { label: 'Tab' });
@@ -60,9 +60,9 @@
   const layouts: Record<KeyboardPage, KeyDefinition[][]> = {
     main: [
       [
-        ctrl,
-        shift,
         escape,
+        fn,
+        shift,
         key('home', { label: 'Home' }),
         key('pageUp', { label: 'PgUp', repeat: true }),
         key('delete', { label: 'Del', repeat: true }),
@@ -71,9 +71,9 @@
         key('backspace', { icon: 'fa-delete-left', repeat: true }),
       ],
       [
-        alt,
-        fn,
         tab,
+        ctrl,
+        alt,
         key('end', { label: 'End' }),
         key('pageDown', { label: 'PgDn', repeat: true }),
         key('insert', { label: 'Ins' }),
@@ -83,8 +83,8 @@
       ],
     ],
     function: [
-      [ctrl, shift, escape, ...[1, 2, 3, 4, 5, 6].map(functionKey)],
-      [alt, fn, tab, ...[7, 8, 9, 10, 11, 12].map(functionKey)],
+      [escape, fn, shift, ...[1, 2, 3, 4, 5, 6].map(functionKey)],
+      [tab, ctrl, alt, ...[7, 8, 9, 10, 11, 12].map(functionKey)],
     ],
   };
   const rows = computed(() => layouts[page.value]);
