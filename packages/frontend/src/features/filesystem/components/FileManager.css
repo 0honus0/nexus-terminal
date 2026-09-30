@@ -211,6 +211,7 @@
   padding-left: 0.5rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
   font-size: calc(0.75rem * max(0.85, var(--file-row-scale) * 0.5 + 0.5));
+  line-height: 1.5;
   vertical-align: middle;
 }
 .file-row-name {
@@ -236,8 +237,8 @@
 }
 .file-row-name-container,
 .file-row-parent-content {
-  min-height: 1rem;
-  line-height: 1rem;
+  min-height: 1.5em;
+  line-height: 1.5;
 }
 .file-row-icon {
   display: inline-flex;
@@ -250,12 +251,11 @@
 }
 .file-row-name-label {
   font-size: inherit;
-  line-height: 1rem;
+  line-height: 1.5;
 }
 .file-row-name-button {
   display: flex;
   align-items: center;
-  transform: translateY(-2px);
   background: transparent;
   border: none;
   outline: none;
