@@ -2,7 +2,7 @@
   import { onMounted, ref } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiEmptyState, UiSpinner } from '@/foundation/ui';
+  import { UiButton, UiEmptyState, UiManagementCard, UiSpinner } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { apiErrorMessage } from '@/client/http';
   import NotificationSettingForm from '../components/NotificationSettingForm.vue';
@@ -83,11 +83,7 @@
         :description="t('settings.notifications.noChannels')"
       />
       <div v-else-if="!loading && !error && items.length > 0" class="mt-4 grid gap-4">
-        <article
-          v-for="item in items"
-          :key="item.id"
-          class="ui-solid-item flex flex-col items-start justify-between gap-4 rounded-xl p-4 sm:flex-row"
-        >
+        <UiManagementCard v-for="item in items" :key="item.id">
           <div class="min-w-0 flex-grow">
             <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
               <strong class="min-w-0 break-words text-base font-semibold text-foreground">{{ item.name }}</strong>
@@ -111,23 +107,15 @@
                 : t('settings.notifications.noEventsEnabled')
             }}</small>
           </div>
-          <div class="flex w-full shrink-0 items-center justify-end space-x-3 sm:w-auto">
-            <button
-              type="button"
-              class="text-sm font-medium text-link hover:text-link-hover hover:underline"
-              @click="openEdit(item)"
-            >
+          <template #actions>
+            <UiButton type="button" appearance="soft" @click="openEdit(item)">
               <i class="fas fa-pencil-alt mr-1 text-xs" aria-hidden="true" />{{ t('common.edit') }}
-            </button>
-            <button
-              type="button"
-              class="text-sm font-medium text-error hover:opacity-80 hover:underline"
-              @click="remove(item)"
-            >
+            </UiButton>
+            <UiButton type="button" appearance="ghost" tone="danger" @click="remove(item)">
               <i class="fas fa-trash-alt mr-1 text-xs" aria-hidden="true" />{{ t('common.delete') }}
-            </button>
-          </div>
-        </article>
+            </UiButton>
+          </template>
+        </UiManagementCard>
       </div>
 
       <div v-if="formVisible" class="ui-form-surface mt-6 rounded-xl p-4 sm:p-6">

@@ -333,7 +333,7 @@
             <button
               v-if="group.connections.some((connection) => connection.type === 'SSH')"
               type="button"
-              class="ml-1 flex h-6 items-center justify-center rounded px-1 text-text-secondary opacity-0 transition-all duration-150 hover:bg-black/10 hover:text-primary group-hover:opacity-100 focus:opacity-100 focus:outline-none"
+              class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-black/10 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
               :title="t('workspaceConnectionList.connectAllSshInGroupMenu')"
               @click.stop="connectGroup(group.connections)"
             >
@@ -342,7 +342,7 @@
             <button
               v-if="group.tagId !== null"
               type="button"
-              class="ml-1 flex h-6 items-center justify-center rounded px-1 text-text-secondary opacity-0 transition-all duration-150 hover:bg-black/10 hover:text-primary group-hover:opacity-100 focus:opacity-100 focus:outline-none"
+              class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-black/10 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
               :title="t('workspaceConnectionList.manageTags.menuItem')"
               @click.stop="manageGroup(group.tagId)"
             >
@@ -351,7 +351,7 @@
             <button
               v-if="group.tagId !== null && group.connections.length"
               type="button"
-              class="ml-1 flex h-6 items-center justify-center rounded px-1 text-error/80 opacity-0 transition-all duration-150 hover:bg-error/10 hover:text-error group-hover:opacity-100 focus:opacity-100 focus:outline-none"
+              class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-error/80 transition-colors hover:bg-error/10 hover:text-error focus-visible:ring-2 focus-visible:ring-primary"
               :title="t('workspaceConnectionList.deleteAllConnectionsInGroupMenu')"
               @click.stop="deleteGroupConnections(group)"
             >
@@ -461,7 +461,10 @@
     margin-block: 0.375rem;
   }
   .workspace-connection-group:hover {
-    background: color-mix(in srgb, var(--card-bg-color) 78%, var(--app-bg-color));
+    background: color-mix(in srgb, var(--link-active-color) 20%, var(--app-bg-color));
+  }
+  .workspace-connection-group {
+    background: color-mix(in srgb, var(--link-active-color) 16%, var(--app-bg-color));
   }
   .workspace-connection-item:hover {
     background: color-mix(in srgb, var(--link-active-color) 9%, var(--app-bg-color));

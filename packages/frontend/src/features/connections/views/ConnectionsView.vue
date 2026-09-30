@@ -313,7 +313,7 @@
           </div>
         </header>
 
-        <div v-if="batch" class="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2">
+        <div v-if="batch" class="connection-batch-toolbar border-b border-border/60 px-4 py-3">
           <UiButton data-testid="batch-select-all" type="button" appearance="soft" density="compact" @click="selectAll">
             {{ t('connections.batchEdit.selectAll') }} ({{ selected.size }})
           </UiButton>
@@ -499,6 +499,33 @@
 </template>
 
 <style scoped>
+  .connection-batch-toolbar {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .connection-batch-toolbar :deep(.ui-button) {
+    grid-column: span 2;
+    min-width: 0;
+    min-height: 40px;
+    padding-inline: 6px;
+    white-space: normal;
+  }
+  .connection-batch-toolbar :deep(.ui-button:nth-last-child(-n + 2)) {
+    grid-column: span 3;
+  }
+  @media (min-width: 640px) {
+    .connection-batch-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .connection-batch-toolbar :deep(.ui-button:nth-child(4)) {
+      margin-left: auto;
+    }
+    .connection-batch-toolbar :deep(.ui-button) {
+      min-height: 28px;
+    }
+  }
   .connection-card {
     container-type: inline-size;
   }
