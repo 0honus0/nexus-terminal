@@ -501,9 +501,21 @@
                   <p class="truncate text-xs text-text-secondary">{{ t('dashboard.quickConnectHint') }}</p>
                 </div>
               </div>
-              <span class="shrink-0 text-xs text-text-secondary"
-                >{{ filtered.length }} / {{ connections.connections.value.length }}</span
-              >
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="text-xs text-text-secondary"
+                  >{{ filtered.length }} / {{ connections.connections.value.length }}</span
+                >
+                <RouterLink
+                  data-testid="dashboard-connections-link"
+                  to="/connections"
+                  :aria-label="t('dashboard.viewAllConnections')"
+                  :title="t('dashboard.viewAllConnections')"
+                  class="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium text-link transition-colors hover:bg-primary/10 hover:text-link-hover hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
+                >
+                  <span class="hidden sm:inline">{{ t('dashboard.viewAllConnections') }}</span>
+                  <i class="fas fa-arrow-right text-xs" aria-hidden="true"></i>
+                </RouterLink>
+              </div>
             </div>
           </header>
 
@@ -626,14 +638,6 @@
                 <template v-else>{{ t('dashboard.noConnections') }}</template>
               </div>
             </div>
-          </div>
-          <div class="shrink-0 border-t border-border/70 px-4 py-2.5 text-right">
-            <RouterLink
-              data-testid="dashboard-connections-link"
-              to="/connections"
-              class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
-              >{{ t('dashboard.viewAllConnections') }} →</RouterLink
-            >
           </div>
         </section>
 
