@@ -625,11 +625,16 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
         },
       )
       .toBe(0);
-    if (await sourceCard.isVisible()) {
-      await expect(sourceCard).toContainText(/Completed|Failed|Partially completed|Cancelled/);
-    } else {
-      await expect(modal.getByText('There are no hidden progress tasks.', { exact: true })).toBeVisible();
-    }
+    await expect
+      .poll(
+        async () => {
+          if (await modal.getByText('There are no hidden progress tasks.', { exact: true }).isVisible()) return true;
+          const rows = await sourceTasks.allTextContents();
+          return rows.length > 0 && rows.every((text) => /Completed|Failed|Partially completed|Cancelled/.test(text));
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
     await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
