@@ -20,13 +20,13 @@
   --glass-backdrop-filter: blur(28px) saturate(185%);
   --glass-control-filter: blur(16px) saturate(170%);
   /* Mixing in the theme border keeps edges visible when a light panel sits on a light page. */
-  --glass-border-color: color-mix(in srgb, var(--border-color) 65%, transparent);
+  --glass-border-color: color-mix(in srgb, var(--border-color) 45%, transparent);
   --glass-inset-highlight:
-    inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 18%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--glass-rim) 12%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 8%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--glass-rim) 4%, transparent);
   --glass-rim-shadow:
-    var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 14%, transparent),
-    inset -1px 0 0 color-mix(in srgb, var(--glass-rim) 8%, transparent);
+    var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 5%, transparent),
+    inset -1px 0 0 color-mix(in srgb, var(--glass-rim) 3%, transparent);
   --glass-sheen-image: linear-gradient(
     135deg,
     color-mix(in srgb, var(--glass-rim) 14%, transparent) 0%,
@@ -1448,7 +1448,7 @@
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
   border-color: var(--glass-border-color);
-  border-bottom-color: color-mix(in srgb, var(--border-color) 45%, transparent);
+  border-bottom-color: var(--glass-border-color);
   background-color: var(--glass-fill);
   -webkit-backdrop-filter: var(--glass-backdrop-filter);
   backdrop-filter: var(--glass-backdrop-filter);
@@ -1516,16 +1516,11 @@
   max-width: min(var(--reka-select-content-available-width, calc(100vw - 24px)), calc(100vw - 24px));
   overflow: hidden;
   padding: 4px;
-  border: 1px solid var(--glass-border-color);
   border-top-width: 0;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
   border-bottom-left-radius: var(--ui-control-radius);
   border-bottom-right-radius: var(--ui-control-radius);
-  background-color: var(--glass-fill);
-  -webkit-backdrop-filter: var(--glass-backdrop-filter);
-  backdrop-filter: var(--glass-backdrop-filter);
-  box-shadow: var(--glass-shadow);
   color: var(--ui-text);
   outline: none;
   overscroll-behavior: contain;
