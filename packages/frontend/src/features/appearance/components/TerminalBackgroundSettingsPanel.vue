@@ -1,7 +1,21 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiBadge, UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiSpinner, UiTextarea } from '@/foundation/ui';
+  import {
+    UiBadge,
+    UiButton,
+    UiCheckbox,
+    UiFormField,
+    UiInput,
+    UiModal,
+    UiSelect,
+    UiSlider,
+    UiSpinner,
+    UiSurface,
+    UiSwitch,
+    UiTextarea,
+  } from '@/foundation/ui';
+  import AppearancePresetToolbar from './AppearancePresetToolbar.vue';
   import { useFeedback } from '@/shared/feedback/public';
   import { appearanceApi } from '../api/appearanceApi';
   import type { LocalHtmlThemeDto, RemoteHtmlThemeDto } from '@nexus-terminal/protocol/appearance';
@@ -335,8 +349,7 @@
     }
   };
 
-  const toggleTerminalBackground = async (): Promise<void> => {
-    const enabled = !form.terminalBackgroundEnabled;
+  const toggleTerminalBackground = async (enabled: boolean): Promise<void> => {
     form.terminalBackgroundEnabled = enabled;
     try {
       await store.update({ terminalBackgroundEnabled: enabled });
@@ -366,13 +379,13 @@
 </script>
 
 <template>
-  <section class="space-y-8">
+  <section class="min-w-0 space-y-4">
     <template v-if="props.section === 'background'">
       <h3 class="mb-4 mt-0 border-b border-border pb-2 text-lg font-semibold text-foreground">
         {{ t('styleCustomizer.backgroundSettings') }}
       </h3>
 
-      <div class="space-y-3 rounded border border-border p-4">
+      <UiSurface surface="inset" class="space-y-3 p-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="min-w-0">
             <h4 class="m-0 text-base font-semibold text-foreground">{{ t('styleCustomizer.pageBackground') }}</h4>
@@ -402,30 +415,17 @@
           class="hidden"
           @change="uploadBackground('page', $event)"
         />
-      </div>
+      </UiSurface>
 
       <hr class="my-4 border-border md:my-8" />
 
       <div class="mb-3 flex items-center justify-between">
         <h4 class="m-0 text-base font-semibold text-foreground">{{ t('styleCustomizer.terminalBackground') }}</h4>
-        <button
-          type="button"
-          :class="[
-            'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-            form.terminalBackgroundEnabled ? 'bg-primary' : 'bg-gray-300',
-          ]"
-          role="switch"
-          :aria-checked="form.terminalBackgroundEnabled"
-          @click="toggleTerminalBackground"
-        >
-          <span
-            aria-hidden="true"
-            :class="[
-              'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-              form.terminalBackgroundEnabled ? 'translate-x-5' : 'translate-x-0',
-            ]"
-          ></span>
-        </button>
+        <UiSwitch
+          :model-value="form.terminalBackgroundEnabled"
+          :aria-label="t('styleCustomizer.terminalBackground')"
+          @update:model-value="toggleTerminalBackground"
+        />
       </div>
 
       <template v-if="form.terminalBackgroundEnabled">
@@ -476,13 +476,12 @@
             t('styleCustomizer.terminalBgOverlayOpacity')
           }}</label>
           <div class="flex items-center gap-3">
-            <input
-              v-model.number="form.terminalBackgroundOverlayOpacity"
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              class="w-full cursor-pointer accent-primary"
+            <UiSlider
+              v-model="form.terminalBackgroundOverlayOpacity"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              :aria-label="t('styleCustomizer.terminalBgOverlayOpacity')"
             />
             <span class="min-w-[3em] text-right text-sm text-foreground">{{
               form.terminalBackgroundOverlayOpacity.toFixed(2)
@@ -494,79 +493,57 @@
         <hr class="my-6 border-border" />
         <div class="mb-3 flex items-center gap-2">
           <h4 class="m-0 text-base font-semibold text-foreground">{{ t('styleCustomizer.htmlBackgroundThemes') }}</h4>
-          <button
-            type="button"
-            class="rounded p-1.5 text-xs text-foreground transition-colors duration-150 hover:bg-border"
+          <UiButton
+            density="compact"
+            appearance="ghost"
+            icon-only
             :title="t('common.restore')"
+            :aria-label="t('common.restore')"
             @click="clearCustomHtml"
           >
             <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
-          </button>
+          </UiButton>
         </div>
 
-        <div class="mb-4 flex border-b border-border">
-          <button
-            type="button"
-            :class="[
-              '-mb-px border-b-2 px-4 py-2 transition-colors duration-150',
-              htmlThemeTab === 'local'
-                ? 'border-primary font-semibold text-primary'
-                : 'border-transparent text-text-secondary hover:text-foreground',
+        <UiFormField :label="t('styleCustomizer.htmlBackgroundThemes')" class="mb-4">
+          <UiSelect
+            v-model="htmlThemeTab"
+            :aria-label="t('styleCustomizer.htmlBackgroundThemes')"
+            :options="[
+              { value: 'local', label: t('styleCustomizer.localThemes') },
+              { value: 'remote', label: t('styleCustomizer.remoteThemes') },
             ]"
-            @click="htmlThemeTab = 'local'"
-          >
-            {{ t('styleCustomizer.localThemes') }}
-          </button>
-          <button
-            type="button"
-            :class="[
-              '-mb-px border-b-2 px-4 py-2 transition-colors duration-150',
-              htmlThemeTab === 'remote'
-                ? 'border-primary font-semibold text-primary'
-                : 'border-transparent text-text-secondary hover:text-foreground',
-            ]"
-            @click="htmlThemeTab = 'remote'"
-          >
-            {{ t('styleCustomizer.remoteThemes') }}
-          </button>
-        </div>
+            match-trigger-width
+          />
+        </UiFormField>
 
         <div v-if="htmlThemeTab === 'local'">
-          <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <UiInput
-              v-model="localSearch"
-              class="min-w-0 flex-grow"
-              :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')"
-            />
+          <AppearancePresetToolbar
+            v-model="localSearch"
+            class="mb-4"
+            :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')"
+          >
             <UiButton density="compact" class="shrink-0" @click="openNewPreset">{{
               t('styleCustomizer.addNewTheme')
             }}</UiButton>
-          </div>
+          </AppearancePresetToolbar>
           <div v-if="loadingLocal" class="p-4 text-center text-text-secondary">{{ t('common.loading') }}</div>
           <ul
             v-else-if="filteredLocalThemes.length"
-            class="mt-4 max-h-[200px] list-none overflow-y-auto rounded border border-border bg-background p-0 md:max-h-[280px]"
+            class="m-0 max-h-[320px] list-none space-y-2 overflow-y-auto p-0.5"
           >
             <li
-              v-for="(theme, index) in filteredLocalThemes"
+              v-for="theme in filteredLocalThemes"
               :key="theme.name"
-              :class="[
-                'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 hover:bg-header md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
-                index < filteredLocalThemes.length - 1 ? 'border-b border-border' : '',
-              ]"
+              class="min-w-0 space-y-3 rounded-xl border border-border/60 bg-header/30 p-3 text-sm"
             >
               <div class="mb-2 flex min-w-0 items-center gap-2 md:mb-0">
                 <span class="truncate font-medium text-foreground" :title="theme.name">{{
                   theme.name.replace(/\.html$/i, '')
                 }}</span>
-                <span
-                  :class="[
-                    'rounded-full px-2 py-0.5 text-xs font-semibold',
-                    theme.type === 'preset' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800',
-                  ]"
-                >
+                <UiBadge>
                   {{ t(theme.type === 'preset' ? 'styleCustomizer.presetTag' : 'styleCustomizer.customTag') }}
-                </span>
+                </UiBadge>
               </div>
               <div class="flex flex-wrap justify-start gap-2 md:justify-end">
                 <UiButton density="compact" @click="applyLocalPreset(theme)">{{
@@ -606,22 +583,16 @@
               }}</UiButton>
             </div>
           </UiFormField>
-          <UiInput
+          <AppearancePresetToolbar
             v-model="remoteSearch"
             class="my-4"
             :placeholder="t('styleCustomizer.searchRemoteThemesPlaceholder')"
           />
-          <ul
-            v-if="filteredRemoteThemes.length"
-            class="mt-4 max-h-[200px] list-none overflow-y-auto rounded border border-border bg-background p-0 md:max-h-[280px]"
-          >
+          <ul v-if="filteredRemoteThemes.length" class="m-0 max-h-[320px] list-none space-y-2 overflow-y-auto p-0.5">
             <li
-              v-for="(theme, index) in filteredRemoteThemes"
+              v-for="theme in filteredRemoteThemes"
               :key="theme.name"
-              :class="[
-                'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 hover:bg-header md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
-                index < filteredRemoteThemes.length - 1 ? 'border-b border-border' : '',
-              ]"
+              class="min-w-0 space-y-3 rounded-xl border border-border/60 bg-header/30 p-3 text-sm"
             >
               <span class="mb-2 truncate font-medium text-foreground md:mb-0">{{
                 theme.name.replace(/\.html$/i, '')
@@ -670,23 +641,23 @@
 
     <template v-else>
       <div v-if="showPageBackground || showBackground" class="grid gap-4 md:grid-cols-2">
-        <div v-if="showPageBackground" class="space-y-2 rounded border border-border p-4">
+        <UiSurface v-if="showPageBackground" surface="inset" class="space-y-2 p-3">
           <h3 class="font-semibold">{{ t('styleCustomizer.pageBackground') }}</h3>
           <p class="break-all text-xs text-text-secondary">
             {{ store.settings.pageBackgroundImage || t('styleCustomizer.noBackground') }}
           </p>
-          <input type="file" accept="image/*" @change="uploadBackground('page', $event)" />
+          <UiInput type="file" accept="image/*" @change="uploadBackground('page', $event)" />
           <UiButton v-if="store.settings.pageBackgroundImage" density="compact" @click="removeBackground('page')">
             {{ t('styleCustomizer.removePageBg') }}
           </UiButton>
-        </div>
+        </UiSurface>
 
-        <div v-if="showBackground" class="space-y-2 rounded border border-border p-4">
+        <UiSurface v-if="showBackground" surface="inset" class="space-y-2 p-3">
           <h3 class="font-semibold">{{ t('styleCustomizer.terminalBackground') }}</h3>
           <p class="break-all text-xs text-text-secondary">
             {{ store.settings.terminalBackgroundImage || t('styleCustomizer.noBackground') }}
           </p>
-          <input type="file" accept="image/*" @change="uploadBackground('terminal', $event)" />
+          <UiInput type="file" accept="image/*" @change="uploadBackground('terminal', $event)" />
           <UiButton
             v-if="store.settings.terminalBackgroundImage"
             density="compact"
@@ -694,22 +665,21 @@
           >
             {{ t('styleCustomizer.removeTerminalBg') }}
           </UiButton>
-        </div>
+        </UiSurface>
       </div>
 
-      <div v-if="showBackground" class="space-y-4 rounded border border-border p-4">
+      <UiSurface v-if="showBackground" surface="inset" class="space-y-4 p-3">
         <label class="flex items-center gap-2">
           <UiCheckbox v-model="form.terminalBackgroundEnabled" />
           {{ t('styleCustomizer.terminalBackgroundEnabled') }}
         </label>
         <UiFormField :label="t('styleCustomizer.terminalBgOverlayOpacity')">
-          <input
-            v-model.number="form.terminalBackgroundOverlayOpacity"
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            class="w-full"
+          <UiSlider
+            v-model="form.terminalBackgroundOverlayOpacity"
+            :min="0"
+            :max="1"
+            :step="0.05"
+            :aria-label="t('styleCustomizer.terminalBgOverlayOpacity')"
           />
         </UiFormField>
         <UiFormField :label="t('styleCustomizer.presetContent')">
@@ -723,10 +693,10 @@
           <UiButton appearance="solid" tone="primary" @click="saveVisuals">{{ t('common.save') }}</UiButton>
           <UiButton @click="clearCustomHtml">{{ t('common.clear') }}</UiButton>
         </div>
-      </div>
+      </UiSurface>
 
       <div v-if="showTextEffects" class="grid gap-4 lg:grid-cols-2">
-        <div class="space-y-3 rounded border border-border p-4">
+        <UiSurface surface="inset" class="min-w-0 space-y-3 p-3">
           <h3 class="font-semibold">{{ t('styleCustomizer.textStrokeSettings') }}</h3>
           <label class="flex items-center gap-2">
             <UiCheckbox v-model="form.terminalTextStrokeEnabled" />
@@ -738,15 +708,15 @@
           <UiFormField :label="t('styleCustomizer.textStrokeColor')">
             <UiInput v-model="form.terminalTextStrokeColor" />
           </UiFormField>
-        </div>
+        </UiSurface>
 
-        <div class="space-y-3 rounded border border-border p-4">
+        <UiSurface surface="inset" class="min-w-0 space-y-3 p-3">
           <h3 class="font-semibold">{{ t('styleCustomizer.textShadowSettings') }}</h3>
           <label class="flex items-center gap-2">
             <UiCheckbox v-model="form.terminalTextShadowEnabled" />
             {{ t('styleCustomizer.enableTextShadow') }}
           </label>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid gap-2 sm:grid-cols-3">
             <UiFormField :label="t('styleCustomizer.textShadowOffsetX')">
               <UiInput v-model="form.terminalTextShadowOffsetX" type="number" />
             </UiFormField>
@@ -760,21 +730,24 @@
           <UiFormField :label="t('styleCustomizer.textShadowColor')">
             <UiInput v-model="form.terminalTextShadowColor" />
           </UiFormField>
-        </div>
+        </UiSurface>
       </div>
       <UiButton v-if="showTextEffects" appearance="solid" tone="primary" @click="saveVisuals">{{
         t('common.save')
       }}</UiButton>
 
       <div v-if="showBackground" class="grid gap-6 xl:grid-cols-2">
-        <div class="space-y-3 rounded border border-border p-4">
+        <UiSurface surface="inset" class="min-w-0 space-y-3 p-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="font-semibold">{{ t('styleCustomizer.localThemes') }}</h3>
             <UiButton density="compact" appearance="solid" tone="primary" @click="openNewPreset">{{
               t('styleCustomizer.newLocalPreset')
             }}</UiButton>
           </div>
-          <UiInput v-model="localSearch" :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')" />
+          <AppearancePresetToolbar
+            v-model="localSearch"
+            :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')"
+          />
           <UiSpinner v-if="loadingLocal" />
           <ul v-else class="divide-y divide-border">
             <li v-for="theme in filteredLocalThemes" :key="theme.name" class="flex items-center gap-2 py-2">
@@ -806,9 +779,9 @@
               }}
             </li>
           </ul>
-        </div>
+        </UiSurface>
 
-        <div class="space-y-3 rounded border border-border p-4">
+        <UiSurface surface="inset" class="min-w-0 space-y-3 p-3">
           <h3 class="font-semibold">{{ t('styleCustomizer.remoteThemes') }}</h3>
           <UiFormField :label="t('styleCustomizer.remoteHtmlPresetsRepositoryUrl')">
             <UiInput v-model="remoteRepositoryUrl" :placeholder="t('styleCustomizer.remoteRepoUrlPlaceholder')" />
@@ -819,7 +792,10 @@
             }}</UiButton>
             <UiButton density="compact" @click="loadRemoteThemes">{{ t('styleCustomizer.loadRemoteThemes') }}</UiButton>
           </div>
-          <UiInput v-model="remoteSearch" :placeholder="t('styleCustomizer.searchRemoteThemesPlaceholder')" />
+          <AppearancePresetToolbar
+            v-model="remoteSearch"
+            :placeholder="t('styleCustomizer.searchRemoteThemesPlaceholder')"
+          />
           <UiSpinner v-if="loadingRemote" />
           <ul v-else class="divide-y divide-border">
             <li v-for="theme in filteredRemoteThemes" :key="theme.name" class="flex items-center gap-2 py-2">
@@ -836,7 +812,7 @@
               }}
             </li>
           </ul>
-        </div>
+        </UiSurface>
       </div>
 
       <UiModal

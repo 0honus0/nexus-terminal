@@ -71,6 +71,7 @@
     "emptyContainer": "空のコンテナー"
   },
   "commandInputBar": {
+    "desktopPlaceholder": "コマンド",
     "placeholder": "ここにコマンドを入力して Enter キーを押すと、ターミナルに送信されます...",
     "searchPlaceholder": "ターミナル内で検索...",
     "openSearch": "ターミナル検索を開く",

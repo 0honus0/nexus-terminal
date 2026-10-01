@@ -564,8 +564,10 @@
     min-width: 0;
   }
   .quick-commands-controls {
-    justify-content: center;
-    gap: clamp(0.2rem, 1.25cqi, 0.5rem);
+    justify-content: space-between;
+    flex-wrap: wrap;
+    column-gap: 0.5rem;
+    row-gap: 0.25rem;
   }
   .quick-commands-controls,
   .quick-command-list-area,
@@ -625,7 +627,7 @@
   @container quick-commands-pane (max-width: 140px) {
     .quick-commands-controls {
       flex-wrap: wrap;
-      justify-content: center;
+      justify-content: space-between;
     }
     .quick-commands-search {
       flex: 1 1 100%;
@@ -638,13 +640,18 @@
   }
   .quick-control {
     display: flex;
-    width: clamp(1.6rem, 8.5cqi, 1.875rem);
-    height: clamp(1.6rem, 8.5cqi, 1.875rem);
-    flex: 0 0 clamp(1.6rem, 8.5cqi, 1.875rem);
+    width: 1.625rem;
+    height: 1.625rem;
+    min-width: 1.625rem;
+    min-height: 1.625rem;
+    flex: 0 0 1.625rem;
+    padding: 0;
+    margin: 0;
     align-items: center;
     justify-content: center;
     border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-    border-radius: 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--card-bg-color, var(--app-bg-color));
     color: var(--text-color-secondary);
     transition:
       background-color 0.15s ease,
@@ -653,24 +660,23 @@
     cursor: pointer;
   }
   .quick-control i {
-    font-size: clamp(0.72rem, 3.5cqi, 0.825rem);
+    font-size: 0.75rem;
+    line-height: 1;
   }
   .quick-control:hover {
-    background: var(--header-bg-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--header-bg-color));
     color: var(--text-color);
     border-color: var(--border-color);
   }
   .quick-control--primary {
-    border-color: transparent;
-    background: var(--link-active-color);
-    color: white;
+    color: var(--text-color-secondary);
   }
   .quick-control--primary i {
     color: currentColor !important;
   }
   .quick-control--primary:hover {
-    background: var(--button-hover-bg-color);
-    color: white;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--header-bg-color));
+    color: var(--text-color);
   }
   .context-item {
     display: flex;

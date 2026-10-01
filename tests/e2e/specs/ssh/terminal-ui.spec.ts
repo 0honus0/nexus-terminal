@@ -11,6 +11,103 @@ import {
 import { step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
 
+test('focus configurator records distinct shortcuts and contains narrow viewport content', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await page.getByRole('button', { name: 'Configure Focus Switcher', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Configure Focus Switcher', exact: true });
+  const command = dialog.getByRole('textbox', { name: 'Command Input', exact: true });
+  await command.press('Alt+J');
+  await expect(command).toHaveValue('Alt+J');
+  const search = dialog.getByRole('textbox', { name: 'Terminal Search', exact: true });
+  await search.press('Alt+7');
+  await expect(search).toHaveValue('Alt+7');
+  await command.press('Backspace');
+  await expect(command).toHaveValue('');
+  for (const width of [1280, 640, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect
+      .poll(() =>
+        dialog.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.left >= 0 && rect.right <= innerWidth && element.scrollWidth <= element.clientWidth;
+        }),
+      )
+      .toBe(true);
+    const section = dialog.locator('section').last();
+    expect(await section.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  }
+});
+
+test('desktop command bar keeps editing space in narrow panes without changing Enter submission', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const bar = page.locator('.command-bar-root--desktop');
+  const input = bar.locator('.command-bar-command-input');
+  for (const width of [720, 480, 280, 180]) {
+    await bar.evaluate((element, size) => {
+      element.style.width = `${size}px`;
+      element.style.height = '100px';
+      element.style.maxWidth = '100%';
+    }, width);
+    await expect
+      .poll(() => input.evaluate((element) => element.getBoundingClientRect().width))
+      .toBeGreaterThan(width < 481 ? width - 30 : 100);
+    expect(await bar.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    for (const button of await bar.getByRole('button').all()) {
+      const bounds = await button.boundingBox();
+      const rootBounds = await bar.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(rootBounds!.x);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(rootBounds!.x + rootBounds!.width + 1);
+    }
+  }
+  for (const width of [720, 480, 272, 180]) {
+    await bar.evaluate((element, size) => {
+      element.style.width = `${size}px`;
+      element.style.height = '34px';
+    }, width);
+    await expect.poll(() => input.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(20);
+    const geometry = await bar.evaluate((element) => {
+      const root = element.getBoundingClientRect();
+      const input = element.querySelector('input')!.getBoundingClientRect();
+      const tools = element.querySelector('.desktop-command-controls')!;
+      return {
+        top: input.top - root.top,
+        bottom: root.bottom - input.bottom,
+        overflow: element.scrollHeight - element.clientHeight,
+        toolHeight: tools.getBoundingClientRect().height,
+      };
+    });
+    expect(geometry.top).toBeGreaterThanOrEqual(0);
+    expect(geometry.bottom).toBeGreaterThanOrEqual(0);
+    expect(geometry.overflow).toBeLessThanOrEqual(1);
+    expect(geometry.toolHeight).toBe(26);
+    const tools = bar.locator('.desktop-command-controls');
+    expect(await tools.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    for (const button of await tools.getByRole('button').all()) {
+      const bounds = await button.boundingBox();
+      const root = await bar.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(root!.x);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(root!.x + root!.width + 1);
+    }
+    await expect(tools.getByRole('button').last()).toBeInViewport();
+  }
+  await input.fill("printf 'DESKTOP_COMMAND_LAYOUT_OK\\n'");
+  await input.press('Enter');
+  await expect(page.locator('.terminal-inner-container')).toContainText('DESKTOP_COMMAND_LAYOUT_OK');
+  await expect(input).toHaveValue('');
+});
+
 async function holdFirstTwoTerminalFontWrites(page: Page): Promise<{
   firstStarted: Promise<void>;
   secondStarted: Promise<void>;

@@ -16,7 +16,8 @@
       "fileManagerPathInput": "ファイルマネージャーパス入力"
     },
     "confirmClose": "未保存の変更があります。閉じてもよろしいですか？",
-    "shortcutPlaceholder": "例：Alt + K",
+    "shortcutPlaceholder": "未設定・キーで登録",
+    "shortcutHint": "入力欄で Alt + 英字または数字を押すと直接移動するショートカットを設定できます。Backspace または Delete で解除します。",
     "shortcutSettings": "ショートカット設定",
     "noInputsAvailable": "設定可能な入力項目はありません",
     "altSwitchHint": "ヒント：Alt キーを押すと、設定された入力ソース間でフォーカスを素早く切り替えることができます。"

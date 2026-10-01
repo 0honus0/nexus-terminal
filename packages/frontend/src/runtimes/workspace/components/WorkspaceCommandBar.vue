@@ -252,7 +252,7 @@
   <form
     ref="root"
     class="command-bar-root flex w-full items-center overflow-hidden bg-background"
-    :class="mobile ? 'command-bar-root--mobile h-auto min-h-[2.35rem]' : 'h-full min-h-0'"
+    :class="mobile ? 'command-bar-root--mobile h-auto min-h-[2.35rem]' : 'command-bar-root--desktop h-full min-h-0'"
     @submit.prevent="submit"
   >
     <div
@@ -263,7 +263,15 @@
         v-model="activeInput"
         :data-focus-id="terminalSearchOpen ? 'terminalSearch' : 'commandInput'"
         type="text"
-        :placeholder="t(terminalSearchOpen ? 'commandInputBar.searchPlaceholder' : 'commandInputBar.placeholder')"
+        :placeholder="
+          t(
+            terminalSearchOpen
+              ? 'commandInputBar.searchPlaceholder'
+              : mobile
+                ? 'commandInputBar.placeholder'
+                : 'commandInputBar.desktopPlaceholder',
+          )
+        "
         :disabled="!ready && !terminalSearchOpen"
         :aria-disabled="!ready && !terminalSearchOpen"
         class="command-bar-input command-bar-command-input h-[1.85rem] min-h-[1.85rem] min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition-all duration-300 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -275,7 +283,7 @@
 
       <div
         class="flex items-center gap-[0.3rem]"
-        :class="mobile ? 'mobile-command-controls min-w-0 flex-1 overflow-x-auto' : 'min-w-max shrink-0'"
+        :class="mobile ? 'mobile-command-controls min-w-0 flex-1 overflow-x-auto' : 'desktop-command-controls'"
       >
         <button
           type="button"
@@ -583,6 +591,106 @@
 
   .command-bar-command-input:focus {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--link-active-color) 18%, transparent);
+  }
+
+  /* Desktop adapts to its pane, including narrow split layouts, not the viewport. */
+  .command-bar-root--desktop .command-bar-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    min-height: 100%;
+    padding: 0.375rem 0.5rem;
+    gap: 0.375rem;
+    flex-shrink: 0;
+  }
+
+  .command-bar-root--desktop {
+    align-items: flex-start;
+    flex-shrink: 0;
+  }
+
+  .command-bar-root--desktop .command-bar-input {
+    width: 100%;
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+    padding-inline: 0.75rem;
+    border-radius: 0.5rem;
+    box-shadow: none;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .command-bar-root--desktop .command-bar-button {
+    width: 1.625rem;
+    height: 1.625rem;
+    min-width: 1.625rem;
+    min-height: 1.625rem;
+    flex-basis: 1.625rem;
+    padding: 0;
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    border-radius: 0.375rem;
+    background: var(--card-bg-color, var(--app-bg-color));
+  }
+
+  .command-bar-root--desktop .command-bar-button i {
+    font-size: 0.75rem;
+  }
+
+  .command-bar-root--desktop .command-bar-button:hover:not(:disabled) {
+    border-color: var(--border-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--header-bg-color));
+    color: var(--text-color);
+  }
+
+  .desktop-command-controls {
+    grid-column: -2;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, 1.625rem);
+    column-gap: 0.5rem;
+    row-gap: 0.25rem;
+    width: 100%;
+    justify-content: space-between;
+    padding-left: 0.375rem;
+  }
+
+  @container command-bar-pane (max-width: 480px) {
+    .command-bar-root--desktop .command-bar-inner {
+      grid-template-columns: minmax(0, 1fr);
+      align-content: center;
+    }
+
+    .command-bar-root--desktop .desktop-command-controls {
+      grid-column: 1 / -1;
+      justify-content: space-between;
+      padding-left: 0;
+      border-left: none;
+    }
+  }
+
+  @container command-bar-pane (max-height: 64px) {
+    .command-bar-root--desktop .command-bar-inner {
+      grid-template-columns: minmax(0, 1fr) max-content;
+      align-content: center;
+      min-height: 100%;
+      padding-block: 0;
+    }
+
+    .command-bar-root--desktop .desktop-command-controls {
+      grid-column: 2;
+      display: flex;
+      flex-wrap: nowrap;
+      justify-content: space-between;
+      overflow: visible;
+      padding-left: 0;
+    }
+
+    .desktop-command-controls::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   @container command-bar-pane (max-height: 52px) {

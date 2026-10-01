@@ -117,14 +117,15 @@
     :visible="visible"
     :title="t('focusSwitcher.configTitle')"
     :z-index="70"
-    panel-class="w-[min(900px,95vw)] max-h-[90dvh]"
+    panel-class="max-h-[90dvh]"
+    :panel-style="{ width: 'min(900px, 95vw)', maxWidth: '95vw' }"
     content-class="!py-0"
     @close="attemptClose"
   >
-    <div class="flex min-h-0 flex-col gap-6 overflow-y-auto py-6">
+    <div class="flex min-h-0 min-w-0 flex-col gap-4 py-4">
       <p class="text-sm italic text-text-secondary">{{ t('focusSwitcher.altSwitchHint') }}</p>
 
-      <div class="flex min-h-[300px] gap-6">
+      <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
         <section
           class="flex min-w-0 flex-1 flex-col overflow-y-auto rounded border border-border bg-input p-4"
           @dragover.prevent
@@ -206,20 +207,22 @@
         </section>
       </div>
 
-      <section class="max-h-64 overflow-y-auto rounded border border-border bg-input p-4">
+      <section class="min-w-0 rounded border border-border bg-input p-4">
         <h3 class="mb-4 border-b border-border pb-2 text-base font-semibold text-text-secondary">
           {{ t('focusSwitcher.shortcutSettings') }}
         </h3>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+        <p class="mb-3 text-sm text-text-secondary">{{ t('focusSwitcher.shortcutHint') }}</p>
+        <div class="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-3">
           <div
             v-for="id in workspaceFocusTargets"
             :key="id"
-            class="flex items-center justify-between gap-3 rounded border border-border/50 bg-input p-2"
+            class="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded border border-border/50 bg-input p-2"
           >
             <span class="min-w-0 flex-1 truncate text-sm">{{ t(`focusSwitcher.input.${id}`) }}</span>
             <UiInput
               :model-value="shortcut(id)"
-              class="w-28 shrink-0 text-center text-xs italic"
+              class="!w-36 max-w-full shrink-0 text-center text-xs"
+              :aria-label="t(`focusSwitcher.input.${id}`)"
               readonly
               :placeholder="t('focusSwitcher.shortcutPlaceholder')"
               @keydown.prevent="captureShortcut($event, id)"

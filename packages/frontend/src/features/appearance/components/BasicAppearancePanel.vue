@@ -165,7 +165,13 @@
       <div class="grid gap-4 md:grid-cols-2">
         <UiFormField :label="t('settings.appearance.windowThemeColor.label')">
           <div class="flex gap-2">
-            <input v-model="form.windowThemeColor" type="color" class="h-10 w-14" />
+            <UiInput
+              v-model="form.windowThemeColor"
+              type="color"
+              class="shrink-0"
+              style="width: 3.5rem"
+              :aria-label="t('settings.appearance.windowThemeColor.label')"
+            />
             <UiInput v-model="form.windowThemeColor" />
           </div>
         </UiFormField>
@@ -240,41 +246,20 @@
       </div>
       <p class="mb-3 text-sm leading-relaxed text-text-secondary">{{ t('styleCustomizer.uiDescription') }}</p>
 
-      <div
-        v-for="(value, key) in uiTheme"
-        :key="key"
-        class="mb-3 grid grid-cols-1 items-start gap-x-3 gap-y-1 md:grid-cols-[auto_1fr] md:items-center"
-      >
-        <label
-          :for="`ui-${key}`"
-          class="mb-1 block w-full overflow-hidden text-ellipsis text-left text-sm font-medium text-foreground md:mb-0"
-        >
-          {{ formatLabel(String(key)) }}:
-        </label>
-        <div class="flex w-full items-center gap-2">
-          <input
-            v-if="isColorValue(value)"
-            :id="`ui-${key}`"
-            v-model="uiTheme[key]"
-            type="color"
-            class="h-[34px] min-w-[40px] max-w-[50px] shrink-0 rounded border border-border p-0.5 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-          <input
-            v-if="isColorValue(value)"
-            :value="uiTheme[key]"
-            type="text"
-            class="h-[34px] min-w-[80px] flex-grow cursor-text rounded border border-border bg-background px-[0.7rem] py-1.5 text-sm text-foreground transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            @focus="selectInputText"
-            @input="uiTheme[key] = ($event.target as HTMLInputElement).value"
-          />
-          <input
-            v-else
-            :id="`ui-${key}`"
-            v-model="uiTheme[key]"
-            type="text"
-            class="h-[34px] w-full rounded border border-border bg-background px-[0.7rem] py-1.5 text-sm text-foreground transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
+      <div class="grid min-w-0 gap-3 sm:grid-cols-2">
+        <UiFormField v-for="(value, key) in uiTheme" :key="key" :label="formatLabel(String(key))">
+          <div class="flex min-w-0 items-center gap-2">
+            <UiInput
+              v-if="isColorValue(value)"
+              v-model="uiTheme[key]"
+              type="color"
+              class="shrink-0"
+              style="width: 3rem"
+              :aria-label="formatLabel(String(key))"
+            />
+            <UiInput :id="`ui-${key}`" v-model="uiTheme[key]" class="min-w-0 flex-1" @focus="selectInputText" />
+          </div>
+        </UiFormField>
       </div>
 
       <hr class="my-8 border-border" />

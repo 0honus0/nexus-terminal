@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-  import { UiButton } from '@/foundation/ui';
+  import { UiButton, UiSurface } from '@/foundation/ui';
   import { useI18n } from 'vue-i18n';
   import BasicAppearancePanel from './BasicAppearancePanel.vue';
   import TerminalBackgroundSettingsPanel from './TerminalBackgroundSettingsPanel.vue';
@@ -10,6 +10,12 @@
   const emit = defineEmits<{ close: [] }>();
   const { t } = useI18n();
   const activeTab = ref<'ui' | 'terminal' | 'background' | 'other'>('ui');
+  const tabs = [
+    { id: 'ui', label: 'styleCustomizer.uiStyles' },
+    { id: 'terminal', label: 'styleCustomizer.terminalStyles' },
+    { id: 'background', label: 'styleCustomizer.backgroundSettings' },
+    { id: 'other', label: 'styleCustomizer.otherSettings' },
+  ] as const;
   const root = ref<HTMLElement | null>(null);
   const dialog = ref<HTMLElement | null>(null);
   const uiPanel = ref<InstanceType<typeof BasicAppearancePanel> | null>(null);
@@ -80,6 +86,7 @@
     <div
       v-if="props.visible"
       ref="root"
+      data-ui="overlay"
       class="fixed inset-0 z-[1000] flex items-center justify-center"
       @click.self="emit('close')"
     >
@@ -92,80 +99,42 @@
           @mousedown="startDrag"
         >
           <h2 class="m-0 text-lg text-foreground md:text-xl">{{ t('styleCustomizer.title') }}</h2>
-          <button
-            type="button"
-            class="cursor-pointer rounded border-none bg-transparent px-2 py-1 text-2xl leading-none text-text-secondary hover:bg-black/10 hover:text-foreground md:text-3xl"
-            :aria-label="t('common.close')"
-            @click="emit('close')"
-          >
+          <UiButton appearance="ghost" icon-only :aria-label="t('common.close')" @click="emit('close')">
             &times;
-          </button>
+          </UiButton>
         </header>
 
         <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
           <nav
-            class="flex w-full shrink-0 flex-row flex-wrap justify-center overflow-y-auto border-b border-border bg-header p-2 md:w-[180px] md:flex-col md:flex-nowrap md:justify-start md:border-b-0 md:border-r md:p-4"
+            class="flex w-full shrink-0 flex-row flex-wrap justify-center gap-1.5 overflow-y-auto border-b border-border bg-header p-2 md:w-[128px] md:flex-col md:flex-nowrap md:justify-start md:border-b-0 md:border-r md:py-3"
             :aria-label="t('settings.appearance.title')"
           >
-            <button
-              type="button"
-              :class="[
-                'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
-                activeTab === 'ui'
-                  ? 'border-border/60 bg-header/80 font-semibold text-foreground shadow-2xs backdrop-blur-md'
-                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground font-medium',
-              ]"
-              @click="activeTab = 'ui'"
+            <UiButton
+              v-for="tab in tabs"
+              :key="tab.id"
+              density="compact"
+              :appearance="activeTab === tab.id ? 'soft' : 'ghost'"
+              :tone="activeTab === tab.id ? 'primary' : 'neutral'"
+              :aria-pressed="activeTab === tab.id"
+              class="md:w-full"
+              @click="activeTab = tab.id"
+              >{{ t(tab.label) }}</UiButton
             >
-              {{ t('styleCustomizer.uiStyles') }}
-            </button>
-            <button
-              type="button"
-              :class="[
-                'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
-                activeTab === 'terminal'
-                  ? 'border-border/60 bg-header/80 font-semibold text-foreground shadow-2xs backdrop-blur-md'
-                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground font-medium',
-              ]"
-              @click="activeTab = 'terminal'"
-            >
-              {{ t('styleCustomizer.terminalStyles') }}
-            </button>
-            <button
-              type="button"
-              :class="[
-                'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
-                activeTab === 'background'
-                  ? 'border-border/60 bg-header/80 font-semibold text-foreground shadow-2xs backdrop-blur-md'
-                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground font-medium',
-              ]"
-              @click="activeTab = 'background'"
-            >
-              {{ t('styleCustomizer.backgroundSettings') }}
-            </button>
-            <button
-              type="button"
-              :class="[
-                'mx-1 mb-0 block w-auto cursor-pointer rounded-lg border px-3 py-2 text-center text-xs transition-all duration-150 ease-out md:mx-0 md:mb-2 md:w-full md:py-[0.65rem] md:text-left',
-                activeTab === 'other'
-                  ? 'border-border/60 bg-header/80 font-semibold text-foreground shadow-2xs backdrop-blur-md'
-                  : 'border-transparent text-text-secondary hover:bg-header/40 hover:text-foreground font-medium',
-              ]"
-              @click="activeTab = 'other'"
-            >
-              {{ t('styleCustomizer.otherSettings') }}
-            </button>
           </nav>
 
-          <main class="min-h-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4">
-            <BasicAppearancePanel v-if="activeTab === 'ui'" ref="uiPanel" section="ui" :show-ui-actions="false" />
-            <div v-else-if="activeTab === 'terminal'" class="space-y-8">
-              <BasicAppearancePanel section="terminal" />
-              <TerminalBackgroundSettingsPanel section="text-effects" />
-              <TerminalThemeSettingsPanel />
+          <main class="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4">
+            <UiSurface v-if="activeTab === 'ui'" class="min-w-0 p-4"
+              ><BasicAppearancePanel ref="uiPanel" section="ui" :show-ui-actions="false"
+            /></UiSurface>
+            <div v-else-if="activeTab === 'terminal'" class="min-w-0 space-y-4">
+              <UiSurface class="min-w-0 p-4"><BasicAppearancePanel section="terminal" /></UiSurface>
+              <UiSurface class="min-w-0 p-4"><TerminalBackgroundSettingsPanel section="text-effects" /></UiSurface>
+              <UiSurface class="min-w-0 p-4"><TerminalThemeSettingsPanel /></UiSurface>
             </div>
-            <TerminalBackgroundSettingsPanel v-else-if="activeTab === 'background'" section="background" />
-            <BasicAppearancePanel v-else section="other" />
+            <UiSurface v-else-if="activeTab === 'background'" class="min-w-0 p-4"
+              ><TerminalBackgroundSettingsPanel section="background"
+            /></UiSurface>
+            <UiSurface v-else class="min-w-0 p-4"><BasicAppearancePanel section="other" /></UiSurface>
           </main>
         </div>
 

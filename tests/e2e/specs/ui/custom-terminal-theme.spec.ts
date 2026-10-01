@@ -29,8 +29,41 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
     await page.getByTitle('Customize Style').click();
     const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
     await expect(customizer).toBeVisible();
+    for (const width of [1280, 640, 360]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const name of ['UI Styles', 'Terminal Styles', 'Background', 'Other Settings']) {
+        await customizer.getByRole('button', { name, exact: true }).click();
+        const main = customizer.locator('main');
+        await expect
+          .poll(() => main.evaluate((element) => element.scrollWidth - element.clientWidth))
+          .toBeLessThanOrEqual(1);
+        await expect(
+          customizer.locator(
+            'button:not([data-ui="button"]):not([data-ui="checkbox"]):not([data-ui="switch"]):not([role="combobox"])',
+          ),
+        ).toHaveCount(0);
+        await expect(main.locator('input:not([type="file"]):not([data-no-highlight])')).toHaveCount(0);
+      }
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
     await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
     await expect(customizer.getByRole('button', { name: 'New Theme', exact: true })).toBeVisible();
+    const themePanel = customizer.locator('[data-terminal-theme-panel]');
+    await expect(themePanel.locator('[data-ui="select"]')).toHaveCount(1);
+    await expect(themePanel.getByPlaceholder('Search theme name...', { exact: true }).locator('..')).toHaveAttribute(
+      'data-ui-gen',
+      '2',
+    );
+    for (const width of [1280, 640, 360]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect
+        .poll(() => customizer.evaluate((element) => element.scrollWidth - element.clientWidth))
+        .toBeLessThanOrEqual(1);
+      await expect
+        .poll(() => themePanel.evaluate((element) => element.scrollWidth - element.clientWidth))
+        .toBeLessThanOrEqual(1);
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
 
     await step('create a custom terminal theme from the visual editor', async () => {
       await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
@@ -113,8 +146,10 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
       const appearanceSave = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
-      await row.getByRole('button', { name: 'Apply', exact: true }).click();
+      await themePanel.getByRole('combobox').click();
+      await page.getByRole('option', { name: EDITED_THEME_NAME, exact: true }).click();
       expect((await appearanceSave).ok()).toBeTruthy();
+      await expect(row.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
 
       await expect
         .poll(async () => {

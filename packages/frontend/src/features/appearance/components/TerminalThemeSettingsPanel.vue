@@ -1,12 +1,13 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiFormField, UiInput, UiTextarea } from '@/foundation/ui';
+  import { UiButton, UiFormField, UiInput, UiSelect, UiSurface, UiTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { appearanceApi } from '../api/appearanceApi';
   import type { TerminalThemeDto } from '@nexus-terminal/protocol/appearance';
   import { formatThemeObject, parseThemeObject } from '../model/themeEditor';
   import { useAppearanceStore } from '../store/appearance.store';
+  import AppearancePresetToolbar from './AppearancePresetToolbar.vue';
 
   const { t } = useI18n();
   const feedback = useFeedback();
@@ -29,6 +30,14 @@
     () => store.themes.find((theme) => theme.id === store.settings.activeTerminalThemeId) ?? null,
   );
   const sortedThemes = computed(() => [...store.themes].sort((left, right) => left.name.localeCompare(right.name)));
+  const themeOptions = computed(() => [
+    { value: null, label: t('styleCustomizer.defaultTheme') },
+    ...sortedThemes.value.map((theme) => ({ value: theme.id, label: theme.name })),
+  ]);
+  const selectTheme = (value: string | number | null): void => {
+    if (value === null || typeof value === 'number') void applyTheme(value);
+  };
+  const swatchKeys = ['background', 'foreground', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan'];
   const filteredThemes = computed(() => {
     const query = search.value.trim().toLowerCase();
     return query ? sortedThemes.value.filter((theme) => theme.name.toLowerCase().includes(query)) : sortedThemes.value;
@@ -173,93 +182,88 @@
 </script>
 
 <template>
-  <section>
+  <section class="min-w-0 space-y-4" data-terminal-theme-panel>
     <template v-if="!editorVisible">
-      <h4 class="mb-2 mt-6 text-base font-semibold text-foreground">
+      <h4 class="m-0 text-base font-semibold text-foreground">
         {{ t('styleCustomizer.terminalThemeSelection') }}
       </h4>
 
-      <div
-        class="mb-4 flex flex-col items-start gap-1 py-2 text-sm md:flex-row md:items-center md:gap-3 md:text-[0.95rem]"
-      >
-        <span class="text-text-secondary">{{ t('styleCustomizer.activeTheme') }}:</span>
-        <strong class="font-semibold text-foreground">
-          {{ activeTheme?.name || t('styleCustomizer.defaultTheme') }}
-        </strong>
-      </div>
+      <UiSurface surface="inset" class="space-y-3 p-3">
+        <UiFormField :label="t('styleCustomizer.activeTheme')">
+          <UiSelect
+            :model-value="store.settings.activeTerminalThemeId ?? null"
+            :options="themeOptions"
+            :aria-label="t('styleCustomizer.activeTheme')"
+            match-trigger-width
+            @update:model-value="selectTheme"
+          />
+        </UiFormField>
+        <div class="flex flex-wrap items-center gap-2">
+          <UiButton density="compact" appearance="solid" tone="primary" @click="openCreate">{{
+            t('styleCustomizer.addNewTheme')
+          }}</UiButton>
+          <UiButton density="compact" @click="importInput?.click()">{{ t('styleCustomizer.importTheme') }}</UiButton>
+          <UiButton density="compact" :disabled="!activeTheme" @click="exportActive">{{
+            t('styleCustomizer.exportActiveTheme')
+          }}</UiButton>
+          <input ref="importInput" class="hidden" type="file" accept="application/json,.json" @change="importTheme" />
+        </div>
+      </UiSurface>
 
-      <div class="mb-6 mt-4 flex flex-wrap items-center gap-2 border-b border-dashed border-border pb-4">
-        <UiButton density="compact" @click="openCreate">{{ t('styleCustomizer.addNewTheme') }}</UiButton>
-        <UiButton density="compact" @click="importInput?.click()">{{ t('styleCustomizer.importTheme') }}</UiButton>
-        <UiButton density="compact" :disabled="!activeTheme" @click="exportActive">{{
-          t('styleCustomizer.exportActiveTheme')
-        }}</UiButton>
-        <input ref="importInput" class="hidden" type="file" accept="application/json,.json" @change="importTheme" />
-      </div>
+      <AppearancePresetToolbar v-model="search" :placeholder="t('styleCustomizer.searchThemePlaceholder')" />
 
-      <div class="mb-4">
-        <UiInput v-model="search" :placeholder="t('styleCustomizer.searchThemePlaceholder')" />
-      </div>
-
-      <ul
-        class="mt-4 max-h-[200px] list-none overflow-y-auto rounded border border-border bg-background p-0 md:max-h-[280px]"
-      >
+      <ul class="m-0 max-h-[320px] list-none space-y-2 overflow-y-auto p-0.5">
         <li v-if="filteredThemes.length === 0" class="p-4 text-center italic text-text-secondary">
           {{ t('styleCustomizer.noThemesFound') }}
         </li>
         <li
-          v-for="(theme, index) in filteredThemes"
+          v-for="theme in filteredThemes"
           v-else
           :key="theme.id"
           :class="[
-            'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 ease-in-out md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
-            index < filteredThemes.length - 1 ? 'border-b border-border' : '',
-            theme.id === store.settings.activeTerminalThemeId ? 'bg-button text-button-text' : 'hover:bg-header',
+            'min-w-0 rounded-xl border p-3 text-sm transition-colors',
+            theme.id === store.settings.activeTerminalThemeId
+              ? 'border-primary/50 bg-primary/5'
+              : 'border-border/60 bg-header/30 hover:bg-header/60',
           ]"
         >
-          <span
-            class="mb-2 block overflow-hidden text-ellipsis whitespace-nowrap md:mb-0"
-            :class="
-              theme.id === store.settings.activeTerminalThemeId ? 'font-bold text-button-text' : 'text-foreground'
-            "
-            :title="theme.name"
-          >
-            {{ theme.name }}
-          </span>
-          <div class="flex flex-wrap justify-start gap-2 md:justify-end">
-            <button
-              type="button"
-              :disabled="theme.id === store.settings.activeTerminalThemeId"
-              :class="[
-                'whitespace-nowrap rounded border px-3 py-1.5 text-xs transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-60 md:text-sm',
-                theme.id === store.settings.activeTerminalThemeId
-                  ? 'border-white/30 bg-white/10 text-button-text disabled:cursor-default disabled:border-transparent disabled:bg-transparent disabled:opacity-50'
-                  : 'border-border bg-header text-foreground hover:border-text-secondary hover:bg-border',
-              ]"
-              @click="applyTheme(theme.id)"
-            >
-              {{ t('styleCustomizer.applyButton') }}
-            </button>
-            <button
-              type="button"
-              :class="[
-                'whitespace-nowrap rounded border px-3 py-1.5 text-xs transition-colors duration-200 ease-in-out md:text-sm',
-                theme.id === store.settings.activeTerminalThemeId
-                  ? 'border-white/30 bg-white/10 text-button-text hover:border-white/50 hover:bg-white/20'
-                  : 'border-border bg-header text-foreground hover:border-text-secondary hover:bg-border',
-              ]"
-              @click="openEdit(theme)"
-            >
-              {{ theme.preset ? t('styleCustomizer.editAsCopy') : t('common.edit') }}
-            </button>
-            <button
-              v-if="!theme.preset"
-              type="button"
-              class="whitespace-nowrap rounded border border-error/30 bg-error/10 px-3 py-1.5 text-xs text-error transition-colors duration-200 ease-in-out hover:bg-error/20 md:text-sm"
-              @click="removeTheme(theme)"
-            >
-              {{ t('common.delete') }}
-            </button>
+          <div class="mb-3 flex min-w-0 items-center gap-2">
+            <i
+              v-if="theme.id === store.settings.activeTerminalThemeId"
+              class="fa-solid fa-circle-check shrink-0 text-primary"
+              :title="t('styleCustomizer.activeTheme')"
+              aria-hidden="true"
+            ></i>
+            <span class="min-w-0 flex-1 truncate font-medium text-foreground" :title="theme.name">
+              {{ theme.name }}
+            </span>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex shrink-0 gap-1" aria-hidden="true">
+              <span
+                v-for="key in swatchKeys"
+                :key="key"
+                class="h-4 w-4 rounded border border-border/50"
+                :style="{ backgroundColor: theme.themeData[key] ?? 'transparent' }"
+                :title="key"
+              ></span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <UiButton
+                density="compact"
+                tone="primary"
+                :disabled="theme.id === store.settings.activeTerminalThemeId"
+                @click="applyTheme(theme.id)"
+              >
+                {{ t('styleCustomizer.applyButton') }}
+              </UiButton>
+              <UiButton density="compact" @click="openEdit(theme)">
+                {{ theme.preset ? t('styleCustomizer.editAsCopy') : t('common.edit') }}
+              </UiButton>
+              <UiButton v-if="!theme.preset" density="compact" tone="danger" @click="removeTheme(theme)">
+                {{ t('common.delete') }}
+              </UiButton>
+            </div>
           </div>
         </li>
       </ul>
@@ -270,34 +274,28 @@
         {{ editingTheme ? t('styleCustomizer.editThemeTitle') : t('styleCustomizer.newThemeTitle') }}
       </h3>
 
-      <div class="mb-2 grid grid-cols-1 items-start gap-2 md:grid-cols-[auto_1fr] md:items-center">
-        <label class="block w-full overflow-hidden text-ellipsis text-left text-sm font-medium text-foreground md:mb-0">
-          {{ t('styleCustomizer.themeName') }}:
-        </label>
+      <UiFormField :label="t('styleCustomizer.themeName')">
         <UiInput v-model="themeName" />
-      </div>
+      </UiFormField>
 
       <hr class="my-4 border-border md:my-8" />
       <h4 class="mb-2 mt-6 text-base font-semibold text-foreground">
         {{ t('styleCustomizer.terminalThemeColorEditorTitle') }}
       </h4>
-      <div
-        v-for="key in themeFields"
-        :key="key"
-        class="mb-2 grid grid-cols-1 items-start gap-2 md:grid-cols-[auto_1fr] md:items-center"
-      >
-        <label class="block w-full overflow-hidden text-ellipsis text-left text-sm font-medium text-foreground">
-          {{ labelForThemeField(key) }}:
-        </label>
-        <div class="flex w-full items-center gap-2">
-          <input
-            v-if="themeDraft[key]?.startsWith('#')"
-            v-model="themeDraft[key]"
-            type="color"
-            class="h-[34px] min-w-[40px] max-w-[50px] shrink-0 rounded border border-border p-0.5"
-          />
-          <UiInput v-model="themeDraft[key]" class="min-w-[80px] flex-1" />
-        </div>
+      <div class="grid min-w-0 gap-3 sm:grid-cols-2">
+        <UiFormField v-for="key in themeFields" :key="key" :label="labelForThemeField(key)">
+          <div class="flex min-w-0 items-center gap-2">
+            <UiInput
+              v-if="themeDraft[key]?.startsWith('#')"
+              v-model="themeDraft[key]"
+              type="color"
+              class="shrink-0"
+              style="width: 3rem"
+              :aria-label="labelForThemeField(key)"
+            />
+            <UiInput v-model="themeDraft[key]" class="min-w-0 flex-1" />
+          </div>
+        </UiFormField>
       </div>
 
       <hr class="my-4 border-border md:my-8" />

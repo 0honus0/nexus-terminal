@@ -16,7 +16,8 @@
       "fileManagerPathInput": "File Manager Path Input"
     },
     "confirmClose": "You have unsaved changes. Are you sure you want to close?",
-    "shortcutPlaceholder": "e.g., Alt+K",
+    "shortcutPlaceholder": "Unset; press shortcut",
+    "shortcutHint": "Focus a field and press Alt + a letter or digit to assign a direct focus shortcut. Backspace or Delete clears it.",
     "shortcutSettings": "Shortcut Settings",
     "noInputsAvailable": "No configurable inputs available",
     "altSwitchHint": "Hint: Press the Alt key to quickly switch focus between configured input sources."

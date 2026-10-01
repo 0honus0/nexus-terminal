@@ -71,6 +71,7 @@
     "emptyContainer": "Empty container"
   },
   "commandInputBar": {
+    "desktopPlaceholder": "Command",
     "placeholder": "Enter command and press Enter to send...",
     "searchPlaceholder": "Search in terminal...",
     "openSearch": "Open terminal search",
