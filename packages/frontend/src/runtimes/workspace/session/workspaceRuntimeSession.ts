@@ -206,6 +206,7 @@ export class WorkspaceRuntimeSession {
         phase,
         reconnectAttempt,
         hasViewport: Boolean(this.lastViewport),
+        viewport: this.lastViewport,
       },
       'Workspace connection attempt started',
     );
@@ -237,6 +238,7 @@ export class WorkspaceRuntimeSession {
           phase,
           reconnectAttempt,
           elapsedMs: Math.round(performance.now() - startedAt),
+          viewport: this.adapters.terminalViewport(),
         },
         'Workspace connection attempt succeeded',
       );

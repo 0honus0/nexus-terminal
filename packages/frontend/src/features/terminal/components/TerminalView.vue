@@ -121,6 +121,8 @@
   });
   let lastColumns = 0;
   let lastRows = 0;
+  let geometryFrame: number | undefined;
+  let forceGeometrySync = false;
   const revealBackgroundWhenSized = () => {
     const element = root.value;
     if (!props.active || !element || element.clientWidth <= 0 || element.clientHeight <= 0) return;
@@ -148,17 +150,34 @@
     // that point collapses its viewport to a tiny fallback size; FitAddon clears the renderer
     // before resizing, so restoring the tab later exposes a visible redraw/blank strip. Keep the
     // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
-    if (element.clientWidth <= 0 || element.clientHeight <= 0) return;
+    if (!props.active || document.visibilityState === 'hidden' || element.clientWidth <= 0 || element.clientHeight <= 0)
+      return;
+    const dimensions = fit.proposeDimensions();
+    if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
     revealBackgroundWhenSized();
     fit.fit();
     if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
     if (element.scrollLeft !== 0) element.scrollLeft = 0;
-    if (terminal.cols !== lastColumns || terminal.rows !== lastRows) {
+    if (forceGeometrySync || terminal.cols !== lastColumns || terminal.rows !== lastRows) {
+      forceGeometrySync = false;
       lastColumns = terminal.cols;
       lastRows = terminal.rows;
       void props.channel.resize({ columns: terminal.cols, rows: terminal.rows });
     }
     if (device.isMobile.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
+  };
+  // Browser wakeups and transport recovery need a fresh post-layout measurement even when
+  // the container size did not change. Coalesce them rather than retaining a stale PTY size.
+  const scheduleGeometrySync = () => {
+    forceGeometrySync = true;
+    if (geometryFrame !== undefined) return;
+    geometryFrame = window.requestAnimationFrame(() => {
+      geometryFrame = undefined;
+      fitAndResize();
+    });
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') scheduleGeometrySync();
   };
   const openSearch = () => {
     searchOpen.value = true;
@@ -1067,7 +1086,7 @@
     () => props.active,
     (active) => {
       if (!active) backgroundReady.value = false;
-      else fitAndResize();
+      else scheduleGeometrySync();
       if (active && pendingOutput.length) flushPendingOutput();
     },
     { flush: 'post' },
@@ -1272,6 +1291,7 @@
         void props.channel.sendInput(data);
       }).dispose,
       props.channel.onOutput(handleTerminalOutput),
+      props.channel.onConnected?.(scheduleGeometrySync) ?? (() => undefined),
       props.channel.onResumeComplete?.(() => flushPendingOutput(true)) ?? (() => undefined),
       props.channel.onClose((reason) => {
         prepareForTransportReset();
@@ -1305,6 +1325,13 @@
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
     resizeObserver = new ResizeObserver(fitAndResize);
     resizeObserver.observe(root.value!);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', scheduleGeometrySync);
+    window.addEventListener('focus', scheduleGeometrySync);
+    document.fonts.addEventListener('loadingdone', scheduleGeometrySync);
+    void document.fonts.ready.then(() => {
+      if (terminal && root.value?.isConnected) scheduleGeometrySync();
+    });
     emit('ready');
   });
 
@@ -1345,6 +1372,11 @@
       root.value.removeEventListener('mouseup', recordClipboardGesture, true);
     }
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('pageshow', scheduleGeometrySync);
+    window.removeEventListener('focus', scheduleGeometrySync);
+    document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
+    if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
     clearMobileLongPressTimer();
     if (mobileSelectionSyncFrame !== null) {
       window.cancelAnimationFrame(mobileSelectionSyncFrame);

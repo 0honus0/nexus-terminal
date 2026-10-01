@@ -41,6 +41,7 @@ import { WorkspaceSocket } from '../protocol/workspaceSocket';
 interface WorkspaceTerminalGate {
   canSend(): boolean;
   rememberResize(viewport: WorkspaceTerminalViewportDto): void;
+  onConnected(handler: () => void): () => void;
 }
 
 export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceTerminalGate): TerminalChannel => {
@@ -87,6 +88,7 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       for (const output of buffered.splice(0)) handler(output);
       return () => outputHandlers.delete(handler);
     },
+    onConnected: (handler) => gate?.onConnected(handler) ?? (() => undefined),
     onResumeComplete(handler) {
       resumeCompleteHandlers.add(handler);
       if (resumeCompletePending) {
@@ -991,12 +993,17 @@ export const createWorkspaceCapabilityAdapters = (
 ): WorkspaceCapabilityAdapters => {
   let workspaceBound = false;
   let lastTerminalViewport: WorkspaceTerminalViewportDto | undefined;
+  const connectedHandlers = new Set<() => void>();
   const filesystem = createFilesystemChannel(socket);
   const transfers = createTransferChannel(socket, workspaceId);
   const terminal = createTerminalChannel(socket, {
     canSend: () => workspaceBound && socket.connected,
     rememberResize: (viewport) => {
       lastTerminalViewport = { ...viewport };
+    },
+    onConnected: (handler) => {
+      connectedHandlers.add(handler);
+      return () => connectedHandlers.delete(handler);
     },
   });
   return {
@@ -1017,6 +1024,7 @@ export const createWorkspaceCapabilityAdapters = (
       // the same rows/columns. Reapply the latest fitted viewport so the remote PTY cannot fall
       // back to its 80x24 default merely because no local ResizeObserver event fired.
       if (lastTerminalViewport) await terminal.resize(lastTerminalViewport);
+      for (const handler of connectedHandlers) handler();
       void transfers.workspaceConnected().catch(() => undefined);
     },
     workspaceDisconnected() {
@@ -1026,6 +1034,7 @@ export const createWorkspaceCapabilityAdapters = (
     dispose() {
       workspaceBound = false;
       lastTerminalViewport = undefined;
+      connectedHandlers.clear();
       transfers.dispose();
     },
   };

@@ -11,6 +11,7 @@ export interface TerminalChannel {
   onOutput(handler: (output: TerminalOutput) => void): () => void;
   onClose(handler: (reason?: string) => void): () => void;
   onError(handler: (message: string) => void): () => void;
+  onConnected?(handler: () => void): () => void;
   onResumeComplete?(handler: () => void): () => void;
   completeResume?(): void;
   setPreviousOutputAvailable?(available: boolean): void;

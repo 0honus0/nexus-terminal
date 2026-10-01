@@ -290,9 +290,41 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
     });
 
     const fittedViewport = { ...latestTerminalViewport! };
+    const fittedGeometry = await xtermGeometry(terminal);
     const initialResizeCount = terminalResizeViewports.length;
     const initialConnectRequestCount = workspaceConnectRequests;
     const initialConnectedCount = workspaceConnectResponses;
+
+    await step('background geometry is preserved and waking up remeasures without a container resize', async () => {
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      // A positive but smaller background layout must not overwrite the cached PTY size.
+      await terminal.evaluate((element) => {
+        element.style.width = '160px';
+        element.style.height = '80px';
+      });
+      await page.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+      );
+      expect(latestTerminalViewport).toEqual(fittedViewport);
+      await terminal.evaluate((element) => {
+        element.style.removeProperty('width');
+        element.style.removeProperty('height');
+      });
+      await page.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+      );
+      const beforeWake = terminalResizeViewports.length;
+      await page.evaluate(() => {
+        Reflect.deleteProperty(document, 'visibilityState');
+        document.dispatchEvent(new Event('visibilitychange'));
+        window.dispatchEvent(new Event('pageshow'));
+      });
+      await expect.poll(() => terminalResizeViewports.length).toBeGreaterThan(beforeWake);
+      expect(latestTerminalViewport).toEqual(fittedViewport);
+    });
 
     await step('terminal application modes are active before the SSH outage', async () => {
       await commandInput.fill("printf '\\033[?1049h\\033[?1000h\\033[?1006h\\033[?2004h'");
@@ -334,6 +366,8 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
       await expect.poll(() => terminalResizeViewports.length).toBeGreaterThan(initialResizeCount);
       expect(terminalResizeViewports.at(-1)).toEqual(fittedViewport);
       await expect(terminal.locator('.xterm')).not.toHaveClass(/enable-mouse-events/);
+
+      await expect.poll(() => xtermGeometry(terminal)).toEqual(fittedGeometry);
 
       await xtermInput.focus();
       await page.keyboard.press('ControlOrMeta+C');

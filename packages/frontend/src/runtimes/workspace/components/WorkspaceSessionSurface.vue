@@ -233,6 +233,7 @@
     onOutput: (handler) => runtimeTerminalChannel.onOutput(handler),
     onClose: (handler) => runtimeTerminalChannel.onClose(handler),
     onError: (handler) => runtimeTerminalChannel.onError(handler),
+    onConnected: (handler) => runtimeTerminalChannel.onConnected?.(handler) ?? (() => undefined),
     onResumeComplete: (handler) => runtimeTerminalChannel.onResumeComplete?.(handler) ?? (() => undefined),
     completeResume: () => runtimeTerminalChannel.completeResume?.(),
     // This wrapper changes input presentation only. Preserve the optional suspended-output
