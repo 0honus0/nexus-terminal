@@ -1,5 +1,6 @@
 {
   "terminal": {
+    "inputRejected": "Terminal input was not sent: the connection is unavailable, the input is too large, or the send buffer is full. Rejected input is not retried automatically.",
     "search": {
       "open": "Search terminal",
       "placeholder": "Search terminal...",

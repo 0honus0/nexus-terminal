@@ -15,6 +15,10 @@ type ProtocolMessage = ProtocolResponse | ProtocolEvent;
 
 type EventHandler<T = unknown> = (payload: T) => void;
 type BinaryHandler = (data: Uint8Array) => void;
+const MAX_SEND_BUFFER_BYTES = 1024 * 1024;
+const MAX_HISTORY_RESPONSE_BYTES = 1024 * 1024;
+const MAX_FILE_RESPONSE_BYTES = 128 * 1024 * 1024;
+const messageEncoder = new TextEncoder();
 
 const isProtocolRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -429,7 +433,10 @@ export class WorkspaceSocket {
 
   private sendJson(value: unknown): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) throw new Error('Workspace WebSocket is not open.');
-    this.socket.send(JSON.stringify(value));
+    const message = JSON.stringify(value);
+    if (this.socket.bufferedAmount + messageEncoder.encode(message).byteLength > MAX_SEND_BUFFER_BYTES)
+      throw new Error('Workspace send buffer limit exceeded.');
+    this.socket.send(message);
   }
 
   private handleMessage(raw: unknown): void {
@@ -531,6 +538,15 @@ export class WorkspaceSocket {
     const pending = this.pending.get(frame.requestId);
     if (!pending || !pending.expectBinary) return;
     if (frame.data.byteLength) {
+      const maxBytes =
+        pending.operation === 'suspend.history.previous' ? MAX_HISTORY_RESPONSE_BYTES : MAX_FILE_RESPONSE_BYTES;
+      if (pending.binaryBytes + frame.data.byteLength > maxBytes) {
+        this.pending.delete(frame.requestId);
+        window.clearTimeout(pending.timer);
+        pending.binaryChunks.length = 0;
+        pending.reject(new Error('Workspace binary response limit exceeded.'));
+        return;
+      }
       const copy = frame.data.slice();
       pending.binaryChunks.push(copy);
       pending.binaryBytes += copy.byteLength;

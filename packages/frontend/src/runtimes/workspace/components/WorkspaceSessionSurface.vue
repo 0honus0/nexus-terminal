@@ -209,9 +209,16 @@
   const mobilePane = ref<WorkspacePaneNameDto>('terminal');
   const mobileModifiers = createStickyTerminalModifiers();
   const runtimeTerminalChannel = props.session.adapters.terminal;
+  const stopInputErrorFeedback = runtimeTerminalChannel.onError((message) => {
+    if (message === 'TERMINAL_INPUT_REJECTED') feedback.notifyError(t('terminal.inputRejected'));
+  });
+  onBeforeUnmount(stopInputErrorFeedback);
   const presentationTerminalChannel: TerminalChannel = {
     sendInput(data) {
-      if (props.session.state.value !== 'connected') return;
+      if (props.session.state.value !== 'connected') {
+        feedback.notifyError(t('terminal.inputRejected'));
+        return;
+      }
       let next = data;
       if (props.mobile) {
         const modified = applyTerminalModifiers(data, mobileModifiers.active.value);

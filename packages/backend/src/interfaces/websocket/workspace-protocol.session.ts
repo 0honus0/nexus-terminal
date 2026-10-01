@@ -1284,7 +1284,6 @@ export class WorkspaceProtocolSession {
       case 'terminal-output':
         this.terminalTransport.enqueue(event.data);
         return;
-      case 'terminal-input-ack':
       case 'terminal-resize':
         return;
       case 'terminal-closed':

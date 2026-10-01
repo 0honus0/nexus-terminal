@@ -108,6 +108,8 @@ Workspace Runtime 组合长生命周期的交互会话，包括 SSH terminal、�
 
 每个 Workspace session 持有自己的 transport、controllers 和 presentation state。Registry 持有 session 顺序、激活状态和生命周期。Feature 通过 adapter/capability 接入 Runtime，不读取 Runtime 私有目录。
 
+WorkspaceSocket 在发送前限制浏览器发送缓冲，并按请求限制二进制响应累计大小；Terminal adapter 将输入拒绝和服务端输入错误转交 channel 的错误消费者，不自动重放被拒绝的输入。网络背压由 Backend transport 持有；当前恢复 offset 记录浏览器已接收字节，并非 xterm 已解析字节，不能以断开连接并丢弃待解析数据替代解析侧消费窗口。
+
 ### `app/`
 
 App 是 composition root，负责：

@@ -9,7 +9,6 @@ const MAX_QUEUED_INPUT_BYTES = 1024 * 1024;
 const MAX_RECONNECT_JOURNAL_BYTES = 8 * 1024 * 1024;
 interface InputItem {
   data: string;
-  sequence?: number;
   bytes: number;
 }
 interface TerminalState {
@@ -29,7 +28,7 @@ interface TerminalState {
   terminalOffset: number;
 }
 
-/** Owns shell byte flow/backpressure. WebSocket framing and terminal output ACKs stay in Interfaces. */
+/** Owns shell byte flow/backpressure. WebSocket framing stays in Interfaces. */
 export class WorkspaceTerminalService {
   private readonly states = new Map<string, TerminalState>();
   constructor(
@@ -80,12 +79,10 @@ export class WorkspaceTerminalService {
       } catch {}
     this.states.delete(sessionId);
   }
-  writeInput(sessionId: string, data: string, sequence?: number): void {
+  writeInput(sessionId: string, data: string): void {
     if (typeof data !== 'string') throw new Error('SSH input must be a string.');
     const bytes = Buffer.byteLength(data, 'utf8');
     if (bytes > MAX_INPUT_BYTES) throw new Error(`SSH input exceeds ${MAX_INPUT_BYTES} bytes.`);
-    if (sequence !== undefined && (!Number.isInteger(sequence) || sequence < 0 || sequence > 0xffffffff))
-      throw new Error('Invalid SSH input sequence.');
     const state = this.requireState(sessionId);
     if (state.queuedBytes + bytes > MAX_QUEUED_INPUT_BYTES) {
       logger.warn(
@@ -100,7 +97,7 @@ export class WorkspaceTerminalService {
       throw new Error('SSH input queue limit exceeded.');
     }
     this.integration.noteUserInput(sessionId);
-    state.queue.push({ data, sequence, bytes });
+    state.queue.push({ data, bytes });
     state.queuedBytes += bytes;
     runtimePerformanceMetrics.recordTerminalInputQueued(bytes, state.queuedBytes);
     this.drain(sessionId, state);
@@ -134,13 +131,13 @@ export class WorkspaceTerminalService {
     const state = this.requireState(sessionId);
     if (state.reconnectPaused) return;
     state.reconnectPaused = true;
-    this.sessions.require(sessionId).shell.pause();
+    this.reconcilePause(sessionId, state);
   }
   resumeAfterReconnect(sessionId: string): void {
     const state = this.requireState(sessionId);
     if (!state.reconnectPaused) return;
     state.reconnectPaused = false;
-    if (!state.consumerBackpressure) this.sessions.require(sessionId).shell.resume();
+    this.reconcilePause(sessionId, state);
   }
   replayFrom(sessionId: string, offset: number): Buffer {
     const state = this.requireState(sessionId);
@@ -156,8 +153,11 @@ export class WorkspaceTerminalService {
     const state = this.requireState(sessionId);
     if (state.consumerBackpressure === active) return;
     state.consumerBackpressure = active;
+    this.reconcilePause(sessionId, state);
+  }
+  private reconcilePause(sessionId: string, state: TerminalState): void {
     const shell = this.sessions.require(sessionId).shell;
-    if (active) shell.pause();
+    if (state.consumerBackpressure || state.reconnectPaused) shell.pause();
     else shell.resume();
   }
   private requireState(id: string) {
@@ -172,8 +172,6 @@ export class WorkspaceTerminalService {
       const item = state.queue[state.queueHead++]!;
       state.queuedBytes -= item.bytes;
       const accepted = shell.write(item.data);
-      if (item.sequence !== undefined)
-        this.events.publish(id, { type: 'terminal-input-ack', sequence: item.sequence, bytes: item.bytes });
       if (!accepted) {
         runtimePerformanceMetrics.recordTerminalInputDrainPause();
         state.waitingForDrain = true;

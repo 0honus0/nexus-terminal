@@ -1,5 +1,6 @@
 {
   "terminal": {
+    "inputRejected": "终端输入未发送：连接不可用、输入过大或发送缓冲已满。被拒绝的输入不会自动重发。",
     "search": {
       "open": "搜索终端",
       "placeholder": "搜索终端...",

@@ -162,17 +162,20 @@ export const createAgentWorkspaceTerminalChannel = (input: {
   return {
     sendInput: (data: string) => {
       if (closed) return;
-      if (ready && socket?.readyState === WebSocket.OPEN) {
-        socket.send(new TextEncoder().encode(data));
-        return;
-      }
-      const bytes = new TextEncoder().encode(data).byteLength;
-      if (pendingBytes + bytes > MAX_PENDING_BYTES) {
+      const bytes = new TextEncoder().encode(data);
+      if (
+        bytes.byteLength > 256 * 1024 ||
+        (socket?.bufferedAmount ?? 0) + pendingBytes + bytes.byteLength > MAX_PENDING_BYTES
+      ) {
         emitError('WORKSPACE_TERMINAL_INPUT_QUEUE_FULL');
         return;
       }
+      if (ready && socket?.readyState === WebSocket.OPEN) {
+        socket.send(bytes);
+        return;
+      }
       pendingInput.push(data);
-      pendingBytes += bytes;
+      pendingBytes += bytes.byteLength;
     },
     resize: (nextViewport: WorkspaceTerminalViewportDto) => {
       viewport = { ...nextViewport };

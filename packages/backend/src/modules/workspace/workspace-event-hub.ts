@@ -9,7 +9,6 @@ const MAX_RETAINED_OPERATION_EVENTS = 256;
 export type WorkspaceEvent =
   | { type: 'terminal-output'; data: Uint8Array; stderr?: boolean }
   | { type: 'terminal-resize'; columns: number; rows: number }
-  | { type: 'terminal-input-ack'; sequence: number; bytes: number }
   | { type: 'terminal-closed' }
   | { type: 'terminal-error'; message: string }
   | { type: 'directory-change-queued'; requestId: string; path: string; waitingForPrompt: boolean }

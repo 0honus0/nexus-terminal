@@ -523,6 +523,31 @@ test('large terminal scrollback follows rapid scrollbar drags back to the newest
   ).toBeLessThanOrEqual(3);
 });
 
+test('terminal rejects oversized pasted input and remains usable', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const terminal = page.locator('[data-font-size]');
+  const sentInput: string[] = [];
+  // Observe the already-open transport through the browser's network domain.
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  cdp.on('Network.webSocketFrameSent', ({ response }) => {
+    if (response.opcode === 1 && response.payloadData.includes('terminal.input')) sentInput.push(response.payloadData);
+  });
+  await page.evaluate(() => navigator.clipboard.writeText('界'.repeat(90_000)));
+  await terminal.locator('textarea').focus();
+  await page.keyboard.press('Control+Shift+V');
+  await expect(page.getByText(/终端输入未发送|Terminal input was not sent/).first()).toBeVisible();
+  expect(sentInput).toHaveLength(0);
+  await page.evaluate(() => navigator.clipboard.writeText("printf 'INPUT_AFTER_REJECTION_OK\\n'\r"));
+  await page.keyboard.press('Control+Shift+V');
+  await expect.poll(() => terminal.locator('.xterm-rows').innerText()).toContain('INPUT_AFTER_REJECTION_OK');
+  await cdp.detach();
+});
+
 test('desktop terminal right-click copies a selection then pastes when no selection remains', async ({
   page,
   context,

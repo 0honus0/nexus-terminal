@@ -45,6 +45,13 @@ interface WorkspaceTerminalGate {
 
 export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceTerminalGate): TerminalChannel => {
   const outputHandlers = new Set<(output: TerminalOutput) => void>();
+  const inputErrorHandlers = new Set<(message: string) => void>();
+  const notifyInputError = (): void => {
+    for (const handler of inputErrorHandlers) handler('TERMINAL_INPUT_REJECTED');
+  };
+  socket.on('protocol.error', ({ operation }) => {
+    if (operation === 'terminal.input') notifyInputError();
+  });
   const buffered: Uint8Array[] = [];
   let bufferedBytes = 0;
   let previousOutputAvailable = false;
@@ -68,8 +75,11 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
 
   return {
     sendInput: (data) => {
-      if (gate && !gate.canSend()) return;
-      socket.sendConnected('terminal.input', { data });
+      if ((gate && !gate.canSend()) || new TextEncoder().encode(data).byteLength > 256 * 1024) {
+        notifyInputError();
+        return;
+      }
+      if (!socket.sendConnected('terminal.input', { data })) notifyInputError();
     },
     resize: (viewport: WorkspaceTerminalViewportDto) => {
       gate?.rememberResize(viewport);
@@ -106,9 +116,11 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       };
     },
     onError(handler) {
+      inputErrorHandlers.add(handler);
       const stopTransport = socket.onError(handler);
       const stopTerminal = socket.on('terminal.error', (payload) => handler(payload.message));
       return () => {
+        inputErrorHandlers.delete(handler);
         stopTransport();
         stopTerminal();
       };
