@@ -6,6 +6,8 @@ Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end
 
 Terminal pointer tests use locator clicks so layout changes and viewport scrolling cannot redirect clicks outside the terminal. OSC 52 clipboard tests start an independent SSH session: the pipe-based SSH fixture does not provide PTY signal semantics for stopping a preceding foreground command with Ctrl+C. Status detail assertions target the shared tooltip panel and live accessible metric label, not native title attributes.
 
+OSC 52 tests type ASCII-only shell commands and decode the Unicode heading from Base64 on the test server. Playwright's non-ASCII text insertion is not a physical key event and can interact with xterm's retained helper-textarea paste value; it must not be used to construct these shell commands. The clipboard assertion still compares the complete Unicode text and all 2000 lines.
+
 The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, eight duration-balanced Playwright shards on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
 ## Structure

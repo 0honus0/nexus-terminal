@@ -662,8 +662,12 @@ test('application clipboard writes use OSC 52 without interpreting application s
   const rows = terminal.locator('.xterm-rows');
   const text = `通用终端复制\n${Array.from({ length: 2000 }, (_, index) => index + 1).join('\n')}`;
   const input = terminal.locator('.xterm-helper-textarea');
+  // Playwright inserts non-ASCII characters through input events rather than key
+  // events. xterm's helper textarea is not a normal text input and may retain a
+  // prior paste value. Keep the shell command ASCII while testing Unicode output.
+  const heading = Buffer.from('通用终端复制\n').toString('base64');
   await input.pressSequentially(
-    "printf '\\033]52;c;'; { printf '通用终端复制\\n'; seq 1 2000; } | base64 -w0; printf '\\007'",
+    `printf '\\033]52;c;'; { printf '${heading}' | base64 -d; seq 1 2000; } | base64 -w0; printf '\\007'`,
     { delay: 0 },
   );
   await input.press('Enter');
