@@ -23,14 +23,9 @@ export const preloadAuthenticatedRoutes = (): void => {
   if (connection?.saveData || connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') return;
   authenticatedPreloadScheduled = true;
   const preload = async () => {
-    for (const loader of [
-      loadConnectionsView,
-      loadSettings,
-      loadWorkspaceView,
-      loadNotificationsView,
-      loadProxiesView,
-      loadAuditLogView,
-    ]) {
+    // Warm the common connection/terminal path only. Settings and administrative
+    // pages stay lazy instead of competing with the current page's requests.
+    for (const loader of [loadConnectionsView, loadWorkspaceView]) {
       await loader().catch(() => undefined);
     }
   };

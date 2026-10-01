@@ -108,14 +108,14 @@
       class="auth-login-panel ui-glass-panel flex min-h-[440px] w-full max-w-4xl overflow-hidden rounded-2xl sm:min-h-[480px]"
     >
       <section class="auth-brand-pane hidden w-2/5 flex-col items-center justify-center p-10 text-white md:flex">
-        <img src="@/assets/logo.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
+        <img src="@/assets/logo-small.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
         <h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>
         <p class="text-center text-base opacity-80">{{ t('slogan') }}</p>
       </section>
 
       <section class="flex w-full flex-col justify-center p-8 sm:p-12 md:w-3/5">
         <div class="mb-6 flex justify-center md:hidden">
-          <img src="@/assets/logo.png" :alt="t('projectName')" class="h-16 w-auto" />
+          <img src="@/assets/logo-small.png" :alt="t('projectName')" class="h-16 w-auto" />
         </div>
 
         <h2 class="mb-6 text-center text-2xl font-semibold text-foreground">{{ t('auth.login.title') }}</h2>

@@ -122,6 +122,12 @@ test('invalid password login stays anonymous and surfaces the real form error', 
   await page.goto('/login');
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole('banner')).toHaveCount(0);
+
+  const logo = page.locator('img[src*="logo-small"]').first();
+  await expect(logo).toBeVisible();
+  const logoResponse = await context.request.get((await logo.getAttribute('src'))!);
+  expect(logoResponse.ok()).toBeTruthy();
+  expect((await logoResponse.body()).length).toBeLessThan(50_000);
   await page.locator('#username').fill(E2E_ADMIN.username);
   await page.locator('#password').fill('Definitely-Wrong-E2E-Password!');
 

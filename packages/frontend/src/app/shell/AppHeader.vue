@@ -68,7 +68,7 @@
   >
     <nav class="ui-floating-nav app-navigation" :aria-label="t('common.primaryNavigation')">
       <RouterLink to="/" class="app-brand" :aria-label="t('nav.dashboard')">
-        <img src="@/assets/logo.png" :alt="t('projectName')" class="h-7 w-auto shrink-0" />
+        <img src="@/assets/logo-small.png" :alt="t('projectName')" class="h-7 w-auto shrink-0" />
       </RouterLink>
       <div
         ref="navigationLinks"

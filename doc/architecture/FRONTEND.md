@@ -4,6 +4,12 @@
 
 ## 技术基线
 
+### 加载与静态资源
+
+- 登录、初始化和应用页头使用 `logo-small.png`，原始高分辨率 Logo 不进入这些页面的资源请求。
+- 登录后在空闲时仅预加载连接管理和 Workspace；设置、通知、代理和审计路由保持按需加载，节省流量模式和 2G 网络不主动预加载。
+- 生产 Nginx 对 JS、CSS、JSON、WASM 和 SVG 启用 gzip，响应包含 `Vary: Accept-Encoding`；哈希资源长期缓存，入口 HTML 和 Service Worker 不长期缓存。
+
 - Vue 3、Vue Router、Vue I18n 和 Vite。
 - TypeScript `strict` 与 `noUncheckedIndexedAccess`。
 - HTTP 数据通过 `client/` 进入应用，业务代码使用 camelCase contract。

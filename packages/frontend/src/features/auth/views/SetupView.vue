@@ -51,14 +51,14 @@
   <div class="auth-page flex min-h-dvh items-center justify-center overflow-y-auto p-4">
     <div class="auth-setup-panel ui-glass-panel flex w-full max-w-4xl overflow-hidden rounded-2xl">
       <section class="auth-brand-pane hidden w-2/5 flex-col items-center justify-center p-10 text-white md:flex">
-        <img src="@/assets/logo.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
+        <img src="@/assets/logo-small.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
         <h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>
         <p class="text-center text-base opacity-80">{{ t('auth.setup.description') }}</p>
       </section>
 
       <section class="flex w-full flex-col justify-center p-8 sm:p-12 md:w-3/5">
         <div class="mb-6 flex flex-col items-center md:hidden">
-          <img src="@/assets/logo.png" :alt="t('projectName')" class="mb-3 h-16 w-auto" />
+          <img src="@/assets/logo-small.png" :alt="t('projectName')" class="mb-3 h-16 w-auto" />
           <h2 class="text-xl font-semibold text-foreground">{{ t('auth.setup.title') }}</h2>
           <p class="mt-1 text-sm text-text-secondary">{{ t('auth.setup.description') }}</p>
         </div>

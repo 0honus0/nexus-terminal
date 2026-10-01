@@ -361,21 +361,20 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
     await expect(quickCommands).toBeVisible();
     const quickCommandAdd = quickCommands.getByRole('button', { name: 'Add', exact: true });
     await expect(quickCommandAdd).toBeVisible();
-    const quickCommandAddUsesThemeAccent = await quickCommandAdd.evaluate((element) => {
+    const quickCommandAddUsesToolbarStyle = await quickCommandAdd.evaluate((element) => {
       const probe = document.createElement('span');
-      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--link-active-color').trim();
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--text-color-secondary').trim();
       document.body.append(probe);
-      const expectedBackground = getComputedStyle(probe).color;
-      probe.style.color = 'white';
       const expectedIconColor = getComputedStyle(probe).color;
       probe.remove();
       const icon = element.querySelector('i');
       return {
-        background: getComputedStyle(element).backgroundColor === expectedBackground,
+        width: element.getBoundingClientRect().width,
+        height: element.getBoundingClientRect().height,
         icon: icon instanceof HTMLElement && getComputedStyle(icon).color === expectedIconColor,
       };
     });
-    expect(quickCommandAddUsesThemeAccent).toEqual({ background: true, icon: true });
+    expect(quickCommandAddUsesToolbarStyle).toEqual({ width: 26, height: 26, icon: true });
     await expect(
       quickCommands
         .locator('button[aria-label="Expand search"], input[placeholder="Search name or command..."]')
