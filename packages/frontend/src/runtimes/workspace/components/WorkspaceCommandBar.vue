@@ -714,4 +714,30 @@
       flex-wrap: nowrap;
     }
   }
+
+  @container command-bar-pane (max-width: 480px) {
+    .command-bar-root--desktop .command-bar-inner {
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      padding-block: 0.375rem;
+      align-self: flex-start;
+      box-sizing: border-box;
+      flex: 0 0 auto;
+      width: 100%;
+    }
+
+    .command-bar-root--desktop .desktop-command-controls {
+      grid-column: 1;
+      grid-row: 2;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, 1.625rem);
+      column-gap: 0.25rem;
+      overflow: hidden;
+    }
+
+    .command-bar-root--desktop .command-bar-input {
+      grid-column: 1;
+      grid-row: 1;
+    }
+  }
 </style>
