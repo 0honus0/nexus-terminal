@@ -157,8 +157,10 @@ test('foreground probes preserve healthy SSH and resume a half-open transport wi
   expect(resumes).toBe(1);
   dropProbe = false;
   await page.locator('.app-nav-links a[href="/settings"]').click();
+  await expect(page).toHaveURL(/\/settings$/);
   dropProbe = true;
   await page.locator('.app-nav-links a[href="/workspace"]').click();
+  await expect(page).toHaveURL(/\/workspace$/);
   await expect.poll(() => resumes, { timeout: 15_000 }).toBe(2);
   await expect(input).toBeEnabled();
   expect(connects).toBe(initialConnects);
