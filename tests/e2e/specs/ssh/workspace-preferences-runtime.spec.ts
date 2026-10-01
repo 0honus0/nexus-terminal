@@ -88,27 +88,30 @@ test('command input sync setting drives quick-command search and keyboard execut
       );
     });
 
-    await step('typing in the command bar filters Quick Commands and Enter executes the keyboard selection', async () => {
-      await connectTestSshFromConnectionsPage(page, connectionId);
-      const commandInput = page.locator('.command-bar-command-input:visible');
-      const quickView = page.locator('.quick-commands-root:visible').first();
-      const quickSearch = quickView.getByPlaceholder('Search name or command...', { exact: true });
-      const row = quickView.locator(`[data-command-id="${commandId}"]`);
-      const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
+    await step(
+      'typing in the command bar filters Quick Commands and Enter executes the keyboard selection',
+      async () => {
+        await connectTestSshFromConnectionsPage(page, connectionId);
+        const commandInput = page.locator('.command-bar-command-input:visible');
+        const quickView = page.locator('.quick-commands-root:visible').first();
+        const quickSearch = quickView.getByPlaceholder('Search name or command...', { exact: true });
+        const row = quickView.locator(`[data-command-id="${commandId}"]`);
+        const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
 
-      await expect(row).toBeVisible({ timeout: 20_000 });
-      await commandInput.fill(QUICK_COMMAND_MARKER);
-      await expect(quickSearch).toHaveValue(QUICK_COMMAND_MARKER);
-      await expect(row).toBeVisible();
+        await expect(row).toBeVisible({ timeout: 20_000 });
+        await commandInput.fill(QUICK_COMMAND_MARKER);
+        await expect(quickSearch).toHaveValue(QUICK_COMMAND_MARKER);
+        await expect(row).toBeVisible();
 
-      await commandInput.press('ArrowDown');
-      await expect(row).toHaveClass(/bg-primary\/20/);
-      await commandInput.press('Enter');
+        await commandInput.press('ArrowDown');
+        await expect(row).toHaveClass(/bg-primary\/20/);
+        await commandInput.press('Enter');
 
-      await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain(QUICK_COMMAND_MARKER);
-      await expect(commandInput).toHaveValue('');
-      await expect(quickSearch).toHaveValue('');
-    });
+        await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain(QUICK_COMMAND_MARKER);
+        await expect(commandInput).toHaveValue('');
+        await expect(quickSearch).toHaveValue('');
+      },
+    );
   } finally {
     const restore = await context.request.put('/api/v1/settings', {
       data: {
