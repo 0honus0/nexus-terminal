@@ -1,5 +1,6 @@
 {
   "statusMonitor": {
+    "closeTrend": "トレンドグラフを閉じる",
     "title": "サーバー状態",
     "errorPrefix": "エラー:",
     "loading": "データを待機中...",

@@ -132,6 +132,10 @@
     formatStatusMemoryPair(used, total) ?? t('statusMonitor.notAvailable');
   const swap = (used?: number, total?: number) => formatStatusSwapPair(used, total) ?? t('statusMonitor.notAvailable');
   const disk = (used?: number, total?: number) => formatStatusDiskPair(used, total) ?? t('statusMonitor.notAvailable');
+  const capacityParts = (detail: string) => {
+    const match = detail.match(/^([\d.]+) \/ ([\d.]+) (MB|GB)$/);
+    return match ? { used: match[1], total: match[2], unit: match[3] } : null;
+  };
   const compactRate = (bytesPerSecond?: number): string => {
     if (bytesPerSecond === undefined || !Number.isFinite(bytesPerSecond)) return '0B';
     const value = Math.max(0, bytesPerSecond);
@@ -148,6 +152,8 @@
       percent: number;
       displayPercent: string;
       detail: string;
+      capacity?: ReturnType<typeof capacityParts>;
+      load?: string;
       tooltip: string;
       color: string;
       icon: Component;
@@ -179,6 +185,8 @@
         percent: normalizedPercent(status?.cpuPercent),
         displayPercent: percent(status?.cpuPercent),
         detail: cpuDetail,
+        load:
+          firstLoadAverage !== undefined && Number.isFinite(firstLoadAverage) ? firstLoadAverage.toFixed(2) : undefined,
         tooltip: cpuTooltip || `${metricName('cpu')} ${percent(status?.cpuPercent)}`,
         color: '#3b82f6',
         icon: CpuIcon,
@@ -189,6 +197,7 @@
         percent: normalizedPercent(status?.memPercent),
         displayPercent: percent(status?.memPercent),
         detail: memory(status?.memUsed, status?.memTotal),
+        capacity: capacityParts(memory(status?.memUsed, status?.memTotal)),
         tooltip: `${metricName('memory')} ${memory(status?.memUsed, status?.memTotal)} (${percent(status?.memPercent)})`,
         color: '#10b981',
         icon: MemoryIcon,
@@ -199,6 +208,7 @@
         percent: normalizedPercent(status?.swapPercent),
         displayPercent: percent(status?.swapPercent),
         detail: swap(status?.swapUsed, status?.swapTotal),
+        capacity: capacityParts(swap(status?.swapUsed, status?.swapTotal)),
         tooltip: `${metricName('swap')} ${swap(status?.swapUsed, status?.swapTotal)} (${percent(status?.swapPercent)})`,
         color: '#8b5cf6',
         icon: SwapIcon,
@@ -209,6 +219,7 @@
         percent: normalizedPercent(status?.diskPercent),
         displayPercent: percent(status?.diskPercent),
         detail: disk(status?.diskUsed, status?.diskTotal),
+        capacity: capacityParts(disk(status?.diskUsed, status?.diskTotal)),
         tooltip: `${metricName('disk')} ${disk(status?.diskUsed, status?.diskTotal)} (${percent(status?.diskPercent)})`,
         color: '#f59e0b',
         icon: DiskIcon,
@@ -270,6 +281,7 @@
                 :class="[{ selected: selectedMetric === metric.key }, `metric-${metric.key}`]"
                 :style="{ '--metric-accent': metric.color, '--metric-value': `${metric.percent}%` }"
                 :aria-label="`${metric.name} ${metric.displayPercent}`"
+                :aria-pressed="selectedMetric === metric.key"
                 @click="selectMetric(metric.key)"
               >
                 <div class="metric-top">
@@ -277,7 +289,23 @@
                     <span class="small-icon"><component :is="metric.icon" /></span>
                     <span class="metric-name">{{ metric.name }}</span>
                   </div>
-                  <span v-if="metric.detail" class="metric-detail">{{ metric.detail }}</span>
+                  <span
+                    v-if="metric.detail"
+                    class="metric-detail"
+                    :class="{ 'metric-detail-group': metric.capacity || metric.load }"
+                  >
+                    <template v-if="metric.capacity">
+                      <strong class="detail-value">{{ metric.capacity.used }}</strong>
+                      <span class="detail-divider" aria-hidden="true">/</span>
+                      <span class="detail-total">{{ metric.capacity.total }}</span>
+                      <span class="detail-unit">{{ metric.capacity.unit }}</span>
+                    </template>
+                    <template v-else-if="metric.load">
+                      <span class="detail-label">{{ t('statusMonitor.load') }}</span>
+                      <strong class="detail-value">{{ metric.load }}</strong>
+                    </template>
+                    <template v-else>{{ metric.detail }}</template>
+                  </span>
                 </div>
                 <div class="metric-bottom">
                   <div class="metric-progress" aria-hidden="true">
@@ -297,6 +325,7 @@
                 :class="{ selected: selectedMetric === 'network' }"
                 :style="{ '--metric-accent': '#10b981' }"
                 :aria-label="`${t('statusMonitor.networkLabel')} ↓ ${formatStatusRate(monitor.current.value.netRxRate)} ↑ ${formatStatusRate(monitor.current.value.netTxRate)}`"
+                :aria-pressed="selectedMetric === 'network'"
                 @click="selectMetric('network')"
               >
                 <div class="metric-top">
@@ -321,11 +350,13 @@
                 <div class="metric-bottom network-bottom">
                   <div class="network-pill rate-down">
                     <DownloadIcon />
+                    <span class="rate-label">{{ t('statusMonitor.networkDownload') }}</span>
                     <span class="rate-val rate-full">{{ formatStatusRate(monitor.current.value.netRxRate) }}</span>
                     <span class="rate-val rate-compact">{{ compactRate(monitor.current.value.netRxRate) }}</span>
                   </div>
                   <div class="network-pill rate-up">
                     <UploadIcon />
+                    <span class="rate-label">{{ t('statusMonitor.networkUpload') }}</span>
                     <span class="rate-val rate-full">{{ formatStatusRate(monitor.current.value.netTxRate) }}</span>
                     <span class="rate-val rate-compact">{{ compactRate(monitor.current.value.netTxRate) }}</span>
                   </div>
@@ -348,6 +379,15 @@
                   {{ t('statusMonitor.minutes', { count: range }) }}
                 </button>
               </div>
+              <button
+                type="button"
+                class="history-close"
+                :title="t('statusMonitor.closeTrend')"
+                :aria-label="t('statusMonitor.closeTrend')"
+                @click="selectedMetric = null"
+              >
+                <i class="fas fa-times" aria-hidden="true"></i>
+              </button>
             </header>
             <StatusCharts
               :history="monitor.history.value"

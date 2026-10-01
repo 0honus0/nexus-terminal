@@ -321,6 +321,10 @@
     :data-window-end="windowEnd"
     :data-visible-start="visibleStartTime"
   >
+    <div v-if="props.metric === 'network'" class="network-legend">
+      <span><i class="legend-download"></i>{{ t('statusMonitor.networkDownload') }}</span>
+      <span><i class="legend-upload"></i>{{ t('statusMonitor.networkUpload') }}</span>
+    </div>
     <Line :data="data" :options="options" />
   </div>
 </template>
@@ -328,15 +332,53 @@
 <style scoped>
   .status-history-chart {
     min-width: 0;
-    min-height: 5.5rem;
+    min-height: 0;
     height: 100%;
     flex: 1 1 auto;
+    position: relative;
     overflow: hidden;
   }
 
+  .network-legend {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.35rem;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.65rem;
+    padding: 0.2rem 0.35rem;
+    border-radius: 0.3rem;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    pointer-events: none;
+  }
+
+  .network-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .network-legend i {
+    width: 0.65rem;
+    height: 0.2rem;
+    border-radius: 999px;
+  }
+
+  .legend-download {
+    background: #10b981;
+  }
+
+  .legend-upload {
+    background: #3b82f6;
+  }
+
   @media (max-width: 640px) {
-    .status-history-chart {
-      min-height: 4.75rem;
+    .network-legend {
+      font-size: min(0.75rem, 4.5cqw, 4cqh);
     }
   }
 </style>

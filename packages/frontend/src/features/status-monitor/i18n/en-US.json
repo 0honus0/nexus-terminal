@@ -1,5 +1,6 @@
 {
   "statusMonitor": {
+    "closeTrend": "Close trend chart",
     "title": "Server Status",
     "errorPrefix": "Error:",
     "loading": "Waiting for data...",

@@ -44,6 +44,7 @@
     "online": "在线",
     "networkInterfaceFallback": "网卡",
     "historyRange": "历史时间范围",
+    "closeTrend": "关闭趋势图",
     "copyIpError": "复制 IP 失败",
     "load": "负载"
   }
