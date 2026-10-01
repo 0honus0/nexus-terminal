@@ -28,6 +28,9 @@ export class TerminalStreamTransport {
   private backpressured = false;
   private backpressureStartedAt = 0n;
   private disposed = false;
+  private consumerWindowEnabled = false;
+  private sentBytes = 0;
+  private consumedBytes = 0;
   private readonly capacityWaiters = new Set<Waiter>();
   private readonly drainWaiters = new Set<Waiter>();
 
@@ -42,6 +45,19 @@ export class TerminalStreamTransport {
     }
     this.workspaceId = workspaceId;
     this.reconcileBackpressure();
+  }
+
+  acknowledgeConsumption(consumedBytes: number): void {
+    if (!Number.isSafeInteger(consumedBytes) || consumedBytes < this.consumedBytes || consumedBytes > this.sentBytes) {
+      throw new Error('Invalid terminal consumption acknowledgement.');
+    }
+    this.consumerWindowEnabled = true;
+    this.consumedBytes = consumedBytes;
+    this.flush();
+  }
+
+  private consumerHasCapacity(): boolean {
+    return !this.consumerWindowEnabled || this.sentBytes - this.consumedBytes < HIGH_WATER_BYTES;
   }
 
   enqueue(data: Uint8Array): void {
@@ -86,8 +102,10 @@ export class TerminalStreamTransport {
         runtimePerformanceMetrics.recordTerminalMarkerFilter(process.hrtime.bigint() - filterStartedAt);
       }
       if (!visible.byteLength) continue;
-      this.enqueue(visible);
-      await this.waitForCapacity();
+      for (let offset = 0; offset < visible.byteLength; offset += MAX_CHUNK_BYTES) {
+        this.enqueue(visible.subarray(offset, offset + MAX_CHUNK_BYTES));
+        await this.waitForCapacity();
+      }
     }
     await this.waitForDrain();
   }
@@ -122,23 +140,26 @@ export class TerminalStreamTransport {
     }
     runtimePerformanceMetrics.recordTerminalFlush();
     let sentBytes = 0;
-    while (this.hasQueuedChunks() && this.socket.bufferedAmount < HIGH_WATER_BYTES) {
+    while (this.hasQueuedChunks() && this.socket.bufferedAmount < HIGH_WATER_BYTES && this.consumerHasCapacity()) {
       const chunk = this.dequeue()!;
       this.queuedBytes -= chunk.byteLength;
       const frame = encodeWorkspaceBinaryFrame('terminal', undefined, chunk);
       this.socket.send(frame, { binary: true });
+      this.sentBytes += chunk.byteLength;
       sentBytes += chunk.byteLength;
       runtimePerformanceMetrics.recordTerminalSent(chunk.byteLength, this.queuedBytes, this.socket.bufferedAmount);
       runtimePerformanceMetrics.recordWebSocketOutbound(frame.byteLength);
     }
     this.recordBuffers();
 
-    if (this.socket.bufferedAmount < HIGH_WATER_BYTES) this.resolveWaiters(this.capacityWaiters);
+    if (this.socket.bufferedAmount < HIGH_WATER_BYTES && this.consumerHasCapacity())
+      this.resolveWaiters(this.capacityWaiters);
 
-    const needsPolling = this.hasQueuedChunks() || this.socket.bufferedAmount > LOW_WATER_BYTES;
-    if (needsPolling) {
-      if (this.hasQueuedChunks() || this.socket.bufferedAmount >= HIGH_WATER_BYTES) this.setBackpressured(true);
-      if (scheduleNext) this.scheduleFlush();
+    const consumerBlocked = !this.consumerHasCapacity();
+    if (this.hasQueuedChunks() || this.socket.bufferedAmount > LOW_WATER_BYTES || consumerBlocked) {
+      if (this.hasQueuedChunks() || this.socket.bufferedAmount >= HIGH_WATER_BYTES || consumerBlocked)
+        this.setBackpressured(true);
+      if (scheduleNext && this.needsPolling()) this.scheduleFlush();
     } else {
       this.pollDelayMs = MIN_BACKPRESSURE_POLL_MS;
       this.setBackpressured(false);
@@ -172,7 +193,11 @@ export class TerminalStreamTransport {
 
   private waitForCapacity(): Promise<void> {
     this.flush();
-    if (this.disposed || this.socket.readyState !== WebSocket.OPEN || this.socket.bufferedAmount < HIGH_WATER_BYTES) {
+    if (
+      this.disposed ||
+      this.socket.readyState !== WebSocket.OPEN ||
+      (this.socket.bufferedAmount < HIGH_WATER_BYTES && this.consumerHasCapacity())
+    ) {
       return Promise.resolve();
     }
     return new Promise<void>((resolve) => {
@@ -225,7 +250,7 @@ export class TerminalStreamTransport {
     return (
       !this.disposed &&
       this.socket.readyState === WebSocket.OPEN &&
-      (this.hasQueuedChunks() || this.socket.bufferedAmount > LOW_WATER_BYTES)
+      ((this.hasQueuedChunks() && this.consumerHasCapacity()) || this.socket.bufferedAmount > LOW_WATER_BYTES)
     );
   }
 

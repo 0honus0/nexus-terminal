@@ -100,7 +100,13 @@ const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 const MAX_JSON_MESSAGE_BYTES = 1024 * 1024;
 const BINARY_HIGH_WATER_BYTES = 1024 * 1024;
 const BINARY_BACKPRESSURE_POLL_MS = 10;
-const HIGH_FREQUENCY_OPERATIONS = new Set(['terminal.input', 'terminal.resize', 'docker.stats', 'suspend.owner.renew']);
+const HIGH_FREQUENCY_OPERATIONS = new Set([
+  'terminal.input',
+  'terminal.resize',
+  'terminal.flow',
+  'docker.stats',
+  'suspend.owner.renew',
+]);
 
 type JsonRecord = Record<string, unknown>;
 const isJsonRecord = (value: unknown): value is JsonRecord =>
@@ -523,6 +529,12 @@ export class WorkspaceProtocolSession {
 
   private async route(type: string, payload: JsonRecord, requestId?: string): Promise<unknown> {
     switch (type) {
+      case 'terminal.flow': {
+        const consumedBytes = numberValue(payload.consumedBytes);
+        if (consumedBytes === undefined) throw new Error('Terminal consumption must include consumedBytes.');
+        this.terminalTransport.acknowledgeConsumption(consumedBytes);
+        return null;
+      }
       case 'workspace.ping':
         this.requireWorkspace();
         return null;

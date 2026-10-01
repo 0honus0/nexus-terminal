@@ -78,6 +78,7 @@
   let historyViewGeneration = 0;
   let mobileSelectionSyncFrame: number | null = null;
   const deferredTerminalOutput: Array<string | Uint8Array> = [];
+  const deferredOutputConsumers: Array<() => void> = [];
   const hasVisualBackground = computed(() =>
     Boolean(props.visual?.backgroundEnabled && (props.visual.backgroundImageUrl || props.visual.customHtml)),
   );
@@ -318,8 +319,10 @@
         await props.channel.resetPreviousOutput?.().catch(() => false);
         while (deferredTerminalOutput.length) {
           const queued = deferredTerminalOutput.splice(0);
+          const consumers = deferredOutputConsumers.splice(0);
           deferredTerminalOutputBytes = 0;
           for (const chunk of queued) await writeTerminal(chunk);
+          for (const consumed of consumers) consumed();
         }
         historyLiveSnapshot = '';
         if (generation === historyViewGeneration) {
@@ -988,6 +991,7 @@
   const INACTIVE_OUTPUT_MAX_BATCH_BYTES = 512 * 1024;
   let pendingOutput: Uint8Array[] = [];
   let pendingOutputBytes = 0;
+  let pendingOutputConsumers: Array<() => void> = [];
   let outputFrame: number | undefined;
   let outputTimer: number | undefined;
   const outputEncoder = new TextEncoder();
@@ -1011,7 +1015,11 @@
     }
     pendingOutput = [];
     pendingOutputBytes = 0;
-    terminal.write(batch, showLatest ? () => terminal?.scrollToBottom() : undefined);
+    const consumers = pendingOutputConsumers.splice(0);
+    terminal.write(batch, () => {
+      for (const consumed of consumers) consumed();
+      if (showLatest) terminal?.scrollToBottom();
+    });
   };
   const drainPendingOutput = async (): Promise<void> => {
     clearOutputSchedule();
@@ -1024,7 +1032,9 @@
       }
       pendingOutput = [];
       pendingOutputBytes = 0;
+      const consumers = pendingOutputConsumers.splice(0);
       await writeTerminal(batch);
+      for (const consumed of consumers) consumed();
     } else {
       await writeTerminal('');
     }
@@ -1038,16 +1048,18 @@
     if (props.active) outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
     else outputTimer = window.setTimeout(() => flushPendingOutput(), INACTIVE_OUTPUT_BATCH_MS);
   };
-  const handleTerminalOutput = ({ data }: { data: string | Uint8Array }): void => {
+  const handleTerminalOutput = ({ data, consumed }: { data: string | Uint8Array; consumed?: () => void }): void => {
     activatePagedHistoryMode();
     if (historyBrowsing || historyRebuilding) {
       const shouldRestore = appendDeferredTerminalOutput(data);
+      if (consumed) deferredOutputConsumers.push(consumed);
       if (shouldRestore && historyBrowsing && !historyRebuilding) void restoreLatestOutput();
       return;
     }
     const bytes = typeof data === 'string' ? outputEncoder.encode(data) : data.slice();
     pendingOutput.push(bytes);
     pendingOutputBytes += bytes.byteLength;
+    if (consumed) pendingOutputConsumers.push(consumed);
     if (!props.active && pendingOutputBytes >= INACTIVE_OUTPUT_MAX_BATCH_BYTES) flushPendingOutput();
     else scheduleOutputFlush();
   };

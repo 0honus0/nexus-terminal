@@ -14,7 +14,7 @@ type ProtocolEvent<T = unknown> = WorkspaceProtocolEventDto<T>;
 type ProtocolMessage = ProtocolResponse | ProtocolEvent;
 
 type EventHandler<T = unknown> = (payload: T) => void;
-type BinaryHandler = (data: Uint8Array) => void;
+type BinaryHandler = (data: Uint8Array, consumed?: () => void) => void;
 const MAX_SEND_BUFFER_BYTES = 1024 * 1024;
 const MAX_HISTORY_RESPONSE_BYTES = 1024 * 1024;
 const MAX_FILE_RESPONSE_BYTES = 128 * 1024 * 1024;
@@ -92,11 +92,30 @@ const workspaceFailureKind = (reason: string): string => {
 
 const OPEN_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 30_000;
-const HIGH_FREQUENCY_OPERATIONS = new Set(['terminal.input', 'terminal.resize', 'docker.stats', 'suspend.owner.renew']);
+const HIGH_FREQUENCY_OPERATIONS = new Set([
+  'terminal.input',
+  'terminal.resize',
+  'terminal.flow',
+  'docker.stats',
+  'suspend.owner.renew',
+]);
 const HIGH_FREQUENCY_EVENTS = new Set(['status.sample', 'transfer.upload', 'transfer.copyMove', 'transfer.archive']);
 
 export class WorkspaceSocket {
   private socket?: WebSocket;
+  private consumedTerminalBytes = 0;
+  private consumptionTimer?: number;
+
+  private scheduleConsumptionAck(): void {
+    if (this.consumptionTimer !== undefined) return;
+    const socket = this.socket;
+    this.consumptionTimer = window.setTimeout(() => {
+      this.consumptionTimer = undefined;
+      if (this.socket !== socket || !this.connected) return;
+      if (!this.sendConnected('terminal.flow', { consumedBytes: this.consumedTerminalBytes }))
+        this.scheduleConsumptionAck();
+    }, 20);
+  }
   private readonly pending = new Map<string, PendingRequest>();
   private readonly handlers = new Map<string, Set<EventHandler>>();
   private readonly binaryHandlers = new Set<BinaryHandler>();
@@ -208,6 +227,10 @@ export class WorkspaceSocket {
           return;
         }
         logger.debug(this.context({ pendingRequests: this.pending.size }), 'Workspace WebSocket opened');
+        this.consumedTerminalBytes = 0;
+        window.clearTimeout(this.consumptionTimer);
+        this.consumptionTimer = undefined;
+        this.sendConnected('terminal.flow', { consumedBytes: 0 });
         settleResolve();
       };
       socket.onmessage = (event) => {
@@ -266,6 +289,8 @@ export class WorkspaceSocket {
   }
 
   close(reason = 'Workspace closed'): void {
+    window.clearTimeout(this.consumptionTimer);
+    this.consumptionTimer = undefined;
     const error = new Error(reason);
     const socket = this.socket;
     logger.debug(
@@ -532,7 +557,15 @@ export class WorkspaceSocket {
       return;
     }
     if (frame.kind === 'terminal') {
-      for (const handler of this.binaryHandlers) handler(frame.data);
+      const socket = this.socket;
+      let acknowledged = false;
+      const consumed = () => {
+        if (acknowledged || this.socket !== socket) return;
+        acknowledged = true;
+        this.consumedTerminalBytes += frame.data.byteLength;
+        this.scheduleConsumptionAck();
+      };
+      for (const handler of this.binaryHandlers) handler(frame.data, consumed);
       return;
     }
     const pending = this.pending.get(frame.requestId);

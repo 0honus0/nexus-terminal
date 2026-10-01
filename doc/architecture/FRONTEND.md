@@ -108,7 +108,7 @@ Workspace Runtime 组合长生命周期的交互会话，包括 SSH terminal、�
 
 每个 Workspace session 持有自己的 transport、controllers 和 presentation state。Registry 持有 session 顺序、激活状态和生命周期。Feature 通过 adapter/capability 接入 Runtime，不读取 Runtime 私有目录。
 
-WorkspaceSocket 在发送前限制浏览器发送缓冲，并按请求限制二进制响应累计大小；Terminal adapter 将输入拒绝和服务端输入错误转交 channel 的错误消费者，不自动重放被拒绝的输入。网络背压由 Backend transport 持有；当前恢复 offset 记录浏览器已接收字节，并非 xterm 已解析字节，不能以断开连接并丢弃待解析数据替代解析侧消费窗口。
+WorkspaceSocket 在发送前限制浏览器发送缓冲，并按请求限制二进制响应累计大小；Terminal adapter 将输入拒绝和服务端输入错误转交 channel 的错误消费者，不自动重放被拒绝的输入。SSH 输出携带本地 consumed 回调，TerminalView 在 xterm write 完成后调用；WorkspaceSocket 按当前 WebSocket 累计确认并合并发送 `terminal.flow`，旧连接回调不能确认新连接。历史浏览暂存的实时输出在恢复实时画面并解析后才确认。恢复 offset 仍记录浏览器已接收字节，不丢弃待解析数据或用消费计数替代恢复 offset。
 
 ### `app/`
 

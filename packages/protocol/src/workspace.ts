@@ -68,6 +68,11 @@ export interface WorkspaceTerminalInputRequestDto {
   data: string;
 }
 
+/** Cumulative parsed terminal bytes on this WebSocket attachment, not the reconnect journal offset. */
+export interface WorkspaceTerminalFlowRequestDto {
+  consumedBytes: number;
+}
+
 export type WorkspaceTerminalResizeRequestDto = WorkspaceTerminalViewportDto;
 export type WorkspaceTerminalCurrentDirectoryResponseDto = string;
 
@@ -455,6 +460,7 @@ export interface WorkspaceCoreRequestMapDto {
   'workspace.resume': WorkspaceResumeRequestDto;
   'workspace.close': WorkspaceCloseRequestDto;
   'terminal.input': WorkspaceTerminalInputRequestDto;
+  'terminal.flow': WorkspaceTerminalFlowRequestDto;
   'terminal.resize': WorkspaceTerminalResizeRequestDto;
   'terminal.currentDirectory': Record<string, never>;
   'terminal.changeDirectory': WorkspaceTerminalChangeDirectoryRequestDto;
@@ -471,6 +477,7 @@ export interface WorkspaceCoreResponseMapDto {
   'workspace.resume': WorkspaceResumeResponseDto;
   'workspace.close': null;
   'terminal.input': null;
+  'terminal.flow': null;
   'terminal.resize': null;
   'terminal.currentDirectory': WorkspaceTerminalCurrentDirectoryResponseDto;
   'terminal.changeDirectory': WorkspaceTerminalChangeDirectoryResponseDto;

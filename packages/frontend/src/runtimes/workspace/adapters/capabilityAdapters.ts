@@ -52,25 +52,21 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
   socket.on('protocol.error', ({ operation }) => {
     if (operation === 'terminal.input') notifyInputError();
   });
-  const buffered: Uint8Array[] = [];
-  let bufferedBytes = 0;
+  const buffered: TerminalOutput[] = [];
   let previousOutputAvailable = false;
   let resumeCompletePending = false;
   const resumeCompleteHandlers = new Set<() => void>();
   let historyLoad: Promise<{ data: Uint8Array; hasMore: boolean } | null> | null = null;
-  const maxBufferedBytes = 4 * 1024 * 1024;
 
-  socket.onBinary((data) => {
+  socket.onBinary((data, consumed) => {
     if (outputHandlers.size) {
-      for (const handler of outputHandlers) handler({ data });
+      for (const handler of outputHandlers) handler({ data, consumed });
       return;
     }
     const copy = data.slice();
-    buffered.push(copy);
-    bufferedBytes += copy.byteLength;
-    while (bufferedBytes > maxBufferedBytes && buffered.length > 1) {
-      bufferedBytes -= buffered.shift()!.byteLength;
-    }
+    buffered.push({ data: copy, consumed });
+    // The negotiated consumer window bounds pre-mount buffering. Never drop bytes:
+    // reconnect offsets already include received frames.
   });
 
   return {
@@ -88,8 +84,7 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
     },
     onOutput(handler) {
       outputHandlers.add(handler);
-      for (const data of buffered.splice(0)) handler({ data });
-      bufferedBytes = 0;
+      for (const output of buffered.splice(0)) handler(output);
       return () => outputHandlers.delete(handler);
     },
     onResumeComplete(handler) {

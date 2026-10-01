@@ -523,6 +523,33 @@ test('large terminal scrollback follows rapid scrollbar drags back to the newest
   ).toBeLessThanOrEqual(3);
 });
 
+test('terminal parser acknowledges sustained output and keeps accepting input', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  let consumedBytes = 0;
+  cdp.on('Network.webSocketFrameSent', ({ response }) => {
+    if (response.opcode !== 1) return;
+    const frame = JSON.parse(response.payloadData);
+    if (frame.type === 'terminal.flow') consumedBytes = frame.payload.consumedBytes;
+  });
+  const input = page.locator('.command-bar-command-input');
+  await input.fill(
+    "for ((i=0;i<40000;i++)); do printf 'FLOW_PARSE_LINE_012345678901234567890123456789\\n'; done; printf 'FLOW_PARSE_DONE\\n'",
+  );
+  await input.press('Enter');
+  const rows = page.locator('[data-font-size] .xterm-rows');
+  await expect.poll(() => consumedBytes, { timeout: 20_000 }).toBeGreaterThan(1024 * 1024);
+  await expect.poll(() => rows.innerText(), { timeout: 20_000 }).toContain('FLOW_PARSE_DONE');
+  await input.fill("printf 'FLOW_INPUT_AFTER_OUTPUT_OK\\n'");
+  await input.press('Enter');
+  await expect.poll(() => rows.innerText()).toContain('FLOW_INPUT_AFTER_OUTPUT_OK');
+  await cdp.detach();
+});
+
 test('terminal rejects oversized pasted input and remains usable', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
   await loginAsInitialAdmin(context.request);

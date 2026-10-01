@@ -4,6 +4,7 @@ export type { WorkspaceTerminalViewportDto };
 export type TerminalConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
 export interface TerminalOutput {
   data: string | Uint8Array;
+  consumed?: () => void;
 }
 export interface TerminalSnapshot {
   text: string;
