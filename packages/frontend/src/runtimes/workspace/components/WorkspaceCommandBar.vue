@@ -715,7 +715,7 @@
     }
   }
 
-  @container command-bar-pane (max-width: 480px) {
+  @container command-bar-pane (max-width: 480px) and (min-height: 65px) {
     .command-bar-root--desktop .command-bar-inner {
       grid-template-columns: minmax(0, 1fr);
       align-content: start;

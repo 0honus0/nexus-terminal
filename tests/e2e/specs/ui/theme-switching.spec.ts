@@ -301,7 +301,7 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
     await page.goto('/');
     await expect.poll(() => appBackground(page)).toBe('#212529');
 
-    const search = page.locator('.dashboard-connection-search input');
+    const search = page.getByRole('searchbox', { name: 'Search connections...', exact: true });
     const tag = page.getByRole('combobox', { name: 'Filter by tag', exact: true });
     const sort = page.getByRole('combobox', { name: 'Sort by', exact: true });
     await expect(search).toBeVisible();

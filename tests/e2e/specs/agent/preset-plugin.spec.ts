@@ -1642,6 +1642,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         expect(restored.ok(), await restored.text()).toBeTruthy();
         await targets.click();
         await expect(targetsPanel.getByText('E2E SSH', { exact: true })).toBeVisible({ timeout: 10_000 });
+        await expect(targetsPanel.getByText('0/1')).toBeVisible();
+        await targetsPanel.getByRole('button').filter({ hasText: 'E2E SSH' }).click();
         await expect(targetsPanel.getByText('1/1')).toBeVisible();
         await targets.click();
       },

@@ -41,6 +41,7 @@
     }
     .ui-list-toolbar__filters {
       flex-wrap: wrap;
+      justify-content: space-between;
     }
   }
 </style>

@@ -35,13 +35,13 @@ test('audit activity shares the toolbar, loads on scroll, and bounds rendered ro
   expect(await view.locator('[data-audit-id]').count()).toBeLessThan(25);
   expect(requests.filter((request) => request.offset === 40)).toHaveLength(1);
   const actionSelect = view.getByRole('combobox', { name: 'Action Type', exact: true });
+  const triggerBox = await actionSelect.boundingBox();
+  expect(triggerBox).not.toBeNull();
   await actionSelect.click();
   const actionPanel = page.locator('[data-ui="select-panel"]');
   await expect(actionPanel).toBeVisible();
   await expect(async () => {
-    const triggerBox = await actionSelect.boundingBox();
     const panelBox = await actionPanel.boundingBox();
-    expect(triggerBox).not.toBeNull();
     expect(panelBox).not.toBeNull();
     expect(Math.abs(panelBox!.width - triggerBox!.width)).toBeLessThan(2);
     expect(Math.abs(panelBox!.x - triggerBox!.x)).toBeLessThan(2);
