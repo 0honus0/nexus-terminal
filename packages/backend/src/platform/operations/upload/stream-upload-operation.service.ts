@@ -50,7 +50,7 @@ interface ActiveUpload {
   cancelled: boolean;
 }
 
-const WRITE_HIGH_WATER_MARK = 1024 * 1024;
+const WRITE_HIGH_WATER_MARK = 4 * 1024 * 1024;
 const PREPARE_CONCURRENCY = 8;
 
 export class StreamUploadOperationService implements UploadOperation {
@@ -292,7 +292,7 @@ export class StreamUploadOperationService implements UploadOperation {
       await this.fail(upload, `Received chunk ${request.chunkIndex} after the final chunk.`);
       return;
     }
-    const data = Buffer.from(request.data);
+    const data = Buffer.from(request.data.buffer, request.data.byteOffset, request.data.byteLength);
     const nextBytes = upload.bytesAccepted + data.length;
     if (nextBytes > upload.totalSize) {
       await this.fail(upload, `Upload exceeds declared size: ${nextBytes}/${upload.totalSize}.`);
@@ -312,8 +312,51 @@ export class StreamUploadOperationService implements UploadOperation {
     upload.nextChunkIndex += 1;
     upload.bytesAccepted = nextBytes;
     upload.receivedLastChunk = request.isLast;
+    // Serialize validation/enqueue, not remote acknowledgements. Buffered chunks
+    // let the SFTP Writable use _writev; awaiting each callback disables batching.
+    const accepted = upload.stream.write(data, (error) => {
+      if (upload.cancelled || this.active.get(upload.key) !== upload) return;
+      if (error) {
+        void this.fail(upload, `Unable to write upload chunk ${request.chunkIndex}: ${error.message}`);
+        return;
+      }
+      upload.bytesWritten += data.length;
+      upload.emit({
+        type: 'progress',
+        uploadId: upload.uploadId,
+        chunkIndex: request.chunkIndex,
+        bytesWritten: upload.bytesWritten,
+        totalSize: upload.totalSize,
+        progress: Math.min(100, Math.round((upload.bytesWritten / upload.totalSize) * 100)),
+      });
+    });
+    if (request.isLast) {
+      await this.complete(upload);
+      return;
+    }
+    if (accepted) return;
     await new Promise<void>((resolve, reject) => {
-      upload.stream.write(data, (error) => (error ? reject(error) : resolve()));
+      const cleanup = () => {
+        upload.stream.removeListener('drain', onDrain);
+        upload.stream.removeListener('close', onClose);
+        upload.stream.removeListener('error', onError);
+      };
+      const onDrain = () => {
+        cleanup();
+        resolve();
+      };
+      const onClose = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+      upload.stream.once('drain', onDrain);
+      upload.stream.once('close', onClose);
+      upload.stream.once('error', onError);
+      if (upload.stream.destroyed || !upload.stream.writableNeedDrain) onDrain();
     }).catch(async (error) => {
       await this.fail(
         upload,
@@ -321,28 +364,20 @@ export class StreamUploadOperationService implements UploadOperation {
       );
       throw error;
     });
-    if (upload.cancelled || this.active.get(upload.key) !== upload) return;
-    upload.bytesWritten += data.length;
-    upload.emit({
-      type: 'progress',
-      uploadId: upload.uploadId,
-      chunkIndex: request.chunkIndex,
-      bytesWritten: upload.bytesWritten,
-      totalSize: upload.totalSize,
-      progress:
-        upload.totalSize === 0 ? 100 : Math.min(100, Math.round((upload.bytesWritten / upload.totalSize) * 100)),
-    });
-    if (request.isLast) await this.complete(upload);
   }
 
   private async complete(upload: ActiveUpload): Promise<void> {
-    if (upload.bytesWritten !== upload.totalSize || !upload.receivedLastChunk) {
+    if (upload.bytesAccepted !== upload.totalSize || !upload.receivedLastChunk) {
       await this.fail(upload, `Upload incomplete: ${upload.bytesWritten}/${upload.totalSize}.`);
       return;
     }
     upload.stream.end();
     try {
       await finished(upload.stream);
+      if (upload.cancelled || this.active.get(upload.key) !== upload) return;
+      if (upload.bytesWritten !== upload.totalSize) {
+        throw new Error(`Upload write size mismatch: ${upload.bytesWritten}/${upload.totalSize}.`);
+      }
       const temporaryMetadata = await upload.filesystem.metadata(upload.temporaryPath);
       if (temporaryMetadata.size !== upload.totalSize) {
         throw new Error(`Temporary upload size mismatch: ${temporaryMetadata.size}/${upload.totalSize}.`);

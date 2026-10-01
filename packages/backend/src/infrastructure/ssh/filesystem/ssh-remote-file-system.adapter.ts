@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Readable, Writable } from 'node:stream';
+import { Readable, type Writable } from 'node:stream';
 import type { SFTPWrapper, Stats } from 'ssh2';
 import type {
   RemoteDirectoryEntry,
@@ -61,10 +61,62 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
   }
 
   async openRead(remotePath: string, range?: RemoteReadRange): Promise<Readable> {
-    const channel = await this.channelProvider();
-    return range
-      ? channel.createReadStream(remotePath, { start: range.start, end: range.end })
-      : channel.createReadStream(remotePath);
+    const metadata = await this.metadata(remotePath, { followSymbolicLinks: true });
+    const reader = await this.openPositionedReader(remotePath);
+    const start = range?.start ?? 0;
+    const end = Math.min(metadata.size, range?.end === undefined ? metadata.size : range.end + 1);
+    // Bounded, ordered prefetch hides SFTP round-trip latency without buffering
+    // the whole file. Short reads are completed before yielding each range.
+    const chunkBytes = 64 * 1024;
+    const concurrency = 16;
+    let closed = false;
+    const close = async () => {
+      if (closed) return;
+      closed = true;
+      await reader.close();
+    };
+    const readChunk = async (position: number, length: number): Promise<Buffer> => {
+      const buffer = Buffer.allocUnsafe(length);
+      let offset = 0;
+      while (offset < length) {
+        const count = await reader.readInto(position + offset, buffer.subarray(offset));
+        if (count === 0) throw new Error(`Unexpected end of remote file: ${remotePath}`);
+        offset += count;
+      }
+      return buffer;
+    };
+    const stream = Readable.from(
+      (async function* () {
+        const pending: Array<Promise<Buffer>> = [];
+        let position = start;
+        const enqueue = () => {
+          if (position >= end) return;
+          const length = Math.min(chunkBytes, end - position);
+          const task = readChunk(position, length);
+          // Later requests may fail before the ordered consumer reaches them.
+          void task.catch(() => undefined);
+          pending.push(task);
+          position += length;
+        };
+        try {
+          for (let i = 0; i < concurrency; i++) enqueue();
+          while (pending.length) {
+            const data = await pending.shift()!;
+            enqueue();
+            yield data;
+          }
+        } finally {
+          await Promise.allSettled(pending);
+          await close();
+        }
+      })(),
+      { objectMode: false, highWaterMark: chunkBytes },
+    );
+    // Also close an opened handle when a consumer destroys before its first read.
+    stream.once('close', () => {
+      void close().catch(() => undefined);
+    });
+    return stream;
   }
 
   async openWrite(remotePath: string, options: RemoteWriteOptions = {}): Promise<Writable> {

@@ -19,6 +19,96 @@ async function readRemoteFile(socket: any, remotePath: string): Promise<Buffer> 
   return response.bytes;
 }
 
+test('pipelined upload and HTTP download stay fast under SFTP latency and preserve every byte', async ({ request }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `transfer-throughput-${crypto.randomUUID()}`);
+  const uploadId = `throughput-${crypto.randomUUID()}`;
+  const remotePath = '/transfer-throughput.bin';
+  const payload = Buffer.alloc(8 * 1024 * 1024);
+  for (let offset = 0; offset < payload.length; offset++) payload[offset] = offset % 251;
+  let uploadSocket: Awaited<ReturnType<typeof openAuthenticatedWebSocket>> | undefined;
+
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=60`, { method: 'POST' });
+    expect(delayResponse.ok).toBe(true);
+    const ready = waitForJson(
+      workspace.socket,
+      (message) =>
+        message.type === 'transfer.upload' &&
+        message.payload?.uploadId === uploadId &&
+        message.payload?.type === 'ready',
+      10_000,
+    );
+    await requestWorkspace(workspace.socket, 'upload.start', {
+      uploadId,
+      destinationPath: remotePath,
+      size: payload.length,
+      conflictPolicy: 'overwrite',
+    });
+    await ready;
+    const completed = waitForJson(
+      workspace.socket,
+      (message) =>
+        message.type === 'transfer.upload' &&
+        message.payload?.uploadId === uploadId &&
+        message.payload?.type === 'completed',
+      30_000,
+    );
+    uploadSocket = await openAuthenticatedWebSocket(
+      request,
+      `${E2E_URLS.frontendWsOrigin}/ws/uploads?workspaceId=${encodeURIComponent(workspace.workspaceId)}&uploadId=${encodeURIComponent(uploadId)}&size=${payload.length}`,
+    );
+    const uploadStarted = performance.now();
+    for (let offset = 0; offset < payload.length; offset += 512 * 1024) {
+      uploadSocket.send(payload.subarray(offset, offset + 512 * 1024));
+    }
+    await completed;
+    const uploadMs = performance.now() - uploadStarted;
+    // 8MiB needs at least 256 SFTP WRITE packets at 32KiB. Waiting for
+    // each packet's 60ms response costs >=15s; bounded batching must beat it.
+    expect(uploadMs, 'upload must pipeline remote writes rather than serialize acknowledgements').toBeLessThan(10_000);
+    await closeWebSocket(uploadSocket);
+
+    const readDelay = await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=60`, { method: 'POST' });
+    expect(readDelay.ok).toBe(true);
+    const ticketResponse = await request.post('/api/v1/sftp/download-ticket', {
+      data: { connectionId, sessionId: workspace.workspaceId, remotePath },
+    });
+    expect(ticketResponse.status()).toBe(201);
+    const ticket = (await ticketResponse.json()) as { url: string };
+    const downloadStarted = performance.now();
+    const response = await request.get(ticket.url, { timeout: 30_000 });
+    expect(response.status()).toBe(200);
+    const downloaded = await response.body();
+    const downloadMs = performance.now() - downloadStarted;
+    expect(downloaded).toEqual(payload);
+    expect(downloadMs, 'download must prefetch remote reads instead of waiting for every round trip').toBeLessThan(
+      8_000,
+    );
+
+    // An unaligned range spans multiple prefetch windows and must remain ordered.
+    const start = 123;
+    const end = 2 * 1024 * 1024 + 77;
+    const ranged = await request.get(ticket.url, { headers: { Range: `bytes=${start}-${end}` } });
+    expect(ranged.status()).toBe(206);
+    expect(ranged.headers()['content-range']).toBe(`bytes ${start}-${end}/${payload.length}`);
+    expect(await ranged.body()).toEqual(payload.subarray(start, end + 1));
+    await test.info().attach('transfer-throughput', {
+      body: JSON.stringify({ bytes: payload.length, sftpDelayMs: 60, uploadMs, downloadMs }, null, 2),
+      contentType: 'application/json',
+    });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' }).catch(() => undefined);
+    await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' }).catch(() => undefined);
+    if (uploadSocket) await closeWebSocket(uploadSocket).catch(() => undefined);
+    await closeWebSocket(workspace.socket);
+  }
+});
+
 test('raw binary upload reports ready, progress, completion, and readable remote content', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
