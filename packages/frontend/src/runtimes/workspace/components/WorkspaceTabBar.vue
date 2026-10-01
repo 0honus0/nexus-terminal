@@ -128,7 +128,11 @@
         props.mobile ? 'h-8' : 'mx-2 mt-2 h-10 rounded-t-md',
       ]"
     >
-      <div class="flex min-w-0 shrink items-center overflow-x-auto" @wheel="handleWheel">
+      <div
+        class="flex min-w-0 shrink items-center overflow-x-auto"
+        :class="{ 'mobile-session-scroll': props.mobile }"
+        @wheel="handleWheel"
+      >
         <ul class="m-0 flex h-full shrink-0 list-none p-0">
           <li
             v-for="session in props.sessions"
@@ -268,6 +272,13 @@
 </template>
 
 <style scoped>
+  .mobile-session-scroll {
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .mobile-session-scroll::-webkit-scrollbar {
+    display: none;
+  }
   .context-item {
     display: flex;
     width: calc(100% - 0.5rem);
