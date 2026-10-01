@@ -25,6 +25,7 @@ RUN npm install --global "pnpm@${PNPM_VERSION}" \
 WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY scripts/patches ./scripts/patches
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/protocol/package.json packages/protocol/package.json

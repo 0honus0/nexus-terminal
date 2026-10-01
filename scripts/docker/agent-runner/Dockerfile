@@ -33,6 +33,7 @@ FROM node:${NODE_VERSION}-${DEBIAN_SUITE} AS builder
 ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY scripts/patches ./scripts/patches
 COPY packages/agent-runner/package.json ./packages/agent-runner/package.json
 RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")" \
     && npm install --global "pnpm@${PNPM_VERSION}"

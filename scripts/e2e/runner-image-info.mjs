@@ -29,6 +29,10 @@ const definitionFiles = [
   'tests/e2e/Dockerfile.runner',
   'scripts/e2e/build-runner-image.sh',
   'scripts/e2e/runner-image-info.mjs',
+  ...fs
+    .readdirSync(path.join(repoRoot, 'scripts/patches'))
+    .sort()
+    .map((name) => `scripts/patches/${name}`),
 ];
 const hash = crypto.createHash('sha256');
 hash.update(`node=${nodeVersion}\nplaywright=${playwrightVersion}\npnpm=${pnpmVersion}\n`);
