@@ -483,6 +483,83 @@ test('desktop Alt+Arrow cycles live Workspace sessions without reconnecting them
   }
 });
 
+test('tab bulk-close actions release only the targeted live Workspace sessions', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await setTestSshOnline(true);
+  await resetTestSshFilesystem();
+  await removeMultiSessionConnections(context.request);
+  const connectionIds = await createMultiSessionConnections(context.request);
+  const workspaceConnectIds: string[] = [];
+  const workspaceCloseIds: string[] = [];
+  page.on('websocket', (socket) => {
+    if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
+    socket.on('framesent', (event) => {
+      if (typeof event.payload !== 'string') return;
+      try {
+        const message = JSON.parse(event.payload) as {
+          type?: string;
+          payload?: { workspaceId?: string };
+        };
+        const workspaceId = message.payload?.workspaceId;
+        if (!workspaceId) return;
+        if (message.type === 'workspace.connect') workspaceConnectIds.push(workspaceId);
+        if (message.type === 'workspace.close') workspaceCloseIds.push(workspaceId);
+      } catch {
+        return;
+      }
+    });
+  });
+
+  const tabs = page.locator('.terminal-tab-shell').locator('[role="tab"]');
+  const tabForName = (name: string) => tabs.filter({ hasText: name });
+  const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
+  const runTabContextAction = async (name: string, action: string) => {
+    await tabForName(name).click({ button: 'right' });
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await menu.getByRole('button', { name: action, exact: true }).click();
+  };
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+    await openConnectionFromWorkspacePicker(page, connectionIds[2]!);
+    await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(3);
+    expect(workspaceConnectIds).toHaveLength(3);
+
+    const [alphaWorkspaceId, bravoWorkspaceId, firstCharlieWorkspaceId] = workspaceConnectIds;
+    await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Tabs to the Right');
+    await expect(tabs).toHaveCount(2);
+    await expect(tabForName(MULTI_SESSION_NAMES[2])).toHaveCount(0);
+    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
+    await expect.poll(() => workspaceCloseIds.includes(firstCharlieWorkspaceId!), { timeout: 10_000 }).toBe(true);
+    expect(workspaceCloseIds).not.toContain(alphaWorkspaceId);
+    expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
+
+    await openConnectionFromWorkspacePicker(page, connectionIds[2]!);
+    await expect.poll(() => workspaceConnectIds.length, { timeout: 20_000 }).toBe(4);
+    const secondCharlieWorkspaceId = workspaceConnectIds[3]!;
+
+    await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Tabs to the Left');
+    await expect(tabs).toHaveCount(2);
+    await expect(tabForName(MULTI_SESSION_NAMES[0])).toHaveCount(0);
+    await expect.poll(() => workspaceCloseIds.includes(alphaWorkspaceId!), { timeout: 10_000 }).toBe(true);
+    expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
+    expect(workspaceCloseIds).not.toContain(secondCharlieWorkspaceId);
+
+    await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Other Tabs');
+    await expect(tabs).toHaveCount(1);
+    await expect(tabForName(MULTI_SESSION_NAMES[1])).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(() => workspaceCloseIds.includes(secondCharlieWorkspaceId), { timeout: 10_000 }).toBe(true);
+    expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
+    expect(workspaceConnectIds).toHaveLength(4);
+  } finally {
+    await setTestSshOnline(true);
+    await removeMultiSessionConnections(context.request);
+  }
+});
+
 test('command history broadcasts a saved command to every connected SSH session', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
