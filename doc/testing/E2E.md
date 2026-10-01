@@ -4,6 +4,8 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
+Terminal pointer tests use locator clicks so layout changes and viewport scrolling cannot redirect clicks outside the terminal. OSC 52 clipboard tests start an independent SSH session: the pipe-based SSH fixture does not provide PTY signal semantics for stopping a preceding foreground command with Ctrl+C. Status detail assertions target the shared tooltip panel and live accessible metric label, not native title attributes.
+
 The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, eight duration-balanced Playwright shards on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
 ## Structure

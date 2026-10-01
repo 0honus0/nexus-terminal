@@ -79,7 +79,9 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     await expect(modal).toBeVisible();
     await expect.poll(() => countStatusControls('status.start'), { timeout: 15_000 }).toBeGreaterThan(startsBeforeOpen);
     const monitor = modal.locator('.status-monitor');
-    await expect(monitor.locator('.metric-cpu')).toHaveAttribute('title', /Nexus Virtual CPU/, { timeout: 15_000 });
+    await expect(monitor.locator('.metric-cpu')).toHaveAccessibleName(/CPU 50\.0%/, { timeout: 15_000 });
+    await monitor.locator('.metric-cpu').hover();
+    await expect(page.locator('[data-ui="tooltip-panel"]').filter({ hasText: 'Nexus Virtual CPU' })).toBeVisible();
     await expect(monitor).toContainText('CPU');
     await expect(monitor.getByText('Online', { exact: true })).toBeVisible();
     await expect(monitor.getByText('127.0.0.1', { exact: true })).toHaveCount(0);
@@ -118,7 +120,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     await expect
       .poll(() => countStatusControls('status.start'), { timeout: 15_000 })
       .toBeGreaterThan(startsBeforeReopen);
-    await expect(modal.locator('.status-monitor .metric-cpu')).toHaveAttribute('title', /Nexus Virtual CPU/, {
+    await expect(modal.locator('.status-monitor .metric-cpu')).toHaveAccessibleName(/CPU 50\.0%/, {
       timeout: 15_000,
     });
     await modal.getByRole('button', { name: 'Close', exact: true }).click();

@@ -620,8 +620,9 @@ test('desktop terminal right-click copies a selection then pastes when no select
     const inner = terminal.locator('.terminal-inner-container');
     const box = await inner.boundingBox();
     expect(box).toBeTruthy();
-    await page.mouse.click(box!.x + Math.min(40, box!.width / 4), box!.y + Math.min(100, box!.height / 3), {
+    await inner.click({
       button: 'right',
+      position: { x: Math.min(40, box!.width / 4), y: Math.min(100, box!.height / 3) },
     });
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('DESKTOP_RIGHT_CLICK_PASTE_OK');
   });
@@ -646,22 +647,31 @@ test('desktop terminal right-click copies a selection then pastes when no select
     await page.keyboard.press('Control+Shift+V');
     await expect.poll(async () => rows.innerText()).toContain('DESKTOP_MOUSE_REPORTING_PASTE_OK');
   });
+});
 
-  await step('application clipboard writes use OSC 52 without interpreting application shortcuts', async () => {
-    await page.keyboard.press('Control+C');
-    const text = `通用终端复制\n${Array.from({ length: 2000 }, (_, index) => index + 1).join('\n')}`;
-    const input = terminal.locator('.xterm-helper-textarea');
-    await input.pressSequentially(
-      "printf '\\033]52;c;'; { printf '通用终端复制\\n'; seq 1 2000; } | base64 -w0; printf '\\007'",
-      { delay: 0 },
-    );
-    await input.press('Enter');
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${text}\n`);
-    await input.pressSequentially("printf '\\033]52;c;?\\007\\033]52;c;invalid!\\007'", { delay: 0 });
-    await input.press('Enter');
-    await expect.poll(async () => rows.innerText()).toContain('invalid!');
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${text}\n`);
-  });
+test('application clipboard writes use OSC 52 without interpreting application shortcuts', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const terminal = page.locator('[data-font-size]');
+  const rows = terminal.locator('.xterm-rows');
+  const text = `通用终端复制\n${Array.from({ length: 2000 }, (_, index) => index + 1).join('\n')}`;
+  const input = terminal.locator('.xterm-helper-textarea');
+  await input.pressSequentially(
+    "printf '\\033]52;c;'; { printf '通用终端复制\\n'; seq 1 2000; } | base64 -w0; printf '\\007'",
+    { delay: 0 },
+  );
+  await input.press('Enter');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${text}\n`);
+  await input.pressSequentially("printf '\\033]52;c;?\\007\\033]52;c;invalid!\\007'", { delay: 0 });
+  await input.press('Enter');
+  await expect.poll(async () => rows.innerText()).toContain('invalid!');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${text}\n`);
 });
 
 test('terminal font-size wheel change persists when the session is closed before debounce fires', async ({
