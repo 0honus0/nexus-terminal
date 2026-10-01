@@ -695,7 +695,7 @@
         </div>
       </UiSurface>
 
-      <div v-if="showTextEffects" class="grid gap-4 lg:grid-cols-2">
+      <div v-if="showTextEffects" class="grid gap-4">
         <UiSurface surface="inset" class="min-w-0 space-y-3 p-3">
           <h3 class="font-semibold">{{ t('styleCustomizer.textStrokeSettings') }}</h3>
           <label class="flex items-center gap-2">

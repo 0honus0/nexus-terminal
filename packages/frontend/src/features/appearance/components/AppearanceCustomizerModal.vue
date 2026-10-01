@@ -92,7 +92,7 @@
     >
       <div
         ref="dialog"
-        class="absolute flex h-full w-full flex-col overflow-hidden rounded-lg bg-background text-foreground shadow-[0px_0px_15px_rgb(0_0_0_/_0.15)] md:h-[85vh] md:max-h-[700px] md:w-[90%] md:max-w-[800px]"
+        class="absolute flex h-full w-full flex-col overflow-hidden rounded-lg bg-background text-foreground shadow-[0px_0px_15px_rgb(0_0_0_/_0.15)] md:h-[85vh] md:max-h-[700px] md:w-[90%] md:max-w-[1000px]"
       >
         <header
           class="flex shrink-0 cursor-move items-center justify-between border-b border-border bg-header px-4 py-3"

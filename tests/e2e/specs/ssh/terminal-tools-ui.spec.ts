@@ -72,7 +72,7 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     await commandBar.getByTitle('Find next').click();
     await commandBar.getByTitle('Find previous').click();
     await commandBar.getByTitle('Close terminal search').click();
-    await expect(commandInput).toHaveAttribute('placeholder', 'Enter command and press Enter to send...');
+    await expect(commandInput).toHaveAttribute('placeholder', 'Command');
     await expect(commandInput).toHaveValue('');
   });
 

@@ -106,13 +106,13 @@ test('quick command search stays visible by default and can be collapsed behind 
 
       const controls = quickView.locator('.quick-commands-controls');
       const originalQuickViewStyle = await quickView.getAttribute('style');
-      const expectCollapsedControlsCentered = async (width: number) => {
+      const expectCollapsedControlsAligned = async (width: number) => {
         await quickView.evaluate((element, targetWidth) => {
           element.style.width = `${targetWidth}px`;
           element.style.flex = '0 0 auto';
         }, width);
         await expect.poll(async () => (await quickView.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(width - 1);
-        await expect(controls).toHaveCSS('justify-content', 'center');
+        await expect(controls).toHaveCSS('justify-content', 'space-between');
         await expect
           .poll(async () => {
             return controls.evaluate((element) => {
@@ -142,11 +142,10 @@ test('quick command search stays visible by default and can be collapsed behind 
       };
 
       try {
-        // Cover the full sidebar range: wide panes must not fall back to flex-start, while the
-        // compact and wrapping container-query layouts must keep the same centered invariant.
-        await expectCollapsedControlsCentered(800);
-        await expectCollapsedControlsCentered(300);
-        await expectCollapsedControlsCentered(220);
+        // Both ends retain matching padding in wide, compact, and wrapping layouts.
+        await expectCollapsedControlsAligned(800);
+        await expectCollapsedControlsAligned(300);
+        await expectCollapsedControlsAligned(220);
       } finally {
         await quickView.evaluate((element, style) => {
           if (style === null) element.removeAttribute('style');

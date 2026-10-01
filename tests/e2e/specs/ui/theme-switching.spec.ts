@@ -245,7 +245,7 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
       () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
     );
     try {
-      const lastVisibleThemeRow = customizer.getByText('Link active bg color:', { exact: true }).locator('..');
+      const lastVisibleThemeRow = customizer.getByText('Link active bg color', { exact: true }).locator('..');
       const footer = customizer.locator('footer');
       await expect(lastVisibleThemeRow).toBeVisible();
       await lastVisibleThemeRow.scrollIntoViewIfNeeded();
@@ -453,7 +453,7 @@ test('terminal preset themes load from the API, switch through the UI, and persi
         })
         .toBe(targetThemeId);
 
-      const activeThemeName = customizer.getByText('Active Theme:', { exact: true }).locator('..').locator('strong');
+      const activeThemeName = customizer.getByRole('combobox', { name: 'Active Theme', exact: true });
       await expect(activeThemeName).toHaveText(targetTheme!.name);
     });
 
@@ -463,7 +463,7 @@ test('terminal preset themes load from the API, switch through the UI, and persi
       const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
       await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
 
-      const activeThemeName = customizer.getByText('Active Theme:', { exact: true }).locator('..').locator('strong');
+      const activeThemeName = customizer.getByRole('combobox', { name: 'Active Theme', exact: true });
       await expect(activeThemeName).toHaveText(targetTheme!.name);
 
       const response = await context.request.get('/api/v1/appearance');
@@ -665,9 +665,11 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       await expect.poll(async () => Boolean((await appearance(context.request)).pageBackgroundImage)).toBeTruthy();
       await expect.poll(() => page.evaluate(() => document.body.style.backgroundImage)).not.toBe('none');
 
-      const overlay = customizer.locator('input[type="range"]');
-      await overlay.fill('0.37');
-      await expect(overlay).toHaveValue('0.37');
+      const overlay = customizer.getByRole('slider');
+      await overlay.focus();
+      await overlay.press('Home');
+      for (let index = 0; index < 37; index += 1) await overlay.press('ArrowRight');
+      await expect(overlay).toHaveAttribute('aria-valuenow', '0.37');
 
       const terminalUpload = page.waitForResponse(
         (response) =>
@@ -680,9 +682,12 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       });
       expect((await terminalUpload).ok()).toBeTruthy();
       await expect.poll(async () => Boolean((await appearance(context.request)).terminalBackgroundImage)).toBeTruthy();
-      await expect(overlay).toHaveValue('0.37');
+      await expect(overlay).toHaveAttribute('aria-valuenow', '0.37');
 
-      await overlay.locator('..').getByRole('button', { name: 'Save', exact: true }).click();
+      await overlay
+        .locator('xpath=ancestor::*[@data-ui="slider"]/..')
+        .getByRole('button', { name: 'Save', exact: true })
+        .click();
       await expect.poll(async () => (await appearance(context.request)).terminalBackgroundOverlayOpacity).toBe(0.37);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
@@ -752,7 +757,8 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       'real GitHub remote preset list, search, download, and apply persist through the Appearance owner',
       async () => {
         const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
-        await customizer.getByRole('button', { name: 'Remote Themes', exact: true }).click();
+        await customizer.getByRole('combobox', { name: 'HTML Background Themes', exact: true }).click();
+        await page.getByRole('option', { name: 'Remote Themes', exact: true }).click();
         await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill(repository);
         const saveRepository = page.waitForResponse(
           (response) =>
