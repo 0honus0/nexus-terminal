@@ -114,11 +114,16 @@
     padding: 12px;
   }
   .dashboard-host-card--compact > div {
-    grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
   }
-  .dashboard-host-card--compact > div > :last-child {
-    width: auto;
+
+  @media (min-width: 640px) {
+    .dashboard-host-card--compact > div {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .dashboard-host-card--compact > div > :last-child {
+      width: auto;
+    }
   }
   .dashboard-host-card--compact .dashboard-host-card__name {
     font-size: 14px;
