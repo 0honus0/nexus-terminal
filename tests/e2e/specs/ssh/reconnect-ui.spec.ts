@@ -435,6 +435,54 @@ test('hidden desktop terminal keeps its fitted geometry while switching sessions
   }
 });
 
+test('desktop Alt+Arrow cycles live Workspace sessions without reconnecting them', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await setTestSshOnline(true);
+  await resetTestSshFilesystem();
+  await removeMultiSessionConnections(context.request);
+  const connectionIds = await createMultiSessionConnections(context.request);
+  const workspaceConnectIds: string[] = [];
+  page.on('websocket', (socket) => {
+    if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
+    socket.on('framesent', (event) => {
+      if (typeof event.payload !== 'string') return;
+      try {
+        const message = JSON.parse(event.payload) as {
+          type?: string;
+          payload?: { workspaceId?: string };
+        };
+        if (message.type === 'workspace.connect' && message.payload?.workspaceId)
+          workspaceConnectIds.push(message.payload.workspaceId);
+      } catch {
+        return;
+      }
+    });
+  });
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+    const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
+    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
+    await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(2);
+    expect(workspaceConnectIds).toHaveLength(2);
+
+    await page.keyboard.press('Alt+ArrowUp');
+    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
+
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
+
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
+    expect(workspaceConnectIds).toHaveLength(2);
+  } finally {
+    await setTestSshOnline(true);
+    await removeMultiSessionConnections(context.request);
+  }
+});
+
 test('command history broadcasts a saved command to every connected SSH session', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
