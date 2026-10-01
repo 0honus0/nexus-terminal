@@ -471,10 +471,15 @@ test('command history broadcasts a saved command to every connected SSH session'
     await page.getByText('Send to All Sessions', { exact: true }).filter({ visible: true }).click();
 
     await expect
-      .poll(async () => terminals.nth(0).locator('.xterm-rows').textContent(), { timeout: 15_000 })
-      .toContain(marker);
-    await expect
       .poll(async () => terminals.nth(1).locator('.xterm-rows').textContent(), { timeout: 15_000 })
+      .toContain(marker);
+
+    await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+      new RegExp(MULTI_SESSION_NAMES[0]),
+    );
+    await expect
+      .poll(async () => terminals.nth(0).locator('.xterm-rows').textContent(), { timeout: 15_000 })
       .toContain(marker);
   } finally {
     const history = await context.request.get('/api/v1/command-history');
