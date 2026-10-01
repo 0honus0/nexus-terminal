@@ -166,8 +166,11 @@
 </script>
 
 <template>
+  <!-- Splitpanes keeps registration order across keyed DOM moves. Recreate on
+       structural changes only; size updates must preserve mounted panes. -->
   <Splitpanes
     v-if="node.type === 'container'"
+    :key="JSON.stringify([node.id, node.direction, (node.children ?? []).map((child) => child.id)])"
     class="workspace-split"
     :class="{ 'workspace-split--locked': layoutLocked }"
     :horizontal="node.direction === 'vertical'"
