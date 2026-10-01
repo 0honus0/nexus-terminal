@@ -1486,6 +1486,34 @@
   backdrop-filter: var(--ui-glass-control-filter);
 }
 
+.ui-select--fit-longest {
+  display: grid;
+  width: max-content;
+  max-width: 100%;
+}
+
+.ui-select--fit-longest .ui-select__trigger,
+.ui-select__width-guide {
+  grid-area: 1 / 1;
+}
+
+.ui-select__width-guide {
+  display: grid;
+  visibility: hidden;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+  padding-inline: var(--ui-control-padding-inline);
+  padding-right: calc(var(--ui-control-padding-inline) + var(--ui-control-gap) + 12px);
+  border-inline: 1px solid transparent;
+  font-size: var(--ui-control-font-size);
+  white-space: nowrap;
+}
+
+.ui-select__width-guide > span {
+  grid-area: 1 / 1;
+}
+
 .ui-select__trigger:not(:disabled):hover {
   border-color: var(--ui-hairline-strong);
   background: var(--ui-fill-inset-hover);
@@ -1732,6 +1760,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ui-select__panel[data-fit-longest-option] .ui-select__item-label {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+.ui-select__panel[data-fit-longest-option] .ui-select__item {
+  height: auto;
 }
 
 .ui-select__item-description {

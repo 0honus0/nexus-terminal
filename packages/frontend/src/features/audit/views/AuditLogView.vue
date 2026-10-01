@@ -1,200 +1,236 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiInput, UiSelect, UiSpinner } from '@/foundation/ui';
+  import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
+  import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
+  import { UiButton, UiSelect, UiSpinner } from '@/foundation/ui';
+  import UiListToolbar from '@/foundation/ui/UiListToolbar.vue';
   import { auditActionTypes, type AuditLogQueryDto } from '../model/audit';
   import { useAuditStore } from '../store/audit.store';
+  import AuditLogRow from './AuditLogRow.vue';
 
-  const { t } = useI18n();
+  const { t, te } = useI18n();
   const store = useAuditStore();
-  const { logs, total, loading, error } = storeToRefs(store);
+  const { logs, total, loading, error, hasMore } = storeToRefs(store);
   const searchDraft = ref('');
   const actionTypeDraft = ref('');
   const appliedFilters = ref<Pick<AuditLogQueryDto, 'search' | 'actionType'>>({});
-  const page = ref(1);
-  const limit = 50;
-  const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit)));
-  const paginationRange = computed<Array<number | string>>(() => {
-    const last = totalPages.value;
-    if (last <= 7) return Array.from({ length: last }, (_, index) => index + 1);
-    const values = new Set<number>([1, last]);
-    for (let value = Math.max(2, page.value - 2); value <= Math.min(last - 1, page.value + 2); value += 1)
-      values.add(value);
-    const sorted = [...values].sort((a, b) => a - b);
-    const result: Array<number | string> = [];
-    for (let index = 0; index < sorted.length; index += 1) {
-      const value = sorted[index]!;
-      const previous = sorted[index - 1];
-      if (previous !== undefined && value - previous > 1) result.push(`ellipsis-${previous}`);
-      result.push(value);
-    }
-    return result;
-  });
-
-  const load = () =>
-    store.load({
-      ...appliedFilters.value,
-      limit,
-      offset: (page.value - 1) * limit,
-    });
+  const actionLabel = (action: string) =>
+    te(`auditLog.actions.${action}`) ? t(`auditLog.actions.${action}`) : t('auditLog.unknownAction');
+  const options = computed(() => [
+    { value: '', label: t('auditLog.allActions') },
+    ...auditActionTypes.map((value) => ({ value, label: actionLabel(value) })),
+  ]);
+  const load = () => store.load({ ...appliedFilters.value, limit: 40 });
   const applyFilters = () => {
     appliedFilters.value = {
       ...(searchDraft.value.trim() ? { search: searchDraft.value.trim() } : {}),
       ...(actionTypeDraft.value ? { actionType: actionTypeDraft.value } : {}),
     };
-    if (page.value === 1) void load();
-    else page.value = 1;
+    void load();
   };
-  const changePage = (next: number) => {
-    if (next >= 1 && next <= totalPages.value && next !== page.value) page.value = next;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  watch(searchDraft, () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyFilters, 300);
+  });
+  watch(actionTypeDraft, () => {
+    clearTimeout(searchTimer);
+    applyFilters();
+  });
+  onBeforeUnmount(() => {
+    clearTimeout(searchTimer);
+  });
+  const onScroll = (event: Event) => {
+    const element = event.target as HTMLElement;
+    if (element.scrollHeight - element.scrollTop - element.clientHeight < 320 && !error.value) void store.loadMore();
   };
-  const details = (value: unknown): string => {
-    if (value == null) return '';
-    if (typeof value === 'object') {
-      const record = value as Record<string, unknown>;
-      if ('raw' in record && record.parseError) return t('auditLog.parseErrorRaw', { raw: String(record.raw ?? '') });
-      return JSON.stringify(value, null, 2);
-    }
-    return String(value);
-  };
-
   onMounted(() => void load());
-  watch(page, () => void load());
 </script>
 
 <template>
-  <div class="bg-background p-4 text-foreground">
-    <div class="mx-auto max-w-7xl">
-      <h1 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">{{ t('auditLog.title') }}</h1>
-
-      <div class="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-header/50 p-4">
-        <div class="min-w-[200px] flex-grow">
-          <label for="search-term" class="mb-1 block text-sm font-medium text-text-secondary">{{
-            t('common.search')
-          }}</label>
-          <UiInput
-            id="search-term"
-            v-model="searchDraft"
-            type="text"
-            :placeholder="t('auditLog.searchPlaceholder')"
-            @keyup.enter="applyFilters"
-          />
-        </div>
-        <div class="min-w-[200px] flex-grow">
-          <label for="action-type" class="mb-1 block text-sm font-medium text-text-secondary">{{
-            t('auditLog.table.actionType')
-          }}</label>
-          <UiSelect id="action-type" v-model="actionTypeDraft">
-            <option value="">{{ t('common.all') }}</option>
-            <option v-for="type in auditActionTypes" :key="type" :value="type">
-              {{ t(`auditLog.actions.${type}`, type) }}
-            </option>
-          </UiSelect>
-        </div>
-        <div class="self-end">
-          <UiButton type="button" appearance="solid" @click="applyFilters">
-            {{ t('common.filter') }}
-          </UiButton>
-        </div>
-      </div>
-
-      <div v-if="error" class="mb-4 rounded border-l-4 border-error bg-error/10 p-4 text-error">
-        {{ error === 'audit-load-error' ? t('auditLog.loadFailed') : error }}
-      </div>
-      <div v-else-if="loading && logs.length === 0" class="p-4 text-center text-text-secondary italic">
-        <UiSpinner class="mx-auto" />
-      </div>
-      <div
-        v-else-if="!loading && logs.length === 0"
-        class="mb-4 rounded border-l-4 border-blue-400 bg-blue-100 p-4 text-blue-700"
-      >
-        {{ t('auditLog.noLogs') }}
-      </div>
-
-      <div v-else>
-        <nav v-if="totalPages > 1" :aria-label="t('auditLog.title')" class="mb-4 flex justify-center">
-          <ul class="inline-flex items-center -space-x-px">
-            <li>
-              <button
-                type="button"
-                :disabled="page === 1"
-                class="ml-0 rounded-l-lg border border-border bg-background px-3 py-2 leading-tight text-text-secondary hover:bg-header hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                @click="changePage(page - 1)"
-              >
-                «
-              </button>
-            </li>
-            <li v-for="item in paginationRange" :key="String(item)">
-              <span
-                v-if="typeof item === 'string'"
-                class="border border-border bg-background px-3 py-2 leading-tight text-text-secondary"
-                >…</span
-              >
-              <button
-                v-else
-                type="button"
-                class="border border-border px-3 py-2 leading-tight"
-                :class="
-                  item === page
-                    ? 'border-button bg-button text-button-text hover:bg-button-hover'
-                    : 'bg-background text-text-secondary hover:bg-header hover:text-foreground'
-                "
-                @click="changePage(item)"
-              >
-                {{ item }}
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                :disabled="page === totalPages"
-                class="rounded-r-lg border border-border bg-background px-3 py-2 leading-tight text-text-secondary hover:bg-header hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                @click="changePage(page + 1)"
-              >
-                »
-              </button>
-            </li>
-          </ul>
-        </nav>
-        <div class="mb-4 text-right text-sm text-text-secondary">
-          {{ t('auditLog.paginationInfo', { currentPage: page, totalPages, totalLogs: total }) }}
-        </div>
-        <div class="overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-border text-sm">
-              <thead class="bg-header">
-                <tr>
-                  <th class="whitespace-nowrap px-6 py-3 text-left font-medium tracking-wider text-text-secondary">
-                    {{ t('auditLog.table.timestamp') }}
-                  </th>
-                  <th class="whitespace-nowrap px-6 py-3 text-left font-medium tracking-wider text-text-secondary">
-                    {{ t('auditLog.table.actionType') }}
-                  </th>
-                  <th class="px-6 py-3 text-left font-medium tracking-wider text-text-secondary">
-                    {{ t('auditLog.table.details') }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                <tr v-for="log in logs" :key="log.id" :data-audit-id="log.id" class="hover:bg-header/50">
-                  <td class="whitespace-nowrap px-6 py-4">{{ new Date(log.timestamp * 1000).toLocaleString() }}</td>
-                  <td class="whitespace-nowrap px-6 py-4">
-                    {{ t(`auditLog.actions.${log.actionType}`, log.actionType) }}
-                  </td>
-                  <td class="px-6 py-4">
-                    <pre
-                      v-if="log.details"
-                      class="max-h-40 overflow-y-auto whitespace-pre-wrap break-all rounded border border-border/50 bg-header/50 p-2 font-mono text-xs"
-                      >{{ details(log.details) }}</pre>
-                    <span v-else class="text-text-secondary">-</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+  <div class="audit-page bg-background p-4 text-foreground">
+    <section class="audit-shell mx-auto max-w-7xl">
+      <header class="audit-heading">
+        <div class="flex min-w-0 items-center gap-3">
+          <span class="audit-mark" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+          <div class="min-w-0">
+            <h1 class="text-xl font-semibold">{{ t('auditLog.title') }}</h1>
+            <p class="mt-1 text-xs text-text-secondary">{{ t('auditLog.subtitle') }}</p>
           </div>
         </div>
+        <UiButton appearance="soft" :disabled="loading" @click="load"
+          ><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>{{ t('auditLog.refresh') }}</span></UiButton
+        >
+      </header>
+      <UiListToolbar
+        v-model="searchDraft"
+        :search-label="t('common.search')"
+        :placeholder="t('auditLog.searchPlaceholder')"
+      >
+        <UiSelect
+          v-model="actionTypeDraft"
+          :options="options"
+          :aria-label="t('auditLog.table.actionType')"
+          fit-longest-option
+          text-align="center"
+        />
+      </UiListToolbar>
+      <div class="audit-list-heading">
+        <span>{{ t('auditLog.activity') }}</span
+        ><span class="text-xs font-normal text-text-secondary" role="status">{{
+          t('auditLog.loadedInfo', { loaded: logs.length, total })
+        }}</span>
       </div>
-    </div>
+      <div
+        v-if="error"
+        role="alert"
+        class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm text-error"
+      >
+        <span>{{ error === 'audit-load-error' ? t('auditLog.loadFailed') : error }}</span
+        ><UiButton appearance="soft" @click="logs.length ? store.loadMore() : load()">{{
+          t('auditLog.retry')
+        }}</UiButton>
+      </div>
+      <div v-if="logs.length" class="audit-column-heading" aria-hidden="true">
+        <span>{{ t('auditLog.table.timestamp') }}</span>
+        <span>{{ t('auditLog.table.actionType') }}</span>
+        <span>{{ t('auditLog.table.details') }}</span>
+      </div>
+      <DynamicScroller
+        v-if="logs.length"
+        class="audit-scroller"
+        :items="logs"
+        :min-item-size="140"
+        :buffer="280"
+        key-field="id"
+        :aria-label="t('auditLog.title')"
+        tabindex="0"
+        @scroll.passive="onScroll"
+      >
+        <template #default="{ item, active }">
+          <DynamicScrollerItem :item="item" :active="active" :size-dependencies="[item.details]" :emit-resize="true">
+            <div class="audit-row-spacing"><AuditLogRow :log="item" /></div>
+          </DynamicScrollerItem>
+        </template>
+      </DynamicScroller>
+      <div v-else class="audit-empty">
+        <UiSpinner v-if="loading" /><template v-else-if="!error"
+          ><i class="fa-regular fa-folder-open text-2xl" aria-hidden="true"></i>
+          <p class="mt-3 font-medium">{{ t('auditLog.noLogs') }}</p>
+          <p class="mt-1 text-xs text-text-secondary">{{ t('auditLog.emptyHint') }}</p></template
+        >
+      </div>
+      <footer v-if="logs.length" class="audit-footer">
+        <UiSpinner v-if="loading" /><span>{{
+          loading ? t('auditLog.loadingMore') : hasMore ? t('auditLog.scrollMore') : t('auditLog.endOfList')
+        }}</span
+        ><UiButton
+          v-if="hasMore && !loading && !error"
+          density="compact"
+          appearance="ghost"
+          @click="store.loadMore()"
+          >{{ t('auditLog.loadMore') }}</UiButton
+        >
+      </footer>
+    </section>
   </div>
 </template>
+
+<style scoped>
+  .audit-shell {
+    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+    border-radius: 16px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--card-bg-color) 82%, var(--app-bg-color));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 8%),
+      0 5px 14px -12px color-mix(in srgb, var(--text-color) 32%, transparent);
+  }
+  .audit-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px;
+  }
+  .audit-mark {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  }
+  .audit-list-heading {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-block: 1px solid var(--ui-hairline);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .audit-scroller {
+    height: min(640px, 65dvh);
+    min-height: 224px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .audit-row-spacing {
+    padding: 4px 8px;
+  }
+  .audit-column-heading {
+    display: grid;
+    grid-template-columns: 220px 220px minmax(0, 1fr);
+    gap: 20px;
+    padding: 12px 29px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--ui-fill-inset);
+    color: var(--ui-text-muted);
+    font-size: 12px;
+  }
+  .audit-empty {
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .audit-footer {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px;
+    border-top: 1px solid var(--ui-hairline);
+    font-size: 11px;
+    color: var(--ui-text-muted);
+  }
+  @media (max-width: 640px) {
+    .audit-heading {
+      padding: 14px 12px;
+      align-items: flex-start;
+    }
+    .audit-list-heading {
+      padding-inline: 12px;
+    }
+  }
+  .audit-column-heading > :nth-child(-n + 2) {
+    text-align: center;
+  }
+  @media (max-width: 800px) {
+    .audit-column-heading {
+      display: none;
+    }
+  }
+</style>

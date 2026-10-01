@@ -10,6 +10,7 @@
       type?: string;
       statusDotClass?: string;
       accentClass?: string;
+      compact?: boolean;
     }>(),
     {
       as: 'div',
@@ -18,6 +19,7 @@
       type: undefined,
       statusDotClass: undefined,
       accentClass: undefined,
+      compact: false,
     },
   );
 
@@ -30,7 +32,7 @@
   <component
     :is="as"
     class="dashboard-host-card group relative overflow-hidden rounded-lg p-3 sm:px-4 sm:py-3.5"
-    :class="{ 'pl-3.5 sm:pl-4.5': hasAccent }"
+    :class="{ 'pl-3.5 sm:pl-4.5': hasAccent, 'dashboard-host-card--compact': compact }"
   >
     <span
       v-if="accentClass"
@@ -46,7 +48,7 @@
     >
       <div class="min-w-0">
         <slot name="header">
-          <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <div class="dashboard-host-card__identity flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
             <div class="flex min-w-0 items-baseline gap-2">
               <slot name="status-dot">
                 <span
@@ -58,7 +60,7 @@
               </slot>
               <component
                 :is="titleTag"
-                class="truncate text-lg font-semibold tracking-tight text-foreground"
+                class="dashboard-host-card__name truncate text-lg font-semibold tracking-tight text-foreground"
                 :title="name"
               >
                 {{ name }}
@@ -66,7 +68,7 @@
             </div>
             <span
               v-if="address"
-              class="relative -translate-y-[2.5px] truncate font-mono text-[13px] text-text-secondary"
+              class="dashboard-host-card__address relative -translate-y-[2.5px] truncate font-mono text-[13px] text-text-secondary"
               :title="address"
             >
               {{ address }}
@@ -107,5 +109,27 @@
   .dashboard-host-card:hover {
     border-color: color-mix(in srgb, var(--border-color) 64%, var(--link-active-color));
     background: color-mix(in srgb, var(--card-bg-color) 90%, var(--app-bg-color));
+  }
+  .dashboard-host-card--compact {
+    padding: 12px;
+  }
+  .dashboard-host-card--compact > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+  .dashboard-host-card--compact > div > :last-child {
+    width: auto;
+  }
+  .dashboard-host-card--compact .dashboard-host-card__name {
+    font-size: 14px;
+  }
+  .dashboard-host-card--compact .dashboard-host-card__identity {
+    gap: 4px 8px;
+  }
+  .dashboard-host-card--compact .dashboard-host-card__address {
+    width: 100%;
+    order: 1;
+    font-size: 12px;
+    transform: none;
   }
 </style>

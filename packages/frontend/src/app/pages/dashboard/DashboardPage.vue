@@ -1,8 +1,9 @@
 <script setup lang="ts">
+  import UiListToolbar from '@/foundation/ui/UiListToolbar.vue';
   import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { UiButton, UiInput, UiSelect, UiSpinner, UiScrollArea } from '@/foundation/ui';
+  import { UiButton, UiSelect, UiSpinner, UiScrollArea } from '@/foundation/ui';
   import DashboardHostCard from './DashboardHostCard.vue';
   import {
     numberStorageCodec,
@@ -520,21 +521,11 @@
             class="h-[clamp(300px,42vh,440px)] xl:h-auto xl:flex-1"
             :back-to-top-label="t('dashboard.backToTop')"
           >
-            <div
-              class="dashboard-toolbar sm:sticky sm:top-2 sm:z-10 m-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl p-2.5 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
+            <UiListToolbar
+              v-model="search"
+              :search-label="t('dashboard.searchConnectionsPlaceholder')"
+              class="dashboard-toolbar"
             >
-              <label class="col-span-3 min-w-0 sm:col-span-1"
-                ><span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder') }}</span>
-                <UiInput
-                  v-model="search"
-                  type="search"
-                  density="comfortable"
-                  :placeholder="t('dashboard.searchConnectionsPlaceholder')"
-                  class="dashboard-connection-search w-full"
-                >
-                  <template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
-                </UiInput>
-              </label>
               <div class="min-w-0 sm:min-w-32">
                 <UiSelect
                   v-model="tagId"
@@ -542,7 +533,6 @@
                   class="dashboard-filter-select-gen2 text-xs sm:text-sm"
                   style="--ui-control-height: 2.375rem"
                   text-align="center"
-                  match-trigger-width
                   :aria-label="t('dashboard.filterByTag')"
                 />
               </div>
@@ -553,7 +543,6 @@
                   class="dashboard-filter-select-gen2 text-xs sm:text-sm"
                   style="--ui-control-height: 2.375rem"
                   text-align="center"
-                  match-trigger-width
                   :aria-label="t('dashboard.sortBy')"
                 />
               </div>
@@ -571,18 +560,19 @@
                   aria-hidden="true"
                 ></i>
               </UiButton>
-            </div>
+            </UiListToolbar>
 
             <div class="p-1.5">
               <div v-if="loading && filtered.length === 0" class="py-14 text-center text-sm text-text-secondary">
                 {{ t('common.loading') }}
               </div>
-              <ul v-else-if="filtered.length" class="space-y-2">
+              <ul v-else-if="filtered.length" class="dashboard-quick-connect-grid">
                 <DashboardHostCard
                   v-for="item in filtered"
                   :key="item.id"
                   :data-last-connected-at="item.lastConnectedAt ?? 0"
                   as="li"
+                  compact
                   title-tag="span"
                   :name="item.name || item.host"
                   :address="`${item.username}@${item.host}:${item.port}`"
@@ -818,6 +808,11 @@
 </template>
 
 <style scoped>
+  .dashboard-quick-connect-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    gap: 8px;
+  }
   .dashboard-overview-metrics {
     container-type: inline-size;
   }

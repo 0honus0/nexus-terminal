@@ -45,6 +45,7 @@
       hideIndicator?: boolean;
       triggerClass?: string;
       fitContent?: boolean;
+      fitLongestOption?: boolean;
     }>(),
     {
       modelValue: null,
@@ -54,11 +55,12 @@
       invalid: false,
       align: 'start',
       textAlign: 'start',
-      matchTriggerWidth: false,
+      matchTriggerWidth: true,
       panelClass: '',
       hideIndicator: true,
       triggerClass: '',
       fitContent: false,
+      fitLongestOption: false,
     },
   );
 
@@ -154,8 +156,12 @@
     :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
     :data-state="open ? 'open' : 'closed'"
     class="ui-select"
-    :class="{ 'ui-select--fit-content': props.fitContent }"
+    :class="{ 'ui-select--fit-content': props.fitContent, 'ui-select--fit-longest': props.fitLongestOption }"
   >
+    <span v-if="props.fitLongestOption" class="ui-select__width-guide" aria-hidden="true">
+      <span>{{ props.placeholder }}</span>
+      <span v-for="(option, index) in resolvedOptions" :key="index">{{ option.label }}</span>
+    </span>
     <SelectRoot
       v-model:open="open"
       :model-value="internalModelValue"
@@ -196,6 +202,7 @@
           :data-hide-indicator="props.hideIndicator || undefined"
           :data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
           :data-match-trigger-width="props.matchTriggerWidth || undefined"
+          :data-fit-longest-option="props.fitLongestOption || undefined"
           position="popper"
           :align="props.align"
           :side-offset="0"
