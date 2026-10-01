@@ -790,6 +790,7 @@
       const index = ids.indexOf(registry.activeId.value);
       if (index < 0) return;
       event.preventDefault();
+      event.stopPropagation();
       const delta = event.key === 'ArrowDown' ? 1 : -1;
       activateSession(ids[(index + delta + ids.length) % ids.length]!);
       return;
@@ -801,6 +802,7 @@
     )?.[0];
     if (target) {
       event.preventDefault();
+      event.stopPropagation();
       void focusRegistry.focus(target);
     }
   };
@@ -813,8 +815,8 @@
   onMounted(async () => {
     workspaceActive = true;
     if (route.query.connectionId) preloadWorkspaceTerminalSurface();
-    window.addEventListener('keydown', handleGlobalKeydown);
-    window.addEventListener('keyup', handleGlobalKeyup);
+    window.addEventListener('keydown', handleGlobalKeydown, true);
+    window.addEventListener('keyup', handleGlobalKeyup, true);
     document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
     window.addEventListener('online', handleBrowserOnline);
     window.addEventListener('pageshow', handleDocumentVisibilityChange);
@@ -836,8 +838,8 @@
   onBeforeUnmount(() => {
     workspaceActive = false;
     void workspaceLayout.dispose();
-    window.removeEventListener('keydown', handleGlobalKeydown);
-    window.removeEventListener('keyup', handleGlobalKeyup);
+    window.removeEventListener('keydown', handleGlobalKeydown, true);
+    window.removeEventListener('keyup', handleGlobalKeyup, true);
     window.removeEventListener('online', handleBrowserOnline);
     window.removeEventListener('pageshow', handleDocumentVisibilityChange);
     document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
