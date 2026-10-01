@@ -1,6 +1,6 @@
 # Nexus Backend Architecture
 
-本文描述当前 Backend 的分层、owner 与运行时边界。实际产品需求见 [USAGE](../USAGE.md)，Agent 细节见 [Agent 架构](../AGENT.md)，开发规则见根目录 [AGENTS.md](../../AGENTS.md)。
+本文描述当前 Backend 的分层、owner 与运行时边界，不重复维护功能需求。实际产品需求见 [USAGE](../USAGE.md)，Agent 关键边界与开发规则见 [AGENTS.md](../AGENTS.md)。owner、contract、事务或调用关系变化时，在同一提交更新对应章节。
 
 ## 技术基线
 
@@ -98,7 +98,7 @@ flowchart TD
   Config[config] --> Shared
 ```
 
-允许的静态依赖以根目录 [AGENTS.md](../../AGENTS.md) 为准。Infrastructure 对 Module 的依赖只允许用于实现 Module-owned `*.port` / `*.types` contract，并优先使用 type-only import。
+允许的静态依赖以 [AGENTS.md](../AGENTS.md) 为准。Infrastructure 对 Module 的依赖只允许用于实现 Module-owned `*.port` / `*.types` contract，并优先使用 type-only import。
 
 ## Workspace 与远程能力
 
@@ -170,7 +170,7 @@ Bootstrap 注册 process、database、Runner、provider、plugin 和 transport �
 ## 验证
 
 - `pnpm run check` 执行 Frontend/Agent ESLint 与 Frontend type check。
-- 架构和生命周期规则由根目录 [`AGENTS.md`](../../AGENTS.md) 约束 AI 开发与审查，不使用源码文本扫描测试。
+- 架构和生命周期规则由 [AGENTS.md](../AGENTS.md) 约束 AI 开发与审查，不使用源码文本扫描测试。
 - `pnpm run build:backend` 执行 Backend TypeScript build 并复制 locale/Plugin SDK runtime asset。
 - Agent deterministic scenarios 位于 `tests/backend/agent-scenarios/`。
 - 用户可达 HTTP/WebSocket/SSH/Agent 行为由 `tests/e2e/` 验证。

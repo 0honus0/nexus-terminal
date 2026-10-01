@@ -66,11 +66,11 @@ Agent Workspace Runtime 使用独立 `nexus-agent-runner` 执行平面；Nexus �
 ## 工程文档
 
 - [实际软件需求与使用](./doc/USAGE.md)
-- [开发约束](./AGENTS.md)
+- [开发规则与 Agent 架构](./doc/AGENTS.md)
 - [Frontend 架构](./doc/architecture/FRONTEND.md)
 - [Backend 架构](./doc/architecture/BACKEND.md)
 - [部署、包管理与构建边界](./doc/DEPLOYMENT.md#包管理与构建边界)
-- [Agent 架构](./doc/AGENT.md)
+- [Agent 架构](./doc/AGENTS.md)
 - [远程桌面网关架构](./doc/architecture/REMOTE_DESKTOP.md)
 - [E2E 测试与诊断](./doc/testing/E2E.md)
 

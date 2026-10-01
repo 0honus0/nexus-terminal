@@ -1,6 +1,6 @@
 # Nexus Terminal E2E
 
-> Development rules are maintained in root [AGENTS.md](../../AGENTS.md). Observable product requirements are maintained in [USAGE](../USAGE.md).
+> Read [AGENTS.md](../AGENTS.md) before development. Observable product requirements are maintained in [USAGE](../USAGE.md). This document owns test commands, coverage and delivery evidence; update them alongside changes to the actual validation flow.
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
@@ -185,4 +185,6 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 
 ## Engineering constraints
 
-When adding, moving, grouping, or optimizing tests, follow root [AGENTS.md](../../AGENTS.md) and verify observable behavior described in [USAGE](../USAGE.md).
+When adding, moving, grouping, or optimizing tests, follow [AGENTS.md](../AGENTS.md) and verify observable behavior described in [USAGE](../USAGE.md).
+
+`specs/ssh/upload-protocol.spec.ts` includes an 8MiB upload/download latency regression with 60ms SFTP read/write delay, completion-time budgets, byte equality and an unaligned HTTP Range. Timing attachments record actual durations; this is a pipeline regression check, not a real-network bandwidth guarantee. The new case has not yet been verified successfully because the local E2E environment had an occupied service port.

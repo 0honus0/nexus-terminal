@@ -1,6 +1,6 @@
 # Nexus Terminal Frontend Architecture
 
-本文描述当前 Frontend 的目录、状态 owner、依赖方向和运行时边界。实际产品需求见 [USAGE](../USAGE.md)，开发规则见根目录 [AGENTS.md](../../AGENTS.md)。
+本文描述当前 Frontend 的目录、状态 owner、依赖方向和运行时边界，不重复维护功能需求。实际产品需求见 [USAGE](../USAGE.md)，开发前必读 [AGENTS.md](../AGENTS.md)。owner、公开入口或调用关系变化时，在同一提交更新对应章节。
 
 ## 技术基线
 
@@ -209,7 +209,7 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 Agent launcher 的位置与左右贴边状态由 `host/window-manager.ts` 统一持有和持久化，视口变化按贴边侧重新定位；`AgentLauncher.vue` 只负责拖动、边缘吸附触发和半隐藏展示，悬停/聚焦展开不改写保存的位置。
 
-Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 MessagePort 通信。它不能获得主应用 session cookie、HTTP client 或 Vue owner 实例。完整 Agent 设计见 [Agent 架构](../AGENT.md)。
+Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 MessagePort 通信。它不能获得主应用 session cookie、HTTP client 或 Vue owner 实例。完整 Agent 设计见 [Agent 架构](../AGENTS.md)。
 
 ## 验证
 
@@ -218,4 +218,4 @@ Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 Mess
 - Frontend/Agent ESLint；
 - Frontend TypeScript check。
 
-模块公开入口、跨 feature 依赖、状态 owner、组件拆分和国际化规则由根目录 [`AGENTS.md`](../../AGENTS.md) 约束 AI 开发与审查。仓库不再用读取源码文本、匹配 import 或统计文件形状的脚本和测试充当架构门禁；用户可见行为通过真实 E2E 路径验证。
+模块公开入口、跨 feature 依赖、状态 owner、组件拆分和国际化规则由 [AGENTS.md](../AGENTS.md) 约束 AI 开发与审查。仓库不再用读取源码文本、匹配 import 或统计文件形状的脚本和测试充当架构门禁；用户可见行为通过真实 E2E 路径验证。

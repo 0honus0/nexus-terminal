@@ -18,7 +18,7 @@ pnpm install --frozen-lockfile
 
 根 `packageManager` 字段 pin 本地、CI 与 Docker 使用的 pnpm release；开发机直接安装该版本的 pnpm，Docker builder 也通过 npm 全局安装该版本。升级 pnpm major 前必须确认 lockfile 与 GitHub dependency/security tooling 兼容。依赖刷新如果修改 shared catalog，需要重新生成唯一根 lockfile，并至少构建 Frontend、Backend、Agent Runner，因为 catalog 变化可能同时影响多个 package。
 
-Docker builder 与 CI 从根 workspace/lockfile 安装；Backend 与 Agent Runner 的 production tree 使用 workspace-aware `pnpm deploy --prod` 生成。Frontend 只产出静态 `dist`。开发约束见根目录 [AGENTS.md](../AGENTS.md)。
+Docker builder 与 CI 从根 workspace/lockfile 安装；Backend 与 Agent Runner 的 production tree 使用 workspace-aware `pnpm deploy --prod` 生成。Frontend 只产出静态 `dist`。开发约束见 [AGENTS.md](AGENTS.md)。
 
 ## Docker Compose 部署
 
@@ -210,4 +210,4 @@ NEXUS_IMAGE_TAG=dev \
 scripts/build/build.sh docker
 ```
 
-随后在 `.env` 中设置相同的 `NEXUS_IMAGE_REPOSITORY` 与 `NEXUS_IMAGE_TAG`，再运行 `docker compose up -d`。统一镜像的运行角色入口脚本位于 `scripts/docker/entrypoint.sh`；Docker 相关运行脚本统一归 `scripts/docker/`，开发约束见根目录 [AGENTS.md](../AGENTS.md)。
+随后在 `.env` 中设置相同的 `NEXUS_IMAGE_REPOSITORY` 与 `NEXUS_IMAGE_TAG`，再运行 `docker compose up -d`。统一镜像的运行角色入口脚本位于 `scripts/docker/entrypoint.sh`；Docker 相关运行脚本统一归 `scripts/docker/`，开发约束见 [AGENTS.md](AGENTS.md)。

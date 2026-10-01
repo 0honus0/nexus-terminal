@@ -58,7 +58,7 @@ A browser-based SSH / SFTP / RDP / VNC remote access tool with terminal sessions
 
 ## Documentation
 
-[Features](./FEATURES.md) · [Usage & product requirements](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [Frontend architecture](./architecture/FRONTEND.md) · [Backend architecture](./architecture/BACKEND.md) · [Remote Desktop architecture](./architecture/REMOTE_DESKTOP.md) · [E2E](./testing/E2E.md) · [Development rules](../AGENTS.md) · [中文](../README.md)
+[Features](./FEATURES.md) · [Usage & product requirements](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [Frontend architecture](./architecture/FRONTEND.md) · [Backend architecture](./architecture/BACKEND.md) · [Remote Desktop architecture](./architecture/REMOTE_DESKTOP.md) · [E2E](./testing/E2E.md) · [Development rules](./AGENTS.md) · [中文](../README.md)
 
 ## License
 
