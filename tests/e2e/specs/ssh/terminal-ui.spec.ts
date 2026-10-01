@@ -91,6 +91,50 @@ test('saved custom focus shortcut moves focus from the live terminal to the comm
   }
 });
 
+test('plain Alt cycles the configured focus sequence from a live terminal and wraps around', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const originalResponse = await context.request.get('/api/v1/settings/focus-switcher-sequence');
+  expect(originalResponse.ok()).toBeTruthy();
+  const originalFocus = (await originalResponse.json()) as {
+    sequence: string[];
+    shortcuts: Record<string, { shortcut?: string }>;
+  };
+  const normalized = await context.request.put('/api/v1/settings/focus-switcher-sequence', {
+    data: { sequence: ['commandInput', 'terminalSearch'], shortcuts: {} },
+  });
+  expect(normalized.ok()).toBeTruthy();
+
+  try {
+    const connectionId = await ensureTestSshConnection(context.request);
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    const terminalInput = page.locator('.terminal-inner-container .xterm-helper-textarea');
+    const commandInput = page.locator('.command-bar-command-input');
+    await terminalInput.focus();
+    await expect(terminalInput).toBeFocused();
+
+    await page.keyboard.press('Alt');
+    await expect(commandInput).toBeFocused();
+    await expect(commandInput).toHaveAttribute('data-focus-id', 'commandInput');
+
+    await page.keyboard.press('Alt');
+    await expect(commandInput).toBeFocused();
+    await expect(commandInput).toHaveAttribute('data-focus-id', 'terminalSearch');
+
+    await page.keyboard.press('Alt');
+    await expect(commandInput).toBeFocused();
+    await expect(commandInput).toHaveAttribute('data-focus-id', 'commandInput');
+  } finally {
+    const restore = await context.request.put('/api/v1/settings/focus-switcher-sequence', {
+      data: originalFocus,
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
+});
+
 test('desktop command bar keeps editing space in narrow panes without changing Enter submission', async ({
   page,
   context,
