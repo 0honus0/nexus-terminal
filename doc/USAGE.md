@@ -49,6 +49,14 @@ Agent 每个模型可在「能力配置」中独立选择调用协议，保存�
 
 ## SSH 会话
 
+### Agent 项目目录规则
+
+- Workspace 自动读取项目根及已探索目录路径上的 `AGENTS.md` / `AGENT.md`，文件名大小写不限。多个规则文件同时存在时按目录由浅到深、同目录按文件名排序加载；不会将 `CLAUDE.md` 或其他文件当作别名。
+- SSH 使用 `project_directory_bind(connectionId, directory)` 绑定绝对项目目录，`project_directory_read(connectionId)` 查看，`project_directory_clear(connectionId)` 清除。绑定按用户、应用、对话、连接隔离并持久保存，Root 和获得对应文件读取授权的子 Agent 共享；跨轮生效，删除对话或停用应用清除。绑定不是终端 cwd，不改连接配置、不授予权限，也不自动执行命令。
+- SSH 规则只从绑定根到已探索子目录加载，不读取远端 home 或项目外目录；连接配置变更后旧绑定不自动换目标。Workspace 按最近 `.git` 目录或 worktree 文件确定项目根，没有仓库标记则使用 Workspace 工作根。
+- 规则是发送给模型的项目指导，只适用于对应目标及目录子树，不覆盖用户要求、安全策略或工具审批；冲突应向用户提出。模型收到规则不等于每条要求已被强制验证，重要限制仍须由权限和审批控制。
+- 每次模型请求重新读取，修改或删除规则在后续请求生效。投影最多 16 个文件、每文件正文 16 KiB、正文合计 64 KiB；超过 64 KiB 的源文件不加载，模型上下文预算可进一步截断。不可用时不伪造规则，不写入长期 Memory。
+
 ### Agent SSH 长会话与后台任务
 
 - Agent 工具按功能模块命名：`shell_*`、`ssh_*`、`file_*`、`machine_*`、`workspace_*`、`collaboration_*`、`memory_*`、`browser_*`、`tool_*`、`skill_*`、`plan_*`、`user_*`、`artifact_*`、`acp_*`、`mcp_*`。只接受当前名称，不提供旧工具名别名。

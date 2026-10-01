@@ -424,7 +424,7 @@ OpenAI-compatible Provider 支持 `chat-completions` 与 `responses` 两种协�
 
 Core model input 还必须保持 cache-friendly 且与 Provider 无关：稳定 instructions（Nexus safety → 当前 scope 的 Repo Project Instructions → 已签名 Skill metadata）在前，append-oriented Ledger/tool chronology 随后，本轮 user input 再后，Goal/Plan/Collaboration/Recall 等易变 snapshot 放在尾部。`runId/attemptId/contextEpoch/credential revision/routing identity` 等控制面事实不得为了 cache 或诊断进入模型正文。Tool schema 要确定性 canonicalize/稳定排序；达到 step budget 时通过 `toolMode=none` 禁止新 Tool，而不是删除 schema 破坏前缀。长上下文使用冻结的 model-aware Normal/Extended policy：Normal 默认使用物理 input capacity 的 92% 作为 effective boundary、80% 作为 soft pressure；Extended 分别为 96%/88%。达到 soft pressure 后可提前 compaction，但下一次 inference 所需的最新完整 causal exchange 必须保留；模型可见 Tool result projection 会随 context pressure 收紧到冻结 floor，原始 ToolResult/evidence 仍完整持久化。长上下文压缩采用 generation boundary：一次生成稳定 summary 后开启新 generation，不得每轮重写旧 history。
 
-Repo Project Instructions 第一版只认 Workspace 内的 canonical `AGENTS.md`。Runner 以 `/workspace/work` 为 logical work root，按目标路径向上寻找最近的 `.git` directory 或 worktree-style `.git` file 作为 project root；没有 repo marker 时只使用 work root。只加载 project root → target directory 的 progressive scope，deeper instruction 后置，不扫描 unrelated subtree。Project instruction snapshot 的 path/scope/projectRoot/source SHA-256/byte provenance 只作为当次 Context 的 transient source；它不进入 Memory，不成为 Ledger 或 ContextCheckpoint 的 business truth，也不获得 Tool approval、capability 或安全策略权威。源 hash 进入 stable instruction，因此文件变化通过既有 `stablePrefixHash` / cache lineage 自然失效，不建立第二套 cache invalidation owner。
+Repo Project Instructions 识别 `AGENTS.md` / `AGENT.md`，大小写不限；Workspace 与 SSH 目录均支持。Runner 以 `/workspace/work` 为 logical work root，按目标路径向上寻找最近的 `.git` directory 或 worktree-style `.git` file 作为 project root；没有 repo marker 时只使用 work root。只加载 project root → target directory 的 progressive scope，deeper instruction 后置，不扫描 unrelated subtree。Project instruction snapshot 的 path/scope/projectRoot/source SHA-256/byte provenance 只作为当次 Context 的 transient source；它不进入 Memory，不成为 Ledger 或 ContextCheckpoint 的 business truth，也不获得 Tool approval、capability 或安全策略权威。源 hash 进入 stable instruction，因此文件变化通过既有 `stablePrefixHash` / cache lineage 自然失效，不建立第二套 cache invalidation owner。
 
 上下文构建必须有界：
 
@@ -1016,3 +1016,7 @@ Agent 改动需保持：
 `AgentSshSessionPort` 暴露会话 open/list/close 和后台 Job start/control；`AgentSshSessions` Infrastructure 组合 `ExecutionSessionManager`，唯一持有 Agent 专用 SSH transport、活动借用、任务 channel、限额和清理计时器。命令和文件 adapter 共用 withSession，不复用 Workspace 用户终端。
 
 会话按 user/App/Thread 隔离，Root/Subagent 工具上下文由 Run 注入可信 threadId。文件工具的 sessionId composition 将会话绑定进入规范化参数和 operation hash，检查与执行共享同一选择。后台 Job 使用独立 exec channel，SQLite `agent_ssh_jobs` 保存作用域、operation identity、有界输出和状态；启动时将遗留 running 收敛为 unknown，不保存 live handle 或重放命令。Runner 继续独立持有 Workspace Job Journal，不承担 SSH 连接。
+
+### 项目目录规则加载
+
+- 项目规则识别 `AGENTS.md` / `AGENT.md`，大小写不限（不同于本仓库规则入口）。Runner 按最近 `.git` directory/worktree file 定 Workspace project root，无 repo 用 work root；只加载 root→target scope。SSH 由 conversation-scoped project directory binding 明确根目录，经 file.read 授权和配置 hash 验证读取根→已探索子目录；Root/Subagent 使用统一 source，子 Agent 不越过 delegation grants。path/scope/hash/bytes provenance 是 transient Context source，不进入 Memory/Ledger/checkpoint，不获得审批或安全权威；源变化通过 stablePrefixHash 自然失效。

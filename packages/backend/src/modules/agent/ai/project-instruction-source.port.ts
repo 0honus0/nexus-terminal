@@ -1,4 +1,5 @@
 import type { Scope } from '../agent.types';
+import type { ToolContext } from '../capabilities/tool.types';
 
 export interface ProjectInstructionSnapshot {
   path: string;
@@ -9,7 +10,8 @@ export interface ProjectInstructionSnapshot {
   sourceBytes: number;
   contentBytes: number;
   truncated: boolean;
-  provenance: 'workspace';
+  provenance: 'workspace' | 'ssh';
+  connectionId?: number;
 }
 
 export interface ProjectInstructionOmission {
@@ -32,5 +34,6 @@ export interface ProjectInstructionSourcePort {
     runtimeId: string,
     targetDirectories: readonly string[],
     signal?: AbortSignal,
+    context?: ToolContext,
   ): Promise<ProjectInstructionProjection | null>;
 }

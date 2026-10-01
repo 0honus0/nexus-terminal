@@ -105,6 +105,17 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] =>
       }
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') continue;
       const argumentsRecord = parsed as Record<string, unknown>;
+      if (argumentsRecord.target === 'ssh' && call.name.startsWith('file_')) {
+        for (const value of [argumentsRecord.path, argumentsRecord.destinationPath]) {
+          if (typeof value === 'string' && value.startsWith('/') && !value.includes('\0') && value.length <= 4096) {
+            const directory = ['file_list', 'file_search'].includes(call.name)
+              ? path.posix.normalize(value)
+              : path.posix.dirname(value);
+            targets.add(`ssh:${argumentsRecord.id}:${directory}`);
+          }
+          if (targets.size >= 8) break;
+        }
+      }
       const addTarget = (rawValue: unknown, relativeBase: 'workspace' | 'work', fileTarget = false): void => {
         if (typeof rawValue !== 'string' || !rawValue.trim() || rawValue.length > 4096 || rawValue.includes('\0'))
           return;
@@ -123,8 +134,14 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] =>
         (argumentsRecord.command as Record<string, unknown>).kind === 'argv'
       ) {
         addTarget(argumentsRecord.cwd ?? PROJECT_WORK_ROOT, 'workspace');
-      } else if (argumentsRecord.target === 'workspace' && call.name === 'file_read') {
+      } else if (
+        argumentsRecord.target === 'workspace' &&
+        ['file_read', 'file_write', 'file_delete', 'file_move'].includes(call.name)
+      ) {
         addTarget(argumentsRecord.path, 'work', true);
+        if (call.name === 'file_move') addTarget(argumentsRecord.destinationPath, 'work', true);
+      } else if (argumentsRecord.target === 'workspace' && call.name === 'file_list') {
+        addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work');
       } else if (argumentsRecord.target === 'workspace' && call.name === 'file_search') {
         addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work');
       } else if (
@@ -187,10 +204,30 @@ export class ModelStepRunner {
     const currentProjection = inputProjections[snapshot.id] ?? { ordered: [], pending: [] };
     const currentInput = currentProjection.ordered.at(-1) ?? latestInput(snapshot);
     let projectInstructions: ProjectInstructionSnapshot[] | undefined;
-    if (this.projectInstructionSource && runtimeId && snapshot.definition.environment) {
+    if (this.projectInstructionSource && runtimeId) {
       const targetDirectories = projectInstructionTargetDirectories(snapshot);
       try {
-        const projection = await this.projectInstructionSource.load(scope, snapshot.id, runtimeId, targetDirectories);
+        const projection = await this.projectInstructionSource.load(
+          scope,
+          snapshot.id,
+          runtimeId,
+          targetDirectories,
+          undefined,
+          {
+            ...scope,
+            runId: snapshot.id,
+            threadId: snapshot.threadId,
+            agentRuntimeId: runtimeId,
+            actor: { kind: 'agent', ...scope, runId: snapshot.id, agentRuntimeId: runtimeId },
+            connectionIds: snapshot.definition.connectionIds,
+            environment: snapshot.definition.environment ?? null,
+            stepId: 'project-context',
+            signal: AbortSignal.timeout(10_000),
+            deadlineAt: Math.floor(Date.now() / 1000) + 10,
+            maxOutputBytes: 64 * 1024,
+            inputRevision: snapshot.inputRevision,
+          },
+        );
         projectInstructions = projection?.instructions;
         if (projection?.omitted.length) {
           logger.debug(

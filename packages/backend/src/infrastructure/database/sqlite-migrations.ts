@@ -2,6 +2,7 @@ import type { DatabaseSync as Database } from 'node:sqlite';
 import { logger } from '../../shared/logging/logger';
 import {
   createAgentSshJobsTableSQL,
+  createAgentProjectDirectoriesTableSQL,
   createAgentInputRequestsTableSQL,
   createAiContextCheckpointsTableSQL,
   createAiMemorySearchIndexSQL,
@@ -1278,6 +1279,11 @@ export const definedMigrations: SqliteMigration[] = [
     id: 49,
     name: 'Add durable Agent SSH background jobs',
     sql: createAgentSshJobsTableSQL,
+  },
+  {
+    id: 50,
+    name: 'Add conversation SSH project directories',
+    sql: createAgentProjectDirectoriesTableSQL,
   },
 ];
 

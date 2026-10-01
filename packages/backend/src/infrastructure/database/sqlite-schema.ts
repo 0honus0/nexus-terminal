@@ -1260,6 +1260,18 @@ CREATE TABLE IF NOT EXISTS agent_workspace_runtime_confirmations (
 );
 CREATE INDEX IF NOT EXISTS agent_workspace_runtime_confirmations_expiry ON agent_workspace_runtime_confirmations(expires_at);
 `;
+export const createAgentProjectDirectoriesTableSQL = `
+CREATE TABLE IF NOT EXISTS agent_project_directories (
+  user_id INTEGER NOT NULL,
+  app_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  connection_id INTEGER NOT NULL,
+  directory TEXT NOT NULL,
+  configuration_hash TEXT NOT NULL,
+  PRIMARY KEY (user_id, app_id, thread_id, connection_id)
+);
+`;
+
 export const createAgentSshJobsTableSQL = `
 CREATE TABLE IF NOT EXISTS agent_ssh_jobs (
   job_id TEXT PRIMARY KEY,

@@ -12,6 +12,12 @@ import { RunnerHttpAdapter } from '../../../packages/backend/src/infrastructure/
 import { ProviderService } from '../../../packages/backend/src/modules/agent/ai/provider.service';
 import { ModelStepRunner } from '../../../packages/backend/src/modules/agent/runtime/execution/model-step-runner';
 import { clock, scope } from './scenario-fixtures';
+import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
+import { AgentProjectDirectories } from '../../../packages/backend/src/infrastructure/agent/capabilities/agent-project-directories';
+import type { SshFileTargetPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-file-target.port';
+import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
+import { createHash } from 'node:crypto';
+import { createProjectDirectoryTools } from '../../../packages/backend/src/modules/agent/tools/host/project-directory-tools';
 import { contextService } from './scenario-context-helpers';
 import {
   AgentBenchmarkCase,
@@ -92,6 +98,143 @@ export const projectInstructionsContextScenario = async () => {
   );
 
   const httpDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-project-instructions-http-'));
+  const projectDatabase = new DatabaseAdapter({
+    dataDirectory: httpDirectory,
+    filename: 'projects.sqlite',
+    nodeEnv: 'test',
+  });
+  let authorized = true;
+  let configurationHash = 'project-config';
+  const remoteFiles = new Map([
+    ['/repo/AGENT.md', 'REMOTE_ROOT_RULE'],
+    ['/repo/src/aGeNtS.MD', 'REMOTE_NESTED_RULE'],
+    ['/repo/other/AGENTS.md', 'REMOTE_UNRELATED_RULE'],
+  ]);
+  const directories = new Set(['/repo', '/repo/src', '/repo/other']);
+  const checkHash = (hash: string) => {
+    if (hash !== configurationHash) throw new Error('RESOURCE_CHANGED');
+  };
+  const remoteFilePort = {
+    stat: async (_context: ToolContext, _id: number, filename: string, hash: string) => {
+      checkHash(hash);
+      const content = remoteFiles.get(filename);
+      return {
+        path: filename,
+        resolvedPath: filename,
+        exists: directories.has(filename) || content !== undefined,
+        type: directories.has(filename) ? 'directory' : content === undefined ? null : 'file',
+        sizeBytes: content === undefined ? null : Buffer.byteLength(content),
+        modifiedAt: 1,
+        mode: null,
+        sha256: content === undefined ? null : createHash('sha256').update(content).digest('hex'),
+      };
+    },
+    list: async (_context: ToolContext, _id: number, directory: string, _limit: number, hash: string) => {
+      checkHash(hash);
+      return {
+        path: directory,
+        truncated: false,
+        entries: [...remoteFiles]
+          .filter(([filename]) => path.posix.dirname(filename) === directory)
+          .map(([filename, content]) => ({
+            name: path.posix.basename(filename),
+            path: filename,
+            type: 'file',
+            sizeBytes: Buffer.byteLength(content),
+            modifiedAt: 1,
+          })),
+      };
+    },
+    read: async (
+      _context: ToolContext,
+      _id: number,
+      filename: string,
+      _offset: number,
+      _limit: number,
+      hash: string,
+    ) => {
+      checkHash(hash);
+      return { content: remoteFiles.get(filename)!, truncated: false };
+    },
+  } as unknown as SshFileTargetPort;
+  const projectContext: ToolContext = {
+    ...scope,
+    threadId: 'project-thread',
+    runId: 'project-run',
+    agentRuntimeId: 'root',
+    actor: { kind: 'user', userId: scope.userId },
+    connectionIds: [1],
+    environment: null,
+    stepId: 'project',
+    signal: new AbortController().signal,
+    deadlineAt: Math.floor(Date.now() / 1000) + 60,
+    maxOutputBytes: 64 * 1024,
+    inputRevision: 1,
+  };
+  const projects = new AgentProjectDirectories(projectDatabase, remoteFilePort, async () => authorized);
+  try {
+    const tools = createProjectDirectoryTools(
+      projects,
+      {
+        target: async () => ({
+          kind: 'ssh',
+          target: 'ssh',
+          id: '1',
+          connectionId: 1,
+          configurationHash,
+          targetIdentity: 'ssh:1',
+          endpoint: 'fixture',
+          loginUser: 'fixture',
+          hostKeyTrust: 'unavailable',
+        }),
+      },
+      { sha256Utf8: (text) => createHash('sha256').update(text).digest('hex') },
+    );
+    const bind = tools.find((tool) => tool.descriptor.name === 'project_directory_bind')!;
+    const inspection = await bind.inspect({ connectionId: 1, directory: '/repo' }, projectContext, 1);
+    assert.equal(inspection.mutation, true);
+    assert.equal(inspection.risk, 'mutate');
+    assert.equal((await bind.execute(inspection, projectContext)).ok, true);
+    await assert.rejects(
+      () => bind.inspect({ connectionId: 1, directory: '../escape' }, projectContext, 1),
+      /TOOL_ARGUMENTS_INVALID/,
+    );
+    const inherited = await projects.instructions({ ...projectContext, runId: 'next-run', agentRuntimeId: 'child' }, [
+      'ssh:1:/repo/src',
+      'ssh:2:/repo/other',
+    ]);
+    assert.deepEqual(
+      inherited.map((item) => item.content),
+      ['REMOTE_ROOT_RULE', 'REMOTE_NESTED_RULE'],
+    );
+    assert.ok(inherited.every((item) => item.provenance === 'ssh' && item.connectionId === 1));
+    assert.equal(await projects.read({ ...projectContext, threadId: 'other-thread' }, 1), null);
+    assert.equal(await projects.read({ ...projectContext, userId: scope.userId + 1 }, 1), null);
+    assert.equal(await projects.read({ ...projectContext, appId: 'other-app' }, 1), null);
+    remoteFiles.set('/repo/AGENT.md', 'UPDATED_RULE');
+    assert.equal((await projects.instructions(projectContext, []))[0]?.content, 'UPDATED_RULE');
+    authorized = false;
+    await assert.rejects(() => projects.instructions(projectContext, []), /RESOURCE_FORBIDDEN/);
+    authorized = true;
+    const aborted = new AbortController();
+    const abortingProjects = new AgentProjectDirectories(projectDatabase, remoteFilePort, async () => {
+      aborted.abort();
+      return true;
+    });
+    await assert.rejects(() => abortingProjects.read({ ...projectContext, signal: aborted.signal }, 1), {
+      name: 'AbortError',
+    });
+    configurationHash = 'changed-config';
+    await assert.rejects(() => projects.instructions(projectContext, []), /RESOURCE_CHANGED/);
+    configurationHash = 'project-config';
+    await projects.clear(projectContext, 1);
+    assert.deepEqual(await projects.instructions(projectContext, []), []);
+    await projects.bind(projectContext, { connectionId: 1, directory: '/repo', configurationHash });
+    await projects.clearScope(scope, projectContext.threadId);
+    assert.equal(await projects.read(projectContext, 1), null);
+  } finally {
+    await projectDatabase.close();
+  }
   let httpCodecCases = 0;
   let generationConflictCases = 0;
   let runnerServer: ReturnType<RunnerControllerServer['createServer']> | null = null;
@@ -349,6 +492,53 @@ export const projectInstructionsContextScenario = async () => {
     false,
     'Runner unavailability must remain fail-soft and must not synthesize project instructions',
   );
+  const remoteSnapshot = {
+    ...auditSnapshot,
+    definition: { ...auditSnapshot.definition, environment: null, connectionIds: [1] },
+  };
+  const remoteRunner = new ModelStepRunner(
+    auditProviders,
+    contextService([]),
+    auditModel,
+    new ScenarioModelCallLimiter(),
+    {
+      load: async (_scope, _runId, _runtimeId, _targets, _signal, context) => {
+        assert.equal(context?.threadId, remoteSnapshot.threadId);
+        assert.deepEqual(context?.connectionIds, [1]);
+        return {
+          workspaceId: '',
+          generation: 0,
+          targetDirectories: [],
+          omitted: [],
+          instructions: [
+            {
+              path: '/repo/AGENT.md',
+              scopePath: '/repo',
+              projectRoot: '/repo',
+              hash: 'd'.repeat(64),
+              content: 'SSH_WITHOUT_WORKSPACE_RULE',
+              sourceBytes: 26,
+              contentBytes: 26,
+              truncated: false,
+              provenance: 'ssh',
+              connectionId: 1,
+            },
+          ],
+        };
+      },
+    },
+  );
+  const remotePrepared = await remoteRunner.prepare(
+    remoteSnapshot,
+    scope,
+    [],
+    {},
+    undefined,
+    undefined,
+    'remote-runtime',
+  );
+  assert.ok(remotePrepared.contextPlan.sourceRanges.some((source) => source.id === 'ssh:1:/repo/AGENT.md'));
+  assert.match(remotePrepared.contextPlan.instructions.join('\n'), /SSH_WITHOUT_WORKSPACE_RULE/);
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-project-instructions-'));
   const noRepoDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-project-instructions-no-repo-'));
@@ -409,6 +599,15 @@ export const projectInstructionsContextScenario = async () => {
       'a deeper .git worktree marker must reset project-root scope and exclude outer instructions',
     );
     assert.equal(worktree.instructions[0]!.projectRoot, '/workspace/work/packages/pkg');
+
+    fs.writeFileSync(path.join(worktreeDirectory, 'packages', 'pkg', 'agent.MD'), 'SINGULAR_CASE_RULE\n');
+    fs.writeFileSync(path.join(worktreeDirectory, 'packages', 'pkg', 'AgEnTs.md'), 'PLURAL_CASE_RULE\n');
+    fs.writeFileSync(path.join(worktreeDirectory, 'packages', 'pkg', 'CLAUDE.md'), 'NOT_A_NEXUS_RULE\n');
+    const variants = resolveProjectInstructions(worktreeDirectory, ['/workspace/work/packages/pkg/src']);
+    assert.equal(variants.instructions.length, 3);
+    assert.ok(variants.instructions.some((item) => item.content.includes('SINGULAR_CASE_RULE')));
+    assert.ok(variants.instructions.some((item) => item.content.includes('PLURAL_CASE_RULE')));
+    assert.ok(variants.instructions.every((item) => !item.content.includes('NOT_A_NEXUS_RULE')));
 
     fs.writeFileSync(path.join(outsideDirectory, 'AGENTS.md'), 'OUTSIDE_RULE\n');
     fs.symlinkSync(outsideDirectory, path.join(directory, 'linked'), 'dir');

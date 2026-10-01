@@ -112,9 +112,10 @@ const readInstruction = (
   logicalDirectory: string,
   projectRoot: string,
   remainingBytes: number,
+  name: string,
 ): RunnerProjectInstruction | RunnerProjectInstructionOmission | null => {
-  const logicalPath = logicalDirectory + '/AGENTS.md';
-  const file = path.join(hostPathFor(workRoot, logicalDirectory), 'AGENTS.md');
+  const logicalPath = logicalDirectory + '/' + name;
+  const file = path.join(hostPathFor(workRoot, logicalDirectory), name);
   if (!fs.existsSync(file)) return null;
   assertNoSymlinkPath(workRoot, file, false);
   const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -186,21 +187,26 @@ export const resolveProjectInstructions = (
   };
   let remainingBytes = MAX_CONTENT_BYTES_TOTAL;
   for (const [directory, projectRoot] of orderedScopes) {
-    if (instructions.length >= MAX_INSTRUCTION_FILES) {
-      const candidate = directory + '/AGENTS.md';
-      if (fs.existsSync(path.join(hostPathFor(resolvedRoot, directory), 'AGENTS.md'))) {
-        recordOmission({ path: candidate, reason: 'too_many_files' });
+    const hostDirectory = hostPathFor(resolvedRoot, directory);
+    if (!fs.existsSync(hostDirectory)) continue;
+    const names = fs
+      .readdirSync(hostDirectory)
+      .filter((name) => /^agents?\.md$/i.test(name))
+      .sort();
+    for (const name of names) {
+      if (instructions.length >= MAX_INSTRUCTION_FILES) {
+        recordOmission({ path: directory + '/' + name, reason: 'too_many_files' });
+        continue;
       }
-      continue;
+      const item = readInstruction(resolvedRoot, directory, projectRoot, remainingBytes, name);
+      if (!item) continue;
+      if ('reason' in item) {
+        recordOmission(item);
+        continue;
+      }
+      instructions.push(item);
+      remainingBytes = Math.max(0, remainingBytes - item.contentBytes);
     }
-    const item = readInstruction(resolvedRoot, directory, projectRoot, remainingBytes);
-    if (!item) continue;
-    if ('reason' in item) {
-      recordOmission(item);
-      continue;
-    }
-    instructions.push(item);
-    remainingBytes = Math.max(0, remainingBytes - item.contentBytes);
   }
 
   return {

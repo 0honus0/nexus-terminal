@@ -222,6 +222,9 @@ export const subagentProfileStrategyScenario = async () => {
       supportsFileInput: false,
     } as Parameters<SubagentContextBuilder['prepare']>[4],
     {
+      id: runtime.runId,
+      threadId: 'profile-thread',
+      inputRevision: 1,
       usage: {
         inputTokens: 0,
         outputTokens: 0,
@@ -231,7 +234,7 @@ export const subagentProfileStrategyScenario = async () => {
         subagentMessageBytes: 0,
       },
       budget: { maxRunSteps: 64, maxToolOutputBytes: 1_048_576, contextPolicy: freezeRunContextPolicy('normal') },
-      definition: { environment: { transport: 'workspace-profile' } },
+      definition: { connectionIds: [], environment: { transport: 'workspace-profile' } },
     } as unknown as RunView,
   );
   assert.equal(prepared.kind, 'ready');

@@ -53,6 +53,8 @@ import type { AcpTransportPort, BrowserGatewayPort } from '../../modules/agent/a
 import type { ArtifactLimitPolicyPort } from '../../modules/agent/ai/artifact.port';
 import { ConversationService } from '../../modules/agent/ai/conversation.service';
 import { AgentSshSessions } from '../../infrastructure/agent/capabilities/agent-ssh-sessions';
+import { AgentProjectDirectories } from '../../infrastructure/agent/capabilities/agent-project-directories';
+import { createProjectDirectoryTools } from '../../modules/agent/tools/host/project-directory-tools';
 import { createSshSessionTools } from '../../modules/agent/tools/host/ssh-session-tools';
 import { ContextCheckpointService } from '../../modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../modules/agent/ai/context.service';
@@ -279,7 +281,10 @@ export const composeAgent = ({
     systemClock,
     settings,
     lifecycle,
-    (scope, threadId) => sshSessions.closeScope(scope, threadId),
+    async (scope, threadId) => {
+      await sshSessions.closeScope(scope, threadId);
+      await projectDirectories.clearScope(scope, threadId);
+    },
   );
   const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
   const skills = new SkillRegistry(new InstalledPluginSkillSourceAdapter(database, dataDirectory));
@@ -371,6 +376,14 @@ export const composeAgent = ({
     },
   );
   const sshFiles = new SshFileTargetAdapter(connectionResolver, sshSessions);
+  const projectDirectories = new AgentProjectDirectories(database, sshFiles, async (context, connectionId) => {
+    await sshTargets.target(context, connectionId);
+    const thread = context.threadId ? await conversationRepository.getThread(context, context.threadId) : null;
+    const decision = await capabilityBroker.authorize(context, 'file.read', {
+      target: { target: 'ssh', id: String(connectionId) },
+    });
+    return Boolean(thread && decision.allowed);
+  });
   const sshShell = new SshShellTargetAdapter(connectionResolver, sshSessions);
   const cryptoHash = new NodeCryptoHashAdapter();
   const acpPermissions = new AcpPermissionBroker(stateCommit, cryptoHash, systemClock, (runId, approvalId) => {
@@ -405,6 +418,11 @@ export const composeAgent = ({
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter(acpTransport);
   const toolCatalog = new ToolCatalog();
+  toolCatalog.registerContribution({
+    schemaVersion: 1,
+    id: 'project.directories',
+    tools: createProjectDirectoryTools(projectDirectories, sshTargets, cryptoHash),
+  });
   toolCatalog.registerContribution({
     schemaVersion: 1,
     id: 'ssh.sessions',
@@ -468,10 +486,46 @@ export const composeAgent = ({
   const modelCalls = new ModelCallLimiter(settings);
   const leaseCoordinator = new LeaseCoordinator(leases, systemClock);
   const mutationLeaseGuard = new AgentMutationLeaseGuardAdapter(leases, systemClock);
-  const modelSteps = new ModelStepRunner(providers, context, languageModel, modelCalls, {
-    load: (scope, runId, runtimeId, targetDirectories, signal) =>
-      workspaceRuntime.loadProjectInstructions(scope, runId, runtimeId, targetDirectories, signal),
-  });
+  const projectInstructionSource = {
+    load: async (
+      ...args: Parameters<
+        import('../../modules/agent/ai/project-instruction-source.port').ProjectInstructionSourcePort['load']
+      >
+    ) => {
+      const [scope, runId, runtimeId, targetDirectories, signal, toolContext] = args;
+      const workspace = toolContext?.environment
+        ? await workspaceRuntime
+            .loadProjectInstructions(
+              scope,
+              runId,
+              runtimeId,
+              targetDirectories.filter(
+                (directory) => directory === '/workspace/work' || directory.startsWith('/workspace/work/'),
+              ),
+              signal,
+            )
+            .catch(() => {
+              logger.warn({ runId, runtimeId }, 'Workspace project instructions unavailable; no rules synthesized');
+              return null;
+            })
+        : null;
+      const remote = toolContext
+        ? await projectDirectories.instructions(toolContext, targetDirectories).catch(() => {
+            logger.warn({ runId, runtimeId }, 'SSH project instructions unavailable; no remote rules synthesized');
+            return [];
+          })
+        : [];
+      if (!workspace && !remote.length) return null;
+      return {
+        workspaceId: workspace?.workspaceId ?? '',
+        generation: workspace?.generation ?? 0,
+        targetDirectories: [...targetDirectories],
+        instructions: [...(workspace?.instructions ?? []), ...remote],
+        omitted: workspace?.omitted ?? [],
+      };
+    },
+  };
+  const modelSteps = new ModelStepRunner(providers, context, languageModel, modelCalls, projectInstructionSource);
   const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
   let recordRecoverySafePoint: (
     run: Parameters<AgentScheduler['enqueue']>[0],
@@ -504,10 +558,7 @@ export const composeAgent = ({
     modelContinuations,
     artifacts,
     systemClock,
-    {
-      load: (scope, runId, runtimeId, targetDirectories, signal) =>
-        workspaceRuntime.loadProjectInstructions(scope, runId, runtimeId, targetDirectories, signal),
-    },
+    projectInstructionSource,
   );
   const subagentHost: SubagentExecutionHost = {
     enqueueRootRun: async (runId, scope) => {
@@ -695,6 +746,7 @@ export const composeAgent = ({
           }
         } else {
           await sshSessions.closeScope(scope);
+          await projectDirectories.clearScope(scope);
           try {
             await integrations.deactivate(scope);
           } catch (error) {
