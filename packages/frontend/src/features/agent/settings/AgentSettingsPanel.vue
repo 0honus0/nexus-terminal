@@ -645,26 +645,26 @@
 </script>
 
 <template>
-  <div class="space-y-3 sm:space-y-4">
+  <div class="agent-settings-panel space-y-3 sm:space-y-4">
     <!-- 顶部状态与主控条 (Status & Master Switch Banner) -->
     <div
       v-if="settings"
-      class="rounded-xl border border-border bg-card px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between sm:justify-start gap-2 sm:gap-4 shadow-xs"
+      class="agent-settings-master rounded-xl border border-border bg-card px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-xs"
     >
       <!-- 已启用状态 -->
       <span
-        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold shrink-0 select-none"
+        class="agent-settings-master__status inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold select-none"
         :class="stateBadgeClass"
       >
-        <span class="h-1.5 w-1.5 rounded-full" :class="stateDotClass"></span>
-        {{ stateLabel }}
+        <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="stateDotClass"></span>
+        <span class="min-w-0 break-words">{{ stateLabel }}</span>
       </span>
 
       <!-- 活跃 App 整体展示 -->
       <span
-        class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 sm:px-3 py-1 text-xs text-text-secondary shadow-2xs shrink-0 select-none"
+        class="agent-settings-master__apps inline-flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-border bg-background px-2.5 sm:px-3 py-1 text-xs text-text-secondary shadow-2xs select-none"
       >
-        <span>{{ $t('agent.settings.summary.activeApps') }}</span>
+        <span class="min-w-0 break-words">{{ $t('agent.settings.summary.activeApps') }}</span>
         <span class="font-mono font-medium text-foreground tracking-wide">
           <span :class="enabledApps > 0 ? 'text-foreground font-semibold' : 'text-text-secondary'">{{
             enabledApps
@@ -681,19 +681,19 @@
         :tone="runtimeReady(settings.availability.state) ? 'danger' : 'neutral'"
         :disabled="featureControlBusy"
         density="compact"
-        class="shrink-0 text-xs"
+        class="agent-settings-master__toggle text-xs"
         @click="changeFeature(!runtimeReady(settings.availability.state))"
       >
         <i
           :class="runtimeReady(settings.availability.state) ? 'fa-solid fa-power-off' : 'fa-solid fa-play'"
-          class="text-xs mr-1.5"
+          class="text-xs shrink-0"
           aria-hidden="true"
         ></i>
-        {{
+        <span class="min-w-0 whitespace-normal break-words text-center">{{
           runtimeReady(settings.availability.state)
             ? $t('agent.settings.feature.disable')
             : $t('agent.settings.feature.enable')
-        }}
+        }}</span>
       </UiButton>
     </div>
 
@@ -1086,6 +1086,40 @@
 </template>
 
 <style scoped>
+  .agent-settings-panel {
+    container-type: inline-size;
+  }
+
+  .agent-settings-master {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .agent-settings-master__status,
+  .agent-settings-master__apps,
+  .agent-settings-master__toggle {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .agent-settings-master__toggle {
+    justify-self: end;
+  }
+
+  @container (max-width: 480px) {
+    .agent-settings-master {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
+    .agent-settings-master__toggle {
+      justify-self: stretch;
+    }
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
