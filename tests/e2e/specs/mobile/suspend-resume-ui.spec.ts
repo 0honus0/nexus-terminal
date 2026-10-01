@@ -79,6 +79,33 @@ test('foreground probes preserve healthy SSH and resume a half-open transport wi
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const connectionId = await ensureTestSshConnection(context.request);
+  await page.addInitScript(() => {
+    const NativeWebSocket = window.WebSocket;
+    const state = { completedProbes: 0 };
+    Object.assign(window, { __e2eLiveness: state });
+    window.WebSocket = class extends NativeWebSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols ?? []);
+        if (new URL(String(url), window.location.href).pathname !== '/ws/workspace') return;
+        const probes = new Set<string>();
+        const send = this.send.bind(this);
+        this.send = (data) => {
+          if (typeof data === 'string') {
+            const frame = JSON.parse(data);
+            if (frame.type === 'workspace.ping') probes.add(frame.requestId);
+          }
+          send(data);
+        };
+        this.addEventListener('message', (event) => {
+          if (typeof event.data !== 'string') return;
+          const frame = JSON.parse(event.data);
+          if (frame.type !== 'response' || !frame.payload?.ok || !probes.delete(frame.requestId)) return;
+          // Run after dispatch and the promise chain that clears the in-flight probe.
+          window.setTimeout(() => state.completedProbes++, 0);
+        });
+      }
+    } as typeof WebSocket;
+  });
   let dropProbe = false;
   let connects = 0;
   let resumes = 0;
@@ -108,6 +135,10 @@ test('foreground probes preserve healthy SSH and resume a half-open transport wi
   await foreground();
   await expect.poll(() => probes).toBeGreaterThan(0);
   await refreshed;
+  await page.waitForFunction((expected) => {
+    const state = (window as typeof window & { __e2eLiveness?: { completedProbes: number } }).__e2eLiveness;
+    return (state?.completedProbes ?? 0) >= expected;
+  }, probes);
   expect(resumes).toBe(0);
   const initialConnects = connects;
   const healthyProbes = probes;
