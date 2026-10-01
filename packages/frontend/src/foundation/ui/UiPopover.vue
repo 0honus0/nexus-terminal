@@ -23,6 +23,7 @@
       iconOnly?: boolean;
       wrapperClass?: string;
       triggerClass?: string;
+      portalMarker?: boolean;
     }>(),
     {
       title: '',
@@ -38,6 +39,7 @@
       iconOnly: false,
       wrapperClass: '',
       triggerClass: '',
+      portalMarker: false,
     },
   );
 
@@ -45,6 +47,7 @@
   const emit = defineEmits<{ 'open-change': [open: boolean] }>();
 
   const wrapper = ref<HTMLElement | null>(null);
+  let restoreFocus = true;
 
   const collisionBoundary = computed<HTMLElement | undefined>(() => {
     if (!props.boundarySelector) return undefined;
@@ -63,8 +66,14 @@
     emit('open-change', next);
   };
 
-  const close = (): void => {
+  const close = (focus = true): void => {
+    restoreFocus = focus;
     applyOpen(false);
+  };
+
+  const onCloseAutoFocus = (event: Event): void => {
+    if (!restoreFocus) event.preventDefault();
+    restoreFocus = true;
   };
 
   // `disabled` must also resolve an already-open popover. Funnelling the
@@ -82,23 +91,26 @@
   <span ref="wrapper" data-ui="popover" data-ui-gen="2" class="ui-popover" :class="props.wrapperClass">
     <PopoverRoot :open="model" :modal="false" @update:open="applyOpen">
       <PopoverTrigger as-child>
-        <UiButton
-          :appearance="props.triggerAppearance"
-          :tone="props.triggerTone"
-          :density="props.density"
-          :icon-only="props.iconOnly"
-          :disabled="props.disabled"
-          :aria-label="props.ariaLabel"
-          :title="props.title || undefined"
-          :class="props.triggerClass"
-        >
-          <slot name="trigger" :open="model" />
-        </UiButton>
+        <slot name="trigger-control" :open="model">
+          <UiButton
+            :appearance="props.triggerAppearance"
+            :tone="props.triggerTone"
+            :density="props.density"
+            :icon-only="props.iconOnly"
+            :disabled="props.disabled"
+            :aria-label="props.ariaLabel"
+            :title="props.title || undefined"
+            :class="props.triggerClass"
+          >
+            <slot name="trigger" :open="model" />
+          </UiButton>
+        </slot>
       </PopoverTrigger>
       <PopoverPortal>
         <PopoverContent
           data-ui="popover-panel"
           data-ui-gen="2"
+          :data-agent-hub-portal="props.portalMarker ? '' : undefined"
           data-surface="glass"
           :side="props.placement"
           :side-offset="props.offset"
@@ -112,6 +124,7 @@
           :aria-label="props.ariaLabel"
           class="ui-surface ui-radius--panel ui-popover__panel ui-glass-panel"
           :class="props.panelClass"
+          @close-auto-focus="onCloseAutoFocus"
         >
           <slot name="panel" :close="close" />
         </PopoverContent>

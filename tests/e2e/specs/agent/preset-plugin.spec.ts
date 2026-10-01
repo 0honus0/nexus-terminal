@@ -1504,10 +1504,52 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect(approvalMode).toContainText('Ask when needed');
 
       const targets = hub.getByRole('button', { name: 'SSH Hosts', exact: true });
+      await page.evaluate(() => {
+        const samples: Array<{ x: number; y: number; width: number; height: number }> = [];
+        (window as typeof window & { popoverPlacementSamples?: typeof samples }).popoverPlacementSamples = samples;
+        let frames = 0;
+        const sample = () => {
+          frames += 1;
+          const panel = document.querySelector<HTMLElement>('[data-ui="popover-panel"][aria-label="SSH Hosts"]');
+          if (panel && panel.getBoundingClientRect().width > 0 && getComputedStyle(panel).visibility !== 'hidden') {
+            const rect = panel.getBoundingClientRect();
+            if (rect.top >= 0 && rect.left >= 0)
+              samples.push({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+          }
+          if (samples.length < 8 && frames < 120) requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
       await targets.click();
       const targetsPanel = page.getByRole('dialog', { name: 'SSH Hosts', exact: true });
       await expect(targetsPanel.getByText('E2E SSH', { exact: true })).toBeVisible();
       await expect(targetsPanel.getByText('1/1')).toBeVisible();
+      const bulkSelection = targetsPanel.getByRole('checkbox');
+      await expect(bulkSelection).toBeChecked();
+      await bulkSelection.click();
+      await expect(bulkSelection).not.toBeChecked();
+      await expect(targetsPanel.getByText('0/1')).toBeVisible();
+      await bulkSelection.click();
+      await expect(bulkSelection).toBeChecked();
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              (window as typeof window & { popoverPlacementSamples?: unknown[] }).popoverPlacementSamples?.length ?? 0,
+          ),
+        )
+        .toBe(8);
+      const samples = await page.evaluate(
+        () =>
+          (window as typeof window & { popoverPlacementSamples: Array<{ x: number; y: number }> })
+            .popoverPlacementSamples,
+      );
+      expect(
+        Math.max(...samples.map((sample) => sample.x)) - Math.min(...samples.map((sample) => sample.x)),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.max(...samples.map((sample) => sample.y)) - Math.min(...samples.map((sample) => sample.y)),
+      ).toBeLessThanOrEqual(1);
       await targets.click();
       await restoredComposer.fill(
         `Request the bounded shell approval exactly once. E2E_APPROVAL_CONNECTION_ID=${connectionId}`,

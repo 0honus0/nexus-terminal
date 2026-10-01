@@ -1349,7 +1349,9 @@
 
 .ui-popover__panel {
   z-index: 80;
-  min-width: min(220px, calc(100vw - 24px));
+  min-width: min(220px, var(--reka-popover-content-available-width, calc(100vw - 24px)));
+  max-width: var(--reka-popover-content-available-width, calc(100vw - 24px));
+  max-height: var(--reka-popover-content-available-height, calc(100dvh - 24px));
   overflow: auto;
   padding: 10px;
   color: var(--ui-text);
@@ -1359,6 +1361,20 @@
 
 .ui-popover__panel:focus-visible {
   box-shadow: var(--ui-focus-ring), var(--ui-shadow-raised);
+}
+
+/* A picker keeps its heading/actions outside the one scrollable list. */
+.ui-popover__panel--list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ui-popover__list {
+  max-height: 20rem;
+  flex: 1 1 auto;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
 }
 
 .ui-checkbox {

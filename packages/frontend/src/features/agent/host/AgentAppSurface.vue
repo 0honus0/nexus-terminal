@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
-  import { UiButton, UiInfoHint } from '@/foundation/ui';
+  import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import AgentConversation from '../ai/AgentConversation.vue';
   import {
     createConversationCommandExecutor,
@@ -2747,7 +2747,7 @@
                 <AgentConfigPopover
                   :ariaLabel="$t('agent.operations.targets')"
                   :title="$t('agent.operations.targetsHint')"
-                  panel-class="w-[min(320px,calc(100vw-24px))] !rounded-xl !p-2.5 !shadow-xl"
+                  panel-class="ui-popover__panel--list w-[min(320px,calc(100vw-24px))] !rounded-xl !p-3 !shadow-xl"
                 >
                   <template #trigger>
                     <i
@@ -2774,14 +2774,9 @@
                     ></i>
                   </template>
                   <template #panel>
-                    <div class="flex items-start justify-between gap-3 px-1 pb-2 pt-0.5">
-                      <div class="min-w-0">
-                        <div class="text-[11px] font-semibold leading-tight text-foreground">
-                          {{ $t('agent.operations.targets') }}
-                        </div>
-                        <div class="mt-1 text-[11px] leading-snug text-text-secondary/70">
-                          {{ $t('agent.operations.targetsHint') }}
-                        </div>
+                    <div class="shrink-0 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 px-1">
+                      <div class="min-w-0 flex-1 text-[11px] font-semibold leading-none text-foreground">
+                        {{ $t('agent.operations.targets') }}
                       </div>
                       <span
                         v-if="modelSelectionLocked"
@@ -2790,85 +2785,53 @@
                         <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
                         >{{ $t('agent.operations.frozen') }}
                       </span>
+                      <div v-if="connections.length > 0" class="ml-auto flex shrink-0 items-center gap-2">
+                        <div class="flex min-w-0 items-center gap-1.5 text-[11px] text-text-secondary/70">
+                          <span
+                            class="shrink-0 font-semibold tabular-nums"
+                            :class="displayedConnectionIds.length ? 'text-success' : 'text-error/80'"
+                          >
+                            {{ displayedConnectionIds.length }}/{{ connections.length }}
+                          </span>
+                        </div>
+                        <label
+                          class="inline-flex min-h-7 cursor-pointer items-center gap-1.5 text-[11px] font-medium leading-none text-text-secondary"
+                        >
+                          <UiCheckbox
+                            density="compact"
+                            :model-value="connectionSelectionState === 'on'"
+                            :indeterminate="connectionSelectionState === 'mixed'"
+                            :disabled="modelSelectionLocked"
+                            :aria-label="$t('agent.operations.targetsBulkToggle')"
+                            :title="
+                              connectionSelectionState === 'on'
+                                ? $t('agent.operations.disableAllTargets')
+                                : $t('agent.operations.enableAllTargets')
+                            "
+                            @update:model-value="toggleAllConnectionSelections"
+                          />
+                          <span class="whitespace-nowrap">{{ $t('agent.operations.enableAllTargets') }}</span>
+                        </label>
+                      </div>
                     </div>
 
                     <div
-                      v-if="connections.length > 0"
-                      class="mb-1.5 flex items-center justify-between gap-2 rounded-lg bg-header/30 px-2 py-1.5"
+                      class="ui-popover__list min-h-0 overflow-y-auto overscroll-contain rounded-lg p-1"
+                      role="group"
+                      :aria-label="$t('agent.operations.targets')"
                     >
-                      <div class="flex min-w-0 items-center gap-1.5 text-[11px] text-text-secondary/70">
-                        <span
-                          class="h-1.5 w-1.5 shrink-0 rounded-full"
-                          :class="displayedConnectionIds.length ? 'bg-success' : 'bg-error/75'"
-                          aria-hidden="true"
-                        ></span>
-                        <span class="truncate">{{ $t('agent.operations.targetsRunScope') }}</span>
-                        <span
-                          class="shrink-0 font-semibold tabular-nums"
-                          :class="displayedConnectionIds.length ? 'text-success' : 'text-error/80'"
-                        >
-                          {{ displayedConnectionIds.length }}/{{ connections.length }}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        class="grid h-6 w-[54px] shrink-0 grid-cols-3 items-center overflow-hidden rounded-md border border-border/65 bg-background/55 p-0.5 transition-colors disabled:cursor-default disabled:opacity-50"
-                        :disabled="modelSelectionLocked"
-                        :aria-pressed="
-                          connectionSelectionState === 'mixed' ? 'mixed' : connectionSelectionState === 'on'
-                        "
-                        :aria-label="$t('agent.operations.targetsBulkToggle')"
-                        :title="
-                          connectionSelectionState === 'on'
-                            ? $t('agent.operations.disableAllTargets')
-                            : $t('agent.operations.enableAllTargets')
-                        "
-                        @click="toggleAllConnectionSelections"
-                      >
-                        <span
-                          class="flex h-5 items-center justify-center rounded-[4px] text-[11px] transition-all"
-                          :class="
-                            connectionSelectionState === 'off' ? 'bg-error/10 text-error/85' : 'text-text-secondary/45'
-                          "
-                          aria-hidden="true"
-                        >
-                          <i class="fa-solid fa-xmark"></i>
-                        </span>
-                        <span
-                          class="flex h-5 items-center justify-center rounded-[4px] text-[11px] transition-all"
-                          :class="
-                            connectionSelectionState === 'mixed'
-                              ? 'bg-primary/10 text-primary'
-                              : 'text-text-secondary/35'
-                          "
-                          aria-hidden="true"
-                        >
-                          <i class="fa-solid fa-minus"></i>
-                        </span>
-                        <span
-                          class="flex h-5 items-center justify-center rounded-[4px] text-[11px] transition-all"
-                          :class="
-                            connectionSelectionState === 'on' ? 'bg-success/14 text-success' : 'text-text-secondary/45'
-                          "
-                          aria-hidden="true"
-                        >
-                          <i class="fa-solid fa-check"></i>
-                        </span>
-                      </button>
-                    </div>
-
-                    <div class="max-h-64 overflow-y-auto rounded-lg bg-header/25 p-1">
                       <button
                         v-for="connection in connections"
                         :key="connection.id"
                         type="button"
-                        class="group flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors disabled:cursor-default"
+                        class="group mb-1 flex min-h-12 w-full items-center gap-3 rounded-lg border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
                         :class="
                           displayedConnectionIds.includes(connection.id)
-                            ? 'bg-background/90 text-foreground shadow-xs'
-                            : 'text-text-secondary hover:bg-background/65 hover:text-foreground'
+                            ? 'border-primary/25 bg-primary/8 text-foreground'
+                            : 'border-transparent text-text-secondary hover:bg-header/60 hover:text-foreground'
                         "
                         :disabled="modelSelectionLocked"
+                        :aria-pressed="displayedConnectionIds.includes(connection.id)"
                         @click="
                           toggleConnectionSelection(connection.id, !displayedConnectionIds.includes(connection.id))
                         "

@@ -16,6 +16,7 @@
       density?: UiDensity;
       tone?: UiTone;
       disabled?: boolean;
+      indeterminate?: boolean;
       name?: string;
       id?: string;
       value?: string | number;
@@ -24,6 +25,7 @@
       density: 'default',
       tone: 'primary',
       disabled: false,
+      indeterminate: false,
     },
   );
 
@@ -37,7 +39,7 @@
 <template>
   <CheckboxRoot
     v-bind="attrs"
-    :model-value="model"
+    :model-value="props.indeterminate ? 'indeterminate' : model"
     data-ui="checkbox"
     data-ui-gen="2"
     :data-tone="props.tone"
@@ -51,7 +53,9 @@
   >
     <CheckboxIndicator class="ui-checkbox__indicator">
       <svg class="ui-checkbox__check" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+        <path v-if="props.indeterminate" d="M3 6h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
         <path
+          v-else
           d="M2.6 6.3L4.9 8.6L9.4 3.6"
           stroke="currentColor"
           stroke-width="1.7"
