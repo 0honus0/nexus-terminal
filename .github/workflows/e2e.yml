@@ -190,10 +190,15 @@ jobs:
       - name: Run balanced E2E shard ${{ matrix.shard }}
         env:
           E2E_SPEC_DURATIONS_PATH: test-results/spec-durations.json
-        run: >-
-          node scripts/e2e/balanced-shards.mjs run
-          --shards "${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }}"
-          --shard "${{ matrix.shard }}"
+          DEBUG: pw:webserver
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p tests/e2e/.tmp
+          node scripts/e2e/balanced-shards.mjs run \
+            --shards "${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }}" \
+            --shard "${{ matrix.shard }}" \
+            2>&1 | tee tests/e2e/.tmp/shard-server.log
 
       - name: Upload E2E spec timings
         if: always()
@@ -222,6 +227,7 @@ jobs:
             tests/e2e/logs/
             tests/e2e/playwright-report/
             tests/e2e/test-results/
+            tests/e2e/.tmp/shard-server.log
           if-no-files-found: ignore
           retention-days: 7
 

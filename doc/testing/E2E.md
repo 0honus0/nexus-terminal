@@ -10,6 +10,8 @@ OSC 52 tests type ASCII-only shell commands and decode the Unicode heading from 
 
 Foreground liveness tests wait for successful probe responses to finish browser-side processing before switching to dropped probes. Observing an outgoing ping or catalog refresh alone does not mean the in-flight probe has settled; an immediate foreground event intentionally reuses it. The fixture tracks completion after message dispatch and promise microtasks, without adding an arbitrary sleep.
 
+CI shards enable `DEBUG=pw:webserver` and retain combined output in `.tmp/shard-server.log` with failure diagnostics. This includes managed-service output needed to investigate backend exits before cascading ECONNRESET/ECONNREFUSED failures. The shell pipeline uses pipefail so collecting logs cannot hide a failing test exit status.
+
 The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, eight duration-balanced Playwright shards on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
 ## Structure
