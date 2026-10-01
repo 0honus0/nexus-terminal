@@ -49,7 +49,7 @@
           </div>
         </header>
         <div class="grid w-full min-w-0 flex-1 items-stretch lg:grid-cols-2">
-          <section class="order-2 min-w-0 p-4 sm:p-5">
+          <section class="order-2 min-w-0 p-4 sm:p-5" :class="mobile ? 'border-t border-border/60 lg:border-t-0' : ''">
             <h2 class="mb-2 flex h-7 items-center gap-2 text-sm font-semibold text-foreground">
               <i class="fas fa-pause-circle text-primary/80" aria-hidden="true"></i>
               {{ t('suspendedSshSessions.modalTitle') }}
