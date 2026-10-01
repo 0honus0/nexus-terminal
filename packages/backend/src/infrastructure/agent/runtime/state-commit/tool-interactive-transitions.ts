@@ -124,7 +124,7 @@ export const settleUserInputRequestToolTransition = async (
     !tool ||
     tool.status !== 'running' ||
     tool.provider_call_id !== command.providerCallId ||
-    tool.tool_name !== 'request_user_input' ||
+    tool.tool_name !== 'user_input_request' ||
     tool.risk !== 'control'
   ) {
     throw new Error('TOOL_STATE_CONFLICT');
@@ -142,7 +142,7 @@ export const settleUserInputRequestToolTransition = async (
     null,
     [
       {
-        toolName: 'request_user_input',
+        toolName: 'user_input_request',
         risk: 'control',
         operationHash: tool.operation_hash,
         result: command.result,

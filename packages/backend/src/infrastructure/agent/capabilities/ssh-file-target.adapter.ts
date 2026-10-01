@@ -17,7 +17,7 @@ import type {
   SshFileTargetPort,
 } from '../../../modules/agent/capabilities/ssh-file-target.port';
 import type { ExecutionSession } from '../../../platform/execution/execution-session';
-import type { ExecutionSessionManager } from '../../../platform/execution/execution-session-manager';
+import type { AgentSshSessions } from './agent-ssh-sessions';
 import { isRemoteFileMissingError, type RemoteFileSystem } from '../../../platform/filesystem/remote-filesystem';
 
 const MAX_FILE_READ_BYTES = 1024 * 1024;
@@ -122,7 +122,7 @@ const globRegex = (glob: string | undefined): RegExp | null => {
 export class SshFileTargetAdapter implements SshFileTargetPort {
   constructor(
     private readonly connections: AgentConnectionResolverPort,
-    private readonly sessions: ExecutionSessionManager,
+    private readonly sessions: AgentSshSessions,
   ) {}
 
   async stat(
@@ -542,14 +542,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     if (expectedConfigurationHash !== undefined && connection.configurationHash !== expectedConfigurationHash) {
       throw new Error('RESOURCE_CHANGED');
     }
-    const resolved = await this.connections.resolve(connectionId, expectedConfigurationHash);
-    const session = await this.sessions.connect({
-      ownerType: 'agent',
-      ownerId: context.agentRuntimeId,
-      connection: resolved,
-      connect: { signal: context.signal, timeoutMs: Math.max(1, context.deadlineAt * 1000 - Date.now()) },
-    });
-    try {
+    return this.sessions.withSession(context, connectionId, expectedConfigurationHash, async (session) => {
       assertDeadline(context);
       const filesystem = await session.fileSystem('control');
       try {
@@ -598,9 +591,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
         if (isRemoteFileMissingError(error)) throw new Error('REMOTE_FILE_NOT_FOUND');
         throw error;
       }
-    } finally {
-      await this.sessions.close(session.id).catch(() => undefined);
-    }
+    });
   }
 
   private async inspectPathWithFilesystem(
@@ -728,18 +719,6 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     if (expectedConfigurationHash !== undefined && safe.configurationHash !== expectedConfigurationHash) {
       throw new Error('RESOURCE_CHANGED');
     }
-    const resolved = await this.connections.resolve(connectionId, expectedConfigurationHash);
-    const session = await this.sessions.connect({
-      ownerType: 'agent',
-      ownerId: context.agentRuntimeId,
-      connection: resolved,
-      connect: { signal: context.signal, timeoutMs: Math.max(1, context.deadlineAt * 1000 - Date.now()) },
-    });
-    try {
-      assertDeadline(context);
-      return await work(session);
-    } finally {
-      await this.sessions.close(session.id).catch(() => undefined);
-    }
+    return this.sessions.withSession(context, connectionId, expectedConfigurationHash, work);
   }
 }

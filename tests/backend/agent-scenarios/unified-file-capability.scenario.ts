@@ -111,6 +111,7 @@ export const unifiedFileCapabilityScenario = async () => {
   };
   const sshFiles = new Map<string, Buffer>([['/srv/a.txt', Buffer.from('alpha\nneedle\nomega\n', 'utf8')]]);
   const sshDirs = new Set<string>(['/srv']);
+  const borrowedSessions: Array<string | undefined> = [];
   const fileHash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
   const inspectSsh = (requestedPath: string) => {
     const content = sshFiles.get(requestedPath);
@@ -149,6 +150,7 @@ export const unifiedFileCapabilityScenario = async () => {
   };
   const sshFileTarget = {
     stat: async (_context: ToolContext, connectionId: number, requestedPath: string, configurationHash: string) => {
+      borrowedSessions.push(_context.sshSessionId);
       assert.equal(connectionId, 1);
       assertSshConfiguration(configurationHash);
       return inspectSsh(requestedPath);
@@ -161,6 +163,7 @@ export const unifiedFileCapabilityScenario = async () => {
       offset = 0,
       configurationHash?: string,
     ) => {
+      borrowedSessions.push(_context.sshSessionId);
       assert.equal(connectionId, 1);
       assertSshConfiguration(configurationHash);
       const content = sshFiles.get(requestedPath);
@@ -403,6 +406,27 @@ export const unifiedFileCapabilityScenario = async () => {
   };
 
   try {
+    const readTool = tools.get('file_read')!;
+    const args = { target: 'ssh', id: '1', path: '/srv/a.txt' };
+    const temporary = await readTool.inspect(args, context, 7);
+    const persistent = await readTool.inspect({ ...args, sessionId: 'explicit-session' }, context, 7);
+    assert.notEqual(temporary.operationHash, persistent.operationHash);
+    borrowedSessions.length = 0;
+    await readTool.execute(persistent, context);
+    assert.ok(borrowedSessions.length > 0);
+    assert.ok(
+      borrowedSessions.every((id) => id === 'explicit-session'),
+      'inspection/execution must preserve the selected session',
+    );
+    await assert.rejects(
+      () =>
+        readTool.inspect(
+          { target: 'workspace', id: 'ws-file', path: '/workspace/work/a.txt', sessionId: 'invalid' },
+          context,
+          7,
+        ),
+      /TOOL_ARGUMENTS_INVALID/,
+    );
     for (const target of [
       { target: 'workspace' as const, id: 'ws-file', root: '/workspace/work' },
       { target: 'ssh' as const, id: '1', root: '/srv' },

@@ -16,7 +16,7 @@ export const createBrowserLifecycleTools = (
 ): AgentTool[] => [
   {
     descriptor: {
-      name: 'browser_create_session',
+      name: 'browser_session_open',
       version: TOOL_VERSION,
       description:
         'Create a Browser session using either a configured standalone targetId or the Browser target frozen into a running Workspace.',
@@ -45,7 +45,7 @@ export const createBrowserLifecycleTools = (
       }
       return authority.inspection(
         context,
-        'browser_create_session',
+        'browser_session_open',
         normalized,
         binding,
         undefined,
@@ -75,7 +75,7 @@ export const createBrowserLifecycleTools = (
   },
   {
     descriptor: {
-      name: 'browser_close',
+      name: 'browser_session_close',
       version: TOOL_VERSION,
       description: 'Close a Browser session owned by the current Agent runtime.',
       inputSchema: {
@@ -92,7 +92,7 @@ export const createBrowserLifecycleTools = (
       const { binding } = await authority.session(context, sessionId);
       return authority.inspection(
         context,
-        'browser_close',
+        'browser_session_close',
         { sessionId },
         binding,
         sessionId,

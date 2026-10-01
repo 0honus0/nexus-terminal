@@ -39,6 +39,7 @@ export const sqliteTableDefinitions: readonly SqliteTableDefinition[] = [
   { name: 'agent_quota_usage', sql: schema.createAgentQuotaUsageTableSQL },
   { name: 'ai_threads', sql: schema.createAiThreadsTableSQL },
   { name: 'agent_runs', sql: schema.createAgentRunsTableSQL },
+  { name: 'agent_ssh_jobs', sql: schema.createAgentSshJobsTableSQL },
   { name: 'agent_loop_guards', sql: schema.createAgentLoopGuardsTableSQL },
   { name: 'ai_thread_entries', sql: schema.createAiThreadEntriesTableSQL },
   { name: 'ai_thread_entries_search', sql: schema.createAiThreadEntrySearchIndexSQL },

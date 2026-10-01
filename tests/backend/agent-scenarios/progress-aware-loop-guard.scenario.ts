@@ -216,7 +216,7 @@ export const progressAwareLoopGuardScenario = async () => {
         expectedRunVersion: mixedVersion,
         observations: [
           {
-            toolName: 'machine_list_connections',
+            toolName: 'machine_connection_list',
             risk: 'read',
             operationHash: 'stable-connection-inventory',
             result: stableReadResult,

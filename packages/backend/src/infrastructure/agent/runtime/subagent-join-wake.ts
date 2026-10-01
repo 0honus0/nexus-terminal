@@ -41,7 +41,7 @@ const pendingJoin = (toolCallId: string, inspectionJson: string, resultJson: str
 /**
  * Durable control wake for a runtime parked in `joining`.
  *
- * The work id is bound to the exact join_subagents ToolCall so concurrent child completions merge
+ * The work id is bound to the exact collaboration_subagent_join ToolCall so concurrent child completions merge
  * into one wake. A later child can requeue the same work after an earlier wake found the join still
  * not ready. Completion mailbox delivery is deliberately not part of this control path.
  */
@@ -61,7 +61,7 @@ export const enqueueParentJoinResume = async (
   const tool = await tx.queryOne<{ id: string; inspection_json: string; result_json: string | null }>(
     `SELECT id, inspection_json, result_json
      FROM agent_tool_calls
-     WHERE run_id = ? AND agent_runtime_id = ? AND tool_name = 'join_subagents' AND status = 'succeeded'
+     WHERE run_id = ? AND agent_runtime_id = ? AND tool_name = 'collaboration_subagent_join' AND status = 'succeeded'
      ORDER BY completed_at DESC, created_at DESC, id DESC
      LIMIT 1`,
     [runId, parentRuntimeId],

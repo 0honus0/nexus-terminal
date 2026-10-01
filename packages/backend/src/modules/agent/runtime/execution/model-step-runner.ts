@@ -139,9 +139,9 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] =>
         }
       } else if (
         argumentsRecord.target === 'workspace' &&
-        (call.name === 'workspace_repo_map' || call.name === 'workspace_code_intel')
+        (call.name === 'workspace_repo_map' || call.name === 'workspace_code_query')
       ) {
-        addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work', call.name === 'workspace_code_intel');
+        addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work', call.name === 'workspace_code_query');
       }
       if (targets.size >= 8) break;
     }

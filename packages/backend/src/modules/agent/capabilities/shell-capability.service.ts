@@ -4,6 +4,7 @@ import { hashOperation } from '../operation-hash';
 import type { WorkspaceJobView } from '../workspace-runtime/workspace-runtime-gateway.port';
 import type { WorkspaceShellTargetPort } from '../workspace-runtime/workspace-shell-target.port';
 import type { SshShellExecutionResult, SshShellTargetPort } from './ssh-shell-target.port';
+import type { AgentSshSessionPort, SshJobView } from './ssh-session.port';
 import type { AgentTargetResolver, ResolvedAgentTarget } from './target-resolver';
 import type { AgentTargetSelector, ToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext, ToolPrecondition } from './tool.types';
@@ -23,6 +24,7 @@ export interface UnifiedShellExecutionView {
   target: AgentTargetSelector;
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
   job?: WorkspaceJobView;
+  sshJob?: SshJobView;
   result?: SshShellExecutionResult & { timedOut: boolean };
   error?: string | null;
 }
@@ -38,6 +40,7 @@ export class ShellCapabilityService {
     private readonly workspaceShell: WorkspaceShellTargetPort,
     private readonly sshShell: SshShellTargetPort,
     private readonly cryptoHash: CryptoHashPort,
+    private readonly sshSessions?: AgentSshSessionPort,
   ) {}
 
   resolve(context: ToolContext, selector: AgentTargetSelector): Promise<ResolvedAgentTarget> {
@@ -100,11 +103,24 @@ export class ShellCapabilityService {
       return { target: target.selector, status: job.status, job, error: job.error };
     }
 
-    if (request.command.kind !== 'shell' || request.mode !== 'foreground' || request.cwd !== undefined) {
+    if (request.command.kind !== 'shell' || request.cwd !== undefined) {
       throw new Error('TOOL_ARGUMENTS_INVALID');
     }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
+    if (request.mode === 'background') {
+      if (!context.sshSessionId || !this.sshSessions) throw new Error('SSH_SESSION_REQUIRED');
+      const sshJob = await this.sshSessions.startJob(
+        context,
+        connectionId,
+        target.fingerprint.configurationHash,
+        context.sshSessionId,
+        request.command.text,
+        request.timeoutSeconds,
+        request.operationHash,
+      );
+      return { target: target.selector, status: sshJob.status, sshJob };
+    }
     const result = await this.sshShell.execute(
       context,
       connectionId,
@@ -154,6 +170,25 @@ export class ShellCapabilityService {
       },
       job,
     };
+  }
+
+  async sshJob(
+    context: ToolContext,
+    selector: AgentTargetSelector,
+    jobId: string,
+    action: 'status' | 'wait' | 'cancel',
+    waitSeconds?: number,
+  ): Promise<SshJobView> {
+    if (selector.target !== 'ssh' || !this.sshSessions) throw new Error('TOOL_ARGUMENTS_INVALID');
+    const target = await this.targets.resolve(context, selector);
+    return this.sshSessions.job(context, target.connectionId!, jobId, action, waitSeconds);
+  }
+
+  async inspectSshSession(context: ToolContext, target: ResolvedAgentTarget): Promise<void> {
+    if (!context.sshSessionId) return;
+    if (!this.sshSessions || target.connectionId === undefined) throw new Error('SSH_SESSION_NOT_FOUND');
+    const sessions = await this.sshSessions.list(context, target.connectionId, context.sshSessionId);
+    if (sessions[0]?.status !== 'ready') throw new Error('SSH_SESSION_DISCONNECTED');
   }
 
   async controlJob(

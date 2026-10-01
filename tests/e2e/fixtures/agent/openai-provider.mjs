@@ -179,7 +179,7 @@ const server = http.createServer(async (request, response) => {
     const unavailableWorkspaceTools = [
       'workspace_create',
       'workspace_control',
-      'workspace_switch_tool_versions',
+      'workspace_toolchain_switch',
       'acp_execute',
     ].filter((name) => offeredToolNames.includes(name));
     if (unavailableWorkspaceTools.length > 0) {
@@ -314,13 +314,13 @@ const server = http.createServer(async (request, response) => {
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'file_read');
   const listConnectionsToolOffered =
     Array.isArray(body?.tools) &&
-    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_list_connections');
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_connection_list');
   const delegateSubagentToolOffered =
     Array.isArray(body?.tools) &&
-    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'delegate_subagent');
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'collaboration_subagent_delegate');
   const listSubagentsToolOffered =
     Array.isArray(body?.tools) &&
-    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'list_subagents');
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'collaboration_subagent_list');
   const controlToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'plan_update');
@@ -377,13 +377,13 @@ const server = http.createServer(async (request, response) => {
                   index: 0,
                   id: 'call_e2e_child_batch_first',
                   type: 'function',
-                  function: { name: 'list_subagents', arguments: JSON.stringify({ limit: 10 }) },
+                  function: { name: 'collaboration_subagent_list', arguments: JSON.stringify({ limit: 10 }) },
                 },
                 {
                   index: 1,
                   id: 'call_e2e_child_batch_second',
                   type: 'function',
-                  function: { name: 'list_subagents', arguments: JSON.stringify({ limit: 11 }) },
+                  function: { name: 'collaboration_subagent_list', arguments: JSON.stringify({ limit: 11 }) },
                 },
               ],
             },
@@ -445,7 +445,7 @@ const server = http.createServer(async (request, response) => {
                 id: 'call_e2e_subagent_delegate',
                 type: 'function',
                 function: {
-                  name: 'delegate_subagent',
+                  name: 'collaboration_subagent_delegate',
                   arguments: JSON.stringify({
                     profileId: 'e2e-worker',
                     objective:
@@ -707,7 +707,7 @@ const server = http.createServer(async (request, response) => {
                   index: 0,
                   id: 'call_e2e_multi_list',
                   type: 'function',
-                  function: { name: 'machine_list_connections', arguments: '{}' },
+                  function: { name: 'machine_connection_list', arguments: '{}' },
                 },
                 {
                   index: 1,

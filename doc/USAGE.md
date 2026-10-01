@@ -49,6 +49,17 @@ Agent 每个模型可在「能力配置」中独立选择调用协议，保存�
 
 ## SSH 会话
 
+### Agent SSH 长会话与后台任务
+
+- Agent 工具按功能模块命名：`shell_*`、`ssh_*`、`file_*`、`machine_*`、`workspace_*`、`collaboration_*`、`memory_*`、`browser_*`、`tool_*`、`skill_*`、`plan_*`、`user_*`、`artifact_*`、`acp_*`、`mcp_*`。只接受当前名称，不提供旧工具名别名。
+- `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。
+- `ssh_session_list(connectionId, sessionId?)` 查看当前对话内指定目标的连接状态与活动操作数；`ssh_session_close(connectionId, sessionId, force?)` 关闭并移除连接。普通关闭拒绝活动会话；显式 force 按破坏性操作治理，可能中断全部活动命令，不保证远端进程已终止。
+- `shell_execute` 与全部 `file_read/list/search/write/patch/move/delete` 接受仅限 SSH 的可选 `sessionId`。省略时仍每次临时建连后关闭；指定时检查、执行和验证使用已有连接。失效时不自动重连、降级或重放。
+- 同一用户、应用和对话的 Root/Subagent 可以显式共享会话，但仍须有当前目标授权；跨用户、应用、对话禁止访问。命令各自使用独立 exec channel，文件使用独立句柄，不向其他任务插入输入，不继承前一命令的工作目录或环境变量；远端共享文件和服务仍可能相互影响。
+- SSH `shell_execute(mode="background", sessionId=...)` 返回 `jobId`，任务继续运行；使用 `shell_job_control(target="ssh", id=连接ID, jobId, action="status/wait/cancel")` 查看有界输出、等待或取消。后台任务 timeoutSeconds 默认 3600 秒、最多 86400 秒，独立于提交工具期限；前台仍最多 300 秒且受工具预算约束。后台任务运行时不进行空闲回收，每用户最多 32 个活动任务。
+- SSH 任务状态与终态结果持久保存，原始命令和凭据不写入任务记录。连接丢失、强制关闭或 Backend 重启后的未确认任务标记 unknown，不重放；单任务取消不关闭共享连接。取消只有收到远端执行结束证据才有确定结果，不把本地 channel 关闭当作远端进程已终止。
+- `shell_job_control` 同时管理 Workspace Job；`workspace_code_query` 提供 TS/JS symbols、definition、references、diagnostics，其他语言使用文件搜索／读取。SSH Job 不使用 Runner，普通 SSH 功能不依赖 Runner 可用性。
+
 全局 Agent 呼出悬浮按钮使用 44px 圆形、实心主色底与高对比图标，图标为对话框内的终端提示符；保留拖动位置、点击打开和任务数量徽标。拖到左右边缘附近松手后吸附贴边并半隐藏；鼠标悬停或键盘聚焦时完整展开，手机点击露出的半圆直接打开 Agent，也可拖回页面内取消贴边。贴边侧和纵向位置随布局保存，右键重置位置。
 
 手机终端小键盘左侧六个固定键在普通页和功能键页保持相同顺序：第一排 Esc、Fn、Shift，第二排 Tab、Ctrl、Alt。Shift 使用文字显示，是修饰键而非方向键；右侧 ↑ 是终端方向上键，Fn 切换 F1–F12 页面。

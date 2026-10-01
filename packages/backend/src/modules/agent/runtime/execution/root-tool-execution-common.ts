@@ -32,6 +32,7 @@ export const rootToolContext = (
     agentRuntimeId: runtimeId,
   },
   runId: run.id,
+  threadId: run.threadId,
   agentRuntimeId: runtimeId,
   ...(toolCallId === undefined ? {} : { toolCallId }),
   connectionIds: [...run.definition.connectionIds],

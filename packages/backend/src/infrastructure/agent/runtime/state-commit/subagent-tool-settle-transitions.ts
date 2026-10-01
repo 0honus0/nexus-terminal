@@ -189,7 +189,7 @@ export const settleSubagentToolTransition = async (
       if (!item.result_json) continue;
       const result = parseToolResult(item.result_json);
       if (
-        item.tool_name === 'send_agent_message' &&
+        item.tool_name === 'collaboration_message_send' &&
         (result.errorCode === 'MAILBOX_BUDGET_EXCEEDED' || result.errorCode === 'MAILBOX_HARD_LIMIT_EXCEEDED')
       ) {
         const currentUsage = parseRunUsage(row.usage_json);
@@ -209,7 +209,7 @@ export const settleSubagentToolTransition = async (
         break;
       }
       if (
-        item.tool_name === 'join_subagents' &&
+        item.tool_name === 'collaboration_subagent_join' &&
         result.ok &&
         result.data &&
         typeof result.data === 'object' &&

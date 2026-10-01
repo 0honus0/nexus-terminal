@@ -11,9 +11,9 @@ import { BrowserSessionBindingAuthority } from './browser/browser-session-bindin
 import { createBrowserTransferTools } from './browser/browser-transfer-tools';
 
 const BROWSER_TOOL_ORDER = [
-  'browser_create_session',
-  'browser_snapshot',
-  'browser_screenshot',
+  'browser_session_open',
+  'browser_snapshot_read',
+  'browser_screenshot_capture',
   'browser_navigate',
   'browser_click',
   'browser_type',
@@ -22,10 +22,10 @@ const BROWSER_TOOL_ORDER = [
   'browser_back',
   'browser_select',
   'browser_wait',
-  'browser_console',
+  'browser_console_read',
   'browser_upload',
   'browser_download',
-  'browser_close',
+  'browser_session_close',
 ] as const;
 
 export const createBrowserTools = (

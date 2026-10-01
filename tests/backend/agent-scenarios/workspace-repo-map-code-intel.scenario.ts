@@ -40,7 +40,7 @@ export const workspaceRepoMapCodeIntelScenario = async () => {
     'P-067 must expose one bounded read-only Repo Map navigation Tool',
   );
   assert.equal(
-    descriptors.get('workspace_code_intel')?.riskClass,
+    descriptors.get('workspace_code_query')?.riskClass,
     'read',
     'P-067 must expose one bounded read-only semantic code-intel Tool',
   );
@@ -65,7 +65,7 @@ export const workspaceRepoMapCodeIntelScenario = async () => {
     ).map((tool) => tool.name),
   );
   assert.equal(planNames.has('workspace_repo_map'), true);
-  assert.equal(planNames.has('workspace_code_intel'), true);
+  assert.equal(planNames.has('workspace_code_query'), true);
 
   const navWorkspace = {
     ...scope,

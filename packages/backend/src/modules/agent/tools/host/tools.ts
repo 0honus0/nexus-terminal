@@ -82,7 +82,7 @@ const confirmedResult = (
 
 export const createConnectionListTool = (machine: MachineCapabilityPort, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'machine_list_connections',
+    name: 'machine_connection_list',
     version: '1.0.0',
     description:
       'List authorized SSH connections visible to this Agent. Returns only id, name, host, port, and username; denied targets and credentials are never returned.',
@@ -116,7 +116,7 @@ export const createConnectionListTool = (machine: MachineCapabilityPort, cryptoH
     };
     const resourceKeys = [`app:${context.appId}:machine-connections`];
     return {
-      toolName: 'machine_list_connections',
+      toolName: 'machine_connection_list',
       toolVersion: '1.0.0',
       normalizedArguments,
       target,
@@ -126,7 +126,7 @@ export const createConnectionListTool = (machine: MachineCapabilityPort, cryptoH
       operationHash: operation(
         cryptoHash,
         context,
-        'machine_list_connections',
+        'machine_connection_list',
         '1.0.0',
         target,
         normalizedArguments,
@@ -156,7 +156,7 @@ export const createDiagnosticsTool = (
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
   descriptor: {
-    name: 'machine_diagnostics',
+    name: 'machine_diagnostics_read',
     version: '1.0.0',
     description: 'Read bounded, redacted Nexus diagnostics for an authorized SSH connection context.',
     inputSchema: {
@@ -185,7 +185,7 @@ export const createDiagnosticsTool = (
     const target = await sshTargets.target(context, connectionId);
     const resourceKeys = [`connection:${connectionId}`];
     return {
-      toolName: 'machine_diagnostics',
+      toolName: 'machine_diagnostics_read',
       toolVersion: '1.0.0',
       normalizedArguments,
       target,
@@ -195,7 +195,7 @@ export const createDiagnosticsTool = (
       operationHash: operation(
         cryptoHash,
         context,
-        'machine_diagnostics',
+        'machine_diagnostics_read',
         '1.0.0',
         target,
         normalizedArguments,

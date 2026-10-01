@@ -3,6 +3,7 @@ import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 import type { FileCapabilityService, UnifiedFileStat } from '../../capabilities/file-capability.service';
 import type { AgentTargetKind } from '../../capabilities/tool-target.types';
+import { withSshSessionInput } from './ssh-session-input';
 import type {
   AgentTool,
   ToolContext,
@@ -638,12 +639,13 @@ export const createFileDeleteTool = (files: FileCapabilityService, cryptoHash: C
   },
 });
 
-export const createUnifiedFileTools = (files: FileCapabilityService, cryptoHash: CryptoHashPort): AgentTool[] => [
-  createFileReadTool(files, cryptoHash),
-  createFileListTool(files, cryptoHash),
-  createFileSearchTool(files, cryptoHash),
-  createFileWriteTool(files, cryptoHash),
-  createFilePatchTool(files, cryptoHash),
-  createFileMoveTool(files, cryptoHash),
-  createFileDeleteTool(files, cryptoHash),
-];
+export const createUnifiedFileTools = (files: FileCapabilityService, cryptoHash: CryptoHashPort): AgentTool[] =>
+  [
+    createFileReadTool(files, cryptoHash),
+    createFileListTool(files, cryptoHash),
+    createFileSearchTool(files, cryptoHash),
+    createFileWriteTool(files, cryptoHash),
+    createFilePatchTool(files, cryptoHash),
+    createFileMoveTool(files, cryptoHash),
+    createFileDeleteTool(files, cryptoHash),
+  ].map((tool) => withSshSessionInput(tool, cryptoHash));

@@ -11,7 +11,7 @@ const asRecord = (value: JsonValue): Record<string, JsonValue> => {
 
 export const createRequestUserInputTool = (cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'request_user_input',
+    name: 'user_input_request',
     version: '1.0.0',
     description:
       'Ask the user for missing information that is necessary to continue this Run. Use only when proceeding would require an unsafe or material guess. The Run will pause durably until the user replies.',
@@ -74,7 +74,7 @@ export const createRequestUserInputTool = (cryptoHash: CryptoHashPort): AgentToo
       configurationHash: hashOperation({ schemaVersion: 1, runId: context.runId }, cryptoHash),
     };
     return {
-      toolName: 'request_user_input',
+      toolName: 'user_input_request',
       toolVersion: '1.0.0',
       normalizedArguments,
       target,
@@ -98,7 +98,7 @@ export const createRequestUserInputTool = (cryptoHash: CryptoHashPort): AgentToo
     };
   },
   execute: async (inspection): Promise<ToolResult> => {
-    if (inspection.toolName !== 'request_user_input') throw new Error('TOOL_STATE_CONFLICT');
+    if (inspection.toolName !== 'user_input_request') throw new Error('TOOL_STATE_CONFLICT');
     const args = asRecord(inspection.normalizedArguments);
     const questions = normalizeUserInputQuestions(args.questions);
     return {

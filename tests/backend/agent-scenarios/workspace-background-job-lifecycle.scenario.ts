@@ -42,9 +42,9 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     'canonical Workspace execution must explicitly choose foreground/background execution',
   );
   assert.equal(
-    descriptors.get('shell_job')?.riskClass,
+    descriptors.get('shell_job_control')?.riskClass,
     'control',
-    'canonical Shell must expose one bounded shell_job lifecycle control Tool',
+    'canonical Shell must expose one bounded shell_job_control lifecycle control Tool',
   );
   const planNames = new Set(
     modelFacingToolSchemas(
@@ -66,7 +66,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
       'plan',
     ).map((tool) => tool.name),
   );
-  assert.equal(planNames.has('shell_job'), true, 'durable job status/wait control should remain plan-visible');
+  assert.equal(planNames.has('shell_job_control'), true, 'durable job status/wait control should remain plan-visible');
   assert.equal(planNames.has('shell_execute'), false, 'plan mode must still hide command mutation');
 
   const toolWorkspace = {
@@ -162,7 +162,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     createUnifiedShellTools(shellService, toolCrypto).map((tool) => [tool.descriptor.name, tool]),
   );
   const executeTool = shellTools.get('shell_execute');
-  const controlTool = shellTools.get('shell_job');
+  const controlTool = shellTools.get('shell_job_control');
   assert.ok(executeTool && controlTool);
   const backgroundInspection = await executeTool.inspect(
     {
@@ -252,7 +252,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     tools: [
       ...backgroundOnlyEvidence.tools,
       {
-        toolName: 'shell_job',
+        toolName: 'shell_job_control',
         stepIndex: 2,
         inspection: waitInspection,
         result: waitedToolResult,
@@ -455,7 +455,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
       { name: 'shell_job_cancel_cases', value: cancelCalls, unit: 'cases' },
       { name: 'workspace_background_mutation_conflicts', value: 2, unit: 'cases' },
       { name: 'shell_job_generation_provenance', value: oldGeneration.generation === 7 ? 1 : 0, unit: 'cases' },
-      { name: 'shell_job_plan_controls', value: planNames.has('shell_job') ? 1 : 0, unit: 'tools' },
+      { name: 'shell_job_plan_controls', value: planNames.has('shell_job_control') ? 1 : 0, unit: 'tools' },
       {
         name: 'workspace_background_launch_unverified',
         value: backgroundLaunch.verification.status === 'unverified' ? 1 : 0,

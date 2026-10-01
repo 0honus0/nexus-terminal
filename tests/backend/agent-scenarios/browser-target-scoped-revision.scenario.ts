@@ -109,8 +109,8 @@ export const browserTargetScopedRevisionScenario = async () => {
     },
   };
   const tools = createBrowserTools(repository as never, settings as never, gateway as never, cryptoHash);
-  const createTool = tools.find((tool) => tool.descriptor.name === 'browser_create_session')!;
-  const snapshotTool = tools.find((tool) => tool.descriptor.name === 'browser_snapshot')!;
+  const createTool = tools.find((tool) => tool.descriptor.name === 'browser_session_open')!;
+  const snapshotTool = tools.find((tool) => tool.descriptor.name === 'browser_snapshot_read')!;
 
   const createInspection = await createTool.inspect({ targetId: initialTarget.id }, context, 1);
   const initialNormalized = createInspection.normalizedArguments as Record<string, JsonValue>;

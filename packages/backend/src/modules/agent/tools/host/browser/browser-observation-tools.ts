@@ -22,7 +22,7 @@ export const createBrowserObservationTools = (
 ): AgentTool[] => [
   {
     descriptor: {
-      name: 'browser_snapshot',
+      name: 'browser_snapshot_read',
       version: TOOL_VERSION,
       description: 'Capture a bounded semantic snapshot of a Browser session and return opaque node references.',
       inputSchema: {
@@ -50,7 +50,7 @@ export const createBrowserObservationTools = (
       };
       return authority.inspection(
         context,
-        'browser_snapshot',
+        'browser_snapshot_read',
         normalized,
         binding,
         sessionId,
@@ -81,10 +81,10 @@ export const createBrowserObservationTools = (
   },
   {
     descriptor: {
-      name: 'browser_screenshot',
+      name: 'browser_screenshot_capture',
       version: TOOL_VERSION,
       description:
-        'Capture the current Browser viewport as a bounded PNG Artifact for on-demand visual inspection. Use semantic browser_snapshot by default and call this only when page pixels are needed.',
+        'Capture the current Browser viewport as a bounded PNG Artifact for on-demand visual inspection. Use semantic browser_snapshot_read by default and call this only when page pixels are needed.',
       inputSchema: {
         type: 'object',
         additionalProperties: false,
@@ -112,7 +112,7 @@ export const createBrowserObservationTools = (
       };
       return authority.inspection(
         context,
-        'browser_screenshot',
+        'browser_screenshot_capture',
         normalized,
         binding,
         sessionId,
@@ -156,7 +156,7 @@ export const createBrowserObservationTools = (
         summary: 'Browser viewport screenshot captured as an image Artifact.',
         userSummary: { key: 'agent.conversation.toolSummary.browserScreenshot' },
         data: {
-          type: 'browser_screenshot',
+          type: 'browser_screenshot_capture',
           sessionId: capture.sessionId,
           targetId: capture.targetId,
           generation: capture.generation,
@@ -184,7 +184,7 @@ export const createBrowserObservationTools = (
   },
   {
     descriptor: {
-      name: 'browser_console',
+      name: 'browser_console_read',
       version: TOOL_VERSION,
       description:
         'Read a bounded cursor-based slice of Browser console output. This is read-only and does not expose JavaScript evaluation.',
@@ -209,7 +209,7 @@ export const createBrowserObservationTools = (
       const { binding } = await authority.session(context, sessionId);
       return authority.inspection(
         context,
-        'browser_console',
+        'browser_console_read',
         {
           sessionId,
           afterCursor: integer(args.afterCursor, 0, 0, Number.MAX_SAFE_INTEGER),

@@ -93,7 +93,7 @@ export const planExecutionModeScenario = async () => {
   const planSchemas = runner.schemas(scope, undefined, 'plan');
   assert.deepEqual(
     planSchemas.map((item) => item.name).sort(),
-    ['plan_update', 'request_user_input', 'scenario_plan_read'],
+    ['plan_update', 'scenario_plan_read', 'user_input_request'],
     'plan mode model surface must retain read/control tools and exclude mutation tools',
   );
 
@@ -192,7 +192,7 @@ export const planExecutionModeScenario = async () => {
       assertRequest: (request) => {
         assert.deepEqual(
           request.tools.map((item) => item.name).sort(),
-          ['plan_update', 'request_user_input', 'scenario_plan_read'],
+          ['plan_update', 'scenario_plan_read', 'user_input_request'],
           'the actual model request must not contain mutation tool schemas in plan mode',
         );
       },

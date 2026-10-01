@@ -69,10 +69,16 @@ export const machineRouteDependencyApprovalScenario = async () => {
     ).map((tool) => tool.name),
   );
   assert.ok(
-    withoutTarget.has('machine_list_connections'),
+    withoutTarget.has('machine_connection_list'),
     'connection discovery remains available without a frozen target',
   );
-  for (const toolName of ['machine_diagnostics', 'file_read', 'file_write', 'shell_execute', 'machine_docker_action']) {
+  for (const toolName of [
+    'machine_diagnostics_read',
+    'file_read',
+    'file_write',
+    'shell_execute',
+    'machine_docker_control',
+  ]) {
     assert.equal(
       withoutTarget.has(toolName),
       false,
@@ -87,7 +93,13 @@ export const machineRouteDependencyApprovalScenario = async () => {
       'execute',
     ).map((tool) => tool.name),
   );
-  for (const toolName of ['machine_diagnostics', 'file_read', 'file_write', 'shell_execute', 'machine_docker_action']) {
+  for (const toolName of [
+    'machine_diagnostics_read',
+    'file_read',
+    'file_write',
+    'shell_execute',
+    'machine_docker_control',
+  ]) {
     assert.ok(withTarget.has(toolName), `${toolName} must remain available when a connection is selected`);
   }
 

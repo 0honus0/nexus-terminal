@@ -52,6 +52,8 @@ import { IntegrationService } from '../../modules/agent/ai/integration.service';
 import type { AcpTransportPort, BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
 import type { ArtifactLimitPolicyPort } from '../../modules/agent/ai/artifact.port';
 import { ConversationService } from '../../modules/agent/ai/conversation.service';
+import { AgentSshSessions } from '../../infrastructure/agent/capabilities/agent-ssh-sessions';
+import { createSshSessionTools } from '../../modules/agent/tools/host/ssh-session-tools';
 import { ContextCheckpointService } from '../../modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../modules/agent/ai/context.service';
 import { ProviderService } from '../../modules/agent/ai/provider.service';
@@ -272,7 +274,13 @@ export const composeAgent = ({
   );
   const executionPolicies = new AgentExecutionPolicyService(appStorage, settings);
   const conversationRepository = new SqliteConversationRepository(database);
-  const conversations = new ConversationService(conversationRepository, systemClock, settings, lifecycle);
+  const conversations = new ConversationService(
+    conversationRepository,
+    systemClock,
+    settings,
+    lifecycle,
+    (scope, threadId) => sshSessions.closeScope(scope, threadId),
+  );
   const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
   const skills = new SkillRegistry(new InstalledPluginSkillSourceAdapter(database, dataDirectory));
   const modelContinuations = new SqliteModelContinuationRepository(database);
@@ -350,8 +358,20 @@ export const composeAgent = ({
     targetDenylist,
   );
   const sshTargets = new SshTargetAdapter(connectionResolver, targetDenylist);
-  const sshFiles = new SshFileTargetAdapter(connectionResolver, executionSessions);
-  const sshShell = new SshShellTargetAdapter(connectionResolver, executionSessions);
+  const sshSessions = new AgentSshSessions(
+    connectionResolver,
+    executionSessions,
+    database,
+    async (scope, threadId, connectionId) => {
+      const thread = await conversationRepository.getThread(scope, threadId);
+      const decision = await capabilityBroker.authorize(scope, 'shell.execute', {
+        target: { target: 'ssh', id: String(connectionId) },
+      });
+      return Boolean(thread && decision.allowed);
+    },
+  );
+  const sshFiles = new SshFileTargetAdapter(connectionResolver, sshSessions);
+  const sshShell = new SshShellTargetAdapter(connectionResolver, sshSessions);
   const cryptoHash = new NodeCryptoHashAdapter();
   const acpPermissions = new AcpPermissionBroker(stateCommit, cryptoHash, systemClock, (runId, approvalId) => {
     eventHub.publishTransient({
@@ -381,10 +401,15 @@ export const composeAgent = ({
   const workspaceFiles = new WorkspaceFileTargetAdapter(workspaceRepository, workspaceRuntimeController);
   const workspaceShell = new WorkspaceShellTargetAdapter(workspaceRepository, workspaceRuntimeController);
   const files = new FileCapabilityService(targets, workspaceFiles, sshFiles);
-  const shell = new ShellCapabilityService(targets, workspaceShell, sshShell, cryptoHash);
+  const shell = new ShellCapabilityService(targets, workspaceShell, sshShell, cryptoHash, sshSessions);
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter(acpTransport);
   const toolCatalog = new ToolCatalog();
+  toolCatalog.registerContribution({
+    schemaVersion: 1,
+    id: 'ssh.sessions',
+    tools: createSshSessionTools(sshSessions, sshTargets, cryptoHash),
+  });
   registerFileToolContributions({ catalog: toolCatalog, files, cryptoHash });
   registerShellToolContributions({ catalog: toolCatalog, shell, cryptoHash });
   registerMachineToolContributions({ catalog: toolCatalog, machine, sshTargets, cryptoHash });
@@ -669,6 +694,7 @@ export const composeAgent = ({
             logger.warn({ err: error, ...scope }, 'Agent app enable post-commit runtime sync failed');
           }
         } else {
+          await sshSessions.closeScope(scope);
           try {
             await integrations.deactivate(scope);
           } catch (error) {
@@ -910,6 +936,7 @@ export const composeAgent = ({
       },
     },
     initialize: async () => {
+      await sshSessions.initialize();
       await modelRegistry.initialize();
       await plugins.initializeInstalledVersions();
       const interrupted = await stateCommit.interruptNonTerminalRuns(systemClock.nowUnixSeconds());
@@ -941,6 +968,7 @@ export const composeAgent = ({
     },
     dispose: async () => {
       modelRegistry.dispose();
+      await sshSessions.dispose();
       await Promise.all([
         lifecycleSweeps.stop(),
         subagentScheduler?.dispose() ?? Promise.resolve(),

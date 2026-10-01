@@ -234,7 +234,7 @@ export const createWorkspaceCodeIntelTool = (
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
   descriptor: {
-    name: 'workspace_code_intel',
+    name: 'workspace_code_query',
     version: '1.0.0',
     description:
       'Query bounded TypeScript/JavaScript symbols, definitions, references, or diagnostics in a Workspace target. Unsupported languages return file_search/file_read fallback guidance.',
@@ -286,7 +286,7 @@ export const createWorkspaceCodeIntelTool = (
       maxBytes,
     };
     return {
-      toolName: 'workspace_code_intel',
+      toolName: 'workspace_code_query',
       toolVersion: '1.0.0',
       normalizedArguments,
       target: binding.target,
@@ -295,7 +295,7 @@ export const createWorkspaceCodeIntelTool = (
       mutation: false,
       operationHash: operationHash(
         cryptoHash,
-        'workspace_code_intel',
+        'workspace_code_query',
         context,
         binding.target,
         normalizedArguments,

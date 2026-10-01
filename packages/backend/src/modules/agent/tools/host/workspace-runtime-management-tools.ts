@@ -376,7 +376,7 @@ export const createWorkspaceSwitchToolVersionsTool = (
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
   descriptor: {
-    name: 'workspace_switch_tool_versions',
+    name: 'workspace_toolchain_switch',
     version: '1.0.0',
     description:
       'Switch one or more tool versions for a stable Nexus Agent Workspace by creating its next generation. Requires user approval.',
@@ -446,7 +446,7 @@ export const createWorkspaceSwitchToolVersionsTool = (
       { kind: 'metadata', key: 'workspaceRuntimeCatalog', observedValue: { revision: catalog.revision } },
     ];
     return {
-      toolName: 'workspace_switch_tool_versions',
+      toolName: 'workspace_toolchain_switch',
       toolVersion: '1.0.0',
       normalizedArguments,
       target,
@@ -456,7 +456,7 @@ export const createWorkspaceSwitchToolVersionsTool = (
       operationHash: operation(
         cryptoHash,
         context,
-        'workspace_switch_tool_versions',
+        'workspace_toolchain_switch',
         target,
         normalizedArguments,
         resourceKeys,

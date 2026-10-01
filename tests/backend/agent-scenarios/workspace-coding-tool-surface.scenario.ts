@@ -55,11 +55,11 @@ export const workspaceCodingToolSurfaceScenario = async () => {
     'canonical file patch must remain governed mutation',
   );
   assert.equal(descriptors.get('workspace_repo_map')?.capability, 'file.read');
-  assert.equal(descriptors.get('workspace_code_intel')?.capability, 'file.read');
+  assert.equal(descriptors.get('workspace_code_query')?.capability, 'file.read');
   assert.equal(descriptors.get('shell_execute')?.riskClass, 'mutate', 'canonical execution must remain governed');
   assert.equal(descriptors.get('shell_execute')?.capability, 'shell.execute');
-  assert.equal(descriptors.get('shell_job')?.riskClass, 'control');
-  assert.equal(descriptors.get('shell_job')?.capability, 'shell.execute');
+  assert.equal(descriptors.get('shell_job_control')?.riskClass, 'control');
+  assert.equal(descriptors.get('shell_job_control')?.capability, 'shell.execute');
   const planToolNames = new Set(
     modelFacingToolSchemas(
       catalog,
@@ -84,9 +84,9 @@ export const workspaceCodingToolSurfaceScenario = async () => {
   assert.equal(planToolNames.has('file_search'), true);
   assert.equal(planToolNames.has('file_patch'), false);
   assert.equal(planToolNames.has('workspace_repo_map'), true);
-  assert.equal(planToolNames.has('workspace_code_intel'), true);
+  assert.equal(planToolNames.has('workspace_code_query'), true);
   assert.equal(planToolNames.has('shell_execute'), false);
-  assert.equal(planToolNames.has('shell_job'), true);
+  assert.equal(planToolNames.has('shell_job_control'), true);
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-workspace-coding-'));
   const workRoot = path.join(directory, 'work');

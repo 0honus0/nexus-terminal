@@ -104,7 +104,7 @@ export const createDockerMutationTool = (
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
   descriptor: {
-    name: 'machine_docker_action',
+    name: 'machine_docker_control',
     version: '1.0.0',
     description: 'Start, stop, restart, or remove one existing Docker container on an authorized SSH target.',
     inputSchema: {
@@ -146,7 +146,7 @@ export const createDockerMutationTool = (
     ];
     const risk = action === 'remove' ? 'destructive' : 'mutate';
     return {
-      toolName: 'machine_docker_action',
+      toolName: 'machine_docker_control',
       toolVersion: '1.0.0',
       normalizedArguments,
       target,
@@ -156,7 +156,7 @@ export const createDockerMutationTool = (
       operationHash: operation(
         cryptoHash,
         context,
-        'machine_docker_action',
+        'machine_docker_control',
         '1.0.0',
         target,
         normalizedArguments,

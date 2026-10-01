@@ -175,7 +175,7 @@ export const nestedJoinDurableWakeScenario = async () => {
       [runId, parentRuntimeId, now, now, runId, parentRuntimeId, now, now],
     );
     const joinInspection = {
-      toolName: 'join_subagents',
+      toolName: 'collaboration_subagent_join',
       toolVersion: '1',
       normalizedArguments: {
         delegationIds: [childA.delegationId, childB.delegationId],
@@ -214,7 +214,7 @@ export const nestedJoinDurableWakeScenario = async () => {
          inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
          created_at, started_at, completed_at)
        VALUES (?, ?, ?, 'join-control-step', 'join-control-model-step', 0, 1,
-               'provider-join-control', 'join_subagents', '1', ?,
+               'provider-join-control', 'collaboration_subagent_join', '1', ?,
                'join-control-hash', 1, 'control', 'succeeded', ?, ?, ?, ?)`,
       [
         joinToolCallId,
@@ -377,7 +377,7 @@ export const nestedJoinDurableWakeScenario = async () => {
          created_at, started_at, completed_at)
        VALUES ('root-join-control-tool-call', ?, 'join-root-runtime', 'root-join-control-step',
                'root-join-control-model-step', 0, 1,
-               'provider-root-join-control', 'join_subagents', '1', ?, 'root-join-control-hash', 1,
+               'provider-root-join-control', 'collaboration_subagent_join', '1', ?, 'root-join-control-hash', 1,
                'control', 'succeeded', ?, ?, ?, ?)`,
       [runId, JSON.stringify(rootJoinInspection), JSON.stringify(waitingResult), now + 6, now + 6, now + 6],
     );

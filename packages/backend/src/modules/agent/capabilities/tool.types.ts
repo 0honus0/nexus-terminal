@@ -45,6 +45,8 @@ export interface ToolAvailabilityContext {
 export interface ToolContext extends Scope {
   actor: Actor;
   runId: string;
+  threadId?: string;
+  sshSessionId?: string;
   agentRuntimeId: string;
   toolCallId?: string;
   connectionIds: readonly number[];

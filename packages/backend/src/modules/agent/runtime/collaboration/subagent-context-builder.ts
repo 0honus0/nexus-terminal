@@ -225,7 +225,7 @@ export class SubagentContextBuilder {
       descriptor?.riskClass === 'read' || descriptor?.riskClass === 'control' || governedWorkspaceMutation;
     return Boolean(
       descriptor &&
-      toolName !== 'request_user_input' &&
+      toolName !== 'user_input_request' &&
       toolName !== TOOL_SEARCH_NAME &&
       (descriptor.capability === undefined ||
         delegation.grants.some((grant) => grant.capability === descriptor.capability)) &&
@@ -325,7 +325,7 @@ export class SubagentContextBuilder {
             exchange.result === null ? null : projectToolResult(exchange.result, maxToolOutputBytes),
           ),
         });
-        if (exchange.toolName === 'browser_screenshot' && exchange.result) {
+        if (exchange.toolName === 'browser_screenshot_capture' && exchange.result) {
           const observation = await projectBrowserScreenshotObservation(
             this.artifacts,
             scope,
@@ -397,7 +397,7 @@ export class SubagentContextBuilder {
       })
       .filter(
         (descriptor) =>
-          descriptor.name !== 'request_user_input' &&
+          descriptor.name !== 'user_input_request' &&
           descriptor.name !== TOOL_SEARCH_NAME &&
           (descriptor.capability === undefined || allowedCapabilities.has(descriptor.capability)) &&
           (descriptor.riskClass === 'read' ||

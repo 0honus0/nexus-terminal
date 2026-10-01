@@ -19,9 +19,9 @@ export const browserInteractionPrimitivesScenario = async () => {
   assert.deepEqual(
     descriptorTools.map((tool) => tool.descriptor.name),
     [
-      'browser_create_session',
-      'browser_snapshot',
-      'browser_screenshot',
+      'browser_session_open',
+      'browser_snapshot_read',
+      'browser_screenshot_capture',
       'browser_navigate',
       'browser_click',
       'browser_type',
@@ -30,10 +30,10 @@ export const browserInteractionPrimitivesScenario = async () => {
       'browser_back',
       'browser_select',
       'browser_wait',
-      'browser_console',
+      'browser_console_read',
       'browser_upload',
       'browser_download',
-      'browser_close',
+      'browser_session_close',
     ],
     'Browser tool-family extraction must preserve the canonical model-visible Tool order',
   );
@@ -44,7 +44,7 @@ export const browserInteractionPrimitivesScenario = async () => {
     'browser_back',
     'browser_select',
     'browser_wait',
-    'browser_console',
+    'browser_console_read',
     'browser_upload',
     'browser_download',
   ]) {

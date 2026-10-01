@@ -7,6 +7,7 @@ import { providerPromptCacheHintScenario } from './provider-prompt-cache-hint.sc
 
 import { unifiedFileCapabilityScenario } from './unified-file-capability.scenario';
 import { unifiedShellCapabilityScenario } from './unified-shell-capability.scenario';
+import { sshSessionJobsScenario } from './ssh-session-jobs.scenario';
 import { subagentGovernedMutationScenario } from './subagent-governed-mutation.scenario';
 import { restartRecoveryScenario } from './restart-recovery.scenario';
 import { checkpointWorkspaceEvidenceScenario } from './checkpoint-workspace-evidence.scenario';
@@ -101,6 +102,7 @@ const scenarios = new Map<string, Scenario>([
   ['workspace/coding-tool-surface', workspaceCodingToolSurfaceScenario],
   ['file/unified-targets', unifiedFileCapabilityScenario],
   ['shell/unified-targets', unifiedShellCapabilityScenario],
+  ['ssh/session-jobs', sshSessionJobsScenario],
   ['workspace/repo-map-code-intel', workspaceRepoMapCodeIntelScenario],
   ['workspace/background-job-lifecycle', workspaceBackgroundJobLifecycleScenario],
   ['context/tool-result-projection', toolResultProjectionScenario],

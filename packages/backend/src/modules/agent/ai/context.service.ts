@@ -666,7 +666,7 @@ export class ContextService {
         return calls.flatMap((value) => {
           if (!value || Array.isArray(value) || typeof value !== 'object') return [];
           const call = value as Record<string, JsonValue>;
-          return call.name === 'browser_screenshot' && typeof call.id === 'string' ? [call.id] : [];
+          return call.name === 'browser_screenshot_capture' && typeof call.id === 'string' ? [call.id] : [];
         });
       }),
     );

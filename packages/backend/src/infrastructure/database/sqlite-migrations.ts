@@ -1,6 +1,7 @@
 import type { DatabaseSync as Database } from 'node:sqlite';
 import { logger } from '../../shared/logging/logger';
 import {
+  createAgentSshJobsTableSQL,
   createAgentInputRequestsTableSQL,
   createAiContextCheckpointsTableSQL,
   createAiMemorySearchIndexSQL,
@@ -1272,6 +1273,11 @@ export const definedMigrations: SqliteMigration[] = [
           OR json_type(value_json, '$.model.fallbackModels') IS NULL
         );
     `,
+  },
+  {
+    id: 49,
+    name: 'Add durable Agent SSH background jobs',
+    sql: createAgentSshJobsTableSQL,
   },
 ];
 

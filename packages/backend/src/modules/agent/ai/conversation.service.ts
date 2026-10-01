@@ -44,6 +44,7 @@ export class ConversationService {
     private readonly clock: ClockPort,
     private readonly settings: AgentSettingsService,
     private readonly lifecycle: AppLifecycleService,
+    private readonly closeSshSessions: (scope: Scope, threadId?: string) => Promise<void> = async () => {},
   ) {}
 
   async createThread(scope: Scope, title?: unknown, idempotencyKey?: string): Promise<ThreadView> {
@@ -110,6 +111,7 @@ export class ConversationService {
     if (!threadId) throw new Error('VALIDATION_FAILED');
     const version = normalizeExpectedVersion(expectedVersion);
     const result = await this.repository.deleteThread(scope, threadId, version, this.clock.nowUnixSeconds());
+    await this.closeSshSessions(scope, threadId);
     logger.info(
       { userId: scope.userId, appId: scope.appId, threadId, expectedVersion: version },
       'Agent conversation thread deleted',
@@ -120,6 +122,7 @@ export class ConversationService {
   async deleteAllThreads(scope: Scope, confirmation: unknown): Promise<ThreadDeleteAllResult> {
     if (confirmation !== 'delete_all_threads') throw new Error('VALIDATION_FAILED');
     const result = await this.repository.deleteAllThreads(scope, this.clock.nowUnixSeconds());
+    await this.closeSshSessions(scope);
     logger.info(
       { userId: scope.userId, appId: scope.appId, deletedThreadCount: result.deletedCount },
       'Agent conversation threads deleted',

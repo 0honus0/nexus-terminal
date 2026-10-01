@@ -259,7 +259,7 @@ export const unifiedShellCapabilityScenario = async () => {
   ] as const) {
     await assert.rejects(
       () => executor.inspect(context, proposal(callId, input as unknown as Record<string, JsonValue>)),
-      /TOOL_ARGUMENTS_INVALID/,
+      callId === 'ssh-background' ? /SSH_SESSION_REQUIRED/ : /TOOL_ARGUMENTS_INVALID/,
     );
   }
 

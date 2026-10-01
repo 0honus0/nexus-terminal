@@ -230,12 +230,12 @@ export const browserScreenshotVisionScenario = async () => {
           toolCalls: [
             {
               id: 'browser-screenshot-provider-call',
-              name: 'browser_screenshot',
+              name: 'browser_screenshot_capture',
               argumentsJson: JSON.stringify({ sessionId }),
             },
             {
               id: 'browser-semantic-provider-call',
-              name: 'browser_snapshot',
+              name: 'browser_snapshot_read',
               argumentsJson: JSON.stringify({ sessionId }),
             },
           ],
@@ -259,13 +259,13 @@ export const browserScreenshotVisionScenario = async () => {
     );
 
     const tools = createBrowserTools(null!, settings as never, gateway as never, cryptoHash, artifacts);
-    const screenshot = tools.find((tool) => tool.descriptor.name === 'browser_screenshot');
-    const semantic = tools.find((tool) => tool.descriptor.name === 'browser_snapshot');
+    const screenshot = tools.find((tool) => tool.descriptor.name === 'browser_screenshot_capture');
+    const semantic = tools.find((tool) => tool.descriptor.name === 'browser_snapshot_read');
     assert.ok(
       screenshot,
-      'P-083 requires one explicit on-demand browser_screenshot Tool while semantic browser_snapshot remains the default representation',
+      'P-083 requires one explicit on-demand browser_screenshot_capture Tool while semantic browser_snapshot_read remains the default representation',
     );
-    assert.ok(semantic, 'semantic browser_snapshot must remain present');
+    assert.ok(semantic, 'semantic browser_snapshot_read must remain present');
     assert.equal(screenshotCalls, 0, 'registering/discovering Browser tools must never capture pixels automatically');
 
     const toolContext: ToolContext = {
@@ -293,7 +293,7 @@ export const browserScreenshotVisionScenario = async () => {
     assert.equal(
       screenshotCalls,
       0,
-      'ordinary semantic browser_snapshot execution must not capture pixels or create screenshot cost',
+      'ordinary semantic browser_snapshot_read execution must not capture pixels or create screenshot cost',
     );
     const inspected = await screenshot!.inspect({ sessionId }, toolContext, 1);
     assert.equal(screenshotCalls, 0, 'screenshot inspection must remain metadata-only and must not capture pixels');
@@ -304,7 +304,7 @@ export const browserScreenshotVisionScenario = async () => {
          operation_hash_version, risk, status, created_at)
        VALUES ('browser-screenshot-tool-call', ?, ?, 'browser-screenshot-tool-step',
                'browser-screenshot-model-step', 0, 1, 'browser-screenshot-provider-call',
-               'browser_screenshot', '1.0.0', ?, ?, 1, 'read', 'proposed', ?)`,
+               'browser_screenshot_capture', '1.0.0', ?, ?, 1, 'read', 'proposed', ?)`,
       [runId, runtimeId, JSON.stringify(inspected), inspected.operationHash, now],
     );
 
@@ -317,7 +317,7 @@ export const browserScreenshotVisionScenario = async () => {
       now: now + 2,
     });
     const screenshotResult = await screenshot!.execute(inspected, toolContext);
-    assert.equal(screenshotCalls, 1, 'pixels must be captured only by explicit browser_screenshot execution');
+    assert.equal(screenshotCalls, 1, 'pixels must be captured only by explicit browser_screenshot_capture execution');
     assert.equal(screenshotResult.artifactRefs.length, 1);
     assert.equal(screenshotResult.verification.status, 'verified');
     assert.equal(screenshotResult.verification.evidenceRefs[0], screenshotResult.artifactRefs[0]);
@@ -409,7 +409,9 @@ export const browserScreenshotVisionScenario = async () => {
     const observationIndex = visual.messages.findIndex(
       (message) =>
         message.role === 'user' &&
-        message.content.startsWith('[Browser screenshot observation derived from the preceding browser_screenshot'),
+        message.content.startsWith(
+          '[Browser screenshot observation derived from the preceding browser_screenshot_capture',
+        ),
     );
     assert.equal(
       toolIndexes.length,

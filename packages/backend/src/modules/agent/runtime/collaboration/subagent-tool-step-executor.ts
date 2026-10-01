@@ -168,7 +168,7 @@ export class SubagentToolStepExecutor {
     let continuation: 'runnable' | 'joining' | 'waiting_message' | 'waiting_budget' = 'runnable';
     let budgetReason: JsonValue | undefined;
     if (
-      toolWork.inspection.toolName === 'send_agent_message' &&
+      toolWork.inspection.toolName === 'collaboration_message_send' &&
       (toolResult.errorCode === 'MAILBOX_BUDGET_EXCEEDED' || toolResult.errorCode === 'MAILBOX_HARD_LIMIT_EXCEEDED')
     ) {
       continuation = 'waiting_budget';
@@ -184,7 +184,7 @@ export class SubagentToolStepExecutor {
         maxBytes: activeRun.budget.maxSubagentMessageBytes,
       };
     } else if (
-      toolWork.inspection.toolName === 'join_subagents' &&
+      toolWork.inspection.toolName === 'collaboration_subagent_join' &&
       toolResult.ok &&
       toolResult.data &&
       typeof toolResult.data === 'object' &&
@@ -494,6 +494,7 @@ export class SubagentToolStepExecutor {
       },
       runId: run.id,
       agentRuntimeId: runtimeId,
+      threadId: run.threadId,
       ...(toolCallId === undefined ? {} : { toolCallId }),
       connectionIds: [...run.definition.connectionIds],
       environment: run.definition.environment ?? null,

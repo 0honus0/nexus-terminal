@@ -11,6 +11,50 @@ import type {
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 import type { WorkspaceJobView } from '../../workspace-runtime/workspace-runtime-gateway.port';
+import type { SshJobView } from '../../capabilities/ssh-session.port';
+import { sshSessionContext } from './ssh-session-input';
+
+const sshJobResult = (job: SshJobView, maxOutputBytes: number): ToolResult => {
+  const budget = Math.max(1, Math.min(64 * 1024, Math.floor(maxOutputBytes / 4)));
+  const stdout = utf8Tail(job.result.stdout, budget);
+  const stderr = utf8Tail(job.result.stderr, budget);
+  return {
+    ok: job.status === 'running' || job.status === 'succeeded',
+    summary: `SSH job ${job.status}.`,
+    userSummary: {
+      key: 'agent.conversation.toolSummary.jobState',
+      params: { stateKey: `agent.conversation.toolSummary.labels.jobState.${job.status}` },
+    },
+    data: {
+      jobId: job.jobId,
+      sessionId: job.sessionId,
+      connectionId: job.connectionId,
+      status: job.status,
+      ...job.result,
+      stdout: stdout.text,
+      stderr: stderr.text,
+    },
+    artifactRefs: [],
+    truncated: job.result.truncated || stdout.truncated || stderr.truncated,
+    // The queried record is confirmed, even when the remote command outcome is unknown.
+    outcome: 'confirmed',
+    ...(job.status === 'unknown' ? { errorCode: 'SSH_JOB_OUTCOME_UNKNOWN' } : {}),
+    semantic: { kind: 'execution', target: { target: 'ssh', id: String(job.connectionId) }, status: job.status },
+    verification: {
+      status:
+        job.status === 'succeeded'
+          ? 'verified'
+          : job.status === 'failed' || job.status === 'cancelled'
+            ? 'failed'
+            : 'unverified',
+      summary:
+        job.status === 'succeeded'
+          ? 'SSH confirmed a zero exit code.'
+          : 'Submission or channel closure alone does not prove successful execution.',
+      evidenceRefs: [],
+    },
+  };
+};
 
 const MAX_ID_BYTES = 128;
 const MAX_ARGV_ITEMS = 128;
@@ -407,7 +451,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     name: 'shell_execute',
     version: '1.0.0',
     description:
-      'Execute a command on an explicit Workspace or SSH target. Workspace uses argv without a shell and supports durable background jobs; SSH uses explicit shell text in foreground mode.',
+      'Execute a command on an explicit Workspace or SSH target. Workspace uses argv; SSH uses shell text. Optional SSH sessionId reuses a connection. SSH background mode requires sessionId and returns a jobId; query/wait/cancel with shell_job_control. Background timeout is independent of submission.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -424,7 +468,8 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
           required: ['kind'],
         },
         cwd: { type: 'string', minLength: 1, maxLength: MAX_CWD_BYTES },
-        timeoutSeconds: { type: 'integer', minimum: 1, maximum: 300 },
+        timeoutSeconds: { type: 'integer', minimum: 1, maximum: 86400 },
+        sessionId: { type: 'string', minLength: 1, maxLength: 128 },
         mode: { type: 'string', enum: ['foreground', 'background'] },
       },
       required: ['target', 'id', 'command'],
@@ -436,19 +481,27 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     environment !== null || connectionIds === undefined || connectionIds.length > 0,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
-    onlyKeys(args, ['target', 'id', 'command', 'cwd', 'timeoutSeconds', 'mode']);
+    onlyKeys(args, ['target', 'id', 'command', 'cwd', 'timeoutSeconds', 'mode', 'sessionId']);
+    const sessionContext = sshSessionContext(args, context);
     const selector = selectorFrom(args);
     const command = commandValue(args.command);
     const resolved = await shell.resolve(context, selector);
-    const timeoutSeconds = positiveInteger(
-      args.timeoutSeconds,
-      Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
-    );
+    await shell.inspectSshSession(sessionContext, resolved);
     const rawMode = args.mode === undefined ? 'foreground' : stringValue(args.mode, 16);
     if (rawMode !== 'foreground' && rawMode !== 'background') throw new Error('TOOL_ARGUMENTS_INVALID');
+    const timeoutSeconds = positiveInteger(
+      args.timeoutSeconds,
+      selector.target === 'ssh' && rawMode === 'background'
+        ? 3600
+        : Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
+    );
     if (selector.target === 'workspace' && command.kind !== 'argv') throw new Error('TOOL_ARGUMENTS_INVALID');
     if (selector.target === 'ssh' && command.kind !== 'shell') throw new Error('TOOL_ARGUMENTS_INVALID');
-    if (selector.target === 'ssh' && (rawMode !== 'foreground' || args.cwd !== undefined)) {
+    if (timeoutSeconds > (selector.target === 'ssh' && rawMode === 'background' ? 86400 : 300))
+      throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (selector.target === 'ssh' && rawMode === 'background' && args.sessionId === undefined)
+      throw new Error('SSH_SESSION_REQUIRED');
+    if (selector.target === 'ssh' && args.cwd !== undefined) {
       throw new Error('TOOL_ARGUMENTS_INVALID');
     }
     const cwd =
@@ -463,6 +516,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
       command,
       timeoutSeconds,
       mode: rawMode,
+      ...(args.sessionId === undefined ? {} : { sessionId: args.sessionId }),
       ...(cwd === undefined ? {} : { cwd }),
     };
     const risk = command.kind === 'shell' ? shellRisk(command.text) : 'mutate';
@@ -495,7 +549,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     const command = commandValue(args.command);
     const mode = stringValue(args.mode, 16) as 'foreground' | 'background';
     const target = shell.bindInspectionTarget(inspection.target);
-    const executed = await shell.execute(context, target, {
+    const executed = await shell.execute(sshSessionContext(args, context), target, {
       command,
       ...(args.cwd === undefined ? {} : { cwd: stringValue(args.cwd, MAX_CWD_BYTES) }),
       timeoutSeconds: positiveInteger(args.timeoutSeconds),
@@ -503,6 +557,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
       operationHash: inspection.operationHash,
     });
     if (executed.job) return workspaceExecutionResult(executed.job, mode);
+    if (executed.sshJob) return sshJobResult(executed.sshJob, context.maxOutputBytes);
     if (!executed.result) throw new Error('TOOL_STATE_CONFLICT');
     const ok = executed.result.exitCode === 0;
     return {
@@ -542,17 +597,17 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
 
 export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'shell_job',
+    name: 'shell_job_control',
     version: '1.0.0',
     description:
-      'Inspect, server-side wait for, or cancel one durable Workspace background shell job. Requires the explicit Workspace target that owns the job.',
+      'Inspect, wait for, or cancel a Workspace or SSH background job. SSH jobs belong to the current conversation and use independent channels; lost connections have unknown outcomes and are never replayed.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        target: { type: 'string', enum: ['workspace'] },
+        target: { type: 'string', enum: ['workspace', 'ssh'] },
         id: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
-        jobId: { type: 'string', pattern: '^job-[a-f0-9]{64}$' },
+        jobId: { type: 'string', minLength: 1, maxLength: 80 },
         action: { type: 'string', enum: ['status', 'wait', 'cancel'] },
         waitSeconds: { type: 'integer', minimum: 1, maximum: 300 },
       },
@@ -561,14 +616,15 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     riskClass: 'control',
     capability: 'shell.execute',
   },
-  isAvailable: ({ environment }) => environment !== null,
+  isAvailable: ({ environment, connectionIds }) =>
+    environment !== null || connectionIds === undefined || connectionIds.length > 0,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'jobId', 'action', 'waitSeconds']);
     const selector = selectorFrom(args);
-    if (selector.target !== 'workspace') throw new Error('TOOL_ARGUMENTS_INVALID');
     const jobId = stringValue(args.jobId, 80);
-    if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (!(selector.target === 'ssh' ? /^ssh-job-[a-f0-9-]{36}$/ : /^job-[a-f0-9]{64}$/).test(jobId))
+      throw new Error('TOOL_ARGUMENTS_INVALID');
     const action = stringValue(args.action, 16);
     if (action !== 'status' && action !== 'wait' && action !== 'cancel') throw new Error('TOOL_ARGUMENTS_INVALID');
     const waitSeconds =
@@ -579,16 +635,20 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
           )
         : undefined;
     if (action !== 'wait' && args.waitSeconds !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
-    const resolved = await shell.resolveJob(context, selector, jobId);
+    const resolved =
+      selector.target === 'ssh'
+        ? { target: await shell.resolve(context, selector) }
+        : await shell.resolveJob(context, selector, jobId);
+    if (selector.target === 'ssh') await shell.sshJob(context, selector, jobId, 'status');
     const normalizedArguments: JsonValue = {
-      target: 'workspace',
+      target: selector.target,
       id: resolved.target.selector.id,
       jobId,
       action,
       ...(waitSeconds === undefined ? {} : { waitSeconds }),
     };
     return {
-      toolName: 'shell_job',
+      toolName: 'shell_job_control',
       toolVersion: '1.0.0',
       normalizedArguments,
       target: resolved.target.fingerprint,
@@ -598,7 +658,7 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
       operationHash: operation(
         cryptoHash,
         context,
-        'shell_job',
+        'shell_job_control',
         resolved.target.fingerprint,
         normalizedArguments,
         resolved.target.resourceKeys,
@@ -615,6 +675,17 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     const args = record(inspection.normalizedArguments);
     const target = shell.bindInspectionTarget(inspection.target);
     const action = stringValue(args.action, 16) as 'status' | 'wait' | 'cancel';
+    if (target.selector.target === 'ssh')
+      return sshJobResult(
+        await shell.sshJob(
+          context,
+          target.selector,
+          stringValue(args.jobId, 80),
+          action,
+          args.waitSeconds === undefined ? undefined : positiveInteger(args.waitSeconds),
+        ),
+        context.maxOutputBytes,
+      );
     const job = await shell.controlJob(
       context,
       target,

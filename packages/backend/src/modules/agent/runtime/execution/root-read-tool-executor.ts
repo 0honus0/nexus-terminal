@@ -308,7 +308,7 @@ export class RootReadToolExecutor {
 
     const inputRequestExecution =
       executions.length === 1 &&
-      executions[0]?.inspection.toolName === 'request_user_input' &&
+      executions[0]?.inspection.toolName === 'user_input_request' &&
       executions[0].result.ok &&
       executions[0].result.outcome === 'confirmed'
         ? executions[0]
@@ -360,7 +360,7 @@ export class RootReadToolExecutor {
 
     const mailboxFailure = executions.find(
       ({ inspection, result }) =>
-        inspection.toolName === 'send_agent_message' &&
+        inspection.toolName === 'collaboration_message_send' &&
         (result.errorCode === 'MAILBOX_BUDGET_EXCEEDED' || result.errorCode === 'MAILBOX_HARD_LIMIT_EXCEEDED'),
     );
     if (mailboxFailure) {
@@ -388,7 +388,7 @@ export class RootReadToolExecutor {
 
     const blockedJoin = executions.find(
       ({ inspection, result }) =>
-        inspection.toolName === 'join_subagents' &&
+        inspection.toolName === 'collaboration_subagent_join' &&
         result.ok &&
         result.data &&
         typeof result.data === 'object' &&

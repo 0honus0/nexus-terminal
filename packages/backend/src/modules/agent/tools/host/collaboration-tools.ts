@@ -92,7 +92,7 @@ const localInspection = (
 
 const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'delegate_subagent',
+    name: 'collaboration_subagent_delegate',
     version: '1',
     description:
       'Create a bounded child agent for a specific objective using a configured Subagent profile. The caller identity and parent runtime are bound by Nexus.',
@@ -127,7 +127,7 @@ const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): A
     riskClass: 'control',
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('delegate_subagent', '1', input, context, policyRevision, cryptoHash, 'control'),
+    localInspection('collaboration_subagent_delegate', '1', input, context, policyRevision, cryptoHash, 'control'),
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const idempotencyKey = String(input.idempotencyKey ?? '');
@@ -141,7 +141,7 @@ const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): A
 
 const listSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'list_subagents',
+    name: 'collaboration_subagent_list',
     version: '1',
     description: 'List child delegations in the current Run without exposing their private model context.',
     inputSchema: {
@@ -156,7 +156,7 @@ const listSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
     parallelSafe: true,
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('list_subagents', '1', input, context, policyRevision, cryptoHash, 'read'),
+    localInspection('collaboration_subagent_list', '1', input, context, policyRevision, cryptoHash, 'read'),
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const parentRuntimeId = typeof input.parentRuntimeId === 'string' ? input.parentRuntimeId : context.agentRuntimeId;
@@ -170,7 +170,7 @@ const listSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
 
 const joinSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'join_subagents',
+    name: 'collaboration_subagent_join',
     version: '1',
     description:
       'Check completion of direct child delegations. When the requested join condition is not ready, Nexus yields the parent runtime slot until child progress wakes it.',
@@ -193,7 +193,7 @@ const joinSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
     riskClass: 'control',
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('join_subagents', '1', input, context, policyRevision, cryptoHash, 'control'),
+    localInspection('collaboration_subagent_join', '1', input, context, policyRevision, cryptoHash, 'control'),
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const delegationIds = Array.isArray(input.delegationIds) ? input.delegationIds.map(String) : [];
@@ -220,7 +220,7 @@ const joinSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
 
 const sendMessageTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'send_agent_message',
+    name: 'collaboration_message_send',
     version: '1',
     description:
       'Send one bounded Run-scoped message to an authorized peer. Sender identity is always taken from the current agent runtime.',
@@ -257,7 +257,7 @@ const sendMessageTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): A
     riskClass: 'control',
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('send_agent_message', '1', input, context, policyRevision, cryptoHash, 'control'),
+    localInspection('collaboration_message_send', '1', input, context, policyRevision, cryptoHash, 'control'),
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const idempotencyKey = String(input.idempotencyKey ?? '');
@@ -271,7 +271,7 @@ const sendMessageTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): A
 
 const readMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'read_agent_messages',
+    name: 'collaboration_message_read',
     version: '1',
     description: 'Read the current runtime mailbox by monotonically increasing recipient sequence.',
     inputSchema: {
@@ -286,7 +286,7 @@ const readMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): 
     riskClass: 'control',
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('read_agent_messages', '1', input, context, policyRevision, cryptoHash, 'control'),
+    localInspection('collaboration_message_read', '1', input, context, policyRevision, cryptoHash, 'control'),
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const messages = await mailbox.read(
@@ -302,7 +302,7 @@ const readMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): 
 
 const consumeMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'consume_agent_messages',
+    name: 'collaboration_message_consume',
     version: '1',
     description:
       'Advance the current runtime mailbox contiguous consumption watermark using compare-and-set semantics.',
@@ -318,7 +318,7 @@ const consumeMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort
     riskClass: 'control',
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('consume_agent_messages', '1', input, context, policyRevision, cryptoHash, 'control'),
+    localInspection('collaboration_message_consume', '1', input, context, policyRevision, cryptoHash, 'control'),
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const through = await mailbox.consume(
@@ -340,7 +340,7 @@ const consumeMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort
 
 const getFactTool = (facts: SharedFactsService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'get_shared_fact',
+    name: 'collaboration_fact_read',
     version: '1',
     description: 'Read one bounded Run-scoped shared fact and its CAS version.',
     inputSchema: {
@@ -353,7 +353,7 @@ const getFactTool = (facts: SharedFactsService, cryptoHash: CryptoHashPort): Age
     parallelSafe: true,
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('get_shared_fact', '1', input, context, policyRevision, cryptoHash, 'read'),
+    localInspection('collaboration_fact_read', '1', input, context, policyRevision, cryptoHash, 'read'),
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const fact = await facts.get(context, context.runId, String(input.key));
@@ -363,7 +363,7 @@ const getFactTool = (facts: SharedFactsService, cryptoHash: CryptoHashPort): Age
 
 const compareAndSetFactTool = (facts: SharedFactsService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'compare_and_set_shared_fact',
+    name: 'collaboration_fact_compare_and_set',
     version: '1',
     description: 'Create or update one bounded Run-scoped shared fact with optimistic version checking.',
     inputSchema: {
@@ -379,7 +379,7 @@ const compareAndSetFactTool = (facts: SharedFactsService, cryptoHash: CryptoHash
     riskClass: 'control',
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('compare_and_set_shared_fact', '1', input, context, policyRevision, cryptoHash, 'control'),
+    localInspection('collaboration_fact_compare_and_set', '1', input, context, policyRevision, cryptoHash, 'control'),
   execute: async (inspection, context) => {
     const input = inspection.normalizedArguments as Record<string, JsonValue>;
     const expectedVersion = input.expectedVersion === null ? null : Number(input.expectedVersion);
@@ -397,7 +397,7 @@ const compareAndSetFactTool = (facts: SharedFactsService, cryptoHash: CryptoHash
 
 const proposeMemoryTool = (memories: MemoryService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
-    name: 'propose_memory',
+    name: 'memory_propose',
     version: '1',
     description:
       'Submit a memory candidate for user review. Candidates are not recalled until the user explicitly publishes them.',
@@ -415,7 +415,7 @@ const proposeMemoryTool = (memories: MemoryService, cryptoHash: CryptoHashPort):
     riskClass: 'control',
   },
   inspect: async (input, context, policyRevision) =>
-    localInspection('propose_memory', '1', input, context, policyRevision, cryptoHash, 'control'),
+    localInspection('memory_propose', '1', input, context, policyRevision, cryptoHash, 'control'),
   execute: async (inspection, context) => {
     const memory = await memories.propose(context, inspection.normalizedArguments, {
       runId: context.runId,

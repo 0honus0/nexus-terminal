@@ -526,7 +526,7 @@ const installAndRunNexusAgent = async (
     const serialized = JSON.stringify(await ledger.json());
     expect(serialized).toContain('call_e2e_multi_list');
     expect(serialized).toContain('call_e2e_multi_read');
-    expect(serialized).toContain('machine_list_connections');
+    expect(serialized).toContain('machine_connection_list');
     expect(serialized).toContain('file_read');
     expect(serialized).toContain('nexus-e2e-seed');
   });
@@ -1200,16 +1200,16 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         await expect(toolCall).toHaveCount(1);
         const summary = toolCall.locator('summary');
         await expect(summary).toContainText('Tool call');
-        await expect(summary).not.toContainText('machine_list_connections');
+        await expect(summary).not.toContainText('machine_connection_list');
         await expect(summary).not.toContainText('file_read');
         await expect(summary.getByText('2', { exact: true })).toBeVisible();
 
         await summary.click();
         const details = toolCall.locator('[data-tool-name]');
         await expect(details).toHaveCount(2);
-        await expect(details.nth(0)).toHaveAttribute('data-tool-name', 'machine_list_connections');
+        await expect(details.nth(0)).toHaveAttribute('data-tool-name', 'machine_connection_list');
         await expect(details.nth(1)).toHaveAttribute('data-tool-name', 'file_read');
-        await expect(details.nth(0)).toContainText('machine_list_connections');
+        await expect(details.nth(0)).toContainText('machine_connection_list');
         await expect(details.nth(1)).toContainText('file_read');
 
         await presetThread.click();
