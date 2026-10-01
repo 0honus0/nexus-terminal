@@ -435,6 +435,60 @@ test('hidden desktop terminal keeps its fitted geometry while switching sessions
   }
 });
 
+test('command history broadcasts a saved command to every connected SSH session', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await setTestSshOnline(true);
+  await resetTestSshFilesystem();
+  await removeMultiSessionConnections(context.request);
+  const connectionIds = await createMultiSessionConnections(context.request);
+  const marker = 'COMMAND_HISTORY_BROADCAST_E2E';
+  const command = `printf '${marker}\\n'`;
+
+  const existingHistory = await context.request.get('/api/v1/command-history');
+  expect(existingHistory.ok()).toBeTruthy();
+  for (const entry of (await existingHistory.json()) as Array<{ id: number; command: string }>) {
+    if (entry.command !== command) continue;
+    expect((await context.request.delete(`/api/v1/command-history/${entry.id}`)).ok()).toBeTruthy();
+  }
+
+  const createHistory = await context.request.post('/api/v1/command-history', { data: { command } });
+  expect(createHistory.status()).toBe(201);
+  const historyId = ((await createHistory.json()) as { id: number }).id;
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+
+    const terminals = page.locator('.terminal-inner-container');
+    await expect(terminals).toHaveCount(2);
+    const historyRow = page
+      .locator('.command-history-root:visible')
+      .first()
+      .locator(`[data-history-id="${historyId}"]`);
+    await expect(historyRow).toBeVisible({ timeout: 20_000 });
+    await historyRow.click({ button: 'right' });
+    await page.getByText('Send to All Sessions', { exact: true }).filter({ visible: true }).click();
+
+    await expect
+      .poll(async () => terminals.nth(0).locator('.xterm-rows').textContent(), { timeout: 15_000 })
+      .toContain(marker);
+    await expect
+      .poll(async () => terminals.nth(1).locator('.xterm-rows').textContent(), { timeout: 15_000 })
+      .toContain(marker);
+  } finally {
+    const history = await context.request.get('/api/v1/command-history');
+    expect(history.ok()).toBeTruthy();
+    for (const entry of (await history.json()) as Array<{ id: number; command: string }>) {
+      if (entry.command !== command) continue;
+      const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`);
+      expect([200, 404]).toContain(remove.status());
+    }
+    await setTestSshOnline(true);
+    await removeMultiSessionConnections(context.request);
+  }
+});
+
 test('HTML terminal background starts with a visible viewport on initial load and after switching sessions', async ({
   page,
   context,

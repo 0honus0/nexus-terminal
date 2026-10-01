@@ -13,6 +13,7 @@ import { selectUiOption } from '../../support/ui-select';
 
 const QUICK_COMMAND_NAME = 'E2E Command Input Sync';
 const QUICK_COMMAND_MARKER = 'COMMAND_INPUT_SYNC_E2E';
+const COMMAND_HISTORY_SYNC_MARKER = 'COMMAND_HISTORY_SYNC_E2E';
 
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
   const list = await request.get('/api/v1/quick-commands');
@@ -122,6 +123,78 @@ test('command input sync setting drives quick-command search and keyboard execut
     });
     expect(restore.ok()).toBeTruthy();
     await context.request.delete(`/api/v1/quick-commands/${commandId}`);
+  }
+});
+
+test('command input sync filters command history and executes the keyboard selection in a live SSH session', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+
+  const originalResponse = await context.request.get('/api/v1/settings');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = (await originalResponse.json()) as { commandInputSyncTarget?: string };
+  const historyCommand = `printf '${COMMAND_HISTORY_SYNC_MARKER}\\n'`;
+
+  const existingHistory = await context.request.get('/api/v1/command-history');
+  expect(existingHistory.ok()).toBeTruthy();
+  for (const entry of (await existingHistory.json()) as Array<{ id: number; command: string }>) {
+    if (entry.command !== historyCommand) continue;
+    expect((await context.request.delete(`/api/v1/command-history/${entry.id}`)).ok()).toBeTruthy();
+  }
+
+  const createHistory = await context.request.post('/api/v1/command-history', {
+    data: { command: historyCommand },
+  });
+  expect(createHistory.status()).toBe(201);
+  const historyId = ((await createHistory.json()) as { id: number }).id;
+
+  expect(
+    (
+      await context.request.put('/api/v1/settings', {
+        data: { commandInputSyncTarget: 'commandHistory' },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  const connectionId = await ensureTestSshConnection(context.request);
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    const commandInput = page.locator('.command-bar-command-input:visible');
+    const historyView = page.locator('.command-history-root:visible').first();
+    const historySearch = historyView.locator('.command-history-search');
+    const historyRow = historyView.locator(`[data-history-id="${historyId}"]`);
+    const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
+
+    await expect(historyRow).toBeVisible({ timeout: 20_000 });
+    await commandInput.fill(COMMAND_HISTORY_SYNC_MARKER);
+    await expect(historySearch).toHaveValue(COMMAND_HISTORY_SYNC_MARKER);
+    await expect(historyRow).toBeVisible();
+
+    await commandInput.press('ArrowDown');
+    await expect(historyRow).toHaveClass(/bg-primary\/20/);
+    await commandInput.press('Enter');
+
+    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain(COMMAND_HISTORY_SYNC_MARKER);
+    await expect(commandInput).toHaveValue('');
+    await expect(historySearch).toHaveValue('');
+  } finally {
+    const restore = await context.request.put('/api/v1/settings', {
+      data: { commandInputSyncTarget: original.commandInputSyncTarget ?? 'none' },
+    });
+    expect(restore.ok()).toBeTruthy();
+
+    const history = await context.request.get('/api/v1/command-history');
+    expect(history.ok()).toBeTruthy();
+    for (const entry of (await history.json()) as Array<{ id: number; command: string }>) {
+      if (entry.command !== historyCommand) continue;
+      const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`);
+      expect([200, 404]).toContain(remove.status());
+    }
   }
 });
 
