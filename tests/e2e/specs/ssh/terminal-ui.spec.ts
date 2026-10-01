@@ -44,6 +44,53 @@ test('focus configurator records distinct shortcuts and contains narrow viewport
   }
 });
 
+test('saved custom focus shortcut moves focus from the live terminal to the command input', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const originalResponse = await context.request.get('/api/v1/settings/focus-switcher-sequence');
+  expect(originalResponse.ok()).toBeTruthy();
+  const originalFocus = (await originalResponse.json()) as {
+    sequence: string[];
+    shortcuts: Record<string, { shortcut?: string }>;
+  };
+  const normalized = await context.request.put('/api/v1/settings/focus-switcher-sequence', {
+    data: { sequence: originalFocus.sequence, shortcuts: {} },
+  });
+  expect(normalized.ok()).toBeTruthy();
+
+  try {
+    const connectionId = await ensureTestSshConnection(context.request);
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    await page.getByRole('button', { name: 'Configure Focus Switcher', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Configure Focus Switcher', exact: true });
+    const shortcut = dialog.getByRole('textbox', { name: 'Command Input', exact: true });
+    await shortcut.press('Alt+J');
+    await expect(shortcut).toHaveValue('Alt+J');
+    await dialog.getByRole('button', { name: /^Save/ }).click();
+    await expect(dialog).toBeHidden();
+
+    const persistedResponse = await context.request.get('/api/v1/settings/focus-switcher-sequence');
+    expect(persistedResponse.ok()).toBeTruthy();
+    const persisted = (await persistedResponse.json()) as typeof originalFocus;
+    expect(persisted.shortcuts.commandInput?.shortcut).toBe('Alt+J');
+
+    const terminalInput = page.locator('.terminal-inner-container .xterm-helper-textarea');
+    const commandInput = page.locator('.command-bar-command-input');
+    await terminalInput.focus();
+    await expect(terminalInput).toBeFocused();
+    await page.keyboard.press('Alt+J');
+    await expect(commandInput).toBeFocused();
+  } finally {
+    const restore = await context.request.put('/api/v1/settings/focus-switcher-sequence', {
+      data: originalFocus,
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
+});
+
 test('desktop command bar keeps editing space in narrow panes without changing Enter submission', async ({
   page,
   context,
