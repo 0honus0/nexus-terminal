@@ -109,7 +109,7 @@ GENERATOR_VERSION = semantic-handoff-v1
 
 ## 13. Run Approval Policy 只有 `ask` 与 `full_access` 两档
 
-> 待确认（产品增强，不是已证实安全缺陷）：二值模式确实存在，但 full_access 仍受 capability/target/deny 边界约束。记忆决定、按路径／命令规则批准属于新增产品行为，缺少这些能力不直接违反现有授权 contract；保留交互噪声是否需要改善的疑问。
+> 已关闭（产品所有者决定保留）：继续使用 `ask`／`full_access` 两档，不新增记忆批准或路径／命令模式规则。`full_access` 仍受 capability、target 和 deny 边界约束；这不是已证实安全缺陷。
 
 Nexus 已经有 capability grant、target scope、denylist、risk inspection、policy revision 和 mutation approval 等多层治理机制。但 Run 本身的 approval mode 只有：
 
