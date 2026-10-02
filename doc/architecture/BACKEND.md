@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Resource status collector unique sampleKey/finally clear，bootstrap仅同次采样；host cache/inFlight按current connection keys惰性prune，全局reset丢弃inFlight identity避免旧publish，非取消底层I/O。
+
 RunnerPluginProcess constructor ready timer30s，timeout protocolFailure/failAll+managed SIGKILL，ready/error/exit clear；批激活补偿复用既有owner，不将其描述为所有command总deadline。
 
 BrowserGateway.closeRun由Root scheduler finally调用，close匹配Run owned sessions，执行片段结束含wait/quiesce，run/runtime authority保留；Workspace/global cleanup仍有效，不把disconnect等同远端browser process退出。

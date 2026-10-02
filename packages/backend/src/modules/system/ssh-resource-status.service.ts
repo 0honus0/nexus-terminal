@@ -1,4 +1,5 @@
 import type { ConnectionService } from '../connections/connection.service';
+import { randomUUID } from 'node:crypto';
 import type { SshConnectionResolver } from '../connections/services/ssh-connection-resolver.service';
 import type { SettingsService } from '../settings/settings.service';
 import type { ExecutionSessionManager } from '../../platform/execution/execution-session-manager';
@@ -31,6 +32,7 @@ export class SshResourceStatusService {
   ) {}
   async getSshResourceStatuses() {
     const all = (await this.connections.list()).filter((c) => c.type === 'SSH');
+    this.pruneHosts(new Set(all.map((c) => keyFor(c.host, c.port))));
     const refresh = await this.settings.getRemoteHostRefreshIntervalSeconds();
     const groups = new Map<string, typeof all>();
     for (const c of all) {
@@ -43,6 +45,7 @@ export class SshResourceStatusService {
   }
   async getSshResourceStatus(connectionId: number): Promise<SshResourceStatus | null> {
     const all = (await this.connections.list()).filter((c) => c.type === 'SSH');
+    this.pruneHosts(new Set(all.map((c) => keyFor(c.host, c.port))));
     const selected = all.find((c) => c.id === connectionId);
     if (!selected) return null;
     const key = keyFor(selected.host, selected.port);
@@ -52,6 +55,12 @@ export class SshResourceStatusService {
   }
   clearCache() {
     this.cache.clear();
+    this.inFlight.clear();
+    this.bootstrappedKeys.clear();
+  }
+  private pruneHosts(keys: Set<string>): void {
+    for (const key of this.cache.keys()) if (!keys.has(key)) this.cache.delete(key);
+    for (const key of this.inFlight.keys()) if (!keys.has(key)) this.inFlight.delete(key);
   }
   private collectCachedHost(
     key: string,
@@ -64,7 +73,13 @@ export class SshResourceStatusService {
     const active = this.inFlight.get(key);
     if (active?.fingerprint === fingerprint) return active.promise;
     const startedAt = Date.now();
-    const promise = this.collectHost(key, candidates);
+    const sampleKey = `${key}:${randomUUID()}`;
+    const promise = this.collectHost(sampleKey, candidates)
+      .then((value) => ({ ...value, key }))
+      .finally(() => {
+        this.bootstrappedKeys.delete(sampleKey);
+        this.collector.clear(sampleKey);
+      });
     this.inFlight.set(key, { fingerprint, promise });
     void promise
       .then((value) => {

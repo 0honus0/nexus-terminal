@@ -2011,7 +2011,9 @@ await writePluginFrame(
 
 `RunnerPluginProcess.close()` 和 managed-process SIGTERM→SIGKILL 机制不能主动解决这个状态，因为只有调用方从 `await instance.ready` 返回后才能进入对应补偿路径。
 
-## 92. SSH Resource Status 的 host 级采样状态不会随 Connection 生命周期失效；历史 host:port 会永久留在内存，同 key 重用时还会复用旧机器静态信息
+## 92. SSH Resource Status 历史host状态（已修复）
+
+> 已修复：collector使用每次sample UUID key，finally clear全部采样/static与bootstrap状态，不跨请求复用静态信息；状态请求按当前连接prune cache/inFlight，clearCache清发布owner。不新增mutation订阅，删除后惰性失效；仍在途采样直到结束才物理clear。下文为原证据。
 
 > 确认问题：ssh-resource-status clearCache 只清 cache，未清 bootstrappedKeys 或 collector 的静态／采样 Map；Connection lifecycle 未调用 collector.clear。保留跨 host 重用 stale state，未实际替换远端机器验证。
 
