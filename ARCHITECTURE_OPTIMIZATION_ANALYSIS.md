@@ -1099,7 +1099,9 @@ if (signal.aborted) {
 
 同一个控制信号由时序决定是 supersede / recover 还是 terminal cancel，会使追加新输入、更新 goal 或正常 quiesce 在 safe-boundary 竞争窗口中意外终止 Root Run。
 
-## 48. Runner Workspace lifecycle drain 与 checkpoint restore 的互斥是单向的，restore 可以和 start / restart / delete 并发
+## 48. Runner lifecycle 与 checkpoint 单向互斥（已修复）
+
+> 已修复：beginWorkspaceLifecycleDrain 同步拒绝已有 checkpointCaptures，restore/capture 原反向检查保留；同 generation 双向 admission 互斥，不改变 job drain 策略。下文为原问题证据。
 
 > 确认问题：`workspace-runtime-engine.ts:93–102` 的 beginWorkspaceLifecycleDrain 只查 drain；restore 反向查 checkpoint/drain/writers。缺少对称 admission 检查，最终影响须以并发 restore/lifecycle 测试验证。
 

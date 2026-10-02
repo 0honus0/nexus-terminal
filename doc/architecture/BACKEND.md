@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Runner lifecycle drain 与 checkpointCaptures 双向同步 admission 互斥；capture/restore 持有期间不能新增 lifecycle drain，既有 lifecycle drain 也阻止 checkpoint，不改变主动 job drain。
+
 Root NativeAgentBackend 循环 safe-boundary 按 abort reason 区分 recoverable interruption 与 durable cancel；NEW_INPUT/GOAL_UPDATED/AGENT_QUIESCE 不写 run.cancelled，已结算 step 不重开。
 
 SSH/Workspace Suspend reset 清理会话与待恢复资源，不清除长期 sweep/subscription；Backup restore 和 resetForE2E 使用 reset，shutdown dispose 才 teardown 长期 owner。

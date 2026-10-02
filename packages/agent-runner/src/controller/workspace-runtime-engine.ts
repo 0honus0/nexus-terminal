@@ -98,7 +98,8 @@ export class WorkspaceRuntimeEngine {
 
   beginWorkspaceLifecycleDrain(workspaceId: string, generation: number): () => void {
     const key = workspaceKey(workspaceId, generation);
-    if (this.workspaceLifecycleDrains.has(key)) throw new Error('WORKSPACE_LIFECYCLE_CONFLICT');
+    if (this.workspaceLifecycleDrains.has(key) || this.checkpointCaptures.has(key))
+      throw new Error('WORKSPACE_LIFECYCLE_CONFLICT');
     this.workspaceLifecycleDrains.add(key);
     let released = false;
     return () => {
