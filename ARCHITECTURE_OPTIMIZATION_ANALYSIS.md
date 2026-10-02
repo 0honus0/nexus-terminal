@@ -1462,7 +1462,9 @@ HTTP login 路由只有在 `authenticatePassword()` 返回后才执行 `regenera
 
 因此只要管理员启用了一个慢或不可达的外部通知通道，认证相关请求就会把该通道的网络延迟直接暴露给用户；如果配置了大量匹配同一事件的通道，则同一条认证请求还会同步触发大量并发出站连接。Channel failure 最终因为 `allSettled` 不会反向回滚业务状态，但认证可用性、Backend 出站并发和外部 Webhook/Telegram/SMTP 的响应时间已经被绑定在同一个同步 critical path 上。
 
-## 68. Authenticated Session reset 只保护了部分 load；旧会话 Mutation 的晚到响应可以在 logout / user-change 后重新污染前端缓存
+## 68. 旧会话 Mutation 回填（已修复）
+
+> 已修复：connections refresh/create/update/clone/remove、proxies create/update/remove、tags create/rename/remove、notifications save/remove 捕获 owner generation，await 后仅相同 generation 写缓存。返回 DTO 不改变后端已完成副作用，不声称取消 HTTP 或阻止组件自行消费结果。下文为原证据。
 
 > 确认问题（异步 session owner 缺口）：connections/proxies/tags/notifications mutation 在 await 后直接回填，没有对应 load generation 检查。保留 logout/login stale UI 风险；正常单用户产品不推定跨租户授权泄露，Backend 权限不会因 stale DTO 自动改变。
 

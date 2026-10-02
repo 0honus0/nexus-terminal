@@ -29,14 +29,18 @@ export const useNotificationsStore = defineStore('notifications', () => {
     error.value = null;
   }
   async function save(input: NotificationSettingCreateRequestDto, id?: number) {
+    const generation = loadGeneration;
     const saved = id ? await notificationsApi.update(id, input) : await notificationsApi.create(input);
+    if (generation !== loadGeneration) return saved;
     const index = items.value.findIndex((x) => x.id === saved.id);
     if (index >= 0) items.value[index] = saved;
     else items.value.push(saved);
     return saved;
   }
   async function remove(id: number) {
+    const generation = loadGeneration;
     await notificationsApi.remove(id);
+    if (generation !== loadGeneration) return;
     items.value = items.value.filter((x) => x.id !== id);
   }
   return { items, loading, error, load, reset, save, remove };

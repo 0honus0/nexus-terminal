@@ -36,18 +36,24 @@ export const useProxiesStore = defineStore('proxies', () => {
       }
     },
     async create(input: ProxyCreateRequestDto) {
+      const generation = cacheGeneration;
       const item = await proxiesApi.create(input);
+      if (generation !== cacheGeneration) return item;
       items.value.push(item);
       return item;
     },
     async update(id: number, input: Partial<ProxyCreateRequestDto>) {
+      const generation = cacheGeneration;
       const item = await proxiesApi.update(id, input);
+      if (generation !== cacheGeneration) return item;
       const i = items.value.findIndex((x) => x.id === id);
       if (i >= 0) items.value[i] = item;
       return item;
     },
     async remove(id: number) {
+      const generation = cacheGeneration;
       await proxiesApi.remove(id);
+      if (generation !== cacheGeneration) return;
       items.value = items.value.filter((x) => x.id !== id);
     },
   };

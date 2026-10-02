@@ -46,20 +46,26 @@ export const useTagsStore = defineStore('connection-tags', () => {
       loadedAt.value = 0;
     },
     async create(name: string) {
+      const generation = cacheGeneration;
       const tag = await tagsApi.create(name);
+      if (generation !== cacheGeneration) return tag;
       items.value.push(tag);
       loadedAt.value = Date.now();
       return tag;
     },
     async rename(id: number, name: string) {
+      const generation = cacheGeneration;
       const tag = await tagsApi.update(id, name);
+      if (generation !== cacheGeneration) return tag;
       const i = items.value.findIndex((x) => x.id === id);
       if (i >= 0) items.value[i] = tag;
       loadedAt.value = Date.now();
       return tag;
     },
     async remove(id: number) {
+      const generation = cacheGeneration;
       await tagsApi.remove(id);
+      if (generation !== cacheGeneration) return;
       items.value = items.value.filter((x) => x.id !== id);
       loadedAt.value = Date.now();
     },

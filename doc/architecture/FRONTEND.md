@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Connections/Proxies/Tags/Notifications 的异步 mutation（含 Connection refresh）捕获现有 cache generation，await 后重检再写 items/loadedAt；session reset 是 store 回填边界，不取消后端副作用，也不声称所有调用方局部状态已受 fence。
+
 Plugin Agent dispatcher operationId 按 endpoint contract 透传：createThread/createRun/appendInput/cancelRun/resolveApproval；renameThread/cancelSubagent 使用 expectedVersion CAS，后端不消费 replay key。不能以单纯 header 透传声称 durable replay。
 
 SSH Key/Command History/Quick Commands/Server Transfers store 注册 authenticated-session reset，实例 generation 隔离异步 load/mutation 与排队 history write；transfer reset 停止 poll，旧 refresh finally 不清除新 in-flight owner。服务端副作用仍由后端负责。

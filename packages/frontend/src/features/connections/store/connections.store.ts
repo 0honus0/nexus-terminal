@@ -62,7 +62,9 @@ export const useConnectionsStore = defineStore('connections', () => {
       return item;
     },
     async refresh(id: number) {
-      return this.upsert(await connectionsApi.get(id));
+      const generation = cacheGeneration;
+      const item = await connectionsApi.get(id);
+      return generation === cacheGeneration ? this.upsert(item) : item;
     },
     markConnected(id: number, timestamp: number) {
       const i = items.value.findIndex((item) => item.id === id);
@@ -78,18 +80,26 @@ export const useConnectionsStore = defineStore('connections', () => {
       return next;
     },
     async create(input: ConnectionFormInput) {
-      return this.upsert(await connectionsApi.create(input));
+      const generation = cacheGeneration;
+      const item = await connectionsApi.create(input);
+      return generation === cacheGeneration ? this.upsert(item) : item;
     },
     async update(id: number, input: ConnectionFormUpdate) {
-      return this.upsert(await connectionsApi.update(id, input));
+      const generation = cacheGeneration;
+      const item = await connectionsApi.update(id, input);
+      return generation === cacheGeneration ? this.upsert(item) : item;
     },
     async remove(id: number) {
+      const generation = cacheGeneration;
       await connectionsApi.remove(id);
+      if (generation !== cacheGeneration) return;
       items.value = items.value.filter((x) => x.id !== id);
       loadedAt.value = Date.now();
     },
     async clone(id: number, name: string) {
-      return this.upsert(await connectionsApi.clone(id, name));
+      const generation = cacheGeneration;
+      const item = await connectionsApi.clone(id, name);
+      return generation === cacheGeneration ? this.upsert(item) : item;
     },
   };
 });
