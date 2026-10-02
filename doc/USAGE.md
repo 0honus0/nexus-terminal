@@ -276,6 +276,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - 双文件管理器布局属于实验性能力，复杂场景可能存在边界行为。
 - 同一布局中添加多个文本编辑器目前并非完整支持场景。
 - 请自行备份部署目录中的 `data`；项目本身不替代外部备份方案。
+- Plugin App 升级／卸载的 drain 针对 App Run 与 Backend runtime，不级联停止独立 Workspace 的冻结 Runner Plugin。已有 Workspace 可继续执行旧版本；如需停止旧代码，应先显式 stop／delete 相应 Workspace。
 - Plugin Frontend Run 订阅单实例最多 2 个、当前页面所有 Plugin 合计最多 4 个，同实例不能重复订阅同一 Run；取消完成释放 transport 后归还名额，超限调用直接拒绝，避免 Plugin 占满 Host 共享订阅槽。
 - 带 Runner entry 的已安装 Plugin package 在升级／卸载后不会自动删除旧版本文件，保留冻结 Run／Workspace 使用的版本；当前 installation 仍只有一个版本。旧 package 会持续占用磁盘，不提供自动 package GC，也不会自动升级旧 Workspace。
 - 背景上传与删除在单 Backend 内顺序执行，后一次操作读取前一次提交的引用，避免并发上传遗留被覆盖的新文件；文件清理失败或进程崩溃仍可能留下未引用文件，不承诺跨文件／数据库原子更新。

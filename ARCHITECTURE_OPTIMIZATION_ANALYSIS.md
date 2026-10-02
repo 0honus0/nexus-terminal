@@ -2480,7 +2480,7 @@ const retryableTransportError = (cause: unknown): boolean =>
 
 ## 102. Plugin uninstall / upgrade 是否应停止 retained Workspace 的冻结版本进程
 
-> 待确认（冻结 Workspace 版本生命周期）：uninstall drain 确实按 App runningCount，Runner process 由 Workspace owner 控制。但 retained Workspace 保留冻结版本可能是有意允许；需确认 uninstall 是否承诺立即停止这些独立 Workspace，和 #100 的 package 引用问题分开判定。
+> 已澄清（不改源码）：uninstall drain 只针对 App live Runs 和 Backend runtime；独立 Workspace 继续由自身 generation/lifecycle owner 管理，冻结 Runner version 不随 installation 切换。卸载不承诺级联停止已有 Workspace，需显式 stop/delete；package 提前删除由 #100 保守 retention 处理。
 
 Plugin drain 统计 App live Run，不统计 Runner Workspace Plugin；retained Workspace 的冻结版本由独立 Workspace lifecycle 控制。需明确 uninstall/upgrade 是否必须停止这些 Workspace；保留旧代码执行可能是冻结版本设计，与旧 package 过早回收的 #100 不同。
 
