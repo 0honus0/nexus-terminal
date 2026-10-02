@@ -241,7 +241,7 @@ export class WorkspaceOperationsService {
     };
     await this.mutationGuard.withMutation(
       this.guardRequest(workspaceId, `transfer.${mode}:${requestId}`, [source.connectionId, destination.connectionId]),
-      async () =>
+      async (signal) =>
         this.transfers.run(
           {
             requestId,
@@ -252,6 +252,7 @@ export class WorkspaceOperationsService {
             sourcePaths,
             destinationPath,
             mode,
+            signal,
           },
           emit,
         ),
@@ -277,13 +278,14 @@ export class WorkspaceOperationsService {
             (input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>).destinationPath,
           ])
         : this.guardRequest(workspaceId, `archive.${operation}:${input.requestId}`, [session.connectionId]);
-    await this.mutationGuard.withMutation(guard, async () => {
+    await this.mutationGuard.withMutation(guard, async (signal) => {
       if (operation === 'compress') {
         await this.archives.compress(
           {
             ...(input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>),
             ownerId: workspaceId,
             sessionId: session.executionSessionId,
+            signal,
           },
           emit,
         );
@@ -294,6 +296,7 @@ export class WorkspaceOperationsService {
           ...(input as Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>),
           ownerId: workspaceId,
           sessionId: session.executionSessionId,
+          signal,
         },
         emit,
       );

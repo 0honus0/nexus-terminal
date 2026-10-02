@@ -7,6 +7,7 @@ import { normalizeAbsoluteRemotePath } from '../../filesystem/remote-path';
 import type { TransferEvent, TransferOperation, TransferRequest } from './transfer-operation.port';
 import { logger } from '../../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
+import { OperationOutcomeUnknownError, SettledOperationFailure } from '../operation-outcome';
 
 interface ActiveTransfer {
   requestId: string;
@@ -63,6 +64,9 @@ export class StreamTransferOperationService implements TransferOperation {
     const activeKey = this.key(request.ownerId, request.requestId);
     if (this.active.has(activeKey)) throw new Error(`Transfer ${request.requestId} already exists for this owner.`);
     const controller = new AbortController();
+    const onAbort = () => controller.abort(request.signal?.reason);
+    if (request.signal?.aborted) onAbort();
+    else request.signal?.addEventListener('abort', onAbort, { once: true });
     const active: ActiveTransfer = { requestId: request.requestId, ownerId: request.ownerId, controller, emit };
     this.active.set(activeKey, active);
     logger.debug(
@@ -154,6 +158,11 @@ export class StreamTransferOperationService implements TransferOperation {
         ...(request.sourceOwnerId ? { sourceOwnerId: request.sourceOwnerId } : {}),
       });
     } catch (error) {
+      if (
+        !(error instanceof SettledOperationFailure) &&
+        !(error instanceof DOMException && error.name === 'AbortError')
+      )
+        throw new OperationOutcomeUnknownError();
       if (controller.signal.aborted) {
         emit({ type: 'cancelled', requestId: request.requestId });
       } else {
@@ -167,6 +176,7 @@ export class StreamTransferOperationService implements TransferOperation {
       }
     } finally {
       this.active.delete(activeKey);
+      request.signal?.removeEventListener('abort', onAbort);
     }
   }
 
@@ -291,11 +301,15 @@ export class StreamTransferOperationService implements TransferOperation {
         await reader.close().catch(() => undefined);
         throw error;
       }
+      let closing: Promise<PromiseSettledResult<void>[]> | undefined;
+      const closeHandles = () => (closing ??= Promise.allSettled([reader.close(), writer.close()]));
       const abortOpenHandles = () => {
-        void Promise.allSettled([reader.close(), writer.close()]);
+        void closeHandles();
       };
       signal.addEventListener('abort', abortOpenHandles, { once: true });
       if (signal.aborted) abortOpenHandles();
+      let copyFailure: unknown;
+      const workersAbort = new AbortController();
       try {
         const fileSize = Math.max(0, metadata.size);
         let nextPosition = 0;
@@ -307,6 +321,7 @@ export class StreamTransferOperationService implements TransferOperation {
           const buffer = Buffer.allocUnsafe(Math.min(this.positionedCopyChunkBytes, fileSize));
           runtimePerformanceMetrics.recordSftpPositionedReadAllocation(buffer.byteLength);
           while (true) {
+            if (workersAbort.signal.aborted) return;
             this.throwIfAborted(signal);
             const position = nextPosition;
             if (position >= fileSize) return;
@@ -323,6 +338,7 @@ export class StreamTransferOperationService implements TransferOperation {
                 const bytesRead = await reader.readInto(position + blockOffset, target);
                 if (bytesRead === 0) throw new Error(`Unexpected end of file while reading ${sourcePath}.`);
                 this.throwIfAborted(signal);
+                if (workersAbort.signal.aborted) return;
                 await writer.write(position + blockOffset, target.subarray(0, bytesRead));
                 blockOffset += bytesRead;
                 blockCopiedBytes += bytesRead;
@@ -334,22 +350,48 @@ export class StreamTransferOperationService implements TransferOperation {
             }
           }
         };
-        await Promise.all(Array.from({ length: workerCount }, () => worker()));
+        const results = await Promise.allSettled(
+          Array.from({ length: workerCount }, async () => {
+            try {
+              await worker();
+            } catch (error) {
+              workersAbort.abort();
+              throw error;
+            }
+          }),
+        );
+        const failed = results.find((result) => result.status === 'rejected');
+        if (failed?.status === 'rejected') throw failed.reason;
         this.throwIfAborted(signal);
       } catch (error) {
-        await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
-        throw error;
+        copyFailure = error;
       } finally {
         signal.removeEventListener('abort', abortOpenHandles);
-        await Promise.allSettled([reader.close(), writer.close()]);
+        const closed = await closeHandles();
+        if (closed.some((result) => result.status === 'rejected')) throw new OperationOutcomeUnknownError();
+      }
+
+      if (copyFailure !== undefined) {
+        try {
+          await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
+        } catch {
+          throw new OperationOutcomeUnknownError();
+        }
+        throw new SettledOperationFailure(copyFailure);
       }
 
       try {
         this.throwIfAborted(signal);
         await destinationFs.replaceFile(temporaryPath, destinationPath);
       } catch (error) {
-        await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
-        throw error;
+        try {
+          await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
+        } catch {
+          throw new OperationOutcomeUnknownError();
+        }
+        if (signal.aborted && error instanceof DOMException && error.name === 'AbortError')
+          throw new SettledOperationFailure(error);
+        throw new OperationOutcomeUnknownError();
       }
       tracker.completedFiles += 1;
       perfCompleted = true;

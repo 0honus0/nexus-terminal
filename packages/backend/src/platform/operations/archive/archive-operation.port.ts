@@ -17,6 +17,7 @@ export interface CompressArchiveRequest {
   destinationPath: string;
   format: ArchiveFormat;
   password?: string;
+  signal?: AbortSignal;
 }
 
 export interface DecompressArchiveRequest {
@@ -25,6 +26,7 @@ export interface DecompressArchiveRequest {
   requestId: string;
   archivePath: string;
   password?: string;
+  signal?: AbortSignal;
 }
 
 export type ArchiveEvent =

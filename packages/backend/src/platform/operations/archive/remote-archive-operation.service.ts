@@ -5,6 +5,7 @@ import { CommandExecutionError, type RemoteCommandSession } from '../../executio
 import { logger } from '../../../shared/logging/logger';
 import { quotePosixShellArg } from '../../execution/posix-shell';
 import { normalizeAbsoluteRemotePath } from '../../filesystem/remote-path';
+import { OperationOutcomeUnknownError } from '../operation-outcome';
 import type {
   ArchiveErrorCode,
   ArchiveEvent,
@@ -22,6 +23,7 @@ interface ActiveArchive {
   preflightAbort: AbortController;
   command?: RemoteCommandSession;
   cancelled: boolean;
+  cancelCommand?: () => Promise<void>;
 }
 
 const MAX_PASSWORD_LENGTH = 128;
@@ -70,6 +72,11 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     const temporary = this.temporaryArchivePath(destination, request.requestId, request.format);
     const session = this.sessions.require(request.sessionId);
     const active = this.begin(request.ownerId, request.requestId, 'compress');
+    const onAbort = () => {
+      void this.cancel(request.ownerId, request.requestId).catch(() => undefined);
+    };
+    if (request.signal?.aborted) onAbort();
+    else request.signal?.addEventListener('abort', onAbort, { once: true });
 
     try {
       const required = request.format === 'zip' ? 'zip' : 'tar';
@@ -107,7 +114,11 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
         return;
       }
       const filesystem = await session.fileSystem('control');
-      await filesystem.replaceFile(temporary, destination);
+      try {
+        await filesystem.replaceFile(temporary, destination);
+      } catch {
+        throw new OperationOutcomeUnknownError();
+      }
       this.finish(active);
       emit({
         type: 'completed',
@@ -117,13 +128,22 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
         ...(warning ? { warning } : {}),
       });
     } catch (error) {
+      if (error instanceof OperationOutcomeUnknownError) throw error;
       this.finish(active);
       if (active.cancelled) this.emitCancelled(emit, active);
       else this.emitFailed(emit, 'compress', request.requestId, error instanceof Error ? error.message : String(error));
     } finally {
-      const filesystem = await session.fileSystem('control').catch(() => null);
-      await filesystem?.removeFile(temporary, { ignoreMissing: true }).catch(() => undefined);
-      this.finish(active);
+      request.signal?.removeEventListener('abort', onAbort);
+      try {
+        // Never remove a temporary archive while its writer may still be alive.
+        if (active.command) throw new OperationOutcomeUnknownError();
+        const filesystem = await session.fileSystem('control');
+        await filesystem.removeFile(temporary, { ignoreMissing: true });
+      } catch {
+        throw new OperationOutcomeUnknownError();
+      } finally {
+        this.finish(active);
+      }
     }
   }
 
@@ -153,6 +173,11 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
 
     const session = this.sessions.require(request.sessionId);
     const active = this.begin(request.ownerId, request.requestId, 'decompress');
+    const onAbort = () => {
+      void this.cancel(request.ownerId, request.requestId).catch(() => undefined);
+    };
+    if (request.signal?.aborted) onAbort();
+    else request.signal?.addEventListener('abort', onAbort, { once: true });
     try {
       const required = kind === 'zip' ? 'unzip' : 'tar';
       const commandAvailable = await this.commandExists(session, required, active);
@@ -205,6 +230,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
         path: path.posix.dirname(archivePath),
       });
     } catch (error) {
+      if (error instanceof OperationOutcomeUnknownError) throw error;
       this.finish(active);
       if (active.cancelled) this.emitCancelled(emit, active);
       else {
@@ -219,6 +245,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       }
     } finally {
       this.finish(active);
+      request.signal?.removeEventListener('abort', onAbort);
     }
   }
 
@@ -228,7 +255,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     active.cancelled = true;
     logger.debug({ requestId, ownerId, operation: active.operation }, 'Archive cancellation requested');
     active.preflightAbort.abort();
-    await active.command?.terminate({ signal: 'TERM', graceMs: 800, forceMs: 2_500 }).catch(() => undefined);
+    await active.cancelCommand?.();
     return true;
   }
 
@@ -272,12 +299,13 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     format: ArchiveFormat | 'zip',
   ): Promise<{ stdout: string; stderr: string }> {
     if (active.cancelled) throw new DOMException('Archive operation cancelled.', 'AbortError');
-    const commandSession = await session.startCommand({ command, maxOutputBytes: 256 * 1024 });
-    active.command = commandSession;
-    if (active.cancelled) {
-      await commandSession.terminate({ signal: 'TERM', graceMs: 200, forceMs: 1_000 }).catch(() => undefined);
-      throw new DOMException('Archive operation cancelled.', 'AbortError');
+    let commandSession: RemoteCommandSession;
+    try {
+      commandSession = await session.startCommand({ command, maxOutputBytes: 256 * 1024 });
+    } catch {
+      throw new OperationOutcomeUnknownError();
     }
+    active.command = commandSession;
 
     let fileCount = 0;
     let totalFiles: number | undefined;
@@ -329,17 +357,35 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     });
     try {
       const closeEvent = await new Promise<{ exitCode: number | null }>((resolve, reject) => {
-        const offClose = commandSession.onClose((event) => {
+        let offClose = () => {};
+        let offError = () => {};
+        let stopping: Promise<void> | undefined;
+        const stop = () =>
+          (stopping ??= (async () => {
+            try {
+              await commandSession.terminate({ signal: 'TERM', graceMs: 800, forceMs: 2_500 });
+            } finally {
+              offClose();
+              offError();
+              // terminate/channel close alone does not prove remote process exit.
+              const snapshot = commandSession.snapshot();
+              if (typeof snapshot.exitCode === 'number') resolve({ exitCode: snapshot.exitCode });
+              else reject(new OperationOutcomeUnknownError());
+            }
+          })());
+        offClose = commandSession.onClose((event) => {
           offClose();
           offError();
           resolve(event);
         });
-        const offError = commandSession.onError((error) => {
-          offClose();
-          offError();
-          reject(error);
+        offError = commandSession.onError(() => {
+          void stop().catch(() => reject(new OperationOutcomeUnknownError()));
         });
+        active.cancelCommand = stop;
+        if (active.cancelled) void stop().catch(() => reject(new OperationOutcomeUnknownError()));
       });
+      if (typeof closeEvent.exitCode !== 'number') throw new OperationOutcomeUnknownError();
+      active.command = undefined;
       const snapshot = commandSession.snapshot();
       if (active.cancelled) throw new DOMException('Archive operation cancelled.', 'AbortError');
       if (closeEvent.exitCode !== 0) {
@@ -351,7 +397,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     } finally {
       offOut();
       offErr();
-      if (active.command === commandSession) active.command = undefined;
+      active.cancelCommand = undefined;
     }
   }
 

@@ -11,6 +11,7 @@ export interface TransferRequest {
   sourcePaths: readonly string[];
   destinationPath: string;
   mode: TransferMode;
+  signal?: AbortSignal;
 }
 
 export type TransferEvent =

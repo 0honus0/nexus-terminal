@@ -717,9 +717,9 @@ Command repository 与 tag association repository 各自拥有独立 transaction
 
 因此 create 请求可以返回 500，但 command row 已经永久创建；update 请求也可以报告失败，但 command name/body/variables 已经更新，而 tag association 保持旧值。这使一个 API mutation 在客户端看来失败时仍然产生部分提交。
 
-## 32. Workspace Transfer / Archive 的 terminal outcome 与 Mutation Guard known-settlement 契约待确认
+## 32. Workspace Transfer / Archive writer settlement（已修复）
 
-> 待确认（known outcome 与成功不是同一概念）：`workspace-operations.service.ts:226–301` 确实在 terminal failed/cancelled 后 fulfilled；但 `lease-mutation-guard.adapter.ts:104–124` 的 confirm 表示 known/settled，并不必然代表业务成功。需按各 operation 的清理／验证结果判定是否仍 unknown，不能把所有 failed/cancelled 都要求 quarantine。
+> 已核实并修复：Transfer Promise.all 首次 reject 可越过存活 worker，清理/close 错误被吞；Archive channel error/terminate 未证明远端 exit 就 fulfilled。Transfer 等待全部 worker、共享 close Promise、成功关闭后才清理；无法证明 close/cleanup/replace 的结果时 reject。Archive 仅数值 exit status 证明命令结算，error/terminate 无 exit 证据时 reject 且不清理临时文件；guard signal 传入 operation。known failed/cancelled 保持 fulfilled，unknown 由 guard quarantine，不把失败等同成功或未知。既有 Agent lease scenario 增补确定性交错与真实 SQLite lease 状态断言。下文为原核对背景。
 
 `LeaseMutationGuardAdapter.withMutation()` 的 contract 是：work Promise 正常 resolve 后调用 `handle.confirm()`；只有 work reject 或抛异常时才调用 `handle.unknown(...)`。
 

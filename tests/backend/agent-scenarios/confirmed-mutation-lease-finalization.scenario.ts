@@ -11,6 +11,12 @@ import type { ClockPort, Scope } from '../../../packages/backend/src/modules/age
 import type { LeasePort } from '../../../packages/backend/src/modules/agent/capabilities/lease.port';
 import { freezeRunContextPolicy } from '../../../packages/backend/src/modules/agent/runtime/runs/run-budget-policy';
 import { SCENARIO_MODEL_CAPABILITIES } from './scenario-fixtures';
+import { LeaseMutationGuardAdapter } from '../../../packages/backend/src/infrastructure/agent/capabilities/lease-mutation-guard.adapter';
+import { StreamTransferOperationService } from '../../../packages/backend/src/platform/operations/transfer/stream-transfer-operation.service';
+import type { RemoteFileSystem } from '../../../packages/backend/src/platform/filesystem/remote-filesystem';
+import type { ExecutionSession } from '../../../packages/backend/src/platform/execution/execution-session';
+import { RemoteArchiveOperationService } from '../../../packages/backend/src/platform/operations/archive/remote-archive-operation.service';
+import type { RemoteCommandSession } from '../../../packages/backend/src/platform/execution/remote-execution.port';
 
 export const confirmedMutationLeaseFinalizationScenario = async () => {
   const runFault = async (fault: 'mark_settled' | 'release'): Promise<void> => {
@@ -267,6 +273,204 @@ export const confirmedMutationLeaseFinalizationScenario = async () => {
 
   await runFault('mark_settled');
   await runFault('release');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-transfer-settlement-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'settlement.sqlite', nodeEnv: 'test' });
+  try {
+    await db.initialize();
+    const leases = new SqliteLeaseRepository(db);
+    const guard = new LeaseMutationGuardAdapter(leases);
+    for (const closeFails of [false, true]) {
+      let releaseWrite!: () => void;
+      let startedWrite!: () => void;
+      const writeStarted = new Promise<void>((resolve) => {
+        startedWrite = resolve;
+      });
+      const writePending = new Promise<void>((resolve) => {
+        releaseWrite = resolve;
+      });
+      let inFlight = 0;
+      let removed = 0;
+      let terminal = 0;
+      const filesystem = {
+        ensureDirectory: async () => undefined,
+        metadata: async () => ({ size: 2, mode: 0o644, isFile: true, isDirectory: false, isSymbolicLink: false }),
+        removeFile: async () => {
+          assert.equal(inFlight, 0, 'cleanup must wait for all writers');
+          removed += 1;
+        },
+        openPositionedReader: async () => ({
+          readInto: async (_position: number, target: Uint8Array) => {
+            target.fill(1);
+            return 1;
+          },
+          close: async () => undefined,
+        }),
+        openPositionedWriter: async () => ({
+          write: async (position: number) => {
+            if (position === 0) {
+              await writeStarted;
+              throw new Error('INJECTED_WRITE_FAILURE');
+            }
+            inFlight += 1;
+            startedWrite();
+            await writePending;
+            inFlight -= 1;
+          },
+          close: async () => {
+            assert.equal(inFlight, 0);
+            if (closeFails) throw new Error('INJECTED_CLOSE_FAILURE');
+          },
+        }),
+      } as unknown as RemoteFileSystem;
+      const transfer = new StreamTransferOperationService(
+        { require: () => ({ fileSystem: async () => filesystem }) as unknown as ExecutionSession },
+        { positionedCopyChunkBytes: 1, positionedCopyConcurrency: 2 },
+      );
+      const resourceKey = `connection:42:path:/tmp/settlement-${closeFails}`;
+      const pending = guard.withMutation(
+        {
+          ownerType: 'workspace',
+          ownerId: 'scenario-transfer',
+          operationId: `copy-${closeFails}`,
+          resourceKeys: [resourceKey],
+        },
+        (signal) =>
+          transfer.run(
+            {
+              requestId: `copy-${closeFails}`,
+              ownerId: 'scenario-transfer',
+              sourceSessionId: 'source',
+              destinationSessionId: 'target',
+              sourcePaths: ['/source/file'],
+              destinationPath: '/target',
+              mode: 'copy',
+              signal,
+            },
+            (event) => {
+              if (event.type === 'failed') terminal += 1;
+            },
+          ),
+      );
+      // Attach rejection handling before injecting the fault.
+      const result = pending.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await writeStarted;
+      assert.equal(removed, 1);
+      assert.equal(terminal, 0);
+      releaseWrite();
+      const error = await result;
+      const nextOwner = { type: 'workspace' as const, id: `next-${closeFails}` };
+      if (closeFails) {
+        assert.ok(error instanceof Error && error.message === 'OPERATION_OUTCOME_UNKNOWN');
+        assert.equal(removed, 1, 'failed close forbids temp deletion');
+        assert.equal(terminal, 0, 'unknown outcome must not emit a settled failure');
+        await assert.rejects(leases.acquireMany(nextOwner, [resourceKey], 'write', 60), /RESOURCE_QUARANTINED/);
+      } else {
+        assert.equal(error, null);
+        assert.equal(removed, 2);
+        assert.equal(terminal, 1);
+        const next = await leases.acquireMany(nextOwner, [resourceKey], 'write', 60);
+        await leases.release(
+          next.map((lease) => lease.id),
+          nextOwner,
+        );
+      }
+    }
+    for (const exitCode of [0, 2, null]) {
+      let offClose: ((event: { exitCode: number | null }) => void) | undefined;
+      let offError: ((error: Error) => void) | undefined;
+      let commandStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        commandStarted = resolve;
+      });
+      let removed = 0;
+      let terminal = 0;
+      const command = {
+        snapshot: () => ({ exitCode: undefined, stdout: '', stderr: '' }),
+        onStdout: () => () => undefined,
+        onStderr: () => () => undefined,
+        onClose: (listener: typeof offClose) => {
+          offClose = listener;
+          commandStarted();
+          return () => {
+            offClose = undefined;
+          };
+        },
+        onError: (listener: typeof offError) => {
+          offError = listener;
+          return () => {
+            offError = undefined;
+          };
+        },
+        terminate: async () => undefined,
+      } as unknown as RemoteCommandSession;
+      const session = {
+        execute: async () => ({ exitCode: 0 }),
+        startCommand: async () => command,
+        fileSystem: async () => ({
+          replaceFile: async () => undefined,
+          removeFile: async () => {
+            removed += 1;
+          },
+        }),
+      } as unknown as ExecutionSession;
+      const archive = new RemoteArchiveOperationService({ require: () => session });
+      const resourceKey = `connection:43:path:/tmp/archive-${exitCode}`;
+      const pending = guard.withMutation(
+        {
+          ownerType: 'workspace',
+          ownerId: 'scenario-archive',
+          operationId: `archive-${exitCode}`,
+          resourceKeys: [resourceKey],
+        },
+        (signal) =>
+          archive.compress(
+            {
+              ownerId: 'scenario-archive',
+              requestId: `archive-${exitCode}`,
+              sessionId: 'source',
+              sourcePaths: ['/tmp/source'],
+              destinationPath: '/tmp/output.zip',
+              format: 'zip',
+              signal,
+            },
+            (event) => {
+              if (event.type !== 'progress') terminal += 1;
+            },
+          ),
+      );
+      const result = pending.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await started;
+      assert.equal(terminal, 0);
+      if (exitCode === null) offError?.(new Error('INJECTED_CHANNEL_FAILURE'));
+      else offClose?.({ exitCode });
+      const error = await result;
+      const nextOwner = { type: 'workspace' as const, id: `archive-next-${exitCode}` };
+      if (exitCode === null) {
+        assert.ok(error instanceof Error && error.message === 'OPERATION_OUTCOME_UNKNOWN');
+        assert.equal(removed, 0, 'unproven writer exit forbids cleanup');
+        assert.equal(terminal, 0);
+        await assert.rejects(leases.acquireMany(nextOwner, [resourceKey], 'write', 60), /RESOURCE_QUARANTINED/);
+      } else {
+        assert.equal(error, null, 'numeric nonzero exit is known failure, not unknown');
+        assert.equal(removed, 1);
+        assert.equal(terminal, 1);
+        const next = await leases.acquireMany(nextOwner, [resourceKey], 'write', 60);
+        await leases.release(
+          next.map((lease) => lease.id),
+          nextOwner,
+        );
+      }
+    }
+  } finally {
+    await db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
   return [
     { name: 'finalization_fault_modes', value: 2, unit: 'modes' },
     { name: 'confirmed_mutations_replayed', value: 0, unit: 'tools' },
