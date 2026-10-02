@@ -80,6 +80,7 @@
 - Workspace 路由页面的跨 Feature 组合位于 `app/pages/workspace`，只通过 Feature 与 Runtime 的公开入口消费能力；Runtime 保留会话、布局、组件与 transport owner，不反向加载 App 页面。
 - Workspace transport 由 adapter/session owner 管理；View/composable 不持有 HTTP、WebSocket、frame、重连、心跳或 backpressure。Agent 与 Workspace Runtime 通过公开 contract/capability 协作，不读对方私有状态。
 - 根 pnpm workspace、lockfile、catalog 是唯一依赖 authority。
+- Agent Bootstrap 独立子图通过 `compose-providers`、`compose-ssh-capabilities`、Plugin／Workspace 工厂构造；跨子图 wiring 与 initialize/quiesce/dispose 仍由 `compose-agent` 持有，工厂不得自启动或创建第二生命周期 owner。
 
 ### 2.3 状态、并发与资源
 

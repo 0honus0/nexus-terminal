@@ -2,9 +2,6 @@ import { logger } from '../../shared/logging/logger';
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
-import { SshFileTargetAdapter } from '../../infrastructure/agent/capabilities/ssh-file-target.adapter';
-import { SshShellTargetAdapter } from '../../infrastructure/agent/capabilities/ssh-shell-target.adapter';
-import { SshTargetAdapter } from '../../infrastructure/agent/capabilities/ssh-target.adapter';
 import { WorkspaceFileTargetAdapter } from '../../infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
 import { WorkspaceShellTargetAdapter } from '../../infrastructure/agent/workspace-runtime/workspace-shell-target.adapter';
 import { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
@@ -26,16 +23,9 @@ import { SqliteMemoryRepository } from '../../infrastructure/agent/repositories/
 import { SqliteMemoryProvenanceAdapter } from '../../infrastructure/agent/repositories/sqlite-memory-provenance.adapter';
 import { SqliteModelContinuationRepository } from '../../infrastructure/agent/repositories/sqlite-model-continuation.repository';
 import { InstalledPluginSkillSourceAdapter } from '../../infrastructure/agent/plugins/installed-plugin-skill-source.adapter';
-import { OpenAiProviderAdapter } from '../../infrastructure/agent/providers/openai-provider.adapter';
-import {
-  LocalModelCapabilityRegistryStore,
-  ModelsDevCapabilityRegistrySource,
-} from '../../infrastructure/agent/providers/model-capability-registry.adapter';
 import { McpAdapter } from '../../infrastructure/agent/integrations/mcp.adapter';
 import { AcpAdapter } from '../../infrastructure/agent/integrations/acp.adapter';
 import { OutboundPolicyAdapter } from '../../infrastructure/agent/providers/outbound-policy.adapter';
-import { ProviderSecretAdapter } from '../../infrastructure/agent/providers/provider-secret.adapter';
-import { SqliteProviderRepository } from '../../infrastructure/agent/repositories/sqlite-provider.repository';
 import { SqliteIntegrationRepository } from '../../infrastructure/agent/repositories/sqlite-integration.repository';
 import { SqliteRecallRepository } from '../../infrastructure/agent/repositories/sqlite-recall.repository';
 import { SqliteRunRepository } from '../../infrastructure/agent/repositories/sqlite-run.repository';
@@ -52,14 +42,10 @@ import { IntegrationService } from '../../modules/agent/ai/integration.service';
 import type { AcpTransportPort, BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
 import type { ArtifactLimitPolicyPort } from '../../modules/agent/ai/artifact.port';
 import { ConversationService } from '../../modules/agent/ai/conversation.service';
-import { AgentSshSessions } from '../../infrastructure/agent/capabilities/agent-ssh-sessions';
-import { AgentProjectDirectories } from '../../infrastructure/agent/capabilities/agent-project-directories';
 import { createProjectDirectoryTools } from '../../modules/agent/tools/host/project-directory-tools';
 import { createSshSessionTools } from '../../modules/agent/tools/host/ssh-session-tools';
 import { ContextCheckpointService } from '../../modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../modules/agent/ai/context.service';
-import { ProviderService } from '../../modules/agent/ai/provider.service';
-import { ModelCapabilityRegistryService } from '../../modules/agent/ai/model-capability-registry.service';
 import { snapshotProviderModelCapabilities } from '../../modules/agent/ai/model-capability-resolver';
 import { missingRequiredModelCapabilities } from '../../modules/agent/ai/model-capability-requirements';
 import { RecallService } from '../../modules/agent/ai/recall.service';
@@ -127,6 +113,8 @@ import type { AuditLogService } from '../../modules/audit/audit.service';
 import type { NotificationService } from '../../modules/notifications/notification.service';
 import { AgentNotificationBridge } from './agent-notification-bridge';
 import { composePlugins } from './compose-plugins';
+import { composeProviders } from './compose-providers';
+import { composeSshCapabilities } from './compose-ssh-capabilities';
 import { composeWorkspaceRuntime } from './compose-workspace-runtime';
 import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
 import {
@@ -212,24 +200,15 @@ export const composeAgent = ({
   );
   const settings = new AgentSettingsService(settingsRepository, hardLimitConfirmations, hardLimitUsage, systemClock);
   const capabilityBroker = new AppCapabilityBroker(registry, appStates, appGrants, targetDenylist, capabilityRegistry);
-  const providerRepository = new SqliteProviderRepository(database, cipher);
-  const modelRegistry = new ModelCapabilityRegistryService(
-    new LocalModelCapabilityRegistryStore(dataDirectory),
-    new ModelsDevCapabilityRegistrySource(),
-    systemClock,
-  );
+  const { providers, languageModel, modelRegistry } = composeProviders({
+    database,
+    cipher,
+    dataDirectory,
+    refreshHealth: (userId) => lifecycle.refreshHealth(userId),
+  });
   const outboundPolicy = new OutboundPolicyAdapter(nodeEnv, e2eResetEnabled);
   const integrationRepository = new SqliteIntegrationRepository(database, cipher);
   const mcpRuntime = new McpAdapter(integrationRepository, outboundPolicy);
-  const providerSecrets = new ProviderSecretAdapter(database, cipher);
-  let providers: ProviderService;
-  const languageModel = new OpenAiProviderAdapter(
-    { get: (userId, providerId) => providers.get(userId, providerId) },
-    providerSecrets,
-  );
-  providers = new ProviderService(providerRepository, languageModel, systemClock, (userId) =>
-    lifecycle.refreshHealth(userId),
-  );
   const artifactLimits: ArtifactLimitPolicyPort = {
     forUser: async (userId) => {
       const view = await settings.get(userId);
@@ -362,29 +341,14 @@ export const composeAgent = ({
     docker,
     targetDenylist,
   );
-  const sshTargets = new SshTargetAdapter(connectionResolver, targetDenylist);
-  const sshSessions = new AgentSshSessions(
+  const { sshTargets, sshSessions, sshFiles, projectDirectories, sshShell } = composeSshCapabilities({
+    database,
     connectionResolver,
     executionSessions,
-    database,
-    async (scope, threadId, connectionId) => {
-      const thread = await conversationRepository.getThread(scope, threadId);
-      const decision = await capabilityBroker.authorize(scope, 'shell.execute', {
-        target: { target: 'ssh', id: String(connectionId) },
-      });
-      return Boolean(thread && decision.allowed);
-    },
-  );
-  const sshFiles = new SshFileTargetAdapter(connectionResolver, sshSessions);
-  const projectDirectories = new AgentProjectDirectories(database, sshFiles, async (context, connectionId) => {
-    await sshTargets.target(context, connectionId);
-    const thread = context.threadId ? await conversationRepository.getThread(context, context.threadId) : null;
-    const decision = await capabilityBroker.authorize(context, 'file.read', {
-      target: { target: 'ssh', id: String(connectionId) },
-    });
-    return Boolean(thread && decision.allowed);
+    targetDenylist,
+    conversationRepository,
+    capabilityBroker,
   });
-  const sshShell = new SshShellTargetAdapter(connectionResolver, sshSessions);
   const cryptoHash = new NodeCryptoHashAdapter();
   const acpPermissions = new AcpPermissionBroker(stateCommit, cryptoHash, systemClock, (runId, approvalId) => {
     eventHub.publishTransient({

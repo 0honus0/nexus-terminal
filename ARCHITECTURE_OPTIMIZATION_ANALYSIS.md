@@ -44,30 +44,9 @@ Nexus Terminal 当前已经建立了比较明确的架构边界：Backend 使用
 
 > 已关闭：核对未发现错误迁移或重复数据库 authority，本项按代码组织改善处理，不宣称修复生产故障。75 个 schema SQL 定义按 core、Agent host/AI/execution/collaboration/plugins/workspace 分入 `database/schema/`，唯一 `sqlite-schema.registry.ts` 保留原初始化顺序。42 个已发布迁移按 core/runtime/capabilities/host 分入 `database/migrations/`，全局编号和列表顺序由 `migrations/registry.ts` 汇总，`sqlite-migrations.ts` 仅负责执行。消费者直接导入定义 owner，旧 `sqlite-schema.ts` 删除；未保留兼容转导出，未新增或重写迁移。一次性核对确认全部 schema SQL 值及迁移定义／顺序未变，已有 current-durable-schema、capability-grant-migration、legacy-machine-inspection-migration、legacy-settings-migration 场景通过；未新增或运行 E2E。
 
-## 8. `compose-agent.ts` 已经成为 Composition Root 热点
+## 8. Agent Composition 子图工厂分离（已关闭）
 
-> 待确认（维护性建议）：Bootstrap 导入 concrete repository/adapter 并统一 wiring 符合职责，不能因“知道所有子系统”认定越界。现文件仍集中大量 wiring，是否拆分需提供可独立组装的子图及生命周期边界；未证实实际缺陷。
-
-`compose-agent.ts` 约 47 KB，并且包含大量 concrete dependency import。目前它负责创建和连接：
-
-- repository
-- provider
-- model registry
-- MCP
-- ACP
-- artifact
-- plugin
-- capability
-- policy
-- scheduler
-- subagent
-- workspace runtime
-
-Bootstrap 作为 composition root 本身符合现有架构，但当前单个 composition 文件已经知道几乎所有 Agent 子系统的具体类和 wiring 细节。
-
-随着 Agent 子系统扩张，任何 provider、plugin、runtime、scheduler、collaboration 或 persistence wiring 变化，都容易集中修改 `compose-agent.ts`。
-
-这使 composition root 从“唯一 wiring owner”逐渐变成“大型 wiring 聚合文件”，review 和依赖图推理成本持续增加。
+> 已关闭：本项按明确子图的维护性改善处理，不将 Bootstrap 统一 wiring 认定为 authority 越界。`compose-providers.ts` 创建 Provider repository/secrets/adapter/service 与模型能力 registry，保留 Provider adapter→service 的延迟引用；`compose-ssh-capabilities.ts` 创建 SSH target/session/file/shell/project-directory 子图，保留 Thread 与 capability 授权检查。两者为纯组装工厂，不执行 initialize/dispose，不持有全局 mutable state。`compose-agent.ts` 继续负责跨子图 wiring、Host 回调、initialize/quiesce/dispose 顺序及整体服务返回；已有 Plugin、Workspace 工厂不变。Backend 构建及已有 SSH session jobs、Provider live capability 场景通过，场景验证对应服务而非新增工厂的完整启动；未新增或运行 E2E。
 
 ## 9. Root Build Contract 没有覆盖全部 Production Component
 
@@ -4178,7 +4157,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 98 项，待确认 36 项，已关闭 6 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项已逐项分类：**未解决确认问题 98 项，待确认 35 项，已关闭 7 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4188,7 +4167,7 @@ await terminateAllManagedProcesses();
 | 5      | 已关闭   | Runner Transport / Command Execution 分离                                                                                                                                    |
 | 6      | 已关闭   | StateCommit 事务入口与 Recovery Transition 分离                                                                                                                              |
 | 7      | 已关闭   | SQLite Schema 定义与 Migration 执行边界拆分                                                                                                                                  |
-| 8      | 待确认   | `compose-agent.ts` 已经成为 Composition Root 热点                                                                                                                            |
+| 8      | 已关闭   | Agent Composition 子图工厂分离                                                                                                                                               |
 | 9      | 待确认   | Root Build Contract 没有覆盖全部 Production Component                                                                                                                        |
 | 10     | 待确认   | 大型静态 Theme 数据长期占用 TypeScript 编译单元                                                                                                                              |
 | 11     | 待确认   | Root Agent 的 Context Checkpoint 存在语义保真度缺口                                                                                                                          |
