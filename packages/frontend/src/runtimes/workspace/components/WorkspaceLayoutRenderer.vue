@@ -316,6 +316,9 @@
     <template v-else-if="node.component === 'fileManager'">
       <FileManager
         :channel="session.adapters.filesystem"
+        :before-file-mutation="
+          (paths) => (editorSession ?? session.editorController).invalidatePaths(session.id, paths)
+        "
         :download="session.adapters.download"
         :terminal-directory="session.adapters.terminalDirectory"
         :confirm-delete="fileManagerConfirmDelete"

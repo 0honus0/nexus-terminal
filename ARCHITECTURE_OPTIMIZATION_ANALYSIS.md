@@ -1199,7 +1199,9 @@ function close(id: string): void {
 
 同一组件只有 reload / encoding change 路径会调用 `confirmDiscardIfDirty()`。因此用户修改文件后，只要关闭单个 tab、批量关闭 tab、关闭 popup 或关闭对应 Workspace，就可以在没有任何确认和保存机会的情况下永久丢失本地未保存内容。
 
-## 52. File Manager rename / delete 不更新已打开 Editor 文档，后续保存会在旧路径重新创建文件
+## 52. File Manager mutation 后旧 Editor 重新创建文件（已修复）
+
+> 已修复：所有 Workspace FileManager surface 在 rename/delete 前调用同 scope Editor invalidatePaths，包含目录后代；保存中拒绝 mutation，其他目标文档保留草稿但失效 port，旧路径不能再次 save/reload。保守预失效也覆盖部分失败；不自动猜测新路径，需要关闭旧文档后重新打开实际路径。下文为原问题证据。
 
 > 确认问题：FileManager mutation 未通知 EditorSession，save 使用 document.path；RemoteTextWriter 对不存在路径仍默认 w。前提是旧 tab 保留并再次保存，不是 rename/delete 本身立刻重复创建。
 

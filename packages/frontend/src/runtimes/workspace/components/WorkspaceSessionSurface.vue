@@ -1393,6 +1393,7 @@
       </div>
       <div class="min-h-0 flex-grow overflow-hidden">
         <FileManager
+          :before-file-mutation="(paths) => editorSession.invalidatePaths(session.id, paths)"
           class="h-full min-h-0"
           :channel="session.adapters.filesystem"
           :download="session.adapters.download"

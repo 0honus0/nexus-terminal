@@ -28,6 +28,7 @@ export interface FileEditorSessionController {
   closeToLeft(id: string): Promise<boolean>;
   closeAll(): Promise<boolean>;
   closeScope(scopeId: string): void;
+  invalidatePaths(scopeId: string, paths: readonly string[]): boolean;
   activateRelative(delta: number): void;
 }
 
@@ -265,6 +266,20 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     activeId.value = tabs.value[(index + delta + tabs.value.length) % tabs.value.length]!.id;
   }
 
+  function invalidatePaths(scopeId: string, paths: readonly string[]): boolean {
+    const documents = tabs.value.filter(
+      (doc) =>
+        doc.scopeId === scopeId &&
+        paths.some((path) => doc.path === path || doc.path.startsWith(`${path.replace(/\/$/, '')}/`)),
+    );
+    if (documents.some((doc) => savingDocuments.has(doc.id))) return false;
+    for (const doc of documents) {
+      ports.delete(doc.id);
+      unavailableDocuments.add(doc.id);
+    }
+    return true;
+  }
+
   return {
     tabs,
     activeId,
@@ -286,6 +301,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     closeToLeft,
     closeAll,
     closeScope,
+    invalidatePaths,
     activateRelative,
   };
 }

@@ -27,6 +27,7 @@
   const props = withDefaults(
     defineProps<{
       channel: FilesystemChannel;
+      beforeFileMutation?: (paths: readonly string[]) => boolean;
       download?: FilesystemDownloadPort;
       terminalDirectory?: TerminalDirectoryPort;
       initialPath?: string;
@@ -1036,9 +1037,10 @@
     try {
       if (action.value === 'mkdir') await props.channel.createDirectory(join(text));
       else if (action.value === 'file') await props.channel.createFile(join(text), '');
-      else if (action.value === 'rename' && target.value)
+      else if (action.value === 'rename' && target.value) {
+        if (props.beforeFileMutation && !props.beforeFileMutation([target.value.path])) return;
         await props.channel.rename(target.value.path, joinPath(parentOf(target.value.path), text));
-      else if (action.value === 'chmod' && target.value) {
+      } else if (action.value === 'chmod' && target.value) {
         if (!/^[0-7]{3,4}$/.test(text)) throw new Error(t('fileManager.errors.invalidPermissionsFormat'));
         await props.channel.chmod(target.value.path, Number.parseInt(text, 8));
       }
@@ -1060,6 +1062,7 @@
           : 'fileManager.prompts.confirmDeleteFile';
     const params = entries.length > 1 ? { count: entries.length } : { name: entries[0]!.name };
     if (props.confirmDelete && !(await feedback.confirm({ message: t(key, params), destructive: true }))) return;
+    if (props.beforeFileMutation && !props.beforeFileMutation(entries.map((entry) => entry.path))) return;
     try {
       await props.channel.remove(
         entries.map((entry) => entry.path),
