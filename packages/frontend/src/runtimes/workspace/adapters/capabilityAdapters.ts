@@ -161,7 +161,7 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
     socket.request('filesystem.search', { path, query }),
   stat: (path): Promise<WorkspaceRemoteFileEntryDto> => socket.request('filesystem.stat', { path }),
   async readBinary(path) {
-    const { data, bytes } = await socket.requestBinary('filesystem.readBinary', { path });
+    const { data, bytes } = await socket.requestBinary('filesystem.readBinary', { path, maxBytes: 64 * 1024 * 1024 });
     return { path: data.path, bytes };
   },
   async writeText(path, content, encoding) {
@@ -335,7 +335,11 @@ export const createFilePreviewSource = (socket: WorkspaceSocket): FilePreviewSou
         return { tooLarge: true, actualBytes: entry.metadata.size, maxBytes: options.maxBytes };
       }
     }
-    const result = await racePreviewAbort(socket.requestBinary('filesystem.readBinary', { path }), signal);
+    const result = await socket.requestBinary(
+      'filesystem.readBinary',
+      { path, maxBytes: options?.maxBytes ?? 64 * 1024 * 1024 },
+      signal,
+    );
     const bytes = result.bytes;
     return { bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer };
   },

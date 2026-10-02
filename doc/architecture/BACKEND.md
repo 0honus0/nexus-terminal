@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Workspace readBinary required maxBytes<=64MiB/cap4，requestId owner在open前注册，cancelRead/close销毁read stream，send循环累计限量；Preview透传类型maxBytes和signal，client pending累计限量/timeout取消，不仅stat检查。
+
 FileHttpSessionAdapter HTTP/WS共用 middleware 对userId逐请求验证credentialRevision=SHA256(persistent password hash)，无revision fail-closed。密码认证冻结验证时revision，2FA继承，Passkey新认证绑定当前revision；改密interface revokeUser sockets/destroy current session，不扫描session文件，不回滚已接受操作。
 
 Transfer Registry global active cap32（含 FINAL但controller未释放），settled history100 按updatedAt/id裁剪，create/list/release驱动；不裁剪仍owned记录，不新增timer。

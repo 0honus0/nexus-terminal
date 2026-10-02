@@ -250,7 +250,8 @@ export interface WorkspaceFilesystemRequestMapDto {
   'filesystem.list': WorkspaceFilesystemPathRequestDto;
   'filesystem.search': WorkspaceFilesystemSearchRequestDto;
   'filesystem.stat': WorkspaceFilesystemPathRequestDto;
-  'filesystem.readBinary': WorkspaceFilesystemPathRequestDto;
+  'filesystem.readBinary': WorkspaceFilesystemPathRequestDto & { maxBytes: number };
+  'filesystem.cancelRead': { requestId: string };
   'filesystem.writeText': WorkspaceFilesystemWriteTextRequestDto;
   'filesystem.createDirectory': WorkspaceFilesystemPathRequestDto;
   'filesystem.createFile': WorkspaceFilesystemCreateFileRequestDto;
@@ -265,6 +266,7 @@ export interface WorkspaceFilesystemResponseMapDto {
   'filesystem.search': WorkspaceFilesystemSearchResponseDto;
   'filesystem.stat': WorkspaceRemoteFileEntryDto;
   'filesystem.readBinary': WorkspaceFilesystemReadBinaryResponseDto;
+  'filesystem.cancelRead': boolean;
   'filesystem.writeText': null;
   'filesystem.createDirectory': null;
   'filesystem.createFile': null;

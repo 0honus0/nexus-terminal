@@ -339,6 +339,7 @@ export interface WorkspaceProtocolCloseContext {
 
 /** Clean Workspace WebSocket protocol over clean Module/Platform services. */
 export class WorkspaceProtocolSession {
+  private readonly binaryReads = new Map<string, { cancel(): void; maxBytes: number }>();
   private workspaceId?: string;
   private eventUnsubscribe?: () => void;
   private closed = false;
@@ -452,7 +453,11 @@ export class WorkspaceProtocolSession {
       const result = await this.route(message.type, record(message.payload), message.requestId);
       if (message.requestId) {
         if (result instanceof WorkspaceBinaryResponse) {
-          await this.sendBinaryResponse(message.requestId, result.source);
+          await this.sendBinaryResponse(
+            message.requestId,
+            result.source,
+            this.binaryReads.get(message.requestId)?.maxBytes,
+          );
           this.sendResponse(message.requestId, true, result.data);
         } else {
           this.sendResponse(message.requestId, true, result);
@@ -466,6 +471,8 @@ export class WorkspaceProtocolSession {
       );
       if (message.requestId) this.sendResponse(message.requestId, false, undefined, text);
       else this.sendEvent('protocol.error', { operation: message.type, message: text });
+    } finally {
+      if (message.type === 'filesystem.readBinary' && message.requestId) this.binaryReads.delete(message.requestId);
     }
   }
 
@@ -482,6 +489,7 @@ export class WorkspaceProtocolSession {
   async close(context?: WorkspaceProtocolCloseContext): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    for (const read of this.binaryReads.values()) read.cancel();
     this.autoTerminationUnsubscribe();
     this.ownershipRevokedUnsubscribe();
     this.eventUnsubscribe?.();
@@ -562,7 +570,12 @@ export class WorkspaceProtocolSession {
       case 'filesystem.stat':
         return this.filesystemStat(payload);
       case 'filesystem.readBinary':
-        return this.filesystemReadBinary(payload);
+        return this.filesystemReadBinary(payload, this.requireRequestId(requestId));
+      case 'filesystem.cancelRead': {
+        const read = this.binaryReads.get(this.requireRequestId(stringValue(payload.requestId)));
+        read?.cancel();
+        return Boolean(read);
+      }
       case 'filesystem.writeText':
         return this.filesystemWriteText(payload);
       case 'filesystem.createDirectory':
@@ -836,9 +849,29 @@ export class WorkspaceProtocolSession {
     return remoteFileEntryDto(await this.dependencies.filesystem.stat(this.requireWorkspace(), request.path));
   }
 
-  private async filesystemReadBinary(payload: JsonRecord) {
+  private async filesystemReadBinary(payload: JsonRecord, requestId: string) {
+    const maxBytes = Number(payload.maxBytes);
+    if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > 64 * 1024 * 1024)
+      throw new Error('BINARY_READ_LIMIT_INVALID');
+    if (this.binaryReads.has(requestId) || this.binaryReads.size >= 4) throw new Error('BINARY_READ_CAPACITY_EXCEEDED');
+    let cancelled = false;
+    let cancelStream = () => {};
+    this.binaryReads.set(requestId, {
+      maxBytes,
+      cancel: () => {
+        cancelled = true;
+        cancelStream();
+      },
+    });
     const request: WorkspaceFilesystemPathRequestDto = { path: this.requirePath(payload.path) };
     const stream = await this.dependencies.filesystem.openBinaryRead(this.requireWorkspace(), request.path);
+    cancelStream = () => {
+      stream.destroy(new Error('BINARY_READ_ABORTED'));
+    };
+    if (cancelled || this.closed) {
+      stream.destroy();
+      throw new Error('BINARY_READ_ABORTED');
+    }
     const response: WorkspaceFilesystemReadBinaryResponseDto = { path: request.path };
     return new WorkspaceBinaryResponse(response, stream);
   }
@@ -1363,9 +1396,13 @@ export class WorkspaceProtocolSession {
   private async sendBinaryResponse(
     requestId: string,
     source: AsyncIterable<Uint8Array | Buffer | string>,
+    maxBytes = 64 * 1024 * 1024,
   ): Promise<void> {
+    let total = 0;
     for await (const raw of source) {
       const value = typeof raw === 'string' ? Buffer.from(raw, 'utf8') : Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      total += value.byteLength;
+      if (total > maxBytes) throw new Error('BINARY_READ_SIZE_LIMIT_EXCEEDED');
       for (let offset = 0; offset < value.byteLength; offset += MAX_WORKSPACE_BINARY_PAYLOAD_BYTES) {
         await this.waitForBinaryCapacity();
         const chunk = value.subarray(offset, Math.min(offset + MAX_WORKSPACE_BINARY_PAYLOAD_BYTES, value.byteLength));

@@ -49,6 +49,7 @@ const decodeProtocolMessage = (raw: string): ProtocolMessage => {
 };
 
 interface PendingRequest {
+  maxBytes?: number;
   operation: string;
   resolve(value: unknown): void;
   reject(error: Error): void;
@@ -335,9 +336,16 @@ export class WorkspaceSocket {
   requestBinary<K extends keyof WorkspaceRequestMapDto>(
     type: K,
     payload: WorkspaceRequestMapDto[K],
+    signal?: AbortSignal,
   ): Promise<{ data: WorkspaceResponseMapDto[K]; bytes: Uint8Array }>;
-  requestBinary<T = unknown>(type: string, payload: object = {}): Promise<{ data: T; bytes: Uint8Array }> {
-    return this.requestInternal<T>(type, crypto.randomUUID(), payload, true) as Promise<{
+  requestBinary<T = unknown>(
+    type: string,
+    payload: object = {},
+    signal?: AbortSignal,
+  ): Promise<{ data: T; bytes: Uint8Array }> {
+    const requestId = crypto.randomUUID();
+    const operation = this.requestInternal<T>(type, requestId, payload, true, REQUEST_TIMEOUT_MS, undefined, signal);
+    return operation as Promise<{
       data: T;
       bytes: Uint8Array;
     }>;
@@ -350,14 +358,20 @@ export class WorkspaceSocket {
     expectBinary: boolean,
     timeoutMs = REQUEST_TIMEOUT_MS,
     expectedSocket?: WebSocket,
+    signal?: AbortSignal,
   ): Promise<T | { data: T; bytes: Uint8Array }> {
     if (!requestId) throw new Error('Workspace requestId is required.');
     if (this.pending.has(requestId)) throw new Error(`Workspace request is already pending: ${requestId}`);
     await this.open();
+    if (signal?.aborted) throw new DOMException('Binary read aborted', 'AbortError');
     if (expectedSocket && this.socket !== expectedSocket) throw new Error('Workspace probe transport was superseded.');
     return new Promise<T | { data: T; bytes: Uint8Array }>((resolve, reject) => {
       const timer = window.setTimeout(() => {
+        const pending = this.pending.get(requestId);
         this.pending.delete(requestId);
+        pending?.binaryChunks.splice(0);
+        if (type === 'filesystem.readBinary')
+          void this.request('filesystem.cancelRead', { requestId }).catch(() => undefined);
         logger.warn(
           this.context({
             operation: type,
@@ -367,7 +381,7 @@ export class WorkspaceSocket {
           }),
           'Workspace request timed out',
         );
-        reject(new Error(`Workspace request timed out: ${type}`));
+        (pending?.reject ?? reject)(new Error(`Workspace request timed out: ${type}`));
       }, timeoutMs);
       this.pending.set(requestId, {
         operation: type,
@@ -379,7 +393,29 @@ export class WorkspaceSocket {
         binaryDone: false,
         binaryChunks: [],
         binaryBytes: 0,
+        maxBytes: type === 'filesystem.readBinary' ? Number((payload as { maxBytes?: number }).maxBytes) : undefined,
       });
+      const abort = () => {
+        const pending = this.pending.get(requestId);
+        if (!pending) return;
+        this.pending.delete(requestId);
+        window.clearTimeout(pending.timer);
+        pending.binaryChunks.length = 0;
+        void this.request('filesystem.cancelRead', { requestId }).catch(() => undefined);
+        pending.reject(new DOMException('Binary read aborted', 'AbortError'));
+      };
+      signal?.addEventListener('abort', abort, { once: true });
+      const pending = this.pending.get(requestId)!;
+      const resolveOriginal = pending.resolve;
+      const rejectOriginal = pending.reject;
+      pending.resolve = (value) => {
+        signal?.removeEventListener('abort', abort);
+        resolveOriginal(value);
+      };
+      pending.reject = (error) => {
+        signal?.removeEventListener('abort', abort);
+        rejectOriginal(error);
+      };
       try {
         if (!HIGH_FREQUENCY_OPERATIONS.has(type)) {
           logger.trace(
@@ -572,12 +608,15 @@ export class WorkspaceSocket {
     if (!pending || !pending.expectBinary) return;
     if (frame.data.byteLength) {
       const maxBytes =
-        pending.operation === 'suspend.history.previous' ? MAX_HISTORY_RESPONSE_BYTES : MAX_FILE_RESPONSE_BYTES;
+        pending.operation === 'suspend.history.previous'
+          ? MAX_HISTORY_RESPONSE_BYTES
+          : Math.min(pending.maxBytes ?? MAX_FILE_RESPONSE_BYTES, MAX_FILE_RESPONSE_BYTES);
       if (pending.binaryBytes + frame.data.byteLength > maxBytes) {
         this.pending.delete(frame.requestId);
         window.clearTimeout(pending.timer);
         pending.binaryChunks.length = 0;
         pending.reject(new Error('Workspace binary response limit exceeded.'));
+        void this.request('filesystem.cancelRead', { requestId: frame.requestId }).catch(() => undefined);
         return;
       }
       const copy = frame.data.slice();

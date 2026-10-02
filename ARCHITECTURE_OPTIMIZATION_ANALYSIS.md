@@ -1669,7 +1669,9 @@ private readonly tasks = new Map<string, TransferTask>();
 
 createTagForCommands 先 addTag 再 assignTag，失败返回 assigned:false；tag 是合法独立实体，可手工删除。需要验证 UI 是否如实展示标签创建成功但关联失败，及重试能否使用已有 tag；不再称空标签永久不可回收。
 
-## 79. File Preview 的大小上限和取消只存在于前端包装层；真正的 Binary Transport 既不限制总字节数，也无法取消服务端读取
+## 79. File Preview transport 限量与取消（已修复）
+
+> 已修复：readBinary required maxBytes<=64MiB，server/client累计限量；Preview透传类型上限/signal，cancelRead按requestId销毁stream（含open等待期），close/timeout取消，前端立即释放pending/chunks。每socket最多4 read。已发现前端原有通用累计上限，原“完全无上限”不准确；补类型精确限量及server fence。不承诺remote OS即时停止。下文为原证据。
 
 > 确认问题：`runtimes/workspace/adapters/capabilityAdapters.ts` 先 stat 再无 maxBytes 的 requestBinary，Abort 包装未向服务端取消；frame/backpressure/request timeout 是已有保护但不是累计 byte ceiling。未运行 stat/read 文件增长或取消负载测试。
 
