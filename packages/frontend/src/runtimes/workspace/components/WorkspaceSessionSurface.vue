@@ -656,13 +656,14 @@
     }
     documentPopupVisible.value = false;
   };
-  const closeDocumentPopup = () => {
+  const closeDocumentPopup = async () => {
     if (!props.showPopupFileEditor) {
       documentPopupVisible.value = false;
       return;
     }
-    if (documentMode.value === 'editor') editorSession.value.closeAll();
-    else previewSession.clear();
+    if (documentMode.value === 'editor') {
+      if (!(await editorSession.value.closeAll())) return;
+    } else previewSession.clear();
     documentPopupVisible.value = false;
   };
   const hidePreview = () => {

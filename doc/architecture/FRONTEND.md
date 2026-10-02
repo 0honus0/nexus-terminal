@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Editor session 持有异步批量关闭 gate，由 FileEditor 提供本地化 discard confirmation；Popup 等待 closeAll 结果。强制 scope teardown 保留 dirty/saving 草稿并移除 port，后续 save fail-closed，不静默删除草稿；状态仅进程内。
+
 ### 加载与静态资源
 
 - 登录、初始化和应用页头使用 `logo-small.png`，原始高分辨率 Logo 不进入这些页面的资源请求。

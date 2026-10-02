@@ -1177,7 +1177,9 @@ try {
 
 applyWorkspacePatch 先统一检查 expected SHA 并生成临时文件，再逐项 rename；没有集合级 rollback。中途失败可部分生效，但需要确认 API 是否承诺全文件集合原子提交、错误结果是否应报告已应用文件。
 
-## 51. File Editor 的关闭路径不检查 `dirty`，Tab / Popup / Workspace 关闭都会静默丢弃未保存内容
+## 51. File Editor 关闭静默丢弃 dirty（已修复）
+
+> 已修复：session 单个／批量 close 共用 dirty 确认，saving 拒绝关闭，确认期间内容变化拒绝过期关闭；Popup 等 closeAll 成功。强制 closeScope 保留 dirty/saving 草稿并移除保存 port，干净文档正常清理；草稿仅进程内，不承诺刷新持久化。下文为原问题证据。
 
 > 确认问题：`features/file-editor/composables/useFileEditorSession.ts:200–231` close/bulk/scope 无 dirty gate；FileEditor 的 discard confirm 用在 reload/encoding，不覆盖这些关闭入口。未作 UI 手动复现。
 

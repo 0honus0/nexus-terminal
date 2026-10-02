@@ -21,11 +21,12 @@ export interface FileEditorSessionController {
   changeEncoding(id: string, encoding: string): Promise<void>;
   changeLineEnding(id: string, lineEnding: EditorLineEnding): void;
   updateScrollPosition(id: string, scrollTop: number, scrollLeft: number): void;
-  close(id: string): void;
-  closeOthers(id: string): void;
-  closeToRight(id: string): void;
-  closeToLeft(id: string): void;
-  closeAll(): void;
+  setCloseConfirmation(confirm: () => Promise<boolean>): void;
+  close(id: string): Promise<boolean>;
+  closeOthers(id: string): Promise<boolean>;
+  closeToRight(id: string): Promise<boolean>;
+  closeToLeft(id: string): Promise<boolean>;
+  closeAll(): Promise<boolean>;
   closeScope(scopeId: string): void;
   activateRelative(delta: number): void;
 }
@@ -38,6 +39,8 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   const savingDocuments = new Set<string>();
   let loadingOperations = 0;
   let openGeneration = 0;
+  let confirmClose = async (): Promise<boolean> => false;
+  const unavailableDocuments = new Set<string>();
   const active = computed(() => tabs.value.find((item) => item.id === activeId.value) ?? null);
 
   const beginLoading = (): void => {
@@ -104,7 +107,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   async function save(doc = active.value): Promise<void> {
     if (!doc) return;
     if (savingDocuments.has(doc.id)) return;
-    const port = ports.get(doc.id) ?? defaultPort;
+    const port = unavailableDocuments.has(doc.id) ? undefined : (ports.get(doc.id) ?? defaultPort);
     if (!port) {
       const error = new Error('The source session for this file is no longer available.');
       doc.saveState = 'error';
@@ -134,7 +137,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     const doc = tabs.value.find((item) => item.id === id);
     if (!doc) return;
     if (savingDocuments.has(doc.id)) return;
-    const port = ports.get(doc.id) ?? defaultPort;
+    const port = unavailableDocuments.has(doc.id) ? undefined : (ports.get(doc.id) ?? defaultPort);
     if (!port) throw new Error('The source session for this file is no longer available.');
     beginLoading();
     doc.error = undefined;
@@ -157,7 +160,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     const doc = tabs.value.find((item) => item.id === id);
     if (!doc || !encoding || doc.encoding === encoding) return;
     if (savingDocuments.has(doc.id)) return;
-    const port = ports.get(doc.id) ?? defaultPort;
+    const port = unavailableDocuments.has(doc.id) ? undefined : (ports.get(doc.id) ?? defaultPort);
     if (!port) throw new Error('The source session for this file is no longer available.');
     beginLoading();
     doc.error = undefined;
@@ -197,38 +200,62 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     doc.scrollLeft = Math.max(0, scrollLeft);
   }
 
-  function close(id: string): void {
+  function removeDocument(id: string): void {
     const index = tabs.value.findIndex((item) => item.id === id);
     if (index < 0) return;
     tabs.value.splice(index, 1);
     ports.delete(id);
+    unavailableDocuments.delete(id);
     if (activeId.value === id) activeId.value = tabs.value[Math.min(index, tabs.value.length - 1)]?.id ?? null;
   }
 
-  function closeOthers(id: string): void {
-    if (!tabs.value.some((item) => item.id === id)) return;
-    for (const tab of [...tabs.value]) if (tab.id !== id) close(tab.id);
-    activeId.value = id;
+  async function closeDocuments(documents: EditorDocument[]): Promise<boolean> {
+    if (documents.some((doc) => savingDocuments.has(doc.id))) return false;
+    const snapshots = documents.map((doc) => ({ id: doc.id, content: doc.content, dirty: doc.dirty }));
+    if (documents.some((doc) => doc.dirty) && !(await confirmClose())) return false;
+    if (
+      documents.some((doc) => savingDocuments.has(doc.id)) ||
+      snapshots.some((saved) => {
+        const current = tabs.value.find((doc) => doc.id === saved.id);
+        return current && (current.content !== saved.content || current.dirty !== saved.dirty);
+      })
+    )
+      return false;
+    for (const doc of documents) removeDocument(doc.id);
+    return true;
   }
 
-  function closeToRight(id: string): void {
+  function close(id: string): Promise<boolean> {
+    return closeDocuments(tabs.value.filter((doc) => doc.id === id));
+  }
+
+  function closeOthers(id: string): Promise<boolean> {
+    if (!tabs.value.some((item) => item.id === id)) return Promise.resolve(false);
+    return closeDocuments(tabs.value.filter((tab) => tab.id !== id));
+  }
+
+  function closeToRight(id: string): Promise<boolean> {
     const index = tabs.value.findIndex((item) => item.id === id);
-    if (index < 0) return;
-    for (const tab of tabs.value.slice(index + 1)) close(tab.id);
+    return index < 0 ? Promise.resolve(false) : closeDocuments(tabs.value.slice(index + 1));
   }
 
-  function closeToLeft(id: string): void {
+  function closeToLeft(id: string): Promise<boolean> {
     const index = tabs.value.findIndex((item) => item.id === id);
-    if (index < 0) return;
-    for (const tab of tabs.value.slice(0, index)) close(tab.id);
+    return index < 0 ? Promise.resolve(false) : closeDocuments(tabs.value.slice(0, index));
   }
 
-  function closeAll(): void {
-    for (const tab of [...tabs.value]) close(tab.id);
+  function closeAll(): Promise<boolean> {
+    return closeDocuments([...tabs.value]);
   }
 
   function closeScope(scopeId: string): void {
-    for (const tab of [...tabs.value]) if (tab.scopeId === scopeId) close(tab.id);
+    for (const tab of [...tabs.value])
+      if (tab.scopeId === scopeId) {
+        if (tab.dirty || savingDocuments.has(tab.id)) {
+          ports.delete(tab.id);
+          unavailableDocuments.add(tab.id);
+        } else removeDocument(tab.id);
+      }
   }
 
   function activateRelative(delta: number): void {
@@ -251,6 +278,9 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     changeLineEnding,
     updateScrollPosition,
     close,
+    setCloseConfirmation: (confirm) => {
+      confirmClose = confirm;
+    },
     closeOthers,
     closeToRight,
     closeToLeft,

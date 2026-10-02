@@ -131,6 +131,7 @@
       return;
     }
   };
+  editorSession.setCloseConfirmation(() => feedback.confirm({ message: t('fileEditor.confirmDiscardChanges') }));
   const changeEncoding = async (value: unknown): Promise<void> => {
     const active = editorSession.active.value;
     const encoding = typeof value === 'string' ? value : '';
