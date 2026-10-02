@@ -6,22 +6,21 @@ import type {
 export class SqlitePathHistoryRepository implements PathHistoryRepository {
   constructor(private readonly db: RelationalDatabase) {}
   async upsert(remotePath: string): Promise<number> {
-    const now = Math.floor(Date.now() / 1000);
-    const updated = await this.db.execute('UPDATE path_history SET timestamp = ? WHERE path = ?', [now, remotePath]);
-    if (updated.changes) {
-      const row = await this.db.queryOne<{ id: number }>(
-        'SELECT id FROM path_history WHERE path = ? ORDER BY timestamp DESC LIMIT 1',
+    return this.db.transaction(async (tx) => {
+      const now = Math.floor(Date.now() / 1000);
+      const row = await tx.queryOne<{ id: number }>(
+        'SELECT id FROM path_history WHERE path = ? ORDER BY id ASC LIMIT 1',
         [remotePath],
       );
-      if (!row) throw new Error('Updated path history row could not be reloaded.');
-      return row.id;
-    }
-    const inserted = await this.db.execute('INSERT INTO path_history (path, timestamp) VALUES (?, ?)', [
-      remotePath,
-      now,
-    ]);
-    if (!inserted.lastInsertId) throw new Error('Path history insert did not return an id.');
-    return inserted.lastInsertId;
+      if (row) {
+        await tx.execute('DELETE FROM path_history WHERE path = ? AND id <> ?', [remotePath, row.id]);
+        await tx.execute('UPDATE path_history SET timestamp = ? WHERE id = ?', [now, row.id]);
+        return row.id;
+      }
+      const inserted = await tx.execute('INSERT INTO path_history (path, timestamp) VALUES (?, ?)', [remotePath, now]);
+      if (!inserted.lastInsertId) throw new Error('Path history insert did not return an id.');
+      return inserted.lastInsertId;
+    });
   }
   list(): Promise<PathHistoryEntry[]> {
     return this.db.queryAll('SELECT id, path, timestamp FROM path_history ORDER BY timestamp ASC');

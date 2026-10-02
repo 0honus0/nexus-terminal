@@ -816,9 +816,9 @@ task.payload.sourceItems.find((i) => i.name === sub.sourceItemName);
 
 这里丢失的是 transfer task 内部 source identity，不只是 UI 展示名称冲突。
 
-## 37. Command / Path History 的 `upsert()` 没有唯一约束，并发首次写入会永久产生重复记录
+## 37. Command / Path History 并发 upsert 重复（已修复）
 
-> 确认问题：两份 history repository 的 UPDATE/INSERT 没有共享事务，`sqlite-schema.ts` 对 command/path 无 UNIQUE。保留可形成重复且没有自动合并的缺口，未跑并发插入。
+> 已修复：两份 repository 的查找／插入／更新时间／重复合并在同一排他事务中。旧重复值再次 upsert 时保留最小 ID 并删除其余条目；旧备份格式保持可导入，不新增 UNIQUE 导致恢复兼容性变化。未触及的旧重复项不会被本次自动清扫。下文为原问题证据。
 
 `SqliteCommandHistoryRepository.upsert()` 与 `SqlitePathHistoryRepository.upsert()` 都采用两步逻辑：
 
