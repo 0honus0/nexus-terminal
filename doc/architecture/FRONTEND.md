@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+QuickCommands createTagForCommands 的assigned:false为显式部分成功，Panel显示assignFailedAfterCreate；tag合法独立保留，不补偿删除，不承诺两HTTP请求事务原子。
+
 FileManager remove catch 保留原因并提示 partial/unknown，再 best-effort browser.load；无集合 rollback/逐项 report/自动 retry，不将成功刷新视作 writer 收敛证明。
 
 Connections/Proxies/Tags/Notifications 的异步 mutation（含 Connection refresh）捕获现有 cache generation，await 后重检再写 items/loadedAt；session reset 是 store 回填边界，不取消后端副作用，也不声称所有调用方局部状态已受 fence。

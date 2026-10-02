@@ -1661,7 +1661,9 @@ private readonly tasks = new Map<string, TransferTask>();
 
 因此如果攻击者在改密前已经复制了一个有效 `nexus.sid`，账户所有者即使成功修改密码，该旧 session 仍能继续访问受 `requireAuthenticated` 保护的 HTTP API，直到 session 自然过期、被单独 logout 或整个 session store 被清空。这个问题独立于 #62：#62 是 logout 后既有 WebSocket 继续存活；这里是 credential rotation 后其它 HTTP session 本身仍保持认证状态。
 
-## 78. Quick Command 创建标签与关联失败的部分成功提示待确认
+## 78. Quick Command 标签部分成功（已核对：现有提示充分）
+
+> 已核对：Panel finishTagEdit 检查assigned:false并显示assignFailedAfterCreate，store保留合法tag；不是数据损坏或不可回收。明确两请求非原子，不自动删除标签或盲目再创建，重读后使用已有标签。下文为原背景。
 
 > 待确认（有显式部分成功结果）：quickCommands.store 的 createTagForCommands 分两次请求，但 catch 返回 assigned:false，标签本身也是合法可独立存在实体且可手工删除。需检查 UI 是否提示“标签已创建但关联失败”；不能把空标签直接定为数据损坏或不可回收。
 
