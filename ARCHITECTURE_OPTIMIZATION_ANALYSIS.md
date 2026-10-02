@@ -657,9 +657,9 @@ Connection create/update/delete、Tag create/update/delete、Notification Settin
 
 这会产生明确的重试歧义：客户端认为第一次操作没有成功并再次提交，实际却可能对已经生效的状态执行第二次 mutation。Connection import 也会受此影响：`connections.create()` 内部如果只在 audit 阶段失败，import record 会被统计成失败，但 Connection row 实际已经存在。
 
-## 29. IP Blacklist 的过期封禁状态会阻止同一 IP 再次进入封禁
+## 29. IP Blacklist 过期后不能再次封禁（已修复）
 
-> 确认问题：`modules/auth/ip-blacklist.service.ts` 保留 expired blockedUntil，newlyBlocked 却只检查是否为空。前提是记录未被成功登录 reset 或管理员删除；不是所有 IP 都永久免封。
+> 已修复：过期 blockedUntil 开启新的失败计数周期，达到阈值可再次封禁；活动封禁保留原 deadline，不因失败请求无限续期。计数原子性由下一项 #30 单独修复。下文为原问题证据。
 
 `IpBlacklistService.recordFailedAttempt()` 当前计算：
 

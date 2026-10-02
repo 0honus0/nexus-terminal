@@ -23,9 +23,11 @@ export class IpBlacklistService {
     ]);
     const max = this.bounded(maxRaw, 5, 1, 1000);
     const duration = this.bounded(durationRaw, 300, 1, 86400 * 30);
-    const attempts = (current?.attempts ?? 0) + 1;
-    const newlyBlocked = attempts >= max && !current?.blockedUntil;
-    const blockedUntil = current?.blockedUntil ?? (newlyBlocked ? now + duration : null);
+    const expired = current?.blockedUntil != null && current.blockedUntil <= now;
+    const activeBlock = current?.blockedUntil != null && current.blockedUntil > now;
+    const attempts = (expired ? 0 : (current?.attempts ?? 0)) + 1;
+    const newlyBlocked = attempts >= max && !activeBlock;
+    const blockedUntil = activeBlock ? current!.blockedUntil : newlyBlocked ? now + duration : null;
     await this.repository.upsert({ ip, attempts, lastAttemptAt: now, blockedUntil });
     if (newlyBlocked && blockedUntil)
       await this.notifications.publish('IP_BLOCKED', {
