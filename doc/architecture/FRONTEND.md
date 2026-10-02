@@ -108,6 +108,8 @@ Client 是浏览器到 Backend HTTP contract 的唯一普通入口。它负责�
 
 每个 feature 持有自己的 model、controller、service、组件和公开入口。外部代码只通过该目录的 `public.ts` 使用它。一个 feature 不能直接 import 另一个 feature；跨 feature 组合由 `app/App.vue` 完成，并以 `shared/capabilities/public.ts` 中的窄接口注入 Runtime。
 
+Agent App 的 `host/useAgentAppController.ts` 是实例级 application controller，持有 Thread/Run/Ledger projection、配置选择、缓存、错误域、facade 与事件订阅，并在组件生命周期内初始化和清理。`AgentAppSurface.vue` 只组合展示组件、绑定 controller 提供的响应式状态／动作及观察自身尺寸；Host window manager 与 surface session 仍为原有唯一 owner。提取不新增共享 mutable state，不取消现有 generation fence 或缓存容量限制。
+
 ### `runtimes/workspace/`
 
 Workspace Runtime 组合长生命周期的交互会话，包括 SSH terminal、文件系统、编辑器、预览、传输、状态监控、Docker、布局、sidebars 和远程桌面入口。

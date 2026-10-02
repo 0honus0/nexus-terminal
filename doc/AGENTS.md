@@ -139,6 +139,8 @@ Backend Agent 的 Module 根为 `packages/backend/src/modules/agent/`：
 
 Frontend owner 为 `packages/frontend/src/features/agent/` 下的 `host/ai/runtime/files/settings/api/i18n`；Host 管窗口，API 管 transport。Runner package 是 `packages/agent-runner` / `@nexus-terminal/agent-runner`，不重新命名为 `agent-runtime`。
 
+Agent App 的应用控制逻辑由实例级 `host/useAgentAppController` 持有，Surface 消费其状态和动作并负责展示／尺寸观察；异步订阅、缓存和 facade 清理由 controller 负责，不在模板组件复制 controller 状态。
+
 ## 4. 界面与执行配置
 
 ### 4.1 全局 Host 与 App

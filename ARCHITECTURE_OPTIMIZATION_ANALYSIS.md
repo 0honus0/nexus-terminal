@@ -28,54 +28,9 @@ Nexus Terminal 当前已经建立了比较明确的架构边界：Backend 使用
 
 > 已关闭：两端共享 `packages/protocol/src/runner-version.json` 与 `runner.ts`；Backend wire decoder 直接消费公共 DTO，Runner command/job/file/code-navigation/project-instruction 类型及全部生产消费者已迁移，旧重复声明与转导出入口已删除。Runner 依赖和 Docker 构建同步更新。双方保留必要的边界校验，本地 durable record、授权与 wire→domain conversion 不合并为协议 owner。协议字段与版本值未变；未新增或运行 E2E。
 
-## 3. `AgentAppSurface.vue` 同时承担 Presentation 与 Application Controller 职责
+## 3. Agent App Presentation / Application Controller 分离（已关闭）
 
-> 确认问题（职责聚合）：组件内仍持有 `threadContextCache`、checkpoint generation、error slots 与 runtime operation，并协调多个异步产品流程。窗口 authority 实际来自 `useAgentHostState().windowManager`，不能把消费窗口状态描述为复制窗口 owner；缓存有容量限制、checkpoint 请求有 generation 保护，不据此断言已有无限增长或过期覆盖故障。
-
-当前 Frontend 中多个 Agent / Workspace 文件已经达到较大规模：
-
-```text
-AgentAppSurface.vue                 ≈ 133 KB
-ModelProviderSettings.vue          ≈ 117 KB
-FileManager.vue                     ≈ 87 KB
-WorkspaceSessionSurface.vue         ≈ 72 KB
-TaskRail.vue                        ≈ 53 KB
-AgentSettingsPanel.vue              ≈ 51 KB
-PluginManagementSettings.vue        ≈ 49 KB
-AgentConversation.vue               ≈ 44 KB
-```
-
-其中 `AgentAppSurface.vue` 同时维护：
-
-- Thread list / current thread
-- Ledger entries
-- Run / run history
-- Approval
-- Reconciliation
-- Checkpoint
-- Provider / model
-- Target denylist
-- Connection selection
-- Attachments
-- Workspace availability / catalog
-- Background runs
-- Subagent detail
-- Thread cache
-- Error domain
-- Window state
-
-组件内部已经出现：
-
-```text
-currentRunCheckpointsGeneration
-threadContextCache
-errorSlots
-runtimeOperation
-```
-
-这些状态带有明显的 session、并发控制、缓存和 application lifecycle 语义，而不仅是 presentation state。
-
-结果是 `AgentAppSurface.vue` 同时承担视图渲染、应用状态协调、异步生命周期、缓存、错误域和多个 Agent 子能力的控制职责。职责聚合增加维护成本，但现有 generation 与 bounded cache 不能被忽略；具体状态竞争需另行验证。
+> 已关闭：实例级 `host/useAgentAppController.ts` 持有 Thread/Run/Ledger、配置、缓存、错误域与异步操作／订阅生命周期。`AgentAppSurface.vue` 保留展示组件、模板绑定与 ResizeObserver。原 facade cleanup、generation fence、缓存限制与 Host window owner 保留，没有新增第二份业务状态；用户流程及布局不变。已用类型和 ESLint 检查验证，未新增或运行 E2E。
 
 ## 5. Runner `server.ts` 聚合 Transport、Validation 和业务协议入口
 
@@ -4292,13 +4247,13 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 99 项，待确认 39 项，已关闭 2 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项已逐项分类：**未解决确认问题 98 项，待确认 39 项，已关闭 3 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1      | 已关闭   | Workspace 页面跨 Feature 组合位置                                                                                                                                            |
 | 2      | 已关闭   | Backend ↔ Agent Runner Wire Protocol owner                                                                                                                                   |
-| 3      | 确认问题 | `AgentAppSurface.vue` 同时承担 Presentation 与 Application Controller 职责                                                                                                   |
+| 3      | 已关闭   | Agent App Presentation / Application Controller 分离                                                                                                                         |
 | 5      | 待确认   | Runner `server.ts` 聚合 Transport、Validation 和业务协议入口                                                                                                                 |
 | 6      | 待确认   | `SqliteStateCommitAdapter` 同时承担事务编排和 Recovery Domain 逻辑                                                                                                           |
 | 7      | 待确认   | SQLite Schema 和 Migration 已经形成物理热点文件                                                                                                                              |
