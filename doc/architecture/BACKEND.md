@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+BrowserGateway.closeRun由Root scheduler finally调用，close匹配Run owned sessions，执行片段结束含wait/quiesce，run/runtime authority保留；Workspace/global cleanup仍有效，不把disconnect等同远端browser process退出。
+
 Jump connector总deadline remaining覆盖handshake/forward；forward single-settle timer/abort/close/error和late destroy，catch route owner统一close，不以readyTimeout覆盖channel-open。
 
 Artifact cleanupPreview SQL LIMIT1000按created_at/id；confirm保留历史10000 decoder兼容，selection为批次快照且重检保护，不全量加载候选。

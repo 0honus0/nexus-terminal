@@ -513,6 +513,7 @@ export const composeAgent = ({
     (userId) => runRepository.hostCursor(userId),
     (userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
     (runId) => subagentScheduler?.hasActiveRun(runId) ?? false,
+    (runId) => browserGateway.closeRun(runId),
   );
   const subagentContext = new SubagentContextBuilder(
     runtimeParticipants,

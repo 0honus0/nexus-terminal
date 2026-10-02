@@ -1150,6 +1150,11 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
   async closeAll(): Promise<void> {
     await Promise.all([...this.sessions.keys()].map((sessionId) => this.close(sessionId)));
   }
+  async closeRun(runId: string): Promise<void> {
+    await Promise.all(
+      [...this.sessions.entries()].filter(([, active]) => active.request.runId === runId).map(([id]) => this.close(id)),
+    );
+  }
 
   private async postAction(
     sessionId: string,

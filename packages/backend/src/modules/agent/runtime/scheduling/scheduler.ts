@@ -38,6 +38,7 @@ export class AgentScheduler {
     private readonly hostCursor: (userId: number) => Promise<number>,
     private readonly externalActiveCount: (userId: number) => number = () => 0,
     private readonly runBlocked: (runId: string) => boolean = () => false,
+    private readonly releaseRunResources: (runId: string) => Promise<void> = async () => {},
   ) {}
 
   enqueue(run: RunView): void {
@@ -277,6 +278,9 @@ export class AgentScheduler {
           'Agent scheduler run failed outside persisted harness',
         );
       } finally {
+        await this.releaseRunResources(run.id).catch((error) =>
+          logger.warn({ err: error, runId: run.id }, 'Run resource cleanup failed'),
+        );
         logger.info(
           {
             runId: run.id,

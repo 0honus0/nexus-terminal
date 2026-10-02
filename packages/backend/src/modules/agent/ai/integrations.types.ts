@@ -323,6 +323,7 @@ export interface BrowserDownloadView {
 }
 
 export interface BrowserGatewayPort {
+  closeRun(runId: string): Promise<void>;
   createSession(request: BrowserSessionRequest, signal: AbortSignal): Promise<BrowserSessionView>;
   getSession(sessionId: string, signal?: AbortSignal): Promise<BrowserSessionView>;
   navigate(

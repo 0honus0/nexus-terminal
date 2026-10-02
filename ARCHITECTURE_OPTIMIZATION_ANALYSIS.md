@@ -1917,7 +1917,9 @@ await this.transports.connect(connection, { timeoutMs: TEST_TIMEOUT_MS });
 
 但 jump route 卡在 `forwardOut()` 时，这个“15 秒连接测试”仍然可以无限等待。Agent SSH capability 传入的 deadline-derived `AbortSignal` 同样只能取消握手阶段，不能取消已连接 jump hop 的 forwarding 阶段，因此 Run 取消/超时也可能被这个 pending connect 拖住。
 
-## 89. Agent Browser session 没有按 Run 生命周期回收；Run 结束后旧 session 又被 run binding 禁止关闭，Standalone Browser 资源只能等 Backend shutdown
+## 89. Run Browser session 回收（已修复）
+
+> 已修复：BrowserGateway closeRun，Root scheduler finally释放该Run所有session；覆盖完成/失败/取消/等待/安全暂停，每片段结束回收，不跨等待维持session。run authority不放宽，显式close/workspace/global cleanup保留；不声称新数量配额或全部Child独立生命周期。下文为原证据。
 
 > 确认问题：BrowserRuntimeAdapter session Map 仅 workspace/global cleanup，tool authority 绑定 run/runtime；Run terminal 没有 closeRun。只针对未显式 close 的 standalone session，浏览器远端自行断开等也可终止底层资源；未跑完整 Run handoff。
 
