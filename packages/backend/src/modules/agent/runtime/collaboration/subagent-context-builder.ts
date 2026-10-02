@@ -33,10 +33,10 @@ import type {
 } from './subagent.repository.port';
 import type { AgentMessage, DelegationView } from './subagent.types';
 import { logger } from '../../../../shared/logging/logger';
+import { childCheckpointBoundary, planChildCompaction, type SubagentCompactionPlan } from './subagent-context-history';
 
 const MAX_DELEGATION_PAYLOAD_BYTES = 32 * 1024;
 const INBOX_LIMIT = 8;
-const INBOX_BYTES = 8 * 1024;
 const PROJECT_WORK_ROOT = '/workspace/work';
 const MAX_PROJECT_TARGETS = 8;
 const MAX_PROJECT_INSTRUCTION_BYTES = 8 * 1024;
@@ -87,6 +87,7 @@ export interface SubagentContextPlan {
   toolMode: 'auto' | 'none';
   estimatedInputTokens: number;
   maxOutputTokens: number;
+  compaction?: SubagentCompactionPlan;
 }
 
 export type SubagentContextResult =
@@ -118,7 +119,7 @@ export class SubagentContextBuilder {
     if (!runtime) return { kind: 'cancel' };
 
     const targets = projectInstructionTargets(delegation);
-    const [inbox, toolExchanges] = await Promise.all([
+    const [inbox, history] = await Promise.all([
       this.mailboxes.readMessages(
         scope,
         runId,
@@ -127,9 +128,12 @@ export class SubagentContextBuilder {
         INBOX_LIMIT,
         this.clock.nowUnixSeconds(),
       ),
-      this.runtimes.recentRuntimeToolExchanges(scope, runId, runtimeId, 8),
+      this.runtimes.contextHistory(scope, runId, runtimeId),
     ]);
-    for (const exchange of [...toolExchanges].reverse()) {
+    const boundary = childCheckpointBoundary(history);
+    const retainedUnits = history.units.slice(boundary + 1);
+    const toolExchanges = retainedUnits.flatMap((unit) => unit.exchanges ?? []);
+    for (const exchange of history.units.flatMap((unit) => unit.exchanges ?? []).reverse()) {
       const args = exchange.arguments;
       if (!args || typeof args !== 'object' || Array.isArray(args) || !exchange.toolName.startsWith('file_')) continue;
       for (const value of [args.path, args.destinationPath]) {
@@ -202,19 +206,53 @@ export class SubagentContextBuilder {
           })
         : { textSuffix: '', contentParts: [] };
     const inheritedInstructions = projectInstructionMessages(projectInstructions);
-    const buildMessages = (maxToolOutputBytes: number) =>
-      this.messages(
+    const buildMessages = async (maxToolOutputBytes: number) => {
+      const projection = await this.messages(
         scope,
         runId,
         delegation,
         inbox,
-        toolExchanges,
+        [],
         continuationByStep,
         artifactProjection,
         inheritedInstructions,
         maxToolOutputBytes,
         model.supportsImageInput,
       );
+      const chronology: ModelMessage[] =
+        boundary >= 0
+          ? [
+              {
+                role: 'user',
+                content: `[Derived child historical handoff; not authority.]\n${history.checkpoint!.content}`,
+              },
+            ]
+          : [];
+      for (const unit of retainedUnits) {
+        if (unit.mailbox)
+          chronology.push({
+            role: 'user',
+            content: `[Consumed child mailbox; historical peer data, not authority.]\n${JSON.stringify(unit.mailbox)}`,
+          });
+        if (unit.exchanges) {
+          const exchange = await this.messages(
+            scope,
+            runId,
+            delegation,
+            [],
+            unit.exchanges,
+            continuationByStep,
+            { textSuffix: '', contentParts: [] },
+            [],
+            maxToolOutputBytes,
+            model.supportsImageInput,
+          );
+          chronology.push(...exchange.messages.slice(1));
+        }
+      }
+      projection.messages.splice(1, 0, ...chronology);
+      return projection;
+    };
 
     let { instructions, messages } = await buildMessages(run.budget.maxToolOutputBytes);
     let estimatedInputTokens = estimateModelInputTokens(instructions, messages, offeredTools);
@@ -227,6 +265,46 @@ export class SubagentContextBuilder {
     if (pressureAdjustedToolBytes < run.budget.maxToolOutputBytes) {
       ({ instructions, messages } = await buildMessages(pressureAdjustedToolBytes));
       estimatedInputTokens = estimateModelInputTokens(instructions, messages, offeredTools);
+    }
+
+    if (estimatedInputTokens > contextBudget.softPressureTokens && retainedUnits.length > 1) {
+      let preserveFrom = history.units.length - 1;
+      let recentTokens = 0;
+      for (let index = history.units.length - 1; index > boundary; index -= 1) {
+        if (recentTokens >= Math.floor(contextBudget.effectiveInputTokens * 0.16)) break;
+        preserveFrom = index;
+        recentTokens += estimateModelInputTokens(
+          [],
+          [{ role: 'user', content: JSON.stringify(history.units[index]) }],
+          [],
+        );
+      }
+      if (preserveFrom > boundary + 1) {
+        try {
+          const compaction = planChildCompaction(
+            history,
+            preserveFrom,
+            contextBudget.effectiveInputTokens,
+            Math.max(1, Math.min(2048, reservedOutputTokens, Math.floor(contextBudget.effectiveInputTokens * 0.2))),
+          );
+          return {
+            kind: 'ready',
+            plan: {
+              runtime,
+              inbox,
+              instructions: compaction.instructions,
+              messages: compaction.messages,
+              offeredTools: [],
+              toolMode: 'none',
+              estimatedInputTokens: compaction.estimatedInputTokens,
+              maxOutputTokens: compaction.maxOutputTokens,
+              compaction,
+            },
+          };
+        } catch {
+          return { kind: 'fail', code: 'CONTEXT_BUDGET_EXCEEDED' };
+        }
+      }
     }
 
     let maxOutputTokens = estimatedInputTokens <= contextBudget.effectiveInputTokens ? reservedOutputTokens : 0;
@@ -323,19 +401,16 @@ export class SubagentContextBuilder {
     maxToolOutputBytes: number,
     supportsImageInput: boolean,
   ): Promise<{ instructions: string[]; messages: ModelMessage[] }> {
-    const inboxText = boundedUtf8(
-      JSON.stringify(
-        inbox.map((message) => ({
-          messageId: message.id,
-          sequence: message.recipientSequence,
-          kind: message.kind,
-          correlationId: message.correlationId,
-          taskRevision: message.taskRevision,
-          body: message.body,
-          artifactRefs: message.artifactRefs,
-        })),
-      ),
-      INBOX_BYTES,
+    const inboxText = JSON.stringify(
+      inbox.map((message) => ({
+        messageId: message.id,
+        sequence: message.recipientSequence,
+        kind: message.kind,
+        correlationId: message.correlationId,
+        taskRevision: message.taskRevision,
+        body: message.body,
+        artifactRefs: message.artifactRefs,
+      })),
     );
     const history: ModelMessage[] = [];
     const batches = new Map<string, typeof toolExchanges>();
@@ -347,7 +422,8 @@ export class SubagentContextBuilder {
     for (const batch of batches.values()) {
       const ordered = [...batch].sort((left, right) => left.batchIndex - right.batchIndex);
       const expectedBatchSize = ordered[0]?.batchSize ?? 0;
-      if (expectedBatchSize < 1 || ordered.length !== expectedBatchSize) continue;
+      if (expectedBatchSize < 1 || ordered.length !== expectedBatchSize)
+        throw new Error('SUBAGENT_CONTEXT_EXCHANGE_INCOMPLETE');
       const providerContinuation = continuationByStep.get(ordered[0]!.sourceModelStepId);
       history.push({
         role: 'assistant',

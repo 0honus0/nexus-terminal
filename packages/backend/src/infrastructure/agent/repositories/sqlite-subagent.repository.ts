@@ -29,6 +29,11 @@ import type {
 } from '../../../modules/agent/runtime/collaboration/subagent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { parseToolResult } from '../runtime/durable-state-decoders';
+import type {
+  SubagentContextHistory,
+  SubagentContextCheckpoint,
+  SubagentHistoryUnit,
+} from '../../../modules/agent/runtime/collaboration/subagent-context-history';
 import { enqueueParentJoinResume } from '../runtime/subagent-join-wake';
 import {
   type DelegationRow,
@@ -667,13 +672,90 @@ export class SqliteSubagentRepository
     return rows.map(mapMessage);
   }
 
+  async contextHistory(scope: Scope, runId: string, runtimeId: string): Promise<SubagentContextHistory> {
+    const exchanges = await this.recentRuntimeToolExchanges(scope, runId, runtimeId, 10000);
+    const count = await this.db.queryOne<{ count: number }>(
+      `SELECT COUNT(DISTINCT source_model_step_id) AS count FROM agent_tool_calls WHERE run_id = ? AND agent_runtime_id = ? AND status IN ('succeeded','failed')`,
+      [runId, runtimeId],
+    );
+    if ((count?.count ?? 0) > 10000) throw new Error('CONTEXT_HISTORY_TOO_LARGE');
+    const stepRows = await this.db.queryAll<{ id: string; step_index: number; created_at: number }>(
+      'SELECT id, step_index, created_at FROM agent_steps WHERE run_id = ? AND agent_runtime_id = ? ORDER BY step_index',
+      [runId, runtimeId],
+    );
+    const batches = new Map<string, RuntimeToolExchangeView[]>();
+    for (const exchange of exchanges) {
+      const batch = batches.get(exchange.sourceModelStepId) ?? [];
+      batch.push(exchange);
+      batches.set(exchange.sourceModelStepId, batch);
+    }
+    const units: SubagentHistoryUnit[] = stepRows.flatMap((step) => {
+      const batch = batches.get(step.id);
+      return batch ? [{ id: `step:${step.id}`, createdAt: step.created_at, exchanges: batch }] : [];
+    });
+    const messages = await this.db.queryAll<MessageRow>(
+      `SELECT * FROM agent_messages WHERE run_id = ? AND recipient_runtime_id = ? AND consumed_at IS NOT NULL ORDER BY recipient_sequence`,
+      [runId, runtimeId],
+    );
+    for (const row of messages) {
+      const mapped = mapMessage(row);
+      // Status and expiry do not change the historical content once consumed.
+      units.push({
+        id: `mailbox:${row.id}`,
+        createdAt: row.created_at,
+        mailbox: { ...mapped, status: 'consumed', consumedAt: row.consumed_at },
+      });
+    }
+    // Stable tie-breaks are essential for prefix hashes across repeated requests.
+    const stepOrder = new Map(stepRows.map((step) => [`step:${step.id}`, step.step_index]));
+    units.sort(
+      (left, right) =>
+        left.createdAt - right.createdAt ||
+        (left.mailbox && right.mailbox
+          ? left.mailbox.recipientSequence - right.mailbox.recipientSequence
+          : left.exchanges && right.exchanges
+            ? stepOrder.get(left.id)! - stepOrder.get(right.id)!
+            : left.mailbox
+              ? -1
+              : 1),
+    );
+    const row = await this.db.queryOne<{ checkpoint_json: string }>(
+      'SELECT checkpoint_json FROM agent_runtime_context_checkpoints WHERE runtime_id = ?',
+      [runtimeId],
+    );
+    let checkpoint: SubagentContextCheckpoint | null = null;
+    if (row) {
+      const parsed: unknown = JSON.parse(row.checkpoint_json);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error('AGENT_DURABLE_STATE_INVALID');
+      const value = parsed as Record<string, unknown>;
+      if (
+        value.version !== 'semantic-child-v1' ||
+        typeof value.throughId !== 'string' ||
+        typeof value.sourceHash !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(value.sourceHash) ||
+        typeof value.content !== 'string' ||
+        !value.content.trim() ||
+        Buffer.byteLength(value.content) > 256 * 1024
+      )
+        throw new Error('AGENT_DURABLE_STATE_INVALID');
+      checkpoint = {
+        version: value.version,
+        throughId: value.throughId,
+        sourceHash: value.sourceHash,
+        content: value.content,
+      };
+    }
+    return { units, checkpoint };
+  }
+
   async recentRuntimeToolExchanges(
     scope: Scope,
     runId: string,
     runtimeId: string,
     limit: number,
   ): Promise<RuntimeToolExchangeView[]> {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 32) throw new Error('VALIDATION_FAILED');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10000) throw new Error('VALIDATION_FAILED');
     await requireRun(this.db, scope, runId);
     await assertRuntimeInRun(this.db, runId, runtimeId);
     const rows = await this.db.queryAll<{

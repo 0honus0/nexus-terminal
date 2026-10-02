@@ -52,6 +52,7 @@ export interface BeginModelStepResult {
 }
 
 export interface BeginSubagentModelStepCommand {
+  purpose?: 'compaction';
   scope: Scope;
   runId: string;
   runtimeId: string;
@@ -199,6 +200,7 @@ export interface SettleSubagentWithoutModelCommand {
 }
 
 export interface SettleSubagentModelStepCommand {
+  contextCheckpoint?: import('../collaboration/subagent-context-history').SubagentContextCheckpoint;
   scope: Scope;
   runId: string;
   runtimeId: string;

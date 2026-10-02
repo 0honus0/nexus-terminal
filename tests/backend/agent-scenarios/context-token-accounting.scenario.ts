@@ -82,6 +82,10 @@ export const contextTokenAccountingScenario = async () => {
   };
   let subagentToolArguments: JsonValue = { query: 'small' };
   const runtimes = {
+    contextHistory: async () => ({
+      units: [{ id: 'step:subagent-model-step', createdAt: 1, exchanges: await runtimes.recentRuntimeToolExchanges() }],
+      checkpoint: null,
+    }),
     runtime: async () => runtime,
     recentRuntimeToolExchanges: async (): Promise<RuntimeToolExchangeView[]> => [
       {

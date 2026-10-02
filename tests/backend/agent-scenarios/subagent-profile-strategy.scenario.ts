@@ -15,6 +15,11 @@ import { freezeRunContextPolicy } from '../../../packages/backend/src/modules/ag
 import type { RunView } from '../../../packages/backend/src/modules/agent/runtime/runs/run.types';
 import { emptyModelContinuations } from './scenario-fixtures';
 import { contextService, entry } from './scenario-context-helpers';
+import {
+  completeChildCompaction,
+  type SubagentContextHistory,
+} from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-context-history';
+import { CHECKPOINT_SECTIONS } from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
 
 export const subagentProfileStrategyScenario = async () => {
   const scenarioScope: Scope = { userId: 1, appId: 'subagent-profile-strategy-app' };
@@ -170,10 +175,12 @@ export const subagentProfileStrategyScenario = async () => {
   );
 
   let inheritedRuntimeId = '';
+  const childHistory: SubagentContextHistory = { units: [], checkpoint: null };
   let inheritedTargets: string[] = [];
   const childContext = new SubagentContextBuilder(
     {
       runtime: async () => runtime,
+      contextHistory: async () => childHistory,
       recentRuntimeToolExchanges: async () => [],
     } as unknown as RuntimeParticipantRepositoryPort,
     { readMessages: async () => [], listDelegationMessages: async () => [] } as MailboxReaderPort,
@@ -286,6 +293,109 @@ export const subagentProfileStrategyScenario = async () => {
     rootPlan.estimatedInputTokens > prepared.plan.estimatedInputTokens * 2,
     'representative delegated exploration must materially reduce prompt-resident context versus the Root history',
   );
+
+  childHistory.units = Array.from({ length: 12 }, (_, index) => ({
+    id: `step:${index}`,
+    createdAt: index,
+    exchanges: [
+      {
+        sourceModelStepId: `step-${index}`,
+        batchIndex: 0,
+        batchSize: 1,
+        providerCallId: `call-${index}`,
+        toolName: 'file_read',
+        arguments: { path: `/workspace/work/src/parser/file-${index}.ts` },
+        status: 'succeeded',
+        result: {
+          ok: true,
+          summary:
+            index === 0
+              ? 'EARLY_CHILD_DECISION: do not retry the rejected XML rewrite.'
+              : `Inspected dependency ${index}`,
+          artifactRefs: [],
+          truncated: false,
+          outcome: 'confirmed' as const,
+          verification: { status: 'verified' as const, summary: 'Read succeeded', evidenceRefs: [] },
+        },
+      },
+    ],
+  }));
+  childHistory.units.push({
+    id: 'mailbox:correction',
+    createdAt: 13,
+    mailbox: {
+      id: 'correction',
+      recipientSequence: 1,
+      kind: 'request',
+      body: { text: 'CONSUMED_PARENT_CORRECTION: preserve generated files.' },
+      artifactRefs: [],
+      status: 'consumed',
+    } as never,
+  });
+  runtime.consumedMailboxSequence = 1;
+  const prepareChild = (window = 65536) =>
+    childContext.prepare(
+      scenarioScope,
+      runtime.runId,
+      runtime.id,
+      delegation,
+      {
+        id: 'scenario-model',
+        contextWindow: window,
+        maxOutputTokens: 512,
+        supportsTools: true,
+        supportsImageInput: false,
+        supportsFileInput: false,
+      } as never,
+      {
+        id: runtime.runId,
+        threadId: 'profile-thread',
+        inputRevision: 1,
+        usage: { steps: 18 },
+        budget: { maxRunSteps: 64, maxToolOutputBytes: 65536, contextPolicy: freezeRunContextPolicy('normal') },
+        definition: { connectionIds: [], environment: null },
+      } as never,
+    );
+  const fullHistory = await prepareChild();
+  assert.equal(fullHistory.kind, 'ready');
+  if (fullHistory.kind !== 'ready') throw new Error('SCENARIO_INVALID');
+  assert.equal(fullHistory.plan.compaction, undefined);
+  assert.match(JSON.stringify(fullHistory.plan.messages), /EARLY_CHILD_DECISION/);
+  assert.match(JSON.stringify(fullHistory.plan.messages), /CONSUMED_PARENT_CORRECTION/);
+  assert.equal(
+    fullHistory.plan.messages.filter((message) => message.role === 'tool').length,
+    12,
+    'ample capacity must preserve more than eight complete child exchanges',
+  );
+  for (const unit of childHistory.units)
+    for (const exchange of unit.exchanges ?? []) exchange.result!.summary += ' historical evidence '.repeat(150);
+  let batches = 0;
+  for (;;) {
+    const next = await prepareChild(4096);
+    assert.equal(next.kind, 'ready');
+    if (next.kind !== 'ready') throw new Error('SCENARIO_INVALID');
+    if (!next.plan.compaction) {
+      assert.match(JSON.stringify(next.plan.messages), /EARLY_CHILD_DECISION/);
+      assert.match(JSON.stringify(next.plan.messages), /CONSUMED_PARENT_CORRECTION/);
+      assert.ok(
+        next.plan.messages.some((message) => message.role === 'tool'),
+        'recent complete exchange must remain raw',
+      );
+      break;
+    }
+    const compaction = next.plan.compaction;
+    assert.ok(compaction.estimatedInputTokens <= 3584);
+    assert.equal(next.plan.toolMode, 'none');
+    const summary = CHECKPOINT_SECTIONS.map(
+      (section) =>
+        `## ${section}\n${section === 'Decisions' ? 'EARLY_CHILD_DECISION: do not retry the rejected XML rewrite.' : '(none)'}`,
+    ).join('\n');
+    assert.throws(() => completeChildCompaction(compaction, ''), /CONTEXT_COMPACTION_INVALID/);
+    childHistory.checkpoint = completeChildCompaction(compaction, summary);
+    batches += 1;
+    assert.ok(batches < 12);
+  }
+  assert.ok(batches > 1, 'oversized history must be merged over multiple bounded requests');
 
   return [
     { name: 'custom_profiles_preserved', value: view.policy.profiles.length, unit: 'profiles' },

@@ -135,6 +135,11 @@ export interface RunScopeRepositoryPort {
 }
 
 export interface RuntimeParticipantRepositoryPort {
+  contextHistory(
+    scope: Scope,
+    runId: string,
+    runtimeId: string,
+  ): Promise<import('./subagent-context-history').SubagentContextHistory>;
   runtime(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeParticipantView | null>;
   recentRuntimeToolExchanges(
     scope: Scope,

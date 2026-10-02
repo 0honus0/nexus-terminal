@@ -337,6 +337,7 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     {
       runtime: async () => childRuntime,
       recentRuntimeToolExchanges: async () => [],
+      contextHistory: async () => ({ units: [], checkpoint: null }),
     } as unknown as RuntimeParticipantRepositoryPort,
     {
       readMessages: async () => [],

@@ -3,6 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SqliteSubagentRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-subagent.repository';
+import { SqliteStateCommitAdapter } from '../../../packages/backend/src/infrastructure/agent/runtime/sqlite-state-commit.adapter';
+import { childHistoryHash } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-context-history';
+import { SqliteRunRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-run.repository';
+import { SubagentContextBuilder } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-context-builder';
+import { SubagentModelStepExecutor } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-model-step-executor';
+import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
+import { CHECKPOINT_SECTIONS } from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
+import { ScenarioModelCallLimiter } from './scenario-benchmark-helpers';
+import { emptyModelContinuations } from './scenario-fixtures';
+import type { LanguageModelPort } from '../../../packages/backend/src/modules/agent/ai/language-model.port';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
 import type { ClockPort, Scope } from '../../../packages/backend/src/modules/agent/agent.types';
 import { AgentSettingsService } from '../../../packages/backend/src/modules/agent/host/agent-settings.service';
@@ -186,6 +196,288 @@ export const subagentClaimedCancellationScenario = async () => {
                'owner-subagent-root-runtime', ?, ?)`,
       [runId, modelRef, now, now],
     );
+
+    const summaryChild = await insertChild('summary', { workStatus: 'claimed', ownerEpoch: 7 });
+    await db.execute(
+      `INSERT INTO agent_messages (id, run_id, sender_runtime_id, recipient_runtime_id, delegation_id, recipient_sequence, kind, correlation_id, task_revision, body_json, artifact_refs_json, size_bytes, status, idempotency_key, payload_hash, created_at, expires_at, consumed_at)
+      VALUES ('consumed-correction', ?, 'subagent-root-runtime', ?, ?, 1, 'request', 'correction', 1, '{"text":"Preserve generated files"}', '[]', 50, 'consumed', 'correction-key', 'correction-hash', ?, ?, ?)`,
+      [runId, summaryChild.runtimeId, summaryChild.delegationId, now - 1, now + 100, now],
+    );
+    await db.execute(`UPDATE agent_runtimes SET consumed_mailbox_sequence = 1 WHERE id = ?`, [summaryChild.runtimeId]);
+    const history = await repository.contextHistory(scope, runId, summaryChild.runtimeId);
+    assert.equal(history.units.length, 1);
+    assert.equal(history.units[0]?.mailbox?.status, 'consumed');
+    assert.match(JSON.stringify(history.units), /Preserve generated files/);
+    assert.equal(
+      (await repository.contextHistory(scope, runId, 'subagent-root-runtime')).units.length,
+      0,
+      'child history must not leak to another runtime',
+    );
+    const commit = new SqliteStateCommitAdapter(db);
+    const beginSummary = () =>
+      commit.beginSubagentModelStep({
+        scope,
+        runId,
+        runtimeId: summaryChild.runtimeId,
+        delegationId: summaryChild.delegationId,
+        workId: summaryChild.workId,
+        ownerEpoch: 7,
+        reservedTokens: 500,
+        purpose: 'compaction',
+        now,
+      });
+    const begun = await beginSummary();
+    const checkpoint = {
+      version: 'semantic-child-v1' as const,
+      throughId: history.units[0]!.id,
+      sourceHash: childHistoryHash(history.units),
+      content: 'Preserve generated files.',
+    };
+    const summaryCommand = {
+      scope,
+      runId,
+      runtimeId: summaryChild.runtimeId,
+      delegationId: summaryChild.delegationId,
+      workId: summaryChild.workId,
+      ownerEpoch: 7,
+      stepId: begun.stepId,
+      attemptId: begun.attemptId,
+      outcome: 'completed' as const,
+      result: null,
+      evidenceRefs: [],
+      inputTokens: 100,
+      outputTokens: 20,
+      cachedInputTokens: 5,
+      estimatedUsage: false,
+      finishReason: 'stop' as const,
+      contextCheckpoint: checkpoint,
+      now,
+    };
+    const settled = await commit.settleSubagentModelStep(summaryCommand);
+    assert.equal(settled.run.usage.steps, 1);
+    assert.equal(settled.run.usage.inputTokens, 100);
+    assert.equal((await repository.delegation(scope, runId, summaryChild.delegationId))?.status, 'running');
+    assert.equal((await repository.delegation(scope, runId, summaryChild.delegationId))?.usage.tokens, 120);
+    assert.equal((await repository.runtime(scope, runId, summaryChild.runtimeId))?.consumedMailboxSequence, 1);
+    assert.deepEqual((await repository.contextHistory(scope, runId, summaryChild.runtimeId)).checkpoint, checkpoint);
+    await assert.rejects(commit.settleSubagentModelStep(summaryCommand), /ATTEMPT_STATE_CONFLICT/);
+    const stale = await beginSummary();
+    await assert.rejects(
+      commit.settleSubagentModelStep({
+        ...summaryCommand,
+        stepId: stale.stepId,
+        attemptId: stale.attemptId,
+        contextCheckpoint: { ...checkpoint, sourceHash: '0'.repeat(64) },
+      }),
+      /CONTEXT_COMPACTION_SOURCE_CHANGED/,
+    );
+    assert.deepEqual(
+      (await repository.contextHistory(scope, runId, summaryChild.runtimeId)).checkpoint,
+      checkpoint,
+      'failed transaction must preserve the prior checkpoint',
+    );
+    await commit.settleSubagentModelStep({
+      ...summaryCommand,
+      stepId: stale.stepId,
+      attemptId: stale.attemptId,
+      contextCheckpoint: undefined,
+      outcome: 'failed',
+      finishReason: 'length',
+      errorCode: 'CONTEXT_COMPACTION_INCOMPLETE',
+    });
+
+    const orchestrated = await insertChild('context-orchestration', { workStatus: 'claimed', ownerEpoch: 9 });
+    await db.execute(`UPDATE agent_delegations SET model_ref_json = ?, max_steps = 24 WHERE id = ?`, [
+      JSON.stringify({
+        ...JSON.parse(modelRef),
+        modelCapabilities: { ...SCENARIO_MODEL_CAPABILITIES, contextWindow: 4096, maxOutputTokens: 512 },
+      }),
+      orchestrated.delegationId,
+    ]);
+    for (let index = 0; index < 18; index += 1)
+      await db.execute(
+        `INSERT INTO agent_messages (id, run_id, sender_runtime_id, recipient_runtime_id, delegation_id, recipient_sequence, kind, correlation_id, task_revision, body_json, artifact_refs_json, size_bytes, status, idempotency_key, payload_hash, created_at, expires_at, consumed_at)
+      VALUES (?, ?, 'subagent-root-runtime', ?, ?, ?, 'request', 'history', 1, ?, '[]', 2200, 'consumed', ?, 'hash', ?, ?, ?)`,
+        [
+          `child-history-${index}`,
+          runId,
+          orchestrated.runtimeId,
+          orchestrated.delegationId,
+          index + 1,
+          JSON.stringify({
+            text: `${index === 0 ? 'EARLY_PARENT_CONSTRAINT: preserve source maps. ' : ''}${'Historical evidence. '.repeat(100)}`,
+          }),
+          `history-${index}`,
+          now - 20 + index,
+          now + 100,
+          now,
+        ],
+      );
+    await db.execute(`UPDATE agent_runtimes SET consumed_mailbox_sequence = 18 WHERE id = ?`, [orchestrated.runtimeId]);
+    await db.execute(
+      `INSERT INTO agent_messages (id, run_id, sender_runtime_id, recipient_runtime_id, delegation_id, recipient_sequence, kind, correlation_id, task_revision, body_json, artifact_refs_json, size_bytes, status, idempotency_key, payload_hash, created_at, expires_at)
+      VALUES ('pending-child-correction', ?, 'subagent-root-runtime', ?, ?, 19, 'request', 'pending', 1, '{"text":"PENDING_CORRECTION: inspect source maps"}', '[]', 50, 'accepted', 'pending-correction', 'hash', ?, ?)`,
+      [runId, orchestrated.runtimeId, orchestrated.delegationId, now, now + 100],
+    );
+    let privateCalls = 0;
+    let visibleDeltas = 0;
+    let summaryFailure: 'length' | 'cancel' | null = null;
+    let requestController = new AbortController();
+    const summary = CHECKPOINT_SECTIONS.map(
+      (section) =>
+        `## ${section}\n${section === 'Requirements' ? 'EARLY_PARENT_CONSTRAINT: preserve source maps.' : '(none)'}`,
+    ).join('\n');
+    const modelPort = {
+      async *stream(request) {
+        const compaction = request.instructions.some((instruction) => instruction.includes('task handoff'));
+        if (compaction) {
+          privateCalls += 1;
+          assert.equal(request.toolMode, 'none');
+          assert.doesNotMatch(JSON.stringify(request.messages), /PENDING_CORRECTION/);
+          if (!summaryFailure)
+            assert.equal(
+              (await repository.runtime(scope, runId, orchestrated.runtimeId))?.consumedMailboxSequence,
+              18,
+              'summary batches must not consume pending inbox',
+            );
+        } else {
+          assert.match(JSON.stringify(request.messages), /EARLY_PARENT_CONSTRAINT/);
+          assert.match(JSON.stringify(request.messages), /PENDING_CORRECTION/);
+        }
+        yield { type: 'message.delta', text: compaction ? summary : 'Child work complete.' };
+        yield { type: 'usage', usage: { inputTokens: 200, outputTokens: 40, cachedInputTokens: 10 } };
+        if (compaction && summaryFailure === 'cancel') requestController.abort();
+        yield { type: 'completed', finishReason: compaction && summaryFailure === 'length' ? 'length' : 'stop' };
+      },
+    } as LanguageModelPort;
+    const runs = new SqliteRunRepository(db);
+    const builder = new SubagentContextBuilder(
+      repository,
+      repository,
+      { discover: () => [] } as never,
+      new CapabilityRegistry(),
+      emptyModelContinuations,
+      null!,
+      schedulerClock,
+    );
+    const executor = new SubagentModelStepExecutor(
+      repository,
+      repository,
+      repository,
+      repository,
+      runs,
+      {
+        get: async () => ({
+          enabled: true,
+          version: 1,
+          models: [{ id: 'scenario-model', ...SCENARIO_MODEL_CAPABILITIES }],
+        }),
+      } as never,
+      modelPort,
+      new ScenarioModelCallLimiter(),
+      commit,
+      builder,
+      null!,
+      {
+        verifiedRuntimeEvidence: async () => ({ artifactRefs: [], tools: [] }),
+        completeModelResult: async () => undefined,
+        failBeforeModel: async (...args: unknown[]) => {
+          throw new Error(`UNEXPECTED_EARLY_FAILURE:${args.at(-1)}`);
+        },
+      } as never,
+      {
+        publishRunWake: () => undefined,
+        publishTransient: () => {
+          visibleDeltas += 1;
+        },
+      } as never,
+      schedulerClock,
+    );
+    const claimed = (await db.queryOne<{ version: number }>('SELECT version FROM agent_scheduler_work WHERE id = ?', [
+      orchestrated.workId,
+    ]))!;
+    await executor.execute(
+      scope,
+      {
+        id: orchestrated.workId,
+        runId,
+        agentRuntimeId: orchestrated.runtimeId,
+        kind: 'model_step',
+        status: 'claimed',
+        payload: { delegationId: orchestrated.delegationId },
+        ownerEpoch: 9,
+        version: claimed.version,
+      } as never,
+      9,
+      requestController.signal,
+    );
+    assert.ok(
+      privateCalls > 1,
+      `production child executor must run multiple governed summary batches: ${privateCalls}, ${JSON.stringify(await repository.delegation(scope, runId, orchestrated.delegationId))}`,
+    );
+    assert.equal(visibleDeltas, 1, 'private summary text must not be shown as a child reply');
+    const finishedChild = (await repository.delegation(scope, runId, orchestrated.delegationId))!;
+    assert.equal(finishedChild.status, 'completed');
+    assert.equal(finishedChild.usage.steps, privateCalls + 1);
+    assert.equal(finishedChild.usage.tokens, (privateCalls + 1) * 240);
+    assert.equal((await repository.runtime(scope, runId, orchestrated.runtimeId))?.consumedMailboxSequence, 19);
+
+    for (const mode of ['length', 'cancel'] as const) {
+      summaryFailure = mode;
+      requestController = new AbortController();
+      const child = await insertChild(`summary-${mode}`, { workStatus: 'claimed', ownerEpoch: 9 });
+      await db.execute(`UPDATE agent_delegations SET model_ref_json = ?, max_steps = 24 WHERE id = ?`, [
+        JSON.stringify({
+          ...JSON.parse(modelRef),
+          modelCapabilities: { ...SCENARIO_MODEL_CAPABILITIES, contextWindow: 4096, maxOutputTokens: 512 },
+        }),
+        child.delegationId,
+      ]);
+      await db.execute(
+        `INSERT INTO agent_messages (id, run_id, sender_runtime_id, recipient_runtime_id, delegation_id, recipient_sequence, kind, correlation_id, task_revision, body_json, artifact_refs_json, size_bytes, status, idempotency_key, payload_hash, created_at, expires_at, consumed_at)
+        SELECT id || ?, run_id, sender_runtime_id, ?, ?, recipient_sequence, kind, correlation_id, task_revision, body_json, artifact_refs_json, size_bytes, status, idempotency_key, payload_hash, created_at, expires_at, consumed_at FROM agent_messages WHERE recipient_runtime_id = ? AND recipient_sequence <= 18`,
+        [mode, child.runtimeId, child.delegationId, orchestrated.runtimeId],
+      );
+      await db.execute(`UPDATE agent_runtimes SET consumed_mailbox_sequence = 18 WHERE id = ?`, [child.runtimeId]);
+      const oldHistory = await repository.contextHistory(scope, runId, child.runtimeId);
+      const oldCheckpoint = {
+        ...checkpoint,
+        throughId: oldHistory.units[0]!.id,
+        sourceHash: childHistoryHash(oldHistory.units.slice(0, 1)),
+        content: summary,
+      };
+      await db.execute(`INSERT INTO agent_runtime_context_checkpoints (runtime_id, checkpoint_json) VALUES (?, ?)`, [
+        child.runtimeId,
+        JSON.stringify(oldCheckpoint),
+      ]);
+      await executor.execute(
+        scope,
+        {
+          id: child.workId,
+          runId,
+          agentRuntimeId: child.runtimeId,
+          kind: 'model_step',
+          status: 'claimed',
+          payload: { delegationId: child.delegationId },
+          ownerEpoch: 9,
+          version: 1,
+        } as never,
+        9,
+        requestController.signal,
+      );
+      const failed = (await repository.delegation(scope, runId, child.delegationId))!;
+      assert.equal(failed.status, mode === 'cancel' ? 'cancelled' : 'failed');
+      assert.equal(failed.usage.tokens, 240, 'failed summary usage must still settle once');
+      assert.equal(failed.usage.steps, 1);
+      assert.doesNotMatch(
+        JSON.stringify(failed.result),
+        /EARLY_PARENT_CONSTRAINT/,
+        'private failed summary must not leak into the child result',
+      );
+      assert.deepEqual((await repository.contextHistory(scope, runId, child.runtimeId)).checkpoint, oldCheckpoint);
+      assert.equal((await repository.runtime(scope, runId, child.runtimeId))?.consumedMailboxSequence, 18);
+    }
+    assert.equal(visibleDeltas, 1);
 
     const target = await insertChild('target');
     const next = await insertChild('next');

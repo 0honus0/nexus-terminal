@@ -168,6 +168,16 @@ export const toolResultProjectionScenario = async () => {
     consumedMailboxSequence: 0,
   };
   const runtimes = {
+    contextHistory: async () => ({
+      units: [
+        {
+          id: 'step:tool-result-child-model-step',
+          createdAt: 1,
+          exchanges: await runtimes.recentRuntimeToolExchanges(),
+        },
+      ],
+      checkpoint: null,
+    }),
     runtime: async () => runtime,
     recentRuntimeToolExchanges: async (): Promise<RuntimeToolExchangeView[]> => [
       {

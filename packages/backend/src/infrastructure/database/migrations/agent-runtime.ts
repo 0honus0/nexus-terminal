@@ -3,8 +3,14 @@ import type { SqliteMigration } from './migration.types';
 import { tableExists, columnExists, indexExists, getTableCreateSQL } from './schema-inspection';
 import { createAiThreadEntrySearchIndexSQL, createAgentInputRequestsTableSQL } from '../schema/agent-execution';
 import { createAiContextCheckpointsTableSQL, createAiMemorySearchIndexSQL } from '../schema/agent-ai';
+import { createAgentRuntimeContextCheckpointsTableSQL } from '../schema/agent-collaboration';
 
 export const agentRuntimeMigrations: SqliteMigration[] = [
+  {
+    id: 52,
+    name: 'Persist isolated child runtime semantic context checkpoints',
+    sql: createAgentRuntimeContextCheckpointsTableSQL,
+  },
   {
     id: 51,
     name: 'Retire extractive Context checkpoints before semantic regeneration',

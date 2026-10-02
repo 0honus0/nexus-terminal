@@ -97,43 +97,15 @@ GENERATOR_VERSION = semantic-handoff-v1
 - 已有场景覆盖中／日／英输入、历史中间及 220 字之后约束完整到达模型、后续纠正输入、多次分批合并、工具边界、真实 Root 编排、usage／输入消费／持久化、截断、取消及新输入 fence。模型输出为模拟 fixture，只证明链路与治理，不证明真实模型摘要质量。
 - 单条记录超出摘要请求窗口时明确失败，不做无声截断；真实模型仍可能遗漏语义细节。
 
-## 12. Root Agent 与 Subagent 使用两套不同等级的 Context 生命周期
+## 12. Subagent 自身历史与已消费纠正的持续上下文
 
-> 确认限制，是否构成缺陷待确认：`SubagentContextBuilder` 仍取最近 8 组 exchanges、最多 8 条 inbox，并在容量不足时 fail；未建立 Root 等价的 checkpoint 生命周期。短期有界 delegation 可以合理采用不同策略，需验证允许的长任务是否确实需要早期事实、是否有 Artifact／mailbox 补充途径，不能要求两者完全同构。
+> 已修复：行为探针确认，在容量及步数充足时，第 9 组工具交互会挤出早期事实，已消费 mailbox 纠正也退出上下文；这证明信息保留缺口，不代表已证明真实模型必然任务失败。现在 Child 保留自身完整历史，压力时采用受治理语义摘要＋近期完整交互，仍不继承 Root 私有对话或 Recall。
 
-Root Agent 的上下文路径包含：
-
-- Ledger causal grouping
-- thread anchors
-- earlier-thread recall
-- Context checkpoint
-- adaptive compaction
-- model continuation
-- context epoch / token diagnostics
-
-但 `runtime/collaboration/subagent-context-builder.ts` 使用的是另一套更短的上下文路径。
-
-当前 Subagent 主要继承：
-
-```text
-delegation objective / constraints / completion criteria
-mailbox: 最多 8 条
-recentRuntimeToolExchanges: 最多 8 组
-bounded project instructions
-explicit artifacts
-```
-
-Subagent 会根据 context occupancy 缩小 tool result projection，但没有 Root Agent 同等级的 rolling checkpoint、history compaction、thread recall 或长期工作摘要。
-
-如果构建出的 Subagent context 仍超过有效窗口，`SubagentContextBuilder.prepare()` 最终直接返回：
-
-```text
-CONTEXT_BUDGET_EXCEEDED
-```
-
-这造成 Root 与 Child runtime 的长期任务行为不对称：Root 可以通过 checkpoint 继续运行，而 Subagent 的早期 tool history 会随着“最近 8 组”窗口向前移动而退出上下文，且没有等价的压缩状态接替它。
-
-对于持续时间较长、需要多轮读取、修改和验证的 child coding task，Subagent 可能丢失自己较早阶段的决策、失败尝试和已验证事实，即使这些事实仍存在于 durable state 中。
+- `SubagentContextBuilder` 读取自身工具批次与已消费 mailbox，容量充足时不按最近 8 组丢弃历史；新 inbox 仍按最多 8 条读取，但不再用总字节截断后消费整页。
+- 历史按稳定时间及步序／mailbox sequence 组织，完整工具批次不可拆开；摘要请求按窗口顺序分批合并，保留最新原始交互，不对单条超大记录无声截断。
+- Child Model executor 使用 delegation 冻结模型、既有 limiter、取消、deadline 和 Run／delegation 步数、时间及 usage owner；独立摘要步骤不显示普通回复，也不消费当前 inbox。
+- StateCommit 同事务提交 `agent_runtime_context_checkpoints`、attempt、usage、事件与 runtime projection；检查 scheduler owner、结束状态及来源前缀 hash。迁移 #52 为已发布结构增加派生摘要表，原始工具／消息不删除。
+- 扩展现有 Agent 场景覆盖容量充足的早期事实／已消费纠正、多批合并、真实 SQLite 与执行编排、来源变化、重复提交、截断和取消后的旧摘要保护及 usage。未新增 E2E；未验证真实模型摘要质量，不承诺无损语义保真。
 
 ## 13. Run Approval Policy 只有 `ask` 与 `full_access` 两档
 

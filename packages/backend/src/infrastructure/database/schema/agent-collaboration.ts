@@ -124,3 +124,9 @@ CREATE TABLE IF NOT EXISTS agent_shared_facts (
 );
 CREATE INDEX IF NOT EXISTS agent_shared_facts_run ON agent_shared_facts(run_id, updated_at DESC, key);
 `;
+export const createAgentRuntimeContextCheckpointsTableSQL = `
+CREATE TABLE IF NOT EXISTS agent_runtime_context_checkpoints (
+  runtime_id TEXT PRIMARY KEY REFERENCES agent_runtimes(id) ON DELETE CASCADE,
+  checkpoint_json TEXT NOT NULL CHECK(json_valid(checkpoint_json))
+);
+`;

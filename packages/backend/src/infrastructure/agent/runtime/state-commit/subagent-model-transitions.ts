@@ -15,6 +15,9 @@ import { mapRunRow, RUN_COLUMNS } from '../../repositories/sqlite-run.mapper';
 import type { RunRow } from '../../repositories/sqlite-run.mapper';
 import { enqueueParentJoinResume } from '../subagent-join-wake';
 import { parseRunBudget, parseRunUsage } from '../durable-state-decoders';
+import { childHistoryHash } from '../../../../modules/agent/runtime/collaboration/subagent-context-history';
+import { SqliteSubagentRepository } from '../../repositories/sqlite-subagent.repository';
+import { patchRun, usageWithDelta } from './transaction-primitives';
 import {
   allocateHostEvent,
   appendEvents,
@@ -69,6 +72,10 @@ export const beginSubagentModelStepTransition = async (
   const budget = parseRunBudget(row.budget_json);
   const usage = parseRunUsage(row.usage_json);
   if (usage.steps >= budget.maxRunSteps) throw new Error('RUN_BUDGET_EXCEEDED');
+  const activeSeconds =
+    row.active_execution_seconds +
+    (row.active_execution_started_at === null ? 0 : Math.max(0, command.now - row.active_execution_started_at));
+  if (activeSeconds >= budget.maxActiveExecutionSeconds) throw new Error('RUN_BUDGET_EXCEEDED');
   const previous = await tx.queryOne<{ max_index: number | null }>(
     'SELECT MAX(step_index) AS max_index FROM agent_steps WHERE run_id = ?',
     [command.runId],
@@ -80,8 +87,15 @@ export const beginSubagentModelStepTransition = async (
     `INSERT INTO agent_steps
       (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
        input_refs_json, output_refs_json, created_at, completed_at)
-     VALUES (?, ?, ?, ?, 'model', 'running', 0, '[]', '[]', ?, NULL)`,
-    [stepId, command.runId, command.runtimeId, stepIndex, command.now],
+      VALUES (?, ?, ?, ?, 'model', 'running', 0, ?, '[]', ?, NULL)`,
+    [
+      stepId,
+      command.runId,
+      command.runtimeId,
+      stepIndex,
+      JSON.stringify(command.purpose === 'compaction' ? ['compaction'] : []),
+      command.now,
+    ],
   );
   await tx.execute(
     `INSERT INTO agent_model_attempts
@@ -107,7 +121,16 @@ export const beginSubagentModelStepTransition = async (
       type: 'subagent.started',
       payload: { delegationId: command.delegationId, runtimeId: command.runtimeId, workId: command.workId },
     },
-    { type: 'model.started', payload: { stepId, attemptId, attemptIndex: 1, runtimeId: command.runtimeId } },
+    {
+      type: 'model.started',
+      payload: {
+        stepId,
+        attemptId,
+        attemptIndex: 1,
+        runtimeId: command.runtimeId,
+        ...(command.purpose ? { purpose: command.purpose } : {}),
+      },
+    },
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
   const nextUsage: RunUsage = { ...usage, steps: usage.steps + 1 };
@@ -278,6 +301,91 @@ export const settleSubagentModelStepTransition = async (
   );
   if (!step || step.status !== 'running' || !attempt || attempt.status !== 'streaming') {
     throw new Error('ATTEMPT_STATE_CONFLICT');
+  }
+  if (command.contextCheckpoint) {
+    if (command.outcome !== 'completed' || command.finishReason !== 'stop' || row.status !== 'running')
+      throw new Error('CONTEXT_COMPACTION_STALE');
+    const purpose = await tx.queryOne<{ input_refs_json: string }>(
+      'SELECT input_refs_json FROM agent_steps WHERE id = ?',
+      [command.stepId],
+    );
+    if (purpose?.input_refs_json !== '["compaction"]') throw new Error('STATE_CONFLICT');
+    const checkpoint = command.contextCheckpoint;
+    const history = await new SqliteSubagentRepository(tx).contextHistory(
+      command.scope,
+      command.runId,
+      command.runtimeId,
+    );
+    const through = history.units.findIndex((unit) => unit.id === checkpoint.throughId);
+    if (through < 0 || checkpoint.sourceHash !== childHistoryHash(history.units.slice(0, through + 1)))
+      throw new Error('CONTEXT_COMPACTION_SOURCE_CHANGED');
+    await tx.execute(
+      `INSERT INTO agent_runtime_context_checkpoints (runtime_id, checkpoint_json) VALUES (?, ?) ON CONFLICT(runtime_id) DO UPDATE SET checkpoint_json = excluded.checkpoint_json`,
+      [command.runtimeId, JSON.stringify(checkpoint)],
+    );
+    await tx.execute(
+      `UPDATE agent_model_attempts SET status = 'completed', input_tokens = ?, output_tokens = ?, cached_input_tokens = ?, estimated = ?, completed_at = ? WHERE id = ?`,
+      [
+        command.inputTokens,
+        command.outputTokens,
+        command.cachedInputTokens,
+        command.estimatedUsage ? 1 : 0,
+        command.now,
+        command.attemptId,
+      ],
+    );
+    await tx.execute(`UPDATE agent_steps SET status = 'completed', completed_at = ? WHERE id = ?`, [
+      command.now,
+      command.stepId,
+    ]);
+    await tx.execute(
+      `UPDATE agent_delegations SET used_tokens = used_tokens + ?, version = version + 1, updated_at = ? WHERE id = ?`,
+      [command.inputTokens + command.outputTokens, command.now, command.delegationId],
+    );
+    // Keep the scheduler claim: the execution owner refreshes context before the next attempt.
+    await tx.execute(`UPDATE agent_runtimes SET schedule_state = 'runnable', updated_at = ? WHERE id = ?`, [
+      command.now,
+      command.runtimeId,
+    ]);
+    const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
+    const activeDelta =
+      nextExecuting === 0 && row.active_execution_started_at !== null
+        ? Math.max(0, command.now - row.active_execution_started_at)
+        : 0;
+    await tx.execute(
+      `UPDATE agent_runs SET executing_runtime_count = ?, active_execution_seconds = active_execution_seconds + ?, active_execution_started_at = CASE WHEN ? = 0 THEN NULL ELSE active_execution_started_at END WHERE id = ?`,
+      [nextExecuting, activeDelta, nextExecuting, row.id],
+    );
+    const events: DurableEventInput[] = [
+      {
+        type: 'model.completed',
+        payload: {
+          stepId: command.stepId,
+          attemptId: command.attemptId,
+          runtimeId: command.runtimeId,
+          purpose: 'compaction',
+          inputTokens: command.inputTokens,
+          outputTokens: command.outputTokens,
+        },
+      },
+    ];
+    const committedEvents = await appendEvents(tx, row, events, command.now);
+    const updated = await patchRun(
+      tx,
+      row,
+      {
+        usage: usageWithDelta(row, {
+          inputTokens: command.inputTokens,
+          outputTokens: command.outputTokens,
+          cachedInputTokens: command.cachedInputTokens,
+        }),
+      },
+      events.length,
+      command.now,
+    );
+    const run = mapRunRow(updated);
+    await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+    return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
   }
   const tokenDelta = command.inputTokens + command.outputTokens;
   const cancelling = row.status === 'cancelling';

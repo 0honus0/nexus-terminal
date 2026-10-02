@@ -197,6 +197,8 @@ Run 冻结 Provider/model configuration、capability/reasoning、SSH `connection
 
 ### 6.2 Context 与预算
 
+- Child Context 只维护自身完整工具批次与已消费 mailbox，不继承 Root 私有对话／Recall。容量充足不按固定最近条数丢历史；压力时按完整单位分批语义合并并保留近期原始交互。独立摘要步骤复用冻结 delegation 模型、limiter、取消、deadline 与 Run／delegation 预算；StateCommit 原子提交派生 checkpoint、attempt 和 usage，来源 hash／owner epoch 防过期覆盖。摘要不发布回复、不消费新 inbox、不改变授权，失败不退化为静默丢历史；Child 保持既有失败策略，不要求与 Root 重试或 Recall 同构。
+
 - 稳定 instructions 按 Nexus safety → Repo instructions → signed Skill metadata 排序，再放 append-oriented Ledger/tool chronology、用户输入，Goal/Plan/Collaboration/Recall 易变快照置尾。控制面 run/attempt/epoch/credential/routing ID 不进入模型正文。
 - Tool schema canonicalize/稳定排序；预算耗尽用 `toolMode=none` 禁新 Tool，不删除 schema。generation compaction 不每轮改写旧 history，保留最新完整 causal exchange；Tool 可见结果按 pressure 收紧到冻结 floor，原 evidence 完整持久化。
 - Normal input boundary/soft pressure 为物理容量的 92%/80%，Extended 为 96%/88%。模型物理容量只在 definition/route capability snapshot；RunBudget 保存 step/time/tool/recall/subagent 与冻结 context policy，受用户/App 默认和 hard limit 约束。预算不足进入 `awaiting_budget`，versioned 增额不能超 hard limit。

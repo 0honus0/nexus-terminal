@@ -17,6 +17,7 @@ import { boundedUtf8 } from '../execution/text-budget';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { RunView } from '../runs/run.types';
 import type { CollaborationCommitPort } from '../runs/state-commit.port';
+import { completeChildCompaction } from './subagent-context-history';
 import type { SubagentCompletionCoordinator } from './subagent-completion-coordinator';
 import type { SubagentContextBuilder } from './subagent-context-builder';
 import type {
@@ -110,6 +111,17 @@ export class SubagentModelStepExecutor {
   ) {}
 
   async execute(scope: Scope, work: SchedulerWorkView, ownerEpoch: number, signal: AbortSignal): Promise<void> {
+    while (await this.executeAttempt(scope, work, ownerEpoch, signal)) {
+      /* Recompose after each committed summary batch. */
+    }
+  }
+
+  private async executeAttempt(
+    scope: Scope,
+    work: SchedulerWorkView,
+    ownerEpoch: number,
+    signal: AbortSignal,
+  ): Promise<boolean | void> {
     const payload = work.payload;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || typeof payload.delegationId !== 'string') {
       await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
@@ -193,8 +205,24 @@ export class SubagentModelStepExecutor {
       await this.completion.failBeforeModel(scope, work, delegation, ownerEpoch, preparedContext.code);
       return;
     }
-    const { runtime, inbox, instructions, messages, offeredTools, toolMode, estimatedInputTokens, maxOutputTokens } =
-      preparedContext.plan;
+    const {
+      runtime,
+      inbox,
+      instructions,
+      messages,
+      offeredTools,
+      toolMode,
+      estimatedInputTokens,
+      maxOutputTokens,
+      compaction,
+    } = preparedContext.plan;
+    if (
+      compaction &&
+      (delegation.usage.steps + 2 > delegation.budget.maxSteps || run.usage.steps + 2 > run.budget.maxRunSteps)
+    ) {
+      await this.completion.failBeforeModel(scope, work, delegation, ownerEpoch, 'DELEGATION_BUDGET_EXCEEDED');
+      return;
+    }
     const begun = await this.stateCommit.beginSubagentModelStep({
       scope,
       runId: work.runId,
@@ -203,6 +231,7 @@ export class SubagentModelStepExecutor {
       workId: work.id,
       ownerEpoch,
       reservedTokens: estimatedInputTokens + maxOutputTokens,
+      ...(compaction ? { purpose: 'compaction' as const } : {}),
       now: this.clock.nowUnixSeconds(),
     });
     this.events.publishRunWake(work.runId, begun.run.eventCursor);
@@ -214,8 +243,22 @@ export class SubagentModelStepExecutor {
     const toolCalls = new Map<number, ToolCallAccumulator>();
     let outcome: 'completed' | 'failed' | 'cancelled' = 'completed';
     let failureCode: string | undefined;
+    const requestSignal = compaction
+      ? AbortSignal.any([
+          signal,
+          AbortSignal.timeout(
+            Math.max(
+              1,
+              Math.min(
+                delegation.deadlineAt - this.clock.nowUnixSeconds(),
+                run.budget.maxActiveExecutionSeconds - run.activeExecutionSeconds,
+              ),
+            ) * 1000,
+          ),
+        ])
+      : signal;
     try {
-      const releaseModelCall = await this.modelCalls.acquire(scope.userId, signal);
+      const releaseModelCall = await this.modelCalls.acquire(scope.userId, requestSignal);
       try {
         for await (const event of this.modelPort.stream(
           {
@@ -225,7 +268,7 @@ export class SubagentModelStepExecutor {
             configurationVersion: delegation.modelRef.configurationVersion,
             instructions,
             messages,
-            ...(offeredTools.length > 0 ? { tools: offeredTools, toolMode } : {}),
+            ...(offeredTools.length > 0 || compaction ? { tools: offeredTools, toolMode } : {}),
             cache: {
               scopeKey: `nexus:subagent:${work.runId}:${delegation.id}`,
               affinityKey: `nexus:thread:${run.threadId}`,
@@ -235,23 +278,24 @@ export class SubagentModelStepExecutor {
             capabilitySnapshot: delegation.modelCapabilities,
             maxOutputTokens,
           },
-          signal,
+          requestSignal,
         )) {
           if (event.type === 'message.delta') {
             text += event.text;
             if (Buffer.byteLength(text, 'utf8') > MAX_CHILD_OUTPUT_BYTES) throw new Error('MODEL_RESPONSE_TOO_LARGE');
-            this.events.publishTransient({
-              runId: work.runId,
-              type: 'message.delta',
-              payload: {
-                attemptId: begun.attemptId,
-                attemptIndex: begun.attemptIndex,
-                runtimeId: work.agentRuntimeId,
-                delegationId: delegation.id,
-                text: event.text,
-              },
-              occurredAt: this.clock.nowUnixSeconds(),
-            });
+            if (!compaction)
+              this.events.publishTransient({
+                runId: work.runId,
+                type: 'message.delta',
+                payload: {
+                  attemptId: begun.attemptId,
+                  attemptIndex: begun.attemptIndex,
+                  runtimeId: work.agentRuntimeId,
+                  delegationId: delegation.id,
+                  text: event.text,
+                },
+                occurredAt: this.clock.nowUnixSeconds(),
+              });
           } else if (event.type === 'tool.delta') {
             const current = toolCalls.get(event.index) ?? { argumentsJson: '' };
             if (event.id !== undefined) current.id = event.id;
@@ -278,6 +322,36 @@ export class SubagentModelStepExecutor {
       outputTokens: text ? estimateTokens(text) : 0,
       cachedInputTokens: 0,
     };
+    if (compaction && outcome === 'completed') {
+      try {
+        requestSignal.throwIfAborted();
+        if (finishReason !== 'stop' || toolCalls.size > 0) throw new Error('CONTEXT_COMPACTION_INCOMPLETE');
+        const contextCheckpoint = completeChildCompaction(compaction, text);
+        const settled = await this.stateCommit.settleSubagentModelStep({
+          scope,
+          runId: work.runId,
+          runtimeId: work.agentRuntimeId,
+          delegationId: delegation.id,
+          workId: work.id,
+          ownerEpoch,
+          stepId: begun.stepId,
+          attemptId: begun.attemptId,
+          outcome: 'completed',
+          result: null,
+          evidenceRefs: [],
+          ...settledUsage,
+          estimatedUsage: usage === undefined,
+          finishReason,
+          contextCheckpoint,
+          now: this.clock.nowUnixSeconds(),
+        });
+        this.events.publishRunWake(work.runId, settled.eventCursor);
+        return true;
+      } catch (error) {
+        outcome = signal.aborted ? 'cancelled' : 'failed';
+        failureCode = errorCode(error);
+      }
+    }
     const finishDisposition = outcome === 'completed' ? modelFinishDisposition(finishReason, toolCalls.size) : null;
     if (finishDisposition?.kind === 'failed') {
       outcome = 'failed';
@@ -413,7 +487,7 @@ export class SubagentModelStepExecutor {
         }
       }
     }
-    const completion = boundedUtf8(text, MAX_COMPLETION_BYTES);
+    const completion = compaction ? '' : boundedUtf8(text, MAX_COMPLETION_BYTES);
     const verifiedEvidence = await this.completion
       .verifiedRuntimeEvidence(scope, work.runId, work.agentRuntimeId)
       .catch(() => ({
