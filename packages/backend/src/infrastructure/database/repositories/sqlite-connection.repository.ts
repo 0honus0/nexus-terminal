@@ -110,6 +110,7 @@ export class SqliteConnectionRepository implements ConnectionRepository {
 
   async create(data: CreateStoredConnection, tagIds: readonly number[]): Promise<number> {
     return this.database.transaction(async (database) => {
+      await validateJumpReferences(database, data.jumpChain);
       const result = await database.execute(
         `INSERT INTO connections (
           name,type,host,port,username,auth_method,encrypted_password,encrypted_private_key,encrypted_passphrase,
@@ -143,6 +144,8 @@ export class SqliteConnectionRepository implements ConnectionRepository {
 
   async update(id: number, data: UpdateStoredConnection, tagIds?: readonly number[]): Promise<boolean> {
     return this.database.transaction(async (database) => {
+      if (data.type !== undefined && data.type !== 'SSH') await assertNoJumpDependents(database, id);
+      if (data.jumpChain !== undefined) await validateJumpReferences(database, data.jumpChain, id);
       const columns: Record<keyof UpdateStoredConnection, string> = {
         name: 'name',
         type: 'type',
@@ -183,7 +186,10 @@ export class SqliteConnectionRepository implements ConnectionRepository {
   }
 
   async delete(id: number) {
-    return (await this.database.execute('DELETE FROM connections WHERE id = ?', [id])).changes > 0;
+    return this.database.transaction(async (database) => {
+      await assertNoJumpDependents(database, id);
+      return (await database.execute('DELETE FROM connections WHERE id = ?', [id])).changes > 0;
+    });
   }
 
   async setTags(id: number, tagIds: readonly number[]): Promise<boolean> {
@@ -229,6 +235,24 @@ export class SqliteConnectionRepository implements ConnectionRepository {
 
 const serialize = (value: unknown): string | null =>
   value === null || value === undefined ? null : JSON.stringify(value);
+const assertNoJumpDependents = async (database: RelationalDatabase, id: number): Promise<void> => {
+  const dependent = await database.queryOne(
+    `SELECT c.id FROM connections c, json_each(c.jump_chain) hop WHERE hop.value = ? LIMIT 1`,
+    [id],
+  );
+  if (dependent) throw new Error('该连接仍被 jumpChain 引用，请先修改相关连接的跳板链。');
+};
+const validateJumpReferences = async (
+  database: RelationalDatabase,
+  jumpChain: readonly number[] | null,
+  selfId?: number,
+): Promise<void> => {
+  for (const id of jumpChain ?? []) {
+    if (!Number.isSafeInteger(id) || id <= 0 || id === selfId) throw new Error('jumpChain 引用无效。');
+    const hop = await database.queryOne<{ type: string }>('SELECT type FROM connections WHERE id = ?', [id]);
+    if (hop?.type !== 'SSH') throw new Error('jumpChain 引用的连接必须存在且为 SSH 类型。');
+  }
+};
 const replaceTags = async (
   database: RelationalDatabase,
   connectionId: number,

@@ -736,9 +736,9 @@ Command repository 与 tag association repository 各自拥有独立 transaction
 
 Transfer / Archive 的远端副作用可能部分执行，但“已知部分失败”和“结果未知”应区分。待核实的是 operation resolve 时是否已经证明命令退出、清理完成且没有存活 writer；仅凭 failed/cancelled 事件不能认定 confirm 违反 guard 契约。
 
-## 33. Connection `jumpChain` 使用裸 JSON ID 引用，删除或改型 Jump Host 后会留下悬挂依赖
+## 33. Connection `jumpChain` 删除／改型留下悬挂依赖（已修复）
 
-> 确认问题：Connection create/update 校验 hop，但 delete 和被引用连接改型没有反向依赖检查；JSON jump_chain 没有 FK。Resolver 在使用时 fail-closed，并非会静默绕过 SSH 类型限制。
+> 已修复：Connection repository 在排他事务内阻止删除被 jumpChain 引用的连接或将其改为非 SSH，并在 create/update 同事务重检 hop 存在／SSH／非自身。保留 JSON 存储与 Resolver fail-closed，不自动修改消费者路由。下文为原问题证据。
 
 `ConnectionService.create()` / `update()` 会逐个检查 `jumpChain`：
 
