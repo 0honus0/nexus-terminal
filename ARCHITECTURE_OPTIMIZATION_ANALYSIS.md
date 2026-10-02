@@ -75,9 +75,9 @@ modules/terminal-themes/preset-themes-definition.ts
 
 这类数据与业务代码共处同一 TS 编译单元，还会增加源码浏览噪声，使真正的 theme catalog / validation / service 逻辑更难从静态定义中区分出来。
 
-## 11. Root Agent 的 Context Checkpoint 存在语义保真度缺口
+## 11. Context Checkpoint 用户输入的语言偏置（已关闭）
 
-> 待确认（摘要质量）：当前仍为 deterministic-summary-v1，关键词筛选与抽样事实成立；但 bounded compaction 不可能保证完整语义保留，不能仅据此判定算法错误。需用长任务的实际丢失约束／决策案例判断质量是否不足，原始 Ledger 未被删除。
+> 已关闭（限定已复现缺陷）：同一历史中出现英文 `Goal` 后，中文“请保留全部生成文件，只修改源代码”即使在摘要预算充足时也被排除，等价英文约束则保留。已取消用户输入的英文关键词门槛，改为全部非空用户输入的有界首尾抽样；生成器升级为 `deterministic-summary-v2`，旧摘要在请求时重建。已有 durable-context-checkpoint Agent 场景补充中／日／英约束验证，不新增 E2E。此结论不表示所有长任务的语义保真已被证明或解决；下面的抽样、截断与启发式限制仍属摘要设计取舍，而非已证实的通用故障。
 
 Root Agent 已经具备比较完整的 context budget 和自动 compaction 机制。`context.service.ts` 会根据模型窗口、输出保留、soft pressure、tool schema、历史 Ledger、Recall、project instructions 等计算有效上下文，并在压力下丢弃较老的 Ledger causal groups。
 
@@ -85,19 +85,19 @@ Root Agent 已经具备比较完整的 context budget 和自动 compaction 机�
 
 ```text
 STRATEGY_VERSION = context-checkpoint-v1
-GENERATOR_VERSION = deterministic-summary-v1
+GENERATOR_VERSION = deterministic-summary-v2
 ```
 
 其摘要逻辑主要依赖：
 
-- 正则匹配 objective / goal / constraint / decision / must / never 等关键词
+- 对全部非空用户输入做语言无关的首尾抽样，最多四条
 - 正则匹配 failed / error / invalid / timeout 等失败信号
 - 正则匹配 completed / fixed / verified / passed 等完成信号
-- 对命中的 Ledger entry 做固定数量的 head / tail 抽样
+- 对失败／完成候选 Ledger entry 做固定数量的 head / tail 抽样
 - 保留最近少量 assistant / system state
 - 收集 artifact / evidence refs
 
-因此 checkpoint 并不是对旧上下文语义状态的完整归纳，而是确定性筛选与抽样。当原始 Ledger 因 compaction 被移出活动上下文后，一些没有命中关键词但对后续实现仍重要的信息可能不再进入模型上下文，例如：
+因此 checkpoint 并不是对旧上下文语义状态的完整归纳，而是有界确定性筛选与抽样。当原始 Ledger 因 compaction 被移出活动上下文后，超出抽样、截断或 token 预算的历史信息可能不再进入模型上下文，例如：
 
 - 某个架构选择背后的原因和 tradeoff
 - 已经排除但没有显式出现 failure 关键词的方案
@@ -105,7 +105,7 @@ GENERATOR_VERSION = deterministic-summary-v1
 - 文件之间的依赖关系和中间状态
 - 某次修改为何必须保持的上下文
 
-Canonical Ledger 仍然保留，因此 durable truth 没有丢失；问题发生在“模型当前可见的压缩表示”层。长时间 coding Run 越依赖 checkpoint，历史语义与当前模型可见状态之间的偏差风险越高。
+Canonical Ledger 仍然保留，因此 durable truth 没有丢失；本次修复只消除用户输入筛选的英文关键词偏置，不保证完整语义保留，也未证明上述各类风险已导致实际长任务失败。
 
 ## 12. Root Agent 与 Subagent 使用两套不同等级的 Context 生命周期
 
@@ -4137,7 +4137,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 98 项，待确认 34 项，已关闭 8 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项已逐项分类：**未解决确认问题 98 项，待确认 33 项，已关闭 9 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4150,7 +4150,7 @@ await terminateAllManagedProcesses();
 | 8      | 已关闭   | Agent Composition 子图工厂分离                                                                                                                                               |
 | 9      | 已关闭   | Root Build / Check 覆盖全部生产包                                                                                                                                            |
 | 10     | 待确认   | 大型静态 Theme 数据长期占用 TypeScript 编译单元                                                                                                                              |
-| 11     | 待确认   | Root Agent 的 Context Checkpoint 存在语义保真度缺口                                                                                                                          |
+| 11     | 已关闭   | Context Checkpoint 用户输入的语言偏置                                                                                                                                        |
 | 12     | 待确认   | Root Agent 与 Subagent 使用两套不同等级的 Context 生命周期                                                                                                                   |
 | 13     | 待确认   | Run Approval Policy 只有 `ask` 与 `full_access` 两档                                                                                                                         |
 | 14     | 确认问题 | 被截断的 Tool Output 缺少 Model 可重新寻址的完整结果句柄                                                                                                                     |

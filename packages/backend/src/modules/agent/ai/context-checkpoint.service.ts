@@ -12,7 +12,7 @@ import type { ContextHistoryBoundary } from './context.types';
 import { estimateTokens } from './model-accounting';
 
 const STRATEGY_VERSION = 'context-checkpoint-v1';
-const GENERATOR_VERSION = 'deterministic-summary-v1';
+const GENERATOR_VERSION = 'deterministic-summary-v2';
 
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map((item) => canonicalize(item));
@@ -80,11 +80,6 @@ const buildSummary = (
   maxTokens: number,
 ): { content: string; tokens: number } | null => {
   const userEntries = entries.filter((entry) => entry.kind === 'user_input' && payloadText(entry.payload).trim());
-  const highSignalUserEntries = userEntries.filter((entry) =>
-    /\b(objective|goal|constraint|decision|must|never|do not|don't|without|preserve|require(?:d|ment)?|only|forbid(?:den)?)\b/i.test(
-      payloadText(entry.payload),
-    ),
-  );
   const failedEntries = entries.filter((entry) =>
     /\b(fail(?:ed|ure)?|error|exception|ruled[ -]?out|did not work|invalid|denied|timeout|panic)\b/i.test(
       payloadText(entry.payload),
@@ -108,7 +103,7 @@ const buildSummary = (
     },
     {
       title: 'Objective / constraints / user decisions',
-      lines: sampled(highSignalUserEntries.length > 0 ? highSignalUserEntries : userEntries, 4).map(lineForEntry),
+      lines: sampled(userEntries, 4).map(lineForEntry),
     },
     {
       title: 'Completed work',

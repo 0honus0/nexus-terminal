@@ -21,9 +21,38 @@ import {
   EmptyRecallRepository,
   entry,
   StaticConversationRepository,
+  StaticContextCheckpointRepository,
 } from './scenario-context-helpers';
 
 export const durableContextCheckpointScenario = async () => {
+  for (const constraint of [
+    '请保留全部生成文件，只修改源代码。',
+    '生成ファイルはすべて保持し、ソースコードだけを変更してください。',
+    'Must preserve all generated files; only modify source code.',
+  ]) {
+    const constraintHistory = [
+      entry(1, 'user_input', { text: 'Goal: improve the parser.' }),
+      entry(2, 'user_input', { text: constraint }),
+      entry(3, 'assistant_message', { text: 'Inspection in progress.' }),
+    ];
+    const checkpoints = new ContextCheckpointService(
+      new StaticContextCheckpointRepository(),
+      new ConversationService(new StaticConversationRepository(constraintHistory), clock, null!, null!),
+      clock,
+    );
+    const checkpoint = await checkpoints.checkpointForPrefix({
+      scope,
+      threadId: 'scenario-thread',
+      throughSequence: 3,
+      maxSummaryTokens: 2_048,
+      hardPressure: true,
+    });
+    assert.ok(checkpoint, 'hard-pressure fixture must produce a checkpoint');
+    assert.ok(
+      checkpoint.content.includes(constraint),
+      'an English objective must not exclude user constraints written in another language',
+    );
+  }
   const latestMigrationId = Math.max(...definedMigrations.map((migration) => migration.id));
   const history: LedgerEntryView[] = [
     entry(1, 'user_input', { text: 'Project objective: repair the parser without changing generated files.' }),
