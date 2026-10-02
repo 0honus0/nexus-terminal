@@ -1288,7 +1288,9 @@ SSH channel 的 close 事件已经显式把 `code` 建模为 `number | undefined
 
 这会污染依赖 `execute()` 成败判断的 capability probe、resource/operations 命令和其他 bounded command：一个没有可证明成功 exit status 的命令会被提升为成功状态，甚至同时携带非空 `signal`。
 
-## 57. Server-to-server Transfer 的目标凭据转交需要明确源端信任前提
+## 57. Server Transfer 源端凭据信任（已明确并增加确认）
+
+> 已核对：源端 rsync/scp 必须认证目标，非独立越权证据；UI 提交前明确确认目标凭据转交／源管理员可读的信任前提，三语同步。保留临时 key cleanup，不声称 0600 隔离 root，不新增 relay。API 使用者同样承担该信任前提。下文为原核对背景。
 
 > 待确认（传输设计／授权提示）：`server-transfer-executor.ts:75–92` 确实把 key/password/passphrase 交给 source 的 rsync/scp/sshpass，并有临时 key 清理。服务器直传本身需要源端认证目标；是否违反产品 trust contract 需确认源端受信前提和 UI 提示，不能把实现方式本身定为越权。
 

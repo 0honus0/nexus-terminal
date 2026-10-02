@@ -105,6 +105,7 @@
     "taskIdFallback": "Task ID: {taskId}"
   },
   "sendFilesModal": {
+    "credentialTrustWarning": "Direct server transfer gives the source server the target password, private key or passphrase. Administrators on the source can read these credentials; temporary-file cleanup does not prevent this. Continue only if you trust the source server. Continue?",
     "title": "Send Files",
     "searchConnectionsPlaceholder": "Search connections...",
     "targetPathLabel": "Target Path",

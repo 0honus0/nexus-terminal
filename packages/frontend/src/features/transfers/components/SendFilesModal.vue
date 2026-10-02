@@ -154,6 +154,7 @@
     }
     submitting.value = true;
     try {
+      if (!(await feedback.confirm({ message: t('sendFilesModal.credentialTrustWarning'), destructive: true }))) return;
       const task = await transfers.send({
         sourceConnectionId: props.sourceConnectionId,
         connectionIds: [...selected.value],

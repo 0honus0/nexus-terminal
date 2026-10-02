@@ -105,6 +105,7 @@
     "taskIdFallback": "タスクID: {taskId}"
   },
   "sendFilesModal": {
+    "credentialTrustWarning": "サーバー間の直接転送では、転送先のパスワード・秘密鍵・パスフレーズが転送元に渡されます。転送元の管理者は読み取ることができ、一時ファイルの削除では防げません。転送元を信頼する場合のみ続行してください。続行しますか？",
     "title": "ファイル送信",
     "searchConnectionsPlaceholder": "接続を検索...",
     "targetPathLabel": "ターゲットパス",

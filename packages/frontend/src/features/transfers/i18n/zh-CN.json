@@ -105,6 +105,7 @@
     "taskIdFallback": "任务ID: {taskId}"
   },
   "sendFilesModal": {
+    "credentialTrustWarning": "服务器直传会把目标密码、私钥或口令交给源服务器，源端管理员可读取这些凭据，临时文件清理不能防止读取。仅在信任源服务器时继续。是否继续？",
     "title": "发送文件",
     "searchConnectionsPlaceholder": "搜索连接...",
     "targetPathLabel": "目标路径",
