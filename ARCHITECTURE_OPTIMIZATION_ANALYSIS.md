@@ -598,9 +598,9 @@ Frontend import 成功后只在 300ms 后执行 `window.location.reload()`，Bac
 
 因此 restore 可以在 Agent scheduler、plugin runtime、model registry、cache 仍持有恢复前内存状态时替换 SQLite 与 Agent 文件树。恢复完成后，这些长期存活的 owner 可以继续使用恢复前的 lease、registry、queue、runtime handle 或 cache 去读写已经回退到历史时点的 durable state，形成进程内存状态与恢复后磁盘状态不一致。
 
-## 26. 删除 Proxy / SSH Key 可以直接制造 ConnectionService 自己拒绝创建的 Connection 状态
+## 26. 删除 Proxy / SSH Key 留下非法 Connection（已修复）
 
-> 确认问题（依赖删除未维护 service invariant）：核对 connection/proxy/ssh-key service 与 `sqlite-schema.ts:110` 的 ON DELETE SET NULL。只有完全依赖被删除 credential/route 的连接受影响；有 inline key 的连接不一定失效。
+> 已修复：repository 在同一排他事务内检查 Connection 引用并删除。任何引用阻止删除，需先修改／删除消费者，不自动改路由或凭据。检查与删除之间无并发写入窗口。下文为原问题证据。
 
 Connection 的创建/更新路径对依赖关系有明确 invariant：
 

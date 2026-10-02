@@ -58,6 +58,10 @@ export class SqliteSshKeyRepository implements SshKeyRepository {
     );
   }
   async delete(id: number) {
-    return (await this.database.execute('DELETE FROM ssh_keys WHERE id=?', [id])).changes > 0;
+    return this.database.transaction(async (tx) => {
+      if (await tx.queryOne('SELECT id FROM connections WHERE ssh_key_id = ? LIMIT 1', [id]))
+        throw new Error('该 SSH 密钥仍被连接引用，请先修改或删除相关连接。');
+      return (await tx.execute('DELETE FROM ssh_keys WHERE id=?', [id])).changes > 0;
+    });
   }
 }

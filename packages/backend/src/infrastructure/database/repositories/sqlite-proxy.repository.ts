@@ -100,6 +100,10 @@ export class SqliteProxyRepository implements ProxyRepository {
     );
   }
   async delete(id: number) {
-    return (await this.database.execute('DELETE FROM proxies WHERE id = ?', [id])).changes > 0;
+    return this.database.transaction(async (tx) => {
+      if (await tx.queryOne('SELECT id FROM connections WHERE proxy_id = ? LIMIT 1', [id]))
+        throw new Error('该代理仍被连接引用，请先修改或删除相关连接。');
+      return (await tx.execute('DELETE FROM proxies WHERE id = ?', [id])).changes > 0;
+    });
   }
 }
