@@ -495,9 +495,9 @@ completion mailbox message.artifactRefs
 
 这意味着 Subagent 的 durable execution history 和 terminal evidence identity 并不等价：数据库仍保留早期 verified Tool result，但 parent 收到的 completion message、delegation view 和 terminal event 只携带最近窗口中重新发现的 evidence refs。长期 delegation 的早期验证引用会从标准 completion handoff 中消失。
 
-## 23. Graceful `AGENT_QUIESCE` 会把正在 Streaming 的 Subagent 永久结算为 Cancelled
+## 23. Graceful `AGENT_QUIESCE` 会把正在 Streaming 的 Subagent 永久结算为 Cancelled（已修复）
 
-> 确认问题（生命周期信号语义不一致）：`subagent-model-step-executor.ts` 将 signal.aborted 统一映射 cancelled，Child settle 将 delegation/work 写终态；Root 对 AGENT_QUIESCE 特判。只覆盖来得及执行该 settle 的停机窗口，未跑重启恢复测试。
+> 已修复：Child Model executor 与 Root 一样识别 `AGENT_QUIESCE`，退出执行并将遗留 attempt/work 交给既有 lifecycle recovery，不提交业务取消、completion handoff 或 retry。检查 stream 异常及正常返回后的 signal，以及 compaction／proposal／terminal commit 前边界。下文为修复前证据；现有 startup 会关闭旧 Child，并按安全 checkpoint 创建新执行，不承诺旧 Child 原地续跑。
 
 Root 与 Subagent 都会在 Backend quiesce 时收到：
 

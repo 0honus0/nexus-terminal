@@ -83,6 +83,8 @@ Child 的 MCP 能力同样按需发现：使用 `tool_search` 查找、`tool_inv
 
 Child 模型调用遇到瞬态连接、429 或 502／503／504 等错误时，在既有重试次数、任务 deadline 与 Run／delegation 预算内退避重试。失败请求的 usage 同样计入预算；部分回复和未完成工具建议不会提交为结果，不消费 pending mailbox。不切换冻结模型，不重放工具副作用；非瞬态错误、取消、预算耗尽和重启遗留中断不自动重试。
 
+Backend 正常停机时，Child 模型执行中断不作为用户取消，也不发布部分回复的最终交接。旧执行由既有生命周期恢复流程关闭；重启仅按安全 checkpoint 恢复契约创建新执行，不承诺原 Child 原地续跑或恢复旧模型 stream。
+
 `/interrupt` 仅中断正在 streaming 的 Root 模型；仅 Child streaming 时返回不可中断冲突。普通输入、Goal 与 pending queue 更新不自动取消 Child；对子任务纠正使用 mailbox，终止使用既有取消链路。
 
 工具在检查后版本或当前实现被替换时，实际执行会拒绝旧检查结果；授权等待期间变化也不能执行旧实现。模型须重新发现／检查当前工具，不自动用旧参数调用新版本。

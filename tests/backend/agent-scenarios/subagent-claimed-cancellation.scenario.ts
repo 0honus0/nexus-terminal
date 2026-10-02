@@ -439,6 +439,8 @@ export const subagentClaimedCancellationScenario = async () => {
 
     const retryChild = await insertChild('transient-model-retry', { workStatus: 'claimed', ownerEpoch: 9 });
     let retryCalls = 0;
+    let lifecycleController: AbortController | undefined;
+    let throwOnQuiesce = false;
     const retryExecutor = new SubagentModelStepExecutor(
       repository,
       repository,
@@ -456,6 +458,13 @@ export const subagentClaimedCancellationScenario = async () => {
         async *stream() {
           retryCalls += 1;
           yield { type: 'usage', usage: { inputTokens: 20, outputTokens: 5, cachedInputTokens: 0 } };
+          if (lifecycleController) {
+            lifecycleController.abort(new Error('AGENT_QUIESCE'));
+            if (throwOnQuiesce) throw lifecycleController.signal.reason;
+            yield { type: 'message.delta', text: 'Uncommitted partial reply.' };
+            yield { type: 'completed', finishReason: 'stop' };
+            return;
+          }
           if (retryCalls === 1) throw new Error('PROVIDER_HTTP_503');
           yield { type: 'message.delta', text: 'Recovered child.' };
           yield { type: 'completed', finishReason: 'stop' };
@@ -523,6 +532,47 @@ export const subagentClaimedCancellationScenario = async () => {
     assert.equal((await repository.delegation(scope, runId, retryChild.delegationId))?.status, 'completed');
     assert.equal((await repository.delegation(scope, runId, retryChild.delegationId))?.usage.tokens, 50);
     assert.equal(retryCalls, 2);
+
+    for (const throws of [false, true]) {
+      throwOnQuiesce = throws;
+      const quiescedChild = await insertChild(`quiesced-model-${throws}`, { workStatus: 'claimed', ownerEpoch: 9 });
+      lifecycleController = new AbortController();
+      await retryExecutor.execute(
+        scope,
+        {
+          id: quiescedChild.workId,
+          runId,
+          agentRuntimeId: quiescedChild.runtimeId,
+          kind: 'model_step',
+          status: 'claimed',
+          payload: { delegationId: quiescedChild.delegationId },
+          deadlineAt: now + 100,
+          ownerEpoch: 9,
+        } as never,
+        9,
+        lifecycleController.signal,
+      );
+      assert.equal((await repository.delegation(scope, runId, quiescedChild.delegationId))?.status, 'running');
+      assert.equal(
+        (
+          await db.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
+            quiescedChild.workId,
+          ])
+        )?.status,
+        'claimed',
+        'quiesce must leave durable work to lifecycle recovery, not terminal cancellation',
+      );
+      assert.equal(
+        (
+          await db.queryOne<{ count: number }>(
+            "SELECT COUNT(*) AS count FROM agent_events WHERE run_id = ? AND type IN ('subagent.cancelled','subagent.completed','subagent.failed') AND json_extract(payload_json, '$.runtimeId') = ?",
+            [runId, quiescedChild.runtimeId],
+          )
+        )?.count,
+        0,
+      );
+      lifecycleController = undefined;
+    }
 
     for (const mode of ['length', 'cancel'] as const) {
       summaryFailure = mode;

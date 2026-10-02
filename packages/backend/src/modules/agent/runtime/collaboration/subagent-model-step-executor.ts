@@ -34,6 +34,11 @@ const MAX_COMPLETION_BYTES = 8 * 1024;
 
 const errorCode = (error: unknown): string => executionErrorCode(error, 'SUBAGENT_EXECUTION_FAILED');
 
+const throwIfQuiescing = (signal: AbortSignal): void => {
+  if (signal.aborted && signal.reason instanceof Error && signal.reason.message === 'AGENT_QUIESCE')
+    throw signal.reason;
+};
+
 const terminalDelegation = (value: DelegationView): boolean =>
   value.status === 'completed' || value.status === 'failed' || value.status === 'cancelled';
 
@@ -112,8 +117,14 @@ export class SubagentModelStepExecutor {
   ) {}
 
   async execute(scope: Scope, work: SchedulerWorkView, ownerEpoch: number, signal: AbortSignal): Promise<void> {
-    while (await this.executeAttempt(scope, work, ownerEpoch, signal)) {
-      /* Recompose after each committed summary batch. */
+    try {
+      while (await this.executeAttempt(scope, work, ownerEpoch, signal)) {
+        /* Recompose after each committed summary batch. */
+      }
+    } catch (error) {
+      // Like Root, leave lifecycle interruption to the durable recovery owner. It must not
+      // become a business cancellation, a completion handoff, or a model retry.
+      if (!(signal.aborted && signal.reason instanceof Error && signal.reason.message === 'AGENT_QUIESCE')) throw error;
     }
   }
 
@@ -123,6 +134,7 @@ export class SubagentModelStepExecutor {
     ownerEpoch: number,
     signal: AbortSignal,
   ): Promise<boolean | void> {
+    throwIfQuiescing(signal);
     const payload = work.payload;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || typeof payload.delegationId !== 'string') {
       await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
@@ -224,6 +236,7 @@ export class SubagentModelStepExecutor {
       await this.completion.failBeforeModel(scope, work, delegation, ownerEpoch, 'DELEGATION_BUDGET_EXCEEDED');
       return;
     }
+    throwIfQuiescing(signal);
     const begun = await this.stateCommit.beginSubagentModelStep({
       scope,
       runId: work.runId,
@@ -317,6 +330,7 @@ export class SubagentModelStepExecutor {
         releaseModelCall();
       }
     } catch (error) {
+      throwIfQuiescing(signal);
       outcome = signal.aborted ? 'cancelled' : 'failed';
       failureCode = signal.aborted ? 'ABORTED' : errorCode(error);
       if (shouldRetryModel(error, retryAttemptIndex, requestSignal)) {
@@ -330,6 +344,7 @@ export class SubagentModelStepExecutor {
           retry = { nextAttemptIndex: retryAttemptIndex + 1, notBefore };
       }
     }
+    throwIfQuiescing(signal);
     const settledUsage: TokenUsage = usage ?? {
       inputTokens: estimatedInputTokens,
       outputTokens: text ? estimateTokens(text) : 0,
@@ -361,6 +376,7 @@ export class SubagentModelStepExecutor {
         this.events.publishRunWake(work.runId, settled.eventCursor);
         return true;
       } catch (error) {
+        throwIfQuiescing(signal);
         outcome = signal.aborted ? 'cancelled' : 'failed';
         failureCode = errorCode(error);
       }
@@ -453,6 +469,7 @@ export class SubagentModelStepExecutor {
           failureCode = 'MODEL_TOOL_CALL_INVALID';
         } else {
           try {
+            throwIfQuiescing(signal);
             const proposed = await this.stateCommit.commitSubagentToolProposalBatch({
               scope,
               runId: work.runId,
@@ -499,6 +516,7 @@ export class SubagentModelStepExecutor {
             }
             return;
           } catch (error) {
+            throwIfQuiescing(signal);
             outcome = signal.aborted ? 'cancelled' : 'failed';
             failureCode = signal.aborted ? 'ABORTED' : errorCode(error);
           }
@@ -521,6 +539,7 @@ export class SubagentModelStepExecutor {
       }
     }
     const evidenceRefs = verifiedEvidence.artifactRefs;
+    throwIfQuiescing(signal);
     const settled = await this.stateCommit.settleSubagentModelStep({
       scope,
       runId: work.runId,
