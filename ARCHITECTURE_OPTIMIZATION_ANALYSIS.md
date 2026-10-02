@@ -2084,7 +2084,9 @@ session.shell.onClose(() => {
 
 这里缺的是 transport close → execution session close → workspace cleanup 的 owner 链条；底层已经知道连接死亡，但这个事实没有传播到拥有它的两个上层 registry。
 
-## 94. Agent Integration 的 refresh epoch 只递增、不回收；反复创建/删除 Integration 会永久积累历史 scope+UUID generation state
+## 94. Integration refresh epoch 生命周期（已修复）
+
+> 已修复：无refresh tail不创建历史epoch；有tail继续递增防stale，最后tail结算才delete对应scope+id epoch，避免在途reset ABA。保持已排队refresh串行身份，非timer/TTL。下文为原证据。
 
 > 确认问题（轻量进程内 retention）：IntegrationService refreshEpochs 没有 delete/clear，与可回收 refreshTails/runtimeHealth 不同。每项为小型 generation 值，严重程度不可等同 live process 泄漏；重启可回收，未测长期规模。
 

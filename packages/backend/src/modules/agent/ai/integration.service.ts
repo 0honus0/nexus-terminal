@@ -427,7 +427,11 @@ export class IntegrationService {
     } finally {
       release();
       void tail.finally(() => {
-        if (this.refreshTails.get(integrationId) === tail) this.refreshTails.delete(integrationId);
+        if (this.refreshTails.get(integrationId) === tail) {
+          this.refreshTails.delete(integrationId);
+          for (const key of this.refreshEpochs.keys())
+            if (key.endsWith(`\n${integrationId}`)) this.refreshEpochs.delete(key);
+        }
       });
     }
   }
@@ -538,6 +542,10 @@ export class IntegrationService {
 
   private invalidateRefreshEpoch(scope: Scope, integrationId: string): void {
     const key = this.runtimeHealthKey(scope, integrationId);
+    if (!this.refreshTails.has(integrationId)) {
+      this.refreshEpochs.delete(key);
+      return;
+    }
     this.refreshEpochs.set(key, this.refreshEpoch(scope, integrationId) + 1);
   }
 

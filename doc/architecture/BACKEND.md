@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Integration refreshEpoch仅存于存在refreshTail期间，invalidate无tail delete，有tail increment；final tail identity match后清所有对应UUID scope epochs，避免active epoch重置ABA。
+
 ExecutionManager transport-close subscription identity-fenced close，detach/close/byOwner/all unsubscribe；Workspace shell-close同实例closeSession，避免旧close按复用ID误删，非远端process退出证明。
 
 Resource status collector unique sampleKey/finally clear，bootstrap仅同次采样；host cache/inFlight按current connection keys惰性prune，全局reset丢弃inFlight identity避免旧publish，非取消底层I/O。
