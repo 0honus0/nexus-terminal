@@ -1392,7 +1392,9 @@ X-Forwarded-Proto: https
 
 让服务端把攻击者提供的 origin 动态加入 allowed set，再通过同一请求中的 `Origin` 校验。这里仍然需要请求携带有效 session credential，所以不能单独等同于账号接管；实际缺陷是 WebSocket same-origin / CSWSH 防线的 trusted-proxy 边界被绕开，转发头从代理提供的可信元数据变成了客户端自己定义 origin policy 的输入。
 
-## 64. SSH channel callback 与 Transport teardown 的晚到回调防护待验证
+## 64. SSH channel 晚到回调（已加生命周期 fence，未证明 OS 泄漏）
+
+> 已核对并防御修复：startCommand/openShell 成功回调重检 transport.open；关闭后返回的 channel destroy 并 reject，不注册 session。未复现真实 ssh2/OS 泄漏，不将本地缺少 fence 升格为已证明物理资源泄漏；bounded execute 原 settled guard 保留。下文为原核对背景。
 
 > 待确认（底层 ssh2 回调保证）：adapter callbacks 没有 recheck open，而 bounded execute 有 settled guard；但 route close 后 ssh2 是否能回调成功并返回仍存活 channel，需要真实或可控 transport 测试。源码缺少本地 fence 不等于已证明 OS channel 泄漏。
 

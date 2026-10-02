@@ -69,6 +69,15 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
           reject(error);
           return;
         }
+        if (!this.open) {
+          try {
+            channel.destroy();
+          } catch {
+            /* Transport is already closed; never publish this channel. */
+          }
+          reject(new Error('SSH_TRANSPORT_CLOSED'));
+          return;
+        }
         const session = new SshCommandSessionAdapter(randomUUID(), request.command, channel, maxOutputBytes);
         this.commandSessions.add(session);
         const remove = () => this.commandSessions.delete(session);
@@ -86,6 +95,15 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
       const callback = (error: Error | undefined, channel: ClientChannel) => {
         if (error) {
           reject(error);
+          return;
+        }
+        if (!this.open) {
+          try {
+            channel.destroy();
+          } catch {
+            /* Transport is already closed; never publish this channel. */
+          }
+          reject(new Error('SSH_TRANSPORT_CLOSED'));
           return;
         }
         const shell = new SshShellSessionAdapter(channel);

@@ -276,6 +276,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - 双文件管理器布局属于实验性能力，复杂场景可能存在边界行为。
 - 同一布局中添加多个文本编辑器目前并非完整支持场景。
 - 请自行备份部署目录中的 `data`；项目本身不替代外部备份方案。
+- SSH transport 已关闭后才返回的命令／shell channel 会关闭并拒绝，不发布为可用 session；不声称对所有远端进程终止提供物理证明。
 - WebSocket Origin 校验仅在 TCP peer 属于现有受信代理地址范围时使用 forwarded host／proto；非受信直连不能借转发头自定义允许来源。受信代理必须覆盖客户端提供的转发头；Origin 不代替 session 认证。
 - HTTP 登出会撤销同一认证 session 已建立的 Workspace／Upload／Remote Desktop／Agent／Agent Terminal WebSocket，包括其他持有同 session 的页面；不撤销其他独立 session，不回滚已经接受的远端操作。与登出交错的握手可能被安全拒绝，需重新认证或重试。
 - Plugin Agent SDK 的 operationId 不代表所有 mutation 统一 durable replay：创建 Thread／Run、追加输入、Run 取消和审批决定透传稳定身份；Thread 重命名、Subagent 取消使用版本 CAS。后两类超时应重读状态，可能返回版本冲突，不能盲目用新版本重发原操作。
