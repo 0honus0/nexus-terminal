@@ -1783,7 +1783,9 @@ private readonly sessions = new Map<number, Map<string, SuspendedSessionRecord>>
 
 这不是只增长几个 JS 对象。每条记录持有真实 SSH transport / shell、对应文件描述符和远端 SSH session；`LocalSuspendedSessionLogAdapter` 还允许每个 log 保留 100 MiB，compaction 前物理文件可再多一个 32 MiB batch。没有数量上限或 age-based retention 时，一个用户可以让这些进程级、远端和磁盘资源随挂起次数持续增长，直到逐条 terminate、远端主动断开或 Backend 重启。
 
-## 84. Plugin Backend close() 在 SIGTERM 后不等待退出或升级终止
+## 84. Plugin Backend kill-and-reap（已修复）
+
+> 已修复：close共享Promise，dispose/drain后TERM等exit2s，未退出KILL再等5s，无退出证据reject阻止成功close->delete/start。exitCode/signalCode处理已有退出；kill返回值不作为退出证明。仅直接child，不提供process-tree终止保证。下文为原证据。
 
 > 确认问题：`local-plugin-backend-runtime.adapter.ts:409–415` 在 dispose/drain 后仅 kill(SIGTERM)，不 await exit 或升级 kill；上层随后删实例。这里只指 kill 之后不等待，不是整个 close 从开始立即返回；需要插件不退出才形成 orphan。
 

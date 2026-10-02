@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+BackendPluginProcess close single-flight，dispose/activeHostOperations drain后TERM2s->KILL5s，以exit/exitCode/signalCode为证据，无证据reject保持上层owner，非process-tree kill；kill()或child.killed不等同OS exit。
+
 SshSuspendService takeOver pre-await Registry reservation/user32/global64，既有sweep availableSince24h terminate，attached排除TTL，releaseToAvailable重置时间；不等同普通Workspace admission或OS即时退出证明。
 
 QuickCommandTagRepository bulk admission事务前原length<=1000、安全正整数，再Set去重；有界串行SQL同事务，不先去重后接纳任意大输入。

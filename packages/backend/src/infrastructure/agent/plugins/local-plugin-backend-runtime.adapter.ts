@@ -407,12 +407,39 @@ class BackendPluginProcess {
   }
 
   async close(): Promise<void> {
+    if (this.closePromise) return this.closePromise;
+    this.closePromise = this.closeProcess();
+    return this.closePromise;
+  }
+
+  private closePromise?: Promise<void>;
+
+  private async closeProcess(): Promise<void> {
     this.closing = true;
     if (!this.child.killed && this.child.stdin.writable) {
       await this.request('lifecycle.dispose').catch(() => undefined);
     }
     await Promise.allSettled([...this.activeHostOperations]);
+    const exited = () => this.child.exitCode !== null || this.child.signalCode !== null;
+    if (exited()) return;
+    const waitForExit = (timeoutMs: number): Promise<boolean> =>
+      new Promise((resolve) => {
+        const finish = (success: boolean) => {
+          clearTimeout(timer);
+          this.child.off('exit', onExit);
+          resolve(success);
+        };
+        const onExit = () => finish(true);
+        const timer = setTimeout(() => finish(exited()), timeoutMs);
+        this.child.once('exit', onExit);
+        if (exited()) finish(true);
+      });
+    const terminated = waitForExit(2000);
     this.child.kill('SIGTERM');
+    if (await terminated) return;
+    const killed = waitForExit(5000);
+    this.child.kill('SIGKILL');
+    if (!(await killed)) throw new Error('PLUGIN_BACKEND_EXIT_UNCONFIRMED');
   }
 
   private async handleLine(line: string): Promise<void> {
