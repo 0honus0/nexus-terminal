@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { LocalArtifactStore } from '../../../packages/backend/src/infrastructure/agent/artifacts/local-artifact-store';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
+import { SqliteBackupSnapshotAdapter } from '../../../packages/backend/src/infrastructure/backup/sqlite-backup-snapshot.adapter';
 import type { ArtifactLimitPolicyPort } from '../../../packages/backend/src/modules/agent/ai/artifact.port';
 
 export const artifactCrashReconciliationScenario = async () => {
@@ -194,6 +195,19 @@ export const artifactCrashReconciliationScenario = async () => {
       ),
       quota,
     );
+
+    const backup = new SqliteBackupSnapshotAdapter(
+      db,
+      { encrypt: (value: string) => value, decrypt: (value: string) => value },
+      directory,
+    );
+    const snapshot = await backup.capture();
+    assert.ok(snapshot.tables.agent_runtime_context_checkpoints);
+    const readyPath = path.join(objectRoot, renamedKey.slice(0, 2), renamedKey);
+    fs.unlinkSync(readyPath);
+    await assert.rejects(backup.capture(), /BACKUP_SNAPSHOT_REFERENCE_INVALID/);
+    fs.writeFileSync(readyPath, payload);
+    await backup.capture();
 
     return [
       { name: 'artifact_crash_windows_repaired', value: 3, unit: 'windows' },

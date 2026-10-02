@@ -540,9 +540,9 @@ agent_scheduler_work.status = cancelled
 
 因此 Root 和 Child 对同一个 host lifecycle signal 的语义相反：Root 把 quiesce 当作可恢复执行中断，Child 把 quiesce 当作 terminal cancellation。Backend 正常重启期间正在运行的 child delegation 会因此丢失 continuation。
 
-## 24. Full Backup 的跨数据库／文件系统快照一致性仍需并发验证
+## 24. Full Backup 的跨数据库／文件系统快照一致性（已修复引用完整性缺口）
 
-> 待确认（跨存储一致性）：`infrastructure/backup/sqlite-backup-snapshot.adapter.ts:137` 在数据库排他事务内 capture tables/files，且有文件 inventory 稳定性重试；因此数据库 mutation 会被阻塞，不能直接假定它们继续提交。文件侧是否有未受同一 barrier 约束的发布／删除窗口仍需沿 Artifact/Plugin 写入时序做并发验证。
+> 已核实并修复：Plugin cleanup 先删文件再更新 version status，稳定 inventory 不能证明数据库引用完整。capture 在同一排他事务内验证 ready Artifact size/hash、active Plugin package marker、entry 与 files.json 文件 size/hash；不完整则拒绝导出。Artifact staging/deleting 保持两阶段恢复语义，不误判为 ready 缺失。备份表覆盖 Child context checkpoint。不声称冻结全部文件 writer 或提供跨存储物理时间点快照。下文为原风险分析。
 
 `SqliteBackupSnapshotAdapter.capture()` 会在一个数据库 transaction 中依次读取所有 product / Agent 表，然后继续读取文件系统目录：
 

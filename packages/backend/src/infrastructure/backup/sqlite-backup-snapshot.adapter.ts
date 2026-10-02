@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { mkdir, open, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import type { BackupSnapshotPort } from '../../modules/backup/backup.port';
@@ -49,6 +49,7 @@ const AGENT_TABLES = [
   'ai_context_checkpoints',
   'ai_memories',
   'agent_runtimes',
+  'agent_runtime_context_checkpoints',
   'agent_steps',
   'agent_model_attempts',
   'agent_tool_calls',
@@ -139,6 +140,7 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
       const tables: Record<string, Record<string, unknown>[]> = {};
       for (const table of TABLES) tables[table] = await this.captureTable(database, table);
       const files = await this.captureStableFiles();
+      this.validateFileReferences(tables, files);
       return { format: 'nexus-terminal-backup', version: 1, createdAt: new Date().toISOString(), tables, files };
     });
   }
@@ -308,6 +310,56 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
       if (!file || typeof file.path !== 'string' || typeof file.contentBase64 !== 'string')
         throw new Error('备份包含无效的文件条目。');
       this.safeRelativeFilePath(file.path);
+    }
+  }
+
+  private validateFileReferences(tables: Record<string, Record<string, unknown>[]>, files: BackupFileEntry[]): void {
+    const captured = new Map(files.map((file) => [file.path, file.contentBase64]));
+    for (const artifact of tables.ai_artifacts ?? []) {
+      if (artifact.status !== 'ready') continue;
+      const key = artifact.storage_key;
+      if (typeof key !== 'string') throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+      const content = captured.get(`agent/artifacts/objects/${key.slice(0, 2)}/${key}`);
+      if (content === undefined) throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+      const bytes = Buffer.from(content, 'base64');
+      if (bytes.length !== artifact.size_bytes || createHash('sha256').update(bytes).digest('hex') !== artifact.sha256)
+        throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+    }
+    for (const installation of tables.agent_plugin_installations ?? []) {
+      if (installation.status !== 'installed') continue;
+      const version = (tables.agent_plugin_versions ?? []).find(
+        (row) =>
+          row.app_id === installation.app_id && row.version === installation.version && row.status === 'installed',
+      );
+      if (!version) throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+      const root = `agent/plugins/${version.app_id}/versions/${version.version}/`;
+      const marker = captured.get(`${root}.nexus-package-hash`);
+      if (marker === undefined || Buffer.from(marker, 'base64').toString('utf8').trim() !== version.package_hash)
+        throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+      for (const entry of [version.frontend_entry, version.backend_entry, version.runner_entry]) {
+        if (typeof entry === 'string' && !captured.has(`${root}${entry}`))
+          throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+      }
+      const list = captured.get(`${root}files.json`);
+      if (list === undefined) throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+      const parsed: unknown = JSON.parse(Buffer.from(list, 'base64').toString('utf8'));
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        !('files' in parsed) ||
+        !Array.isArray(parsed.files) ||
+        parsed.files.length > 100_000
+      )
+        throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+      for (const file of parsed.files) {
+        if (!file || typeof file !== 'object' || typeof file.path !== 'string' || typeof file.sha256 !== 'string')
+          throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+        const content = captured.get(`${root}${file.path}`);
+        if (content === undefined) throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+        const bytes = Buffer.from(content, 'base64');
+        if (bytes.length !== file.sizeBytes || createHash('sha256').update(bytes).digest('hex') !== file.sha256)
+          throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
+      }
     }
   }
 
