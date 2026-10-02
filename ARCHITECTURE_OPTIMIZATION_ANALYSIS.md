@@ -1581,7 +1581,9 @@ agent/plugins
 
 因此 Nexus 当前可以在完全合法的存储配额内生成一个导出成功的备份，但这个备份随后无法通过产品自己的 `/backup/import` 恢复。这里破坏的是 backup round-trip contract，而不只是“大文件上传体验不好”。
 
-## 74. Backup capture 把完整文件树读取放在 SQLite exclusive transaction 内；大备份会阻塞所有普通数据库操作
+## 74. Backup 文件 I/O 持有全局 DB barrier（已修复）
+
+> 已修复：表 capture 在短排他事务内完成后释放 barrier，再 stable file capture 与引用验证。保持 captured tables 的 ready Artifact hash/size、active Plugin 文件 fail-closed 校验；非跨存储时间点，不冻结 writer。表读取/解密本身仍持有事务，未声称零 DB 等待或已测延迟。下文为原证据。
 
 > 确认问题（全局 DB scheduler barrier）：snapshot capture 在 transaction 内 await 文件扫描，DatabaseAdapter scheduleExclusive 不允许 shared 操作穿插。确认阻塞结构，不声称已测具体时间；也不是 SQLite OS 级 exclusive lock 模式的断言。
 

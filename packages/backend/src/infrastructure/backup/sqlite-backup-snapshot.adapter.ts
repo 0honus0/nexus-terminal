@@ -137,13 +137,17 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
   ) {}
 
   async capture(): Promise<BackupSnapshot> {
-    return this.database.transaction(async (database) => {
+    const tables = await this.database.transaction(async (database) => {
       const tables: Record<string, Record<string, unknown>[]> = {};
       for (const table of TABLES) tables[table] = await this.captureTable(database, table);
-      const files = await this.captureStableFiles();
-      this.validateFileReferences(tables, files);
-      return { format: 'nexus-terminal-backup', version: 1, createdAt: new Date().toISOString(), tables, files };
+      return tables;
     });
+    // Disk capture must not hold the global database scheduler barrier. The captured
+    // tables remain the reference authority; fail closed if the later file view cannot
+    // satisfy them. This is reference integrity, not a cross-store point-in-time claim.
+    const files = await this.captureStableFiles();
+    this.validateFileReferences(tables, files);
+    return { format: 'nexus-terminal-backup', version: 1, createdAt: new Date().toISOString(), tables, files };
   }
 
   async restore(
