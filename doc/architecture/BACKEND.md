@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Full Backup MAX_FULL_BACKUP_BYTES=100MiB 共享 export envelope post-encode admission/import pre-decode/multer；解决 successful-export/import-limit mismatch，不是 streaming 或 pre-capture heap admission。
+
 Theme ensurePresets 同事务遵守全局 UNIQUE(name)，冲突 user 更名且保留 ID/data/references，候选排除已存在及全部待装 preset 名；existing preset 幂等，不 overwrite user，也不跳过必需 preset。
 
 Passkey HTTP session 为单 ceremony currentChallenge/passkeyOrigin owner，register/auth 共享 slot；新 challenge 使旧验证 fail-closed，不提供多 Tab 并行 ceremony contract，不将失效拒绝视作认证绕过。

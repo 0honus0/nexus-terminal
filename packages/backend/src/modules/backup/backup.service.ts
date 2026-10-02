@@ -2,6 +2,7 @@ import type { PasswordHasher } from '../../shared/security/crypto.port';
 import type { UserService } from '../user/user.service';
 import type { BackupCodecPort, BackupRestoreHooks, BackupSnapshotPort } from './backup.port';
 import type { BackupImportResult } from './backup.types';
+import { MAX_FULL_BACKUP_BYTES } from './backup-limits';
 
 /** Owns backup authorization and the capture → codec / decode → restore application workflow. */
 export class BackupService {
@@ -19,10 +20,18 @@ export class BackupService {
     if (!password) throw new Error('请输入当前登录密码后再导出备份。');
     const user = await this.users.getStored(userId);
     if (!user || !(await this.hasher.compare(password, user.hashedPassword))) throw new Error('当前登录密码不正确。');
-    return this.runExclusive(async () => this.codec.encode(await this.snapshots.capture(), password));
+    return this.runExclusive(async () => {
+      const bytes = await this.codec.encode(await this.snapshots.capture(), password);
+      if (bytes.byteLength > MAX_FULL_BACKUP_BYTES)
+        throw new Error(
+          'FULL_BACKUP_SIZE_LIMIT_EXCEEDED: encoded backup exceeds 100 MiB; no restorable backup was exported.',
+        );
+      return bytes;
+    });
   }
 
   async importFull(bytes: Uint8Array, password?: string): Promise<BackupImportResult> {
+    if (bytes.byteLength > MAX_FULL_BACKUP_BYTES) throw new Error('FULL_BACKUP_SIZE_LIMIT_EXCEEDED');
     const decoded = await this.codec.decode(bytes, password);
     return this.runExclusive(async () => {
       await this.hooks.beforeRestore?.();

@@ -10,6 +10,7 @@ import type {
   WorkspaceSidebarConfigDto,
 } from '@nexus-terminal/protocol/settings';
 import multer from 'multer';
+import { MAX_FULL_BACKUP_BYTES } from '../../../modules/backup/backup-limits';
 import type { BackupService } from '../../../modules/backup/backup.service';
 import { BackupPasswordRequiredError, InvalidBackupPasswordError } from '../../../shared/errors/backup.errors';
 import type { AuditLogService } from '../../../modules/audit/audit.service';
@@ -590,7 +591,7 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
     }),
   );
 
-  const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
+  const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FULL_BACKUP_BYTES } });
   router.post(
     '/backup/export',
     route(async (request, response) => {

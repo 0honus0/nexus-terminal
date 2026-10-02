@@ -1552,7 +1552,9 @@ WHERE name = ? AND theme_type = 'preset'
 
 removePaths 在 guard 内顺序删除；后项失败不会恢复前项。待确认 UI 对逐项结果和目录刷新是否明确，不能从“一个批量请求”推出已承诺 all-or-nothing。
 
-## 73. Full Backup 可以成功导出超过自身 Import 接口上限的文件，形成“可导出、不可恢复”的备份
+## 73. Full Backup round-trip 大小上限（已修复）
+
+> 已修复：export 编码后检查共享100MiB envelope上限，import application 与 multer 同值，超限拒绝而非交付不可导入文件。仍完整内存 capture/encode，不声称先验内存 admission/大型状态支持（#81另议）。下文为原证据。
 
 > 确认问题（round-trip 上限不一致）：Settings route multer import=100MiB，export 没有对应上限，快照包含合法大型 Artifact/Plugin 数据。无需断言所有大状态都成功导出（另有 #81）；未创建大备份测试。
 
