@@ -2166,6 +2166,8 @@ disposeForScope: (scope) => this.runtime.dispose(scope, scopePlugin),
 
 ## 96. Backend 重启后的 user initialization 只恢复 builtin App 的 enabled MCP Integration；Plugin App 的 MCP Tool contribution 不会自动回到内存 Catalog
 
+> 已修复：user initialization 在 Plugin reconcile 后按 builtin 与当前用户 Plugin installations 的去重 App 集合 syncEnabled，复用既有 refresh/CAS/失败诊断。enabled 不保证远端可达或 ready；下文保留原问题证据。
+
 > 确认问题：`compose-agent.ts:1010` integrations.syncEnabled 仅 registry.list；Plugin reconcile 恢复 runtime 而非所有该 scope MCP contribution。手动 refresh/enable 可修复，不能描述为不可恢复丢失。
 
 MCP Integration 是按通用 App scope 暴露的。HTTP route 直接使用 URL 中的 `appId`：

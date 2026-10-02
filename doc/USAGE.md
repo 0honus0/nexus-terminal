@@ -276,6 +276,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - 双文件管理器布局属于实验性能力，复杂场景可能存在边界行为。
 - 同一布局中添加多个文本编辑器目前并非完整支持场景。
 - 请自行备份部署目录中的 `data`；项目本身不替代外部备份方案。
+- Backend 重启后的用户初始化会恢复 builtin 和已安装 Plugin App 的 enabled MCP 集成；远端连接失败仍显示集成错误，不保证 enabled 即 ready，可手动刷新。
 - 全局关闭 Agent 会对 builtin 与当前用户已安装 Plugin App 执行 scope quiesce，重新启用也覆盖两类 App。配置提交后生命周期失败会记录诊断，不承诺故障插件均能在期限内停止，也不回滚已提交设置。
 - Integration 删除／禁用的旧 refresh 仍会被失效保护拦住，临时 generation 在最后在途 refresh 结束后回收，不无限保留历史 UUID。
 - SSH 远端断开会驱动 Execution／Workspace Registry 回收，不再保留已断开的 ready 记录；挂起移交先解除旧 Execution 监听，晚到关闭事件不会按同 ID 误关新会话。远端操作结果未知仍按原隔离契约处理。

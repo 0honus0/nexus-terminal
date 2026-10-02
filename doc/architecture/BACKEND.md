@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+用户初始化先 reconcile Plugin runtime，再对 builtin 与用户安装的 Plugin App 去重执行 MCP syncEnabled；工具 contribution 仍由 refresh 的配置版本／schema CAS 发布，registry.list 保持 builtin-only。
+
 Feature patch lifecycle枚举builtin registry.list+user Plugin installations dedup IDs，disable/enable对称scope调用；保留list builtin-only API，不以新Run feature gate替代旧execution quiesce，不声称跨runtime原子commit。
 
 Integration refreshEpoch仅存于存在refreshTail期间，invalidate无tail delete，有tail increment；final tail identity match后清所有对应UUID scope epochs，避免active epoch重置ABA。

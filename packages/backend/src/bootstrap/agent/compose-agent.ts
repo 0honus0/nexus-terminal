@@ -977,8 +977,12 @@ export const composeAgent = ({
       await settings.get(userId);
       await lifecycle.initializeDefaults(userId);
       await plugins.reconcileUserRuntime(userId);
-      for (const definition of registry.list()) {
-        await integrations.syncEnabled({ userId, appId: definition.manifest.id });
+      const appIds = new Set([
+        ...registry.list().map((definition) => definition.manifest.id),
+        ...(await plugins.listInstallations(userId)).map((installation) => installation.appId),
+      ]);
+      for (const appId of appIds) {
+        await integrations.syncEnabled({ userId, appId });
       }
     },
     quiesce: async (deadlineUnixSeconds) => {
