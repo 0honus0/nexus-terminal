@@ -1,6 +1,7 @@
 import type { BackgroundAssetStore } from './appearance-assets.port';
 import type { AppearanceSettingsService } from './appearance-settings.service';
 import type { BackgroundKind } from './appearance.types';
+import { logger, logErrorCode } from '../../shared/logging/logger';
 
 const MAX_BACKGROUND_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']);
@@ -33,8 +34,14 @@ export class BackgroundAssetService {
   async remove(kind: BackgroundKind): Promise<boolean> {
     const current = await this.settings.get();
     const publicPath = kind === 'page' ? current.pageBackgroundImage : current.terminalBackgroundImage;
-    if (publicPath) await this.store.removePublicPath(publicPath).catch(() => false);
     await this.settings.setBackgroundReference(kind, '');
+    if (publicPath)
+      await this.store.removePublicPath(publicPath).catch((error) => {
+        logger.warn(
+          { kind, errorCode: logErrorCode(error, 'BACKGROUND_CLEANUP_FAILED') },
+          'Unreferenced background cleanup failed',
+        );
+      });
     return true;
   }
 

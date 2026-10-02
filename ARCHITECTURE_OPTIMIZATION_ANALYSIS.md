@@ -940,9 +940,9 @@ WHERE credential_id=?
 
 WebAuthn signature counter 的安全语义依赖服务端保存值保持单调。当前实现允许并发成功登录造成 counter 回退，也允许多个请求在同一个旧 counter 快照上完成验证，削弱了后续 replay / cloned-authenticator 检测所依赖的状态一致性。
 
-## 41. Background 删除存在数据库失败窗口，但已有 missing reference 自愈路径
+## 41. Background 删除的数据库失败窗口（已修复）
 
-> 待确认（可自动修复的失败窗口）：`background-asset.service.ts` 的删除顺序成立，但 `appearance-settings.service.ts:169` 后续 get 会清理 missing reference。因此删除数据库失败可暂时悬挂，不是无条件永久不一致；是否需要 stronger recovery 取决于故障持续时间。
+> 已核实为可自愈的短暂缺口并修复：先提交空背景引用再删除文件，数据库失败不删除文件；后置 cleanup 错误安全诊断、不逆转已提交响应。保留 missing reference 自愈，不声称自动回收所有 orphan 文件或解决并发 upload 的独立问题。下文为原核对背景。
 
 remove 先删除文件再清空 Setting；第二步失败可留下 missing reference。AppearanceSettingsService.get() 已有检测并清理 missing background 的路径，数据库恢复后有机会自愈，因此不保留“永久悬挂”的结论。
 
