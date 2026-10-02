@@ -1130,7 +1130,9 @@ this.workspaceLifecycleDrains.add(key);
 
 所以当前 checkpoint 与 lifecycle 的“安全状态”取决于谁先进入：checkpoint 会拒绝已经存在的 lifecycle drain，但已经存在的 checkpoint 不会阻止新的 lifecycle drain，两个 owner 没有形成对称互斥。
 
-## 49. Runner Workspace `start` 的多 Plugin 激活失败补偿不完整，会留下运行中的部分 Plugin
+## 49. Runner 多 Plugin 激活失败残留实例（已修复）
+
+> 已修复：activateWorkspace owner 的整批 catch 调用 disposeWorkspace，覆盖 start/ready/activate 任意失败，清理同 generation 前序已激活实例；start/restart/reconciler 共用，不只补单入口。下文为原问题证据。
 
 > 确认问题：`plugin-runner-runtime.ts` 的 activate loop 只清理当前失败实例；controller start catch 只 stop runtime，与 restart 的 disposeWorkspace 不同。只在后序插件失败且前序成功时成立，未启动故障插件验证。
 

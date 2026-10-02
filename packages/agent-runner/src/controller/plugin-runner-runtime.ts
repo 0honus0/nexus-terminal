@@ -175,19 +175,24 @@ export class PluginRunnerRuntime {
 
   async activateWorkspace(workspace: WorkspaceRecord): Promise<void> {
     this.prepareWorkspace(workspace);
-    for (const target of workspace.runnerPlugins) {
-      const key = this.key(workspace, target.pluginId);
-      if (this.instances.has(key)) continue;
-      const instance = this.start(workspace, target);
-      this.instances.set(key, instance);
-      try {
-        await instance.ready;
-        await instance.request('lifecycle.activate');
-      } catch (error) {
-        this.instances.delete(key);
-        await instance.close().catch(() => undefined);
-        throw error;
+    try {
+      for (const target of workspace.runnerPlugins) {
+        const key = this.key(workspace, target.pluginId);
+        if (this.instances.has(key)) continue;
+        const instance = this.start(workspace, target);
+        this.instances.set(key, instance);
+        try {
+          await instance.ready;
+          await instance.request('lifecycle.activate');
+        } catch (error) {
+          this.instances.delete(key);
+          await instance.close().catch(() => undefined);
+          throw error;
+        }
       }
+    } catch (error) {
+      await this.disposeWorkspace(workspace);
+      throw error;
     }
   }
 
