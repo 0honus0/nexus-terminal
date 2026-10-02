@@ -1763,7 +1763,9 @@ return this.db.transaction(async (tx) => {
 
 这和 #75 的 Transfer 笛卡尔积不同：这里没有巨大对象展开，放大点是“输入数组长度 → 全局排他事务内串行数据库 RPC 数量”。
 
-## 83. SSH Suspend 没有会话数量上限或 suspended TTL；用户可以持续积累 live SSH transport、shell 和每会话日志
+## 83. SSH Suspend 数量与挂起 TTL（已修复）
+
+> 已修复：takeOver await前占位，每user32/global64（含attached/disconnected记录），满载拒绝；已有sweep对连续available24h执行terminate及auto通知，attached不按旧TTL终止，return重置时间。普通未注册Workspace并发不属此quota；不声称全部SSH资源全局byte bound。下文为原证据。
 
 > 确认问题（live resource admission）：SshSuspendService session Map 无 count/age quota；owner lease/sweep 不等价 suspended session TTL，单 log 有字节限制。显式 terminate、远端断开和 shutdown 可回收，未做容量压测。
 

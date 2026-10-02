@@ -29,6 +29,7 @@ export interface SshSuspendServiceOptions {
 }
 
 interface SuspendedSessionRecord {
+  availableSince: number;
   userId: number;
   originalSessionId: string;
   connectionName: string;
@@ -106,6 +107,11 @@ export class SshSuspendService {
     request: SuspendTakeoverRequest,
     ownership?: { ownerId: string; workspaceId: string },
   ): Promise<string | null> {
+    if (
+      (this.sessions.get(request.userId)?.size ?? 0) >= 32 ||
+      [...this.sessions.values()].reduce((total, records) => total + records.size, 0) >= 64
+    )
+      throw new Error('SSH_SUSPEND_CAPACITY_EXCEEDED');
     if (!request.transport.isOpen || !request.shell.isOpen) {
       request.checkpoint?.dispose();
       await request.transport.close().catch(() => undefined);
@@ -114,6 +120,7 @@ export class SshSuspendService {
     const suspendSessionId = randomUUID();
     const now = this.now();
     const record: SuspendedSessionRecord = {
+      availableSince: now,
       ...request,
       connectionId: request.connectionId,
       suspendStartTime: new Date(now).toISOString(),
@@ -134,6 +141,7 @@ export class SshSuspendService {
       outputChain: Promise.resolve(),
       unsubscribe: [],
     };
+    this.userSessions(request.userId).set(suspendSessionId, record);
     try {
       await this.logs.flush(record.logIdentifier);
       const offset = await this.logs.position(record.logIdentifier);
@@ -375,6 +383,13 @@ export class SshSuspendService {
     let expired = 0;
     for (const [userId, sessions] of this.sessions) {
       for (const [id, record] of sessions) {
+        if (record.ownershipState === 'available' && now - record.availableSince >= 24 * 60 * 60 * 1000) {
+          void this.terminate(userId, id).catch(() => undefined);
+          for (const listener of this.autoTerminationListeners)
+            listener({ userId, suspendSessionId: id, reason: 'Suspended session exceeded 24-hour retention.' });
+          expired += 1;
+          continue;
+        }
         if (
           record.ownershipState === 'available' ||
           record.ownershipLeaseExpiresAt === undefined ||
@@ -557,6 +572,7 @@ export class SshSuspendService {
   }
 
   private releaseToAvailable(id: string, record: SuspendedSessionRecord): void {
+    if (record.ownershipState !== 'available') record.availableSince = this.now();
     record.ownershipState = 'available';
     record.ownerId = undefined;
     record.ownershipLeaseExpiresAt = undefined;
