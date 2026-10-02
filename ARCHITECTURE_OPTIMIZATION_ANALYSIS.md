@@ -893,9 +893,9 @@ flags: options.flags ?? 'w';
 
 Workspace mutation guard 在这种失败下只能把 mutation 标记为 unknown/quarantine；它无法把已经 truncate 的远端文件恢复成保存前内容。因此一次普通 editor save 的传输故障可以造成用户文件内容损坏。
 
-## 40. Passkey Assertion Counter 更新不是原子校验，登录并发会破坏单调性
+## 40. Passkey Assertion Counter 并发回退（已修复）
 
-> 确认问题（条件性竞态）：Passkey service 先 verify 旧 counter 再无条件 updateCounter。只适用于会增加 counter 的 authenticator；常见同步 Passkey 的 zero counter 不应被描述成必然回退或已证明 replay 绕过。
+> 已修复：commitAuthentication 以 verifier 使用的 expectedCounter 条件更新 counter 与 last-used，同一 statement 完成。CAS 失败拒绝认证，非零 counter 只允许增加，0→0 同步 Passkey 保持有效；旧 updateCounter/touch 入口删除。下文为原问题证据。
 
 `PasskeyService.finishAuthentication()` 会先按 credential ID 读取当前 passkey row，然后把其中保存的 `counter` 交给 `verifyAuthenticationResponse()`：
 

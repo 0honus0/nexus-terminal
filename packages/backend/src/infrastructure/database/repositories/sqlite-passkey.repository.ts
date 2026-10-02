@@ -66,22 +66,20 @@ export class SqlitePasskeyRepository implements PasskeyRepository {
       await this.database.queryAll<Row>('SELECT * FROM passkeys WHERE user_id=? ORDER BY created_at DESC', [userId])
     ).map(map);
   }
-  async updateCounter(id: string, counter: number) {
+  async commitAuthentication(id: string, expectedCounter: number, counter: number) {
+    if (
+      !Number.isSafeInteger(counter) ||
+      counter < 0 ||
+      !Number.isSafeInteger(expectedCounter) ||
+      expectedCounter < 0 ||
+      ((counter !== 0 || expectedCounter !== 0) && counter <= expectedCounter)
+    )
+      return false;
     return (
       (
         await this.database.execute(
-          "UPDATE passkeys SET counter=?,updated_at=strftime('%s','now') WHERE credential_id=?",
-          [counter, id],
-        )
-      ).changes > 0
-    );
-  }
-  async touch(id: string) {
-    return (
-      (
-        await this.database.execute(
-          "UPDATE passkeys SET last_used_at=strftime('%s','now'),updated_at=strftime('%s','now') WHERE credential_id=?",
-          [id],
+          "UPDATE passkeys SET counter=?,last_used_at=strftime('%s','now'),updated_at=strftime('%s','now') WHERE credential_id=? AND counter=?",
+          [counter, id, expectedCounter],
         )
       ).changes > 0
     );

@@ -116,10 +116,14 @@ export class PasskeyService {
     }
     const user = await this.users.get(passkey.userId);
     if (!user) throw new Error('Passkey belongs to a missing user.');
-    await Promise.all([
-      this.repository.updateCounter(credentialId, verification.newCounter),
-      this.repository.touch(credentialId),
-    ]);
+    if (!(await this.repository.commitAuthentication(credentialId, passkey.counter, verification.newCounter))) {
+      await this.audit.logAction('PASSKEY_AUTH_FAILURE', {
+        credentialId,
+        reason: 'Credential state changed',
+        ip: request.ip,
+      });
+      return { verified: false };
+    }
     await this.audit.logAction('PASSKEY_AUTH_SUCCESS', {
       userId: user.id,
       username: user.username,
