@@ -1,5 +1,7 @@
 import type { StoredUserRecord, UserRepository } from '../../../modules/user/user.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import type { SecretCipher } from '../../../shared/security/crypto.port';
+import { protectOperationalSecret, readOperationalSecret } from '../../security/operational-secret-storage';
 interface Row {
   id: number;
   username: string;
@@ -8,30 +10,33 @@ interface Row {
   created_at: number;
   updated_at: number;
 }
-const map = (r: Row): StoredUserRecord => ({
+const map = (r: Row, cipher: SecretCipher): StoredUserRecord => ({
   id: r.id,
   username: r.username,
   hashedPassword: r.hashed_password,
-  twoFactorSecret: r.two_factor_secret,
+  twoFactorSecret: r.two_factor_secret === null ? null : readOperationalSecret(cipher, r.two_factor_secret),
   hasTwoFactor: Boolean(r.two_factor_secret),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
 export class SqliteUserRepository implements UserRepository {
-  constructor(private readonly database: RelationalDatabase) {}
+  constructor(
+    private readonly database: RelationalDatabase,
+    private readonly cipher: SecretCipher,
+  ) {}
   async get(id: number) {
     const r = await this.database.queryOne<Row>(
       'SELECT id,username,hashed_password,two_factor_secret,created_at,updated_at FROM users WHERE id=?',
       [id],
     );
-    return r ? map(r) : null;
+    return r ? map(r, this.cipher) : null;
   }
   async findByUsername(username: string) {
     const r = await this.database.queryOne<Row>(
       'SELECT id,username,hashed_password,two_factor_secret,created_at,updated_at FROM users WHERE username=?',
       [username],
     );
-    return r ? map(r) : null;
+    return r ? map(r, this.cipher) : null;
   }
   async count() {
     return (await this.database.queryOne<{ total: number }>('SELECT COUNT(*) AS total FROM users'))?.total ?? 0;
@@ -61,7 +66,7 @@ export class SqliteUserRepository implements UserRepository {
     return (
       (
         await this.database.execute("UPDATE users SET two_factor_secret=?,updated_at=strftime('%s','now') WHERE id=?", [
-          secret,
+          secret === null ? null : protectOperationalSecret(this.cipher, secret),
           id,
         ])
       ).changes > 0

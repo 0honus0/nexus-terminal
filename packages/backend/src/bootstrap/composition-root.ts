@@ -42,6 +42,7 @@ import { ProcessDiagnosticProbe } from '../infrastructure/diagnostics/process-di
 import { NetworkNotificationChannelAdapter } from '../infrastructure/notifications/network-notification-channel.adapter';
 import { I18nextNotificationLocalizer } from '../infrastructure/notifications/i18next-notification-localizer.adapter';
 import { AesGcmSecretCipher } from '../infrastructure/security/aes-gcm-secret-cipher';
+import { migrateOperationalSecrets } from '../infrastructure/security/operational-secret-storage';
 import { BcryptPasswordHasher } from '../infrastructure/security/bcrypt-password-hasher';
 import { SshTransportAdapter } from '../infrastructure/ssh/ssh-transport.adapter';
 import { LocalSuspendedSessionLogAdapter } from '../infrastructure/ssh-suspend/local-suspended-session-log.adapter';
@@ -214,10 +215,10 @@ export const createCompositionRoot = (
   const agentLeases = new SqliteLeaseRepository(database);
   const mutationGuard = new LeaseMutationGuardAdapter(agentLeases);
 
-  const settingsRepository = new SqliteSettingsRepository(database);
+  const settingsRepository = new SqliteSettingsRepository(database, cipher);
   const settingsMigrationRepository = new SqliteSettingsMigrationRepository(database);
   const auditRepository = new SqliteAuditLogRepository(database);
-  const userRepository = new SqliteUserRepository(database);
+  const userRepository = new SqliteUserRepository(database, cipher);
   const sshKeyRepository = new SqliteSshKeyRepository(database);
   const proxyRepository = new SqliteProxyRepository(database);
   const connectionRepository = new SqliteConnectionRepository(database);
@@ -227,7 +228,7 @@ export const createCompositionRoot = (
   const commandHistoryRepository = new SqliteCommandHistoryRepository(database);
   const pathHistoryRepository = new SqlitePathHistoryRepository(database);
   const favoritePathRepository = new SqliteFavoritePathRepository(database);
-  const notificationRepository = new SqliteNotificationRepository(database);
+  const notificationRepository = new SqliteNotificationRepository(database, cipher);
   const passkeyRepository = new SqlitePasskeyRepository(database);
   const terminalThemeRepository = new SqliteTerminalThemeRepository(database);
   const appearanceRepository = new SqliteAppearanceSettingsRepository(database);
@@ -513,6 +514,7 @@ export const createCompositionRoot = (
     initialize: async () => {
       await database.initialize();
       await backupSnapshots.recoverInterruptedRestore();
+      await migrateOperationalSecrets(database, cipher);
       await agent.initialize();
       await settings.ensureDefaults();
       await terminalThemes.initialize(presetTerminalThemes);

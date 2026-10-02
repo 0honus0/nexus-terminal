@@ -8,6 +8,8 @@ import type {
   UpdateNotificationSetting,
 } from '../../../modules/notifications/notification.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import type { SecretCipher } from '../../../shared/security/crypto.port';
+import { protectOperationalSecret, readOperationalSecret } from '../../security/operational-secret-storage';
 interface Row {
   id: number;
   channel_type: NotificationChannelType;
@@ -25,34 +27,45 @@ const parse = <T>(raw: string, fallback: T): T => {
     return fallback;
   }
 };
-const map = (r: Row): NotificationSetting => ({
+const map = (r: Row, cipher: SecretCipher): NotificationSetting => ({
   id: r.id,
   channelType: r.channel_type,
   name: r.name,
   enabled: Boolean(r.enabled),
-  config: parse<NotificationChannelConfig>(r.config, {} as NotificationChannelConfig),
+  config: parse<NotificationChannelConfig>(readOperationalSecret(cipher, r.config), {} as NotificationChannelConfig),
   enabledEvents: parse<NotificationEvent[]>(r.enabled_events, []),
   createdAt: Number(r.created_at),
   updatedAt: Number(r.updated_at),
 });
 export class SqliteNotificationRepository implements NotificationSettingsRepository {
-  constructor(private readonly database: RelationalDatabase) {}
+  constructor(
+    private readonly database: RelationalDatabase,
+    private readonly cipher: SecretCipher,
+  ) {}
   async list() {
-    return (await this.database.queryAll<Row>('SELECT * FROM notification_settings ORDER BY created_at ASC')).map(map);
+    return (await this.database.queryAll<Row>('SELECT * FROM notification_settings ORDER BY created_at ASC')).map(
+      (row) => map(row, this.cipher),
+    );
   }
   async get(id: number) {
     const row = await this.database.queryOne<Row>('SELECT * FROM notification_settings WHERE id=?', [id]);
-    return row ? map(row) : null;
+    return row ? map(row, this.cipher) : null;
   }
   async listEnabledFor(event: NotificationEvent) {
     return (await this.database.queryAll<Row>('SELECT * FROM notification_settings WHERE enabled=1'))
-      .map(map)
+      .map((row) => map(row, this.cipher))
       .filter((setting) => setting.enabledEvents.includes(event));
   }
   async create(s: CreateNotificationSetting) {
     const r = await this.database.execute(
       "INSERT INTO notification_settings (channel_type,name,enabled,config,enabled_events,created_at,updated_at) VALUES (?,?,?,?,?,strftime('%s','now'),strftime('%s','now'))",
-      [s.channelType, s.name, s.enabled ? 1 : 0, JSON.stringify(s.config), JSON.stringify(s.enabledEvents)],
+      [
+        s.channelType,
+        s.name,
+        s.enabled ? 1 : 0,
+        protectOperationalSecret(this.cipher, JSON.stringify(s.config)),
+        JSON.stringify(s.enabledEvents),
+      ],
     );
     if (!r.lastInsertId) throw new Error('Notification setting insert did not return an id.');
     return r.lastInsertId;
@@ -68,7 +81,15 @@ export class SqliteNotificationRepository implements NotificationSettingsReposit
     const e = Object.entries(s).filter(([, v]) => v !== undefined) as Array<[keyof UpdateNotificationSetting, unknown]>;
     if (!e.length) return true;
     const vals = e.map(([k, v]) =>
-      k === 'enabled' ? (v ? 1 : 0) : k === 'config' || k === 'enabledEvents' ? JSON.stringify(v) : v,
+      k === 'enabled'
+        ? v
+          ? 1
+          : 0
+        : k === 'config'
+          ? protectOperationalSecret(this.cipher, JSON.stringify(v))
+          : k === 'enabledEvents'
+            ? JSON.stringify(v)
+            : v,
     );
     return (
       (

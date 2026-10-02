@@ -849,9 +849,9 @@ request B: INSERT -> row #2
 
 这与 repository 方法名和上层“历史条目按 command/path 合并”的语义不一致。
 
-## 38. 多类 Operational Secret 直接以明文写入 SQLite，绕过项目已有的 `SecretCipher` 边界
+## 38. Operational Secret SQLite 明文存储（已修复）
 
-> 确认问题（存储保护不一致）：核对 user/settings/notification repository，TOTP seed 和对应 JSON secret 未经 SecretCipher。Full Backup envelope 本身有加密，不能说导出的备份文件直接明文可读；威胁前提是原数据库／已解密快照可读。
+> 已修复：TOTP、captchaConfig 和 notification config 通过带版本前缀的 SecretCipher envelope 存储，repository 返回领域明文；启动事务迁移旧明文并验证已有 ciphertext，错误密钥不退化为明文。Backup capture 解密配置、restore 用目标密钥重加密，保留原备份结构与旧备份兼容；用户身份/TOTP 仍不属于 Full Backup。迁移不擦除历史 SQLite page/WAL 或旧外部备份。下文为原问题证据。
 
 项目对 Connection / Proxy / SSH Key credential 已建立明确的加密存储路径：service 在写入 repository 前调用 `SecretCipher.encrypt()`，数据库列也使用 `encrypted_password`、`encrypted_private_key`、`encrypted_passphrase` 等语义。
 

@@ -5,6 +5,7 @@ import type { BackupSnapshotPort } from '../../modules/backup/backup.port';
 import type { BackupFileEntry, BackupSnapshot } from '../../modules/backup/backup.types';
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../shared/security/crypto.port';
+import { protectOperationalSecret, readOperationalSecret } from '../security/operational-secret-storage';
 
 const PRODUCT_TABLES = [
   'settings',
@@ -206,6 +207,15 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
   private async captureTable(database: RelationalDatabase, table: string): Promise<Record<string, unknown>[]> {
     if (!(await this.tableExists(database, table))) return [];
     const rows = await database.queryAll<Record<string, unknown>>(`SELECT * FROM ${quoteIdentifier(table)}`);
+    for (const row of rows) {
+      const column =
+        table === 'notification_settings'
+          ? 'config'
+          : table === 'settings' && row.key === 'captchaConfig'
+            ? 'value'
+            : null;
+      if (column && typeof row[column] === 'string') row[column] = readOperationalSecret(this.cipher, row[column]);
+    }
     const sensitive = SENSITIVE_COLUMNS[table] ?? [];
     if (!sensitive.length) return rows;
     return rows.map((source) => {
@@ -568,6 +578,16 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
   private prepareRow(table: string, source: Record<string, unknown>): Record<string, unknown> {
     if (!source || typeof source !== 'object' || Array.isArray(source)) throw new Error(`备份表 ${table} 包含无效行。`);
     const row = { ...source };
+    const operationalColumn =
+      table === 'notification_settings'
+        ? 'config'
+        : table === 'settings' && row.key === 'captchaConfig'
+          ? 'value'
+          : null;
+    if (operationalColumn) {
+      if (typeof row[operationalColumn] !== 'string') throw new Error('BACKUP_SECRET_INVALID');
+      row[operationalColumn] = protectOperationalSecret(this.cipher, row[operationalColumn]);
+    }
     const plaintext = row.__backup_plaintext;
     delete row.__backup_plaintext;
     if (plaintext && typeof plaintext === 'object' && !Array.isArray(plaintext)) {

@@ -6,6 +6,9 @@ import path from 'node:path';
 import { LocalArtifactStore } from '../../../packages/backend/src/infrastructure/agent/artifacts/local-artifact-store';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
 import { SqliteBackupSnapshotAdapter } from '../../../packages/backend/src/infrastructure/backup/sqlite-backup-snapshot.adapter';
+import { AesGcmSecretCipher } from '../../../packages/backend/src/infrastructure/security/aes-gcm-secret-cipher';
+import { migrateOperationalSecrets } from '../../../packages/backend/src/infrastructure/security/operational-secret-storage';
+import { SqliteSettingsRepository } from '../../../packages/backend/src/infrastructure/database/repositories/sqlite-settings.repository';
 import type { ArtifactLimitPolicyPort } from '../../../packages/backend/src/modules/agent/ai/artifact.port';
 
 export const artifactCrashReconciliationScenario = async () => {
@@ -208,6 +211,21 @@ export const artifactCrashReconciliationScenario = async () => {
     await assert.rejects(backup.capture(), /BACKUP_SNAPSHOT_REFERENCE_INVALID/);
     fs.writeFileSync(readyPath, payload);
     await backup.capture();
+
+    const sourceCipher = new AesGcmSecretCipher('11'.repeat(32));
+    const targetCipher = new AesGcmSecretCipher('22'.repeat(32));
+    const captcha = JSON.stringify({ hcaptchaSecretKey: 'scenario-sensitive-value' });
+    await db.execute("INSERT INTO settings (key,value) VALUES ('captchaConfig',?)", [captcha]);
+    await migrateOperationalSecrets(db, sourceCipher);
+    const raw = await db.queryOne<{ value: string }>("SELECT value FROM settings WHERE key='captchaConfig'");
+    assert.ok(raw && !raw.value.includes('scenario-sensitive-value'));
+    assert.equal(await new SqliteSettingsRepository(db, sourceCipher).get('captchaConfig'), captcha);
+    await assert.rejects(migrateOperationalSecrets(db, targetCipher));
+    const portable = await new SqliteBackupSnapshotAdapter(db, sourceCipher, directory).capture();
+    assert.equal(portable.tables.settings.find((row) => row.key === 'captchaConfig')?.value, captcha);
+    await new SqliteBackupSnapshotAdapter(db, targetCipher, directory).restore(portable);
+    assert.equal(await new SqliteSettingsRepository(db, targetCipher).get('captchaConfig'), captcha);
+    await assert.rejects(new SqliteSettingsRepository(db, sourceCipher).get('captchaConfig'));
 
     return [
       { name: 'artifact_crash_windows_repaired', value: 3, unit: 'windows' },
