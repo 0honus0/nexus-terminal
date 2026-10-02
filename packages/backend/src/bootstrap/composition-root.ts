@@ -515,6 +515,7 @@ export const createCompositionRoot = (
       await database.initialize();
       await backupSnapshots.recoverInterruptedRestore();
       await migrateOperationalSecrets(database, cipher);
+      await sshSuspend.initialize();
       await agent.initialize();
       await settings.ensureDefaults();
       await terminalThemes.initialize(presetTerminalThemes);

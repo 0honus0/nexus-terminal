@@ -93,6 +93,10 @@ export class SshSuspendService {
     this.sweepTimer.unref?.();
   }
 
+  async initialize(): Promise<void> {
+    await this.logs.clearAll();
+  }
+
   onAutoTerminated(listener: (event: SuspendedSessionAutoTermination) => void): () => void {
     this.autoTerminationListeners.add(listener);
     return () => this.autoTerminationListeners.delete(listener);
@@ -495,8 +499,9 @@ export class SshSuspendService {
       record.checkpoint?.dispose();
       record.checkpoint = undefined;
       await record.transport.close().catch(() => undefined);
-      await this.logs.flush(record.logIdentifier).catch(() => undefined);
+      await this.logs.delete(record.logIdentifier).catch(() => undefined);
     }
+    await this.logs.clearAll();
   }
 
   private async acquireForResume(

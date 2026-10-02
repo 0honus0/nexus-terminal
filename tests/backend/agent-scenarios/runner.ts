@@ -34,6 +34,7 @@ import { idempotencyTtlScenario } from './idempotency-ttl.scenario';
 
 import { browserInteractionPrimitivesScenario } from './browser-interaction-primitives.scenario';
 import { suspendedSessionOwnershipScenario } from './suspended-session-ownership.scenario';
+import { suspendedLogReconciliationScenario } from './suspended-log-reconciliation.scenario';
 import { browserScreenshotVisionScenario } from './browser-screenshot-vision.scenario';
 import { toolSurfaceProgressiveDisclosureScenario } from './tool-surface-progressive-disclosure.scenario';
 import { machineRouteDependencyApprovalScenario } from './machine-route-dependency-approval.scenario';
@@ -166,6 +167,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/server-transfer-admission', serverTransferAdmissionScenario],
   ['runtime/memory-product-closure', memoryProductClosureScenario],
   ['workspace/suspended-session-ownership', suspendedSessionOwnershipScenario],
+  ['workspace/suspended-log-reconciliation', suspendedLogReconciliationScenario],
   ['browser/target-scoped-revision', browserTargetScopedRevisionScenario],
   ['browser/interaction-primitives', browserInteractionPrimitivesScenario],
   ['browser/screenshot-artifact-vision', browserScreenshotVisionScenario],

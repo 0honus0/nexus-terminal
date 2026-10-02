@@ -8,6 +8,7 @@ export interface SuspendedSessionLogSlice {
 }
 
 export interface SuspendedSessionLogStore {
+  clearAll(): Promise<void>;
   append(identifier: string, data: string | Uint8Array): Promise<number>;
   flush(identifier: string): Promise<void>;
   openRead(identifier: string): Promise<Readable>;

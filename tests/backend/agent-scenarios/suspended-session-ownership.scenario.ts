@@ -6,6 +6,9 @@ import { WorkspaceProtocolSession } from '../../../packages/backend/src/interfac
 export const suspendedSessionOwnershipScenario = async () => {
   const logs = new Map<string, Buffer>();
   const logStore = {
+    clearAll: async () => {
+      logs.clear();
+    },
     append: async (identifier: string, data: string | Uint8Array) => {
       const current = logs.get(identifier) ?? Buffer.alloc(0);
       const next = Buffer.concat([current, typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data)]);

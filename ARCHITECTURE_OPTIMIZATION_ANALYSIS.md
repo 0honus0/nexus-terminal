@@ -2918,7 +2918,9 @@ const session = await source.startCommand({ command, ... });
 
 ## 109. SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志
 
-> 确认问题（durable file 无恢复／清理 owner）：SshSuspend dispose clear sessions 后只 flush log，LocalSuspendedSessionLogStore 无启动 enumerate/prune。文件仍可由宿主手工处理，不是物理不可访问；缺少产品内回收入口。
+> 已修复：SshSuspend 的 catalog 明确保持进程内，不尝试恢复旧 transport；对应 log store 新增全量 orphan cleanup。Backend initialize 在任何新 suspended session 建立前清理上次异常退出遗留日志，reset/dispose 在 output drain 与 transport close 后删除当前 session 日志并再次目录级清理。Agent 场景用真实 LocalSuspendedSessionLogAdapter 写入 stale log 后模拟启动，验证 initialize 后文件不可再读。下文为原问题证据。
+
+> 原问题证据：SshSuspend dispose clear sessions 后只 flush log，LocalSuspendedSessionLogStore 无启动 enumerate/prune。文件仍可由宿主手工处理，不是物理不可访问；缺少产品内回收入口。
 
 `SshSuspendService` 的 suspended-session catalog 完全是进程内 Map：
 
@@ -4215,7 +4217,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项当前分类：**未解决确认问题 22 项，待确认 15 项，已修复 80 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
+原 144 项当前分类：**未解决确认问题 21 项，待确认 15 项，已修复 81 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4323,7 +4325,7 @@ await terminateAllManagedProcesses();
 | 106    | 已修复   | Plugin 首次安装没有 per-App serialization；两个版本并发 install 可以把 App activeVersion 与 Installation version 写成永久冲突                                                |
 | 107    | 已修复   | Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`                                               |
 | 108    | 已关闭   | Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发                                 |
-| 109    | 确认问题 | SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志                                                                           |
+| 109    | 已修复   | SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志                                                                           |
 | 110    | 确认问题 | Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合                                        |
 | 111    | 确认问题 | Workspace WebSocket 没有 in-flight request / file-operation admission limit；客户端可以绕过 Frontend scheduler 并发放大 SFTP stream、positioned copy 与远端 archive command  |
 | 112    | 确认问题 | `upload.start` 建立 active upload 后没有 idle deadline；客户端不发送数据即可永久占住远端写流、临时文件与持续续租的 mutation lease                                            |

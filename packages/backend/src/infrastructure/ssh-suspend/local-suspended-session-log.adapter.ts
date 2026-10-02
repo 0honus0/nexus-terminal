@@ -27,6 +27,11 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
   constructor(dataDirectory: string) {
     this.directory = path.join(dataDirectory, 'temp_suspended_ssh_logs');
   }
+  async clearAll(): Promise<void> {
+    await Promise.allSettled([...this.writers.values()].map((writer) => writer.tail));
+    this.writers.clear();
+    await fs.rm(this.directory, { recursive: true, force: true });
+  }
   async append(id: string, data: string | Uint8Array): Promise<number> {
     const file = this.file(id);
     const chunk = typeof data === 'string' ? Buffer.from(data) : Buffer.from(data);
