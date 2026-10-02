@@ -785,9 +785,9 @@ users.create(...)
 
 这使一次性 bootstrap invariant 只存在于非原子的应用层检查中，并发初始化可以绕过它。
 
-## 36. Server Transfer 用 `sourceItemName` 作为 SubTask 身份，同名不同路径的源文件会解析成同一个对象
+## 36. Server Transfer 同名源条目身份丢失（已修复）
 
-> 确认问题：`transfer-task.registry.ts` 保存 name，`transfer-orchestrator.service.ts:78` 以 find(name) 回查；validation 未要求唯一 name。目标同名覆盖策略是另一问题，不能替代 source path identity。
+> 已修复：registry 为每个 subtask 保存 sourceItemIndex，orchestrator 直接读取 payload 的原条目；sourceItemName 仅显示。不同路径同名源不会都解析成第一个对象，不改变目标覆盖策略或 wire DTO。下文为原问题证据。
 
 `TransferTaskRegistry.create()` 为每个 source item 建立 subtask 时只保存：
 

@@ -18,11 +18,12 @@ export class TransferTaskRegistry {
     const now = new Date();
     const subTasks: TransferSubTask[] = [];
     for (const connectionId of payload.connectionIds)
-      for (const item of payload.sourceItems)
+      for (const [sourceItemIndex, item] of payload.sourceItems.entries())
         subTasks.push({
           subTaskId: randomUUID(),
           connectionId,
           sourceItemName: item.name,
+          sourceItemIndex,
           status: 'queued',
           startTime: now,
         });

@@ -15,6 +15,7 @@ export interface TransferSubTask {
   subTaskId: string;
   connectionId: number;
   sourceItemName: string;
+  sourceItemIndex: number;
   status: TransferSubTaskStatus;
   progress?: number;
   message?: string;

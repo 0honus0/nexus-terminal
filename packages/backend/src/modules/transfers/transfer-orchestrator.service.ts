@@ -75,7 +75,7 @@ export class TransferOrchestratorService {
   private async processSubTask(taskId: string, sub: TransferSubTask, source: ExecutionSession, signal: AbortSignal) {
     const task = this.tasks.get(taskId);
     if (!task) return;
-    const item = task.payload.sourceItems.find((i) => i.name === sub.sourceItemName);
+    const item = task.payload.sourceItems[sub.sourceItemIndex];
     logger.trace(
       { taskId, subTaskId: sub.subTaskId, targetConnectionId: sub.connectionId },
       'Server transfer sub-task dispatch',
