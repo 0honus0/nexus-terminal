@@ -238,6 +238,10 @@ export class SubagentToolStepExecutor {
     run: RunView,
     toolWork: RuntimeToolWorkView,
   ): Promise<void> {
+    if (run.definition.executionMode === 'plan') {
+      await this.completion.failBeforeModel(scope, work, delegation, ownerEpoch, 'PLAN_MODE_TOOL_FORBIDDEN');
+      return;
+    }
     if (
       delegation.mutationMode !== 'governed' ||
       !toolWork.inspection.mutation ||

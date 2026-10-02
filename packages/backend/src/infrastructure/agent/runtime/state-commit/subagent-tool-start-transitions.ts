@@ -309,6 +309,7 @@ export const beginSubagentMutationToolTransition = async (
   );
   if (!row) throw new Error('NOT_FOUND');
   if (row.status !== 'running') throw new Error('RUN_NOT_SCHEDULABLE');
+  if (mapRunRow(row).definition.executionMode === 'plan') throw new Error('PLAN_MODE_TOOL_FORBIDDEN');
   if (row.input_revision !== command.expectedInputRevision) throw new Error('APPROVAL_STALE');
   const app = await tx.queryOne<{ policy_revision: number }>(
     'SELECT policy_revision FROM agent_apps WHERE user_id = ? AND app_id = ?',

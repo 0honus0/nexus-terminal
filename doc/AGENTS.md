@@ -228,6 +228,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 ### 7.2 执行职责与结果
 
 - `GovernedMutationExecutor` 共享 Root/Subagent 治理顺序，包括 reinspection、approval、lease、unknown outcome、settle/finalization/recovery；durable transition 仍只提交 StateCommit。
+- `plan` 禁写覆盖 Root／Child model surface、actual inspection 与 Child durable mutation begin；governed profile、grants 和 full_access 不覆盖 executionMode，禁止仅依赖提示词或事后 completion evidence。
 - Root 分派由 `RootToolExecutionCoordinator`，read/control wave 与 read lease 由 `RootReadToolExecutor`，Root hooks/信号由 `RootMutationExecutionAdapter`。Subagent 的 Tool、Model、completion/mailbox/fail-fast 分别由 `SubagentToolStepExecutor/ModelStepExecutor/CompletionCoordinator`；Participant 仅 dispatch/inbox/join，不回吸职责或新建 authority。
 - Multi-tool proposal 先 bounded inspection + durable lineage，拒绝单项也持久化；只有 read、parallelSafe、resourceKeys 不冲突可小批并行，control 顺序执行，mutation 不削弱单 Tool 安全链。
 - execution identity 为 Run + Runtime + canonical target + revision + ToolCall/Job；Workspace 冻结 generation，SSH 冻结 configurationHash。execute 不重绑定“当前终端/SSH”。

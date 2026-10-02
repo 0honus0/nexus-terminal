@@ -265,6 +265,15 @@ export const subagentGovernedMutationScenario = async () => {
     false,
     'Full Access must not override a read-only Subagent profile',
   );
+  const planRun = runForMode('full_access');
+  planRun.definition = { ...planRun.definition, executionMode: 'plan' };
+  assert.equal(
+    toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, planRun).some(
+      (schema) => schema.name === mutationTool.descriptor.name,
+    ),
+    false,
+    'Plan Run must not expose Child mutation Tools even with full access',
+  );
 
   const fullAccessRun = {
     id: baseDelegation.runId,
@@ -1097,6 +1106,32 @@ export const subagentGovernedMutationScenario = async () => {
       'rejected durable governance checks must not advance the Tool state',
     );
 
+    const executeDefinition = (await durableDb.queryOne<{ definition_json: string }>(
+      'SELECT definition_json FROM agent_runs WHERE id = ?',
+      [durableRunId],
+    ))!;
+    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+      JSON.stringify({ ...JSON.parse(executeDefinition.definition_json), executionMode: 'plan' }),
+      durableRunId,
+    ]);
+    await assert.rejects(
+      beginDurableMutation,
+      /PLAN_MODE_TOOL_FORBIDDEN/,
+      'durable begin must reject a forged ready Child mutation in Plan mode without consuming approval',
+    );
+    assert.equal(
+      (
+        await durableDb.queryOne<{ consumed_at: number | null }>(
+          'SELECT consumed_at FROM agent_approvals WHERE id = ?',
+          [durableApprovalId],
+        )
+      )?.consumed_at,
+      null,
+    );
+    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+      executeDefinition.definition_json,
+      durableRunId,
+    ]);
     const begun = await beginDurableMutation();
     assert.equal(begun.run.executingRuntimeCount, 1);
     assert.equal(

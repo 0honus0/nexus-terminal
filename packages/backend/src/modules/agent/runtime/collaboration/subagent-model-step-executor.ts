@@ -407,9 +407,11 @@ export class SubagentModelStepExecutor {
               proposal,
             );
             const rejectedResult =
-              inspection.mutation && orderedCalls.length > 1
-                ? failedToolResult(new Error('SUBAGENT_MUTATION_BATCH_FORBIDDEN'))
-                : undefined;
+              begun.run.definition.executionMode === 'plan' && inspection.mutation
+                ? failedToolResult(new Error('PLAN_MODE_TOOL_FORBIDDEN'))
+                : inspection.mutation && orderedCalls.length > 1
+                  ? failedToolResult(new Error('SUBAGENT_MUTATION_BATCH_FORBIDDEN'))
+                  : undefined;
             batchItems.push({
               providerCallId: proposal.providerCallId,
               toolCallId: randomUUID(),

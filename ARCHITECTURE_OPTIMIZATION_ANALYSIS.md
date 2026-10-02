@@ -257,7 +257,7 @@ child proposes mutation
 
 ## 17. `plan` Execution Mode 的禁写边界没有覆盖 Subagent Tool Pipeline
 
-> 确认问题（执行前约束缺口）：核对 `runtime/collaboration/subagent-context-builder.ts`、`subagent-model-step-executor.ts`、`subagent-tool-step-executor.ts` 与 Root `tool-call-runner.ts`；Child 的 schema 和 governed mutation gate 均未检查 executionMode。只对具备 mutation grants、governed profile、full_access 的组合成立，不代表默认 read-only child 能写；未运行真实 plan delegation。
+> 已修复：Child schema 在 plan mode 隐藏 mutation／destructive；实际 inspection 的 mutation proposal 作为拒绝结果持久化；Tool executor 与 durable mutation begin 在副作用／approval consume 前再次拒绝。现有场景验证 full_access + plan 不暴露 mutation，以及伪造 ready Tool 的 durable begin 拒绝且审批未消费。参考 OpenCode V2 Plan／只读子 Agent 的执行前边界，不仅依赖提示词或事后 completion。
 
 Root Agent 对 `executionMode: 'plan'` 有两层明确约束。
 
@@ -273,7 +273,7 @@ riskClass = read | control
 PLAN_MODE_TOOL_FORBIDDEN
 ```
 
-但 Subagent 没有复用这条完整 pipeline。`SubagentContextBuilder.toolSchemas()` 自己从 `ToolCatalog.discover()` 构造 child tool surface，只根据 delegation grants、risk class、`mutationMode` 和 `approvalMode` 过滤，没有检查：
+Subagent 的 schema 与 governed mutation pipeline 同样检查：
 
 ```ts
 run.definition.executionMode;
@@ -285,7 +285,7 @@ run.definition.executionMode;
 ToolExecutor.inspect(...)
 ```
 
-而不是带 `executionMode` 参数的 `ToolCallRunner.inspect(...)`。
+随后根据 plan mode 与 inspection.mutation 将不允许的 proposal 拒绝持久化；无论 schema 是否伪造，实际 Tool executor 与 durable begin 都不能执行 plan mutation。
 
 Create Run 的输入校验允许 `approvalMode` 与 `executionMode` 独立组合，没有发现禁止：
 
@@ -294,9 +294,9 @@ approvalMode = full_access
 executionMode = plan
 ```
 
-因此这组合法 Run 配置下，Root model surface 会隐藏 mutation tools，但 `worker` Subagent 仍满足 `governedMutationsEnabled`，可以获得 `file.write`、`file.delete`、`shell.execute`、`workspace.manage` 等 mutation capability，并且后续 inspection path 没有 plan-mode guard。
+这组配置下 Root 与 worker 的 model surface 都隐藏 mutation tools；既有 grants 不覆盖 executionMode，full_access 也不能批准 plan mutation。
 
-Root completion gate 能在 Run 结束时发现 “plan-only Run produced mutation evidence” 并把 completion 判为失败，但这个检查发生在 mutation 之后。也就是说 plan mode 的“不执行 mutation”约束在 Root 是执行前 invariant，在 Child 路径却退化成了事后 completion 检测。
+Root completion gate 的事后检测保留作为补充，不替代 Child 的执行前 invariant。未新增 E2E。
 
 ## 18. Subagent 绕过 Deferred MCP Tool Surface，Root / Child 的 Tool Exposure Contract 不一致
 
