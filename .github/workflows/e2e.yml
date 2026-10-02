@@ -151,7 +151,6 @@ jobs:
       - name: Build production packages
         run: |
           pnpm run build
-          pnpm run build:agent-runner
 
   playwright:
     name: Playwright shard ${{ matrix.shard }}

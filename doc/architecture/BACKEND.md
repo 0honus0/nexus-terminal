@@ -182,6 +182,7 @@ Bootstrap 注册 process、database、Runner、provider、plugin 和 transport �
 - `pnpm run check` 执行 Frontend/Agent ESLint 与 Frontend type check。
 - 架构和生命周期规则由 [AGENTS.md](../AGENTS.md) 约束 AI 开发与审查，不使用源码文本扫描测试。
 - `pnpm run build:backend` 执行 Backend TypeScript build 并复制 locale/Plugin SDK runtime asset。
+- 根 `pnpm run build` 覆盖 Backend、Frontend、Agent Runner；根 `check` 覆盖 Frontend／Agent ESLint 和三个生产包类型检查。CI 消费该完整入口，不在同一步重复构建 Runner；独立 Runner 作业仍使用包级入口。
 - Agent deterministic scenarios 位于 `tests/backend/agent-scenarios/`。
 - 用户可达 HTTP/WebSocket/SSH/Agent 行为由 `tests/e2e/` 验证。
 - Canonical workflow 保留 production-style Docker smoke。

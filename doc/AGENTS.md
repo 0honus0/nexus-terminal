@@ -109,6 +109,7 @@
 - `tests/e2e` 验证公开 HTTP/WebSocket/SSH/Agent/移动端/UI 行为；`tests/backend/agent-scenarios` 保留确定性 Agent 集成场景。回归断言输出、真实状态与副作用，不锁定实现文本。
 - 低风险可逆文本/样式改动不增加测试；并发、持久化、权限、协议与恢复修复保留行为证据。类型、ESLint、格式或构建能发现的问题不编镜像测试。
 - 本地运行受影响检查/构建/E2E；提交前运行 `pnpm run check`、`pnpm run format:all:check`、`git diff --check`。不加 sleep、扩大 timeout 或允许 flaky 掩盖问题。
+- 根 `build` 串行构建 Backend／Frontend／Agent Runner；根 `check` 串行执行现有 ESLint 及三个生产包类型检查。完整 build 后不重复构建 Runner，独立包／镜像作业可使用包级构建入口；构建覆盖不改变 Runner 可选部署契约。
 - 提交描述单一完成事项；推送后检查对应 workflow 的日志/artifact。合并或发布前确认工作区、未跟踪文件、失效引用、未完成标记、版本一致与远程 E2E/Docker smoke，无被忽略的失败。
 
 ## 3. Agent 定位与源码职责

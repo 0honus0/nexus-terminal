@@ -16,6 +16,8 @@ pnpm install --frozen-lockfile
 
 随后通过 workspace filter 或根脚本执行构建，例如 `pnpm run build:backend`、`pnpm run build:frontend`、`pnpm run build:agent-runner`。根脚本可以编排多个 workspace，但 package script 不得再次执行第二套 package-manager install；`scripts/build/build.sh local ...` 假定根 workspace install 已完成。
 
+根 `pnpm run build` 串行构建 Backend、Frontend 和 Agent Runner；`pnpm run check` 串行执行 Frontend／Agent ESLint 及三个生产包的类型检查。Runner 是否部署仍由部署配置决定，完整构建不自动启用 Runner。只需某个包时使用对应 `build:*` 脚本；执行完整 build 后无需重复执行 `build:agent-runner`。
+
 根 `packageManager` 字段 pin 本地、CI 与 Docker 使用的 pnpm release；开发机直接安装该版本的 pnpm，Docker builder 也通过 npm 全局安装该版本。升级 pnpm major 前必须确认 lockfile 与 GitHub dependency/security tooling 兼容。依赖刷新如果修改 shared catalog，需要重新生成唯一根 lockfile，并至少构建 Frontend、Backend、Agent Runner，因为 catalog 变化可能同时影响多个 package。
 
 Docker builder 与 CI 从根 workspace/lockfile 安装；Backend 与 Agent Runner 的 production tree 使用 workspace-aware `pnpm deploy --prod` 生成。Frontend 只产出静态 `dist`。开发约束见 [AGENTS.md](AGENTS.md)。

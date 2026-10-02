@@ -48,29 +48,9 @@ Nexus Terminal 当前已经建立了比较明确的架构边界：Backend 使用
 
 > 已关闭：本项按明确子图的维护性改善处理，不将 Bootstrap 统一 wiring 认定为 authority 越界。`compose-providers.ts` 创建 Provider repository/secrets/adapter/service 与模型能力 registry，保留 Provider adapter→service 的延迟引用；`compose-ssh-capabilities.ts` 创建 SSH target/session/file/shell/project-directory 子图，保留 Thread 与 capability 授权检查。两者为纯组装工厂，不执行 initialize/dispose，不持有全局 mutable state。`compose-agent.ts` 继续负责跨子图 wiring、Host 回调、initialize/quiesce/dispose 顺序及整体服务返回；已有 Plugin、Workspace 工厂不变。Backend 构建及已有 SSH session jobs、Provider live capability 场景通过，场景验证对应服务而非新增工厂的完整启动；未新增或运行 E2E。
 
-## 9. Root Build Contract 没有覆盖全部 Production Component
+## 9. Root Build / Check 覆盖全部生产包（已关闭）
 
-> 待确认（本地命令语义／覆盖）：根 `build` 确实只构建 Backend/Frontend，`check` 只含两类 ESLint 和 Frontend typecheck。但 canonical E2E 与依赖更新 workflow 都显式追加 `build:agent-runner`，因此“production component 未被 CI 构建验证”不成立。Runner 可选部署，根 `build` 是否必须覆盖 Runner 仍需确认，保留本地单命令覆盖不完整的疑问。
-
-当前根 `package.json` 中：
-
-```json
-"build": "pnpm run build:backend && pnpm run build:frontend"
-```
-
-Agent Runner 已经是实际运行组件，但仍通过单独的：
-
-```text
-build:agent-runner
-```
-
-完成构建。
-
-因此根级 `pnpm build` 与“完整 Nexus production build”之间存在语义差异。Backend 和 Frontend 构建通过时，Agent Runner 仍可能没有被构建验证。
-
-`pnpm run check` 的覆盖范围也主要集中在 Frontend ESLint、Agent ESLint 和 Frontend typecheck，各 package 的 `check / typecheck / build` contract 并不完全一致。
-
-仅执行根 `check` 或 `build` 不能代表所有生产组件均已验证；完整 CI 已通过独立 Runner build 覆盖这一部分，不应把本地命令差异扩大为整个发布流程的盲区。
+> 已关闭：核对确认的是本地完整入口覆盖不一致，不是 CI 漏验。根 `build` 现串行构建 Backend／Frontend／Agent Runner，根 `check` 保留两类 ESLint 并覆盖三个生产包类型检查。Canonical E2E 与依赖更新 workflow 删除完整 build 后的重复 Runner build，独立 Runner 作业仍保留包级构建。Runner 可选部署契约不变；根 check 与完整 build 已用 Node 24 实际执行通过，未新增或运行 E2E，未推送或取得本提交远端 CI 结果。
 
 ## 10. 大型静态 Theme 数据长期占用 TypeScript 编译单元
 
@@ -4157,7 +4137,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 98 项，待确认 35 项，已关闭 7 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项已逐项分类：**未解决确认问题 98 项，待确认 34 项，已关闭 8 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4168,7 +4148,7 @@ await terminateAllManagedProcesses();
 | 6      | 已关闭   | StateCommit 事务入口与 Recovery Transition 分离                                                                                                                              |
 | 7      | 已关闭   | SQLite Schema 定义与 Migration 执行边界拆分                                                                                                                                  |
 | 8      | 已关闭   | Agent Composition 子图工厂分离                                                                                                                                               |
-| 9      | 待确认   | Root Build Contract 没有覆盖全部 Production Component                                                                                                                        |
+| 9      | 已关闭   | Root Build / Check 覆盖全部生产包                                                                                                                                            |
 | 10     | 待确认   | 大型静态 Theme 数据长期占用 TypeScript 编译单元                                                                                                                              |
 | 11     | 待确认   | Root Agent 的 Context Checkpoint 存在语义保真度缺口                                                                                                                          |
 | 12     | 待确认   | Root Agent 与 Subagent 使用两套不同等级的 Context 生命周期                                                                                                                   |

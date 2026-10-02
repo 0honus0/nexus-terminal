@@ -3,7 +3,7 @@
   "version": "1.0.2",
   "private": true,
   "scripts": {
-    "build": "pnpm run build:backend && pnpm run build:frontend",
+    "build": "pnpm run build:backend && pnpm run build:frontend && pnpm run build:agent-runner",
     "build:backend": "pnpm --filter @nexus-terminal/backend build",
     "build:frontend": "pnpm --filter @nexus-terminal/frontend build",
     "docker:build": "scripts/build/build.sh docker",

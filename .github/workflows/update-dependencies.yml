@@ -79,7 +79,6 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         run: |
           pnpm run build
-          pnpm run build:agent-runner
 
       - name: Audit production dependencies
         if: steps.changes.outputs.changed == 'true'
