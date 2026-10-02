@@ -184,7 +184,7 @@ export const subagentProfileStrategyScenario = async () => {
       recentRuntimeToolExchanges: async () => [],
     } as unknown as RuntimeParticipantRepositoryPort,
     { readMessages: async () => [], listDelegationMessages: async () => [] } as MailboxReaderPort,
-    { discover: () => [] } as unknown as ToolCatalog,
+    { discover: () => [], list: () => [] } as unknown as ToolCatalog,
     new CapabilityRegistry(),
     emptyModelContinuations,
     null!,

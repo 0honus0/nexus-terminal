@@ -150,7 +150,7 @@ export const subagentMailboxTtlScenario = async () => {
     const contextBuilder = new SubagentContextBuilder(
       repository,
       repository,
-      { discover: () => [] } as unknown as ToolCatalog,
+      { discover: () => [], list: () => [] } as unknown as ToolCatalog,
       new CapabilityRegistry(),
       emptyModelContinuations,
       null!,

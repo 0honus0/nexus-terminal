@@ -114,7 +114,7 @@ export const contextTokenAccountingScenario = async () => {
   const subagentContext = new SubagentContextBuilder(
     runtimes,
     mailboxes,
-    { discover: () => [] } as unknown as ToolCatalog,
+    { discover: () => [], list: () => [] } as unknown as ToolCatalog,
     new CapabilityRegistry(),
     emptyModelContinuations,
     null!,

@@ -198,7 +198,7 @@ export const toolResultProjectionScenario = async () => {
   const childBuilder = new SubagentContextBuilder(
     runtimes,
     { readMessages: async () => [], listDelegationMessages: async () => [] } as MailboxReaderPort,
-    { discover: () => [] } as unknown as ToolCatalog,
+    { discover: () => [], list: () => [] } as unknown as ToolCatalog,
     new CapabilityRegistry(),
     emptyModelContinuations,
     null!,
