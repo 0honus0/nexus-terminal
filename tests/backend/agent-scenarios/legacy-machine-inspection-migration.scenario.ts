@@ -4,10 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { parseToolInspection } from '../../../packages/backend/src/infrastructure/agent/runtime/durable-state-decoders';
-import {
-  definedMigrations,
-  runMigrations,
-} from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
+import { runMigrations } from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
+import { definedMigrations } from '../../../packages/backend/src/infrastructure/database/migrations/registry';
 
 export const legacyMachineInspectionMigrationScenario = async () => {
   const latestMigrationId = Math.max(...definedMigrations.map((migration) => migration.id));

@@ -100,6 +100,7 @@
 - 外部 JSON 使用 camelCase，数据库 snake_case 留在 repository/infrastructure 边界。
 - HTTP/WebSocket/Runner/持久化 JSON 先以 `unknown` 解析并做有界验证，不用 `JSON.parse()` 类型断言代替 decode；领域层接收明确类型，边界映射规范 DTO。
 - SQLite schema 描述当前新安装结构，migration 只升级已发布结构并支持可重入/故障恢复。兼容层必须绑定已发布版本与删除条件，不为历史 dev 状态保留永久 shim。
+- SQLite 定义集中在 Infrastructure `database/schema/`，初始化顺序只由 `sqlite-schema.registry.ts` 持有；迁移定义位于 `database/migrations/`，全局编号／列表由 `migrations/registry.ts` 汇总，`sqlite-migrations.ts` 唯一执行。物理拆分不改变 SQL、已发布迁移或创建／升级顺序，消费者直接导入真实定义模块。
 - 事务由真实状态 owner 建立；状态、事件、Ledger、幂等结果与 projection 在同一 commit boundary 内更新。Runner 执行冻结 generation/input，Backend 不失去 durable 产品状态权威。
 
 ### 2.6 测试、提交与发布

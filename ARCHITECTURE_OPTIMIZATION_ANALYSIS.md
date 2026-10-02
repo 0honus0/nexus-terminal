@@ -40,30 +40,9 @@ Nexus Terminal 当前已经建立了比较明确的架构边界：Backend 使用
 
 > 已关闭：重新确认可独立提取的是恢复／App 禁用转换的实现，而非新增 authority 或必须迁到事务外的领域服务。`state-commit/recovery-transitions.ts` 接收 Adapter 当前事务，完成 active mutation lease→quarantine、Model/Tool 子状态收敛、输入／审批清理、Run/runtime/subagent/summary/event 更新；共享审批清理函数同时供终态审批清理入口使用。Adapter 仍开启唯一事务，成功提交后通知，再按原顺序读取历史 restart recovery candidates。SQL、scope/version 条件、执行顺序和恢复规则不变。已有 restart-recovery 与 app-disable-scope Agent 场景通过；未新增或运行 E2E。
 
-## 7. SQLite Schema 和 Migration 已经形成物理热点文件
+## 7. SQLite Schema 定义与 Migration 执行边界拆分（已关闭）
 
-> 待确认（代码组织建议）：集中 schema/migration 是现存唯一数据库 authority，文件体积和多业务表共存本身不是故障。尚无具体冲突、错误迁移或 owner 越界证据；只保留物理拆分是否值得的疑问，不据此要求重写已发布迁移。
-
-当前：
-
-```text
-sqlite-schema.ts      ≈ 53 KB
-sqlite-migrations.ts  ≈ 60 KB
-```
-
-两个文件集中维护多个业务域的数据结构和升级历史。
-
-逻辑上 SQLite infrastructure 仍然是统一 schema / migration authority，但物理源码已经成为所有 feature 共同修改的热点。
-
-Agent、Workspace、Auth、SSH、Plugin 等能力继续增加表和 migration 时，多个领域的改动会集中到同一文件，带来：
-
-- merge conflict 增加
-- review 范围扩大
-- 单次 schema 修改更难确认所属 owner
-- migration history 持续增长后可读性下降
-- 无关业务域在同一编译单元内发生频繁修改
-
-这里的问题不是数据库 authority 不明确，而是物理代码组织已经无法反映各业务域的来源和变更边界。
+> 已关闭：核对未发现错误迁移或重复数据库 authority，本项按代码组织改善处理，不宣称修复生产故障。75 个 schema SQL 定义按 core、Agent host/AI/execution/collaboration/plugins/workspace 分入 `database/schema/`，唯一 `sqlite-schema.registry.ts` 保留原初始化顺序。42 个已发布迁移按 core/runtime/capabilities/host 分入 `database/migrations/`，全局编号和列表顺序由 `migrations/registry.ts` 汇总，`sqlite-migrations.ts` 仅负责执行。消费者直接导入定义 owner，旧 `sqlite-schema.ts` 删除；未保留兼容转导出，未新增或重写迁移。一次性核对确认全部 schema SQL 值及迁移定义／顺序未变，已有 current-durable-schema、capability-grant-migration、legacy-machine-inspection-migration、legacy-settings-migration 场景通过；未新增或运行 E2E。
 
 ## 8. `compose-agent.ts` 已经成为 Composition Root 热点
 
@@ -4199,7 +4178,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 98 项，待确认 37 项，已关闭 5 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项已逐项分类：**未解决确认问题 98 项，待确认 36 项，已关闭 6 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4208,7 +4187,7 @@ await terminateAllManagedProcesses();
 | 3      | 已关闭   | Agent App Presentation / Application Controller 分离                                                                                                                         |
 | 5      | 已关闭   | Runner Transport / Command Execution 分离                                                                                                                                    |
 | 6      | 已关闭   | StateCommit 事务入口与 Recovery Transition 分离                                                                                                                              |
-| 7      | 待确认   | SQLite Schema 和 Migration 已经形成物理热点文件                                                                                                                              |
+| 7      | 已关闭   | SQLite Schema 定义与 Migration 执行边界拆分                                                                                                                                  |
 | 8      | 待确认   | `compose-agent.ts` 已经成为 Composition Root 热点                                                                                                                            |
 | 9      | 待确认   | Root Build Contract 没有覆盖全部 Production Component                                                                                                                        |
 | 10     | 待确认   | 大型静态 Theme 数据长期占用 TypeScript 编译单元                                                                                                                              |

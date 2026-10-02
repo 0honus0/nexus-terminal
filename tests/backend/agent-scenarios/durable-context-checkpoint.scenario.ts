@@ -6,10 +6,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { SqliteConversationRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-conversation.repository';
 import { SqliteContextCheckpointRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-context-checkpoint.repository';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
-import {
-  definedMigrations,
-  runMigrations,
-} from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
+import { runMigrations } from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
+import { definedMigrations } from '../../../packages/backend/src/infrastructure/database/migrations/registry';
 import { ContextCheckpointService } from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../../packages/backend/src/modules/agent/ai/context.service';
 import type { LedgerEntryView } from '../../../packages/backend/src/modules/agent/ai/conversation.repository.port';

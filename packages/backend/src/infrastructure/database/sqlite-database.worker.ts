@@ -10,7 +10,8 @@ import type {
 } from './database-worker.protocol';
 import { runMigrations } from './sqlite-migrations';
 import { sqlitePostMigrationDefinitions, sqliteTableDefinitions } from './sqlite-schema.registry';
-import { createAiMemorySearchIndexSQL, createAiThreadEntrySearchIndexSQL } from './sqlite-schema';
+import { createAiMemorySearchIndexSQL } from './schema/agent-ai';
+import { createAiThreadEntrySearchIndexSQL } from './schema/agent-execution';
 import { sqliteLedgerSearchTerms, sqliteSearchTerms } from './sqlite-search-index';
 import { setBackendLogLevel } from '../../shared/logging/logger';
 
