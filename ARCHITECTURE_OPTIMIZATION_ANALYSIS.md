@@ -619,9 +619,9 @@ ON DELETE SET NULL
 
 运行时删除 Proxy 后，Connection 可以继续保持 proxy route 但 `proxyId = null`，后续 SSH resolver 会在真正连接时失败。删除 SSH Key 后，原本依赖该 key 的 Connection 可以保持 key auth，但同时 `sshKeyId = null` 且没有 inline private key，最终变成不可解析的 credential 状态。
 
-## 27. Connection Import 中内联 Proxy 与 Connection 的创建不是一个原子操作
+## 27. Connection Import 内联 Proxy 部分提交（已修复）
 
-> 确认问题（部分提交）：`modules/connections/connection-import.service.ts` 先 proxies.create 再 connections.create，没有共享事务或失败补偿。Proxy 的 duplicate 检查会阻止部分重复创建，不能声称相同导入必然无限产生重复 Proxy；孤立记录风险保留。
+> 已修复：ConnectionImportCommitPort 由 SQLite adapter 在每条 record 的排他事务内复用 Proxy/Connection 校验、凭据保护和 repository，嵌套 aggregate work 加入同一事务。失败回滚新 Proxy、Connection、tags 和 audit，无 import cache 或盲删补偿。Legacy normalization 不变。下文为原问题证据。
 
 `ConnectionImportService.importRecords()` 遇到带 inline proxy 的记录时，会先执行：
 

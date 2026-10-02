@@ -1,8 +1,7 @@
 import type { ProxyInput } from '../proxies/proxy.types';
-import type { ProxyService } from '../proxies/proxy.service';
+import type { ConnectionImportCommitPort } from './connection-import.port';
 import type { SecretCipher } from '../../shared/security/crypto.port';
 import type { CreateConnectionInput } from './connection.types';
-import type { ConnectionService } from './connection.service';
 
 interface CurrentImportRecord extends CreateConnectionInput {
   proxy?: ProxyInput | null;
@@ -35,36 +34,19 @@ const legacyTagIds = (value: unknown): number[] =>
 /** Owns compatibility normalization for the legacy connection-import JSON contract. */
 export class ConnectionImportService {
   constructor(
-    private readonly connections: ConnectionService,
-    private readonly proxies: ProxyService,
+    private readonly commit: ConnectionImportCommitPort,
     private readonly cipher: SecretCipher,
   ) {}
 
   async importRecords(values: readonly unknown[]): Promise<ConnectionImportResult> {
     let successCount = 0;
     const errors: ConnectionImportResult['errors'] = [];
-    const proxyCache = new Map<string, number>();
-    for (const proxy of await this.proxies.list()) proxyCache.set(this.proxyKey(proxy), proxy.id);
 
     for (const source of values) {
       try {
         if (!isRecord(source)) throw new Error('连接记录必须是 JSON 对象。');
         const normalized = this.isLegacy(source) ? this.normalizeLegacy(source) : this.normalizeCurrent(source);
-        let proxyId = normalized.connection.proxyId ?? null;
-        if (normalized.proxy) {
-          const key = this.proxyKey(normalized.proxy);
-          const cached = proxyCache.get(key);
-          if (cached) proxyId = cached;
-          else {
-            const created = await this.proxies.create(normalized.proxy);
-            proxyId = created.id;
-            proxyCache.set(key, created.id);
-          }
-        }
-        await this.connections.create({
-          ...normalized.connection,
-          proxyId,
-        });
+        await this.commit.create(normalized.connection, normalized.proxy);
         successCount += 1;
       } catch (error) {
         errors.push({
@@ -159,9 +141,5 @@ export class ConnectionImportService {
     if (value === null || value === undefined || value === '') return undefined;
     if (typeof value !== 'string') throw new Error('Legacy encrypted credential must be a string.');
     return this.cipher.decrypt(value);
-  }
-
-  private proxyKey(proxy: Pick<ProxyInput, 'name' | 'type' | 'host' | 'port'>): string {
-    return `${proxy.name.trim()}\u0000${proxy.type}\u0000${proxy.host.trim()}\u0000${proxy.port}`;
   }
 }

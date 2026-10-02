@@ -2,6 +2,7 @@ import type { RuntimeConfig } from '../config/runtime-config';
 import type { AgentServices } from '../modules/agent/public';
 import { DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE } from '../modules/agent/host/official-plugin-source';
 import { composeAgent } from './agent/compose-agent';
+import { SqliteConnectionImportAdapter } from '../infrastructure/database/repositories/sqlite-connection-import.adapter';
 import { createAgentConnectionResolver, createAgentDiagnostics } from './agent/machine-support';
 import { NexusBackupCodecAdapter } from '../infrastructure/backup/backup-codec.adapter';
 import { SqliteBackupSnapshotAdapter } from '../infrastructure/backup/sqlite-backup-snapshot.adapter';
@@ -273,7 +274,7 @@ export const createCompositionRoot = (
   const passkeys = new PasskeyService(passkeyRepository, user, webauthn, audit, notifications);
 
   const tags = new TagService(tagRepository);
-  const connectionImport = new ConnectionImportService(connections, proxies, cipher);
+  const connectionImport = new ConnectionImportService(new SqliteConnectionImportAdapter(database, cipher), cipher);
   const quickCommandTags = new QuickCommandTagService(quickCommandTagRepository);
   const quickCommands = new QuickCommandService(quickCommandRepository, quickCommandTagRepository);
   const commandHistory = new CommandHistoryService(commandHistoryRepository);
