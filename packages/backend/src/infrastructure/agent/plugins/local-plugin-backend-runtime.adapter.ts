@@ -159,6 +159,7 @@ type StorageRequest =
 type IntentRequest =
   | {
       kind: 'intent.create';
+      operationId: string;
       requestId: number;
       receiverAppId: string;
       intentId: string;
@@ -267,7 +268,7 @@ const decodeIntentRequest = (record: ProtocolRecord): IntentRequest => {
   const requestId = protocolRequestId(record.requestId);
   switch (record.kind) {
     case 'intent.create': {
-      requireProtocolKeys(record, ['receiverAppId', 'intentId', 'input', 'artifactRefs', 'confirmed']);
+      requireProtocolKeys(record, ['operationId', 'receiverAppId', 'intentId', 'input', 'artifactRefs', 'confirmed']);
       if (record.confirmed !== true || !Array.isArray(record.artifactRefs) || record.artifactRefs.length > 16) {
         throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
       }
@@ -281,6 +282,7 @@ const decodeIntentRequest = (record: ProtocolRecord): IntentRequest => {
       return {
         kind: record.kind,
         requestId,
+        operationId: protocolString(record.operationId, 128),
         receiverAppId: protocolString(record.receiverAppId, 256),
         intentId: protocolString(record.intentId, 256),
         input: protocolJsonValue(record.input),
@@ -338,7 +340,7 @@ const decodeIntentRequest = (record: ProtocolRecord): IntentRequest => {
   }
 };
 
-class BackendPluginProcess {
+export class BackendPluginProcess {
   private readonly pending = new Map<
     number,
     { resolve(value: unknown): void; reject(error: Error): void; timer: NodeJS.Timeout }
@@ -575,13 +577,17 @@ class BackendPluginProcess {
       let value: unknown;
       switch (message.kind) {
         case 'intent.create':
-          value = await this.appIntents.createConfirmed(this.scope, {
-            receiverAppId: message.receiverAppId,
-            intentId: message.intentId,
-            input: message.input,
-            artifactRefs: message.artifactRefs,
-            confirmed: true,
-          });
+          value = await this.appIntents.createConfirmed(
+            this.scope,
+            {
+              receiverAppId: message.receiverAppId,
+              intentId: message.intentId,
+              input: message.input,
+              artifactRefs: message.artifactRefs,
+              confirmed: true,
+            },
+            message.operationId,
+          );
           break;
         case 'intent.listReceived':
           value = await this.appIntents.listReceived(this.scope, message.limit);

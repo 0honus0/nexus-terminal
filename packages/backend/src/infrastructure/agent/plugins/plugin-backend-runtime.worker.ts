@@ -37,6 +37,7 @@ type WorkerStorageRequestInput =
 type WorkerIntentRequestInput =
   | {
       kind: 'intent.create';
+      operationId: string;
       receiverAppId: string;
       intentId: string;
       input: JsonValue;
@@ -193,9 +194,17 @@ const sdk: PluginBackendSdkV1 = Object.freeze({
   }),
   intents: Object.freeze({
     create: async (request: Parameters<PluginBackendSdkV1['intents']['create']>[0]) => {
-      const { receiverAppId, intentId, input, artifactRefs = [], confirmed } = request;
+      const { operationId, receiverAppId, intentId, input, artifactRefs = [], confirmed } = request;
       return intentReceipt(
-        await intentRequest({ kind: 'intent.create', receiverAppId, intentId, input, artifactRefs, confirmed }),
+        await intentRequest({
+          kind: 'intent.create',
+          operationId,
+          receiverAppId,
+          intentId,
+          input,
+          artifactRefs,
+          confirmed,
+        }),
       );
     },
     listReceived: async (limit?: number) => {

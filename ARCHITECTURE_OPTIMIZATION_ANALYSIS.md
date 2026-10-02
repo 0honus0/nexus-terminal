@@ -2572,7 +2572,9 @@ AND (w.status <> 'deleted' OR w.retained = 1)
 
 ## 104. Backend Plugin 的 AppIntent create 丢失了已经存在的 idempotency owner；崩溃窗口会把一次跨 App 操作重复提交为两张 receipt
 
-> 确认问题（SDK 无 durable retry identity）：`local-plugin-backend-runtime.adapter.ts:541–547` 不传 createConfirmed 第三参数，Backend SDK input 也不提供 idempotencyKey。只有插件在 uncertain commit 后重试同一业务操作才产生重复 receipt；不声称任意 create 会重复。
+> 已修复：Backend SDK create 必填 UUID operationId，worker/IPC decode/Host 透传给 createConfirmed 第三参数，复用 durable receipt identity/payload 校验。Plugin 须提交前保存 ID 并同 payload 重试，不自动生成替代 ID；Agent 场景通过真实 Backend Plugin worker/IPC 验证同 ID 同 payload replay 原 receipt、同 ID 改 payload 拒绝。不承诺 receiver 外部副作用 exactly-once。下文为原证据。
+
+> 原问题证据（SDK 无 durable retry identity）：`local-plugin-backend-runtime.adapter.ts:541–547` 不传 createConfirmed 第三参数，Backend SDK input 也不提供 idempotencyKey。只有插件在 uncertain commit 后重试同一业务操作才产生重复 receipt；不声称任意 create 会重复。
 
 `AppIntentService.createConfirmed()` 本身已经为跨 App intent 建立了 durable idempotency contract。只要调用方传入 `idempotencyKey`，receipt id 就直接绑定到该 key，并会在重复请求时校验 payload 后 replay 原 receipt：
 
@@ -4308,7 +4310,7 @@ await terminateAllManagedProcesses();
 | 101    | 确认问题 | Plugin 可耗尽共享 Run subscription 槽并阻止新的 Host UI 订阅                                                                                                                 |
 | 102    | 待确认   | Plugin uninstall / upgrade 是否应停止 retained Workspace 的冻结版本进程                                                                                                      |
 | 103    | 确认问题 | `retained` Workspace 的显式 delete 只删除 Generation，不释放 Workspace retention；它会同时留下不可回收文件树并永久阻塞 Run / Thread 删除                                     |
-| 104    | 确认问题 | Backend Plugin 的 AppIntent create 丢失了已经存在的 idempotency owner；崩溃窗口会把一次跨 App 操作重复提交为两张 receipt                                                     |
+| 104    | 已修复   | Backend Plugin 的 AppIntent create 丢失了已经存在的 idempotency owner；崩溃窗口会把一次跨 App 操作重复提交为两张 receipt                                                     |
 | 105    | 确认问题 | Backend Plugin 的 Host RPC 没有 response-drain deadline；一个堵住 stdin 的 Plugin 可以让 uninstall / upgrade 永远卡在 SIGTERM 之前                                           |
 | 106    | 确认问题 | Plugin 首次安装没有 per-App serialization；两个版本并发 install 可以把 App activeVersion 与 Installation version 写成永久冲突                                                |
 | 107    | 确认问题 | Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`                                               |

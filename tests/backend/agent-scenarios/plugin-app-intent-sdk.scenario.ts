@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppIntentArtifactAdapter } from '../../../packages/backend/src/infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { LocalArtifactStore } from '../../../packages/backend/src/infrastructure/agent/artifacts/local-artifact-store';
+import { BackendPluginProcess } from '../../../packages/backend/src/infrastructure/agent/plugins/local-plugin-backend-runtime.adapter';
 import { SqliteAppGrantRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-app-grant.repository';
 import { SqliteAppIntentRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-app-intent.repository';
 import { SqliteAppStateRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-app-state.repository';
+import { SqliteAppStorageRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-app-storage.repository';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
 import type { ClockPort, Scope } from '../../../packages/backend/src/modules/agent/agent.types';
 import type { ArtifactLimitPolicyPort } from '../../../packages/backend/src/modules/agent/ai/artifact.port';
@@ -37,6 +40,7 @@ export const pluginAppIntentSdkScenario = async () => {
   const states = new SqliteAppStateRepository(db);
   const grants = new SqliteAppGrantRepository(db, new CapabilityRegistry());
   const intentRepository = new SqliteAppIntentRepository(db);
+  const storage = new SqliteAppStorageRepository(db);
   let intentNow = Math.floor(Date.now() / 1000);
   const intentClock: ClockPort = { nowUnixSeconds: () => intentNow };
   const intents = new AppIntentService(
@@ -175,6 +179,78 @@ export const pluginAppIntentSdkScenario = async () => {
     );
     await grants.insertDefaults(receiver, [artifactGrant]);
 
+    const runtimeRoot = path.join(directory, 'plugin-runtime');
+    const runtimeBackend = path.join(runtimeRoot, 'backend');
+    fs.mkdirSync(runtimeBackend, { recursive: true });
+    fs.writeFileSync(
+      path.join(runtimeBackend, 'index.mjs'),
+      `const operationId = '00000000-0000-4000-8000-000000000104';
+
+export default {
+  async activate(context) {
+    const request = {
+      operationId,
+      receiverAppId: 'fixture.receiver',
+      intentId: 'fixture.receive',
+      input: { kind: 'runtime-idempotency' },
+      artifactRefs: [],
+      confirmed: true,
+    };
+    const first = await context.sdk.intents.create(request);
+    const replay = await context.sdk.intents.create(request);
+    let mismatch = null;
+    try {
+      await context.sdk.intents.create({ ...request, input: { kind: 'runtime-idempotency-changed' } });
+    } catch (error) {
+      mismatch = error instanceof Error ? error.message : String(error);
+    }
+    await context.sdk.storage.put(
+      'runtime.intent-idempotency',
+      { operationId, firstId: first.id, replayId: replay.id, mismatch },
+      null,
+    );
+  },
+};
+`,
+      'utf8',
+    );
+    const workerPath = path.resolve(
+      __dirname,
+      '../../../packages/backend/src/infrastructure/agent/plugins/plugin-backend-runtime.worker.ts',
+    );
+    const tsxBin = path.resolve(__dirname, '../../../packages/backend/node_modules/.bin/tsx');
+    const child = spawn(tsxBin, [workerPath], {
+      cwd: runtimeRoot,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        NEXUS_PLUGIN_USER_ID: String(sender.userId),
+        NEXUS_PLUGIN_APP_ID: sender.appId,
+        NEXUS_PLUGIN_VERSION: '1.0.0',
+        NEXUS_PLUGIN_SDK_VERSION: '1.0.0',
+        NEXUS_PLUGIN_PROTOCOL_VERSION: '1',
+        NEXUS_PLUGIN_BACKEND_ENTRY: 'backend/index.mjs',
+        NEXUS_PLUGIN_ROOT: runtimeRoot,
+      },
+    });
+    const runtime = new BackendPluginProcess(child, sender, storage, intents, true, '1.0.0');
+    try {
+      await runtime.ready;
+      await runtime.request('lifecycle.activate');
+      const runtimeResult = await storage.get(sender, 'runtime.intent-idempotency');
+      assert.deepEqual(runtimeResult?.value, {
+        operationId: '00000000-0000-4000-8000-000000000104',
+        firstId: '00000000-0000-4000-8000-000000000104',
+        replayId: '00000000-0000-4000-8000-000000000104',
+        mismatch: 'IDEMPOTENCY_PAYLOAD_MISMATCH',
+      });
+      const runtimeReceipts = (await intents.listReceived(receiver)).filter(
+        (candidate) => candidate.id === '00000000-0000-4000-8000-000000000104',
+      );
+      assert.equal(runtimeReceipts.length, 1, 'Backend Plugin retry must replay one durable AppIntent receipt');
+    } finally {
+      await runtime.close();
+    }
+
     const receipt = await intents.createConfirmed(sender, {
       receiverAppId: receiver.appId,
       intentId: receiverIntent,
@@ -242,7 +318,8 @@ export const pluginAppIntentSdkScenario = async () => {
     );
 
     return [
-      { name: 'plugin_app_intent_authority_roundtrips', value: 1, unit: 'cases' },
+      { name: 'plugin_app_intent_authority_roundtrips', value: 2, unit: 'cases' },
+      { name: 'plugin_backend_intent_idempotent_replays', value: 1, unit: 'receipts' },
       { name: 'plugin_app_intent_authority_rejections', value: 5, unit: 'cases' },
     ];
   } finally {

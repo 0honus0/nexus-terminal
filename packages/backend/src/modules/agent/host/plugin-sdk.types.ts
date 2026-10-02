@@ -41,6 +41,7 @@ export interface PluginBackendSdkV1 {
   };
   intents: {
     create(input: {
+      operationId: string;
       receiverAppId: string;
       intentId: string;
       input: JsonValue;
