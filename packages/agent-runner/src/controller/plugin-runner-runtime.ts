@@ -38,6 +38,8 @@ class RunnerPluginProcess {
   private sequence = 0;
   private readyResolve!: () => void;
   private readyReject!: (error: Error) => void;
+  private readonly readyTimer: NodeJS.Timeout;
+  private readySettled = false;
   readonly ready = new Promise<void>((resolve, reject) => {
     this.readyResolve = resolve;
     this.readyReject = reject;
@@ -48,6 +50,8 @@ class RunnerPluginProcess {
     private readonly sdkVersion: string,
     private readonly protocolVersion: typeof PLUGIN_RUNNER_PROTOCOL_VERSION,
   ) {
+    this.readyTimer = setTimeout(() => this.protocolFailure(new Error('PLUGIN_RUNNER_READY_TIMEOUT')), 30_000);
+    this.readyTimer.unref?.();
     child.stdout.on('data', (chunk: Buffer) => {
       try {
         for (const frame of this.decoder.push(chunk))
@@ -109,6 +113,7 @@ class RunnerPluginProcess {
   private handleFrame(frame: PluginIpcFrame): void {
     const message = decodePluginJson(frame);
     if (message.kind === 'runtime.ready') {
+      if (this.readySettled) return;
       if (frame.requestId !== 0) throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
       if (message.protocolVersion !== this.protocolVersion || message.sdkVersion !== this.sdkVersion) {
         this.failAll(new Error('PLUGIN_RUNNER_PROTOCOL_VERSION_MISMATCH'));
@@ -116,6 +121,8 @@ class RunnerPluginProcess {
         return;
       }
       this.readyResolve();
+      this.readySettled = true;
+      clearTimeout(this.readyTimer);
       return;
     }
     if (message.kind !== 'lifecycle.result') throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
@@ -142,6 +149,8 @@ class RunnerPluginProcess {
   }
 
   private failAll(error: Error): void {
+    clearTimeout(this.readyTimer);
+    this.readySettled = true;
     this.readyReject(error);
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);

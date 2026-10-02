@@ -1966,7 +1966,9 @@ if (
 
 连续执行这种 Run 可以持续累积真实浏览器资源和远端 CDP connection。这和普通“遗漏 close 的调用方责任”不同：生命周期 authority 本身让创建 Run 结束后不存在任何可达的细粒度回收入口。
 
-## 91. Runner Plugin 的 ready handshake 没有 timeout；第三方模块在发送 `runtime.ready` 前卡住时，Workspace lifecycle command 和 Runner startup reconcile 都会永久挂起
+## 91. Runner Plugin ready handshake（已修复）
+
+> 已修复：启动时30s ready timer，超时protocolFailure reject并SIGKILL managed process，activate补偿收敛；ready/error/exit清timer。不声称整个workspace command总deadline实现，dispose/terminate仍有各自边界。下文为原证据。
 
 > 确认问题：plugin-runner-runtime ready 无 timer，worker import 在发 ready 前，controller/reconciler await activate。需 child 保持存活且 import 不 settle；普通抛错／退出会 reject，不能说任何坏插件都会永久挂住。
 
