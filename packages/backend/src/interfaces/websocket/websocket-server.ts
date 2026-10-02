@@ -31,6 +31,7 @@ interface SessionRequest extends Request {
 }
 
 interface ClientRecord {
+  sessionId?: string;
   socket: WebSocket;
   kind: 'workspace' | 'upload' | 'remote-desktop' | 'agent' | 'agent-terminal';
   protocol?: { close(): Promise<void> | void; touchOwnership?(): void };
@@ -65,6 +66,7 @@ export interface WebSocketServerOptions {
 }
 
 export interface BackendWebSocketServer {
+  revokeSession(sessionId: string): Promise<void>;
   metrics(): {
     total: number;
     workspace: number;
@@ -152,6 +154,8 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
   const { server, sessionMiddleware, config, dependencies } = options;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
   const clients = new Set<ClientRecord>();
+  const socketSessions = new WeakMap<WebSocket, string>();
+  let revocationEpoch = 0;
   let closing = false;
   let quiesceDepth = 0;
   let agentMaxReplayLag = 0;
@@ -161,6 +165,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
   let quiesceTail: Promise<void> = Promise.resolve();
 
   const trackClient = (record: ClientRecord): void => {
+    record.sessionId = socketSessions.get(record.socket);
     clients.add(record);
     logger.debug({ websocketKind: record.kind, activeClients: clients.size }, 'WebSocket client attached');
     const alive = () => {
@@ -298,6 +303,12 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     username: string,
     clientIp: string,
   ): void => {
+    const upgrade = (accept: (ws: WebSocket) => void): void => {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        socketSessions.set(ws, request.sessionID);
+        accept(ws);
+      });
+    };
     if (pathname === '/ws/uploads') {
       const workspaceId = url.searchParams.get('workspaceId')?.trim() || '';
       const uploadId = url.searchParams.get('uploadId')?.trim() || '';
@@ -307,7 +318,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         return;
       }
       const uploadRequest: WorkspaceUploadStreamQueryDto = { workspaceId, uploadId, size };
-      wss.handleUpgrade(request, socket, head, (ws) => {
+      upgrade((ws) => {
         runtimePerformanceMetrics.webSocketUpgradeAccepted();
         onUploadConnection(ws, userId, uploadRequest);
       });
@@ -320,7 +331,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         rejectUpgrade(socket, 400, 'Bad Request');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (ws) => {
+      upgrade((ws) => {
         runtimePerformanceMetrics.webSocketUpgradeAccepted();
         onRemoteDesktopConnection(ws, request, ticket, userId);
       });
@@ -360,7 +371,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         rows,
         ...(sessionId ? { sessionId } : {}),
       };
-      wss.handleUpgrade(request, socket, head, (ws) => {
+      upgrade((ws) => {
         runtimePerformanceMetrics.webSocketUpgradeAccepted();
         onAgentTerminalConnection(ws, userId, terminalRequest);
       });
@@ -387,20 +398,21 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         rejectUpgrade(socket, 429, 'Too Many Requests');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (ws) => {
+      upgrade((ws) => {
         runtimePerformanceMetrics.webSocketUpgradeAccepted();
         onAgentConnection(ws, userId, sessionKey);
       });
       return;
     }
 
-    wss.handleUpgrade(request, socket, head, (ws) => {
+    upgrade((ws) => {
       runtimePerformanceMetrics.webSocketUpgradeAccepted();
       onWorkspaceConnection(ws, userId, username, clientIp);
     });
   };
 
   const upgradeHandler = (request: http.IncomingMessage, socket: Socket, head: Buffer): void => {
+    const epoch = revocationEpoch;
     runtimePerformanceMetrics.webSocketUpgradeAttempt();
     if (closing || quiesceDepth > 0) {
       rejectUpgrade(socket, 503, 'Service Unavailable');
@@ -442,6 +454,10 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
 
         const sessionResponse: Response = Object.setPrototypeOf(new http.ServerResponse(request), express.response);
         sessionMiddleware(request as SessionRequest, sessionResponse, () => {
+          if (epoch !== revocationEpoch || closing || quiesceDepth > 0 || socket.destroyed) {
+            rejectUpgrade(socket, 401, 'Unauthorized');
+            return;
+          }
           const sessionRequest = request as SessionRequest;
           const userId = sessionRequest.session?.userId;
           const username = sessionRequest.session?.username;
@@ -553,6 +569,12 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         bufferedAmountBytes,
         maxBufferedAmountBytes,
       };
+    },
+    revokeSession: async (sessionId: string): Promise<void> => {
+      revocationEpoch += 1;
+      const revoked = [...clients].filter((record) => record.sessionId === sessionId);
+      for (const record of revoked) record.socket.terminate();
+      await Promise.allSettled(revoked.map((record) => Promise.resolve().then(() => record.protocol?.close())));
     },
     quiesce: <T>(operation: () => Promise<T>): Promise<T> => {
       quiesceDepth += 1;

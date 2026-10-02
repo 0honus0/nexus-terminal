@@ -43,6 +43,7 @@ const passkeySummaryDto = (passkey: PasskeySummary): PasskeySummaryDto => ({
 });
 
 export interface AuthRouterDependencies {
+  revokeSessionSockets(sessionId: string): Promise<void>;
   auth: AuthService;
   twoFactor: TwoFactorService;
   captcha: CaptchaService;
@@ -530,7 +531,9 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       const userId = request.session.userId;
       const username = request.session.username;
       const ip = requestIp(request);
+      const sessionId = request.sessionID;
       await destroySession(request);
+      await dependencies.revokeSessionSockets(sessionId);
       response.clearCookie(dependencies.sessionCookieName, { httpOnly: true, sameSite: 'lax', secure: request.secure });
       if (userId && username) await dependencies.auth.recordLogout(userId, username, ip);
       response.json({ message: '已成功登出。' });

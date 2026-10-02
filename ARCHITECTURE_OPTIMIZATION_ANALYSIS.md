@@ -1340,7 +1340,9 @@ cache expiresAt 从 startedAt 计算；采集较慢时完成即过期，但 inFl
 
 dispatcher 的 thread rename 等分支不传 operationId；create/appendInput 等分支有传递。部分 mutation 另有 expectedVersion/CAS 或幂等终态保护。应逐 endpoint 验证 timeout 后相同操作的 replay 约定，不能统一断言缺失 operationId 必然重复执行。
 
-## 62. HTTP Logout 只销毁 Session，但已经建立的认证 WebSocket 不会被撤销
+## 62. Logout 未撤销既有 WebSocket（已修复）
+
+> 已修复：所有 socket track 持有 sessionId，logout destroy 后调用 session-scoped revoke，立即 terminate 并 drain protocol close；upgrade 跨 revoke epoch 的认证结果拒绝。其他已连接 session 不受影响，其他 session 的同时进行 upgrade 可安全拒绝并重试；已接受副作用不回滚。下文为原问题证据。
 
 > 确认问题：auth logout destroySession，`websocket-server.ts` 只在 upgrade 验证认证状态，存活 ClientRecord 没有按 session revocation 清理。官方 UI 主动关闭自己的 socket 不能撤销另一持有同 session 的连接；未实测 logout 后 RPC。
 

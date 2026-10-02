@@ -85,6 +85,9 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     systemStatus: services.modules.systemStatus,
     sshResourceStatus: services.modules.sshResourceStatus,
     passkeyRelyingParties: config.passkeyRelyingParties,
+    revokeSessionSockets: async (sessionId) => {
+      await webSockets?.revokeSession(sessionId);
+    },
     workspaceFilesystem: services.modules.workspaceFilesystem,
   });
   const pluginFrontendRequestHandler = config.agentPublicOrigin
