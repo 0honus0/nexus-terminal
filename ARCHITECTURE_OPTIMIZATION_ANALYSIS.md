@@ -1625,7 +1625,9 @@ for (const connectionId of payload.connectionIds)
 
 `TransferOrchestratorService` 的并发限制只约束后续实际传输，不会限制 `create()` 前的同步分配。因此一个已认证请求就能在进入 bounded execution 之前制造巨大的 CPU/heap 放大，严重时可阻塞 event loop 或触发进程 OOM。
 
-## 76. Server Transfer 的 terminal task 只靠用户手工删除；Backend Map 和 `/status` 响应会随进程生命周期持续增长
+## 76. Server Transfer 进程内历史保留（已修复）
+
+> 已修复：全 Registry 保留最近100个 controller 已释放终态，create/list/release prune；在途含未释放 controller cap32，满载拒绝新任务，不删除活动记录。结合#75每任务上限限制 Map/status 增长，不声称 byte-level heap bound 或跨重启持久化。下文为原证据。
 
 > 确认问题（进程内 history retention）：tasks Map 保留 terminal record，releaseCancellation 只删 controller，status 全量返回。显式删除和重启可回收，不能称跨重启永久泄漏；负载未测。
 

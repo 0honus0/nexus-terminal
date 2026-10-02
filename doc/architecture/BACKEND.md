@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Transfer Registry global active cap32（含 FINAL但controller未释放），settled history100 按updatedAt/id裁剪，create/list/release驱动；不裁剪仍owned记录，不新增timer。
+
 TransferTaskRegistry.create 在 UUID/subtask 分配前校验64 targets/256 sources/1024 product，拒绝重复 target/path，维持 sourceItemIndex；非 HTTP 消费者同样受 admission。
 
 Backup capture 先 transaction capture tables，释放 scheduler barrier 后 captureStableFiles/validateFileReferences；captured table view 为引用权威，不加 live-table recapture 或 writer freeze，不承诺 physical point-in-time。DB barrier 仍覆盖表读取/解密，不覆盖整树文件读取/重试/hash 校验。

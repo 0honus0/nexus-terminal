@@ -14,6 +14,12 @@ export class TransferTaskRegistry {
   private readonly controllers = new Map<string, AbortController>();
 
   create(payload: InitiateTransferPayload, userId: string | number): CreatedTransferTask {
+    this.prune();
+    if (
+      [...this.tasks.values()].filter((task) => !FINAL.has(task.status) || this.controllers.has(task.taskId)).length >=
+      32
+    )
+      throw new Error('TRANSFER_ACTIVE_TASK_LIMIT_EXCEEDED');
     if (
       !payload.connectionIds.length ||
       payload.connectionIds.length > 64 ||
@@ -69,6 +75,7 @@ export class TransferTaskRegistry {
     return t ? this.cloneWithConvenience(t) : null;
   }
   list(userId: string | number) {
+    this.prune();
     return [...this.tasks.values()].filter((t) => t.userId === userId).map((t) => this.cloneWithConvenience(t));
   }
   metrics(): { activeTasks: number; queuedSubTasks: number; activeSubTasks: number } {
@@ -115,6 +122,13 @@ export class TransferTaskRegistry {
   }
   releaseCancellation(id: string) {
     this.controllers.delete(id);
+    this.prune();
+  }
+  private prune(): void {
+    const settled = [...this.tasks.values()]
+      .filter((task) => FINAL.has(task.status) && !this.controllers.has(task.taskId))
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || b.taskId.localeCompare(a.taskId));
+    for (const task of settled.slice(100)) this.tasks.delete(task.taskId);
   }
   setOverallStatus(id: string, status: TransferTaskStatus) {
     const t = this.tasks.get(id);
