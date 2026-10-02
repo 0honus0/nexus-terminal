@@ -501,6 +501,7 @@ export interface AgentServices {
   initialize(): Promise<void>;
   initializeForUser(userId: number): Promise<void>;
   quiesce(deadlineUnixSeconds: number): Promise<void>;
+  prepareRestore(deadlineUnixSeconds: number): Promise<void>;
   dispose(): Promise<void>;
 }
 

@@ -35,6 +35,7 @@ export interface ComposePluginsOptions {
 export interface ComposedPlugins {
   appStorage: SqliteAppStorageRepository;
   plugins: PluginInstallService;
+  resetRuntime(): Promise<void>;
 }
 
 export const composePlugins = ({
@@ -101,5 +102,15 @@ export const composePlugins = ({
     publicOrigin,
   );
 
-  return { appStorage, plugins };
+  return {
+    appStorage,
+    plugins,
+    resetRuntime: async () => {
+      await pluginBackendRuntime.closeAll();
+      for (const { appId, version } of registry.pluginVersions()) {
+        registry.removeVersion(appId, version);
+        definitions.removeVersion(appId, version);
+      }
+    },
+  };
 };

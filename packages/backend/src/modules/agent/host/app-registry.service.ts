@@ -64,6 +64,14 @@ export class AppRegistryService {
     return this.builtinDefinitions.has(appId);
   }
 
+  pluginVersions(): Array<{ appId: string; version: string }> {
+    return [...this.versions].flatMap(([appId, versions]) =>
+      [...versions.keys()]
+        .filter((version) => this.builtinDefinitions.get(appId)?.manifest.version !== version)
+        .map((version) => ({ appId, version })),
+    );
+  }
+
   list(): AgentAppDefinition[] {
     return [...this.builtinDefinitions.values()].sort((left, right) =>
       left.manifest.id.localeCompare(right.manifest.id),

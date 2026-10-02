@@ -387,6 +387,7 @@ export const createCompositionRoot = (
     passwordHasher,
     {
       beforeRestore: async () => {
+        await agent.prepareRestore(Math.floor(Date.now() / 1000) + 10);
         transferTasks.cancelAll();
         await workspaceSuspend.dispose().catch(() => undefined);
         await sshSuspend.dispose().catch(() => undefined);
@@ -397,6 +398,7 @@ export const createCompositionRoot = (
         await terminalThemes.initialize(presetTerminalThemes);
         await appearance.initialize();
         sshResourceStatus.clearCache();
+        await agent.initialize();
       },
     },
   );

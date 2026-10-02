@@ -78,6 +78,10 @@ const checkpointRecoveryReasons = (checkpoint: CheckpointView): string[] => {
 export class CheckpointService {
   private readonly deferredRestartRuns = new Map<string, Scope>();
 
+  resetRecovery(): void {
+    this.deferredRestartRuns.clear();
+  }
+
   constructor(
     private readonly checkpoints: CheckpointRepositoryPort,
     private readonly runs: RunSnapshotReaderPort &

@@ -26,8 +26,14 @@ export class BackupService {
     const decoded = await this.codec.decode(bytes, password);
     return this.runExclusive(async () => {
       await this.hooks.beforeRestore?.();
-      const restored = await this.snapshots.restore(decoded.snapshot);
-      await this.hooks.afterRestore?.();
+      let restored;
+      try {
+        restored = await this.snapshots.restore(decoded.snapshot);
+      } finally {
+        // The adapter rolls back uncommitted swaps before rejecting. Rebuild owners against
+        // whichever durable state survived, including after a failed restore.
+        await this.hooks.afterRestore?.();
+      }
       return { ...restored, usedPassword: decoded.usedPassword };
     });
   }

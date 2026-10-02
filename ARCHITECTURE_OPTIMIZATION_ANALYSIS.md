@@ -559,9 +559,9 @@ Agent durable state 同时存在于 SQLite 与这些文件目录中。例如数�
 
 待验证的风险是：未被数据库 barrier 和稳定性重试共同覆盖的 writer 可能导致跨存储时间点不一致。尚不能据现有读取顺序断言恢复后一定出现缺失引用。
 
-## 25. Backup Restore 会替换 Agent Durable State，但不会进入 Agent 的 quiesce / reinitialize 生命周期
+## 25. Backup Restore 未进入 Agent 生命周期（已修复）
 
-> 确认问题（恢复生命周期缺口）：`bootstrap/composition-root.ts:389–400` 的 before/afterRestore 未调用 Agent quiesce/reinitialize。Snapshot adapter 已有 restore journal 和文件／数据库失败恢复，不能说底层 restore 毫无原子性；这里保留的是存活内存 owner 与恢复状态的同步缺口，实际冲突未复现。
+> 已修复：beforeRestore 调用 Agent prepareRestore，停止 sweep、quiesce Root/Child dispatcher，关闭 MCP/SSH/browser/interactive handles 与 Plugin processes，清除动态 Plugin/definition registry 和 deferred recovery 状态。afterRestore 重新 initialize，包括失败后 adapter rollback 存活的数据。不复用恢复前 lease/queue/runtime；quiesce 失败禁止进入 restore。下文为原问题证据。
 
 Backup restore 的 `beforeRestore` 当前执行：
 

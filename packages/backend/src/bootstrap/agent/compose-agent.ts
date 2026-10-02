@@ -231,7 +231,7 @@ export const composeAgent = ({
     systemClock,
   );
   const definitions = new AgentDefinitionRegistry();
-  const { appStorage, plugins } = composePlugins({
+  const { appStorage, plugins, resetRuntime } = composePlugins({
     database,
     dataDirectory,
     nexusVersion,
@@ -976,11 +976,26 @@ export const composeAgent = ({
       }
     },
     quiesce: async (deadlineUnixSeconds) => {
+      await lifecycleSweeps.stop();
       await Promise.all([
         scheduler.quiesce(deadlineUnixSeconds),
         subagentScheduler?.quiesce(deadlineUnixSeconds) ?? Promise.resolve(),
       ]);
       for (const definition of registry.list()) await lifecycle.quiesce(definition.manifest.id, deadlineUnixSeconds);
+    },
+    prepareRestore: async (deadlineUnixSeconds) => {
+      await lifecycleSweeps.stop();
+      await Promise.all([scheduler.quiesce(deadlineUnixSeconds), subagentScheduler?.quiesce(deadlineUnixSeconds)]);
+      await Promise.all([
+        mcpRuntime.closeAll(),
+        sshSessions.dispose(),
+        workspaceInteractiveSessions.closeAll(),
+        browserGateway.closeAll(),
+      ]);
+      await resetRuntime();
+      modelRegistry.dispose();
+      startupRecoveredRuns.length = 0;
+      checkpoints.resetRecovery();
     },
     dispose: async () => {
       modelRegistry.dispose();

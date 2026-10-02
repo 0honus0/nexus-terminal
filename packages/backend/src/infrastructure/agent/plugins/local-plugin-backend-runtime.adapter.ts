@@ -634,6 +634,12 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
     }
   }
 
+  async closeAll(): Promise<void> {
+    const instances = [...this.instances.values()];
+    await Promise.all(instances.map((instance) => instance.close()));
+    this.instances.clear();
+  }
+
   async health(scope: Scope, plugin: PluginVersionRecord): Promise<PluginBackendRuntimeHealth> {
     if (!plugin.backendEntry) return { available: true, reason: null };
     const instance = this.instances.get(this.instanceKey(scope, plugin));
