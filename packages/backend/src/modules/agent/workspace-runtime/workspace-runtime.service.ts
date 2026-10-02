@@ -708,7 +708,14 @@ export class WorkspaceRuntimeService {
     const now = this.now();
     const commandId = randomUUID();
     const operationHash = hashOperation(
-      { schemaVersion: 2, scope: { userId: scope.userId, appId: scope.appId }, action, generation, payload },
+      {
+        schemaVersion: 2,
+        scope: { userId: scope.userId, appId: scope.appId },
+        action,
+        generation,
+        payload,
+        ...(scope.appId === ADMIN_SCOPE.appId ? { attemptId: commandId } : {}),
+      },
       this.cryptoHash,
     );
     const deadlineAt =
@@ -716,6 +723,7 @@ export class WorkspaceRuntimeService {
     const wirePayload: JsonValue =
       payload && typeof payload === 'object' && !Array.isArray(payload) ? { ...payload } : {};
     const command = await this.repository.createCommand({
+      replayActiveOnly: scope.appId === ADMIN_SCOPE.appId,
       scope,
       id: commandId,
       workspaceId,

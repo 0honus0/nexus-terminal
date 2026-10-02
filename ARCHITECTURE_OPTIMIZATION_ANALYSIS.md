@@ -990,9 +990,9 @@ if (active >= workspaceSettings.maxActiveWorkspaces) throw new Error('WORKSPACE_
 
 因此这个配置当前只是非原子的 admission precheck，不是 durable concurrency limit；并发请求可以突破它。
 
-## 44. Workspace adminAction 对 failed/unknown 命令永久去重，原样重试不会再次提交 Runner
+## 44. Workspace adminAction 永久复用失败命令（已修复）
 
-> 确认问题：adminAction 固定 generation=1；dispatch operation hash 与 repository replay 不按 terminal failure 建立新 attempt。对相同 payload 重试成立；更换 payload/hash 不受此结论约束，unknown 也需先 reconcile 而非盲目重复执行。
+> 已修复：管理操作使用独立 attempt identity，同参数 pending/running/unknown 在 repository 事务内复用；明确终态后主动提交创建新命令，保留历史，不重放 unknown。Workspace 生命周期原 operation-hash replay 不变。参数复用既有 canonicalize 比较，不依赖 JSON 字段顺序。下文为原问题证据。
 
 `WorkspaceRuntimeService.adminAction()` 对管理操作固定使用 admin scope 和 `generation = 1`：
 

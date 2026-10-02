@@ -24,6 +24,7 @@ export interface CreateWorkspaceRecord {
 }
 
 export interface CreateWorkspaceRuntimeCommandRecord {
+  replayActiveOnly: boolean;
   scope: Scope;
   id: string;
   workspaceId?: string;

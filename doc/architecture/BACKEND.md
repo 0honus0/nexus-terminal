@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Workspace admin dispatch 使用 attemptId 派生命令 hash，repository transaction 对相同 request JSON 的 pending/running/unknown 做 active-only replay，终态允许新的主动请求。Workspace lifecycle hash 去重仍保持，不修改历史命令或将 unknown 自动重试。
+
 Workspace repository create transaction 在 replay 后检查 run/runtime 与 user-wide active quota，再写 command/Workspace；CreateWorkspaceRecord 携带 effective maxActiveWorkspaces，Service 不保留事务外 count admission。配额不按 App 分裂，配置快照未新增 settings CAS。
 
 Workspace create 在授权/hash 后、admission/profile 解析前执行 repository replay；SQLite create transaction 再使用同一 replay helper 防并发，既有 command retention/hash/pending/unknown 契约不变。成功后重试不重新提交 Runner provision。

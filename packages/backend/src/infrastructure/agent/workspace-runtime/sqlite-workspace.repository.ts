@@ -1,4 +1,5 @@
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
+import { canonicalize } from '../../../modules/agent/operation-hash';
 import type {
   AgentWorkspaceRepositoryPort,
   CreateWorkspaceRecord,
@@ -319,11 +320,19 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
 
   async createCommand(record: CreateWorkspaceRuntimeCommandRecord): Promise<WorkspaceRuntimeCommandView> {
     return this.db.transaction(async (tx) => {
-      const existing = await tx.queryOne<CommandRow>(
-        `SELECT ${COMMAND_COLUMNS} FROM agent_workspace_runtime_commands
-         WHERE user_id=? AND app_id=? AND action=? AND operation_hash=?`,
-        [record.scope.userId, record.scope.appId, record.action, record.operationHash],
-      );
+      const existing = record.replayActiveOnly
+        ? (
+            await tx.queryAll<CommandRow>(
+              `SELECT ${COMMAND_COLUMNS} FROM agent_workspace_runtime_commands
+            WHERE user_id=? AND app_id=? AND action=? AND status IN ('pending','running','unknown')`,
+              [record.scope.userId, record.scope.appId, record.action],
+            )
+          ).find((row) => canonicalize(parseDurableJsonValue(row.request_json)) === canonicalize(record.request))
+        : await tx.queryOne<CommandRow>(
+            `SELECT ${COMMAND_COLUMNS} FROM agent_workspace_runtime_commands
+            WHERE user_id=? AND app_id=? AND action=? AND operation_hash=?`,
+            [record.scope.userId, record.scope.appId, record.action, record.operationHash],
+          );
       if (existing) return commandView(existing);
       await tx.execute(
         `INSERT INTO agent_workspace_runtime_commands
