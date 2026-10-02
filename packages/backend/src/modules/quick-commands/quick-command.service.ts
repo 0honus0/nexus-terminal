@@ -11,11 +11,7 @@ export class QuickCommandService {
     tagIds: readonly number[] = [],
     variables?: Record<string, string>,
   ): Promise<number> {
-    const id = await this.repository.create(name, command, variables);
-    // A freshly inserted command cannot have tag associations yet. Avoid an otherwise empty
-    // DELETE transaction for the common untagged create path; updates still need to clear tags.
-    if (tagIds.length > 0) await this.tags.setCommandTags(id, tagIds);
-    return id;
+    return this.repository.create(name, command, tagIds, variables);
   }
   async update(
     id: number,
@@ -24,9 +20,7 @@ export class QuickCommandService {
     tagIds: readonly number[] = [],
     variables?: Record<string, string>,
   ): Promise<boolean> {
-    const updated = await this.repository.update(id, name, command, variables);
-    if (updated) await this.tags.setCommandTags(id, tagIds);
-    return updated;
+    return this.repository.update(id, name, command, tagIds, variables);
   }
   delete(id: number) {
     return this.repository.delete(id);

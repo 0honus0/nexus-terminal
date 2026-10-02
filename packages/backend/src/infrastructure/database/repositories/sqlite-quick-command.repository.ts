@@ -36,23 +36,50 @@ const parseVariables = (value: string | null): Record<string, string> => {
 const select = `SELECT qc.id,qc.name,qc.command,qc.usage_count,qc.variables,qc.created_at,qc.updated_at,GROUP_CONCAT(qta.tag_id) AS tag_ids_str FROM quick_commands qc LEFT JOIN quick_command_tag_associations qta ON qc.id=qta.quick_command_id`;
 export class SqliteQuickCommandRepository implements QuickCommandRepository {
   constructor(private readonly db: RelationalDatabase) {}
-  async create(name: string | null, command: string, variables?: Record<string, string>): Promise<number> {
-    const r = await this.db.execute(
-      "INSERT INTO quick_commands (name,command,variables,created_at,updated_at) VALUES (?,?,?,strftime('%s','now'),strftime('%s','now'))",
-      [name, command, variables ? JSON.stringify(variables) : null],
-    );
-    if (!r.lastInsertId) throw new Error('Quick command insert did not return an id.');
-    return r.lastInsertId;
+  async create(
+    name: string | null,
+    command: string,
+    tagIds: readonly number[],
+    variables?: Record<string, string>,
+  ): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      const r = await tx.execute(
+        "INSERT INTO quick_commands (name,command,variables,created_at,updated_at) VALUES (?,?,?,strftime('%s','now'),strftime('%s','now'))",
+        [name, command, variables ? JSON.stringify(variables) : null],
+      );
+      if (!r.lastInsertId) throw new Error('Quick command insert did not return an id.');
+      await this.replaceTags(tx, r.lastInsertId, tagIds);
+      return r.lastInsertId;
+    });
   }
-  async update(id: number, name: string | null, command: string, variables?: Record<string, string>): Promise<boolean> {
-    return (
-      (
-        await this.db.execute(
-          "UPDATE quick_commands SET name=?,command=?,variables=?,updated_at=strftime('%s','now') WHERE id=?",
-          [name, command, variables ? JSON.stringify(variables) : null, id],
-        )
-      ).changes > 0
-    );
+  async update(
+    id: number,
+    name: string | null,
+    command: string,
+    tagIds: readonly number[],
+    variables?: Record<string, string>,
+  ): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const updated =
+        (
+          await tx.execute(
+            "UPDATE quick_commands SET name=?,command=?,variables=?,updated_at=strftime('%s','now') WHERE id=?",
+            [name, command, variables ? JSON.stringify(variables) : null, id],
+          )
+        ).changes > 0;
+      if (updated) await this.replaceTags(tx, id, tagIds);
+      return updated;
+    });
+  }
+  private async replaceTags(tx: RelationalDatabase, id: number, tagIds: readonly number[]): Promise<void> {
+    await tx.execute('DELETE FROM quick_command_tag_associations WHERE quick_command_id=?', [id]);
+    for (const tagId of new Set(tagIds)) {
+      if (!Number.isSafeInteger(tagId) || tagId <= 0) throw new Error('Invalid quick command tag id.');
+      await tx.execute('INSERT INTO quick_command_tag_associations (quick_command_id,tag_id) VALUES (?,?)', [
+        id,
+        tagId,
+      ]);
+    }
   }
   async delete(id: number): Promise<boolean> {
     return (await this.db.execute('DELETE FROM quick_commands WHERE id=?', [id])).changes > 0;

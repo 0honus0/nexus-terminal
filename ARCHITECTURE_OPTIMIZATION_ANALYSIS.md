@@ -700,9 +700,9 @@ repository.upsert(...)
 
 封禁阈值因此会被并发请求推迟，且阈值附近的请求可能因为 lost update 没有触发预期的 block transition。
 
-## 31. Quick Command 本体与 Tag Association 分两个 Transaction 提交
+## 31. Quick Command 本体与 Tag Association 分离提交（已修复）
 
-> 确认问题：`modules/quick-commands/quick-command.service.ts` 与 `sqlite-quick-command-tag.repository.ts` 分别提交本体和关联。无效 tag/FK 或第二步数据库失败可留下本体变更；关联事务本身会 rollback，并非全部写入都无保护。
+> 已修复：QuickCommandRepository create/update 同一事务提交本体与去重后的 tag associations；非法 tag/FK 导致整体回滚。删除无人消费的 setCommandTags 独立入口，批量追加标签能力保持不变。下文为原问题证据。
 
 `QuickCommandService.add()` 的顺序是：
 

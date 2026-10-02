@@ -16,9 +16,6 @@ export class QuickCommandTagService {
   delete(id: number) {
     return this.repository.delete(id);
   }
-  setCommandTags(commandId: number, tagIds: readonly number[]) {
-    return this.repository.setCommandTags(commandId, tagIds);
-  }
   addTagToCommands(commandIds: readonly number[], tagId: number) {
     return this.repository.addTagToCommands(commandIds, tagId);
   }

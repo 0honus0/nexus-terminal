@@ -10,7 +10,6 @@ export interface QuickCommandTagRepository {
   create(name: string): Promise<number>;
   update(id: number, name: string): Promise<boolean>;
   delete(id: number): Promise<boolean>;
-  setCommandTags(commandId: number, tagIds: readonly number[]): Promise<void>;
   addTagToCommands(commandIds: readonly number[], tagId: number): Promise<void>;
   listForCommand(commandId: number): Promise<QuickCommandTag[]>;
 }

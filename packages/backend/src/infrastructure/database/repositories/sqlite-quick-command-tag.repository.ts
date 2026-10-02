@@ -52,17 +52,6 @@ export class SqliteQuickCommandTagRepository implements QuickCommandTagRepositor
   async delete(id: number): Promise<boolean> {
     return (await this.db.execute('DELETE FROM quick_command_tags WHERE id=?', [id])).changes > 0;
   }
-  setCommandTags(commandId: number, tagIds: readonly number[]): Promise<void> {
-    return this.db.transaction(async (tx) => {
-      await tx.execute('DELETE FROM quick_command_tag_associations WHERE quick_command_id=?', [commandId]);
-      for (const tagId of tagIds)
-        if (Number.isFinite(tagId))
-          await tx.execute('INSERT INTO quick_command_tag_associations (quick_command_id,tag_id) VALUES (?,?)', [
-            commandId,
-            tagId,
-          ]);
-    });
-  }
   addTagToCommands(commandIds: readonly number[], tagId: number): Promise<void> {
     return this.db.transaction(async (tx) => {
       for (const commandId of commandIds)
