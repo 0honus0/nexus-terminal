@@ -36,36 +36,9 @@ Nexus Terminal 当前已经建立了比较明确的架构边界：Backend 使用
 
 > 已关闭：重新核对后确认的边界是 Server 直接编排 command/job Journal transition、后台执行、工具链互斥及 provision/lifecycle，而不是文件体积或统一路由本身。上述执行流程已提取到实例级 `runner-command-executor.ts`；`server.ts` 保留认证、协议版本检查、HTTP/WebSocket dispatch、输入读取和响应映射。无状态的 record/key/browser/binding 校验放在 `runner-request-validation.ts`，route 专用校验仍留在 route 边界。复用原 Journal、Engine、Plugin、ACP、Terminal、Browser owner，保持 generation、幂等、unknown outcome、互斥和 drain/cleanup 顺序，不新增 durable authority。已有 background-job-lifecycle 与 coding-tool-surface Agent 场景通过；未新增或运行 E2E。
 
-## 6. `SqliteStateCommitAdapter` 同时承担事务编排和 Recovery Domain 逻辑
+## 6. StateCommit 事务入口与 Recovery Transition 分离（已关闭）
 
-> 待确认（职责放置）：`settleInterruptedRunChildren()` 及 restart recovery 确实仍在 adapter 内。但这些更新必须共享 StateCommit 事务，存在恢复逻辑不等于新增 authority。需区分可提取的领域决策与必须留在 infrastructure 的 SQL／事务操作，不直接认定恢复逻辑应整体迁出。
-
-当前 StateCommit 已经把多类 transition 分离出来，例如：
-
-```text
-model-transitions
-tool-transitions
-run-transitions
-approval-transitions
-subagent-transitions
-...
-```
-
-StateCommit 本身作为 durable mutation owner，这个 ownership 是明确的。
-
-但 `sqlite-state-commit.adapter.ts` 内仍包含较重的恢复类逻辑，例如：
-
-```text
-settleInterruptedRunChildren()
-restart mutation lease recovery
-quarantine creation
-approval cleanup
-...
-```
-
-这些逻辑包含 interrupted run、mutation lease、quarantine、approval cleanup 等恢复语义，不只是 SQLite transaction orchestration。
-
-结果是 StateCommit adapter 一方面负责事务边界，另一方面又逐渐聚集 recovery domain 行为。随着故障恢复规则增加，adapter 会重新成为业务聚合点，削弱已经拆出的 transitions 所带来的职责收敛。
+> 已关闭：重新确认可独立提取的是恢复／App 禁用转换的实现，而非新增 authority 或必须迁到事务外的领域服务。`state-commit/recovery-transitions.ts` 接收 Adapter 当前事务，完成 active mutation lease→quarantine、Model/Tool 子状态收敛、输入／审批清理、Run/runtime/subagent/summary/event 更新；共享审批清理函数同时供终态审批清理入口使用。Adapter 仍开启唯一事务，成功提交后通知，再按原顺序读取历史 restart recovery candidates。SQL、scope/version 条件、执行顺序和恢复规则不变。已有 restart-recovery 与 app-disable-scope Agent 场景通过；未新增或运行 E2E。
 
 ## 7. SQLite Schema 和 Migration 已经形成物理热点文件
 
@@ -4226,7 +4199,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 98 项，待确认 38 项，已关闭 4 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项已逐项分类：**未解决确认问题 98 项，待确认 37 项，已关闭 5 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4234,7 +4207,7 @@ await terminateAllManagedProcesses();
 | 2      | 已关闭   | Backend ↔ Agent Runner Wire Protocol owner                                                                                                                                   |
 | 3      | 已关闭   | Agent App Presentation / Application Controller 分离                                                                                                                         |
 | 5      | 已关闭   | Runner Transport / Command Execution 分离                                                                                                                                    |
-| 6      | 待确认   | `SqliteStateCommitAdapter` 同时承担事务编排和 Recovery Domain 逻辑                                                                                                           |
+| 6      | 已关闭   | StateCommit 事务入口与 Recovery Transition 分离                                                                                                                              |
 | 7      | 待确认   | SQLite Schema 和 Migration 已经形成物理热点文件                                                                                                                              |
 | 8      | 待确认   | `compose-agent.ts` 已经成为 Composition Root 热点                                                                                                                            |
 | 9      | 待确认   | Root Build Contract 没有覆盖全部 Production Component                                                                                                                        |
