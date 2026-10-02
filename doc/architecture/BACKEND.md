@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Command/Path history upsert+prune 同排他事务（10000/2000，timestamp DESC/touched/id），list recent bounded window 再按升序返回；兼容旧重复/超额导入，不加 UNIQUE，超额物理收缩发生在 next write。
+
 NotificationService publish 为 bounded in-memory admission（4 active/128 pending），event 顺序投递最多64个匹配 setting，test 共用同一 owner；repository create 排他 cap64，legacy 不删除。认证不 await 网络；无 durable replay/退出交付承诺，SMTP timeout 为阶段/空闲边界而非总 deadline。
 
 Audit repository add 在排他事务内 insert/count/prune 至 50,000，以 timestamp/id 选最旧；事务失败整体 rollback，service 继续持有审计失败不逆转业务的 best-effort 契约。

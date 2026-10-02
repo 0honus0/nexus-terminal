@@ -15,6 +15,7 @@ export class SqliteCommandHistoryRepository implements CommandHistoryRepository 
       if (row) {
         await tx.execute('DELETE FROM command_history WHERE command = ? AND id <> ?', [command, row.id]);
         await tx.execute('UPDATE command_history SET timestamp = ? WHERE id = ?', [now, row.id]);
+        await this.prune(tx, row.id);
         return row.id;
       }
       const inserted = await tx.execute('INSERT INTO command_history (command, timestamp) VALUES (?, ?)', [
@@ -22,11 +23,20 @@ export class SqliteCommandHistoryRepository implements CommandHistoryRepository 
         now,
       ]);
       if (!inserted.lastInsertId) throw new Error('Command history insert did not return an id.');
+      await this.prune(tx, inserted.lastInsertId);
       return inserted.lastInsertId;
     });
   }
   list(): Promise<CommandHistoryEntry[]> {
-    return this.db.queryAll('SELECT id, command, timestamp FROM command_history ORDER BY timestamp ASC');
+    return this.db.queryAll(
+      'SELECT id, command, timestamp FROM (SELECT id, command, timestamp FROM command_history ORDER BY timestamp DESC,id DESC LIMIT 10000) ORDER BY timestamp ASC,id ASC',
+    );
+  }
+  private async prune(tx: Pick<RelationalDatabase, 'execute'>, touchedId: number): Promise<void> {
+    await tx.execute(
+      'DELETE FROM command_history WHERE id IN (SELECT id FROM command_history ORDER BY timestamp DESC,(id=?) DESC,id DESC LIMIT -1 OFFSET 10000)',
+      [touchedId],
+    );
   }
   async delete(id: number): Promise<boolean> {
     return (await this.db.execute('DELETE FROM command_history WHERE id = ?', [id])).changes > 0;

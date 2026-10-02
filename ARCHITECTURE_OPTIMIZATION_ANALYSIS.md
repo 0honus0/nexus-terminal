@@ -1487,7 +1487,9 @@ HTTP login 路由只有在 `authenticatePassword()` 返回后才执行 `regenera
 
 结果是 session reset 不是完整的 async ownership boundary。即使已经修复了旧 load 回填，旧 mutation 仍能在账号切换后重新制造 stale/cross-session UI state，直到后续完整 reload 才被覆盖。
 
-## 69. Command History / Path History 对 distinct value 无保留上限，GET 又始终返回整表，长期使用会让持久化和前端加载无界增长
+## 69. Command/Path History 无界保留与读取（已修复）
+
+> 已修复：command10000/path2000 recent window，upsert 同事务 prune（同秒优先 touched ID），list 有界且维持升序返回。旧导入数据不拒绝，读取立即有界，持久化超额在该表下次写入裁剪；不声称旧库未写入也自动收缩或已做性能基准。下文为原证据。
 
 > 确认问题（无分页读取／retention 边界）：两份 history repository 确实整表 SELECT，distinct value 无自动 prune。无界指缺少应用层条数上限，不是无限物理资源；实际规模和查询成本未基准测试。
 
