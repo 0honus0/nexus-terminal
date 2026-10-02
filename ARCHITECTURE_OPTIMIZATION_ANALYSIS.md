@@ -300,7 +300,7 @@ Root completion gate 的事后检测保留作为补充，不替代 Child 的执�
 
 ## 18. Subagent 绕过 Deferred MCP Tool Surface，Root / Child 的 Tool Exposure Contract 不一致
 
-> 确认问题（模型入口契约差异）：核对 `capabilities/tool-model-surface.ts` 与 `runtime/collaboration/subagent-context-builder.ts`。Child 直接 discover descriptor，未采用 Root deferred router。保留 exposure/version-handle 差异，不声称绕过 capability authorization；schema 规模影响未测。
+> 已修复：Child 复用 Root modelFacingToolSchemas 与 resolveDeferredToolProposal，隐藏 deferred schema，以 tool_search／tool_invoke 按需发现，解析后重新检查 delegation grants。现有场景验证只读 MCP 的 Child router、直接隐藏工具拒绝、stale handle 拒绝及无 grant 拒绝。参考 Codex pinned commit `14a477ea89712071944244022e8a10142845456e` 的 tool_search 模式；复用 Nexus owner，未移植上游代码。
 
 Root Agent 对 MCP capability 已经实现 deferred tool exposure。`tool-model-surface.ts` 会识别：
 
@@ -318,37 +318,36 @@ tool_invoke
 
 按需发现和调用。`tool_invoke` 使用带 tool name + version 的 handle；`resolveDeferredToolProposal()` 会在真正 inspection 前检查 handle 指向的 Tool 仍然存在且 version 没有变化。
 
-Subagent 的 model surface 没有走这套逻辑。`SubagentContextBuilder.toolSchemas()` 直接调用：
+Subagent 的 model surface 复用：
 
 ```ts
-toolCatalog.discover(scope, '', 256, ...)
+modelFacingToolSchemas(catalog, scope, availability, executionMode);
 ```
 
-随后只显式排除：
+随后按 delegation 的 capability／risk 过滤；排除：
 
 ```text
-request_user_input
-tool_search
+user_input_request
 ```
 
-它没有排除 `modelExposure === 'deferred'` 的 descriptor，也没有加入 Root 使用的 `tool_invoke` router schema。
+deferred descriptor 不直接暴露；有可用的授权 deferred Tool 且允许 tool_search 时提供两个 router。Plan 保持同一只读 surface 限制。
 
-因此当 Subagent profile 获得 `integration.mcp.read` 等 grant 时，deferred MCP tools 会作为普通 Tool schema 直接暴露给 child model。内置 `scout` profile 就包含：
+Subagent profile 获得下面 grant 时，通过 router 发现允许的只读 MCP 能力：
 
 ```text
 integration.mcp.read
 ```
 
-执行时 `SubagentModelStepExecutor` 又直接调用 `ToolExecutor.inspect()`，没有经过 `resolveDeferredToolProposal()`。这意味着 deferred handle 的 version binding / stale-handle 检查在 Child 路径不存在。
+执行时先 resolveDeferredToolProposal，检查当前 catalog version，再对具体 proposal 做 delegation grant 校验，然后 ToolExecutor.inspect。handle 不授予权限；governed Child mutation 的 Workspace-only 边界不放宽。
 
-这里形成了两个不同的 model-facing Tool contract：
+Root／Child 使用相同 model-facing router contract：
 
 ```text
 Root     -> direct core tools + tool_search/tool_invoke -> deferred MCP
-Subagent -> direct catalog descriptors                  -> deferred MCP 直接暴露
+Subagent -> permitted direct tools + tool_search/tool_invoke -> deferred MCP
 ```
 
-随着 MCP / Plugin Tool 数量增加，Root 已经建立的 lazy exposure 和 schema budget 控制不会自动覆盖 Subagent；动态 Tool contribution 发生版本替换时，Child 也没有 Root deferred router 的 version-bound handle 保护。
+Child 不再重复暴露全量 MCP schema；动态 contribution 版本替换时旧 handle fail closed。未新增 E2E，不声称已测所有真实 MCP Server。
 
 ## 19. Root 与 Subagent 的 Model Retry 策略差异是否需要统一
 

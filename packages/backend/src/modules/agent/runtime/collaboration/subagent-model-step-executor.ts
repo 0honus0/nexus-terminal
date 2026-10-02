@@ -381,15 +381,12 @@ export class SubagentModelStepExecutor {
             invalidProviderCall = true;
             break;
           }
-          const proposal: ToolProposal = {
+          let proposal: ToolProposal = {
             providerCallId: call.id,
             name: call.name,
             argumentsJson: call.argumentsJson || '{}',
           };
-          if (
-            !offeredToolNames.has(proposal.name) ||
-            !this.contextBuilder.allowsProposal(scope, delegation, proposal)
-          ) {
+          if (!offeredToolNames.has(proposal.name)) {
             const rejectedResult = failedToolResult(new Error('SUBAGENT_TOOL_NOT_ALLOWED'));
             batchItems.push({
               providerCallId: proposal.providerCallId,
@@ -402,6 +399,12 @@ export class SubagentModelStepExecutor {
             continue;
           }
           try {
+            proposal = this.contextBuilder.resolveProposal(
+              this.toolContext(begun.run, work.agentRuntimeId, begun.stepId, signal, delegation.deadlineAt),
+              proposal,
+            );
+            if (!this.contextBuilder.allowsProposal(scope, delegation, proposal))
+              throw new Error('SUBAGENT_TOOL_NOT_ALLOWED');
             const inspection = await this.toolExecutor.inspect(
               this.toolContext(begun.run, work.agentRuntimeId, begun.stepId, signal, delegation.deadlineAt),
               proposal,

@@ -18,9 +18,15 @@ import type {
   ProviderModelConfig,
 } from '../../ai/model.types';
 import type { ToolCatalog } from '../../capabilities/tool-catalog';
-import type { ToolInspection, ToolProposal } from '../../capabilities/tool.types';
+import type { ToolContext, ToolInspection, ToolProposal } from '../../capabilities/tool.types';
 import { CapabilityRegistry } from '../../host/capability-registry';
-import { TOOL_SEARCH_NAME } from '../../capabilities/tool-model-surface';
+import {
+  TOOL_SEARCH_NAME,
+  TOOL_INVOKE_NAME,
+  modelFacingToolSchemas,
+  isDeferredToolDescriptor,
+  resolveDeferredToolProposal,
+} from '../../capabilities/tool-model-surface';
 import { projectToolResult } from '../../capabilities/tool-result-projection';
 import { estimateModelInputTokens } from '../../ai/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
@@ -338,7 +344,6 @@ export class SubagentContextBuilder {
     return Boolean(
       descriptor &&
       toolName !== 'user_input_request' &&
-      toolName !== TOOL_SEARCH_NAME &&
       (descriptor.capability === undefined ||
         delegation.grants.some((grant) => grant.capability === descriptor.capability)) &&
       riskAllowed,
@@ -371,6 +376,10 @@ export class SubagentContextBuilder {
     } catch {
       return false;
     }
+  }
+
+  resolveProposal(context: ToolContext, proposal: ToolProposal): ToolProposal {
+    return resolveDeferredToolProposal(this.toolCatalog, context, proposal);
   }
 
   allowsInspection(scope: Scope, delegation: DelegationView, inspection: ToolInspection): boolean {
@@ -510,29 +519,38 @@ export class SubagentContextBuilder {
     if (!model.supportsTools) return [];
     const allowedCapabilities = new Set(delegation.grants.map((grant) => grant.capability));
     const governedMutationsEnabled = delegation.mutationMode === 'governed' && run.definition.executionMode !== 'plan';
-    return this.toolCatalog
-      .discover(scope, '', 256, {
-        environment: run.definition.environment ?? null,
-        connectionIds: run.definition.connectionIds,
-      })
-      .filter(
-        (descriptor) =>
-          descriptor.name !== 'user_input_request' &&
-          descriptor.name !== TOOL_SEARCH_NAME &&
-          (descriptor.capability === undefined || allowedCapabilities.has(descriptor.capability)) &&
-          (descriptor.riskClass === 'read' ||
-            descriptor.riskClass === 'control' ||
-            (governedMutationsEnabled &&
-              (descriptor.capability === 'file.write' ||
-                descriptor.capability === 'file.delete' ||
-                descriptor.capability === 'shell.execute' ||
-                descriptor.capability === 'workspace.manage') &&
-              (descriptor.riskClass === 'mutate' || descriptor.riskClass === 'destructive'))),
-      )
-      .map((descriptor) => ({
-        name: descriptor.name,
-        description: descriptor.description,
-        inputSchema: descriptor.inputSchema,
-      }));
+    const availability = {
+      environment: run.definition.environment ?? null,
+      connectionIds: run.definition.connectionIds,
+    };
+    const descriptors = this.toolCatalog.list(scope, availability);
+    const allowed = new Set(
+      descriptors
+        .filter(
+          (descriptor) =>
+            descriptor.name !== 'user_input_request' &&
+            (descriptor.capability === undefined || allowedCapabilities.has(descriptor.capability)) &&
+            (descriptor.riskClass === 'read' ||
+              descriptor.riskClass === 'control' ||
+              (governedMutationsEnabled &&
+                (descriptor.capability === 'file.write' ||
+                  descriptor.capability === 'file.delete' ||
+                  descriptor.capability === 'shell.execute' ||
+                  descriptor.capability === 'workspace.manage') &&
+                (descriptor.riskClass === 'mutate' || descriptor.riskClass === 'destructive'))),
+        )
+        .map((descriptor) => descriptor.name),
+    );
+    const hasDeferred = descriptors.some(
+      (descriptor) => allowed.has(descriptor.name) && isDeferredToolDescriptor(descriptor),
+    );
+    return modelFacingToolSchemas(this.toolCatalog, scope, availability, run.definition.executionMode).filter(
+      (schema) =>
+        schema.name === TOOL_INVOKE_NAME
+          ? hasDeferred && allowed.has(TOOL_SEARCH_NAME)
+          : schema.name === TOOL_SEARCH_NAME
+            ? hasDeferred && allowed.has(schema.name)
+            : allowed.has(schema.name),
+    );
   }
 }

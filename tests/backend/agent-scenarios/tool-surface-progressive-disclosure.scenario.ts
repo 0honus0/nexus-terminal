@@ -413,6 +413,99 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     false,
     'Subagent read/control surface must not accidentally expose the Root-only MCP mutation discovery/router path',
   );
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.child.read-mcp',
+    tools: [
+      inertTool({
+        name: 'mcp_child_read',
+        capability: 'integration.mcp.read',
+        riskClass: 'read',
+        version: 'mcp:read-v1',
+        modelExposure: 'deferred',
+        description: 'Child deferred metadata read.',
+      }),
+    ],
+  });
+  const readDelegation: DelegationView = {
+    ...childDelegation,
+    grants: [
+      ...childDelegation.grants,
+      { capability: 'integration.mcp.read', schemaVersion: 2, scope: { kind: 'global' } },
+    ],
+  };
+  const routedChild = await childContext.prepare(
+    scope,
+    childRuntime.runId,
+    childRuntime.id,
+    readDelegation,
+    {
+      id: 'scenario-model',
+      contextWindow: 16384,
+      maxOutputTokens: 2048,
+      supportsTools: true,
+      supportsImageInput: false,
+      supportsFileInput: false,
+    },
+    {
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        steps: 0,
+        subagentMessages: 0,
+        subagentMessageBytes: 0,
+      },
+      budget: { maxRunSteps: 32, maxToolOutputBytes: 16384, contextPolicy: freezeRunContextPolicy('normal') },
+      definition: { environment: null, executionMode: 'execute' },
+    } as unknown as RunView,
+  );
+  assert.equal(routedChild.kind, 'ready');
+  if (routedChild.kind !== 'ready') throw new Error('SCENARIO_INVALID');
+  assert.ok(routedChild.plan.offeredTools.some((tool) => tool.name === 'tool_search'));
+  assert.ok(routedChild.plan.offeredTools.some((tool) => tool.name === 'tool_invoke'));
+  assert.equal(
+    routedChild.plan.offeredTools.some((tool) => tool.name.startsWith('mcp_surface_')),
+    false,
+  );
+  const childSearch = await executor.invoke(context, {
+    providerCallId: 'child-search',
+    name: 'tool_search',
+    argumentsJson: JSON.stringify({ query: 'mcp_child_read', limit: 1 }),
+  });
+  const childHandle = ((childSearch.result.data as Record<string, JsonValue>).matches as JsonValue[])[0] as Record<
+    string,
+    JsonValue
+  >;
+  const resolvedChild = childContext.resolveProposal(context, {
+    providerCallId: 'child-invoke',
+    name: 'tool_invoke',
+    argumentsJson: JSON.stringify({ handle: childHandle.handle, arguments: {} }),
+  });
+  assert.equal(childContext.allowsProposal(scope, readDelegation, resolvedChild), true);
+  assert.equal(
+    childContext.allowsProposal(scope, { ...readDelegation, grants: [] }, resolvedChild),
+    false,
+    'resolving a handle must not confer delegation grants',
+  );
+  assert.throws(
+    () =>
+      childContext.resolveProposal(context, {
+        providerCallId: 'direct-child',
+        name: resolvedChild.name,
+        argumentsJson: '{}',
+      }),
+    /MODEL_TOOL_CALL_INVALID/,
+  );
+  assert.throws(
+    () =>
+      childContext.resolveProposal(context, {
+        providerCallId: 'stale-child',
+        name: 'tool_invoke',
+        argumentsJson: JSON.stringify({ handle, arguments: {} }),
+      }),
+    /RESOURCE_CHANGED/,
+  );
 
   return [
     { name: 'authoritative_catalog_tools', value: 123, unit: 'tools' },
