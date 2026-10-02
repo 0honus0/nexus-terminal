@@ -1332,7 +1332,9 @@ validateJumpChain 接受带自身 route 的 SSH Connection，resolveJumpChain �
 
 cache expiresAt 从 startedAt 计算；采集较慢时完成即过期，但 inFlight 能合并并发请求。待测该策略是否导致重复昂贵采集；以采样开始作为 freshness 起点本身可合理。
 
-## 61. Plugin Agent Mutation 的 operationId 与各 endpoint replay 契约待确认
+## 61. Plugin Agent operationId（已核对：分 endpoint 契约）
+
+> 已核对：createThread/createRun/appendInput/cancelRun/resolveApproval 传递 operationId；thread rename 与 subagent cancel 的后端 route 不消费 replay key，使用 expectedVersion/CAS，不承诺 durable replay。文档明确差异，不能用 header 补丁虚构 replay；超时需重读状态，冲突不能盲改版本重试。下文为原核对背景。
 
 > 待确认（统一 operation identity 与幂等执行须区分）：`features/agent/plugin-sdk/agent-dispatcher.ts:99–106` 等分支未传 operationId，但部分方法用 expectedVersion/CAS 或本身幂等。需要逐 endpoint 确认必须 durable replay 的约定，不能把缺少 header 等同于所有重试都会重复 mutation。
 

@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Plugin Agent dispatcher operationId 按 endpoint contract 透传：createThread/createRun/appendInput/cancelRun/resolveApproval；renameThread/cancelSubagent 使用 expectedVersion CAS，后端不消费 replay key。不能以单纯 header 透传声称 durable replay。
+
 SSH Key/Command History/Quick Commands/Server Transfers store 注册 authenticated-session reset，实例 generation 隔离异步 load/mutation 与排队 history write；transfer reset 停止 poll，旧 refresh finally 不清除新 in-flight owner。服务端副作用仍由后端负责。
 
 Editor open 持有 scope generation + close epoch，load/异步 decoding 后重检发布；closeScope/invalidatePaths bump scope generation，closeAll bump epoch。失效结果 AbortError，不注册旧 port，不声称取消无 signal contract 的底层 I/O。
