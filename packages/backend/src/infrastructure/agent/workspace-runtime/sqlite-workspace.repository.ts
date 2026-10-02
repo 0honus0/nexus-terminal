@@ -259,9 +259,9 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
     now: number,
   ): Promise<AgentWorkspaceView> {
     const changed = await this.db.execute(
-      `UPDATE agent_workspaces SET status=?,version=version+1,last_active_at=?,updated_at=?
+      `UPDATE agent_workspaces SET status=?,retained=CASE WHEN ?='deleted' THEN 0 ELSE retained END,version=version+1,last_active_at=?,updated_at=?
        WHERE id=? AND version=? AND user_id=? AND app_id=?`,
-      [status, now, now, workspaceId, expectedVersion, scope.userId, scope.appId],
+      [status, status, now, now, workspaceId, expectedVersion, scope.userId, scope.appId],
     );
     if (changed.changes !== 1) throw new Error('STATE_CONFLICT');
     const result = await this.getWorkspace(scope, workspaceId);
@@ -282,8 +282,8 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
       for (const workspaceId of workspaceIds) {
         await tx.execute(
           `UPDATE agent_workspaces
-           SET status='deleted',version=version+1,last_active_at=?,updated_at=?
-           WHERE id=? AND user_id=? AND status<>'deleted'`,
+           SET status='deleted',retained=0,version=version+1,last_active_at=?,updated_at=?
+            WHERE id=? AND user_id=? AND (status<>'deleted' OR retained=1)`,
           [now, now, workspaceId, userId],
         );
       }

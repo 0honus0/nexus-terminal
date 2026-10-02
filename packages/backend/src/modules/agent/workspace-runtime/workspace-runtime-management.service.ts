@@ -307,7 +307,10 @@ export class WorkspaceRuntimeManagementService {
     const active = owned.filter((workspace) => ACTIVE_WORKSPACE_STATUSES.has(workspace.status));
     const retained = owned.filter((workspace) => workspace.retained);
     const candidates = owned
-      .filter((workspace) => !workspace.retained && !ACTIVE_WORKSPACE_STATUSES.has(workspace.status))
+      .filter(
+        (workspace) =>
+          (!workspace.retained || workspace.status === 'deleted') && !ACTIVE_WORKSPACE_STATUSES.has(workspace.status),
+      )
       .slice(0, 4096);
     const bytes = new Map(storage.byWorkspace.map((item) => [item.workspaceId, item.runtimeBytes] as const));
     const now = this.now();

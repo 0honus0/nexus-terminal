@@ -598,6 +598,10 @@ export class RunnerCommandExecutor {
   }
 
   private save(workspace: WorkspaceRecord, status: WorkspaceRecord['status']): void {
-    this.dependencies.journal.saveWorkspace({ ...workspace, status });
+    this.dependencies.journal.saveWorkspace({
+      ...workspace,
+      status,
+      retained: status === 'deleted' ? false : workspace.retained,
+    });
   }
 }

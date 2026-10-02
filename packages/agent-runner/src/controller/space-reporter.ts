@@ -59,7 +59,9 @@ export class SpaceReporter {
       const workspace = workspaces.find((candidate) => candidate.workspaceId === item.workspaceId);
       return (
         total +
-        (workspace && !workspace.retained && ['stopped', 'deleted', 'failed'].includes(workspace.status)
+        (workspace &&
+        (!workspace.retained || workspace.status === 'deleted') &&
+        ['stopped', 'deleted', 'failed'].includes(workspace.status)
           ? item.runtimeBytes
           : 0)
       );

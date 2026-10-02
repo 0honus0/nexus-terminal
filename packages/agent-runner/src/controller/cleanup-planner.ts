@@ -46,7 +46,7 @@ export class CleanupPlanner {
       const workspace = byId.get(workspaceId);
       if (
         !workspace ||
-        workspace.retained ||
+        (workspace.retained && workspace.status !== 'deleted') ||
         workspace.status === 'running' ||
         (workspace.status === 'creating' && activeProvisionWorkspaceIds.has(workspace.workspaceId)) ||
         activeWorkspaceIds.has(workspace.workspaceId)

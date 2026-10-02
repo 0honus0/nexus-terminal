@@ -2486,6 +2486,8 @@ Plugin drain 统计 App live Run，不统计 Runner Workspace Plugin；retained 
 
 ## 103. `retained` Workspace 的显式 delete 只删除 Generation，不释放 Workspace retention；它会同时留下不可回收文件树并永久阻塞 Run / Thread 删除
 
+> 已修复：成功 deleted 投影清除 Runner/Backend retained；persistent root 仍由显式 runtime cleanup 删除，旧 deleted+retained 允许 cleanup，确认删除后也清 retained。stop 不释放 retention，失败/未知 delete 不假装成功。下文为原证据。
+
 > 确认问题（显式删除／retention 无释放入口）：repository retained flag 无 update API，delete 只 generation，cleanup 排除 retained，Run/Thread delete 检查 status<>deleted OR retained=1。需确认产品 delete 是否仅指 generation；现有 UI 没有后续释放入口的缺口保留，未端到端删除验证。
 
 Workspace 的 `retained` 是 create-time durable flag：

@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Workspace deleted 成功投影在同一 status CAS 清 retained，Runner journal 同步释放；persistent root 仍属 preview/confirm runtimeCleanup，legacy deleted+retained 不阻止候选，cleanup projection 清 retention。
+
 Plugin installation 与独立 Workspace generation 是不同 lifecycle owner；App uninstall/drain 不级联 Workspace Runner process，后者 stop/delete 经 RunnerCommandExecutor 回收，冻结版本不重绑定当前 installation。
 
 Plugin package cleanup 对 runnerEntry 保守保留：installation count 不是冻结 Run/Workspace 的完整引用 owner，未建立共享 package-reference lease 前禁止 count-then-unlink Runner source。当前 installation 切换与旧 package 文件保留分离。

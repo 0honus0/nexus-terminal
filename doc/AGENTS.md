@@ -247,6 +247,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 - 全局共享不可变 Tool Pack，generation PATH 选版本；deps/build 按环境 profile 分区。版本切换仅重建目标 generation，终止其旧 process/session，项目文件与其他 Workspace 不受影响，不修改 `/usr/bin`。
 - job/ACP/Plugin 原生 process group 随 owner 整组回收，Terminal 用真实 PTY foreground group。启用 Runner Plugin 等于允许以 Runner OS 权限运行；逻辑工作目录不是跨 Plugin ACL 或安全沙箱，不暴露伪 cgroup/network/quota 字段。
 - cleanup：preview 冻结 workspaceIds → confirm → Runner recheck → deleted[] → Backend projection sync；不扩大范围，跳过 retained/active/job/session。journal 损坏保留原件与 evidence 并 fail closed，不能当空 journal 启动。
+- Workspace 显式 delete 成功释放 retention；历史 deleted+retained 允许进入显式 cleanup，stop 不释放保留。persistent project root 由 cleanup owner 删除，不把 generation 删除当作全文件树已回收。
 
 ### 8.2 文件、执行与传输边界
 
