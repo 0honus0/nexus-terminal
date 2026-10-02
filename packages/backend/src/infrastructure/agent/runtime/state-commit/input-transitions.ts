@@ -70,7 +70,8 @@ export const appendInputTransition = async (
       ? await tx.queryOne<{ id: string }>(
           `SELECT a.id FROM agent_model_attempts a
            JOIN agent_steps s ON s.id = a.step_id
-           WHERE s.run_id = ? AND s.kind = 'model' AND s.status = 'running' AND a.status = 'streaming'
+           WHERE s.run_id = ? AND EXISTS (SELECT 1 FROM agent_runtimes rt WHERE rt.id = s.agent_runtime_id AND rt.run_id = s.run_id AND rt.participant_id = 'root')
+             AND s.kind = 'model' AND s.status = 'running' AND a.status = 'streaming'
            LIMIT 1`,
           [row.id],
         )

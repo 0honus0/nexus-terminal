@@ -227,6 +227,21 @@ export const subagentClaimedCancellationScenario = async () => {
         now,
       });
     const begun = await beginSummary();
+    await assert.rejects(
+      commit.appendInput({
+        scope,
+        runId,
+        inputEntryId: 'child-only-interrupt',
+        input: { text: 'Interrupt Root only.', artifactRefs: [] },
+        mode: 'interrupt',
+        expectedRunVersion: begun.run.version,
+        idempotencyKey: 'child-only-interrupt',
+        requestHash: 'child-only-interrupt',
+        now,
+      }),
+      /RUN_NOT_STREAMING_MODEL/,
+      'Child-only streaming must not accept a Root interrupt',
+    );
     const checkpoint = {
       version: 'semantic-child-v1' as const,
       throughId: history.units[0]!.id,

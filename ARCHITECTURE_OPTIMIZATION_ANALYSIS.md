@@ -357,7 +357,7 @@ Child 不再重复暴露全量 MCP schema；动态 contribution 版本替换时�
 
 ## 20. Run Interrupt 的 Streaming 检测覆盖 Child，但实际 Abort 只发送给 Root Scheduler
 
-> 确认问题（中断判定／执行 owner 不一致）：核对 `sqlite-run-input.transitions.ts`、`runtime/runs/run.service.ts`、`bootstrap/agent/compose-agent.ts` 与两套 scheduler。Run-level streaming 查询包含 child，input callback 只 signal Root；未运行 child-only streaming 中断场景。
+> 已修复：input／Goal／pending-input 的 streaming 查询按 agent_runtimes.participant_id=root 限定，与 Root scheduler signal owner 一致；Child-only streaming 的显式 interrupt 返回 RUN_NOT_STREAMING_MODEL，SQLite 场景验证拒绝。保留 Root-only 产品语义，Child 纠正使用 mailbox，取消走既有链路。
 
 `appendInputTransition()` 在处理 Run 的新输入和显式 interrupt 时，会查询整个 Run 下是否存在：
 
@@ -367,13 +367,13 @@ agent_steps.status = running
 agent_model_attempts.status = streaming
 ```
 
-这条查询没有限制 `agent_runtime_id`，因此 Root 和 Subagent 的 streaming model attempt 都会让：
+这条查询通过 runtime participant 限定 Root，只有 Root streaming model attempt 会让：
 
 ```text
 shouldInterruptModel = true
 ```
 
-显式 `RunService.interrupt()` 也依赖同一条判断；只要任意 runtime 正在 streaming，interrupt 请求就可以通过 `RUN_NOT_STREAMING_MODEL` 检查并提交。
+显式 interrupt 仅 Root streaming 可提交，不以 Child streaming 冒充 Root 可中断。
 
 但 `RunService` 提交后的 interrupt callback 在 composition root 中绑定为：
 
@@ -390,12 +390,12 @@ cancel(runId)
 cancelRuntime(runId, runtimeId)
 ```
 
-当前 input / interrupt / goal-update callback 没有调用这两个入口。它们只在 Run cancel、delegation cancel、completion/fail-fast 等路径使用。
+input／interrupt／Goal callback 继续只 signal Root；这与查询 owner 一致，不隐式取消 Child。
 
 因此当 Root 已经 park/settle、Run 的实际 streaming model 只属于 Subagent 时，会出现：
 
 ```text
-interrupt transaction: 发现 streaming child -> 成功提交 input/interrupt
+interrupt transaction: 仅 streaming child -> RUN_NOT_STREAMING_MODEL
 RunService:            调用 Root scheduler.signalInput(run)
 Root scheduler:        没有 active Root Run -> 返回 false
 Subagent scheduler:    未收到 abort
