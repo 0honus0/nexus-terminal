@@ -53,8 +53,17 @@ export class SqliteQuickCommandTagRepository implements QuickCommandTagRepositor
     return (await this.db.execute('DELETE FROM quick_command_tags WHERE id=?', [id])).changes > 0;
   }
   addTagToCommands(commandIds: readonly number[], tagId: number): Promise<void> {
+    if (
+      !commandIds.length ||
+      commandIds.length > 1000 ||
+      !Number.isSafeInteger(tagId) ||
+      tagId <= 0 ||
+      commandIds.some((id) => !Number.isSafeInteger(id) || id <= 0)
+    )
+      throw new Error('QUICK_COMMAND_TAG_BATCH_INVALID');
+    const uniqueIds = [...new Set(commandIds)];
     return this.db.transaction(async (tx) => {
-      for (const commandId of commandIds)
+      for (const commandId of uniqueIds)
         if (Number.isFinite(commandId))
           await tx.execute(
             'INSERT OR IGNORE INTO quick_command_tag_associations (quick_command_id,tag_id) VALUES (?,?)',

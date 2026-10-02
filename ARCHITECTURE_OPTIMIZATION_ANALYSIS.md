@@ -1740,7 +1740,9 @@ const payload = encrypt(Buffer.from(snapshotJson, 'utf8'), dataKey);
 
 这个问题和 #73 不同：#73 是“能够成功导出的文件可能超过 import 100 MiB 上限”；这里是 export 自己在合法状态下就会因为 V8/Node 单字符串表示上限失败。
 
-## 82. Quick Command 批量打标签不限制或去重 `commandIds`；一个 1 MiB 请求可在全局排他 SQLite transaction 内制造数十万次串行 SQL
+## 82. Quick Command bulk tag 工作量放大（已修复）
+
+> 已修复：repository事务前限制原数组1..1000、安全正整数tag/command，去重后最多1000 SQL；不允许先去重掩盖超长原输入。保留同事务原子关联，不引入并行SQL或部分commit。下文为原证据。
 
 > 确认问题（数据库工作量放大）：bulk route 未限数量，sqlite-quick-command-tag.repository 在 exclusive transaction 内对每项执行 INSERT OR IGNORE；重复 ID 仍产生 SQL/RPC。数量为估算，未执行大批量请求。
 

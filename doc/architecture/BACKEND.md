@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+QuickCommandTagRepository bulk admission事务前原length<=1000、安全正整数，再Set去重；有界串行SQL同事务，不先去重后接纳任意大输入。
+
 Backup V1 snapshot admission64MiB：tables逐行UTF8 JSON计量，inventory按base64长度+路径开销预算后read；codec逐条二次计量再全量stringify。不是streaming/任意合法quota roundtrip，单行DB物化与全量表heap仍存在。
 
 Workspace readBinary required maxBytes<=64MiB/cap4，requestId owner在open前注册，cancelRead/close销毁read stream，send循环累计限量；Preview透传类型maxBytes和signal，client pending累计限量/timeout取消，不仅stat检查。
