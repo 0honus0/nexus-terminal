@@ -8,7 +8,11 @@ import { SqliteContextCheckpointRepository } from '../../../packages/backend/src
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
 import { runMigrations } from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
 import { definedMigrations } from '../../../packages/backend/src/infrastructure/database/migrations/registry';
-import { ContextCheckpointService } from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
+import {
+  ContextCheckpointService,
+  CHECKPOINT_SECTIONS,
+  completeCheckpoint,
+} from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../../packages/backend/src/modules/agent/ai/context.service';
 import type { LedgerEntryView } from '../../../packages/backend/src/modules/agent/ai/conversation.repository.port';
 import { ConversationService } from '../../../packages/backend/src/modules/agent/ai/conversation.service';
@@ -22,9 +26,65 @@ import {
   entry,
   StaticConversationRepository,
   StaticContextCheckpointRepository,
+  scenarioCheckpoints,
 } from './scenario-context-helpers';
 
 export const durableContextCheckpointScenario = async () => {
+  const middleConstraint = '只修改源代码，保留全部生成文件；未经确认不要推送。';
+  const semanticHistory = Array.from({ length: 18 }, (_, index) =>
+    entry(index + 1, 'user_input', {
+      text: `${'普通历史背景。'.repeat(65)}${index === 8 ? middleConstraint : `历史记录 ${index}`}`,
+    }),
+  );
+  semanticHistory.push(entry(19, 'user_input', { text: '纠正：可以修改生成文件，但仍然不要推送。' }));
+  const semanticRepository = new StaticContextCheckpointRepository();
+  const semanticService = new ContextCheckpointService(
+    semanticRepository,
+    new ConversationService(new StaticConversationRepository(semanticHistory), clock, null!, null!),
+    clock,
+  );
+  const request = {
+    scope,
+    threadId: 'scenario-thread',
+    throughSequence: 18,
+    maxSummaryTokens: 512,
+    maxGenerationInputTokens: 1600,
+    hardPressure: true,
+  };
+  let batches = 0;
+  let sawMiddle = false;
+  for (;;) {
+    const projection = await semanticService.plan(request);
+    if (!projection.generation) break;
+    const generation = projection.generation;
+    assert.ok(generation.estimatedInputTokens <= 1600, 'each summary request must fit its input ceiling');
+    if (batches > 0)
+      assert.ok(
+        generation.messages[0]?.content.includes('previousHandoff'),
+        'subsequent batches merge the previous summary',
+      );
+    sawMiddle ||= generation.messages.some((message) => message.content.includes(middleConstraint));
+    const text = CHECKPOINT_SECTIONS.map(
+      (section) => `## ${section}\n${section === 'Requirements' && sawMiddle ? middleConstraint : '(none)'}`,
+    ).join('\n');
+    await semanticRepository.upsert(completeCheckpoint(generation, text));
+    batches += 1;
+    assert.ok(batches <= 18, 'batch progression must terminate');
+  }
+  assert.ok(batches > 1);
+  assert.ok(
+    sawMiddle,
+    'all historical inputs, including constraints after 220 characters and in the middle, must reach the summarizer',
+  );
+  const correction = await semanticService.plan({ ...request, throughSequence: 19 });
+  assert.ok(correction.generation);
+  assert.ok(correction.generation.messages[0]?.content.includes(middleConstraint));
+  assert.ok(correction.generation.messages.some((message) => message.content.includes('纠正：可以修改生成文件')));
+  assert.throws(() => completeCheckpoint(correction.generation!, ''), /CONTEXT_COMPACTION_INVALID/);
+  await assert.rejects(
+    semanticService.plan({ ...request, throughSequence: 19, maxGenerationInputTokens: 64 }),
+    /CONTEXT_COMPACTION_UNIT_TOO_LARGE/,
+  );
   for (const constraint of [
     '请保留全部生成文件，只修改源代码。',
     '生成ファイルはすべて保持し、ソースコードだけを変更してください。',
@@ -33,14 +93,13 @@ export const durableContextCheckpointScenario = async () => {
     const constraintHistory = [
       entry(1, 'user_input', { text: 'Goal: improve the parser.' }),
       entry(2, 'user_input', { text: constraint }),
-      entry(3, 'assistant_message', { text: 'Inspection in progress.' }),
+      entry(3, 'assistant_message', { text: 'Inspection in progress. '.repeat(40) }),
     ];
-    const checkpoints = new ContextCheckpointService(
+    const checkpoints = scenarioCheckpoints(
       new StaticContextCheckpointRepository(),
       new ConversationService(new StaticConversationRepository(constraintHistory), clock, null!, null!),
-      clock,
     );
-    const checkpoint = await checkpoints.checkpointForPrefix({
+    const checkpoint = await checkpoints.generate({
       scope,
       threadId: 'scenario-thread',
       throughSequence: 3,
@@ -71,7 +130,7 @@ export const durableContextCheckpointScenario = async () => {
       }),
     );
   }
-  const service = contextService(history);
+  const service = contextService(history, true);
   const plan = await service.compose({
     scope,
     threadId: 'scenario-thread',
@@ -114,6 +173,9 @@ export const durableContextCheckpointScenario = async () => {
   const fallbackConversations = new ConversationService(fallbackRepository, clock, null!, null!);
   const failingCheckpoints = new ContextCheckpointService(
     {
+      findLatest: async () => {
+        throw new Error('CHECKPOINT_STORE_UNAVAILABLE');
+      },
       getExact: async () => {
         throw new Error('CHECKPOINT_STORE_UNAVAILABLE');
       },
@@ -132,33 +194,26 @@ export const durableContextCheckpointScenario = async () => {
     null!,
     failingCheckpoints,
   );
-  const fallbackPlan = await fallbackContext.compose({
-    scope,
-    threadId: 'scenario-thread',
-    runId: 'scenario-run',
-    currentInput: 'Proceed despite a checkpoint persistence failure.',
-    goal: 'GOAL_MARKER: preserve parser correctness and generated-file immutability.',
-    taskPlan: 'PLAN_MARKER: inspect, patch source only, run deterministic verification.',
-    collaborationContext: 'COLLAB_MARKER: child parser audit completed; no active child work remains.',
-    modelContextWindow: 4_096,
-    maxContextTokens: 1_050,
-    reservedOutputTokens: 256,
-    maxRecallItems: 5,
-    maxRecallBytes: 8_192,
-    compactionMode: 'balanced',
-    tools: [],
-  });
-  assert.equal(fallbackPlan.compacted, true);
-  assert.equal(
-    fallbackPlan.tokenDiagnostics.summaryCheckpointTokens,
-    0,
-    'checkpoint failure must fall back to drop-only projection instead of fabricating derived state',
+  await assert.rejects(
+    fallbackContext.compose({
+      scope,
+      threadId: 'scenario-thread',
+      runId: 'scenario-run',
+      currentInput: 'Proceed despite a checkpoint persistence failure.',
+      goal: 'GOAL_MARKER: preserve parser correctness and generated-file immutability.',
+      taskPlan: 'PLAN_MARKER: inspect, patch source only, run deterministic verification.',
+      collaborationContext: 'COLLAB_MARKER: child parser audit completed; no active child work remains.',
+      modelContextWindow: 4_096,
+      maxContextTokens: 1_050,
+      reservedOutputTokens: 256,
+      maxRecallItems: 5,
+      maxRecallBytes: 8_192,
+      compactionMode: 'balanced',
+      tools: [],
+    }),
+    /CONTEXT_COMPACTION_UNAVAILABLE/,
+    'checkpoint storage failure must not silently run with drop-only history',
   );
-  assert.ok(
-    fallbackPlan.droppedSections.includes('summary-checkpoint:unavailable'),
-    'checkpoint failure must be observable without blocking model execution',
-  );
-  assertValidToolExchange(fallbackPlan.messages);
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-context-checkpoint-schema-'));
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'context-checkpoint.sqlite', nodeEnv: 'test' });
@@ -209,13 +264,13 @@ export const durableContextCheckpointScenario = async () => {
     await durableConversationsRepository.appendEntry(scope, 'context-checkpoint-thread', {
       id: 'context-checkpoint-entry-3',
       kind: 'assistant_message',
-      payload: { text: 'Current state remains safe and resumable.' },
+      payload: { text: 'Current state remains safe and resumable. '.repeat(40) },
       createdAt: clock.nowUnixSeconds() + 2,
     });
     const durableConversations = new ConversationService(durableConversationsRepository, clock, null!, null!);
     const durableCheckpointRepository = new SqliteContextCheckpointRepository(db);
-    const durableCheckpoints = new ContextCheckpointService(durableCheckpointRepository, durableConversations, clock);
-    const firstCheckpoint = await durableCheckpoints.checkpointForPrefix({
+    const durableCheckpoints = scenarioCheckpoints(durableCheckpointRepository, durableConversations);
+    const firstCheckpoint = await durableCheckpoints.generate({
       scope,
       threadId: 'context-checkpoint-thread',
       throughSequence: 3,
@@ -224,7 +279,7 @@ export const durableContextCheckpointScenario = async () => {
     });
     assert.ok(firstCheckpoint, 'Context checkpoint producer must persist a derived summary');
     assert.match(firstCheckpoint!.content, /STALE_SOURCE_MARKER/);
-    const reusedCheckpoint = await durableCheckpoints.checkpointForPrefix({
+    const reusedCheckpoint = await durableCheckpoints.generate({
       scope,
       threadId: 'context-checkpoint-thread',
       throughSequence: 3,
@@ -246,7 +301,7 @@ export const durableContextCheckpointScenario = async () => {
     );
 
     await db.execute("DELETE FROM ai_thread_entries WHERE id = 'context-checkpoint-entry-2'");
-    const refreshedCheckpoint = await durableCheckpoints.checkpointForPrefix({
+    const refreshedCheckpoint = await durableCheckpoints.generate({
       scope,
       threadId: 'context-checkpoint-thread',
       throughSequence: 3,
@@ -264,7 +319,7 @@ export const durableContextCheckpointScenario = async () => {
       /STALE_SOURCE_MARKER/,
       'regenerated checkpoint must derive only from the current canonical Ledger source',
     );
-    const resumedBoundaryCheckpoint = await durableCheckpoints.checkpointForPrefix({
+    const resumedBoundaryCheckpoint = await durableCheckpoints.generate({
       scope,
       threadId: 'context-checkpoint-thread',
       runId: 'resumed-run',
@@ -327,6 +382,16 @@ export const durableContextCheckpointScenario = async () => {
       'migration 30 must create the Context checkpoint owner',
     );
     assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
+    legacyDb.exec(`INSERT INTO ai_threads (id) VALUES ('retired-checkpoint-thread');
+      INSERT INTO ai_context_checkpoints (id, thread_id, visibility_hash, visibility_json, from_sequence, to_sequence, source_hash, strategy_version, generator_json, source_tokens, summary_tokens, content, created_at)
+      VALUES ('retired-checkpoint', 'retired-checkpoint-thread', 'visibility', '{"kind":"thread_prefix"}', 1, 1, 'source', 'context-checkpoint-v1', '{"kind":"deterministic","version":"deterministic-summary-v2"}', 100, 20, 'retired derived summary', 1);
+      DELETE FROM migrations WHERE id = 51;`);
+    await runMigrations(legacyDb);
+    assert.equal(
+      (legacyDb.prepare('SELECT COUNT(*) AS count FROM ai_context_checkpoints').get() as { count: number }).count,
+      0,
+      'upgrade must retire extractive derived state',
+    );
     assert.equal(
       migrationVersion?.version,
       latestMigrationId,
@@ -340,7 +405,7 @@ export const durableContextCheckpointScenario = async () => {
   return [
     { name: 'summary_checkpoint_tokens', value: plan.tokenDiagnostics.summaryCheckpointTokens, unit: 'tokens' },
     { name: 'visible_context_messages', value: plan.messages.length, unit: 'messages' },
-    { name: 'checkpoint_failure_fallbacks', value: 1, unit: 'cases' },
+    { name: 'checkpoint_failure_safe_stops', value: 1, unit: 'cases' },
     { name: 'durable_checkpoint_roundtrips', value: 1, unit: 'cases' },
     { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
     { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },

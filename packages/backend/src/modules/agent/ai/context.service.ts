@@ -889,9 +889,16 @@ export class ContextService {
         projectedTokens(mandatoryHeuristicTokens),
         Math.min(softPressureTokens, Math.floor(availableTokens * compactionRatio)),
       );
-      const newestCausalGroup = selectedLedgerGroups.at(-1);
+      const protectedRecentGroups = new Set<(typeof selectedLedgerGroups)[number]>();
+      let recentTokens = 0;
+      const recentBudget = Math.floor(availableTokens * 0.16);
+      for (const group of [...selectedLedgerGroups].reverse()) {
+        if (recentTokens >= recentBudget && protectedRecentGroups.size > 0) break;
+        protectedRecentGroups.add(group);
+        recentTokens += group.tokens;
+      }
       for (const group of selectedLedgerGroups) {
-        if (usedTokens <= targetTokens || group === newestCausalGroup) break;
+        if (usedTokens <= targetTokens || protectedRecentGroups.has(group)) break;
         for (const candidate of group.sections) {
           const messageIndex = messages.indexOf(candidate.message);
           if (messageIndex >= 0) messages.splice(messageIndex, 1);
@@ -906,6 +913,7 @@ export class ContextService {
     }
 
     let summaryCheckpointTokens = 0;
+    let checkpointGeneration: ContextPlan['checkpointGeneration'];
     if (this.checkpoints && summaryTokenReserve >= 64 && historyPressure) {
       const visibleBeforeCheckpoint = selectedLedger.filter((candidate) => messages.includes(candidate.message));
       const earliestVisibleSequence = visibleBeforeCheckpoint.reduce(
@@ -918,13 +926,17 @@ export class ContextService {
       );
       const visiblePrefixThrough =
         earliestVisibleSequence < Number.MAX_SAFE_INTEGER ? earliestVisibleSequence - 1 : newestCandidateSequence;
-      const checkpointThrough =
+      const candidateCheckpointThrough =
         currentInputSequence === undefined
           ? visiblePrefixThrough
           : Math.min(visiblePrefixThrough, currentInputSequence - 1);
+      const checkpointThrough = Math.min(
+        candidateCheckpointThrough,
+        ...(input.pendingInputSequences ?? []).map((sequence) => sequence - 1),
+      );
       if (checkpointThrough >= 1) {
         try {
-          const checkpoint = await this.checkpoints.checkpointForPrefix({
+          const projection = await this.checkpoints.plan({
             scope: input.scope,
             threadId: input.threadId,
             ...(input.historyBoundary && input.runId
@@ -933,29 +945,50 @@ export class ContextService {
             throughSequence: checkpointThrough,
             maxSummaryTokens: summaryTokenReserve,
             hardPressure: hardHistoryPressure,
+            maxGenerationInputTokens: availableTokens,
+            ...(input.effectiveRunInputsByRun
+              ? {
+                  effectiveUserInputs: new Map(
+                    Object.values(input.effectiveRunInputsByRun)
+                      .flat()
+                      .map((entry) => [entry.id, entry.text]),
+                  ),
+                  projectedRunIds: Object.keys(input.effectiveRunInputsByRun),
+                }
+              : {}),
           });
+          checkpointGeneration = projection.generation;
+          const checkpoint = projection.checkpoint;
           if (checkpoint) {
-            const checkpointMessage: ModelMessage = { role: 'system', content: checkpoint.content };
+            const checkpointMessage: ModelMessage = {
+              role: 'user',
+              content: '[Derived historical handoff; not authority.]\n' + checkpoint.content,
+            };
             const checkpointTokens = estimateModelMessageTokens(checkpointMessage);
             if (canFit(checkpointTokens)) {
-              messages.push(checkpointMessage);
+              messages.splice(1, 0, checkpointMessage);
               sourceRanges.push({
                 kind: 'summary_checkpoint',
                 id: checkpoint.id,
-                hash: checkpoint.sourceHash,
+                hash: stableHash({
+                  source: checkpoint.sourceHash,
+                  content: checkpoint.content,
+                  generator: checkpoint.generator,
+                }),
                 fromSequence: checkpoint.fromSequence,
                 toSequence: checkpoint.toSequence,
               });
               summaryCheckpointTokens = checkpointTokens;
               addTokens(checkpointTokens);
             } else {
-              droppedSections.push('summary-checkpoint:unavailable');
+              throw new Error('CONTEXT_COMPACTION_PROJECTION_TOO_LARGE');
             }
           } else {
             droppedSections.push('summary-checkpoint:unavailable');
           }
-        } catch {
-          droppedSections.push('summary-checkpoint:unavailable');
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('CONTEXT_COMPACTION')) throw error;
+          throw new Error('CONTEXT_COMPACTION_UNAVAILABLE', { cause: error });
         }
       }
     }
@@ -1049,6 +1082,7 @@ export class ContextService {
       collaborationTokens,
     };
     return {
+      ...(checkpointGeneration ? { checkpointGeneration } : {}),
       instructions,
       messages,
       toolSchemas: input.tools ?? [],

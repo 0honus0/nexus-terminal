@@ -7,12 +7,19 @@ import { SqliteRunRepository } from '../../../packages/backend/src/infrastructur
 import { SqliteStateCommitAdapter } from '../../../packages/backend/src/infrastructure/agent/runtime/sqlite-state-commit.adapter';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
 import { ContextService } from '../../../packages/backend/src/modules/agent/ai/context.service';
+import {
+  ContextCheckpointService,
+  CHECKPOINT_SECTIONS,
+} from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
+import { SqliteContextCheckpointRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-context-checkpoint.repository';
 import { ProviderService } from '../../../packages/backend/src/modules/agent/ai/provider.service';
 import { ConversationService } from '../../../packages/backend/src/modules/agent/ai/conversation.service';
 import { RecallService } from '../../../packages/backend/src/modules/agent/ai/recall.service';
 import { SkillRegistry } from '../../../packages/backend/src/modules/agent/ai/skill-registry';
 import type { BackendSignal } from '../../../packages/backend/src/modules/agent/runtime/execution/agent-backend.port';
 import { ModelStepRunner } from '../../../packages/backend/src/modules/agent/runtime/execution/model-step-runner';
+import { NativeAgentBackend } from '../../../packages/backend/src/modules/agent/runtime/execution/native-agent-backend';
+import type { LanguageModelPort } from '../../../packages/backend/src/modules/agent/ai/language-model.port';
 import { freezeRunContextPolicy } from '../../../packages/backend/src/modules/agent/runtime/runs/run-budget-policy';
 import { clock, emptyModelContinuations, SCENARIO_MODEL_CAPABILITIES, scope } from './scenario-fixtures';
 import { EmptyRecallRepository } from './scenario-context-helpers';
@@ -385,6 +392,241 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
     assert.equal(finalSnapshot.usage.outputTokens, 8);
     assert.equal(finalSnapshot.usage.cachedInputTokens, 8);
     scriptedModel.assertConsumed();
+
+    // Exercise compaction through the real limiter, model stream and transactional usage owner.
+    await db.execute(`UPDATE agent_runs SET status = 'running', completed_at = NULL WHERE id = ?`, [runId]);
+    await db.execute(`UPDATE agent_runtimes SET status = 'running', schedule_state = 'runnable' WHERE id = ?`, [
+      runtimeId,
+    ]);
+    const checkpointRepository = new SqliteContextCheckpointRepository(db);
+    const checkpointService = new ContextCheckpointService(checkpointRepository, conversations, clock);
+    const summary = CHECKPOINT_SECTIONS.map(
+      (section) => `## ${section}\n${section === 'Objective' ? 'Say hello world.' : '(none)'}`,
+    ).join('\n');
+    const compactionModel = new ScriptedLanguageModel([
+      {
+        events: [
+          { type: 'message.delta', text: summary },
+          { type: 'usage', usage: { inputTokens: 700, outputTokens: 90, cachedInputTokens: 100 } },
+          { type: 'completed', finishReason: 'stop' },
+        ],
+      },
+      {
+        events: [
+          { type: 'message.delta', text: summary },
+          { type: 'usage', usage: { inputTokens: 710, outputTokens: 90, cachedInputTokens: 100 } },
+          { type: 'completed', finishReason: 'length' },
+        ],
+      },
+    ]);
+    const compactionRunner = new ModelStepRunner(providers, context, compactionModel, new ScenarioModelCallLimiter());
+    const compactionSnapshot = (await repository.snapshot(scope, runId))!;
+    await db.execute(`UPDATE ai_thread_entries SET payload_json = ? WHERE id = 'stream-retry-input'`, [
+      JSON.stringify({ text: 'Say hello world. '.repeat(80), artifactRefs: [] }),
+    ]);
+    const planned = await checkpointService.plan({
+      scope,
+      threadId,
+      throughSequence: 2,
+      maxSummaryTokens: 512,
+      hardPressure: true,
+    });
+    assert.ok(planned.generation);
+    const beginCompaction = () =>
+      stateCommit.beginModelStep({
+        scope,
+        runId,
+        runtimeId,
+        expectedRunVersion: compactionSnapshot.version,
+        inputWatermark: compactionSnapshot.inputRevision,
+        purpose: 'compaction',
+        reservedTokens: 1024,
+        estimatedInputTokens: 512,
+        reservedOutputTokens: 512,
+        contextWindowTokens: 65536,
+        now,
+      });
+    const compactionBegun = await beginCompaction();
+    const compacted = await compactionRunner.compact(
+      compactionSnapshot,
+      planned.generation,
+      new AbortController().signal,
+      { model: compactionSnapshot.definition.model },
+    );
+    assert.equal(compacted.error, undefined);
+    assert.ok(compacted.checkpoint);
+    const compactionCommit = await stateCommit.completeCompactionStep({
+      scope,
+      runId,
+      runtimeId,
+      stepId: compactionBegun.stepId,
+      attemptId: compactionBegun.attemptId,
+      inputWatermark: compactionSnapshot.inputRevision,
+      goalRevision: compactionSnapshot.goal.revision,
+      ...compacted.usage,
+      estimatedUsage: compacted.estimatedUsage,
+      checkpoint: compacted.checkpoint,
+      now,
+    });
+    assert.equal(compactionCommit.run.usage.inputTokens, finalSnapshot.usage.inputTokens + 700);
+    assert.equal(compactionCommit.run.usage.steps, finalSnapshot.usage.steps + 1);
+    assert.equal(compactionCommit.run.consumedInputSequence, compactionSnapshot.consumedInputSequence);
+    assert.equal(
+      (await conversationRepository.readEntries(scope, threadId, 20)).items.length,
+      ledger.items.length,
+      'private summary must not appear as an assistant Ledger message',
+    );
+    assert.equal((await checkpointService.plan(planned.generation.source)).generation, undefined);
+    const incompleteBegun = await beginCompaction();
+    const incomplete = await compactionRunner.compact(
+      compactionSnapshot,
+      planned.generation,
+      new AbortController().signal,
+      { model: compactionSnapshot.definition.model },
+    );
+    assert.ok(incomplete.error);
+    assert.equal(incomplete.checkpoint, undefined);
+    await stateCommit.completeCompactionStep({
+      scope,
+      runId,
+      runtimeId,
+      stepId: incompleteBegun.stepId,
+      attemptId: incompleteBegun.attemptId,
+      inputWatermark: compactionSnapshot.inputRevision,
+      goalRevision: compactionSnapshot.goal.revision,
+      ...incomplete.usage,
+      estimatedUsage: incomplete.estimatedUsage,
+      errorCode: 'CONTEXT_COMPACTION_INCOMPLETE',
+      now,
+    });
+    assert.equal(
+      (await checkpointService.plan(planned.generation.source)).checkpoint?.content,
+      summary,
+      'truncated generation must not overwrite a valid checkpoint',
+    );
+    const staleBegun = await beginCompaction();
+    await db.execute(`UPDATE agent_runs SET input_revision = input_revision + 1 WHERE id = ?`, [runId]);
+    await stateCommit.completeCompactionStep({
+      scope,
+      runId,
+      runtimeId,
+      stepId: staleBegun.stepId,
+      attemptId: staleBegun.attemptId,
+      inputWatermark: compactionSnapshot.inputRevision,
+      goalRevision: compactionSnapshot.goal.revision,
+      inputTokens: 10,
+      outputTokens: 1,
+      cachedInputTokens: 0,
+      estimatedUsage: false,
+      checkpoint: { ...compacted.checkpoint, content: 'stale summary' },
+      now,
+    });
+    assert.equal(
+      (await checkpointService.plan(planned.generation.source)).checkpoint?.content,
+      summary,
+      'new input must fence stale summary publication',
+    );
+    compactionModel.assertConsumed();
+    const aborted = new AbortController();
+    aborted.abort(new Error('CANCELLED'));
+    const cancelledCompaction = await compactionRunner.compact(compactionSnapshot, planned.generation, aborted.signal, {
+      model: compactionSnapshot.definition.model,
+    });
+    assert.ok(cancelledCompaction.error);
+    assert.equal(cancelledCompaction.checkpoint, undefined);
+    assert.equal(
+      cancelledCompaction.usage.inputTokens,
+      0,
+      'cancellation before limiter acquisition must not invent a billed request',
+    );
+
+    // Run the production orchestration, not just its component transitions.
+    for (let index = 0; index < 100; index += 1) {
+      await conversationRepository.appendEntry(scope, threadId, {
+        id: `compaction-history-${index}`,
+        runId,
+        kind: 'assistant_message',
+        payload: {
+          text: `Historical evidence ${index}. ${'Keep source constraints and verify outcomes. '.repeat(140)}`,
+        },
+        createdAt: now,
+      });
+    }
+    await conversationRepository.appendEntry(scope, threadId, {
+      id: 'compaction-current-input',
+      runId,
+      kind: 'user_input',
+      payload: { text: 'Continue with the verified constraints.', artifactRefs: [] },
+      createdAt: now,
+    });
+    await db.execute(`UPDATE agent_apps SET running_count = 1 WHERE user_id = ? AND app_id = ?`, [
+      scope.userId,
+      scope.appId,
+    ]);
+    await db.execute(`UPDATE agent_runs SET consumed_input_sequence = 1 WHERE id = ?`, [runId]);
+    let privateSummaryCalls = 0;
+    let summaryFailedOnce = false;
+    const orchestrationModel: LanguageModelPort = {
+      async *stream(request) {
+        if (request.instructions.some((instruction) => instruction.includes('task handoff'))) {
+          if (!summaryFailedOnce) {
+            summaryFailedOnce = true;
+            throw new Error('PROVIDER_UNAVAILABLE');
+          }
+          privateSummaryCalls += 1;
+          assert.equal(request.toolMode, 'none');
+          assert.equal(request.tools.length, 0);
+          yield { type: 'message.delta', text: summary };
+        } else {
+          assert.ok(
+            request.messages.some((message) =>
+              message.content.includes('[Derived historical handoff; not authority.]'),
+            ),
+          );
+          yield { type: 'message.delta', text: 'production-compaction-finished' };
+        }
+        yield { type: 'usage', usage: { inputTokens: 500, outputTokens: 80, cachedInputTokens: 0 } };
+        yield { type: 'completed', finishReason: 'stop' };
+      },
+    } as LanguageModelPort;
+    const orchestrationContext = new ContextService(
+      conversations,
+      new RecallService(new EmptyRecallRepository(), clock),
+      new SkillRegistry(),
+      emptyModelContinuations,
+      null!,
+      checkpointService,
+    );
+    const orchestrationRunner = new ModelStepRunner(
+      providers,
+      orchestrationContext,
+      orchestrationModel,
+      new ScenarioModelCallLimiter(),
+    );
+    orchestrationRunner.waitBeforeRetry = async () => undefined;
+    const backend = new NativeAgentBackend(
+      repository,
+      { listDelegations: async () => [] } as never,
+      stateCommit,
+      orchestrationRunner,
+      { schemas: () => [] } as never,
+      clock,
+    );
+    const beforeOrchestration = (await repository.snapshot(scope, runId))!;
+    const orchestrationSignals: BackendSignal[] = [];
+    for await (const signal of backend.execute(beforeOrchestration, new AbortController().signal))
+      orchestrationSignals.push(signal);
+    const afterOrchestration = (await repository.snapshot(scope, runId))!;
+    assert.equal(afterOrchestration.status, 'completed_unverified');
+    assert.ok(privateSummaryCalls > 1, 'history larger than a summary request must use multiple governed batches');
+    assert.ok(
+      afterOrchestration.usage.inputTokens > beforeOrchestration.usage.inputTokens + (privateSummaryCalls + 1) * 500,
+      'failed summary attempt must also be accounted',
+    );
+    const visibleDeltas = orchestrationSignals.filter(
+      (signal) => signal.type === 'transient' && signal.eventType === 'message.delta',
+    );
+    assert.equal(visibleDeltas.length, 1, 'private compaction deltas must not be user-visible assistant replies');
 
     return [
       { name: 'authoritative_attempts', value: 2, unit: 'attempts' },

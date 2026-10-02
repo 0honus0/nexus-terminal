@@ -68,10 +68,10 @@ const parseGenerator = (value: string): ContextCheckpointGenerator => {
   const parsed = JSON.parse(value) as unknown;
   if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('PERSISTED_STATE_INVALID');
   const record = parsed as Record<string, unknown>;
-  if (record.kind !== 'deterministic' || typeof record.version !== 'string' || !record.version) {
+  if (record.kind !== 'model' || typeof record.version !== 'string' || !record.version) {
     throw new Error('PERSISTED_STATE_INVALID');
   }
-  return { kind: 'deterministic', version: record.version };
+  return { kind: 'model', version: record.version };
 };
 
 const mapRow = (row: ContextCheckpointRow): ContextCheckpointView => ({
@@ -92,6 +92,24 @@ const mapRow = (row: ContextCheckpointRow): ContextCheckpointView => ({
 
 export class SqliteContextCheckpointRepository implements ContextCheckpointRepositoryPort {
   constructor(private readonly db: RelationalDatabase) {}
+
+  async findLatest(
+    scope: UpsertContextCheckpointRecord['scope'],
+    threadId: string,
+    visibilityHash: string,
+    throughSequence: number,
+    strategyVersion: string,
+  ): Promise<ContextCheckpointView | null> {
+    const row = await this.db.queryOne<ContextCheckpointRow>(
+      `SELECT c.* FROM ai_context_checkpoints c
+       JOIN ai_threads t ON t.id = c.thread_id
+       WHERE c.thread_id = ? AND c.visibility_hash = ? AND c.to_sequence <= ?
+         AND c.strategy_version = ? AND t.user_id = ? AND t.app_id = ?
+       ORDER BY c.to_sequence DESC, c.created_at DESC LIMIT 1`,
+      [threadId, visibilityHash, throughSequence, strategyVersion, scope.userId, scope.appId],
+    );
+    return row ? mapRow(row) : null;
+  }
 
   async getExact(
     scope: UpsertContextCheckpointRecord['scope'],

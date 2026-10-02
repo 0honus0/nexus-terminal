@@ -118,6 +118,7 @@ export class NativeAgentBackend implements AgentBackendPort {
   private async *executePersisted(initial: RunView, signal: AbortSignal): AsyncIterable<BackendSignal> {
     const scope = { userId: initial.userId, appId: initial.appId };
     const runtimeId = await this.repository.rootRuntimeId(scope, initial.id);
+    let compactionAttemptIndex = 1;
 
     while (true) {
       const snapshot = await this.repository.snapshot(scope, initial.id);
@@ -187,13 +188,88 @@ export class NativeAgentBackend implements AgentBackendPort {
         );
       } catch (error) {
         const code = errorCode(error);
-        if (code !== 'PROVIDER_CONFIGURATION_STALE' && code !== 'MODEL_NOT_FOUND') throw error;
+        if (
+          code !== 'PROVIDER_CONFIGURATION_STALE' &&
+          code !== 'MODEL_NOT_FOUND' &&
+          !code.startsWith('CONTEXT_COMPACTION')
+        )
+          throw error;
         const failed = await this.lifecycle.failAtSafeBoundary(snapshot, code);
         yield { type: 'durable', runId: snapshot.id, cursor: failed.eventCursor };
         yield { type: 'settled', run: failed.run };
         return;
       }
       let { model, contextPlan } = preparedModelStep;
+      if (contextPlan.checkpointGeneration) {
+        const budgetWait = await this.lifecycle.reserveModelBudget(snapshot);
+        if (budgetWait) {
+          yield { type: 'durable', runId: snapshot.id, cursor: budgetWait.eventCursor };
+          yield { type: 'settled', run: budgetWait.run };
+          return;
+        }
+        const generation = contextPlan.checkpointGeneration;
+        const begun = await this.stateCommit.beginModelStep({
+          scope,
+          runId: snapshot.id,
+          runtimeId,
+          expectedRunVersion: snapshot.version,
+          inputWatermark: snapshot.inputRevision,
+          purpose: 'compaction',
+          reservedTokens: generation.estimatedInputTokens + generation.maxOutputTokens,
+          estimatedInputTokens: generation.estimatedInputTokens,
+          reservedOutputTokens: generation.maxOutputTokens,
+          contextWindowTokens: model.contextWindow,
+          model: activeRoute.model,
+          now: this.clock.nowUnixSeconds(),
+        });
+        yield { type: 'durable', runId: snapshot.id, cursor: begun.run.eventCursor };
+        const result = await this.modelSteps.compact(snapshot, generation, signal, {
+          model: activeRoute.model,
+          capabilities: activeRoute.modelCapabilities,
+        });
+        const committed = await this.stateCommit.completeCompactionStep({
+          scope,
+          runId: snapshot.id,
+          runtimeId,
+          stepId: begun.stepId,
+          attemptId: begun.attemptId,
+          inputWatermark: snapshot.inputRevision,
+          goalRevision: snapshot.goal.revision,
+          ...result.usage,
+          estimatedUsage: result.estimatedUsage,
+          ...(result.checkpoint ? { checkpoint: result.checkpoint } : {}),
+          ...(result.error ? { errorCode: errorCode(result.error) } : {}),
+          now: this.clock.nowUnixSeconds(),
+        });
+        yield { type: 'durable', runId: snapshot.id, cursor: committed.eventCursor };
+        if (signal.aborted) {
+          if (['NEW_INPUT', 'GOAL_UPDATED'].includes(signalReason(signal) ?? '')) return;
+          const cancelled = await this.lifecycle.cancelAtSafeBoundary(committed.run);
+          yield { type: 'durable', runId: snapshot.id, cursor: cancelled.eventCursor };
+          yield { type: 'settled', run: cancelled.run };
+          return;
+        }
+        if (committed.compactionErrorCode === 'CONTEXT_COMPACTION_SUPERSEDED') return;
+        if (committed.compactionErrorCode && !result.error) {
+          const failed = await this.lifecycle.failAtSafeBoundary(committed.run, committed.compactionErrorCode);
+          yield { type: 'durable', runId: snapshot.id, cursor: failed.eventCursor };
+          yield { type: 'settled', run: failed.run };
+          return;
+        }
+        if (result.error) {
+          if (this.modelSteps.shouldRetry(result.error, compactionAttemptIndex, signal)) {
+            compactionAttemptIndex += 1;
+            await this.modelSteps.waitBeforeRetry(result.error, compactionAttemptIndex, signal);
+            continue;
+          }
+          const failed = await this.lifecycle.failAtSafeBoundary(committed.run, errorCode(result.error));
+          yield { type: 'durable', runId: snapshot.id, cursor: failed.eventCursor };
+          yield { type: 'settled', run: failed.run };
+          return;
+        }
+        compactionAttemptIndex = 1;
+        continue;
+      }
       logger.debug(
         {
           runId: snapshot.id,
@@ -367,6 +443,7 @@ export class NativeAgentBackend implements AgentBackendPort {
             { model: nextRoute.model, capabilities: nextRoute.modelCapabilities },
             runtimeId,
           );
+          if (nextPrepared.contextPlan.checkpointGeneration) throw new Error('CONTEXT_COMPACTION_ROUTE_CAPACITY');
           const changed = await this.stateCommit.changeModelRoute({
             scope,
             runId: snapshot.id,

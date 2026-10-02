@@ -22,6 +22,7 @@ export interface ContextRequest {
   historyBoundary?: ContextHistoryBoundary;
   currentInput: string;
   currentInputEntryId?: string;
+  pendingInputSequences?: readonly number[];
   currentInputArtifactRefs?: string[];
   modelInputCapabilities?: {
     supportsImageInput: boolean;
@@ -92,6 +93,7 @@ export interface ContextTokenDiagnostics {
 }
 
 export interface ContextPlan {
+  checkpointGeneration?: import('./context-checkpoint.service').ContextCheckpointGeneration;
   instructions: string[];
   messages: ModelMessage[];
   toolSchemas: ModelToolSchema[];

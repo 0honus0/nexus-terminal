@@ -23,6 +23,12 @@ import type { Scope } from '../../agent.types';
 import type { CatalogToolSchema } from '../../capabilities/tool-catalog';
 import type { BackendSignal } from './agent-backend.port';
 import { ModelCallLimiter } from './model-call-limiter';
+import { estimateTokens } from '../../ai/model-accounting';
+import {
+  CHECKPOINT_INSTRUCTIONS,
+  completeCheckpoint,
+  type ContextCheckpointGeneration,
+} from '../../ai/context-checkpoint.service';
 import { waitForRetry } from './execution-errors';
 import { resolveModelContextBudget } from '../runs/run-budget-policy';
 import type { RunInputProjection, RunSnapshot } from '../runs/run.types';
@@ -167,6 +173,69 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] =>
 };
 
 export class ModelStepRunner {
+  async compact(
+    snapshot: RunSnapshot,
+    generation: ContextCheckpointGeneration,
+    signal: AbortSignal,
+    route: { model: ModelRef; capabilities?: ModelCapabilitySnapshot },
+  ) {
+    let text = '';
+    let usage: TokenUsage | undefined;
+    let finishReason: ModelFinishReason | null = null;
+    let error: unknown;
+    const remainingSeconds = Math.max(1, snapshot.budget.maxActiveExecutionSeconds - snapshot.activeExecutionSeconds);
+    const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(remainingSeconds * 1000)]);
+    let checkpoint;
+    let requested = false;
+    try {
+      const release = await this.modelCalls.acquire(snapshot.userId, requestSignal);
+      try {
+        requested = true;
+        for await (const event of this.modelPort.stream(
+          {
+            userId: snapshot.userId,
+            providerId: route.model.providerId,
+            modelId: route.model.modelId,
+            configurationVersion: route.model.configurationVersion,
+            capabilitySnapshot: route.capabilities,
+            instructions: [CHECKPOINT_INSTRUCTIONS],
+            messages: generation.messages,
+            tools: [],
+            toolMode: 'none',
+            maxOutputTokens: Math.min(
+              generation.maxOutputTokens,
+              route.capabilities?.maxOutputTokens ?? generation.maxOutputTokens,
+            ),
+          },
+          requestSignal,
+        )) {
+          if (event.type === 'message.delta') {
+            text += event.text;
+            if (Buffer.byteLength(text) > MAX_ASSISTANT_BYTES) throw new Error('CONTEXT_COMPACTION_TOO_LARGE');
+          } else if (event.type === 'usage') usage = event.usage;
+          else if (event.type === 'completed') finishReason = event.finishReason;
+          else if (event.type === 'tool.delta') throw new Error('CONTEXT_COMPACTION_TOOL_UNEXPECTED');
+        }
+      } finally {
+        release();
+      }
+      requestSignal.throwIfAborted();
+      if (finishReason !== 'stop') throw new Error('CONTEXT_COMPACTION_INCOMPLETE');
+      checkpoint = completeCheckpoint(generation, text);
+    } catch (caught) {
+      error = caught;
+    }
+    return {
+      checkpoint,
+      error,
+      estimatedUsage: usage === undefined,
+      usage: usage ?? {
+        inputTokens: requested ? generation.estimatedInputTokens : 0,
+        outputTokens: estimateTokens(text),
+        cachedInputTokens: 0,
+      },
+    };
+  }
   constructor(
     private readonly providers: ProviderService,
     private readonly context: ContextService,
@@ -274,6 +343,7 @@ export class ModelStepRunner {
         ? {}
         : { historyBoundary: snapshot.definition.contextBoundary }),
       currentInput: currentInput.text,
+      pendingInputSequences: currentProjection.pending.map((entry) => entry.sequence),
       ...(currentInput.id ? { currentInputEntryId: currentInput.id } : {}),
       ...(currentInput.artifactRefs.length ? { currentInputArtifactRefs: currentInput.artifactRefs } : {}),
       modelInputCapabilities: {

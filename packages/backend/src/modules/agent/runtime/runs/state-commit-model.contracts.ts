@@ -5,6 +5,7 @@ import type { RunEvent, RunUsage, RunView } from './run.types';
 import type { StateCommitResult } from './state-commit-common.contracts';
 
 export interface BeginModelStepCommand {
+  purpose?: 'compaction';
   scope: Scope;
   runId: string;
   runtimeId: string;
@@ -19,6 +20,27 @@ export interface BeginModelStepCommand {
   contextEpoch?: string;
   model?: ModelRef;
   now: number;
+}
+
+export interface CompleteCompactionStepCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  stepId: string;
+  attemptId: string;
+  inputWatermark: number;
+  goalRevision: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  estimatedUsage: boolean;
+  checkpoint?: import('../../ai/context-checkpoint.repository.port').UpsertContextCheckpointRecord;
+  errorCode?: string;
+  now: number;
+}
+
+export interface CompleteCompactionStepResult extends StateCommitResult {
+  compactionErrorCode?: string;
 }
 
 export interface BeginModelStepResult {

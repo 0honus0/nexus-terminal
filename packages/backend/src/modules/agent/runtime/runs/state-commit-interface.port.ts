@@ -3,6 +3,8 @@ import type { RunView } from './run.types';
 import type { StateCommitCommand, StateCommitResult } from './state-commit-common.contracts';
 import type {
   BeginModelStepCommand,
+  CompleteCompactionStepCommand,
+  CompleteCompactionStepResult,
   BeginModelStepResult,
   BeginSubagentModelStepCommand,
   BeginSubagentMutationToolCommand,
@@ -71,6 +73,7 @@ export interface StateCommitPort {
   resolveRunReconciliation(command: ResolveRunReconciliationCommand): Promise<StateCommitResult>;
   supersedeRunApprovals(scope: Scope, runId: string, now: number): Promise<number>;
   beginModelStep(command: BeginModelStepCommand): Promise<BeginModelStepResult>;
+  completeCompactionStep(command: CompleteCompactionStepCommand): Promise<CompleteCompactionStepResult>;
   beginSubagentModelStep(command: BeginSubagentModelStepCommand): Promise<BeginModelStepResult>;
   pauseRuntimeForBudget(command: PauseRuntimeForBudgetCommand): Promise<StateCommitResult>;
   parkRuntime(command: ParkRuntimeCommand): Promise<StateCommitResult>;
@@ -158,6 +161,7 @@ export type CollaborationCommitPort = Pick<
 export type RootExecutionCommitPort = Pick<
   StateCommitPort,
   | 'beginModelStep'
+  | 'completeCompactionStep'
   | 'beginMutationTool'
   | 'beginReadToolBatch'
   | 'commit'

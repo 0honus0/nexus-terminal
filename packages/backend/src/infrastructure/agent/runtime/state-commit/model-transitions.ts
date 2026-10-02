@@ -88,7 +88,10 @@ export const beginModelStepTransition = async (
   if (runtimeChanged.changes !== 1) throw new Error('RUNTIME_NOT_SCHEDULABLE');
   const events: DurableEventInput[] = [
     ...(firstStep ? [{ type: 'run.status_changed', payload: { from: 'created', to: 'running' } } as const] : []),
-    { type: 'model.started', payload: { stepId, attemptId, attemptIndex: 1 } },
+    {
+      type: 'model.started',
+      payload: { stepId, attemptId, attemptIndex: 1, ...(command.purpose ? { purpose: command.purpose } : {}) },
+    },
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
   const latestInput = await tx.queryOne<{ sequence: number | null }>(
@@ -99,16 +102,19 @@ export const beginModelStepTransition = async (
   const currentUsage = parseRunUsage(row.usage_json);
   const nextUsage: RunUsage = {
     ...currentUsage,
-    context: {
-      inputTokens: command.estimatedInputTokens,
-      heuristicInputTokens: command.heuristicInputTokens ?? command.estimatedInputTokens,
-      reservedOutputTokens: command.reservedOutputTokens,
-      contextWindowTokens: command.contextWindowTokens,
-      source: command.contextSource ?? 'estimated',
-      ...(command.model ? { model: command.model } : {}),
-      ...(command.contextEpoch ? { contextEpoch: command.contextEpoch } : {}),
-      updatedAt: command.now,
-    },
+    context:
+      command.purpose === 'compaction'
+        ? currentUsage.context
+        : {
+            inputTokens: command.estimatedInputTokens,
+            heuristicInputTokens: command.heuristicInputTokens ?? command.estimatedInputTokens,
+            reservedOutputTokens: command.reservedOutputTokens,
+            contextWindowTokens: command.contextWindowTokens,
+            source: command.contextSource ?? 'estimated',
+            ...(command.model ? { model: command.model } : {}),
+            ...(command.contextEpoch ? { contextEpoch: command.contextEpoch } : {}),
+            updatedAt: command.now,
+          },
   };
   const updated = await tx.execute(
     `UPDATE agent_runs SET
@@ -123,7 +129,7 @@ export const beginModelStepTransition = async (
       command.now,
       JSON.stringify(nextUsage),
       command.now,
-      consumedInputSequence,
+      command.purpose === 'compaction' ? row.consumed_input_sequence : consumedInputSequence,
       events.length,
       command.now,
       command.runId,

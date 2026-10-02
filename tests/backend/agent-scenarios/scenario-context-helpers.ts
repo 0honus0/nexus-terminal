@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import type { Scope } from '../../../packages/backend/src/modules/agent/agent.types';
 import { ContextCheckpointService } from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
+import {
+  CHECKPOINT_SECTIONS,
+  completeCheckpoint,
+  type ContextCheckpointRequest,
+} from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../../packages/backend/src/modules/agent/ai/context.service';
 import type {
   AppendLedgerEntry,
@@ -153,6 +158,26 @@ export class StaticConversationRepository implements ConversationRepositoryPort 
 export class StaticContextCheckpointRepository implements ContextCheckpointRepositoryPort {
   private readonly rows = new Map<string, ContextCheckpointView>();
 
+  async findLatest(
+    _scope: Scope,
+    threadId: string,
+    visibilityHash: string,
+    throughSequence: number,
+    strategyVersion: string,
+  ) {
+    return (
+      [...this.rows.values()]
+        .filter(
+          (row) =>
+            row.threadId === threadId &&
+            row.visibilityHash === visibilityHash &&
+            row.toSequence <= throughSequence &&
+            row.strategyVersion === strategyVersion,
+        )
+        .sort((a, b) => b.toSequence - a.toSequence)[0] ?? null
+    );
+  }
+
   private key(
     threadId: string,
     visibilityHash: string,
@@ -229,13 +254,60 @@ export const entry = (
   createdAt: 1_800_000_000 + sequence,
 });
 
-export const contextService = (entries: LedgerEntryView[]): ContextService => {
+export const contextService = (entries: LedgerEntryView[], generateCheckpoints = false): ContextService => {
   const repository = new StaticConversationRepository(entries);
   // These collaborators are used only by mutation/thread-creation paths; scenarios below exercise real read projection.
   const conversations = new ConversationService(repository, clock, null!, null!);
   const recall = new RecallService(new EmptyRecallRepository(), clock);
-  const checkpoints = new ContextCheckpointService(new StaticContextCheckpointRepository(), conversations, clock);
+  const checkpoints = generateCheckpoints
+    ? scenarioCheckpoints(new StaticContextCheckpointRepository(), conversations)
+    : new ContextCheckpointService(new StaticContextCheckpointRepository(), conversations, clock);
   return new ContextService(conversations, recall, new SkillRegistry(), emptyModelContinuations, null!, checkpoints);
+};
+
+// Deterministic model fixture for Context integration; production has no extractive fallback.
+export const scenarioHandoff = (messages: readonly { content: string }[]): string => {
+  const facts = messages
+    .map((message) => {
+      const parsed = JSON.parse(message.content);
+      return parsed.previousHandoff
+        ? parsed.previousHandoff.split('## Requirements')[0].replace('## Objective\n', '').trim()
+        : (parsed.payload?.text ?? '');
+    })
+    .filter(Boolean);
+  const selected = facts.filter((text) =>
+    /objective|goal|FAILED|STALE_SOURCE|保留|生成ファイル|Must preserve/i.test(text),
+  );
+  return CHECKPOINT_SECTIONS.map(
+    (section, index) => `## ${section}\n${index === 0 ? selected.join('\n') || '(none)' : '(none)'}`,
+  ).join('\n');
+};
+
+export const scenarioCheckpoints = (
+  repository: ContextCheckpointRepositoryPort,
+  conversations: ConversationService,
+) => {
+  const service = new ContextCheckpointService(repository, conversations, clock);
+  return Object.assign(service, {
+    async generate(input: ContextCheckpointRequest) {
+      for (;;) {
+        const projection = await ContextCheckpointService.prototype.plan.call(service, input);
+        if (!projection.generation) return projection.checkpoint;
+        await repository.upsert(
+          completeCheckpoint(projection.generation, scenarioHandoff(projection.generation.messages)),
+        );
+      }
+    },
+    async plan(input: ContextCheckpointRequest) {
+      for (;;) {
+        const projection = await ContextCheckpointService.prototype.plan.call(service, input);
+        if (!projection.generation) return projection;
+        await repository.upsert(
+          completeCheckpoint(projection.generation, scenarioHandoff(projection.generation.messages)),
+        );
+      }
+    },
+  });
 };
 
 export const assertValidToolExchange = (messages: Awaited<ReturnType<ContextService['compose']>>['messages']): void => {

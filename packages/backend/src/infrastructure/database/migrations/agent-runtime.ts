@@ -6,6 +6,12 @@ import { createAiContextCheckpointsTableSQL, createAiMemorySearchIndexSQL } from
 
 export const agentRuntimeMigrations: SqliteMigration[] = [
   {
+    id: 51,
+    name: 'Retire extractive Context checkpoints before semantic regeneration',
+    check: async (db: Database): Promise<boolean> => tableExists(db, 'ai_context_checkpoints'),
+    sql: `DELETE FROM ai_context_checkpoints WHERE strategy_version <> 'context-checkpoint-v2';`,
+  },
+  {
     id: 21,
     name: 'Track Agent thread title ownership',
     check: async (db: Database): Promise<boolean> => {

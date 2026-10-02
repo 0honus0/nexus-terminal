@@ -9,6 +9,8 @@ import type {
   AtomicMutatePendingInput,
   AtomicSetRunGoal,
   BeginModelStepCommand,
+  CompleteCompactionStepCommand,
+  CompleteCompactionStepResult,
   BeginModelStepResult,
   BeginReadToolBatchCommand,
   BeginSubagentMutationToolCommand,
@@ -103,6 +105,7 @@ import {
   supersedeUnconsumedRunApprovals,
 } from './state-commit/recovery-transitions';
 import { setRunGoalTransition } from './state-commit/goal-transitions';
+import { completeCompactionStepTransition } from './state-commit/compaction-transitions';
 import { appendInputTransition } from './state-commit/input-transitions';
 import { mutatePendingInputTransition } from './state-commit/pending-input-transitions';
 import { evaluateLoopGuard } from './state-commit/loop-guard';
@@ -210,6 +213,10 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
 
   async beginModelStep(command: BeginModelStepCommand): Promise<BeginModelStepResult> {
     return this.observedTransaction((tx) => beginModelStepTransition(tx, command));
+  }
+
+  async completeCompactionStep(command: CompleteCompactionStepCommand): Promise<CompleteCompactionStepResult> {
+    return this.observedTransaction((tx) => completeCompactionStepTransition(tx, command));
   }
 
   async beginSubagentModelStep(command: BeginSubagentModelStepCommand): Promise<BeginModelStepResult> {

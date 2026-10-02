@@ -5,7 +5,7 @@ export type ContextCheckpointVisibility =
   { kind: 'thread_prefix' } | { kind: 'run_boundary'; runId: string; historyBoundary: ContextHistoryBoundary };
 
 export interface ContextCheckpointGenerator {
-  kind: 'deterministic';
+  kind: 'model';
   version: string;
 }
 
@@ -43,6 +43,13 @@ export interface UpsertContextCheckpointRecord {
 }
 
 export interface ContextCheckpointRepositoryPort {
+  findLatest(
+    scope: Scope,
+    threadId: string,
+    visibilityHash: string,
+    throughSequence: number,
+    strategyVersion: string,
+  ): Promise<ContextCheckpointView | null>;
   getExact(
     scope: Scope,
     threadId: string,
