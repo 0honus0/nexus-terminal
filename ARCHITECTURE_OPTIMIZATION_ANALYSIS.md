@@ -32,30 +32,9 @@ Nexus Terminal 当前已经建立了比较明确的架构边界：Backend 使用
 
 > 已关闭：实例级 `host/useAgentAppController.ts` 持有 Thread/Run/Ledger、配置、缓存、错误域与异步操作／订阅生命周期。`AgentAppSurface.vue` 保留展示组件、模板绑定与 ResizeObserver。原 facade cleanup、generation fence、缓存限制与 Host window owner 保留，没有新增第二份业务状态；用户流程及布局不变。已用类型和 ESLint 检查验证，未新增或运行 E2E。
 
-## 5. Runner `server.ts` 聚合 Transport、Validation 和业务协议入口
+## 5. Runner Transport / Command Execution 分离（已关闭）
 
-> 待确认（维护性取舍）：文件确实聚合 HTTP/WebSocket 路由与输入验证，但执行已委派给 Engine、Terminal、ACP、Browser 等 owner。统一入口并不自动构成业务 authority 越界；需明确可独立拆出的 route/decoder 边界，不能仅以文件体积认定缺陷。协议公共 owner 缺口见第 2 项。
-
-`packages/agent-runner/src/controller/server.ts` 约 65 KB，目前同时处理：
-
-- HTTP
-- auth token
-- JSON body parsing
-- request limit
-- runtime validation
-- browser endpoint validation
-- Workspace routes
-- binary stream
-- 各类业务 command
-- WebSocket
-- terminal
-- ACP 等入口
-
-这使同一个文件同时承担 transport 层、认证、输入读取、协议校验、route dispatch 和多个业务 capability 的入口职责。
-
-协议增加或某个 Runner capability 变化时，同一个中央文件需要持续修改。随着 route 和 capability 数量增加，变更冲突、review 难度和回归范围都会继续扩大。
-
-该问题还与 Backend ↔ Runner protocol 双重 owner 相互放大：部分 runtime validation 直接存在于 Runner server 中，因此 transport controller 同时承担了一部分 wire schema owner 职责。
+> 已关闭：重新核对后确认的边界是 Server 直接编排 command/job Journal transition、后台执行、工具链互斥及 provision/lifecycle，而不是文件体积或统一路由本身。上述执行流程已提取到实例级 `runner-command-executor.ts`；`server.ts` 保留认证、协议版本检查、HTTP/WebSocket dispatch、输入读取和响应映射。无状态的 record/key/browser/binding 校验放在 `runner-request-validation.ts`，route 专用校验仍留在 route 边界。复用原 Journal、Engine、Plugin、ACP、Terminal、Browser owner，保持 generation、幂等、unknown outcome、互斥和 drain/cleanup 顺序，不新增 durable authority。已有 background-job-lifecycle 与 coding-tool-surface Agent 场景通过；未新增或运行 E2E。
 
 ## 6. `SqliteStateCommitAdapter` 同时承担事务编排和 Recovery Domain 逻辑
 
@@ -4247,14 +4226,14 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 98 项，待确认 39 项，已关闭 3 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项已逐项分类：**未解决确认问题 98 项，待确认 38 项，已关闭 4 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1      | 已关闭   | Workspace 页面跨 Feature 组合位置                                                                                                                                            |
 | 2      | 已关闭   | Backend ↔ Agent Runner Wire Protocol owner                                                                                                                                   |
 | 3      | 已关闭   | Agent App Presentation / Application Controller 分离                                                                                                                         |
-| 5      | 待确认   | Runner `server.ts` 聚合 Transport、Validation 和业务协议入口                                                                                                                 |
+| 5      | 已关闭   | Runner Transport / Command Execution 分离                                                                                                                                    |
 | 6      | 待确认   | `SqliteStateCommitAdapter` 同时承担事务编排和 Recovery Domain 逻辑                                                                                                           |
 | 7      | 待确认   | SQLite Schema 和 Migration 已经形成物理热点文件                                                                                                                              |
 | 8      | 待确认   | `compose-agent.ts` 已经成为 Composition Root 热点                                                                                                                            |

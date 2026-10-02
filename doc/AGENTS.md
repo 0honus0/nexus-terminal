@@ -234,6 +234,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 - Runner 可选：未配置/未启动/不可达不阻止核心 Backend、连接管理、SSH 能力启动；availability 明确 unavailable。Compose 显式 profile 启用，无固定宿主 URL 硬依赖。
 - Backend→Runner HTTP/WebSocket 统一 Bearer `NEXUS_AGENT_RUNNER_TOKEN`（至少 32 字符）与 `X-Nexus-Agent-Protocol: 2026-09-13`；token 是实例完整控制权，不暴露给浏览器、日志或 Plugin。
 - provision 发送完整 profile；start/stop/restart/delete 仅 `workspaceId + generation`；job 发送 generation/参数。Backend 自己持有 user/App/Run/Runtime 授权、version、operation hash 和 reconcile，不镜像给 Runner。
+- Runner Server 只持有 transport/route 边界；实例级 `RunnerCommandExecutor` 编排 command/job 与 Workspace 生命周期、工具链互斥及 Journal transition，复用现有 runtime 和 Journal，不在 Server 复制执行流程或持久状态。
 - 单用户 native Runtime 组织项目而非 OS sandbox；generation 冻结环境，Workspace 文件独立持久。Host 子进程共享宿主上下文，Docker 子进程共享 Runner 容器，不用 Docker socket/dockerd/nested Docker/privileged/SYS_ADMIN/unconfined。
 - Node/Python/Go 支持版本/架构保留在 `scripts/docker/agent-runner/catalog/catalog.json`；mise 按版本安装并做上游与实际版本检查，ref 仅 family/version，缓存按架构，不固定来源/安装树摘要/选择指纹。已安装不自动替换，使用中不可卸载。
 - 全局共享不可变 Tool Pack，generation PATH 选版本；deps/build 按环境 profile 分区。版本切换仅重建目标 generation，终止其旧 process/session，项目文件与其他 Workspace 不受影响，不修改 `/usr/bin`。
