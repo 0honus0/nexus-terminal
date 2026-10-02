@@ -1514,7 +1514,9 @@ SELECT id, path, timestamp FROM path_history ORDER BY timestamp ASC
 
 因此这不是单纯的表会“慢慢变大”：长期使用大量不同命令或路径后，每次打开相关 UI 都会进行整表排序、完整 JSON 序列化、网络传输和前端持有。数据库空间、查询成本、响应体和浏览器内存都会随历史唯一值数量持续线性增长。这个问题独立于 #37 的并发 duplicate row。
 
-## 70. 同一 Session 只保留一个 Passkey ceremony challenge 是否符合产品预期
+## 70. Passkey ceremony（已核对：单 session 单流程）
+
+> 已核对并明确：现有 session 单 currentChallenge/passkeyOrigin，只支持一个 active ceremony，新流程使旧 assertion fail-closed；不是认证绕过。多 Tab 并行不受支持，失败重新发起；不新增 ceremony ID 或并行状态。下文为原背景。
 
 > 待确认（单 ceremony 设计）：`interfaces/http/auth/auth.routes.ts` 共享 currentChallenge/passkeyOrigin 成立，第二流程可让第一流程 fail-closed。是否要求并行 ceremony 支持属于产品契约，不能把拒绝旧 challenge 描述成认证绕过。
 
