@@ -23,6 +23,8 @@ const MAX_PROTOCOL_QUEUED_BYTES = 32 * 1024 * 1024;
 const MAX_PROTOCOL_QUEUED_FRAMES = 128;
 const MAX_PLUGIN_HOST_OPERATIONS = 32;
 const CONTROL_TIMEOUT_MS = 30_000;
+const PROTOCOL_WRITE_TIMEOUT_MS = 5_000;
+const HOST_OPERATION_DRAIN_TIMEOUT_MS = 5_000;
 const PLUGIN_BACKEND_PROTOCOL_VERSION: typeof PluginBackendProtocolVersion = 1;
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
 
@@ -75,6 +77,7 @@ export class BoundedProtocolWriter {
     private readonly writable: Writable,
     private readonly maxQueuedBytes = MAX_PROTOCOL_QUEUED_BYTES,
     private readonly maxQueuedFrames = MAX_PROTOCOL_QUEUED_FRAMES,
+    private readonly writeTimeoutMs = PROTOCOL_WRITE_TIMEOUT_MS,
   ) {}
 
   write(encoded: string): Promise<void> {
@@ -110,7 +113,14 @@ export class BoundedProtocolWriter {
       let settled = false;
       let callbackDone = false;
       let drainDone = true;
+      const timer = setTimeout(() => {
+        const error = new Error('PLUGIN_BACKEND_PROTOCOL_WRITE_TIMEOUT');
+        finish(error);
+        this.writable.destroy();
+      }, this.writeTimeoutMs);
+      timer.unref?.();
       const cleanup = () => {
+        clearTimeout(timer);
         this.writable.off('error', onError);
         this.writable.off('close', onClose);
         this.writable.off('drain', onDrain);
@@ -428,7 +438,20 @@ export class BackendPluginProcess {
     if (!this.child.killed && this.child.stdin.writable) {
       await this.request('lifecycle.dispose').catch(() => undefined);
     }
-    await Promise.allSettled([...this.activeHostOperations]);
+    if (this.activeHostOperations.size > 0) {
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(finish, HOST_OPERATION_DRAIN_TIMEOUT_MS);
+        timer.unref?.();
+        void Promise.allSettled([...this.activeHostOperations]).then(finish);
+      });
+    }
     const exited = () => this.child.exitCode !== null || this.child.signalCode !== null;
     if (exited()) return;
     const waitForExit = (timeoutMs: number): Promise<boolean> =>

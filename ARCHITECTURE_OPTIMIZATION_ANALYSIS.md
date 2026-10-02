@@ -2639,7 +2639,9 @@ Receiver 的 `listReceived()` 只是按 receipt row 返回，没有按 sender + 
 
 ## 105. Backend Plugin 的 Host RPC 没有 response-drain deadline；一个堵住 stdin 的 Plugin 可以让 uninstall / upgrade 永远卡在 SIGTERM 之前
 
-> 确认问题：close 在 kill 前 await activeHostOperations，BoundedProtocolWriter backpressure wait 没有 drain deadline。bounded frame/queue 限制容量但不能终结已有 stalled write；需要 child 存活且不读 stdin，未构造 pipe stall 验证。
+> 已修复：Host→Plugin protocol writer 的 callback/drain 增加硬 deadline，超时销毁 stdin writer 并触发 protocol failure；close 对 active Host RPC 只做有界 drain，之后仍进入 SIGTERM→SIGKILL。Agent 场景用真实 Backend Plugin worker 发起 32 个大 storage read 后阻塞 event loop，验证 response backpressure 下 close 有界完成。下文为原问题证据。
+
+> 原问题证据：close 在 kill 前 await activeHostOperations，BoundedProtocolWriter backpressure wait 没有 drain deadline。bounded frame/queue 限制容量但不能终结已有 stalled write；需要 child 存活且不读 stdin。
 
 `BackendPluginProcess` 对 lifecycle request 有 30 秒 timer，但 Plugin 主动发起的 storage / intent Host RPC 没有对应 deadline。Host 只把正在处理的请求登记到：
 
@@ -4207,7 +4209,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 98 项，待确认 33 项，已关闭 9 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项当前分类：**未解决确认问题 25 项，待确认 15 项，已修复 78 项，已关闭／核对／澄清 22 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4221,97 +4223,97 @@ await terminateAllManagedProcesses();
 | 9      | 已关闭   | Root Build / Check 覆盖全部生产包                                                                                                                                            |
 | 10     | 待确认   | 大型静态 Theme 数据长期占用 TypeScript 编译单元                                                                                                                              |
 | 11     | 已关闭   | Context Checkpoint 用户输入的语言偏置                                                                                                                                        |
-| 12     | 待确认   | Root Agent 与 Subagent 使用两套不同等级的 Context 生命周期                                                                                                                   |
-| 13     | 待确认   | Run Approval Policy 只有 `ask` 与 `full_access` 两档                                                                                                                         |
-| 14     | 确认问题 | 被截断的 Tool Output 缺少 Model 可重新寻址的完整结果句柄                                                                                                                     |
-| 15     | 确认问题 | Root Agent 的嵌套 `AGENTS.md` 发现依赖历史 Tool Call，首次触达存在 Instruction Gap                                                                                           |
-| 16     | 待确认   | Subagent Governed Mutation 在 `ask` 模式下没有交互批准路径                                                                                                                   |
-| 17     | 确认问题 | `plan` Execution Mode 的禁写边界没有覆盖 Subagent Tool Pipeline                                                                                                              |
-| 18     | 确认问题 | Subagent 绕过 Deferred MCP Tool Surface，Root / Child 的 Tool Exposure Contract 不一致                                                                                       |
-| 19     | 待确认   | Root 与 Subagent 的 Model Retry 策略差异是否需要统一                                                                                                                         |
-| 20     | 确认问题 | Run Interrupt 的 Streaming 检测覆盖 Child，但实际 Abort 只发送给 Root Scheduler                                                                                              |
-| 21     | 确认问题 | Durable `toolVersion` 没有在 Read / Control Tool 真正执行时形成版本绑定                                                                                                      |
-| 22     | 确认问题 | Subagent Terminal Evidence 只从最近 32 个 Tool Batch 回收，长期 Delegation 会丢失早期已验证证据                                                                              |
-| 23     | 确认问题 | Graceful `AGENT_QUIESCE` 会把正在 Streaming 的 Subagent 永久结算为 Cancelled                                                                                                 |
-| 24     | 待确认   | Full Backup 的跨数据库／文件系统快照一致性仍需并发验证                                                                                                                       |
-| 25     | 确认问题 | Backup Restore 会替换 Agent Durable State，但不会进入 Agent 的 quiesce / reinitialize 生命周期                                                                               |
-| 26     | 确认问题 | 删除 Proxy / SSH Key 可以直接制造 ConnectionService 自己拒绝创建的 Connection 状态                                                                                           |
-| 27     | 确认问题 | Connection Import 中内联 Proxy 与 Connection 的创建不是一个原子操作                                                                                                          |
-| 28     | 确认问题 | 多个业务 Mutation 在提交后才写 Audit，Audit 失败会把“已成功修改”报告成“操作失败”                                                                                             |
-| 29     | 确认问题 | IP Blacklist 的过期封禁状态会阻止同一 IP 再次进入封禁                                                                                                                        |
-| 30     | 确认问题 | IP Blacklist 的失败计数是非原子的 read-modify-write，并发登录失败会丢失计数                                                                                                  |
-| 31     | 确认问题 | Quick Command 本体与 Tag Association 分两个 Transaction 提交                                                                                                                 |
-| 32     | 待确认   | Workspace Transfer / Archive 的 terminal outcome 与 Mutation Guard known-settlement 契约待确认                                                                               |
-| 33     | 确认问题 | Connection `jumpChain` 使用裸 JSON ID 引用，删除或改型 Jump Host 后会留下悬挂依赖                                                                                            |
-| 35     | 确认问题 | Initial Admin Setup 使用非原子的 `count() -> create()`，并发请求可以创建多个初始用户                                                                                         |
-| 36     | 确认问题 | Server Transfer 用 `sourceItemName` 作为 SubTask 身份，同名不同路径的源文件会解析成同一个对象                                                                                |
-| 37     | 确认问题 | Command / Path History 的 `upsert()` 没有唯一约束，并发首次写入会永久产生重复记录                                                                                            |
-| 38     | 确认问题 | 多类 Operational Secret 直接以明文写入 SQLite，绕过项目已有的 `SecretCipher` 边界                                                                                            |
-| 39     | 确认问题 | Remote Text Save 直接截断目标文件，写入中断会破坏原内容                                                                                                                      |
-| 40     | 确认问题 | Passkey Assertion Counter 更新不是原子校验，登录并发会破坏单调性                                                                                                             |
-| 41     | 待确认   | Background 删除存在数据库失败窗口，但已有 missing reference 自愈路径                                                                                                         |
-| 42     | 确认问题 | Workspace create 的业务预检查遮蔽了底层 idempotency replay                                                                                                                   |
-| 43     | 确认问题 | Workspace 数量上限采用事务外 count-then-create，并发创建可以突破 maxActiveWorkspaces                                                                                         |
-| 44     | 确认问题 | Workspace adminAction 对 failed/unknown 命令永久去重，原样重试不会再次提交 Runner                                                                                            |
-| 45     | 确认问题 | Workspace setup / pack uninstall 先提交 Settings，再执行 Runner 命令，失败后形成跨 owner 半提交                                                                              |
-| 46     | 确认问题 | Backup Restore 会永久 dispose SSH Suspend / Workspace Suspend 的进程内生命周期，但导入后没有重建                                                                             |
-| 47     | 确认问题 | Root Agent 的 recoverable abort reason 在主循环 safe-boundary 存在被错误写成 `cancelled` 的竞态                                                                              |
-| 48     | 确认问题 | Runner Workspace lifecycle drain 与 checkpoint restore 的互斥是单向的，restore 可以和 start / restart / delete 并发                                                          |
-| 49     | 确认问题 | Runner Workspace `start` 的多 Plugin 激活失败补偿不完整，会留下运行中的部分 Plugin                                                                                           |
-| 50     | 待确认   | Runner 多文件 applyPatch 的集合原子性与部分失败契约待确认                                                                                                                    |
-| 51     | 确认问题 | File Editor 的关闭路径不检查 `dirty`，Tab / Popup / Workspace 关闭都会静默丢弃未保存内容                                                                                     |
-| 52     | 确认问题 | File Manager rename / delete 不更新已打开 Editor 文档，后续保存会在旧路径重新创建文件                                                                                        |
-| 53     | 确认问题 | File Editor 的异步 `open()` 不属于 Workspace scope 生命周期，Workspace 关闭后仍能插入幽灵 Tab                                                                                |
-| 54     | 确认问题 | Authenticated Session Reset 未覆盖部分 Frontend Store                                                                                                                        |
-| 56     | 确认问题 | Bounded SSH command 把“没有 exit status”的 close 当作 exit code 0，会把异常终止报告为成功                                                                                    |
-| 57     | 待确认   | Server-to-server Transfer 的目标凭据转交需要明确源端信任前提                                                                                                                 |
-| 58     | 确认问题 | Server Transfer 的 source capability probe 不接受取消信号，任务取消可以被三个串行 10 秒探测延迟                                                                              |
-| 59     | 待确认   | Jump Chain 的 hop 引用是否应复用被引用连接的完整 route                                                                                                                       |
-| 60     | 待确认   | SSH Resource Status 按采样开始时间计算 TTL 的代价待测                                                                                                                        |
-| 61     | 待确认   | Plugin Agent Mutation 的 operationId 与各 endpoint replay 契约待确认                                                                                                         |
-| 62     | 确认问题 | HTTP Logout 只销毁 Session，但已经建立的认证 WebSocket 不会被撤销                                                                                                            |
-| 63     | 确认问题 | WebSocket Origin 校验无条件信任 `X-Forwarded-Host` / `X-Forwarded-Proto`，可被直连客户端自满足                                                                               |
-| 64     | 待确认   | SSH channel callback 与 Transport teardown 的晚到回调防护待验证                                                                                                              |
-| 65     | 待确认   | Remote Archive 解压的部分失败展示与结果确认契约待确认                                                                                                                        |
-| 66     | 确认问题 | Audit Log 非原子 retention 在并发写入下可能过度裁剪历史                                                                                                                      |
-| 67     | 确认问题 | Notification fan-out 同步串进认证关键路径，而且没有通道数量/并发上限；外部通知端点可同时放大认证延迟与出站连接数                                                             |
-| 68     | 确认问题 | Authenticated Session reset 只保护了部分 load；旧会话 Mutation 的晚到响应可以在 logout / user-change 后重新污染前端缓存                                                      |
-| 69     | 确认问题 | Command History / Path History 对 distinct value 无保留上限，GET 又始终返回整表，长期使用会让持久化和前端加载无界增长                                                        |
-| 70     | 待确认   | 同一 Session 只保留一个 Passkey ceremony challenge 是否符合产品预期                                                                                                          |
-| 71     | 确认问题 | Terminal Theme preset 初始化只按 `name + preset` 查重，但数据库对 `name` 全局唯一；未来新增 preset 与既有用户主题同名时会直接阻断 Backend 启动                               |
-| 72     | 待确认   | File Manager 批量删除的部分失败契约待确认                                                                                                                                    |
-| 73     | 确认问题 | Full Backup 可以成功导出超过自身 Import 接口上限的文件，形成“可导出、不可恢复”的备份                                                                                         |
-| 74     | 确认问题 | Backup capture 把完整文件树读取放在 SQLite exclusive transaction 内；大备份会阻塞所有普通数据库操作                                                                          |
-| 75     | 确认问题 | Server Transfer 请求没有数组上限或去重，单个小于 1 MiB 的请求可以同步展开数千万个 SubTask                                                                                    |
-| 76     | 确认问题 | Server Transfer 的 terminal task 只靠用户手工删除；Backend Map 和 `/status` 响应会随进程生命周期持续增长                                                                     |
-| 77     | 确认问题 | 修改密码只更新 Password Hash，不会撤销其它已认证 HTTP Session；泄露 Cookie 在改密后仍然有效                                                                                  |
-| 78     | 待确认   | Quick Command 创建标签与关联失败的部分成功提示待确认                                                                                                                         |
-| 79     | 确认问题 | File Preview 的大小上限和取消只存在于前端包装层；真正的 Binary Transport 既不限制总字节数，也无法取消服务端读取                                                              |
-| 80     | 确认问题 | File Editor 对远端文件读取完全没有大小上限；Large File Mode 在完整下载和解码之后才生效                                                                                       |
-| 81     | 确认问题 | Full Backup 把整份快照物化成单个 JS 字符串；默认合法 Artifact 状态即可超过 Node 字符串上限而无法导出                                                                         |
-| 82     | 确认问题 | Quick Command 批量打标签不限制或去重 `commandIds`；一个 1 MiB 请求可在全局排他 SQLite transaction 内制造数十万次串行 SQL                                                     |
-| 83     | 确认问题 | SSH Suspend 没有会话数量上限或 suspended TTL；用户可以持续积累 live SSH transport、shell 和每会话日志                                                                        |
-| 84     | 确认问题 | Plugin Backend close() 在 SIGTERM 后不等待退出或升级终止                                                                                                                     |
-| 85     | 确认问题 | IP blacklist 没有任何过期行清理；匿名失败登录可让持久化 IP 基数永久增长                                                                                                      |
-| 86     | 确认问题 | Connection Tag 的“替换全部关联”接口不验证目标 Tag，也不去重/校验正 ID；同一 API 对非法输入会返回假成功或 500                                                                 |
-| 87     | 确认问题 | Artifact cleanup preview 可以生成超过 confirm 自身硬上限的 confirmation；超过 10,000 个可回收 Artifact 后清理流程必然无法执行                                                |
-| 88     | 确认问题 | SSH Jump Chain 的 `forwardOut()` 不受 connect timeout 或 AbortSignal 控制；“15 秒连接测试”和 Agent deadline 都可以无限挂在跳板通道打开阶段                                   |
-| 89     | 确认问题 | Agent Browser session 没有按 Run 生命周期回收；Run 结束后旧 session 又被 run binding 禁止关闭，Standalone Browser 资源只能等 Backend shutdown                                |
-| 91     | 确认问题 | Runner Plugin 的 ready handshake 没有 timeout；第三方模块在发送 `runtime.ready` 前卡住时，Workspace lifecycle command 和 Runner startup reconcile 都会永久挂起               |
-| 92     | 确认问题 | SSH Resource Status 的 host 级采样状态不会随 Connection 生命周期失效；历史 host:port 会永久留在内存，同 key 重用时还会复用旧机器静态信息                                     |
-| 93     | 确认问题 | SSH transport 主动断开只会关闭底层 transport / shell，不会驱动 ExecutionSession 与 Workspace owner 回收；Registry 可长期保留已断开的“ready”会话                              |
-| 94     | 确认问题 | Agent Integration 的 refresh epoch 只递增、不回收；反复创建/删除 Integration 会永久积累历史 scope+UUID generation state                                                      |
-| 95     | 确认问题 | 全局 Agent feature disable 只 quiesce builtin App；Plugin App 的活跃 Run、Subagent 和 Backend Plugin runtime 会继续运行                                                      |
-| 96     | 确认问题 | Backend 重启后的 user initialization 只恢复 builtin App 的 enabled MCP Integration；Plugin App 的 MCP Tool contribution 不会自动回到内存 Catalog                             |
-| 97     | 确认问题 | Backend Plugin 的 `runtime.ready` handshake 也没有 timeout；已启用插件在模块 import 阶段卡死可以让整个 Backend 启动永远停在 listen 之前                                      |
-| 98     | 确认问题 | Backend graceful shutdown 没有关闭 Plugin Backend runtime；SIGTERM 后主服务可以在 HTTP 已停止后继续被 Plugin child process 挂住                                              |
-| 99     | 确认问题 | Background 并发上传在特定交错下可留下无引用文件                                                                                                                              |
-| 100    | 确认问题 | Plugin 升级会按 installation 引用删除旧 Runner package，但持久 Workspace Profile 仍冻结旧版本；升级后 retained Workspace 再启动会稳定失败                                    |
-| 101    | 确认问题 | Plugin 可耗尽共享 Run subscription 槽并阻止新的 Host UI 订阅                                                                                                                 |
-| 102    | 待确认   | Plugin uninstall / upgrade 是否应停止 retained Workspace 的冻结版本进程                                                                                                      |
-| 103    | 确认问题 | `retained` Workspace 的显式 delete 只删除 Generation，不释放 Workspace retention；它会同时留下不可回收文件树并永久阻塞 Run / Thread 删除                                     |
+| 12     | 已修复   | Root Agent 与 Subagent 使用两套不同等级的 Context 生命周期                                                                                                                   |
+| 13     | 已关闭   | Run Approval Policy 只有 `ask` 与 `full_access` 两档                                                                                                                         |
+| 14     | 已修复   | 被截断的 Tool Output 缺少 Model 可重新寻址的完整结果句柄                                                                                                                     |
+| 15     | 已修复   | Root Agent 的嵌套 `AGENTS.md` 发现依赖历史 Tool Call，首次触达存在 Instruction Gap                                                                                           |
+| 16     | 已修复   | Subagent Governed Mutation 在 `ask` 模式下没有交互批准路径                                                                                                                   |
+| 17     | 已修复   | `plan` Execution Mode 的禁写边界没有覆盖 Subagent Tool Pipeline                                                                                                              |
+| 18     | 已修复   | Subagent 绕过 Deferred MCP Tool Surface，Root / Child 的 Tool Exposure Contract 不一致                                                                                       |
+| 19     | 已修复   | Root 与 Subagent 的 Model Retry 策略差异是否需要统一                                                                                                                         |
+| 20     | 已修复   | Run Interrupt 的 Streaming 检测覆盖 Child，但实际 Abort 只发送给 Root Scheduler                                                                                              |
+| 21     | 已修复   | Durable `toolVersion` 没有在 Read / Control Tool 真正执行时形成版本绑定                                                                                                      |
+| 22     | 已修复   | Subagent Terminal Evidence 只从最近 32 个 Tool Batch 回收，长期 Delegation 会丢失早期已验证证据                                                                              |
+| 23     | 已修复   | Graceful `AGENT_QUIESCE` 会把正在 Streaming 的 Subagent 永久结算为 Cancelled                                                                                                 |
+| 24     | 已修复   | Full Backup 的跨数据库／文件系统快照一致性仍需并发验证                                                                                                                       |
+| 25     | 已修复   | Backup Restore 会替换 Agent Durable State，但不会进入 Agent 的 quiesce / reinitialize 生命周期                                                                               |
+| 26     | 已修复   | 删除 Proxy / SSH Key 可以直接制造 ConnectionService 自己拒绝创建的 Connection 状态                                                                                           |
+| 27     | 已修复   | Connection Import 中内联 Proxy 与 Connection 的创建不是一个原子操作                                                                                                          |
+| 28     | 已修复   | 多个业务 Mutation 在提交后才写 Audit，Audit 失败会把“已成功修改”报告成“操作失败”                                                                                             |
+| 29     | 已修复   | IP Blacklist 的过期封禁状态会阻止同一 IP 再次进入封禁                                                                                                                        |
+| 30     | 已修复   | IP Blacklist 的失败计数是非原子的 read-modify-write，并发登录失败会丢失计数                                                                                                  |
+| 31     | 已修复   | Quick Command 本体与 Tag Association 分两个 Transaction 提交                                                                                                                 |
+| 32     | 已修复   | Workspace Transfer / Archive 的 terminal outcome 与 Mutation Guard known-settlement 契约待确认                                                                               |
+| 33     | 已修复   | Connection `jumpChain` 使用裸 JSON ID 引用，删除或改型 Jump Host 后会留下悬挂依赖                                                                                            |
+| 35     | 已修复   | Initial Admin Setup 使用非原子的 `count() -> create()`，并发请求可以创建多个初始用户                                                                                         |
+| 36     | 已修复   | Server Transfer 用 `sourceItemName` 作为 SubTask 身份，同名不同路径的源文件会解析成同一个对象                                                                                |
+| 37     | 已修复   | Command / Path History 的 `upsert()` 没有唯一约束，并发首次写入会永久产生重复记录                                                                                            |
+| 38     | 已修复   | 多类 Operational Secret 直接以明文写入 SQLite，绕过项目已有的 `SecretCipher` 边界                                                                                            |
+| 39     | 已修复   | Remote Text Save 直接截断目标文件，写入中断会破坏原内容                                                                                                                      |
+| 40     | 已修复   | Passkey Assertion Counter 更新不是原子校验，登录并发会破坏单调性                                                                                                             |
+| 41     | 已关闭   | Background 删除存在数据库失败窗口，但已有 missing reference 自愈路径                                                                                                         |
+| 42     | 已修复   | Workspace create 的业务预检查遮蔽了底层 idempotency replay                                                                                                                   |
+| 43     | 已修复   | Workspace 数量上限采用事务外 count-then-create，并发创建可以突破 maxActiveWorkspaces                                                                                         |
+| 44     | 已修复   | Workspace adminAction 对 failed/unknown 命令永久去重，原样重试不会再次提交 Runner                                                                                            |
+| 45     | 已修复   | Workspace setup / pack uninstall 先提交 Settings，再执行 Runner 命令，失败后形成跨 owner 半提交                                                                              |
+| 46     | 已修复   | Backup Restore 会永久 dispose SSH Suspend / Workspace Suspend 的进程内生命周期，但导入后没有重建                                                                             |
+| 47     | 已修复   | Root Agent 的 recoverable abort reason 在主循环 safe-boundary 存在被错误写成 `cancelled` 的竞态                                                                              |
+| 48     | 已修复   | Runner Workspace lifecycle drain 与 checkpoint restore 的互斥是单向的，restore 可以和 start / restart / delete 并发                                                          |
+| 49     | 已修复   | Runner Workspace `start` 的多 Plugin 激活失败补偿不完整，会留下运行中的部分 Plugin                                                                                           |
+| 50     | 已关闭   | Runner 多文件 applyPatch 的集合原子性与部分失败契约待确认                                                                                                                    |
+| 51     | 已修复   | File Editor 的关闭路径不检查 `dirty`，Tab / Popup / Workspace 关闭都会静默丢弃未保存内容                                                                                     |
+| 52     | 已修复   | File Manager rename / delete 不更新已打开 Editor 文档，后续保存会在旧路径重新创建文件                                                                                        |
+| 53     | 已修复   | File Editor 的异步 `open()` 不属于 Workspace scope 生命周期，Workspace 关闭后仍能插入幽灵 Tab                                                                                |
+| 54     | 已修复   | Authenticated Session Reset 未覆盖部分 Frontend Store                                                                                                                        |
+| 56     | 已修复   | Bounded SSH command 把“没有 exit status”的 close 当作 exit code 0，会把异常终止报告为成功                                                                                    |
+| 57     | 已关闭   | Server-to-server Transfer 的目标凭据转交需要明确源端信任前提                                                                                                                 |
+| 58     | 已修复   | Server Transfer 的 source capability probe 不接受取消信号，任务取消可以被三个串行 10 秒探测延迟                                                                              |
+| 59     | 已关闭   | Jump Chain 的 hop 引用是否应复用被引用连接的完整 route                                                                                                                       |
+| 60     | 已关闭   | SSH Resource Status 按采样开始时间计算 TTL 的代价待测                                                                                                                        |
+| 61     | 已关闭   | Plugin Agent Mutation 的 operationId 与各 endpoint replay 契约待确认                                                                                                         |
+| 62     | 已修复   | HTTP Logout 只销毁 Session，但已经建立的认证 WebSocket 不会被撤销                                                                                                            |
+| 63     | 已修复   | WebSocket Origin 校验无条件信任 `X-Forwarded-Host` / `X-Forwarded-Proto`，可被直连客户端自满足                                                                               |
+| 64     | 已修复   | SSH channel callback 与 Transport teardown 的晚到回调防护待验证                                                                                                              |
+| 65     | 已关闭   | Remote Archive 解压的部分失败展示与结果确认契约待确认                                                                                                                        |
+| 66     | 已修复   | Audit Log 非原子 retention 在并发写入下可能过度裁剪历史                                                                                                                      |
+| 67     | 已修复   | Notification fan-out 同步串进认证关键路径，而且没有通道数量/并发上限；外部通知端点可同时放大认证延迟与出站连接数                                                             |
+| 68     | 已修复   | Authenticated Session reset 只保护了部分 load；旧会话 Mutation 的晚到响应可以在 logout / user-change 后重新污染前端缓存                                                      |
+| 69     | 已修复   | Command History / Path History 对 distinct value 无保留上限，GET 又始终返回整表，长期使用会让持久化和前端加载无界增长                                                        |
+| 70     | 已关闭   | 同一 Session 只保留一个 Passkey ceremony challenge 是否符合产品预期                                                                                                          |
+| 71     | 已修复   | Terminal Theme preset 初始化只按 `name + preset` 查重，但数据库对 `name` 全局唯一；未来新增 preset 与既有用户主题同名时会直接阻断 Backend 启动                               |
+| 72     | 已关闭   | File Manager 批量删除的部分失败契约待确认                                                                                                                                    |
+| 73     | 已修复   | Full Backup 可以成功导出超过自身 Import 接口上限的文件，形成“可导出、不可恢复”的备份                                                                                         |
+| 74     | 已修复   | Backup capture 把完整文件树读取放在 SQLite exclusive transaction 内；大备份会阻塞所有普通数据库操作                                                                          |
+| 75     | 已修复   | Server Transfer 请求没有数组上限或去重，单个小于 1 MiB 的请求可以同步展开数千万个 SubTask                                                                                    |
+| 76     | 已修复   | Server Transfer 的 terminal task 只靠用户手工删除；Backend Map 和 `/status` 响应会随进程生命周期持续增长                                                                     |
+| 77     | 已修复   | 修改密码只更新 Password Hash，不会撤销其它已认证 HTTP Session；泄露 Cookie 在改密后仍然有效                                                                                  |
+| 78     | 已关闭   | Quick Command 创建标签与关联失败的部分成功提示待确认                                                                                                                         |
+| 79     | 已修复   | File Preview 的大小上限和取消只存在于前端包装层；真正的 Binary Transport 既不限制总字节数，也无法取消服务端读取                                                              |
+| 80     | 已修复   | File Editor 对远端文件读取完全没有大小上限；Large File Mode 在完整下载和解码之后才生效                                                                                       |
+| 81     | 已修复   | Full Backup 把整份快照物化成单个 JS 字符串；默认合法 Artifact 状态即可超过 Node 字符串上限而无法导出                                                                         |
+| 82     | 已修复   | Quick Command 批量打标签不限制或去重 `commandIds`；一个 1 MiB 请求可在全局排他 SQLite transaction 内制造数十万次串行 SQL                                                     |
+| 83     | 已修复   | SSH Suspend 没有会话数量上限或 suspended TTL；用户可以持续积累 live SSH transport、shell 和每会话日志                                                                        |
+| 84     | 已修复   | Plugin Backend close() 在 SIGTERM 后不等待退出或升级终止                                                                                                                     |
+| 85     | 已修复   | IP blacklist 没有任何过期行清理；匿名失败登录可让持久化 IP 基数永久增长                                                                                                      |
+| 86     | 已修复   | Connection Tag 的“替换全部关联”接口不验证目标 Tag，也不去重/校验正 ID；同一 API 对非法输入会返回假成功或 500                                                                 |
+| 87     | 已修复   | Artifact cleanup preview 可以生成超过 confirm 自身硬上限的 confirmation；超过 10,000 个可回收 Artifact 后清理流程必然无法执行                                                |
+| 88     | 已修复   | SSH Jump Chain 的 `forwardOut()` 不受 connect timeout 或 AbortSignal 控制；“15 秒连接测试”和 Agent deadline 都可以无限挂在跳板通道打开阶段                                   |
+| 89     | 已修复   | Agent Browser session 没有按 Run 生命周期回收；Run 结束后旧 session 又被 run binding 禁止关闭，Standalone Browser 资源只能等 Backend shutdown                                |
+| 91     | 已修复   | Runner Plugin 的 ready handshake 没有 timeout；第三方模块在发送 `runtime.ready` 前卡住时，Workspace lifecycle command 和 Runner startup reconcile 都会永久挂起               |
+| 92     | 已修复   | SSH Resource Status 的 host 级采样状态不会随 Connection 生命周期失效；历史 host:port 会永久留在内存，同 key 重用时还会复用旧机器静态信息                                     |
+| 93     | 已修复   | SSH transport 主动断开只会关闭底层 transport / shell，不会驱动 ExecutionSession 与 Workspace owner 回收；Registry 可长期保留已断开的“ready”会话                              |
+| 94     | 已修复   | Agent Integration 的 refresh epoch 只递增、不回收；反复创建/删除 Integration 会永久积累历史 scope+UUID generation state                                                      |
+| 95     | 已修复   | 全局 Agent feature disable 只 quiesce builtin App；Plugin App 的活跃 Run、Subagent 和 Backend Plugin runtime 会继续运行                                                      |
+| 96     | 已修复   | Backend 重启后的 user initialization 只恢复 builtin App 的 enabled MCP Integration；Plugin App 的 MCP Tool contribution 不会自动回到内存 Catalog                             |
+| 97     | 已修复   | Backend Plugin 的 `runtime.ready` handshake 也没有 timeout；已启用插件在模块 import 阶段卡死可以让整个 Backend 启动永远停在 listen 之前                                      |
+| 98     | 已修复   | Backend graceful shutdown 没有关闭 Plugin Backend runtime；SIGTERM 后主服务可以在 HTTP 已停止后继续被 Plugin child process 挂住                                              |
+| 99     | 已修复   | Background 并发上传在特定交错下可留下无引用文件                                                                                                                              |
+| 100    | 已关闭   | Plugin 升级会按 installation 引用删除旧 Runner package，但持久 Workspace Profile 仍冻结旧版本；升级后 retained Workspace 再启动会稳定失败                                    |
+| 101    | 已修复   | Plugin 可耗尽共享 Run subscription 槽并阻止新的 Host UI 订阅                                                                                                                 |
+| 102    | 已关闭   | Plugin uninstall / upgrade 是否应停止 retained Workspace 的冻结版本进程                                                                                                      |
+| 103    | 已修复   | `retained` Workspace 的显式 delete 只删除 Generation，不释放 Workspace retention；它会同时留下不可回收文件树并永久阻塞 Run / Thread 删除                                     |
 | 104    | 已修复   | Backend Plugin 的 AppIntent create 丢失了已经存在的 idempotency owner；崩溃窗口会把一次跨 App 操作重复提交为两张 receipt                                                     |
-| 105    | 确认问题 | Backend Plugin 的 Host RPC 没有 response-drain deadline；一个堵住 stdin 的 Plugin 可以让 uninstall / upgrade 永远卡在 SIGTERM 之前                                           |
+| 105    | 已修复   | Backend Plugin 的 Host RPC 没有 response-drain deadline；一个堵住 stdin 的 Plugin 可以让 uninstall / upgrade 永远卡在 SIGTERM 之前                                           |
 | 106    | 确认问题 | Plugin 首次安装没有 per-App serialization；两个版本并发 install 可以把 App activeVersion 与 Installation version 写成永久冲突                                                |
 | 107    | 确认问题 | Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`                                               |
 | 108    | 确认问题 | Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发                                 |

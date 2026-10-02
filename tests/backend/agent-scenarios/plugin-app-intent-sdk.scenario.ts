@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { AppIntentArtifactAdapter } from '../../../packages/backend/src/infrastructure/agent/artifacts/app-intent-artifact.adapter';
@@ -14,6 +15,7 @@ import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/da
 import type { ClockPort, Scope } from '../../../packages/backend/src/modules/agent/agent.types';
 import type { ArtifactLimitPolicyPort } from '../../../packages/backend/src/modules/agent/ai/artifact.port';
 import { ArtifactService } from '../../../packages/backend/src/modules/agent/ai/artifact.service';
+import type { AppStoragePort } from '../../../packages/backend/src/modules/agent/host/app-storage.port';
 import { AppIntentService } from '../../../packages/backend/src/modules/agent/host/app-intent.service';
 import { validateManifest } from '../../../packages/backend/src/modules/agent/host/app-manifest-validator';
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
@@ -218,20 +220,23 @@ export default {
       __dirname,
       '../../../packages/backend/src/infrastructure/agent/plugins/plugin-backend-runtime.worker.ts',
     );
-    const tsxBin = path.resolve(__dirname, '../../../packages/backend/node_modules/.bin/tsx');
-    const child = spawn(tsxBin, [workerPath], {
-      cwd: runtimeRoot,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        NEXUS_PLUGIN_USER_ID: String(sender.userId),
-        NEXUS_PLUGIN_APP_ID: sender.appId,
-        NEXUS_PLUGIN_VERSION: '1.0.0',
-        NEXUS_PLUGIN_SDK_VERSION: '1.0.0',
-        NEXUS_PLUGIN_PROTOCOL_VERSION: '1',
-        NEXUS_PLUGIN_BACKEND_ENTRY: 'backend/index.mjs',
-        NEXUS_PLUGIN_ROOT: runtimeRoot,
-      },
-    });
+    const backendRequire = createRequire(path.resolve(__dirname, '../../../packages/backend/package.json'));
+    const tsxLoader = backendRequire.resolve('tsx');
+    const spawnPluginWorker = (backendEntry: string) =>
+      spawn(process.execPath, ['--import', tsxLoader, workerPath], {
+        cwd: runtimeRoot,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          NEXUS_PLUGIN_USER_ID: String(sender.userId),
+          NEXUS_PLUGIN_APP_ID: sender.appId,
+          NEXUS_PLUGIN_VERSION: '1.0.0',
+          NEXUS_PLUGIN_SDK_VERSION: '1.0.0',
+          NEXUS_PLUGIN_PROTOCOL_VERSION: '1',
+          NEXUS_PLUGIN_BACKEND_ENTRY: backendEntry,
+          NEXUS_PLUGIN_ROOT: runtimeRoot,
+        },
+      });
+    const child = spawnPluginWorker('backend/index.mjs');
     const runtime = new BackendPluginProcess(child, sender, storage, intents, true, '1.0.0');
     try {
       await runtime.ready;
@@ -249,6 +254,66 @@ export default {
       assert.equal(runtimeReceipts.length, 1, 'Backend Plugin retry must replay one durable AppIntent receipt');
     } finally {
       await runtime.close();
+    }
+
+    await storage.put(sender, 'stall.payload', 'x'.repeat(60 * 1024), null);
+    let stalledReads = 0;
+    let stalledReadsResolve!: () => void;
+    const stalledReadsStarted = new Promise<void>((resolve) => {
+      stalledReadsResolve = resolve;
+    });
+    const observedStorage: AppStoragePort = {
+      get: async (scope, key) => {
+        if (key === 'stall.payload') {
+          stalledReads += 1;
+          if (stalledReads === 32) stalledReadsResolve();
+        }
+        return storage.get(scope, key);
+      },
+      put: (scope, key, value, expectedVersion) => storage.put(scope, key, value, expectedVersion),
+      delete: (scope, key, expectedVersion) => storage.delete(scope, key, expectedVersion),
+    };
+    fs.writeFileSync(
+      path.join(runtimeBackend, 'stall.mjs'),
+      `export default {
+  activate(context) {
+    setImmediate(() => {
+      for (let index = 0; index < 32; index += 1) {
+        void context.sdk.storage.get('stall.payload').catch(() => undefined);
+      }
+      while (true) {}
+    });
+  },
+};
+`,
+      'utf8',
+    );
+    const stalledChild = spawnPluginWorker('backend/stall.mjs');
+    const stalledRuntime = new BackendPluginProcess(stalledChild, sender, observedStorage, intents, true, '1.0.0');
+    const withDeadline = async <T>(promise: Promise<T>, timeoutMs: number, errorCode: string): Promise<T> => {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(errorCode)), timeoutMs);
+            timer.unref?.();
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    try {
+      await stalledRuntime.ready;
+      await stalledRuntime.request('lifecycle.activate');
+      await withDeadline(stalledReadsStarted, 5_000, 'PLUGIN_BACKEND_STALL_NOT_REPRODUCED');
+      const closeStartedAt = Date.now();
+      await withDeadline(stalledRuntime.close(), 12_000, 'PLUGIN_BACKEND_STALLED_CLOSE_TIMEOUT');
+      assert.ok(Date.now() - closeStartedAt < 12_000, 'stalled Backend Plugin close must remain bounded');
+    } finally {
+      if (!stalledChild.killed) stalledChild.kill('SIGKILL');
+      await stalledRuntime.close().catch(() => undefined);
     }
 
     const receipt = await intents.createConfirmed(sender, {
@@ -320,6 +385,7 @@ export default {
     return [
       { name: 'plugin_app_intent_authority_roundtrips', value: 2, unit: 'cases' },
       { name: 'plugin_backend_intent_idempotent_replays', value: 1, unit: 'receipts' },
+      { name: 'plugin_backend_stalled_response_closures', value: 1, unit: 'cases' },
       { name: 'plugin_app_intent_authority_rejections', value: 5, unit: 'cases' },
     ];
   } finally {
