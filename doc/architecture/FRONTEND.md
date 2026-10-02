@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Editor open 持有 scope generation + close epoch，load/异步 decoding 后重检发布；closeScope/invalidatePaths bump scope generation，closeAll bump epoch。失效结果 AbortError，不注册旧 port，不声称取消无 signal contract 的底层 I/O。
+
 FileManager 的 beforeFileMutation port 由 Workspace surface/renderer 组合到同 scope Editor invalidatePaths；rename/delete 前失效目标及后代保存 port，saving gate 阻止交错。草稿保留，部分失败不猜路径身份，需重新打开。
 
 Editor session 持有异步批量关闭 gate，由 FileEditor 提供本地化 discard confirmation；Popup 等待 closeAll 结果。强制 scope teardown 保留 dirty/saving 草稿并移除 port，后续 save fail-closed，不静默删除草稿；状态仅进程内。

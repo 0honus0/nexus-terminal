@@ -1227,7 +1227,9 @@ Backend 的 `WorkspaceFilesystemService.writeFile()` 最终进入 `RemoteTextWri
 
 这是 File Manager 与 Editor 对同一远端文件缺少 mutation identity / path invalidation 协议导致的实际数据一致性错误。
 
-## 53. File Editor 的异步 `open()` 不属于 Workspace scope 生命周期，Workspace 关闭后仍能插入幽灵 Tab
+## 53. File Editor 过期 open 插入幽灵 Tab（已修复）
+
+> 已修复：open 冻结 scope generation 和 close epoch，load 后重检才发布 document；closeScope 与文件 mutation 增加 scope generation，closeAll 增加 epoch，过期结果 AbortError，不注册 disposed port。底层无 AbortSignal contract，不声称取消 I/O；再次合法 open 读取新的 generation。下文为原问题证据。
 
 > 确认问题：`useFileEditorSession.ts:64–85` load 后 push；closeScope 仅删除当前 tabs，无 scope generation/in-flight invalidation。需要 load 在关闭后成功返回才触发，网络失败不会生成 tab。
 

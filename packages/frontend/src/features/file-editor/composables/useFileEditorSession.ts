@@ -40,6 +40,8 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   const savingDocuments = new Set<string>();
   let loadingOperations = 0;
   let openGeneration = 0;
+  let closeEpoch = 0;
+  const scopeGenerations = new Map<string | undefined, number>();
   let confirmClose = async (): Promise<boolean> => false;
   const unavailableDocuments = new Set<string>();
   const active = computed(() => tabs.value.find((item) => item.id === activeId.value) ?? null);
@@ -56,6 +58,8 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   async function open(path: string, context?: FileEditorOpenContext): Promise<EditorDocument> {
     const generation = ++openGeneration;
     const scopeId = context?.scopeId;
+    const scopeGeneration = scopeGenerations.get(scopeId) ?? 0;
+    const epoch = closeEpoch;
     const existing = tabs.value.find((item) => item.path === path && item.scopeId === scopeId);
     if (existing) {
       activeId.value = existing.id;
@@ -66,6 +70,8 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     beginLoading();
     try {
       const loaded = await port.load(path);
+      if (epoch !== closeEpoch || scopeGeneration !== (scopeGenerations.get(scopeId) ?? 0))
+        throw new DOMException('Document scope was closed or changed.', 'AbortError');
       const loadedExisting = tabs.value.find((item) => item.path === path && item.scopeId === scopeId);
       if (loadedExisting) {
         if (generation === openGeneration || !activeId.value) activeId.value = loadedExisting.id;
@@ -246,10 +252,12 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   }
 
   function closeAll(): Promise<boolean> {
+    closeEpoch += 1;
     return closeDocuments([...tabs.value]);
   }
 
   function closeScope(scopeId: string): void {
+    scopeGenerations.set(scopeId, (scopeGenerations.get(scopeId) ?? 0) + 1);
     for (const tab of [...tabs.value])
       if (tab.scopeId === scopeId) {
         if (tab.dirty || savingDocuments.has(tab.id)) {
@@ -273,6 +281,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
         paths.some((path) => doc.path === path || doc.path.startsWith(`${path.replace(/\/$/, '')}/`)),
     );
     if (documents.some((doc) => savingDocuments.has(doc.id))) return false;
+    scopeGenerations.set(scopeId, (scopeGenerations.get(scopeId) ?? 0) + 1);
     for (const doc of documents) {
       ports.delete(doc.id);
       unavailableDocuments.add(doc.id);
