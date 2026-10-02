@@ -1433,7 +1433,9 @@ if (count > 50000) {
 
 结果不是“最多略超 50,000”，而是会额外删除本来应该保留的审计历史。这里的 retention policy 目前只是 best effort，而不是数据库层能够成立的 50,000 条保留不变量。
 
-## 67. Notification fan-out 同步串进认证关键路径，而且没有通道数量/并发上限；外部通知端点可同时放大认证延迟与出站连接数
+## 67. Notification 认证路径与无界 fan-out（已修复）
+
+> 已修复：publish 仅 admission，不等待外部发送；进程内 4 active/128 queued 共享测试发送容量，单事件最多 64 通道顺序投递；create 同事务 cap64。旧配置不删，仅前 64 个匹配 ID 投递。SMTP 增加连接/问候/socket timeout 和 finally close。满队列/失败诊断，非 durable outbox，不保证进程退出交付。下文为原证据。
 
 > 确认问题（可用性耦合）：NotificationService await allSettled，Auth/2FA/Passkey 同步 await publish；channel 自有网络超时但没有总 fan-out admission。只在匹配且启用的通道存在时影响认证，具体延迟与吞吐未测。
 

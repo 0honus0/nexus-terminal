@@ -52,23 +52,30 @@ export class SqliteNotificationRepository implements NotificationSettingsReposit
     return row ? map(row, this.cipher) : null;
   }
   async listEnabledFor(event: NotificationEvent) {
-    return (await this.database.queryAll<Row>('SELECT * FROM notification_settings WHERE enabled=1'))
-      .map((row) => map(row, this.cipher))
-      .filter((setting) => setting.enabledEvents.includes(event));
+    return (
+      await this.database.queryAll<Row>(
+        'SELECT * FROM notification_settings WHERE enabled=1 AND EXISTS (SELECT 1 FROM json_each(enabled_events) WHERE value=?) ORDER BY id ASC LIMIT 64',
+        [event],
+      )
+    ).map((row) => map(row, this.cipher));
   }
   async create(s: CreateNotificationSetting) {
-    const r = await this.database.execute(
-      "INSERT INTO notification_settings (channel_type,name,enabled,config,enabled_events,created_at,updated_at) VALUES (?,?,?,?,?,strftime('%s','now'),strftime('%s','now'))",
-      [
-        s.channelType,
-        s.name,
-        s.enabled ? 1 : 0,
-        protectOperationalSecret(this.cipher, JSON.stringify(s.config)),
-        JSON.stringify(s.enabledEvents),
-      ],
-    );
-    if (!r.lastInsertId) throw new Error('Notification setting insert did not return an id.');
-    return r.lastInsertId;
+    return this.database.transaction(async (tx) => {
+      const count = await tx.queryOne<{ total: number }>('SELECT COUNT(*) AS total FROM notification_settings');
+      if ((count?.total ?? 0) >= 64) throw new Error('NOTIFICATION_SETTING_LIMIT_EXCEEDED');
+      const r = await tx.execute(
+        "INSERT INTO notification_settings (channel_type,name,enabled,config,enabled_events,created_at,updated_at) VALUES (?,?,?,?,?,strftime('%s','now'),strftime('%s','now'))",
+        [
+          s.channelType,
+          s.name,
+          s.enabled ? 1 : 0,
+          protectOperationalSecret(this.cipher, JSON.stringify(s.config)),
+          JSON.stringify(s.enabledEvents),
+        ],
+      );
+      if (!r.lastInsertId) throw new Error('Notification setting insert did not return an id.');
+      return r.lastInsertId;
+    });
   }
   async update(id: number, s: UpdateNotificationSetting) {
     const cols: Record<keyof UpdateNotificationSetting, string> = {

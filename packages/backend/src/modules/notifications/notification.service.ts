@@ -16,6 +16,29 @@ import type {
 
 /** Fire-and-observe application service for domain notifications; channel failures are isolated per setting. */
 export class NotificationService {
+  private active = 0;
+  private readonly queue: Array<() => void> = [];
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.queue.length >= 128) return Promise.reject(new Error('NOTIFICATION_CAPACITY_EXCEEDED'));
+    return new Promise<T>((resolve, reject) => {
+      this.queue.push(() => {
+        this.active += 1;
+        void Promise.resolve()
+          .then(operation)
+          .then(resolve, reject)
+          .finally(() => {
+            this.active -= 1;
+            this.pump();
+          });
+      });
+      this.pump();
+    });
+  }
+
+  private pump(): void {
+    while (this.active < 4 && this.queue.length) this.queue.shift()!();
+  }
   constructor(
     private readonly repository: NotificationSettingsRepository,
     private readonly channels: NotificationChannelPort,
@@ -25,6 +48,12 @@ export class NotificationService {
   ) {}
 
   async publish(event: NotificationEvent, details?: Record<string, unknown> | string): Promise<void> {
+    void this.enqueue(() => this.dispatch(event, details)).catch(() => {
+      logger.warn({ event }, 'Notification dropped or dispatch failed');
+    });
+  }
+
+  private async dispatch(event: NotificationEvent, details?: Record<string, unknown> | string): Promise<void> {
     const [applicable, timezone, language] = await Promise.all([
       this.repository.listEnabledFor(event),
       this.settings.getSetting('timezone'),
@@ -34,19 +63,15 @@ export class NotificationService {
     logger.debug({ event, channelCount: applicable.length }, 'Notification fan-out dispatch');
     const locale = this.localizer.resolveLocale(language);
     const payload = { event, timestamp: Date.now(), details: this.localizeDetails(details, locale) };
-    const results = await Promise.allSettled(
-      applicable.map((setting) =>
-        this.channels.send(this.formatter.prepare(setting, payload, timezone || 'UTC', locale)),
-      ),
-    );
-    for (let index = 0; index < results.length; index += 1) {
-      const result = results[index];
-      if (result?.status !== 'rejected') continue;
-      const setting = applicable[index];
-      logger.warn(
-        { err: result.reason, event, settingId: setting?.id, channelType: setting?.channelType },
-        'Notification channel delivery failed',
-      );
+    for (const setting of applicable) {
+      try {
+        await this.channels.send(this.formatter.prepare(setting, payload, timezone || 'UTC', locale));
+      } catch {
+        logger.warn(
+          { event, settingId: setting.id, channelType: setting.channelType },
+          'Notification channel delivery failed',
+        );
+      }
     }
   }
 
@@ -94,7 +119,7 @@ export class NotificationService {
         );
       }
       logger.debug({ channelType }, 'Test notification dispatch');
-      await this.channels.send(prepared);
+      await this.enqueue(() => this.channels.send(prepared));
       return {
         success: true,
         message: this.localizer.translate(locale, 'notification.test.success', 'Test notification sent successfully.'),

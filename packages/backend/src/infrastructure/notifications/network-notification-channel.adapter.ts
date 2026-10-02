@@ -30,9 +30,16 @@ export class NetworkNotificationChannelAdapter implements NotificationChannelPor
       host: c.smtpHost,
       port: c.smtpPort,
       secure: c.smtpSecure ?? true,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
       auth: c.smtpUser && c.smtpPass ? { user: c.smtpUser, pass: c.smtpPass } : undefined,
     });
-    await transport.sendMail({ from: `"${c.from.split('@')[0]}" <${c.from}>`, to: c.to, subject, html: body });
+    try {
+      await transport.sendMail({ from: `"${c.from.split('@')[0]}" <${c.from}>`, to: c.to, subject, html: body });
+    } finally {
+      transport.close();
+    }
   }
   private async sendTelegram(c: TelegramConfig, body: string) {
     if (!c.botToken || !c.chatId) throw new Error('Telegram 配置缺少 botToken/chatId。');
