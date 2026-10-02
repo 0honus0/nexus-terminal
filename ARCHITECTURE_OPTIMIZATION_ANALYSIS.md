@@ -1848,7 +1848,9 @@ for (const connectionId of connectionIds)
 
 同一逻辑操作没有稳定的“目标不存在/输入非法”契约，而把数据库 constraint error 暴露成通用服务端错误。并且数组没有长度上限，合法唯一 ID 很多时仍会在 exclusive transaction 内逐条 INSERT；不过这里的核心 correctness defect 是 target existence 和输入规范没有在 owner boundary 被建立。
 
-## 87. Artifact cleanup preview 可以生成超过 confirm 自身硬上限的 confirmation；超过 10,000 个可回收 Artifact 后清理流程必然无法执行
+## 87. Artifact cleanup preview/confirm 容量匹配（已修复）
+
+> 已修复：preview最旧createdAt/id最多1000，低于历史confirm decoder10000兼容上限；逐批重新preview/confirm，不改变旧confirmation解码契约或保护重检。返回selectedCount表示本批，非全库。下文为原证据。
 
 > 确认问题：`infrastructure/agent/artifacts/local-artifact-store.ts:600` preview 无 LIMIT，而 `:160–162` decoder 拒绝 >10,000。只限定这条全量 preview/confirm 流程，单项删除／其他管理手段不能据此说全部失效；未插入一万条 Artifact 测试。
 

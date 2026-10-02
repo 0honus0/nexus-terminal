@@ -619,7 +619,7 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
            SELECT 1 FROM agent_app_intent_artifact_grants ig
            WHERE ig.artifact_id = a.id AND ig.revoked_at IS NULL AND ig.expires_at > ?
          )
-       ORDER BY a.created_at, a.id`,
+        ORDER BY a.created_at, a.id LIMIT 1000`,
       [userId, now, now],
     );
     const totalReady = await this.db.queryOne<{ count: number }>(
