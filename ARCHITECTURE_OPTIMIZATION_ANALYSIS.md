@@ -2698,7 +2698,9 @@ async close(): Promise<void> {
 
 ## 106. Plugin 首次安装没有 per-App serialization；两个版本并发 install 可以把 App activeVersion 与 Installation version 写成永久冲突
 
-> 确认问题：coordinator 事务外捕获 existingState/Installation，states.insertDefault 为 INSERT OR IGNORE，installation upsert 为 last-writer-wins，未共享事务。只适用于首次安装并发窗口；未 barrier 复现。
+> 已修复：PackageInstallCoordinator 在 verify 得到规范 appId 后按 `userId + appId` 串行首次 install；进入串行区后重新校验 stage，再读取最新 App/Installation，并把 package install、Version 注册、App/Installation 提交和 stage finalization 放在同一 install 生命周期。Agent 场景用真实 SQLite 持久状态卡住 v1 package install，同时启动 v2，验证 v2 在 v1 完成前不能越过 package-install 边界，随后明确返回 `PLUGIN_UPGRADE_REQUIRED`，且 durable activeVersion/Installation version 都保持 v1。下文为原问题证据。
+
+> 原问题证据：coordinator 事务外捕获 existingState/Installation，states.insertDefault 为 INSERT OR IGNORE，installation upsert 为 last-writer-wins，未共享事务。只适用于首次安装并发窗口。
 
 `PluginInstallService.install()` 只是直接转发到 coordinator：
 
@@ -4209,7 +4211,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项当前分类：**未解决确认问题 25 项，待确认 15 项，已修复 78 项，已关闭／核对／澄清 22 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
+原 144 项当前分类：**未解决确认问题 24 项，待确认 15 项，已修复 79 项，已关闭／核对／澄清 22 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4314,7 +4316,7 @@ await terminateAllManagedProcesses();
 | 103    | 已修复   | `retained` Workspace 的显式 delete 只删除 Generation，不释放 Workspace retention；它会同时留下不可回收文件树并永久阻塞 Run / Thread 删除                                     |
 | 104    | 已修复   | Backend Plugin 的 AppIntent create 丢失了已经存在的 idempotency owner；崩溃窗口会把一次跨 App 操作重复提交为两张 receipt                                                     |
 | 105    | 已修复   | Backend Plugin 的 Host RPC 没有 response-drain deadline；一个堵住 stdin 的 Plugin 可以让 uninstall / upgrade 永远卡在 SIGTERM 之前                                           |
-| 106    | 确认问题 | Plugin 首次安装没有 per-App serialization；两个版本并发 install 可以把 App activeVersion 与 Installation version 写成永久冲突                                                |
+| 106    | 已修复   | Plugin 首次安装没有 per-App serialization；两个版本并发 install 可以把 App activeVersion 与 Installation version 写成永久冲突                                                |
 | 107    | 确认问题 | Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`                                               |
 | 108    | 确认问题 | Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发                                 |
 | 109    | 确认问题 | SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志                                                                           |

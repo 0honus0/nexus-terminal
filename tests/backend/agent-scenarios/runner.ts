@@ -3,6 +3,7 @@ import { performance } from 'node:perf_hooks';
 import { artifactSingleDeleteProductScenario } from './artifact-single-delete-product.scenario';
 import { memoryProductClosureScenario } from './memory-product-closure.scenario';
 import { pluginAppIntentSdkScenario } from './plugin-app-intent-sdk.scenario';
+import { pluginInstallSerializationScenario } from './plugin-install-serialization.scenario';
 import { providerPromptCacheHintScenario } from './provider-prompt-cache-hint.scenario';
 
 import { unifiedFileCapabilityScenario } from './unified-file-capability.scenario';
@@ -158,6 +159,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],
   ['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],
   ['runtime/plugin-app-intent-sdk', pluginAppIntentSdkScenario],
+  ['runtime/plugin-install-serialization', pluginInstallSerializationScenario],
   ['runtime/memory-product-closure', memoryProductClosureScenario],
   ['workspace/suspended-session-ownership', suspendedSessionOwnershipScenario],
   ['browser/target-scoped-revision', browserTargetScopedRevisionScenario],

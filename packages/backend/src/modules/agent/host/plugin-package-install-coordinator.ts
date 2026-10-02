@@ -40,6 +40,8 @@ const SUPPORTED_PLUGIN_SDK_MAJOR = 1;
 const PLUGIN_STAGE_RETENTION_SECONDS = 24 * 60 * 60;
 
 export class PluginPackageInstallCoordinator {
+  private readonly installTails = new Map<string, Promise<void>>();
+
   constructor(
     private readonly repository: PluginInstallRepositoryPort,
     private readonly verifier: PackageVerifierPort,
@@ -262,100 +264,118 @@ export class PluginPackageInstallCoordinator {
     if (verified.packageHash !== stage.packageHash) throw new Error('PLUGIN_STAGE_CHANGED');
     if (this.registry.isBuiltin(verified.manifest.id)) throw new Error('PLUGIN_APP_ID_RESERVED');
     const scope = { userId, appId: verified.manifest.id };
-    const existingState = await this.states.get(scope);
-    const existingInstallation = await this.repository.getInstallation(userId, verified.manifest.id);
-    if (
-      existingState &&
-      existingInstallation?.status === 'installed' &&
-      existingState.activeVersion !== verified.manifest.version
-    ) {
-      throw new Error('PLUGIN_UPGRADE_REQUIRED');
-    }
-    if (existingState && existingInstallation && existingInstallation.version !== existingState.activeVersion) {
-      throw new Error('PLUGIN_INSTALLATION_STATE_CONFLICT');
-    }
-    if (existingState && !existingInstallation && existingState.activeVersion !== verified.manifest.version) {
-      throw new Error('PLUGIN_INSTALLATION_STATE_CONFLICT');
-    }
-
-    const now = this.clock.nowUnixSeconds();
-    const plugin = this.pluginRecord(verified, 'installed', now, now);
-    await this.verifier.install(stageId, verified);
-    await this.repository.upsertVersion(plugin);
-    this.runtimeLifecycle.registerVersion(plugin);
-
-    if (!existingState) {
-      const inserted = await this.states.insertDefault({
-        ...scope,
-        activeVersion: verified.manifest.version,
-        desiredState: 'disabled',
-        observedState: 'disabled',
-        healthReason: null,
-        policyRevision: 1,
-        runningCount: 0,
-        approvalCount: 0,
-        budgetRequestCount: 0,
-        acceptNewRuns: true,
-        version: 1,
-        createdAt: now,
-        updatedAt: now,
-      });
-      if (inserted) this.onHostStateCommitted(userId);
-    }
-    let current = await this.states.get(scope);
-    if (!current) throw new Error('PLUGIN_APP_STATE_MISSING');
-    if (existingInstallation?.status === 'removed') {
-      current = await this.repository.activateInstallation(
-        userId,
-        verified.manifest.id,
-        existingInstallation.version,
-        verified.manifest.version,
-        current.version,
-        'disabled',
-        now,
-      );
-      this.onHostStateCommitted(userId);
-    } else {
-      await this.repository.upsertInstallation({
-        userId,
-        appId: verified.manifest.id,
-        version: verified.manifest.version,
-        status: 'installed',
-        createdAt: existingInstallation?.createdAt ?? now,
-        updatedAt: now,
-      });
-    }
+    const releaseInstall = await this.acquireInstallLock(scope);
     try {
-      stage = await this.repository.updateStage(userId, stageId, stage.versionNumber, {
-        publisherKeyId: verified.publisherKeyId,
-        appId: verified.manifest.id,
-        version: verified.manifest.version,
-        manifest: verified.manifest,
-        status: 'installed',
-        errorCode: null,
-        updatedAt: now,
-      });
-      await this.verifier.discardStage(stageId, stage.appId);
-      await this.repository.deleteStage(userId, stageId);
-    } catch (error) {
-      logger.warn(
-        { err: error, userId, stageId, appId: plugin.appId, version: plugin.version },
-        'Agent plugin install stage finalization failed after installation commit',
+      const currentStage = await this.requireStage(userId, stageId);
+      if (!['verified', 'failed'].includes(currentStage.status)) throw new Error('PLUGIN_STAGE_NOT_VERIFIED');
+      if (
+        currentStage.versionNumber !== stage.versionNumber ||
+        currentStage.packageHash !== stage.packageHash ||
+        currentStage.appId !== stage.appId ||
+        currentStage.version !== stage.version
+      ) {
+        throw new Error('PLUGIN_STAGE_CHANGED');
+      }
+      stage = currentStage;
+      this.assertStageIdentity(stage, verified);
+
+      const existingState = await this.states.get(scope);
+      const existingInstallation = await this.repository.getInstallation(userId, verified.manifest.id);
+      if (
+        existingState &&
+        existingInstallation?.status === 'installed' &&
+        existingState.activeVersion !== verified.manifest.version
+      ) {
+        throw new Error('PLUGIN_UPGRADE_REQUIRED');
+      }
+      if (existingState && existingInstallation && existingInstallation.version !== existingState.activeVersion) {
+        throw new Error('PLUGIN_INSTALLATION_STATE_CONFLICT');
+      }
+      if (existingState && !existingInstallation && existingState.activeVersion !== verified.manifest.version) {
+        throw new Error('PLUGIN_INSTALLATION_STATE_CONFLICT');
+      }
+
+      const now = this.clock.nowUnixSeconds();
+      const plugin = this.pluginRecord(verified, 'installed', now, now);
+      await this.verifier.install(stageId, verified);
+      await this.repository.upsertVersion(plugin);
+      this.runtimeLifecycle.registerVersion(plugin);
+
+      if (!existingState) {
+        const inserted = await this.states.insertDefault({
+          ...scope,
+          activeVersion: verified.manifest.version,
+          desiredState: 'disabled',
+          observedState: 'disabled',
+          healthReason: null,
+          policyRevision: 1,
+          runningCount: 0,
+          approvalCount: 0,
+          budgetRequestCount: 0,
+          acceptNewRuns: true,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+        if (inserted) this.onHostStateCommitted(userId);
+      }
+      let current = await this.states.get(scope);
+      if (!current) throw new Error('PLUGIN_APP_STATE_MISSING');
+      if (existingInstallation?.status === 'removed') {
+        current = await this.repository.activateInstallation(
+          userId,
+          verified.manifest.id,
+          existingInstallation.version,
+          verified.manifest.version,
+          current.version,
+          'disabled',
+          now,
+        );
+        this.onHostStateCommitted(userId);
+      } else {
+        await this.repository.upsertInstallation({
+          userId,
+          appId: verified.manifest.id,
+          version: verified.manifest.version,
+          status: 'installed',
+          createdAt: existingInstallation?.createdAt ?? now,
+          updatedAt: now,
+        });
+      }
+      try {
+        stage = await this.repository.updateStage(userId, stageId, stage.versionNumber, {
+          publisherKeyId: verified.publisherKeyId,
+          appId: verified.manifest.id,
+          version: verified.manifest.version,
+          manifest: verified.manifest,
+          status: 'installed',
+          errorCode: null,
+          updatedAt: now,
+        });
+        await this.verifier.discardStage(stageId, stage.appId);
+        await this.repository.deleteStage(userId, stageId);
+      } catch (error) {
+        logger.warn(
+          { err: error, userId, stageId, appId: plugin.appId, version: plugin.version },
+          'Agent plugin install stage finalization failed after installation commit',
+        );
+        // Installation/app state is already authoritative. Preserve the stage for reconciliation instead of reporting install failure.
+      }
+      logger.info(
+        {
+          userId,
+          stageId,
+          appId: plugin.appId,
+          version: plugin.version,
+          desiredState: current.desiredState,
+          observedState: current.observedState,
+        },
+        'Agent plugin installation completed',
       );
-      // Installation/app state is already authoritative. Preserve the stage for reconciliation instead of reporting install failure.
+      return { stage, plugin, app: this.runtimeLifecycle.appView(current, plugin) };
+    } finally {
+      releaseInstall();
     }
-    logger.info(
-      {
-        userId,
-        stageId,
-        appId: plugin.appId,
-        version: plugin.version,
-        desiredState: current.desiredState,
-        observedState: current.observedState,
-      },
-      'Agent plugin installation completed',
-    );
-    return { stage, plugin, app: this.runtimeLifecycle.appView(current, plugin) };
   }
 
   async listPendingUpgrades(userId: number): Promise<PluginPendingUpgradeView[]> {
@@ -967,6 +987,27 @@ export class PluginPackageInstallCoordinator {
     const stage = await this.repository.getStage(userId, stageId);
     if (!stage) throw new Error('PLUGIN_STAGE_NOT_FOUND');
     return stage;
+  }
+
+  private async acquireInstallLock(scope: Scope): Promise<() => void> {
+    const key = `${scope.userId}:${scope.appId}`;
+    const previous = this.installTails.get(key) ?? Promise.resolve();
+    let releaseGate: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    const tail = previous.catch(() => undefined).then(() => gate);
+    this.installTails.set(key, tail);
+    await previous.catch(() => undefined);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      releaseGate();
+      void tail.finally(() => {
+        if (this.installTails.get(key) === tail) this.installTails.delete(key);
+      });
+    };
   }
 
   private verifyPackage(userId: number, stage: PluginStageRecord): Promise<VerifiedPluginPackage> {

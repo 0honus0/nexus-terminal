@@ -8,6 +8,8 @@ Backend Plugin AppIntent create 的 UUID operationId 经 SDK/worker/有界 IPC d
 
 Backend Plugin Host→child 协议 writer 对 callback/drain 持有硬 deadline；超时销毁 stdin writer 并触发 protocol failure。关闭 runtime 时 active Host RPC 只做有界 drain，随后仍进入 SIGTERM→SIGKILL 收敛，不能让不消费 stdin 的 Plugin 永久阻塞 uninstall／upgrade。
 
+PluginPackageInstallCoordinator 在 package verify 得到规范 appId 后，对同一 `userId + appId` 的首次 install 串行执行；进入串行区后重新读取并校验 stage，再读取 App state／Installation，并把 package install、Version 注册、App/Installation 提交与 stage finalization 保持在同一 install 生命周期内。不同版本的并发首次安装只能有一个进入提交路径，后到请求基于最新 installation 收敛为 upgrade-required，不能制造持久 activeVersion/version 分叉。
+
 Workspace deleted 成功投影在同一 status CAS 清 retained，Runner journal 同步释放；persistent root 仍属 preview/confirm runtimeCleanup，legacy deleted+retained 不阻止候选，cleanup projection 清 retention。
 
 Plugin installation 与独立 Workspace generation 是不同 lifecycle owner；App uninstall/drain 不级联 Workspace Runner process，后者 stop/delete 经 RunnerCommandExecutor 回收，冻结版本不重绑定当前 installation。
