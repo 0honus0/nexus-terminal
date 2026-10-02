@@ -16,19 +16,16 @@ export class IpBlacklistService {
   async recordFailedAttempt(ip: string): Promise<void> {
     if (!(await this.settings.isIpBlacklistEnabled()) || LOCAL_IPS.has(ip)) return;
     const now = Math.floor(Date.now() / 1000);
-    const [maxRaw, durationRaw, current] = await Promise.all([
+    const [maxRaw, durationRaw] = await Promise.all([
       this.settings.getSetting('maxLoginAttempts'),
       this.settings.getSetting('loginBanDuration'),
-      this.repository.get(ip),
     ]);
     const max = this.bounded(maxRaw, 5, 1, 1000);
     const duration = this.bounded(durationRaw, 300, 1, 86400 * 30);
-    const expired = current?.blockedUntil != null && current.blockedUntil <= now;
-    const activeBlock = current?.blockedUntil != null && current.blockedUntil > now;
-    const attempts = (expired ? 0 : (current?.attempts ?? 0)) + 1;
-    const newlyBlocked = attempts >= max && !activeBlock;
-    const blockedUntil = activeBlock ? current!.blockedUntil : newlyBlocked ? now + duration : null;
-    await this.repository.upsert({ ip, attempts, lastAttemptAt: now, blockedUntil });
+    const {
+      entry: { attempts, blockedUntil },
+      newlyBlocked,
+    } = await this.repository.recordFailure(ip, now, max, duration);
     if (newlyBlocked && blockedUntil)
       await this.notifications.publish('IP_BLOCKED', {
         ip,

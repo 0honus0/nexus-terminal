@@ -678,9 +678,9 @@ blockedUntil > now;
 
 因此一个 IP 只要经历过一次完整的封禁并自然过期，后续无论累计多少次失败都不会再次被 `isBlocked()` 判为封禁，除非中间发生 `resetAttempts()` 或记录被显式删除。
 
-## 30. IP Blacklist 的失败计数是非原子的 read-modify-write，并发登录失败会丢失计数
+## 30. IP Blacklist 并发失败丢计数（已修复）
 
-> 确认问题：同一 `ip-blacklist.service.ts` 的 get → upsert 跨独立数据库请求，没有 increment/CAS。数据库 statement 串行不等于整个异步调用链原子；具体交错未实测。
+> 已修复：repository.recordFailure 在排他事务内读计数、处理到期周期、更新计数和 block deadline，返回真实 newlyBlocked。Service 不再持有 read-modify-write；并发调用不能覆盖计数，通知仅由进入封禁的 transition 触发。下文为原问题证据。
 
 `recordFailedAttempt()` 先读取当前记录：
 

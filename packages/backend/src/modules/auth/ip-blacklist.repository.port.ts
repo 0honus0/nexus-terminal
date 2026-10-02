@@ -6,7 +6,12 @@ export interface IpBlacklistEntry {
 }
 export interface IpBlacklistRepository {
   get(ip: string): Promise<IpBlacklistEntry | null>;
-  upsert(entry: IpBlacklistEntry): Promise<void>;
+  recordFailure(
+    ip: string,
+    now: number,
+    maxAttempts: number,
+    duration: number,
+  ): Promise<{ entry: IpBlacklistEntry; newlyBlocked: boolean }>;
   remove(ip: string): Promise<boolean>;
   list(limit: number, offset: number): Promise<{ entries: IpBlacklistEntry[]; total: number }>;
 }

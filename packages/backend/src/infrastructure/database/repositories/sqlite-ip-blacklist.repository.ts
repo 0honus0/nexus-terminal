@@ -18,11 +18,25 @@ export class SqliteIpBlacklistRepository implements IpBlacklistRepository {
     const r = await this.database.queryOne<Row>('SELECT * FROM ip_blacklist WHERE ip=?', [ip]);
     return r ? map(r) : null;
   }
-  async upsert(e: IpBlacklistEntry) {
-    await this.database.execute(
-      'INSERT INTO ip_blacklist (ip,attempts,last_attempt_at,blocked_until) VALUES (?,?,?,?) ON CONFLICT(ip) DO UPDATE SET attempts=excluded.attempts,last_attempt_at=excluded.last_attempt_at,blocked_until=excluded.blocked_until',
-      [e.ip, e.attempts, e.lastAttemptAt, e.blockedUntil],
-    );
+  async recordFailure(ip: string, now: number, maxAttempts: number, duration: number) {
+    return this.database.transaction(async (tx) => {
+      const row = await tx.queryOne<Row>('SELECT * FROM ip_blacklist WHERE ip=?', [ip]);
+      const expired = row?.blocked_until != null && row.blocked_until <= now;
+      const active = row?.blocked_until != null && row.blocked_until > now;
+      const attempts = (expired ? 0 : (row?.attempts ?? 0)) + 1;
+      const newlyBlocked = attempts >= maxAttempts && !active;
+      const e: IpBlacklistEntry = {
+        ip,
+        attempts,
+        lastAttemptAt: now,
+        blockedUntil: active ? row!.blocked_until : newlyBlocked ? now + duration : null,
+      };
+      await tx.execute(
+        'INSERT INTO ip_blacklist (ip,attempts,last_attempt_at,blocked_until) VALUES (?,?,?,?) ON CONFLICT(ip) DO UPDATE SET attempts=excluded.attempts,last_attempt_at=excluded.last_attempt_at,blocked_until=excluded.blocked_until',
+        [e.ip, e.attempts, e.lastAttemptAt, e.blockedUntil],
+      );
+      return { entry: e, newlyBlocked };
+    });
   }
   async remove(ip: string) {
     return (await this.database.execute('DELETE FROM ip_blacklist WHERE ip=?', [ip])).changes > 0;
