@@ -127,12 +127,14 @@ export class SubagentCompletionCoordinator {
   }
 
   async verifiedRuntimeEvidence(scope: Scope, runId: string, runtimeId: string): Promise<VerifiedRuntimeEvidence> {
-    const exchanges = await this.runtimes.recentRuntimeToolExchanges(scope, runId, runtimeId, 32);
+    const history = await this.runtimes.contextHistory(scope, runId, runtimeId);
+    const exchanges = history.units.flatMap((unit) => unit.exchanges ?? []);
     const refs = new Set<string>();
     const tools: VerifiedRuntimeEvidence['tools'] = [];
     for (const exchange of exchanges) {
       const result = exchange.result;
-      if (!result || result.outcome !== 'confirmed' || result.verification.status !== 'verified') continue;
+      if (!result || !result.ok || result.outcome !== 'confirmed' || result.verification.status !== 'verified')
+        continue;
       const resultRefs = [...new Set([...result.artifactRefs, ...result.verification.evidenceRefs])].filter(
         (ref): ref is string => typeof ref === 'string' && ref.length > 0,
       );
@@ -146,7 +148,7 @@ export class SubagentCompletionCoordinator {
       }
       for (const ref of resultRefs) {
         refs.add(ref);
-        if (refs.size >= MAX_WORKER_EVIDENCE_REFS) return { artifactRefs: [...refs], tools };
+        if (refs.size > MAX_WORKER_EVIDENCE_REFS) throw new Error('SUBAGENT_EVIDENCE_TOO_LARGE');
       }
     }
     return { artifactRefs: [...refs], tools };

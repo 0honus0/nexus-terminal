@@ -506,17 +506,20 @@ export class SubagentModelStepExecutor {
       }
     }
     const completion = compaction ? '' : boundedUtf8(text, MAX_COMPLETION_BYTES);
-    const verifiedEvidence = await this.completion
-      .verifiedRuntimeEvidence(scope, work.runId, work.agentRuntimeId)
-      .catch(() => ({
-        artifactRefs: [] as string[],
-        tools: [] as Array<{
-          toolName: string;
-          summary: string;
-          verificationSummary: string;
-          evidenceRefs: string[];
-        }>,
-      }));
+    let verifiedEvidence: Awaited<ReturnType<SubagentCompletionCoordinator['verifiedRuntimeEvidence']>> = {
+      artifactRefs: [],
+      tools: [],
+    };
+    if (!retry) {
+      try {
+        verifiedEvidence = await this.completion.verifiedRuntimeEvidence(scope, work.runId, work.agentRuntimeId);
+      } catch (error) {
+        if (outcome === 'completed') {
+          outcome = 'failed';
+          failureCode = errorCode(error);
+        }
+      }
+    }
     const evidenceRefs = verifiedEvidence.artifactRefs;
     const settled = await this.stateCommit.settleSubagentModelStep({
       scope,

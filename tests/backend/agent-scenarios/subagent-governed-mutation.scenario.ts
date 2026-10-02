@@ -242,7 +242,7 @@ export const subagentGovernedMutationScenario = async () => {
       id: baseDelegation.runId,
       userId: 1,
       appId: scenarioScope.appId,
-      definition: { approvalMode, environment: { transport: 'workspace-profile' } },
+      definition: { approvalMode, executionMode: 'execute', environment: { transport: 'workspace-profile' } },
     }) as unknown as RunView;
   assert.equal(
     toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('ask')).some(
@@ -449,52 +449,58 @@ export const subagentGovernedMutationScenario = async () => {
     null!,
     null!,
     {
-      recentRuntimeToolExchanges: async () => [
-        {
-          sourceModelStepId: 'scenario-mutation-model-step',
-          batchIndex: 0,
-          batchSize: 2,
-          providerCallId: 'scenario-verified-call',
-          toolName: mutationTool.descriptor.name,
-          arguments: {},
-          status: 'succeeded',
-          result: {
-            ok: true,
-            summary: 'Verified worker evidence.',
-            data: null,
-            artifactRefs: ['artifact:scenario-diff'],
-            truncated: false,
-            outcome: 'confirmed',
-            verification: {
-              status: 'verified',
-              summary: 'Focused test passed.',
-              evidenceRefs: ['artifact:scenario-test'],
-            },
+      contextHistory: async () => ({
+        units: [
+          {
+            exchanges: [
+              {
+                sourceModelStepId: 'scenario-mutation-model-step',
+                batchIndex: 0,
+                batchSize: 2,
+                providerCallId: 'scenario-verified-call',
+                toolName: mutationTool.descriptor.name,
+                arguments: {},
+                status: 'succeeded',
+                result: {
+                  ok: true,
+                  summary: 'Verified worker evidence.',
+                  data: null,
+                  artifactRefs: ['artifact:scenario-diff'],
+                  truncated: false,
+                  outcome: 'confirmed',
+                  verification: {
+                    status: 'verified',
+                    summary: 'Focused test passed.',
+                    evidenceRefs: ['artifact:scenario-test'],
+                  },
+                },
+              },
+              {
+                sourceModelStepId: 'scenario-mutation-model-step',
+                batchIndex: 1,
+                batchSize: 2,
+                providerCallId: 'scenario-unverified-call',
+                toolName: 'scenario_unverified_claim',
+                arguments: {},
+                status: 'failed',
+                result: {
+                  ok: false,
+                  summary: 'Model-visible but unverified claim.',
+                  data: null,
+                  artifactRefs: ['artifact:must-not-propagate'],
+                  truncated: false,
+                  outcome: 'confirmed',
+                  verification: {
+                    status: 'unverified',
+                    summary: 'No durable verification.',
+                    evidenceRefs: ['artifact:also-must-not-propagate'],
+                  },
+                },
+              },
+            ],
           },
-        },
-        {
-          sourceModelStepId: 'scenario-mutation-model-step',
-          batchIndex: 1,
-          batchSize: 2,
-          providerCallId: 'scenario-unverified-call',
-          toolName: 'scenario_unverified_claim',
-          arguments: {},
-          status: 'failed',
-          result: {
-            ok: false,
-            summary: 'Model-visible but unverified claim.',
-            data: null,
-            artifactRefs: ['artifact:must-not-propagate'],
-            truncated: false,
-            outcome: 'confirmed',
-            verification: {
-              status: 'unverified',
-              summary: 'No durable verification.',
-              evidenceRefs: ['artifact:also-must-not-propagate'],
-            },
-          },
-        },
-      ],
+        ],
+      }),
     } as never,
     stateCommit as never,
     { send: async () => undefined } as never,
@@ -523,6 +529,71 @@ export const subagentGovernedMutationScenario = async () => {
     },
   );
   const forbiddenInspection = await misdeclaredWorkspaceMutationTool.inspect({}, mutationContext, 1);
+  const longEvidence = new SubagentCompletionCoordinator(
+    null!,
+    null!,
+    {
+      contextHistory: async () => ({
+        units: Array.from({ length: 65 }, (_, index) => ({
+          exchanges: [
+            {
+              toolName: 'scenario_verified',
+              result: {
+                ok: true,
+                summary: `Evidence ${index}`,
+                artifactRefs: [index === 0 ? 'early-evidence' : `evidence-${index}`],
+                outcome: 'confirmed',
+                verification: { status: 'verified', summary: 'Verified.', evidenceRefs: [] },
+              },
+            },
+          ],
+        })),
+      }),
+    } as never,
+    null!,
+    null!,
+    null!,
+    null!,
+    null!,
+  );
+  await assert.rejects(
+    longEvidence.verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId),
+    /SUBAGENT_EVIDENCE_TOO_LARGE/,
+    'handoff reference overflow must not silently discard early evidence',
+  );
+  const earlyEvidence = new SubagentCompletionCoordinator(
+    null!,
+    null!,
+    {
+      contextHistory: async () => ({
+        units: Array.from({ length: 40 }, (_, index) => ({
+          exchanges: [
+            {
+              toolName: 'scenario_verified',
+              result: {
+                ok: true,
+                summary: `Evidence ${index}`,
+                artifactRefs: index === 0 ? ['early-evidence'] : [],
+                outcome: 'confirmed',
+                verification: { status: 'verified', summary: 'Verified.', evidenceRefs: [] },
+              },
+            },
+          ],
+        })),
+      }),
+    } as never,
+    null!,
+    null!,
+    null!,
+    null!,
+    null!,
+  );
+  assert.deepEqual(
+    (await earlyEvidence.verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId))
+      .artifactRefs,
+    ['early-evidence'],
+    'verified reference beyond the previous 32-batch window must survive',
+  );
   executionOrder.length = 0;
   await (
     mutationExecutor as unknown as {

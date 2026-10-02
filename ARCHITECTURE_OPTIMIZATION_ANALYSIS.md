@@ -450,7 +450,7 @@ Mutation 路径的行为不同：`GovernedMutationExecutor` 会调用 `refreshMu
 
 ## 22. Subagent Terminal Evidence 只从最近 32 个 Tool Batch 回收，长期 Delegation 会丢失早期已验证证据
 
-> 确认问题（completion 引用窗口限制）：核对 collaboration 的 verifiedRuntimeEvidence 和 repository recentRuntimeToolExchanges 查询。窗口外引用不进入该 handoff，不是数据库 Artifact 被删除；默认 maxSteps≤24 模板通常不受影响。长自定义 delegation 的行为未验证。
+> 已修复：completion 从 contextHistory 的完整 durable 工具历史收集成功、confirmed＋verified 引用，不再限最近 32 批。保留 64 refs／16 个有界工具摘要；超过引用上限显式 SUBAGENT_EVIDENCE_TOO_LARGE，历史读取失败不能静默变成成功无证据 completion。场景验证 40 批早期引用及 65 refs 明确拒绝；Artifact 数据不因 handoff 边界删除。
 
 Subagent 在准备 terminal completion 时，会调用：
 
@@ -461,15 +461,15 @@ verifiedRuntimeEvidence(scope, runId, runtimeId);
 这个方法的唯一 Tool evidence 来源是：
 
 ```ts
-recentRuntimeToolExchanges(scope, runId, runtimeId, 32);
+contextHistory(scope, runId, runtimeId);
 ```
 
-Repository 实现不是查询全部 verified Tool，而是先按 `source_model_step_id` 取最近 32 个 Tool batch：
+Repository 提供完整有界 durable 历史（超过 10000 批显式拒绝），completion 不先取最近窗口：
 
 ```sql
 GROUP BY source_model_step_id
 ORDER BY batch_created_at DESC
-LIMIT ?
+-- 全部历史，有显式容量上限
 ```
 
 然后只在这些 batch 中收集：
@@ -477,6 +477,7 @@ LIMIT ?
 ```text
 result.outcome = confirmed
 result.verification.status = verified
+result.ok = true
 ```
 
 得到的 refs 随后被写入：
