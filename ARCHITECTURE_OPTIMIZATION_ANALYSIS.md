@@ -1408,7 +1408,9 @@ startCommand/openShell 仅在发请求前 assertOpen，回调成功后未重新�
 
 解压直接写目标目录，没有 staging tree swap 或回滚。一般 zip/tar 解压允许失败前已产生部分结果；待确认产品对 partial outcome 的提示、刷新和未知 writer 收敛是否充分，而非要求所有解压都事务化。
 
-## 66. Audit Log 非原子 retention 在并发写入下可能过度裁剪历史
+## 66. Audit Log 并发 retention 过度裁剪（已修复）
+
+> 已修复：add 的 insert/count/prune 同一排他事务，timestamp/id 稳定裁剪至 50,000；不会并发共享旧 count 再额外删行。Audit service 原 best-effort 业务契约保留。下文为原问题证据。
 
 > 确认问题（可能过度裁剪）：`sqlite-audit-log.repository.ts:24–34` insert/count/delete 不在同一事务。并发相同 count 后的 DELETE 各自重新选最旧记录，会裁剪不同的额外旧行，不是“重复删除同一批已经删除的行”；未跑并发 retention 测试。
 

@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Audit repository add 在排他事务内 insert/count/prune 至 50,000，以 timestamp/id 选最旧；事务失败整体 rollback，service 继续持有审计失败不逆转业务的 best-effort 契约。
+
 Remote Archive extraction 为直接输出、可部分成功契约，不是 staged-tree transaction；known failed/cancelled 不表示零副作用，unknown 维持 mutation quarantine。只有数值 exit evidence 证明 command 退出，不新增 partial inventory／自动 rollback。
 
 SshExecutionTransportAdapter 的 exec/shell callback 在发布 session 前重检 open，晚到 channel destroy/reject；teardown 后不加入 owned sets。此为本地 lifecycle fence，不等同已复现 ssh2 OS 泄漏或远端退出证明。

@@ -21,17 +21,19 @@ export class SqliteAuditLogRepository implements AuditLogRepository {
         value = JSON.stringify({ error: 'Failed to stringify details' });
       }
     }
-    await this.db.execute('INSERT INTO audit_logs (timestamp,action_type,details) VALUES (?,?,?)', [
-      Math.floor(Date.now() / 1000),
-      actionType,
-      value,
-    ]);
-    const count = (await this.db.queryOne<{ total: number }>('SELECT COUNT(*) AS total FROM audit_logs'))?.total ?? 0;
-    if (count > 50000)
-      await this.db.execute(
-        'DELETE FROM audit_logs WHERE id IN (SELECT id FROM audit_logs ORDER BY timestamp ASC LIMIT ?)',
-        [count - 50000],
-      );
+    await this.db.transaction(async (tx) => {
+      await tx.execute('INSERT INTO audit_logs (timestamp,action_type,details) VALUES (?,?,?)', [
+        Math.floor(Date.now() / 1000),
+        actionType,
+        value,
+      ]);
+      const count = (await tx.queryOne<{ total: number }>('SELECT COUNT(*) AS total FROM audit_logs'))?.total ?? 0;
+      if (count > 50000)
+        await tx.execute(
+          'DELETE FROM audit_logs WHERE id IN (SELECT id FROM audit_logs ORDER BY timestamp ASC,id ASC LIMIT ?)',
+          [count - 50000],
+        );
+    });
   }
   async list(options: {
     limit: number;
