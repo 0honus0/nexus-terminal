@@ -867,9 +867,9 @@ HTTP response 层虽然会对 CAPTCHA secret、SMTP password 和 Telegram token 
 
 因此只要 SQLite 文件、数据库备份前的本地数据目录或数据库读取权限泄露，攻击者不需要 Nexus encryption key 就可以直接取得 TOTP seed、CAPTCHA provider secret、SMTP/Telegram/Webhook credential。当前 credential protection boundary 在不同模块之间并不一致。
 
-## 39. Remote Text Save 直接截断目标文件，写入中断会破坏原内容
+## 39. Remote Text Save 先截断原文件（已修复）
 
-> 确认问题：`platform/filesystem/remote-text-writer.service.ts` 对最终路径 openWrite，SSH adapter 默认 flags=w；没有 temp+replaceFile。guard 对 unknown 的隔离不能恢复被截断内容；未执行破坏性断链测试。
+> 已修复：write 使用同目录随机唯一临时文件 wx，保留原 mode 与编码，finished 后 replaceFile；失败 destroy/drain 后清理临时文件，不提前截断目标。create 的独占新建语义不变，atomicity 仍取决于 transport 的 replaceFile contract，unknown 不声称回滚。下文为原问题证据。
 
 `RemoteTextWriterService.write()` 当前保存已有文件时直接执行：
 

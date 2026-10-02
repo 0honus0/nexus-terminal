@@ -1,4 +1,6 @@
 import { finished } from 'node:stream/promises';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import * as iconv from 'iconv-lite';
 import type { RemoteFileSystem } from './remote-filesystem';
 import type { RemoteFileEntry } from './file-entry';
@@ -15,9 +17,21 @@ export class RemoteTextWriterService {
   ): Promise<RemoteFileEntry | null> {
     const normalizedEncoding = this.resolveRequestedEncoding(encoding);
     const original = await filesystem.metadata(remotePath).catch(() => null);
-    const stream = await filesystem.openWrite(remotePath, original ? { mode: original.mode } : undefined);
-    stream.end(this.encodeContent(content, normalizedEncoding));
-    await finished(stream);
+    const temporaryPath = path.posix.join(path.posix.dirname(remotePath), `.nexus-save-${randomUUID()}.part`);
+    const stream = await filesystem.openWrite(temporaryPath, {
+      flags: 'wx',
+      ...(original ? { mode: original.mode } : {}),
+    });
+    try {
+      stream.end(this.encodeContent(content, normalizedEncoding));
+      await finished(stream);
+      await filesystem.replaceFile(temporaryPath, remotePath);
+    } catch (error) {
+      stream.destroy();
+      await finished(stream).catch(() => undefined);
+      await filesystem.removeFile(temporaryPath, { ignoreMissing: true });
+      throw error;
+    }
     const metadata = await filesystem.metadata(remotePath).catch(() => null);
     return metadata ? toRemoteFileEntry(remotePath, metadata) : null;
   }
