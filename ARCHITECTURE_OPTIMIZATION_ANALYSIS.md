@@ -1359,7 +1359,9 @@ response.clearCookie(...);
 
 结果是 logout 只阻止后续 HTTP 请求和新的 WebSocket upgrade，没有同步撤销已经授予的长期 capability。对于 Workspace shell/filesystem、Agent run/control、upload 或 remote desktop 这类长连接能力，认证生命周期和 session 生命周期实际发生了分离。
 
-## 63. WebSocket Origin 校验无条件信任 `X-Forwarded-Host` / `X-Forwarded-Proto`，可被直连客户端自满足
+## 63. WebSocket Origin 无条件信任 forwarded headers（已修复）
+
+> 已修复：forwarded host/proto 与 client IP 共用 TCP peer trusted-proxy gate，非受信直连只采信 Host/TLS；保留显式 allowed origin/originless。现有 private/loopback/link-local/unique-local 信任模型未收紧为专用代理 allowlist；代理须覆盖客户端转发头。下文为原问题证据。
 
 > 确认问题（Origin 配置信任缺口）：`websocket-server.ts:117–127` 未先检查 proxy peer 即采信 forwarded host/proto。普通浏览器 WebSocket API 不能任意设置这些 headers，且 Origin 不能替代身份认证；不声称仅凭这点已能跨站盗用 cookie。
 

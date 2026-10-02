@@ -121,9 +121,12 @@ const allowedOrigin = (request: http.IncomingMessage, config: WebSocketRuntimeOp
   if (!origin) return config.allowOriginlessWebSockets;
   try {
     const allowed = new Set(config.passkeyRelyingParties.map((entry) => new URL(entry.origin).origin));
-    const host = firstHeaderValue(request.headers['x-forwarded-host']) || firstHeaderValue(request.headers.host);
+    const trustedProxy = isTrustedProxyAddress(request.socket.remoteAddress);
+    const host =
+      (trustedProxy ? firstHeaderValue(request.headers['x-forwarded-host']) : undefined) ||
+      firstHeaderValue(request.headers.host);
     const protocol =
-      firstHeaderValue(request.headers['x-forwarded-proto']) ||
+      (trustedProxy ? firstHeaderValue(request.headers['x-forwarded-proto']) : undefined) ||
       ((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted ? 'https' : 'http');
     if (host) allowed.add(new URL(`${protocol}://${host}`).origin);
     return allowed.has(new URL(origin).origin);

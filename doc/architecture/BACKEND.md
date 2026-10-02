@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+WebSocket allowedOrigin 的 forwarded host/proto 共用 isTrustedProxyAddress peer gate，与 client IP 边界一致；非受信直连用 Host/TLS，静态 origin/originless 保留。既有 private-range proxy trust 不是专用代理 allowlist。
+
 WebSocket owner track sessionId 并提供 revokeSession，HTTP logout destroySession 后通过 Bootstrap port 撤销对应 socket/protocol。revocation epoch 防异步 auth admission 跨 logout 发布，所有 transport kind 共用身份绑定；不是全用户 revoke 或副作用 rollback。
 
 SshResourceStatus freshness 为 startedAt + refresh，inFlight 按 host/config fingerprint 合并，批量最多两 worker；慢完成可以立即过期，不延长旧采样 freshness。未建立基准测试结论。
