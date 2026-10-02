@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Workspace setup/uninstall 使用 confirmationId 作为稳定 admin attempt identity；先等 Runner succeeded，再 CAS settings、删除 confirmation。非成功保留配置/确认，重复确认命令 replay 不重放副作用。远端与 settings 不构成原子事务，CAS 冲突需用户检查/re-preview；不实施盲目补偿。
+
 Workspace admin dispatch 使用 attemptId 派生命令 hash，repository transaction 对相同 request JSON 的 pending/running/unknown 做 active-only replay，终态允许新的主动请求。Workspace lifecycle hash 去重仍保持，不修改历史命令或将 unknown 自动重试。
 
 Workspace repository create transaction 在 replay 后检查 run/runtime 与 user-wide active quota，再写 command/Workspace；CreateWorkspaceRecord 携带 effective maxActiveWorkspaces，Service 不保留事务外 count admission。配额不按 App 分裂，配置快照未新增 settings CAS。

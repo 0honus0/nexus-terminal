@@ -1024,9 +1024,9 @@ if (command.id !== commandId) {
 
 这些 endpoint 并没有由调用方提供的显式 idempotency key；当前 operation hash 实际同时承担了去重和 retry identity，导致 transient failure 不能通过正常“再试一次”恢复。
 
-## 45. Workspace setup / pack uninstall 先提交 Settings，再执行 Runner 命令，失败后形成跨 owner 半提交
+## 45. Workspace setup / uninstall 先提交 Settings（已修复提前提交）
 
-> 确认问题：`workspace-runtime-management.service.ts` 先 settings.patch/delete confirmation，后 adminAction。Settings revision 已有 CAS，但不覆盖 Runner command 成败；命令失败时需 reconciliation，不能靠 CAS 自动回滚。
+> 已修复提前提交：Runner 命令使用 confirmationId 稳定身份并等待终态，明确 succeeded 才 CAS settings／删除确认。pending/failed/unknown 不改配置、不消费确认；同确认重试复用原命令。Runner 已成功而 settings CAS 失败保留确认并报错，不盲回滚远端或覆盖新设置；这不是跨存储原子事务，也未提供自动恢复配置冲突。下文为原问题证据。
 
 `WorkspaceRuntimeManagementService.confirmSetup()` 的提交顺序是：
 

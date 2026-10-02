@@ -183,9 +183,16 @@ export class WorkspaceRuntimeManagementService {
     );
     const selections = normalizeSelections(record(confirmation.payload).selections);
     const plan = setupPlan(catalog, settings.requestedSettings.workspaceRuntime, selections);
+    const command = await this.runtime.adminAction(
+      userId,
+      'packInstall',
+      asJson({ packs: plan.packs }),
+      confirmationId,
+    );
+    if (command.status !== 'succeeded') return command;
     await this.settings.patch(userId, { workspaceRuntime: plan.workspaceRuntime }, expectedVersion);
     await this.confirmations.delete(userId, confirmationId);
-    return this.runtime.adminAction(userId, 'packInstall', asJson({ packs: plan.packs }));
+    return command;
   }
 
   async installPack(userId: number, familyId: string, versionId: string): Promise<WorkspaceRuntimeCommandView> {
@@ -275,11 +282,18 @@ export class WorkspaceRuntimeManagementService {
         : [],
       defaultVersionId: typeof payload.defaultVersionId === 'string' ? payload.defaultVersionId : null,
     };
+    const command = await this.runtime.adminAction(
+      userId,
+      'packUninstall',
+      asJson({ pack: packRef(pack) }),
+      confirmationId,
+    );
+    if (command.status !== 'succeeded') return command;
     if (!isDeepStrictEqual(next, settings.requestedSettings.workspaceRuntime)) {
       await this.settings.patch(userId, { workspaceRuntime: next }, expectedVersion);
     }
     await this.confirmations.delete(userId, confirmationId);
-    return this.runtime.adminAction(userId, 'packUninstall', asJson({ pack: packRef(pack) }));
+    return command;
   }
 
   async previewRuntimeCleanup(userId: number, expectedVersion: number): Promise<WorkspaceRuntimeCleanupPreview> {

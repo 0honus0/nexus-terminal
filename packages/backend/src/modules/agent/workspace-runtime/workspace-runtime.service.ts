@@ -627,9 +627,14 @@ export class WorkspaceRuntimeService {
     }
   }
 
-  async adminAction(userId: number, action: string, payload: JsonValue): Promise<WorkspaceRuntimeCommandView> {
+  async adminAction(
+    userId: number,
+    action: string,
+    payload: JsonValue,
+    confirmationId?: string,
+  ): Promise<WorkspaceRuntimeCommandView> {
     const input = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
-    return this.dispatch({ userId, appId: ADMIN_SCOPE.appId }, action, undefined, 1, input);
+    return this.dispatch({ userId, appId: ADMIN_SCOPE.appId }, action, undefined, 1, input, true, true, confirmationId);
   }
 
   async reconcile(limit = 100): Promise<number> {
@@ -701,6 +706,7 @@ export class WorkspaceRuntimeService {
     payload: JsonValue,
     syncWorkspace = true,
     waitForTerminal = false,
+    confirmationId?: string,
   ): Promise<WorkspaceRuntimeCommandView> {
     if (workspaceId && (action === 'stop' || action === 'restart' || action === 'delete')) {
       this.runtimeHooks.workspaceInvalidated?.(workspaceId, generation);
@@ -714,7 +720,7 @@ export class WorkspaceRuntimeService {
         action,
         generation,
         payload,
-        ...(scope.appId === ADMIN_SCOPE.appId ? { attemptId: commandId } : {}),
+        ...(scope.appId === ADMIN_SCOPE.appId ? { attemptId: confirmationId ?? commandId } : {}),
       },
       this.cryptoHash,
     );
@@ -723,7 +729,7 @@ export class WorkspaceRuntimeService {
     const wirePayload: JsonValue =
       payload && typeof payload === 'object' && !Array.isArray(payload) ? { ...payload } : {};
     const command = await this.repository.createCommand({
-      replayActiveOnly: scope.appId === ADMIN_SCOPE.appId,
+      replayActiveOnly: scope.appId === ADMIN_SCOPE.appId && !confirmationId,
       scope,
       id: commandId,
       workspaceId,
