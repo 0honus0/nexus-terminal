@@ -1324,7 +1324,9 @@ const sourceScp = await this.commandPath(source, 'scp');
 
 validateJumpChain 接受带自身 route 的 SSH Connection，resolveJumpChain 将其投影成 host/credential，未保留 route/proxy/jumpChain。待确认 hop 的定义是“完整连接配置”还是“从前一跳连接的主机”；后者并不要求执行被引用连接的独立 route。
 
-## 60. SSH Resource Status 按采样开始时间计算 TTL 的代价待测
+## 60. SSH Resource Status TTL（已核对：保留采样开始 freshness）
+
+> 已核对：采样开始 TTL 是有效 freshness 策略，已有 fingerprint/inFlight 去重和批量两 worker 限制；慢采集完成即过期不单独证明缺陷。文档明确当前策略，未测量性能代价，不声称完成性能优化；后续若有负载证据再立项。下文为原核对背景。
 
 > 待确认（freshness 定义）：`ssh-resource-status.service.ts` 用 startedAt+refresh 计算 expiry，并有 inFlight 去重。以采样开始计时可以是有意 freshness policy；未测慢采集是否造成实际频率／负载问题。
 
