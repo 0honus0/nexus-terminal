@@ -10,6 +10,8 @@ Backend Plugin Host→child 协议 writer 对 callback/drain 持有硬 deadline�
 
 PluginPackageInstallCoordinator 在 package verify 得到规范 appId 后，对同一 `userId + appId` 的首次 install 串行执行；进入串行区后重新读取并校验 stage，再读取 App state／Installation，并把 package install、Version 注册、App/Installation 提交与 stage finalization 保持在同一 install 生命周期内。不同版本的并发首次安装只能有一个进入提交路径，后到请求基于最新 installation 收敛为 upgrade-required，不能制造持久 activeVersion/version 分叉。
 
+Terminal Theme 删除由 SQLite repository 在单一事务中删除 user theme，并仅在删除实际成功时清理值等于该 theme id 的 `appearance_settings.activeTerminalThemeId`；不存在／preset 删除不会清理引用。Theme 生命周期和 Appearance 当前引用因此不会提交为悬挂状态。
+
 Workspace deleted 成功投影在同一 status CAS 清 retained，Runner journal 同步释放；persistent root 仍属 preview/confirm runtimeCleanup，legacy deleted+retained 不阻止候选，cleanup projection 清 retention。
 
 Plugin installation 与独立 Workspace generation 是不同 lifecycle owner；App uninstall/drain 不级联 Workspace Runner process，后者 stop/delete 经 RunnerCommandExecutor 回收，冻结版本不重绑定当前 installation。

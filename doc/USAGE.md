@@ -279,6 +279,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - Backend Plugin `intents.create` 必须提供稳定 UUID `operationId`；插件应在首次提交前持久保存该 ID，未知提交结果时以同 ID／同 payload 重试，Host replay 原 receipt。复用 ID 修改 payload 会拒绝；这不保证接收方的外部动作只执行一次。
 - Backend Plugin 若停止读取 Host RPC response，Host 对协议写入与关闭前 active RPC drain 都有硬 deadline；超时会把该 runtime 视为协议失败并进入进程终止，Plugin uninstall／upgrade 不会无限卡在等待 stdin drain。
 - 同一用户下同一 Plugin App 的首次 install 串行提交；并发安装不同版本时，先完成的版本成为当前 installation，后到请求会要求走 upgrade，不会把 App activeVersion 与 Installation version 写成不同版本。
+- 删除当前使用的自定义 Terminal Theme 时，Backend 会在同一持久化事务中清除 `activeTerminalThemeId`；直接调用删除 API 也不会留下指向已删除主题的悬挂设置。
 - Workspace delete 成功后释放保留标记，Run／Thread 不再因该 Workspace retention 永久阻塞删除；项目文件树随后可通过 runtime cleanup 清理，delete 本身仍先删除运行 generation。stop 不释放项目保留，失败或结果未知不视为删除成功；旧 deleted 保留记录也可清理。
 - Plugin App 升级／卸载的 drain 针对 App Run 与 Backend runtime，不级联停止独立 Workspace 的冻结 Runner Plugin。已有 Workspace 可继续执行旧版本；如需停止旧代码，应先显式 stop／delete 相应 Workspace。
 - Plugin Frontend Run 订阅单实例最多 2 个、当前页面所有 Plugin 合计最多 4 个，同实例不能重复订阅同一 Run；取消完成释放 transport 后归还名额，超限调用直接拒绝，避免 Plugin 占满 Host 共享订阅槽。

@@ -2781,7 +2781,9 @@ upgrade / uninstall 也要求 installation version 与 App activeVersion 一致�
 
 ## 107. Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`
 
-> 确认问题：TerminalThemeService.delete 不维护 setting，Appearance get 未验证非空 ID，initialize 只在 null 选默认。Frontend 有 default fallback 所以不一定白屏；持久 reference 不一致仍存在。
+> 已修复：SQLite Terminal Theme repository 将 user theme 删除与 `appearance_settings.activeTerminalThemeId` 条件清理放入同一事务；只有目标 user theme 确实删除时才把值等于该 ID 的 active reference 写为 `null`，删除其它主题／preset 不会误清。Agent 场景用真实 SQLite 验证删除非当前主题保持引用、删除当前主题同步清空 durable reference。下文为原问题证据。
+
+> 原问题证据：TerminalThemeService.delete 不维护 setting，Appearance get 未验证非空 ID，initialize 只在 null 选默认。Frontend 有 default fallback 所以不一定白屏；持久 reference 不一致仍存在。
 
 当前“正在使用哪个终端主题”由 `AppearanceSettingsService` 持久化为一个普通 setting，并且写入时会验证目标主题存在：
 
@@ -4211,7 +4213,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项当前分类：**未解决确认问题 24 项，待确认 15 项，已修复 79 项，已关闭／核对／澄清 22 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
+原 144 项当前分类：**未解决确认问题 23 项，待确认 15 项，已修复 80 项，已关闭／核对／澄清 22 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4317,7 +4319,7 @@ await terminateAllManagedProcesses();
 | 104    | 已修复   | Backend Plugin 的 AppIntent create 丢失了已经存在的 idempotency owner；崩溃窗口会把一次跨 App 操作重复提交为两张 receipt                                                     |
 | 105    | 已修复   | Backend Plugin 的 Host RPC 没有 response-drain deadline；一个堵住 stdin 的 Plugin 可以让 uninstall / upgrade 永远卡在 SIGTERM 之前                                           |
 | 106    | 已修复   | Plugin 首次安装没有 per-App serialization；两个版本并发 install 可以把 App activeVersion 与 Installation version 写成永久冲突                                                |
-| 107    | 确认问题 | Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`                                               |
+| 107    | 已修复   | Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`                                               |
 | 108    | 确认问题 | Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发                                 |
 | 109    | 确认问题 | SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志                                                                           |
 | 110    | 确认问题 | Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合                                        |

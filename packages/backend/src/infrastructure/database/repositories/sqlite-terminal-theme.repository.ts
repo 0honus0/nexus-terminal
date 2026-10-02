@@ -169,10 +169,16 @@ export class SqliteTerminalThemeRepository implements TerminalThemeRepository {
   }
 
   async deleteUser(id: number): Promise<boolean> {
-    return (
-      (await this.database.execute("DELETE FROM terminal_themes WHERE id = ? AND theme_type = 'user'", [id])).changes >
-      0
-    );
+    const now = Math.floor(Date.now() / 1000);
+    return this.database.transaction(async (database) => {
+      const deleted = await database.execute("DELETE FROM terminal_themes WHERE id = ? AND theme_type = 'user'", [id]);
+      if (deleted.changes !== 1) return false;
+      await database.execute(
+        "UPDATE appearance_settings SET value='null', updated_at=? WHERE key='activeTerminalThemeId' AND value=?",
+        [now, String(id)],
+      );
+      return true;
+    });
   }
 
   async ensurePresets(presets: readonly TerminalThemePreset[]): Promise<void> {

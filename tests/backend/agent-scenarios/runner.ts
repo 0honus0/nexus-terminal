@@ -4,6 +4,7 @@ import { artifactSingleDeleteProductScenario } from './artifact-single-delete-pr
 import { memoryProductClosureScenario } from './memory-product-closure.scenario';
 import { pluginAppIntentSdkScenario } from './plugin-app-intent-sdk.scenario';
 import { pluginInstallSerializationScenario } from './plugin-install-serialization.scenario';
+import { terminalThemeReferenceIntegrityScenario } from './terminal-theme-reference-integrity.scenario';
 import { providerPromptCacheHintScenario } from './provider-prompt-cache-hint.scenario';
 
 import { unifiedFileCapabilityScenario } from './unified-file-capability.scenario';
@@ -160,6 +161,7 @@ const scenarios = new Map<string, Scenario>([
   ['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],
   ['runtime/plugin-app-intent-sdk', pluginAppIntentSdkScenario],
   ['runtime/plugin-install-serialization', pluginInstallSerializationScenario],
+  ['runtime/terminal-theme-reference-integrity', terminalThemeReferenceIntegrityScenario],
   ['runtime/memory-product-closure', memoryProductClosureScenario],
   ['workspace/suspended-session-ownership', suspendedSessionOwnershipScenario],
   ['browser/target-scoped-revision', browserTargetScopedRevisionScenario],
