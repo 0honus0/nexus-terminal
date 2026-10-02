@@ -163,7 +163,7 @@ Runner 的 Workspace command capture 仍有独立输出上限；本能力只弥�
 
 ## 15. Root Agent 的嵌套 `AGENTS.md` 发现依赖历史 Tool Call，首次触达存在 Instruction Gap
 
-> 确认时序缺口（源码路径）：Root discovery 仍从 `/workspace/work` 与 recent assistant tool calls 取目录，snapshot 查询仍限最近 50 entries；Subagent 另从 delegation 文本取 targets。首次尚未出现在历史中的嵌套目录规则不保证在生成本轮 proposal 前加载。尚未运行真实规则约束场景，不能据此声称所有首次操作都会违反规则。
+> 已修复明确 working-set 的首次发现缺口：Root 在生成 proposal 前优先从当前 pending input、最新有效输入、Goal 与活动 Plan 中发现显式 Workspace 路径，再补探索历史；现有 Agent 场景验证无历史时嵌套规则已进入模型请求。参考 OpenCode V2 的按目标 scope 发现原则，不扫描全仓，不承诺预知模型自行选择的任意目录；规则不是安全授权 owner。
 
 Root Agent 在每次 Model step 之前通过 `projectInstructionTargetDirectories(snapshot)` 决定需要加载哪些 repository project instructions。
 
@@ -190,7 +190,7 @@ workspace_code_intel.path
 ORDER BY sequence DESC LIMIT 50
 ```
 
-Root 的 target discovery 不解析当前 user input、当前 Run goal 或其它当前 working-set 描述中的路径。与此不同，Subagent 的 `projectInstructionTargets(delegation)` 会直接从 delegation objective / constraints 中提取 `/workspace/work/...` 路径。
+Root 的 target discovery 优先解析当前有效输入、Goal 与 pending／in_progress Plan 中显式的绝对 Workspace 路径和相对项目路径；归一化后只接受 `/workspace/work` 内目录，再补最近 Tool 参数。最多 8 个 target，不改变规则 source 的授权、根目录与字节边界。
 
 Runner 侧的 `resolveProjectInstructions()` 只会沿 Backend 已传入的 target directory，从 nearest project root 到该 target 的 ancestor chain 查找 `AGENTS.md`。因此，如果仓库存在：
 
@@ -199,9 +199,9 @@ Runner 侧的 `resolveProjectInstructions()` 只会沿 Backend 已传入的 targ
 /workspace/work/packages/foo/AGENTS.md
 ```
 
-而 Root 首次准备访问 `packages/foo/...`，在此前没有相关历史 tool call 时，本轮 Model context 只保证包含根级 instruction。`packages/foo/AGENTS.md` 需要等相关路径已经出现在历史 tool call 后，后续 Model step 才可能被发现。
+当前请求或 Goal 明确指定 `packages/foo/...` 时，即使没有历史 Tool Call，本轮 Model context 也会沿该 target 的 ancestor chain 加载嵌套规则。模型临时自行选址仍依赖探索发现，不承诺自然语言路径识别完备。
 
-这使 project instruction discovery 与“已经执行/提出过哪些 Tool”产生时序依赖：用于约束某个目录访问的 instruction，可能在第一次针对该目录生成 Tool call 时尚未进入模型上下文。较早 target 还可能随着 50 条 `recentEntries` 窗口向前移动而退出 discovery source。
+当前任务 working-set 不再仅依赖 50 条 recentEntries 窗口；历史探索范围仍是有界补充，不持久镜像项目规则。
 
 ## 16. Subagent Governed Mutation 在 `ask` 模式下没有交互批准路径
 

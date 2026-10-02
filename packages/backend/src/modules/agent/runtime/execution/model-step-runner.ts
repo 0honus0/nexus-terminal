@@ -85,8 +85,19 @@ const retryAfterMilliseconds = (error: unknown): number => {
 
 const PROJECT_WORK_ROOT = '/workspace/work';
 
-const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] => {
+const projectInstructionTargetDirectories = (snapshot: RunSnapshot, currentText: readonly string[]): string[] => {
   const targets = new Set<string>([PROJECT_WORK_ROOT]);
+  for (const text of currentText) {
+    for (const match of text.matchAll(/(?:\/workspace\/work\/|\b(?:[A-Za-z0-9_.-]+\/)+)[A-Za-z0-9_./-]+/g)) {
+      const raw = match[0];
+      if (raw.length > 4096 || raw.includes('\0')) continue;
+      const logical = path.posix.normalize(raw.startsWith('/') ? raw : `${PROJECT_WORK_ROOT}/${raw}`);
+      if (!logical.startsWith(PROJECT_WORK_ROOT + '/')) continue;
+      const basename = path.posix.basename(logical);
+      targets.add(basename.includes('.') && !basename.startsWith('.') ? path.posix.dirname(logical) : logical);
+      if (targets.size >= 8) return [...targets];
+    }
+  }
   for (const entry of [...snapshot.recentEntries].reverse()) {
     if (targets.size >= 8) break;
     if (
@@ -274,7 +285,14 @@ export class ModelStepRunner {
     const currentInput = currentProjection.ordered.at(-1) ?? latestInput(snapshot);
     let projectInstructions: ProjectInstructionSnapshot[] | undefined;
     if (this.projectInstructionSource && runtimeId) {
-      const targetDirectories = projectInstructionTargetDirectories(snapshot);
+      const targetDirectories = projectInstructionTargetDirectories(snapshot, [
+        ...currentProjection.pending.map((input) => input.text),
+        currentInput?.text ?? '',
+        snapshot.goal.text ?? '',
+        ...snapshot.plan.items
+          .filter((item) => item.status === 'in_progress' || item.status === 'pending')
+          .flatMap((item) => [item.title, item.detail ?? '']),
+      ]);
       try {
         const projection = await this.projectInstructionSource.load(
           scope,

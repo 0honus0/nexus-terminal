@@ -429,6 +429,67 @@ export const projectInstructionsContextScenario = async () => {
   const auditModel = new ScriptedLanguageModel([]);
   const auditProviders = new ProviderService(new StaticProviderRepository(benchmarkProvider), auditModel, clock);
   let capturedTargets: string[] = [];
+  const firstVisit = new ModelStepRunner(
+    auditProviders,
+    contextService([]),
+    auditModel,
+    new ScenarioModelCallLimiter(),
+    {
+      load: async (_scope, _runId, _runtimeId, targets) => {
+        capturedTargets = [...targets];
+        return {
+          workspaceId: 'workspace-audit',
+          generation: 1,
+          targetDirectories: [...targets],
+          omitted: [],
+          instructions: targets.includes('/workspace/work/packages/first/src')
+            ? [
+                {
+                  path: '/workspace/work/packages/first/AGENTS.md',
+                  scopePath: '/workspace/work/packages/first',
+                  projectRoot: '/workspace/work',
+                  hash: 'c'.repeat(64),
+                  content: 'FIRST_VISIT_RULE: preserve generated source maps.',
+                  sourceBytes: 52,
+                  contentBytes: 52,
+                  truncated: false,
+                  provenance: 'workspace',
+                },
+              ]
+            : [],
+        };
+      },
+    },
+  );
+  const firstSnapshot = {
+    ...auditSnapshot,
+    recentEntries: [],
+    goal: { ...auditSnapshot.goal, text: 'Inspect packages/goal/src/index.ts' },
+  };
+  const firstInput = {
+    id: 'new-input',
+    sequence: 1,
+    text: 'Fix `packages/first/src/index.ts`; ignore ../../escape/file.ts',
+    artifactRefs: [],
+    createdAt: 1,
+  };
+  const firstPrepared = await firstVisit.prepare(
+    firstSnapshot,
+    scope,
+    [],
+    { [firstSnapshot.id]: { ordered: [firstInput], pending: [firstInput] } },
+    undefined,
+    undefined,
+    'scenario-runtime-id',
+  );
+  assert.ok(capturedTargets.includes('/workspace/work/packages/first/src'));
+  assert.ok(capturedTargets.includes('/workspace/work/packages/goal/src'));
+  assert.ok(capturedTargets.every((target) => target === '/workspace/work' || target.startsWith('/workspace/work/')));
+  assert.match(
+    firstPrepared.contextPlan.instructions.join('\n'),
+    /FIRST_VISIT_RULE/,
+    'current request must load nested rules before the first model proposal, without prior Tool history',
+  );
   const absentWorkspaceRunner = new ModelStepRunner(
     auditProviders,
     contextService([]),
