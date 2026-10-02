@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Jump connector总deadline remaining覆盖handshake/forward；forward single-settle timer/abort/close/error和late destroy，catch route owner统一close，不以readyTimeout覆盖channel-open。
+
 Artifact cleanupPreview SQL LIMIT1000按created_at/id；confirm保留历史10000 decoder兼容，selection为批次快照且重检保护，不全量加载候选。
 
 Tag setConnections事务前bounded/positive/dedup，事务内先查tag和connections再delete/insert；HTTP非法400、不存在404，空数组不绕过target存在校验。

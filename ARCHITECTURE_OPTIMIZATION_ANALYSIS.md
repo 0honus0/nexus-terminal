@@ -1883,7 +1883,9 @@ const decodeCleanupSelection = (raw: string): CleanupSelectionItem[] => {
 
 此外 preview 在达到阈值前已经无界加载全部候选行并构造完整 JSON；confirm 对最多 10,000 项又在一个 transaction 内逐项查询保护状态并更新。因此这个缺陷同时把“无法确认”的 correctness 问题和大 selection 的 DB/heap 放大绑定在了同一条清理路径上。
 
-## 88. SSH Jump Chain 的 `forwardOut()` 不受 connect timeout 或 AbortSignal 控制；“15 秒连接测试”和 Agent deadline 都可以无限挂在跳板通道打开阶段
+## 88. SSH Jump forwarding deadline（已修复）
+
+> 已修复：整route共享deadline，各握手/forward使用remaining；forward timer/signal/close/error settle并cleanup，晚到channel destroy，失败route.close回收hops。不是OS即时退出证明，cleanup可额外耗时。下文为原证据。
 
 > 确认问题（channel-open deadline 缺口）：`ssh-jump.connector.ts:5–7,58` await forward 无 timer/signal；握手 connectSshClient ready 后移除 listener。挂起取决于 SSH peer 保持连接且不应答 channel-open，未构造该远端服务器。
 
