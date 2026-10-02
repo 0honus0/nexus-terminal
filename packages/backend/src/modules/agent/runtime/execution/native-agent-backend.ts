@@ -126,6 +126,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       if (!['created', 'running'].includes(snapshot.status)) return;
 
       if (signal.aborted) {
+        if (['NEW_INPUT', 'GOAL_UPDATED', 'AGENT_QUIESCE'].includes(signalReason(signal) ?? '')) return;
         const cancelled = await this.lifecycle.cancelAtSafeBoundary(snapshot);
         yield { type: 'durable', runId: snapshot.id, cursor: cancelled.eventCursor };
         yield { type: 'settled', run: cancelled.run };

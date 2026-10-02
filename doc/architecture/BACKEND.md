@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Root NativeAgentBackend 循环 safe-boundary 按 abort reason 区分 recoverable interruption 与 durable cancel；NEW_INPUT/GOAL_UPDATED/AGENT_QUIESCE 不写 run.cancelled，已结算 step 不重开。
+
 SSH/Workspace Suspend reset 清理会话与待恢复资源，不清除长期 sweep/subscription；Backup restore 和 resetForE2E 使用 reset，shutdown dispose 才 teardown 长期 owner。
 
 Workspace setup/uninstall 使用 confirmationId 作为稳定 admin attempt identity；先等 Runner succeeded，再 CAS settings、删除 confirmation。非成功保留配置/确认，重复确认命令 replay 不重放副作用。远端与 settings 不构成原子事务，CAS 冲突需用户检查/re-preview；不实施盲目补偿。

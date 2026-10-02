@@ -1067,7 +1067,9 @@ Backup 的 `afterRestore` 当前只重新初始化 Settings、Terminal Theme、A
 
 因此一次成功的 backup import 完成后，Backend 进程仍继续复用已经 dispose 的 `workspaceSuspend` / `sshSuspend` 实例：新的 suspended session 不再由原 sweep timer 回收，Workspace suspend coordinator 也不再接收 ownership revoke 事件。若 restore 在 `beforeRestore` 之后失败，同样会留下这个进程级 teardown，因为失败路径不会执行等价重建。
 
-## 47. Root Agent 的 recoverable abort reason 在主循环 safe-boundary 存在被错误写成 `cancelled` 的竞态
+## 47. Root safe-boundary 错写 recoverable abort 为 cancelled（已修复）
+
+> 已修复：主循环顶部对 NEW_INPUT/GOAL_UPDATED/AGENT_QUIESCE 直接退出执行，不提交业务取消；其他取消保留 durable safe-boundary cancel。已完成 step 不重复 supersede，恢复仍由 scheduler/recovery owner 持有。下文为原问题证据。
 
 > 确认问题：`native-agent-backend.ts:127–131` 对 signal.aborted 无 reason 分支调用 cancelAtSafeBoundary；outer catch 的 recoverable reason 特判不覆盖正常循环进入此处。未控制 settle→下一轮的精确时序复现。
 
