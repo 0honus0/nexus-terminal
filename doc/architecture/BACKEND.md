@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Plugin package cleanup 对 runnerEntry 保守保留：installation count 不是冻结 Run/Workspace 的完整引用 owner，未建立共享 package-reference lease 前禁止 count-then-unlink Runner source。当前 installation 切换与旧 package 文件保留分离。
+
 BackgroundAssetService 单 mutationTail 串行 upload/remove 的读引用、save、setReference、旧文件 cleanup；失败 tail 转 fulfilled 保证后续继续，settings.get(false) 不启动额外引用修复；不是多进程锁或 crash reconciliation。
 
 Agent dispose 与 restore 共用 Plugin resetRuntime owner；closeAll allSettled 等待全部 child，退出成功按实例身份移除，失败保留实例并 AggregateError，不依赖 builtin lifecycle.dispose 枚举 Plugin。

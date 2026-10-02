@@ -2356,6 +2356,8 @@ if (previous && previous !== saved.publicPath) {
 
 ## 100. Plugin 升级会按 installation 引用删除旧 Runner package，但持久 Workspace Profile 仍冻结旧版本；升级后 retained Workspace 再启动会稳定失败
 
+> 已处理（保守 package retention）：带 runnerEntry 的 installed version 不自动清理，避免 installation count 不覆盖冻结 Workspace/Run 引用及 count/unlink 并发窗口。升级/卸载不改写旧 Workspace；旧 Runner package 可持续占盘，未实现共享引用 lease 与自动 GC。下文为原证据。
+
 > 确认问题（package 引用 owner 缺口）：PluginPackageInstallCoordinator cleanup 只 countInstalled；Workspace frozen runnerPlugins 仍引用旧版本，Runner 读取旧 package marker。需要旧版没有其它 installation 引用且 cleanup 执行；未完整升级／重启验证。
 
 Workspace 在创建时会把 Runner Plugin 的真实执行版本冻结进 durable profile：
