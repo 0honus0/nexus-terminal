@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { mkdir, open, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import type { BackupSnapshotPort } from '../../modules/backup/backup.port';
+import { MAX_BACKUP_SNAPSHOT_JSON_BYTES } from '../../modules/backup/backup-limits';
 import type { BackupFileEntry, BackupSnapshot } from '../../modules/backup/backup.types';
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../shared/security/crypto.port';
@@ -145,7 +146,15 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
     // Disk capture must not hold the global database scheduler barrier. The captured
     // tables remain the reference authority; fail closed if the later file view cannot
     // satisfy them. This is reference integrity, not a cross-store point-in-time claim.
-    const files = await this.captureStableFiles();
+    let tableBytes = 1024;
+    for (const [name, rows] of Object.entries(tables)) {
+      tableBytes += Buffer.byteLength(JSON.stringify(name)) + 4;
+      for (const row of rows) {
+        tableBytes += Buffer.byteLength(JSON.stringify(row)) + 1;
+        if (tableBytes > MAX_BACKUP_SNAPSHOT_JSON_BYTES) throw new Error('FULL_BACKUP_SNAPSHOT_LIMIT_EXCEEDED');
+      }
+    }
+    const files = await this.captureStableFiles(MAX_BACKUP_SNAPSHOT_JSON_BYTES - tableBytes);
     this.validateFileReferences(tables, files);
     return { format: 'nexus-terminal-backup', version: 1, createdAt: new Date().toISOString(), tables, files };
   }
@@ -235,10 +244,18 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
     });
   }
 
-  private async captureStableFiles(): Promise<BackupFileEntry[]> {
+  private async captureStableFiles(budget: number): Promise<BackupFileEntry[]> {
     for (let attempt = 0; attempt < FILE_SNAPSHOT_ATTEMPTS; attempt += 1) {
       try {
         const before = await this.fileInventory();
+        let required = 0;
+        for (const entry of before) {
+          required +=
+            4 * Math.ceil(entry.size / 3) +
+            Buffer.byteLength(JSON.stringify({ path: entry.relativePath, contentBase64: '' })) +
+            1;
+          if (required > budget) throw new Error('FULL_BACKUP_SNAPSHOT_LIMIT_EXCEEDED');
+        }
         const files: BackupFileEntry[] = [];
         for (const entry of before) {
           const content = await readFile(entry.absolutePath);

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { MAX_BACKUP_SNAPSHOT_JSON_BYTES } from '../../modules/backup/backup-limits';
 import type { BackupCodecPort } from '../../modules/backup/backup.port';
 import type { BackupSnapshot } from '../../modules/backup/backup.types';
 import { BackupPasswordRequiredError, InvalidBackupPasswordError } from '../../shared/errors/backup.errors';
@@ -84,6 +85,18 @@ export class NexusBackupCodecAdapter implements BackupCodecPort {
     const totalStartedAt = runtimePerformanceMetrics.operationStarted();
     try {
       if (!password) throw new Error('导出备份需要当前登录密码。');
+      let estimatedBytes = 1024;
+      for (const [name, rows] of Object.entries(snapshot.tables)) {
+        estimatedBytes += Buffer.byteLength(JSON.stringify(name)) + 4;
+        for (const row of rows) {
+          estimatedBytes += Buffer.byteLength(JSON.stringify(row)) + 1;
+          if (estimatedBytes > MAX_BACKUP_SNAPSHOT_JSON_BYTES) throw new Error('FULL_BACKUP_SNAPSHOT_LIMIT_EXCEEDED');
+        }
+      }
+      for (const file of snapshot.files) {
+        estimatedBytes += Buffer.byteLength(JSON.stringify(file)) + 1;
+        if (estimatedBytes > MAX_BACKUP_SNAPSHOT_JSON_BYTES) throw new Error('FULL_BACKUP_SNAPSHOT_LIMIT_EXCEEDED');
+      }
       const dataKey = crypto.randomBytes(32);
       const salt = crypto.randomBytes(16);
       const passwordKey = await measureCpuAsync('backup.pbkdf2', () =>

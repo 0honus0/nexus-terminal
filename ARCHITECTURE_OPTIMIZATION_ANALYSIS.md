@@ -1719,7 +1719,9 @@ const decoded = await decodeEditorDocument(file.bytes, encoding);
 
 因此一个很大的日志、dump、数据库、归档或其它远端文件只要走“按文本打开”，就会完整进入浏览器内存；`WorkspaceSocket` 在组装 binary response 时还会同时持有 chunk copies 和最终连续 buffer。结果可以是明显的 UI freeze、内存峰值或 tab OOM，而现有 Large File Mode 无法保护这段资源路径。
 
-## 81. Full Backup 把整份快照物化成单个 JS 字符串；默认合法 Artifact 状态即可超过 Node 字符串上限而无法导出
+## 81. Full Backup 单字符串表示规模（已加容量 admission）
+
+> 已修复容量失控路径：沿#73有界V1格式，snapshot预算64MiB，表逐行计量、文件inventory按base64膨胀计量后才read，codec再次逐条计量后才全量stringify。大合法Artifact状态明确拒绝，不承诺全部配额均可产品内备份或streaming；单DB行仍先物化，未声称byte精确heap上限。下文为原证据。
 
 > 确认问题（表示规模上限）：snapshot contentBase64 + backup-codec JSON.stringify 均非 streaming。Node/V8 MAX_STRING_LENGTH 随运行时／平台变化，以下数值是特定运行时举例，不是所有部署固定值；未分配大型快照复现 OOM。
 
