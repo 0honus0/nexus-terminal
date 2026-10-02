@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+ExecutionManager transport-close subscription identity-fenced close，detach/close/byOwner/all unsubscribe；Workspace shell-close同实例closeSession，避免旧close按复用ID误删，非远端process退出证明。
+
 Resource status collector unique sampleKey/finally clear，bootstrap仅同次采样；host cache/inFlight按current connection keys惰性prune，全局reset丢弃inFlight identity避免旧publish，非取消底层I/O。
 
 RunnerPluginProcess constructor ready timer30s，timeout protocolFailure/failAll+managed SIGKILL，ready/error/exit clear；批激活补偿复用既有owner，不将其描述为所有command总deadline。

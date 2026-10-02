@@ -2045,7 +2045,9 @@ clear(key: string) {
 
 所以当前 host 级 resource status state 没有和 Connection / remote-host identity 建立完整生命周期边界：删除、修改和全局 cache reset 都不能真正使其失效。
 
-## 93. SSH transport 主动断开只会关闭底层 transport / shell，不会驱动 ExecutionSession 与 Workspace owner 回收；Registry 可长期保留已断开的“ready”会话
+## 93. Transport close owner 回收（已修复）
+
+> 已修复：ExecutionManager订阅transport close，同实例close/delete并解除listener；detach前unsubscribe避免移交误关。Workspace shell-close同实例关闭Registry，复用ID晚到事件不影响新实例。其他操作owner cleanup仍走既有链，不声称所有远端副作用退出。下文为原证据。
 
 > 确认问题：ExecutionSession 提供 onTransportClose，但 manager 无订阅；WorkspaceTerminal shell-close handler 只 flush/publish。Frontend 收到 closed 后可能另行关闭，但不能保证后台 owner 即时同步；未测 socket 保持存活的断链场景。
 

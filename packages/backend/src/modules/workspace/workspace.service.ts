@@ -121,6 +121,9 @@ export class WorkspaceService {
         lastConnectedAt,
       };
       this.sessions.set(session);
+      session.shell.onClose(() => {
+        if (this.sessions.get(session.id) === session) void this.closeSession(session.id).catch(() => undefined);
+      });
       await this.connections.markConnected(request.connectionId, lastConnectedAt).catch(() => false);
       const details = {
         userId: request.userId,
@@ -176,6 +179,9 @@ export class WorkspaceService {
         createdAt: Date.now(),
       };
       this.sessions.set(session);
+      session.shell.onClose(() => {
+        if (this.sessions.get(session.id) === session) void this.closeSession(session.id).catch(() => undefined);
+      });
       return session;
     } catch (error) {
       this.executionSessions.detach(execution.id);

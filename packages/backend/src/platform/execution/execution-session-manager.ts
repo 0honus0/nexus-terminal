@@ -22,6 +22,11 @@ export interface AttachExecutionSessionRequest {
 
 export class ExecutionSessionManager {
   private readonly sessions = new Map<string, ExecutionSession>();
+  private readonly closeSubscriptions = new Map<string, () => void>();
+  private unsubscribe(id: string): void {
+    this.closeSubscriptions.get(id)?.();
+    this.closeSubscriptions.delete(id);
+  }
 
   constructor(private readonly transportFactory: RemoteExecutionTransportFactory) {}
 
@@ -73,6 +78,16 @@ export class ExecutionSessionManager {
     };
     const session = new ExecutionSession(identity, request.transport);
     this.sessions.set(id, session);
+    this.closeSubscriptions.set(
+      id,
+      session.onTransportClose(() => {
+        if (this.sessions.get(id) === session) void this.close(id).catch(() => undefined);
+      }),
+    );
+    if (!request.transport.isOpen) {
+      void this.close(id);
+      throw new Error('Execution transport closed during attach.');
+    }
     return session;
   }
 
@@ -88,6 +103,7 @@ export class ExecutionSessionManager {
 
   detach(id: string): RemoteExecutionTransport {
     const session = this.require(id);
+    this.unsubscribe(id);
     const transport = session.detachTransport();
     this.sessions.delete(id);
     return transport;
@@ -98,6 +114,7 @@ export class ExecutionSessionManager {
     if (!session) return;
     this.sessions.delete(id);
     try {
+      this.unsubscribe(id);
       await session.close();
     } catch (error) {
       logger.warn(
@@ -112,7 +129,10 @@ export class ExecutionSessionManager {
     const matching = [...this.sessions.entries()].filter(
       ([, session]) => session.ownerType === ownerType && (ownerId === undefined || session.ownerId === ownerId),
     );
-    for (const [id] of matching) this.sessions.delete(id);
+    for (const [id] of matching) {
+      this.unsubscribe(id);
+      this.sessions.delete(id);
+    }
     if (matching.length)
       logger.debug({ ownerType, ownerId, sessionCount: matching.length }, 'Execution sessions closing by owner');
     await Promise.all(
@@ -127,6 +147,7 @@ export class ExecutionSessionManager {
   }
 
   async closeAll(): Promise<void> {
+    for (const id of this.closeSubscriptions.keys()) this.unsubscribe(id);
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
     await Promise.all(
