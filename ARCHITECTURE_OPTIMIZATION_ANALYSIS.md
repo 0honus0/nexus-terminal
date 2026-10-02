@@ -639,9 +639,9 @@ connections.create({ ...normalized.connection, proxyId })
 
 Connection 创建失败时，本次 import 可以把 record 计为失败，但先创建的 Proxy 不会自动回收。重复导入也可能被 Proxy 的 duplicate 检查拒绝；确认的是部分提交，不是必然持续创建重复 Proxy。
 
-## 28. 多个业务 Mutation 在提交后才写 Audit，Audit 失败会把“已成功修改”报告成“操作失败”
+## 28. 后置 Audit 失败造成业务响应歧义（已修复）
 
-> 确认问题（提交／响应歧义）：核对 Connection/Auth/Notification 等 service 的 mutation → await audit 顺序。仅对后置 audit 抛错的路径成立；Notification fan-out 使用 allSettled，与 audit 异常传播不同。未注入数据库审计失败。
+> 已修复：经用户确认，AuditLogService 将审计定义为非阻断记录，捕获持久化错误并记录 actionType 与安全 errorCode，不记录 details/secret，不让已提交业务返回操作失败。没有声称审计必达或实现 outbox。全部 logAction 消费者使用同一契约。下文为原问题证据。
 
 当前多个模块的顺序是：
 

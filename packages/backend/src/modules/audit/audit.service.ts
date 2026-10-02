@@ -1,9 +1,17 @@
 import type { AuditLogActionType } from './audit.types';
 import type { AuditLogRepository } from './audit.repository.port';
+import { logger, logErrorCode } from '../../shared/logging/logger';
 export class AuditLogService {
   constructor(private readonly repository: AuditLogRepository) {}
-  logAction(actionType: AuditLogActionType, details?: Record<string, unknown> | string | null) {
-    return this.repository.add(actionType, details);
+  async logAction(actionType: AuditLogActionType, details?: Record<string, unknown> | string | null): Promise<void> {
+    try {
+      await this.repository.add(actionType, details);
+    } catch (error) {
+      logger.error(
+        { actionType, errorCode: logErrorCode(error, 'AUDIT_WRITE_FAILED') },
+        'Audit record could not be persisted',
+      );
+    }
   }
   getLogs(
     limit = 50,
