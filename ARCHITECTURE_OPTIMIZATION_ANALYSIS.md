@@ -2208,6 +2208,8 @@ for (const definition of registry.list()) {
 
 ## 97. Backend Plugin 的 `runtime.ready` handshake 也没有 timeout；已启用插件在模块 import 阶段卡死可以让整个 Backend 启动永远停在 listen 之前
 
+> 已修复：BackendPluginProcess 使用既有 30 秒 control budget 限制 ready，超时 protocolFailure 拒绝并 SIGKILL，ready/error/exit 清 timer，晚到 ready 不恢复已失败实例。退出仍由 close owner 确认；下文为原证据。
+
 > 确认问题：`local-plugin-backend-runtime.adapter.ts:353–356` ready 无 timer，worker import 在 ready 前；installed enabled runtime 初始化被 services.initialize await。与 #91 是不同进程边界；未启动卡死插件验证。
 
 Backend Plugin 与 Runner Plugin 是两套独立 runtime。Backend 这一套在 `LocalPluginBackendRuntimeAdapter.activate()` 中同样先等待无界的 `ready`：

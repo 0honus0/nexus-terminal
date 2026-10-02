@@ -350,6 +350,8 @@ class BackendPluginProcess {
   private readonly protocolWriter: BoundedProtocolWriter;
   private readyResolve!: () => void;
   private readyReject!: (error: Error) => void;
+  private readonly readyTimer: NodeJS.Timeout;
+  private readySettled = false;
   readonly ready = new Promise<void>((resolve, reject) => {
     this.readyResolve = resolve;
     this.readyReject = reject;
@@ -364,6 +366,11 @@ class BackendPluginProcess {
     private readonly sdkVersion: string,
   ) {
     this.protocolWriter = new BoundedProtocolWriter(child.stdin);
+    this.readyTimer = setTimeout(
+      () => this.protocolFailure(new Error('PLUGIN_BACKEND_READY_TIMEOUT')),
+      CONTROL_TIMEOUT_MS,
+    );
+    this.readyTimer.unref?.();
     child.stdout.on('data', (chunk: Buffer) => {
       try {
         for (const line of this.stdoutLines.push(chunk)) {
@@ -457,6 +464,7 @@ class BackendPluginProcess {
       return;
     }
     if (message.kind === 'runtime.ready') {
+      if (this.readySettled) return;
       if (
         message.protocolVersion !== PLUGIN_BACKEND_PROTOCOL_VERSION ||
         protocolString(message.sdkVersion, 128) !== this.sdkVersion
@@ -466,6 +474,8 @@ class BackendPluginProcess {
         return;
       }
       this.readyResolve();
+      this.readySettled = true;
+      clearTimeout(this.readyTimer);
       return;
     }
     if (message.kind === 'lifecycle.result') {
@@ -630,6 +640,8 @@ class BackendPluginProcess {
   }
 
   private failAll(error: Error): void {
+    this.readySettled = true;
+    clearTimeout(this.readyTimer);
     this.readyReject(error);
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
