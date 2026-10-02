@@ -28,11 +28,12 @@ interface PreparingBatch {
   token: symbol;
 }
 
-interface UploadPrepareCachePolicy {
+interface StreamUploadOperationPolicy {
   maxBatchesPerOwner?: number;
   maxDirectoriesPerOwner?: number;
   ttlMs?: number;
   now?: () => number;
+  idleTimeoutMs?: number;
 }
 
 interface PendingUpload {
@@ -62,6 +63,7 @@ interface ActiveUpload {
   emit: (event: UploadEvent) => void;
   queue: Promise<void>;
   cancelled: boolean;
+  idleTimer?: NodeJS.Timeout;
 }
 
 const WRITE_HIGH_WATER_MARK = 4 * 1024 * 1024;
@@ -69,6 +71,7 @@ const PREPARE_CONCURRENCY = 8;
 const DEFAULT_MAX_PREPARED_BATCHES_PER_OWNER = 64;
 const DEFAULT_MAX_PREPARED_DIRECTORIES_PER_OWNER = 100_000;
 const DEFAULT_PREPARED_BATCH_TTL_MS = 30 * 60_000;
+const DEFAULT_UPLOAD_IDLE_TIMEOUT_MS = 5 * 60_000;
 
 export class StreamUploadOperationService implements UploadOperation {
   private readonly active = new Map<string, ActiveUpload>();
@@ -79,15 +82,17 @@ export class StreamUploadOperationService implements UploadOperation {
   private readonly maxPreparedDirectoriesPerOwner: number;
   private readonly preparedBatchTtlMs: number;
   private readonly now: () => number;
+  private readonly uploadIdleTimeoutMs: number;
 
   constructor(
     private readonly sessions: Pick<ExecutionSessionManager, 'require'>,
-    policy: UploadPrepareCachePolicy = {},
+    policy: StreamUploadOperationPolicy = {},
   ) {
     this.maxPreparedBatchesPerOwner = policy.maxBatchesPerOwner ?? DEFAULT_MAX_PREPARED_BATCHES_PER_OWNER;
     this.maxPreparedDirectoriesPerOwner = policy.maxDirectoriesPerOwner ?? DEFAULT_MAX_PREPARED_DIRECTORIES_PER_OWNER;
     this.preparedBatchTtlMs = policy.ttlMs ?? DEFAULT_PREPARED_BATCH_TTL_MS;
     this.now = policy.now ?? Date.now;
+    this.uploadIdleTimeoutMs = Math.max(1, Math.floor(policy.idleTimeoutMs ?? DEFAULT_UPLOAD_IDLE_TIMEOUT_MS));
   }
 
   async prepare(request: UploadPrepareRequest): Promise<{ preparedDirectories: number }> {
@@ -246,6 +251,7 @@ export class StreamUploadOperationService implements UploadOperation {
       };
       this.pending.delete(key);
       this.active.set(key, upload);
+      this.refreshUploadIdleTimeout(upload);
       stream.once('error', (error: Error) => {
         if (this.active.get(key) !== upload || upload.cancelled) return;
         void this.fail(upload, `Upload stream failed: ${error.message}`);
@@ -288,6 +294,7 @@ export class StreamUploadOperationService implements UploadOperation {
     if (upload) {
       upload.cancelled = true;
       this.active.delete(upload.key);
+      this.clearUploadIdleTimeout(upload);
       upload.stream.destroy();
       // A remote SFTP write may already be inside the serialized append queue. Wait for it to
       // settle after destroying the stream before reporting cancellation/teardown complete.
@@ -384,6 +391,7 @@ export class StreamUploadOperationService implements UploadOperation {
     upload.nextChunkIndex += 1;
     upload.bytesAccepted = nextBytes;
     upload.receivedLastChunk = request.isLast;
+    this.refreshUploadIdleTimeout(upload);
     // Serialize validation/enqueue, not remote acknowledgements. Buffered chunks
     // let the SFTP Writable use _writev; awaiting each callback disables batching.
     const accepted = upload.stream.write(data, (error) => {
@@ -456,6 +464,7 @@ export class StreamUploadOperationService implements UploadOperation {
       }
       await upload.filesystem.replaceFile(upload.temporaryPath, upload.destinationPath);
       const metadata = await upload.filesystem.metadata(upload.destinationPath);
+      this.clearUploadIdleTimeout(upload);
       this.active.delete(upload.key);
       logger.debug(
         { workspaceId: upload.ownerId, uploadId: upload.uploadId, totalSize: upload.totalSize },
@@ -476,6 +485,7 @@ export class StreamUploadOperationService implements UploadOperation {
     if (this.active.get(upload.key) !== upload) return;
     this.active.delete(upload.key);
     upload.cancelled = true;
+    this.clearUploadIdleTimeout(upload);
     if (!upload.stream.destroyed) upload.stream.destroy();
     await upload.filesystem.removeFile(upload.temporaryPath, { ignoreMissing: true }).catch(() => undefined);
     logger.warn(
@@ -489,6 +499,40 @@ export class StreamUploadOperationService implements UploadOperation {
       'Upload failed',
     );
     upload.emit({ type: 'failed', uploadId: upload.uploadId, message });
+  }
+
+  private refreshUploadIdleTimeout(upload: ActiveUpload): void {
+    this.clearUploadIdleTimeout(upload);
+    upload.idleTimer = setTimeout(() => {
+      void this.expireIdleUpload(upload);
+    }, this.uploadIdleTimeoutMs);
+    upload.idleTimer.unref?.();
+  }
+
+  private clearUploadIdleTimeout(upload: ActiveUpload): void {
+    if (!upload.idleTimer) return;
+    clearTimeout(upload.idleTimer);
+    upload.idleTimer = undefined;
+  }
+
+  private async expireIdleUpload(upload: ActiveUpload): Promise<void> {
+    if (this.active.get(upload.key) !== upload || upload.cancelled) return;
+    this.active.delete(upload.key);
+    upload.cancelled = true;
+    this.clearUploadIdleTimeout(upload);
+    if (!upload.stream.destroyed) upload.stream.destroy();
+    await upload.queue.catch(() => undefined);
+    await upload.filesystem.removeFile(upload.temporaryPath, { ignoreMissing: true }).catch(() => undefined);
+    logger.warn(
+      {
+        workspaceId: upload.ownerId,
+        uploadId: upload.uploadId,
+        bytesWritten: upload.bytesWritten,
+        totalSize: upload.totalSize,
+      },
+      'Upload idle timeout expired',
+    );
+    upload.emit({ type: 'failed', uploadId: upload.uploadId, message: 'Upload idle timeout expired.' });
   }
 
   private uploadKey(ownerId: string, uploadId: string): string {

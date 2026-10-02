@@ -3047,9 +3047,9 @@ while (queuedUploads.length > 0 && activeUploads.size < streamLimit) { ... }
 
 这和 #108 的 Server Transfer 不同：#108 是 `/transfers/send` 子系统为每个 task 建立独立 source ExecutionSession/target transport，却没有 system-wide task capacity；这里是 Workspace WebSocket 自己缺少 in-flight/admission owner，资源放大发生在既有 Workspace ExecutionSession 上的 SFTP/file-operation plane。
 
-## 112. `upload.start` 建立 active upload 后没有 idle deadline；客户端不发送数据即可永久占住远端写流、临时文件与持续续租的 mutation lease
+## 112. `upload.start` 建立 active upload 后没有 idle deadline；客户端不发送数据即可永久占住远端写流、临时文件与持续续租的 mutation lease（已修复）
 
-> 确认问题：StreamUploadOperationService active 无 activity/deadline；LeaseMutationGuard timeout 只在 acquire loop，成功后持续 renew。断链/显式 cancel/owner cleanup 是已有回收路径；未测试保持 control socket 但不建 data socket 的 idle upload。
+> 已修复：`StreamUploadOperationService` 现在从 active upload 建立起持有 5 分钟 idle/stall deadline，每个通过校验的 chunk 刷新 deadline。超时由 upload service 自己销毁远端 writable、等待既有 append queue 收敛、删除临时 `.part`、移出 active Map 并发出 `failed` terminal event；正常完成、失败、取消都会清理 timer。这样即使 data WebSocket 从未建立，或建立后不再发送 chunk，upload 也会自动回收，上层 terminal event 同时释放 mutation lease 与 Workspace file-operation admission。Agent 回归验证 ready 后无数据会自动失败、销毁 stream、删除临时文件并从 active 状态退出。下文保留原问题证据。
 
 Workspace 上传是 control plane 与 data plane 分开的两阶段协议。`upload.start` 先在 control WebSocket 上建立 Backend upload state；`StreamUploadOperationService.start()` 随后会立即创建临时文件并打开远端写流：
 
@@ -4217,7 +4217,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项当前分类：**未解决确认问题 19 项，待确认 15 项，已修复 83 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
+原 144 项当前分类：**未解决确认问题 18 项，待确认 15 项，已修复 84 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4328,7 +4328,7 @@ await terminateAllManagedProcesses();
 | 109    | 已修复   | SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志                                                                           |
 | 110    | 已修复   | Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合                                        |
 | 111    | 已修复   | Workspace WebSocket 没有 in-flight request / file-operation admission limit；客户端可以绕过 Frontend scheduler 并发放大 SFTP stream、positioned copy 与远端 archive command  |
-| 112    | 确认问题 | `upload.start` 建立 active upload 后没有 idle deadline；客户端不发送数据即可永久占住远端写流、临时文件与持续续租的 mutation lease                                            |
+| 112    | 已修复   | `upload.start` 建立 active upload 后没有 idle deadline；客户端不发送数据即可永久占住远端写流、临时文件与持续续租的 mutation lease                                            |
 | 113    | 确认问题 | SFTP Download Ticket 的 capacity 只限制 ticket 数，不限制每个 ticket 的并发 claim / read stream；一个 token 就能绕过 64/512 配额制造无界下载流                               |
 | 114    | 确认问题 | 普通 Workspace session 没有 per-user / global 数量上限；认证用户可用不同 `workspaceId` 线性创建 SSH transport、shell 与 ExecutionSession                                     |
 | 115    | 确认问题 | Agent Workspace Terminal 没有 session 配额；每条 `/ws/agent-terminal` 新连接都能在 Runner 新建 PTY/login shell 子进程                                                        |
