@@ -6,6 +6,8 @@ import type { PluginFrontendAgentRpcMethod, PluginFrontendRunEvent } from './pro
 const MAX_TEXT_BYTES = 64_000;
 const MAX_LIST_ITEMS = 128;
 const encoder = new TextEncoder();
+// Host-owned admission across all Plugin iframe dispatchers on the shared socket.
+const pluginSubscriptionControllers = new Set<AbortController>();
 const reasoningEfforts = new Set<AgentReasoningEffortDto>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 const record = (value: unknown): Record<string, unknown> => {
@@ -69,6 +71,9 @@ const emptyParams = (value: unknown): void => {
 export class PluginAgentSdkDispatcher {
   private readonly runFacade: AgentRunFacade;
   private readonly subscriptions = new Map<string, AbortController>();
+  private readonly subscribedRuns = new Set<string>();
+  private activeSubscriptions = 0;
+  private closed = false;
 
   constructor(
     private readonly appId: string,
@@ -233,15 +238,23 @@ export class PluginAgentSdkDispatcher {
   }
 
   close(): void {
+    this.closed = true;
     for (const controller of this.subscriptions.values()) controller.abort();
     this.subscriptions.clear();
     this.runFacade.dispose();
   }
 
   private subscribe(runId: string, cursor: number): { subscriptionId: string } {
+    if (this.closed) throw new Error('PLUGIN_AGENT_CLOSED');
+    if (this.subscribedRuns.has(runId)) throw new Error('PLUGIN_AGENT_RUN_ALREADY_SUBSCRIBED');
+    if (this.activeSubscriptions >= 2 || pluginSubscriptionControllers.size >= 4)
+      throw new Error('PLUGIN_AGENT_SUBSCRIPTION_LIMIT');
     const subscriptionId = crypto.randomUUID();
     const controller = new AbortController();
     this.subscriptions.set(subscriptionId, controller);
+    this.subscribedRuns.add(runId);
+    this.activeSubscriptions += 1;
+    pluginSubscriptionControllers.add(controller);
     void (async () => {
       try {
         for await (const event of agentEvents.run(this.appId, runId, cursor, controller.signal)) {
@@ -256,6 +269,9 @@ export class PluginAgentSdkDispatcher {
           });
         }
       } finally {
+        this.subscribedRuns.delete(runId);
+        this.activeSubscriptions -= 1;
+        pluginSubscriptionControllers.delete(controller);
         if (this.subscriptions.get(subscriptionId) === controller) this.subscriptions.delete(subscriptionId);
       }
     })();

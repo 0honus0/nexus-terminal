@@ -2408,6 +2408,8 @@ observedPackageHash = fs.readFileSync(marker, 'utf8').trim();
 
 ## 101. Plugin 可耗尽共享 Run subscription 槽并阻止新的 Host UI 订阅
 
+> 已修复（Host SDK admission）：所有 iframe dispatcher 合计最多4个、单实例2个；同实例重复Run拒绝，取消仍计数直到generator finally。Backend16槽保持，不声称其它Host消费者无限容量或恶意直连的用户级隔离。下文为原证据。
+
 > 确认问题（共享 admission 饥饿）：PluginAgentSdkDispatcher subscriptions Map 无独立上限，agent-events 共用 socket，Backend MAX_SUBSCRIPTIONS=16。已有订阅不会因新订阅被直接踢出，是后续 Host/Run subscribe 可失败；未实际耗尽槽位。
 
 Frontend 的所有 Agent event stream 复用进程内同一个 `sharedAgentSocket`：

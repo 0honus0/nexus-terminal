@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+PluginAgentSdkDispatcher 是 iframe Run subscription admission owner：单实例2、页面合计4、同Run去重，abort到generator finally间仍占预算；close拒绝新订阅，Backend共享16槽不变。
+
 FilesystemChannel.readBinary required maxBytes，FileDocumentPort load固定16MiB并复用server/client累计fence；reload/encoding走同一port，decode仅在限量成功后执行，不以large-file character threshold替代网络/heap admission。
 
 QuickCommands createTagForCommands 的assigned:false为显式部分成功，Panel显示assignFailedAfterCreate；tag合法独立保留，不补偿删除，不承诺两HTTP请求事务原子。
