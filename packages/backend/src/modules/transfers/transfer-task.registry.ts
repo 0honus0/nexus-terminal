@@ -14,6 +14,19 @@ export class TransferTaskRegistry {
   private readonly controllers = new Map<string, AbortController>();
 
   create(payload: InitiateTransferPayload, userId: string | number): CreatedTransferTask {
+    if (
+      !payload.connectionIds.length ||
+      payload.connectionIds.length > 64 ||
+      !payload.sourceItems.length ||
+      payload.sourceItems.length > 256 ||
+      payload.connectionIds.length * payload.sourceItems.length > 1024
+    )
+      throw new Error('TRANSFER_REQUEST_LIMIT_EXCEEDED');
+    if (
+      new Set(payload.connectionIds).size !== payload.connectionIds.length ||
+      new Set(payload.sourceItems.map((item) => item.path)).size !== payload.sourceItems.length
+    )
+      throw new Error('TRANSFER_REQUEST_DUPLICATE_ITEMS');
     const taskId = randomUUID();
     const now = new Date();
     const subTasks: TransferSubTask[] = [];

@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+TransferTaskRegistry.create 在 UUID/subtask 分配前校验64 targets/256 sources/1024 product，拒绝重复 target/path，维持 sourceItemIndex；非 HTTP 消费者同样受 admission。
+
 Backup capture 先 transaction capture tables，释放 scheduler barrier 后 captureStableFiles/validateFileReferences；captured table view 为引用权威，不加 live-table recapture 或 writer freeze，不承诺 physical point-in-time。DB barrier 仍覆盖表读取/解密，不覆盖整树文件读取/重试/hash 校验。
 
 Full Backup MAX_FULL_BACKUP_BYTES=100MiB 共享 export envelope post-encode admission/import pre-decode/multer；解决 successful-export/import-limit mismatch，不是 streaming 或 pre-capture heap admission。

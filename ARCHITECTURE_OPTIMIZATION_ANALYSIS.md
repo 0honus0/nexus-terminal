@@ -1605,7 +1605,9 @@ return this.database.transaction(async (database) => {
 
 这个问题和 #24 的跨存储一致性疑问不同：#24 尚需并发 writer 验证；这里可从 scheduler barrier 确认数据库请求会等待文件 I/O，实际等待时长仍需测量。
 
-## 75. Server Transfer 请求没有数组上限或去重，单个小于 1 MiB 的请求可以同步展开数千万个 SubTask
+## 75. Server Transfer 子任务乘积放大（已修复）
+
+> 已修复：Registry.create 分配前 admission：target<=64/source<=256/product<=1024，空数组或重复 target/source path 拒绝，不重排 sourceItemIndex。独立于 JSON byte limit 与执行并发。下文为原证据。
 
 > 确认问题（乘积放大）：transfers route/service 无 cardinality/dedup，TransferTaskRegistry 同步展开 connectionIds×sourceItems。1MiB body 上限和后续 worker concurrency 都不约束乘积；数量例子为计算而非发起实际内存攻击。
 
