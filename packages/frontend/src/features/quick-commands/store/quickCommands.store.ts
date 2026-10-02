@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
+import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 import { quickCommandsApi } from '../api/quickCommandsApi';
 import type {
@@ -30,6 +31,19 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     tagLoadError = ref<string | null>(null),
     selectedId = ref<number | null>(null);
   const expanded = ref<Record<string, boolean>>(readStoredValue(expandedGroupsStorage) ?? {});
+  let generation = 0;
+  function reset() {
+    generation += 1;
+    items.value = [];
+    tags.value = [];
+    search.value = '';
+    sort.value = 'name';
+    loading.value = false;
+    error.value = null;
+    tagLoadError.value = null;
+    selectedId.value = null;
+    expanded.value = {};
+  }
   const filtered = computed(() => {
     const term = search.value.trim().toLowerCase();
     return items.value.filter(
@@ -71,25 +85,31 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
   });
 
   async function load() {
+    const epoch = generation;
     loading.value = true;
     error.value = null;
     tagLoadError.value = null;
     try {
-      items.value = await quickCommandsApi.list();
+      const next = await quickCommandsApi.list();
+      if (epoch !== generation) return;
+      items.value = next;
       try {
-        tags.value = await quickCommandsApi.listTags();
+        const nextTags = await quickCommandsApi.listTags();
+        if (epoch === generation) tags.value = nextTags;
       } catch (cause) {
-        tagLoadError.value = cause instanceof Error ? cause.message : String(cause);
+        if (epoch === generation) tagLoadError.value = cause instanceof Error ? cause.message : String(cause);
       }
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause);
+      if (epoch === generation) error.value = cause instanceof Error ? cause.message : String(cause);
       throw cause;
     } finally {
-      loading.value = false;
+      if (epoch === generation) loading.value = false;
     }
   }
   async function save(input: QuickCommandFormInput, id?: number) {
+    const epoch = generation;
     const item = id ? await quickCommandsApi.update(id, input) : await quickCommandsApi.create(input);
+    if (epoch !== generation) return item;
     const i = items.value.findIndex((x) => x.id === item.id);
     if (i >= 0) items.value[i] = item;
     else items.value.push(item);
@@ -97,15 +117,18 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     return item;
   }
   async function remove(id: number) {
+    const epoch = generation;
     await quickCommandsApi.remove(id);
+    if (epoch !== generation) return;
     items.value = items.value.filter((x) => x.id !== id);
     error.value = null;
     if (selectedId.value === id) selectedId.value = null;
   }
   async function recordUsage(id: number) {
+    const epoch = generation;
     try {
       const updated = await quickCommandsApi.incrementUsage(id);
-      if (!updated) return;
+      if (!updated || epoch !== generation) return;
       const index = items.value.findIndex((item) => item.id === id);
       if (index >= 0) items.value[index] = updated;
     } catch {
@@ -113,22 +136,27 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     }
   }
   async function addTag(name: string) {
+    const epoch = generation;
     const tag = await quickCommandsApi.createTag(name);
-    tags.value.push(tag);
+    if (epoch === generation) tags.value.push(tag);
     return tag;
   }
   async function removeTag(id: number) {
+    const epoch = generation;
     await quickCommandsApi.removeTag(id);
+    if (epoch !== generation) return;
     tags.value = tags.value.filter((tag) => tag.id !== id);
     items.value = items.value.map((item) =>
       item.tagIds.includes(id) ? { ...item, tagIds: item.tagIds.filter((tagId) => tagId !== id) } : item,
     );
   }
   async function renameTag(id: number, name: string) {
+    const epoch = generation;
     const tag = tags.value.find((item) => item.id === id);
     if (!tag) throw new Error('Quick Command tag not found.');
     const oldName = tag.name;
     const updated = await quickCommandsApi.renameTag(id, name);
+    if (epoch !== generation) return updated;
     const index = tags.value.findIndex((item) => item.id === id);
     if (index >= 0) tags.value[index] = updated;
     if (oldName !== updated.name && expanded.value[oldName] !== undefined) {
@@ -140,10 +168,13 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     return updated;
   }
   async function createTagForCommands(name: string, commandIds: number[]) {
+    const epoch = generation;
     const tag = await addTag(name);
+    if (epoch !== generation) throw new DOMException('Session changed', 'AbortError');
     if (!commandIds.length) return { tag, assigned: true as const };
     try {
       await quickCommandsApi.assignTag(commandIds, tag.id);
+      if (epoch !== generation) throw new DOMException('Session changed', 'AbortError');
       const idSet = new Set(commandIds);
       items.value = items.value.map((item) =>
         idSet.has(item.id) && !item.tagIds.includes(tag.id) ? { ...item, tagIds: [...item.tagIds, tag.id] } : item,
@@ -190,6 +221,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     selectedId.value = null;
   }
   return {
+    reset,
     items,
     tags,
     search,
@@ -218,3 +250,4 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     resetSelection,
   };
 });
+registerAuthenticatedSessionReset('quick-commands-cache', () => useQuickCommandsStore().reset());

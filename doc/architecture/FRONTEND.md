@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+SSH Key/Command History/Quick Commands/Server Transfers store 注册 authenticated-session reset，实例 generation 隔离异步 load/mutation 与排队 history write；transfer reset 停止 poll，旧 refresh finally 不清除新 in-flight owner。服务端副作用仍由后端负责。
+
 Editor open 持有 scope generation + close epoch，load/异步 decoding 后重检发布；closeScope/invalidatePaths bump scope generation，closeAll bump epoch。失效结果 AbortError，不注册旧 port，不声称取消无 signal contract 的底层 I/O。
 
 FileManager 的 beforeFileMutation port 由 Workspace surface/renderer 组合到同 scope Editor invalidatePaths；rename/delete 前失效目标及后代保存 port，saving gate 阻止交错。草稿保留，部分失败不猜路径身份，需重新打开。

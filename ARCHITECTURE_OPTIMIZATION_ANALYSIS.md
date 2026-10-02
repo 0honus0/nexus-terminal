@@ -1248,7 +1248,9 @@ Workspace teardown 时 `workspaceRuntimeRegistry.removeRuntime()` 调用 `shared
 
 同仓库的 `FilePreviewSession` 已经为 pending load 保存 AbortController 和 operation token，并在 close/clear 时取消；Editor 没有等价生命周期保护，因此两条文件打开路径的 teardown 语义不一致。
 
-## 54. Authenticated Session Reset 未覆盖部分 Frontend Store
+## 54. Authenticated Session Reset 缺漏 Store（已修复）
+
+> 已修复：SSH Keys、Command History、Quick Commands、Server Transfers 注册 reset；清空 session cache/loading/error/selection，停止 transfer poll。session generation 防旧 load/mutation 回填和旧 refresh finally 覆盖新 owner；未发出的 history queue 写入跳过。已发送后端副作用不声称撤回。下文为原问题证据。
 
 > 确认问题（session cache 生命周期未覆盖）：sshKeys/history/quickCommands/serverTransfers store 未注册等价 reset；SSH Key loaded fast path 保留缓存。Nexus 正常产品是单用户，不能据此声称存在常规 A→B 多租户泄露；同账号 logout/login 的 stale state 缺口仍成立。
 

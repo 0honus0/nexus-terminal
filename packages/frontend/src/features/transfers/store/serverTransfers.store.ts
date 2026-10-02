@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { apiErrorMessage } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { serverTransfersApi } from '../api/serverTransfersApi';
@@ -14,6 +15,18 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
   let pendingRefresh = false;
   let pendingRefreshBackground = true;
   let freshnessGeneration = 0;
+  let sessionGeneration = 0;
+  const reset = () => {
+    sessionGeneration += 1;
+    freshnessGeneration += 1;
+    stopPolling();
+    items.value = [];
+    loading.value = false;
+    error.value = '';
+    pendingRefresh = false;
+    pendingRefreshBackground = true;
+    refreshInFlight = undefined;
+  };
 
   const progressTasks = computed(() => items.value.map(toTransferTask).sort((a, b) => b.createdAt - a.createdAt));
   const invalidateInFlightRefresh = () => {
@@ -37,11 +50,12 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
         error.value = apiErrorMessage(cause, 'Failed to load transfer tasks.');
       }
     } finally {
-      if (showLoading) loading.value = false;
+      if (showLoading && generation === freshnessGeneration) loading.value = false;
     }
   };
 
   const runRefreshLoop = async (initialBackground: boolean): Promise<void> => {
+    const epoch = sessionGeneration;
     let background = initialBackground;
     try {
       while (true) {
@@ -49,13 +63,14 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
         pendingRefreshBackground = true;
         const generation = freshnessGeneration;
         await performLoad(background, generation);
+        if (epoch !== sessionGeneration) return;
         if (!pendingRefresh) return;
         // Keep an existing foreground load visible through its queued refresh, and
         // upgrade a background refresh if any queued caller explicitly needs foreground loading.
         background = background && pendingRefreshBackground;
       }
     } finally {
-      refreshInFlight = undefined;
+      if (epoch === sessionGeneration) refreshInFlight = undefined;
     }
   };
 
@@ -76,7 +91,9 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
   };
 
   const send = async (request: SendFilesRequestDto): Promise<ServerTransferTaskDto> => {
+    const epoch = sessionGeneration;
     const task = await serverTransfersApi.send(request);
+    if (epoch !== sessionGeneration) return task;
     invalidateInFlightRefresh();
     items.value = [task, ...items.value.filter((item) => item.taskId !== task.taskId)];
     logger.debug(
@@ -87,6 +104,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
   };
 
   const cancel = async (taskId: string): Promise<void> => {
+    const epoch = sessionGeneration;
     const task = items.value.find((item) => item.taskId === taskId);
     logger.debug({ taskId, currentStatus: task?.status }, 'Server transfer cancellation dispatch');
     invalidateInFlightRefresh();
@@ -94,11 +112,14 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
       task.status = 'cancelling';
     }
     await serverTransfersApi.cancel(taskId);
+    if (epoch !== sessionGeneration) return;
     void load({ background: true, ensureFresh: true });
   };
 
   const remove = async (taskId: string): Promise<void> => {
+    const epoch = sessionGeneration;
     await serverTransfersApi.remove(taskId);
+    if (epoch !== sessionGeneration) return;
     invalidateInFlightRefresh();
     items.value = items.value.filter((item) => item.taskId !== taskId);
   };
@@ -122,5 +143,19 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
     timer = undefined;
   }
 
-  return { items, progressTasks, loading, error, load, send, cancel, remove, cancelAll, startPolling, stopPolling };
+  return {
+    reset,
+    items,
+    progressTasks,
+    loading,
+    error,
+    load,
+    send,
+    cancel,
+    remove,
+    cancelAll,
+    startPolling,
+    stopPolling,
+  };
 });
+registerAuthenticatedSessionReset('server-transfers-cache', () => useServerTransfersStore().reset());
