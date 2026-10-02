@@ -1171,9 +1171,9 @@ try {
 
 同一个实现里的 `restart` 失败路径会显式执行 `disposeWorkspace()`，说明 `start` 与 `restart` 对部分激活的补偿语义也不一致。一次普通 start 的中途失败即可形成“Workspace 未运行、部分 Plugin 仍运行”的进程内状态。
 
-## 50. Runner 多文件 applyPatch 的集合原子性与部分失败契约待确认
+## 50. Runner 多文件 applyPatch 集合原子性（已核对：不承诺集合事务）
 
-> 待确认（集合原子性契约）：`workspace-coding-files.ts` 的 temp validation + rename 序列没有集合 rollback，这一点成立。但单次 API 不自动意味着多文件必须原子提交；需确认对外失败／partial outcome 契约，不能直接宣称实现违反承诺。
+> 已核对：现有 API 只有全部成功才返回 applied=true，没有全集合原子／崩溃回滚承诺；临时文件后的顺序 rename 可能部分生效。明确使用契约：失败不等于未修改，须重新读取全部目标 hash 后再规划，不原样自动重试。本项关闭原未确认的“违反原子承诺”指控，不宣称新增集合 rollback 或逐文件 durable partial report。
 
 applyWorkspacePatch 先统一检查 expected SHA 并生成临时文件，再逐项 rename；没有集合级 rollback。中途失败可部分生效，但需要确认 API 是否承诺全文件集合原子提交、错误结果是否应报告已应用文件。
 
