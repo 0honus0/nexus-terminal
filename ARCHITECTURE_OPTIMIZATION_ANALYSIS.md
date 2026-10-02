@@ -1826,7 +1826,9 @@ return Boolean(e?.blockedUntil && e.blockedUntil > now);
 
 这个问题和 #29/#30 不重复：#29 是过期 `blockedUntil` 导致同 IP 无法再次正确封禁，#30 是并发失败计数 lost update；这里是不同 IP 维度的持久化 retention 缺失。
 
-## 86. Connection Tag 的“替换全部关联”接口不验证目标 Tag，也不去重/校验正 ID；同一 API 对非法输入会返回假成功或 500
+## 86. Connection Tag 关联输入与不存在契约（已修复）
+
+> 已修复：原数组<=1000/safe正ID，去重；同事务查tag与全部connection存在后替换，空关联也查tag，不存在404/非法400。失败保持旧关联，非部分commit。下文为原证据。
 
 > 确认问题（API validation/error 契约）：TagService/repository 无 target precheck，重复项触发 composite PK，无效项触发 FK；transaction 本身会回滚，不能说失败会丢旧关联。未发送无效请求验证具体 HTTP 状态映射。
 

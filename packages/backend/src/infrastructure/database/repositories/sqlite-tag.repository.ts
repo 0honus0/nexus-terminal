@@ -41,9 +41,21 @@ export class SqliteTagRepository implements TagRepository {
     return (await this.db.execute('DELETE FROM tags WHERE id=?', [id])).changes > 0;
   }
   setConnections(tagId: number, connectionIds: readonly number[]): Promise<void> {
+    if (
+      !Number.isSafeInteger(tagId) ||
+      tagId <= 0 ||
+      connectionIds.length > 1000 ||
+      connectionIds.some((id) => !Number.isSafeInteger(id) || id <= 0)
+    )
+      throw new Error('TAG_CONNECTION_INPUT_INVALID');
+    const ids = [...new Set(connectionIds)];
     return this.db.transaction(async (tx) => {
+      if (!(await tx.queryOne('SELECT id FROM tags WHERE id=?', [tagId]))) throw new Error('TAG_NOT_FOUND');
+      for (const id of ids)
+        if (!(await tx.queryOne('SELECT id FROM connections WHERE id=?', [id])))
+          throw new Error('TAG_CONNECTION_NOT_FOUND');
       await tx.execute('DELETE FROM connection_tags WHERE tag_id=?', [tagId]);
-      for (const connectionId of connectionIds)
+      for (const connectionId of ids)
         await tx.execute('INSERT INTO connection_tags (tag_id,connection_id) VALUES (?,?)', [tagId, connectionId]);
     });
   }

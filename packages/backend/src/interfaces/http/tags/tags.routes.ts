@@ -68,7 +68,7 @@ export const createTagsRouter = (dependencies: { tags: TagService; audit: AuditL
         response.status(400).json({ message: '无效的标签 ID。' });
         return;
       }
-      if (!Array.isArray(ids) || !ids.every(Number.isInteger)) {
+      if (!Array.isArray(ids) || ids.length > 1000 || !ids.every((value) => Number.isSafeInteger(value) && value > 0)) {
         response.status(400).json({ message: 'connectionIds 必须是一个数字数组。' });
         return;
       }
@@ -76,7 +76,16 @@ export const createTagsRouter = (dependencies: { tags: TagService; audit: AuditL
         await dependencies.tags.setConnections(id, ids);
         response.json({ message: '标签的连接关联更新成功。' });
       } catch (error) {
-        response.status(500).json({ message: errorMessage(error) });
+        const message = errorMessage(error);
+        response
+          .status(
+            message === 'TAG_NOT_FOUND' || message === 'TAG_CONNECTION_NOT_FOUND'
+              ? 404
+              : message === 'TAG_CONNECTION_INPUT_INVALID'
+                ? 400
+                : 500,
+          )
+          .json({ message });
       }
     }),
   );
