@@ -1400,7 +1400,9 @@ X-Forwarded-Proto: https
 
 startCommand/openShell 仅在发请求前 assertOpen，回调成功后未重新检查 open；bounded execute 则有 settled guard。需验证 ssh2 在 route teardown 与 callback 交错下是否能返回仍存活 channel；当前没有真实晚到 channel 泄漏复现。
 
-## 65. Remote Archive 解压的部分失败展示与结果确认契约待确认
+## 65. Remote Archive 部分失败契约（已核对并明确）
+
+> 已核对：普通解压不承诺 staging tree／集合回滚；失败和取消可能已有部分输出，使用文档明确刷新实际目录再决定重试。#32 的数值 exit evidence 与 unknown quarantine 保留，不将 close/terminate 当作已退出，不将 failed 当作零副作用。未新增逐文件 partial inventory。下文为原核对背景。
 
 > 待确认（普通解压部分成功语义）：`remote-archive-operation.service.ts` 没有 staged tree swap；zip/tar 解压通常就允许部分结果。应核实错误提示和 unknown outcome 验证，而不是假定所有 archive API 都承诺事务回滚。
 
