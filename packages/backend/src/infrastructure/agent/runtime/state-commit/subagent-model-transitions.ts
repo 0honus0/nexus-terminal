@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { AGENT_DEFAULTS } from '../../../../modules/agent/agent-defaults';
+import { durableRecord, parseDurableJson } from '../durable-state-decoders';
+import { shouldRetryModel } from '../../../../modules/agent/runtime/execution/model-retry-policy';
 import type {
   BeginModelStepResult,
   BeginSubagentModelStepCommand,
@@ -389,6 +392,34 @@ export const settleSubagentModelStepTransition = async (
   }
   const tokenDelta = command.inputTokens + command.outputTokens;
   const cancelling = row.status === 'cancelling';
+  const retry = command.retry && !cancelling && row.status === 'running' ? command.retry : undefined;
+  if (retry) {
+    const limits = await tx.queryOne<{ used_steps: number; max_steps: number; deadline_at: number }>(
+      'SELECT used_steps, max_steps, deadline_at FROM agent_delegations WHERE id = ?',
+      [command.delegationId],
+    );
+    const currentWork = await tx.queryOne<{ payload_json: string; deadline_at: number }>(
+      'SELECT payload_json, deadline_at FROM agent_scheduler_work WHERE id = ?',
+      [command.workId],
+    );
+    const payload = currentWork ? durableRecord(parseDurableJson(currentWork.payload_json)) : {};
+    const currentIndex = typeof payload.retryAttemptIndex === 'number' ? payload.retryAttemptIndex : 1;
+    if (
+      !limits ||
+      !currentWork ||
+      command.outcome !== 'failed' ||
+      !Number.isSafeInteger(retry.nextAttemptIndex) ||
+      retry.nextAttemptIndex !== currentIndex + 1 ||
+      retry.nextAttemptIndex > AGENT_DEFAULTS.modelRetryCount + 1 ||
+      !Number.isSafeInteger(retry.notBefore) ||
+      retry.notBefore <= command.now ||
+      retry.notBefore >= Math.min(limits.deadline_at, currentWork.deadline_at) ||
+      limits.used_steps >= limits.max_steps ||
+      parseRunUsage(row.usage_json).steps >= parseRunBudget(row.budget_json).maxRunSteps ||
+      !shouldRetryModel(new Error(command.errorCode), currentIndex, new AbortController().signal)
+    )
+      throw new Error('MODEL_RETRY_INVALID');
+  }
   const effectiveOutcome = cancelling ? 'cancelled' : command.outcome;
   const effectiveErrorCode = command.errorCode;
   const effectiveResult = command.result;
@@ -396,8 +427,13 @@ export const settleSubagentModelStepTransition = async (
     effectiveOutcome === 'completed' ? 'completed' : effectiveOutcome === 'cancelled' ? 'aborted' : 'failed';
   const stepStatus =
     effectiveOutcome === 'completed' ? 'completed' : effectiveOutcome === 'cancelled' ? 'cancelled' : 'failed';
-  const delegationStatus =
-    effectiveOutcome === 'completed' ? 'completed' : effectiveOutcome === 'cancelled' ? 'cancelled' : 'failed';
+  const delegationStatus = retry
+    ? 'running'
+    : effectiveOutcome === 'completed'
+      ? 'completed'
+      : effectiveOutcome === 'cancelled'
+        ? 'cancelled'
+        : 'failed';
   await tx.execute(
     `UPDATE agent_model_attempts SET status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?,
      estimated = ?, continuation_json = ?, error_code = ?, completed_at = ?
@@ -429,15 +465,21 @@ export const settleSubagentModelStepTransition = async (
       effectiveResult === null ? null : JSON.stringify(effectiveResult),
       JSON.stringify(command.evidenceRefs),
       command.now,
-      command.now,
+      retry ? null : command.now,
       command.delegationId,
       command.runId,
     ],
   );
   const runtimeChanged = await tx.execute(
-    `UPDATE agent_runtimes SET status = ?, schedule_state = 'finished', updated_at = ?
+    `UPDATE agent_runtimes SET status = ?, schedule_state = ?, updated_at = ?
      WHERE id = ? AND run_id = ? AND status IN ('created','running','interrupted')`,
-    [effectiveOutcome === 'failed' ? 'failed' : 'stopped', command.now, command.runtimeId, command.runId],
+    [
+      retry ? 'running' : effectiveOutcome === 'failed' ? 'failed' : 'stopped',
+      retry ? 'runnable' : 'finished',
+      command.now,
+      command.runtimeId,
+      command.runId,
+    ],
   );
   const workChanged = await tx.execute(
     `UPDATE agent_scheduler_work SET status = ?, version = version + 1, updated_at = ?
@@ -453,7 +495,22 @@ export const settleSubagentModelStepTransition = async (
   if (delegationChanged.changes !== 1 || runtimeChanged.changes !== 1 || workChanged.changes !== 1) {
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
-  await enqueueParentJoinResume(tx, command.runId, delegation.parent_runtime_id, command.delegationId, command.now);
+  if (retry) {
+    await tx.execute(
+      `INSERT INTO agent_scheduler_work
+      (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before, deadline_at, created_at, updated_at, version)
+      SELECT ?, run_id, agent_runtime_id, 'model_step', 'queued', ?, NULL, ?, deadline_at, ?, ?, 1 FROM agent_scheduler_work WHERE id = ?`,
+      [
+        `work-${randomUUID()}`,
+        JSON.stringify({ delegationId: command.delegationId, retryAttemptIndex: retry.nextAttemptIndex }),
+        retry.notBefore,
+        command.now,
+        command.now,
+        command.workId,
+      ],
+    );
+  } else
+    await enqueueParentJoinResume(tx, command.runId, delegation.parent_runtime_id, command.delegationId, command.now);
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const finalCancellation = cancelling && nextExecuting === 0;
   if (finalCancellation) await cancelRunSubagentWork(tx, row.id, command.now, true);
@@ -485,19 +542,23 @@ export const settleSubagentModelStepTransition = async (
         outputTokens: command.outputTokens,
       },
     },
-    {
-      type:
-        effectiveOutcome === 'completed'
-          ? 'subagent.completed'
-          : effectiveOutcome === 'cancelled'
-            ? 'subagent.cancelled'
-            : 'subagent.failed',
-      payload: {
-        delegationId: command.delegationId,
-        runtimeId: command.runtimeId,
-        evidenceRefs: command.evidenceRefs,
-      },
-    },
+    ...(!retry
+      ? [
+          {
+            type:
+              effectiveOutcome === 'completed'
+                ? 'subagent.completed'
+                : effectiveOutcome === 'cancelled'
+                  ? 'subagent.cancelled'
+                  : 'subagent.failed',
+            payload: {
+              delegationId: command.delegationId,
+              runtimeId: command.runtimeId,
+              evidenceRefs: command.evidenceRefs,
+            },
+          } as DurableEventInput,
+        ]
+      : []),
     ...(finalCancellation
       ? [
           { type: 'run.cancelled', payload: { reason: 'participants_settled' } } as const,

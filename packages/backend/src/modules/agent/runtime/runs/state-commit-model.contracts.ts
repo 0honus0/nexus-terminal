@@ -200,6 +200,7 @@ export interface SettleSubagentWithoutModelCommand {
 }
 
 export interface SettleSubagentModelStepCommand {
+  retry?: { nextAttemptIndex: number; notBefore: number };
   contextCheckpoint?: import('../collaboration/subagent-context-history').SubagentContextCheckpoint;
   scope: Scope;
   runId: string;

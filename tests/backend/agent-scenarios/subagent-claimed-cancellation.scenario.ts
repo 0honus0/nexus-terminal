@@ -354,7 +354,7 @@ export const subagentClaimedCancellationScenario = async () => {
     const builder = new SubagentContextBuilder(
       repository,
       repository,
-      { discover: () => [] } as never,
+      { discover: () => [], list: () => [] } as never,
       new CapabilityRegistry(),
       emptyModelContinuations,
       null!,
@@ -421,6 +421,93 @@ export const subagentClaimedCancellationScenario = async () => {
     assert.equal(finishedChild.usage.steps, privateCalls + 1);
     assert.equal(finishedChild.usage.tokens, (privateCalls + 1) * 240);
     assert.equal((await repository.runtime(scope, runId, orchestrated.runtimeId))?.consumedMailboxSequence, 19);
+
+    const retryChild = await insertChild('transient-model-retry', { workStatus: 'claimed', ownerEpoch: 9 });
+    let retryCalls = 0;
+    const retryExecutor = new SubagentModelStepExecutor(
+      repository,
+      repository,
+      repository,
+      repository,
+      runs,
+      {
+        get: async () => ({
+          enabled: true,
+          version: 1,
+          models: [{ id: 'scenario-model', ...SCENARIO_MODEL_CAPABILITIES }],
+        }),
+      } as never,
+      {
+        async *stream() {
+          retryCalls += 1;
+          yield { type: 'usage', usage: { inputTokens: 20, outputTokens: 5, cachedInputTokens: 0 } };
+          if (retryCalls === 1) throw new Error('PROVIDER_HTTP_503');
+          yield { type: 'message.delta', text: 'Recovered child.' };
+          yield { type: 'completed', finishReason: 'stop' };
+        },
+      } as LanguageModelPort,
+      new ScenarioModelCallLimiter(),
+      commit,
+      builder,
+      null!,
+      {
+        verifiedRuntimeEvidence: async () => ({ artifactRefs: [], tools: [] }),
+        completeModelResult: async () => undefined,
+        failBeforeModel: async (...args: unknown[]) => {
+          throw new Error(`UNEXPECTED_RETRY_FAILURE:${args.at(-1)}`);
+        },
+      } as never,
+      { publishRunWake: () => undefined, publishTransient: () => undefined } as never,
+      schedulerClock,
+    );
+    await retryExecutor.execute(
+      scope,
+      {
+        id: retryChild.workId,
+        runId,
+        agentRuntimeId: retryChild.runtimeId,
+        kind: 'model_step',
+        status: 'claimed',
+        payload: { delegationId: retryChild.delegationId },
+        deadlineAt: now + 100,
+        ownerEpoch: 9,
+      } as never,
+      9,
+      new AbortController().signal,
+    );
+    assert.equal((await repository.delegation(scope, runId, retryChild.delegationId))?.status, 'running');
+    assert.equal(
+      (await repository.delegation(scope, runId, retryChild.delegationId))?.usage.tokens,
+      25,
+      'failed retry attempt usage must be durable',
+    );
+    const retryWork = (await db.queryOne<{ id: string; payload_json: string; not_before: number; deadline_at: number }>(
+      "SELECT id, payload_json, not_before, deadline_at FROM agent_scheduler_work WHERE agent_runtime_id = ? AND status = 'queued'",
+      [retryChild.runtimeId],
+    ))!;
+    assert.ok(retryWork.not_before > now && retryWork.not_before < retryWork.deadline_at);
+    assert.equal(JSON.parse(retryWork.payload_json).retryAttemptIndex, 2);
+    await db.execute("UPDATE agent_scheduler_work SET status = 'claimed', owner_epoch = 9 WHERE id = ?", [
+      retryWork.id,
+    ]);
+    await retryExecutor.execute(
+      scope,
+      {
+        id: retryWork.id,
+        runId,
+        agentRuntimeId: retryChild.runtimeId,
+        kind: 'model_step',
+        status: 'claimed',
+        payload: JSON.parse(retryWork.payload_json),
+        deadlineAt: retryWork.deadline_at,
+        ownerEpoch: 9,
+      } as never,
+      9,
+      new AbortController().signal,
+    );
+    assert.equal((await repository.delegation(scope, runId, retryChild.delegationId))?.status, 'completed');
+    assert.equal((await repository.delegation(scope, runId, retryChild.delegationId))?.usage.tokens, 50);
+    assert.equal(retryCalls, 2);
 
     for (const mode of ['length', 'cancel'] as const) {
       summaryFailure = mode;

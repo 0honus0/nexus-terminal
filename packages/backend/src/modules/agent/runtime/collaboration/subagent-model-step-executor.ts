@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { shouldRetryModel, modelRetryDelayMs } from '../execution/model-retry-policy';
 import { logErrorCode, logger } from '../../../../shared/logging/logger';
 import type { ClockPort, Scope } from '../../agent.types';
 import type { LanguageModelPort } from '../../ai/language-model.port';
@@ -243,6 +244,8 @@ export class SubagentModelStepExecutor {
     const toolCalls = new Map<number, ToolCallAccumulator>();
     let outcome: 'completed' | 'failed' | 'cancelled' = 'completed';
     let failureCode: string | undefined;
+    let retry: { nextAttemptIndex: number; notBefore: number } | undefined;
+    const retryAttemptIndex = typeof payload.retryAttemptIndex === 'number' ? payload.retryAttemptIndex : 1;
     const requestSignal = compaction
       ? AbortSignal.any([
           signal,
@@ -316,6 +319,16 @@ export class SubagentModelStepExecutor {
     } catch (error) {
       outcome = signal.aborted ? 'cancelled' : 'failed';
       failureCode = signal.aborted ? 'ABORTED' : errorCode(error);
+      if (shouldRetryModel(error, retryAttemptIndex, requestSignal)) {
+        const notBefore =
+          this.clock.nowUnixSeconds() + Math.ceil(modelRetryDelayMs(error, retryAttemptIndex + 1) / 1000);
+        if (
+          notBefore < Math.min(delegation.deadlineAt, work.deadlineAt) &&
+          delegation.usage.steps + 1 < delegation.budget.maxSteps &&
+          begun.run.usage.steps < begun.run.budget.maxRunSteps
+        )
+          retry = { nextAttemptIndex: retryAttemptIndex + 1, notBefore };
+      }
     }
     const settledUsage: TokenUsage = usage ?? {
       inputTokens: estimatedInputTokens,
@@ -515,6 +528,7 @@ export class SubagentModelStepExecutor {
       stepId: begun.stepId,
       attemptId: begun.attemptId,
       outcome,
+      ...(retry ? { retry } : {}),
       result:
         outcome === 'completed'
           ? { summary: completion, finishReason, verifiedTools: verifiedEvidence.tools }
@@ -531,6 +545,7 @@ export class SubagentModelStepExecutor {
     });
     this.events.publishRunWake(work.runId, settled.eventCursor);
 
+    if (retry && settled.run.status === 'running') return;
     if (inbox.length > 0 && outcome === 'completed') {
       const through = inbox.at(-1)?.recipientSequence ?? runtime.consumedMailboxSequence;
       await this.mailboxes

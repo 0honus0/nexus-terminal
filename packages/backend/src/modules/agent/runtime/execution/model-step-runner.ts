@@ -18,7 +18,6 @@ import type {
   TokenUsage,
 } from '../../ai/model.types';
 import { ProviderService } from '../../ai/provider.service';
-import { AGENT_DEFAULTS } from '../../agent-defaults';
 import type { Scope } from '../../agent.types';
 import type { CatalogToolSchema } from '../../capabilities/tool-catalog';
 import type { BackendSignal } from './agent-backend.port';
@@ -29,7 +28,7 @@ import {
   completeCheckpoint,
   type ContextCheckpointGeneration,
 } from '../../ai/context-checkpoint.service';
-import { waitForRetry } from './execution-errors';
+import { shouldRetryModel, waitBeforeModelRetry } from './model-retry-policy';
 import { resolveModelContextBudget } from '../runs/run-budget-policy';
 import type { RunInputProjection, RunSnapshot } from '../runs/run.types';
 import { logger } from '../../../../shared/logging/logger';
@@ -75,12 +74,6 @@ const latestInput = (run: RunSnapshot): { id: string; text: string; artifactRefs
     if (typeof text === 'string') return { id: entry.id, text, artifactRefs };
   }
   return { id: '', text: '', artifactRefs: [] };
-};
-
-const retryAfterMilliseconds = (error: unknown): number => {
-  if (!error || typeof error !== 'object' || !('retryAfterMs' in error)) return 0;
-  const value = (error as { retryAfterMs?: unknown }).retryAfterMs;
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.min(30_000, Math.ceil(value)) : 0;
 };
 
 const PROJECT_WORK_ROOT = '/workspace/work';
@@ -566,25 +559,7 @@ export class ModelStepRunner {
   }
 
   shouldRetry(error: unknown, currentAttemptIndex: number, signal: AbortSignal): boolean {
-    if (signal.aborted || currentAttemptIndex > AGENT_DEFAULTS.modelRetryCount) return false;
-    const message = error instanceof Error ? error.message : '';
-    const code =
-      error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code ?? '') : '';
-    return (
-      /^PROVIDER_HTTP_(429|502|503|504)$/.test(message) ||
-      [
-        'PROVIDER_UNAVAILABLE',
-        'PROVIDER_DNS_RESOLUTION_FAILED',
-        'PROVIDER_HEADERS_TIMEOUT',
-        'PROVIDER_IDLE_TIMEOUT',
-        'PROVIDER_STREAM_TRUNCATED',
-        'ECONNRESET',
-        'ECONNREFUSED',
-        'ETIMEDOUT',
-        'EAI_AGAIN',
-      ].includes(message) ||
-      ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN'].includes(code)
-    );
+    return shouldRetryModel(error, currentAttemptIndex, signal);
   }
 
   shouldFailover(error: unknown, signal: AbortSignal): boolean {
@@ -592,7 +567,6 @@ export class ModelStepRunner {
   }
 
   waitBeforeRetry(error: unknown, nextAttemptIndex: number, signal: AbortSignal): Promise<void> {
-    const defaultDelayMs = (nextAttemptIndex === 2 ? 1_000 : 2_000) + Math.floor(Math.random() * 251);
-    return waitForRetry(Math.max(defaultDelayMs, retryAfterMilliseconds(error)), signal);
+    return waitBeforeModelRetry(error, nextAttemptIndex, signal);
   }
 }

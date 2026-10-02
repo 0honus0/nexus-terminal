@@ -351,9 +351,9 @@ Child 不再重复暴露全量 MCP schema；动态 contribution 版本替换时�
 
 ## 19. Root 与 Subagent 的 Model Retry 策略差异是否需要统一
 
-> 待确认（可用性策略取舍）：`model-step-runner.ts` 有 retry/routes，`subagent-model-step-executor.ts` 将异常直接 settle；实现差异成立，但没有发现 Root/Child 必须共享 retry policy 的契约。是否需要 Child 自动重试须结合成本、deadline 与 parent 重委派策略验证。
+> 已修复（按所有者决定新增 Child 重试）：Root／Child 共享瞬态错误分类、次数与退避 policy；Child 失败 attempt／usage 先 durable settle，再 queued work 有界重试，保留 frozen model。deadline、Run／delegation step budget、取消和 owner epoch 继续约束；不重放 Tool 副作用、不新增 fallback route。SQLite 场景验证 503→重试成功及两次 usage 结算。
 
-Root 有 durable model retry 和 fallback route；Child 在 stream 异常后 settle failed，profile 的 allowedModels 是授权集合而非 route chain。需要用瞬态错误验证 parent 是否会重新委派，以及 Child 自动重试是否符合预算。
+参考 Codex pinned commit `14a477ea89712071944244022e8a10142845456e` 的 responses_retry：服务端退避建议不扩展重试次数。Nexus 使用自身 durable work／StateCommit，未移植代码；每次失败的 partial output 不形成 completion、Tool proposal 或 mailbox 消费，usage 仍计费。次数记录在连续 retry work payload，新正常步骤重置；非瞬态、耗尽、取消和重启遗留 interrupted 均不自动重试，allowedModels 不变为 fallback route。
 
 ## 20. Run Interrupt 的 Streaming 检测覆盖 Child，但实际 Abort 只发送给 Root Scheduler
 
