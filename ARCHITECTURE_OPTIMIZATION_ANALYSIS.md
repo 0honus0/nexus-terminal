@@ -1316,7 +1316,9 @@ const sourceScp = await this.commandPath(source, 'scp');
 
 这和真正的 target probe、mkdir、transfer command 已经透传 `AbortSignal` 的语义不一致，导致取消延迟专门集中在任务启动阶段。
 
-## 59. Jump Chain 的 hop 引用是否应复用被引用连接的完整 route
+## 59. Jump Chain hop 路由语义（已核对：显式主机链）
+
+> 已核对：现有 transport 使用显式有序 host/credential chain，没有复用 hop 独立 route 的公开承诺。文档明确从前一跳直连下一跳，不递归插入 hop proxy/jumpChain；若网络需要这些中间跳，应显式列入目标链。本项关闭未确认的完整 route 复用缺陷，不改变现有解析／循环拒绝保护。下文为原核对背景。
 
 > 待确认（hop 是否只代表 host credential）：resolver flatten 确实未保留 hop.route，Connection validation 又接受该配置。但 jumpChain 的每一 hop 也可能设计为从前一跳直连的主机描述；需确认文档是否承诺复用被引用连接的完整 route，再判缺陷。
 

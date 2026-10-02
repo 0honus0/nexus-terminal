@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+SSH jump transport 消费显式有序 ResolvedJumpHost（host/credential），不递归执行引用 Connection 独立 route；Resolver 仍保留现有缺失/type/cycle fail-closed。完整路由递归不是当前公开契约。
+
 ServerTransferExecutor.commandPath 透传任务 signal，probe 前后与 catch 重检取消，普通缺失命令可 fallback，abort 不转成 null 后继续串行探测。
 
 Server Transfer 的 source executor 使用目标 credential 从源端认证目标，信任源 OS 管理员是公开前提；UI 提交确认不构成源端隔离机制。临时 key finally cleanup 保留，不将直传等同 Backend relay。
