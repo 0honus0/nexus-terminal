@@ -2845,7 +2845,9 @@ return appearanceThemes.value.find((theme) => theme.id === id)?.themeData ?? def
 
 ## 108. Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发
 
-> 确认问题（跨任务 admission）：TransfersService initiate 每次直接 process，orchestrator concurrency 仅 task 内，ExecutionSessionManager 无总配额。连接失败／远端限制会影响真实资源规模，未压测。
+> 已关闭／核对：#76 已在 TransferTaskRegistry.create 增加全进程 active task cap=32，且 FINAL 但 cancellation owner 未释放的任务仍计入 admission；#75 同时限制单请求最多 1024 subtask，orchestrator 默认每 task 最多 5 个并行 worker。因此大量小 `/send` 请求不能再线性无界增加 Server Transfer source ExecutionSession／远端命令；共享 ExecutionSessionManager 本身仍服务多个独立 subsystem，不在本项增加跨 subsystem 总闸门。新增回归场景验证第 33 个 active task 被拒绝、释放一个终态 owner 后容量恢复。下文为原问题证据。
+
+> 原问题证据：TransfersService initiate 每次直接 process，orchestrator concurrency 仅 task 内，ExecutionSessionManager 无总配额；该证据早于 #76 active-task admission。
 
 `TransferOrchestratorService` 确实对**单个** task 的 subtask worker 做了并发限制：
 
@@ -4213,7 +4215,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项当前分类：**未解决确认问题 23 项，待确认 15 项，已修复 80 项，已关闭／核对／澄清 22 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
+原 144 项当前分类：**未解决确认问题 22 项，待确认 15 项，已修复 80 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4320,7 +4322,7 @@ await terminateAllManagedProcesses();
 | 105    | 已修复   | Backend Plugin 的 Host RPC 没有 response-drain deadline；一个堵住 stdin 的 Plugin 可以让 uninstall / upgrade 永远卡在 SIGTERM 之前                                           |
 | 106    | 已修复   | Plugin 首次安装没有 per-App serialization；两个版本并发 install 可以把 App activeVersion 与 Installation version 写成永久冲突                                                |
 | 107    | 已修复   | Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`                                               |
-| 108    | 确认问题 | Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发                                 |
+| 108    | 已关闭   | Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发                                 |
 | 109    | 确认问题 | SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志                                                                           |
 | 110    | 确认问题 | Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合                                        |
 | 111    | 确认问题 | Workspace WebSocket 没有 in-flight request / file-operation admission limit；客户端可以绕过 Frontend scheduler 并发放大 SFTP stream、positioned copy 与远端 archive command  |
