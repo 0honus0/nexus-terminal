@@ -1267,7 +1267,9 @@ Frontend 已经有 `authenticatedSessionLifecycle`，并给 connections、proxie
 
 Command History、Quick Commands 和 Server Transfers 同样保留全局 Pinia state；虽然通常会在组件 mount/poll 时再次请求，新请求返回前仍持有并可能渲染旧 session 数据。当前 authenticated-session owner contract 没有覆盖全部 session-scoped cache；这不等于 Backend 数据权限被绕过。
 
-## 56. Bounded SSH command 把“没有 exit status”的 close 当作 exit code 0，会把异常终止报告为成功
+## 56. Bounded SSH 无 exit status 被报告成功（已修复）
+
+> 已修复：无有限数值 status 使用现有 -1 unknown/failure sentinel，close 含退出 signal 也拒绝；只有明确 code 0 且无 signal resolve。保留 CommandExecutionError/result 消费契约，不以 channel close 证明业务成功。下文为原问题证据。
 
 > 确认问题：`ssh-execution-transport.adapter.ts` close handler 对未提供 code 的情况默认 0。SSH server 未发送 status／以 signal 结束是触发前提；不是所有正常 close 都错误。
 

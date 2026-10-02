@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Bounded SSH close 缺少有限数值 exit status 时保留 result(-1) 并 reject CommandExecutionError；exit signal 同样禁止 success，只有证据明确的零退出成功。
+
 Runner applyWorkspacePatch 的集合契约为完整 prevalidation + per-file replacement，并非多文件事务；applied=true 仅全量成功，错误不证明零副作用。重新读取目标 hash 才能重新规划，不新增平行文件 journal 或崩溃 rollback 声明。
 
 PluginRunnerRuntime.activateWorkspace 的批级失败补偿由 runtime owner disposeWorkspace 持有，统一覆盖 start/restart/reconciler；失败时不遗留前序激活实例。

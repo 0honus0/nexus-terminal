@@ -297,9 +297,9 @@ const executeBoundedCommand = (client: Client, request: CommandRequest): Promise
         settleReject(new CommandExecutionError(streamError.message, result(-1))),
       );
       stream.once('close', (code: number | undefined, exitSignal: string | undefined) => {
-        const exitCode = typeof code === 'number' ? code : 0;
+        const exitCode = typeof code === 'number' && Number.isFinite(code) ? code : -1;
         const finalResult = result(exitCode, exitSignal);
-        if (exitCode !== 0) {
+        if (exitCode !== 0 || exitSignal) {
           const message = finalResult.stderr.trim() || `SSH command exited with code ${exitCode}`;
           settleReject(new CommandExecutionError(message, finalResult));
         } else {
