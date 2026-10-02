@@ -1544,7 +1544,9 @@ WHERE name = ? AND theme_type = 'preset'
 
 这个异常位于正常启动链上：`BackendApplication.start()` 先 `await services.initialize()`，而 `services.initialize()` 会 `await terminalThemes.initialize(presetTerminalThemes)`，完成后才执行 HTTP `listen()`。因此名称冲突不是“缺少一个新主题”这么轻，而是会让升级后的 Backend 在监听端口前直接启动失败。
 
-## 72. File Manager 批量删除的部分失败契约待确认
+## 72. File Manager 部分删除失败（已明确并修复失败刷新）
+
+> 已核对：批量顺序删除不承诺回滚；UI catch 增加三语部分删除/unknown 提示并尽力 reload，保持原错误原因；reload 失败不伪装恢复成功。无逐项 backend report，不声称能重建每项确定 outcome，不自动重试。下文为原背景。
 
 > 待确认（批量删除失败展示）：WorkspaceFilesystemService 顺序删除且不回滚属实，但批量文件删除通常不承诺 all-or-nothing。需确认 UI 是否刷新并展示逐项成功／失败，保留的是 partial outcome 契约疑问，不直接要求删除事务化。
 

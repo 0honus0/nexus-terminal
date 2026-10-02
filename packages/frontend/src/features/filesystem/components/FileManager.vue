@@ -1070,7 +1070,10 @@
       );
       await browser.load();
     } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+      feedback.notifyError(
+        `${t('fileManager.errors.deletePartial')}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
+      await browser.load().catch(() => undefined);
     }
   };
   const changeTerminalToCurrent = async () => {

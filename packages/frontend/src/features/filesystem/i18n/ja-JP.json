@@ -160,6 +160,7 @@
       "missingConnectionId": "現在の接続 ID を取得できません",
       "createFolderFailed": "フォルダーの作成に失敗しました",
       "deleteFailed": "削除に失敗しました",
+      "deletePartial": "削除に失敗しました。一部は削除済みの可能性があります。再試行前に更新したディレクトリを確認してください。結果不明は操作停止の証拠ではありません",
       "renameFailed": "名前の変更に失敗しました",
       "chmodFailed": "権限の変更に失敗しました",
       "invalidPermissionsFormat": "無効な権限形式です。3 桁または 4 桁の 8 進数を入力してください (例: 755 または 0755)。",

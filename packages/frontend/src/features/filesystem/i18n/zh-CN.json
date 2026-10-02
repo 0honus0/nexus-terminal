@@ -160,6 +160,7 @@
       "missingConnectionId": "无法获取当前连接 ID",
       "createFolderFailed": "创建文件夹失败",
       "deleteFailed": "删除失败",
+      "deletePartial": "删除失败，部分项目可能已删除。重试前检查刷新后的目录；结果未知不代表操作已停止",
       "renameFailed": "重命名失败",
       "chmodFailed": "修改权限失败",
       "invalidPermissionsFormat": "无效的权限格式。请输入 3 或 4 位八进制数字 (例如 755 或 0755)。",

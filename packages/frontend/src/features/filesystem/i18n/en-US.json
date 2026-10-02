@@ -160,6 +160,7 @@
       "missingConnectionId": "Cannot get current connection ID",
       "createFolderFailed": "Failed to create folder",
       "deleteFailed": "Failed to delete",
+      "deletePartial": "Deletion failed; some items may already be deleted. Check the refreshed directory before retrying; an unknown outcome is not proof that the operation stopped",
       "renameFailed": "Failed to rename",
       "chmodFailed": "Failed to change permissions",
       "invalidPermissionsFormat": "Invalid permissions format. Please enter 3 or 4 octal digits (e.g., 755 or 0755).",
