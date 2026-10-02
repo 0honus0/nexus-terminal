@@ -946,9 +946,9 @@ WebAuthn signature counter 的安全语义依赖服务端保存值保持单调�
 
 remove 先删除文件再清空 Setting；第二步失败可留下 missing reference。AppearanceSettingsService.get() 已有检测并清理 missing background 的路径，数据库恢复后有机会自愈，因此不保留“永久悬挂”的结论。
 
-## 42. Workspace create 的业务预检查遮蔽了底层 idempotency replay
+## 42. Workspace create 预检查遮蔽 replay（已修复）
 
-> 确认问题：`workspace-runtime.service.ts:339–348` 在 repository replay 前拒绝已有 live Workspace；`sqlite-workspace.repository.ts` 有对应 create replay。相同 key 成功后重试的契约被 service precheck 遮蔽，未跑接口重试。
+> 已修复：授权与 requestHash 后先 repository.replayCreate，再业务 admission/profile 解析；同 key/hash 返回原 Workspace，不重复发 provision。创建事务仍共享同一 replay helper 防并发重复提交；payload mismatch/pending/unknown 保持拒绝，replay 有原 idempotency retention 边界。下文为原问题证据。
 
 `WorkspaceRuntimeService.create()` 已经接受 `idempotencyKey` 并计算稳定的 `requestHash`，底层 `SqliteWorkspaceRepository.createWorkspace()` 也实现了完整 replay：它先通过 `commandForReplay(..., 'workspace.create', idempotencyKey, ...)` 查找旧命令，校验 `request_hash`，然后返回原先创建的 Workspace。
 

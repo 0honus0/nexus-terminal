@@ -337,6 +337,8 @@ export class WorkspaceRuntimeService {
       },
       this.cryptoHash,
     );
+    const replay = await this.repository.replayCreate(scope, idempotencyKey, requestHash, this.now());
+    if (replay) return replay;
     const settings = await this.settings.get(scope.userId);
     const existing = await this.repository.listWorkspaces(scope);
     if (

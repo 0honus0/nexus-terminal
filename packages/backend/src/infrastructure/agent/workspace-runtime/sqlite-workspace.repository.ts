@@ -107,24 +107,43 @@ const commandView = (row: CommandRow): WorkspaceRuntimeCommandView => ({
 export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
   constructor(private readonly db: RelationalDatabase) {}
 
+  async replayCreate(
+    scope: Scope,
+    idempotencyKey: string,
+    requestHash: string,
+    now: number,
+  ): Promise<AgentWorkspaceView | null> {
+    return this.db.transaction((tx) => this.replayCreateInTx(tx, scope, idempotencyKey, requestHash, now));
+  }
+
+  private async replayCreateInTx(
+    tx: RelationalDatabase,
+    scope: Scope,
+    idempotencyKey: string,
+    requestHash: string,
+    now: number,
+  ): Promise<AgentWorkspaceView | null> {
+    const command = await commandForReplay(tx, scope, 'workspace.create', idempotencyKey, now);
+    if (!command) return null;
+    if (command.request_hash !== requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+    if (command.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
+    if (command.status === 'unknown') throw new Error('RECONCILIATION_REQUIRED');
+    if (!command.result_entity_id) throw new Error('WORKSPACE_STATE_INVALID');
+    const replay = await this.getWorkspaceInTx(tx, scope, command.result_entity_id);
+    if (!replay) throw new Error('WORKSPACE_STATE_INVALID');
+    return replay;
+  }
+
   async createWorkspace(record: CreateWorkspaceRecord): Promise<AgentWorkspaceView> {
     return this.db.transaction(async (tx) => {
-      const existingCommand = await commandForReplay(
+      const replay = await this.replayCreateInTx(
         tx,
         record.scope,
-        'workspace.create',
         record.idempotencyKey,
+        record.requestHash,
         record.createdAt,
       );
-      if (existingCommand) {
-        if (existingCommand.request_hash !== record.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
-        if (existingCommand.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
-        if (existingCommand.status === 'unknown') throw new Error('RECONCILIATION_REQUIRED');
-        if (!existingCommand.result_entity_id) throw new Error('WORKSPACE_STATE_INVALID');
-        const replay = await this.getWorkspaceInTx(tx, record.scope, existingCommand.result_entity_id);
-        if (!replay) throw new Error('WORKSPACE_STATE_INVALID');
-        return replay;
-      }
+      if (replay) return replay;
 
       const run = await tx.queryOne<{ id: string }>(
         `SELECT r.id FROM agent_runs r JOIN agent_runtimes rt ON rt.run_id=r.id

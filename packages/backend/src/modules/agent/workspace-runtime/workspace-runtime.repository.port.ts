@@ -48,6 +48,12 @@ export interface ReconfigureWorkspaceRecord {
 }
 
 export interface AgentWorkspaceRepositoryPort {
+  replayCreate(
+    scope: Scope,
+    idempotencyKey: string,
+    requestHash: string,
+    now: number,
+  ): Promise<AgentWorkspaceView | null>;
   createWorkspace(record: CreateWorkspaceRecord): Promise<AgentWorkspaceView>;
   listWorkspaces(scope: Scope, runId?: string): Promise<AgentWorkspaceView[]>;
   listUserWorkspaces(userId: number): Promise<AgentWorkspaceView[]>;
