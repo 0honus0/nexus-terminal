@@ -764,21 +764,26 @@ export const composeAgent = ({
         const updated = await settings.patch(userId, patch, expectedRevision);
         const featureChanged = before.effectiveSettings.feature.enabled !== updated.effectiveSettings.feature.enabled;
         if (featureChanged) publishHostWake(userId);
+        const featureAppIds = featureChanged
+          ? [
+              ...new Set([
+                ...registry.list().map((definition) => definition.manifest.id),
+                ...(await plugins.listInstallations(userId)).map((installation) => installation.appId),
+              ]),
+            ]
+          : [];
         if (before.effectiveSettings.feature.enabled && !updated.effectiveSettings.feature.enabled) {
           const deadline = systemClock.nowUnixSeconds() + 10;
-          for (const definition of registry.list()) {
+          for (const appId of featureAppIds) {
             try {
-              await lifecycle.quiesceScope({ userId, appId: definition.manifest.id }, deadline);
+              await lifecycle.quiesceScope({ userId, appId }, deadline);
             } catch (error) {
-              logger.warn(
-                { err: error, userId, appId: definition.manifest.id },
-                'Agent feature disable post-commit quiesce failed',
-              );
+              logger.warn({ err: error, userId, appId }, 'Agent feature disable post-commit quiesce failed');
             }
           }
         } else if (!before.effectiveSettings.feature.enabled && updated.effectiveSettings.feature.enabled) {
-          for (const definition of registry.list()) {
-            const scope = { userId, appId: definition.manifest.id };
+          for (const appId of featureAppIds) {
+            const scope = { userId, appId };
             try {
               await lifecycle.resumeScope(scope);
               scheduler.resumeScope(scope);

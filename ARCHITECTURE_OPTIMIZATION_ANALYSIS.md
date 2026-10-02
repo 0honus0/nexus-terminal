@@ -2113,7 +2113,9 @@ Integration id 来自 UUID idempotency key。用户可以创建 integration A �
 
 因此 Integration lifecycle 当前会产生单调增长的历史 generation state。它不依赖 refresh 是否失败，也不要求并发竞态；只要长期进行 Integration create/remove，heap 中就会持续保留已经不存在的 Integration UUID。
 
-## 95. 全局 Agent feature disable 只 quiesce builtin App；Plugin App 的活跃 Run、Subagent 和 Backend Plugin runtime 会继续运行
+## 95. Agent feature disable Plugin scope 覆盖（已修复）
+
+> 已修复：feature变化枚举builtin与当前user Plugin installations去重appIds，disable quiesceScope/enable resumeScope均覆盖；registry.list builtin契约不改。post-commit失败仍诊断，不声称所有故障插件必然10s停止或配置/外部runtime原子。下文为原证据。
 
 > 确认问题：`app-registry.service.ts:67` list 仅 builtin；`compose-agent.ts:804` disable 用 list 枚举 scope。新 Run 有 feature gate，已有 Plugin execution 不在此 loop；未跑真实插件禁用场景。
 
