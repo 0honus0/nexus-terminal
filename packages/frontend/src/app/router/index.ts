@@ -5,12 +5,12 @@ import { loadConnectionsView } from '@/features/connections/public';
 import { loadProxiesView } from '@/features/proxies/public';
 import { loadNotificationsView } from '@/features/notifications/public';
 import { loadAuditLogView } from '@/features/audit/public';
-import { loadWorkspaceView } from '@/runtimes/workspace/public';
 import { clearDynamicImportRecoveryMarker, recoverStaleDynamicImport } from '@/app/bootstrap/pwa';
 
 const loadDashboard = () => import('../pages/dashboard/DashboardPage.vue');
 const loadLogin = () => import('../pages/login/LoginPage.vue');
 const loadSettings = () => import('../pages/settings/SettingsPage.vue');
+const loadWorkspacePage = () => import('../pages/workspace/WorkspacePage.vue');
 
 let authenticatedPreloadScheduled = false;
 export const preloadAuthenticatedRoutes = (): void => {
@@ -25,7 +25,7 @@ export const preloadAuthenticatedRoutes = (): void => {
   const preload = async () => {
     // Warm the common connection/terminal path only. Settings and administrative
     // pages stay lazy instead of competing with the current page's requests.
-    for (const loader of [loadConnectionsView, loadWorkspaceView]) {
+    for (const loader of [loadConnectionsView, loadWorkspacePage]) {
       await loader().catch(() => undefined);
     }
   };
@@ -55,7 +55,7 @@ const routes: RouteRecordRaw[] = [
     name: 'Setup',
     component: loadSetupView,
   },
-  { path: '/workspace', name: 'Workspace', component: loadWorkspaceView },
+  { path: '/workspace', name: 'Workspace', component: loadWorkspacePage },
   {
     path: '/connections',
     name: 'Connections',

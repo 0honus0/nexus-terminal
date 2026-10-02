@@ -79,7 +79,7 @@ packages/frontend/src/
         ├── protocol/
         ├── session/
         ├── state/
-        ├── views/
+         ├── presentation/             public page-composition entry
         └── public.ts
 ```
 
@@ -111,6 +111,8 @@ Client 是浏览器到 Backend HTTP contract 的唯一普通入口。它负责�
 ### `runtimes/workspace/`
 
 Workspace Runtime 组合长生命周期的交互会话，包括 SSH terminal、文件系统、编辑器、预览、传输、状态监控、Docker、布局、sidebars 和远程桌面入口。
+
+`app/pages/workspace/WorkspacePage.vue` 持有路由页面的跨 Feature 组合，通过各 Feature 的 `public.ts` 消费偏好、外观、历史、传输与挂起目录。Runtime 的 `presentation/public.ts` 只暴露页面所需的组件、延迟加载器、UI state provider 和唯一 session registry；布局、transport 与会话生命周期仍由 Runtime 原 owner 持有，App 不复制这些状态。`/workspace` 路由及认证后空闲预加载均加载该 App 页面，Runtime 不持有该页面的反向加载入口。
 
 每个 Workspace session 持有自己的 transport、controllers 和 presentation state。Registry 持有 session 顺序、激活状态和生命周期。Feature 通过 adapter/capability 接入 Runtime，不读取 Runtime 私有目录。
 

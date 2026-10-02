@@ -27,21 +27,22 @@
     refreshSuspendedSessionsCatalog,
     type SuspendedSessionDto,
   } from '@/features/ssh-suspend/public';
-  import WorkspaceStartPage from '../components/WorkspaceStartPage.vue';
-  import WorkspaceTabBar from '../components/WorkspaceTabBar.vue';
-  import { provideWorkspaceUiState } from '../state/workspaceUiState';
-  import { workspaceRuntimeRegistry, type WorkspaceRuntimeSession } from '../session';
   import {
+    WorkspaceStartPage,
+    WorkspaceTabBar,
+    provideWorkspaceUiState,
+    workspaceRuntimeRegistry,
+    type WorkspaceRuntimeSession,
+    loadWorkspaceLayoutConfigurator,
+    loadWorkspaceFocusConfigurator,
     loadWorkspaceSessionSurface,
     preloadWorkspaceTerminalSurface,
-  } from '../components/preloadWorkspaceTerminalSurface';
+  } from '@/runtimes/workspace/presentation/public';
 
   const ProgressDisplayModal = defineAsyncComponent(loadProgressDisplayModal);
   const SuspendedSessionsModal = defineAsyncComponent(loadSuspendedSessionsModal);
-  const WorkspaceLayoutConfigurator = defineAsyncComponent(
-    () => import('../components/WorkspaceLayoutConfigurator.vue'),
-  );
-  const WorkspaceFocusConfigurator = defineAsyncComponent(() => import('../components/WorkspaceFocusConfigurator.vue'));
+  const WorkspaceLayoutConfigurator = defineAsyncComponent(loadWorkspaceLayoutConfigurator);
+  const WorkspaceFocusConfigurator = defineAsyncComponent(loadWorkspaceFocusConfigurator);
   const WorkspaceSessionSurface = defineAsyncComponent(loadWorkspaceSessionSurface);
 
   interface SurfaceApi {

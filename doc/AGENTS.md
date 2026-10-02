@@ -21,9 +21,9 @@
 本节优先于后续规范。每条规则独立生效，不通过改写其他条目改变原意；规则冲突时停止受影响的工作并询问项目所有者，不自行选择或合并。
 
 1. 每次开发都必须遵守本文件的全部内容。
-2. 项目所有者提出的新规则应作为独立条目加入本节，不得通过改写其他条目改变其原意。
+2. 项目所有者提出的新规则若更新或取代已有规则，应直接修改原条目，以最新明确要求为准，不保留重复或冲突条目；仅独立的新要求另行追加。
 3. 发现本节规则相互冲突时，必须询问项目所有者如何处理，不得自行选择或合并冲突规则。
-4. 处理 `doc/` 中记录的问题时，一次解决一个问题；每解决一个问题，单独提交并推送。
+4. 处理问题清单时，一次解决一个问题；修改前先确认问题与修改方案，修复后同步更新相关文档、完成快速检查并单独创建本地提交。当前快速修复阶段不新增 E2E 用例。
 5. 问题修复完成后，必须同步关闭或删除 `doc/` 中对应的未解决记录，不得保留已解决问题的开放状态或残余描述。
 6. 自动化测试源码和测试专用 harness 必须统一放在仓库根目录 `tests/` 下，并按功能分类；生产包中不得新增分散的测试目录。
 7. 可复用的开发、检查、构建、Docker 和 E2E 辅助脚本必须放在 `scripts/` 下，并按功能目录分类。
@@ -77,6 +77,7 @@
 - `packages/protocol` 唯一持有 HTTP、WebSocket 与 Runner wire DTO；adapter 直接使用规范名称，不重复声明或创建兼容别名。
 - Backend 按 `shared -> platform -> modules -> interfaces/infrastructure -> bootstrap` 分工：Module 持有用例与 port，Infrastructure 实现 adapter，Interface 仅转换协议，Bootstrap 组装。Interface 不访问数据库或持有产品事务；业务模块不读 `process.env` 或依赖具体 Infrastructure。
 - Frontend 分为 `app/features/runtimes/foundation/shared`；跨模块通过 `public.ts` 或 foundation `index.ts`，不深层导入私有实现。共享能力提升到已有公共 owner。
+- Workspace 路由页面的跨 Feature 组合位于 `app/pages/workspace`，只通过 Feature 与 Runtime 的公开入口消费能力；Runtime 保留会话、布局、组件与 transport owner，不反向加载 App 页面。
 - Workspace transport 由 adapter/session owner 管理；View/composable 不持有 HTTP、WebSocket、frame、重连、心跳或 backpressure。Agent 与 Workspace Runtime 通过公开 contract/capability 协作，不读对方私有状态。
 - 根 pnpm workspace、lockfile、catalog 是唯一依赖 authority。
 
