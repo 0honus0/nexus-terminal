@@ -276,6 +276,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - 双文件管理器布局属于实验性能力，复杂场景可能存在边界行为。
 - 同一布局中添加多个文本编辑器目前并非完整支持场景。
 - 请自行备份部署目录中的 `data`；项目本身不替代外部备份方案。
+- Backend 正常关闭会调用所有 Backend Plugin child 的 dispose／终止及退出确认；失败会报告关闭错误，不把发送 kill 信号当作已退出。
 - Backend Plugin 的 ready 握手限时 30 秒，模块导入卡住会终止 child 并报告 `PLUGIN_BACKEND_READY_TIMEOUT`；不再无限等待该握手，后续退出确认可能额外耗时。
 - Backend 重启后的用户初始化会恢复 builtin 和已安装 Plugin App 的 enabled MCP 集成；远端连接失败仍显示集成错误，不保证 enabled 即 ready，可手动刷新。
 - 全局关闭 Agent 会对 builtin 与当前用户已安装 Plugin App 执行 scope quiesce，重新启用也覆盖两类 App。配置提交后生命周期失败会记录诊断，不承诺故障插件均能在期限内停止，也不回滚已提交设置。

@@ -1016,6 +1016,7 @@ export const composeAgent = ({
         mcpRuntime.closeAll(),
         workspaceInteractiveSessions.closeAll(),
         browserGateway.closeAll(),
+        resetRuntime(),
       ]);
       eventHub.clear();
       await lifecycle.dispose();

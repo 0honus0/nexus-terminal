@@ -2271,6 +2271,8 @@ await listen(server, config.port);
 
 ## 98. Backend graceful shutdown 没有关闭 Plugin Backend runtime；SIGTERM 后主服务可以在 HTTP 已停止后继续被 Plugin child process 挂住
 
+> 已修复：正常 Agent dispose 接入已存在的 resetRuntime/Plugin closeAll；closeAll 等待所有实例并在成功后按身份移除，失败保留 owner 且汇总诊断。原“adapter 无 closeAll”不准确，缺口是 shutdown wiring；下文为原链路证据。
+
 > 确认问题：`compose-agent.ts` quiesce/dispose 与 `app-lifecycle.service.ts:150` 仅 builtin definition；Plugin adapter 无全局实例 close owner 接入。Root/Child scheduler 全局 quiesce 已覆盖，不要误说所有 Plugin Run 都不 abort；这里是 backend child process cleanup 缺口。
 
 主 Backend 的 shutdown 顺序是：

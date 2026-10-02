@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Agent dispose 与 restore 共用 Plugin resetRuntime owner；closeAll allSettled 等待全部 child，退出成功按实例身份移除，失败保留实例并 AggregateError，不依赖 builtin lifecycle.dispose 枚举 Plugin。
+
 Backend Plugin ready timer 复用 CONTROL_TIMEOUT_MS；超时经 protocolFailure/failAll 拒绝并 kill，晚到 ready 不复活失败实例，ready/error/exit 解除 timer，close 仍负责退出证据。
 
 用户初始化先 reconcile Plugin runtime，再对 builtin 与用户安装的 Plugin App 去重执行 MCP syncEnabled；工具 contribution 仍由 refresh 的配置版本／schema CAS 发布，registry.list 保持 builtin-only。

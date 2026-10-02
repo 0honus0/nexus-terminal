@@ -674,9 +674,18 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
   }
 
   async closeAll(): Promise<void> {
-    const instances = [...this.instances.values()];
-    await Promise.all(instances.map((instance) => instance.close()));
-    this.instances.clear();
+    const results = await Promise.allSettled(
+      [...this.instances.entries()].map(async ([key, instance]) => {
+        await instance.close();
+        if (this.instances.get(key) === instance) this.instances.delete(key);
+      }),
+    );
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length)
+      throw new AggregateError(
+        failures.map((result) => result.reason),
+        'PLUGIN_BACKEND_SHUTDOWN_FAILED',
+      );
   }
 
   async health(scope: Scope, plugin: PluginVersionRecord): Promise<PluginBackendRuntimeHealth> {
