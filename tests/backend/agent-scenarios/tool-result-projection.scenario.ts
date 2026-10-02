@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SqliteStateCommitAdapter } from '../../../packages/backend/src/infrastructure/agent/runtime/sqlite-state-commit.adapter';
+import { SqliteRunRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-run.repository';
+import { createToolResultReadTool } from '../../../packages/backend/src/modules/agent/tools/host/tool-result-read-tool';
+import { createHash } from 'node:crypto';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
 import type { ClockPort, JsonValue } from '../../../packages/backend/src/modules/agent/agent.types';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
@@ -420,6 +423,61 @@ export const toolResultProjectionScenario = async () => {
     assert.match(ledgerPayload.text!, /ERROR critical failure/);
     assert.match(ledgerPayload.text!, /TAIL marker/);
     assert.ok(!ledgerPayload.text!.includes('noise-0899'), 'projection must not serialize the entire raw log');
+
+    const handle = JSON.parse(ledgerPayload.text!).projection;
+    assert.equal(handle.toolCallId, 'tool-result-call');
+    const results = new SqliteRunRepository(db);
+    catalog.registerContribution({
+      schemaVersion: 1,
+      id: 'scenario.results.read',
+      tools: [
+        createToolResultReadTool(results, {
+          sha256Utf8: (value: string) => createHash('sha256').update(value).digest('hex'),
+        }),
+      ],
+    });
+    const readContext = { ...toolContext, runId: 'tool-result-run', agentRuntimeId: 'tool-result-runtime' };
+    let recovered = '';
+    let offset: number | null = 0;
+    while (offset !== null) {
+      const page = await executor.invoke(readContext, {
+        providerCallId: 'read-page',
+        name: 'tool_result_read',
+        argumentsJson: JSON.stringify({ toolCallId: handle.toolCallId, sha256: handle.sha256, offset, maxBytes: 300 }),
+      });
+      const data = page.result.data as { text: string; nextOffset: number | null };
+      assert.ok(Buffer.byteLength(JSON.stringify(projectToolResult(page.result, maxModelBytes))) <= maxModelBytes);
+      recovered += data.text;
+      offset = data.nextOffset;
+    }
+    assert.equal(
+      recovered,
+      JSON.stringify(rawResult),
+      'paging must recover captured middle bytes without rerunning the original Tool',
+    );
+    assert.match(recovered, /noise-0450/);
+    for (const forbidden of [
+      { ...readContext, agentRuntimeId: 'other-child' },
+      { ...readContext, appId: 'other-app' },
+      { ...readContext, userId: 2 },
+    ]) {
+      await assert.rejects(
+        executor.invoke(forbidden, {
+          providerCallId: 'forbidden-page',
+          name: 'tool_result_read',
+          argumentsJson: JSON.stringify({ toolCallId: handle.toolCallId, sha256: handle.sha256 }),
+        }),
+        /RESOURCE_FORBIDDEN/,
+      );
+    }
+    await assert.rejects(
+      executor.invoke(readContext, {
+        providerCallId: 'stale-page',
+        name: 'tool_result_read',
+        argumentsJson: JSON.stringify({ toolCallId: handle.toolCallId, sha256: '0'.repeat(64) }),
+      }),
+      /RESOURCE_CHANGED/,
+    );
 
     return [
       { name: 'raw_result_bytes', value: rawBytes, unit: 'bytes' },

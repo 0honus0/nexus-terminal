@@ -25,6 +25,8 @@ import { createSkillReadTool, createSkillSearchTool } from '../../modules/agent/
 import { createRequestUserInputTool } from '../../modules/agent/tools/host/user-input-tools';
 import { createToolSearchTool } from '../../modules/agent/tools/host/tool-discovery-tools';
 import { createArtifactReadTool } from '../../modules/agent/tools/host/artifact-tools';
+import { createToolResultReadTool } from '../../modules/agent/tools/host/tool-result-read-tool';
+import type { ToolResultReaderPort } from '../../modules/agent/runtime/runs/run.repository.port';
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
@@ -134,7 +136,7 @@ export interface RuntimeToolContributionOptions {
   catalog: ToolCatalog;
   artifacts: ArtifactService;
   plans: PlanService;
-  runs: RunSnapshotReaderPort;
+  runs: RunSnapshotReaderPort & ToolResultReaderPort;
   subagents: SubagentService;
   mailbox: MailboxService;
   facts: SharedFactsService;
@@ -158,7 +160,7 @@ export const registerRuntimeToolContributions = ({
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'runtime.artifacts.read',
-    tools: [createArtifactReadTool(artifacts, cryptoHash)],
+    tools: [createArtifactReadTool(artifacts, cryptoHash), createToolResultReadTool(runs, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,

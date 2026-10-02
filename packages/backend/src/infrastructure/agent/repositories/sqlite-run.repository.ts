@@ -26,6 +26,7 @@ import type {
   RunPage,
   RunQueryPort,
   Scope,
+  ToolResultReaderPort,
 } from '../../../modules/agent/runtime/runs/run.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import {
@@ -147,8 +148,20 @@ const mapEvent = (row: EventRow): RunEvent => ({
 });
 
 export class SqliteRunRepository
-  implements RunQueryPort, RunEventReaderPort, HostCursorReaderPort, RunExecutionReaderPort
+  implements RunQueryPort, RunEventReaderPort, HostCursorReaderPort, RunExecutionReaderPort, ToolResultReaderPort
 {
+  async toolResult(scope: Scope, runId: string, runtimeId: string, toolCallId: string) {
+    const row = await this.db.queryOne<{ result_json: string }>(
+      `SELECT t.result_json FROM agent_tool_calls t JOIN agent_runs r ON r.id = t.run_id
+       WHERE t.id = ? AND t.run_id = ? AND t.agent_runtime_id = ? AND r.user_id = ? AND r.app_id = ?
+         AND t.status IN ('succeeded','failed') AND t.result_json IS NOT NULL`,
+      [toolCallId, runId, runtimeId, scope.userId, scope.appId],
+    );
+    if (!row) return null;
+    parseToolResult(row.result_json);
+    const { userSummary: _userSummary, ...captured } = durableRecord(parseDurableJson(row.result_json));
+    return JSON.stringify(captured);
+  }
   constructor(private readonly db: RelationalDatabase) {}
 
   async snapshot(scope: Scope, runId: string): Promise<RunSnapshot | null> {

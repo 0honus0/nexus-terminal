@@ -441,7 +441,9 @@ export class SubagentContextBuilder {
           role: 'tool',
           toolCallId: exchange.providerCallId,
           content: JSON.stringify(
-            exchange.result === null ? null : projectToolResult(exchange.result, maxToolOutputBytes),
+            exchange.result === null
+              ? null
+              : projectToolResult(exchange.result, maxToolOutputBytes, exchange.toolCallId),
           ),
         });
         if (exchange.toolName === 'browser_screenshot_capture' && exchange.result) {

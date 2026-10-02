@@ -97,7 +97,7 @@ export interface ToolResult {
   outcome: 'confirmed' | 'unknown';
   errorCode?: string;
   semantic?: ToolResultSemantic;
-  projection?: { originalBytes: number; sha256: string };
+  projection?: { originalBytes: number; sha256: string; toolCallId?: string };
   verification: {
     status: 'verified' | 'unverified' | 'failed';
     summary: string;

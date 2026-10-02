@@ -210,7 +210,7 @@ export const settleUserInputRequestToolTransition = async (
         id: command.toolResultEntryId,
         runId: currentRow.id,
         kind: 'tool_result',
-        payload: toolResultLedgerPayload(currentRow, command.result, command.providerCallId),
+        payload: toolResultLedgerPayload(currentRow, command.result, command.providerCallId, command.toolCallId),
       },
     ],
     command.now,
@@ -479,7 +479,7 @@ export const settleReadToolBatchTransition = async (
       id: item.toolResultEntryId,
       runId: row.id,
       kind: 'tool_result' as const,
-      payload: toolResultLedgerPayload(row, safeResult, item.providerCallId),
+      payload: toolResultLedgerPayload(row, safeResult, item.providerCallId, item.toolCallId),
     });
     events.push({
       type: item.result.ok ? 'tool.completed' : 'tool.failed',

@@ -56,6 +56,10 @@ export interface RunSnapshotReaderPort {
   snapshot(scope: Scope, runId: string): Promise<RunSnapshot | null>;
 }
 
+export interface ToolResultReaderPort {
+  toolResult(scope: Scope, runId: string, runtimeId: string, toolCallId: string): Promise<string | null>;
+}
+
 export interface RunListReaderPort {
   list(scope: Scope, threadId: string | undefined, limit: number, before?: string): Promise<RunPage>;
 }

@@ -137,12 +137,13 @@ const withoutUserSummary = ({ userSummary: _userSummary, ...rest }: ToolResult):
  * Build the bounded ToolResult sent back to the model. The caller remains responsible for
  * persisting the unmodified ToolResult as execution evidence.
  */
-export const projectToolResult = (toolResult: ToolResult, maxOutputBytes: number): ToolResult => {
+export const projectToolResult = (toolResult: ToolResult, maxOutputBytes: number, toolCallId?: string): ToolResult => {
   const result = withoutUserSummary(toolResult);
   const encoded = JSON.stringify(result);
   const originalBytes = Buffer.byteLength(encoded, 'utf8');
   if (originalBytes <= maxOutputBytes) return result;
   const projection = {
+    ...(toolCallId ? { toolCallId } : {}),
     originalBytes,
     sha256: createHash('sha256').update(encoded, 'utf8').digest('hex'),
   };

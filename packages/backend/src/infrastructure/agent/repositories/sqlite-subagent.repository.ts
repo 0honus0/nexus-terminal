@@ -760,6 +760,7 @@ export class SqliteSubagentRepository
     await assertRuntimeInRun(this.db, runId, runtimeId);
     const rows = await this.db.queryAll<{
       source_model_step_id: string;
+      id: string;
       batch_index: number;
       batch_size: number;
       provider_call_id: string;
@@ -777,7 +778,7 @@ export class SqliteSubagentRepository
          ORDER BY batch_created_at DESC, batch_key DESC
          LIMIT ?
        )
-       SELECT t.source_model_step_id,
+        SELECT t.id, t.source_model_step_id,
               t.batch_index, t.batch_size, t.provider_call_id, t.tool_name,
               t.inspection_json, t.result_json, t.status
        FROM agent_tool_calls t
@@ -790,6 +791,7 @@ export class SqliteSubagentRepository
     return rows.map((row) => {
       const inspection = decodeToolInspection(row.inspection_json);
       return {
+        toolCallId: row.id,
         sourceModelStepId: row.source_model_step_id,
         batchIndex: row.batch_index,
         batchSize: row.batch_size,

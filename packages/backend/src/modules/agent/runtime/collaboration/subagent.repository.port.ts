@@ -96,6 +96,7 @@ export interface SendMessageRecord {
 }
 
 export interface RuntimeToolExchangeView {
+  toolCallId?: string;
   sourceModelStepId: string;
   batchIndex: number;
   batchSize: number;

@@ -4,9 +4,11 @@ import type { JsonValue } from '../../../../modules/agent/agent.types';
 import { pressureAdjustedToolOutputBytes } from '../../../../modules/agent/runtime/runs/run-budget-policy';
 import { mapRunRow, type RunRow } from '../../repositories/sqlite-run.mapper';
 
-export const modelToolResultJson = (row: RunRow, result: ToolResult): string => {
+export const modelToolResultJson = (row: RunRow, result: ToolResult, toolCallId: string): string => {
   const run = mapRunRow(row);
-  return JSON.stringify(projectToolResult(result, pressureAdjustedToolOutputBytes(run.budget, run.usage.context)));
+  return JSON.stringify(
+    projectToolResult(result, pressureAdjustedToolOutputBytes(run.budget, run.usage.context), toolCallId),
+  );
 };
 
 /**
@@ -28,5 +30,10 @@ export const toolResultLedgerPayload = (
   row: RunRow,
   result: ToolResult,
   toolCallId: string,
+  durableToolCallId: string,
 ): Record<string, JsonValue> =>
-  toolResultLedgerPayloadFromEvidence(toolCallId, modelToolResultJson(row, result), result.userSummary);
+  toolResultLedgerPayloadFromEvidence(
+    toolCallId,
+    modelToolResultJson(row, result, durableToolCallId),
+    result.userSummary,
+  );

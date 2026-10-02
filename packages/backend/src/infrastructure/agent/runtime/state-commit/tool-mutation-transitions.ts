@@ -240,7 +240,7 @@ export const settleMutationToolTransition = async (
         id: command.toolResultEntryId,
         runId: row.id,
         kind: 'tool_result',
-        payload: toolResultLedgerPayload(row, safeResult, command.providerCallId),
+        payload: toolResultLedgerPayload(row, safeResult, command.providerCallId, command.toolCallId),
       },
     ],
     command.now,

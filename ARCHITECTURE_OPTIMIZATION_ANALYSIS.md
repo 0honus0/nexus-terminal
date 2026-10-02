@@ -130,7 +130,7 @@ type RunApprovalMode = 'ask' | 'full_access';
 
 ## 14. 被截断的 Tool Output 缺少 Model 可重新寻址的完整结果句柄
 
-> 确认能力缺口：Host tools 提供 `artifact_read`，未发现通用按 toolCallId/hash 读取完整 durable result 的工具；有 Artifact 的具体输出不受此结论影响。保存的 result 也可能已经受执行端 capture limit 限制，不能声称可恢复执行时未捕获的字节。是否需要通用结果读取属于后续 contract 决策。
+> 已修复：截断 projection 携带 durable `toolCallId` 和内容 hash，`tool_result_read` 按当前 user／App／Run／Runtime 校验并提供有界分页读取。参考 OpenCode V2 的输出分页读取模式，复用已有 SQLite result owner，不另建输出存储；仅可恢复已捕获字节，执行端 capture limit 保持不变。
 
 Nexus 对 Tool output 已经有明确的 bounded projection。`tool-result-projection.ts` 在结果超过 `maxToolOutputBytes` 时会保留：
 
@@ -143,7 +143,7 @@ Nexus 对 Tool output 已经有明确的 bounded projection。`tool-result-proje
 
 同时 StateCommit 会把未经过 model projection 的 `ToolResult` 保存到 `agent_tool_calls.result_json`。因此 Backend durable state 中通常仍保留更完整的 Tool 结果。
 
-但写入 conversation Ledger、重新送给模型的 `tool_result` 使用的是 `modelToolResultJson()` 生成的 bounded projection。当前公开的 Agent tool / API surface 中没有发现通过 `toolCallId` 或 projection hash 重新读取对应完整 `result_json` 的模型能力。
+写入 conversation Ledger、重新送给模型的 `tool_result` 使用 bounded projection，截断时提供 durable Tool Call 引用。模型用 `tool_result_read` 和 hash 读取原结果 JSON 的 Unicode 字符分页；页面按当前 Tool output 预算进一步收紧，返回 nextOffset，拒绝跨 runtime 读取与 hash 不匹配。
 
 这会产生一个断层：
 
@@ -154,12 +154,12 @@ Tool 完整结果
         │
         └── bounded model projection
                     │
-                    └── 被截断部分没有通用可寻址 handle
+                    └── tool_result_read: toolCallId + sha256 + offset
 ```
 
-如果具体 Tool 本身没有把大输出转成 Artifact，模型在后续步骤发现需要被截断部分时，虽然 Backend 可能仍持有这些数据，却无法通过一个统一引用重新读取，只能重新执行 Tool 或依赖其他 Tool 再次获取信息。
+不要求具体 Tool 把大输出重复保存为 Artifact，也不为读取而重新执行原 Tool。原结果的 outcome／verification 不因读取成功而升级。
 
-Runner 本身对 Workspace command capture 还有独立的输出上限，因此这里存在两层截断：执行侧 capture limit 和模型侧 projection limit。前者是资源边界，后者的问题在于被投影掉的 durable result 没有统一的模型级恢复路径。
+Runner 的 Workspace command capture 仍有独立输出上限；本能力只弥补模型 projection，不能恢复执行时未捕获的数据。现有 Agent 场景验证真实 SQLite 原结果中间页恢复、hash 与 user／App／runtime 隔离；未新增 E2E。
 
 ## 15. Root Agent 的嵌套 `AGENTS.md` 发现依赖历史 Tool Call，首次触达存在 Instruction Gap
 
