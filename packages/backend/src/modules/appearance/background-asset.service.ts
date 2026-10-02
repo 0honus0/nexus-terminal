@@ -8,6 +8,15 @@ const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'ima
 
 /** Owns background asset lifecycle and keeps settings/file storage consistent. */
 export class BackgroundAssetService {
+  private mutationTail: Promise<void> = Promise.resolve();
+  private serializeMutation<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.mutationTail.then(work);
+    this.mutationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
   constructor(
     private readonly store: BackgroundAssetStore,
     private readonly settings: AppearanceSettingsService,
@@ -18,31 +27,35 @@ export class BackgroundAssetService {
     if (content.byteLength <= 0) throw new Error('背景图片不能为空。');
     if (content.byteLength > MAX_BACKGROUND_BYTES) throw new Error('背景图片不能超过 5MB。');
 
-    const current = await this.settings.get();
-    const previous = kind === 'page' ? current.pageBackgroundImage : current.terminalBackgroundImage;
-    const saved = await this.store.save(content, mimeType);
-    try {
-      await this.settings.setBackgroundReference(kind, saved.publicPath);
-    } catch (error) {
-      await this.store.removePublicPath(saved.publicPath).catch(() => false);
-      throw error;
-    }
-    if (previous && previous !== saved.publicPath) await this.store.removePublicPath(previous).catch(() => false);
-    return { filePath: saved.publicPath };
+    return this.serializeMutation(async () => {
+      const current = await this.settings.get(false);
+      const previous = kind === 'page' ? current.pageBackgroundImage : current.terminalBackgroundImage;
+      const saved = await this.store.save(content, mimeType);
+      try {
+        await this.settings.setBackgroundReference(kind, saved.publicPath);
+      } catch (error) {
+        await this.store.removePublicPath(saved.publicPath).catch(() => false);
+        throw error;
+      }
+      if (previous && previous !== saved.publicPath) await this.store.removePublicPath(previous).catch(() => false);
+      return { filePath: saved.publicPath };
+    });
   }
 
   async remove(kind: BackgroundKind): Promise<boolean> {
-    const current = await this.settings.get();
-    const publicPath = kind === 'page' ? current.pageBackgroundImage : current.terminalBackgroundImage;
-    await this.settings.setBackgroundReference(kind, '');
-    if (publicPath)
-      await this.store.removePublicPath(publicPath).catch((error) => {
-        logger.warn(
-          { kind, errorCode: logErrorCode(error, 'BACKGROUND_CLEANUP_FAILED') },
-          'Unreferenced background cleanup failed',
-        );
-      });
-    return true;
+    return this.serializeMutation(async () => {
+      const current = await this.settings.get(false);
+      const publicPath = kind === 'page' ? current.pageBackgroundImage : current.terminalBackgroundImage;
+      await this.settings.setBackgroundReference(kind, '');
+      if (publicPath)
+        await this.store.removePublicPath(publicPath).catch((error) => {
+          logger.warn(
+            { kind, errorCode: logErrorCode(error, 'BACKGROUND_CLEANUP_FAILED') },
+            'Unreferenced background cleanup failed',
+          );
+        });
+      return true;
+    });
   }
 
   read(fileName: string) {

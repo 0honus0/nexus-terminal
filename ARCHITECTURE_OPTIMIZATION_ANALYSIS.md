@@ -2323,6 +2323,8 @@ void shutdown();
 
 ## 99. Background 并发上传在特定交错下可留下无引用文件
 
+> 已修复：BackgroundAssetService upload/remove 全链同进程串行，读取引用不触发额外惰性修复 writer，失败释放队列。保留写引用失败的新文件补偿；不保证进程崩溃原子或既有 orphan 自动回收。下文为原证据。
+
 > 确认问题（可构造并发交错）：BackgroundAssetService read previous/save/set/delete 无 per-kind CAS/lock，orphan sweep 未建立。不是任意两次并发都会触发，必须都读到同一个旧引用等交错；未强制此交错。
 
 `BackgroundAssetService.upload()` 的生命周期是：
