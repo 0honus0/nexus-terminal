@@ -281,6 +281,7 @@ flowchart TD
 - execution session：命令执行与 shell 语义；
 - filesystem：路径和文件操作；
 - transfer module：跨 session 传输、任务状态与取消；
+- upload operation：批量上传目录 prepare cache 的 admission、TTL、复用与 Workspace teardown 回收；单 Workspace 最多 64 个 batch、合计 100,000 个目录，batch 采用 30 分钟滑动 TTL；
 - SSH suspend module：挂起 catalog 与恢复事务；
 - Interfaces：HTTP/WebSocket streaming、认证和 backpressure。
 

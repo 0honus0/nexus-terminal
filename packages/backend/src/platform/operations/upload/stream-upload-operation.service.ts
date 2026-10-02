@@ -19,6 +19,20 @@ interface PreparedBatch {
   sessionId: string;
   basePath: string;
   directories: Set<string>;
+  expiresAt: number;
+}
+
+interface PreparingBatch {
+  ownerId: string;
+  directoryCount: number;
+  token: symbol;
+}
+
+interface UploadPrepareCachePolicy {
+  maxBatchesPerOwner?: number;
+  maxDirectoriesPerOwner?: number;
+  ttlMs?: number;
+  now?: () => number;
 }
 
 interface PendingUpload {
@@ -52,47 +66,76 @@ interface ActiveUpload {
 
 const WRITE_HIGH_WATER_MARK = 4 * 1024 * 1024;
 const PREPARE_CONCURRENCY = 8;
+const DEFAULT_MAX_PREPARED_BATCHES_PER_OWNER = 64;
+const DEFAULT_MAX_PREPARED_DIRECTORIES_PER_OWNER = 100_000;
+const DEFAULT_PREPARED_BATCH_TTL_MS = 30 * 60_000;
 
 export class StreamUploadOperationService implements UploadOperation {
   private readonly active = new Map<string, ActiveUpload>();
   private readonly pending = new Map<string, PendingUpload>();
   private readonly prepared = new Map<string, PreparedBatch>();
+  private readonly preparing = new Map<string, PreparingBatch>();
+  private readonly maxPreparedBatchesPerOwner: number;
+  private readonly maxPreparedDirectoriesPerOwner: number;
+  private readonly preparedBatchTtlMs: number;
+  private readonly now: () => number;
 
-  constructor(private readonly sessions: Pick<ExecutionSessionManager, 'require'>) {}
+  constructor(
+    private readonly sessions: Pick<ExecutionSessionManager, 'require'>,
+    policy: UploadPrepareCachePolicy = {},
+  ) {
+    this.maxPreparedBatchesPerOwner = policy.maxBatchesPerOwner ?? DEFAULT_MAX_PREPARED_BATCHES_PER_OWNER;
+    this.maxPreparedDirectoriesPerOwner = policy.maxDirectoriesPerOwner ?? DEFAULT_MAX_PREPARED_DIRECTORIES_PER_OWNER;
+    this.preparedBatchTtlMs = policy.ttlMs ?? DEFAULT_PREPARED_BATCH_TTL_MS;
+    this.now = policy.now ?? Date.now;
+  }
 
   async prepare(request: UploadPrepareRequest): Promise<{ preparedDirectories: number }> {
     if (!request.prepareId || request.prepareId.length > 512) throw new Error('Invalid upload prepare id.');
     if (request.directories.length > 20_000) throw new Error('Too many upload directories.');
-    const filesystem = await this.sessions.require(request.sessionId).fileSystem('transfer');
     const basePath = this.absolutePath(request.basePath, 'upload base');
     const directories = new Set<string>([basePath]);
     for (const input of request.directories) directories.add(this.resolveRelativeDirectory(basePath, input));
+    const key = this.prepareKey(request.ownerId, request.prepareId);
+    const token = this.reservePreparedBatch(key, request.ownerId, directories.size);
 
-    await filesystem.ensureDirectory(basePath);
-    const remaining = [...directories]
-      .filter((value) => value !== basePath)
-      .sort((a, b) => {
-        const depth = a.split('/').length - b.split('/').length;
-        return depth || a.localeCompare(b);
+    try {
+      const filesystem = await this.sessions.require(request.sessionId).fileSystem('transfer');
+      await filesystem.ensureDirectory(basePath);
+      const remaining = [...directories]
+        .filter((value) => value !== basePath)
+        .sort((a, b) => {
+          const depth = a.split('/').length - b.split('/').length;
+          return depth || a.localeCompare(b);
+        });
+      let index = 0;
+      const workers = Math.min(PREPARE_CONCURRENCY, remaining.length);
+      await Promise.all(
+        Array.from({ length: workers }, async () => {
+          while (index < remaining.length) await filesystem.ensureDirectory(remaining[index++]);
+        }),
+      );
+
+      const reservation = this.preparing.get(key);
+      if (!reservation || reservation.token !== token) throw new Error('Upload preparation was superseded.');
+      this.prepared.set(key, {
+        ownerId: request.ownerId,
+        sessionId: request.sessionId,
+        basePath,
+        directories,
+        expiresAt: this.now() + this.preparedBatchTtlMs,
       });
-    let index = 0;
-    const workers = Math.min(PREPARE_CONCURRENCY, remaining.length);
-    await Promise.all(
-      Array.from({ length: workers }, async () => {
-        while (index < remaining.length) await filesystem.ensureDirectory(remaining[index++]);
-      }),
-    );
-
-    this.prepared.set(this.prepareKey(request.ownerId, request.prepareId), {
-      ownerId: request.ownerId,
-      sessionId: request.sessionId,
-      basePath,
-      directories,
-    });
-    return { preparedDirectories: directories.size };
+      this.preparing.delete(key);
+      return { preparedDirectories: directories.size };
+    } catch (error) {
+      if (this.preparing.get(key)?.token === token) this.preparing.delete(key);
+      throw error;
+    }
   }
 
   async start(request: UploadStartRequest, emit: (event: UploadEvent) => void): Promise<void> {
+    const now = this.now();
+    this.prunePrepared(now);
     const key = this.uploadKey(request.ownerId, request.uploadId);
     if (!request.uploadId || request.uploadId.length > 512) {
       emit({ type: 'failed', uploadId: request.uploadId, message: 'Invalid upload id.' });
@@ -154,6 +197,7 @@ export class StreamUploadOperationService implements UploadOperation {
           });
           return;
         }
+        batch.expiresAt = now + this.preparedBatchTtlMs;
       } else {
         await filesystem.ensureDirectory(destinationDirectory);
         if (isCancelled()) return;
@@ -277,6 +321,34 @@ export class StreamUploadOperationService implements UploadOperation {
     for (const upload of this.pending.values()) if (upload.ownerId === ownerId) ids.add(upload.uploadId);
     await Promise.all([...ids].map((uploadId) => this.cancel(ownerId, uploadId)));
     for (const [key, batch] of this.prepared) if (batch.ownerId === ownerId) this.prepared.delete(key);
+    for (const [key, batch] of this.preparing) if (batch.ownerId === ownerId) this.preparing.delete(key);
+  }
+
+  private reservePreparedBatch(key: string, ownerId: string, directoryCount: number): symbol {
+    this.prunePrepared(this.now());
+    const retained = new Map<string, number>();
+    for (const [candidateKey, batch] of this.prepared) {
+      if (batch.ownerId === ownerId) retained.set(candidateKey, batch.directories.size);
+    }
+    for (const [candidateKey, batch] of this.preparing) {
+      if (batch.ownerId === ownerId) retained.set(candidateKey, batch.directoryCount);
+    }
+    retained.set(key, directoryCount);
+    if (retained.size > this.maxPreparedBatchesPerOwner) throw new Error('Too many prepared upload batches.');
+    let retainedDirectories = 0;
+    for (const count of retained.values()) retainedDirectories += count;
+    if (retainedDirectories > this.maxPreparedDirectoriesPerOwner) {
+      throw new Error('Prepared upload directory capacity exceeded.');
+    }
+    const token = Symbol('upload-prepare');
+    this.preparing.set(key, { ownerId, directoryCount, token });
+    return token;
+  }
+
+  private prunePrepared(now: number): void {
+    for (const [key, batch] of this.prepared) {
+      if (batch.expiresAt <= now) this.prepared.delete(key);
+    }
   }
 
   private async appendSerial(upload: ActiveUpload, request: UploadChunkRequest): Promise<void> {

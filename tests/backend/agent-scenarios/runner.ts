@@ -6,6 +6,7 @@ import { pluginAppIntentSdkScenario } from './plugin-app-intent-sdk.scenario';
 import { pluginInstallSerializationScenario } from './plugin-install-serialization.scenario';
 import { terminalThemeReferenceIntegrityScenario } from './terminal-theme-reference-integrity.scenario';
 import { serverTransferAdmissionScenario } from './server-transfer-admission.scenario';
+import { uploadPrepareCacheLifecycleScenario } from './upload-prepare-cache-lifecycle.scenario';
 import { providerPromptCacheHintScenario } from './provider-prompt-cache-hint.scenario';
 
 import { unifiedFileCapabilityScenario } from './unified-file-capability.scenario';
@@ -165,6 +166,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/plugin-install-serialization', pluginInstallSerializationScenario],
   ['runtime/terminal-theme-reference-integrity', terminalThemeReferenceIntegrityScenario],
   ['runtime/server-transfer-admission', serverTransferAdmissionScenario],
+  ['workspace/upload-prepare-cache-lifecycle', uploadPrepareCacheLifecycleScenario],
   ['runtime/memory-product-closure', memoryProductClosureScenario],
   ['workspace/suspended-session-ownership', suspendedSessionOwnershipScenario],
   ['workspace/suspended-log-reconciliation', suspendedLogReconciliationScenario],

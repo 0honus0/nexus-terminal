@@ -2966,9 +2966,9 @@ for (const record of records) {
 
 这和 #83 的“运行期间 suspended session 数量/日志资源无上限”不同。#83 的日志仍有 live session owner，用户可以逐条 terminate；这里是 shutdown 明确切断 owner 后仍保留 durable file，随后没有 recovery/reconcile owner，属于持久资源生命周期断裂。
 
-## 110. Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合
+## 110. Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合（已修复）
 
-> 确认问题：StreamUploadOperationService prepared Map 只在 cancelOwner 删除；单 prepare 20,000 目录限制不等于 aggregate capacity。batch 可被多个文件复用，不能简单要求第一次 start 就 consume；需 batch release/TTL/admission，未压测。
+> 已修复：`StreamUploadOperationService` 现在由自身持有 prepared-batch admission 与生命周期：每个 Workspace 最多保留 64 个 batch、合计最多 100,000 个 normalized directory，batch 使用 30 分钟滑动 TTL，并在 `prepare` / `start` 时机会式清理；同 `prepareId` replacement 只占一个 logical slot，准备中的 reservation 也参与容量核算，避免并发 prepare 绕过 admission。`cancelOwner()` 同时失效 prepared 与 preparing 状态。batch 仍可被多个 `upload.start` 复用，不在第一次 start 后错误 consume。Agent 回归覆盖 aggregate capacity、batch count、同 ID replacement、复用、TTL 与 owner cleanup。下文保留原问题证据。
 
 `StreamUploadOperationService` 为批量上传维护了一个进程内 prepare cache：
 
@@ -4217,7 +4217,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项当前分类：**未解决确认问题 21 项，待确认 15 项，已修复 81 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
+原 144 项当前分类：**未解决确认问题 20 项，待确认 15 项，已修复 82 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4326,7 +4326,7 @@ await terminateAllManagedProcesses();
 | 107    | 已修复   | Terminal Theme 删除与 Appearance active theme 分属两个 owner；直接删除当前主题会留下无法自动修复的悬挂 `activeTerminalThemeId`                                               |
 | 108    | 已关闭   | Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发                                 |
 | 109    | 已修复   | SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志                                                                           |
-| 110    | 确认问题 | Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合                                        |
+| 110    | 已修复   | Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合                                        |
 | 111    | 确认问题 | Workspace WebSocket 没有 in-flight request / file-operation admission limit；客户端可以绕过 Frontend scheduler 并发放大 SFTP stream、positioned copy 与远端 archive command  |
 | 112    | 确认问题 | `upload.start` 建立 active upload 后没有 idle deadline；客户端不发送数据即可永久占住远端写流、临时文件与持续续租的 mutation lease                                            |
 | 113    | 确认问题 | SFTP Download Ticket 的 capacity 只限制 ticket 数，不限制每个 ticket 的并发 claim / read stream；一个 token 就能绕过 64/512 配额制造无界下载流                               |
