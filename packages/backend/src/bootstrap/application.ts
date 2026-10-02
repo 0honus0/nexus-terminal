@@ -22,6 +22,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     dataDirectory: config.dataDirectory,
     secret: config.sessionSecret,
     cookieName: config.sessionCookieName,
+    credentialRevision: (userId) => services.modules.auth.getCredentialRevision(userId),
   });
   let webSockets!: BackendWebSocketServer;
   let performanceReporter: RuntimePerformanceReporter | undefined;
@@ -87,6 +88,9 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     passkeyRelyingParties: config.passkeyRelyingParties,
     revokeSessionSockets: async (sessionId) => {
       await webSockets?.revokeSession(sessionId);
+    },
+    revokeUserSockets: async (userId) => {
+      await webSockets?.revokeUser(userId);
     },
     workspaceFilesystem: services.modules.workspaceFilesystem,
   });

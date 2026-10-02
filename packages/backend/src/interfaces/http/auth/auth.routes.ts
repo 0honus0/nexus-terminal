@@ -43,6 +43,7 @@ const passkeySummaryDto = (passkey: PasskeySummary): PasskeySummaryDto => ({
 });
 
 export interface AuthRouterDependencies {
+  revokeUserSockets(userId: number): Promise<void>;
   revokeSessionSockets(sessionId: string): Promise<void>;
   auth: AuthService;
   twoFactor: TwoFactorService;
@@ -177,6 +178,7 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       if (result.status === 'requiresTwoFactor') {
         await regenerateSession(request);
         request.session.userId = result.userId;
+        request.session.credentialRevision = result.credentialRevision;
         request.session.requiresTwoFactor = true;
         request.session.rememberMe = Boolean(rememberMe);
         const payload: AuthLoginResponseDto = { message: '需要进行两步验证。', requiresTwoFactor: true };
@@ -187,6 +189,7 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       await dependencies.ipBlacklist.resetAttempts(ip);
       await regenerateSession(request);
       request.session.userId = result.user.id;
+      request.session.credentialRevision = result.credentialRevision;
       request.session.username = result.user.username;
       request.session.requiresTwoFactor = false;
       configureSessionLifetime(request, Boolean(rememberMe));
@@ -218,9 +221,11 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
         return;
       }
       const rememberMe = Boolean(request.session.rememberMe);
+      const credentialRevision = request.session.credentialRevision;
       await dependencies.ipBlacklist.resetAttempts(ip);
       await regenerateSession(request);
       request.session.userId = result.user.id;
+      request.session.credentialRevision = credentialRevision;
       request.session.username = result.user.username;
       request.session.requiresTwoFactor = false;
       configureSessionLifetime(request, rememberMe);
@@ -260,6 +265,13 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       try {
         await dependencies.auth.changePassword(request.session.userId!, currentPassword, newPassword, {
           ip: requestIp(request),
+        });
+        await dependencies.revokeUserSockets(request.session.userId!);
+        await destroySession(request);
+        response.clearCookie(dependencies.sessionCookieName, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: request.secure,
         });
         response.json({ message: '密码已成功修改。' });
       } catch (error) {
@@ -433,6 +445,7 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       request.session.username = result.user.username;
       request.session.requiresTwoFactor = false;
       configureSessionLifetime(request, Boolean(body.rememberMe));
+      request.session.credentialRevision = await dependencies.auth.getCredentialRevision(result.user.id);
       const payload: PasskeyAuthenticationResponseDto = {
         verified: true,
         message: 'Passkey 认证成功。',

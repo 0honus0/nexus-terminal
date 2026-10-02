@@ -8,6 +8,7 @@ export interface FileHttpSessionAdapterOptions {
   dataDirectory: string;
   secret: string;
   cookieName?: string;
+  credentialRevision(userId: number): Promise<string | undefined>;
 }
 
 /** Express-compatible persistent session adapter. Bootstrap owns its lifecycle/configuration. */
@@ -22,7 +23,7 @@ export class FileHttpSessionAdapter {
     fs.mkdirSync(sessionsPath, { recursive: true });
     this.cookieName = options.cookieName || 'nexus.sid';
     this.store = new FileStore({ path: sessionsPath, ttl: 30 * 24 * 60 * 60 });
-    this.middleware = session({
+    const loadSession = session({
       store: this.store,
       name: this.cookieName,
       secret: options.secret,
@@ -31,6 +32,24 @@ export class FileHttpSessionAdapter {
       proxy: true,
       cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto' },
     });
+    this.middleware = (request, response, next) => {
+      loadSession(request, response, (error) => {
+        if (error) return next(error);
+        const userId = request.session.userId;
+        if (!userId) return next();
+        void options.credentialRevision(userId).then((revision) => {
+          if (!revision || revision !== request.session.credentialRevision) {
+            delete request.session.userId;
+            delete request.session.username;
+            delete request.session.requiresTwoFactor;
+            delete request.session.credentialRevision;
+            delete request.session.currentChallenge;
+            delete request.session.passkeyOrigin;
+          }
+          next();
+        }, next);
+      });
+    };
   }
 
   clear(): Promise<void> {

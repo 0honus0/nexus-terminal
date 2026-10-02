@@ -79,6 +79,7 @@ import { createSettingsRouter } from './settings/settings.routes';
 import { errorMessage } from './shared/http-utils';
 
 export interface HttpApplicationDependencies {
+  revokeUserSockets(userId: number): Promise<void>;
   revokeSessionSockets(sessionId: string): Promise<void>;
   sessionMiddleware: RequestHandler;
   trustProxy: string;
@@ -273,6 +274,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       users: dependencies.users,
       sessionCookieName: dependencies.sessionCookieName,
       revokeSessionSockets: dependencies.revokeSessionSockets,
+      revokeUserSockets: dependencies.revokeUserSockets,
     }),
   );
   app.use(

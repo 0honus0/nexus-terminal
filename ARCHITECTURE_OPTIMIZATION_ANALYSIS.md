@@ -1643,7 +1643,9 @@ private readonly tasks = new Map<string, TransferTask>();
 
 因此只要用户长期运行 Server Transfer 而不逐条点击删除，Backend heap 中的任务、每个任务的 subtasks，以及 `/status` 的 JSON 响应都会单调增长到进程重启。这和 #69 的数据库历史表无界增长不同；这里是生产进程内存和轮询响应体的无界 retention。
 
-## 77. 修改密码只更新 Password Hash，不会撤销其它已认证 HTTP Session；泄露 Cookie 在改密后仍然有效
+## 77. 改密后的认证撤销（已修复）
+
+> 已修复：session middleware 每次对持久 password hash SHA256 revision 校验，密码/2FA/Passkey 建立 revision，旧无revision session fail-closed；改密 revokeUser 全部现有socket并destroy当前session。并发旧请求已接受副作用不回滚，但旧session写回仍因revision失效；不依赖文件store删除。下文为原证据。
 
 > 确认问题（credential rotation revocation 缺口）：AuthService changePassword 与认证 middleware/file session adapter 未维护 user credential revision 或按用户 revoke。必须已有有效 cookie；不是新密码校验被绕过，未做双浏览器验证。
 

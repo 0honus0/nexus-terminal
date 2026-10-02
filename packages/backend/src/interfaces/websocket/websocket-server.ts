@@ -31,6 +31,7 @@ interface SessionRequest extends Request {
 }
 
 interface ClientRecord {
+  userId?: number;
   sessionId?: string;
   socket: WebSocket;
   kind: 'workspace' | 'upload' | 'remote-desktop' | 'agent' | 'agent-terminal';
@@ -66,6 +67,7 @@ export interface WebSocketServerOptions {
 }
 
 export interface BackendWebSocketServer {
+  revokeUser(userId: number): Promise<void>;
   revokeSession(sessionId: string): Promise<void>;
   metrics(): {
     total: number;
@@ -158,6 +160,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
   const clients = new Set<ClientRecord>();
   const socketSessions = new WeakMap<WebSocket, string>();
+  const socketUsers = new WeakMap<WebSocket, number>();
   let revocationEpoch = 0;
   let closing = false;
   let quiesceDepth = 0;
@@ -169,6 +172,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
 
   const trackClient = (record: ClientRecord): void => {
     record.sessionId = socketSessions.get(record.socket);
+    record.userId = socketUsers.get(record.socket);
     clients.add(record);
     logger.debug({ websocketKind: record.kind, activeClients: clients.size }, 'WebSocket client attached');
     const alive = () => {
@@ -309,6 +313,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     const upgrade = (accept: (ws: WebSocket) => void): void => {
       wss.handleUpgrade(request, socket, head, (ws) => {
         socketSessions.set(ws, request.sessionID);
+        socketUsers.set(ws, userId);
         accept(ws);
       });
     };
@@ -576,6 +581,12 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     revokeSession: async (sessionId: string): Promise<void> => {
       revocationEpoch += 1;
       const revoked = [...clients].filter((record) => record.sessionId === sessionId);
+      for (const record of revoked) record.socket.terminate();
+      await Promise.allSettled(revoked.map((record) => Promise.resolve().then(() => record.protocol?.close())));
+    },
+    revokeUser: async (userId: number): Promise<void> => {
+      revocationEpoch += 1;
+      const revoked = [...clients].filter((record) => record.userId === userId);
       for (const record of revoked) record.socket.terminate();
       await Promise.allSettled(revoked.map((record) => Promise.resolve().then(() => record.protocol?.close())));
     },

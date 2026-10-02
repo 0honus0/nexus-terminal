@@ -1,4 +1,5 @@
 import type { PasswordHasher } from '../../shared/security/crypto.port';
+import { createHash } from 'node:crypto';
 import type { AuditLogService } from '../audit/audit.service';
 import type { NotificationService } from '../notifications/notification.service';
 import type { UserService } from '../user/user.service';
@@ -8,8 +9,8 @@ export interface AuthenticatedUser {
   username: string;
 }
 export type PasswordAuthenticationResult =
-  | { status: 'authenticated'; user: AuthenticatedUser }
-  | { status: 'requiresTwoFactor'; userId: number }
+  | { status: 'authenticated'; user: AuthenticatedUser; credentialRevision: string }
+  | { status: 'requiresTwoFactor'; userId: number; credentialRevision: string }
   | { status: 'invalid' };
 
 /** Password/setup use cases only. Express session creation remains an interface concern. */
@@ -54,9 +55,14 @@ export class AuthService {
       });
       return { status: 'invalid' };
     }
-    if (user.twoFactorSecret) return { status: 'requiresTwoFactor', userId: user.id };
+    const credentialRevision = createHash('sha256').update(user.hashedPassword).digest('hex');
+    if (user.twoFactorSecret) return { status: 'requiresTwoFactor', userId: user.id, credentialRevision };
     await this.recordLoginSuccess(user.id, user.username, context?.ip, false);
-    return { status: 'authenticated', user: { id: user.id, username: user.username } };
+    return { status: 'authenticated', user: { id: user.id, username: user.username }, credentialRevision };
+  }
+  async getCredentialRevision(userId: number): Promise<string | undefined> {
+    const user = await this.users.getStored(userId);
+    return user ? createHash('sha256').update(user.hashedPassword).digest('hex') : undefined;
   }
   async changePassword(userId: number, currentPassword: string, nextPassword: string, context?: { ip?: string }) {
     if (currentPassword === nextPassword) throw new Error('新密码不能与当前密码相同。');
