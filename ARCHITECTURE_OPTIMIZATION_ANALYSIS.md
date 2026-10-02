@@ -1698,7 +1698,9 @@ socket.requestBinary('filesystem.readBinary', { path });
 
 所以当前的“预览大小限制”和“关闭即取消”都是 UI 层语义，无法约束真正消耗网络、SFTP、Backend 和 Browser 内存的 binary operation。
 
-## 80. File Editor 对远端文件读取完全没有大小上限；Large File Mode 在完整下载和解码之后才生效
+## 80. File Editor 解码前读取容量（已修复）
+
+> 已修复：FilesystemChannel readBinary required maxBytes，Editor port固定16MiB，server/client流累计限量，超限不解码；load/reload/changeEncoding共享port。Large File Mode仅渲染优化，非streaming editor。原前端有通用上限，缺的是Editor专用低容量边界。下文为原证据。
 
 > 确认问题：document adapter 先完整 binary read/decode，FileEditor 字符阈值仅作用于渲染。request timeout 与 frame size 有限，不等价文件总字节限制；未实际打开超大远程文件。
 

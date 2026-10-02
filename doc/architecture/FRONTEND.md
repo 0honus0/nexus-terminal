@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+FilesystemChannel.readBinary required maxBytes，FileDocumentPort load固定16MiB并复用server/client累计fence；reload/encoding走同一port，decode仅在限量成功后执行，不以large-file character threshold替代网络/heap admission。
+
 QuickCommands createTagForCommands 的assigned:false为显式部分成功，Panel显示assignFailedAfterCreate；tag合法独立保留，不补偿删除，不承诺两HTTP请求事务原子。
 
 FileManager remove catch 保留原因并提示 partial/unknown，再 best-effort browser.load；无集合 rollback/逐项 report/自动 retry，不将成功刷新视作 writer 收敛证明。

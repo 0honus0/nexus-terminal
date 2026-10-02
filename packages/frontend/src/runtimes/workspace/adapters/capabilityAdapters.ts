@@ -160,8 +160,8 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
   search: (path, query): Promise<WorkspaceFilesystemSearchResponseDto> =>
     socket.request('filesystem.search', { path, query }),
   stat: (path): Promise<WorkspaceRemoteFileEntryDto> => socket.request('filesystem.stat', { path }),
-  async readBinary(path) {
-    const { data, bytes } = await socket.requestBinary('filesystem.readBinary', { path, maxBytes: 64 * 1024 * 1024 });
+  async readBinary(path, maxBytes) {
+    const { data, bytes } = await socket.requestBinary('filesystem.readBinary', { path, maxBytes });
     return { path: data.path, bytes };
   },
   async writeText(path, content, encoding) {
@@ -296,7 +296,7 @@ export const createFilesystemDownloadPort = (workspaceId: string, connectionId: 
 
 export const createFileDocumentPort = (filesystem: FilesystemChannel): FileDocumentPort => ({
   async load(path, encoding): Promise<LoadedEditorDocument> {
-    const file = await filesystem.readBinary(path);
+    const file = await filesystem.readBinary(path, 16 * 1024 * 1024);
     const decoded = await decodeEditorDocument(file.bytes, encoding);
     return {
       path: file.path,
