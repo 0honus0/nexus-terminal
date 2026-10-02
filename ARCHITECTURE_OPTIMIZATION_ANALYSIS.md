@@ -1522,7 +1522,9 @@ SELECT id, path, timestamp FROM path_history ORDER BY timestamp ASC
 
 注册和认证共享 Session currentChallenge/passkeyOrigin。后发 ceremony 可覆盖前者并使旧 assertion fail-closed；这不是认证绕过。需确认是否支持同一 Session 多 Tab 并行 ceremony，以及是否值得引入 ceremony ID。
 
-## 71. Terminal Theme preset 初始化只按 `name + preset` 查重，但数据库对 `name` 全局唯一；未来新增 preset 与既有用户主题同名时会直接阻断 Backend 启动
+## 71. Preset 与用户主题升级同名（已修复）
+
+> 已修复：ensurePresets 同事务按全局 name 查重，existing preset 保留；冲突 user 确定性更名为可用 user-ID 后缀（避开全部待装 preset），保留 ID/颜色/引用，再插入 preset。重复初始化幂等，不覆盖用户数据。下文为原证据。
 
 > 确认问题（升级兼容性条件）：`sqlite-terminal-theme.repository.ts` ensurePresets 与 schema UNIQUE(name) 不一致，initialize 被启动链 await。当前已有 preset 不构成冲突；必须有未来新增 preset 与既有 user theme 同名，未建立升级数据库测试。
 

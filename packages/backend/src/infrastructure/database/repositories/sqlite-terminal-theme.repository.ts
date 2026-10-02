@@ -179,11 +179,23 @@ export class SqliteTerminalThemeRepository implements TerminalThemeRepository {
     const now = Math.floor(Date.now() / 1000);
     await this.database.transaction(async (database) => {
       for (const preset of presets) {
-        const existing = await database.queryOne<{ id: number }>(
-          "SELECT id FROM terminal_themes WHERE name = ? AND theme_type = 'preset'",
+        const existing = await database.queryOne<{ id: number; theme_type: 'preset' | 'user' }>(
+          'SELECT id,theme_type FROM terminal_themes WHERE name = ?',
           [preset.name],
         );
-        if (existing) continue;
+        if (existing?.theme_type === 'preset') continue;
+        if (existing) {
+          const base = `${preset.name} (user ${existing.id})`;
+          let name = base;
+          let suffix = 2;
+          while (
+            presets.some((item) => item.name === name) ||
+            (await database.queryOne('SELECT id FROM terminal_themes WHERE name = ?', [name]))
+          ) {
+            name = `${base} ${suffix++}`;
+          }
+          await database.execute('UPDATE terminal_themes SET name=?,updated_at=? WHERE id=?', [name, now, existing.id]);
+        }
         await database.execute(
           `INSERT INTO terminal_themes (name, theme_type, ${themeColumns.join(', ')}, created_at, updated_at)
            VALUES (?, 'preset', ${themeColumns.map(() => '?').join(', ')}, ?, ?)`,
