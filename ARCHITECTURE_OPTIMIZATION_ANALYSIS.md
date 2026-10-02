@@ -1806,7 +1806,9 @@ this.child.kill('SIGTERM');
 
 当前 protocol 对消息大小、host operation 并发和 request timeout 都有明确上限，但 process lifetime 的最终 owner 没有同等的 kill-and-reap 保证。
 
-## 85. IP blacklist 没有任何过期行清理；匿名失败登录可让持久化 IP 基数永久增长
+## 85. IP blacklist 过期保留与分页（已修复）
+
+> 已修复：get/recordFailure/list触发5分钟限频单flight清理，lastAttempt超过7天且无活动ban才删除；page1..200/非负safe offset。TTL不声称7天内IP总数硬界，不解除未到期ban，不新增timer。下文为原证据。
 
 > 确认问题（持久化 retention）：IpBlacklistService/repository 无过期行自动 sweep；成功登录 reset 和管理删除仍可回收。新来源 IP 的可获得性与 proxy trust 影响实际增长，未模拟大量来源。
 
