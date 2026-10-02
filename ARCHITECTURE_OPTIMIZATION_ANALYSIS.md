@@ -205,7 +205,7 @@ Runner 侧的 `resolveProjectInstructions()` 只会沿 Backend 已传入的 targ
 
 ## 16. Subagent Governed Mutation 在 `ask` 模式下没有交互批准路径
 
-> 确认能力限制，产品预期待确认：schema gate 与 execute gate 都仍要求 full_access，mutation preparation 固定 autoApprove。不是子 Agent 绕过 ask 执行 mutation，而是 ask 下不提供该能力；是否应开放 child requested approval，需要对照产品期望决定。不能把 fail-closed 限制描述为未授权写入漏洞。
+> 已修复：governed Child 在 `ask` 模式使用同一 durable Approval owner，Tool work 原子转为 waiting；批准重新入队，拒绝／到期／新输入 supersede 写入 Child 自身结果并继续批次。`full_access` 保持现有自动批准路径。未新增审批系统，仍拒绝非 Workspace target、未授权 delegation 和 unknown outcome 重放。
 
 内置 `worker` Subagent profile 被定义为：
 
@@ -220,29 +220,29 @@ capabilities:
   artifacts.read
 ```
 
-但 `SubagentContextBuilder.toolSchemas()` 只有在下面条件同时成立时，才把 mutation / destructive tools 提供给 child model：
+`SubagentContextBuilder.toolSchemas()` 按 delegation 的 governed 模式提供允许的 mutation tools：
 
 ```ts
-delegation.mutationMode === 'governed' && run.definition.approvalMode === 'full_access';
+delegation.mutationMode === 'governed';
 ```
 
-执行侧 `SubagentToolStepExecutor.executeChildMutation()` 同样要求 Run 为 `full_access`；否则直接以：
+执行侧与 durable begin 仍检查 governed delegation，否则以：
 
 ```text
 SUBAGENT_MUTATION_NOT_GOVERNED
 ```
 
-结束。durable transition `beginSubagentMutationToolTransition()` 还会再次检查 `approvalMode === 'full_access'`。
+结束。durable begin 要求真实 approved、未消费、未过期且 operation／policy／input 绑定一致的审批，不再以 full_access 排除 ask。
 
 Root mutation 的路径不同。`RootMutationExecutionAdapter` 在 `ask` 模式下仍会调用 `GovernedMutationExecutor.prepare()`，以 `autoApprove: false` 创建真实的 `requested` approval，随后等待用户批准；只有 `full_access` 才自动 resolve approval。
 
-Subagent 路径虽然复用了 `GovernedMutationExecutor`，但进入时固定：
+Subagent 复用 `GovernedMutationExecutor`，批准策略为：
 
 ```ts
-autoApprove: true;
+autoApprove: run.definition.approvalMode === 'full_access';
 ```
 
-并且只有 `full_access` 才能到达这个入口。因此当前没有形成：
+`ask` 模式形成：
 
 ```text
 child proposes mutation
@@ -251,9 +251,9 @@ child proposes mutation
         -> child continues
 ```
 
-这样的交互批准链路。
+这样的交互批准链路。waiting work 在批准后重新入队，重检 inspection 与目标再消费审批执行。拒绝和到期通过现有 Child settle owner 保存完整结果、完成 work 并安排下一模型步骤；新输入 supersede 也恢复队列，旧审批不能再执行。
 
-结果是 Root 与 Child 对同一个 Run approval mode 的语义不一致：`ask` 下 Root 可以执行经过用户逐次批准的 mutation，而 governed child worker 的 mutation tools 在 model surface 就被移除；要让 child worker 实际执行写文件、删除、shell mutation 或 workspace mutation，Run 必须进入 `full_access`，随后 child mutation 又会自动批准。
+参考 OpenCode V2 permissions 的 `ask` 等待客户端决定 contract，适配 Nexus 已有 Run-level pause、Approval 与 scheduler work owner，未移植代码。现有 Agent 场景覆盖 SQLite waiting／批准重新入队／拒绝与过期续跑、预算计数及目标拒绝；不声称已完成真实 UI E2E 验证。
 
 ## 17. `plan` Execution Mode 的禁写边界没有覆盖 Subagent Tool Pipeline
 

@@ -509,8 +509,7 @@ export class SubagentContextBuilder {
   ): ModelToolSchema[] {
     if (!model.supportsTools) return [];
     const allowedCapabilities = new Set(delegation.grants.map((grant) => grant.capability));
-    const governedMutationsEnabled =
-      delegation.mutationMode === 'governed' && run.definition.approvalMode === 'full_access';
+    const governedMutationsEnabled = delegation.mutationMode === 'governed';
     return this.toolCatalog
       .discover(scope, '', 256, {
         environment: run.definition.environment ?? null,

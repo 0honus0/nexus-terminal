@@ -24,6 +24,7 @@ import {
   resolveAcpPermissionApprovalTransition,
 } from './acp-permission-approval-transitions';
 import { toolResultLedgerPayloadFromEvidence } from './tool-transition-result';
+import { resumeChildApprovalWork } from './child-approval-work';
 
 export const requestToolApprovalTransition = async (
   tx: RelationalDatabase,
@@ -81,6 +82,14 @@ export const requestToolApprovalTransition = async (
     [command.toolCallId, row.id],
   );
   if (toolChanged.changes !== 1) throw new Error('TOOL_STATE_CONFLICT');
+  if (mapRunRow(row).definition.approvalMode === 'ask') {
+    await tx.execute(
+      `UPDATE agent_scheduler_work SET status = 'waiting', version = version + 1, updated_at = ?
+      WHERE run_id = ? AND agent_runtime_id = ? AND kind = 'tool_step' AND status = 'claimed'
+        AND json_extract(payload_json, '$.toolCallId') = ?`,
+      [command.now, row.id, command.runtimeId, command.toolCallId],
+    );
+  }
   await tx.execute(
     `UPDATE agent_runtimes SET schedule_state = 'waiting_approval', updated_at = ?
      WHERE id = ? AND run_id = ? AND status = 'running'`,
@@ -227,42 +236,48 @@ export const resolveToolApprovalTransition = async (
     [command.now, approval.requested_by_runtime_id, row.id],
   );
   let ledgerCursor = 0;
+  const childWork = await tx.queryOne<{ id: string }>(
+    `SELECT id FROM agent_scheduler_work WHERE run_id = ? AND kind = 'tool_step'
+      AND status = 'waiting' AND json_extract(payload_json, '$.toolCallId') = ?`,
+    [row.id, approval.tool_call_id],
+  );
   if (command.decision === 'denied') {
     await tx.execute(
       `UPDATE agent_steps SET status = 'cancelled', completed_at = ?
        WHERE id = (SELECT step_id FROM agent_tool_calls WHERE id = ?) AND run_id = ? AND status = 'created'`,
       [command.now, approval.tool_call_id, row.id],
     );
-    ledgerCursor = await appendLedger(
-      tx,
-      row,
-      [
-        {
-          id: randomUUID(),
-          runId: row.id,
-          kind: 'tool_result',
-          payload: toolResultLedgerPayloadFromEvidence(
-            approval.provider_call_id,
-            JSON.stringify({
-              ok: false,
-              outcome: 'confirmed',
-              errorCode: 'APPROVAL_DENIED',
-              summary: command.feedback
-                ? `The user denied this remote mutation and provided guidance: ${command.feedback}`
-                : 'The user denied this remote mutation.',
-              ...(command.feedback ? { userFeedback: command.feedback } : {}),
-            }),
-            command.feedback
-              ? {
-                  key: 'agent.conversation.toolSummary.approvalDeniedWithFeedback',
-                  params: { feedback: command.feedback },
-                }
-              : { key: 'agent.conversation.toolSummary.approvalDenied' },
-          ),
-        },
-      ],
-      command.now,
-    );
+    if (!childWork)
+      ledgerCursor = await appendLedger(
+        tx,
+        row,
+        [
+          {
+            id: randomUUID(),
+            runId: row.id,
+            kind: 'tool_result',
+            payload: toolResultLedgerPayloadFromEvidence(
+              approval.provider_call_id,
+              JSON.stringify({
+                ok: false,
+                outcome: 'confirmed',
+                errorCode: 'APPROVAL_DENIED',
+                summary: command.feedback
+                  ? `The user denied this remote mutation and provided guidance: ${command.feedback}`
+                  : 'The user denied this remote mutation.',
+                ...(command.feedback ? { userFeedback: command.feedback } : {}),
+              }),
+              command.feedback
+                ? {
+                    key: 'agent.conversation.toolSummary.approvalDeniedWithFeedback',
+                    params: { feedback: command.feedback },
+                  }
+                : { key: 'agent.conversation.toolSummary.approvalDenied' },
+            ),
+          },
+        ],
+        command.now,
+      );
   }
   const events: DurableEventInput[] = [
     {
@@ -297,6 +312,19 @@ export const resolveToolApprovalTransition = async (
     ],
   );
   if (commandCompleted.changes !== 1) throw new Error('IDEMPOTENCY_STATE_CONFLICT');
+  const childSettlement = await resumeChildApprovalWork(
+    tx,
+    run,
+    approval.tool_call_id,
+    command.now,
+    command.decision === 'denied' ? { code: 'APPROVAL_DENIED', feedback: command.feedback } : undefined,
+  );
+  if (childSettlement)
+    return {
+      ...childSettlement,
+      ledgerCursor,
+      committedEvents: [...committedEvents, ...childSettlement.committedEvents],
+    };
   return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
 };
 
@@ -344,28 +372,35 @@ export const expireToolApprovalsTransition = async (tx: RelationalDatabase, now:
       [now, item.step_id, row.id],
     );
     if (toolChanged.changes !== 1 || stepChanged.changes !== 1) throw new Error('APPROVAL_STATE_INVALID');
-    const ledgerCursor = await appendLedger(
-      tx,
-      row,
-      [
-        {
-          id: randomUUID(),
-          runId: row.id,
-          kind: 'tool_result',
-          payload: toolResultLedgerPayloadFromEvidence(
-            item.provider_call_id,
-            JSON.stringify({
-              ok: false,
-              outcome: 'confirmed',
-              errorCode: 'APPROVAL_EXPIRED',
-              summary: 'The approval request expired before it was consumed.',
-            }),
-            { key: 'agent.conversation.toolSummary.approvalExpired' },
-          ),
-        },
-      ],
-      now,
+    const childWork = await tx.queryOne<{ id: string }>(
+      `SELECT id FROM agent_scheduler_work WHERE run_id = ? AND kind = 'tool_step'
+        AND status = 'waiting' AND json_extract(payload_json, '$.toolCallId') = ?`,
+      [row.id, item.tool_call_id],
     );
+    const ledgerCursor = childWork
+      ? 0
+      : await appendLedger(
+          tx,
+          row,
+          [
+            {
+              id: randomUUID(),
+              runId: row.id,
+              kind: 'tool_result',
+              payload: toolResultLedgerPayloadFromEvidence(
+                item.provider_call_id,
+                JSON.stringify({
+                  ok: false,
+                  outcome: 'confirmed',
+                  errorCode: 'APPROVAL_EXPIRED',
+                  summary: 'The approval request expired before it was consumed.',
+                }),
+                { key: 'agent.conversation.toolSummary.approvalExpired' },
+              ),
+            },
+          ],
+          now,
+        );
     const events: DurableEventInput[] = [
       {
         type: 'approval.expired',
@@ -383,7 +418,10 @@ export const expireToolApprovalsTransition = async (tx: RelationalDatabase, now:
     const run = mapRunRow(updatedRow);
     await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), now);
     void ledgerCursor;
-    resumed.push(run);
+    const childSettlement = await resumeChildApprovalWork(tx, run, item.tool_call_id, now, {
+      code: 'APPROVAL_EXPIRED',
+    });
+    resumed.push(childSettlement?.run ?? run);
   }
   return resumed;
 };

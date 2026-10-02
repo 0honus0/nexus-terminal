@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import {
+  resolveToolApprovalTransition,
+  expireToolApprovalsTransition,
+} from '../../../packages/backend/src/infrastructure/agent/runtime/state-commit/approval-transitions';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -244,8 +248,8 @@ export const subagentGovernedMutationScenario = async () => {
     toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('ask')).some(
       (schema) => schema.name === mutationTool.descriptor.name,
     ),
-    false,
-    'ask-mode Runs must not expose mutation Tools to governed workers because Child approval cannot be parked safely',
+    true,
+    'ask-mode Runs expose governed mutation Tools with durable user approval',
   );
   assert.equal(
     toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('full_access')).some(
@@ -889,6 +893,15 @@ export const subagentGovernedMutationScenario = async () => {
       ],
     );
 
+    const definitionRow = await durableDb.queryOne<{ definition_json: string }>(
+      'SELECT definition_json FROM agent_runs WHERE id = ?',
+      [durableRunId],
+    );
+    assert.ok(definitionRow);
+    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+      JSON.stringify({ ...JSON.parse(definitionRow.definition_json), approvalMode: 'ask' }),
+      durableRunId,
+    ]);
     const requested = await durableCommit.requestToolApproval({
       scope: scenarioScope,
       runId: durableRunId,
@@ -902,6 +915,77 @@ export const subagentGovernedMutationScenario = async () => {
       now: durableNow,
     });
     assert.equal(requested.run.status, 'awaiting_approval');
+    assert.equal(
+      (
+        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
+          durableWorkId,
+        ])
+      )?.status,
+      'waiting',
+    );
+    for (const rejection of ['denied', 'expired'] as const) {
+      await assert.rejects(
+        durableDb.transaction(async (tx) => {
+          if (rejection === 'denied') {
+            await resolveToolApprovalTransition(tx, {
+              scope: scenarioScope,
+              runId: durableRunId,
+              approvalId: durableApprovalId,
+              decision: 'denied',
+              operationHash: durableOperationHash,
+              expectedApprovalVersion: 1,
+              expectedRunVersion: requested.run.version,
+              expectedPolicyRevision: 1,
+              expectedInputRevision: 1,
+              decidedByUserId: scenarioScope.userId,
+              idempotencyKey: 'denied-child',
+              requestHash: 'denied-child',
+              feedback: 'Use a read-only approach.',
+              now: durableNow,
+            });
+          } else {
+            await expireToolApprovalsTransition(tx, durableNow + 301);
+          }
+          const rejected = await tx.queryOne<{ status: string; result_json: string }>(
+            'SELECT status, result_json FROM agent_tool_calls WHERE id = ?',
+            [durableToolCallId],
+          );
+          assert.equal(rejected?.status, 'failed');
+          assert.equal(
+            JSON.parse(rejected!.result_json).errorCode,
+            rejection === 'denied' ? 'APPROVAL_DENIED' : 'APPROVAL_EXPIRED',
+          );
+          assert.equal(
+            (
+              await tx.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
+                durableWorkId,
+              ])
+            )?.status,
+            'completed',
+          );
+          assert.equal(
+            (
+              await tx.queryOne<{ status: string }>(
+                "SELECT status FROM agent_scheduler_work WHERE run_id = ? AND agent_runtime_id = ? AND kind = 'model_step'",
+                [durableRunId, durableChildRuntimeId],
+              )
+            )?.status,
+            'queued',
+          );
+          assert.equal(
+            (
+              await tx.queryOne<{ executing_runtime_count: number }>(
+                'SELECT executing_runtime_count FROM agent_runs WHERE id = ?',
+                [durableRunId],
+              )
+            )?.executing_runtime_count,
+            requested.run.executingRuntimeCount,
+          );
+          throw new Error('SCENARIO_ROLLBACK');
+        }),
+        /SCENARIO_ROLLBACK/,
+      );
+    }
     const resolved = await durableCommit.resolveToolApproval({
       scope: scenarioScope,
       runId: durableRunId,
@@ -913,7 +997,7 @@ export const subagentGovernedMutationScenario = async () => {
       expectedPolicyRevision: 1,
       expectedInputRevision: 1,
       decidedByUserId: scenarioScope.userId,
-      resolutionSource: 'full_access',
+      resolutionSource: 'user',
       idempotencyKey: 'governed-mutation-approval-resolution',
       requestHash: requestHash(1, {
         approvalId: durableApprovalId,
@@ -925,6 +1009,17 @@ export const subagentGovernedMutationScenario = async () => {
       now: durableNow,
     });
     assert.equal(resolved.run.status, 'running');
+    assert.equal(
+      (
+        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
+          durableWorkId,
+        ])
+      )?.status,
+      'queued',
+    );
+    await durableDb.execute("UPDATE agent_scheduler_work SET status = 'claimed', owner_epoch = 7 WHERE id = ?", [
+      durableWorkId,
+    ]);
     const beginDurableMutation = () =>
       durableCommit.beginSubagentMutationTool({
         scope: scenarioScope,
@@ -954,25 +1049,6 @@ export const subagentGovernedMutationScenario = async () => {
       durableDelegationId,
     ]);
 
-    const definitionRow = await durableDb.queryOne<{ definition_json: string }>(
-      'SELECT definition_json FROM agent_runs WHERE id = ?',
-      [durableRunId],
-    );
-    assert.ok(definitionRow);
-    const askDefinition = { ...JSON.parse(definitionRow.definition_json), approvalMode: 'ask' };
-    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
-      JSON.stringify(askDefinition),
-      durableRunId,
-    ]);
-    await assert.rejects(
-      beginDurableMutation,
-      (error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_NOT_GOVERNED',
-      'StateCommit must reject a durable Child mutation when the Run is no longer Full Access',
-    );
-    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
-      definitionRow.definition_json,
-      durableRunId,
-    ]);
     const forbiddenDurableInspection: ToolInspection = {
       ...durableInspection,
       target: {

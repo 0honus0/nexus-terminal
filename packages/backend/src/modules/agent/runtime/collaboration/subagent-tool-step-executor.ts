@@ -240,7 +240,6 @@ export class SubagentToolStepExecutor {
   ): Promise<void> {
     if (
       delegation.mutationMode !== 'governed' ||
-      run.definition.approvalMode !== 'full_access' ||
       !toolWork.inspection.mutation ||
       !['mutate', 'destructive'].includes(toolWork.inspection.risk)
     ) {
@@ -284,7 +283,7 @@ export class SubagentToolStepExecutor {
         run,
         inspection: toolWork.inspection,
         signal,
-        autoApprove: true,
+        autoApprove: run.definition.approvalMode === 'full_access',
         hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, toolWork),
       });
       if (prepared.status !== 'ready') return;

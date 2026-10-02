@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { resumeChildApprovalWork } from './child-approval-work';
 import type {
   AppendInputCommitResult,
   AtomicAppendInput,
@@ -335,7 +336,13 @@ export const appendInputTransition = async (
   if (runChanged.changes !== 1) throw new Error('STATE_CONFLICT');
   const updatedRow = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
   if (!updatedRow) throw new Error('NOT_FOUND');
-  const run = mapRunRow(updatedRow);
+  let run = mapRunRow(updatedRow);
+  if (waitingApproval) {
+    const childSettlement = await resumeChildApprovalWork(tx, run, waitingApproval.tool_call_id, command.now, {
+      code: 'APPROVAL_SUPERSEDED',
+    });
+    if (childSettlement) run = childSettlement.run;
+  }
   await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(run), command.now);
   const response = { inputId: command.inputEntryId, sequence, runVersion: run.version };
   const completed = await tx.execute(

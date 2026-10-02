@@ -178,7 +178,9 @@ export const settleSubagentToolTransition = async (
         [command.runId, command.runtimeId, tool.source_model_step_id],
       )
     : [];
-  const hasRemainingBatch = batchRows.some((item) => ['proposed', 'running'].includes(item.status));
+  const hasRemainingBatch = batchRows.some((item) =>
+    ['proposed', 'ready', 'awaiting_approval', 'running'].includes(item.status),
+  );
   let batchContinuation: SettleSubagentToolCommand['continuation'] = hasRemainingBatch
     ? 'runnable'
     : command.continuation;
