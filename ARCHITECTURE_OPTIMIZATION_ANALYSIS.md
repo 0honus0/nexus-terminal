@@ -407,7 +407,7 @@ child model call 会继续运行，已经排队的 child tool work 也不会因�
 
 ## 21. Durable `toolVersion` 没有在 Read / Control Tool 真正执行时形成版本绑定
 
-> 确认问题（版本 fence 缺口）：`capabilities/tool-executor.ts` 的 executeAuthorized 按名称 require 当前 tool 并重新授权，没有比较 descriptor.version 与 inspection.toolVersion；mutation refresh 有额外约束。需要 contribution 恰在 inspect/execute 间替换才触发，未做竞态复现。
+> 已修复：executeAuthorized 在授权前校验 durable toolVersion，并在异步授权后、调用 Tool.execute 前再次校验 catalog implementation identity／version；read、control、mutation 共用 fence。现有 progressive-disclosure 场景验证 inspect 后替换及授权 await 中替换均 RESOURCE_CHANGED 且无执行副作用。延续已参考的 deferred 版本绑定原则，无第二 catalog owner。
 
 Tool proposal 被 inspection 后，`agent_tool_calls` 会持久化：
 

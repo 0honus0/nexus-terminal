@@ -157,6 +157,7 @@ export class ToolExecutor {
 
   private async executeAuthorized(context: ToolContext, inspection: ToolInspection): Promise<ToolResult> {
     const tool = this.catalog.require(inspection.toolName, context);
+    if (tool.descriptor.version !== inspection.toolVersion) throw new Error('RESOURCE_CHANGED');
     const fresh = await this.capabilities.authorize(
       context,
       tool.descriptor.capability,
@@ -164,6 +165,8 @@ export class ToolExecutor {
     );
     if (!fresh.allowed || fresh.policyRevision !== inspection.policyRevision)
       throw new Error('POLICY_REVISION_CONFLICT');
+    const current = this.catalog.require(inspection.toolName, context);
+    if (current !== tool || current.descriptor.version !== inspection.toolVersion) throw new Error('RESOURCE_CHANGED');
     return tool.execute(inspection, context);
   }
 

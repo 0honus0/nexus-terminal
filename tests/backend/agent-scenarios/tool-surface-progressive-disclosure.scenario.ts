@@ -323,6 +323,33 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     'plan mode must not expose MCP mutation discovery/router or deferred mutation Tools',
   );
 
+  await assert.rejects(
+    executor.executeMutation(context, routed.inspection),
+    /RESOURCE_CHANGED/,
+    'durable inspected version must fence a later catalog replacement',
+  );
+  let replacedDuringAuthorization = false;
+  const racingExecutor = new ToolExecutor(catalog, {
+    authorize: async () => {
+      if (!replacedDuringAuthorization) {
+        replacedDuringAuthorization = true;
+        catalog.replaceOwnedContribution(scope, 'mcp:surface-fixture', {
+          schemaVersion: 1,
+          id: 'scenario.mcp.surface',
+          tools: mcpTools(121, 'mcp:surface-v3'),
+        });
+      }
+      return { allowed: true, policyRevision: routed.inspection.policyRevision };
+    },
+  } as never);
+  const raceInspection = { ...routed.inspection, toolVersion: 'mcp:surface-v2' };
+  const executedBeforeRace = executedToolNames.length;
+  await assert.rejects(
+    racingExecutor.executeMutation(context, raceInspection),
+    /RESOURCE_CHANGED/,
+    'catalog replacement while authorization awaits must fail before Tool execution',
+  );
+  assert.equal(executedToolNames.length, executedBeforeRace);
   const childRuntime: RuntimeParticipantView = {
     id: 'tool-surface-child-runtime',
     runId: 'tool-surface-child-run',
