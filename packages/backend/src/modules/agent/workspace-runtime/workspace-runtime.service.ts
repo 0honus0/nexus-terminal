@@ -340,20 +340,7 @@ export class WorkspaceRuntimeService {
     const replay = await this.repository.replayCreate(scope, idempotencyKey, requestHash, this.now());
     if (replay) return replay;
     const settings = await this.settings.get(scope.userId);
-    const existing = await this.repository.listWorkspaces(scope);
-    if (
-      existing.some(
-        (workspace) =>
-          workspace.runId === runId &&
-          workspace.agentRuntimeId === agentRuntimeId &&
-          !['deleted', 'failed'].includes(workspace.status),
-      )
-    ) {
-      throw new Error('WORKSPACE_EXISTS');
-    }
     const workspaceSettings = settings.effectiveSettings.workspaceRuntime;
-    const active = existing.filter((workspace) => !['deleted', 'failed'].includes(workspace.status)).length;
-    if (active >= workspaceSettings.maxActiveWorkspaces) throw new Error('WORKSPACE_LIMIT_EXCEEDED');
     let profile: WorkspaceProfileView;
     if (frozenProfile) {
       if (expectedCatalogRevision && frozenProfile.catalogRevision !== expectedCatalogRevision) {
@@ -376,6 +363,7 @@ export class WorkspaceRuntimeService {
       agentRuntimeId,
       retained,
       profile,
+      maxActiveWorkspaces: workspaceSettings.maxActiveWorkspaces,
       generation: 1,
       createdAt: now,
     });

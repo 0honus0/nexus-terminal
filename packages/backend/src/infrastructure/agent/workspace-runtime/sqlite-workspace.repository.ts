@@ -159,6 +159,13 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
         [record.scope.userId, record.scope.appId, record.runId, record.agentRuntimeId],
       );
       if (existing) throw new Error('WORKSPACE_EXISTS');
+      if (!Number.isSafeInteger(record.maxActiveWorkspaces) || record.maxActiveWorkspaces < 1)
+        throw new Error('VALIDATION_FAILED');
+      const active = await tx.queryOne<{ total: number }>(
+        "SELECT COUNT(*) AS total FROM agent_workspaces WHERE user_id=? AND status NOT IN ('deleted','failed')",
+        [record.scope.userId],
+      );
+      if ((active?.total ?? 0) >= record.maxActiveWorkspaces) throw new Error('WORKSPACE_LIMIT_EXCEEDED');
 
       await tx.execute(
         `INSERT INTO agent_commands

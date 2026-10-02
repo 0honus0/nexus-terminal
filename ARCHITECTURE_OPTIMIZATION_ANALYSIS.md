@@ -972,9 +972,9 @@ if (
 
 这意味着 `workspace.create` 的 durable idempotency contract 对“成功后重试”这一最核心场景实际失效：调用方无法通过相同 key 稳定获得第一次创建的 Workspace，而会得到一个业务冲突错误。
 
-## 43. Workspace 数量上限采用事务外 count-then-create，并发创建可以突破 maxActiveWorkspaces
+## 43. Workspace 并发创建突破数量限制（已修复）
 
-> 确认问题：`workspace-runtime.service.ts:351–352` 的 count 位于 repository transaction 外，repository 只查同一 run/runtime 冲突。不同 run/runtime 并发是必要前提，未作 barrier 并发测试。
+> 已修复：createWorkspace record 携带有效 maxActiveWorkspaces，repository 排他事务在 replay 后按 user_id 统计所有 App 的 active Workspace、检查配额再插入；保留同 run/runtime 冲突检查。Service 删除独立 count admission，不以数据库 statement 串行冒充异步链原子。配置使用该请求读取的 effective limit，非同事务 settings revision CAS。下文为原问题证据。
 
 同一个 `WorkspaceRuntimeService.create()` 会先在事务外读取全部 Workspace 并计数：
 

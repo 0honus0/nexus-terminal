@@ -17,6 +17,7 @@ export interface CreateWorkspaceRecord {
   runId: string;
   agentRuntimeId: string;
   retained: boolean;
+  maxActiveWorkspaces: number;
   profile: WorkspaceProfileView;
   generation: number;
   createdAt: number;
