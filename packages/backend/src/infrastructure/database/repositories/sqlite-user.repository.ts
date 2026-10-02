@@ -36,13 +36,16 @@ export class SqliteUserRepository implements UserRepository {
   async count() {
     return (await this.database.queryOne<{ total: number }>('SELECT COUNT(*) AS total FROM users'))?.total ?? 0;
   }
-  async create(username: string, hashedPassword: string) {
-    const r = await this.database.execute(
-      "INSERT INTO users (username,hashed_password,created_at,updated_at) VALUES (?,?,strftime('%s','now'),strftime('%s','now'))",
-      [username, hashedPassword],
-    );
-    if (!r.lastInsertId) throw new Error('User insert did not return an id.');
-    return r.lastInsertId;
+  async createInitialAdmin(username: string, hashedPassword: string) {
+    return this.database.transaction(async (tx) => {
+      if (await tx.queryOne('SELECT id FROM users LIMIT 1')) throw new Error('设置已完成，无法重复执行。');
+      const r = await tx.execute(
+        "INSERT INTO users (username,hashed_password,created_at,updated_at) VALUES (?,?,strftime('%s','now'),strftime('%s','now'))",
+        [username, hashedPassword],
+      );
+      if (!r.lastInsertId) throw new Error('User insert did not return an id.');
+      return r.lastInsertId;
+    });
   }
   async updatePassword(id: number, hash: string) {
     return (

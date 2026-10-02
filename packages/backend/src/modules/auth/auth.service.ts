@@ -24,10 +24,9 @@ export class AuthService {
     return this.users.count().then((count) => count === 0);
   }
   async setupAdmin(username: string, password: string, context?: { ip?: string }) {
-    if ((await this.users.count()) > 0) throw new Error('设置已完成，无法重复执行。');
     this.validateNewPassword(password);
     if (!username?.trim()) throw new Error('用户名不能为空。');
-    const id = await this.users.create(username.trim(), await this.hasher.hash(password));
+    const id = await this.users.createInitialAdmin(username.trim(), await this.hasher.hash(password));
     await this.audit.logAction('ADMIN_SETUP_COMPLETE', { userId: id, username: username.trim(), ip: context?.ip });
     await this.notifications.publish('ADMIN_SETUP_COMPLETE', {
       userId: id,

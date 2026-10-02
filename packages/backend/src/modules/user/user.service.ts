@@ -18,8 +18,8 @@ export class UserService {
   count() {
     return this.repository.count();
   }
-  create(username: string, hashedPassword: string) {
-    return this.repository.create(username, hashedPassword);
+  createInitialAdmin(username: string, hashedPassword: string) {
+    return this.repository.createInitialAdmin(username, hashedPassword);
   }
   updatePassword(id: number, hash: string) {
     return this.repository.updatePassword(id, hash);

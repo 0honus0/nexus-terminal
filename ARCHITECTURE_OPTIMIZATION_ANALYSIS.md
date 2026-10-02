@@ -766,9 +766,9 @@ connections.jump_chain TEXT
 
 也就是说 create/update 时成立的 aggregate invariant 不会在依赖 Connection 删除时被维护，数据库会长期保存 Service 层无法再次创建出来的 route 状态。
 
-## 35. Initial Admin Setup 使用非原子的 `count() -> create()`，并发请求可以创建多个初始用户
+## 35. Initial Admin Setup 并发创建多个初始用户（已修复）
 
-> 确认问题：`modules/auth/auth.service.ts:26–30` 在 count 和 create 之间 await password hash；users 仅 username 唯一。不同用户名可在初始空库窗口并发通过，未发送真实并发 setup 请求。
+> 已修复：createInitialAdmin 在 repository 排他事务中检查 users 空表并插入；并发 setup 只有首个提交成功。密码 hash 在事务外执行，不将初始用户限制误加到所有数据恢复路径。下文为原问题证据。
 
 `AuthService.setupAdmin()` 用下面的前置检查保护一次性初始化：
 
