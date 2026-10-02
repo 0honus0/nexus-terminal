@@ -1,5 +1,3 @@
-import type { ToolContext } from '../../../modules/agent/capabilities/tool.types';
-import type { WorkspaceFileTargetPort } from '../../../modules/agent/workspace-runtime/workspace-file-target.port';
 import type {
   WorkspaceApplyPatchRequest,
   WorkspaceFileDeleteRequest,
@@ -7,9 +5,11 @@ import type {
   WorkspaceFileMoveRequest,
   WorkspaceFileReadRequest,
   WorkspaceFileWriteRequest,
-  WorkspaceRuntimeControllerPort,
   WorkspaceSearchRequest,
-} from '../../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
+} from '@nexus-terminal/protocol/runner';
+import type { ToolContext } from '../../../modules/agent/capabilities/tool.types';
+import type { WorkspaceFileTargetPort } from '../../../modules/agent/workspace-runtime/workspace-file-target.port';
+import type { WorkspaceRuntimeControllerPort } from '../../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type { AgentWorkspaceRepositoryPort } from '../../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
 
 export class WorkspaceFileTargetAdapter implements WorkspaceFileTargetPort {

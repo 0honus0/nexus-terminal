@@ -1,6 +1,7 @@
+import type { WorkspaceRecipe, ToolchainPackRef } from '@nexus-terminal/protocol/runner';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CatalogPack, WorkspaceRecipe, ToolchainPackRef, RuntimeCatalog } from '../types';
+import type { CatalogPack, RuntimeCatalog } from '../types';
 
 const MAX_CATALOG_RECIPES = 256;
 const MAX_CATALOG_PACKS = 4096;

@@ -24,57 +24,9 @@ Nexus Terminal 当前已经建立了比较明确的架构边界：Backend 使用
 
 > 已关闭：跨 Feature 页面现位于 `app/pages/workspace/WorkspacePage.vue`；路由与空闲预加载由 App 直接加载。Runtime 通过 `presentation/public.ts` 暴露页面所需组件、UI state provider 和唯一 session registry，不反向加载 App 页面。此项仅调整组合位置，未改变产品行为；不代表 Runtime 的其他独立依赖问题全部消失。
 
-## 2. Backend ↔ Agent Runner Wire Protocol 存在双重 Owner
+## 2. Backend ↔ Agent Runner Wire Protocol owner（已关闭）
 
-> 确认问题（协议 authority 不一致）：Backend `runner-http.adapter.ts:56` 与 Runner `controller/server.ts:30` 分别持有相同版本常量；Backend decoder 使用 domain port 类型，Runner 使用自身 `types.ts`。Runner package 未依赖 protocol package。双端边界验证本身必要，问题是 wire DTO／版本缺少公共唯一 owner；尚未证明实际 wire 漂移。
-
-仓库已有 `packages/protocol` 作为跨组件 wire DTO 的公共 owner，但 Backend ↔ Runner 的协议仍有两套实现。
-
-Backend 中存在：
-
-```text
-infrastructure/agent/workspace-runtime/
-  runner-http-protocol.ts
-  runner-http.adapter.ts
-```
-
-Runner 中存在：
-
-```text
-agent-runner/src/
-  types.ts
-  controller/server.ts
-```
-
-两端分别维护 runtime validation，并且分别声明：
-
-```ts
-RUNNER_PROTOCOL_VERSION = '2026-09-13';
-```
-
-协议版本、DTO 和 validation 逻辑因此没有唯一 owner。两端代码可以独立演进，存在 compile-time 和 runtime contract 漂移风险。
-
-Backend 的 `runner-http-protocol.ts` 还直接引用：
-
-```text
-modules/agent/workspace-runtime/*.port
-modules/agent/agent.types
-```
-
-这意味着 wire protocol 与 Backend domain type 发生耦合，协议边界没有完全独立于领域模型。
-
-两端还存在大量同类手写解析和校验逻辑，例如：
-
-```text
-asRecord()
-hasOnlyKeys()
-stringValue()
-integerValue()
-validateWorkspaceBindings()
-decodeXxx()
-```
-
-这些重复逻辑扩大了协议修改时需要同步变更的范围，也增加了两端校验规则不一致的可能性。
+> 已关闭：两端共享 `packages/protocol/src/runner-version.json` 与 `runner.ts`；Backend wire decoder 直接消费公共 DTO，Runner command/job/file/code-navigation/project-instruction 类型及全部生产消费者已迁移，旧重复声明与转导出入口已删除。Runner 依赖和 Docker 构建同步更新。双方保留必要的边界校验，本地 durable record、授权与 wire→domain conversion 不合并为协议 owner。协议字段与版本值未变；未新增或运行 E2E。
 
 ## 3. `AgentAppSurface.vue` 同时承担 Presentation 与 Application Controller 职责
 
@@ -4340,12 +4292,12 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项已逐项分类：**未解决确认问题 100 项，待确认 39 项，已关闭 1 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
+原 144 项已逐项分类：**未解决确认问题 99 项，待确认 39 项，已关闭 2 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1      | 已关闭   | Workspace 页面跨 Feature 组合位置                                                                                                                                            |
-| 2      | 确认问题 | Backend ↔ Agent Runner Wire Protocol 存在双重 Owner                                                                                                                          |
+| 2      | 已关闭   | Backend ↔ Agent Runner Wire Protocol owner                                                                                                                                   |
 | 3      | 确认问题 | `AgentAppSurface.vue` 同时承担 Presentation 与 Application Controller 职责                                                                                                   |
 | 5      | 待确认   | Runner `server.ts` 聚合 Transport、Validation 和业务协议入口                                                                                                                 |
 | 6      | 待确认   | `SqliteStateCommitAdapter` 同时承担事务编排和 Recovery Domain 逻辑                                                                                                           |

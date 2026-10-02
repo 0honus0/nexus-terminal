@@ -1,8 +1,6 @@
+import type { WorkspaceJobView } from '@nexus-terminal/protocol/runner';
 import type { ToolContext } from '../../../modules/agent/capabilities/tool.types';
-import type {
-  WorkspaceJobCall,
-  WorkspaceJobView,
-} from '../../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
+import type { WorkspaceJobCall } from '../../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type { AgentWorkspaceRepositoryPort } from '../../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type {
   WorkspaceShellJobAction,

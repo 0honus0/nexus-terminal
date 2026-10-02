@@ -1,3 +1,4 @@
+import type { ToolchainPackRef } from '@nexus-terminal/protocol/runner';
 import { createHash, randomUUID } from 'node:crypto';
 import { isUtf8 } from 'node:buffer';
 import { spawn } from 'node:child_process';
@@ -7,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as tar from 'tar';
 import semver from 'semver';
-import type { CatalogPack, ToolchainPackRef } from '../types';
+import type { CatalogPack } from '../types';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { ToolchainStore } from './toolchain-store';
 import { ToolchainMutationCoordinator } from './toolchain-mutation-coordinator';

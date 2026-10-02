@@ -1,25 +1,26 @@
-import type { JsonValue } from '../../../modules/agent/agent.types';
-import type { ProjectInstructionProjection } from '../../../modules/agent/ai/project-instruction-source.port';
-import type { WorkspaceJobView } from '../../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type {
-  RunnerCommandResult,
-  WorkspaceApplyPatchResult,
   RunnerWorkspaceProjection,
+  WorkspaceApplyPatchResult,
+  WorkspaceCodeIntelResult,
   WorkspaceFileDeleteResult,
   WorkspaceFileListResult,
   WorkspaceFileMoveResult,
   WorkspaceFileReadResult,
   WorkspaceFileStatResult,
   WorkspaceFileWriteResult,
-  WorkspaceSearchResult,
+  WorkspaceJobView,
   WorkspaceRepoMapResult,
-  WorkspaceCodeIntelResult,
-} from '../../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
+  WorkspaceSearchResult,
+} from '@nexus-terminal/protocol/runner';
+import type { JsonValue } from '../../../modules/agent/agent.types';
+import type { RunnerProjectInstructionProjection } from '@nexus-terminal/protocol/runner';
+import type { RunnerCommandWireResponse } from '@nexus-terminal/protocol/runner';
+import type { RunnerCommandResult } from '../../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type {
-  WorkspaceRuntimeAvailability,
-  WorkspaceRuntimeCatalog,
-  WorkspaceRuntimeStorageView,
-} from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
+  AgentWorkspaceRuntimeAvailabilityDto,
+  AgentWorkspaceRuntimeCatalogDto,
+  AgentWorkspaceRuntimeStorageDto,
+} from '@nexus-terminal/protocol/agent-workspace-runtime';
 
 const MAX_PROTOCOL_COLLECTION_ITEMS = 4096;
 const MAX_STORAGE_WORKSPACES = 16_384;
@@ -71,7 +72,7 @@ const stringArrayValue = (value: unknown, maxItems = 256): string[] => {
   return value.map((item) => stringValue(item) as string);
 };
 
-export const decodeAvailability = (value: unknown): WorkspaceRuntimeAvailability => {
+export const decodeAvailability = (value: unknown): AgentWorkspaceRuntimeAvailabilityDto => {
   const record = recordValue(value);
   if (record.mode !== 'native' || record.isolation !== 'logical') throw protocolError();
   return {
@@ -82,7 +83,7 @@ export const decodeAvailability = (value: unknown): WorkspaceRuntimeAvailability
   };
 };
 
-export const decodeCatalog = (value: unknown): WorkspaceRuntimeCatalog => {
+export const decodeCatalog = (value: unknown): AgentWorkspaceRuntimeCatalogDto => {
   const record = recordValue(value);
   if (!Array.isArray(record.recipes) || record.recipes.length > 256) throw protocolError();
   if (!Array.isArray(record.packs) || record.packs.length > MAX_PROTOCOL_COLLECTION_ITEMS) throw protocolError();
@@ -95,7 +96,7 @@ export const decodeCatalog = (value: unknown): WorkspaceRuntimeCatalog => {
       return {
         id: stringValue(recipe.id) as string,
         revision: stringValue(recipe.revision) as string,
-        kind: recipe.kind as WorkspaceRuntimeCatalog['recipes'][number]['kind'],
+        kind: recipe.kind as AgentWorkspaceRuntimeCatalogDto['recipes'][number]['kind'],
         displayName: stringValue(recipe.displayName) as string,
         allowedFamilies: stringArrayValue(recipe.allowedFamilies),
         defaultFamilies: stringArrayValue(recipe.defaultFamilies),
@@ -109,7 +110,7 @@ export const decodeCatalog = (value: unknown): WorkspaceRuntimeCatalog => {
         versionId: stringValue(pack.versionId) as string,
         displayName: stringValue(pack.displayName) as string,
         diskBytes: integerValue(pack.diskBytes),
-        status: pack.status as WorkspaceRuntimeCatalog['packs'][number]['status'],
+        status: pack.status as AgentWorkspaceRuntimeCatalogDto['packs'][number]['status'],
         installed: booleanValue(pack.installed),
         enabled: booleanValue(pack.enabled),
         inUse: booleanValue(pack.inUse),
@@ -118,7 +119,7 @@ export const decodeCatalog = (value: unknown): WorkspaceRuntimeCatalog => {
   };
 };
 
-export const decodeStorage = (value: unknown): WorkspaceRuntimeStorageView => {
+export const decodeStorage = (value: unknown): AgentWorkspaceRuntimeStorageDto => {
   const record = recordValue(value);
   if (!Array.isArray(record.byPack) || record.byPack.length > MAX_PROTOCOL_COLLECTION_ITEMS) throw protocolError();
   if (!Array.isArray(record.byWorkspace) || record.byWorkspace.length > MAX_STORAGE_WORKSPACES) throw protocolError();
@@ -154,13 +155,6 @@ export const decodeStorage = (value: unknown): WorkspaceRuntimeStorageView => {
     },
   };
 };
-
-interface RunnerCommandWireResponse {
-  commandId: string;
-  status: RunnerCommandResult['status'];
-  result?: unknown;
-  error?: unknown;
-}
 
 const commandStatuses = new Set<RunnerCommandResult['status']>([
   'pending',
@@ -238,9 +232,7 @@ export const decodeWrittenBytes = (value: unknown): number => {
   return integerValue(record.writtenBytes);
 };
 
-export const decodeProjectInstructionProjection = (
-  value: unknown,
-): Omit<ProjectInstructionProjection, 'workspaceId' | 'generation'> => {
+export const decodeProjectInstructionProjection = (value: unknown): RunnerProjectInstructionProjection => {
   const record = recordValue(value);
   const targetDirectories = stringArrayValue(record.targetDirectories, 8);
   if (!Array.isArray(record.instructions) || record.instructions.length > 16) throw protocolError();

@@ -1,3 +1,4 @@
+import type { WorkspaceJobView } from '@nexus-terminal/protocol/runner';
 import type { JsonValue } from '../../agent.types';
 import type { ShellCapabilityService, UnifiedShellCommand } from '../../capabilities/shell-capability.service';
 import type { AgentTargetKind } from '../../capabilities/tool-target.types';
@@ -10,7 +11,7 @@ import type {
 } from '../../capabilities/tool.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
-import type { WorkspaceJobView } from '../../workspace-runtime/workspace-runtime-gateway.port';
+
 import type { SshJobView } from '../../capabilities/ssh-session.port';
 import { sshSessionContext } from './ssh-session-input';
 

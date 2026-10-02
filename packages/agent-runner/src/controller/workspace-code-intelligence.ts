@@ -1,3 +1,13 @@
+import type {
+  WorkspaceCodeIntelDiagnostic,
+  WorkspaceCodeIntelLocation,
+  WorkspaceCodeIntelRequest,
+  WorkspaceCodeIntelResult,
+  WorkspaceRepoMapFile,
+  WorkspaceRepoMapRequest,
+  WorkspaceRepoMapResult,
+  WorkspaceRepoMapSymbol,
+} from '@nexus-terminal/protocol/runner';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,97 +43,6 @@ const SKIP_DIRECTORIES = new Set([
   'out',
   'target',
 ]);
-
-export interface RunnerWorkspaceRepoMapRequest {
-  path: string;
-  query?: string;
-  maxFiles: number;
-  maxSymbols: number;
-  maxOutputBytes: number;
-}
-
-export interface RunnerWorkspaceRepoMapSymbol {
-  name: string;
-  kind: string;
-  line: number;
-  column: number;
-  signature: string;
-}
-
-export interface RunnerWorkspaceRepoMapFile {
-  path: string;
-  sha256: string;
-  sizeBytes: number;
-  imports: string[];
-  symbols: RunnerWorkspaceRepoMapSymbol[];
-}
-
-export interface RunnerWorkspaceRepoMapResult {
-  engine: 'typescript-native';
-  path: string;
-  query: string | null;
-  revision: string;
-  indexedFiles: number;
-  indexedBytes: number;
-  cacheHits: number;
-  cacheMisses: number;
-  files: RunnerWorkspaceRepoMapFile[];
-  truncated: boolean;
-  fallback: {
-    searchTool: 'file_search';
-    readTool: 'file_read';
-    unsupportedLanguages: true;
-  };
-}
-
-export type RunnerWorkspaceCodeIntelAction = 'symbols' | 'definition' | 'references' | 'diagnostics';
-
-export interface RunnerWorkspaceCodeIntelRequest {
-  action: RunnerWorkspaceCodeIntelAction;
-  path: string;
-  line?: number;
-  column?: number;
-  maxResults: number;
-  maxOutputBytes: number;
-}
-
-export interface RunnerWorkspaceCodeIntelLocation {
-  path: string;
-  line: number;
-  column: number;
-  endLine: number;
-  endColumn: number;
-  name?: string;
-  kind?: string;
-  signature?: string;
-}
-
-export interface RunnerWorkspaceCodeIntelDiagnostic {
-  path: string;
-  line: number;
-  column: number;
-  endLine: number;
-  endColumn: number;
-  code: number;
-  category: string;
-  text: string;
-}
-
-export interface RunnerWorkspaceCodeIntelResult {
-  action: RunnerWorkspaceCodeIntelAction;
-  path: string;
-  engine: 'typescript-native' | 'fallback';
-  supported: boolean;
-  revision: string | null;
-  sha256: string | null;
-  results: Array<RunnerWorkspaceRepoMapSymbol | RunnerWorkspaceCodeIntelLocation | RunnerWorkspaceCodeIntelDiagnostic>;
-  truncated: boolean;
-  fallback: null | {
-    reason: 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED';
-    searchTool: 'file_search';
-    readTool: 'file_read';
-  };
-}
 
 interface IndexedFile {
   logical: string;
@@ -323,8 +242,8 @@ const positionFor = (sourceFile: SourceFile, line: number, column: number): numb
 const locationForNode = (
   root: string,
   node: Node,
-  extra?: Pick<RunnerWorkspaceCodeIntelLocation, 'name' | 'kind' | 'signature'>,
-): RunnerWorkspaceCodeIntelLocation | null => {
+  extra?: Pick<WorkspaceCodeIntelLocation, 'name' | 'kind' | 'signature'>,
+): WorkspaceCodeIntelLocation | null => {
   const sourceFile = node.getSourceFile();
   const hostPath = path.resolve(sourceFile.fileName);
   const relative = path.relative(root, hostPath);
@@ -355,9 +274,9 @@ const collectSymbols = async (
   project: Project,
   sourceFile: SourceFile,
   maxSymbols: number,
-): Promise<{ values: RunnerWorkspaceRepoMapSymbol[]; truncated: boolean }> => {
+): Promise<{ values: WorkspaceRepoMapSymbol[]; truncated: boolean }> => {
   const ast = await nativeAst();
-  const results: RunnerWorkspaceRepoMapSymbol[] = [];
+  const results: WorkspaceRepoMapSymbol[] = [];
   const probeLimit = maxSymbols + 1;
   const add = (node: Node, kind: string): void => {
     if (results.length >= probeLimit) return;
@@ -458,11 +377,7 @@ const boundedJsonArray = <T>(values: T[], maxOutputBytes: number): { values: T[]
 export class WorkspaceCodeIntelligence {
   private readonly caches = new Map<string, CacheEntry>();
 
-  async repoMap(
-    cacheKey: string,
-    workRoot: string,
-    request: RunnerWorkspaceRepoMapRequest,
-  ): Promise<RunnerWorkspaceRepoMapResult> {
+  async repoMap(cacheKey: string, workRoot: string, request: WorkspaceRepoMapRequest): Promise<WorkspaceRepoMapResult> {
     validateRequestBounds(request.maxFiles, 1, MAX_REPO_MAP_FILES);
     validateRequestBounds(request.maxSymbols, 1, MAX_REPO_MAP_SYMBOLS);
     validateRequestBounds(request.maxOutputBytes, 1024, MAX_REPO_MAP_OUTPUT_BYTES);
@@ -511,11 +426,11 @@ export class WorkspaceCodeIntelligence {
       (left, right) => right.score - left.score || left.indexed.logical.localeCompare(right.indexed.logical),
     );
     const selectedCandidates = candidates.slice(0, request.maxFiles);
-    const selected: RunnerWorkspaceRepoMapFile[] = [];
+    const selected: WorkspaceRepoMapFile[] = [];
     let symbolBudget = request.maxSymbols;
     let symbolTruncated = false;
     for (const candidate of selectedCandidates) {
-      let symbols: RunnerWorkspaceRepoMapSymbol[] = [];
+      let symbols: WorkspaceRepoMapSymbol[] = [];
       if (symbolBudget > 0) {
         const collected = await collectSymbols(candidate.project, candidate.sourceFile, symbolBudget);
         symbols = collected.values;
@@ -555,8 +470,8 @@ export class WorkspaceCodeIntelligence {
   async codeIntel(
     cacheKey: string,
     workRoot: string,
-    request: RunnerWorkspaceCodeIntelRequest,
-  ): Promise<RunnerWorkspaceCodeIntelResult> {
+    request: WorkspaceCodeIntelRequest,
+  ): Promise<WorkspaceCodeIntelResult> {
     if (!['symbols', 'definition', 'references', 'diagnostics'].includes(request.action)) {
       throw new Error('VALIDATION_FAILED');
     }
@@ -627,9 +542,7 @@ export class WorkspaceCodeIntelligence {
       };
     }
 
-    let results: Array<
-      RunnerWorkspaceRepoMapSymbol | RunnerWorkspaceCodeIntelLocation | RunnerWorkspaceCodeIntelDiagnostic
-    > = [];
+    let results: Array<WorkspaceRepoMapSymbol | WorkspaceCodeIntelLocation | WorkspaceCodeIntelDiagnostic> = [];
     let countTruncated = false;
     if (request.action === 'symbols') {
       const collected = await collectSymbols(project, sourceFile, request.maxResults);
@@ -659,7 +572,7 @@ export class WorkspaceCodeIntelligence {
           code: diagnostic.code,
           category: String(sync.DiagnosticCategory[diagnostic.category] ?? diagnostic.category),
           text: utf8Prefix(diagnostic.text, 1024),
-        } satisfies RunnerWorkspaceCodeIntelDiagnostic;
+        } satisfies WorkspaceCodeIntelDiagnostic;
       });
     } else {
       const line = request.line;
@@ -686,13 +599,13 @@ export class WorkspaceCodeIntelligence {
                 signature: normalizedSignature(project.emitter.printNode(node)),
               }),
             )
-            .filter((value): value is RunnerWorkspaceCodeIntelLocation => value !== null);
+            .filter((value): value is WorkspaceCodeIntelLocation => value !== null);
           countTruncated = definitions.length > request.maxResults;
           results = definitions.slice(0, request.maxResults);
         } else {
           const ast = await nativeAst();
           const token = ast.getTokenAtPosition(sourceFile, position);
-          const refs: RunnerWorkspaceCodeIntelLocation[] = [];
+          const refs: WorkspaceCodeIntelLocation[] = [];
           const seen = new Set<string>();
           for (const referenced of project.checker.getReferencedSymbolsForNode(token, position)) {
             const handles = [referenced.definition, ...referenced.references];

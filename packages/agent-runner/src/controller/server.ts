@@ -1,18 +1,20 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
-import http, { type IncomingMessage, type ServerResponse } from 'node:http';
-import type { Duplex } from 'node:stream';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
 import type {
-  CommandRecord,
   WorkspaceRuntimeCommand,
   WorkspaceProvisionCommand,
   WorkspaceLifecycleCommand,
   WorkspaceJobInput,
   WorkspaceJobRequest,
-  WorkspaceRecord,
-} from '../types';
+  WorkspaceBrowserEndpoint,
+} from '@nexus-terminal/protocol/runner';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import runnerVersion = require('@nexus-terminal/protocol/runner-version.json');
+import type { RunnerCommandWireResponse } from '@nexus-terminal/protocol/runner';
+import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import type { Duplex } from 'node:stream';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
+import type { CommandRecord, WorkspaceRecord } from '../types';
 import { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 import { RunnerJournal, payloadHash } from './journal';
@@ -24,10 +26,10 @@ import { MAX_HOST_WORKSPACE_TRANSFER_BYTES } from './plugin-workspace-store';
 import type { AcpProcessRuntime } from './acp-process-runtime';
 import type { WorkspaceTerminalRuntime } from './workspace-terminal-runtime';
 import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
-import type { WorkspaceBrowserEndpoint } from '../types';
+
 import { runnerLog } from '../logging';
 
-const RUNNER_PROTOCOL_VERSION = '2026-09-13';
+const { RUNNER_PROTOCOL_VERSION } = runnerVersion;
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_JOB_WAIT_MS = 5 * 60 * 1000;
 const RUNNER_CLIENT_INPUT_ERRORS = new Set([
@@ -48,7 +50,7 @@ const json = (response: ServerResponse, status: number, body: unknown): void => 
   response.end(JSON.stringify(body));
 };
 
-const commandWireResponse = (command: CommandRecord) => ({
+const commandWireResponse = (command: CommandRecord): RunnerCommandWireResponse => ({
   commandId: command.commandId,
   status: command.status,
   ...(command.result === null ? {} : { result: command.result }),

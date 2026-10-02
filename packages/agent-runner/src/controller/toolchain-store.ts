@@ -1,6 +1,6 @@
+import type { ToolchainPackRef } from '@nexus-terminal/protocol/runner';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ToolchainPackRef } from '../types';
 
 const safeSegment = (value: string): string => {
   if (!/^[A-Za-z0-9_.-]{1,128}$/.test(value)) throw new Error('WORKSPACE_TOOLCHAIN_REF_INVALID');

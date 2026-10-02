@@ -1,4 +1,27 @@
+import type {
+  WorkspaceApplyPatchRequest,
+  WorkspaceApplyPatchResult,
+  WorkspaceCodeIntelRequest,
+  WorkspaceCodeIntelResult,
+  WorkspaceFileDeleteRequest,
+  WorkspaceFileDeleteResult,
+  WorkspaceFileListRequest,
+  WorkspaceFileListResult,
+  WorkspaceFileMoveRequest,
+  WorkspaceFileMoveResult,
+  WorkspaceFileReadRequest,
+  WorkspaceFileReadResult,
+  WorkspaceFileStatResult,
+  WorkspaceFileWriteRequest,
+  WorkspaceFileWriteResult,
+  WorkspaceJobView,
+  WorkspaceRepoMapRequest,
+  WorkspaceRepoMapResult,
+  WorkspaceSearchRequest,
+  WorkspaceSearchResult,
+} from '@nexus-terminal/protocol/runner';
 import { Readable } from 'node:stream';
+import runnerVersion = require('@nexus-terminal/protocol/runner-version.json');
 import { setTimeout as delay } from 'node:timers/promises';
 import type WebSocket from 'ws';
 import type { ProjectInstructionProjection } from '../../../modules/agent/ai/project-instruction-source.port';
@@ -14,32 +37,12 @@ import type {
   WorkspaceExecutionGrant,
   WorkspaceRuntimeGatewayPort,
   WorkspaceJobCall,
-  WorkspaceJobView,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type {
   WorkspaceRuntimeControllerPort,
   AgentWorkspaceReadHandle,
   RunnerCommandRequest,
   RunnerCommandResult,
-  WorkspaceApplyPatchRequest,
-  WorkspaceApplyPatchResult,
-  WorkspaceFileDeleteRequest,
-  WorkspaceFileDeleteResult,
-  WorkspaceFileListRequest,
-  WorkspaceFileListResult,
-  WorkspaceFileMoveRequest,
-  WorkspaceFileMoveResult,
-  WorkspaceFileReadRequest,
-  WorkspaceFileReadResult,
-  WorkspaceFileStatResult,
-  WorkspaceFileWriteRequest,
-  WorkspaceFileWriteResult,
-  WorkspaceSearchRequest,
-  WorkspaceSearchResult,
-  WorkspaceRepoMapRequest,
-  WorkspaceRepoMapResult,
-  WorkspaceCodeIntelRequest,
-  WorkspaceCodeIntelResult,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type {
   WorkspaceRuntimeAvailability,
@@ -53,7 +56,7 @@ const MAX_STORAGE_RESPONSE_BYTES = 8 * 1024 * 1024;
 const MAX_CATALOG_RESPONSE_BYTES = 8 * 1024 * 1024;
 const MAX_HOST_WORKSPACE_TRANSFER_BYTES = 256 * 1024 * 1024;
 const WORKSPACE_TRANSFER_TIMEOUT_MS = 120_000;
-const RUNNER_PROTOCOL_VERSION = '2026-09-13';
+const { RUNNER_PROTOCOL_VERSION } = runnerVersion;
 
 const retryableRunnerGetTransportError = (error: unknown): boolean => {
   if (!(error instanceof TypeError)) return false;

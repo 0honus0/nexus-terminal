@@ -1,3 +1,9 @@
+import type {
+  WorkspaceCodeIntelRequest,
+  WorkspaceCodeIntelResult,
+  WorkspaceRepoMapRequest,
+  WorkspaceRepoMapResult,
+} from '@nexus-terminal/protocol/runner';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { logger } from '../../../shared/logging/logger';
@@ -13,10 +19,6 @@ import type {
   RunnerCommandRequest,
   RunnerCommandResult,
   WorkspaceRuntimeControllerPort,
-  WorkspaceRepoMapRequest,
-  WorkspaceRepoMapResult,
-  WorkspaceCodeIntelRequest,
-  WorkspaceCodeIntelResult,
 } from './workspace-runtime-controller.port';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION, type PluginRunnerTargetSourcePort } from '../host/plugin-runner-target.port';
 import type { AgentWorkspaceRepositoryPort } from './workspace-runtime.repository.port';

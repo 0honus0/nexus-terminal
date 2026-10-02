@@ -35,6 +35,8 @@ WORKDIR /build
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY scripts/patches ./scripts/patches
 COPY packages/agent-runner/package.json ./packages/agent-runner/package.json
+COPY packages/protocol/package.json ./packages/protocol/package.json
+COPY packages/protocol/src ./packages/protocol/src
 RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")" \
     && npm install --global "pnpm@${PNPM_VERSION}"
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \

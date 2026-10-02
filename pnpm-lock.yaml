@@ -57,6 +57,9 @@ importers:
 
   packages/agent-runner:
     dependencies:
+      '@nexus-terminal/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       diff:
         specifier: 9.0.0
         version: 9.0.0

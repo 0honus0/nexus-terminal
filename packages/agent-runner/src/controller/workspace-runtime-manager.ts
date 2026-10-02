@@ -1,7 +1,8 @@
+import type { ToolchainPackRef, WorkspaceJobRequest, WorkspaceProvisionCommand } from '@nexus-terminal/protocol/runner';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ToolchainPackRef, WorkspaceJobRequest, WorkspaceProvisionCommand } from '../types';
+
 import type { ToolchainStore } from './toolchain-store';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;

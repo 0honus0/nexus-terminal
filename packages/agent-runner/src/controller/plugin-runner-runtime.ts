@@ -1,3 +1,4 @@
+import type { PluginRunnerTarget } from '@nexus-terminal/protocol/runner';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import {
   MANAGED_PROCESS_DETACHED,
@@ -15,7 +16,7 @@ import {
   type PluginIpcFrame,
   writePluginFrame,
 } from '../plugin-ipc';
-import type { WorkspaceRecord, PluginRunnerTarget } from '../types';
+import type { WorkspaceRecord } from '../types';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
 import { PluginWorkspaceStore, type WorkspaceReadHandle } from './plugin-workspace-store';
 

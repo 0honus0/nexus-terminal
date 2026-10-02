@@ -1,7 +1,8 @@
+import type { WorkspaceJobResult } from '@nexus-terminal/protocol/runner';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import type { CommandRecord, JobRecord, WorkspaceJobResult, WorkspaceRecord } from '../types';
+import type { CommandRecord, JobRecord, WorkspaceRecord } from '../types';
 import { runnerLog } from '../logging';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
 

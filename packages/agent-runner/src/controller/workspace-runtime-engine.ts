@@ -1,10 +1,37 @@
+import type {
+  WorkspaceJobRequest,
+  WorkspaceJobResult,
+  WorkspaceProvisionCommand,
+} from '@nexus-terminal/protocol/runner';
+import type {
+  WorkspaceApplyPatchRequest,
+  WorkspaceApplyPatchResult,
+  WorkspaceCodeIntelRequest,
+  WorkspaceCodeIntelResult,
+  WorkspaceFileDeleteRequest,
+  WorkspaceFileDeleteResult,
+  WorkspaceFileListRequest,
+  WorkspaceFileListResult,
+  WorkspaceFileMoveRequest,
+  WorkspaceFileMoveResult,
+  WorkspaceFileReadRequest,
+  WorkspaceFileReadResult,
+  WorkspaceFileStatResult,
+  WorkspaceFileWriteRequest,
+  WorkspaceFileWriteResult,
+  WorkspaceRepoMapRequest,
+  WorkspaceRepoMapResult,
+  WorkspaceSearchRequest,
+  WorkspaceSearchResult,
+} from '@nexus-terminal/protocol/runner';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { WorkspaceJobRequest, WorkspaceJobResult, WorkspaceRecord, WorkspaceProvisionCommand } from '../types';
+import type { WorkspaceRecord } from '../types';
 import { JobRunner } from '../worker/job-runner';
 import { WorkspaceRuntimeManager } from './workspace-runtime-manager';
 import type { ToolchainStore } from './toolchain-store';
-import { resolveProjectInstructions, type RunnerProjectInstructionProjection } from './project-instructions';
+import { resolveProjectInstructions } from './project-instructions';
+import type { RunnerProjectInstructionProjection } from '@nexus-terminal/protocol/runner';
 import {
   applyWorkspacePatch,
   deleteWorkspaceFile,
@@ -14,29 +41,8 @@ import {
   searchWorkspace,
   statWorkspacePath,
   writeWorkspaceFile,
-  type RunnerWorkspaceApplyPatchRequest,
-  type RunnerWorkspaceApplyPatchResult,
-  type RunnerWorkspaceFileDeleteRequest,
-  type RunnerWorkspaceFileDeleteResult,
-  type RunnerWorkspaceFileListRequest,
-  type RunnerWorkspaceFileListResult,
-  type RunnerWorkspaceFileMoveRequest,
-  type RunnerWorkspaceFileMoveResult,
-  type RunnerWorkspaceFileReadRequest,
-  type RunnerWorkspaceFileReadResult,
-  type RunnerWorkspaceFileStatResult,
-  type RunnerWorkspaceFileWriteRequest,
-  type RunnerWorkspaceFileWriteResult,
-  type RunnerWorkspaceSearchRequest,
-  type RunnerWorkspaceSearchResult,
 } from './workspace-coding-files';
-import {
-  WorkspaceCodeIntelligence,
-  type RunnerWorkspaceCodeIntelRequest,
-  type RunnerWorkspaceCodeIntelResult,
-  type RunnerWorkspaceRepoMapRequest,
-  type RunnerWorkspaceRepoMapResult,
-} from './workspace-code-intelligence';
+import { WorkspaceCodeIntelligence } from './workspace-code-intelligence';
 import {
   createWorkspaceCheckpointArchive,
   recoverWorkspaceCheckpointRestore,
@@ -149,20 +155,20 @@ export class WorkspaceRuntimeEngine {
   readWorkspaceFile(
     workspaceId: string,
     generation: number,
-    request: RunnerWorkspaceFileReadRequest,
-  ): RunnerWorkspaceFileReadResult {
+    request: WorkspaceFileReadRequest,
+  ): WorkspaceFileReadResult {
     return readWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
   }
 
-  statWorkspacePath(workspaceId: string, generation: number, path: string): RunnerWorkspaceFileStatResult {
+  statWorkspacePath(workspaceId: string, generation: number, path: string): WorkspaceFileStatResult {
     return statWorkspacePath(this.codingWorkRoot(workspaceId, generation), path);
   }
 
   writeWorkspaceFile(
     workspaceId: string,
     generation: number,
-    request: RunnerWorkspaceFileWriteRequest,
-  ): RunnerWorkspaceFileWriteResult {
+    request: WorkspaceFileWriteRequest,
+  ): WorkspaceFileWriteResult {
     return this.withWorkspaceMutation(workspaceId, generation, () =>
       writeWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request),
     );
@@ -171,16 +177,16 @@ export class WorkspaceRuntimeEngine {
   listWorkspaceFiles(
     workspaceId: string,
     generation: number,
-    request: RunnerWorkspaceFileListRequest,
-  ): RunnerWorkspaceFileListResult {
+    request: WorkspaceFileListRequest,
+  ): WorkspaceFileListResult {
     return listWorkspaceFiles(this.codingWorkRoot(workspaceId, generation), request);
   }
 
   moveWorkspaceFile(
     workspaceId: string,
     generation: number,
-    request: RunnerWorkspaceFileMoveRequest,
-  ): RunnerWorkspaceFileMoveResult {
+    request: WorkspaceFileMoveRequest,
+  ): WorkspaceFileMoveResult {
     return this.withWorkspaceMutation(workspaceId, generation, () =>
       moveWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request),
     );
@@ -189,26 +195,18 @@ export class WorkspaceRuntimeEngine {
   deleteWorkspaceFile(
     workspaceId: string,
     generation: number,
-    request: RunnerWorkspaceFileDeleteRequest,
-  ): RunnerWorkspaceFileDeleteResult {
+    request: WorkspaceFileDeleteRequest,
+  ): WorkspaceFileDeleteResult {
     return this.withWorkspaceMutation(workspaceId, generation, () =>
       deleteWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request),
     );
   }
 
-  searchWorkspace(
-    workspaceId: string,
-    generation: number,
-    request: RunnerWorkspaceSearchRequest,
-  ): RunnerWorkspaceSearchResult {
+  searchWorkspace(workspaceId: string, generation: number, request: WorkspaceSearchRequest): WorkspaceSearchResult {
     return searchWorkspace(this.codingWorkRoot(workspaceId, generation), request);
   }
 
-  repoMap(
-    workspaceId: string,
-    generation: number,
-    request: RunnerWorkspaceRepoMapRequest,
-  ): Promise<RunnerWorkspaceRepoMapResult> {
+  repoMap(workspaceId: string, generation: number, request: WorkspaceRepoMapRequest): Promise<WorkspaceRepoMapResult> {
     return this.codeIntelligence.repoMap(
       workspaceKey(workspaceId, generation),
       this.codingWorkRoot(workspaceId, generation),
@@ -219,8 +217,8 @@ export class WorkspaceRuntimeEngine {
   codeIntel(
     workspaceId: string,
     generation: number,
-    request: RunnerWorkspaceCodeIntelRequest,
-  ): Promise<RunnerWorkspaceCodeIntelResult> {
+    request: WorkspaceCodeIntelRequest,
+  ): Promise<WorkspaceCodeIntelResult> {
     return this.codeIntelligence.codeIntel(
       workspaceKey(workspaceId, generation),
       this.codingWorkRoot(workspaceId, generation),
@@ -231,8 +229,8 @@ export class WorkspaceRuntimeEngine {
   applyWorkspacePatch(
     workspaceId: string,
     generation: number,
-    request: RunnerWorkspaceApplyPatchRequest,
-  ): RunnerWorkspaceApplyPatchResult {
+    request: WorkspaceApplyPatchRequest,
+  ): WorkspaceApplyPatchResult {
     if (request.dryRun === true) return applyWorkspacePatch(this.codingWorkRoot(workspaceId, generation), request);
     return this.withWorkspaceMutation(workspaceId, generation, () =>
       applyWorkspacePatch(this.codingWorkRoot(workspaceId, generation), request),

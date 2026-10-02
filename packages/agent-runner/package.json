@@ -17,6 +17,7 @@
     "@types/ws": "^8.18.1"
   },
   "dependencies": {
+    "@nexus-terminal/protocol": "workspace:*",
     "diff": "9.0.0",
     "semver": "7.7.2",
     "tar": "catalog:",

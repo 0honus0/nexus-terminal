@@ -1,4 +1,3 @@
-import type { ToolContext } from '../capabilities/tool.types';
 import type {
   WorkspaceApplyPatchRequest,
   WorkspaceApplyPatchResult,
@@ -15,7 +14,8 @@ import type {
   WorkspaceFileWriteResult,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
-} from './workspace-runtime-controller.port';
+} from '@nexus-terminal/protocol/runner';
+import type { ToolContext } from '../capabilities/tool.types';
 
 export interface WorkspaceFileTargetPort {
   stat(context: ToolContext, workspaceId: string, generation: number, path: string): Promise<WorkspaceFileStatResult>;

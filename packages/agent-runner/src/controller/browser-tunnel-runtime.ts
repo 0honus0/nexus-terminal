@@ -1,9 +1,10 @@
+import type { WorkspaceBrowserEndpoint } from '@nexus-terminal/protocol/runner';
 import http from 'node:http';
 import https from 'node:https';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
-import type { WorkspaceBrowserEndpoint } from '../types';
+
 import type { RunnerJournal } from './journal';
 
 const MAX_CDP_MESSAGE_BYTES = 16 * 1024 * 1024;

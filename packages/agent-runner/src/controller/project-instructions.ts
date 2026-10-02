@@ -1,3 +1,8 @@
+import type {
+  RunnerProjectInstruction,
+  RunnerProjectInstructionOmission,
+  RunnerProjectInstructionProjection,
+} from '@nexus-terminal/protocol/runner';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,29 +14,6 @@ const MAX_OMISSION_DETAILS = 32;
 const MAX_SOURCE_FILE_BYTES = 64 * 1024;
 const MAX_CONTENT_BYTES_PER_FILE = 16 * 1024;
 const MAX_CONTENT_BYTES_TOTAL = 64 * 1024;
-
-export interface RunnerProjectInstruction {
-  path: string;
-  scopePath: string;
-  projectRoot: string;
-  hash: string;
-  content: string;
-  sourceBytes: number;
-  contentBytes: number;
-  truncated: boolean;
-  provenance: 'workspace';
-}
-
-export interface RunnerProjectInstructionOmission {
-  path: string;
-  reason: 'source_too_large' | 'invalid_utf8' | 'total_budget' | 'too_many_files';
-}
-
-export interface RunnerProjectInstructionProjection {
-  targetDirectories: string[];
-  instructions: RunnerProjectInstruction[];
-  omitted: RunnerProjectInstructionOmission[];
-}
 
 const normalizeLogicalDirectory = (value: string): string => {
   if (typeof value !== 'string' || !value.startsWith('/') || value.includes('\0') || value.length > 4096) {

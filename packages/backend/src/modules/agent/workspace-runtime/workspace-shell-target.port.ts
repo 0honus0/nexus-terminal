@@ -1,5 +1,6 @@
+import type { WorkspaceJobView } from '@nexus-terminal/protocol/runner';
 import type { ToolContext } from '../capabilities/tool.types';
-import type { WorkspaceJobCall, WorkspaceJobView } from './workspace-runtime-gateway.port';
+import type { WorkspaceJobCall } from './workspace-runtime-gateway.port';
 
 export type WorkspaceShellMode = 'foreground' | 'background';
 export type WorkspaceShellJobAction = 'status' | 'wait' | 'cancel';

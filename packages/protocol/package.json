@@ -28,6 +28,7 @@
       "types": "./src/connections.ts",
       "default": "./src/connections.ts"
     },
+    "./runner-version.json": "./src/runner-version.json",
     "./*": {
       "types": "./src/*.ts",
       "default": "./src/*.ts"

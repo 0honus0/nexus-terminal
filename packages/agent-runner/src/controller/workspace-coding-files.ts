@@ -1,3 +1,23 @@
+import type {
+  WorkspaceApplyPatchRequest,
+  WorkspaceApplyPatchResult,
+  WorkspaceFileDeleteRequest,
+  WorkspaceFileDeleteResult,
+  WorkspaceFileListEntry,
+  WorkspaceFileListRequest,
+  WorkspaceFileListResult,
+  WorkspaceFileMoveRequest,
+  WorkspaceFileMoveResult,
+  WorkspaceFileReadRequest,
+  WorkspaceFileReadResult,
+  WorkspaceFileStatResult,
+  WorkspaceFileWriteRequest,
+  WorkspaceFileWriteResult,
+  WorkspacePatchChange,
+  WorkspaceSearchMatch,
+  WorkspaceSearchRequest,
+  WorkspaceSearchResult,
+} from '@nexus-terminal/protocol/runner';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -15,148 +35,6 @@ const MAX_SEARCH_BYTES = 16 * 1024 * 1024;
 const MAX_SEARCH_LINE_BYTES = 4 * 1024;
 const MAX_PATCH_FILES = 16;
 const MAX_PATCH_BYTES = 30 * 1024;
-
-export interface RunnerWorkspaceFileReadRequest {
-  path: string;
-  startLine?: number;
-  endLine?: number;
-  offsetBytes?: number;
-  maxBytes?: number;
-}
-
-export interface RunnerWorkspaceFileReadResult {
-  path: string;
-  sha256: string;
-  sizeBytes: number;
-  content: string;
-  startLine: number | null;
-  endLine: number | null;
-  offsetBytes: number | null;
-  contentBytes: number;
-  truncated: boolean;
-}
-
-export interface RunnerWorkspaceFileStatResult {
-  path: string;
-  exists: boolean;
-  type: 'file' | 'directory' | null;
-  sizeBytes: number | null;
-  modifiedAt: number | null;
-  mode: number | null;
-  sha256: string | null;
-}
-
-export interface RunnerWorkspaceFileWriteRequest {
-  path: string;
-  content: string;
-  expectedSha256: string | null;
-}
-
-export interface RunnerWorkspaceFileWriteResult {
-  path: string;
-  sha256: string;
-  sizeBytes: number;
-  modifiedAt: number;
-  created: boolean;
-}
-
-export interface RunnerWorkspaceFileListRequest {
-  path: string;
-  maxEntries: number;
-}
-
-export interface RunnerWorkspaceFileListEntry {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  sizeBytes: number;
-  modifiedAt: number;
-}
-
-export interface RunnerWorkspaceFileListResult {
-  path: string;
-  entries: RunnerWorkspaceFileListEntry[];
-  truncated: boolean;
-}
-
-export interface RunnerWorkspaceFileMoveRequest {
-  path: string;
-  destinationPath: string;
-  expectedSha256: string | null;
-}
-
-export interface RunnerWorkspaceFileMoveResult {
-  path: string;
-  destinationPath: string;
-  type: 'file' | 'directory';
-  sha256: string | null;
-}
-
-export interface RunnerWorkspaceFileDeleteRequest {
-  path: string;
-  recursive: boolean;
-  expectedSha256: string | null;
-}
-
-export interface RunnerWorkspaceFileDeleteResult {
-  path: string;
-  type: 'file' | 'directory';
-  deleted: true;
-}
-
-export interface RunnerWorkspaceSearchRequest {
-  query: string;
-  path: string;
-  glob?: string;
-  maxResults: number;
-  contextLines: number;
-  maxOutputBytes: number;
-}
-
-export interface RunnerWorkspaceSearchMatch {
-  path: string;
-  line: number;
-  column: number;
-  text: string;
-  before: string[];
-  after: string[];
-}
-
-export interface RunnerWorkspaceSearchResult {
-  query: string;
-  path: string;
-  engine: 'rg' | 'fallback';
-  matches: RunnerWorkspaceSearchMatch[];
-  truncated: boolean;
-  scannedFiles: number;
-  scannedBytes: number;
-}
-
-export interface RunnerWorkspacePatchExpectedFile {
-  path: string;
-  sha256: string;
-}
-
-export interface RunnerWorkspaceApplyPatchRequest {
-  patch: string;
-  expectedFiles: RunnerWorkspacePatchExpectedFile[];
-  dryRun?: boolean;
-}
-
-export interface RunnerWorkspacePatchChange {
-  path: string;
-  beforeSha256: string;
-  afterSha256: string;
-  beforeBytes: number;
-  afterBytes: number;
-  additions: number;
-  deletions: number;
-}
-
-export interface RunnerWorkspaceApplyPatchResult {
-  changes: RunnerWorkspacePatchChange[];
-  applied: boolean;
-}
 
 const normalizeLogicalPath = (value: string): string => {
   if (typeof value !== 'string' || !value.trim() || value.includes('\0') || value.length > 4096) {
@@ -239,10 +117,7 @@ const positiveInteger = (value: number | undefined, fallback: number, max: numbe
   return resolved;
 };
 
-export const readWorkspaceFile = (
-  workRoot: string,
-  request: RunnerWorkspaceFileReadRequest,
-): RunnerWorkspaceFileReadResult => {
+export const readWorkspaceFile = (workRoot: string, request: WorkspaceFileReadRequest): WorkspaceFileReadResult => {
   const root = assertRoot(workRoot);
   const logical = normalizeLogicalPath(request.path);
   const { raw } = openRegularFile(root, logical);
@@ -343,7 +218,7 @@ const workspacePathState = (root: string, logical: string): WorkspacePathState |
   throw new Error('WORKSPACE_PATH_FORBIDDEN');
 };
 
-export const statWorkspacePath = (workRoot: string, requestedPath: string): RunnerWorkspaceFileStatResult => {
+export const statWorkspacePath = (workRoot: string, requestedPath: string): WorkspaceFileStatResult => {
   const root = assertRoot(workRoot);
   const logical = normalizeLogicalPath(requestedPath);
   const state = workspacePathState(root, logical);
@@ -373,10 +248,7 @@ const validateExpectedSha256 = (value: string | null): void => {
   if (value !== null && !/^[a-f0-9]{64}$/.test(value)) throw new Error('VALIDATION_FAILED');
 };
 
-export const writeWorkspaceFile = (
-  workRoot: string,
-  request: RunnerWorkspaceFileWriteRequest,
-): RunnerWorkspaceFileWriteResult => {
+export const writeWorkspaceFile = (workRoot: string, request: WorkspaceFileWriteRequest): WorkspaceFileWriteResult => {
   const root = assertRoot(workRoot);
   const logical = normalizeLogicalPath(request.path);
   if (logical === WORK_LOGICAL_ROOT) throw new Error('WORKSPACE_PATH_FORBIDDEN');
@@ -426,10 +298,7 @@ export const writeWorkspaceFile = (
   };
 };
 
-export const listWorkspaceFiles = (
-  workRoot: string,
-  request: RunnerWorkspaceFileListRequest,
-): RunnerWorkspaceFileListResult => {
+export const listWorkspaceFiles = (workRoot: string, request: WorkspaceFileListRequest): WorkspaceFileListResult => {
   const root = assertRoot(workRoot);
   const logical = normalizeLogicalPath(request.path);
   if (!Number.isSafeInteger(request.maxEntries) || request.maxEntries < 1 || request.maxEntries > 500) {
@@ -440,7 +309,7 @@ export const listWorkspaceFiles = (
   const raw = fs
     .readdirSync(state.hostPath, { withFileTypes: true })
     .sort((left, right) => left.name.localeCompare(right.name));
-  const entries: RunnerWorkspaceFileListEntry[] = [];
+  const entries: WorkspaceFileListEntry[] = [];
   for (const entry of raw) {
     if (entries.length >= request.maxEntries) break;
     if (entry.isSymbolicLink() || (!entry.isFile() && !entry.isDirectory())) continue;
@@ -458,10 +327,7 @@ export const listWorkspaceFiles = (
   return { path: logical, entries, truncated: raw.length > entries.length };
 };
 
-export const moveWorkspaceFile = (
-  workRoot: string,
-  request: RunnerWorkspaceFileMoveRequest,
-): RunnerWorkspaceFileMoveResult => {
+export const moveWorkspaceFile = (workRoot: string, request: WorkspaceFileMoveRequest): WorkspaceFileMoveResult => {
   const root = assertRoot(workRoot);
   const sourceLogical = normalizeLogicalPath(request.path);
   const destinationLogical = normalizeLogicalPath(request.destinationPath);
@@ -498,8 +364,8 @@ export const moveWorkspaceFile = (
 
 export const deleteWorkspaceFile = (
   workRoot: string,
-  request: RunnerWorkspaceFileDeleteRequest,
-): RunnerWorkspaceFileDeleteResult => {
+  request: WorkspaceFileDeleteRequest,
+): WorkspaceFileDeleteResult => {
   const root = assertRoot(workRoot);
   const logical = normalizeLogicalPath(request.path);
   if (logical === WORK_LOGICAL_ROOT || typeof request.recursive !== 'boolean') {
@@ -534,9 +400,9 @@ const boundedMatches = (
   maxResults: number,
   contextLines: number,
   maxOutputBytes: number,
-): { matches: RunnerWorkspaceSearchMatch[]; truncated: boolean } => {
+): { matches: WorkspaceSearchMatch[]; truncated: boolean } => {
   const matchEvents = events.filter((event) => event.type === 'match');
-  const matches: RunnerWorkspaceSearchMatch[] = [];
+  const matches: WorkspaceSearchMatch[] = [];
   let bytes = 2;
   let truncated = matchEvents.length > maxResults;
   for (const event of matchEvents) {
@@ -547,7 +413,7 @@ const boundedMatches = (
         candidate.path === event.path &&
         Math.abs(candidate.line - event.line) <= contextLines,
     );
-    const candidate: RunnerWorkspaceSearchMatch = {
+    const candidate: WorkspaceSearchMatch = {
       path: event.path,
       line: event.line,
       column: event.column,
@@ -581,8 +447,8 @@ const logicalFromHost = (root: string, hostPath: string): string => {
 const searchWithRipgrep = (
   root: string,
   logical: string,
-  request: RunnerWorkspaceSearchRequest,
-): RunnerWorkspaceSearchResult | null => {
+  request: WorkspaceSearchRequest,
+): WorkspaceSearchResult | null => {
   const probe = spawnSync('rg', ['--version'], { encoding: 'utf8', timeout: 500, maxBuffer: 4096 });
   if (probe.error || probe.status !== 0) return null;
   const target = hostPathFor(root, logical);
@@ -649,11 +515,7 @@ const compileSearch = (query: string): RegExp => {
   }
 };
 
-const fallbackSearch = (
-  root: string,
-  logical: string,
-  request: RunnerWorkspaceSearchRequest,
-): RunnerWorkspaceSearchResult => {
+const fallbackSearch = (root: string, logical: string, request: WorkspaceSearchRequest): WorkspaceSearchResult => {
   const expression = compileSearch(request.query);
   const target = hostPathFor(root, logical);
   assertNoSymlink(root, target, false);
@@ -746,10 +608,7 @@ const fallbackSearch = (
   };
 };
 
-export const searchWorkspace = (
-  workRoot: string,
-  request: RunnerWorkspaceSearchRequest,
-): RunnerWorkspaceSearchResult => {
+export const searchWorkspace = (workRoot: string, request: WorkspaceSearchRequest): WorkspaceSearchResult => {
   const root = assertRoot(workRoot);
   if (
     !Number.isSafeInteger(request.maxResults) ||
@@ -790,8 +649,8 @@ const sourceLinesAtDeclaredLocation = (source: string, patchSpec: StructuredPatc
 
 export const applyWorkspacePatch = (
   workRoot: string,
-  request: RunnerWorkspaceApplyPatchRequest,
-): RunnerWorkspaceApplyPatchResult => {
+  request: WorkspaceApplyPatchRequest,
+): WorkspaceApplyPatchResult => {
   const root = assertRoot(workRoot);
   if (
     typeof request.patch !== 'string' ||
@@ -823,7 +682,7 @@ export const applyWorkspacePatch = (
     before: Buffer;
     after: Buffer;
     mode: number;
-    change: RunnerWorkspacePatchChange;
+    change: WorkspacePatchChange;
   }> = [];
   const patchPaths = new Set<string>();
   for (const patchSpec of patches) {
