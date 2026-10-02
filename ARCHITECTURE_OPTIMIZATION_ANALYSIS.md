@@ -1044,9 +1044,9 @@ return this.runtime.adminAction(userId, 'packInstall', asJson({ packs: plan.pack
 
 这里的 confirmation 只保护 preview 时的 settings/catalog revision，并没有把 Settings mutation 与 Runner command 组成一个可恢复的提交协议，所以失败会留下 durable configuration 与实际 Runner inventory 不一致。
 
-## 46. Backup Restore 会永久 dispose SSH Suspend / Workspace Suspend 的进程内生命周期，但导入后没有重建
+## 46. Backup Restore dispose Suspend 长期 owner（已修复）
 
-> 确认问题：`composition-root.ts:389–400` 使用 dispose 而非可重启 reset；workspace coordinator unsubscribe 和 SSH suspend sweepTimer 清理后无 reinitialize。这里是进程继续运行期间不可用，Backend 重启会重新创建 owner，不是跨重启永久失效。
+> 已修复：两个 Suspend owner 增加 reset，仅清空会话／待恢复资源，保留 sweep 和 ownership subscription；restore 与既有 resetForE2E 消费 reset，真正 shutdown 仍 dispose。restore 异常后 owner 仍可服务新会话；不重启或改动真实运行实例。下文为原问题证据。
 
 `composition-root.ts` 的 `beforeRestore` 在每次完整备份导入前执行：
 

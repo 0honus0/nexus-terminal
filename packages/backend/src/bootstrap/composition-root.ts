@@ -391,8 +391,8 @@ export const createCompositionRoot = (
       beforeRestore: async () => {
         await agent.prepareRestore(Math.floor(Date.now() / 1000) + 10);
         transferTasks.cancelAll();
-        await workspaceSuspend.dispose().catch(() => undefined);
-        await sshSuspend.dispose().catch(() => undefined);
+        await workspaceSuspend.reset();
+        await sshSuspend.reset();
         await executionSessions.closeAll();
       },
       afterRestore: async () => {
@@ -523,8 +523,8 @@ export const createCompositionRoot = (
     resetForE2E: async (mode) => {
       await agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
       transferTasks.cancelAll();
-      await workspaceSuspend.dispose().catch(() => undefined);
-      await sshSuspend.dispose().catch(() => undefined);
+      await workspaceSuspend.reset();
+      await sshSuspend.reset();
       await executionSessions.closeAll();
       await database.resetForE2E(mode, config.e2eSeedDatabase);
       await agent.initialize();

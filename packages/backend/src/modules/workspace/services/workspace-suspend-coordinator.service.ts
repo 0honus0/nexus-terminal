@@ -627,9 +627,13 @@ export class WorkspaceSuspendCoordinatorService {
   }
 
   async dispose(): Promise<void> {
+    this.ownershipRevocationUnsubscribe();
+    await this.reset();
+  }
+
+  async reset(): Promise<void> {
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
     this.reconnectTimers.clear();
-    this.ownershipRevocationUnsubscribe();
     for (const workspaceId of [...this.pending.keys()]) await this.rollbackResume(workspaceId).catch(() => false);
     for (const session of [...this.workspaces.listAllSessions()]) {
       this.status.clear(session.id);

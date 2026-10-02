@@ -466,10 +466,14 @@ export class SshSuspendService {
 
   async dispose(): Promise<void> {
     clearInterval(this.sweepTimer);
+    await this.reset();
+    this.ownershipRevokedListeners.clear();
+  }
+
+  async reset(): Promise<void> {
     const records = [...this.sessions.values()].flatMap((map) => [...map.values()]);
     this.sessions.clear();
     this.availabilityWaiters.clear();
-    this.ownershipRevokedListeners.clear();
     for (const record of records) {
       this.detachListeners(record);
       await record.outputChain.catch(() => undefined);
