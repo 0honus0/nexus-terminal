@@ -20,9 +20,13 @@ import type {
 import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
 
+const MAX_ACTIVE_FILE_OPERATIONS_PER_WORKSPACE = 16;
+
 /** Workspace authorization/ownership facade over reusable Platform file operations. */
 export class WorkspaceOperationsService {
   private readonly uploadGuards = new Map<string, MutationGuardHandle>();
+  private readonly uploadAdmissionReleases = new Map<string, () => void>();
+  private readonly activeFileOperations = new Map<string, Set<string>>();
 
   constructor(
     private readonly sessions: WorkspaceSessionRegistry,
@@ -35,17 +39,22 @@ export class WorkspaceOperationsService {
 
   async prepareUpload(workspaceId: string, prepareId: string, basePath: string, directories: readonly string[]) {
     const session = this.sessions.require(workspaceId);
-    return this.mutationGuard.withMutation(
-      this.guardRequest(workspaceId, `upload.prepare:${prepareId}`, [session.connectionId]),
-      async () =>
-        this.uploads.prepare({
-          ownerId: workspaceId,
-          sessionId: session.executionSessionId,
-          prepareId,
-          basePath,
-          directories,
-        }),
-    );
+    const releaseAdmission = this.acquireFileOperation(workspaceId, `upload.prepare:${prepareId}`);
+    try {
+      return await this.mutationGuard.withMutation(
+        this.guardRequest(workspaceId, `upload.prepare:${prepareId}`, [session.connectionId]),
+        async () =>
+          this.uploads.prepare({
+            ownerId: workspaceId,
+            sessionId: session.executionSessionId,
+            prepareId,
+            basePath,
+            directories,
+          }),
+      );
+    } finally {
+      releaseAdmission();
+    }
   }
 
   async startUpload(
@@ -56,12 +65,10 @@ export class WorkspaceOperationsService {
     options: { relativePath?: string; prepareId?: string; conflictPolicy?: UploadConflictPolicy } = {},
   ) {
     const session = this.sessions.require(workspaceId);
-    if (this.uploadGuards.has(this.uploadKey(workspaceId, uploadId))) throw new Error('LEASE_REENTRANT');
-    const handle = await this.mutationGuard.beginMutation(
-      this.pathGuardRequest(workspaceId, `upload:${uploadId}`, session.connectionId, [destinationPath]),
-    );
     const key = this.uploadKey(workspaceId, uploadId);
-    this.uploadGuards.set(key, handle);
+    if (this.uploadGuards.has(key) || this.uploadAdmissionReleases.has(key)) throw new Error('LEASE_REENTRANT');
+    const releaseAdmission = this.acquireFileOperation(workspaceId, `upload:${uploadId}`);
+    this.uploadAdmissionReleases.set(key, releaseAdmission);
     let terminal: Promise<void> | null = null;
     const emit = (event: UploadEvent): void => {
       if (!this.isUploadTerminalEvent(event)) {
@@ -71,18 +78,26 @@ export class WorkspaceOperationsService {
       terminal = this.settleUploadTerminalEvent(workspaceId, uploadId, event);
     };
     try {
+      const handle = await this.mutationGuard.beginMutation(
+        this.pathGuardRequest(workspaceId, `upload:${uploadId}`, session.connectionId, [destinationPath]),
+      );
+      this.uploadGuards.set(key, handle);
       await this.uploads.start(
         { ownerId: workspaceId, sessionId: session.executionSessionId, uploadId, destinationPath, size, ...options },
         emit,
       );
       if (terminal) await terminal;
     } catch (error) {
-      await this.finishUploadGuard(
-        workspaceId,
-        uploadId,
-        false,
-        error instanceof Error ? error.message : String(error),
-      );
+      try {
+        await this.finishUploadGuard(
+          workspaceId,
+          uploadId,
+          false,
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        this.finishUploadAdmission(workspaceId, uploadId);
+      }
       throw error;
     }
   }
@@ -104,13 +119,25 @@ export class WorkspaceOperationsService {
 
   async cancelUpload(workspaceId: string, uploadId: string) {
     const cancelled = await this.uploads.cancel(workspaceId, uploadId);
-    if (cancelled) await this.finishUploadGuard(workspaceId, uploadId, true);
+    if (cancelled) {
+      try {
+        await this.finishUploadGuard(workspaceId, uploadId, true);
+      } finally {
+        this.finishUploadAdmission(workspaceId, uploadId);
+      }
+    }
     return cancelled;
   }
 
   async abortUpload(workspaceId: string, uploadId: string, message: string) {
     const aborted = await this.uploads.abort(workspaceId, uploadId, message);
-    if (aborted) await this.finishUploadGuard(workspaceId, uploadId, false, message);
+    if (aborted) {
+      try {
+        await this.finishUploadGuard(workspaceId, uploadId, false, message);
+      } finally {
+        this.finishUploadAdmission(workspaceId, uploadId);
+      }
+    }
     return aborted;
   }
 
@@ -221,6 +248,12 @@ export class WorkspaceOperationsService {
       this.uploadGuards.delete(key);
       await handle.confirm().catch(() => undefined);
     }
+    const admissions = [...this.uploadAdmissionReleases.entries()].filter(([key]) => key.startsWith(`${workspaceId}:`));
+    for (const [key, release] of admissions) {
+      this.uploadAdmissionReleases.delete(key);
+      release();
+    }
+    this.activeFileOperations.delete(workspaceId);
   }
 
   private async runGuardedTransfer(
@@ -234,30 +267,38 @@ export class WorkspaceOperationsService {
     const destination = this.sessions.require(workspaceId);
     const source = this.sessions.require(sourceWorkspaceId);
     if (source.userId !== destination.userId) throw new Error('无权访问源 SFTP 会话。');
+    const releaseAdmission = this.acquireFileOperation(workspaceId, `transfer:${requestId}`);
     let terminalEvent: TransferEvent | null = null;
     const emit = (event: TransferEvent): void => {
       if (this.isTransferTerminalEvent(event)) terminalEvent = event;
       else this.events.publish(workspaceId, { type: 'transfer-event', event });
     };
-    await this.mutationGuard.withMutation(
-      this.guardRequest(workspaceId, `transfer.${mode}:${requestId}`, [source.connectionId, destination.connectionId]),
-      async (signal) =>
-        this.transfers.run(
-          {
-            requestId,
-            ownerId: workspaceId,
-            sourceOwnerId: sourceWorkspaceId,
-            sourceSessionId: source.executionSessionId,
-            destinationSessionId: destination.executionSessionId,
-            sourcePaths,
-            destinationPath,
-            mode,
-            signal,
-          },
-          emit,
-        ),
-    );
-    if (terminalEvent) this.events.publish(workspaceId, { type: 'transfer-event', event: terminalEvent });
+    try {
+      await this.mutationGuard.withMutation(
+        this.guardRequest(workspaceId, `transfer.${mode}:${requestId}`, [
+          source.connectionId,
+          destination.connectionId,
+        ]),
+        async (signal) =>
+          this.transfers.run(
+            {
+              requestId,
+              ownerId: workspaceId,
+              sourceOwnerId: sourceWorkspaceId,
+              sourceSessionId: source.executionSessionId,
+              destinationSessionId: destination.executionSessionId,
+              sourcePaths,
+              destinationPath,
+              mode,
+              signal,
+            },
+            emit,
+          ),
+      );
+      if (terminalEvent) this.events.publish(workspaceId, { type: 'transfer-event', event: terminalEvent });
+    } finally {
+      releaseAdmission();
+    }
   }
 
   private async runGuardedArchive(
@@ -267,6 +308,7 @@ export class WorkspaceOperationsService {
       Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'> | Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>,
   ): Promise<void> {
     const session = this.sessions.require(workspaceId);
+    const releaseAdmission = this.acquireFileOperation(workspaceId, `archive:${input.requestId}`);
     let terminalEvent: ArchiveEvent | null = null;
     const emit = (event: ArchiveEvent): void => {
       if (event.type === 'progress') this.events.publish(workspaceId, { type: 'archive-event', event });
@@ -278,30 +320,34 @@ export class WorkspaceOperationsService {
             (input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>).destinationPath,
           ])
         : this.guardRequest(workspaceId, `archive.${operation}:${input.requestId}`, [session.connectionId]);
-    await this.mutationGuard.withMutation(guard, async (signal) => {
-      if (operation === 'compress') {
-        await this.archives.compress(
+    try {
+      await this.mutationGuard.withMutation(guard, async (signal) => {
+        if (operation === 'compress') {
+          await this.archives.compress(
+            {
+              ...(input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>),
+              ownerId: workspaceId,
+              sessionId: session.executionSessionId,
+              signal,
+            },
+            emit,
+          );
+          return;
+        }
+        await this.archives.decompress(
           {
-            ...(input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>),
+            ...(input as Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>),
             ownerId: workspaceId,
             sessionId: session.executionSessionId,
             signal,
           },
           emit,
         );
-        return;
-      }
-      await this.archives.decompress(
-        {
-          ...(input as Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>),
-          ownerId: workspaceId,
-          sessionId: session.executionSessionId,
-          signal,
-        },
-        emit,
-      );
-    });
-    if (terminalEvent) this.events.publish(workspaceId, { type: 'archive-event', event: terminalEvent });
+      });
+      if (terminalEvent) this.events.publish(workspaceId, { type: 'archive-event', event: terminalEvent });
+    } finally {
+      releaseAdmission();
+    }
   }
 
   private isTransferTerminalEvent(event: TransferEvent): boolean {
@@ -330,7 +376,36 @@ export class WorkspaceOperationsService {
           message: error instanceof Error ? error.message : String(error),
         },
       });
+    } finally {
+      this.finishUploadAdmission(workspaceId, uploadId);
     }
+  }
+
+  private acquireFileOperation(workspaceId: string, operationKey: string): () => void {
+    const active = this.activeFileOperations.get(workspaceId) ?? new Set<string>();
+    if (active.has(operationKey)) throw new Error('WORKSPACE_FILE_OPERATION_ALREADY_ACTIVE');
+    if (active.size >= MAX_ACTIVE_FILE_OPERATIONS_PER_WORKSPACE) {
+      throw new Error('WORKSPACE_FILE_OPERATION_CAPACITY_EXCEEDED');
+    }
+    active.add(operationKey);
+    this.activeFileOperations.set(workspaceId, active);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const current = this.activeFileOperations.get(workspaceId);
+      if (!current) return;
+      current.delete(operationKey);
+      if (!current.size) this.activeFileOperations.delete(workspaceId);
+    };
+  }
+
+  private finishUploadAdmission(workspaceId: string, uploadId: string): void {
+    const key = this.uploadKey(workspaceId, uploadId);
+    const release = this.uploadAdmissionReleases.get(key);
+    if (!release) return;
+    this.uploadAdmissionReleases.delete(key);
+    release();
   }
 
   private guardRequest(

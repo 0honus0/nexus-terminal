@@ -282,8 +282,11 @@ flowchart TD
 - filesystem：路径和文件操作；
 - transfer module：跨 session 传输、任务状态与取消；
 - upload operation：批量上传目录 prepare cache 的 admission、TTL、复用与 Workspace teardown 回收；单 Workspace 最多 64 个 batch、合计 100,000 个目录，batch 采用 30 分钟滑动 TTL；
+- Workspace operations：上传 prepare／active upload／copy-move／archive 共用每 Workspace 16 个 file-operation admission slot；从等待 mutation lease 开始计数，到 terminal/cancel/failure/cleanup 释放；
 - SSH suspend module：挂起 catalog 与恢复事务；
 - Interfaces：HTTP/WebSocket streaming、认证和 backpressure。
+
+Workspace WebSocket control session 最多同时处理 64 个 request；超过容量返回 `WORKSPACE_REQUEST_CAPACITY_EXCEEDED`，防止 socket message callback 的并发 dispatch 绕过 Module 层资源边界。
 
 终端 shell 的暂停由 `WorkspaceTerminalService` 统一根据消费者背压与恢复暂停两个原因计算；任何原因仍存在时不得 resume。输入队列不提供未接通的 sequence/ACK 机制，网络提交不等于远端命令执行确认。
 

@@ -98,6 +98,7 @@ import {
 
 const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 const MAX_JSON_MESSAGE_BYTES = 1024 * 1024;
+const MAX_IN_FLIGHT_REQUESTS = 64;
 const BINARY_HIGH_WATER_BYTES = 1024 * 1024;
 const BINARY_BACKPRESSURE_POLL_MS = 10;
 const HIGH_FREQUENCY_OPERATIONS = new Set([
@@ -340,6 +341,7 @@ export interface WorkspaceProtocolCloseContext {
 /** Clean Workspace WebSocket protocol over clean Module/Platform services. */
 export class WorkspaceProtocolSession {
   private readonly binaryReads = new Map<string, { cancel(): void; maxBytes: number }>();
+  private inFlightRequests = 0;
   private workspaceId?: string;
   private eventUnsubscribe?: () => void;
   private closed = false;
@@ -449,6 +451,17 @@ export class WorkspaceProtocolSession {
         'Workspace request dispatch',
       );
     }
+    if (this.inFlightRequests >= MAX_IN_FLIGHT_REQUESTS) {
+      const error = 'WORKSPACE_REQUEST_CAPACITY_EXCEEDED';
+      logger.debug(
+        { operation: message.type, requestId: message.requestId, workspaceId: this.workspaceId },
+        'Workspace request admission rejected',
+      );
+      if (message.requestId) this.sendResponse(message.requestId, false, undefined, error);
+      else this.sendEvent('protocol.error', { operation: message.type, message: error });
+      return;
+    }
+    this.inFlightRequests += 1;
     try {
       const result = await this.route(message.type, record(message.payload), message.requestId);
       if (message.requestId) {
@@ -473,6 +486,7 @@ export class WorkspaceProtocolSession {
       else this.sendEvent('protocol.error', { operation: message.type, message: text });
     } finally {
       if (message.type === 'filesystem.readBinary' && message.requestId) this.binaryReads.delete(message.requestId);
+      this.inFlightRequests -= 1;
     }
   }
 

@@ -3014,9 +3014,9 @@ for (const [key, batch] of this.prepared) if (batch.ownerId === ownerId) this.pr
 
 这里缺的是 prepared-batch 自己的生命周期 owner。它现在既不是一次性 token，也不是 TTL cache，也没有 max entries / max retained directory strings；Frontend 的生命周期和 Backend 的生命周期已经分离。
 
-## 111. Workspace WebSocket 没有 in-flight request / file-operation admission limit；客户端可以绕过 Frontend scheduler 并发放大 SFTP stream、positioned copy 与远端 archive command
+## 111. Workspace WebSocket 没有 in-flight request / file-operation admission limit；客户端可以绕过 Frontend scheduler 并发放大 SFTP stream、positioned copy 与远端 archive command（已修复）
 
-> 确认问题：`websocket-server.ts:192` 并发 handleMessage，各 operation Map 仅 ID 去重；Frontend 上传 scheduler 不是 server admission。已有 mutation resource lease 会限制冲突目标，但不同目标仍可并行；不声称相同路径可任意绕过 lease。
+> 已修复：Workspace protocol session 现在最多并发处理 64 个 control request，超过容量直接返回 `WORKSPACE_REQUEST_CAPACITY_EXCEEDED`；`WorkspaceOperationsService` 另持有每 Workspace 16 个共享 file-operation slot，`upload.prepare`、等待 lease／已 ready 的 upload、copy/move 与 archive 全部进入同一 admission，terminal/cancel/failure/cleanup 均释放。Frontend scheduler 仍只是 UI 策略，Backend admission 才是资源不变量。Agent 回归同时验证 16 个 file-operation 槽位跨 upload/transfer 共享、释放后可再入，以及第 65 个并发协议请求被拒绝。下文保留原问题证据。
 
 Workspace WebSocket 的消息入口直接并发派发每一帧：
 
@@ -4217,7 +4217,7 @@ await terminateAllManagedProcesses();
 
 ## 问题汇总
 
-原 144 项当前分类：**未解决确认问题 20 项，待确认 15 项，已修复 82 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
+原 144 项当前分类：**未解决确认问题 19 项，待确认 15 项，已修复 83 项，已关闭／核对／澄清 23 项，删除 4 项**。确认问题包含能力／时序缺口与架构文档不一致，不等同于已复现功能故障。以下汇总与各项当前核对状态一致，编号保持原样。
 
 | 原编号 | 核对状态 | 保留条目                                                                                                                                                                     |
 | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4327,7 +4327,7 @@ await terminateAllManagedProcesses();
 | 108    | 已关闭   | Server Transfer 只限制单任务内部并发，没有全局 active-task / ExecutionSession 配额；多个 `/send` 请求可以线性扩张 SSH session 与远端命令并发                                 |
 | 109    | 已修复   | SSH Suspend 的落盘日志没有 startup reconcile；Backend 正常关闭时会主动保留随后永远不可达的孤儿日志                                                                           |
 | 110    | 已修复   | Workspace `upload.prepare` cache 没有 TTL / 数量上限 / consume 回收；不同 `prepareId` 可以在单个 Workspace 生命周期内永久堆积目录集合                                        |
-| 111    | 确认问题 | Workspace WebSocket 没有 in-flight request / file-operation admission limit；客户端可以绕过 Frontend scheduler 并发放大 SFTP stream、positioned copy 与远端 archive command  |
+| 111    | 已修复   | Workspace WebSocket 没有 in-flight request / file-operation admission limit；客户端可以绕过 Frontend scheduler 并发放大 SFTP stream、positioned copy 与远端 archive command  |
 | 112    | 确认问题 | `upload.start` 建立 active upload 后没有 idle deadline；客户端不发送数据即可永久占住远端写流、临时文件与持续续租的 mutation lease                                            |
 | 113    | 确认问题 | SFTP Download Ticket 的 capacity 只限制 ticket 数，不限制每个 ticket 的并发 claim / read stream；一个 token 就能绕过 64/512 配额制造无界下载流                               |
 | 114    | 确认问题 | 普通 Workspace session 没有 per-user / global 数量上限；认证用户可用不同 `workspaceId` 线性创建 SSH transport、shell 与 ExecutionSession                                     |
