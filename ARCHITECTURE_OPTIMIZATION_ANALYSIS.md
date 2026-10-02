@@ -1296,7 +1296,9 @@ SSH channel 的 close 事件已经显式把 `code` 建模为 `number | undefined
 
 源端 rsync/scp 登录目标需要目标 credential；实现将临时 private key 写到源端并在 finally 清理，password/passphrase 经 sshpass 使用。源端 root 可观察这些值，0600 不能隔离 root。待确认是否已有明确源端受信／凭据转交提示，以及是否需要 Backend relay 模式。
 
-## 58. Server Transfer 的 source capability probe 不接受取消信号，任务取消可以被三个串行 10 秒探测延迟
+## 58. Server Transfer capability probe 取消延迟（已修复）
+
+> 已修复：三次 commandPath 透传 request.signal，执行前后重检；catch 不吞 cancellation，不再继续后续 probe。保留单次 timeout 与普通命令缺失 fallback，不保证 OS 远端终止即刻完成。下文为原问题证据。
 
 > 确认问题：ServerTransferExecutor commandPath 探测未接收 request.signal；主传输有取消，不代表启动前 probe 可立即取消。这里只确认有限延迟，不是永久不可取消；实际取消延迟未测。
 

@@ -47,9 +47,9 @@ export class ServerTransferExecutor {
     this.throwIfAborted(request.signal);
     const source = request.sourceSession;
     const sourceFs = await source.fileSystem('transfer');
-    const sshpass = await this.commandPath(source, 'sshpass');
-    const sourceRsync = await this.commandPath(source, 'rsync');
-    const sourceScp = await this.commandPath(source, 'scp');
+    const sshpass = await this.commandPath(source, 'sshpass', request.signal);
+    const sourceRsync = await this.commandPath(source, 'rsync', request.signal);
+    const sourceScp = await this.commandPath(source, 'scp', request.signal);
     const selected = await this.selectStrategy(request, sourceRsync, sourceScp);
     const strategy = this.strategies[selected.method];
     request.onProgress?.({ progress: 5, method: selected.method, message: `Using ${selected.method}.` });
@@ -189,15 +189,19 @@ export class ServerTransferExecutor {
     }
   }
 
-  private async commandPath(source: ExecutionSession, command: string): Promise<string | null> {
+  private async commandPath(source: ExecutionSession, command: string, signal: AbortSignal): Promise<string | null> {
+    this.throwIfAborted(signal);
     try {
       const result = await source.execute({
         command: `command -v ${quotePosixShellArg(command)} 2>/dev/null`,
         timeoutMs: 10_000,
         maxOutputBytes: 16 * 1024,
+        signal,
       });
+      this.throwIfAborted(signal);
       return result.stdout.trim() || null;
     } catch {
+      this.throwIfAborted(signal);
       return null;
     }
   }
