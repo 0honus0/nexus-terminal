@@ -171,7 +171,8 @@ export const createAppearanceRouter = (dependencies: {
         response.status(404).json({ message: `主题 '${String(request.params.themeName)}' 未找到` });
         return;
       }
-      response.type('text/html; charset=utf-8').send(content);
+      response.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'");
+      response.type('text/plain; charset=utf-8').send(content);
     }),
   );
   router.post(
@@ -269,7 +270,12 @@ export const createAppearanceRouter = (dependencies: {
         return;
       }
       try {
-        response.type('text/html; charset=utf-8').send(await dependencies.htmlThemes.readRemote(fileUrl));
+        const content = await dependencies.htmlThemes.readRemote(fileUrl);
+        response.setHeader(
+          'Content-Security-Policy',
+          "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+        );
+        response.type('text/plain; charset=utf-8').send(content);
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });
       }

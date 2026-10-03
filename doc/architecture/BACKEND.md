@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Appearance local/remote content route统一text/plain+document CSP sandbox/default-src none，全局nosniff保留；Frontend获取字符串后既有opaque-origin iframe/srcdoc负责展示隔离，API不再提供同源HTML document execution surface。
+
 FileHttpSessionAdapter拥有sessions目录0700及文件0600权限收紧，启动lstat拒绝symlink目录/非普通entry，save成功后chmod，错误传给调用者；write-file-atomic继承已有文件mode，初始临时写依靠0700目录隔离。保留明文与既有session decode，不引入加密双轨。
 
 Backup import沿用authenticated HTTP boundary与codec envelope验证、instance/password wrapped key及exclusive restore；同实例免密码不表示任意session可构造合法包。无新增recent-auth/confirmation/audit owner，auth表不参与restore。

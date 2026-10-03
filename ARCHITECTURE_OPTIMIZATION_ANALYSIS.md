@@ -4074,6 +4074,8 @@ volumes:
 
 ## 141. Remote HTML Theme content API 把 GitHub 上的攻击者 HTML 作为 Nexus 同源 `text/html` 返回；直接导航可绕过 Terminal iframe sandbox 并执行已认证同源脚本
 
+> 已修复独立response面：remote/local HTML content API返回text/plain及CSP sandbox/default-src none，保留全局nosniff；Frontend现有responseType text与sandbox srcdoc展示不变。未执行真实恶意HTML导航攻击，不宣称源码过滤或主题脚本本身可信。
+
 > 确认问题（独立 document response 风险）：appearance route 明确text/html，HtmlThemeService只约束Raw Github来源，全局普通HTTP headers无CSP sandbox；Terminal iframe sandbox只保护另一展示面。需要已登录用户导航至攻击者控制HTML的链接，未执行真实攻击脚本。
 
 Terminal 真正显示 Custom HTML background 时已经做了正确的 iframe 隔离：
