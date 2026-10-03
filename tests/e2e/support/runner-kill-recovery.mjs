@@ -95,9 +95,14 @@ const stop = async (signal) => {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
   const exited = once(child, 'exit');
   child.kill(signal);
-  await exited;
+  const [code, actualSignal] = await exited;
+  if (signal === 'SIGKILL') {
+    assert.equal(code, null);
+    assert.equal(actualSignal, 'SIGKILL');
+  }
 };
 const marker = path.join(root, 'executions.txt');
+const pidFile = path.join(root, 'job.pid');
 const job = {
   jobId: 'kill-recovery-job',
   generation: 1,
@@ -105,7 +110,7 @@ const job = {
   argv: [
     process.execPath,
     '-e',
-    `require('node:fs').appendFileSync(${JSON.stringify(marker)}, 'once\\n'); setInterval(() => {}, 1000);`,
+    `const fs = require('node:fs'); fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); fs.appendFileSync(${JSON.stringify(marker)}, 'once\\n'); setInterval(() => {}, 1000);`,
   ],
   cwd: '/workspace/work',
   maxBytes: 1024,
@@ -118,8 +123,21 @@ try {
     () => (fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8') : ''),
     (value) => value === 'once\n',
   );
+  const oldPid = Number(fs.readFileSync(pidFile, 'utf8'));
+  assert.ok(Number.isSafeInteger(oldPid) && oldPid > 0);
+  process.kill(oldPid, 0);
+  assert.equal((await api(`/v1/jobs/${job.jobId}`)).status, 'running');
   await stop('SIGKILL');
   await start();
+  await poll(() => {
+    try {
+      process.kill(oldPid, 0);
+      return false;
+    } catch (error) {
+      if (error.code !== 'ESRCH') throw error;
+      return true;
+    }
+  }, Boolean);
   const recovered = await api(`/v1/jobs/${job.jobId}`);
   assert.equal(recovered.status, 'unknown');
   assert.equal((await api(`/v1/workspaces/${workspaceId}/jobs`, job)).status, 'unknown');
