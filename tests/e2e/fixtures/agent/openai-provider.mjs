@@ -194,9 +194,9 @@ const server = http.createServer(async (request, response) => {
       return;
     }
   }
-  const expectedSkill = serializedMessages.includes('E2E_EXPECT_DEVELOPER_SKILL')
+  const expectedSkill = latestUserText.includes('E2E_EXPECT_DEVELOPER_SKILL')
     ? { id: 'nexus.agent.developer', name: 'developer', bodyMarker: 'Prefer a Nexus Workspace Runtime' }
-    : serializedMessages.includes('E2E_EXPECT_OPERATIONS_SKILL')
+    : latestUserText.includes('E2E_EXPECT_OPERATIONS_SKILL')
       ? { id: 'nexus.agent.operations', name: 'operations', bodyMarker: 'Prefer structured diagnostics' }
       : null;
   const skillToolCallId = expectedSkill ? `call_e2e_skill_${expectedSkill.id.replaceAll('.', '_')}` : null;
