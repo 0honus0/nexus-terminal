@@ -37,6 +37,8 @@
         "channelTypeEditNote": "创建后无法修改渠道类型。",
         "webhookMethod": "HTTP 方法:",
         "webhookHeaders": "自定义 Headers",
+        "secretHeaderNames": "额外的秘密 Header 名称（逗号分隔）",
+        "secretHeaderHint": "常见凭据 Header 自动脱敏。null 保留已有秘密，删除对应条目则删除；自定义凭据名称请在此标记。",
         "webhookBodyTemplate": "请求体模板 (可选)",
         "webhookBodyPlaceholder": "默认: JSON 格式负载。可使用",
         "emailTo": "收件人邮箱:",

@@ -27,6 +27,7 @@
     url: '',
     method: 'POST' as NotificationMethod,
     webhookHeaders: '{}',
+    secretHeaderNames: '',
     webhookBodyTemplate: '',
     to: '',
     emailBodyTemplate: '',
@@ -54,6 +55,7 @@
         url: String(item?.config.url ?? ''),
         method: notificationMethod(item?.config.method),
         webhookHeaders: JSON.stringify(item?.config.headers ?? {}, null, 2),
+        secretHeaderNames: (item?.config.secretHeaderNames ?? []).join(', '),
         webhookBodyTemplate: String(item?.config.bodyTemplate ?? ''),
         to: String(item?.config.to ?? ''),
         emailBodyTemplate: String(item?.config.bodyTemplate ?? ''),
@@ -77,7 +79,7 @@
       const value = JSON.parse(form.webhookHeaders || '{}') as unknown;
       if (!value || typeof value !== 'object' || Array.isArray(value))
         throw new Error(t('settings.notifications.form.headersObjectRequired'));
-      return { headers: value as Record<string, string>, error: '' };
+      return { headers: value as Record<string, string | null>, error: '' };
     } catch (cause) {
       return {
         headers: {} as Record<string, string>,
@@ -99,6 +101,10 @@
         url: form.url,
         method: form.method,
         headers: headerValidation.value.headers,
+        secretHeaderNames: form.secretHeaderNames
+          .split(',')
+          .map((name) => name.trim())
+          .filter(Boolean),
         bodyTemplate: form.webhookBodyTemplate,
       };
     }
@@ -217,6 +223,10 @@
             {{ headerValidation.error }}
           </p></UiFormField
         >
+        <UiFormField :label="t('settings.notifications.form.secretHeaderNames')">
+          <UiInput v-model="form.secretHeaderNames" />
+          <p class="text-xs text-text-secondary">{{ t('settings.notifications.form.secretHeaderHint') }}</p>
+        </UiFormField>
         <UiFormField :label="t('settings.notifications.form.webhookBodyTemplate')" for-id="webhook-body"
           ><UiTextarea
             id="webhook-body"

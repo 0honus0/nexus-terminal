@@ -37,6 +37,8 @@
         "channelTypeEditNote": "Channel type cannot be changed after creation.",
         "webhookMethod": "HTTP Method:",
         "webhookHeaders": "Custom Headers",
+        "secretHeaderNames": "Additional secret header names (comma separated)",
+        "secretHeaderHint": "Credential headers are redacted automatically. null preserves an existing secret; remove its entry to delete it. Mark custom credential names here.",
         "webhookBodyTemplate": "Body Template (Optional)",
         "webhookBodyPlaceholder": "Default: JSON payload. Use",
         "emailTo": "Recipient Email(s):",

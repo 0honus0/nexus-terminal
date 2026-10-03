@@ -44,7 +44,9 @@ export type NotificationEventDto = (typeof NOTIFICATION_EVENTS)[number];
 export interface NotificationConfigDto {
   url?: string;
   method?: 'POST' | 'GET' | 'PUT';
-  headers?: Record<string, string>;
+  /** null preserves a stored secret on update; responses redact secret values to null. */
+  headers?: Record<string, string | null>;
+  secretHeaderNames?: string[];
   bodyTemplate?: string;
   to?: string;
   smtpHost?: string;

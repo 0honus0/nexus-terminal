@@ -11,6 +11,8 @@ import {
   type NotificationTestResponseDto,
 } from '@nexus-terminal/protocol/notifications';
 import type { NotificationSettingsService } from '../../../modules/notifications/notification-settings.service';
+import { isSecretWebhookHeader } from '../../../modules/notifications/webhook-header-secrets';
+import type { WebhookConfig } from '../../../modules/notifications/notification.types';
 import type {
   CreateNotificationSetting,
   NotificationChannelConfig,
@@ -60,9 +62,20 @@ const readConfigDto = (value: unknown): NotificationConfigDto => {
     config.method = value.method;
   }
   if (value.headers !== undefined) {
-    if (!isRecord(value.headers) || !Object.values(value.headers).every((entry) => typeof entry === 'string'))
+    if (
+      !isRecord(value.headers) ||
+      !Object.values(value.headers).every((entry) => typeof entry === 'string' || entry === null)
+    )
       throw new Error('config.headers 必须是字符串映射。');
-    config.headers = Object.fromEntries(Object.entries(value.headers).map(([key, entry]) => [key, String(entry)]));
+    config.headers = value.headers as Record<string, string | null>;
+  }
+  if (value.secretHeaderNames !== undefined) {
+    if (
+      !Array.isArray(value.secretHeaderNames) ||
+      !value.secretHeaderNames.every((name) => typeof name === 'string' && /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name))
+    )
+      throw new Error('config.secretHeaderNames 无效。');
+    config.secretHeaderNames = value.secretHeaderNames as string[];
   }
   if (value.smtpPort !== undefined) {
     if (typeof value.smtpPort !== 'number' || !Number.isFinite(value.smtpPort))
@@ -80,14 +93,45 @@ const readConfig = (
   value: unknown,
   channelType: NotificationChannelType,
   allowMissingSecret = false,
+  existingWebhook?: WebhookConfig,
 ): NotificationChannelConfig => {
   const config = readConfigDto(value);
   if (channelType === 'webhook') {
     if (typeof config.url !== 'string') throw new Error('webhook config.url 必须是字符串。');
+    const headers =
+      config.headers === undefined
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(config.headers).map(([name, value]) => {
+              if (value !== null) return [name, value];
+              const previousName = Object.keys(existingWebhook?.headers ?? {}).find(
+                (key) => key.toLowerCase() === name.toLowerCase(),
+              );
+              if (
+                !allowMissingSecret ||
+                !previousName ||
+                !existingWebhook ||
+                !isSecretWebhookHeader(previousName, existingWebhook)
+              )
+                throw new Error('只能保留已有secret header。');
+              return [name, existingWebhook.headers![previousName]];
+            }),
+          );
+    if (existingWebhook && config.secretHeaderNames !== undefined) {
+      for (const name of existingWebhook.secretHeaderNames ?? []) {
+        const entry = Object.entries(config.headers ?? {}).find(([key]) => key.toLowerCase() === name.toLowerCase());
+        if (
+          (config.headers === undefined || entry?.[1] === null) &&
+          !config.secretHeaderNames.some((key) => key.toLowerCase() === name.toLowerCase())
+        )
+          throw new Error('取消secret标记需删除或显式替换header。');
+      }
+    }
     return {
       url: config.url,
       ...(config.method === undefined ? {} : { method: config.method }),
-      ...(config.headers === undefined ? {} : { headers: config.headers }),
+      ...(headers === undefined ? {} : { headers }),
+      ...(config.secretHeaderNames === undefined ? {} : { secretHeaderNames: config.secretHeaderNames }),
       ...(config.bodyTemplate === undefined ? {} : { bodyTemplate: config.bodyTemplate }),
     };
   }
@@ -139,7 +183,8 @@ const createInput = (body: unknown): CreateNotificationSetting => {
   };
 };
 
-const updateInput = (body: unknown, channelType: NotificationChannelType): UpdateNotificationSetting => {
+const updateInput = (body: unknown, setting: NotificationSetting): UpdateNotificationSetting => {
+  const channelType = setting.channelType;
   if (!isRecord(body)) throw new Error('请求体必须是对象。');
   const request = body as NotificationSettingUpdateRequestDto;
   const input: UpdateNotificationSetting = {};
@@ -152,7 +197,13 @@ const updateInput = (body: unknown, channelType: NotificationChannelType): Updat
     if (typeof request.enabled !== 'boolean') throw new Error('enabled 必须是布尔值。');
     input.enabled = request.enabled;
   }
-  if (request.config !== undefined) input.config = readConfig(request.config, channelType, true);
+  if (request.config !== undefined)
+    input.config = readConfig(
+      request.config,
+      channelType,
+      true,
+      channelType === 'webhook' ? (setting.config as WebhookConfig) : undefined,
+    );
   if (request.enabledEvents !== undefined) input.enabledEvents = readEnabledEvents(request.enabledEvents);
   return input;
 };
@@ -161,6 +212,13 @@ const notificationDto = (setting: NotificationSetting): NotificationSettingDto =
   const config: NotificationConfigDto = { ...setting.config };
   if (setting.channelType === 'email') delete config.smtpPass;
   if (setting.channelType === 'telegram') delete config.botToken;
+  if (setting.channelType === 'webhook')
+    config.headers = Object.fromEntries(
+      Object.entries((setting.config as WebhookConfig).headers ?? {}).map(([name, value]) => [
+        name,
+        isSecretWebhookHeader(name, setting.config as WebhookConfig) ? null : value,
+      ]),
+    );
   return { ...setting, config };
 };
 
@@ -215,7 +273,7 @@ export const createNotificationsRouter = (settings: NotificationSettingsService)
           response.status(404).json({ message: `通知设置 ${id} 未找到。` });
           return;
         }
-        if (!(await settings.update(id, updateInput(request.body, existing.channelType)))) {
+        if (!(await settings.update(id, updateInput(request.body, existing)))) {
           response.status(404).json({ message: `通知设置 ${id} 未找到。` });
           return;
         }

@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Webhook secret header分类共用模块规则及case-insensitive secretHeaderNames；HTTP DTO redacts为null，更新解析只允许null引用已存在secret，持久/网络owner仅收到string map，Frontend支持标记与保留。secret marker不可通过null保留同时撤销，无旧包迁移或普通header整体隐藏。
+
 SSH Key HTTP mutation接入共享AuditLogService，SSH_KEY_CREATED/UPDATED/DELETED只记录标识和字段名，不将credential内容送入audit；业务与audit非原子，内部service调用不自动产生HTTP审计。
 
 Initial admin setup保留空users bootstrap Web流程，createInitialAdmin原子空库条件负责并发互斥，不引入deployment token；受控首次初始化属于部署安全前提，不是session授权或公网抢占防护。

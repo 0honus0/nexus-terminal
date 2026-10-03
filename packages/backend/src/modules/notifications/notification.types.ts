@@ -41,6 +41,7 @@ export interface WebhookConfig {
   url: string;
   method?: 'POST' | 'GET' | 'PUT';
   headers?: Record<string, string>;
+  secretHeaderNames?: string[];
   bodyTemplate?: string;
 }
 export interface EmailConfig {

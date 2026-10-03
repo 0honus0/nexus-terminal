@@ -3920,6 +3920,8 @@ response.json({ message: 'SSH 密钥删除成功。' });
 
 ## 138. Notification API 只对 SMTP password / Telegram bot token 做响应脱敏，Webhook headers 原样返回；保存的 Authorization/API-Key credential 可被任何已认证 Session 直接读取
 
+> 已修复HTTP DTO：常见authorization/cookie/api-key/token/secret名称自动secret，自定义secretHeaderNames可配置；response值null、update null仅保留已有secret，删除entry删除，不返回秘密值。ordinary headers仍可读写，取消自定义标记需显式替换或删除，未宣称任意未知名称自动识别或防止管理员修改出站目标。
+
 > 确认问题（secret DTO边界不一致）：notificationDto 只删 smtpPass/botToken，Webhook headers 完整保留。仅当 headers 含secret成立；取得已认证管理员session是前提，不是匿名读取。应保留普通header可编辑需求，区分secret字段。
 
 Webhook 配置允许保存任意 header：
