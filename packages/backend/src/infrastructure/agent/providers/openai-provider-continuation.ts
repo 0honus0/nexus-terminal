@@ -78,11 +78,18 @@ export class OpenAiResponsesContinuationCollector {
   private readonly reasoning = new Map<string, string>();
   private readonly tools = new Map<string, string>();
 
+  private admitNewPart(existing: boolean): void {
+    if (!existing && this.reasoning.size + this.tools.size >= MAX_CONTINUATION_PARTS) {
+      throw new Error('MODEL_PROVIDER_CONTINUATION_INVALID');
+    }
+  }
+
   recordReasoning(providerMetadata: unknown): void {
     const metadata = openAiProviderMetadata(providerMetadata);
     const itemId = metadata?.itemId;
     const encrypted = metadata?.reasoningEncryptedContent;
     if (typeof itemId === 'string' && itemId && typeof encrypted === 'string' && encrypted) {
+      this.admitNewPart(this.reasoning.has(itemId));
       this.reasoning.set(itemId, encrypted);
     }
   }
@@ -90,7 +97,11 @@ export class OpenAiResponsesContinuationCollector {
   recordToolCall(toolCallId: string, providerMetadata: unknown): void {
     const metadata = openAiProviderMetadata(providerMetadata);
     const itemId = metadata?.itemId;
-    if (typeof itemId === 'string' && itemId) this.tools.set(toolCallId, itemId);
+    if (typeof itemId === 'string' && itemId) {
+      this.admitNewPart(this.tools.has(toolCallId));
+      if (!this.tools.has(toolCallId) && this.tools.size >= 64) throw new Error('MODEL_TOOL_CALL_BATCH_TOO_LARGE');
+      this.tools.set(toolCallId, itemId);
+    }
   }
 
   build(route: {

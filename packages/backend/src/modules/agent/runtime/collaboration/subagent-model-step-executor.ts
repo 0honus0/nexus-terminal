@@ -313,6 +313,7 @@ export class SubagentModelStepExecutor {
                 occurredAt: this.clock.nowUnixSeconds(),
               });
           } else if (event.type === 'tool.delta') {
+            if (!toolCalls.has(event.index) && toolCalls.size >= 32) throw new Error('MODEL_TOOL_CALL_BATCH_TOO_LARGE');
             const current = toolCalls.get(event.index) ?? { argumentsJson: '' };
             if (event.id !== undefined) current.id = event.id;
             if (event.name !== undefined) current.name = event.name;

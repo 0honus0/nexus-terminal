@@ -3306,6 +3306,8 @@ Integration/McpAdapter 无总 MCP session quota；单 session 有连接 timeout�
 
 ## 119. Model tool-call 数量上限只在 provider stream 结束后检查；OpenAI-compatible endpoint 可在最终拒绝前持续扩大 tool-call/continuation 内存状态
 
+> 已修复：Provider在分配新id前限64，Root／Child在Map新增前分别限64／32；Responses collector ingest限512 parts及64 tool identities，重复id不额外计数，超限立即失败，不等待finish。保留终态校验，未发恶意远端模型流。
+
 > 确认问题（ingest cardinality fence 缺口）：openai-provider.adapter indexFor 无数量 gate，Root/Child Map 结束后才拒绝 batch。单参数字节上限、deadline/max tokens 限制仍有效但不能替代本地累计数量；未发送恶意模型流。
 
 Root execution 明确定义了单个 model step 最多 64 个 Tool call：

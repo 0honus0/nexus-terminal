@@ -32,6 +32,7 @@ import { shouldRetryModel, waitBeforeModelRetry } from './model-retry-policy';
 import { resolveModelContextBudget } from '../runs/run-budget-policy';
 import type { RunInputProjection, RunSnapshot } from '../runs/run.types';
 import { logger } from '../../../../shared/logging/logger';
+import { MAX_TOOL_CALLS_PER_MODEL_STEP } from './root-model-execution-common';
 
 const MAX_ASSISTANT_BYTES = 256 * 1024;
 
@@ -472,6 +473,9 @@ export class ModelStepRunner {
               payload: { ...attemptIdentity, text: event.text },
             };
           } else if (event.type === 'tool.delta') {
+            if (!toolCalls.has(event.index) && toolCalls.size >= MAX_TOOL_CALLS_PER_MODEL_STEP) {
+              throw new Error('MODEL_TOOL_CALL_BATCH_TOO_LARGE');
+            }
             const current = toolCalls.get(event.index) ?? { argumentsJson: '' };
             if (event.id) current.id = event.id;
             if (event.name) current.name = event.name;

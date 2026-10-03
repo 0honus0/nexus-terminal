@@ -400,6 +400,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
     const indexFor = (id: string): number => {
       const existing = toolIndexes.get(id);
       if (existing !== undefined) return existing;
+      if (toolIndexes.size >= 64) throw new Error('MODEL_TOOL_CALL_BATCH_TOO_LARGE');
       const index = toolIndexes.size;
       toolIndexes.set(id, index);
       return index;
@@ -419,16 +420,18 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
           continue;
         }
         if (part.type === 'tool-input-start') {
+          const index = indexFor(part.id);
           toolNames.set(part.id, part.toolName);
-          yield { type: 'tool.delta', index: indexFor(part.id), id: part.id, name: part.toolName };
+          yield { type: 'tool.delta', index, id: part.id, name: part.toolName };
           continue;
         }
         if (part.type === 'tool-input-delta') {
+          const index = indexFor(part.id);
           const nextBytes = (toolBytes.get(part.id) ?? 0) + Buffer.byteLength(part.delta, 'utf8');
           if (nextBytes > MAX_TOOL_ARGUMENT_BYTES) throw new Error('MODEL_TOOL_ARGUMENTS_TOO_LARGE');
           toolBytes.set(part.id, nextBytes);
           sawToolDelta.add(part.id);
-          yield { type: 'tool.delta', index: indexFor(part.id), argumentsDelta: part.delta };
+          yield { type: 'tool.delta', index, argumentsDelta: part.delta };
           continue;
         }
         if (part.type === 'tool-call') {
