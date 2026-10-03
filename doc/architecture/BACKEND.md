@@ -288,6 +288,8 @@ flowchart TD
 
 Workspace WebSocket control session 最多同时处理 64 个 request；超过容量返回 `WORKSPACE_REQUEST_CAPACITY_EXCEEDED`，防止 socket message callback 的并发 dispatch 绕过 Module 层资源边界。
 
+SFTP HTTP 下载的真实 workload 由 `interfaces/http/sftp/download-admission.registry.ts` 统一 admission：ticket GET、认证 GET 和目录 ZIP 都计入每用户 8／全局 64 的 active pipeline 上限，response finish/close 释放；ticket registry 只继续负责短时 capability、owner lock 与 ticket retention，不再承担 stream capacity 语义。
+
 终端 shell 的暂停由 `WorkspaceTerminalService` 统一根据消费者背压与恢复暂停两个原因计算；任何原因仍存在时不得 resume。输入队列不提供未接通的 sequence/ACK 机制，网络提交不等于远端命令执行确认。
 
 SSH `TerminalStreamTransport` 支持 `terminal.flow` 消费窗口；客户端在连接后用 consumedBytes=0 启用，随后只允许安全整数、单调且不超过已发送字节的确认。计数属于当前 WebSocket，不是 journal offset。窗口为 1 MiB，单帧最多 256 KiB；窗口耗尽暂停实时 shell 和发送，确认释放容量后继续。恢复日志按帧等待窗口容量，不把整个 replay 一次塞入发送队列。未启用窗口的协议客户端保留网络背压。

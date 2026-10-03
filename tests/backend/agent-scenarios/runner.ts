@@ -9,6 +9,7 @@ import { serverTransferAdmissionScenario } from './server-transfer-admission.sce
 import { uploadPrepareCacheLifecycleScenario } from './upload-prepare-cache-lifecycle.scenario';
 import { uploadIdleTimeoutScenario } from './upload-idle-timeout.scenario';
 import { workspaceOperationAdmissionScenario } from './workspace-operation-admission.scenario';
+import { sftpDownloadAdmissionScenario } from './sftp-download-admission.scenario';
 import { providerPromptCacheHintScenario } from './provider-prompt-cache-hint.scenario';
 
 import { unifiedFileCapabilityScenario } from './unified-file-capability.scenario';
@@ -171,6 +172,7 @@ const scenarios = new Map<string, Scenario>([
   ['workspace/upload-prepare-cache-lifecycle', uploadPrepareCacheLifecycleScenario],
   ['workspace/upload-idle-timeout', uploadIdleTimeoutScenario],
   ['workspace/operation-admission', workspaceOperationAdmissionScenario],
+  ['workspace/sftp-download-admission', sftpDownloadAdmissionScenario],
   ['runtime/memory-product-closure', memoryProductClosureScenario],
   ['workspace/suspended-session-ownership', suspendedSessionOwnershipScenario],
   ['workspace/suspended-log-reconciliation', suspendedLogReconciliationScenario],

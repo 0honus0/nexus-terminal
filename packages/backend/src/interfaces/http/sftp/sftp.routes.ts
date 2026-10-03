@@ -9,6 +9,7 @@ import { isRemoteFileMissingError } from '../../../platform/filesystem/remote-fi
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, requestIp } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
+import { SftpDownloadAdmissionRegistry, SftpDownloadCapacityError } from './download-admission.registry';
 import {
   DOWNLOAD_TICKET_TTL_SECONDS,
   DownloadTicketCapacityError,
@@ -17,6 +18,7 @@ import {
 } from './download-ticket.registry';
 
 const tickets = new DownloadTicketRegistry();
+const downloadAdmission = new SftpDownloadAdmissionRegistry();
 const MAX_INLINE_PREVIEW_SIZE = 20 * 1024 * 1024;
 const INLINE_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -56,6 +58,18 @@ const disposition = (kind: 'inline' | 'attachment', remotePath: string) => {
     fallback = filename.replace(/["\\\r\n]/g, '_').replace(/[^\x20-\x7E]/g, '_') || 'download',
     encoded = encodeURIComponent(filename).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
   return `${kind}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+};
+
+const admitDownload = (userId: number, response: Response): void => {
+  const release = downloadAdmission.acquire(userId);
+  let released = false;
+  const finish = () => {
+    if (released) return;
+    released = true;
+    release();
+  };
+  response.once('finish', finish);
+  response.once('close', finish);
 };
 
 const archiveDirectory = async (
@@ -177,6 +191,15 @@ export const createSftpRouter = (filesystem: WorkspaceFilesystemService): Router
         return;
       }
     }
+    if (request.method !== 'HEAD') {
+      try {
+        admitDownload(userId, response);
+      } catch (error) {
+        if (!(error instanceof SftpDownloadCapacityError)) throw error;
+        response.status(429).json({ message: error.message });
+        return;
+      }
+    }
     const target = await filesystem.resolveActive(userId, connectionId, workspaceId);
     if (!target) {
       response.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
@@ -264,6 +287,13 @@ export const createSftpRouter = (filesystem: WorkspaceFilesystemService): Router
         remotePath = typeof request.query.remotePath === 'string' ? request.query.remotePath : '';
       if (!Number.isSafeInteger(connectionId) || connectionId <= 0 || !remotePath) {
         response.status(400).json({ message: '缺少或无效的查询参数。' });
+        return;
+      }
+      try {
+        admitDownload(userId, response);
+      } catch (error) {
+        if (!(error instanceof SftpDownloadCapacityError)) throw error;
+        response.status(429).json({ message: error.message });
         return;
       }
       const target = await filesystem.resolveActive(userId, connectionId, workspaceId);
