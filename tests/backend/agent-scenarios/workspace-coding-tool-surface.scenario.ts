@@ -322,7 +322,7 @@ export const workspaceCodingToolSurfaceScenario = async () => {
     );
     strictLocationRejections += 1;
 
-    const httpJournal = new RunnerJournal(path.join(directory, 'coding-http-journal.json'));
+    const httpJournal = new RunnerJournal(path.join(directory, 'coding-http-journal.sqlite'));
     httpJournal.saveWorkspace({
       workspaceId: 'coding-workspace',
       generation: 5,
@@ -430,6 +430,7 @@ export const workspaceCodingToolSurfaceScenario = async () => {
       generationConflictCases += 1;
     } finally {
       await new Promise<void>((resolve, reject) => codingServer.close((error) => (error ? reject(error) : resolve())));
+      httpJournal.close();
     }
 
     return [

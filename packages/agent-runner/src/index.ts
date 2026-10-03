@@ -38,7 +38,13 @@ const main = async (): Promise<void> => {
   }
   const catalog = new WorkspaceRuntimeCatalog(catalogFile);
   runnerLog('info', 'Agent Runner starting', { runtimeMode: 'native', isolation: 'logical' });
-  const journal = new RunnerJournal(path.join(root, 'state', 'journal.json'));
+  if (
+    fs.existsSync(path.join(root, 'state', 'journal.json')) ||
+    fs.existsSync(path.join(root, 'state', 'journal.json.corrupt-marker'))
+  ) {
+    throw new Error('RUNNER_JOURNAL_FORMAT_UNSUPPORTED');
+  }
+  const journal = new RunnerJournal(path.join(root, 'state', 'journal.sqlite'));
   const store = new ToolchainStore(path.join(root, 'packs'));
   const runtimeEngine = new WorkspaceRuntimeEngine(path.join(root, 'runtime'), store);
   const toolchainMutations = new ToolchainMutationCoordinator();
@@ -88,6 +94,7 @@ const main = async (): Promise<void> => {
       server.close(() => resolve());
     });
     runnerLog('info', 'Agent Runner graceful shutdown completed', { signal });
+    journal.close();
   };
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
   process.once('SIGINT', () => void shutdown('SIGINT'));

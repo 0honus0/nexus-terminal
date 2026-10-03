@@ -354,7 +354,7 @@ export const workspaceRepoMapCodeIntelScenario = async () => {
     let httpCodecCases = 0;
     let generationConflictCases = 0;
     let httpValidationCases = 0;
-    const journal = new RunnerJournal(path.join(directory, 'code-intel-journal.json'));
+    const journal = new RunnerJournal(path.join(directory, 'code-intel-journal.sqlite'));
     journal.saveWorkspace({
       workspaceId: 'code-intel-workspace',
       generation: 7,
@@ -472,6 +472,7 @@ export const workspaceRepoMapCodeIntelScenario = async () => {
       generationConflictCases += 1;
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+      journal.close();
     }
 
     return [

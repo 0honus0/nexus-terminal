@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+Runner 的 command/job/workspace Journal 使用 `state/journal.sqlite` 按记录增量提交，成功提交后才更新内存状态；终态历史保留与容量限制不变。不迁移旧 JSON Journal：发现旧 `state/journal.json` 或其损坏标记时拒绝启动并保留原件，管理员须先停止相关工作、核对 Backend／Runner 状态并备份，再显式处理旧状态；不可仅删除旧文件来绕过未知副作用的核对。SQLite 损坏或不支持的版本同样拒绝启动，不自动重建空库。
+
 单轮模型流在接收阶段最多累计 64 个不同 Tool call（Subagent 为 32）；超出即失败，不等待上游结束，也不会执行该超限批次。Responses continuation 在接收阶段最多 512 个 part／64 个 Tool identity，重复 identity 不增加数量。
 
 MCP 的连接超时、schema 与调用限制作用于单个 integration，不代表所有启用 integration 的总连接上限。当前不设置 aggregate MCP 硬配额；管理员须按部署资源配置并显式停用／删除不再使用的 integration。

@@ -238,8 +238,9 @@ export const projectInstructionsContextScenario = async () => {
   let httpCodecCases = 0;
   let generationConflictCases = 0;
   let runnerServer: ReturnType<RunnerControllerServer['createServer']> | null = null;
+  let journal: RunnerJournal | undefined;
   try {
-    const journal = new RunnerJournal(path.join(httpDirectory, 'journal.json'));
+    journal = new RunnerJournal(path.join(httpDirectory, 'journal.sqlite'));
     journal.saveWorkspace({
       workspaceId: 'scenario-workspace',
       generation: 7,
@@ -330,6 +331,7 @@ export const projectInstructionsContextScenario = async () => {
     if (runnerServer) {
       await new Promise<void>((resolve, reject) => runnerServer!.close((error) => (error ? reject(error) : resolve())));
     }
+    journal?.close();
     fs.rmSync(httpDirectory, { recursive: true, force: true });
   }
 

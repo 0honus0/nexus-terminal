@@ -2,18 +2,19 @@ import type { WorkspaceJobResult } from '@nexus-terminal/protocol/runner';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import type { CommandRecord, JobRecord, WorkspaceRecord } from '../types';
 import { runnerLog } from '../logging';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
 
 interface JournalState {
-  schemaVersion: 4;
+  schemaVersion: 5;
   commands: Record<string, CommandRecord>;
   workspaces: Record<string, WorkspaceRecord>;
   jobs: Record<string, JobRecord>;
 }
 
-const empty = (): JournalState => ({ schemaVersion: 4, commands: {}, workspaces: {}, jobs: {} });
+const empty = (): JournalState => ({ schemaVersion: 5, commands: {}, workspaces: {}, jobs: {} });
 const TERMINAL_HISTORY_LIMIT = 4096;
 const TERMINAL_HISTORY_MIN_AGE_SECONDS = 24 * 60 * 60;
 const MAX_JOURNAL_COLLECTION_ITEMS = 16_384;
@@ -21,7 +22,6 @@ const JOURNAL_COLLECTION_HIGH_WATER = 12_288;
 const MAX_JOURNAL_RECOVERY_COLLECTION_ITEMS = 32_768;
 const MAX_JOURNAL_STRING_BYTES = 64 * 1024;
 const MAX_WORKSPACE_JOB_OUTPUT_BYTES = 1024 * 1024;
-const CORRUPT_EVIDENCE_LIMIT = 4;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -208,9 +208,9 @@ const decodeRecordCollection = <T>(
 
 const decodeJournalState = (value: unknown): JournalState => {
   const record = recordValue(value);
-  if (record.schemaVersion !== 4) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
+  if (record.schemaVersion !== 5) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     commands: decodeRecordCollection(
       record.commands,
       decodeCommandRecord,
@@ -227,83 +227,77 @@ const decodeJournalState = (value: unknown): JournalState => {
   };
 };
 
-const isMissingFile = (error: unknown): boolean =>
-  error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT';
-
-const fsyncFile = (filePath: string): void => {
-  const fd = fs.openSync(filePath, 'r');
-  try {
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
-};
-
-const fsyncDirectory = (directory: string): void => {
-  const fd = fs.openSync(directory, 'r');
-  try {
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
-};
-
 const corruptMarkerPath = (filePath: string): string => `${filePath}.corrupt-marker`;
-
-const pruneCorruptEvidence = (filePath: string): void => {
-  const directory = path.dirname(filePath);
-  const prefix = `${path.basename(filePath)}.corrupt.`;
-  let evidence: Array<{ path: string; mtimeMs: number }> = [];
-  try {
-    evidence = fs
-      .readdirSync(directory)
-      .filter((name) => name.startsWith(prefix))
-      .map((name) => {
-        const target = path.join(directory, name);
-        return { path: target, mtimeMs: fs.statSync(target).mtimeMs };
-      })
-      .sort((left, right) => right.mtimeMs - left.mtimeMs);
-  } catch {
-    return;
-  }
-  for (const stale of evidence.slice(CORRUPT_EVIDENCE_LIMIT)) {
-    try {
-      fs.rmSync(stale.path, { force: true });
-    } catch {
-      // Evidence retention is best-effort; never discard the newest preserved corruption.
-    }
-  }
-};
 
 export const payloadHash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export class RunnerJournal {
   private state: JournalState;
-  constructor(private readonly filePath: string) {
+  private readonly database: DatabaseSync;
+  constructor(filePath: string) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     if (fs.existsSync(corruptMarkerPath(filePath))) throw new Error('RUNNER_JOURNAL_INVALID');
-    try {
-      this.state = decodeJournalState(JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown);
-    } catch (error) {
-      if (isMissingFile(error)) {
-        this.state = empty();
-        this.flush();
-      } else if (error instanceof Error && error.message === 'JOURNAL_SCHEMA_UNSUPPORTED') {
-        // Pre-release schema replacement is explicit: preserve the old journal before starting fresh.
-        this.quarantineCurrent('schema-unsupported');
-        this.state = empty();
-        this.flush();
-      } else {
-        this.quarantineCurrent('corrupt');
-        throw new Error('RUNNER_JOURNAL_INVALID');
+    const existing = fs.existsSync(filePath);
+    if (existing) {
+      const fd = fs.openSync(filePath, 'r');
+      const header = Buffer.alloc(16);
+      try {
+        fs.readSync(fd, header, 0, 16, 0);
+      } finally {
+        fs.closeSync(fd);
       }
+      if (header.toString() !== 'SQLite format 3\0') throw new Error('RUNNER_JOURNAL_FORMAT_UNSUPPORTED');
+    } else {
+      fs.closeSync(fs.openSync(filePath, 'wx', 0o600));
     }
-    this.compact();
+    this.database = new DatabaseSync(filePath);
+    try {
+      const version = this.database.prepare('PRAGMA user_version').get();
+      if (existing && version?.user_version !== 5) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
+      if (this.database.prepare('PRAGMA quick_check').get()?.quick_check !== 'ok') invalidJournal();
+      this.database.exec(`PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;
+        CREATE TABLE IF NOT EXISTS journal_records (
+          kind TEXT NOT NULL CHECK(kind IN ('commands','jobs','workspaces')),
+          id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(kind,id)
+        ) STRICT;`);
+      this.database.exec('PRAGMA user_version=5');
+      const raw = empty();
+      const counts = { commands: 0, jobs: 0, workspaces: 0 };
+      for (const row of this.database.prepare('SELECT kind,id,payload FROM journal_records').iterate()) {
+        if (
+          typeof row.kind !== 'string' ||
+          !['commands', 'jobs', 'workspaces'].includes(row.kind) ||
+          typeof row.id !== 'string' ||
+          typeof row.payload !== 'string'
+        )
+          invalidJournal();
+        const kind = row.kind as keyof Pick<JournalState, 'commands' | 'jobs' | 'workspaces'>;
+        if (++counts[kind] > MAX_JOURNAL_RECOVERY_COLLECTION_ITEMS) invalidJournal();
+        Object.defineProperty(raw[kind], row.id as string, {
+          value: JSON.parse(row.payload as string),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      }
+      this.state = decodeJournalState(raw);
+    } catch (error) {
+      this.database.close();
+      throw error instanceof Error && error.message === 'JOURNAL_SCHEMA_UNSUPPORTED'
+        ? error
+        : new Error('RUNNER_JOURNAL_INVALID');
+    }
+    try {
+      this.compact();
+    } catch (error) {
+      this.database.close();
+      throw error;
+    }
     if (
       Object.keys(this.state.commands).length > MAX_JOURNAL_COLLECTION_ITEMS ||
       Object.keys(this.state.jobs).length > MAX_JOURNAL_COLLECTION_ITEMS
     ) {
-      this.quarantineCurrent('corrupt');
+      this.database.close();
       throw new Error('RUNNER_JOURNAL_INVALID');
     }
   }
@@ -350,7 +344,7 @@ export class RunnerJournal {
       createdAt: Math.floor(Date.now() / 1000),
       completedAt: null,
     };
-    this.commitState({ ...this.state, jobs: { ...this.state.jobs, [jobId]: record } });
+    this.commitRecord('jobs', jobId, record);
     return record;
   }
 
@@ -416,7 +410,7 @@ export class RunnerJournal {
       createdAt: now,
       completedAt: null,
     };
-    this.commitState({ ...this.state, commands: { ...this.state.commands, [commandId]: record } });
+    this.commitRecord('commands', commandId, record);
     return record;
   }
 
@@ -450,13 +444,12 @@ export class RunnerJournal {
   }
 
   saveWorkspace(record: WorkspaceRecord): void {
-    this.commitState({ ...this.state, workspaces: { ...this.state.workspaces, [record.workspaceId]: record } });
+    this.commitRecord('workspaces', record.workspaceId, record);
   }
 
   deleteWorkspace(id: string): void {
-    const workspaces = { ...this.state.workspaces };
-    delete workspaces[id];
-    this.commitState({ ...this.state, workspaces });
+    this.database.prepare("DELETE FROM journal_records WHERE kind='workspaces' AND id=?").run(id);
+    delete this.state.workspaces[id];
   }
 
   compact(now = Math.floor(Date.now() / 1000)): void {
@@ -489,7 +482,7 @@ export class RunnerJournal {
     const nextCommandCount = Object.keys(commands).length;
     const nextJobCount = Object.keys(jobs).length;
     if (commandCount !== nextCommandCount || jobCount !== nextJobCount) {
-      this.commitState({ ...this.state, commands, jobs });
+      this.commitPrunedState({ ...this.state, commands, jobs });
       runnerLog('debug', 'Agent Runner journal compacted', {
         prunedCommandCount: commandCount - nextCommandCount,
         prunedJobCount: jobCount - nextJobCount,
@@ -507,61 +500,54 @@ export class RunnerJournal {
     }
   }
 
-  private quarantineCurrent(reason: 'schema-unsupported' | 'corrupt'): void {
-    if (!fs.existsSync(this.filePath)) return;
-    const target = `${this.filePath}.${reason}.${Date.now()}-${process.pid}-${process.hrtime.bigint()}`;
-    fs.renameSync(this.filePath, target);
-    if (reason === 'corrupt') {
-      fsyncFile(target);
-      const marker = corruptMarkerPath(this.filePath);
-      fs.writeFileSync(
-        marker,
-        `${JSON.stringify({ schemaVersion: 1, evidenceFile: path.basename(target), recordedAt: Math.floor(Date.now() / 1000) })}\n`,
-        { mode: 0o600, flag: 'wx' },
-      );
-      fsyncFile(marker);
-      pruneCorruptEvidence(this.filePath);
-    }
-    fsyncDirectory(path.dirname(this.filePath));
-    runnerLog(reason === 'corrupt' ? 'error' : 'warn', 'Agent Runner journal evidence preserved', {
-      reason,
-      evidenceFile: path.basename(target),
-    });
-  }
-
   private patchJob(id: string, patch: Partial<JobRecord>): void {
     const current = this.state.jobs[id];
     if (!current) throw new Error('JOB_NOT_FOUND');
-    const jobs = { ...this.state.jobs, [id]: { ...current, ...patch } };
-    this.commitState({ ...this.state, jobs });
+    this.commitRecord('jobs', id, { ...current, ...patch });
   }
 
   private patchCommand(id: string, patch: Partial<CommandRecord>): void {
     const current = this.state.commands[id];
     if (!current) throw new Error('COMMAND_NOT_FOUND');
-    const commands = { ...this.state.commands, [id]: { ...current, ...patch } };
-    this.commitState({ ...this.state, commands });
+    this.commitRecord('commands', id, { ...current, ...patch });
   }
 
-  private commitState(nextState: JournalState): void {
-    this.flushState(nextState);
+  private commitPrunedState(nextState: JournalState): void {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const remove = this.database.prepare('DELETE FROM journal_records WHERE kind=? AND id=?');
+      for (const kind of ['commands', 'jobs', 'workspaces'] as const) {
+        for (const id of Object.keys(this.state[kind])) {
+          if (!Object.hasOwn(nextState[kind], id)) remove.run(kind, id);
+        }
+      }
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
     this.state = nextState;
   }
 
-  private flush(): void {
-    this.flushState(this.state);
+  private commitRecord<K extends 'commands' | 'jobs' | 'workspaces'>(
+    kind: K,
+    id: string,
+    record: JournalState[K][string],
+  ): void {
+    this.database
+      .prepare(
+        'INSERT INTO journal_records(kind,id,payload) VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET payload=excluded.payload',
+      )
+      .run(kind, id, JSON.stringify(record));
+    Object.defineProperty(this.state[kind], id, {
+      value: record,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
 
-  private flushState(state: JournalState): void {
-    const temp = `${this.filePath}.tmp`;
-    try {
-      fs.writeFileSync(temp, JSON.stringify(state), { mode: 0o600 });
-      fsyncFile(temp);
-      fs.renameSync(temp, this.filePath);
-      fsyncDirectory(path.dirname(this.filePath));
-    } catch (error) {
-      fs.rmSync(temp, { force: true });
-      throw error;
-    }
+  close(): void {
+    this.database.close();
   }
 }

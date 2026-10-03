@@ -266,7 +266,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
   });
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-workspace-background-job-'));
-  const journal = new RunnerJournal(path.join(directory, 'journal.json'));
+  const journal = new RunnerJournal(path.join(directory, 'journal.sqlite'));
   journal.saveWorkspace({
     workspaceId: 'background-workspace',
     generation: 7,
@@ -483,6 +483,19 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     for (const current of pending.values()) current.reject(new Error('SCENARIO_CLEANUP'));
     pending.clear();
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    const persistedWorkspace = journal.workspace('background-workspace');
+    const persistedJobs = journal.jobs();
+    journal.close();
+    const recovered = new RunnerJournal(path.join(directory, 'journal.sqlite'));
+    try {
+      assert.deepEqual(recovered.workspace('background-workspace'), persistedWorkspace);
+      assert.deepEqual(
+        recovered.jobs().sort((a, b) => a.jobId.localeCompare(b.jobId)),
+        persistedJobs.sort((a, b) => a.jobId.localeCompare(b.jobId)),
+      );
+    } finally {
+      recovered.close();
+    }
     fs.rmSync(directory, { recursive: true, force: true });
   }
 };

@@ -3364,6 +3364,8 @@ Provider 是用户可配置的 `openai-compatible` endpoint，`baseUrl` 可以�
 
 ## 120. Runner Journal 每次状态变更都同步重写并 fsync 整份历史；持久 job/command 变多后单次提交成本随全部历史线性增长并阻塞 Runner event loop
 
+> 已修复：按用户要求不迁移旧数据，改Node24内置SQLite逐记录持久化，ordinary transition单记录UPSERT／DELETE后发布内存；compact事务仅删除裁剪记录，保留原容量／retention／幂等owner。新state/journal.sqlite，检测旧JSON/marker拒绝启动并保留，不双轨写入。仍有同步单记录fsync延迟、启动全量decode与compact扫描，未宣称零阻塞或做磁盘故障基准。
+
 > 确认问题（同步工作量放大）：`agent-runner/src/controller/journal.ts:545–559` 整份 stringify/write/fsync；collection capacity/compaction 已有，不能称历史无限增长。结构性同步成本成立，实际延迟／严重程度待基准测试。
 
 `RunnerJournal` 允许 command/job collection 分别增长到 16,384 项，达到高水位后也仍可保留 12,288 项；Workspace job 的单条 stdout+stderr 又允许最多 1 MiB：
