@@ -68,6 +68,7 @@ import { createQuickCommandsRouter } from './quick-commands/quick-commands.route
 import { createSftpRouter } from './sftp/sftp.routes';
 import { createSshKeysRouter } from './ssh-keys/ssh-keys.routes';
 import { compileProxyTrust } from '../shared/proxy-trust';
+import { mutationOriginSecurity } from './shared/mutation-origin';
 import { createSshSuspendRouter } from './ssh-suspend/ssh-suspend.routes';
 import { createSystemRouter } from './system/system.routes';
 import { createTagsRouter } from './tags/tags.routes';
@@ -207,6 +208,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
     next();
   });
   app.use(express.json({ limit: '1mb' }));
+  app.use(mutationOriginSecurity);
 
   if (dependencies.e2eResetEnabled) {
     app.post('/api/v1/__e2e/reset', async (request, response) => {

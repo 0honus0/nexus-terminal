@@ -4146,6 +4146,8 @@ Local custom theme 的读取 endpoint 同样以 `text/html` 返回，因此一�
 
 ## 142. 传统 HTTP mutation 只依赖 `SameSite=Lax` Session cookie，没有 Origin/CSRF boundary；同站点兄弟 Origin 可触发无 body 的认证副作用
 
+> 已加统一mutation Origin/Fetch Metadata gate（在session/routes前）：拒绝cross-site/same-site，Origin须等于可信proxy解析的request origin；无Origin仅same-origin或无浏览器metadata客户端可用。Agent HMAC保留，不新增普通API token，不将非浏览器无Origin视为认证；代理Host/Proto必须正确。未做双origin浏览器验证。
+
 > 确认问题（条件性CSRF缺口）：普通Auth/Connection/Notification POST未用Agent mutationSecurity；Lax不拦同site兄弟origin。必须攻击者控制同scheme可发送同site cookie的页面，且入口没有额外代理Origin规则；JSON-only跨站mutation不能据此都宣称可表单触发，未做双origin浏览器验证。
 
 当前普通 HTTP Session cookie 配置是：

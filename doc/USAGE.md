@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+普通HTTP mutation（登录、设置、连接测试、通知测试、logout等）统一检查浏览器Origin/Fetch Metadata，兄弟域名即使same-site也不能触发。无Origin的same-origin浏览器请求或无浏览器metadata API客户端仍可使用，认证要求不变；反向代理须正确传递外部Host/Proto，否则正常操作可能403。内网IP豁免不豁免此来源检查，Agent既有CSRF token仍必需。
+
 本地／远程 HTML 主题内容 API 作为纯文本返回，不作为 Nexus 同源 HTML 页面执行；直接打开内容地址只查看源码。终端仍通过既有 sandbox iframe 展示主题，脚本内容不被删除，不将 GitHub 来源视为可信执行来源。
 
 Session 目录由应用收紧为 `0700`，已有普通文件及新保存文件收紧为 `0600`，权限设置失败不静默继续；目录含异常类型条目时拒绝启动。Session 仍是原有明文格式，不保护 root、同 UID 进程或额外 ACL 授权，数据目录及备份仍需妥善保护。此变更不要求丢弃已有 Session。

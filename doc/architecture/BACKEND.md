@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+HTTP application在session/routes前应用mutationOriginSecurity，安全方法跳过，非安全方法按Express可信host/protocol比对Origin并拒绝same-site/cross-site metadata；无Origin浏览器仅same-origin可用，非浏览器仍须各route认证。Agent额外HMAC owner不变，无第二token协议。
+
 Appearance local/remote content route统一text/plain+document CSP sandbox/default-src none，全局nosniff保留；Frontend获取字符串后既有opaque-origin iframe/srcdoc负责展示隔离，API不再提供同源HTML document execution surface。
 
 FileHttpSessionAdapter拥有sessions目录0700及文件0600权限收紧，启动lstat拒绝symlink目录/非普通entry，save成功后chmod，错误传给调用者；write-file-atomic继承已有文件mode，初始临时写依靠0700目录隔离。保留明文与既有session decode，不引入加密双轨。
