@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Memory repository按created_at/id keyset枚举，service有界limit+1，HTTP返回items/nextCursor，Frontend管理及import source手动翻页；Recall过滤与历史retention不变。分页cursor不作为授权，scope/status仍每页校验；无自动purge或aggregate quota。
+
 单用户Scheduler满runtime预算requeueFront并结束pump；Root/Child共享user runtime count，换App不能绕过预算。App轮转是选队策略，不是优先级或多用户公平调度contract。
 
 RunnerJournal 唯一持有 Runner command/job/workspace 持久化：Node24 `node:sqlite`，`journal_records(kind,id,payload)` 按记录 UPSERT、`DELETE`，SQLite DELETE rollback journal + synchronous FULL，提交后发布内存变更。普通transition不复制／序列化全历史；compact仅事务删除裁剪记录。恢复校验SQLite及逐记录decode，格式／损坏fail closed保留原库；无旧JSON导入或双轨写入。同步单记录commit仍可能等待磁盘，未承诺event loop完全无阻塞或commit严格O(1)。

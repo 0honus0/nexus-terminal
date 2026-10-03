@@ -3419,6 +3419,8 @@ Root 队列按 appId 分组，遇到 user capacity 满时 requeueFront 并 break
 
 ## 122. Agent Memory 没有总数量/retention/delete owner；candidate、revoked 和 expired memory 会永久保留在 SQLite 与 FTS，超过最新 200 条后又无法通过 list API 重新枚举
 
+> 管理可达性已修复：list按不可变createdAt/id keyset分页，HTTP items/nextCursor，管理与导入来源UI可加载更早记录；不以修改updatedAt导致翻页跳项。retention/delete/aggregate容量策略仍未实现，保留审计历史，不将分页当作总存储治理；无自动物理删除。
+
 > 确认问题（管理可达性／规模边界）：MemoryService list≤200 无 cursor/offset，repository 未给管理面完整枚举；status/expiry 只过滤 recall，非 purge。保留历史可能有审计价值，不能要求 revoked 必须立即物理删除；旧记录管理入口缺口保留。
 
 Memory 的单条输入有明确大小边界：content 最多 16 KiB、source refs 最多 32 KiB。但 `MemoryService.propose()` 没有查询当前 user/App 的 memory 数量，也没有 quota：

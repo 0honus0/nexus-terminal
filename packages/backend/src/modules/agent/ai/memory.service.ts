@@ -160,10 +160,17 @@ export class MemoryService {
     return memory;
   }
 
-  async list(scope: Scope, status: MemoryStatus | 'all' = 'all', limit = 100): Promise<MemoryView[]> {
+  async list(
+    scope: Scope,
+    status: MemoryStatus | 'all' = 'all',
+    limit = 100,
+    before?: { createdAt: number; id: string },
+  ): Promise<MemoryView[]> {
     if (!['candidate', 'published', 'revoked', 'all'].includes(status)) throw new Error('VALIDATION_FAILED');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIST) throw new Error('VALIDATION_FAILED');
-    return this.repository.list(scope, status, limit);
+    if (before && (!Number.isSafeInteger(before.createdAt) || before.createdAt < 0 || !nonEmpty(before.id, 128)))
+      throw new Error('VALIDATION_FAILED');
+    return this.repository.list(scope, status, limit + 1, before);
   }
 
   async review(scope: Scope, memoryId: string, raw: unknown): Promise<MemoryView> {

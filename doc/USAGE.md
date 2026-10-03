@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+Memory 管理和跨 App 导入来源可逐页加载更早记录，每页最多 200 条，按创建时间／ID 倒序；审核更新不改变分页排序。重新加载从首页开始，分页不是跨请求一致性快照。revoked／expired 历史仍保留，不自动物理删除，当前没有 Memory 总量硬配额，Recall 限制不等于存储容量限制。
+
 单用户 Agent Root／Subagent 共享 Runtime 并发预算；预算满时 queued Run 等待释放，不因切换 App 额外获得槽位。Root 按 App 轮转，但不承诺优先级、严格无饥饿或跨用户公平调度；created Run 的全局 admission 仍独立生效。
 
 Runner 的 command/job/workspace Journal 使用 `state/journal.sqlite` 按记录增量提交，成功提交后才更新内存状态；终态历史保留与容量限制不变。不迁移旧 JSON Journal：发现旧 `state/journal.json` 或其损坏标记时拒绝启动并保留原件，管理员须先停止相关工作、核对 Backend／Runner 状态并备份，再显式处理旧状态；不可仅删除旧文件来绕过未知副作用的核对。SQLite 损坏或不支持的版本同样拒绝启动，不自动重建空库。

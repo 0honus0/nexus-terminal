@@ -256,7 +256,12 @@ export interface AgentContextFacade {
 }
 
 export interface AgentMemoryFacade {
-  list(scope: Scope, status?: MemoryStatus | 'all', limit?: number): Promise<MemoryView[]>;
+  list(
+    scope: Scope,
+    status?: MemoryStatus | 'all',
+    limit?: number,
+    before?: { createdAt: number; id: string },
+  ): Promise<MemoryView[]>;
   propose(scope: Scope, input: unknown, provenance?: { runId: string; runtimeId: string }): Promise<MemoryView>;
   review(scope: Scope, memoryId: string, input: unknown): Promise<MemoryView>;
   previewImport(scope: Scope, sourceAppId: string, sourceMemoryId: string): Promise<MemoryImportConfirmation>;

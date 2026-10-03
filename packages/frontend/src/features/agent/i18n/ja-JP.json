@@ -1002,6 +1002,8 @@
         "clickToOverride": "クリックしてこの設定でオーバーライド"
       },
       "memory": {
+        "loadMore": "以前のメモリーを読み込む",
+        "loadMoreSources": "以前のインポート元メモリーを読み込む",
         "title": "Memory のレビューと公開",
         "description": "Recall に入る前に durable Memory をレビューし、公開済み項目の revoke と App 間 import を行います。",
         "reload": "再読み込み",

@@ -23,6 +23,8 @@
   const selectedAppId = ref('');
   const status = ref<AgentMemoryStatusDto | 'all'>('all');
   const memories = shallowRef<AgentMemoryViewDto[]>([]);
+  const memoryCursor = ref<string | null>(null);
+  const sourceCursor = ref<string | null>(null);
   const drafts = ref<Record<string, string>>({});
   const memoryBaselines = ref<Record<string, string>>({});
   const draftConflicts = ref<Record<string, boolean>>({});
@@ -114,12 +116,14 @@
     };
   });
 
-  const loadMemories = async (): Promise<void> => {
+  const loadMemories = async (more = false): Promise<void> => {
+    if (more && (loading.value || !memoryCursor.value)) return;
     const generation = ++memoriesGeneration;
     const appId = selectedAppId.value;
     const requestedStatus = status.value;
     if (!appId) {
       memories.value = [];
+      memoryCursor.value = null;
       drafts.value = {};
       memoryBaselines.value = {};
       draftConflicts.value = {};
@@ -135,7 +139,13 @@
     }
     loading.value = true;
     try {
-      const next = await agentApi.memories(appId, requestedStatus, 100);
+      const page = await agentApi.memories(
+        appId,
+        requestedStatus,
+        100,
+        more ? (memoryCursor.value ?? undefined) : undefined,
+      );
+      const next = page.items;
       if (generation !== memoriesGeneration || selectedAppId.value !== appId || status.value !== requestedStatus)
         return;
       const nextDrafts = { ...drafts.value };
@@ -155,7 +165,10 @@
           nextConflicts[memory.id] = true;
         }
       }
-      memories.value = next;
+      memories.value = more
+        ? [...memories.value.filter((item) => !next.some((entry) => entry.id === item.id)), ...next]
+        : next;
+      memoryCursor.value = page.nextCursor;
       drafts.value = nextDrafts;
       memoryBaselines.value = nextBaselines;
       draftConflicts.value = nextConflicts;
@@ -170,23 +183,34 @@
     }
   };
 
-  const loadSourceMemories = async (): Promise<void> => {
+  const loadSourceMemories = async (more = false): Promise<void> => {
+    if (more && (importLoading.value || !sourceCursor.value)) return;
     const generation = ++sourceMemoriesGeneration;
     const appId = sourceAppId.value;
     if (!appId) {
       sourceMemories.value = [];
+      sourceCursor.value = null;
       importLoading.value = false;
       return;
     }
     importLoading.value = true;
     try {
-      const next = await agentApi.memories(appId, 'published', 100);
+      const page = await agentApi.memories(
+        appId,
+        'published',
+        100,
+        more ? (sourceCursor.value ?? undefined) : undefined,
+      );
+      const next = more
+        ? [...sourceMemories.value.filter((item) => !page.items.some((entry) => entry.id === item.id)), ...page.items]
+        : page.items;
       if (generation !== sourceMemoriesGeneration || sourceAppId.value !== appId) return;
       const now = Math.floor(Date.now() / 1000);
       const filtered = next.filter(
         (memory) => memory.status === 'published' && (memory.expiresAt === null || memory.expiresAt > now),
       );
       sourceMemories.value = filtered;
+      sourceCursor.value = page.nextCursor;
       if (sourceMemoryId.value) {
         const selectedSource = filtered.find((memory) => memory.id === sourceMemoryId.value) ?? null;
         if (!selectedSource) {
@@ -356,7 +380,7 @@
           <UiInfoHint :text="$t('agent.settings.memory.description')" />
         </div>
       </div>
-      <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled || loading" @click="loadMemories">
+      <UiButton appearance="soft" tone="neutral" type="button" :disabled="disabled || loading" @click="loadMemories()">
         <i class="fa-solid fa-rotate mr-1" aria-hidden="true"></i>
         {{ $t('agent.settings.memory.reload') }}
       </UiButton>
@@ -485,6 +509,16 @@
         </article>
       </div>
 
+      <UiButton
+        v-if="memoryCursor"
+        appearance="soft"
+        tone="neutral"
+        :disabled="disabled || loading"
+        @click="loadMemories(true)"
+      >
+        {{ $t('agent.settings.memory.loadMore') }}
+      </UiButton>
+
       <div class="border-t border-border/60 pt-5">
         <div class="flex items-center gap-1.5">
           <h4 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.memory.importTitle') }}</h4>
@@ -492,6 +526,15 @@
         </div>
 
         <div class="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+          <UiButton
+            v-if="sourceCursor"
+            appearance="soft"
+            tone="neutral"
+            :disabled="disabled || importLoading"
+            @click="loadSourceMemories(true)"
+          >
+            {{ $t('agent.settings.memory.loadMoreSources') }}
+          </UiButton>
           <label class="text-xs text-text-secondary">
             {{ $t('agent.settings.memory.sourceApp') }}
             <UiSelect

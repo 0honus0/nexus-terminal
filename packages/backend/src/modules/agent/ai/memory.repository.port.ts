@@ -38,7 +38,12 @@ export interface MemoryImportCommitResult {
 export interface MemoryRepositoryPort {
   get(scope: Scope, id: string): Promise<MemoryView | null>;
   getOwned(userId: number, appId: string, id: string): Promise<MemoryView | null>;
-  list(scope: Scope, status: MemoryStatus | 'all', limit: number): Promise<MemoryView[]>;
+  list(
+    scope: Scope,
+    status: MemoryStatus | 'all',
+    limit: number,
+    before?: { createdAt: number; id: string },
+  ): Promise<MemoryView[]>;
   propose(record: {
     id: string;
     scope: Scope;

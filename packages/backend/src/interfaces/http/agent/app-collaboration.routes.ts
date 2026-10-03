@@ -402,7 +402,16 @@ export const createAppCollaborationRouter = (dependencies: AppCollaborationRoute
         limit,
       };
       const scope = { userId: agentUserId(request), appId: param(request.params.appId) };
-      agentData(request, response, (await dependencies.memories.list(scope, query.status, query.limit)).map(memoryDto));
+      const rawBefore = queryString(request.query.before);
+      if (rawBefore && rawBefore.length > 512) throw new Error('CURSOR_INVALID');
+      const items = await dependencies.memories.list(scope, query.status, query.limit, decodeCursor(rawBefore));
+      const hasMore = items.length > limit;
+      const page = items.slice(0, limit);
+      const tail = hasMore ? page.at(-1) : undefined;
+      agentData(request, response, {
+        items: page.map(memoryDto),
+        nextCursor: encodeCursor(tail ? { createdAt: tail.createdAt, id: tail.id } : undefined),
+      });
     }),
   );
 

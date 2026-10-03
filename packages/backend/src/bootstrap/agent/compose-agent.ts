@@ -857,7 +857,7 @@ export const composeAgent = ({
       conversations,
       context,
       memories: {
-        list: (scope, status, limit) => memories.list(scope, status, limit),
+        list: (scope, status, limit, before) => memories.list(scope, status, limit, before),
         propose: (scope, input, provenance) => memories.propose(scope, input, provenance),
         review: (scope, memoryId, input) => memories.review(scope, memoryId, input),
         previewImport: (scope, sourceAppId, sourceMemoryId) =>

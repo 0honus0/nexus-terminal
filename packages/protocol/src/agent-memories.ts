@@ -23,6 +23,12 @@ export interface AgentMemoryViewDto {
 export interface AgentMemoryListQueryDto {
   status: AgentMemoryStatusDto | 'all';
   limit: number;
+  before?: string;
+}
+
+export interface AgentMemoryPageDto {
+  items: AgentMemoryViewDto[];
+  nextCursor: string | null;
 }
 
 export interface AgentMemoryProposalRequestDto {

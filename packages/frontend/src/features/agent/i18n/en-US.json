@@ -1002,6 +1002,8 @@
         "clickToOverride": "Click to override with this profile"
       },
       "memory": {
+        "loadMore": "Load older memories",
+        "loadMoreSources": "Load older source memories",
         "title": "Memory review & publishing",
         "description": "Review durable App memories before they enter Recall, revoke published items, and import published Memory across Apps.",
         "reload": "Reload",

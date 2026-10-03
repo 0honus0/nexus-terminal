@@ -527,13 +527,17 @@ export const agentApi = {
     appId: string,
     status: AgentMemoryStatusDto | 'all' = 'all',
     limit = 100,
-  ): Promise<AgentMemoryViewDto[]> {
-    const params: AgentMemoryListQueryDto = { status, limit };
+    before?: string,
+  ): Promise<import('@nexus-terminal/protocol/agent-memories').AgentMemoryPageDto> {
+    const params: AgentMemoryListQueryDto = { status, limit, ...(before ? { before } : {}) };
     return unwrap(
       (
-        await httpClient.get<AgentEnvelopeDto<AgentMemoryViewDto[]>>(`/apps/${encodeURIComponent(appId)}/memories`, {
-          params,
-        })
+        await httpClient.get<AgentEnvelopeDto<import('@nexus-terminal/protocol/agent-memories').AgentMemoryPageDto>>(
+          `/apps/${encodeURIComponent(appId)}/memories`,
+          {
+            params,
+          },
+        )
       ).data,
     );
   },

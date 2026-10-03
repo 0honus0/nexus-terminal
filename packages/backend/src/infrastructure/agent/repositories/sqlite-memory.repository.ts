@@ -75,12 +75,24 @@ export class SqliteMemoryRepository implements MemoryRepositoryPort {
     return this.get({ userId, appId }, id);
   }
 
-  async list(scope: Scope, status: MemoryStatus | 'all', limit: number): Promise<MemoryView[]> {
+  async list(
+    scope: Scope,
+    status: MemoryStatus | 'all',
+    limit: number,
+    before?: { createdAt: number; id: string },
+  ): Promise<MemoryView[]> {
     const rows = await this.db.queryAll<MemoryRow>(
       `SELECT ${MEMORY_COLUMNS} FROM ai_memories
        WHERE user_id = ? AND app_id = ?${status === 'all' ? '' : ' AND status = ?'}
-       ORDER BY updated_at DESC, id DESC LIMIT ?`,
-      status === 'all' ? [scope.userId, scope.appId, limit] : [scope.userId, scope.appId, status, limit],
+        ${before ? ' AND (created_at < ? OR (created_at = ? AND id < ?))' : ''}
+        ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [
+        scope.userId,
+        scope.appId,
+        ...(status === 'all' ? [] : [status]),
+        ...(before ? [before.createdAt, before.createdAt, before.id] : []),
+        limit,
+      ],
     );
     return rows.map(mapMemory);
   }

@@ -1002,6 +1002,8 @@
         "clickToOverride": "点击即可覆盖为该策略"
       },
       "memory": {
+        "loadMore": "加载更早的记忆",
+        "loadMoreSources": "加载更早的来源记忆",
         "title": "Memory 审核与发布",
         "description": "在 Memory 进入 Recall 前进行用户审核，撤销已发布条目，并从其它 App 导入已发布 Memory。",
         "reload": "重新加载",
