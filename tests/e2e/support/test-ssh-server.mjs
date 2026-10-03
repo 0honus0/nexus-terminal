@@ -43,6 +43,7 @@ let sftpStatDelayMs = 0;
 let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
 let sftpReadDelayMs = 0;
+let sftpDelayedReadCount = 0;
 let sftpOpenDelayMs = 0;
 let sftpDelayedOpenCount = 0;
 let archiveExecDelayMs = 0;
@@ -594,6 +595,7 @@ async function resetRoot() {
   sftpLstatDenyPrefix = '';
   sftpReadDirDelayMs = 0;
   sftpReadDelayMs = 0;
+  sftpDelayedReadCount = 0;
   sftpOpenDelayMs = 0;
   sftpDelayedOpenCount = 0;
   archiveExecDelayMs = 0;
@@ -753,6 +755,7 @@ function attachSftp(session, accept) {
     }
     try {
       if (sftpReadDelayMs > 0) {
+        sftpDelayedReadCount += 1;
         await new Promise((resolve) => setTimeout(resolve, sftpReadDelayMs));
       }
       const buffer = Buffer.alloc(length);
@@ -1222,6 +1225,7 @@ const controlServer = http.createServer(async (req, res) => {
       sftpLstatDenyPrefix = '';
       sftpReadDirDelayMs = 0;
       sftpReadDelayMs = 0;
+      sftpDelayedReadCount = 0;
       sftpOpenDelayMs = 0;
       sftpDelayedOpenCount = 0;
       archiveExecDelayMs = 0;
@@ -1278,11 +1282,16 @@ const controlServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ sftpReadDirDelayMs }));
       return;
     }
-    if (req.method === 'POST' && requestUrl.pathname === '/sftp/read-delay') {
-      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-      sftpReadDelayMs = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(10_000, Math.round(requestedDelay))) : 0;
+    if (requestUrl.pathname === '/sftp/read-delay' && (req.method === 'POST' || req.method === 'GET')) {
+      if (req.method === 'POST') {
+        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+        sftpReadDelayMs = Number.isFinite(requestedDelay)
+          ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+          : 0;
+        sftpDelayedReadCount = 0;
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpReadDelayMs }));
+      res.end(JSON.stringify({ sftpReadDelayMs, sftpDelayedReadCount }));
       return;
     }
     if (requestUrl.pathname === '/sftp/open-delay' && (req.method === 'POST' || req.method === 'GET')) {
@@ -1295,6 +1304,18 @@ const controlServer = http.createServer(async (req, res) => {
       }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpOpenDelayMs, sftpDelayedOpenCount }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/sftp/grow-binary-fixture') {
+      const name = requestUrl.searchParams.get('name') || '';
+      if (!/^growing-[0-9a-f-]{36}\.txt$/.test(name)) {
+        res.writeHead(400);
+        res.end('Invalid binary growth fixture name');
+        return;
+      }
+      await fsp.appendFile(resolveRemotePath(`/${name}`), 'g'.repeat(8192));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ appendedBytes: 8192 }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {

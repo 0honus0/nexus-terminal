@@ -204,3 +204,48 @@ test('cancelling while SFTP OPEN is pending aborts the read and releases its slo
     if (pending) await pending;
   }
 });
+
+test('a file growing after SFTP READ starts cannot exceed the admitted byte budget', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId);
+  const path = `/growing-${crypto.randomUUID()}.txt`;
+  let pending: Promise<unknown> | undefined;
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    await requestWorkspace(workspace.socket, 'filesystem.writeText', { path, content: 'initial' });
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=3000`, { method: 'POST' })).ok).toBeTruthy();
+    pending = requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', { path, maxBytes: 1024 }).then(
+      (result) => ({ bytes: result.bytes }),
+      (error: Error) => ({ error: error.message }),
+    );
+    await expect
+      .poll(async () => {
+        const response = await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay`);
+        return (await response.json()).sftpDelayedReadCount;
+      })
+      .toBeGreaterThan(0);
+    const content = 'initial' + 'g'.repeat(8192);
+    expect(
+      (
+        await fetch(`${E2E_SSH.controlUrl}/sftp/grow-binary-fixture?name=${encodeURIComponent(path.slice(1))}`, {
+          method: 'POST',
+        })
+      ).ok,
+    ).toBeTruthy();
+    expect(await pending).toMatchObject({ bytes: Buffer.from('initial') });
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' })).ok).toBeTruthy();
+    await expect(
+      requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', { path, maxBytes: 1024 }),
+    ).rejects.toThrow('BINARY_READ_SIZE_LIMIT_EXCEEDED');
+    const recovered = await requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', {
+      path,
+      maxBytes: Buffer.byteLength(content),
+    });
+    expect(recovered.bytes).toEqual(Buffer.from(content));
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' });
+    await closeWebSocket(workspace.socket);
+    if (pending) await pending;
+  }
+});
