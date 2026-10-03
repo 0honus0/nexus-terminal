@@ -32,6 +32,30 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       const center = visibleProgressCenter(page);
       await expect(center).toBeVisible({ timeout: 10_000 });
       await expect(center).toContainText(filename);
+      await center.evaluate((element) => {
+        // Deliberately translucent theme colors must not leak the terminal through
+        // either the progress body or its header.
+        (element as HTMLElement).style.setProperty('--card-bg-color', 'rgb(20 30 40 / 0.2)');
+        (element as HTMLElement).style.setProperty('--header-bg-color', 'rgb(40 50 60 / 0.3)');
+      });
+      const fills = await center.evaluate((element) =>
+        [element, element.querySelector('.transfer-progress-header')!].map((surface) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 1;
+          const context = canvas.getContext('2d')!;
+          context.fillStyle = getComputedStyle(surface).backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          return Array.from(context.getImageData(0, 0, 1, 1).data);
+        }),
+      );
+      expect(fills).toEqual([
+        [20, 30, 40, 255],
+        [40, 50, 60, 255],
+      ]);
+      await center.evaluate((element) => {
+        (element as HTMLElement).style.removeProperty('--card-bg-color');
+        (element as HTMLElement).style.removeProperty('--header-bg-color');
+      });
       await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
     });

@@ -477,7 +477,8 @@
     max-width: calc(100vw - 16px);
     max-height: calc(100vh - 16px);
     border-radius: 14px;
-    background: var(--glass-panel-fill);
+    background: #fff;
+    background: rgb(from var(--card-bg-color, var(--app-bg-color)) r g b / 1);
   }
   .transfer-progress-window--archive {
     border-color: var(--border-color);
@@ -491,10 +492,12 @@
     border-bottom: 1px solid var(--border-color);
     padding: 8px 10px;
     cursor: grab;
-    background: var(--glass-nav-fill);
+    background: #fff;
+    background: rgb(from var(--header-bg-color, var(--app-bg-color)) r g b / 1);
   }
   .transfer-progress-window--archive .transfer-progress-header {
-    background: var(--glass-nav-fill);
+    background: #fff;
+    background: rgb(from var(--header-bg-color, var(--app-bg-color)) r g b / 1);
   }
   .dragging .transfer-progress-header {
     cursor: grabbing;
