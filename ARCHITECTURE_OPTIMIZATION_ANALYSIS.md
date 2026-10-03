@@ -3986,6 +3986,8 @@ PUT  /api/v1/notifications/:id
 
 ## 139. Full Backup import 的 destructive confirmation / recent-auth 策略待确认
 
+> 已审核（保留公开恢复授权）：完整认证session及合法envelope是前提，同实例instance key可解包不要求当前密码，跨实例需备份密码；未新增recent-auth/destructive confirmation/audit策略，auth表仍不恢复。不将持有合法备份的回放能力当匿名越权。
+
 > 待确认（明确的恢复授权契约）：BackupService/codec 对同实例免备份密码是已公开行为；备份包仍要通过 envelope完整性/密钥校验，普通session不能任意构造合法包。是否增加 destructive confirmation/current-factor与审计是安全策略，不能仅因import与export不同就判越权；需要已有该实例合法备份。
 
 同实例backup envelope可由instance key解密，不要求当前密码；跨实例需备份密码，envelope仍受完整性/密钥检查，auth表不在恢复集合。需已获得合法备份才能重放。待确认destructive confirmation、recent-auth和audit要求；不把公开恢复契约自动判为越权。

@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Backup import沿用authenticated HTTP boundary与codec envelope验证、instance/password wrapped key及exclusive restore；同实例免密码不表示任意session可构造合法包。无新增recent-auth/confirmation/audit owner，auth表不参与restore。
+
 Webhook secret header分类共用模块规则及case-insensitive secretHeaderNames；HTTP DTO redacts为null，更新解析只允许null引用已存在secret，持久/网络owner仅收到string map，Frontend支持标记与保留。secret marker不可通过null保留同时撤销，无旧包迁移或普通header整体隐藏。
 
 SSH Key HTTP mutation接入共享AuditLogService，SSH_KEY_CREATED/UPDATED/DELETED只记录标识和字段名，不将credential内容送入audit；业务与audit非原子，内部service调用不自动产生HTTP审计。
