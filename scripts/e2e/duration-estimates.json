@@ -34,7 +34,7 @@
     "specs/ssh/connection.spec.ts": 13640,
     "specs/ssh/cross-session-transfer.spec.ts": 527,
     "specs/ssh/docker-manager-ui.spec.ts": 14015,
-    "specs/ssh/file-document-preview.spec.ts": 36115,
+    "specs/ssh/file-document-preview.spec.ts": 40285,
     "specs/ssh/file-manager-navigation.spec.ts": 30216,
     "specs/ssh/file-preview-editor.spec.ts": 65402,
     "specs/ssh/file-upload-reconnect-stress.spec.ts": 24840,
