@@ -3572,6 +3572,8 @@ Remote Stage 同样如此，而且同一个 repository package 可以被反复 S
 
 ## 128. 启用 2FA 后既有认证 Session 的撤销策略待确认
 
+> 已审核（保留既有会话策略）：activate不撤销完整认证session，credentialRevision仅绑定密码；启用后新密码登录需2FA，不追溯challenge已有登录。stolen-cookie风险仍存在，不宣称已解决会话泄露或增加secret-based revision。
+
 > 待确认（启用2FA的既有 session 策略）：TwoFactorService activate 未 revoke；requireAuthenticated 只读 session 字段。旧完整认证 session 继续有效属实，但启用2FA是否承诺注销已有 session 需确认；不能将正常已有会话称为绕过新登录 challenge。泄露 cookie 场景应与 #77 的 revocation 策略一起评估。
 
 2FA activate 更新 user secret，未 revoke/rechallenge 已完整认证 session；升级认证状态的旧 session 不会回头执行新登录challenge。待确认启用2FA是否必须注销既有会话，尤其stolen-cookie威胁；缺少此策略不等于新登录2FA验证被绕过。
