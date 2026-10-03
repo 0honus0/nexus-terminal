@@ -65,17 +65,6 @@ server.listen(0, '0.0.0.0', () => {
 });
 NODE
 )"
-browser_page_port="$(node - <<'NODE'
-const net = require('node:net');
-const server = net.createServer();
-server.listen(0, '127.0.0.1', () => {
-  const address = server.address();
-  if (!address || typeof address === 'string') process.exit(1);
-  console.log(address.port);
-  server.close();
-});
-NODE
-)"
 plugin_repository_port="$(node - <<'NODE'
 const net = require('node:net');
 const server = net.createServer();
@@ -257,24 +246,30 @@ compose config >/dev/null
 browser_page_script="$workspace/direct-browser-page.cjs"
 cat > "$browser_page_script" <<'NODE'
 const http = require('node:http');
-const port = Number(process.env.NEXUS_BROWSER_PAGE_PORT);
+const fs = require('node:fs');
 const html = `<!doctype html><title>Nexus Browser Smoke</title><input aria-label="Name"><button onclick="document.querySelector('#status').textContent=document.querySelector('input').value">Apply</button><div id="status">idle</div>`;
 const server = http.createServer((request, response) => {
   if (request.url !== '/') { response.writeHead(404).end(); return; }
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
   response.end(html);
 });
-server.listen(port, '127.0.0.1');
+server.listen(0, '127.0.0.1', () => {
+  fs.writeFileSync(process.env.NEXUS_BROWSER_PAGE_PORT_FILE, String(server.address().port));
+});
 const shutdown = () => server.close(() => process.exit(0));
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 NODE
-NEXUS_BROWSER_PAGE_PORT="$browser_page_port" node "$browser_page_script" >"$browser_page_log" 2>&1 &
+browser_page_port_file="$workspace/direct-browser-page.port"
+NEXUS_BROWSER_PAGE_PORT_FILE="$browser_page_port_file" node "$browser_page_script" >"$browser_page_log" 2>&1 &
 browser_page_pid=$!
 for _ in {1..40}; do
-  if curl -fsS "http://127.0.0.1:${browser_page_port}/" >/dev/null; then break; fi
+  if [[ -s "$browser_page_port_file" ]]; then break; fi
+  if ! kill -0 "$browser_page_pid" 2>/dev/null; then break; fi
   sleep 0.1
 done
+[[ -s "$browser_page_port_file" ]] || { echo 'Direct Browser page did not bind.' >&2; exit 1; }
+browser_page_port="$(cat "$browser_page_port_file")"
 curl -fsS "http://127.0.0.1:${browser_page_port}/" >/dev/null || { echo 'Direct Browser page did not start.' >&2; exit 1; }
 
 # Browser direct smoke target. Chromium intentionally owns only a host-loopback CDP
