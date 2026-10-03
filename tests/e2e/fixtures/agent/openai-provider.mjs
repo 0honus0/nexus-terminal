@@ -376,9 +376,8 @@ const server = http.createServer(async (request, response) => {
     Connection: 'keep-alive',
   });
   if (latestUserText.includes('E2E_BROWSER_LIFECYCLE')) {
-    const opened = messages.some(
-      (message) => message?.role === 'tool' && message.tool_call_id === 'call_e2e_browser_open',
-    );
+    const browserCallId = `call_e2e_browser_open_${latestUserText.match(/E2E_BROWSER_LIFECYCLE ([a-f0-9-]+)/)?.[1]}`;
+    const opened = messages.some((message) => message?.role === 'tool' && message.tool_call_id === browserCallId);
     if (!opened) browserCompletionReleased = false;
     if (opened && !browserCompletionReleased) {
       await new Promise((resolve) => {
@@ -398,7 +397,7 @@ const server = http.createServer(async (request, response) => {
           tool_calls: [
             {
               index: 0,
-              id: 'call_e2e_browser_open',
+              id: browserCallId,
               type: 'function',
               function: {
                 name: 'browser_session_open',

@@ -364,19 +364,21 @@ const installAndRunNexusAgent = async (
     });
     expect(thread.status()).toBe(201);
     const browserThreadId = (await thread.json()).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
-      headers: { ...headers, 'Idempotency-Key': randomUUID() },
-      data: {
-        schemaVersion: 1,
-        threadId: browserThreadId,
-        input: { text: 'E2E_BROWSER_LIFECYCLE', artifactRefs: [] },
-        agentDefinitionId: 'agent.default',
-        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
-        approvalMode: 'full_access',
-        executionMode: 'execute',
-        connectionIds: [],
-      },
-    });
+    const createBrowserRun = () =>
+      request.post('/api/v1/apps/nexus.agent/runs', {
+        headers: { ...headers, 'Idempotency-Key': randomUUID() },
+        data: {
+          schemaVersion: 1,
+          threadId: browserThreadId,
+          input: { text: `E2E_BROWSER_LIFECYCLE ${randomUUID()}`, artifactRefs: [] },
+          agentDefinitionId: 'agent.default',
+          model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+          approvalMode: 'full_access',
+          executionMode: 'execute',
+          connectionIds: [],
+        },
+      });
+    const created = await createBrowserRun();
     expect(created.status(), await created.text()).toBe(201);
     const run = (await created.json()).data;
     try {
@@ -394,6 +396,48 @@ const installAndRunNexusAgent = async (
     expect(ledger.ok()).toBeTruthy();
     expect(JSON.stringify(await ledger.json())).toContain('Browser session created.');
     await expect.poll(contexts).toEqual(baseline);
+
+    await step('cancel an opened Browser Run, reclaim its context, then run again', async () => {
+      for (const cancel of [true, false]) {
+        const created = await createBrowserRun();
+        expect(created.status(), await created.text()).toBe(201);
+        const run = (await created.json()).data;
+        try {
+          await expect.poll(contexts).toHaveLength(baseline.length + 1);
+          const live = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}`);
+          expect(live.ok()).toBeTruthy();
+          expect((await live.json()).data.status).toBe('running');
+          if (cancel) {
+            await cancelRunForCleanup(request, run.id);
+            expect((await waitForTerminalRun(request, run.id)).status).toBe('cancelled');
+            await expect.poll(contexts).toEqual(baseline);
+          }
+        } finally {
+          const released = await fetch(`${E2E_URLS.openAiProviderOrigin}/browser-lifecycle/release`, {
+            method: 'POST',
+          });
+          expect(released.ok).toBeTruthy();
+        }
+        const terminal = await waitForTerminalRun(request, run.id);
+        if (!cancel) expect(['completed', 'completed_unverified']).toContain(terminal.status);
+        const entries = await request.get(`/api/v1/apps/nexus.agent/threads/${browserThreadId}/entries?limit=50`);
+        expect(entries.ok()).toBeTruthy();
+        const items = (await entries.json()).data.items as Array<{
+          runId: string;
+          kind: string;
+          payload: { text?: string };
+        }>;
+        expect(
+          items
+            .filter((entry) => entry.runId === run.id && entry.kind === 'tool_result')
+            .some((entry) => {
+              const result = JSON.parse(entry.payload.text ?? '{}');
+              return result.ok === true && result.summary === 'Browser session created.';
+            }),
+        ).toBeTruthy();
+        await expect.poll(contexts).toEqual(baseline);
+      }
+    });
   });
   await step('the plugin AgentDefinition is visible and completes a real Run', async () => {
     const definitions = await request.get('/api/v1/apps/nexus.agent/agent-definitions');
