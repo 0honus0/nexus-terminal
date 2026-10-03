@@ -200,6 +200,44 @@ try {
   assert.equal((await api(`/v1/workspaces/${workspaceId}/jobs`, job)).status, 'unknown');
   assert.equal((await api(`/v1/jobs/${next.jobId}`)).status, 'succeeded');
   assert.equal(fs.readFileSync(marker, 'utf8'), 'once\n');
+  const stubbornPidFile = path.join(root, 'cancel-descendants.json');
+  const stubbornGrandchild = `process.on('SIGTERM', () => {}); require('node:fs').writeFileSync(${JSON.stringify(stubbornPidFile)}, JSON.stringify({ child: process.ppid, grandchild: process.pid })); setInterval(() => {}, 1000);`;
+  const stubbornChild = `process.on('SIGTERM', () => {}); require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(stubbornGrandchild)}], { stdio: 'ignore' }); setInterval(() => {}, 1000);`;
+  const cancelJob = {
+    ...job,
+    jobId: 'cancel-stubborn-descendants',
+    argv: [
+      process.execPath,
+      '-e',
+      `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(stubbornChild)}], { stdio: 'ignore' }); setInterval(() => {}, 1000);`,
+    ],
+  };
+  assert.equal((await api(`/v1/workspaces/${workspaceId}/jobs`, cancelJob)).status, 'running');
+  const stubborn = await poll(
+    () => (fs.existsSync(stubbornPidFile) ? JSON.parse(fs.readFileSync(stubbornPidFile, 'utf8')) : null),
+    (value) => value !== null,
+  );
+  const stubbornIdentities = [stubborn.child, stubborn.grandchild].map((pid) => {
+    assert.ok(Number.isSafeInteger(pid) && pid > 0);
+    const identity = processState(pid);
+    assert.ok(identity && !['Z', 'X'].includes(identity.state));
+    return { pid, ...identity };
+  });
+  assert.equal((await api(`/v1/jobs/${cancelJob.jobId}/cancel`, {})).status, 'cancelled');
+  for (const identity of stubbornIdentities) {
+    await poll(() => {
+      const current = processState(identity.pid);
+      return !current || current.startTime !== identity.startTime || ['Z', 'X'].includes(current.state);
+    }, Boolean);
+  }
+  const afterCancel = { ...next, jobId: 'after-descendant-cancel' };
+  await api(`/v1/workspaces/${workspaceId}/jobs`, afterCancel);
+  const afterCancelResult = await poll(
+    () => api(`/v1/jobs/${afterCancel.jobId}`),
+    (value) => !['running', 'pending'].includes(value.status),
+  );
+  assert.equal(afterCancelResult.status, 'succeeded');
+  assert.equal(afterCancelResult.result.stdout, 'recovered');
   console.log(`Runner SIGKILL recovery passed; evidence retained at ${root}`);
 } finally {
   await stop('SIGTERM');

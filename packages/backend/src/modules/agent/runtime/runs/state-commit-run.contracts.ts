@@ -2,7 +2,7 @@ import type { JsonValue, Scope } from '../../agent.types';
 import type { ModelRef } from '../../ai/model.types';
 import type { LedgerEntryKind } from '../../ai/conversation.repository.port';
 import type { RunPlan } from '../planning/plan.types';
-import type { RunBudget, RunDefinitionSnapshot, RunGoal, RunView, UserInputData } from './run.types';
+import type { RunBudget, RunDefinitionSnapshot, RunEvent, RunGoal, RunView, UserInputData } from './run.types';
 
 export interface AtomicCreateRun {
   scope: Scope;
@@ -105,6 +105,7 @@ export interface CancelRunCommitResult {
   run: RunView;
   accepted: boolean;
   replayed: boolean;
+  committedEvents: RunEvent[];
 }
 
 export interface AtomicIncreaseRunBudget {

@@ -178,7 +178,7 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
   }
 
   async cancelRun(command: AtomicCancelRun): Promise<CancelRunCommitResult> {
-    return this.db.transaction((tx) => cancelRunTransition(tx, command));
+    return this.observedTransaction((tx) => cancelRunTransition(tx, command));
   }
 
   async increaseRunBudget(command: AtomicIncreaseRunBudget): Promise<IncreaseRunBudgetCommitResult> {

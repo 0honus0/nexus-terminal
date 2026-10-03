@@ -13,7 +13,7 @@ import type {
   ResolveRunReconciliationCommand,
   StateCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
-import type { RunStatus } from '../../../../modules/agent/runtime/runs/run.types';
+import type { RunEvent, RunStatus } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
@@ -270,7 +270,7 @@ export const cancelRunTransition = async (
       [command.runId, command.scope.userId, command.scope.appId],
     );
     if (!row) throw new Error('RECONCILIATION_REQUIRED');
-    return { run: mapRunRow(row), accepted: response.accepted, replayed: true };
+    return { run: mapRunRow(row), accepted: response.accepted, replayed: true, committedEvents: [] };
   }
   const row = await tx.queryOne<RunRow>(
     `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
@@ -296,6 +296,7 @@ export const cancelRunTransition = async (
   );
   let accepted = false;
   let updatedRow = row;
+  let committedEvents: RunEvent[] = [];
   if (NON_TERMINAL.has(row.status)) {
     accepted = true;
     const immediate = row.executing_runtime_count === 0 || (row.status !== 'running' && row.status !== 'cancelling');
@@ -395,7 +396,7 @@ export const cancelRunTransition = async (
       { type: 'run.status_changed', payload: { from: row.status, to: nextStatus } },
     ];
     await cancelRunSubagentWork(tx, row.id, command.now, immediate);
-    await appendEvents(tx, row, events, command.now);
+    committedEvents = await appendEvents(tx, row, events, command.now);
     const changed = await tx.execute(
       `UPDATE agent_runs SET status = ?, completed_at = ?, executing_runtime_count = ?,
          active_execution_started_at = CASE WHEN ? = 'cancelled' THEN NULL ELSE active_execution_started_at END,
@@ -435,7 +436,7 @@ export const cancelRunTransition = async (
     [accepted ? 202 : 200, JSON.stringify(response), command.now, row.user_id, row.app_id, command.idempotencyKey],
   );
   if (completed.changes !== 1) throw new Error('IDEMPOTENCY_STATE_CONFLICT');
-  return { run: mapRunRow(updatedRow), accepted, replayed: false };
+  return { run: mapRunRow(updatedRow), accepted, replayed: false, committedEvents };
 };
 
 export const increaseRunBudgetTransition = async (

@@ -176,6 +176,7 @@ Run 冻结 Provider/model configuration、capability/reasoning、SSH `connection
 ### 5.2 StateCommit、事件与调度
 
 - StateCommit 是 Run/Model/Tool/Approval/Subagent durable mutation authority；domain row、version、event、Ledger、Host summary、command/idempotency 与 runtime/work projection 同事务更新，不能先写一半再由 EventHub 补齐。
+- Run 取消事务也通过同一提交后观察边界发布已提交事件并触发终态资源清理；等待审批等无活跃 scheduler 的取消不能仅依赖 scheduler finally。幂等重放不重复发布原事件。
 - StateCommit 恢复与 App 禁用转换集中在 `state-commit/recovery-transitions.ts`，接收 Adapter 当前事务；Adapter 持有事务与提交后通知，不在事务外另建 recovery mutation authority。
 - HTTP 幂等身份为 `(userId, appId, commandName, Idempotency-Key) + request hash`，同 key 不同 payload 拒绝，unknown side effect 不自动重放。
 - `/ws/agent` durable event 有 sequence、snapshot/cursor catch-up/repository replay；transient delta 无 durable sequence、断线可丢、不冒充 final message。transport 有 reconnect/backoff/backpressure 边界。
