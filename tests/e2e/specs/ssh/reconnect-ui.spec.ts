@@ -189,6 +189,83 @@ test('initial SSH failure removes its connecting tab without automatic retry', a
   }
 });
 
+test('hidden terminals consume sustained output without animation frames or reconnecting the shell', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await setTestSshOnline(true);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  let consumedBytes = 0;
+  let connectRequests = 0;
+  page.on('websocket', (socket) => {
+    socket.on('framesent', ({ payload }) => {
+      if (typeof payload !== 'string') return;
+      try {
+        const message = JSON.parse(payload);
+        if (message.type === 'terminal.flow') consumedBytes = message.payload?.consumedBytes ?? 0;
+        if (message.type === 'workspace.connect') connectRequests += 1;
+      } catch {
+        // Binary input is not a protocol request.
+      }
+    });
+  });
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const terminal = page.locator('.terminal-inner-container');
+  const command = page.locator('.command-bar-command-input');
+  await expect(command).toBeEnabled();
+  await command.fill('export NEXUS_BACKGROUND_SHELL=$$');
+  await command.press('Enter');
+  await expect.poll(() => consumedBytes).toBeGreaterThan(0);
+  const initialConsumed = consumedBytes;
+  const initialConnects = connectRequests;
+  // Model browser suspension deterministically: no animation-frame callbacks run
+  // while hidden. Timers and network remain available, as in a throttled tab.
+  await page.evaluate(() => {
+    const original = window.requestAnimationFrame;
+    const originalCancel = window.cancelAnimationFrame;
+    const suspendedFrames = new Map<number, FrameRequestCallback>();
+    let nextFrame = -1;
+    (window as typeof window & { __restoreOutputFrames?: () => void }).__restoreOutputFrames = () => {
+      window.requestAnimationFrame = original;
+      window.cancelAnimationFrame = originalCancel;
+      for (const callback of suspendedFrames.values()) original.call(window, callback);
+      suspendedFrames.clear();
+      Reflect.deleteProperty(document, 'visibilityState');
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    window.requestAnimationFrame = (callback) => {
+      const id = nextFrame--;
+      suspendedFrames.set(id, callback);
+      return id;
+    };
+    window.cancelAnimationFrame = (id) => {
+      if (!suspendedFrames.delete(id)) originalCancel.call(window, id);
+    };
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  try {
+    await command.fill(
+      'for ((i=0;i<6000;i++)); do printf "background-%06d %0200d\\n" "$i" 0; done; printf "BACKGROUND_OUTPUT_DONE\\n"',
+    );
+    await command.press('Enter');
+    await expect.poll(() => consumedBytes - initialConsumed, { timeout: 15_000 }).toBeGreaterThan(1_200_000);
+    expect(connectRequests).toBe(initialConnects);
+  } finally {
+    await page.evaluate(() => {
+      (window as typeof window & { __restoreOutputFrames?: () => void }).__restoreOutputFrames?.();
+    });
+  }
+  await expect(terminal.locator('.xterm-rows')).toContainText('BACKGROUND_OUTPUT_DONE');
+  await command.fill('if [[ "$NEXUS_BACKGROUND_SHELL" == "$$" ]]; then printf "%s%s\\n" BACKGROUND_SAME_ SHELL; fi');
+  await command.press('Enter');
+  await expect(terminal.locator('.xterm-rows')).toContainText('BACKGROUND_SAME_SHELL');
+  expect(connectRequests).toBe(initialConnects);
+});
+
 test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);

@@ -177,6 +177,8 @@
     });
   };
   const onVisibilityChange = () => {
+    clearOutputSchedule();
+    if (pendingOutput.length) flushPendingOutput();
     if (document.visibilityState === 'visible') scheduleGeometrySync();
   };
   const openSearch = () => {
@@ -1064,7 +1066,8 @@
   };
   const scheduleOutputFlush = (): void => {
     if (outputFrame !== undefined || outputTimer !== undefined) return;
-    if (props.active) outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
+    if (props.active && document.visibilityState !== 'hidden')
+      outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
     else outputTimer = window.setTimeout(() => flushPendingOutput(), INACTIVE_OUTPUT_BATCH_MS);
   };
   const handleTerminalOutput = ({ data, consumed }: { data: string | Uint8Array; consumed?: () => void }): void => {
@@ -1079,7 +1082,11 @@
     pendingOutput.push(bytes);
     pendingOutputBytes += bytes.byteLength;
     if (consumed) pendingOutputConsumers.push(consumed);
-    if (!props.active && pendingOutputBytes >= INACTIVE_OUTPUT_MAX_BATCH_BYTES) flushPendingOutput();
+    if (
+      (!props.active || document.visibilityState === 'hidden') &&
+      pendingOutputBytes >= INACTIVE_OUTPUT_MAX_BATCH_BYTES
+    )
+      flushPendingOutput();
     else scheduleOutputFlush();
   };
   watch(
