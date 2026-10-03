@@ -166,6 +166,7 @@ test('desktop command bar keeps editing space in narrow panes without changing E
     await bar.evaluate((element, size) => {
       element.style.width = `${size}px`;
       element.style.height = '34px';
+      element.scrollTop = 0;
     }, width);
     await expect.poll(() => input.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(20);
     const geometry = await bar.evaluate((element) => {
@@ -180,8 +181,14 @@ test('desktop command bar keeps editing space in narrow panes without changing E
       };
     });
     expect(geometry.top).toBeGreaterThanOrEqual(0);
-    expect(geometry.bottom).toBeGreaterThanOrEqual(0);
-    expect(geometry.overflow).toBeLessThanOrEqual(1);
+    if (width > 480) {
+      expect(geometry.bottom).toBeGreaterThanOrEqual(0);
+      expect(geometry.overflow).toBeLessThanOrEqual(1);
+    } else {
+      // Narrow panes keep input first and tools second at every height. A short
+      // pane scrolls vertically rather than changing button columns or overlap.
+      expect(geometry.overflow).toBeGreaterThan(0);
+    }
     expect(geometry.toolHeight).toBe(26);
     const tools = bar.locator('.desktop-command-controls');
     expect(await tools.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -191,8 +198,41 @@ test('desktop command bar keeps editing space in narrow panes without changing E
       expect(bounds!.x).toBeGreaterThanOrEqual(root!.x);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(root!.x + root!.width + 1);
     }
+    await tools.getByRole('button').last().scrollIntoViewIfNeeded();
     await expect(tools.getByRole('button').last()).toBeInViewport();
   }
+  for (const width of [480, 280, 180]) {
+    const columns: string[] = [];
+    for (const height of [34, 64, 65, 100, 180]) {
+      await bar.evaluate(
+        (element, size) => {
+          element.style.width = `${size.width}px`;
+          element.style.height = `${size.height}px`;
+          element.scrollTop = 0;
+        },
+        { width, height },
+      );
+      await expect
+        .poll(() =>
+          bar.evaluate((element) => {
+            const input = element.querySelector('input')!.getBoundingClientRect();
+            const tools = element.querySelector('.desktop-command-controls')!.getBoundingClientRect();
+            return input.bottom <= tools.top;
+          }),
+        )
+        .toBe(true);
+      columns.push(
+        await bar
+          .locator('.desktop-command-controls')
+          .evaluate((element) => getComputedStyle(element).gridTemplateColumns),
+      );
+    }
+    expect(new Set(columns).size).toBe(1);
+  }
+  await bar.evaluate((element) => {
+    element.style.height = '100px';
+    element.scrollTop = 0;
+  });
   await input.fill("printf 'DESKTOP_COMMAND_LAYOUT_OK\\n'");
   await input.press('Enter');
   await expect(page.locator('.terminal-inner-container')).toContainText('DESKTOP_COMMAND_LAYOUT_OK');

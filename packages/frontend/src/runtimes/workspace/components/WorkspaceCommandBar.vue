@@ -646,13 +646,15 @@
   }
 
   .desktop-command-controls {
-    grid-column: -2;
+    grid-column: 2;
     min-width: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fit, 1.625rem);
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 1.625rem;
     column-gap: 0.5rem;
     row-gap: 0.25rem;
-    width: 100%;
+    width: max-content;
     justify-content: space-between;
     padding-left: 0.375rem;
   }
@@ -665,31 +667,18 @@
 
     .command-bar-root--desktop .desktop-command-controls {
       grid-column: 1 / -1;
+      grid-row: 2;
+      grid-auto-flow: row;
+      grid-auto-columns: auto;
+      grid-template-columns: repeat(auto-fit, minmax(1.625rem, 1fr));
+      width: 100%;
       justify-content: space-between;
       padding-left: 0;
       border-left: none;
     }
-  }
-
-  @container command-bar-pane (max-height: 64px) {
-    .command-bar-root--desktop .command-bar-inner {
-      grid-template-columns: minmax(0, 1fr) max-content;
-      align-content: center;
-      min-height: 100%;
-      padding-block: 0;
-    }
-
-    .command-bar-root--desktop .desktop-command-controls {
-      grid-column: 2;
-      display: flex;
-      flex-wrap: nowrap;
-      justify-content: space-between;
-      overflow: visible;
-      padding-left: 0;
-    }
-
-    .desktop-command-controls::-webkit-scrollbar {
-      display: none;
+    .command-bar-root--desktop .command-bar-input {
+      grid-column: 1;
+      grid-row: 1;
     }
   }
 
@@ -697,6 +686,9 @@
     .command-bar-inner {
       min-height: max-content;
       align-content: start;
+      padding-block: 0.04rem;
+    }
+    .command-bar-root--desktop .command-bar-inner {
       padding-block: 0.04rem;
     }
   }
@@ -715,7 +707,7 @@
     }
   }
 
-  @container command-bar-pane (max-width: 480px) and (min-height: 65px) {
+  @container command-bar-pane (max-width: 480px) {
     .command-bar-root--desktop .command-bar-inner {
       grid-template-columns: minmax(0, 1fr);
       align-content: start;
@@ -730,7 +722,7 @@
       grid-column: 1;
       grid-row: 2;
       display: grid;
-      grid-template-columns: repeat(auto-fit, 1.625rem);
+      grid-template-columns: repeat(auto-fit, minmax(1.625rem, 1fr));
       column-gap: 0.25rem;
       overflow: hidden;
     }
