@@ -1322,7 +1322,15 @@ host_tool_snapshot_after="$(host_tool_snapshot)"
 corrupt_runner_root="$workspace/agent-runner-corrupt"
 corrupt_runner_log="$workspace/agent-runner-corrupt.log"
 mkdir -p "$corrupt_runner_root/state"
-printf '{not-json' > "$corrupt_runner_root/state/journal.json"
+node --input-type=module - "$corrupt_runner_root/state/journal.sqlite" <<'NODE'
+import { DatabaseSync } from 'node:sqlite';
+const db = new DatabaseSync(process.argv[2]);
+db.exec(`PRAGMA user_version=5;
+  CREATE TABLE journal_records (kind TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(kind,id)) STRICT;`);
+db.prepare('INSERT INTO journal_records VALUES (?,?,?)').run('workspaces', 'corrupt-workspace', '{not-json');
+db.close();
+NODE
+corrupt_journal_hash="$(sha256sum "$corrupt_runner_root/state/journal.sqlite" | awk '{print $1}')"
 if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
   PORT=0 \
   NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
@@ -1333,17 +1341,8 @@ if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
   exit 1
 fi
 grep -Fq 'RUNNER_JOURNAL_INVALID' "$corrupt_runner_log"
-[[ ! -e "$corrupt_runner_root/state/journal.json" ]] || {
-  echo 'Agent Runner left the corrupt journal in its active location.' >&2
-  exit 1
-}
-mapfile -t corrupt_journal_evidence < <(find "$corrupt_runner_root/state" -maxdepth 1 -type f -name 'journal.json.corrupt.*' -print)
-[[ "${#corrupt_journal_evidence[@]}" -eq 1 ]] || {
-  echo 'Agent Runner did not preserve the corrupt journal evidence.' >&2
-  exit 1
-}
-grep -Fq '{not-json' "${corrupt_journal_evidence[0]}" || {
-  echo 'Agent Runner changed the corrupt journal evidence.' >&2
+[[ "$corrupt_journal_hash" == "$(sha256sum "$corrupt_runner_root/state/journal.sqlite" | awk '{print $1}')" ]] || {
+  echo 'Agent Runner changed the corrupt SQLite journal evidence.' >&2
   exit 1
 }
 if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
@@ -1355,12 +1354,28 @@ if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
   echo 'Agent Runner accepted the same corrupt journal on a retry.' >&2
   exit 1
 fi
-grep -Fq '{not-json' "${corrupt_journal_evidence[0]}" || {
-  echo 'Agent Runner changed corrupt journal evidence after a retry.' >&2
+[[ "$corrupt_journal_hash" == "$(sha256sum "$corrupt_runner_root/state/journal.sqlite" | awk '{print $1}')" ]] || {
+  echo 'Agent Runner changed corrupt SQLite journal evidence after a retry.' >&2
   exit 1
 }
-[[ ! -e "$corrupt_runner_root/state/journal.json" ]] || {
-  echo 'Agent Runner restored corrupt journal state after a retry.' >&2
+
+legacy_runner_root="$workspace/agent-runner-legacy"
+mkdir -p "$legacy_runner_root/state"
+printf '{not-json' > "$legacy_runner_root/state/journal.json"
+if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 PORT=0 \
+  NEXUS_AGENT_RUNNER_TOKEN="$runner_token" NEXUS_AGENT_RUNNER_ROOT="$legacy_runner_root" \
+  NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
+  node "$repo_root/packages/agent-runner/dist/index.js" >"$workspace/agent-runner-legacy.log" 2>&1; then
+  echo 'Agent Runner accepted a legacy JSON journal.' >&2
+  exit 1
+fi
+grep -Fq 'RUNNER_JOURNAL_FORMAT_UNSUPPORTED' "$workspace/agent-runner-legacy.log"
+[[ "$(cat "$legacy_runner_root/state/journal.json")" == '{not-json' ]] || {
+  echo 'Agent Runner changed the legacy journal evidence.' >&2
+  exit 1
+}
+[[ ! -e "$legacy_runner_root/state/journal.sqlite" ]] || {
+  echo 'Agent Runner created a replacement journal despite legacy evidence.' >&2
   exit 1
 }
 
