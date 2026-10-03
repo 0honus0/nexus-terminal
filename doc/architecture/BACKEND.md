@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Plugin version owner使用全局appId/version immutable key，packageHash冲突拒绝，publisherKeyId用于签名trust而非namespace；Stage/installation仍保持既有scope授权。verify登记version不等于installed source，verified-only metadata无常规GC。
+
 Memory repository按created_at/id keyset枚举，service有界limit+1，HTTP返回items/nextCursor，Frontend管理及import source手动翻页；Recall过滤与历史retention不变。分页cursor不作为授权，scope/status仍每页校验；无自动purge或aggregate quota。
 
 单用户Scheduler满runtime预算requeueFront并结束pump；Root/Child共享user runtime count，换App不能绕过预算。App轮转是选队策略，不是优先级或多用户公平调度contract。

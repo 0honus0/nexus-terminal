@@ -3475,6 +3475,8 @@ repository 只做 `ORDER BY updated_at DESC, id DESC LIMIT ?`，没有 before/cu
 
 ## 123. Plugin 全局 immutable package namespace 与 publisher／user identity 契约待确认
 
+> 已审核（保留现有identity）：单用户部署同appId/version全局immutable、不同hash拒绝；publisher是签名／信任身份，不新增目录key维度或假想租户namespace。verified-only metadata回收仍未实现，不将策略澄清当GC修复。
+
 > 待确认（全局 immutable namespace／单用户设计）：verify 写全局 version，hash 不同拒绝，信任按 user；源码事实成立，但全局同 app/version 唯一可以是设计约束，正常单用户产品不承诺各用户同名插件隔离。需确认 publisher identity 应否进入 key，以及 verified-only row 回收策略。
 
 Stage/trust/installation 按 user，版本与文件目录按全局 appId/version immutable identity；verify 即写 version，不同 hash 会冲突，verified-only row 无常规删除。全局同名版本唯一可能有意，需确认 publisher identity 和未安装版本回收契约；不认定正常单用户存在跨租户抢占漏洞。
