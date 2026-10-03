@@ -696,6 +696,10 @@ export class WorkspaceProtocolSession {
         actorUsername: this.identity.username,
         clientIp: this.identity.clientIp,
       });
+      // A fresh SSH connection can reuse the logical Workspace ID after its old
+      // shell ended. Replace the old terminal listeners and replay/input state.
+      this.dependencies.terminal.detach(workspaceId);
+      this.dependencies.shell.clear(workspaceId);
       this.dependencies.terminal.attach(workspaceId, {
         columns: request.viewport?.columns ?? 80,
         rows: request.viewport?.rows ?? 24,

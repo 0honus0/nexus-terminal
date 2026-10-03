@@ -377,6 +377,10 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
         .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 10_000 })
         .toContain('NEXUS_RECONNECTED_E2E');
       await expect
+        .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 10_000 })
+        .toMatch(/(?:^|\n|nexus-e2e\$ )NEXUS_RECONNECTED_E2E\s*(?:\n|$)/);
+      await expect.poll(async () => terminal.locator('.xterm-rows').innerText()).toContain('nexus-e2e$');
+      await expect
         .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 5_000 })
         .not.toContain('nexus-e2e$ nexus-e2e$');
       await expect
