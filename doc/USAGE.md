@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+Plugin Frontend 的静态代码和 SDK 可匿名获取并使用公开 immutable 缓存；不提供私有前端代码保密。包的 frontend 目录（包括 source map）不可包含凭据、用户私有数据或服务端秘密。获取代码不授予 App 数据、descriptor 或 Host RPC 权限，后者继续走认证／capability／MessagePort 边界。
+
 Plugin 包在本部署以 `appId + version` 表示全局不可变身份；同名同版本的不同内容不能并存，换 publisher 不会获得独立 namespace。修改包内容须发布新版本或使用不同 App ID。verify 会登记版本元数据，尚无 verified-only 版本自动回收；该行为不代表支持多用户私有同名插件。
 
 Memory 管理和跨 App 导入来源可逐页加载更早记录，每页最多 200 条，按创建时间／ID 倒序；审核更新不改变分页排序。重新加载从首页开始，分页不是跨请求一致性快照。revoked／expired 历史仍保留，不自动物理删除，当前没有 Memory 总量硬配额，Recall 限制不等于存储容量限制。

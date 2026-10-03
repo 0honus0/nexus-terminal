@@ -3483,6 +3483,8 @@ Stage/trust/installation 按 user，版本与文件目录按全局 appId/version
 
 ## 124. Plugin Frontend 静态代码公开策略与私有包保密要求待确认
 
+> 已审核（保留公开code surface）：frontend assets/SDK匿名GET/HEAD、CORS与immutable cache为既有交付契约；不承诺私有代码保密，不因静态代码公开改Host RPC授权。未测试私有代码场景，不新增认证层破坏opaque iframe加载。
+
 > 待确认（有意隔离的静态 code surface）：`plugin-frontend-static-server.ts` 确实匿名 public/CORS，且有专门 CSP；前端 JS 通常不承载用户 secret，静态资源公开不自动等于权限绕过。须确认是否支持私有代码保密，并区分 descriptor 授权／Host RPC 权限；未验证私有资源场景。
 
 Plugin static handler 在 Express 前处理 /plugins 与 /sdk，资源匿名 public immutable/CORS，另有 CSP 和路径/marker 校验。Host RPC 权限并未因此自动公开。需确认插件前端代码是否有私有保密要求；JS/CSS公开不自动构成身份授权漏洞，也不应在静态文件中保存用户secret。
