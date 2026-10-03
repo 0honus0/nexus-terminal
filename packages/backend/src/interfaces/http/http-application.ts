@@ -370,7 +370,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
   );
 
   app.use('/api/v1/proxies', createProxiesRouter({ proxies: dependencies.proxies, audit: dependencies.audit }));
-  app.use('/api/v1/ssh-keys', createSshKeysRouter(dependencies.sshKeys));
+  app.use('/api/v1/ssh-keys', createSshKeysRouter(dependencies.sshKeys, dependencies.audit));
   app.use('/api/v1/tags', createTagsRouter({ tags: dependencies.tags, audit: dependencies.audit }));
   app.use('/api/v1/quick-command-tags', createQuickCommandTagsRouter(dependencies.quickCommandTags));
   app.use('/api/v1/quick-commands', createQuickCommandsRouter(dependencies.quickCommands));

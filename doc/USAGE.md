@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+SSH Key 创建／更新／删除进入审计日志，记录 key ID、操作者、来源及更新字段名，不记录私钥／passphrase。沿用现有 best-effort 审计，写失败记录服务端错误而不回滚 mutation；不新增 SSH Key 外部通知事件。
+
 首次空库的 Web 初始化没有部署 token；任何可到达并通过当前网络准入的人都可能先创建初始管理员。部署者必须先在受控网络／仅本机或受限防火墙内完成初始化，确认管理员已创建后再开放公共访问。已有首次创建原子检查不代替网络隔离。
 
 HTTP 与 WebSocket 共用 `TRUST_PROXY`，默认只信任 loopback；私网直连客户端的 Forwarded IP 不再默认可信。WebSocket 来源解析采用 `X-Forwarded-For` 可信代理链，不使用 `X-Real-IP`。独立容器／远程反向代理须显式指定代理地址或最小可信 CIDR，代理必须正确覆盖客户端提供的来源／Host／Proto header，不能把所有私网客户端都视为代理。

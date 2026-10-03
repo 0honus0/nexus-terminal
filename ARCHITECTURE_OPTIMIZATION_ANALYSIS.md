@@ -3862,6 +3862,8 @@ return (
 
 ## 137. SSH Key 是共享 Credential owner，但 create/update/delete 完全没有 Audit / Notification 事件；修改一个被多条 Connection 引用的私钥不会留下持久安全记录
 
+> 审计缺口已修复：成功HTTP mutation写SSH_KEY_CREATED/UPDATED/DELETED，含keyId/userId/IP/更新字段名，不含secret。沿用AuditLogService best-effort写失败日志，不承诺mutation/audit原子性；未新增外部Notification策略。
+
 > 确认问题（审计覆盖差异）：SSH Key route/service 未注入或调用 audit，对比 Connection/Proxy credential mutation 有事件。缺少审计可确认；外部 Notification 是否必须触发是另一个策略问题，不能把通知缺失与审计缺失同等定性。
 
 Connection 与 Proxy mutation 都已经进入 Audit boundary。Connection service 在 create/update/delete 后分别记录：

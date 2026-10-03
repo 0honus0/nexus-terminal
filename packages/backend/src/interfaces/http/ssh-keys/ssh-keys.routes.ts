@@ -6,6 +6,8 @@ import type {
   SshKeyUpdateRequestDto,
 } from '@nexus-terminal/protocol/connections';
 import type { SshKeyService } from '../../../modules/ssh-keys/ssh-key.service';
+import type { AuditLogService } from '../../../modules/audit/audit.service';
+import { requestIp } from '../shared/http-utils';
 import type { SshKeySummary } from '../../../modules/ssh-keys/ssh-key.types';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
@@ -45,7 +47,7 @@ const sshKeyUpdateInput = (body: unknown): SshKeyUpdateRequestDto => {
   return input;
 };
 
-export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
+export const createSshKeysRouter = (sshKeys: SshKeyService, audit: AuditLogService): Router => {
   const router = Router();
   router.use(requireAuthenticated);
 
@@ -60,6 +62,11 @@ export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
     route(async (request, response) => {
       try {
         const key = await sshKeys.create(sshKeyCreateInput(request.body));
+        await audit.logAction('SSH_KEY_CREATED', {
+          keyId: key.id,
+          userId: request.session.userId,
+          ip: requestIp(request),
+        });
         const payload: SshKeyMutationResponseDto = { message: 'SSH 密钥创建成功。', key: sshKeySummaryDto(key) };
         response.status(201).json(payload);
       } catch (error) {
@@ -81,12 +88,19 @@ export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
         return;
       }
       try {
-        const key = await sshKeys.update(id, sshKeyUpdateInput(request.body));
+        const input = sshKeyUpdateInput(request.body);
+        const key = await sshKeys.update(id, input);
         if (!key) {
           response.status(404).json({ message: 'SSH 密钥未找到。' });
           return;
         }
         const payload: SshKeyMutationResponseDto = { message: 'SSH 密钥更新成功。', key: sshKeySummaryDto(key) };
+        await audit.logAction('SSH_KEY_UPDATED', {
+          keyId: id,
+          userId: request.session.userId,
+          ip: requestIp(request),
+          updatedFields: Object.keys(input),
+        });
         response.json(payload);
       } catch (error) {
         const message = errorMessage(error);
@@ -106,6 +120,7 @@ export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
         response.status(404).json({ message: 'SSH 密钥未找到。' });
         return;
       }
+      await audit.logAction('SSH_KEY_DELETED', { keyId: id, userId: request.session.userId, ip: requestIp(request) });
       response.json({ message: 'SSH 密钥删除成功。' });
     }),
   );

@@ -25,6 +25,9 @@ export type AuditLogActionType =
   | 'PROXY_CREATED'
   | 'PROXY_UPDATED'
   | 'PROXY_DELETED'
+  | 'SSH_KEY_CREATED'
+  | 'SSH_KEY_UPDATED'
+  | 'SSH_KEY_DELETED'
 
   // Tags
   | 'TAG_CREATED'

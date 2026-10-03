@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+SSH Key HTTP mutation接入共享AuditLogService，SSH_KEY_CREATED/UPDATED/DELETED只记录标识和字段名，不将credential内容送入audit；业务与audit非原子，内部service调用不自动产生HTTP审计。
+
 Initial admin setup保留空users bootstrap Web流程，createInitialAdmin原子空库条件负责并发互斥，不引入deployment token；受控首次初始化属于部署安全前提，不是session授权或公网抢占防护。
 
 HTTP Express与WS proxy-addr共享RuntimeConfig.trustProxy CIDR配置，默认loopback；WS按可信链右向左找首个不可信hop，Host/Proto仅trusted TCP peer可转发。Auth requestOrigin fallback使用Express protocol/host，独立X-Real-IP和private-range trust已移除。
