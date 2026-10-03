@@ -103,6 +103,22 @@ const stop = async (signal) => {
 };
 const marker = path.join(root, 'executions.txt');
 const pidFile = path.join(root, 'job.pid');
+const descendantPidFile = path.join(root, 'descendants.json');
+const grandchildSource = `const fs = require('node:fs'); fs.writeFileSync(${JSON.stringify(descendantPidFile)}, JSON.stringify({ child: process.ppid, grandchild: process.pid })); setInterval(() => {}, 1000);`;
+const childSource = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grandchildSource)}], { stdio: 'ignore' }); setInterval(() => {}, 1000);`;
+const processState = (pid) => {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const fields = stat
+      .slice(stat.lastIndexOf(') ') + 2)
+      .trim()
+      .split(/\s+/);
+    return { state: fields[0], group: Number(fields[2]), startTime: fields[19] };
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return null;
+  }
+};
 const job = {
   jobId: 'kill-recovery-job',
   generation: 1,
@@ -110,7 +126,7 @@ const job = {
   argv: [
     process.execPath,
     '-e',
-    `const fs = require('node:fs'); fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); fs.appendFileSync(${JSON.stringify(marker)}, 'once\\n'); setInterval(() => {}, 1000);`,
+    `const fs = require('node:fs'); fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); fs.appendFileSync(${JSON.stringify(marker)}, 'once\\n'); require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childSource)}], { stdio: 'ignore' }); setInterval(() => {}, 1000);`,
   ],
   cwd: '/workspace/work',
   maxBytes: 1024,
@@ -126,8 +142,25 @@ try {
   const oldPid = Number(fs.readFileSync(pidFile, 'utf8'));
   assert.ok(Number.isSafeInteger(oldPid) && oldPid > 0);
   process.kill(oldPid, 0);
+  const descendants = await poll(
+    () => (fs.existsSync(descendantPidFile) ? JSON.parse(fs.readFileSync(descendantPidFile, 'utf8')) : null),
+    (value) => value !== null,
+  );
+  const descendantIdentities = [descendants.child, descendants.grandchild].map((pid) => {
+    assert.ok(Number.isSafeInteger(pid) && pid > 0 && pid !== oldPid);
+    process.kill(pid, 0);
+    const identity = processState(pid);
+    assert.ok(identity && identity.state !== 'Z' && identity.state !== 'X');
+    assert.equal(identity.group, oldPid, 'Descendants must inherit the managed Job process group');
+    return { pid, ...identity };
+  });
+  assert.notEqual(descendants.child, descendants.grandchild);
   assert.equal((await api(`/v1/jobs/${job.jobId}`)).status, 'running');
   await stop('SIGKILL');
+  for (const identity of descendantIdentities) {
+    const current = processState(identity.pid);
+    assert.ok(current && current.startTime === identity.startTime && !['Z', 'X'].includes(current.state));
+  }
   await start();
   await poll(() => {
     try {
@@ -138,6 +171,14 @@ try {
       return true;
     }
   }, Boolean);
+  for (const identity of descendantIdentities) {
+    await poll(() => {
+      const current = processState(identity.pid);
+      // A killed orphan may remain a zombie until the host init reaps it.
+      // PID disappearance, reuse or a dead state proves this exact process no longer executes.
+      return !current || current.startTime !== identity.startTime || ['Z', 'X'].includes(current.state);
+    }, Boolean);
+  }
   const recovered = await api(`/v1/jobs/${job.jobId}`);
   assert.equal(recovered.status, 'unknown');
   assert.equal((await api(`/v1/workspaces/${workspaceId}/jobs`, job)).status, 'unknown');
