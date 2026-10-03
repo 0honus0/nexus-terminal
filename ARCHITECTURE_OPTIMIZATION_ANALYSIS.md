@@ -3756,6 +3756,8 @@ if (body.privateKey !== undefined)
 
 ## 134. 新增长期认证凭据是否要求 recent-auth / step-up
 
+> 已审核（保留完整session的凭据管理权限）：Passkey/TOTP enrollment未新增recent-auth，验证新authenticator不证明原factor；改密/disable 2FA原密码校验保留。stolen full session可增加凭据风险未消除，不声称匿名绑定或已实现step-up。
+
 > 待确认（敏感操作授权策略）：auth route enrollment 只 requireAuthenticated，新 authenticator 验证不证明原凭据；事实成立但 current session 本身是否允许管理凭据是产品策略。保留 stolen-cookie→新增凭据的风险场景，不声称无需已认证权限即可绑定。
 
 新增Passkey/TOTP依赖已完整认证session，没有既有因子的recent-auth证明；改密/禁用2FA则需密码。stolen session可增加持久凭据是风险场景，但仍以前置已认证权限为条件。待确认凭据管理是否要求统一step-up，不把策略不对称直接称匿名绑定漏洞。

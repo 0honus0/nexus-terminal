@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Passkey/TOTP enrollment采用完整authenticated session授权与新factor verification，无recent-auth timestamp/统一step-up owner；改密与disable 2FA既有密码检查不变，不将新factor proof视为旧credential proof。
+
 ProxyService.update在写repository前合并current/credential patch，校验最终encryptedPassword/encryptedPrivateKey不变量；create/切换需新credential，未修改credential保留，passphrase仍optional，无旧非法row自动迁移。
 
 Notification配置／unsaved test由完整认证route保护，NetworkNotificationChannelAdapter保留SMTP及axios HTTP出站与timeout；不新增address-class deny/每跳allowlist，管理员egress权限与部署网络策略分开。
