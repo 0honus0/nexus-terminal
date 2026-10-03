@@ -254,6 +254,8 @@ SSH Key 创建／更新／删除进入审计日志，记录 key ID、操作者�
 
 HTTP 与 WebSocket 共用 `TRUST_PROXY`，默认只信任 loopback；私网直连客户端的 Forwarded IP 不再默认可信。WebSocket 来源解析采用 `X-Forwarded-For` 可信代理链，不使用 `X-Real-IP`。独立容器／远程反向代理须显式指定代理地址或最小可信 CIDR，代理必须正确覆盖客户端提供的来源／Host／Proto header，不能把所有私网客户端都视为代理。
 
+随附 Compose 使用动态容器 IP，默认信任一个 Frontend 代理 hop（`TRUST_PROXY=1`），要求 Backend 不向不可信客户端发布／开放直连。宿主 loopback 反代可转交外部及内网真实来源；NPM 经 Frontend 的多层反代须配置 Frontend 的可信 real_ip 及外部协议转交，不会自动信任任意来源头。普通内网直连不受地址类别封禁，仍服从已有白名单／黑名单。
+
 新增 Passkey／启用 TOTP 由已有完整认证会话授权，目前不要求原凭据的 recent-auth／统一 step-up；验证新 authenticator 不代表重新验证原身份因素。修改密码／禁用 2FA 保留原有密码校验。已泄露的完整会话可能被用于新增长期凭据，不能仅依赖新增因素保护已有会话。
 
 Proxy 更新不会允许 password／key 认证模式缺少对应密码／私钥。省略凭据字段保留原值，显式空值会被拒绝；可选 passphrase 可以清空。旧的缺凭据记录须补齐凭据或切换认证方式后才能继续更新，不自动生成或迁移秘密。

@@ -220,8 +220,14 @@ scripts/build/build.sh docker
 
 空库实例的 Web setup 没有部署 token，可到达该接口的人可能抢先创建管理员。启动前先用防火墙／受限网络隔离，或在 Compose override 将 Frontend 发布端口绑定 `127.0.0.1`，通过本机或 SSH tunnel 完成初始化。核实管理员创建成功后才开放公共入口；不要先将未初始化实例暴露到不可信网络。只发布 Frontend 端口也不代替此要求。首次管理员原子创建保护并发，不验证部署者身份。
 
-随附 Compose 为 Frontend 分配固定 IPv4 `NEXUS_FRONTEND_PROXY_IP`（默认 `172.30.0.2`），只将该地址追加到 Backend 的可信代理。默认 IPv4 子网为 `NEXUS_IPV4_SUBNET=172.30.0.0/24`；与宿主网络冲突时同时修改子网和 Frontend IP。Frontend Nginx 用直接 peer 的地址覆盖 Forwarded-For，不接受客户端注入的链；外层代理若需保留真实 IP，须另行安全配置 Nginx real_ip 的可信来源，不能直接恢复任意客户端链。
+随附 Compose 保持动态容器地址，不指定固定 IPv4 子网或 Frontend IP。Backend 无发布端口，默认 `TRUST_PROXY=1`，信任一个入口代理 hop；Frontend Nginx 用 `$remote_addr` 覆盖 Forwarded-For。该 hop 策略要求 Backend 不被不可信客户端／容器直连；若发布 Backend 端口或将不可信容器加入网络，须改用可信代理精确 IP/CIDR，不能继续依赖 hop 数。宿主 Backend 默认仍为 `loopback`。HTTP 与 WebSocket 支持相同的数字 hop 或逗号分隔 IP/CIDR 配置。
 
-IPv6 同样使用固定 Frontend 地址 `NEXUS_FRONTEND_PROXY_IPV6=fd01::2` 并单独加入信任；修改 IPv6 子网时须一起修改该地址。Compose 不信任整个 Docker 子网。
+### Nginx Proxy Manager（NPM）与真实来源
+
+NPM 直接反代宿主 Backend 的 `127.0.0.1:3001` 时，Backend 默认信任 loopback，可识别 NPM 发送的 `X-Forwarded-For`；NPM 必须提供真实客户端链及 `X-Forwarded-Host`（外部域名/端口）、`X-Forwarded-Proto`（外部 http/https），并启用 WebSocket 转发。不要仅发送 `X-Real-IP`。NPM 若运行在容器中，`127.0.0.1` 是该容器自身，实际 Backend peer 可能是 Docker 地址，须按真实链路配置，不能假定 loopback。
+
+NPM → 宿主发布的 Frontend 端口 → Frontend Nginx → Backend 是两层链路。Backend 的一个 hop 指最后的 Frontend，不是 NPM。默认 Frontend 会覆盖来源为 NPM 的 peer 地址；若需要外部真实 IP，须在自定义 Frontend Nginx `server` 中设置 `set_real_ip_from <实际可信NPM地址/CIDR>; real_ip_header X-Forwarded-For; real_ip_recursive on;`，继续使用 `$remote_addr` 传给 Backend。Docker 发布端口可能使 Frontend 看到 gateway 地址，须核实；信任共享gateway意味着其他同路径客户端也能提供头，应隔离该入口，仅允许NPM访问。
+
+外层 NPM 终止 HTTPS 时，还须在自定义 Frontend 配置中仅对可信 NPM peer 保留它提供的 `X-Forwarded-Proto`，其他请求仍用 `$scheme`；不能无条件转发客户端头。`X-Forwarded-Host` 须保留外部域名/端口。这里不提供自动信任任意NPM的设置：普通内网直连仍按真实peer识别，不需要加入trust名单；经可信NPM访问的内网客户端同样通过Forwarded-For识别其内网IP。
 
 `TRUST_PROXY` 默认 `loopback`，HTTP 与 WebSocket 使用相同策略。独立容器或远程代理部署必须显式指定真实反向代理 IP 或最小可信 CIDR（逗号分隔），并限制 Backend 直连访问。不要为方便而信任全部私网范围；可信代理必须覆盖客户端的 `X-Forwarded-For`、`X-Forwarded-Host`、`X-Forwarded-Proto`。WebSocket 不读取 `X-Real-IP`。配置错误可能造成来源白名单／黑名单／审计地址失真或外部 Origin 被拒绝。

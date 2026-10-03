@@ -67,6 +67,7 @@ import { createQuickCommandTagsRouter } from './quick-command-tags/quick-command
 import { createQuickCommandsRouter } from './quick-commands/quick-commands.routes';
 import { createSftpRouter } from './sftp/sftp.routes';
 import { createSshKeysRouter } from './ssh-keys/ssh-keys.routes';
+import { compileProxyTrust } from '../shared/proxy-trust';
 import { createSshSuspendRouter } from './ssh-suspend/ssh-suspend.routes';
 import { createSystemRouter } from './system/system.routes';
 import { createTagsRouter } from './tags/tags.routes';
@@ -141,7 +142,7 @@ export interface HttpApplicationDependencies {
 
 export const createHttpApplication = (dependencies: HttpApplicationDependencies): Express => {
   const app = express();
-  app.set('trust proxy', dependencies.trustProxy);
+  app.set('trust proxy', compileProxyTrust(dependencies.trustProxy));
   app.disable('x-powered-by');
 
   app.use((request, response, next) => {

@@ -9,10 +9,6 @@ services:
     <<: *nexus-service
     command: ['frontend']
     container_name: nexus-terminal-frontend
-    networks:
-      nexus-terminal-network:
-        ipv4_address: ${NEXUS_FRONTEND_PROXY_IP:-172.30.0.2}
-        ipv6_address: ${NEXUS_FRONTEND_PROXY_IPV6:-fd01::2}
     ports:
       - '${NEXUS_HTTP_PORT:-18111}:80'
     depends_on:
@@ -34,7 +30,8 @@ services:
         required: false
     environment:
       NODE_ENV: production
-      TRUST_PROXY: ${TRUST_PROXY:-loopback},${NEXUS_FRONTEND_PROXY_IP:-172.30.0.2},${NEXUS_FRONTEND_PROXY_IPV6:-fd01::2}
+      # Backend has no published port; the one ingress hop is Frontend Nginx.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       PORT: 3001
       APP_NAME: ${APP_NAME:-Nexus Terminal}
       GUACD_HOST: guacd
@@ -91,6 +88,5 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: ${NEXUS_IPV4_SUBNET:-172.30.0.0/24}
         - subnet: ${NEXUS_IPV6_SUBNET:-fd01::/80}
           gateway: ${NEXUS_IPV6_GATEWAY:-fd01::1}

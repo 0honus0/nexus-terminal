@@ -3766,6 +3766,8 @@ if (body.privateKey !== undefined)
 
 > 已修复默认及HTTP/WS一致性：TRUST_PROXY默认loopback，WS用proxy-addr同Express CIDR配置/右向左链解析，移除X-Real-IP优先；Origin Forwarded只信实际peer，auth fallback使用Express受trust约束的host/protocol。不承诺信任代理不覆盖header时安全，容器独立代理须显式配置精确地址/最小CIDR。
 
+> 按用户要求撤销Compose固定地址/IPv4子网，保留动态网络，HTTP/WS统一支持数字hop，随附Compose默认1-hop（Backend无发布端口）。信任hop依赖隔离不可信直连，NPM多层来源须配置Frontend real_ip及协议转交；真实内网直连不默认信任来源头但不封禁内网访问。
+
 > 确认问题（部署条件明确）：默认 HTTP trustProxy 与 WS 私网 peer trust 会接受 headers。必须能直连 Backend，或受信代理不覆盖客户端 header；仅 Frontend/Nginx 对外且正确覆盖 header 时不能推定外网绕过。WS trust 还未与自定义 HTTP TRUST_PROXY 统一。
 
 Backend 默认同时使用：

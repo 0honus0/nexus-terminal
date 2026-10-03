@@ -4,6 +4,7 @@ import type { AgentTerminalAttachQueryDto } from '@nexus-terminal/protocol/agent
 import type { WorkspaceUploadStreamQueryDto } from '@nexus-terminal/protocol/workspace';
 import express, { type Request, type RequestHandler, type Response } from 'express';
 import proxyaddr from 'proxy-addr';
+import { compileProxyTrust } from '../shared/proxy-trust';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
 import type { AgentEventFacade, AgentRunFacade, AgentWorkspaceRuntimeFacade } from '../../modules/agent/public';
@@ -141,7 +142,7 @@ const parseNonNegativeInteger = (value: string | null): number | null => {
 /** HTTP-server WebSocket boundary: upgrade/auth/origin/IP/heartbeat and clean transport selection only. */
 export const attachWebSocketServer = (options: WebSocketServerOptions): BackendWebSocketServer => {
   const { server, sessionMiddleware, config, dependencies } = options;
-  const trustProxy = proxyaddr.compile(config.trustProxy.split(',').map((address) => address.trim()));
+  const trustProxy = compileProxyTrust(config.trustProxy);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
   const clients = new Set<ClientRecord>();
   const socketSessions = new WeakMap<WebSocket, string>();
