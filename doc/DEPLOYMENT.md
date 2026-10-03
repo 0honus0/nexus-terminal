@@ -216,6 +216,10 @@ scripts/build/build.sh docker
 
 # 反向代理来源信任
 
+## 首次管理员初始化必须隔离网络
+
+空库实例的 Web setup 没有部署 token，可到达该接口的人可能抢先创建管理员。启动前先用防火墙／受限网络隔离，或在 Compose override 将 Frontend 发布端口绑定 `127.0.0.1`，通过本机或 SSH tunnel 完成初始化。核实管理员创建成功后才开放公共入口；不要先将未初始化实例暴露到不可信网络。只发布 Frontend 端口也不代替此要求。首次管理员原子创建保护并发，不验证部署者身份。
+
 随附 Compose 为 Frontend 分配固定 IPv4 `NEXUS_FRONTEND_PROXY_IP`（默认 `172.30.0.2`），只将该地址追加到 Backend 的可信代理。默认 IPv4 子网为 `NEXUS_IPV4_SUBNET=172.30.0.0/24`；与宿主网络冲突时同时修改子网和 Frontend IP。Frontend Nginx 用直接 peer 的地址覆盖 Forwarded-For，不接受客户端注入的链；外层代理若需保留真实 IP，须另行安全配置 Nginx real_ip 的可信来源，不能直接恢复任意客户端链。
 
 IPv6 同样使用固定 Frontend 地址 `NEXUS_FRONTEND_PROXY_IPV6=fd01::2` 并单独加入信任；修改 IPv6 子网时须一起修改该地址。Compose 不信任整个 Docker 子网。
