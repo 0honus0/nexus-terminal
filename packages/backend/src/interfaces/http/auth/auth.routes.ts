@@ -70,8 +70,8 @@ const firstHeaderValue = (value: string | string[] | undefined): string | undefi
 const requestOrigin = (request: Request): string | undefined => {
   const origin = firstHeaderValue(request.headers.origin);
   if (origin) return origin;
-  const protocol = firstHeaderValue(request.headers['x-forwarded-proto']) || request.protocol;
-  const host = firstHeaderValue(request.headers['x-forwarded-host']) || firstHeaderValue(request.headers.host);
+  const protocol = request.protocol;
+  const host = request.host;
   return protocol && host ? `${protocol}://${host}` : undefined;
 };
 

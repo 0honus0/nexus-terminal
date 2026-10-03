@@ -125,7 +125,7 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
   agentRunnerUrl: env.NEXUS_AGENT_RUNNER_URL?.trim() || undefined,
   agentRunnerToken: env.NEXUS_AGENT_RUNNER_TOKEN?.trim() || undefined,
   host: env.HOST?.trim() || '0.0.0.0',
-  trustProxy: env.TRUST_PROXY?.trim() || 'loopback, linklocal, uniquelocal',
+  trustProxy: env.TRUST_PROXY?.trim() || 'loopback',
   port: parsePositiveInteger(env.PORT, 3001, 'PORT'),
   nodeEnv: env.NODE_ENV?.trim() || 'development',
   dataDirectory,

@@ -213,3 +213,11 @@ scripts/build/build.sh docker
 ```
 
 随后在 `.env` 中设置相同的 `NEXUS_IMAGE_REPOSITORY` 与 `NEXUS_IMAGE_TAG`，再运行 `docker compose up -d`。统一镜像的运行角色入口脚本位于 `scripts/docker/entrypoint.sh`；Docker 相关运行脚本统一归 `scripts/docker/`，开发约束见 [AGENTS.md](AGENTS.md)。
+
+# 反向代理来源信任
+
+随附 Compose 为 Frontend 分配固定 IPv4 `NEXUS_FRONTEND_PROXY_IP`（默认 `172.30.0.2`），只将该地址追加到 Backend 的可信代理。默认 IPv4 子网为 `NEXUS_IPV4_SUBNET=172.30.0.0/24`；与宿主网络冲突时同时修改子网和 Frontend IP。Frontend Nginx 用直接 peer 的地址覆盖 Forwarded-For，不接受客户端注入的链；外层代理若需保留真实 IP，须另行安全配置 Nginx real_ip 的可信来源，不能直接恢复任意客户端链。
+
+IPv6 同样使用固定 Frontend 地址 `NEXUS_FRONTEND_PROXY_IPV6=fd01::2` 并单独加入信任；修改 IPv6 子网时须一起修改该地址。Compose 不信任整个 Docker 子网。
+
+`TRUST_PROXY` 默认 `loopback`，HTTP 与 WebSocket 使用相同策略。独立容器或远程代理部署必须显式指定真实反向代理 IP 或最小可信 CIDR（逗号分隔），并限制 Backend 直连访问。不要为方便而信任全部私网范围；可信代理必须覆盖客户端的 `X-Forwarded-For`、`X-Forwarded-Host`、`X-Forwarded-Proto`。WebSocket 不读取 `X-Real-IP`。配置错误可能造成来源白名单／黑名单／审计地址失真或外部 Origin 被拒绝。

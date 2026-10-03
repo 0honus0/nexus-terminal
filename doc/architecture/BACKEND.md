@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+HTTP Express与WS proxy-addr共享RuntimeConfig.trustProxy CIDR配置，默认loopback；WS按可信链右向左找首个不可信hop，Host/Proto仅trusted TCP peer可转发。Auth requestOrigin fallback使用Express protocol/host，独立X-Real-IP和private-range trust已移除。
+
 Passkey/TOTP enrollment采用完整authenticated session授权与新factor verification，无recent-auth timestamp/统一step-up owner；改密与disable 2FA既有密码检查不变，不将新factor proof视为旧credential proof。
 
 ProxyService.update在写repository前合并current/credential patch，校验最终encryptedPassword/encryptedPrivateKey不变量；create/切换需新credential，未修改credential保留，passphrase仍optional，无旧非法row自动迁移。

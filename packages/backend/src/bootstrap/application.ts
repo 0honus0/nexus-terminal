@@ -108,6 +108,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     server,
     sessionMiddleware: sessions.middleware,
     config: {
+      trustProxy: config.trustProxy,
       allowOriginlessWebSockets: config.allowOriginlessWebSockets,
       passkeyRelyingParties: config.passkeyRelyingParties,
     },

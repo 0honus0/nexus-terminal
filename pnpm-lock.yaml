@@ -157,6 +157,9 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 9.14.0
+      proxy-addr:
+        specifier: ^2.0.7
+        version: 2.0.7
       puppeteer-core:
         specifier: 'catalog:'
         version: 25.10.0
@@ -215,6 +218,9 @@ importers:
       '@types/nodemailer':
         specifier: ^8.0.1
         version: 8.0.1
+      '@types/proxy-addr':
+        specifier: ^2.0.3
+        version: 2.0.3
       '@types/qrcode':
         specifier: ^1.5.6
         version: 1.5.6
@@ -1381,6 +1387,9 @@ packages:
 
   '@types/nodemailer@8.0.1':
     resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
+
+  '@types/proxy-addr@2.0.3':
+    resolution: {integrity: sha512-TgAHHO4tNG3HgLTUhB+hM4iwW6JUNeQHCLnF1DjaDA9c69PN+IasoFu2MYDhubFc+ZIw5c5t9DMtjvrD6R3Egg==}
 
   '@types/qrcode@1.5.6':
     resolution: {integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==}
@@ -4647,6 +4656,10 @@ snapshots:
       undici-types: 8.9.0
 
   '@types/nodemailer@8.0.1':
+    dependencies:
+      '@types/node': 26.5.1
+
+  '@types/proxy-addr@2.0.3':
     dependencies:
       '@types/node': 26.5.1
 

@@ -3,7 +3,7 @@ import type { Socket } from 'node:net';
 import type { AgentTerminalAttachQueryDto } from '@nexus-terminal/protocol/agent-terminal';
 import type { WorkspaceUploadStreamQueryDto } from '@nexus-terminal/protocol/workspace';
 import express, { type Request, type RequestHandler, type Response } from 'express';
-import ipaddr from 'ipaddr.js';
+import proxyaddr from 'proxy-addr';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
 import type { AgentEventFacade, AgentRunFacade, AgentWorkspaceRuntimeFacade } from '../../modules/agent/public';
@@ -55,6 +55,7 @@ export interface WebSocketServerDependencies extends WorkspaceProtocolDependenci
 }
 
 export interface WebSocketRuntimeOptions {
+  trustProxy: string;
   allowOriginlessWebSockets: boolean;
   passkeyRelyingParties: readonly { origin: string }[];
 }
@@ -97,33 +98,16 @@ const firstHeaderValue = (value: string | string[] | undefined): string | undefi
     .find(Boolean);
 };
 
-/** Forwarded client-address headers are honored only when the TCP peer itself is trusted. */
-const isTrustedProxyAddress = (address: string | undefined): boolean => {
-  if (!address) return false;
-  try {
-    return ['loopback', 'private', 'linkLocal', 'uniqueLocal'].includes(ipaddr.process(address).range());
-  } catch {
-    return false;
-  }
-};
-
-const resolveClientIp = (request: http.IncomingMessage): string => {
-  const remote = request.socket.remoteAddress;
-  if (!isTrustedProxyAddress(remote)) return remote || 'unknown';
-  return (
-    firstHeaderValue(request.headers['x-real-ip']) ||
-    firstHeaderValue(request.headers['x-forwarded-for']) ||
-    remote ||
-    'unknown'
-  );
-};
-
-const allowedOrigin = (request: http.IncomingMessage, config: WebSocketRuntimeOptions): boolean => {
+const allowedOrigin = (
+  request: http.IncomingMessage,
+  config: WebSocketRuntimeOptions,
+  trust: (address: string, index: number) => boolean,
+): boolean => {
   const origin = firstHeaderValue(request.headers.origin);
   if (!origin) return config.allowOriginlessWebSockets;
   try {
     const allowed = new Set(config.passkeyRelyingParties.map((entry) => new URL(entry.origin).origin));
-    const trustedProxy = isTrustedProxyAddress(request.socket.remoteAddress);
+    const trustedProxy = !!request.socket.remoteAddress && trust(request.socket.remoteAddress, 0);
     const host =
       (trustedProxy ? firstHeaderValue(request.headers['x-forwarded-host']) : undefined) ||
       firstHeaderValue(request.headers.host);
@@ -157,6 +141,7 @@ const parseNonNegativeInteger = (value: string | null): number | null => {
 /** HTTP-server WebSocket boundary: upgrade/auth/origin/IP/heartbeat and clean transport selection only. */
 export const attachWebSocketServer = (options: WebSocketServerOptions): BackendWebSocketServer => {
   const { server, sessionMiddleware, config, dependencies } = options;
+  const trustProxy = proxyaddr.compile(config.trustProxy.split(',').map((address) => address.trim()));
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
   const clients = new Set<ClientRecord>();
   const socketSessions = new WeakMap<WebSocket, string>();
@@ -440,13 +425,13 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       rejectUpgrade(socket, 404, 'Not Found');
       return;
     }
-    if (!allowedOrigin(request, config)) {
+    if (!allowedOrigin(request, config, trustProxy)) {
       logger.debug({ path: pathname }, 'WebSocket upgrade rejected by origin policy');
       rejectUpgrade(socket, 403, 'Forbidden');
       return;
     }
 
-    const clientIp = resolveClientIp(request);
+    const clientIp = proxyaddr(request, trustProxy);
     void dependencies.ipWhitelist
       .check(clientIp)
       .then((decision) => {

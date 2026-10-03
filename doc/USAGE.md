@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+HTTP 与 WebSocket 共用 `TRUST_PROXY`，默认只信任 loopback；私网直连客户端的 Forwarded IP 不再默认可信。WebSocket 来源解析采用 `X-Forwarded-For` 可信代理链，不使用 `X-Real-IP`。独立容器／远程反向代理须显式指定代理地址或最小可信 CIDR，代理必须正确覆盖客户端提供的来源／Host／Proto header，不能把所有私网客户端都视为代理。
+
 新增 Passkey／启用 TOTP 由已有完整认证会话授权，目前不要求原凭据的 recent-auth／统一 step-up；验证新 authenticator 不代表重新验证原身份因素。修改密码／禁用 2FA 保留原有密码校验。已泄露的完整会话可能被用于新增长期凭据，不能仅依赖新增因素保护已有会话。
 
 Proxy 更新不会允许 password／key 认证模式缺少对应密码／私钥。省略凭据字段保留原值，显式空值会被拒绝；可选 passphrase 可以清空。旧的缺凭据记录须补齐凭据或切换认证方式后才能继续更新，不自动生成或迁移秘密。

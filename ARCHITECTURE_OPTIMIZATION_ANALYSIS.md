@@ -3764,6 +3764,8 @@ if (body.privateKey !== undefined)
 
 ## 135. 默认 Proxy Trust 把整个私网都当成可信反向代理；同网段直连客户端可伪造 Forwarded IP 绕过 IP Whitelist，并让 Blacklist / Audit 记录错误来源
 
+> 已修复默认及HTTP/WS一致性：TRUST_PROXY默认loopback，WS用proxy-addr同Express CIDR配置/右向左链解析，移除X-Real-IP优先；Origin Forwarded只信实际peer，auth fallback使用Express受trust约束的host/protocol。不承诺信任代理不覆盖header时安全，容器独立代理须显式配置精确地址/最小CIDR。
+
 > 确认问题（部署条件明确）：默认 HTTP trustProxy 与 WS 私网 peer trust 会接受 headers。必须能直连 Backend，或受信代理不覆盖客户端 header；仅 Frontend/Nginx 对外且正确覆盖 header 时不能推定外网绕过。WS trust 还未与自定义 HTTP TRUST_PROXY 统一。
 
 Backend 默认同时使用：
