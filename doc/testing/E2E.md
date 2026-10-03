@@ -110,6 +110,8 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
+Send Files regression coverage accepts the public credential-transfer trust confirmation before checking task submission, while keeping the held initial-list race and independent form-loading assertions.
+
 Skill fixture scenarios are selected from the latest user input, not retained historical scenario markers; initial metadata-only exposure and explicit `skill_read` body checks remain enforced.
 
 Docker deployment smoke injects an invalid record into the current SQLite Runner Journal, checks fail-closed startup twice, and verifies the journal bytes remain unchanged as recovery evidence.
