@@ -3645,6 +3645,8 @@ if (!result.valid) {
 
 ## 131. “密码正确、等待 2FA”的部分认证 Session 也会落盘 30 天，且没有 per-user/global Session 数量或磁盘 admission；仅掌握第一因素即可持续扩张 session 文件
 
+> 已修复pending生命周期/admission：固定5分钟deadline与cookie/store TTL，store.set串行枚举检查64个live partial session，记住我仅成功后生效，过期middleware销毁。只约束live pending，不承诺reaper前expired文件数/总bytes硬界，不覆盖完整session数量，单进程契约。
+
 > 确认问题（pending-auth 生命周期／容量）：file session TTL=30d，password-correct branch regenerate 并保存 partial auth，无独立短TTL/count gate。session-file-store 自有过期 reaping，不能说永不回收；需要知道正确密码才进入此分配路径，未压力测试。
 
 `FileHttpSessionAdapter` 使用 `session-file-store`，所有 server-side Session 都写进 data directory 下的独立 session store，并配置固定 30 天 TTL：

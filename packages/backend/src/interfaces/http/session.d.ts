@@ -6,6 +6,7 @@ declare module 'express-session' {
     userId?: number;
     username?: string;
     requiresTwoFactor?: boolean;
+    pendingTwoFactorExpiresAt?: number;
     rememberMe?: boolean;
     tempTwoFactorSecret?: string;
     currentChallenge?: string;

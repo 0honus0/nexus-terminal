@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+密码正确、等待 2FA 的部分认证会话固定 5 分钟有效，不随请求续期；“记住我”只在第二因素成功后生效。单 Backend 最多保存 64 个有效部分认证会话，满载拒绝新增保存；过期会话不能继续验证，文件由 session store 回收。该限制不是完整登录会话数量或过期文件总磁盘字节的硬上限。
+
 2FA 登录验证码验证失败会记录 `LOGIN_FAILURE` 审计并进入已有登录失败通知流程，同时继续累计 IP blacklist 失败次数；事件不包含验证码或 2FA secret。外部通知是否投递取决于通知配置及既有投递结果。
 
 Passkey 登录发现接口可在未登录时返回是否已配置 Passkey；指定用户名的认证选项可包含 credential ID／transports。credential ID 是公开标识，不是私钥或登录凭据，仍须验证 authenticator 签名。不承诺隐藏 Passkey 配置状态；false 不能区分账号不存在与未配置，也没有此 discovery 专用限流保证。

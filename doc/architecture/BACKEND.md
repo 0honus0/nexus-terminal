@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+pending 2FA由auth route写绝对deadline/cookie5分钟，FileHttpSessionAdapter set串行检查64 live pending及deadline，store TTL按剩余时间保存；middleware过期destroy，成功regenerate退出partial owner。session-file-store reaper负责expired物理文件，未建立跨进程lease或完整session quota。
+
 TwoFactorService失败分支复用AuthService.recordLoginFailure（audit+notification），静态second-factor reason区分密码失败；HTTP adapter仍持有blacklist计数与401响应，不建立第二审计owner。
 
 Passkey discovery保留匿名配置查询及username-based allowCredentials公开标识，authentication仍由WebAuthn challenge/signature owner验证；不是账号存在性oracle的完整保证，不新增privacy masking／专用discovery limiter。

@@ -180,6 +180,8 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
         request.session.userId = result.userId;
         request.session.credentialRevision = result.credentialRevision;
         request.session.requiresTwoFactor = true;
+        request.session.pendingTwoFactorExpiresAt = Date.now() + 5 * 60 * 1000;
+        request.session.cookie.maxAge = 5 * 60 * 1000;
         request.session.rememberMe = Boolean(rememberMe);
         const payload: AuthLoginResponseDto = { message: '需要进行两步验证。', requiresTwoFactor: true };
         response.json(payload);

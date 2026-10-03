@@ -23,6 +23,36 @@ export class FileHttpSessionAdapter {
     fs.mkdirSync(sessionsPath, { recursive: true });
     this.cookieName = options.cookieName || 'nexus.sid';
     this.store = new FileStore({ path: sessionsPath, ttl: 30 * 24 * 60 * 60 });
+    const save = this.store.set.bind(this.store);
+    let saveTail: Promise<void> = Promise.resolve();
+    this.store.set = (id, data, callback) => {
+      const task = saveTail.then(async () => {
+        if (data.requiresTwoFactor) {
+          const deadline = data.pendingTwoFactorExpiresAt;
+          if (!deadline || deadline <= Date.now()) throw new Error('PENDING_AUTH_EXPIRED');
+          let pending = 0;
+          for (const filename of await fs.promises.readdir(sessionsPath)) {
+            if (!filename.endsWith('.json')) continue;
+            const key = filename.slice(0, -5);
+            if (key === id) continue;
+            const row = await new Promise<session.SessionData | null | undefined>((resolve, reject) => {
+              this.store.get(key, (error, value) => (error ? reject(error) : resolve(value)));
+            });
+            if (row?.requiresTwoFactor && (row.pendingTwoFactorExpiresAt ?? 0) > Date.now() && ++pending >= 64) {
+              throw new Error('PENDING_AUTH_CAPACITY_EXCEEDED');
+            }
+          }
+          data.cookie.originalMaxAge = Math.max(1, deadline - Date.now());
+          data.cookie.expires = new Date(deadline);
+        }
+        await new Promise<void>((resolve, reject) => save(id, data, (error) => (error ? reject(error) : resolve())));
+      });
+      saveTail = task.catch(() => undefined);
+      void task.then(
+        () => callback?.(),
+        (error) => callback?.(error),
+      );
+    };
     const loadSession = session({
       store: this.store,
       name: this.cookieName,
@@ -36,6 +66,10 @@ export class FileHttpSessionAdapter {
       loadSession(request, response, (error) => {
         if (error) return next(error);
         const userId = request.session.userId;
+        if (request.session.requiresTwoFactor && (request.session.pendingTwoFactorExpiresAt ?? 0) <= Date.now()) {
+          request.session.regenerate((regenerateError) => (regenerateError ? next(regenerateError) : next()));
+          return;
+        }
         if (!userId) return next();
         void options.credentialRevision(userId).then((revision) => {
           if (!revision || revision !== request.session.credentialRevision) {
