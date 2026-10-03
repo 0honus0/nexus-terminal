@@ -14,7 +14,7 @@ CI shards enable `DEBUG=pw:webserver` and retain combined output in `.tmp/shard-
 
 The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, eight duration-balanced Playwright shards on isolated GitHub-hosted runners with Node 24 and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
-The full Docker smoke's direct Browser page fixture binds an OS-assigned loopback port and publishes that port only while retaining the listener. It does not probe and release a port before starting the page server, which could collide with another fixture and send readiness checks to the wrong service.
+The full Docker smoke's direct Browser page fixture binds an OS-assigned loopback port and publishes that port only while retaining the listener. Compose resolves the required page-port environment variable only after binding succeeds; a missing binding fails closed. It does not probe and release a port before starting the page server, which could collide with another fixture and send readiness checks to the wrong service.
 
 ## Structure
 

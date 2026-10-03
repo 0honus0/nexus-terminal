@@ -185,7 +185,7 @@ services:
         MCowBQYDK2VwAyEALU2gA/FGdyVBtxtSsTRGmLiNjRsxeE8MdkMt2dndZQ8=
         -----END PUBLIC KEY-----
       NEXUS_E2E_DIRECT_CDP_PORT: $cdp_browser_proxy_port
-      NEXUS_E2E_BROWSER_PAGE_PORT: $browser_page_port
+      NEXUS_E2E_BROWSER_PAGE_PORT: \${NEXUS_E2E_BROWSER_PAGE_PORT:?Browser page must bind before Compose configuration}
   guacd:
     container_name: nexus-e2e-guacd-$suffix
   agent-runner:
@@ -240,7 +240,6 @@ curl -fsS "http://127.0.0.1:${plugin_repository_port}/health" >/dev/null || {
   exit 1
 }
 
-compose config >/dev/null
 # Browser direct page target. Chromium itself runs on the host, so this loopback HTTP
 # server exercises the Browser data plane independently from the Backend -> CDP control plane.
 browser_page_script="$workspace/direct-browser-page.cjs"
@@ -271,6 +270,8 @@ done
 [[ -s "$browser_page_port_file" ]] || { echo 'Direct Browser page did not bind.' >&2; exit 1; }
 browser_page_port="$(cat "$browser_page_port_file")"
 curl -fsS "http://127.0.0.1:${browser_page_port}/" >/dev/null || { echo 'Direct Browser page did not start.' >&2; exit 1; }
+export NEXUS_E2E_BROWSER_PAGE_PORT="$browser_page_port"
+compose config >/dev/null
 
 # Browser direct smoke target. Chromium intentionally owns only a host-loopback CDP
 # listener. Modern Chromium can remain loopback-only even when given a broader debug
