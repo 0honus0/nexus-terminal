@@ -3290,6 +3290,8 @@ void this.server.newConnection(socket, requestWithInternalToken).catch(...);
 
 ## 117. Backend Plugin 的总进程容量策略待确认
 
+> 已审核（不新增配额）：当前单用户可信管理员显式enable，保留按实例生命周期与IPC限制；aggregate硬上限不是既有需求，不能以Map无上限直接认定漏洞。总宿主预算由部署管理，不声称已有自动aggregate保护。
+
 > 待确认（受信插件容量策略）：instances Map 无 aggregate process gate 属实，新安装默认 disabled 且 enable/信任为显式操作。是否必须 hard quota 取决于单用户管理员资源治理要求；不能仅凭可安装任意数量就定为权限漏洞，未做容量测试。
 
 Backend Plugin instances 无总 process 配额，单进程 IPC/Host operation 有限制；安装默认 disabled，enable 是显式受信管理操作。待根据单用户部署的 OS/container 预算评估是否需要应用层总量 admission。

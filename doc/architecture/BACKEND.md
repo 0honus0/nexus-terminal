@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Backend Plugin instances registry拥有按scope/package的进程生命周期，不承担aggregate process admission；受信管理员enable与部署资源预算是当前总量策略，单实例writer/ready/drain限制不替代总进程配额。
+
 GuacamoleRuntimeAdapter 在票据消费前检查共享16槽，activeSockets覆盖建连与连接，newConnection settle+socket CLOSED释放；bridge settings持socket以拒绝晚到的失效配置，shutdown终止受管socket，guacamole-lite继续持有guacd teardown。
 
 WorkspaceRuntimeTerminalService 持有 terminal admission（每 Workspace 8、合计64），在Runner open前reserve；managed持有幂等release，detach保留，reattach复用，自然close或显式close完成释放，pending open失败释放。
