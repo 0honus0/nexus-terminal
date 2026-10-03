@@ -1,5 +1,11 @@
 {
   "workspace": {
+    "uploadChooser": {
+      "title": "Upload files",
+      "description": "Choose any file type, not just photos or videos. Multiple files are supported.",
+      "systemHint": "If your phone shows Camera / Camcorder / Photos and videos, choose Photos and videos, then look for Browse, Files or file locations in the side menu. Labels depend on your phone and browser.",
+      "selectFiles": "Choose files (any type)"
+    },
     "start": {
       "title": "Connections & sessions",
       "description": "Resume a suspended session or choose a connection to open a terminal.",

@@ -65,6 +65,80 @@ async function longPressFile(page: Page, filename: string): Promise<Locator> {
   return menu;
 }
 
+test('mobile upload explains arbitrary files and opens an unrestricted system picker', async ({ page, context }) => {
+  await connectMobileSsh(page, context.request);
+  await openConnectedFileManager(page);
+  await page.evaluate(() =>
+    Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: undefined }),
+  );
+  const menu = await longPressFile(page, 'archive-source.txt');
+  await menu.getByRole('button', { name: 'Upload', exact: true }).click();
+  const chooser = page.getByRole('dialog', { name: 'Upload files', exact: true });
+  await expect(chooser).toBeVisible();
+  await expect(chooser).toContainText('Choose any file type');
+  await expect(chooser).toContainText('Photos and videos');
+  const pickerPromise = page.waitForEvent('filechooser');
+  await chooser.getByRole('button', { name: 'Choose files (any type)', exact: true }).click();
+  const picker = await pickerPromise;
+  expect(picker.isMultiple()).toBe(true);
+  expect(await picker.element().getAttribute('accept')).toBeNull();
+  await picker.setFiles({
+    name: 'mobile-arbitrary-file.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Mobile file chooser upload'),
+  });
+  await expect(fileManagerRow(page, 'mobile-arbitrary-file.txt')).toBeVisible({ timeout: 20_000 });
+  await expect(chooser).toBeHidden();
+});
+
+for (const outcome of ['success', 'cancel', 'failure'] as const) {
+  test(`mobile direct file picker ${outcome} preserves upload state and allows another selection`, async ({
+    page,
+    context,
+  }) => {
+    await connectMobileSsh(page, context.request);
+    await openConnectedFileManager(page);
+    await page.evaluate((result) => {
+      Object.defineProperty(window, 'showOpenFilePicker', {
+        configurable: true,
+        value: async (options: { multiple: boolean }) => {
+          if (!options.multiple) throw new Error('Picker must allow multiple files');
+          if (result === 'cancel') throw new DOMException('Selection cancelled', 'AbortError');
+          if (result === 'failure') throw new DOMException('Picker access denied', 'NotAllowedError');
+          return [
+            {
+              getFile: async () => new File(['Direct picker file bytes'], 'direct-picker.txt', { type: 'text/plain' }),
+            },
+          ];
+        },
+      });
+    }, outcome);
+    const menu = await longPressFile(page, 'archive-source.txt');
+    await menu.getByRole('button', { name: 'Upload', exact: true }).click();
+    const chooser = page.getByRole('dialog', { name: 'Upload files', exact: true });
+    await chooser.getByRole('button', { name: 'Choose files (any type)', exact: true }).click();
+    await expect(chooser).toBeHidden();
+    if (outcome === 'success') {
+      await expect(fileManagerRow(page, 'direct-picker.txt')).toBeVisible({ timeout: 20_000 });
+    } else {
+      await expect(fileManagerRow(page, 'direct-picker.txt')).toHaveCount(0);
+      if (outcome === 'failure') await expect(page.getByText('Picker access denied', { exact: true })).toBeVisible();
+      else await expect(page.getByText('Selection cancelled', { exact: true })).toHaveCount(0);
+      await page.evaluate(() =>
+        Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: undefined }),
+      );
+      const retryMenu = await longPressFile(page, 'archive-source.txt');
+      await retryMenu.getByRole('button', { name: 'Upload', exact: true }).click();
+      const nextPicker = page.waitForEvent('filechooser');
+      await chooser.getByRole('button', { name: 'Choose files (any type)', exact: true }).click();
+      await (
+        await nextPicker
+      ).setFiles({ name: 'picker-recovery.txt', mimeType: 'text/plain', buffer: Buffer.from('Recovered selection') });
+      await expect(fileManagerRow(page, 'picker-recovery.txt')).toBeVisible({ timeout: 20_000 });
+    }
+  });
+}
+
 test('mobile long-press menu flattens archive actions and creates a real ZIP', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);

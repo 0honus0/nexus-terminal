@@ -684,7 +684,32 @@
 
   const chooseUpload = (path: string) => {
     uploadPath.value = path;
+    if (props.mobile) {
+      uploadChooserVisible.value = true;
+      return;
+    }
     uploadInput.value?.click();
+  };
+  const uploadChooserVisible = ref(false);
+  const selectUploadFiles = async () => {
+    uploadChooserVisible.value = false;
+    const picker = (
+      window as Window & {
+        showOpenFilePicker?: (options: { multiple: boolean }) => Promise<Array<{ getFile(): Promise<File> }>>;
+      }
+    ).showOpenFilePicker;
+    if (!picker) {
+      uploadInput.value?.click();
+      return;
+    }
+    try {
+      const handles = await picker.call(window, { multiple: true });
+      const files = await Promise.all(handles.map((handle) => handle.getFile()));
+      await uploadFilesAt(uploadPath.value, files);
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return;
+      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+    }
   };
   const uploadFilesAt = async (
     path: string,
@@ -1333,6 +1358,23 @@
     />
 
     <input ref="uploadInput" class="hidden" type="file" multiple @change="uploadFiles" />
+    <UiModal
+      :visible="uploadChooserVisible"
+      :z-index="1200"
+      :title="t('workspace.uploadChooser.title')"
+      @close="uploadChooserVisible = false"
+    >
+      <div class="space-y-4">
+        <p class="text-sm text-text-secondary">{{ t('workspace.uploadChooser.description') }}</p>
+        <p class="rounded-md border border-border bg-muted/30 p-3 text-sm">
+          {{ t('workspace.uploadChooser.systemHint') }}
+        </p>
+        <UiButton class="w-full" @click="selectUploadFiles">
+          <i class="fas fa-folder-open mr-2" aria-hidden="true"></i>
+          {{ t('workspace.uploadChooser.selectFiles') }}
+        </UiButton>
+      </div>
+    </UiModal>
 
     <ProgressCenter
       v-if="transfers.tasks.value.length && progressVisible && !fileManagerPopupVisible"
