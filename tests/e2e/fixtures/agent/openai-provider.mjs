@@ -6,6 +6,9 @@ const expectedCredential = 'e2e-provider-secret';
 let checkpointResponses = 0;
 let releaseBrowserCompletion;
 let browserCompletionReleased = false;
+let releaseChildCancelParent;
+let childCancelParentHeld = false;
+let childCancelParentReleased = false;
 
 const readJson = async (request) => {
   const chunks = [];
@@ -21,6 +24,15 @@ const sendSse = (response, value) => {
 };
 
 const server = http.createServer(async (request, response) => {
+  if (request.url === '/child-cancel-parent') {
+    if (request.method === 'POST') {
+      childCancelParentReleased = true;
+      releaseChildCancelParent?.();
+    }
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ held: childCancelParentHeld }));
+    return;
+  }
   if (request.method === 'POST' && request.url === '/browser-lifecycle/release') {
     browserCompletionReleased = true;
     releaseBrowserCompletion?.();
@@ -375,6 +387,54 @@ const server = http.createServer(async (request, response) => {
     'Cache-Control': 'no-store',
     Connection: 'keep-alive',
   });
+  const childCancelJoinResult = messages.find(
+    (message) => message?.role === 'tool' && message.tool_call_id === 'call_e2e_child_cancel_join',
+  );
+  if (latestUserText.includes('E2E_CHILD_INDEPENDENT_CANCEL') && subagentDelegateResult && !childCancelJoinResult) {
+    const delegation = JSON.parse(subagentDelegateResult.content);
+    sendSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_e2e_child_cancel_join',
+                type: 'function',
+                function: {
+                  name: 'collaboration_subagent_join',
+                  arguments: JSON.stringify({
+                    delegationIds: [delegation.data.id],
+                    mode: 'all',
+                    deadlineAt: Math.floor(Date.now() / 1000) + 120,
+                  }),
+                },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+    sendSse(response, { choices: [], usage: { prompt_tokens: 7, completion_tokens: 4 } });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
+  if (latestUserText.includes('E2E_CHILD_INDEPENDENT_CANCEL') && childCancelJoinResult && !childCancelParentReleased) {
+    childCancelParentHeld = true;
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 30_000);
+      releaseChildCancelParent = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      response.once('close', releaseChildCancelParent);
+    });
+    childCancelParentHeld = false;
+    releaseChildCancelParent = undefined;
+    if (response.destroyed) return;
+  }
   if (latestUserText.includes('E2E_BROWSER_LIFECYCLE')) {
     const browserCallId = `call_e2e_browser_open_${latestUserText.match(/E2E_BROWSER_LIFECYCLE ([a-f0-9-]+)/)?.[1]}`;
     const opened = messages.some((message) => message?.role === 'tool' && message.tool_call_id === browserCallId);
@@ -555,6 +615,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   if (subagentBatchRequested && !subagentDelegateResult && delegateSubagentToolOffered) {
+    if (latestUserText.includes('E2E_CHILD_INDEPENDENT_CANCEL')) childCancelParentReleased = false;
     sendSse(response, {
       choices: [
         {

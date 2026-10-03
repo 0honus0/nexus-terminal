@@ -941,10 +941,17 @@ const installAndRunNexusAgent = async (
     expect(subagentPayload).toContain('CHILD_BATCH_OK');
     expect(subagentPayload).not.toContain('E2E_CHILD_BATCH_PROTOCOL_INVALID');
 
-    for (const phase of ['complete', 'cancel-live', 'cancel-creating'] as const)
+    for (const phase of [
+      'complete',
+      'cancel-live',
+      'cancel-creating',
+      'child-cancel-live',
+      'child-cancel-creating',
+    ] as const)
       await step(`a real Child Browser context is reclaimed: ${phase}`, async () => {
-        const cancel = phase !== 'complete';
-        const cancelCreating = phase === 'cancel-creating';
+        const independent = phase.startsWith('child-');
+        const cancel = phase !== 'complete' && !independent;
+        const cancelCreating = phase.endsWith('creating');
         const contexts = async () => {
           const response = await fetch(`${E2E_URLS.browserControlOrigin}/contexts`);
           expect(response.ok).toBeTruthy();
@@ -966,7 +973,10 @@ const installAndRunNexusAgent = async (
           data: {
             schemaVersion: 1,
             threadId: childThreadId,
-            input: { text: 'E2E_SUBAGENT_MULTI_TOOL_BATCH E2E_CHILD_BROWSER_REQUEST', artifactRefs: [] },
+            input: {
+              text: `E2E_SUBAGENT_MULTI_TOOL_BATCH E2E_CHILD_BROWSER_REQUEST${independent ? ' E2E_CHILD_INDEPENDENT_CANCEL' : ''}`,
+              artifactRefs: [],
+            },
             agentDefinitionId: 'agent.default',
             model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
             approvalMode: 'ask',
@@ -987,6 +997,39 @@ const installAndRunNexusAgent = async (
               .toBe(true);
           }
           await expect.poll(contexts).toHaveLength(baseline.length + 1);
+          if (independent) {
+            const children = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}/subagents?limit=20`);
+            expect(children.ok()).toBeTruthy();
+            const items = (await children.json()).data.items;
+            expect(items).toHaveLength(1);
+            const child = items[0];
+            expect(child.status).toBe('running');
+            const cancelled = await request.post(
+              `/api/v1/apps/nexus.agent/runs/${run.id}/subagents/${child.id}/cancel`,
+              {
+                headers,
+                data: { expectedVersion: child.version },
+              },
+            );
+            expect(cancelled.status(), await cancelled.text()).toBe(202);
+            expect((await cancelled.json()).data.status).toBe('cancelled');
+            if (cancelCreating) {
+              const released = await fetch(`${E2E_URLS.browserControlOrigin}/creation-barrier/release`, {
+                method: 'POST',
+              });
+              expect(released.ok).toBeTruthy();
+            }
+            await expect
+              .poll(async () => {
+                const response = await fetch(`${E2E_URLS.openAiProviderOrigin}/child-cancel-parent`);
+                expect(response.ok).toBeTruthy();
+                return (await response.json()).held;
+              })
+              .toBe(true);
+            const parent = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}`);
+            expect(parent.ok()).toBeTruthy();
+            expect((await parent.json()).data.status).toBe('running');
+          }
           if (cancel) {
             await cancelRunForCleanup(request, run.id);
             if (cancelCreating) {
@@ -1010,6 +1053,10 @@ const installAndRunNexusAgent = async (
             await expect.poll(contexts).toEqual(baseline);
           }
         } finally {
+          if (independent) {
+            const released = await fetch(`${E2E_URLS.openAiProviderOrigin}/child-cancel-parent`, { method: 'POST' });
+            expect(released.ok).toBeTruthy();
+          }
           if (cancelCreating) {
             const released = await fetch(`${E2E_URLS.browserControlOrigin}/creation-barrier/release`, {
               method: 'POST',
@@ -1030,10 +1077,10 @@ const installAndRunNexusAgent = async (
           const childItems = (await children.json()).data.items;
           expect(childItems).toHaveLength(1);
           const child = childItems[0];
-          expect(child.status).toBe(cancel ? 'cancelled' : 'completed');
+          expect(child.status).toBe(cancel || independent ? 'cancelled' : 'completed');
           expect(child.childRuntimeId).not.toBe(child.parentRuntimeId);
           const serialized = JSON.stringify(child.result);
-          if (!cancel) {
+          if (!cancel && !independent) {
             expect(serialized).toContain('Browser lifecycle fixture completed.');
             expect(serialized).toContain(child.childRuntimeId);
             expect(serialized).toContain(run.id);

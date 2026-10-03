@@ -76,7 +76,10 @@ export class RootToolExecutionCoordinator {
       return waiting ? 'return' : 'continue';
     }
 
-    yield* this.reads.execute(snapshot, this.reads.selectWave(snapshot, pendingTools), signal);
+    for await (const event of this.reads.execute(snapshot, this.reads.selectWave(snapshot, pendingTools), signal)) {
+      yield event;
+      if (event.type === 'settled') return 'return';
+    }
     const pendingAbortReason = signalReason(signal);
     if (
       pendingAbortReason === 'NEW_INPUT' ||

@@ -66,6 +66,8 @@ The isolated Runner harness additionally cancels a real HTTP Job whose two desce
 
 Creation-race coverage uses a loopback WebSocket proxy in the dedicated Chromium fixture. It forwards real CDP text frames and holds the response to `Browser.setDownloadBehavior`, after the context/page exists but before session registration completes. Separate Root and Child scenarios observe the held response and live context, cancel the parent Run, release the response, and require public `cancelled` plus context reclamation (and a cancelled Child for delegation). This covers that specific late-initialization window, not every asynchronous creation boundary or an independently cancelled Child while its parent stays running. A safety deadline releases abandoned fixture responses; successful assertions explicitly release them rather than relying on the deadline. No production testing endpoint is added.
 
+Independent Child cancellation is exercised both with a live Browser context and with its final initialization response held. The parent explicitly calls `collaboration_subagent_join` and yields its runtime slot before the Child starts. The public versioned Subagent cancel endpoint must return a cancelled delegation without cancelling the parent. A separate provider response barrier observes the resumed parent still `running`; releasing it must allow successful parent completion with the Child still cancelled and Chromium contexts back at baseline. This verifies Root join parking and wake-up as well as final Run-owned cleanup, not immediate context reclamation while the parent remains active.
+
 ## Logs
 
 Every test receives its own text log. The archive layout mirrors the test source layout, for example:
