@@ -3252,6 +3252,8 @@ WebSocket server 对 `/ws/agent-terminal` 也没有连接数 admission。因此�
 
 ## 116. Remote Desktop 的 1024 上限只覆盖 pending ticket；ticket 一经消费就退出计数，active Guacamole/RDP/VNC session 没有任何 Nexus 侧容量 owner
 
+> 已修复：单Backend16个共享active socket名额，在newConnection前同步预留，opening结束且socket CLOSED后释放；晚到bridge配置检查socket与adapter状态，dispose终止受管socket。pending ticket上限独立保留，无per-user预算，未真实压测guacd容量。
+
 > 确认问题（Nexus admission 缺口）：GuacamoleRuntimeAdapter consumeTicket 删除 pending，通用 client tracking 无 active limit。guacd/远端自身可能有系统容量限制，但不是 Nexus 用户／全局 quota；未建立大量桌面连接。
 
 `GuacamoleRuntimeAdapter` 明确给 pending ticket 设置了全局上限：

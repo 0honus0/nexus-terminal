@@ -10,6 +10,7 @@ import type {
 
 const DEFAULT_TICKET_TTL_MS = 30_000;
 const MAX_PENDING_TICKETS = 1024;
+const MAX_ACTIVE_SESSIONS = 16;
 const BRIDGE_SETTING = 'nexus-bridge-id';
 
 interface RemoteDesktopTicketRecord {
@@ -36,7 +37,8 @@ export interface GuacamoleRuntimeAdapterOptions {
  */
 export class GuacamoleRuntimeAdapter implements RemoteDesktopSessionIssuer {
   private readonly tickets = new Map<string, RemoteDesktopTicketRecord>();
-  private readonly pendingBridgeSettings = new Map<string, Record<string, string>>();
+  private readonly pendingBridgeSettings = new Map<string, { settings: Record<string, string>; socket: WebSocket }>();
+  private readonly activeSockets = new Set<WebSocket>();
   private readonly internalEncryptionKey = crypto.randomBytes(32);
   private readonly ticketTtlMs: number;
   private readonly server: GuacamoleLite;
@@ -61,6 +63,7 @@ export class GuacamoleRuntimeAdapter implements RemoteDesktopSessionIssuer {
   }
 
   async createSession(userId: number, request: RemoteDesktopSessionRequest): Promise<{ ticket: string }> {
+    if (this.closed) throw new Error('REMOTE_DESKTOP_CLOSED');
     this.pruneExpiredTickets();
     if (this.tickets.size >= MAX_PENDING_TICKETS) throw new Error('远程桌面会话请求过多，请稍后重试。');
     const ticket = crypto.randomBytes(32).toString('base64url');
@@ -73,20 +76,37 @@ export class GuacamoleRuntimeAdapter implements RemoteDesktopSessionIssuer {
   }
 
   acceptSession(ticket: string, userId: number, socket: WebSocket, request: IncomingMessage): boolean {
+    if (this.closed || socket.readyState !== socket.OPEN || this.activeSockets.size >= MAX_ACTIVE_SESSIONS)
+      return false;
     const record = this.consumeTicket(ticket, userId);
     if (!record) return false;
 
     const bridgeId = crypto.randomBytes(18).toString('base64url');
-    this.pendingBridgeSettings.set(bridgeId, this.toGuacamoleSettings(record.request));
+    this.activeSockets.add(socket);
+    this.pendingBridgeSettings.set(bridgeId, { settings: this.toGuacamoleSettings(record.request), socket });
+    let opening = true;
+    const release = () => {
+      if (opening || socket.readyState !== socket.CLOSED) return;
+      this.activeSockets.delete(socket);
+      this.pendingBridgeSettings.delete(bridgeId);
+      socket.off('close', release);
+    };
+    socket.once('close', release);
     const token = this.createInternalBridgeToken(record.request.protocol.toLowerCase() as 'rdp' | 'vnc', bridgeId);
     const requestWithInternalToken = Object.create(request) as IncomingMessage;
     requestWithInternalToken.url = `/?token=${encodeURIComponent(token)}`;
 
-    void this.server.newConnection(socket, requestWithInternalToken).catch((error) => {
-      this.pendingBridgeSettings.delete(bridgeId);
-      logger.error({ err: error }, 'Failed to accept remote desktop session');
-      if (socket.readyState === socket.OPEN) socket.close(1011, 'Remote desktop connection failed');
-    });
+    void this.server
+      .newConnection(socket, requestWithInternalToken)
+      .catch((error) => {
+        this.pendingBridgeSettings.delete(bridgeId);
+        logger.error({ err: error }, 'Failed to accept remote desktop session');
+        if (socket.readyState === socket.OPEN) socket.close(1011, 'Remote desktop connection failed');
+      })
+      .finally(() => {
+        opening = false;
+        release();
+      });
     return true;
   }
 
@@ -95,6 +115,7 @@ export class GuacamoleRuntimeAdapter implements RemoteDesktopSessionIssuer {
     this.closed = true;
     this.tickets.clear();
     this.pendingBridgeSettings.clear();
+    for (const socket of this.activeSockets) socket.terminate();
     this.server.close();
   }
 
@@ -123,12 +144,13 @@ export class GuacamoleRuntimeAdapter implements RemoteDesktopSessionIssuer {
       return;
     }
     const resolved = this.pendingBridgeSettings.get(bridgeId);
-    if (!resolved) {
+    if (!resolved || this.closed || resolved.socket.readyState !== resolved.socket.OPEN) {
+      this.pendingBridgeSettings.delete(bridgeId);
       callback(new Error('远程桌面内部连接配置已失效。'));
       return;
     }
     this.pendingBridgeSettings.delete(bridgeId);
-    callback(undefined, { ...settings, connection: resolved });
+    callback(undefined, { ...settings, connection: resolved.settings });
   }
 
   private createInternalBridgeToken(protocol: 'rdp' | 'vnc', bridgeId: string): string {
