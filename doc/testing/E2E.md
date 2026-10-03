@@ -110,6 +110,8 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
+The Agent Provider fixture handles semantic handoff requests separately from normal tool scenarios, emitting all eight required sections. The installed-plugin continuation must complete successfully after retained Skill history triggers context compaction, before inline approval is exercised.
+
 Provider discovery verifies both direct-backend and public-frontend same-Origin mutations, rejects a mismatched Origin, and rejects cross-site Fetch Metadata even with an otherwise matching Origin; all Agent rejections preserve the standard error envelope.
 
 The SSH outage regression checks the fresh shell prompt and executable input after reconnecting the same logical Workspace ID; fresh connections replace ended-shell listeners and terminal replay/input state rather than reusing stale bindings.

@@ -1426,6 +1426,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await expect(modelSelector).toContainText('e2e-model-alt');
 
     const restoredComposer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
+    const providerBeforeContinuation = await context.request.get(`${E2E_URLS.openAiProviderOrigin}/health`);
+    const checkpointResponsesBefore = ((await providerBeforeContinuation.json()) as { checkpointResponses: number })
+      .checkpointResponses;
     await restoredComposer.fill('Confirm the Agent composer can start the next Run from the current thread.');
     await hub.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(
@@ -1436,6 +1439,14 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     const runPage = (await runsResponse.json()) as Envelope<{ items: RunView[] }>;
     expect(runPage.data.items[0]?.definition).toMatchObject({ agentDefinitionId: 'agent.default' });
     expect(runPage.data.items.some((item) => item.definition.model?.modelId === 'e2e-model-alt')).toBeTruthy();
+    const continuedRun = runPage.data.items.find((item) => item.definition.model?.modelId === 'e2e-model-alt');
+    expect(continuedRun).toBeDefined();
+    const continuedTerminal = await waitForTerminalRun(context.request, continuedRun!.id);
+    expect(['completed', 'completed_unverified']).toContain(continuedTerminal.status);
+    const providerAfterContinuation = await context.request.get(`${E2E_URLS.openAiProviderOrigin}/health`);
+    expect(
+      ((await providerAfterContinuation.json()) as { checkpointResponses: number }).checkpointResponses,
+    ).toBeGreaterThan(checkpointResponsesBefore);
     await taskPanelToggle.click();
     await expect(taskRail).toBeVisible();
     const historyCard = taskRail.locator('[data-rail-card="history"]');

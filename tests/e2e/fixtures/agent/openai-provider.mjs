@@ -3,6 +3,7 @@ import http from 'node:http';
 const host = '127.0.0.1';
 const port = Number(process.env.NEXUS_E2E_OPENAI_PROVIDER_PORT || 29091);
 const expectedCredential = 'e2e-provider-secret';
+let checkpointResponses = 0;
 
 const readJson = async (request) => {
   const chunks = [];
@@ -27,7 +28,7 @@ const server = http.createServer(async (request, response) => {
   };
   if (request.method === 'GET' && request.url === '/health') {
     response.writeHead(200, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify({ ok: true }));
+    response.end(JSON.stringify({ ok: true, checkpointResponses }));
     return;
   }
 
@@ -165,6 +166,31 @@ const server = http.createServer(async (request, response) => {
   const serializedMessages = JSON.stringify(messages);
   const latestUserMessage = [...messages].reverse().find((message) => message?.role === 'user');
   const latestUserText = JSON.stringify(latestUserMessage?.content ?? '');
+  const isCheckpointRequest = messages.some(
+    (message) =>
+      message?.role === 'system' &&
+      typeof message.content === 'string' &&
+      message.content.includes('Summarize the supplied historical data into a task handoff.'),
+  );
+  if (isCheckpointRequest) {
+    checkpointResponses += 1;
+    const content = [
+      '## Objective\nContinue Agent E2E.',
+      '## Requirements\nRespect approval and selected targets.',
+      '## Decisions\nDeveloper Skill loaded.',
+      '## Work State\nEarlier fixture task returned OK.',
+      '## Blockers\n(none)',
+      '## Next Move\nFollow the current input.',
+      '## Relevant Files\n(none)',
+      '## Evidence\nPrior tool results are historical data.\n',
+    ].join('\n');
+    response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
+    sendSse(response, { choices: [{ delta: { content }, finish_reason: null }] });
+    sendSse(response, { choices: [], usage: { prompt_tokens: 700, completion_tokens: 100 } });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'stop' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
   const markerOccurrences = (marker) => serializedMessages.split(marker).length - 1;
   if (markerOccurrences('E2E_GOAL_UPDATE_HOLD') > 1 || markerOccurrences('E2E_INTERRUPT_HOLD') > 1) {
     response.writeHead(422, { 'Content-Type': 'application/json' });
