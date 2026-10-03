@@ -6,6 +6,8 @@ import {
   openWorkspaceSession,
   requestWorkspace,
   requestWorkspaceBinary,
+  sendJson,
+  waitForJson,
   waitForFilesystemReady,
 } from '../../support/ws';
 
@@ -35,6 +37,44 @@ test('binary reads require a valid byte budget and recover after an oversized re
     const exact = await read({ maxBytes: baseline.bytes.length });
     expect(exact.bytes).toEqual(baseline.bytes);
   } finally {
+    await closeWebSocket(workspace.socket);
+  }
+});
+
+test('rejecting a duplicate binary read ID preserves cancellation of the original read', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId);
+  const id = crypto.randomUUID();
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=1000`, { method: 'POST' })).ok).toBeTruthy();
+    const payload = { path: '/seed.txt', maxBytes: 1024 };
+    sendJson(workspace.socket, { type: 'filesystem.readBinary', requestId: id, payload });
+    await requestWorkspace(workspace.socket, 'workspace.ping');
+    const rejected = waitForJson(
+      workspace.socket,
+      (message) => message.requestId === id && message.payload?.ok === false,
+    );
+    sendJson(workspace.socket, { type: 'filesystem.readBinary', requestId: id, payload });
+    expect((await rejected).payload.error).toBe('BINARY_READ_CAPACITY_EXCEEDED');
+    const aborted = waitForJson(
+      workspace.socket,
+      (message) => message.requestId === id && message.payload?.error === 'BINARY_READ_ABORTED',
+    );
+    // Handle the listener promise even if the cancellation assertion fails.
+    const outcome = aborted.then(
+      () => true,
+      () => false,
+    );
+    expect(await requestWorkspace(workspace.socket, 'filesystem.cancelRead', { requestId: id })).toBe(true);
+    expect(await outcome).toBe(true);
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' })).ok).toBeTruthy();
+    expect(
+      (await requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', payload)).bytes.length,
+    ).toBeGreaterThan(0);
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' });
     await closeWebSocket(workspace.socket);
   }
 });

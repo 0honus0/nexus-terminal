@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+二进制读取的重复 requestId 会被拒绝，不接管或移除已在执行的读取；原请求仍可取消，且仍按原字节上限执行。
+
 远端归档取消只有收到命令退出码或 SSH exit-signal 才确认取消；仅关闭 channel 仍是结果未知，不据此清理可能仍有 writer 的临时归档。
 
 Agent HTTP 的来源拒绝仍返回标准 `error.code=CSRF_REJECTED` envelope 与 request ID；全局浏览器来源检查不改变 Agent API 的错误协议。

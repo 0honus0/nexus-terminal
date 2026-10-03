@@ -152,7 +152,7 @@ Docker deployment smoke injects an invalid record into the current SQLite Runner
 
 The SSH exec fixture handles supported SSH signal requests against its command process group and reports actual exit status or exit-signal. Archive cancellation checks require remote exit evidence rather than channel closure alone.
 
-Direct Workspace binary-read regressions require a numeric safe-integer `maxBytes` ceiling and reject coercible strings, booleans and arrays. Delayed real SFTP reads fill all four admission slots, reject a fifth read, then cancel every admitted read and verify four subsequent reads return identical bytes. These assertions do not cover duplicate request IDs or disconnect during stream acquisition.
+Direct Workspace binary-read regressions require a numeric safe-integer `maxBytes` ceiling and reject coercible strings, booleans and arrays. Delayed real SFTP reads fill all four admission slots, reject a fifth read, then cancel every admitted read and verify four subsequent reads return identical bytes. A duplicate request-ID regression verifies that rejecting the duplicate preserves the original read's cancellation handle and confirms its aborted result before a successful subsequent read. Disconnect during stream acquisition and growing-file races remain outside these assertions.
 
 The suite intentionally keeps regression tests for previously fixed production issues, including:
 

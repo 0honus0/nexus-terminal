@@ -462,15 +462,18 @@ export class WorkspaceProtocolSession {
       return;
     }
     this.inFlightRequests += 1;
+    let ownedBinaryRead: { cancel(): void; maxBytes: number } | undefined;
     try {
-      const result = await this.route(message.type, record(message.payload), message.requestId);
+      const previousBinaryRead = message.requestId ? this.binaryReads.get(message.requestId) : undefined;
+      const pending = this.route(message.type, record(message.payload), message.requestId);
+      // Binary admission registers its owner synchronously before opening the stream.
+      // A rejected duplicate must never acquire or retire the existing owner's handle.
+      if (message.type === 'filesystem.readBinary' && message.requestId && !previousBinaryRead)
+        ownedBinaryRead = this.binaryReads.get(message.requestId);
+      const result = await pending;
       if (message.requestId) {
         if (result instanceof WorkspaceBinaryResponse) {
-          await this.sendBinaryResponse(
-            message.requestId,
-            result.source,
-            this.binaryReads.get(message.requestId)?.maxBytes,
-          );
+          await this.sendBinaryResponse(message.requestId, result.source, ownedBinaryRead?.maxBytes);
           this.sendResponse(message.requestId, true, result.data);
         } else {
           this.sendResponse(message.requestId, true, result);
@@ -485,7 +488,8 @@ export class WorkspaceProtocolSession {
       if (message.requestId) this.sendResponse(message.requestId, false, undefined, text);
       else this.sendEvent('protocol.error', { operation: message.type, message: text });
     } finally {
-      if (message.type === 'filesystem.readBinary' && message.requestId) this.binaryReads.delete(message.requestId);
+      if (message.requestId && ownedBinaryRead && this.binaryReads.get(message.requestId) === ownedBinaryRead)
+        this.binaryReads.delete(message.requestId);
       this.inFlightRequests -= 1;
     }
   }
