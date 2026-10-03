@@ -101,13 +101,15 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
       if (
         !Array.isArray(ids) ||
         ids.length === 0 ||
-        !ids.every(Number.isInteger) ||
+        ids.length > 1000 ||
+        !ids.every((id) => Number.isSafeInteger(id) && id > 0) ||
         typeof tagId !== 'number' ||
-        !Number.isInteger(tagId)
+        !Number.isSafeInteger(tagId) ||
+        tagId <= 0
       ) {
         const payload: QuickCommandBulkAssignTagResponseDto = {
           success: false,
-          message: '请求体必须包含 commandIds (非空数字数组) 和 tagId (数字)。',
+          message: 'commandIds 必须包含 1 至 1000 个安全正整数，tagId 必须是安全正整数。',
         };
         response.status(400).json(payload);
         return;
