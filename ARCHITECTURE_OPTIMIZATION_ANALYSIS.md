@@ -1919,7 +1919,7 @@ await this.transports.connect(connection, { timeoutMs: TEST_TIMEOUT_MS });
 
 ## 89. Run Browser session 回收（已修复）
 
-> 已修复：BrowserGateway closeRun，Root scheduler finally释放该Run所有session；覆盖完成/失败/取消/等待/安全暂停，每片段结束回收，不跨等待维持session。run authority不放宽，显式close/workspace/global cleanup保留；不声称新数量配额或全部Child独立生命周期。下文为原证据。
+> 复审已修正：不再每片段无条件回收。StateCommit提交终态后触发closeRun，Root scheduler finally按最新持久终态补查；审批/预算等待、输入重调度不close。Root terminal回收Run全部session（含Child），Child单独结束不提前关闭整个Run。显式close/workspace/global cleanup保留，run/runtime authority不放宽，非DB/外部资源原子事务，失败日志及global cleanup兜底；未做真实浏览器等待续接验证。下文为原证据。
 
 > 确认问题：BrowserRuntimeAdapter session Map 仅 workspace/global cleanup，tool authority 绑定 run/runtime；Run terminal 没有 closeRun。只针对未显式 close 的 standalone session，浏览器远端自行断开等也可终止底层资源；未跑完整 Run handoff。
 

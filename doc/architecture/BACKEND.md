@@ -102,7 +102,7 @@ Resource status collector unique sampleKey/finally clear，bootstrap仅同次采
 
 RunnerPluginProcess constructor ready timer30s，timeout protocolFailure/failAll+managed SIGKILL，ready/error/exit clear；批激活补偿复用既有owner，不将其描述为所有command总deadline。
 
-BrowserGateway.closeRun由Root scheduler finally调用，close匹配Run owned sessions，执行片段结束含wait/quiesce，run/runtime authority保留；Workspace/global cleanup仍有效，不把disconnect等同远端browser process退出。
+BrowserGateway.closeRun由StateCommit提交终态后的Bootstrap回调触发，Root scheduler finally按最新durable status补查；wait/input supersede不释放，terminal释放整个Run owned sessions（含Child）。Child单独结束不closeRun，run/runtime authority保留，Workspace/global cleanup仍有效；提交与外部资源关闭非原子，不把disconnect等同远端browser process退出。
 
 Jump connector总deadline remaining覆盖handshake/forward；forward single-settle timer/abort/close/error和late destroy，catch route owner统一close，不以readyTimeout覆盖channel-open。
 

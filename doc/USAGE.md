@@ -359,7 +359,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - SSH 远端断开会驱动 Execution／Workspace Registry 回收，不再保留已断开的 ready 记录；挂起移交先解除旧 Execution 监听，晚到关闭事件不会按同 ID 误关新会话。远端操作结果未知仍按原隔离契约处理。
 - SSH 资源采集不跨采样复用机器静态信息，实际采集会重新读取；删除／改地址后旧 host 缓存在下次状态请求时清理，全局 reset 不允许旧采样回填。已有 TTL 内状态仍可短暂显示旧信息。
 - Runner Plugin 必须在 30 秒内完成 ready 握手；模块导入卡住会报超时并终止进程，Workspace 激活走既有失败补偿，不再无限等待。后续 dispose／退出收敛可能额外耗时。
-- Agent Root 执行片段结束会回收该 Run 的 Browser session，包括完成、失败、取消和等待审批／输入／安全暂停；恢复后需重新创建浏览器 session，新 Run 不可接管旧 session。此处关闭远端 Context／连接，不等于终止远端浏览器服务。
+- Run进入completed/completed_unverified/failed/cancelled/interrupted终态后回收该Run的Browser session；审批／预算等待及新输入重调度不自动关闭，可在原Run/runtime授权范围继续使用。安全暂停若持久化为interrupted仍回收，checkpoint新Run须重新创建session。Child单独结束不关闭整个Run的session，显式close/Workspace/global cleanup仍有效。回收Context／连接不等于终止远端浏览器服务，失败记录日志并由全局清理兜底。
 - 跳板连接的总连接预算覆盖所有握手与 forwarding，forward 阶段同样接受取消；超时后关闭已建立的跳板，晚到 channel 不发布。连接清理可能额外耗时，不保证远端即时退出。
 - Artifact 清理预览每批最多选择最旧的 1,000 个可回收对象，确认仅处理本批；清理后可重新预览继续，不代表一批清空全部。确认时仍重检保留／授权／活跃 Run 保护。
 - 替换连接标签关联最多 1,000 个安全正整数连接 ID，重复合并；空数组可清空已有标签，标签或连接不存在返回 404，失败不丢弃原关联。

@@ -1,4 +1,5 @@
 import { logger } from '../../shared/logging/logger';
+import { TERMINAL_RUN_STATUSES } from '../../modules/agent/runtime/runs/run.types';
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
@@ -276,6 +277,11 @@ export const composeAgent = ({
   const context = new ContextService(conversations, recall, skills, modelContinuations, artifacts, contextCheckpoints);
   const notificationBridge = new AgentNotificationBridge(notifications, conversationRepository);
   const stateCommit = new SqliteStateCommitAdapter(database, (run, events) => {
+    if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      void browserGateway
+        .closeRun(run.id)
+        .catch((error) => logger.warn({ err: error, runId: run.id }, 'Terminal Run browser cleanup failed'));
+    }
     void notificationBridge
       .project(run, events)
       .catch((error) =>
@@ -513,7 +519,10 @@ export const composeAgent = ({
     (userId) => runRepository.hostCursor(userId),
     (userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
     (runId) => subagentScheduler?.hasActiveRun(runId) ?? false,
-    (runId) => browserGateway.closeRun(runId),
+    async (run) => {
+      const latest = await runRepository.snapshot({ userId: run.userId, appId: run.appId }, run.id);
+      if (latest && TERMINAL_RUN_STATUSES.has(latest.status)) await browserGateway.closeRun(run.id);
+    },
   );
   const subagentContext = new SubagentContextBuilder(
     runtimeParticipants,
