@@ -90,6 +90,12 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
     );
     expect(sameOriginDiscovery.ok(), await sameOriginDiscovery.text()).toBeTruthy();
 
+    const publicOriginDiscovery = await request.post('/api/v1/agent/ai/providers/discover-endpoint-models', {
+      headers: { ...headers, Origin: E2E_URLS.frontendOrigin, 'Sec-Fetch-Site': 'same-origin' },
+      data: { baseUrl: providerBase, credential: providerSecret },
+    });
+    expect(publicOriginDiscovery.ok(), await publicOriginDiscovery.text()).toBeTruthy();
+
     const mismatchedOrigin = await request.post(`${directOrigin}/api/v1/agent/ai/providers/discover-endpoint-models`, {
       headers: { ...headers, Origin: 'https://cross-origin.invalid' },
       data: {
@@ -99,6 +105,13 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
     });
     expect(mismatchedOrigin.status()).toBe(403);
     await expect(mismatchedOrigin.json()).resolves.toMatchObject({ error: { code: 'CSRF_REJECTED' } });
+
+    const crossSiteDiscovery = await request.post('/api/v1/agent/ai/providers/discover-endpoint-models', {
+      headers: { ...headers, Origin: E2E_URLS.frontendOrigin, 'Sec-Fetch-Site': 'cross-site' },
+      data: { baseUrl: providerBase, credential: providerSecret },
+    });
+    expect(crossSiteDiscovery.status()).toBe(403);
+    await expect(crossSiteDiscovery.json()).resolves.toMatchObject({ error: { code: 'CSRF_REJECTED' } });
   });
 
   await step('configured model endpoints can be saved without a private-network exception list', async () => {
