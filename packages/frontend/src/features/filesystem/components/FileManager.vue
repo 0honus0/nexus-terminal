@@ -640,7 +640,7 @@
     return selected.length ? selected : [entry];
   };
   const longPress = useLongPressGesture<WorkspaceRemoteFileEntryDto>({
-    enabled: () => device.isMobile.value,
+    enabled: () => device.supportsTouchInteraction.value,
     vibrateMs: 15,
     onTrigger: (entry, point) => openContextAt(point.x, point.y, entry),
   });
@@ -1279,7 +1279,7 @@
     event.preventDefault();
     if (!browser.selected.value.has(entry.path) && !event.ctrlKey && !event.metaKey && !event.shiftKey)
       browser.select(entry, 'only');
-    if (device.isMobile.value) longPress.suppressClick();
+    if (device.supportsTouchInteraction.value) longPress.suppressClick();
     compressSubmenu.value = null;
     context.value = { scope: 'entry', entry, x: event.clientX, y: event.clientY };
   };

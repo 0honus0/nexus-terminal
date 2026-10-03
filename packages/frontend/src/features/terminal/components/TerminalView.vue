@@ -164,7 +164,7 @@
       lastRows = terminal.rows;
       void props.channel.resize({ columns: terminal.cols, rows: terminal.rows });
     }
-    if (device.isMobile.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
+    if (device.supportsTouchInteraction.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
   };
   // Browser wakeups and transport recovery need a fresh post-layout measurement even when
   // the container size did not change. Coalesce them rather than retaining a stale PTY size.
@@ -511,7 +511,7 @@
   };
 
   const suppressMobileSoftKeyboard = (): void => {
-    if (!device.isMobile.value || !terminal?.textarea) return;
+    if (!device.supportsTouchInteraction.value || !terminal?.textarea) return;
     const textarea = terminal.textarea;
     if (!mobileKeyboardRestoreState) {
       mobileKeyboardRestoreState = {
@@ -611,7 +611,7 @@
   };
 
   const syncMobileSelectionHandles = (): void => {
-    if (!device.isMobile.value) return;
+    if (!device.supportsTouchInteraction.value) return;
     if (!terminal || !wrapper.value || !mobileTouchSelectionActive || !terminal.hasSelection()) {
       hideMobileSelectionHandles();
       return;
@@ -654,7 +654,8 @@
   };
 
   const scheduleMobileSelectionSync = (): void => {
-    if (!device.isMobile.value || !mobileTouchSelectionActive || mobileSelectionSyncFrame !== null) return;
+    if (!device.supportsTouchInteraction.value || !mobileTouchSelectionActive || mobileSelectionSyncFrame !== null)
+      return;
     mobileSelectionSyncFrame = window.requestAnimationFrame(() => {
       mobileSelectionSyncFrame = null;
       syncMobileSelectionHandles();
@@ -707,7 +708,7 @@
   };
 
   const triggerMobileLongPress = (clientX: number, clientY: number): void => {
-    if (!terminal || !device.isMobile.value) return;
+    if (!terminal || !device.supportsTouchInteraction.value) return;
     resetMobileTouchScroll();
     mobileLongPressTriggered = true;
     mobileTouchSelectionActive = true;
@@ -813,7 +814,7 @@
   };
 
   const handleContextMenu = async (event: MouseEvent): Promise<void> => {
-    if (device.isMobile.value) {
+    if (device.supportsTouchInteraction.value) {
       event.preventDefault();
       event.stopPropagation();
       if (Date.now() < suppressMobileContextMenuUntil || mobileClipboardMenu.value.visible) return;
@@ -852,7 +853,7 @@
 
   const handleRightMouseDown = (event: MouseEvent): void => {
     if (
-      device.isMobile.value ||
+      device.supportsTouchInteraction.value ||
       !props.rightClickCopyPaste ||
       (remoteMouseReportingActive() && !event.shiftKey) ||
       event.button !== 2
@@ -904,7 +905,7 @@
   };
   const handleTouchStart = (event: TouchEvent) => {
     clearMobileLongPressTimer();
-    if (event.touches.length === 1 && device.isMobile.value) {
+    if (event.touches.length === 1 && device.supportsTouchInteraction.value) {
       const touch = event.touches[0]!;
       mobileTouchScrollActive = false;
       mobileTouchScrollLastY = touch.clientY;
@@ -926,7 +927,7 @@
     mobileLongPressStart = null;
     resetMobileTouchScroll();
     if (event.touches.length !== 2) return;
-    if (device.isMobile.value) {
+    if (device.supportsTouchInteraction.value) {
       mobileGestureHadMultipleTouches = true;
       suppressMobileSoftKeyboard();
     }
@@ -935,7 +936,7 @@
     pinchStartFontSize = renderedFontSize.value;
   };
   const handleTouchMove = (event: TouchEvent) => {
-    if (event.touches.length === 1 && device.isMobile.value) {
+    if (event.touches.length === 1 && device.supportsTouchInteraction.value) {
       const touch = event.touches[0]!;
       if (mobileLongPressStart) {
         const moved = Math.hypot(touch.clientX - mobileLongPressStart.x, touch.clientY - mobileLongPressStart.y);
@@ -984,7 +985,7 @@
         syncMobileSelectionHandles();
       }
       mobileLongPressTriggered = false;
-    } else if (device.isMobile.value && event.touches.length === 0) {
+    } else if (device.supportsTouchInteraction.value && event.touches.length === 0) {
       const shouldFocus = event.type !== 'touchcancel' && !mobileTouchMoved && !mobileGestureHadMultipleTouches;
       restoreMobileSoftKeyboard(shouldFocus);
     }
@@ -1311,7 +1312,7 @@
     );
     cleanup.push(
       terminal.onSelectionChange(() => {
-        if (device.isMobile.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
+        if (device.supportsTouchInteraction.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
       }).dispose,
       terminal.onScroll((viewportY) => {
         const movedUp = viewportY < historyLastViewportY;
@@ -1446,11 +1447,14 @@
     <div
       ref="root"
       class="terminal-inner-container relative z-10 h-full min-h-0 w-full"
-      :class="{ 'terminal-transparent': hasVisualBackground, 'terminal-mobile-touch': device.isMobile.value }"
+      :class="{
+        'terminal-transparent': hasVisualBackground,
+        'terminal-mobile-touch': device.supportsTouchInteraction.value,
+      }"
       role="application"
       :aria-label="t('terminal.ariaLabel')"
     ></div>
-    <template v-if="device.isMobile.value && mobileSelectionHandles.visible">
+    <template v-if="device.supportsTouchInteraction.value && mobileSelectionHandles.visible">
       <button
         v-show="mobileSelectionHandles.startVisible"
         type="button"
@@ -1477,7 +1481,7 @@
       ></button>
     </template>
     <div
-      v-if="device.isMobile.value && mobileClipboardMenu.visible"
+      v-if="device.supportsTouchInteraction.value && mobileClipboardMenu.visible"
       class="mobile-terminal-clipboard-menu"
       :style="{ left: `${mobileClipboardMenu.x}px`, top: `${mobileClipboardMenu.y}px` }"
       @pointerdown.stop

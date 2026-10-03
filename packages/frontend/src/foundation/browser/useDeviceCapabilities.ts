@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref, type ComputedRef, type Ref }
 
 export interface DeviceCapabilities {
   isMobile: ComputedRef<boolean>;
+  supportsTouchInteraction: ComputedRef<boolean>;
   hasTouch: Readonly<Ref<boolean>>;
   hasCoarsePointer: Readonly<Ref<boolean>>;
   isNarrowViewport: Readonly<Ref<boolean>>;
@@ -39,6 +40,7 @@ export function useDeviceCapabilities(): DeviceCapabilities {
   // Full mobile Workspace mode preserves the reachable legacy product classification.
   // Touch/coarse/narrow capabilities remain independent signals for feature-local affordances.
   const isMobile = computed(() => mobileUserAgent.value);
+  const supportsTouchInteraction = computed(() => hasTouch.value || hasCoarsePointer.value);
 
   onMounted(() => {
     coarseQuery = window.matchMedia('(pointer: coarse)');
@@ -54,5 +56,5 @@ export function useDeviceCapabilities(): DeviceCapabilities {
     narrowQuery?.removeEventListener('change', refreshMediaCapabilities);
   });
 
-  return { isMobile, hasTouch, hasCoarsePointer, isNarrowViewport };
+  return { isMobile, supportsTouchInteraction, hasTouch, hasCoarsePointer, isNarrowViewport };
 }
