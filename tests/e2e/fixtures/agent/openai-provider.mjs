@@ -4,6 +4,8 @@ const host = '127.0.0.1';
 const port = Number(process.env.NEXUS_E2E_OPENAI_PROVIDER_PORT || 29091);
 const expectedCredential = 'e2e-provider-secret';
 let checkpointResponses = 0;
+let releaseBrowserCompletion;
+let browserCompletionReleased = false;
 
 const readJson = async (request) => {
   const chunks = [];
@@ -19,6 +21,13 @@ const sendSse = (response, value) => {
 };
 
 const server = http.createServer(async (request, response) => {
+  if (request.method === 'POST' && request.url === '/browser-lifecycle/release') {
+    browserCompletionReleased = true;
+    releaseBrowserCompletion?.();
+    response.writeHead(200);
+    response.end();
+    return;
+  }
   const end = response.end.bind(response);
   response.end = (chunk, ...args) => {
     if (response.statusCode === 422) {
@@ -366,6 +375,44 @@ const server = http.createServer(async (request, response) => {
     'Cache-Control': 'no-store',
     Connection: 'keep-alive',
   });
+  if (latestUserText.includes('E2E_BROWSER_LIFECYCLE')) {
+    const opened = messages.some(
+      (message) => message?.role === 'tool' && message.tool_call_id === 'call_e2e_browser_open',
+    );
+    if (!opened) browserCompletionReleased = false;
+    if (opened && !browserCompletionReleased) {
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, 30_000);
+        releaseBrowserCompletion = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        response.once('close', releaseBrowserCompletion);
+      });
+      releaseBrowserCompletion = undefined;
+      if (response.destroyed) return;
+    }
+    const delta = opened
+      ? { content: 'Browser lifecycle fixture completed.' }
+      : {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_e2e_browser_open',
+              type: 'function',
+              function: {
+                name: 'browser_session_open',
+                arguments: JSON.stringify({ targetId: 'e2e-lifecycle' }),
+              },
+            },
+          ],
+        };
+    sendSse(response, { choices: [{ delta, finish_reason: null }] });
+    sendSse(response, { choices: [], usage: { prompt_tokens: 7, completion_tokens: 4 } });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: opened ? 'stop' : 'tool_calls' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
   if (failRun) {
     sendSse(response, {
       choices: [

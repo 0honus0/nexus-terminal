@@ -18,6 +18,8 @@ export const E2E_PORTS = {
   smtp: parsePort('NEXUS_E2E_SMTP_PORT', 22224),
   pluginRepository: parsePort('NEXUS_E2E_PLUGIN_REPOSITORY_PORT', 29092),
   openAiProvider: parsePort('NEXUS_E2E_OPENAI_PROVIDER_PORT', 29091),
+  browserControl: parsePort('NEXUS_E2E_BROWSER_CONTROL_PORT', 29093),
+  browserCdp: parsePort('NEXUS_E2E_BROWSER_CDP_PORT', 29094),
 } as const;
 
 export const E2E_URLS = {
@@ -30,4 +32,6 @@ export const E2E_URLS = {
   sshControlOrigin: `http://127.0.0.1:${E2E_PORTS.sshControl}`,
   pluginRepositoryOrigin: `http://127.0.0.1:${E2E_PORTS.pluginRepository}`,
   openAiProviderOrigin: `http://127.0.0.1:${E2E_PORTS.openAiProvider}`,
+  browserControlOrigin: `http://127.0.0.1:${E2E_PORTS.browserControl}`,
+  browserCdpOrigin: `http://127.0.0.1:${E2E_PORTS.browserCdp}`,
 } as const;

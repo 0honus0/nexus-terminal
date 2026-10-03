@@ -267,6 +267,7 @@ const installAndRunNexusAgent = async (
             scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } },
           },
           { capability: 'machine.inspect', scope: { kind: 'global' } },
+          { capability: 'browser.read', scope: { kind: 'global' } },
           {
             capability: 'shell.execute',
             scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } },
@@ -320,6 +321,80 @@ const installAndRunNexusAgent = async (
   });
 
   let threadId = '';
+  await step('a real Browser context is reclaimed after the Agent Run reaches terminal state', async () => {
+    const contexts = async () => {
+      const response = await fetch(`${E2E_URLS.browserControlOrigin}/contexts`);
+      expect(response.ok).toBeTruthy();
+      return (await response.json()).browserContextIds as string[];
+    };
+    const baseline = await contexts();
+    const before = await request.get('/api/v1/agent/settings');
+    expect(before.ok()).toBeTruthy();
+    const settings = (await before.json()).data;
+    const configured = await request.patch('/api/v1/agent/settings', {
+      headers,
+      data: {
+        expectedVersion: settings.revision,
+        patch: {
+          browser: {
+            targets: [
+              {
+                id: 'e2e-lifecycle',
+                endpoints: [
+                  {
+                    scope: 'external-network',
+                    via: 'backend',
+                    url: E2E_URLS.browserCdpOrigin,
+                    priority: 1,
+                    allowPlaintext: true,
+                    verifyTls: true,
+                  },
+                ],
+                allowedUrlPatterns: [E2E_URLS.browserControlOrigin],
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(configured.ok(), await configured.text()).toBeTruthy();
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
+      headers,
+      data: { title: 'Browser lifecycle E2E' },
+    });
+    expect(thread.status()).toBe(201);
+    const browserThreadId = (await thread.json()).data.id;
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: browserThreadId,
+        input: { text: 'E2E_BROWSER_LIFECYCLE', artifactRefs: [] },
+        agentDefinitionId: 'agent.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'full_access',
+        executionMode: 'execute',
+        connectionIds: [],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const run = (await created.json()).data;
+    try {
+      await expect.poll(contexts).toHaveLength(baseline.length + 1);
+      const running = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}`);
+      expect(running.ok()).toBeTruthy();
+      expect((await running.json()).data.status).toBe('running');
+    } finally {
+      const released = await fetch(`${E2E_URLS.openAiProviderOrigin}/browser-lifecycle/release`, { method: 'POST' });
+      expect(released.ok).toBeTruthy();
+    }
+    const terminal = await waitForTerminalRun(request, run.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${browserThreadId}/entries?limit=50`);
+    expect(ledger.ok()).toBeTruthy();
+    expect(JSON.stringify(await ledger.json())).toContain('Browser session created.');
+    await expect.poll(contexts).toEqual(baseline);
+  });
   await step('the plugin AgentDefinition is visible and completes a real Run', async () => {
     const definitions = await request.get('/api/v1/apps/nexus.agent/agent-definitions');
     expect(definitions.ok(), await definitions.text()).toBeTruthy();

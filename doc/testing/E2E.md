@@ -48,6 +48,8 @@ Dashboard and mobile suspend/resume coverage targets host cards, public connecti
 
 Test support HTTP controls are limited to deterministic fixture setup and fault injection (for example remote file creation, artificial latency, or SSH availability). Test assertions use the Nexus HTTP/WebSocket/UI/ingress surfaces. Fake external services validate incoming requests directly and return success/failure instead of exposing captured internal request logs to specs.
 
+The Agent preset flow also starts a dedicated real Chromium fixture with loopback CDP and an external context observation endpoint. A model-response barrier holds the Root Run after `browser_session_open`: the spec verifies a new Chromium context exists while the public Run status is `running`, then releases the response, verifies a successful terminal Run and successful tool result, and waits for context count to return to its baseline. This proves Root normal-completion Browser cleanup, not Child cleanup, approval/budget wait retention, cancellation, or late session creation races. The fixture owns only its own Chromium process; it never attaches to a user's browser. The remote launcher allocates isolated control and CDP ports alongside other fixture ports.
+
 Functional/documentation screenshots are declared directly at real E2E checkpoints with `captureFunctionalScreenshot(page, filename)`. Screenshot capture remains opt-in for focused maintenance runs; the canonical E2E workflow does not mutate the repository or commit refreshed screenshots.
 
 ## Logs

@@ -112,6 +112,20 @@ export default defineConfig({
   ],
   webServer: [
     {
+      command: 'node support/test-browser-server.mjs',
+      cwd: e2eRoot,
+      env: {
+        ...inheritedEnv,
+        NEXUS_E2E_BROWSER_CONTROL_PORT: String(E2E_PORTS.browserControl),
+        NEXUS_E2E_BROWSER_CDP_PORT: String(E2E_PORTS.browserCdp),
+      },
+      url: `${E2E_URLS.browserControlOrigin}/contexts`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
       command: 'node fixtures/agent/openai-provider.mjs',
       cwd: e2eRoot,
       env: inheritedEnv,
