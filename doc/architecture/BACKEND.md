@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Notification配置／unsaved test由完整认证route保护，NetworkNotificationChannelAdapter保留SMTP及axios HTTP出站与timeout；不新增address-class deny/每跳allowlist，管理员egress权限与部署网络策略分开。
+
 pending 2FA由auth route写绝对deadline/cookie5分钟，FileHttpSessionAdapter set串行检查64 live pending及deadline，store TTL按剩余时间保存；middleware过期destroy，成功regenerate退出partial owner。session-file-store reaper负责expired物理文件，未建立跨进程lease或完整session quota。
 
 TwoFactorService失败分支复用AuthService.recordLoginFailure（audit+notification），静态second-factor reason区分密码失败；HTTP adapter仍持有blacklist计数与401响应，不建立第二审计owner。

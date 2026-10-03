@@ -3681,6 +3681,8 @@ if (result.status === 'requiresTwoFactor') {
 
 ## 132. Notification 出站网络的管理员授权与 allowlist 策略待确认
 
+> 已审核（保留可信管理员网络权限）：test-unsaved/配置测试受完整认证保护，delivery使用管理配置；允许内网SMTP/Webhook/custom Telegram，保留现有timeout与HTTP redirect行为。不承诺address deny/allowlist/DNS pinning，部署层负责额外egress隔离，不将该配置权限当匿名SSRF。
+
 > 待确认（管理功能网络权限）：notification test/delivery 无私网地址 deny 属实，已有单请求超时；内网SMTP/Webhook 是正常自托管需求。需确认认证用户是否允许使用 Backend 网络、是否要求 allowlist/redirect policy，不把合法配置能力直接定为越权SSRF。
 
 Notification unsaved test 与delivery可使用内网Webhook/custom Telegram domain/SMTP host，未有统一address deny；单请求网络超时已存在。内网通知是自托管正常需求。需定义管理员可用network权限、redirect/allowlist政策，不能仅凭配置任意目标判定越权。
