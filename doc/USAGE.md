@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+Agent Workspace Terminal 每个 Workspace 最多 8 个、单 Backend 合计最多 64 个在途会话；打开中、断线宽限期和关闭中均占名额，满载拒绝新建，携带原 sessionId 的合法续接不新增名额。名额在打开失败或会话关闭收敛后归还。
+
 - 首次启用 Agent 时按 onboarding 安装推荐的 first-party Plugin，并在 Settings 中配置 Provider、模型和 Runner。
 - Agent launcher 在认证后显示；打开 Host 后可创建 Thread、设置 Goal、提交输入并查看 Plan、approval、artifact 和运行历史。
 - 桌面 Agent 窗口可拖动标题栏调整位置；右下角缩放手柄围绕窗口当前中心对称扩展或收缩，并跟随鼠标移动。任一边缘到达屏幕边界后停止该方向的扩展；键盘方向键调整大小采用同样的居中缩放方式。

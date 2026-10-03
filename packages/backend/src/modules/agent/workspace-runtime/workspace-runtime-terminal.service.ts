@@ -32,6 +32,8 @@ const validViewport = (columns: number, rows: number): void => {
 type BufferedOutput = { kind: 'data' | 'stderr'; data: Uint8Array };
 
 interface ManagedTerminalSession {
+  releaseSlot: () => void;
+  closing: boolean;
   id: string;
   scope: Scope;
   workspaceId: string;
@@ -155,6 +157,24 @@ class TerminalAttachment implements WorkspaceRuntimeTerminalAttachment {
 
 export class WorkspaceRuntimeTerminalService {
   private readonly managed = new Map<string, ManagedTerminalSession>();
+  private readonly reservedByWorkspace = new Map<string, number>();
+  private reservedTotal = 0;
+
+  private reserve(workspaceId: string): () => void {
+    const count = this.reservedByWorkspace.get(workspaceId) ?? 0;
+    if (count >= 8 || this.reservedTotal >= 64) throw new Error('WORKSPACE_TERMINAL_CAPACITY_EXCEEDED');
+    this.reservedByWorkspace.set(workspaceId, count + 1);
+    this.reservedTotal += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.reservedTotal -= 1;
+      const remaining = (this.reservedByWorkspace.get(workspaceId) ?? 1) - 1;
+      if (remaining === 0) this.reservedByWorkspace.delete(workspaceId);
+      else this.reservedByWorkspace.set(workspaceId, remaining);
+    };
+  }
 
   constructor(
     private readonly repository: AgentWorkspaceRepositoryPort,
@@ -215,8 +235,25 @@ export class WorkspaceRuntimeTerminalService {
       return attachment;
     }
 
-    const session = await this.sessions.open({ ...scope, workspaceId, generation, columns, rows }, signal);
+    const releaseSlot = this.reserve(workspaceId);
+    let session: WorkspaceRuntimeInteractiveSession;
+    try {
+      session = await this.sessions.open({ ...scope, workspaceId, generation, columns, rows }, signal);
+    } catch (error) {
+      releaseSlot();
+      throw error;
+    }
+    if (signal?.aborted || !session.isOpen) {
+      try {
+        await session.close();
+      } finally {
+        releaseSlot();
+      }
+      throw signal?.reason ?? new Error('WORKSPACE_TERMINAL_SESSION_NOT_FOUND');
+    }
     const managed: ManagedTerminalSession = {
+      releaseSlot,
+      closing: false,
       id: randomUUID(),
       scope: { ...scope },
       workspaceId,
@@ -300,6 +337,7 @@ export class WorkspaceRuntimeTerminalService {
     if (attachment && managed.attachment !== attachment) return;
     if (managed.closed) return;
     const currentAttachment = managed.attachment;
+    managed.closing = true;
     this.finishManaged(managed);
     currentAttachment?.deliverClose();
     await managed.session
@@ -309,7 +347,8 @@ export class WorkspaceRuntimeTerminalService {
           { err: error, sessionId: managed.id, workspaceId: managed.workspaceId },
           'Agent terminal backend session close failed',
         ),
-      );
+      )
+      .finally(managed.releaseSlot);
   }
 
   private output(managed: ManagedTerminalSession, kind: 'data' | 'stderr', data: Uint8Array): void {
@@ -332,6 +371,7 @@ export class WorkspaceRuntimeTerminalService {
   private finishManaged(managed: ManagedTerminalSession): void {
     if (managed.closed) return;
     managed.closed = true;
+    if (!managed.closing) managed.releaseSlot();
     this.managed.delete(managed.id);
     if (managed.detachTimer) clearTimeout(managed.detachTimer);
     managed.detachTimer = null;

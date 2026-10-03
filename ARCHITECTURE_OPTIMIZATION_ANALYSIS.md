@@ -3195,6 +3195,8 @@ WebSocket server 对 Workspace client 也只有观测计数：`clients` 是普�
 
 ## 115. Agent Workspace Terminal 没有 session 配额；每条 `/ws/agent-terminal` 新连接都能在 Runner 新建 PTY/login shell 子进程
 
+> 已修复：Terminal service 同步预留每 Workspace 8／Backend 64 槽，覆盖 pending open、managed/detached 与 close 等待；续接复用槽位，失败／自然关闭／显式 close 收敛释放。不引入用户/App多层预算，未对真实 Runner PTY 做容量压测。
+
 > 确认问题：WorkspaceRuntimeTerminalService open 无 session count gate，Runner writer counter 只互斥 checkpoint/lifecycle；不带已有 sessionId 会创建新 terminal。需已授权 Workspace/capability，不能称匿名进程创建。
 
 Agent terminal WebSocket 每次建立连接都会调用：
