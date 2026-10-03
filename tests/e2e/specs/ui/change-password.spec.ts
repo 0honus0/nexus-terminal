@@ -157,8 +157,10 @@ test('password change UI updates the real login credential and can restore the t
       await expect(form).toContainText('Password changed successfully!');
 
       const authenticatedStatus = await context.request.get('/api/v1/auth/status');
-      expect(authenticatedStatus.ok()).toBeTruthy();
-      await expect(authenticatedStatus.json()).resolves.toMatchObject({ isAuthenticated: true });
+      expect(authenticatedStatus.status()).toBe(401);
+      expect(await login(context.request, TEMP_PASSWORD)).toBeTruthy();
+      const renewedStatus = await context.request.get('/api/v1/auth/status');
+      await expect(renewedStatus.json()).resolves.toMatchObject({ isAuthenticated: true });
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByRole('tab', { name: 'Security', exact: true }).click();
       await expect(form).toBeVisible();
