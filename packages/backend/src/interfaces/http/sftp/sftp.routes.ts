@@ -60,18 +60,6 @@ const disposition = (kind: 'inline' | 'attachment', remotePath: string) => {
   return `${kind}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 };
 
-const admitDownload = (userId: number, response: Response): void => {
-  const release = downloadAdmission.acquire(userId);
-  let released = false;
-  const finish = () => {
-    if (released) return;
-    released = true;
-    release();
-  };
-  response.once('finish', finish);
-  response.once('close', finish);
-};
-
 const archiveDirectory = async (
   service: WorkspaceFilesystemService,
   target: WorkspaceFilesystemTarget,
@@ -83,6 +71,11 @@ const archiveDirectory = async (
   response.type('application/zip');
   response.setHeader('Content-Disposition', `attachment; filename="${name}.zip"`);
   const handle = await service.createDirectoryArchive(target.workspaceId, remotePath);
+  if (response.destroyed) {
+    handle.cancel();
+    handle.stream.destroy();
+    return;
+  }
   let finished = false;
   response.once('finish', () => {
     finished = true;
@@ -90,7 +83,9 @@ const archiveDirectory = async (
   response.once('close', () => {
     if (!finished && !response.writableEnded) handle.cancel();
   });
-  await Promise.all([pipeline(handle.stream, response), handle.start()]);
+  const results = await Promise.allSettled([pipeline(handle.stream, response), handle.start()]);
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') throw failure.reason;
 };
 
 export const createSftpRouter = (filesystem: WorkspaceFilesystemService): Router => {
@@ -144,6 +139,7 @@ export const createSftpRouter = (filesystem: WorkspaceFilesystemService): Router
   );
 
   const download = route(async (request, response) => {
+    let releaseAdmission: (() => void) | undefined;
     let lease: DownloadTicketLease | undefined;
     let userId: number,
       connectionId: number,
@@ -193,86 +189,101 @@ export const createSftpRouter = (filesystem: WorkspaceFilesystemService): Router
     }
     if (request.method !== 'HEAD') {
       try {
-        admitDownload(userId, response);
+        releaseAdmission = downloadAdmission.acquire();
       } catch (error) {
         if (!(error instanceof SftpDownloadCapacityError)) throw error;
         response.status(429).json({ message: error.message });
         return;
       }
     }
-    const target = await filesystem.resolveActive(userId, connectionId, workspaceId);
-    if (!target) {
-      response.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
-      return;
-    }
     try {
-      const meta = await target.filesystem.metadata(remotePath, { followSymbolicLinks: true });
-      if (lease && (meta.size !== lease.fileSize || Math.floor(meta.modifiedAt / 1000) !== lease.fileMtime)) {
-        tickets.invalidate(lease);
-        response.status(410).json({ message: '远程文件已变化，请重新发起下载。' });
+      const target = await filesystem.resolveActive(userId, connectionId, workspaceId);
+      if (!target) {
+        response.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
         return;
       }
-      if (meta.isDirectory) {
-        if (lease) {
+      try {
+        const meta = await target.filesystem.metadata(remotePath, { followSymbolicLinks: true });
+        if (response.destroyed) return;
+        if (lease && (meta.size !== lease.fileSize || Math.floor(meta.modifiedAt / 1000) !== lease.fileMtime)) {
           tickets.invalidate(lease);
-          response.status(410).json({ message: '下载链接对应的文件已变化。' });
+          response.status(410).json({ message: '远程文件已变化，请重新发起下载。' });
           return;
         }
-        await archiveDirectory(filesystem, target, remotePath, response);
-        return;
-      }
-      if (!meta.isFile) {
-        response.status(400).json({ message: '指定的路径不是一个文件。' });
-        return;
-      }
-      if (kind === 'inline' && meta.size > MAX_INLINE_PREVIEW_SIZE) {
-        response.status(413).json({ message: '文件过大，无法进行内联预览。' });
-        return;
-      }
-      const range = parseRange(request.headers.range, meta.size);
-      if (range === 'invalid') {
+        if (meta.isDirectory) {
+          if (lease) {
+            tickets.invalidate(lease);
+            response.status(410).json({ message: '下载链接对应的文件已变化。' });
+            return;
+          }
+          if (request.method === 'HEAD') {
+            response.type('application/zip').status(200).end();
+            return;
+          }
+          await archiveDirectory(filesystem, target, remotePath, response);
+          return;
+        }
+        if (!meta.isFile) {
+          response.status(400).json({ message: '指定的路径不是一个文件。' });
+          return;
+        }
+        if (kind === 'inline' && meta.size > MAX_INLINE_PREVIEW_SIZE) {
+          response.status(413).json({ message: '文件过大，无法进行内联预览。' });
+          return;
+        }
+        const range = parseRange(request.headers.range, meta.size);
+        if (range === 'invalid') {
+          response.setHeader('Accept-Ranges', 'bytes');
+          response.setHeader('Content-Range', `bytes */${meta.size}`);
+          response.status(416).end();
+          return;
+        }
+        response.setHeader('Content-Disposition', disposition(kind, remotePath));
+        response.setHeader(
+          'Content-Type',
+          kind === 'inline'
+            ? (INLINE_TYPES[path.posix.extname(remotePath).toLowerCase()] ?? 'application/octet-stream')
+            : 'application/octet-stream',
+        );
+        response.setHeader('X-Content-Type-Options', 'nosniff');
+        response.setHeader('Cache-Control', 'private, no-store');
         response.setHeader('Accept-Ranges', 'bytes');
-        response.setHeader('Content-Range', `bytes */${meta.size}`);
-        response.status(416).end();
-        return;
-      }
-      response.setHeader('Content-Disposition', disposition(kind, remotePath));
-      response.setHeader(
-        'Content-Type',
-        kind === 'inline'
-          ? (INLINE_TYPES[path.posix.extname(remotePath).toLowerCase()] ?? 'application/octet-stream')
-          : 'application/octet-stream',
-      );
-      response.setHeader('X-Content-Type-Options', 'nosniff');
-      response.setHeader('Cache-Control', 'private, no-store');
-      response.setHeader('Accept-Ranges', 'bytes');
-      if (range) {
-        response.status(206);
-        response.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${meta.size}`);
-        response.setHeader('Content-Length', String(range.end - range.start + 1));
-      } else {
-        response.status(200);
-        response.setHeader('Content-Length', String(meta.size));
-      }
-      if (request.method === 'HEAD') {
-        response.end();
-        if (lease) tickets.complete(lease);
-        return;
-      }
-      const stream = await target.filesystem.openRead(remotePath, range || undefined);
-      if (lease) tickets.attachStream(lease, stream);
-      response.once('close', () => {
-        if (!response.writableEnded && !stream.destroyed) stream.destroy();
-      });
-      await pipeline(stream, response);
-      if (lease) tickets.complete(lease);
-    } catch (error) {
-      if (!response.headersSent) {
-        if (lease && isRemoteFileMissingError(error)) tickets.invalidate(lease);
-        response.status(isRemoteFileMissingError(error) ? 404 : 500).json({
-          message: isRemoteFileMissingError(error) ? '远程文件未找到。' : `处理下载请求时出错: ${errorMessage(error)}`,
+        if (range) {
+          response.status(206);
+          response.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${meta.size}`);
+          response.setHeader('Content-Length', String(range.end - range.start + 1));
+        } else {
+          response.status(200);
+          response.setHeader('Content-Length', String(meta.size));
+        }
+        if (request.method === 'HEAD') {
+          response.end();
+          if (lease) tickets.complete(lease);
+          return;
+        }
+        const stream = await target.filesystem.openRead(remotePath, range || undefined);
+        if (response.destroyed) {
+          stream.destroy();
+          return;
+        }
+        if (lease) tickets.attachStream(lease, stream);
+        response.once('close', () => {
+          if (!response.writableEnded && !stream.destroyed) stream.destroy();
         });
-      } else if (!response.writableEnded) response.destroy(error instanceof Error ? error : new Error(String(error)));
+        await pipeline(stream, response);
+        if (lease) tickets.complete(lease);
+      } catch (error) {
+        if (!response.headersSent) {
+          if (lease && isRemoteFileMissingError(error)) tickets.invalidate(lease);
+          response.status(isRemoteFileMissingError(error) ? 404 : 500).json({
+            message: isRemoteFileMissingError(error)
+              ? '远程文件未找到。'
+              : `处理下载请求时出错: ${errorMessage(error)}`,
+          });
+        } else if (!response.writableEnded) response.destroy(error instanceof Error ? error : new Error(String(error)));
+      }
+    } finally {
+      releaseAdmission?.();
     }
   });
   router.get('/download', download);
@@ -289,30 +300,40 @@ export const createSftpRouter = (filesystem: WorkspaceFilesystemService): Router
         response.status(400).json({ message: '缺少或无效的查询参数。' });
         return;
       }
+      let releaseAdmission: (() => void) | undefined;
       try {
-        admitDownload(userId, response);
+        releaseAdmission = downloadAdmission.acquire();
       } catch (error) {
         if (!(error instanceof SftpDownloadCapacityError)) throw error;
         response.status(429).json({ message: error.message });
         return;
       }
-      const target = await filesystem.resolveActive(userId, connectionId, workspaceId);
-      if (!target) {
-        response.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
-        return;
-      }
       try {
-        const meta = await target.filesystem.metadata(remotePath, { followSymbolicLinks: true });
-        if (!meta.isDirectory) {
-          response.status(400).json({ message: '指定的路径不是一个目录。' });
+        const target = await filesystem.resolveActive(userId, connectionId, workspaceId);
+        if (!target) {
+          response.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
           return;
         }
-        await archiveDirectory(filesystem, target, remotePath, response);
-      } catch (error) {
-        if (!response.headersSent)
-          response
-            .status(isRemoteFileMissingError(error) ? 404 : 500)
-            .json({ message: isRemoteFileMissingError(error) ? '远程目录未找到。' : errorMessage(error) });
+        try {
+          const meta = await target.filesystem.metadata(remotePath, { followSymbolicLinks: true });
+          if (response.destroyed) return;
+          if (!meta.isDirectory) {
+            response.status(400).json({ message: '指定的路径不是一个目录。' });
+            return;
+          }
+          if (request.method === 'HEAD') {
+            response.type('application/zip').status(200).end();
+            return;
+          }
+          await archiveDirectory(filesystem, target, remotePath, response);
+        } catch (error) {
+          if (!response.headersSent)
+            response
+              .status(isRemoteFileMissingError(error) ? 404 : 500)
+              .json({ message: isRemoteFileMissingError(error) ? '远程目录未找到。' : errorMessage(error) });
+        }
+      } finally {
+        releaseAdmission?.();
       }
     }),
   );

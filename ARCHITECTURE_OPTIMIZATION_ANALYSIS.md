@@ -3096,7 +3096,9 @@ await this.leases.renew(leaseIds, owner, LEASE_TTL_SECONDS);
 
 ## 113. SFTP Download Ticket 的 capacity 只限制 ticket 数，不限制每个 ticket 的并发 claim / read stream；一个 token 就能绕过 64/512 配额制造无界下载流（已修复）
 
-> 已修复：新增独立的 `SftpDownloadAdmissionRegistry` 作为真实 HTTP/SFTP read workload owner，而不是继续把 ticket 数误当成 stream 数。所有 GET 文件下载都在解析出 user 后占用 admission，不论来自短时 ticket 还是认证 session；`/download-directory` ZIP pipeline 同样进入该 admission。默认每用户最多 8 个、全局最多 64 个 active download workload，HEAD 不打开 read stream 因而不占槽；response finish/close 幂等释放。容量满返回 429。这样同一 ticket 的重复 claim、认证直链和目录下载都只能在统一有界并发内打开远端 read/ZIP pipeline。Agent 回归验证 per-user/global admission 及幂等释放。下文保留原问题证据。
+> 复审修正：单用户部署统一8槽，删除无实际收益的per-user/global双轨计数；handler finally释放，提前HTTP close不释放仍等待open的名额，晚到stream销毁；两个目录下载入口HEAD均不启动ZIP。既有计数场景迁移到单层契约，未新增测试；未端到端验证真实SFTP late-open/关闭窗口。
+
+> 已修复：新增独立的 `SftpDownloadAdmissionRegistry` 作为真实 HTTP/SFTP read workload owner，而不是继续把 ticket 数误当成 stream 数。所有 GET 文件下载都在解析出 user 后占用 admission，不论来自短时 ticket 还是认证 session；`/download-directory` ZIP pipeline 同样进入该 admission。当前单用户部署共用8个在途下载槽；HEAD不创建read/ZIP，handler finally释放，提前关闭后的晚到stream销毁。容量满返回 429。这样同一 ticket 的重复 claim、认证直链和目录下载都只能在统一有界并发内打开远端 read/ZIP pipeline。Agent 回归验证 per-user/global admission 及幂等释放。下文保留原问题证据。
 
 HTTP SFTP 下载专门有一个看起来很明确的容量边界：
 
