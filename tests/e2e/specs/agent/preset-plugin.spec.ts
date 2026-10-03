@@ -364,18 +364,21 @@ const installAndRunNexusAgent = async (
     });
     expect(thread.status()).toBe(201);
     const browserThreadId = (await thread.json()).data.id;
-    const createBrowserRun = () =>
+    const createBrowserRun = (approval = false) =>
       request.post('/api/v1/apps/nexus.agent/runs', {
         headers: { ...headers, 'Idempotency-Key': randomUUID() },
         data: {
           schemaVersion: 1,
           threadId: browserThreadId,
-          input: { text: `E2E_BROWSER_LIFECYCLE ${randomUUID()}`, artifactRefs: [] },
+          input: {
+            text: `E2E_BROWSER_LIFECYCLE ${randomUUID()}${approval ? ` E2E_BROWSER_APPROVAL=${connectionId}` : ''}`,
+            artifactRefs: [],
+          },
           agentDefinitionId: 'agent.default',
           model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
-          approvalMode: 'full_access',
+          approvalMode: approval ? 'ask' : 'full_access',
           executionMode: 'execute',
-          connectionIds: [],
+          connectionIds: approval ? [connectionId] : [],
         },
       });
     const created = await createBrowserRun();
@@ -491,6 +494,66 @@ const installAndRunNexusAgent = async (
           },
         });
         expect(restored.ok(), await restored.text()).toBeTruthy();
+      }
+    });
+    await step('approval waiting preserves the opened context until denial resumes the Run', async () => {
+      const created = await createBrowserRun(true);
+      expect(created.status(), await created.text()).toBe(201);
+      const run = (await created.json()).data;
+      try {
+        const readRun = async () => {
+          const response = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}`);
+          expect(response.ok()).toBeTruthy();
+          return (await response.json()).data;
+        };
+        await expect.poll(async () => (await readRun()).status).toBe('awaiting_approval');
+        const liveContexts = await contexts();
+        expect(liveContexts).toHaveLength(baseline.length + 1);
+        const approvals = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}/approvals`);
+        expect(approvals.ok()).toBeTruthy();
+        const pending = (await approvals.json()).data.filter(
+          (approval: { status: string }) => approval.status === 'requested',
+        );
+        expect(pending).toHaveLength(1);
+        const approval = pending[0];
+        expect(approval.inspection.toolName).toBe('shell_execute');
+        const denied = await request.post(`/api/v1/apps/nexus.agent/approvals/${approval.id}/resolve`, {
+          headers: { ...headers, 'Idempotency-Key': randomUUID() },
+          data: {
+            schemaVersion: 1,
+            expectedVersion: approval.version,
+            operationHash: approval.operationHash,
+            decision: 'denied',
+          },
+        });
+        expect(denied.ok(), await denied.text()).toBeTruthy();
+        expect((await denied.json()).data.status).toBe('denied');
+        await expect.poll(async () => (await readRun()).status).toBe('running');
+        expect(await contexts()).toEqual(liveContexts);
+        const released = await fetch(`${E2E_URLS.openAiProviderOrigin}/browser-lifecycle/release`, { method: 'POST' });
+        expect(released.ok).toBeTruthy();
+        const terminal = await waitForTerminalRun(request, run.id);
+        expect(['completed', 'completed_unverified']).toContain(terminal.status);
+        const entries = await request.get(`/api/v1/apps/nexus.agent/threads/${browserThreadId}/entries?limit=50`);
+        expect(entries.ok()).toBeTruthy();
+        const items = (await entries.json()).data.items as Array<{
+          runId: string;
+          kind: string;
+          payload: { text?: string };
+        }>;
+        const results = items
+          .filter((entry) => entry.runId === run.id && entry.kind === 'tool_result')
+          .map((entry) => JSON.parse(entry.payload.text ?? '{}'));
+        expect(results).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ ok: true, summary: 'Browser session created.' }),
+            expect.objectContaining({ ok: false, errorCode: 'APPROVAL_DENIED' }),
+          ]),
+        );
+        await expect.poll(contexts).toEqual(baseline);
+      } finally {
+        await cancelRunForCleanup(request, run.id);
+        await waitForTerminalRun(request, run.id);
       }
     });
   });

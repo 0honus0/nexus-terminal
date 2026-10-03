@@ -378,6 +378,44 @@ const server = http.createServer(async (request, response) => {
   if (latestUserText.includes('E2E_BROWSER_LIFECYCLE')) {
     const browserCallId = `call_e2e_browser_open_${latestUserText.match(/E2E_BROWSER_LIFECYCLE ([a-f0-9-]+)/)?.[1]}`;
     const opened = messages.some((message) => message?.role === 'tool' && message.tool_call_id === browserCallId);
+    const approvalCallId = `${browserCallId}_approval`;
+    const approvalRequested = latestUserText.includes('E2E_BROWSER_APPROVAL');
+    const approvalSettled = messages.some(
+      (message) => message?.role === 'tool' && message.tool_call_id === approvalCallId,
+    );
+    if (opened && approvalRequested && !approvalSettled) {
+      const connection = /E2E_BROWSER_APPROVAL=(\d+)/.exec(latestUserText);
+      sendSse(response, {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: approvalCallId,
+                  type: 'function',
+                  function: {
+                    name: 'shell_execute',
+                    arguments: JSON.stringify({
+                      target: 'ssh',
+                      id: connection[1],
+                      command: { kind: 'shell', text: 'printf browser-approval-e2e' },
+                      mode: 'foreground',
+                      timeoutSeconds: 10,
+                    }),
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      });
+      sendSse(response, { choices: [], usage: { prompt_tokens: 7, completion_tokens: 4 } });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
     if (!opened) browserCompletionReleased = false;
     if (opened && !browserCompletionReleased) {
       await new Promise((resolve) => {
