@@ -6,6 +6,79 @@ import { selectUiOption } from '../../support/ui-select';
 
 const CHANNEL_NAME = 'E2E Webhook Channel';
 
+test('webhook secrets are redacted and preserved, replaced, or removed by real UI edits', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await cleanupChannel(context.request);
+  const url = (phase: string) => `${E2E_SSH.controlUrl}/e2e-notification-webhook-secrets?phase=${phase}`;
+  const created = await context.request.post('/api/v1/notifications', {
+    data: {
+      channelType: 'webhook',
+      name: CHANNEL_NAME,
+      enabled: false,
+      enabledEvents: [],
+      config: {
+        url: url('original'),
+        method: 'POST',
+        headers: { Authorization: 'Bearer e2e-original', 'X-E2E-Private': 'private-original', 'X-Public': 'visible' },
+        secretHeaderNames: ['X-E2E-Private'],
+        bodyTemplate: '{"event":"{event}"}',
+      },
+    },
+  });
+  expect(created.status()).toBe(201);
+  const assertRedacted = async () => {
+    const response = await context.request.get('/api/v1/notifications');
+    expect(response.ok()).toBeTruthy();
+    const body = await response.text();
+    expect(body).not.toContain('Bearer e2e-');
+    expect(body).not.toContain('private-original');
+    expect(body).not.toContain('private-replacement');
+    const channel = (
+      JSON.parse(body) as Array<{ id: number; name: string; config: { headers: Record<string, string | null> } }>
+    ).find((item) => item.name === CHANNEL_NAME)!;
+    expect(channel).toBeDefined();
+    return channel;
+  };
+  try {
+    const initial = await assertRedacted();
+    expect(initial.config.headers).toEqual({ Authorization: null, 'X-E2E-Private': null, 'X-Public': 'visible' });
+    const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+    expect(language.ok()).toBeTruthy();
+    await page.goto('/notifications');
+    for (const phase of ['original', 'replacement', 'removed']) {
+      await step(`Webhook secret edit ${phase} uses the expected outbound credentials`, async () => {
+        const card = page.locator('article').filter({ hasText: CHANNEL_NAME });
+        await card.getByRole('button', { name: 'Edit', exact: true }).click();
+        const headers = page.locator('#webhook-headers');
+        expect(await headers.inputValue()).not.toContain('Bearer e2e-');
+        await page.locator('#webhook-url').fill(url(phase));
+        if (phase === 'replacement')
+          await headers.fill(
+            JSON.stringify({
+              Authorization: 'Bearer e2e-replacement',
+              'X-E2E-Private': 'private-replacement',
+              'X-Public': 'visible',
+            }),
+          );
+        if (phase === 'removed') await headers.fill('{"X-Public":"visible"}');
+        await page
+          .locator('form')
+          .filter({ has: page.locator('#setting-name') })
+          .getByRole('button', { name: 'Save', exact: true })
+          .click();
+        await expect(page.locator('#setting-name')).toHaveCount(0);
+        const saved = await assertRedacted();
+        if (phase === 'removed') expect(saved.config.headers).toEqual({ 'X-Public': 'visible' });
+        else expect(saved.config.headers.Authorization).toBeNull();
+        const delivered = await context.request.post(`/api/v1/notifications/${saved.id}/test`);
+        expect(delivered.ok(), await delivered.text()).toBeTruthy();
+      });
+    }
+  } finally {
+    await cleanupChannel(context.request);
+  }
+});
+
 async function cleanupChannel(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/notifications');
   expect(response.ok()).toBeTruthy();

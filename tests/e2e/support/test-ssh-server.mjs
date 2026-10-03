@@ -1409,6 +1409,19 @@ const controlServer = http.createServer(async (req, res) => {
       res.end(valid ? undefined : JSON.stringify({ error: 'invalid E2E webhook request' }));
       return;
     }
+    if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook-secrets') {
+      for await (const _chunk of req) {
+        // Drain without persisting credentials in fixture diagnostics.
+      }
+      const phase = requestUrl.searchParams.get('phase');
+      const valid =
+        phase === 'removed'
+          ? req.headers.authorization === undefined && req.headers['x-e2e-private'] === undefined
+          : req.headers.authorization === `Bearer e2e-${phase}` && req.headers['x-e2e-private'] === `private-${phase}`;
+      res.writeHead(valid ? 204 : 422);
+      res.end();
+      return;
+    }
     if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook') {
       for await (const _chunk of req) {
         // Drain the request body; this endpoint is only a deterministic external integration target.
