@@ -117,6 +117,11 @@ export class ProxyService {
     } else {
       this.applyCredentialPatch(update, nextAuth, input);
     }
+    const credentials = { ...current, ...update };
+    if (nextAuth === 'password' && !credentials.encryptedPassword)
+      throw new Error('代理密码认证方式需要提供 password。');
+    if (nextAuth === 'key' && !credentials.encryptedPrivateKey)
+      throw new Error('代理密钥认证方式需要提供 private_key。');
     if (Object.keys(update).length > 0 && !(await this.repository.update(id, update)))
       throw new Error('更新代理记录失败。');
     return this.get(id);

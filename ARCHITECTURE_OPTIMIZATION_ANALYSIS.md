@@ -3689,6 +3689,8 @@ Notification unsaved test 与delivery可使用内网Webhook/custom Telegram doma
 
 ## 133. Proxy create 与 update 使用不同 credential invariant；认证方式不变时可把必需 password/privateKey 清成 NULL，生成 create 路径永远不会接受的非法 Proxy
 
+> 已修复：update在repository写前合并current/patch检查最终encrypted必需字段，password/key拒绝清空或继续写入旧非法状态；未传凭据保留原值，optional passphrase可清空，切换none仍清credential。不自动迁移旧非法row。
+
 > 确认问题：`proxy.service.ts:114–118` 认证方式不变走 credential patch，允许空值置NULL，create/切换方式则拒绝缺凭据。HTTP parser 允许空／null；未发接口验证运行时错误。
 
 `ProxyService.create()` 对 credential state 有明确约束。Password auth 必须有 password，Key auth 必须有 private key：
