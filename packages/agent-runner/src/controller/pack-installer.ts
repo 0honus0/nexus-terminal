@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isUtf8 } from 'node:buffer';
 import { spawn } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
-import { MANAGED_PROCESS_DETACHED, signalManagedProcess } from '../managed-process';
+import { MANAGED_PROCESS_DETACHED, registerManagedProcess, signalManagedProcess } from '../managed-process';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as tar from 'tar';
@@ -217,6 +217,7 @@ const runProcess = async (
     let stdout: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let stderr: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let killedForOutput = false;
+    let registrationError: unknown;
     const terminate = (): void => {
       signalManagedProcess(child, 'SIGKILL');
     };
@@ -236,9 +237,14 @@ const runProcess = async (
       clearTimeout(timer);
       reject(error);
     });
-    child.once('exit', (code, signal) => {
+    child.once('exit', () => signalManagedProcess(child, 'SIGKILL'));
+    child.once('close', (code, signal) => {
       clearTimeout(timer);
       signalManagedProcess(child, 'SIGKILL');
+      if (registrationError) {
+        reject(registrationError);
+        return;
+      }
       if (code === 0 && !killedForOutput) {
         resolve({ stdout: stdout.toString('utf8'), stderr: stderr.toString('utf8') });
         return;
@@ -260,6 +266,12 @@ const runProcess = async (
         ),
       );
     });
+    try {
+      registerManagedProcess(child, 'pack', randomUUID());
+    } catch (error) {
+      registrationError = error;
+      terminate();
+    }
   });
 
 /** Catalog-bound installer. Sources are never accepted from ordinary HTTP/API input. */

@@ -4243,6 +4243,8 @@ Provider discovery/test/run使用用户配置HTTP(S) baseUrl，无私网deny；d
 
 ## 144. Toolchain Pack 的 `mise` 子进程以 detached process group 启动却没有进入 managed-process registry；Runner 重启/崩溃可遗留继续运行的安装进程
 
+> 已接入现有owner：runProcess登记kind pack、随机opaque invocation ID（不保存argv/cwd），覆盖mise/版本检查；登记失败kill并等close，exit先清process group、close后收敛输出/释放安装调用。已有shutdown/startup registry回收复用；spawn到登记仍有极短窗口，不宣称断电原子或已验证kill/restart。
+
 > 确认问题（已有crash-recovery owner未接入）：`agent-runner/src/controller/pack-installer.ts:210–215` detached spawn未registerManagedProcess；本次runProcess timer只在当前parent活着时有效。容器整体退出可能由容器runtime杀掉所有进程，风险主要是Runner单进程退出／重启而容器或宿主仍活着，未做kill/restart测试。
 
 Runner 已经建立了明确的 managed-process owner。`managed-process.ts` 甚至把 `pack` 列为正式 kind：

@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Runner PackInstaller.runProcess复用registerManagedProcess(kind pack)覆盖mise/工具版本检查，opaque invocation ID不含command payload，登记失败kill/close收敛，exit清派生group、close后完成Promise；shutdown/startup仍由共享managed-process registry负责，无新增pack registry。
+
 Provider baseUrl保持HTTP(S)及loopback/private模型用途，OpenAI adapter/SDK transport不新增MCP-style地址policy、redirect逐跳验证或DNS pinning；discovery已有timeout/body约束，可信管理员egress与部署隔离分开。
 
 HTTP application在session/routes前应用mutationOriginSecurity，安全方法跳过，非安全方法按Express可信host/protocol比对Origin并拒绝same-site/cross-site metadata；无Origin浏览器仅same-origin可用，非浏览器仍须各route认证。Agent额外HMAC owner不变，无第二token协议。
