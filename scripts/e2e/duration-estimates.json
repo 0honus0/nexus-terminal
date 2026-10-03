@@ -1,8 +1,8 @@
 {
   "version": 1,
   "specs": {
-    "specs/agent/host.spec.ts": 82007,
-    "specs/agent/preset-plugin.spec.ts": 32494,
+    "specs/agent/host.spec.ts": 76586,
+    "specs/agent/preset-plugin.spec.ts": 34871,
     "specs/agent/provider.spec.ts": 310,
     "specs/auth/setup-login.spec.ts": 8206,
     "specs/http/architecture-contracts.spec.ts": 1824,
@@ -34,7 +34,7 @@
     "specs/ssh/connection.spec.ts": 13640,
     "specs/ssh/cross-session-transfer.spec.ts": 527,
     "specs/ssh/docker-manager-ui.spec.ts": 14015,
-    "specs/ssh/file-document-preview.spec.ts": 40285,
+    "specs/ssh/file-document-preview.spec.ts": 42474,
     "specs/ssh/file-manager-navigation.spec.ts": 30216,
     "specs/ssh/file-preview-editor.spec.ts": 65402,
     "specs/ssh/file-upload-reconnect-stress.spec.ts": 24840,
@@ -68,7 +68,7 @@
     "specs/ui/connection-create.spec.ts": 9978,
     "specs/ui/connection-non-ssh-bulk.spec.ts": 3084,
     "specs/ui/custom-terminal-theme.spec.ts": 16149,
-    "specs/ui/dashboard-workflows.spec.ts": 31202,
+    "specs/ui/dashboard-workflows.spec.ts": 29029,
     "specs/ui/html-preset-backgrounds.spec.ts": 685,
     "specs/ui/html-theme-security.spec.ts": 3028,
     "specs/ui/ip-blacklist-settings.spec.ts": 7864,
