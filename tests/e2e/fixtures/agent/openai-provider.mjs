@@ -429,8 +429,18 @@ const server = http.createServer(async (request, response) => {
       releaseBrowserCompletion = undefined;
       if (response.destroyed) return;
     }
+    const browserResult =
+      opened && latestUserText.includes('E2E_CHILD_BROWSER_LIFECYCLE')
+        ? JSON.parse(
+            messages.find((message) => message?.role === 'tool' && message.tool_call_id === browserCallId).content,
+          )
+        : null;
     const delta = opened
-      ? { content: 'Browser lifecycle fixture completed.' }
+      ? {
+          content: browserResult
+            ? JSON.stringify({ marker: 'Browser lifecycle fixture completed.', browserResult })
+            : 'Browser lifecycle fixture completed.',
+        }
       : {
           tool_calls: [
             {
@@ -558,8 +568,9 @@ const server = http.createServer(async (request, response) => {
                   name: 'collaboration_subagent_delegate',
                   arguments: JSON.stringify({
                     profileId: 'e2e-worker',
-                    objective:
-                      'E2E_CHILD_MULTI_TOOL_BATCH Validate one child assistant turn with two durable tool calls.',
+                    objective: serializedMessages.includes('E2E_CHILD_BROWSER_REQUEST')
+                      ? `E2E_BROWSER_LIFECYCLE ${crypto.randomUUID()} E2E_CHILD_BROWSER_LIFECYCLE Validate the child Browser lifecycle.`
+                      : 'E2E_CHILD_MULTI_TOOL_BATCH Validate one child assistant turn with two durable tool calls.',
                     constraints: ['Use only the offered read/control tools.'],
                     inputArtifactRefs: [],
                     maxSteps: 8,

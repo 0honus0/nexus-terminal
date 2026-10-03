@@ -54,6 +54,8 @@ Functional/documentation screenshots are declared directly at real E2E checkpoin
 
 Browser approval-wait retention is exercised by opening a real context, proposing a bounded SSH command in `ask` mode, and observing public `awaiting_approval` status with that context still live. Denying the versioned approval resumes the Run; the same context IDs must remain present until the held model response is released. The scenario verifies successful completion, context reclamation, and this Run's Ledger results for successful Browser creation and `APPROVAL_DENIED`. This covers denial/resumption, not approval-and-execution or Child Browser lifetimes.
 
+Child normal-completion coverage delegates to a profile explicitly granted `browser.read`, observes a real context while the Child model response is held, then releases completion and waits for a successful parent Run and context reclamation. The public Subagent record must contain exactly the expected completed Child with a Runtime distinct from its parent. The deterministic Child response projects its actual Browser tool result so the spec can associate the session's Run and Runtime identities with that public Child record and confirm successful creation. This proves Child-created context cleanup at parent Run completion, not cleanup immediately at Child completion while the parent remains active, or cancellation during session creation.
+
 ## Logs
 
 Every test receives its own text log. The archive layout mirrors the test source layout, for example:
