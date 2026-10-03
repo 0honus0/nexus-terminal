@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+Agent HTTP 的来源拒绝仍返回标准 `error.code=CSRF_REJECTED` envelope 与 request ID；全局浏览器来源检查不改变 Agent API 的错误协议。
+
 Toolchain安装与版本检查子进程接入Runner统一managed-process生命周期，正常关闭终止登记进程，重启按现有PID/start-time记录回收遗留组；登记失败终止并报告失败。进程启动与登记不是跨崩溃原子事务，不保证任意时刻崩溃都无遗留进程，也不重放未知安装副作用。
 
 OpenAI-compatible Provider允许本地／内网HTTP(S)模型服务，可信管理员配置的baseUrl用于discovery/test/run；不新增私网封禁、逐跳重定向allowlist或DNS pinning。本地模型是支持用途，若需要限制Backend出站目标由部署网络层提供，discovery大小/超时限制不等于网络隔离。
