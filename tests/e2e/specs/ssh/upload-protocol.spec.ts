@@ -15,6 +15,7 @@ import { E2E_URLS } from '../../support/test-env';
 async function readRemoteFile(socket: any, remotePath: string): Promise<Buffer> {
   const response = await requestWorkspaceBinary<{ path: string }>(socket, 'filesystem.readBinary', {
     path: remotePath,
+    maxBytes: 64 * 1024 * 1024,
   });
   return response.bytes;
 }

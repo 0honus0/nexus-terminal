@@ -44,7 +44,9 @@ const runArchive = async (
 };
 
 const readRemoteText = async (socket: E2eWebSocket, path: string): Promise<string> =>
-  (await requestWorkspaceBinary(socket, 'filesystem.readBinary', { path })).bytes.toString('utf8');
+  (await requestWorkspaceBinary(socket, 'filesystem.readBinary', { path, maxBytes: 64 * 1024 * 1024 })).bytes.toString(
+    'utf8',
+  );
 
 const rootFileNames = async (socket: E2eWebSocket): Promise<string[]> =>
   (
@@ -267,7 +269,10 @@ test('detached workspace keeps archive work running and replays its outcome on r
       const event = (await outcome).payload as ArchiveResult;
       test.skip(event.code === 'COMMAND_NOT_FOUND', 'zip is not installed in this test environment');
       expect(event.type, JSON.stringify(event)).toBe('completed');
-      const archive = await requestWorkspaceBinary(resumed, 'filesystem.readBinary', { path: destination });
+      const archive = await requestWorkspaceBinary(resumed, 'filesystem.readBinary', {
+        path: destination,
+        maxBytes: 64 * 1024 * 1024,
+      });
       expect(archive.bytes.byteLength).toBeGreaterThan(0);
       await requestWorkspace(resumed, 'workspace.close', {
         workspaceId: workspace.workspaceId,
@@ -470,6 +475,7 @@ test('same-workspace move treats a missing destination path as available', async
       await completed;
 
       const destination = await requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', {
+        maxBytes: 64 * 1024 * 1024,
         path: '/folder-seed/move-source.txt',
       });
       expect(destination.bytes.toString('utf8')).toContain('move-me');

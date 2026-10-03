@@ -29,7 +29,10 @@ async function createConnection(request: APIRequestContext, name: string): Promi
 }
 
 async function readRemoteFile(socket: E2eWebSocket, remotePath: string): Promise<string> {
-  const response = await requestWorkspaceBinary(socket, 'filesystem.readBinary', { path: remotePath });
+  const response = await requestWorkspaceBinary(socket, 'filesystem.readBinary', {
+    path: remotePath,
+    maxBytes: 64 * 1024 * 1024,
+  });
   return response.bytes.toString('utf8');
 }
 

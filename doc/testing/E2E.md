@@ -110,6 +110,8 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
+Direct Workspace binary-read regression requests declare the required `maxBytes` ceiling; byte/content assertions remain unchanged and exercise the same bounded protocol as Frontend consumers.
+
 The suite intentionally keeps regression tests for previously fixed production issues, including:
 
 - desktop Dashboard keeps the Recent Activity section reachable in the initial common viewport while connection/resource panels own their scrolling;
