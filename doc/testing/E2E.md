@@ -110,7 +110,27 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
-The architecture/security follow-up adds a batch of 15 independent HTTP E2Es: eight mutation Origin/Fetch Metadata cases (including direct backend, public frontend, opaque/path Origins, and rejection without state changes), plus seven Webhook secret DTO/edit cases covering automatic redaction, case-insensitive preservation, invalid null retention, unsafe classification removal, malformed metadata/value rejection, atomicity, and saved-channel delivery.
+Change coverage is counted by production change, not by test-case count. Mutation Origin/Fetch Metadata has eight HTTP cases and Webhook secret editing has seven HTTP cases plus its UI delivery flow; these represent two production changes, not fifteen.
+
+The following mapping groups fifteen production changes with their behavioral E2E entrypoints. Acceptance requires the exact pushed revision's canonical Actions workflow to pass checks/format/build, all eight Playwright shards, and all three Docker smoke modes. Local results are preflight diagnostics only. A passing suite does not imply coverage of behaviors absent from these assertions.
+
+| Production change                          | Behavioral coverage                                                                                                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| HTTP mutation Origin / Fetch Metadata      | `http/mutation-origin.spec.ts`, `agent/provider.spec.ts`: matching public/direct Origins, denied foreign/opaque/path Origins, metadata rejection and unchanged settings                                |
+| Webhook secret header editing              | `http/webhook-secret-contract.spec.ts`, `ui/notification-settings.spec.ts`: redaction, preserve/replace/remove, rejected edits and actual outbound credentials                                         |
+| Effective Proxy credential validation      | `http/architecture-contracts.spec.ts`: password/key null or empty rejection, metadata atomicity, omission preservation and no credential reuse after switching to none                                 |
+| SSH Key mutation audit                     | `http/architecture-contracts.spec.ts`: created/updated/deleted audit records, actor/source and field names without credential content                                                                  |
+| HTML theme content response isolation      | `ui/html-theme-security.spec.ts`: real direct navigation displays source, restrictive response headers and no script/localStorage side effect; remote upstream response remains outside this assertion |
+| Connection tag atomic replacement          | `http/architecture-contracts.spec.ts`: duplicates, invalid/oversized batches, missing targets, preserved associations and explicit empty replacement                                                   |
+| Quick Command bounded tag batches          | `http/architecture-contracts.spec.ts`: duplicate IDs, raw oversized/invalid input rejection, no partial association and subsequent valid assignment                                                    |
+| Active terminal theme deletion             | `http/architecture-contracts.spec.ts`, `ui/custom-terminal-theme.spec.ts`: persisted reference cleared and visible fallback                                                                            |
+| Password-bound session invalidation        | `websocket/authenticated-session.spec.ts`, `ui/change-password.spec.ts`: established socket revoked, old HTTP session rejected and new-password login restores capability                              |
+| Logout revokes established WebSocket       | `websocket/authenticated-session.spec.ts`: live ping before logout, server closure, HTTP 401 and rejected new upgrade                                                                                  |
+| Bounded Workspace binary read              | `ssh/binary-read-limits.spec.ts`: required valid budget, oversized-file rejection, exact-limit bytes and a usable subsequent read; growing-file/cancellation races need separate assertions            |
+| Runner Journal fail-closed recovery        | `scripts/e2e/docker-deployment-smoke.sh`: malformed SQLite records fail twice with unchanged bytes and legacy JSON startup rejection; not a power-loss/disk-full simulation                            |
+| Archive cancellation exit evidence         | `ssh/protocol.spec.ts`, `ssh/progress-display-archive-cancel.spec.ts`: remote cancellation and stalled preparation regressions using fixture exit/exit-signal evidence                                 |
+| Fresh SSH Shell listener rebinding         | `ssh/reconnect-ui.spec.ts`: outage/reconnect with fresh prompt and executable output under the same Workspace ID                                                                                       |
+| Cross-source credential trust confirmation | `ssh/progress-display-baseline.spec.ts`: Send Files requires public trust confirmation before real task submission and progress assertions                                                             |
 
 Webhook secret coverage reads redacted automatic/custom credential headers, preserves `null` secrets through a real UI save, replaces them, then removes their entries. Each stage sends a saved-channel test to a strict fixture receiver that checks actual outbound credentials without logging or retaining them.
 
