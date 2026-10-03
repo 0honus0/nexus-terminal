@@ -162,3 +162,45 @@ test('failed SFTP stream acquisition releases admission and does not poison late
     await closeWebSocket(workspace.socket);
   }
 });
+
+test('cancelling while SFTP OPEN is pending aborts the read and releases its slot', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId);
+  const id = crypto.randomUUID();
+  let pending: Promise<unknown> | undefined;
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=3000`, { method: 'POST' })).ok).toBeTruthy();
+    pending = requestWorkspaceBinary(
+      workspace.socket,
+      'filesystem.readBinary',
+      { path: '/seed.txt', maxBytes: 1024 },
+      id,
+    ).then(
+      () => ({ completed: true }),
+      (error: Error) => ({ error: error.message }),
+    );
+    await expect
+      .poll(async () => {
+        const response = await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay`);
+        return (await response.json()).sftpDelayedOpenCount;
+      })
+      .toBe(1);
+    expect(await requestWorkspace(workspace.socket, 'filesystem.cancelRead', { requestId: id })).toBe(true);
+    expect(await pending).toMatchObject({ error: expect.stringContaining('BINARY_READ_ABORTED') });
+    expect(await requestWorkspace(workspace.socket, 'filesystem.cancelRead', { requestId: id })).toBe(false);
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=0`, { method: 'POST' })).ok).toBeTruthy();
+    const recovered = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', { path: '/seed.txt', maxBytes: 1024 }),
+      ),
+    );
+    expect(recovered[0].bytes.length).toBeGreaterThan(0);
+    for (const result of recovered) expect(result.bytes).toEqual(recovered[0].bytes);
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=0`, { method: 'POST' });
+    await closeWebSocket(workspace.socket);
+    if (pending) await pending;
+  }
+});

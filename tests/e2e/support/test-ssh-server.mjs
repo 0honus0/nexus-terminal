@@ -43,6 +43,8 @@ let sftpStatDelayMs = 0;
 let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
 let sftpReadDelayMs = 0;
+let sftpOpenDelayMs = 0;
+let sftpDelayedOpenCount = 0;
 let archiveExecDelayMs = 0;
 let dockerContainerPresent = true;
 let dockerContainerState = 'running';
@@ -592,6 +594,8 @@ async function resetRoot() {
   sftpLstatDenyPrefix = '';
   sftpReadDirDelayMs = 0;
   sftpReadDelayMs = 0;
+  sftpOpenDelayMs = 0;
+  sftpDelayedOpenCount = 0;
   archiveExecDelayMs = 0;
 }
 
@@ -727,6 +731,10 @@ function attachSftp(session, accept) {
 
   sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
     try {
+      if (sftpOpenDelayMs > 0 && flags & OPEN_MODE.READ) {
+        sftpDelayedOpenCount += 1;
+        await new Promise((resolve) => setTimeout(resolve, sftpOpenDelayMs));
+      }
       const fullPath = resolveRemotePath(remotePath);
       await fsp.mkdir(path.dirname(fullPath), { recursive: true });
       const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? attrs.mode & 0o7777 : 0o644);
@@ -1214,6 +1222,8 @@ const controlServer = http.createServer(async (req, res) => {
       sftpLstatDenyPrefix = '';
       sftpReadDirDelayMs = 0;
       sftpReadDelayMs = 0;
+      sftpOpenDelayMs = 0;
+      sftpDelayedOpenCount = 0;
       archiveExecDelayMs = 0;
       activeSftpChannels.clear();
       openedSftpChannels = 0;
@@ -1273,6 +1283,18 @@ const controlServer = http.createServer(async (req, res) => {
       sftpReadDelayMs = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(10_000, Math.round(requestedDelay))) : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpReadDelayMs }));
+      return;
+    }
+    if (requestUrl.pathname === '/sftp/open-delay' && (req.method === 'POST' || req.method === 'GET')) {
+      if (req.method === 'POST') {
+        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+        sftpOpenDelayMs = Number.isFinite(requestedDelay)
+          ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+          : 0;
+        sftpDelayedOpenCount = 0;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ sftpOpenDelayMs, sftpDelayedOpenCount }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {
