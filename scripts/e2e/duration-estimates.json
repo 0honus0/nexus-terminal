@@ -2,7 +2,7 @@
   "version": 1,
   "specs": {
     "specs/agent/host.spec.ts": 81040,
-    "specs/agent/preset-plugin.spec.ts": 34871,
+    "specs/agent/preset-plugin.spec.ts": 38538,
     "specs/agent/provider.spec.ts": 310,
     "specs/auth/setup-login.spec.ts": 8206,
     "specs/http/architecture-contracts.spec.ts": 1824,
