@@ -226,6 +226,56 @@ test('mobile suspended catalog refreshes promptly after the immediate suspend ha
   }
 });
 
+test('cached suspended cards remain visible while a remounted panel refreshes its catalog', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  const original = await openWorkspaceSession(context.request, connectionId, `stable-catalog-${crypto.randomUUID()}`);
+  await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: 'STABLE_CATALOG_SNAPSHOT\r\n' });
+  await closeWebSocket(original.socket);
+  let suspended: SuspendedSession | undefined;
+  await expect
+    .poll(async () => {
+      suspended = (await suspendedSessions(context.request)).find(
+        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+      );
+      return Boolean(suspended);
+    })
+    .toBeTruthy();
+  await page.goto('/workspace');
+  const card = page.locator(`[data-suspend-id="${suspended!.id}"]`);
+  await expect(card).toBeVisible();
+  await page.locator('.app-nav-links a[href="/settings"]').click();
+  await expect(page).toHaveURL(/\/settings$/);
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let refreshes = 0;
+  await page.route('**/api/v1/ssh-suspend/suspended-sessions', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    refreshes += 1;
+    await barrier;
+    await route.continue();
+  });
+  try {
+    await page.locator('.app-nav-links a[href="/workspace"]').click();
+    await expect.poll(() => refreshes).toBeGreaterThan(0);
+    await expect(card).toBeVisible();
+    await expect(page.locator('.suspended-session-loading')).toHaveCount(0);
+  } finally {
+    release();
+  }
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: 'Resume', exact: true }).click();
+  await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.command-bar-command-input')).toBeEnabled();
+});
+
 test('mobile resumed terminal loads older suspended output when dragged downward', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);

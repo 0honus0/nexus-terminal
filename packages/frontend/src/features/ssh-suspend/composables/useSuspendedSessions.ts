@@ -95,7 +95,9 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
     const generation = catalogGeneration;
     loadPromise = (async () => {
       if (!options.silent) {
-        loading.value = true;
+        // Refreshing a shared, already-loaded catalog must not replace its cards
+        // with a loading placeholder when another layout mounts the panel.
+        loading.value = !loaded;
         error.value = null;
       }
       try {
