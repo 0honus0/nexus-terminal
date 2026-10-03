@@ -146,6 +146,8 @@ The no-Workspace-tool fixture assertion is scoped to the latest user input too: 
 
 Runner Journal recovery validates existing records before write-capable initialization PRAGMAs; the Docker corruption smoke checks byte preservation across both failed startup attempts.
 
+The full deployment smoke also invokes `tests/e2e/support/runner-kill-recovery.mjs`: an isolated host Runner executes a real HTTP Job that appends a marker and remains running, then is killed with SIGKILL. Startup must durably mark that Job unknown, an identical Job request must not replay its side effect, and a new Job must complete with exact stdout. A second restart preserves both terminal records and the single marker. The Workspace is seeded with an empty toolchain fixture; this does not cover installation/provisioning, power loss, disk-full failures or Backend restart recovery.
+
 Send Files regression coverage accepts the public credential-transfer trust confirmation before checking task submission, while keeping the held initial-list race and independent form-loading assertions.
 
 Skill fixture scenarios are selected from the latest user input, not retained historical scenario markers; initial metadata-only exposure and explicit `skill_read` body checks remain enforced.

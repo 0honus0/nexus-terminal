@@ -1317,6 +1317,9 @@ host_tool_snapshot_after="$(host_tool_snapshot)"
   exit 1
 }
 
+# Real isolated host Runner SIGKILL/restart verifies durable unknown outcomes and no Job replay.
+node "$repo_root/tests/e2e/support/runner-kill-recovery.mjs"
+
 # A damaged execution journal must fail closed and preserve evidence instead of silently
 # booting with an empty control plane while runtime directories still exist.
 corrupt_runner_root="$workspace/agent-runner-corrupt"
