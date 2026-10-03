@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+MCP 的连接超时、schema 与调用限制作用于单个 integration，不代表所有启用 integration 的总连接上限。当前不设置 aggregate MCP 硬配额；管理员须按部署资源配置并显式停用／删除不再使用的 integration。
+
 启用 Backend Plugin 会运行独立 Node 进程；单实例 IPC／超时限制不是所有 Plugin 的总进程容量上限。当前不设置 aggregate Plugin 硬配额，请按单用户宿主资源显式启用、停用插件，部署的 OS／容器资源预算不由安装数量自动推导。
 
 远程桌面在单 Backend 内最多 16 个正在建连或已连接的会话；达到上限拒绝新连接，现有桌面不被踢下线。一次性票据数量限制与桌面连接容量相互独立；名额在建连任务及 socket 关闭收敛后归还。

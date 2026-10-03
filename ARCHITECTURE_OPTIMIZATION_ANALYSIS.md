@@ -3298,6 +3298,8 @@ Backend Plugin instances 无总 process 配额，单进程 IPC/Host operation �
 
 ## 118. MCP Integration 的 aggregate session 容量策略待确认
 
+> 已审核（不新增配额）：MCP按配置/version拥有连接与close/disable生命周期，单连接deadline/schema限制成立；当前单用户可信管理员配置，不新增假想多用户aggregate gate。仍无所有MCP连接数硬上限，部署预算需由管理员控制。
+
 > 待确认（容量策略）：Integration/McpAdapter 无总 session quota，单 session schema/fetch limits 和连接超时存在。可信管理员配置多个 MCP 可以是正常需求；需根据部署预算确认 admission 要求，未测实际增长规模。
 
 Integration/McpAdapter 无总 MCP session quota；单 session 有连接 timeout、schema 和 dispatcher 限制，disable/remove 有清理。待根据可信管理员配置规模确认 aggregate admission 需求；未测容量退化。

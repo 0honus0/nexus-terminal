@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+McpAdapter按integration/version拥有session，配置owner负责disable/remove/closeAll；无aggregate session quota，单连接schema/transport deadline不构成总连接预算。
+
 Backend Plugin instances registry拥有按scope/package的进程生命周期，不承担aggregate process admission；受信管理员enable与部署资源预算是当前总量策略，单实例writer/ready/drain限制不替代总进程配额。
 
 GuacamoleRuntimeAdapter 在票据消费前检查共享16槽，activeSockets覆盖建连与连接，newConnection settle+socket CLOSED释放；bridge settings持socket以拒绝晚到的失效配置，shutdown终止受管socket，guacamole-lite继续持有guacd teardown。
