@@ -438,6 +438,61 @@ const installAndRunNexusAgent = async (
         await expect.poll(contexts).toEqual(baseline);
       }
     });
+    await step('budget waiting preserves the opened context until the resumed Run completes', async () => {
+      const settingsResponse = await request.get('/api/v1/agent/settings');
+      expect(settingsResponse.ok()).toBeTruthy();
+      const original = (await settingsResponse.json()).data;
+      const limited = await request.patch('/api/v1/agent/settings', {
+        headers,
+        data: { expectedVersion: original.revision, patch: { budget: { maxRunSteps: 3 } } },
+      });
+      expect(limited.ok(), await limited.text()).toBeTruthy();
+      let budgetRunId = '';
+      try {
+        const created = await createBrowserRun();
+        expect(created.status(), await created.text()).toBe(201);
+        budgetRunId = (await created.json()).data.id;
+        const readRun = async () => {
+          const response = await request.get(`/api/v1/apps/nexus.agent/runs/${budgetRunId}`);
+          expect(response.ok()).toBeTruthy();
+          return (await response.json()).data;
+        };
+        await expect.poll(async () => (await readRun()).status).toBe('awaiting_budget');
+        const waiting = await readRun();
+        const liveContexts = await contexts();
+        expect(liveContexts).toHaveLength(baseline.length + 1);
+        expect(waiting.budget.maxRunSteps).toBe(3);
+        expect(waiting.usage.steps).toBe(3);
+        const increased = await request.post(`/api/v1/apps/nexus.agent/runs/${budgetRunId}/budget`, {
+          headers: { ...headers, 'Idempotency-Key': randomUUID() },
+          data: { schemaVersion: 1, expectedVersion: waiting.version, increase: { maxRunSteps: 6 } },
+        });
+        expect(increased.ok(), await increased.text()).toBeTruthy();
+        await expect.poll(async () => (await readRun()).status).toBe('running');
+        expect(await contexts()).toEqual(liveContexts);
+        const released = await fetch(`${E2E_URLS.openAiProviderOrigin}/browser-lifecycle/release`, { method: 'POST' });
+        expect(released.ok).toBeTruthy();
+        const terminal = await waitForTerminalRun(request, budgetRunId);
+        expect(['completed', 'completed_unverified']).toContain(terminal.status);
+        await expect.poll(contexts).toEqual(baseline);
+      } finally {
+        if (budgetRunId) {
+          await cancelRunForCleanup(request, budgetRunId);
+          await waitForTerminalRun(request, budgetRunId);
+        }
+        const currentResponse = await request.get('/api/v1/agent/settings');
+        expect(currentResponse.ok()).toBeTruthy();
+        const current = (await currentResponse.json()).data;
+        const restored = await request.patch('/api/v1/agent/settings', {
+          headers,
+          data: {
+            expectedVersion: current.revision,
+            patch: { budget: { maxRunSteps: original.effectiveSettings.budget.maxRunSteps } },
+          },
+        });
+        expect(restored.ok(), await restored.text()).toBeTruthy();
+      }
+    });
   });
   await step('the plugin AgentDefinition is visible and completes a real Run', async () => {
     const definitions = await request.get('/api/v1/apps/nexus.agent/agent-definitions');
