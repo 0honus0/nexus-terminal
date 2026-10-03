@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+撤销 Plugin publisher key 会保留该 key 的记录并使其不能用于新的包校验；管理员可显式重新信任同 key，此操作清除当前 revokedAt，并非永久禁止重新信任。publisher 列表当前全量返回、无分页或自动历史删除，不承诺大规模 key 管理容量；审计历史与当前信任状态应分别理解。
+
 远程 Plugin repository 是可信管理员发起的 Backend 网络访问：支持 HTTP(S)、内网地址及重定向，不提供按地址分类封禁、每跳 allowlist 或 DNS pinning。只配置可信 catalog／包地址；包签名和大小检查不是网络隔离。需要限制服务器出站网络时，应在部署网络层设置规则，不将 MCP 的地址策略推定为此入口的保护。
 
 Plugin Frontend 的静态代码和 SDK 可匿名获取并使用公开 immutable 缓存；不提供私有前端代码保密。包的 frontend 目录（包括 source map）不可包含凭据、用户私有数据或服务端秘密。获取代码不授予 App 数据、descriptor 或 Host RPC 权限，后者继续走认证／capability／MessagePort 边界。

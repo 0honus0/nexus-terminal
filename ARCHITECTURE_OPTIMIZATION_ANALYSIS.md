@@ -3499,6 +3499,8 @@ Remote repository/package adapter 接受 HTTP(S)，follow redirect，未统一�
 
 ## 126. Plugin Publisher revocation 历史的分页与保留策略待确认
 
+> 已审核（不删除信任记录）：revoked row保留用于当前状态／审计可见性，explicit put trust会清revokedAt，非永久anti-retrust tombstone；单用户列表仍全量，分页/容量优化未做且未验证实际退化，不把无delete认定资源泄漏。不宣称本项实现分页。
+
 > 待确认（安全历史保留策略）：repository 保留 revoked key 且整表 list 属实；撤销记录可能用于防止恢复旧信任／审计，不等于无用垃圾。分页与容量需根据实际规模验证，不能因为无 delete 就要求删除 trust tombstone。
 
 revoked publisher key 保留，list 无分页；单 key PEM/label 有大小校验。撤销历史可能用于审计或防止恢复旧信任。待确认历史回收与分页策略，不能把未物理删除的revocation tombstone直接当泄漏。

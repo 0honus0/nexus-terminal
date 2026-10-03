@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Publisher repository按user/key保存当前trust row，revoke只标记revokedAt，put显式retrust清marker，不构成永久revocation tombstone；list全量，未实现pagination/自动purge。保留当前记录不代替独立audit历史。
+
 HttpRemotePluginRepositoryAdapter保留undici redirect=follow、HTTP(S)及可信管理员private endpoint访问；fetch有大小/调用signal约束，无每跳地址policy或DNS pinning。签名trust归Package verifier，不替代部署egress边界。
 
 Plugin frontend static handler独立公开GET/HEAD code surface，路径/marker/realpath校验与CSP、CORS、public immutable缓存不提供身份授权；descriptor/Host RPC另行授权，静态代码保密不在当前contract。
