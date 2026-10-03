@@ -249,3 +249,35 @@ test('a file growing after SFTP READ starts cannot exceed the admitted byte budg
     if (pending) await pending;
   }
 });
+
+test('disconnecting during pending SFTP OPEN closes the subsequently acquired remote handle', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId);
+  const handles = async () => {
+    const response = await fetch(`${E2E_SSH.controlUrl}/sftp/read-handles`);
+    expect(response.ok).toBeTruthy();
+    return response.json() as Promise<{ opened: number; closed: number }>;
+  };
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    const baseline = await handles();
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=3000`, { method: 'POST' })).ok).toBeTruthy();
+    sendJson(workspace.socket, {
+      type: 'filesystem.readBinary',
+      requestId: crypto.randomUUID(),
+      payload: { path: '/seed.txt', maxBytes: 1024 },
+    });
+    await expect
+      .poll(async () => {
+        const response = await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay`);
+        return (await response.json()).sftpDelayedOpenCount;
+      })
+      .toBe(1);
+    await closeWebSocket(workspace.socket);
+    await expect.poll(handles).toEqual({ opened: baseline.opened + 1, closed: baseline.closed + 1 });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=0`, { method: 'POST' });
+    await closeWebSocket(workspace.socket);
+  }
+});

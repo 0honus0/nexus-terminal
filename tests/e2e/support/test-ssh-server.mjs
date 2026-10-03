@@ -46,6 +46,8 @@ let sftpReadDelayMs = 0;
 let sftpDelayedReadCount = 0;
 let sftpOpenDelayMs = 0;
 let sftpDelayedOpenCount = 0;
+let sftpReadHandlesOpened = 0;
+let sftpReadHandlesClosed = 0;
 let archiveExecDelayMs = 0;
 let dockerContainerPresent = true;
 let dockerContainerState = 'running';
@@ -598,6 +600,8 @@ async function resetRoot() {
   sftpDelayedReadCount = 0;
   sftpOpenDelayMs = 0;
   sftpDelayedOpenCount = 0;
+  sftpReadHandlesOpened = 0;
+  sftpReadHandlesClosed = 0;
   archiveExecDelayMs = 0;
 }
 
@@ -740,7 +744,9 @@ function attachSftp(session, accept) {
       const fullPath = resolveRemotePath(remotePath);
       await fsp.mkdir(path.dirname(fullPath), { recursive: true });
       const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? attrs.mode & 0o7777 : 0o644);
-      const handle = registry.add({ type: 'file', fileHandle, path: fullPath });
+      const readOnly = Boolean(flags & OPEN_MODE.READ) && !(flags & OPEN_MODE.WRITE);
+      const handle = registry.add({ type: 'file', fileHandle, path: fullPath, readOnly });
+      if (readOnly) sftpReadHandlesOpened += 1;
       sftp.handle(reqid, handle);
     } catch (error) {
       respondError(reqid, error);
@@ -820,6 +826,7 @@ function attachSftp(session, accept) {
     }
     try {
       if (state.type === 'file') await state.fileHandle.close();
+      if (state.readOnly) sftpReadHandlesClosed += 1;
       sftp.status(reqid, STATUS_CODE.OK);
     } catch (error) {
       respondError(reqid, error);
@@ -1228,6 +1235,8 @@ const controlServer = http.createServer(async (req, res) => {
       sftpDelayedReadCount = 0;
       sftpOpenDelayMs = 0;
       sftpDelayedOpenCount = 0;
+      sftpReadHandlesOpened = 0;
+      sftpReadHandlesClosed = 0;
       archiveExecDelayMs = 0;
       activeSftpChannels.clear();
       openedSftpChannels = 0;
@@ -1304,6 +1313,11 @@ const controlServer = http.createServer(async (req, res) => {
       }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpOpenDelayMs, sftpDelayedOpenCount }));
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/sftp/read-handles') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ opened: sftpReadHandlesOpened, closed: sftpReadHandlesClosed }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/sftp/grow-binary-fixture') {
