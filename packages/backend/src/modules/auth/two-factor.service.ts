@@ -30,8 +30,10 @@ export class TwoFactorService {
   async verifyLogin(userId: number, token: string, context?: { ip?: string }) {
     const user = await this.users.getStored(userId);
     if (!user?.twoFactorSecret) throw new Error('无法验证，请重新登录。');
-    if (!this.provider.verify(user.twoFactorSecret, token))
+    if (!this.provider.verify(user.twoFactorSecret, token)) {
+      await this.auth.recordLoginFailure(user.username, 'Invalid two-factor token', context?.ip);
       return { valid: false as const, user: { id: user.id, username: user.username } };
+    }
     await this.auth.recordLoginSuccess(user.id, user.username, context?.ip, true);
     return { valid: true as const, user: { id: user.id, username: user.username } };
   }

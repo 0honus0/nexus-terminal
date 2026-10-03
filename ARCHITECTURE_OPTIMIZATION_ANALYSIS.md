@@ -3588,6 +3588,8 @@ Remote Stage 同样如此，而且同一个 repository package 可以被反复 S
 
 ## 130. 2FA 登录失败只增加 IP blacklist 计数，不写认证 Audit / Notification；第二因素爆破在安全事件流里形成盲区
 
+> 已修复：TwoFactorService验证失败复用AuthService.recordLoginFailure，LOGIN_FAILURE audit/notification带用户名、静态reason/IP，不记录token/secret；HTTP IP blacklist路径保留。通知投递仍服从现有配置，不承诺外部必达。
+
 > 确认问题（安全可观测性不一致）：`two-factor.service.ts:33–34` 失败只 return valid:false，auth route 只 blacklist，不复用 login failure audit。IP blacklist 仍有保护，不是完全不设防；失败事件是否发送外部通知可另作策略选择。
 
 密码登录失败时，`AuthService.authenticatePassword()` 会同时记录 `LOGIN_FAILURE` audit 并发布 notification：

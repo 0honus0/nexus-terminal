@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+2FA 登录验证码验证失败会记录 `LOGIN_FAILURE` 审计并进入已有登录失败通知流程，同时继续累计 IP blacklist 失败次数；事件不包含验证码或 2FA secret。外部通知是否投递取决于通知配置及既有投递结果。
+
 Passkey 登录发现接口可在未登录时返回是否已配置 Passkey；指定用户名的认证选项可包含 credential ID／transports。credential ID 是公开标识，不是私钥或登录凭据，仍须验证 authenticator 签名。不承诺隐藏 Passkey 配置状态；false 不能区分账号不存在与未配置，也没有此 discovery 专用限流保证。
 
 启用 2FA 后，新的密码登录须完成第二因素，但已有完整认证会话不会自动注销或重新挑战；当前 credential revision 绑定密码而非 2FA secret。启用 2FA 不等于撤销已泄露的登录 cookie，需要另行处理已有会话及凭据风险。
