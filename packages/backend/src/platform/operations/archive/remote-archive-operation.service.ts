@@ -356,7 +356,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       stderrRemainder = consume(data, stderrRemainder);
     });
     try {
-      const closeEvent = await new Promise<{ exitCode: number | null }>((resolve, reject) => {
+      const closeEvent = await new Promise<{ exitCode: number | null; signal?: string | null }>((resolve, reject) => {
         let offClose = () => {};
         let offError = () => {};
         let stopping: Promise<void> | undefined;
@@ -369,7 +369,8 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
               offError();
               // terminate/channel close alone does not prove remote process exit.
               const snapshot = commandSession.snapshot();
-              if (typeof snapshot.exitCode === 'number') resolve({ exitCode: snapshot.exitCode });
+              if (typeof snapshot.exitCode === 'number' || snapshot.signal)
+                resolve({ exitCode: snapshot.exitCode ?? null, signal: snapshot.signal });
               else reject(new OperationOutcomeUnknownError());
             }
           })());
@@ -384,7 +385,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
         active.cancelCommand = stop;
         if (active.cancelled) void stop().catch(() => reject(new OperationOutcomeUnknownError()));
       });
-      if (typeof closeEvent.exitCode !== 'number') throw new OperationOutcomeUnknownError();
+      if (typeof closeEvent.exitCode !== 'number' && !closeEvent.signal) throw new OperationOutcomeUnknownError();
       active.command = undefined;
       const snapshot = commandSession.snapshot();
       if (active.cancelled) throw new DOMException('Archive operation cancelled.', 'AbortError');

@@ -918,7 +918,7 @@ function buildStatusFixture() {
   ].join('\n');
 }
 
-function runRemoteCommand(command, stream) {
+function runRemoteCommand(command, stream, session) {
   if (command.includes('__NEXUS_STATUS_')) {
     finishExec(stream, buildStatusFixture());
     return;
@@ -1006,13 +1006,25 @@ function runRemoteCommand(command, stream) {
     cwd: rootDir,
     env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color', NEXUS_E2E_ROOT: rootDir },
     stdio: ['pipe', 'pipe', 'pipe'],
+    detached: true,
   });
+  const onSignal = (accept, reject, info) => {
+    if (!['TERM', 'KILL', 'INT', 'HUP'].includes(info.name)) return reject?.();
+    try {
+      process.kill(-child.pid, `SIG${info.name}`);
+      accept?.();
+    } catch {
+      reject?.();
+    }
+  };
+  session.on('signal', onSignal);
   child.stdout.on('data', (chunk) => stream.write(chunk));
   child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
   stream.on('data', (chunk) => child.stdin.write(chunk));
   stream.on('close', () => child.kill('SIGTERM'));
-  child.on('close', (code) => {
-    stream.exit(code ?? 0);
+  child.on('close', (code, signal) => {
+    session.off('signal', onSignal);
+    stream.exit(signal ? signal.replace(/^SIG/, '') : (code ?? 0));
     stream.end();
   });
 }
@@ -1059,7 +1071,7 @@ const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
       session.on('pty', (acceptPty) => acceptPty());
       session.on('window-change', (acceptWindowChange) => acceptWindowChange?.());
       session.on('shell', (acceptShell) => attachShell(session, acceptShell));
-      session.on('exec', (acceptExec, _rejectExec, info) => runRemoteCommand(info.command, acceptExec()));
+      session.on('exec', (acceptExec, _rejectExec, info) => runRemoteCommand(info.command, acceptExec(), session));
       session.on('sftp', (acceptSftp) => attachSftp(session, acceptSftp));
     });
 

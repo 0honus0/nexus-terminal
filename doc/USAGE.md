@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+远端归档取消只有收到命令退出码或 SSH exit-signal 才确认取消；仅关闭 channel 仍是结果未知，不据此清理可能仍有 writer 的临时归档。
+
 Agent HTTP 的来源拒绝仍返回标准 `error.code=CSRF_REJECTED` envelope 与 request ID；全局浏览器来源检查不改变 Agent API 的错误协议。
 
 Toolchain安装与版本检查子进程接入Runner统一managed-process生命周期，正常关闭终止登记进程，重启按现有PID/start-time记录回收遗留组；登记失败终止并报告失败。进程启动与登记不是跨崩溃原子事务，不保证任意时刻崩溃都无遗留进程，也不重放未知安装副作用。
