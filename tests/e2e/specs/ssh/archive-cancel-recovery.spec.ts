@@ -86,6 +86,63 @@ test('archive cancellation settles after remote exit and permits a subsequent co
   }
 });
 
+test('a failed archive command does not poison subsequent compression in the same Workspace', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId);
+  const id = crypto.randomUUID();
+  const destination = `/failed-${id}.zip`;
+  const terminal = (requestId: string) =>
+    waitForJson(
+      workspace.socket,
+      (message) =>
+        message.type === 'transfer.archive' &&
+        message.payload?.requestId === requestId &&
+        ['completed', 'cancelled', 'failed'].includes(message.payload?.type),
+    ).then(
+      (message) => message.payload,
+      () => ({ type: 'timeout' }),
+    );
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    const failed = terminal(id);
+    await requestWorkspace(
+      workspace.socket,
+      'transfer.compress',
+      {
+        sources: [`/missing-${id}.txt`],
+        destination,
+        format: 'zip',
+      },
+      id,
+    );
+    expect(await failed).toMatchObject({ type: 'failed', requestId: id });
+    await expect.poll(() => requestWorkspace(workspace.socket, 'transfer.cancelArchive', { taskId: id })).toBe(false);
+    await expect(requestWorkspace(workspace.socket, 'filesystem.stat', { path: destination })).rejects.toThrow();
+    const nextId = crypto.randomUUID();
+    const nextPath = `/after-failure-${nextId}.zip`;
+    const recovered = terminal(nextId);
+    await requestWorkspace(
+      workspace.socket,
+      'transfer.compress',
+      {
+        sources: ['/archive-source.txt'],
+        destination: nextPath,
+        format: 'zip',
+      },
+      nextId,
+    );
+    expect(await recovered).toMatchObject({ type: 'completed', requestId: nextId, path: nextPath });
+    const bytes = await requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', {
+      path: nextPath,
+      maxBytes: 1024 * 1024,
+    });
+    expect(bytes.bytes.subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+  } finally {
+    await closeWebSocket(workspace.socket);
+  }
+});
+
 test('cancelling one concurrent archive leaves the other archive able to complete', async ({ request }) => {
   await loginAsInitialAdmin(request);
   const connectionId = await ensureTestSshConnection(request);
