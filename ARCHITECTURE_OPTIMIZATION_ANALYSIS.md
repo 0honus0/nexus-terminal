@@ -3411,6 +3411,8 @@ Runner HTTP server、ACP/Terminal/Browser WebSocket 和这些 journal mutation �
 
 ## 121. Agent Queue 的公平性与单用户／跨 App 调度契约待确认
 
+> 已审核（无需实现变更）：单用户Root/Child共用runtime预算，满载时换App不增加可用槽，requeueFront+break不构成已证实的同用户跨App缺陷；保留App轮转及全局created admission，不扩展多用户公平／优先级承诺。
+
 > 待确认（单用户产品前提）：`runtime/scheduling/scheduler.ts:213–215` requeueFront+break、created 全局 count 成立。正常 Nexus 为单用户，跨用户公平性场景不是既有支持承诺；同用户跨 App head-of-line 仍需结合预期调度与 workload 验证。
 
 Root 队列按 appId 分组，遇到 user capacity 满时 requeueFront 并 break；created admission 为全局20。Subagent 也可能在选中饱和 user 后退出 pump。跨用户公平性不在正常单用户产品前提内；同用户跨 App 排队是否不合理须用实际 workload 和预期优先级验证。

@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+单用户 Agent Root／Subagent 共享 Runtime 并发预算；预算满时 queued Run 等待释放，不因切换 App 额外获得槽位。Root 按 App 轮转，但不承诺优先级、严格无饥饿或跨用户公平调度；created Run 的全局 admission 仍独立生效。
+
 Runner 的 command/job/workspace Journal 使用 `state/journal.sqlite` 按记录增量提交，成功提交后才更新内存状态；终态历史保留与容量限制不变。不迁移旧 JSON Journal：发现旧 `state/journal.json` 或其损坏标记时拒绝启动并保留原件，管理员须先停止相关工作、核对 Backend／Runner 状态并备份，再显式处理旧状态；不可仅删除旧文件来绕过未知副作用的核对。SQLite 损坏或不支持的版本同样拒绝启动，不自动重建空库。
 
 单轮模型流在接收阶段最多累计 64 个不同 Tool call（Subagent 为 32）；超出即失败，不等待上游结束，也不会执行该超限批次。Responses continuation 在接收阶段最多 512 个 part／64 个 Tool identity，重复 identity 不增加数量。
