@@ -39,6 +39,7 @@ const PASSWORD = 'e2e-password';
 const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
+let sftpPendingWrites = 0;
 let sftpStatDelayMs = 0;
 let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
@@ -783,6 +784,7 @@ function attachSftp(session, accept) {
       sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
       return;
     }
+    sftpPendingWrites += 1;
     try {
       if (sftpWriteDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, sftpWriteDelayMs));
@@ -791,6 +793,8 @@ function attachSftp(session, accept) {
       sftp.status(reqid, STATUS_CODE.OK);
     } catch (error) {
       respondError(reqid, error);
+    } finally {
+      sftpPendingWrites -= 1;
     }
   });
 
@@ -1268,13 +1272,15 @@ const controlServer = http.createServer(async (req, res) => {
       res.end();
       return;
     }
-    if (req.method === 'POST' && requestUrl.pathname === '/sftp/write-delay') {
-      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-      sftpWriteDelayMs = Number.isFinite(requestedDelay)
-        ? Math.max(0, Math.min(35_000, Math.round(requestedDelay)))
-        : 0;
+    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/write-delay') {
+      if (req.method === 'POST') {
+        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+        sftpWriteDelayMs = Number.isFinite(requestedDelay)
+          ? Math.max(0, Math.min(35_000, Math.round(requestedDelay)))
+          : 0;
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpWriteDelayMs }));
+      res.end(JSON.stringify({ sftpWriteDelayMs, sftpPendingWrites }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/sftp/stat-delay') {

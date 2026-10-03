@@ -98,6 +98,24 @@ test('pipelined upload and HTTP download stay fast under SFTP latency and preser
     expect(ranged.status()).toBe(206);
     expect(ranged.headers()['content-range']).toBe(`bytes ${start}-${end}/${payload.length}`);
     expect(await ranged.body()).toEqual(payload.subarray(start, end + 1));
+    const suffixLength = 64 * 1024 + 13;
+    const suffix = await request.get(ticket.url, { headers: { Range: `bytes=-${suffixLength}` } });
+    expect(suffix.status()).toBe(206);
+    expect(suffix.headers()['content-range']).toBe(
+      `bytes ${payload.length - suffixLength}-${payload.length - 1}/${payload.length}`,
+    );
+    expect(await suffix.body()).toEqual(payload.subarray(-suffixLength));
+    const tailStart = payload.length - 2 * 1024 * 1024 - 19;
+    const tail = await request.get(ticket.url, { headers: { Range: `bytes=${tailStart}-` } });
+    expect(tail.status()).toBe(206);
+    expect(tail.headers()['content-range']).toBe(`bytes ${tailStart}-${payload.length - 1}/${payload.length}`);
+    expect(await tail.body()).toEqual(payload.subarray(tailStart));
+    const outside = await request.get(ticket.url, { headers: { Range: `bytes=${payload.length}-` } });
+    expect(outside.status()).toBe(416);
+    expect(outside.headers()['content-range']).toBe(`bytes */${payload.length}`);
+    const recovered = await request.get(ticket.url);
+    expect(recovered.status()).toBe(200);
+    expect(await recovered.body()).toEqual(payload);
     await test.info().attach('transfer-throughput', {
       body: JSON.stringify({ bytes: payload.length, sftpDelayMs: 60, uploadMs, downloadMs }, null, 2),
       contentType: 'application/json',
@@ -175,6 +193,85 @@ test('raw binary upload reports ready, progress, completion, and readable remote
     await closeWebSocket(uploadSocket);
     await expect(readRemoteFile(workspace.socket, remotePath)).resolves.toEqual(payload);
   } finally {
+    await closeWebSocket(workspace.socket);
+  }
+});
+
+test('cancelling pipelined remote writes preserves the destination and permits a fresh upload', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `upload-write-cancel-${crypto.randomUUID()}`);
+  const destinationPath = '/pipeline-cancel.bin';
+  const original = 'Existing destination must survive cancellation.';
+  const payload = Buffer.alloc(2 * 1024 * 1024, 0x5a);
+  let uploadSocket: Awaited<ReturnType<typeof openAuthenticatedWebSocket>> | undefined;
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    await requestWorkspace(workspace.socket, 'filesystem.writeText', { path: destinationPath, content: original });
+    for (const cancel of [true, false]) {
+      const uploadId = `pipeline-cancel-${crypto.randomUUID()}`;
+      const delay = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${cancel ? 1200 : 0}`, { method: 'POST' });
+      expect(delay.ok).toBeTruthy();
+      const ready = waitForJson(
+        workspace.socket,
+        (message) =>
+          message.type === 'transfer.upload' &&
+          message.payload?.uploadId === uploadId &&
+          message.payload?.type === 'ready',
+      );
+      await requestWorkspace(workspace.socket, 'upload.start', {
+        uploadId,
+        destinationPath,
+        size: payload.length,
+        conflictPolicy: 'overwrite',
+      });
+      await ready;
+      const terminal = waitForJson(
+        workspace.socket,
+        (message) =>
+          message.type === 'transfer.upload' &&
+          message.payload?.uploadId === uploadId &&
+          ['completed', 'cancelled', 'failed'].includes(String(message.payload?.type)),
+      );
+      uploadSocket = await openAuthenticatedWebSocket(
+        request,
+        `${E2E_URLS.frontendWsOrigin}/ws/uploads?workspaceId=${encodeURIComponent(workspace.workspaceId)}&uploadId=${encodeURIComponent(uploadId)}&size=${payload.length}`,
+      );
+      // Multiple buffered chunks are required to enter SFTP's batched write path;
+      // a single chunk uses its ordinary serialized _write implementation.
+      const sentBytes = cancel ? payload.length / 2 : payload.length;
+      for (let offset = 0; offset < sentBytes; offset += 64 * 1024) {
+        uploadSocket.send(payload.subarray(offset, offset + 64 * 1024));
+      }
+      if (cancel) {
+        await expect
+          .poll(async () => {
+            const state = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`);
+            expect(state.ok).toBeTruthy();
+            return (await state.json()).sftpPendingWrites;
+          })
+          .toBeGreaterThan(1);
+        expect(await requestWorkspace(workspace.socket, 'upload.cancel', { uploadId })).toBe(true);
+      }
+      expect((await terminal).payload.type).toBe(cancel ? 'cancelled' : 'completed');
+      await closeWebSocket(uploadSocket);
+      uploadSocket = undefined;
+      await expect
+        .poll(async () => {
+          const state = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`);
+          expect(state.ok).toBeTruthy();
+          return (await state.json()).sftpPendingWrites;
+        })
+        .toBe(0);
+      await expect(
+        requestWorkspace(workspace.socket, 'filesystem.stat', { path: `/.nexus-upload-${uploadId}.part` }),
+      ).rejects.toThrow();
+      expect(await readRemoteFile(workspace.socket, destinationPath)).toEqual(cancel ? Buffer.from(original) : payload);
+    }
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+    if (uploadSocket) await closeWebSocket(uploadSocket);
     await closeWebSocket(workspace.socket);
   }
 });
