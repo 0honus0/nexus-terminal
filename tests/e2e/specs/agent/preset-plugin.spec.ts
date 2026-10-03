@@ -1567,6 +1567,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const approvalRun = approvalRunPage.data.items.find((item) => item.status === 'awaiting_approval');
       expect(approvalRun).toBeDefined();
       expect(approvalRun!.definition.approvalMode).toBe('ask');
+      expect(approvalRun!.definition.connectionIds).toContain(connectionId);
       expect(approvalRun!.definition.connectionIds).toEqual([connectionId]);
 
       await restoredComposer.fill('/goal Keep the pending approval and use this updated goal afterward.');
