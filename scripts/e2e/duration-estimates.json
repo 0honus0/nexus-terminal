@@ -2,7 +2,7 @@
   "version": 1,
   "specs": {
     "specs/agent/host.spec.ts": 82007,
-    "specs/agent/preset-plugin.spec.ts": 30216,
+    "specs/agent/preset-plugin.spec.ts": 32494,
     "specs/agent/provider.spec.ts": 310,
     "specs/auth/setup-login.spec.ts": 8206,
     "specs/http/architecture-contracts.spec.ts": 1824,
@@ -34,9 +34,9 @@
     "specs/ssh/connection.spec.ts": 13640,
     "specs/ssh/cross-session-transfer.spec.ts": 527,
     "specs/ssh/docker-manager-ui.spec.ts": 14015,
-    "specs/ssh/file-document-preview.spec.ts": 38886,
+    "specs/ssh/file-document-preview.spec.ts": 36115,
     "specs/ssh/file-manager-navigation.spec.ts": 30216,
-    "specs/ssh/file-preview-editor.spec.ts": 61882,
+    "specs/ssh/file-preview-editor.spec.ts": 65402,
     "specs/ssh/file-upload-reconnect-stress.spec.ts": 24840,
     "specs/ssh/file-upload.spec.ts": 60966,
     "specs/ssh/panel-wheel-scaling.spec.ts": 17840,
@@ -57,7 +57,7 @@
     "specs/ssh/suspend-resume.spec.ts": 39572,
     "specs/ssh/terminal-protocol.spec.ts": 1491,
     "specs/ssh/terminal-tools-ui.spec.ts": 4046,
-    "specs/ssh/terminal-ui.spec.ts": 47168,
+    "specs/ssh/terminal-ui.spec.ts": 50453,
     "specs/ssh/upload-protocol.spec.ts": 12542,
     "specs/ssh/workspace-preferences-runtime.spec.ts": 10174,
     "specs/ui/audit-log-filtering.spec.ts": 8532,
@@ -83,7 +83,7 @@
     "specs/ui/rdp-remoteapp-fullscreen.spec.ts": 17225,
     "specs/ui/ssh-key-management.spec.ts": 7046,
     "specs/ui/system-settings.spec.ts": 21442,
-    "specs/ui/theme-switching.spec.ts": 40730,
+    "specs/ui/theme-switching.spec.ts": 43091,
     "specs/ui/workspace-no-session.spec.ts": 2818,
     "specs/websocket/authenticated-session.spec.ts": 3672
   }
