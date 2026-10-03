@@ -18,7 +18,7 @@ Initial admin setup保留空users bootstrap Web流程，createInitialAdmin原子
 
 HTTP Express与WS proxy-addr共享RuntimeConfig.trustProxy CIDR配置，默认loopback；WS按可信链右向左找首个不可信hop，Host/Proto仅trusted TCP peer可转发。Auth requestOrigin fallback使用Express protocol/host，独立X-Real-IP和private-range trust已移除。
 
-接口共享compileProxyTrust，支持CIDR/IP及数字hop；standalone默认loopback，Compose动态网络使用1-hop并不发布Backend端口。hop不验证代理身份，部署必须隔离不可信短路径；Frontend默认覆盖来源，多层NPM需部署侧trusted real_ip/协议配置，无固定IP或子网要求。
+接口共享compileProxyTrust，支持CIDR/IP及数字hop；standalone默认loopback，Compose动态网络使用1-hop并不发布Backend端口，Frontend保持所有网卡发布，可信转发路径由部署防火墙保护。Frontend可信宿主/私网peer real_ip取XFF最后地址（非递归），协议只接受http/https再传给Backend；部署要求宿主/容器网络可信。Auth共享isInternalIp策略，内网跳过whitelist/blacklist，公网仍使用现有计数；来源trust与用户内网豁免是不同owner。
 
 Passkey/TOTP enrollment采用完整authenticated session授权与新factor verification，无recent-auth timestamp/统一step-up owner；改密与disable 2FA既有密码检查不变，不将新factor proof视为旧credential proof。
 

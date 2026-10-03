@@ -1,7 +1,7 @@
 import type { NotificationService } from '../notifications/notification.service';
 import type { SettingsService } from '../settings/settings.service';
 import type { IpBlacklistRepository } from './ip-blacklist.repository.port';
-const LOCAL_IPS = new Set(['127.0.0.1', '::1', 'localhost']);
+import { isInternalIp } from './internal-ip';
 export class IpBlacklistService {
   constructor(
     private readonly repository: IpBlacklistRepository,
@@ -9,12 +9,13 @@ export class IpBlacklistService {
     private readonly notifications: NotificationService,
   ) {}
   async isBlocked(ip: string): Promise<boolean> {
+    if (isInternalIp(ip)) return false;
     if (!(await this.settings.isIpBlacklistEnabled())) return false;
     const e = await this.repository.get(ip);
     return Boolean(e?.blockedUntil && e.blockedUntil > Math.floor(Date.now() / 1000));
   }
   async recordFailedAttempt(ip: string): Promise<void> {
-    if (!(await this.settings.isIpBlacklistEnabled()) || LOCAL_IPS.has(ip)) return;
+    if (isInternalIp(ip) || !(await this.settings.isIpBlacklistEnabled())) return;
     const now = Math.floor(Date.now() / 1000);
     const [maxRaw, durationRaw] = await Promise.all([
       this.settings.getSetting('maxLoginAttempts'),

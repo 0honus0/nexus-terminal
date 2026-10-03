@@ -224,10 +224,10 @@ scripts/build/build.sh docker
 
 ### Nginx Proxy Manager（NPM）与真实来源
 
-NPM 直接反代宿主 Backend 的 `127.0.0.1:3001` 时，Backend 默认信任 loopback，可识别 NPM 发送的 `X-Forwarded-For`；NPM 必须提供真实客户端链及 `X-Forwarded-Host`（外部域名/端口）、`X-Forwarded-Proto`（外部 http/https），并启用 WebSocket 转发。不要仅发送 `X-Real-IP`。NPM 若运行在容器中，`127.0.0.1` 是该容器自身，实际 Backend peer 可能是 Docker 地址，须按真实链路配置，不能假定 loopback。
+默认部署为 NPM Docker host 网络 → `http://127.0.0.1:18111` → Nexus Frontend → Backend。Frontend端口保持所有网卡发布，内部端口不发布；NPM启用WebSocket并保持外部Host（含必要端口），发送`X-Forwarded-For`及`X-Forwarded-Proto`。NPM必须把它实际看到的客户端IP放在Forwarded-For最后一项（追加或覆盖），不能仅透传用户自带header；不要仅提供X-Real-IP。
 
-NPM → 宿主发布的 Frontend 端口 → Frontend Nginx → Backend 是两层链路。Backend 的一个 hop 指最后的 Frontend，不是 NPM。默认 Frontend 会覆盖来源为 NPM 的 peer 地址；若需要外部真实 IP，须在自定义 Frontend Nginx `server` 中设置 `set_real_ip_from <实际可信NPM地址/CIDR>; real_ip_header X-Forwarded-For; real_ip_recursive on;`，继续使用 `$remote_addr` 传给 Backend。Docker 发布端口可能使 Frontend 看到 gateway 地址，须核实；信任共享gateway意味着其他同路径客户端也能提供头，应隔离该入口，仅允许NPM访问。
+Frontend默认信任loopback/RFC1918/IPv6 ULA入口peer，以适配动态Docker gateway；real_ip_recursive关闭，只取可信入口交来的最后一个来源，不继续穿透内网客户端自带的链。Frontend将该地址作为单值Forwarded-For发给Backend，并仅从可信入口接受精确http/https协议值。此简化配置要求宿主进程及内部Docker网络可信；Frontend并未强制仅NPM可达：需用部署防火墙保护可信转发路径，不能允许不可信私网peer伪造来源；不可信容器不得直连Frontend/Backend。不需要固定容器IP或手动修改gateway地址。
 
-外层 NPM 终止 HTTPS 时，还须在自定义 Frontend 配置中仅对可信 NPM peer 保留它提供的 `X-Forwarded-Proto`，其他请求仍用 `$scheme`；不能无条件转发客户端头。`X-Forwarded-Host` 须保留外部域名/端口。这里不提供自动信任任意NPM的设置：普通内网直连仍按真实peer识别，不需要加入trust名单；经可信NPM访问的内网客户端同样通过Forwarded-For识别其内网IP。
+真实内网地址（loopback、RFC1918、IPv6 ULA及link-local）不受IP白名单或失败黑名单限制；公网来源继续使用已启用的失败计数、最大尝试次数和封禁时长。内网豁免不绕过密码/2FA认证。NPM若再位于CDN/其他代理之后，应在NPM处正确解析真实客户端再交给Nexus，不在Nexus递归猜测任意来源链。
 
 `TRUST_PROXY` 默认 `loopback`，HTTP 与 WebSocket 使用相同策略。独立容器或远程代理部署必须显式指定真实反向代理 IP 或最小可信 CIDR（逗号分隔），并限制 Backend 直连访问。不要为方便而信任全部私网范围；可信代理必须覆盖客户端的 `X-Forwarded-For`、`X-Forwarded-Host`、`X-Forwarded-Proto`。WebSocket 不读取 `X-Real-IP`。配置错误可能造成来源白名单／黑名单／审计地址失真或外部 Origin 被拒绝。

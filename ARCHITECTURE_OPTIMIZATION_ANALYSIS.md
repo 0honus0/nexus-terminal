@@ -3768,6 +3768,8 @@ if (body.privateKey !== undefined)
 
 > 按用户要求撤销Compose固定地址/IPv4子网，保留动态网络，HTTP/WS统一支持数字hop，随附Compose默认1-hop（Backend无发布端口）。信任hop依赖隔离不可信直连，NPM多层来源须配置Frontend real_ip及协议转交；真实内网直连不默认信任来源头但不封禁内网访问。
 
+> 按明确部署/需求收敛：host-network NPM可作为外部入口，Frontend按用户要求仍全部网卡发布（不强制唯一入口），内部端口不发布；Frontend信任宿主/私网入口peer并只取XFF最后地址，传交验证的http/https协议，不固定IP。内网来源共享豁免whitelist/失败blacklist，公网失败仍计数封禁；宿主/内部Docker网络必须可信，不可信私网直连伪造风险须由部署隔离，不宣称任意公开拓扑安全。
+
 > 确认问题（部署条件明确）：默认 HTTP trustProxy 与 WS 私网 peer trust 会接受 headers。必须能直连 Backend，或受信代理不覆盖客户端 header；仅 Frontend/Nginx 对外且正确覆盖 header 时不能推定外网绕过。WS trust 还未与自定义 HTTP TRUST_PROXY 统一。
 
 Backend 默认同时使用：

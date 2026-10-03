@@ -254,7 +254,9 @@ SSH Key 创建／更新／删除进入审计日志，记录 key ID、操作者�
 
 HTTP 与 WebSocket 共用 `TRUST_PROXY`，默认只信任 loopback；私网直连客户端的 Forwarded IP 不再默认可信。WebSocket 来源解析采用 `X-Forwarded-For` 可信代理链，不使用 `X-Real-IP`。独立容器／远程反向代理须显式指定代理地址或最小可信 CIDR，代理必须正确覆盖客户端提供的来源／Host／Proto header，不能把所有私网客户端都视为代理。
 
-随附 Compose 使用动态容器 IP，默认信任一个 Frontend 代理 hop（`TRUST_PROXY=1`），要求 Backend 不向不可信客户端发布／开放直连。宿主 loopback 反代可转交外部及内网真实来源；NPM 经 Frontend 的多层反代须配置 Frontend 的可信 real_ip 及外部协议转交，不会自动信任任意来源头。普通内网直连不受地址类别封禁，仍服从已有白名单／黑名单。
+随附Compose使用动态容器IP，Frontend端口保持所有网卡发布，可由host网络NPM反代，也可内网直接访问；Backend及其他内部端口不发布。Frontend接收可信宿主/私网入口提供的Forwarded-For最后一个真实客户端地址及http/https协议，再交给1-hop Backend。宿主及内部容器网络须可信，公开端口不保证NPM唯一入口，部署须防止不可信私网peer注入来源头。NPM必须追加或覆盖真实客户端地址，不仅透传用户头。
+
+内网来源（loopback、RFC1918、IPv6 ULA及link-local，含IPv4映射地址）跳过IP白名单和失败封禁，但仍需正常密码/2FA认证；公网来源遵守白名单及已启用的失败阈值/封禁时长。已有内网blacklist row不自动删除，但不再阻止内网登录。
 
 新增 Passkey／启用 TOTP 由已有完整认证会话授权，目前不要求原凭据的 recent-auth／统一 step-up；验证新 authenticator 不代表重新验证原身份因素。修改密码／禁用 2FA 保留原有密码校验。已泄露的完整会话可能被用于新增长期凭据，不能仅依赖新增因素保护已有会话。
 

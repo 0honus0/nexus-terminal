@@ -1,7 +1,7 @@
 import ipaddr from 'ipaddr.js';
 import type { SettingsService } from '../settings/settings.service';
 
-const LOCAL = new Set(['127.0.0.1', '::1', 'localhost']);
+import { isInternalIp } from './internal-ip';
 
 export interface IpWhitelistDecision {
   allowed: boolean;
@@ -35,7 +35,7 @@ export class IpWhitelistService {
 
   async check(source: string | undefined): Promise<IpWhitelistDecision> {
     if (!source) return { allowed: false, statusCode: 403, message: '禁止访问：无法识别来源 IP。' };
-    if (LOCAL.has(source)) return { allowed: true, statusCode: 200, message: '允许访问。' };
+    if (isInternalIp(source)) return { allowed: true, statusCode: 200, message: '允许访问。' };
     try {
       const configured = await this.settings.getSetting('ipWhitelist');
       if (!configured?.trim()) return { allowed: true, statusCode: 200, message: '允许访问。' };
