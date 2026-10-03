@@ -1,8 +1,8 @@
 {
   "version": 1,
   "specs": {
-    "specs/agent/host.spec.ts": 81040,
-    "specs/agent/preset-plugin.spec.ts": 41484,
+    "specs/agent/host.spec.ts": 73792,
+    "specs/agent/preset-plugin.spec.ts": 43855,
     "specs/agent/provider.spec.ts": 310,
     "specs/auth/setup-login.spec.ts": 8206,
     "specs/http/architecture-contracts.spec.ts": 1824,
@@ -20,8 +20,9 @@
     "specs/http/terminal-themes.spec.ts": 270,
     "specs/http/webhook-secret-contract.spec.ts": 1500,
     "specs/mobile/dashboard-mobile.spec.ts": 15125,
+    "specs/mobile/pad-suspended-output.spec.ts": 30039,
     "specs/mobile/ssh-workspace.spec.ts": 4144,
-    "specs/mobile/suspend-resume-ui.spec.ts": 48142,
+    "specs/mobile/suspend-resume-ui.spec.ts": 54203,
     "specs/mobile/terminal-touch.spec.ts": 15245,
     "specs/mobile/touch-advanced.spec.ts": 24319,
     "specs/mobile/touch-preview-progress.spec.ts": 23311,
@@ -49,7 +50,7 @@
     "specs/ssh/quick-command-collapsible-search.spec.ts": 6823,
     "specs/ssh/quick-command-management.spec.ts": 7744,
     "specs/ssh/quick-command-tags-variables.spec.ts": 4322,
-    "specs/ssh/reconnect-ui.spec.ts": 40512,
+    "specs/ssh/reconnect-ui.spec.ts": 42577,
     "specs/ssh/sftp-download.spec.ts": 912,
     "specs/ssh/status-docker-protocol.spec.ts": 1419,
     "specs/ssh/status-history-time-axis.spec.ts": 3635,
@@ -58,7 +59,7 @@
     "specs/ssh/terminal-protocol.spec.ts": 1491,
     "specs/ssh/terminal-tools-ui.spec.ts": 4046,
     "specs/ssh/terminal-ui.spec.ts": 50453,
-    "specs/ssh/upload-protocol.spec.ts": 12542,
+    "specs/ssh/upload-protocol.spec.ts": 19232,
     "specs/ssh/workspace-preferences-runtime.spec.ts": 10174,
     "specs/ui/audit-log-filtering.spec.ts": 8532,
     "specs/ui/backup-ui.spec.ts": 5637,
@@ -83,7 +84,7 @@
     "specs/ui/rdp-remoteapp-fullscreen.spec.ts": 17225,
     "specs/ui/ssh-key-management.spec.ts": 7046,
     "specs/ui/system-settings.spec.ts": 21442,
-    "specs/ui/theme-switching.spec.ts": 43091,
+    "specs/ui/theme-switching.spec.ts": 46693,
     "specs/ui/workspace-no-session.spec.ts": 2818,
     "specs/websocket/authenticated-session.spec.ts": 3672
   }
