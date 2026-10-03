@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
+  import { logger } from '@/client/logging/logger';
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import {
     UiButton,
@@ -216,6 +217,16 @@
   const presentationTerminalChannel: TerminalChannel = {
     sendInput(data) {
       if (props.session.state.value !== 'connected') {
+        logger.warn(
+          {
+            workspaceId: props.session.id,
+            state: props.session.state.value,
+            inputBytes: new TextEncoder().encode(data).byteLength,
+            visibilityState: document.visibilityState,
+            failureKind: 'terminal_input_session_not_connected',
+          },
+          'Terminal input rejected during session recovery',
+        );
         feedback.notifyError(t('terminal.inputRejected'));
         return;
       }

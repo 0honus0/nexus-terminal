@@ -1242,6 +1242,9 @@
     root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
     root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
     terminal.attachCustomKeyEventHandler((event) => {
+      // Keep an explicit key press able to kick reconnect without forwarding
+      // that key to a transport whose current attachment is not ready.
+      if (!props.inputEnabled && event.type === 'keydown') emit('interaction');
       if (event.type === 'keydown' && !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key))
         recordClipboardGesture();
       if (

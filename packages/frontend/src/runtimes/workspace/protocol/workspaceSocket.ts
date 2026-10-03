@@ -460,7 +460,17 @@ export class WorkspaceSocket {
     try {
       this.sendJson({ type, payload });
       return true;
-    } catch {
+    } catch (cause) {
+      if (type === 'terminal.input')
+        logger.warn(
+          this.context({
+            err: cause,
+            operation: type,
+            socketBufferedBytes: this.socket?.bufferedAmount,
+            failureKind: 'terminal_input_transport_send_failed',
+          }),
+          'Terminal input rejected by transport',
+        );
       return false;
     }
   }

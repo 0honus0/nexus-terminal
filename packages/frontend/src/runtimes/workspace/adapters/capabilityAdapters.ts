@@ -51,7 +51,10 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
     for (const handler of inputErrorHandlers) handler('TERMINAL_INPUT_REJECTED');
   };
   socket.on('protocol.error', ({ operation }) => {
-    if (operation === 'terminal.input') notifyInputError();
+    if (operation === 'terminal.input') {
+      logger.warn({ failureKind: 'terminal_input_server_rejected' }, 'Terminal input rejected by server');
+      notifyInputError();
+    }
   });
   const buffered: TerminalOutput[] = [];
   let previousOutputAvailable = false;
@@ -72,7 +75,16 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
 
   return {
     sendInput: (data) => {
-      if ((gate && !gate.canSend()) || new TextEncoder().encode(data).byteLength > 256 * 1024) {
+      const inputBytes = new TextEncoder().encode(data).byteLength;
+      if ((gate && !gate.canSend()) || inputBytes > 256 * 1024) {
+        logger.warn(
+          {
+            inputBytes,
+            transportConnected: socket.connected,
+            failureKind: inputBytes > 256 * 1024 ? 'terminal_input_too_large' : 'terminal_input_workspace_not_ready',
+          },
+          'Terminal input rejected before transport send',
+        );
         notifyInputError();
         return;
       }

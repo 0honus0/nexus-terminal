@@ -277,7 +277,7 @@
       ref="terminalRef"
       :active="active !== false"
       class="min-h-0 flex-1"
-      :input-enabled="session.hasConnected.value"
+      :input-enabled="session.state.value === 'connected'"
       :channel="terminalChannel ?? session.adapters.terminal"
       :font-family="terminalFontFamily"
       :font-size="terminalFontSize"

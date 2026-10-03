@@ -72,6 +72,69 @@ async function dragTerminalDown(page: Page): Promise<void> {
   );
 }
 
+test('mobile terminal blocks input until foreground resume completes without replaying keystrokes', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  const rejections: Array<{ failureKind?: string; state?: string; inputBytes?: number }> = [];
+  page.on('console', (message) => {
+    for (const argument of message.args()) {
+      void argument
+        .jsonValue()
+        .then((value) => {
+          if (value && typeof value === 'object' && value.failureKind?.startsWith('terminal_input_'))
+            rejections.push(value);
+        })
+        .catch(() => undefined);
+    }
+  });
+  let dropProbe = false;
+  let resumes = 0;
+  const terminalInputs: string[] = [];
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.routeWebSocket('**/ws/workspace', (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage(async (message) => {
+      if (typeof message === 'string') {
+        const frame = JSON.parse(message);
+        if (frame.type === 'terminal.input') terminalInputs.push(frame.payload.data);
+        if (frame.type === 'workspace.ping' && dropProbe) return;
+        if (frame.type === 'workspace.resume') {
+          resumes += 1;
+          await barrier;
+        }
+      }
+      server.send(message);
+    });
+  });
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const input = page.locator('.command-bar-command-input');
+  await expect(input).toBeEnabled();
+  dropProbe = true;
+  await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+  try {
+    await expect.poll(() => resumes, { timeout: 15_000 }).toBe(1);
+    // Preserve the old screen, but do not accept input on an unready attachment.
+    await page.locator('.xterm-helper-textarea').focus();
+    await page.keyboard.insertText('x');
+  } finally {
+    dropProbe = false;
+    release();
+  }
+  await expect(input).toBeEnabled();
+  await input.fill('printf "%s%s\\n" MOBILE_RECOVERY_ INPUT_OK');
+  await input.press('Enter');
+  await expect(page.locator('.terminal-inner-container')).toContainText('MOBILE_RECOVERY_INPUT_OK');
+  expect(terminalInputs).not.toContain('x');
+  expect(rejections).toEqual([]);
+});
+
 test('foreground probes preserve healthy SSH and resume a half-open transport without a fresh login', async ({
   page,
   context,
