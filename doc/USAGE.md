@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+OpenAI-compatible Provider允许本地／内网HTTP(S)模型服务，可信管理员配置的baseUrl用于discovery/test/run；不新增私网封禁、逐跳重定向allowlist或DNS pinning。本地模型是支持用途，若需要限制Backend出站目标由部署网络层提供，discovery大小/超时限制不等于网络隔离。
+
 普通HTTP mutation（登录、设置、连接测试、通知测试、logout等）统一检查浏览器Origin/Fetch Metadata，兄弟域名即使same-site也不能触发。无Origin的same-origin浏览器请求或无浏览器metadata API客户端仍可使用，认证要求不变；反向代理须正确传递外部Host/Proto，否则正常操作可能403。内网IP豁免不豁免此来源检查，Agent既有CSRF token仍必需。
 
 本地／远程 HTML 主题内容 API 作为纯文本返回，不作为 Nexus 同源 HTML 页面执行；直接打开内容地址只查看源码。终端仍通过既有 sandbox iframe 展示主题，脚本内容不被删除，不将 GitHub 来源视为可信执行来源。

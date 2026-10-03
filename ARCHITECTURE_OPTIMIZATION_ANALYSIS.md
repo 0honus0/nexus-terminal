@@ -4235,6 +4235,8 @@ if (!tokenMatches(agentCsrfToken(request, options.csrfSecret), request.header('x
 
 ## 143. OpenAI-compatible Provider 的本地模型／内网 egress 策略待确认
 
+> 已审核（保留管理员本地模型权限）：配置HTTP(S) baseUrl可loopback/内网，discovery已有timeout/body ceiling；不新增私网deny、redirect逐跳allowlist或DNS pinning。Provider不是MCP网络policy消费者，部署可限制egress，未宣称已解决任意目标访问。
+
 > 待确认（本地模型是合法需求）：Provider URL可内网/loopback属实，常用于本地兼容模型服务器；discovery有timeout/body ceiling。正常单用户管理员具备配置权，需先定义目标network authority与redirect政策，不能一律禁止内网或直接定性SSRF漏洞。
 
 Provider discovery/test/run使用用户配置HTTP(S) baseUrl，无私网deny；discovery有timeout/body上限。loopback与私网兼容模型（本地推理）是正常用途。待定义管理员network authority、redirect/DNS政策，不能一律把本地模型接入认定为SSRF漏洞。

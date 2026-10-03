@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Provider baseUrl保持HTTP(S)及loopback/private模型用途，OpenAI adapter/SDK transport不新增MCP-style地址policy、redirect逐跳验证或DNS pinning；discovery已有timeout/body约束，可信管理员egress与部署隔离分开。
+
 HTTP application在session/routes前应用mutationOriginSecurity，安全方法跳过，非安全方法按Express可信host/protocol比对Origin并拒绝same-site/cross-site metadata；无Origin浏览器仅same-origin可用，非浏览器仍须各route认证。Agent额外HMAC owner不变，无第二token协议。
 
 Appearance local/remote content route统一text/plain+document CSP sandbox/default-src none，全局nosniff保留；Frontend获取字符串后既有opaque-origin iframe/srcdoc负责展示隔离，API不再提供同源HTML document execution surface。
