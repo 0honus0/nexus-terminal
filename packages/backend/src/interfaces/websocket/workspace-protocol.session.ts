@@ -868,8 +868,8 @@ export class WorkspaceProtocolSession {
   }
 
   private async filesystemReadBinary(payload: JsonRecord, requestId: string) {
-    const maxBytes = Number(payload.maxBytes);
-    if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > 64 * 1024 * 1024)
+    const maxBytes = payload.maxBytes;
+    if (typeof maxBytes !== 'number' || !Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > 64 * 1024 * 1024)
       throw new Error('BINARY_READ_LIMIT_INVALID');
     if (this.binaryReads.has(requestId) || this.binaryReads.size >= 4) throw new Error('BINARY_READ_CAPACITY_EXCEEDED');
     let cancelled = false;
