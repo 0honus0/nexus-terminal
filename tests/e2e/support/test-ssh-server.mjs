@@ -49,6 +49,8 @@ let sftpDelayedOpenCount = 0;
 let sftpReadHandlesOpened = 0;
 let sftpReadHandlesClosed = 0;
 let archiveExecDelayMs = 0;
+let archiveCommandsStarted = 0;
+let archiveCommandsExited = 0;
 let dockerContainerPresent = true;
 let dockerContainerState = 'running';
 const activeSshClients = new Set();
@@ -603,6 +605,8 @@ async function resetRoot() {
   sftpReadHandlesOpened = 0;
   sftpReadHandlesClosed = 0;
   archiveExecDelayMs = 0;
+  archiveCommandsStarted = 0;
+  archiveCommandsExited = 0;
 }
 
 function openModeToFsFlags(flags) {
@@ -1035,12 +1039,14 @@ function runRemoteCommand(command, stream, session) {
       reject?.();
     }
   };
+  if (isArchiveCommand) archiveCommandsStarted += 1;
   session.on('signal', onSignal);
   child.stdout.on('data', (chunk) => stream.write(chunk));
   child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
   stream.on('data', (chunk) => child.stdin.write(chunk));
   stream.on('close', () => child.kill('SIGTERM'));
   child.on('close', (code, signal) => {
+    if (isArchiveCommand) archiveCommandsExited += 1;
     session.off('signal', onSignal);
     stream.exit(signal ? signal.replace(/^SIG/, '') : (code ?? 0));
     stream.end();
@@ -1238,6 +1244,8 @@ const controlServer = http.createServer(async (req, res) => {
       sftpReadHandlesOpened = 0;
       sftpReadHandlesClosed = 0;
       archiveExecDelayMs = 0;
+      archiveCommandsStarted = 0;
+      archiveCommandsExited = 0;
       activeSftpChannels.clear();
       openedSftpChannels = 0;
       await fsp.rm(archiveExecHoldPath, { force: true });
@@ -1339,6 +1347,11 @@ const controlServer = http.createServer(async (req, res) => {
         : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ archiveExecDelayMs }));
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/archive/processes') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ started: archiveCommandsStarted, exited: archiveCommandsExited }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/archive/preflight-hold') {
