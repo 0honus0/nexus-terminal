@@ -3580,6 +3580,8 @@ Remote Stage 同样如此，而且同一个 repository package 可以被反复 S
 
 ## 129. Passkey discovery 的公开标识符与使用状态隐私策略待确认
 
+> 已审核（保留标准discovery）：has-configured匿名返回配置状态，username-based options可返回credential ID/transports；公开标识不授权登录，签名验证仍必要。未新增隐私隐藏／discovery专项限流，不宣称false能证明账号不存在。
+
 > 待确认（隐私／标准 discovery 行为）：auth routes 返回 hasPasskeys 与 allowCredentials 属实；credential ID 是公开标识符，不是私钥，username-based WebAuthn 返回它是标准用法。只能辨认“已配置Passkey”的候选账户，false 无法区分不存在／未配置；是否隐藏此信息须定隐私契约。
 
 匿名 has-configured 返回布尔，username-based authentication options 返回 allowCredentials ID/transports。false 无法区分不存在/未配置；credential ID是公开标识符而非可登录secret。待确认单用户产品是否要求隐藏Passkey使用状态、是否增加discovery rate limit。

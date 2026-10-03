@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+Passkey 登录发现接口可在未登录时返回是否已配置 Passkey；指定用户名的认证选项可包含 credential ID／transports。credential ID 是公开标识，不是私钥或登录凭据，仍须验证 authenticator 签名。不承诺隐藏 Passkey 配置状态；false 不能区分账号不存在与未配置，也没有此 discovery 专用限流保证。
+
 启用 2FA 后，新的密码登录须完成第二因素，但已有完整认证会话不会自动注销或重新挑战；当前 credential revision 绑定密码而非 2FA secret。启用 2FA 不等于撤销已泄露的登录 cookie，需要另行处理已有会话及凭据风险。
 
 Plugin 本地／远程／官方 Stage 共用单 Backend 最多 8 个保留 Stage，创建串行检查；达到上限拒绝新 Stage，安装完成清理或 24 小时过期清理成功后可继续。每 Stage 最多 50 MiB archive／200 MiB 展开文件，8 个约为 2 GiB 的保守 payload 预算，不是实际磁盘使用上限；已安装版本、历史 orphan 和文件系统开销不在此预算内。

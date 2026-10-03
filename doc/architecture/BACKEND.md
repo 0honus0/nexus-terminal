@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+Passkey discovery保留匿名配置查询及username-based allowCredentials公开标识，authentication仍由WebAuthn challenge/signature owner验证；不是账号存在性oracle的完整保证，不新增privacy masking／专用discovery limiter。
+
 TwoFactorService.activate更新secret及审计／通知，不触发session撤销；Auth credentialRevision来自hashedPassword，2FA配置变化不使旧完整认证session失效。
 
 PluginPackageInstallCoordinator.withStageAdmission统一串行local/remote/official stage创建，await retention cleanup后按retained rows检查8槽，gate覆盖source open/verifier/createStage/failure cleanup；每Stage已有50/200MiB界限形成保守payload预算。无跨进程lease或orphan accounting。
