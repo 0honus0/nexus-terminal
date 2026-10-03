@@ -166,6 +166,8 @@ The pending-OPEN disconnect regression confirms the fixture received SFTP OPEN b
 
 The suite intentionally keeps regression tests for previously fixed production issues, including:
 
+- quick-command tag batches reject missing command references in either order and missing tags with 404 / `QUICK_COMMAND_TAG_REFERENCE_NOT_FOUND`, leave no partial associations and permit a subsequent valid assignment;
+
 - desktop Dashboard keeps the Recent Activity section reachable in the initial common viewport while connection/resource panels own their scrolling;
 - Quick Commands preserve text-only group rename, header-area expand/collapse, and narrow-pane toolbar scaling without horizontal overflow;
 - File Manager path history and favorite-path popovers keep rounded themed chrome, wrap long paths, resize with the viewport, and remain inside viewport bounds;

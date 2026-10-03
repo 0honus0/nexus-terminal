@@ -100,6 +100,60 @@ test('proxy credential updates reject invalid effective authentication without p
   }
 });
 
+test('quick command tag batches roll back valid associations when a referenced command is missing', async ({
+  request,
+}) => {
+  await loginAsInitialAdmin(request);
+  const created = await request.post('/api/v1/quick-commands', {
+    data: { name: `E2E tag rollback ${randomUUID()}`, command: 'echo e2e', tagIds: [] },
+  });
+  expect(created.status()).toBe(201);
+  const commandId = (await created.json()).command.id;
+  const tagged = await request.post('/api/v1/quick-command-tags', { data: { name: `E2E rollback ${randomUUID()}` } });
+  expect(tagged.status()).toBe(201);
+  const tagId = (await tagged.json()).tag.id;
+  try {
+    for (const commandIds of [
+      [commandId, Number.MAX_SAFE_INTEGER],
+      [Number.MAX_SAFE_INTEGER, commandId],
+    ]) {
+      const assigned = await request.post('/api/v1/quick-commands/bulk-assign-tag', { data: { commandIds, tagId } });
+      expect(assigned.status(), await assigned.text()).toBe(404);
+      await expect(assigned.json()).resolves.toMatchObject({
+        error: { code: 'QUICK_COMMAND_TAG_REFERENCE_NOT_FOUND' },
+      });
+      const listed = await request.get('/api/v1/quick-commands');
+      expect(listed.ok()).toBeTruthy();
+      expect((await listed.json()).find((command: { id: number }) => command.id === commandId).tagIds).toEqual([]);
+    }
+    const missingTag = await request.post('/api/v1/quick-commands/bulk-assign-tag', {
+      data: { commandIds: [commandId], tagId: Number.MAX_SAFE_INTEGER },
+    });
+    expect(missingTag.status(), await missingTag.text()).toBe(404);
+    await expect(missingTag.json()).resolves.toMatchObject({
+      error: { code: 'QUICK_COMMAND_TAG_REFERENCE_NOT_FOUND' },
+    });
+    const afterMissingTag = await request.get('/api/v1/quick-commands');
+    expect(afterMissingTag.ok()).toBeTruthy();
+    expect((await afterMissingTag.json()).find((command: { id: number }) => command.id === commandId).tagIds).toEqual(
+      [],
+    );
+    expect(
+      (
+        await request.post('/api/v1/quick-commands/bulk-assign-tag', {
+          data: { commandIds: [commandId], tagId },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    const listed = await request.get('/api/v1/quick-commands');
+    expect(listed.ok()).toBeTruthy();
+    expect((await listed.json()).find((command: { id: number }) => command.id === commandId).tagIds).toEqual([tagId]);
+  } finally {
+    expect((await request.delete(`/api/v1/quick-commands/${commandId}`)).ok()).toBeTruthy();
+    expect((await request.delete(`/api/v1/quick-command-tags/${tagId}`)).ok()).toBeTruthy();
+  }
+});
+
 test('SSH key mutations persist actor and field-only audit records without credential content', async ({ request }) => {
   await loginAsInitialAdmin(request);
   const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 })

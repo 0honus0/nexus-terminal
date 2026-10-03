@@ -1,3 +1,9 @@
+export class QuickCommandTagReferenceError extends Error {
+  constructor() {
+    super('QUICK_COMMAND_TAG_REFERENCE_NOT_FOUND');
+  }
+}
+
 export interface QuickCommandTag {
   id: number;
   name: string;

@@ -10,6 +10,7 @@ import type {
   QuickCommandMutationResponseDto,
 } from '@nexus-terminal/protocol/quick-commands';
 import type { QuickCommandService } from '../../../modules/quick-commands/quick-command.service';
+import { QuickCommandTagReferenceError } from '../../../modules/quick-command-tags/quick-command-tag.repository.port';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
@@ -114,7 +115,13 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
         response.status(400).json(payload);
         return;
       }
-      await commands.assignTag(ids, tagId);
+      try {
+        await commands.assignTag(ids, tagId);
+      } catch (error) {
+        if (!(error instanceof QuickCommandTagReferenceError)) throw error;
+        response.status(404).json({ error: { code: error.message }, message: '快捷命令或标签不存在。' });
+        return;
+      }
       const payload: QuickCommandBulkAssignTagResponseDto = {
         success: true,
         message: `标签 ${tagId} 已成功尝试关联到 ${ids.length} 个指令。`,

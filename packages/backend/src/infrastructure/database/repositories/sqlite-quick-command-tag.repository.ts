@@ -1,4 +1,5 @@
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { QuickCommandTagReferenceError } from '../../../modules/quick-command-tags/quick-command-tag.repository.port';
 import type {
   QuickCommandTag,
   QuickCommandTagRepository,
@@ -63,6 +64,13 @@ export class SqliteQuickCommandTagRepository implements QuickCommandTagRepositor
       throw new Error('QUICK_COMMAND_TAG_BATCH_INVALID');
     const uniqueIds = [...new Set(commandIds)];
     return this.db.transaction(async (tx) => {
+      const tag = await tx.queryOne<{ id: number }>('SELECT id FROM quick_command_tags WHERE id=?', [tagId]);
+      if (!tag) throw new QuickCommandTagReferenceError();
+      const commands = await tx.queryAll<{ id: number }>(
+        `SELECT id FROM quick_commands WHERE id IN (${uniqueIds.map(() => '?').join(',')})`,
+        uniqueIds,
+      );
+      if (commands.length !== uniqueIds.length) throw new QuickCommandTagReferenceError();
       for (const commandId of uniqueIds)
         if (Number.isFinite(commandId))
           await tx.execute(
