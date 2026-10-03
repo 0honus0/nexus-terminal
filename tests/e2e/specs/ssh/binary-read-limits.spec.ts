@@ -127,3 +127,38 @@ test('four delayed binary reads reject excess admission and cancellation frees e
     await Promise.allSettled(pending);
   }
 });
+
+test('failed SFTP stream acquisition releases admission and does not poison later reads', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId);
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    for (let batch = 0; batch < 3; batch++) {
+      const results = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', {
+            path: `/missing-${crypto.randomUUID()}`,
+            maxBytes: 1024,
+          }).then(
+            () => ({ completed: true }),
+            (error: Error) => ({ error: error.message }),
+          ),
+        ),
+      );
+      for (const result of results) {
+        expect(result).toMatchObject({ error: expect.stringContaining('filesystem.readBinary failed:') });
+        expect('error' in result ? result.error : '').not.toContain('CAPACITY_EXCEEDED');
+      }
+    }
+    const recovered = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', { path: '/seed.txt', maxBytes: 1024 }),
+      ),
+    );
+    expect(recovered[0].bytes.length).toBeGreaterThan(0);
+    for (const result of recovered) expect(result.bytes).toEqual(recovered[0].bytes);
+  } finally {
+    await closeWebSocket(workspace.socket);
+  }
+});
