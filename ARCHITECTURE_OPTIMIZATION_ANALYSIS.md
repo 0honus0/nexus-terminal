@@ -3994,6 +3994,8 @@ PUT  /api/v1/notifications/:id
 
 ## 140. File HTTP Session 未显式保证落盘权限，临时认证 secret 的保护依赖部署环境
 
+> 权限边界已修复：启动创建/收紧sessions目录0700、已有普通文件0600，新save回调后chmod0600，异常目录类型/权限失败拒绝继续。保持现有明文格式，非文件加密，不保护同UID/root/ACL额外授权；atomic临时文件处于0700目录，不宣称创建瞬间file mode必为0600。
+
 > 确认问题（应用未保证落盘权限）：`file-http-session.adapter.ts:21–24` mkdir无mode，FileStore无secret/mode；session可能含tempTwoFactorSecret。最终权限受umask、已有data父目录、ACL影响，不能断言所有Compose默认宿主读者都可读取；读取JSON也不能直接伪造签名cookie。
 
 `FileHttpSessionAdapter` 把所有 Express Session 放进 data directory 下的普通文件目录：

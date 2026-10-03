@@ -20,7 +20,13 @@ export class FileHttpSessionAdapter {
   constructor(options: FileHttpSessionAdapterOptions) {
     const FileStore = sessionFileStore(session);
     const sessionsPath = path.join(options.dataDirectory, 'sessions');
-    fs.mkdirSync(sessionsPath, { recursive: true });
+    fs.mkdirSync(sessionsPath, { recursive: true, mode: 0o700 });
+    if (!fs.lstatSync(sessionsPath).isDirectory()) throw new Error('SESSION_DIRECTORY_INVALID');
+    fs.chmodSync(sessionsPath, 0o700);
+    for (const entry of fs.readdirSync(sessionsPath, { withFileTypes: true })) {
+      if (!entry.isFile()) throw new Error('SESSION_DIRECTORY_ENTRY_INVALID');
+      fs.chmodSync(path.join(sessionsPath, entry.name), 0o600);
+    }
     this.cookieName = options.cookieName || 'nexus.sid';
     this.store = new FileStore({ path: sessionsPath, ttl: 30 * 24 * 60 * 60 });
     const save = this.store.set.bind(this.store);
@@ -46,6 +52,7 @@ export class FileHttpSessionAdapter {
           data.cookie.expires = new Date(deadline);
         }
         await new Promise<void>((resolve, reject) => save(id, data, (error) => (error ? reject(error) : resolve())));
+        await fs.promises.chmod(path.join(sessionsPath, `${id}.json`), 0o600);
       });
       saveTail = task.catch(() => undefined);
       void task.then(
