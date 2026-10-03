@@ -51,6 +51,14 @@ const sameToken = (left: string, right: string): boolean => {
 
 /** Owns Workspace ↔ ExecutionSession lifecycle; protocol handlers never manipulate transports directly. */
 export class WorkspaceService {
+  private readonly pendingConnections = new Set<string>();
+  private reserve(id: string): () => void {
+    if (!this.canCreate(id)) throw new Error('WORKSPACE_ALREADY_EXISTS');
+    if (this.sessions.snapshot().length + this.pendingConnections.size >= 64)
+      throw new Error('WORKSPACE_SESSION_CAPACITY_EXCEEDED');
+    this.pendingConnections.add(id);
+    return () => this.pendingConnections.delete(id);
+  }
   constructor(
     private readonly sessions: WorkspaceSessionRegistry,
     private readonly executionSessions: ExecutionSessionManager,
@@ -73,119 +81,129 @@ export class WorkspaceService {
     return this.sessions.snapshot();
   }
   canCreate(id: string): boolean {
-    return Boolean(id) && !this.sessions.get(id) && !this.executionSessions.get(id);
+    return Boolean(id) && !this.pendingConnections.has(id) && !this.sessions.get(id) && !this.executionSessions.get(id);
   }
 
   async connect(request: ConnectWorkspaceRequest): Promise<WorkspaceSession> {
     if (!request.workspaceId) throw new Error('workspaceId is required.');
-    const connection = await this.connections.get(request.connectionId);
-    if (!connection) throw new Error(`Connection ${request.connectionId} was not found.`);
-    if (connection.type !== 'SSH') throw new Error(`Connection ${request.connectionId} is not an SSH connection.`);
-    let execution;
+    const release = this.reserve(request.workspaceId);
     try {
-      const resolved = await this.resolver.resolveStored(request.connectionId);
-      execution = await this.executionSessions.connect({
-        id: request.workspaceId,
-        ownerType: 'workspace',
-        ownerId: String(request.userId),
-        connection: resolved,
-        connect: { signal: request.signal },
-      });
-    } catch (error) {
-      const details = {
-        userId: request.userId,
-        username: request.actorUsername,
-        connectionId: request.connectionId,
-        connectionName: connection.name || connection.host,
-        ip: request.clientIp,
-        reason: error instanceof Error ? error.message : String(error),
-      };
-      void this.audit.logAction('SSH_CONNECT_FAILURE', details).catch(() => undefined);
-      void this.notifications.publish('SSH_CONNECT_FAILURE', details).catch(() => undefined);
-      throw error;
-    }
-    try {
-      const shell = await execution.openShell({ columns: request.columns, rows: request.rows });
-      const lastConnectedAt = Math.floor(Date.now() / 1000);
-      const session: WorkspaceSession = {
-        id: request.workspaceId,
-        userId: request.userId,
-        connectionId: request.connectionId,
-        connectionName: connection.name || connection.host,
-        executionSessionId: execution.id,
-        shell,
-        resumeToken: resumeToken(),
-        attachmentGeneration: 1,
-        attached: true,
-        createdAt: Date.now(),
-        lastConnectedAt,
-      };
-      this.sessions.set(session);
-      session.shell.onClose(() => {
-        if (this.sessions.get(session.id) === session) void this.closeSession(session.id).catch(() => undefined);
-      });
-      await this.connections.markConnected(request.connectionId, lastConnectedAt).catch(() => false);
-      const details = {
-        userId: request.userId,
-        username: request.actorUsername,
-        connectionId: request.connectionId,
-        connectionName: session.connectionName,
-        sessionId: session.id,
-        ip: request.clientIp,
-      };
-      void this.audit.logAction('SSH_CONNECT_SUCCESS', details).catch(() => undefined);
-      void this.notifications.publish('SSH_CONNECT_SUCCESS', details).catch(() => undefined);
-      return session;
-    } catch (error) {
-      await this.executionSessions.close(execution.id).catch(() => undefined);
-      const details = {
-        userId: request.userId,
-        username: request.actorUsername,
-        connectionId: request.connectionId,
-        connectionName: connection.name || connection.host,
-        sessionId: request.workspaceId,
-        ip: request.clientIp,
-        reason: error instanceof Error ? error.message : String(error),
-      };
-      logger.warn(
-        { err: error, workspaceId: request.workspaceId, connectionId: request.connectionId },
-        'Workspace shell initialization failed',
-      );
-      void this.audit.logAction('SSH_SHELL_FAILURE', details).catch(() => undefined);
-      void this.notifications.publish('SSH_SHELL_FAILURE', details).catch(() => undefined);
-      throw error;
+      const connection = await this.connections.get(request.connectionId);
+      if (!connection) throw new Error(`Connection ${request.connectionId} was not found.`);
+      if (connection.type !== 'SSH') throw new Error(`Connection ${request.connectionId} is not an SSH connection.`);
+      let execution;
+      try {
+        const resolved = await this.resolver.resolveStored(request.connectionId);
+        execution = await this.executionSessions.connect({
+          id: request.workspaceId,
+          ownerType: 'workspace',
+          ownerId: String(request.userId),
+          connection: resolved,
+          connect: { signal: request.signal },
+        });
+      } catch (error) {
+        const details = {
+          userId: request.userId,
+          username: request.actorUsername,
+          connectionId: request.connectionId,
+          connectionName: connection.name || connection.host,
+          ip: request.clientIp,
+          reason: error instanceof Error ? error.message : String(error),
+        };
+        void this.audit.logAction('SSH_CONNECT_FAILURE', details).catch(() => undefined);
+        void this.notifications.publish('SSH_CONNECT_FAILURE', details).catch(() => undefined);
+        throw error;
+      }
+      try {
+        const shell = await execution.openShell({ columns: request.columns, rows: request.rows });
+        const lastConnectedAt = Math.floor(Date.now() / 1000);
+        const session: WorkspaceSession = {
+          id: request.workspaceId,
+          userId: request.userId,
+          connectionId: request.connectionId,
+          connectionName: connection.name || connection.host,
+          executionSessionId: execution.id,
+          shell,
+          resumeToken: resumeToken(),
+          attachmentGeneration: 1,
+          attached: true,
+          createdAt: Date.now(),
+          lastConnectedAt,
+        };
+        this.sessions.set(session);
+        session.shell.onClose(() => {
+          if (this.sessions.get(session.id) === session) void this.closeSession(session.id).catch(() => undefined);
+        });
+        await this.connections.markConnected(request.connectionId, lastConnectedAt).catch(() => false);
+        const details = {
+          userId: request.userId,
+          username: request.actorUsername,
+          connectionId: request.connectionId,
+          connectionName: session.connectionName,
+          sessionId: session.id,
+          ip: request.clientIp,
+        };
+        void this.audit.logAction('SSH_CONNECT_SUCCESS', details).catch(() => undefined);
+        void this.notifications.publish('SSH_CONNECT_SUCCESS', details).catch(() => undefined);
+        return session;
+      } catch (error) {
+        await this.executionSessions.close(execution.id).catch(() => undefined);
+        const details = {
+          userId: request.userId,
+          username: request.actorUsername,
+          connectionId: request.connectionId,
+          connectionName: connection.name || connection.host,
+          sessionId: request.workspaceId,
+          ip: request.clientIp,
+          reason: error instanceof Error ? error.message : String(error),
+        };
+        logger.warn(
+          { err: error, workspaceId: request.workspaceId, connectionId: request.connectionId },
+          'Workspace shell initialization failed',
+        );
+        void this.audit.logAction('SSH_SHELL_FAILURE', details).catch(() => undefined);
+        void this.notifications.publish('SSH_SHELL_FAILURE', details).catch(() => undefined);
+        throw error;
+      }
+    } finally {
+      release();
     }
   }
 
   attach(request: AttachWorkspaceRequest): WorkspaceSession {
-    const execution = this.executionSessions.attach({
-      id: request.workspaceId,
-      connectionId: request.connectionId,
-      ownerType: 'workspace',
-      ownerId: String(request.userId),
-      transport: request.transport,
-    });
+    const release = this.reserve(request.workspaceId);
     try {
-      const session: WorkspaceSession = {
+      const execution = this.executionSessions.attach({
         id: request.workspaceId,
-        userId: request.userId,
         connectionId: request.connectionId,
-        connectionName: request.connectionName,
-        executionSessionId: execution.id,
-        shell: request.shell,
-        resumeToken: resumeToken(),
-        attachmentGeneration: 1,
-        attached: true,
-        createdAt: Date.now(),
-      };
-      this.sessions.set(session);
-      session.shell.onClose(() => {
-        if (this.sessions.get(session.id) === session) void this.closeSession(session.id).catch(() => undefined);
+        ownerType: 'workspace',
+        ownerId: String(request.userId),
+        transport: request.transport,
       });
-      return session;
-    } catch (error) {
-      this.executionSessions.detach(execution.id);
-      throw error;
+      try {
+        const session: WorkspaceSession = {
+          id: request.workspaceId,
+          userId: request.userId,
+          connectionId: request.connectionId,
+          connectionName: request.connectionName,
+          executionSessionId: execution.id,
+          shell: request.shell,
+          resumeToken: resumeToken(),
+          attachmentGeneration: 1,
+          attached: true,
+          createdAt: Date.now(),
+        };
+        this.sessions.set(session);
+        session.shell.onClose(() => {
+          if (this.sessions.get(session.id) === session) void this.closeSession(session.id).catch(() => undefined);
+        });
+        return session;
+      } catch (error) {
+        this.executionSessions.detach(execution.id);
+        throw error;
+      }
+    } finally {
+      release();
     }
   }
 

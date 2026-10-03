@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+WorkspaceService owns cap64：pendingConnections在connect/attach前同步reserve，registry+pending admission，finally释放准备名额；同ID禁止并发，resume复用，detach转移owner。不设per-user双层配额。
+
 AppIntent operationId 的 durable replay 生命周期与 receipt 相同，无独立永久 tombstone；10 分钟到期清理后不能保证该 ID 不再次创建。SDK requestId 与 operationId 分离，当前授权仍在 replay 前重检。
 
 Backend Plugin AppIntent create 的 UUID operationId 经 SDK/worker/有界 IPC decode 传给 AppIntentService.createConfirmed，receipt repository 持有 durable 幂等；requestId 只负责单进程响应关联，不代替业务身份。

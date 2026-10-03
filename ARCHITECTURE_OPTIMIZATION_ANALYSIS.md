@@ -3151,6 +3151,8 @@ const ARCHIVE_READ_CONCURRENCY = 32;
 
 ## 114. 普通 Workspace session 没有 per-user / global 数量上限；认证用户可用不同 `workspaceId` 线性创建 SSH transport、shell 与 ExecutionSession
 
+> 已修复：单进程普通 Workspace owner cap64，connect/attach在await前预留，pending与registry一起计量，同ID拒绝，finally释放pending；resume不新占槽，detach移交由Suspend预算接管。不引入多用户双层配额，未做负载基准。
+
 > 确认问题：WorkspaceService canCreate 只看 ID，registry/ExecutionSessionManager 无 count admission；Agent Workspace maxActiveWorkspaces 不覆盖传统 SSH Workspace。身份认证、heartbeat 与断线 cleanup 已有，缺少总量预算，未压测。
 
 Workspace control WebSocket 的 `workspace.connect` 只检查 ID 唯一性：
