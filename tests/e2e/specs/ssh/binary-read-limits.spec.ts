@@ -250,6 +250,55 @@ test('a file growing after SFTP READ starts cannot exceed the admitted byte budg
   }
 });
 
+test('disconnecting during a pending SFTP READ closes the already acquired remote handle', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId);
+  const handles = async () => {
+    const response = await fetch(`${E2E_SSH.controlUrl}/sftp/read-handles`);
+    expect(response.ok).toBeTruthy();
+    return response.json() as Promise<{ opened: number; closed: number }>;
+  };
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    const baseline = await handles();
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=3000`, { method: 'POST' })).ok).toBeTruthy();
+    sendJson(workspace.socket, {
+      type: 'filesystem.readBinary',
+      requestId: crypto.randomUUID(),
+      payload: { path: '/seed.txt', maxBytes: 1024 },
+    });
+    await expect
+      .poll(async () => {
+        const response = await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay`);
+        expect(response.ok).toBeTruthy();
+        return (await response.json()).sftpDelayedReadCount;
+      })
+      .toBeGreaterThan(0);
+    expect(await handles()).toEqual({ opened: baseline.opened + 1, closed: baseline.closed });
+    await closeWebSocket(workspace.socket);
+    await expect.poll(handles).toEqual({ opened: baseline.opened + 1, closed: baseline.closed + 1 });
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' })).ok).toBeTruthy();
+    const recoveredWorkspace = await openWorkspaceSession(request, connectionId);
+    try {
+      await waitForFilesystemReady(recoveredWorkspace.socket);
+      const path = `/disconnect-recovery-${crypto.randomUUID()}.txt`;
+      const content = `read recovery ${crypto.randomUUID()}`;
+      await requestWorkspace(recoveredWorkspace.socket, 'filesystem.writeText', { path, content });
+      const recovered = await requestWorkspaceBinary(recoveredWorkspace.socket, 'filesystem.readBinary', {
+        path,
+        maxBytes: Buffer.byteLength(content),
+      });
+      expect(recovered.bytes).toEqual(Buffer.from(content));
+    } finally {
+      await closeWebSocket(recoveredWorkspace.socket);
+    }
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' });
+    await closeWebSocket(workspace.socket);
+  }
+});
+
 test('disconnecting during pending SFTP OPEN closes the subsequently acquired remote handle', async ({ request }) => {
   await loginAsInitialAdmin(request);
   const connectionId = await ensureTestSshConnection(request);
