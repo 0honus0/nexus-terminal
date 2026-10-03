@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import type { NotificationKind, UiNotification } from '../model';
 
 const DEFAULT_TIMEOUT_MS = 3000;
+const DEFAULT_ERROR_TIMEOUT_MS = 8000;
 const ERROR_DEDUPE_MS = 15_000;
 
 export const useNotificationStore = defineStore('shared-notifications', () => {
@@ -14,7 +15,11 @@ export const useNotificationStore = defineStore('shared-notifications', () => {
     notifications.value = notifications.value.filter((notification) => notification.id !== id);
   };
 
-  const show = (kind: NotificationKind, message: string, timeoutMs = DEFAULT_TIMEOUT_MS): number | null => {
+  const show = (
+    kind: NotificationKind,
+    message: string,
+    timeoutMs = kind === 'error' ? DEFAULT_ERROR_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
+  ): number | null => {
     if (kind === 'error') {
       const now = Date.now();
       const previous = recentErrors.get(message);
