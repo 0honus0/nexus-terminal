@@ -29,7 +29,7 @@
     "specs/ssh/docker-manager-ui.spec.ts": 14015,
     "specs/ssh/file-document-preview.spec.ts": 41859,
     "specs/ssh/file-manager-navigation.spec.ts": 30157,
-    "specs/ssh/file-preview-editor.spec.ts": 65237,
+    "specs/ssh/file-preview-editor.spec.ts": 59872,
     "specs/ssh/file-upload-reconnect-stress.spec.ts": 24764,
     "specs/ssh/file-upload.spec.ts": 64680,
     "specs/ssh/panel-wheel-scaling.spec.ts": 17840,
