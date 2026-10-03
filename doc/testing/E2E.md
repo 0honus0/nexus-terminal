@@ -110,6 +110,8 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
+The architecture/security follow-up adds a batch of 15 independent HTTP E2Es: eight mutation Origin/Fetch Metadata cases (including direct backend, public frontend, opaque/path Origins, and rejection without state changes), plus seven Webhook secret DTO/edit cases covering automatic redaction, case-insensitive preservation, invalid null retention, unsafe classification removal, malformed metadata/value rejection, atomicity, and saved-channel delivery.
+
 Webhook secret coverage reads redacted automatic/custom credential headers, preserves `null` secrets through a real UI save, replaces them, then removes their entries. Each stage sends a saved-channel test to a strict fixture receiver that checks actual outbound credentials without logging or retaining them.
 
 The Agent Provider fixture handles semantic handoff requests separately from normal tool scenarios, emitting all eight required sections. The installed-plugin continuation must complete successfully after retained Skill history triggers context compaction, before inline approval is exercised.
