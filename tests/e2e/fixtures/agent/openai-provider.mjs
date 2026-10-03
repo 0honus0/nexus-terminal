@@ -171,7 +171,7 @@ const server = http.createServer(async (request, response) => {
     response.end(JSON.stringify({ error: { message: 'repeated current input marker' } }));
     return;
   }
-  const expectsNoWorkspaceTools = serializedMessages.includes('E2E_NO_WORKSPACE_TOOLS');
+  const expectsNoWorkspaceTools = latestUserText.includes('E2E_NO_WORKSPACE_TOOLS');
   if (expectsNoWorkspaceTools) {
     const offeredToolNames = Array.isArray(body?.tools)
       ? body.tools.map((tool) => tool?.function?.name).filter((name) => typeof name === 'string')
