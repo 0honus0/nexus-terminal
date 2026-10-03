@@ -3491,6 +3491,8 @@ Plugin static handler 在 Express 前处理 /plugins 与 /sdk，资源匿名 pub
 
 ## 125. Remote Plugin repository/package fetch 的管理员 egress 与 redirect 策略待确认
 
+> 已审核（保留可信管理员egress）：HTTP(S) repository允许内网并follow redirect，catalog/package fetch不承诺地址分类deny、每跳allowlist或DNS pinning；不复用MCP网络策略封禁合理内网管理需求。签名/大小/abort边界不等于网络隔离，限制egress由部署提供。
+
 > 待确认（管理员 egress 策略）：HttpRemotePluginRepositoryAdapter follow redirect 且无地址分类 deny 属实；但本产品单用户管理内网服务，私有 repository 可为必要功能。应确认管理员是否视为可信服务器网络使用者，以及 redirect 允许边界，不直接把 private access 定为漏洞。
 
 Remote repository/package adapter 接受 HTTP(S)，follow redirect，未统一拒绝内网/loopback/link-local或检查每跳地址。已有 response size 与 timeout 限制。内网 repository 是合理管理需求；待定义已认证管理员的 network authority、redirect与allowlist策略，不保留已确认SSRF漏洞定性。

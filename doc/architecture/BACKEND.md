@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+HttpRemotePluginRepositoryAdapter保留undici redirect=follow、HTTP(S)及可信管理员private endpoint访问；fetch有大小/调用signal约束，无每跳地址policy或DNS pinning。签名trust归Package verifier，不替代部署egress边界。
+
 Plugin frontend static handler独立公开GET/HEAD code surface，路径/marker/realpath校验与CSP、CORS、public immutable缓存不提供身份授权；descriptor/Host RPC另行授权，静态代码保密不在当前contract。
 
 Plugin version owner使用全局appId/version immutable key，packageHash冲突拒绝，publisherKeyId用于签名trust而非namespace；Stage/installation仍保持既有scope授权。verify登记version不等于installed source，verified-only metadata无常规GC。
