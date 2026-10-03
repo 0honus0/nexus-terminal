@@ -2572,6 +2572,8 @@ AND (w.status <> 'deleted' OR w.retained = 1)
 
 ## 104. Backend Plugin 的 AppIntent create 丢失了已经存在的 idempotency owner；崩溃窗口会把一次跨 App 操作重复提交为两张 receipt
 
+> 复审：SDK→worker→Host operationId 与 repository 同事务重复校验已成立；补充 replay 仅在 receipt 保留期内有效，10 分钟到期 purge 后无独立去重 tombstone，禁止宣称永久幂等。未扩展 receipt 存储契约。
+
 > 已修复：Backend SDK create 必填 UUID operationId，worker/IPC decode/Host 透传给 createConfirmed 第三参数，复用 durable receipt identity/payload 校验。Plugin 须提交前保存 ID 并同 payload 重试，不自动生成替代 ID；Agent 场景通过真实 Backend Plugin worker/IPC 验证同 ID 同 payload replay 原 receipt、同 ID 改 payload 拒绝。不承诺 receiver 外部副作用 exactly-once。下文为原证据。
 
 > 原问题证据（SDK 无 durable retry identity）：`local-plugin-backend-runtime.adapter.ts:541–547` 不传 createConfirmed 第三参数，Backend SDK input 也不提供 idempotencyKey。只有插件在 uncertain commit 后重试同一业务操作才产生重复 receipt；不声称任意 create 会重复。

@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+AppIntent operationId 的 durable replay 生命周期与 receipt 相同，无独立永久 tombstone；10 分钟到期清理后不能保证该 ID 不再次创建。SDK requestId 与 operationId 分离，当前授权仍在 replay 前重检。
+
 Backend Plugin AppIntent create 的 UUID operationId 经 SDK/worker/有界 IPC decode 传给 AppIntentService.createConfirmed，receipt repository 持有 durable 幂等；requestId 只负责单进程响应关联，不代替业务身份。
 
 Backend Plugin Host→child 协议 writer 对 callback/drain 持有硬 deadline；超时销毁 stdin writer 并触发 protocol failure。关闭 runtime 时 active Host RPC 只做有界 drain，随后仍进入 SIGTERM→SIGKILL 收敛，不能让不消费 stdin 的 Plugin 永久阻塞 uninstall／upgrade。

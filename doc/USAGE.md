@@ -277,6 +277,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - 同一布局中添加多个文本编辑器目前并非完整支持场景。
 - 请自行备份部署目录中的 `data`；项目本身不替代外部备份方案。
 - Backend Plugin `intents.create` 必须提供稳定 UUID `operationId`；插件应在首次提交前持久保存该 ID，未知提交结果时以同 ID／同 payload 重试，Host replay 原 receipt。复用 ID 修改 payload 会拒绝；这不保证接收方的外部动作只执行一次。
+- AppIntent replay 仅在原 receipt 仍保留时有效：receipt 有效期为 10 分钟，到期清理会丢失该 ID 的去重证据。超过该窗口的未知提交结果须先核对业务状态，不可把同 ID 重试当作永久去重；重试仍须通过当前 App／grant 校验。
 - Backend Plugin 若停止读取 Host RPC response，Host 对协议写入与关闭前 active RPC drain 都有硬 deadline；超时会把该 runtime 视为协议失败并进入进程终止，Plugin uninstall／upgrade 不会无限卡在等待 stdin drain。
 - 同一用户下同一 Plugin App 的首次 install 串行提交；并发安装不同版本时，先完成的版本成为当前 installation，后到请求会要求走 upgrade，不会把 App activeVersion 与 Installation version 写成不同版本。
 - 删除当前使用的自定义 Terminal Theme 时，Backend 会在同一持久化事务中清除 `activeTerminalThemeId`；直接调用删除 API 也不会留下指向已删除主题的悬挂设置。
