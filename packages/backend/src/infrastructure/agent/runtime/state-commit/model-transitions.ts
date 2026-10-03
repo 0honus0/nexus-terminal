@@ -121,7 +121,7 @@ export const beginModelStepTransition = async (
        status = 'running', goal_status = 'in_progress', started_at = COALESCE(started_at, ?),
        usage_json = ?,
        active_execution_started_at = CASE WHEN executing_runtime_count = 0 THEN ? ELSE active_execution_started_at END,
-       executing_runtime_count = executing_runtime_count + 1,
+       executing_runtime_count = executing_runtime_count + ?,
        consumed_input_sequence = MAX(consumed_input_sequence, ?),
        next_event_sequence = next_event_sequence + ?, version = version + 1, updated_at = ?
      WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
@@ -129,6 +129,9 @@ export const beginModelStepTransition = async (
       command.now,
       JSON.stringify(nextUsage),
       command.now,
+      // Tool proposals retain the Root execution slot through their tool phase.
+      // Starting the next model transfers that slot rather than acquiring another.
+      runtime.schedule_state === 'executing' ? 0 : 1,
       command.purpose === 'compaction' ? row.consumed_input_sequence : consumedInputSequence,
       events.length,
       command.now,

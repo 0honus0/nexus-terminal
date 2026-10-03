@@ -180,6 +180,7 @@ Run 冻结 Provider/model configuration、capability/reasoning、SSH `connection
 - HTTP 幂等身份为 `(userId, appId, commandName, Idempotency-Key) + request hash`，同 key 不同 payload 拒绝，unknown side effect 不自动重放。
 - `/ws/agent` durable event 有 sequence、snapshot/cursor catch-up/repository replay；transient delta 无 durable sequence、断线可丢、不冒充 final message。transport 有 reconnect/backoff/backpressure 边界。
 - Root `AgentScheduler` 是单 Backend 进程内 dispatcher，按 App 轮转并受用户 Runtime limits 约束；先 commit 再 enqueue。`NEW_INPUT/CANCELLED/AGENT_QUIESCE` 区分输入、取消和关闭。
+- Root 的执行计数在模型与其工具阶段之间交接；`executing` 状态下开始下一轮模型复用已有槽位，不能重复累加。进入 join／mailbox 等待时释放该槽位，参与者取消结算用真实剩余计数决定 Run 终态，不以强制清零替代收敛。
 - Subagent 使用 SQLite `agent_scheduler_work` durable CAS/owner epoch claim 队列（`queued/claimed/waiting/completed/cancelled`），与父 Run 共享预算/并发；depth、环、message bytes/count、TTL、backpressure、取消与父状态有界。
 - Backend 重启将遗留 Root Run 收敛为 interrupted，不恢复旧 stack；checkpoint/resume 创建新 Run/Runtime/资源并重新授权，不复用旧 approval 或重放 mutation。checkpoint 不含 secret、live handle、active lease/mutation continuation，只含 Plan、watermark、evidence、冻结事实和安全恢复元数据。
 - SQLite schema/migration 按已进入 `main` 的版本升级，不以 dev 数据可重建跳过迁移。多 Backend 需一并设计 leader/claim、owner epoch、lease/fence、幂等、恢复与事件顺序，不能仅替换 queue。
