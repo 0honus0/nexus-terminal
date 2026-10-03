@@ -255,15 +255,10 @@ export class RunnerJournal {
       const version = this.database.prepare('PRAGMA user_version').get();
       if (existing && version?.user_version !== 5) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
       if (this.database.prepare('PRAGMA quick_check').get()?.quick_check !== 'ok') invalidJournal();
-      this.database.exec(`PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;
-        CREATE TABLE IF NOT EXISTS journal_records (
-          kind TEXT NOT NULL CHECK(kind IN ('commands','jobs','workspaces')),
-          id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(kind,id)
-        ) STRICT;`);
-      this.database.exec('PRAGMA user_version=5');
       const raw = empty();
       const counts = { commands: 0, jobs: 0, workspaces: 0 };
-      for (const row of this.database.prepare('SELECT kind,id,payload FROM journal_records').iterate()) {
+      const records = existing ? this.database.prepare('SELECT kind,id,payload FROM journal_records').iterate() : [];
+      for (const row of records) {
         if (
           typeof row.kind !== 'string' ||
           !['commands', 'jobs', 'workspaces'].includes(row.kind) ||
@@ -281,6 +276,14 @@ export class RunnerJournal {
         });
       }
       this.state = decodeJournalState(raw);
+      // Validate recovery completely before any write, including PRAGMAs that can
+      // change the database header. Invalid journals must retain their original bytes.
+      this.database.exec(`PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;
+        CREATE TABLE IF NOT EXISTS journal_records (
+          kind TEXT NOT NULL CHECK(kind IN ('commands','jobs','workspaces')),
+          id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(kind,id)
+        ) STRICT;`);
+      this.database.exec('PRAGMA user_version=5');
     } catch (error) {
       this.database.close();
       throw error instanceof Error && error.message === 'JOURNAL_SCHEMA_UNSUPPORTED'
