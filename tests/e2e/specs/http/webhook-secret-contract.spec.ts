@@ -11,6 +11,10 @@ const cases = [
   { name: 'custom secret classification cannot be removed while retaining null', kind: 'unmark' },
   { name: 'invalid custom secret header name is rejected atomically', kind: 'invalid-name' },
   { name: 'non-string header values are rejected atomically', kind: 'invalid-value' },
+  {
+    name: 'case-colliding custom headers cannot expose a retained secret by removing its classification',
+    kind: 'case-collision',
+  },
 ] as const;
 
 for (const scenario of cases) {
@@ -58,6 +62,10 @@ for (const scenario of cases) {
           unmark: { headers: initial.config.headers, secretHeaderNames: [] },
           'invalid-name': { secretHeaderNames: ['invalid header'] },
           'invalid-value': { headers: { Authorization: 123 } },
+          'case-collision': {
+            headers: { 'X-E2E-Private': 'public-replacement', 'x-e2e-private': null, Authorization: null },
+            secretHeaderNames: [],
+          },
         };
         const updated = await request.put(`/api/v1/notifications/${initial.id}`, {
           data: {
@@ -65,7 +73,9 @@ for (const scenario of cases) {
             config: { url, ...(changes[scenario.kind] as object) },
           },
         });
-        expect(updated.status(), await updated.text()).toBe(scenario.kind === 'preserve' ? 200 : 400);
+        const updateBody = await updated.text();
+        expect(updateBody).not.toContain('private-original');
+        expect(updated.status(), updateBody).toBe(scenario.kind === 'preserve' ? 200 : 400);
         if (scenario.kind === 'preserve') expect(JSON.stringify(await updated.json())).not.toContain(secret);
       }
       const listed = await request.get('/api/v1/notifications');

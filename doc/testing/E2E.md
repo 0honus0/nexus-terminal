@@ -134,6 +134,8 @@ The following mapping groups fifteen production changes with their behavioral E2
 
 Webhook secret coverage reads redacted automatic/custom credential headers, preserves `null` secrets through a real UI save, replaces them, then removes their entries. Each stage sends a saved-channel test to a strict fixture receiver that checks actual outbound credentials without logging or retaining them.
 
+The Webhook case-collision regression submits an explicit replacement and a differently cased `null` entry while removing custom secret classification. It requires rejection before persisted mutation, no old secret in the response, unchanged redacted configuration and successful outbound delivery with the original credentials. Mixed-case preservation with a single entry remains supported.
+
 The Agent Provider fixture handles semantic handoff requests separately from normal tool scenarios, emitting all eight required sections. The installed-plugin continuation must complete successfully after retained Skill history triggers context compaction, before inline approval is exercised.
 
 Provider discovery verifies both direct-backend and public-frontend same-Origin mutations, rejects a mismatched Origin, and rejects cross-site Fetch Metadata even with an otherwise matching Origin; all Agent rejections preserve the standard error envelope.

@@ -67,6 +67,8 @@ const readConfigDto = (value: unknown): NotificationConfigDto => {
       !Object.values(value.headers).every((entry) => typeof entry === 'string' || entry === null)
     )
       throw new Error('config.headers 必须是字符串映射。');
+    const names = Object.keys(value.headers).map((name) => name.toLowerCase());
+    if (new Set(names).size !== names.length) throw new Error('config.headers 不允许大小写重复的 header 名称。');
     config.headers = value.headers as Record<string, string | null>;
   }
   if (value.secretHeaderNames !== undefined) {
