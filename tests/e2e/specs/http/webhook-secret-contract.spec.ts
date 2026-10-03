@@ -15,7 +15,30 @@ const cases = [
     name: 'case-colliding custom headers cannot expose a retained secret by removing its classification',
     kind: 'case-collision',
   },
+  { name: 'reversed case-colliding headers cannot bypass secret edit rejection', kind: 'reverse-collision' },
 ] as const;
+
+test('case-colliding headers are rejected on create and unsaved delivery without persisting a channel', async ({
+  request,
+}) => {
+  await loginAsInitialAdmin(request);
+  const name = `E2E Header Collision ${randomUUID()}`;
+  const config = {
+    url: `${E2E_SSH.controlUrl}/e2e-notification-webhook-secrets?phase=original`,
+    method: 'POST',
+    headers: { Authorization: 'Bearer e2e-original', authorization: 'Bearer e2e-replacement' },
+  };
+  const created = await request.post('/api/v1/notifications', {
+    data: { name, channelType: 'webhook', enabled: false, enabledEvents: [], config },
+  });
+  expect(created.status(), await created.text()).toBe(400);
+  const sent = await request.post('/api/v1/notifications/test-unsaved', { data: { channelType: 'webhook', config } });
+  expect(sent.status(), await sent.text()).toBe(400);
+  expect((await sent.json()).message).toContain('config.headers');
+  const listed = await request.get('/api/v1/notifications');
+  expect(listed.ok()).toBeTruthy();
+  expect(((await listed.json()) as Array<{ name: string }>).some((channel) => channel.name === name)).toBe(false);
+});
 
 for (const scenario of cases) {
   test(scenario.name, async ({ request }) => {
@@ -64,6 +87,10 @@ for (const scenario of cases) {
           'invalid-value': { headers: { Authorization: 123 } },
           'case-collision': {
             headers: { 'X-E2E-Private': 'public-replacement', 'x-e2e-private': null, Authorization: null },
+            secretHeaderNames: [],
+          },
+          'reverse-collision': {
+            headers: { 'x-e2e-private': null, 'X-E2E-Private': 'public-replacement', Authorization: null },
             secretHeaderNames: [],
           },
         };
