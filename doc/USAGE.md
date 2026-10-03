@@ -240,6 +240,8 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 ## Agent
 
+Plugin 本地／远程／官方 Stage 共用单 Backend 最多 8 个保留 Stage，创建串行检查；达到上限拒绝新 Stage，安装完成清理或 24 小时过期清理成功后可继续。每 Stage 最多 50 MiB archive／200 MiB 展开文件，8 个约为 2 GiB 的保守 payload 预算，不是实际磁盘使用上限；已安装版本、历史 orphan 和文件系统开销不在此预算内。
+
 撤销 Plugin publisher key 会保留该 key 的记录并使其不能用于新的包校验；管理员可显式重新信任同 key，此操作清除当前 revokedAt，并非永久禁止重新信任。publisher 列表当前全量返回、无分页或自动历史删除，不承诺大规模 key 管理容量；审计历史与当前信任状态应分别理解。
 
 远程 Plugin repository 是可信管理员发起的 Backend 网络访问：支持 HTTP(S)、内网地址及重定向，不提供按地址分类封禁、每跳 allowlist 或 DNS pinning。只配置可信 catalog／包地址；包签名和大小检查不是网络隔离。需要限制服务器出站网络时，应在部署网络层设置规则，不将 MCP 的地址策略推定为此入口的保护。

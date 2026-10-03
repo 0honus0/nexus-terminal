@@ -4,6 +4,8 @@
 
 ## 技术基线
 
+PluginPackageInstallCoordinator.withStageAdmission统一串行local/remote/official stage创建，await retention cleanup后按retained rows检查8槽，gate覆盖source open/verifier/createStage/failure cleanup；每Stage已有50/200MiB界限形成保守payload预算。无跨进程lease或orphan accounting。
+
 Publisher repository按user/key保存当前trust row，revoke只标记revokedAt，put显式retrust清marker，不构成永久revocation tombstone；list全量，未实现pagination/自动purge。保留当前记录不代替独立audit历史。
 
 HttpRemotePluginRepositoryAdapter保留undici redirect=follow、HTTP(S)及可信管理员private endpoint访问；fetch有大小/调用signal约束，无每跳地址policy或DNS pinning。签名trust归Package verifier，不替代部署egress边界。

@@ -41,6 +41,23 @@ const PLUGIN_STAGE_RETENTION_SECONDS = 24 * 60 * 60;
 
 export class PluginPackageInstallCoordinator {
   private readonly installTails = new Map<string, Promise<void>>();
+  private stageTail: Promise<void> = Promise.resolve();
+
+  private async withStageAdmission<T>(create: () => Promise<T>): Promise<T> {
+    const previous = this.stageTail;
+    let release!: () => void;
+    this.stageTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      const retained = await this.cleanupExpiredStages();
+      if (retained.length >= 8) throw new Error('PLUGIN_STAGE_CAPACITY_EXCEEDED');
+      return await create();
+    } finally {
+      release();
+    }
+  }
 
   constructor(
     private readonly repository: PluginInstallRepositoryPort,
@@ -86,7 +103,10 @@ export class PluginPackageInstallCoordinator {
   }
 
   async stage(userId: number, input: PluginStageInput): Promise<PluginStageRecord> {
-    await this.cleanupExpiredStages();
+    return this.withStageAdmission(() => this.stageArtifact(userId, input));
+  }
+
+  private async stageArtifact(userId: number, input: PluginStageInput): Promise<PluginStageRecord> {
     const source = await this.packages.open(userId, input.artifactAppId, input.artifactId);
     const stageId = randomUUID();
     const staged = await this.verifier.stage({ stageId, sizeBytes: source.sizeBytes, source: source.source });
@@ -886,7 +906,19 @@ export class PluginPackageInstallCoordinator {
     expectedPublisherKeyId?: string,
     validatedCatalog?: RemotePluginCatalog,
   ): Promise<PluginStageRecord> {
-    await this.cleanupExpiredStages();
+    return this.withStageAdmission(() =>
+      this.createRemoteStage(userId, input, config, signal, expectedPublisherKeyId, validatedCatalog),
+    );
+  }
+
+  private async createRemoteStage(
+    userId: number,
+    input: RemotePluginStageInput,
+    config: RemotePluginRepositoryConfig,
+    signal?: AbortSignal,
+    expectedPublisherKeyId?: string,
+    validatedCatalog?: RemotePluginCatalog,
+  ): Promise<PluginStageRecord> {
     logger.debug(
       { userId, appId: input.appId, version: input.version, repositoryUrl: config.url },
       'Agent remote plugin staging started',

@@ -3507,6 +3507,8 @@ revoked publisher key 保留，list 无分页；单 key PEM/label 有大小校�
 
 ## 127. Plugin Stage 只有单包大小与 24h retention，没有 per-user Stage count / aggregate bytes admission；重复 Stage/verify 可以在 retention 窗口内持续堆积数十到数百 MiB 的本地副本
 
+> 已加aggregate admission：local/remote/official共用串行创建gate，清理后最多8个retained Stage，失败清理保留row仍计数；按单Stage archive50MiB+expanded200MiB保守预留约2GiB payload。不是实际磁盘bytes accounting，不涵盖installed packages、既有orphan/文件系统开销，不承诺跨进程quota。
+
 > 确认问题（aggregate disk budget 缺口）：PluginPackageInstallCoordinator stage 仅 cleanupExpired，verifier 单包50MiB／展开200MiB，Remote Stage 不经过 Artifact quota。已有24h retention，不是永久所有 Stage 不回收；重复 Stage 的窗口容量未测。
 
 Plugin package verifier 对单个包做了比较完整的局部限制：
