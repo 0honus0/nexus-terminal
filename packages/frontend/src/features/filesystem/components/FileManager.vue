@@ -213,9 +213,11 @@
   let unregisterSearchFocus: (() => void) | undefined;
   let unregisterPathFocus: (() => void) | undefined;
   let navigationQueue: Promise<void> = Promise.resolve();
+  let queuedRefresh: { promise: Promise<void>; draftRevision: number } | undefined;
   let clipboardPasteSerial = 0;
 
   const enqueueNavigation = (operation: () => Promise<void>): Promise<void> => {
+    queuedRefresh = undefined;
     const next = navigationQueue.then(operation, operation);
     navigationQueue = next.catch(() => undefined);
     return next;
@@ -227,13 +229,21 @@
     }
   };
   const refresh = async (): Promise<void> => {
-    const draftRevision = pathDraftRevision;
-    await enqueueNavigation(async () => {
+    if (queuedRefresh) {
+      queuedRefresh.draftRevision = pathDraftRevision;
+      await queuedRefresh.promise;
+      return;
+    }
+    const pending = { promise: Promise.resolve(), draftRevision: pathDraftRevision };
+    pending.promise = enqueueNavigation(async () => {
+      if (queuedRefresh === pending) queuedRefresh = undefined;
       await browser.refresh();
-      if (!browser.error.value && (!pathDraftEditing.value || pathDraftRevision === draftRevision)) {
+      if (!browser.error.value && (!pathDraftEditing.value || pathDraftRevision === pending.draftRevision)) {
         pathDraft.value = browser.path.value;
       }
     });
+    queuedRefresh = pending;
+    await pending.promise;
   };
 
   const resolveWheelScale = createWheelScaleResolver({

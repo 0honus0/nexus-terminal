@@ -54,14 +54,29 @@ test('compare single and repeated refresh requests while retaining new remote en
         await expect(activeFileManagerList(page).locator(`tr[data-filename="${filename}"]`)).toBeVisible();
         await expect.poll(() => pending.size).toBe(0);
         expect(requests - baseline).toBeGreaterThan(0);
-        // The UI navigation queue serializes refreshes; a burst is not a concurrent list window.
-        expect(requests - baseline).toBe(clicks);
+        // Same-turn queued refreshes may coalesce, but the exact selected contract must hold.
+        expect(requests - baseline).toBe(process.env.NEXUS_E2E_SERIAL_REFRESH_BASELINE === '1' ? clicks : 1);
         expect(peakPending).toBe(1);
         await expect(manager.locator('.file-manager-path-input input')).toHaveValue('/');
         samples.push({ clicks, sample, requests: requests - baseline, peakPending, ms: performance.now() - start });
       }
     }
     console.log('[repeated refresh profile]', JSON.stringify(samples));
+    if (process.env.NEXUS_E2E_SERIAL_REFRESH_BASELINE !== '1') {
+      const baseline = requests;
+      await manager.getByTitle('Refresh', { exact: true }).click();
+      await expect.poll(() => requests - baseline).toBe(1);
+      expect(pending.size).toBe(1);
+      const filename = 'refresh-during-active-read.txt';
+      await writeFile(path.resolve('.tmp/ssh-root', filename), 'late refresh fixture');
+      await manager.getByTitle('Refresh', { exact: true }).click();
+      await expect.poll(() => requests - baseline).toBe(2);
+      await expect.poll(() => pending.size).toBe(0);
+      await expect(activeFileManagerList(page).locator(`tr[data-filename="${filename}"]`)).toBeVisible();
+      expect(requests - baseline).toBe(2);
+      expect(peakPending).toBe(1);
+      await expect(manager.locator('.file-manager-path-input input')).toHaveValue('/');
+    }
   } finally {
     try {
       await cdp.detach();
