@@ -20,6 +20,56 @@ import {
   waitForJson,
 } from '../../support/ws';
 
+test('compare initial connection shell readiness with optional filesystem initialization blocked', async ({
+  request,
+}) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const samples = [];
+  for (const blocked of [false, true]) {
+    for (let sample = 0; sample < 3; sample++) {
+      const socket = await openAuthenticatedWebSocket(request);
+      try {
+        expect(
+          (await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate?blocked=${blocked ? 1 : 0}`, { method: 'POST' })).ok,
+        ).toBe(true);
+        const start = performance.now();
+        await requestWorkspace(socket, 'workspace.connect', {
+          connectionId,
+          workspaceId: `init-profile-${crypto.randomUUID()}`,
+          viewport: { columns: 100, rows: 30 },
+        });
+        const connectedMs = performance.now() - start;
+        if (blocked)
+          await expect
+            .poll(async () => (await (await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate`)).json()).pending)
+            .toBe(1);
+        const marker = `INIT_OK_${crypto.randomUUID()}`;
+        const output = waitForBinaryText(socket, marker);
+        const inputStart = performance.now();
+        const split = Math.floor(marker.length / 2);
+        await requestWorkspace(socket, 'terminal.input', {
+          data: `printf '%s%s\\n' '${marker.slice(0, split)}' '${marker.slice(split)}'\r`,
+        });
+        await output;
+        const shellMs = performance.now() - inputStart;
+        expect((await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate?blocked=0`, { method: 'POST' })).ok).toBe(true);
+        await waitForFilesystemReady(socket);
+        expect(await requestWorkspace(socket, 'filesystem.list', { path: '/' })).toBeTruthy();
+        samples.push({ blocked, sample, connectedMs, shellMs });
+      } finally {
+        try {
+          expect((await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate?blocked=0`, { method: 'POST' })).ok).toBe(true);
+        } finally {
+          await closeWebSocket(socket);
+        }
+      }
+    }
+  }
+  console.log('[initial capability profile]', JSON.stringify(samples));
+});
+
 for (const outcome of ['ready', 'error', 'closed'] as const) {
   test(`suspend resume keeps shell usable while filesystem initialization is gated: ${outcome}`, async ({
     request,
