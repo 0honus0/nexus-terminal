@@ -43,6 +43,9 @@ let sftpPendingWrites = 0;
 let sftpStatDelayMs = 0;
 let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
+let prepareOperationDelayMs = 0;
+let prepareStatRequests = 0;
+let prepareMkdirRequests = 0;
 let sftpSlowDirectory = '';
 let sftpSlowDirectoryDelayMs = 0;
 let sftpReadDelayMs = 0;
@@ -680,6 +683,10 @@ function attachSftp(session, accept) {
 
   const statRequest = async (reqid, remotePath, useLstat = false) => {
     try {
+      if (remotePath.startsWith('/prepare-profile-')) {
+        prepareStatRequests++;
+        if (prepareOperationDelayMs) await new Promise((resolve) => setTimeout(resolve, prepareOperationDelayMs));
+      }
       if (sftpStatDelayMs > 0 && remotePath === '/pending-start-cancel.bin') {
         await new Promise((resolve) => setTimeout(resolve, sftpStatDelayMs));
       }
@@ -866,6 +873,10 @@ function attachSftp(session, accept) {
 
   sftp.on('MKDIR', async (reqid, remotePath, attrs) => {
     try {
+      if (remotePath.startsWith('/prepare-profile-')) {
+        prepareMkdirRequests++;
+        if (prepareOperationDelayMs) await new Promise((resolve) => setTimeout(resolve, prepareOperationDelayMs));
+      }
       await fsp.mkdir(resolveRemotePath(remotePath), { mode: attrs?.mode ? attrs.mode & 0o7777 : 0o755 });
       sftp.status(reqid, STATUS_CODE.OK);
     } catch (error) {
@@ -1318,6 +1329,22 @@ const controlServer = http.createServer(async (req, res) => {
       sftpLstatDenyPrefix = requestUrl.searchParams.get('path') || '';
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpLstatDenyPrefix }));
+      return;
+    }
+    if (requestUrl.pathname === '/sftp/prepare-profile' && (req.method === 'POST' || req.method === 'GET')) {
+      if (req.method === 'POST') {
+        const delay = Number(requestUrl.searchParams.get('ms') || '0');
+        if (!Number.isFinite(delay) || delay < 0 || delay > 1000) {
+          res.writeHead(400);
+          res.end('Invalid prepare delay');
+          return;
+        }
+        prepareOperationDelayMs = Math.round(delay);
+        prepareStatRequests = 0;
+        prepareMkdirRequests = 0;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ prepareOperationDelayMs, prepareStatRequests, prepareMkdirRequests }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/sftp/readdir-delay') {

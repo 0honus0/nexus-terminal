@@ -1,6 +1,7 @@
 import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { LeaseOwner, LeasePort } from '../../../modules/agent/capabilities/lease.port';
 import { LEASE_RENEW_INTERVAL_MS } from '../../../modules/agent/capabilities/lease-policy';
+import { KnownMutationFailure } from '../../../platform/operations/known-mutation-failure';
 import type {
   MutationGuardHandle,
   MutationGuardPort,
@@ -139,6 +140,10 @@ export class LeaseMutationGuardAdapter implements MutationGuardPort {
       await handle.confirm();
       return result;
     } catch (error) {
+      if (error instanceof KnownMutationFailure && !handle.signal.aborted) {
+        await handle.confirm();
+        throw error;
+      }
       await handle.unknown('MUTATION_OUTCOME_UNKNOWN', { errorCode: code(error) }).catch(() => undefined);
       throw error;
     }

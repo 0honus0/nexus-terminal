@@ -4,6 +4,8 @@ import type { Writable } from 'node:stream';
 import { logger } from '../../../shared/logging/logger';
 import type { ExecutionSessionManager } from '../../execution/execution-session-manager';
 import type { RemoteFileSystem } from '../../filesystem/remote-filesystem';
+import { RemoteDirectoryTypeConflict } from '../../filesystem/remote-filesystem';
+import { KnownMutationFailure } from '../known-mutation-failure';
 import { toRemoteFileEntry } from '../../filesystem/file-entry';
 import { normalizeAbsoluteRemotePath } from '../../filesystem/remote-path';
 import type {
@@ -106,20 +108,55 @@ export class StreamUploadOperationService implements UploadOperation {
 
     try {
       const filesystem = await this.sessions.require(request.sessionId).fileSystem('transfer');
-      await filesystem.ensureDirectory(basePath);
-      const remaining = [...directories]
+      try {
+        await filesystem.ensureDirectory(basePath);
+      } catch (error) {
+        if (error instanceof RemoteDirectoryTypeConflict)
+          throw new KnownMutationFailure(error.message, { cause: error });
+        throw error;
+      }
+      // Schedule shared parents before their children, but do not add implicit
+      // parents to the prepared destination allowlist or its capacity accounting.
+      // At most one extra path per requested directory keeps this work bounded.
+      const preparationDirectories = new Set(directories);
+      for (const directory of directories) {
+        const parent = path.posix.dirname(directory);
+        if (parent !== basePath && this.isWithin(basePath, parent)) preparationDirectories.add(parent);
+      }
+      const remaining = [...preparationDirectories]
         .filter((value) => value !== basePath)
         .sort((a, b) => {
           const depth = a.split('/').length - b.split('/').length;
           return depth || a.localeCompare(b);
         });
-      let index = 0;
-      const workers = Math.min(PREPARE_CONCURRENCY, remaining.length);
-      await Promise.all(
-        Array.from({ length: workers }, async () => {
-          while (index < remaining.length) await filesystem.ensureDirectory(remaining[index++]);
-        }),
-      );
+      let layerStart = 0;
+      while (layerStart < remaining.length) {
+        const depth = remaining[layerStart]!.split('/').length;
+        let layerEnd = layerStart + 1;
+        while (layerEnd < remaining.length && remaining[layerEnd]!.split('/').length === depth) layerEnd++;
+        let index = layerStart;
+        let failed = false;
+        const outcomes = await Promise.allSettled(
+          Array.from({ length: Math.min(PREPARE_CONCURRENCY, layerEnd - layerStart) }, async () => {
+            while (!failed && index < layerEnd) {
+              try {
+                await filesystem.ensureDirectory(remaining[index++]);
+              } catch (error) {
+                failed = true;
+                throw error;
+              }
+            }
+          }),
+        );
+        const failures = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+        if (failures.length) {
+          if (failures.every((failure) => failure.reason instanceof RemoteDirectoryTypeConflict)) {
+            throw new KnownMutationFailure(failures[0]!.reason.message, { cause: failures[0]!.reason });
+          }
+          throw failures.find((failure) => !(failure.reason instanceof RemoteDirectoryTypeConflict))!.reason;
+        }
+        layerStart = layerEnd;
+      }
 
       const reservation = this.preparing.get(key);
       if (!reservation || reservation.token !== token) throw new Error('Upload preparation was superseded.');

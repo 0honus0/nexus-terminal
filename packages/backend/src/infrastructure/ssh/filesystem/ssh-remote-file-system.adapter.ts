@@ -11,7 +11,7 @@ import type {
   RemoteReadRange,
   RemoteWriteOptions,
 } from '../../../platform/filesystem/remote-filesystem';
-import { isRemoteFileMissingError } from '../../../platform/filesystem/remote-filesystem';
+import { isRemoteFileMissingError, RemoteDirectoryTypeConflict } from '../../../platform/filesystem/remote-filesystem';
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
 const call = <T>(invoke: (callback: (error: Error | undefined | null, value: T) => void) => void): Promise<T> =>
@@ -294,7 +294,7 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
   private async ensureDirectoryInternal(remotePath: string): Promise<void> {
     try {
       const metadata = await this.metadata(remotePath);
-      if (!metadata.isDirectory) throw new Error(`Remote path exists but is not a directory: ${remotePath}`);
+      if (!metadata.isDirectory) throw new RemoteDirectoryTypeConflict(remotePath);
       return;
     } catch (error) {
       if (!isRemoteFileMissingError(error)) throw error;

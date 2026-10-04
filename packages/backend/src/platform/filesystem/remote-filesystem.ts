@@ -66,6 +66,14 @@ export interface RemoteFileSystem {
 
 export type RemoteFileSystemRole = 'control' | 'transfer' | 'background';
 
+/** Metadata acknowledged a non-directory before this ensure attempt could mutate it. */
+export class RemoteDirectoryTypeConflict extends Error {
+  constructor(remotePath: string) {
+    super(`Remote path exists but is not a directory: ${remotePath}`);
+    this.name = 'RemoteDirectoryTypeConflict';
+  }
+}
+
 export const isRemoteFileMissingError = (error: unknown): boolean => {
   if (!error) return false;
   const value = error as { code?: unknown; message?: unknown };
