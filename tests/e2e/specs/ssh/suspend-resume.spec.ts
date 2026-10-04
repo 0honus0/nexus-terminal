@@ -923,6 +923,7 @@ test('resumed terminal pages older history through a bounded window and restores
         }
       });
     });
+    const resumeStarted = performance.now();
     await suspendedRow.getByRole('button', { name: 'Resume', exact: true }).click();
     await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
 
@@ -934,6 +935,8 @@ test('resumed terminal pages older history through a bounded window and restores
       .poll(async () => (await rows.locator(':scope > div').allTextContents()).join(''))
       .toContain(tailMarker);
     await expect(rows).not.toContainText(earlyMarker);
+
+    const tailVisibleMs = performance.now() - resumeStarted;
 
     // xterm 6 uses a custom scrollable element; the legacy .xterm-viewport no longer exposes
     // the terminal's actual scrollTop/scrollHeight. Assert lazy paging at the protocol boundary
@@ -1025,6 +1028,23 @@ test('resumed terminal pages older history through a bounded window and restores
       -6_000,
       () => historyRequestCount > requestsBeforeReturningToTail,
       're-entering history should request an older page',
+    );
+    await dragHistorySliderToBottom();
+    await expect.poll(renderedTerminalText, { timeout: 10_000 }).toContain(tailMarker);
+    const roundtripMarker = `RESUME_PROFILE_${crypto.randomUUID().replaceAll('-', '')}`;
+    const command = page.getByRole('textbox', { name: 'Command', exact: true });
+    await expect(command).toHaveCount(1);
+    const roundtripStarted = performance.now();
+    await command.fill(`printf 'RESUME_%s\\n' '${roundtripMarker.slice('RESUME_'.length)}'`);
+    await command.press('Enter');
+    await expect.poll(renderedTerminalText).toContain(roundtripMarker);
+    console.log(
+      '[browser resume profile]',
+      JSON.stringify({
+        snapshotBytes: Buffer.byteLength(snapshot),
+        tailVisibleMs,
+        postHistoryRoundtripMs: performance.now() - roundtripStarted,
+      }),
     );
   } finally {
     expect((await context.request.put('/api/v1/settings/layout', { data: originalLayout })).ok()).toBeTruthy();
