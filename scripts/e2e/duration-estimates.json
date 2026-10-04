@@ -1,6 +1,7 @@
 {
   "version": 1,
   "specs": {
+    "specs/agent/event-catchup.spec.ts": 21650,
     "specs/agent/host.spec.ts": 77400,
     "specs/agent/preset-plugin.spec.ts": 43268,
     "specs/agent/provider.spec.ts": 310,
@@ -41,7 +42,7 @@
     "specs/ssh/download-network-profile.spec.ts": 46317,
     "specs/ssh/editor-save-profile.spec.ts": 1539,
     "specs/ssh/file-document-preview.spec.ts": 44171,
-    "specs/ssh/file-list-profile.spec.ts": 9326,
+    "specs/ssh/file-list-profile.spec.ts": 11609,
     "specs/ssh/file-list-sort.spec.ts": 4909,
     "specs/ssh/file-manager-navigation.spec.ts": 26762,
     "specs/ssh/file-preview-editor.spec.ts": 66146,
@@ -64,7 +65,7 @@
     "specs/ssh/status-docker-protocol.spec.ts": 1419,
     "specs/ssh/status-history-time-axis.spec.ts": 3635,
     "specs/ssh/suspend-log-compaction.spec.ts": 4307,
-    "specs/ssh/suspend-resume.spec.ts": 41677,
+    "specs/ssh/suspend-resume.spec.ts": 43779,
     "specs/ssh/terminal-protocol.spec.ts": 1491,
     "specs/ssh/terminal-tools-ui.spec.ts": 4046,
     "specs/ssh/terminal-ui.spec.ts": 48972,
