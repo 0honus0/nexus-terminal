@@ -492,7 +492,9 @@ export class WorkspaceSuspendCoordinatorService {
       { workspaceId, suspendedSessionId: pending.suspendSessionId, historyAvailable: pending.historyCursor > 0 },
       'Suspended Workspace resumed',
     );
-    await this.filesystem
+    // Ownership and terminal replay are committed. Optional SFTP initialization must not
+    // hold the resume response (and therefore the browser's terminal activation) hostage.
+    void this.filesystem
       .initialize(workspaceId)
       .catch((error) =>
         logger.warn({ err: error, workspaceId }, 'Workspace filesystem initialization after resume failed'),

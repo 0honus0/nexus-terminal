@@ -17,7 +17,82 @@ import {
   sendJson,
   waitForFilesystemReady,
   waitForBinaryText,
+  waitForJson,
 } from '../../support/ws';
+
+for (const outcome of ['ready', 'error', 'closed'] as const) {
+  test(`suspend resume keeps shell usable while filesystem initialization is gated: ${outcome}`, async ({
+    request,
+  }) => {
+    await loginAsInitialAdmin(request);
+    await resetTestSshFilesystem();
+    const original = await openWorkspaceSession(request, await ensureTestSshConnection(request));
+    await waitForFilesystemReady(original.socket);
+    const marked = await requestWorkspace<{ suspendedSessionId: string }>(original.socket, 'suspend.mark');
+    await closeWebSocket(original.socket);
+    const socket = await openAuthenticatedWebSocket(request);
+    const gate = async (blocked: boolean) => {
+      expect(
+        (
+          await fetch(
+            `${E2E_SSH.controlUrl}/sftp/realpath-gate?blocked=${blocked ? 1 : 0}&deny=${outcome === 'error' ? 1 : 0}`,
+            { method: 'POST' },
+          )
+        ).ok,
+      ).toBe(true);
+    };
+    try {
+      await gate(true);
+      const filesystemEvents: string[] = [];
+      socket.on('message', (data: Buffer, binary: boolean) => {
+        if (binary) return;
+        const message = JSON.parse(data.toString());
+        if (message.type === 'filesystem.ready' || message.type === 'filesystem.error')
+          filesystemEvents.push(message.type);
+      });
+      const started = performance.now();
+      const resumed = requestWorkspace(socket, 'suspend.resume', {
+        suspendedSessionId: marked.suspendedSessionId,
+        workspaceId: `gated-${crypto.randomUUID()}`,
+      });
+      await expect
+        .poll(async () => (await (await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate`)).json()).pending)
+        .toBe(1);
+      await resumed;
+      console.log('[gated resume profile]', JSON.stringify({ outcome, resumeMs: performance.now() - started }));
+      expect(filesystemEvents).toEqual([]);
+      const output = waitForBinaryText(socket, 'GATED_SHELL_OK');
+      await requestWorkspace(socket, 'terminal.input', { data: "printf 'GATED_%s\\n' SHELL_OK\r" });
+      await output;
+      if (outcome === 'closed') {
+        await closeWebSocket(socket);
+        await gate(false);
+        const next = await openAuthenticatedWebSocket(request);
+        try {
+          const ready = waitForJson(next, (message) => message.type === 'filesystem.ready');
+          await requestWorkspace(next, 'suspend.resume', {
+            suspendedSessionId: marked.suspendedSessionId,
+            workspaceId: `after-gate-${crypto.randomUUID()}`,
+          });
+          await ready;
+          await requestWorkspace(next, 'suspend.unmark');
+        } finally {
+          await closeWebSocket(next);
+        }
+      } else {
+        const settled = waitForJson(socket, (message) => message.type === `filesystem.${outcome}`);
+        await gate(false);
+        await settled;
+        await expect(requestWorkspace(socket, 'terminal.currentDirectory')).resolves.toEqual('/');
+        await requestWorkspace(socket, 'suspend.unmark');
+      }
+    } finally {
+      await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate`, { method: 'POST' });
+      await closeWebSocket(socket);
+      await request.delete(`/api/v1/ssh-suspend/terminate/${marked.suspendedSessionId}`);
+    }
+  });
+}
 
 test('marked attached workspace stays usable and another authorized socket can take over', async ({ request }) => {
   await loginAsInitialAdmin(request);

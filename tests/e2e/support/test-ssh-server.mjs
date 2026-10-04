@@ -39,6 +39,9 @@ const PASSWORD = 'e2e-password';
 const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
+let sftpRealpathBlocked = false;
+let sftpRealpathDeny = false;
+const sftpRealpathWaiters = new Set();
 let sftpPendingWrites = 0;
 let sftpStatDelayMs = 0;
 let sftpLstatDenyPrefix = '';
@@ -705,6 +708,14 @@ function attachSftp(session, accept) {
 
   sftp.on('REALPATH', async (reqid, remotePath) => {
     try {
+      const deny = sftpRealpathDeny;
+      if (sftpRealpathBlocked) {
+        await new Promise((resolve) => sftpRealpathWaiters.add(resolve));
+      }
+      if (deny) {
+        sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED);
+        return;
+      }
       const fullPath = resolveRemotePath(remotePath);
       await fsp.stat(fullPath);
       sftp.name(reqid, [{ filename: virtualPath(remotePath), longname: virtualPath(remotePath), attrs: {} }]);
@@ -1273,6 +1284,10 @@ const controlServer = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/reset') {
+      sftpRealpathBlocked = false;
+      sftpRealpathDeny = false;
+      for (const resolve of sftpRealpathWaiters) resolve();
+      sftpRealpathWaiters.clear();
       await stopSshServer();
       sftpWriteDelayMs = 0;
       sftpStatDelayMs = 0;
@@ -1307,6 +1322,19 @@ const controlServer = http.createServer(async (req, res) => {
       await startSshServer();
       res.writeHead(204);
       res.end();
+      return;
+    }
+    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/realpath-gate') {
+      if (req.method === 'POST') {
+        sftpRealpathBlocked = requestUrl.searchParams.get('blocked') === '1';
+        sftpRealpathDeny = requestUrl.searchParams.get('deny') === '1';
+        if (!sftpRealpathBlocked) {
+          for (const resolve of sftpRealpathWaiters) resolve();
+          sftpRealpathWaiters.clear();
+        }
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ blocked: sftpRealpathBlocked, pending: sftpRealpathWaiters.size }));
       return;
     }
     if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/write-delay') {

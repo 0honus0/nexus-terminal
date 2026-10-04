@@ -44,8 +44,10 @@ export class WorkspaceFilesystemService {
     try {
       const fs = await this.filesystem(session);
       await fs.resolvePath('.');
+      if (this.sessions.get(workspaceId) !== session) return;
       this.events.publish(workspaceId, { type: 'filesystem-ready', connectionId: session.connectionId });
     } catch (error) {
+      if (this.sessions.get(workspaceId) !== session) return;
       this.events.publish(workspaceId, {
         type: 'filesystem-error',
         connectionId: session.connectionId,
