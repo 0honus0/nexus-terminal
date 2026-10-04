@@ -1107,6 +1107,7 @@ function attachShell(session, accept) {
 await resetRoot();
 
 const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
+  client.setNoDelay(true);
   activeSshClients.add(client);
   client.once('close', () => activeSshClients.delete(client));
 
