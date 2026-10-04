@@ -139,6 +139,14 @@ test('HTTP downloads reject excess admission and reclaim delayed OPEN handles af
     const baselineResponse = await request.get(url);
     expect(baselineResponse.status()).toBe(200);
     const bytes = await baselineResponse.body();
+    // Content-Length completion can precede the baseline stream's remote CLOSE.
+    // Freeze counters only after that handle settles, not while it is still live.
+    await expect
+      .poll(async () => {
+        const counts = await handles();
+        return counts.opened - counts.closed;
+      })
+      .toBe(0);
     const baseline = await handles();
     const ticketResponse = await request.post('/api/v1/sftp/download-ticket', {
       data: { connectionId, sessionId: workspace.workspaceId, remotePath: '/seed.txt' },

@@ -354,7 +354,7 @@ flowchart TD
 
 Workspace WebSocket control session 最多同时处理 64 个 request；超过容量返回 `WORKSPACE_REQUEST_CAPACITY_EXCEEDED`，防止 socket message callback 的并发 dispatch 绕过 Module 层资源边界。
 
-SFTP HTTP 下载的 workload 由 `interfaces/http/sftp/download-admission.registry.ts` 统一 admission：单用户部署的 ticket GET、认证 GET 和目录 ZIP 共用 8 个槽，不建立额外按用户配额 Map。handler finally 归还名额，HTTP 提前关闭不提前释放等待中的 open；晚到 stream 销毁，HEAD 不创建 read/ZIP。ticket registry 继续负责 capability、owner lock 与 retention。远端 I/O 不收敛时保守占槽，不承诺 OS 资源即时退出。
+SFTP HTTP 下载的 workload 由 `interfaces/http/sftp/download-admission.registry.ts` 统一 admission：单用户部署的 ticket GET、认证 GET 和目录 ZIP 共用 8 个槽，不建立额外按用户配额 Map。handler finally 归还名额，HTTP 提前关闭不提前释放等待中的 open；晚到 stream 销毁，HEAD 不创建 read/ZIP。ticket registry 继续负责 capability、owner lock 与 retention。远端 I/O 不收敛时保守占槽，不承诺 OS 资源即时退出。下载 E2E 的累计句柄基线必须在远端 CLOSE 收敛后记录；收到 Content-Length 对应 body 不代表句柄已关闭，也不代表 admission 已归还。
 
 终端 shell 的暂停由 `WorkspaceTerminalService` 统一根据消费者背压与恢复暂停两个原因计算；任何原因仍存在时不得 resume。输入队列不提供未接通的 sequence/ACK 机制，网络提交不等于远端命令执行确认。
 
