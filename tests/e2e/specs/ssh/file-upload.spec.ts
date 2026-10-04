@@ -727,6 +727,37 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
 
   const filename = 'm11-03e-picker-upload.bin';
   const payload = Buffer.alloc(768 * 1024 + 123, 0x6d);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  const uploadSockets = new Set<string>();
+  const uploadIds = new Set<string>();
+  const dataFrames: Array<{ ms: number; bytes: number }> = [];
+  let uploadStarted = 0;
+  let completedMs: number | undefined;
+  cdp.on('Network.webSocketCreated', ({ requestId, url }) => {
+    if (url.includes('/ws/uploads?')) {
+      uploadSockets.add(requestId);
+      const uploadId = new URL(url).searchParams.get('uploadId');
+      if (uploadId) uploadIds.add(uploadId);
+    }
+  });
+  cdp.on('Network.webSocketFrameSent', ({ requestId, response }) => {
+    if (uploadSockets.has(requestId) && response.opcode === 2)
+      dataFrames.push({
+        ms: performance.now() - uploadStarted,
+        bytes: Buffer.from(response.payloadData, 'base64').length,
+      });
+  });
+  cdp.on('Network.webSocketFrameReceived', ({ response }) => {
+    if (response.opcode !== 1) return;
+    const message = JSON.parse(response.payloadData);
+    if (
+      message.type === 'transfer.upload' &&
+      message.payload?.type === 'completed' &&
+      uploadIds.has(message.payload.uploadId)
+    )
+      completedMs = performance.now() - uploadStarted;
+  });
   const beforeMetrics = await fileManagerMetrics(page);
   const viewport = page.viewportSize();
   const modalBox = await fileManager.boundingBox();
@@ -743,6 +774,7 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
     const fileChooserPromise = page.waitForEvent('filechooser');
     await fileManager.getByRole('button', { name: 'Upload File', exact: true }).click();
     const fileChooser = await fileChooserPromise;
+    uploadStarted = performance.now();
     await fileChooser.setFiles({ name: filename, mimeType: 'application/octet-stream', buffer: payload });
 
     const progressPopup = visibleProgressCenter(page);
@@ -766,6 +798,9 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
     await fileManager.getByTitle('Refresh', { exact: true }).click();
     await expect(fileManagerRow(page, filename)).toBeVisible({ timeout: 20_000 });
     expect(await downloadRemoteFile(page, filename)).toEqual(payload);
+    expect(dataFrames.reduce((sum, frame) => sum + frame.bytes, 0)).toBe(payload.length);
+    expect(completedMs).toBeDefined();
+    console.log('[browser upload profile]', JSON.stringify({ bytes: payload.length, dataFrames, completedMs }));
 
     const afterMetrics = await fileManagerMetrics(page);
     await expect(progressPopup).toBeHidden({ timeout: 4_000 });
@@ -796,6 +831,7 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
       'utf8',
     );
   } finally {
+    await cdp.detach();
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 });
