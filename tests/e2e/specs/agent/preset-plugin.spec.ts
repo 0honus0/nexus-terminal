@@ -998,12 +998,30 @@ const installAndRunNexusAgent = async (
           }
           await expect.poll(contexts).toHaveLength(baseline.length + 1);
           if (independent) {
+            if (!cancelCreating) {
+              // Context allocation precedes tool settlement and the next model claim,
+              // both of which can advance the delegation's optimistic version.
+              await expect
+                .poll(async () => {
+                  const response = await fetch(`${E2E_URLS.openAiProviderOrigin}/browser-lifecycle`);
+                  expect(response.ok).toBeTruthy();
+                  return (await response.json()).held;
+                })
+                .toBe(true);
+            }
             const children = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}/subagents?limit=20`);
             expect(children.ok()).toBeTruthy();
             const items = (await children.json()).data.items;
             expect(items).toHaveLength(1);
             const child = items[0];
             expect(child.status).toBe('running');
+            expect(child.version).toBeGreaterThan(1);
+            const stale = await request.post(`/api/v1/apps/nexus.agent/runs/${run.id}/subagents/${child.id}/cancel`, {
+              headers,
+              data: { expectedVersion: child.version - 1 },
+            });
+            expect(stale.status(), await stale.text()).toBe(409);
+            expect((await stale.json()).error.code).toBe('DELEGATION_VERSION_CONFLICT');
             const cancelled = await request.post(
               `/api/v1/apps/nexus.agent/runs/${run.id}/subagents/${child.id}/cancel`,
               {

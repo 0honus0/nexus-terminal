@@ -6,6 +6,7 @@ const expectedCredential = 'e2e-provider-secret';
 let checkpointResponses = 0;
 let releaseBrowserCompletion;
 let browserCompletionReleased = false;
+let browserCompletionHeld = false;
 let releaseChildCancelParent;
 let childCancelParentHeld = false;
 let childCancelParentReleased = false;
@@ -24,6 +25,11 @@ const sendSse = (response, value) => {
 };
 
 const server = http.createServer(async (request, response) => {
+  if (request.method === 'GET' && request.url === '/browser-lifecycle') {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ held: browserCompletionHeld }));
+    return;
+  }
   if (request.url === '/child-cancel-parent') {
     if (request.method === 'POST') {
       childCancelParentReleased = true;
@@ -478,15 +484,20 @@ const server = http.createServer(async (request, response) => {
     }
     if (!opened) browserCompletionReleased = false;
     if (opened && !browserCompletionReleased) {
-      await new Promise((resolve) => {
-        const timer = setTimeout(resolve, 30_000);
-        releaseBrowserCompletion = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-        response.once('close', releaseBrowserCompletion);
-      });
-      releaseBrowserCompletion = undefined;
+      browserCompletionHeld = true;
+      try {
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 30_000);
+          releaseBrowserCompletion = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          response.once('close', releaseBrowserCompletion);
+        });
+      } finally {
+        browserCompletionHeld = false;
+        releaseBrowserCompletion = undefined;
+      }
       if (response.destroyed) return;
     }
     const browserResult =
