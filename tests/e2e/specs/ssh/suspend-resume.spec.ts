@@ -67,11 +67,54 @@ test('marking suspend keeps the UI tab interactive and unmarking keeps the shell
   const terminal = page.getByRole('application', { name: 'Terminal', exact: true });
   await expect(terminal).toBeVisible();
   const activeTab = page.getByRole('tab', { selected: true });
+  const command = page.locator('.command-bar-command-input');
+  await command.fill(
+    "for ((i=0;i<2000;i++)); do printf 'SNAPSHOT_PROFILE_%04d_abcdefghijklmnopqrstuvwxyz\\n' \"$i\"; done; printf 'SNAPSHOT_%s\\n' PROFILE_DONE",
+  );
+  await command.press('Enter');
+  await expect(terminal.locator('.xterm-rows')).toContainText('SNAPSHOT_PROFILE_DONE');
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  let markStarted = 0;
+  const suspendRequests = new Map<string, { phase: string; requestMs: number; snapshotBytes: number }>();
+  const phaseSamples: Array<{ phase: string; requestMs: number; snapshotBytes: number; responseMs: number }> = [];
+  let snapshotBytes = 0;
+  let requestMs = 0;
+  const markResponse = new Promise<number>((resolve) => {
+    cdp.on('Network.webSocketFrameSent', ({ response }) => {
+      if (response.opcode !== 1) return;
+      const message = JSON.parse(response.payloadData);
+      if (message.type !== 'suspend.prepare' && message.type !== 'suspend.commit') return;
+      snapshotBytes = Buffer.byteLength(message.payload?.terminalSnapshot ?? '');
+      requestMs = performance.now() - markStarted;
+      suspendRequests.set(message.requestId, { phase: message.type, requestMs, snapshotBytes });
+    });
+    cdp.on('Network.webSocketFrameReceived', ({ response }) => {
+      if (response.opcode !== 1) return;
+      const message = JSON.parse(response.payloadData);
+      if (message.type !== 'response') return;
+      const sample = suspendRequests.get(message.requestId);
+      if (!sample) return;
+      suspendRequests.delete(message.requestId);
+      const responseMs = performance.now() - markStarted;
+      phaseSamples.push({ ...sample, responseMs });
+      if (sample.phase === 'suspend.commit') resolve(responseMs);
+    });
+  });
   await activeTab.click({ button: 'right' });
+  markStarted = performance.now();
   await page.getByRole('button', { name: 'Suspend Session', exact: true }).click();
+  const responseMs = await markResponse;
+  expect(snapshotBytes).toBeGreaterThan(0);
+  expect(snapshotBytes).toBeLessThanOrEqual(1024 * 1024);
+  expect(phaseSamples.map((sample) => sample.phase)).toEqual(['suspend.prepare', 'suspend.commit']);
+  console.log(
+    '[browser suspend snapshot profile]',
+    JSON.stringify({ requestMs, responseMs, snapshotBytes, phaseSamples }),
+  );
+  await cdp.detach();
   await expect(activeTab).toBeVisible();
   await expect(terminal).toBeVisible();
-  const command = page.locator('.command-bar-command-input');
   await command.fill('echo MARKED_UI_ALIVE');
   await command.press('Enter');
   await expect(terminal.locator('.xterm-rows')).toContainText('MARKED_UI_ALIVE');
