@@ -655,7 +655,9 @@ test('resume sends only the newest cached tail and pages older terminal history 
   expect(Buffer.byteLength(snapshot)).toBeGreaterThan(512 * 1024);
   expect(Buffer.byteLength(snapshot)).toBeLessThan(900 * 1024);
 
+  const markStarted = performance.now();
   await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
+  const markMs = performance.now() - markStarted;
   await closeWebSocket(original.socket);
 
   const recoverySocket = await openAuthenticatedWebSocket(request);
@@ -701,7 +703,8 @@ test('resume sends only the newest cached tail and pages older terminal history 
     );
     recoverySocket.off('message', onInitialMessage);
 
-    expect(Date.now() - startedAt).toBeLessThan(5_000);
+    const resumeMs = Date.now() - startedAt;
+    expect(resumeMs).toBeLessThan(5_000);
     expect(resumed).toMatchObject({
       workspaceId: resumedWorkspaceId,
       resumedFrom: suspended!.id,
@@ -721,8 +724,15 @@ test('resume sends only the newest cached tail and pages older terminal history 
     let firstPreviousPage: { data: { hasMore: boolean }; bytes: Buffer } | null = null;
     let hasMore = resumed.historyAvailable;
     let pages = 0;
+    const pageSamples: Array<{ ms: number; bytes: number; hasMore: boolean }> = [];
     while (hasMore && pages < 10) {
+      const pageStarted = performance.now();
       const page = await requestWorkspaceBinary<{ hasMore: boolean }>(recoverySocket, 'suspend.history.previous');
+      pageSamples.push({
+        ms: performance.now() - pageStarted,
+        bytes: page.bytes.byteLength,
+        hasMore: page.data.hasMore,
+      });
       firstPreviousPage ??= page;
       const text = page.bytes.toString('utf8');
       older = text + older;
@@ -734,6 +744,17 @@ test('resume sends only the newest cached tail and pages older terminal history 
     const restoredHistory = `${older}${cachedTail}`;
     expect(restoredHistory).toContain(earlyMarker);
     expect(restoredHistory).toContain(tailMarker);
+    for (const line of filler) expect(restoredHistory).toContain(line);
+    console.log(
+      '[suspend history profile]',
+      JSON.stringify({
+        snapshotBytes: Buffer.byteLength(snapshot),
+        markMs,
+        resumeMs,
+        cachedTailBytes: Buffer.byteLength(cachedTail),
+        pageSamples,
+      }),
+    );
 
     const reset = await requestWorkspace<{ available: boolean }>(recoverySocket, 'suspend.history.reset');
     expect(reset.available).toBe(true);
