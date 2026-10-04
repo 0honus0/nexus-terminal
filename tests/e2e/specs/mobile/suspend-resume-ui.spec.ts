@@ -135,6 +135,109 @@ test('mobile terminal blocks input until foreground resume completes without rep
   expect(rejections).toEqual([]);
 });
 
+test('mobile terminal gates automatic status replies during recovery and answers server output replay', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  const terminalInputs: string[] = [];
+  const rejections: string[] = [];
+  page.on('console', (message) => {
+    if (message.text().includes('Terminal input rejected')) rejections.push(message.text());
+  });
+  let dropProbe = false;
+  let resumes = 0;
+  let holdQuery = false;
+  let delayedQuery: Buffer | undefined;
+  let deliverQuery: (() => void) | undefined;
+  let replayedQueries = 0;
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.routeWebSocket('**/ws/workspace', (socket) => {
+    const server = socket.connectToServer();
+    server.onMessage((message) => {
+      if (resumes > 0 && typeof message !== 'string' && message.includes(Buffer.from('RECOVERY_QUERY\x1b[5n')))
+        replayedQueries++;
+      if (holdQuery && typeof message !== 'string' && message.includes(Buffer.from('RECOVERY_QUERY\x1b[5n'))) {
+        delayedQuery = message;
+        deliverQuery = () => socket.send(message);
+        return;
+      }
+      socket.send(message);
+    });
+    socket.onMessage(async (message) => {
+      if (typeof message === 'string') {
+        const frame = JSON.parse(message);
+        if (frame.type === 'terminal.input') terminalInputs.push(frame.payload.data);
+        if (frame.type === 'workspace.ping' && dropProbe) return;
+        if (frame.type === 'workspace.resume') {
+          resumes++;
+          // The old transport is fenced during reconnect. Deliver the captured
+          // real output on the replacement transport, not the obsolete socket.
+          deliverQuery = () => {
+            if (delayedQuery) socket.send(delayedQuery);
+          };
+          await barrier;
+        }
+      }
+      server.send(message);
+    });
+  });
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const command = page.locator('.command-bar-command-input');
+  const terminal = page.locator('.terminal-inner-container');
+  // Consume replies in a remote input loop rather than letting DSR bytes enter
+  // the shell's command-editing buffer and corrupt the next probe command.
+  await command.fill(
+    'printf "STATUS_%s\\n" LOOP_READY; while IFS= read -rsn1 key; do case "$key" in l) printf "LIVE_%s\\033[5n\\n" QUERY;; r) printf "RECOVERY_%s\\033[5n\\n" QUERY;; a) printf "AFTER_%s\\033[5n\\n" QUERY;; q) break;; esac; done; printf "STATUS_%s\\n" LOOP_EXIT',
+  );
+  await command.press('Enter');
+  await expect(terminal).toContainText('STATUS_LOOP_READY');
+  const query = async (marker: string) => {
+    await command.fill(marker === 'LIVE_QUERY' ? 'l' : marker === 'RECOVERY_QUERY' ? 'r' : 'a');
+    await command.press('Enter');
+  };
+  await query('LIVE_QUERY');
+  await expect.poll(() => terminalInputs.filter((data) => data === '\x1b[0n').length).toBe(1);
+  holdQuery = true;
+  await query('RECOVERY_QUERY');
+  await expect.poll(() => Boolean(delayedQuery)).toBe(true);
+  dropProbe = true;
+  await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+  try {
+    await expect.poll(() => resumes, { timeout: 15_000 }).toBe(1);
+    await expect(command).toBeDisabled();
+    deliverQuery!();
+    await expect(terminal).toContainText('RECOVERY_QUERY');
+    expect(terminalInputs.filter((data) => data === '\x1b[0n')).toHaveLength(1);
+    expect(rejections).toEqual([]);
+  } finally {
+    holdQuery = false;
+    dropProbe = false;
+    release();
+  }
+  await expect(command).toBeEnabled();
+  // Resume legitimately replays the server output withheld from the old
+  // transport. Its DSR generates a new reply; this is not cached user input.
+  await expect.poll(() => replayedQueries).toBe(1);
+  await expect.poll(() => terminalInputs.filter((data) => data === '\x1b[0n').length).toBe(2);
+  // A fresh query and loop exit provide a final processing boundary.
+  await query('AFTER_QUERY');
+  await expect.poll(() => terminalInputs.filter((data) => data === '\x1b[0n').length).toBe(3);
+  await expect(terminal).toContainText('AFTER_QUERY');
+  expect(rejections).toEqual([]);
+  await command.fill('q');
+  await command.press('Enter');
+  await expect(terminal).toContainText('STATUS_LOOP_EXIT');
+  expect(terminalInputs.filter((data) => data === '\x1b[0n')).toHaveLength(3);
+  expect(replayedQueries).toBe(1);
+  expect(rejections).toEqual([]);
+});
+
 test('foreground probes preserve healthy SSH and resume a half-open transport without a fresh login', async ({
   page,
   context,
