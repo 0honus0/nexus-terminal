@@ -251,6 +251,9 @@ test('cancelling pipelined remote writes preserves the destination and permits a
       // Multiple buffered chunks are required to enter SFTP's batched write path;
       // a single chunk uses its ordinary serialized _write implementation.
       const sentBytes = cancel ? payload.length / 2 : payload.length;
+      const transferStarted = performance.now();
+      let cancelStarted: number | undefined;
+      let cancelResponseMs: number | undefined;
       for (let offset = 0; offset < sentBytes; offset += 64 * 1024) {
         uploadSocket.send(payload.subarray(offset, offset + 64 * 1024));
       }
@@ -262,9 +265,12 @@ test('cancelling pipelined remote writes preserves the destination and permits a
             return (await state.json()).sftpPendingWrites;
           })
           .toBeGreaterThan(1);
+        cancelStarted = performance.now();
         expect(await requestWorkspace(workspace.socket, 'upload.cancel', { uploadId })).toBe(true);
+        cancelResponseMs = performance.now() - cancelStarted;
       }
       expect((await terminal).payload.type).toBe(cancel ? 'cancelled' : 'completed');
+      const terminalMs = performance.now() - (cancelStarted ?? transferStarted);
       await closeWebSocket(uploadSocket);
       uploadSocket = undefined;
       await expect
@@ -278,6 +284,15 @@ test('cancelling pipelined remote writes preserves the destination and permits a
         requestWorkspace(workspace.socket, 'filesystem.stat', { path: `/.nexus-upload-${uploadId}.part` }),
       ).rejects.toThrow();
       expect(await readRemoteFile(workspace.socket, destinationPath)).toEqual(cancel ? Buffer.from(original) : payload);
+      console.log(
+        '[upload cancellation profile]',
+        JSON.stringify({
+          cancel,
+          cancelResponseMs,
+          terminalMs,
+          verifiedConvergenceMs: performance.now() - (cancelStarted ?? transferStarted),
+        }),
+      );
     }
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
@@ -324,7 +339,13 @@ test('upload cancelled during pending start never becomes active after delayed r
       size: 4096,
       conflictPolicy: 'overwrite',
     });
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await expect
+      .poll(async () => {
+        const response = await fetch(`${E2E_SSH.controlUrl}/sftp/stat-delay`);
+        expect(response.ok).toBe(true);
+        return (await response.json()).sftpDelayedStatCount;
+      })
+      .toBeGreaterThan(0);
 
     await expect(requestWorkspace<boolean>(workspace.socket, 'upload.cancel', { uploadId })).resolves.toBe(true);
     await expect(cancelledEvent).resolves.toMatchObject({ payload: { uploadId, type: 'cancelled' } });
