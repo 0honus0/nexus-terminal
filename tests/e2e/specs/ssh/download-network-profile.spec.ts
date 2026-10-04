@@ -19,7 +19,9 @@ for (const profile of [
   test(`download network profile ${profile.name}`, async ({ request }, testInfo) => {
     await loginAsInitialAdmin(request);
     await resetTestSshFilesystem();
-    const payload = Buffer.alloc(4 * 1024 * 1024);
+    // 4MiB at 2Mbps necessarily exceeds CI's 15s HTTP deadline. Two MiB still
+    // crosses two full prefetch windows without changing the request timeout.
+    const payload = Buffer.alloc((profile.rate === 250_000 ? 2 : 4) * 1024 * 1024);
     for (let i = 0; i < payload.length; i++) payload[i] = i % 251;
     const expectedHash = createHash('sha256').update(payload).digest('hex');
     await writeFile(path.resolve('.tmp/ssh-root/network-profile.bin'), payload);
@@ -66,7 +68,8 @@ for (const profile of [
         contentType: 'application/json',
       });
     } finally {
-      await fetch(`${control}?ms=0&bytesPerSecond=0`, { method: 'POST' });
+      await expect.poll(async () => (await (await fetch(control)).json()).sftpReadPending).toBe(0);
+      expect((await fetch(`${control}?ms=0&bytesPerSecond=0`, { method: 'POST' })).ok).toBeTruthy();
       await closeWebSocket(workspace.socket);
     }
   });

@@ -140,6 +140,8 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
+Download network profiles use 4MiB per stream except the 2Mbps profile, which uses 2MiB: 4MiB at that configured rate necessarily exceeds CI's existing 15-second HTTP deadline. The smaller sample still spans two full prefetch windows; request timeouts are unchanged. Network-profile cleanup waits for fixture-confirmed pending READs to reach zero and requires successful configuration reset so an aborted request cannot contaminate the following profile.
+
 `ssh/reconnect-ui.spec.ts` also exercises hidden-page terminal consumption with animation-frame callbacks suspended and retained until visibility is restored. More than 1.2 MB of real SSH output must be acknowledged while hidden; on return the terminal must display the completion marker and accept input on the original shell without another Workspace connect. Hidden terminals use timer-based output batches with the existing byte threshold rather than relying on animation frames. This deterministic case does not simulate full browser process freezing, prove long-duration timer-throttling behavior, or cover every detached-view replay boundary.
 
 Change coverage is counted by production change, not by test-case count. Mutation Origin/Fetch Metadata has eight HTTP cases and Webhook secret editing has seven HTTP cases plus its UI delivery flow; these represent two production changes, not fifteen.
