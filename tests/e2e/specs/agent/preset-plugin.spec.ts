@@ -1989,8 +1989,86 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect(taskRail.getByRole('button', { name: 'Back to Tasks', exact: true })).toBeVisible();
 
       await taskRail.getByRole('button', { name: 'Delete run', exact: true }).click();
-      await taskRail.getByRole('button', { name: 'Confirm delete', exact: true }).click();
-      await expect(taskRail.getByRole('button', { name: 'Back to Tasks', exact: true })).toHaveCount(0);
+      const verifyDeleteBarrier = process.env.NEXUS_E2E_DELETE_SYNC_BARRIER === '1';
+      let releaseDeleteList!: () => void;
+      let confirmDeleteList!: () => void;
+      const deleteListHeld = new Promise<void>((resolve) => {
+        confirmDeleteList = resolve;
+      });
+      const deleteListRelease = new Promise<void>((resolve) => {
+        releaseDeleteList = resolve;
+      });
+      const deleteListMatcher = (url: URL) =>
+        url.pathname === '/api/v1/apps/nexus.agent/runs' && url.searchParams.get('threadId') === threadId;
+      if (verifyDeleteBarrier) {
+        await page.route(
+          deleteListMatcher,
+          async (route) => {
+            const response = await route.fetch();
+            confirmDeleteList();
+            await deleteListRelease;
+            await route.fulfill({ response });
+          },
+          { times: 1 },
+        );
+      }
+      const deleteProfileStarted = performance.now();
+      const deleteProfileRequests: Array<{ url: string; method: string; startedMs: number; finishedMs?: number }> = [];
+      const onProfileRequest = (request: import('@playwright/test').Request) => {
+        if (!request.url().includes('/api/v1/apps/nexus.agent/')) return;
+        deleteProfileRequests.push({
+          url: request.url(),
+          method: request.method(),
+          startedMs: performance.now() - deleteProfileStarted,
+        });
+      };
+      const onProfileFinished = (request: import('@playwright/test').Request) => {
+        const record = deleteProfileRequests.find(
+          (item) => item.url === request.url() && item.method === request.method() && item.finishedMs === undefined,
+        );
+        if (record) record.finishedMs = performance.now() - deleteProfileStarted;
+      };
+      page.on('request', onProfileRequest);
+      page.on('requestfinished', onProfileFinished);
+      const ledgerAfterDelete = page.waitForResponse(
+        (response) => response.url().includes(`/threads/${threadId}/entries`) && response.request().method() === 'GET',
+      );
+      const backgroundAfterDelete = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === '/api/v1/apps/nexus.agent/runs' &&
+          !url.searchParams.has('threadId') &&
+          response.request().method() === 'GET'
+        );
+      });
+      try {
+        await taskRail.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+        if (verifyDeleteBarrier) {
+          await deleteListHeld;
+          const selectedThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+          await expect(selectedThread).toHaveAttribute('aria-current', 'true');
+          await expect(selectedThread).toBeDisabled();
+          releaseDeleteList();
+        }
+        await expect(taskRail.getByRole('button', { name: 'Back to Tasks', exact: true })).toHaveCount(0);
+        const responses = await Promise.all([ledgerAfterDelete, backgroundAfterDelete]);
+        for (const response of responses) {
+          expect(response.ok()).toBeTruthy();
+          await response.finished();
+        }
+        if (verifyDeleteBarrier) {
+          await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toBeEnabled();
+        }
+        console.log(
+          '[Run deletion UI profile]',
+          JSON.stringify({ syncMs: performance.now() - deleteProfileStarted, requests: deleteProfileRequests }),
+        );
+      } finally {
+        releaseDeleteList();
+        if (verifyDeleteBarrier) await page.unroute(deleteListMatcher);
+        page.off('request', onProfileRequest);
+        page.off('requestfinished', onProfileFinished);
+      }
 
       await expect
         .poll(async () => {

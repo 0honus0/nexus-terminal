@@ -1846,13 +1846,16 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
       }
       runtimeOperation.succeed();
       const resyncDeletedRun = async (): Promise<void> => {
+        const refreshes: Promise<void>[] = [];
         if (currentThread.value?.id === snapshot.threadId) {
           const page = await facade.listRuns(snapshot.threadId);
           threadRuns.value = page.items;
-          await refreshApprovals(run.value?.id);
-          await refreshLedger();
+          refreshes.push(refreshApprovals(run.value?.id), refreshLedger());
         }
-        await refreshBackgroundRuns();
+        refreshes.push(refreshBackgroundRuns());
+        const results = await Promise.allSettled(refreshes);
+        const failed = results.find((result) => result.status === 'rejected');
+        if (failed?.status === 'rejected') throw failed.reason;
       };
       await postCommitSync(resyncDeletedRun, {
         domainKey: 'agent.operations.failureDomain.run',
