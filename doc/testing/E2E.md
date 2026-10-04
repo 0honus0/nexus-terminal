@@ -140,6 +140,8 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
+`specs/ssh/file-list-sort.spec.ts` verifies natural numeric/multilingual name ordering, case-insensitive equivalence, and directory precedence in both directions through a real SFTP-backed File Manager. Browser-local comparator profiling compares 1,000/10,000 names over three samples and checks identical complete ordering; timings are diagnostic, not CI speed thresholds or end-to-end large-directory latency guarantees. Run alongside `specs/ssh/file-manager-navigation.spec.ts` to retain refresh, navigation, long-list actionability, and terminal path-sync regression coverage.
+
 Actions run `37180354883` failed the real GitHub remote-theme list in shard 8: Playwright trace recorded local HTTP 400 with `Request failed with status code 403` from upstream on both attempts. Upstream body/rate-limit headers were not retained, so rate limiting is not a confirmed cause. E2E shards now receive the workflow's read-only `GITHUB_TOKEN` for the existing authenticated GitHub catalog path; real list/search/download/apply assertions remain. List failures include local status and response body. Local theme UI regression passed 10/10, but workflow-token behavior requires a new complete remote run; this is not acceptance of the failed SHA.
 
 The preparation recovery fixture also requests a valid sibling alongside a blocked parent: the valid directory must remain after failure, and reusing the prepare ID after fixing the parent must succeed. This exercises acknowledged partial success without destructive rollback. The Agent preset-plugin E2E remains part of local regression because the known-failure settlement branch touches the shared mutation guard.

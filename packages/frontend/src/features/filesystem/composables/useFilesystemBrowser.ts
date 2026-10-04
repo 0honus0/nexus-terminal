@@ -49,8 +49,9 @@ const entryName = (entry: WorkspaceRemoteFileEntryDto): string =>
     ? (entry as WorkspaceFileSearchEntryDto).relativePath
     : entry.name;
 
+const entryNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 const compareEntryNames = (left: WorkspaceRemoteFileEntryDto, right: WorkspaceRemoteFileEntryDto): number =>
-  entryName(left).localeCompare(entryName(right), undefined, { numeric: true, sensitivity: 'base' });
+  entryNameCollator.compare(entryName(left), entryName(right));
 
 const compare = (
   left: WorkspaceRemoteFileEntryDto,
