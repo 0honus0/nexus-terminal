@@ -67,6 +67,16 @@ for (const outcome of ['ready', 'error', 'closed'] as const) {
       if (outcome === 'closed') {
         await closeWebSocket(socket);
         await gate(false);
+        await expect
+          .poll(async () => {
+            const response = await request.get('/api/v1/ssh-suspend/suspended-sessions');
+            expect(response.ok()).toBe(true);
+            const sessions = await response.json();
+            return sessions.find(
+              (session: { id: string; ownershipState: string }) => session.id === marked.suspendedSessionId,
+            )?.ownershipState;
+          })
+          .toBe('available');
         const next = await openAuthenticatedWebSocket(request);
         try {
           const ready = waitForJson(next, (message) => message.type === 'filesystem.ready');
