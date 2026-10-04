@@ -4,6 +4,10 @@ Nexus Terminal 支持 Docker Compose 部署，并提供运行时配置、反向�
 
 ## 包管理与构建边界
 
+主镜像、独立 Agent Runner、E2E Runner 和 CI 使用浮动的 Node.js Current；第一方插件仓库的验证和发布也跟随 Current。Nginx 使用 stable 系列。镜像构建拉取基础镜像，Alpine/Debian 构建步骤升级系统包，不固定 Node patch 或镜像 digest；缓存命中的系统包步骤不会重新执行。E2E Runner 在后续 CI 运行时按周刷新并无缓存重建。Workspace catalog 中供用户选择的语言工具包仍独立按明确版本安装，已安装环境不自动替换。
+
+`.github/workflows/update-dependencies.yml` 每周一或手动从默认分支创建依赖更新分支，使用 `pnpm update --depth 0 --recursive` 在声明范围内更新项目依赖及根锁文件；精确版本和跨 major 升级不由该命令自动放开。检测到变更后验证 frozen install、格式、生产构建和 high 级生产依赖审计，创建或更新 PR，再显式触发该分支的完整 E2E。更新任务成功不等于 E2E 已通过；合并前核对被测 SHA 的全部检查。pnpm 工具自身继续由 `packageManager` 固定，不由此任务升级。
+
 Docker 构建在 pnpm 安装前复制 `scripts/patches/`，与 workspace/lockfile 一起应用依赖补丁；统一镜像、Agent Runner 和 E2E Runner 使用同一补丁输入。E2E Runner 镜像缓存指纹包含补丁内容。
 
 仓库只使用一个根 pnpm workspace：生产包位于 `packages/backend`、`packages/frontend`、`packages/agent-runner`，测试 package 位于 `tests/e2e`；依赖解析统一由根 `pnpm-workspace.yaml` 与 `pnpm-lock.yaml` 管理。workspace package 不得新增 `package-lock.json`、嵌套 lockfile 或独立安装流程；需要共享版本的依赖通过 pnpm catalog 管理，带 lifecycle/build script 的依赖必须经过根 `allowBuilds` 审查。
