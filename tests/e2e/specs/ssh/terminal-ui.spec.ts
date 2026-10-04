@@ -759,22 +759,49 @@ test('terminal parser acknowledges sustained output and keeps accepting input', 
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   let consumedBytes = 0;
+  const flowSamples: Array<{ ms: number; consumedBytes: number }> = [];
+  let outputStarted = 0;
+  await page.evaluate(() => {
+    const profile = { longTasks: [] as Array<{ startMs: number; durationMs: number }> };
+    Object.assign(window, { terminalOutputProfile: profile });
+    const observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries())
+        profile.longTasks.push({ startMs: entry.startTime, durationMs: entry.duration });
+    });
+    observer.observe({ type: 'longtask', buffered: false });
+    Object.assign(window, { stopTerminalOutputProfile: () => observer.disconnect() });
+  });
   cdp.on('Network.webSocketFrameSent', ({ response }) => {
     if (response.opcode !== 1) return;
     const frame = JSON.parse(response.payloadData);
-    if (frame.type === 'terminal.flow') consumedBytes = frame.payload.consumedBytes;
+    if (frame.type === 'terminal.flow') {
+      consumedBytes = frame.payload.consumedBytes;
+      if (outputStarted) flowSamples.push({ ms: performance.now() - outputStarted, consumedBytes });
+    }
   });
   const input = page.locator('.command-bar-command-input');
   await input.fill(
     "for ((i=0;i<40000;i++)); do printf 'FLOW_PARSE_LINE_012345678901234567890123456789\\n'; done; printf 'FLOW_PARSE_DONE\\n'",
   );
+  outputStarted = performance.now();
+  const browserStarted = await page.evaluate(() => performance.now());
   await input.press('Enter');
   const rows = page.locator('[data-font-size] .xterm-rows');
   await expect.poll(() => consumedBytes, { timeout: 20_000 }).toBeGreaterThan(1024 * 1024);
   await expect.poll(() => rows.innerText(), { timeout: 20_000 }).toContain('FLOW_PARSE_DONE');
+  const outputMs = performance.now() - outputStarted;
   await input.fill("printf 'FLOW_INPUT_AFTER_OUTPUT_OK\\n'");
   await input.press('Enter');
   await expect.poll(() => rows.innerText()).toContain('FLOW_INPUT_AFTER_OUTPUT_OK');
+  const longTasks = await page.evaluate((start) => {
+    const state = window as unknown as {
+      terminalOutputProfile: { longTasks: Array<{ startMs: number; durationMs: number }> };
+      stopTerminalOutputProfile: () => void;
+    };
+    state.stopTerminalOutputProfile();
+    return state.terminalOutputProfile.longTasks.filter((entry) => entry.startMs >= start);
+  }, browserStarted);
+  console.log('[terminal output profile]', JSON.stringify({ outputMs, consumedBytes, flowSamples, longTasks }));
   await cdp.detach();
 });
 
