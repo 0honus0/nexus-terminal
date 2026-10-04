@@ -317,7 +317,7 @@ test('foreground probes preserve healthy SSH and resume a half-open transport wi
   expect(connects).toBe(initialConnects);
   await expect(tab).toHaveAttribute('data-session-id', workspaceId!);
   const input = page.locator('.command-bar-command-input');
-  await input.fill('echo FOREGROUND_RECOVERY_OK');
+  await input.fill("printf 'FOREGROUND_%s\\n' RECOVERY_OK");
   await input.press('Enter');
   await expect(page.locator('.terminal-inner-container')).toContainText('FOREGROUND_RECOVERY_OK');
   expect(resumes).toBe(1);
