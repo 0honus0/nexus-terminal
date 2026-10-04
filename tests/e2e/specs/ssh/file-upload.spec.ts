@@ -735,6 +735,49 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   page.on('close', markUploadProfilePageDestroyed);
   const payload = Buffer.alloc((largeReadProfile ? 16 * 1024 * 1024 : 768 * 1024) + 123, 0x6d);
   const useFileReader = process.env.NEXUS_E2E_UPLOAD_FILE_READER === '1';
+  const profileWriteDelay = process.env.NEXUS_E2E_UPLOAD_BACKPRESSURE_PROFILE === '1' ? 30 : largeReadProfile ? 0 : 300;
+  await page.evaluate(() => {
+    const originalSend = WebSocket.prototype.send;
+    const sockets = new Set<WebSocket>();
+    const stats = { maxBufferedBytes: 0, highWaterSamples: 0, observedDrainMs: 0, drainIntervals: 0 };
+    const draining = new Map<WebSocket, number>();
+    const sample = () => {
+      for (const socket of sockets) {
+        stats.maxBufferedBytes = Math.max(stats.maxBufferedBytes, socket.bufferedAmount);
+        if (socket.bufferedAmount >= 8 * 1024 * 1024) stats.highWaterSamples++;
+        if (socket.bufferedAmount >= 8 * 1024 * 1024 && !draining.has(socket)) {
+          draining.set(socket, performance.now());
+          stats.drainIntervals++;
+        }
+        const started = draining.get(socket);
+        if (
+          started !== undefined &&
+          (socket.bufferedAmount <= 2 * 1024 * 1024 || socket.readyState !== WebSocket.OPEN)
+        ) {
+          stats.observedDrainMs += performance.now() - started;
+          draining.delete(socket);
+        }
+      }
+    };
+    WebSocket.prototype.send = function (data) {
+      originalSend.call(this, data);
+      if (new URL(this.url).pathname === '/ws/uploads') {
+        sockets.add(this);
+        sample();
+      }
+    };
+    const timer = window.setInterval(sample, 4);
+    Object.assign(window, {
+      __uploadBufferProfile: {
+        stats,
+        restore() {
+          clearInterval(timer);
+          sockets.clear();
+          WebSocket.prototype.send = originalSend;
+        },
+      },
+    });
+  });
   await page.evaluate(
     ({ filename, useFileReader }) => {
       const originalSlice = Blob.prototype.slice;
@@ -813,7 +856,7 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   expect(listBox).toBeTruthy();
   await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-before-upload.png') });
 
-  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${largeReadProfile ? 0 : 300}`, {
+  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${profileWriteDelay}`, {
     method: 'POST',
   });
   expect(delayResponse.ok).toBeTruthy();
@@ -864,6 +907,19 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
           .__uploadReadProfile.reads,
     );
     expect(reads.reduce((sum, read) => sum + read.bytes, 0)).toBe(payload.length);
+    const bufferStats = await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __uploadBufferProfile: { stats: { maxBufferedBytes: number; highWaterSamples: number } };
+          }
+        ).__uploadBufferProfile.stats,
+    );
+    console.log('[upload bufferedAmount profile]', JSON.stringify({ profileWriteDelay, ...bufferStats }));
+    const writeStats = await (await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`)).json();
+    expect(writeStats.sftpWriteBytes).toBe(payload.length);
+    expect(writeStats.sftpPendingWrites).toBe(0);
+    console.log('[SFTP upload write profile]', JSON.stringify(writeStats));
     console.log(
       '[browser upload profile]',
       JSON.stringify({ useFileReader, bytes: payload.length, dataFrames, completedMs, reads }),
@@ -900,9 +956,14 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   } finally {
     await page
       .evaluate(() => {
-        const state = window as typeof window & { __uploadReadProfile?: { restore(): void } };
+        const state = window as typeof window & {
+          __uploadReadProfile?: { restore(): void };
+          __uploadBufferProfile?: { restore(): void };
+        };
         state.__uploadReadProfile?.restore();
+        state.__uploadBufferProfile?.restore();
         delete state.__uploadReadProfile;
+        delete state.__uploadBufferProfile;
       })
       .catch((error) => {
         // A crashed/closed page no longer retains patched Blob methods. Preserve the

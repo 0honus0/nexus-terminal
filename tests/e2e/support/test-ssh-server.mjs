@@ -43,6 +43,9 @@ let sftpRealpathBlocked = false;
 let sftpRealpathDeny = false;
 const sftpRealpathWaiters = new Set();
 let sftpPendingWrites = 0;
+let sftpWriteRequests = 0;
+let sftpWriteBytes = 0;
+let sftpPeakPendingWrites = 0;
 let sftpStatDelayMs = 0;
 let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
@@ -828,6 +831,9 @@ function attachSftp(session, accept) {
       return;
     }
     sftpPendingWrites += 1;
+    sftpWriteRequests += 1;
+    sftpWriteBytes += data.length;
+    sftpPeakPendingWrites = Math.max(sftpPeakPendingWrites, sftpPendingWrites);
     try {
       if (sftpWriteDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, sftpWriteDelayMs));
@@ -1290,6 +1296,9 @@ const controlServer = http.createServer(async (req, res) => {
       sftpRealpathWaiters.clear();
       await stopSshServer();
       sftpWriteDelayMs = 0;
+      sftpWriteRequests = 0;
+      sftpWriteBytes = 0;
+      sftpPeakPendingWrites = 0;
       sftpStatDelayMs = 0;
       sftpLstatDenyPrefix = '';
       sftpReadDirDelayMs = 0;
@@ -1345,7 +1354,15 @@ const controlServer = http.createServer(async (req, res) => {
           : 0;
       }
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpWriteDelayMs, sftpPendingWrites }));
+      res.end(
+        JSON.stringify({
+          sftpWriteDelayMs,
+          sftpPendingWrites,
+          sftpWriteRequests,
+          sftpWriteBytes,
+          sftpPeakPendingWrites,
+        }),
+      );
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/sftp/stat-delay') {
