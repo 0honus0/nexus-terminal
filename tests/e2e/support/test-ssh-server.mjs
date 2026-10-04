@@ -43,6 +43,8 @@ let sftpPendingWrites = 0;
 let sftpStatDelayMs = 0;
 let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
+let sftpSlowDirectory = '';
+let sftpSlowDirectoryDelayMs = 0;
 let sftpReadDelayMs = 0;
 let sftpDelayedReadCount = 0;
 let sftpReadBytesPerSecond = 0;
@@ -709,6 +711,9 @@ function attachSftp(session, accept) {
 
   sftp.on('OPENDIR', async (reqid, remotePath) => {
     try {
+      if (remotePath === sftpSlowDirectory && sftpSlowDirectoryDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, sftpSlowDirectoryDelayMs));
+      }
       if (sftpReadDirDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, sftpReadDirDelayMs));
       }
@@ -1321,6 +1326,19 @@ const controlServer = http.createServer(async (req, res) => {
         : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpReadDirDelayMs }));
+      return;
+    }
+    if (requestUrl.pathname === '/sftp/slow-directory' && req.method === 'POST') {
+      const delay = Number(requestUrl.searchParams.get('ms') || '0');
+      if (!Number.isFinite(delay) || delay < 0 || delay > 10000) {
+        res.writeHead(400);
+        res.end('Invalid directory delay');
+        return;
+      }
+      sftpSlowDirectory = requestUrl.searchParams.get('path') || '';
+      sftpSlowDirectoryDelayMs = Math.round(delay);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ sftpSlowDirectory, sftpSlowDirectoryDelayMs }));
       return;
     }
     if (requestUrl.pathname === '/sftp/read-network' && (req.method === 'POST' || req.method === 'GET')) {

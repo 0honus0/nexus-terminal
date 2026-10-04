@@ -27,29 +27,44 @@ export class RemoteFileSearchService {
     let scannedDirectories = 0;
     let truncated = false;
 
-    while (queue.length && items.length < maxResults) {
-      const remaining = maxDirectories - scannedDirectories;
-      if (remaining <= 0) {
-        truncated = true;
-        break;
-      }
-      const batch = queue.splice(0, Math.min(concurrency, remaining));
-      scannedDirectories += batch.length;
-      const results = await Promise.all(
-        batch.map(async (directory) => {
-          try {
-            return {
-              directory,
-              entries: await filesystem.readDirectory(directory),
-              error: undefined as Error | undefined,
-            };
-          } catch (error) {
-            return { directory, entries: [], error: error instanceof Error ? error : new Error(String(error)) };
-          }
-        }),
-      );
-
-      for (const result of results) {
+    const pending = new Map<
+      number,
+      Promise<{
+        id: number;
+        directory: string;
+        entries: Awaited<ReturnType<RemoteFileSystem['readDirectory']>>;
+        error?: Error;
+      }>
+    >();
+    let nextId = 0;
+    try {
+      while ((queue.length || pending.size) && items.length < maxResults) {
+        while (queue.length && pending.size < concurrency && scannedDirectories < maxDirectories) {
+          const directory = queue.shift()!;
+          const id = nextId++;
+          scannedDirectories++;
+          pending.set(
+            id,
+            (async () => {
+              try {
+                return {
+                  id,
+                  directory,
+                  entries: await filesystem.readDirectory(directory),
+                  error: undefined as Error | undefined,
+                };
+              } catch (error) {
+                return { id, directory, entries: [], error: error instanceof Error ? error : new Error(String(error)) };
+              }
+            })(),
+          );
+        }
+        if (!pending.size) {
+          if (queue.length) truncated = true;
+          break;
+        }
+        const result = await Promise.race(pending.values());
+        pending.delete(result.id);
         if (result.error) {
           if (result.directory === normalizedRoot) throw result.error;
           continue;
@@ -73,8 +88,10 @@ export class RemoteFileSearchService {
           }
           if (entry.metadata.isDirectory && !entry.metadata.isSymbolicLink) queue.push(fullPath);
         }
-        if (items.length >= maxResults) break;
       }
+    } finally {
+      // No speculative directory work survives success, truncation or a root error.
+      await Promise.all(pending.values());
     }
     if (queue.length) truncated = true;
     return { items, truncated };
