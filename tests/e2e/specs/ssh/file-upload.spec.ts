@@ -471,6 +471,13 @@ test('multi-file upload uses all configured streams instead of size-capacity thr
 });
 
 test('batch upload completes every file under slow SFTP acknowledgements', async ({ page, context }) => {
+  const profileCores = Number(process.env.NEXUS_E2E_UPLOAD_BATCH_CORES || 0);
+  if (profileCores) {
+    expect([1, 4, 8]).toContain(profileCores);
+    await page.addInitScript((cores) => {
+      Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => cores });
+    }, profileCores);
+  }
   await openFileManager(page, context);
 
   const weakFiles = Array.from({ length: 10 }, (_, index) => ({
@@ -479,9 +486,44 @@ test('batch upload completes every file under slow SFTP acknowledgements', async
     fill: 0x40 + index,
   }));
 
+  let activeStreams = 0;
+  let peakStreams = 0;
+  let started = 0;
+  const uploadIds = new Set<string>();
+  const completedIds = new Set<string>();
+  let completedMs: number | undefined;
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  cdp.on('Network.webSocketCreated', ({ url }) => {
+    if (new URL(url).pathname !== '/ws/uploads') return;
+    const id = new URL(url).searchParams.get('uploadId');
+    if (id) uploadIds.add(id);
+  });
+  cdp.on('Network.webSocketFrameReceived', ({ response }) => {
+    if (response.opcode !== 1) return;
+    const message = JSON.parse(response.payloadData);
+    if (
+      message.type !== 'transfer.upload' ||
+      message.payload?.type !== 'completed' ||
+      !uploadIds.has(message.payload.uploadId)
+    )
+      return;
+    completedIds.add(message.payload.uploadId);
+    if (completedIds.size === weakFiles.length) completedMs = performance.now() - started;
+  });
+  const trackSocket = (socket: import('@playwright/test').WebSocket) => {
+    if (new URL(socket.url()).pathname !== '/ws/uploads') return;
+    activeStreams++;
+    peakStreams = Math.max(peakStreams, activeStreams);
+    socket.on('close', () => {
+      activeStreams--;
+    });
+  };
+  page.on('websocket', trackSocket);
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=750`, { method: 'POST' });
   try {
     await slowStep('the user-visible upload batch completes despite slow remote acknowledgements', async () => {
+      started = performance.now();
       await dragLocalFiles(page, weakFiles);
       const progressPopup = visibleProgressCenter(page);
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
@@ -495,11 +537,29 @@ test('batch upload completes every file under slow SFTP acknowledgements', async
 
     await step('all uploaded files download with their declared byte sizes', async () => {
       for (const file of weakFiles) {
-        expect((await downloadRemoteFile(page, file.name)).byteLength).toBe(file.size);
+        expect(await downloadRemoteFile(page, file.name)).toEqual(Buffer.alloc(file.size, file.fill));
       }
     });
+    expect(completedIds.size).toBe(weakFiles.length);
+    expect(completedMs).toBeDefined();
+    await expect.poll(() => activeStreams).toBe(0);
+    console.log(
+      '[batch upload profile]',
+      JSON.stringify({
+        profileCores,
+        files: weakFiles.length,
+        bytes: weakFiles.reduce((total, file) => total + file.size, 0),
+        peakStreams,
+        completedMs,
+      }),
+    );
   } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+    try {
+      await cdp.detach();
+    } finally {
+      page.off('websocket', trackSocket);
+      await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+    }
   }
 });
 
