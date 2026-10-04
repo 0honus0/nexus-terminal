@@ -529,6 +529,9 @@ test('file previews and text editor protect historical file-opening regressions'
     await expectUiSelectValue(lineEnding, 'lf');
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toContainText('Save successful', { timeout: 15_000 });
+    await expect
+      .poll(async () => (await readFile(path.resolve('.tmp/ssh-root/utf16-crlf.txt'))).toString('hex'))
+      .toBe(Buffer.from('\uFEFFENCODING_E2E\nSECOND_LINE\n', 'utf16le').toString('hex'));
 
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
     await row(page, 'utf16-crlf.txt').dblclick();
