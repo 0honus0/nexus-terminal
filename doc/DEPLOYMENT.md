@@ -10,6 +10,8 @@ Nexus Terminal 支持 Docker Compose 部署，并提供运行时配置、反向�
 
 Docker 构建在 pnpm 安装前复制 `scripts/patches/`，与 workspace/lockfile 一起应用依赖补丁；统一镜像、Agent Runner 和 E2E Runner 使用同一补丁输入。E2E Runner 镜像缓存指纹包含补丁内容。
 
+自动依赖更新在范围内更新后执行 `pnpm dedupe`，统一可共享的传递依赖版本，再验证 frozen install 和构建；这避免 CodeMirror 等包含私有类型或运行时身份的依赖保留新旧副本。去重不放开声明范围或构建脚本许可，构建失败仍阻止创建更新 PR。
+
 仓库只使用一个根 pnpm workspace：生产包位于 `packages/backend`、`packages/frontend`、`packages/agent-runner`，测试 package 位于 `tests/e2e`；依赖解析统一由根 `pnpm-workspace.yaml` 与 `pnpm-lock.yaml` 管理。workspace package 不得新增 `package-lock.json`、嵌套 lockfile 或独立安装流程；需要共享版本的依赖通过 pnpm catalog 管理，带 lifecycle/build script 的依赖必须经过根 `allowBuilds` 审查。
 
 从仓库根目录安装一次：

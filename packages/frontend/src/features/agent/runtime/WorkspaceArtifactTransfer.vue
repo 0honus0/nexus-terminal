@@ -2,7 +2,7 @@
   import { ref, watch } from 'vue';
   import { UiSelect } from '@/foundation/ui';
   import type { AgentArtifactRefDto } from '../api/agent-api';
-  import { NONE_OPTION } from '../common/pick-option';
+  import { NONE_OPTION, optionalOptionValue } from '../common/pick-option';
 
   const props = defineProps<{
     artifacts: AgentArtifactRefDto[];
@@ -78,7 +78,7 @@
             label: `${artifact.originalName} · ${artifact.id}`,
           })),
         ]"
-        @update:model-value="(value: unknown) => (importArtifactId = value === NONE_OPTION ? '' : String(value))"
+        @update:model-value="(value: unknown) => (importArtifactId = optionalOptionValue(value))"
       />
       <input
         v-model.trim="importPath"

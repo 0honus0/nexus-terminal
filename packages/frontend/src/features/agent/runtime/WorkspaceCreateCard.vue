@@ -2,7 +2,7 @@
   import { computed, ref, watch } from 'vue';
   import { UiSelect } from '@/foundation/ui';
   import type { AgentSettingsViewDto, AgentWorkspaceRuntimeCatalogDto } from '../api/agent-api';
-  import { NONE_OPTION } from '../common/pick-option';
+  import { NONE_OPTION, optionalOptionValue } from '../common/pick-option';
 
   interface RunnerCandidate {
     pluginId: string;
@@ -130,7 +130,7 @@
           { value: NONE_OPTION, label: $t('agent.workspaceRuntime.browserTargetNone') },
           ...browserTargets.map((target) => ({ value: target.id, label: target.id })),
         ]"
-        @update:model-value="(value: unknown) => (selectedBrowserTargetId = value === NONE_OPTION ? '' : String(value))"
+        @update:model-value="(value: unknown) => (selectedBrowserTargetId = optionalOptionValue(value))"
       />
       <span class="mt-1 block text-[11px]">{{ $t('agent.workspaceRuntime.browserTargetHint') }}</span>
     </label>
@@ -158,9 +158,7 @@
               { value: NONE_OPTION, label: $t('agent.workspaceRuntime.toolNotSelected') },
               ...packsForFamily(familyId).map((pack) => ({ value: pack.versionId, label: pack.versionId })),
             ]"
-            @update:model-value="
-              (value: unknown) => (toolVersions[familyId] = value === NONE_OPTION ? '' : String(value))
-            "
+            @update:model-value="(value: unknown) => (toolVersions[familyId] = optionalOptionValue(value))"
           />
         </label>
       </div>

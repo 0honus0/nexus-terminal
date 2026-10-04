@@ -2,7 +2,7 @@
   import { computed, ref, watch } from 'vue';
   import { UiSelect } from '@/foundation/ui';
   import type { AgentWorkspaceDto, AgentWorkspaceRuntimeCatalogDto } from '../api/agent-api';
-  import { NONE_OPTION } from '../common/pick-option';
+  import { NONE_OPTION, optionalOptionValue } from '../common/pick-option';
 
   const props = defineProps<{
     workspace: AgentWorkspaceDto;
@@ -70,7 +70,7 @@
               : [{ value: NONE_OPTION, label: $t('agent.workspaceRuntime.toolNotSelected') }]),
             ...packsForFamily(familyId).map((pack) => ({ value: pack.versionId, label: pack.versionId })),
           ]"
-          @update:model-value="(value: unknown) => (draft[familyId] = value === NONE_OPTION ? '' : String(value))"
+          @update:model-value="(value: unknown) => (draft[familyId] = optionalOptionValue(value))"
         />
       </label>
     </div>

@@ -43,7 +43,9 @@ jobs:
         run: git checkout -B "$UPDATE_BRANCH"
 
       - name: Update workspace dependencies
-        run: pnpm update --depth 0 --recursive
+        run: |
+          pnpm update --depth 0 --recursive
+          pnpm dedupe
 
       - name: Detect changes
         id: changes
