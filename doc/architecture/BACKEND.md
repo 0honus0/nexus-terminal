@@ -182,7 +182,7 @@ BackgroundAssetService.remove 先持久化空引用，再清理旧文件；后�
 
 PasskeyRepository.commitAuthentication 用 expectedCounter CAS 同一 statement 更新 counter/last-used；Service 验证成功后必须成功 commit 才发登录成功。非零计数保持递增，0→0 允许，不保留分离 touch/updateCounter。
 
-RemoteTextWriter.write 以随机同目录 wx temporary file 写入，finished 后 replaceFile，失败 destroy/drain 后 cleanup；不直接 openWrite 最终路径。编码/mode 保持原契约，transport 决定 strongest available replacement atomicity。
+RemoteTextWriter.write 以随机同目录 wx temporary file 写入，finished 后 replaceFile，失败 destroy/drain 后 cleanup；不直接 openWrite 最终路径。保存前读取原文件 mode；write 返回 void，不额外 STAT 最终文件或构造无人消费的文件条目，WebSocket 保存成功响应仍为 null。create 仍返回文件条目。编码/mode 保持原契约，transport 决定 strongest available replacement atomicity。`tests/e2e/specs/ssh/editor-save-profile.spec.ts` 经真实 WebSocket/SSH 保存检查精确 UTF-8 字节和临时文件清理；不覆盖故障注入或完整编辑器 UI 延迟。
 
 Operational secret storage 复用 SecretCipher，版本前缀 envelope 持有 TOTP/captchaConfig/notification config；repository 边界解密／加密，启动前以事务迁移 Legacy plaintext 并验证 ciphertext。Backup adapter 对配置解密 capture、目标密钥加密 restore；不将源部署 ciphertext 带到目标部署，不迁移 auth 表进入 Full Backup。
 

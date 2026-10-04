@@ -9,12 +9,7 @@ import { toRemoteFileEntry } from './file-entry';
 const normalizeEncoding = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export class RemoteTextWriterService {
-  async write(
-    filesystem: RemoteFileSystem,
-    remotePath: string,
-    content: string,
-    encoding = 'utf-8',
-  ): Promise<RemoteFileEntry | null> {
+  async write(filesystem: RemoteFileSystem, remotePath: string, content: string, encoding = 'utf-8'): Promise<void> {
     const normalizedEncoding = this.resolveRequestedEncoding(encoding);
     const original = await filesystem.metadata(remotePath).catch(() => null);
     const temporaryPath = path.posix.join(path.posix.dirname(remotePath), `.nexus-save-${randomUUID()}.part`);
@@ -32,8 +27,6 @@ export class RemoteTextWriterService {
       await filesystem.removeFile(temporaryPath, { ignoreMissing: true });
       throw error;
     }
-    const metadata = await filesystem.metadata(remotePath).catch(() => null);
-    return metadata ? toRemoteFileEntry(remotePath, metadata) : null;
   }
 
   async create(
