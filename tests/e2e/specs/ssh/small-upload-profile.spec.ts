@@ -22,7 +22,21 @@ test('profile small uploads by ready, transfer and commit phases with exact remo
   const results = [];
   try {
     await waitForFilesystemReady(workspace.socket);
-    for (const writeDelayMs of [0, 60]) {
+    const commitProfile = process.env.NEXUS_E2E_UPLOAD_COMMIT_PROFILE === '1';
+    const conditions = commitProfile
+      ? [
+          { writeDelayMs: 0, statDelayMs: 0 },
+          { writeDelayMs: 0, statDelayMs: 60 },
+        ]
+      : [
+          { writeDelayMs: 0, statDelayMs: 0 },
+          { writeDelayMs: 60, statDelayMs: 0 },
+        ];
+    for (const { writeDelayMs, statDelayMs } of conditions) {
+      expect(
+        (await fetch(`${E2E_SSH.controlUrl}/sftp/stat-delay?ms=${statDelayMs}&prefix=%2Fsmall-`, { method: 'POST' }))
+          .ok,
+      ).toBe(true);
       expect((await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${writeDelayMs}`, { method: 'POST' })).ok).toBe(
         true,
       );
@@ -80,6 +94,7 @@ test('profile small uploads by ready, transfer and commit phases with exact remo
           ).toBe(false);
           results.push({
             writeDelayMs,
+            statDelayMs,
             sample,
             readyMs,
             writeMs: written - sent,
@@ -91,13 +106,25 @@ test('profile small uploads by ready, transfer and commit phases with exact remo
         }
       }
     }
+    const statResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/stat-delay`);
+    expect(statResponse.ok).toBe(true);
+    const statStats = await statResponse.json();
+    if (commitProfile) expect(statStats.sftpDelayedStatCount).toBeGreaterThanOrEqual(3);
+    console.log('UPLOAD_STAT_PROFILE', JSON.stringify(statStats));
     console.log('SMALL_UPLOAD_RESULT', JSON.stringify(results));
     await testInfo.attach('small-upload-profile', {
       body: JSON.stringify(results, null, 2),
       contentType: 'application/json',
     });
   } finally {
-    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
-    await closeWebSocket(workspace.socket);
+    try {
+      expect((await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+    } finally {
+      try {
+        expect((await fetch(`${E2E_SSH.controlUrl}/sftp/stat-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+      } finally {
+        await closeWebSocket(workspace.socket);
+      }
+    }
   }
 });

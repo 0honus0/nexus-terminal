@@ -47,6 +47,8 @@ let sftpWriteRequests = 0;
 let sftpWriteBytes = 0;
 let sftpPeakPendingWrites = 0;
 let sftpStatDelayMs = 0;
+let sftpStatDelayPrefix = '';
+let sftpDelayedStatCount = 0;
 let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
 let prepareOperationDelayMs = 0;
@@ -693,7 +695,11 @@ function attachSftp(session, accept) {
         prepareStatRequests++;
         if (prepareOperationDelayMs) await new Promise((resolve) => setTimeout(resolve, prepareOperationDelayMs));
       }
-      if (sftpStatDelayMs > 0 && remotePath === '/pending-start-cancel.bin') {
+      if (
+        sftpStatDelayMs > 0 &&
+        (sftpStatDelayPrefix ? remotePath.startsWith(sftpStatDelayPrefix) : remotePath === '/pending-start-cancel.bin')
+      ) {
+        sftpDelayedStatCount++;
         await new Promise((resolve) => setTimeout(resolve, sftpStatDelayMs));
       }
       if (useLstat && sftpLstatDenyPrefix && remotePath.startsWith(sftpLstatDenyPrefix)) {
@@ -1300,6 +1306,8 @@ const controlServer = http.createServer(async (req, res) => {
       sftpWriteBytes = 0;
       sftpPeakPendingWrites = 0;
       sftpStatDelayMs = 0;
+      sftpStatDelayPrefix = '';
+      sftpDelayedStatCount = 0;
       sftpLstatDenyPrefix = '';
       sftpReadDirDelayMs = 0;
       sftpReadDelayMs = 0;
@@ -1365,11 +1373,17 @@ const controlServer = http.createServer(async (req, res) => {
       );
       return;
     }
-    if (req.method === 'POST' && requestUrl.pathname === '/sftp/stat-delay') {
-      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-      sftpStatDelayMs = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(10_000, Math.round(requestedDelay))) : 0;
+    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/stat-delay') {
+      if (req.method === 'POST') {
+        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+        sftpStatDelayMs = Number.isFinite(requestedDelay)
+          ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+          : 0;
+        sftpStatDelayPrefix = requestUrl.searchParams.get('prefix') || '';
+        sftpDelayedStatCount = 0;
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpStatDelayMs }));
+      res.end(JSON.stringify({ sftpStatDelayMs, sftpStatDelayPrefix, sftpDelayedStatCount }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/sftp/lstat-deny-prefix') {
