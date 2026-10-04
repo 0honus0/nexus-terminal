@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_VERSION=24
-ARG ALPINE_VERSION=3.24
-FROM node:${NODE_VERSION}-alpine AS workspace-base
+FROM node:current-alpine AS workspace-base
+RUN apk upgrade --no-cache
 ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
@@ -38,14 +37,16 @@ COPY packages/frontend/public ./packages/frontend/public
 COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./packages/frontend/
 RUN pnpm --filter @nexus-terminal/frontend build
 
-FROM alpine:${ALPINE_VERSION} AS runtime
+FROM nginx:stable-alpine AS runtime
 LABEL org.opencontainers.image.title="Nexus Terminal" \
       org.opencontainers.image.description="Unified runtime image for the frontend and backend"
 
-RUN apk add --no-cache nodejs nginx tini \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache libstdc++ tini \
     && rm -rf /usr/share/nginx/html/* /var/cache/apk/*
 WORKDIR /app
 ENV NEXUS_HTML_THEME_ASSET_DIR=/app/assets/html-themes/local
+COPY --from=workspace-base /usr/local/bin/node /usr/local/bin/node
 
 COPY --from=backend-builder /out/backend/dist ./dist
 COPY assets/html-themes/local ./assets/html-themes/local
@@ -53,7 +54,7 @@ COPY --from=backend-builder /out/backend/node_modules ./node_modules
 COPY --from=backend-builder /out/backend/package.json ./package.json
 
 COPY --from=frontend-builder /build/packages/frontend/dist /usr/share/nginx/html
-COPY packages/frontend/nginx.conf /etc/nginx/http.d/default.conf
+COPY packages/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY scripts/docker/entrypoint.sh /usr/local/bin/nexus-terminal
 
 RUN chmod 0755 /usr/local/bin/nexus-terminal \
