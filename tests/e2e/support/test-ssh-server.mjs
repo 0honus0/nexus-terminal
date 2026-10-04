@@ -51,6 +51,7 @@ let sftpStatDelayPrefix = '';
 let sftpDelayedStatCount = 0;
 let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
+let sftpDelayedDirectoryOpens = 0;
 let prepareOperationDelayMs = 0;
 let prepareStatRequests = 0;
 let prepareMkdirRequests = 0;
@@ -618,6 +619,7 @@ async function resetRoot() {
   sftpStatDelayMs = 0;
   sftpLstatDenyPrefix = '';
   sftpReadDirDelayMs = 0;
+  sftpDelayedDirectoryOpens = 0;
   sftpReadDelayMs = 0;
   sftpDelayedReadCount = 0;
   sftpOpenDelayMs = 0;
@@ -742,6 +744,7 @@ function attachSftp(session, accept) {
         await new Promise((resolve) => setTimeout(resolve, sftpSlowDirectoryDelayMs));
       }
       if (sftpReadDirDelayMs > 0) {
+        sftpDelayedDirectoryOpens++;
         await new Promise((resolve) => setTimeout(resolve, sftpReadDirDelayMs));
       }
       const fullPath = resolveRemotePath(remotePath);
@@ -1310,6 +1313,7 @@ const controlServer = http.createServer(async (req, res) => {
       sftpDelayedStatCount = 0;
       sftpLstatDenyPrefix = '';
       sftpReadDirDelayMs = 0;
+      sftpDelayedDirectoryOpens = 0;
       sftpReadDelayMs = 0;
       sftpDelayedReadCount = 0;
       sftpOpenDelayMs = 0;
@@ -1408,13 +1412,16 @@ const controlServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ prepareOperationDelayMs, prepareStatRequests, prepareMkdirRequests }));
       return;
     }
-    if (req.method === 'POST' && requestUrl.pathname === '/sftp/readdir-delay') {
-      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-      sftpReadDirDelayMs = Number.isFinite(requestedDelay)
-        ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
-        : 0;
+    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/readdir-delay') {
+      if (req.method === 'POST') {
+        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+        sftpReadDirDelayMs = Number.isFinite(requestedDelay)
+          ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+          : 0;
+        sftpDelayedDirectoryOpens = 0;
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpReadDirDelayMs }));
+      res.end(JSON.stringify({ sftpReadDirDelayMs, sftpDelayedDirectoryOpens }));
       return;
     }
     if (requestUrl.pathname === '/sftp/slow-directory' && req.method === 'POST') {
