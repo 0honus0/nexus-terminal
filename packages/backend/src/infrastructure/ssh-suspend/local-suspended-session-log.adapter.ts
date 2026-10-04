@@ -38,8 +38,8 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
     if (!chunk.length) return this.position(id);
     let endOffset = 0;
     await this.enqueue(id, async (writer) => {
-      await fs.mkdir(this.directory, { recursive: true, mode: 0o700 });
       if (writer.size === undefined) {
+        await fs.mkdir(this.directory, { recursive: true, mode: 0o700 });
         try {
           writer.size = (await fs.stat(file)).size;
         } catch (error) {
