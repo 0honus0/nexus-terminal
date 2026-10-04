@@ -973,11 +973,19 @@ test('resumed terminal pages older history through a bounded window and restores
     let historyRequestCount = 0;
     let historyResponseCount = 0;
     const historyRequestIds = new Set<string>();
+    let resumeStarted = 0;
+    let resumeRequestMs: number | undefined;
+    let resumeResponseMs: number | undefined;
+    let resumeRequestId: string | undefined;
     page.on('websocket', (socket) => {
       socket.on('framesent', ({ payload }) => {
         if (typeof payload !== 'string') return;
         try {
           const message = JSON.parse(payload) as { type?: string; requestId?: string };
+          if (message.type === 'suspend.resume') {
+            resumeRequestId = message.requestId;
+            resumeRequestMs = performance.now() - resumeStarted;
+          }
           if (message.type === 'suspend.history.previous') {
             historyRequestCount += 1;
             if (message.requestId) historyRequestIds.add(message.requestId);
@@ -990,6 +998,8 @@ test('resumed terminal pages older history through a bounded window and restores
         if (typeof payload !== 'string') return;
         try {
           const message = JSON.parse(payload) as { type?: string; requestId?: string };
+          if (message.type === 'response' && resumeRequestId && message.requestId === resumeRequestId)
+            resumeResponseMs = performance.now() - resumeStarted;
           if (message.type === 'response' && message.requestId && historyRequestIds.delete(message.requestId)) {
             historyResponseCount += 1;
           }
@@ -998,9 +1008,25 @@ test('resumed terminal pages older history through a bounded window and restores
         }
       });
     });
-    const resumeStarted = performance.now();
+    const gateFilesystem = process.env.NEXUS_E2E_RESUME_FILESYSTEM_GATE === '1';
+    if (gateFilesystem)
+      expect((await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate?blocked=1`, { method: 'POST' })).ok).toBe(true);
+    resumeStarted = performance.now();
     await suspendedRow.getByRole('button', { name: 'Resume', exact: true }).click();
     await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
+    const resumeSuccessVisibleMs = performance.now() - resumeStarted;
+    expect(resumeRequestMs).toBeDefined();
+    expect(resumeResponseMs).toBeDefined();
+    if (gateFilesystem) {
+      await expect
+        .poll(async () => (await (await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate`)).json()).pending)
+        .toBe(1);
+      expect((await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate`, { method: 'POST' })).ok).toBe(true);
+    }
+    console.log(
+      '[resume activation phases]',
+      JSON.stringify({ resumeRequestMs, resumeResponseMs, resumeSuccessVisibleMs }),
+    );
 
     const terminals = page.locator('.terminal-inner-container:visible');
     await expect(terminals).toHaveCount(1, { timeout: 20_000 });
@@ -1122,6 +1148,7 @@ test('resumed terminal pages older history through a bounded window and restores
       }),
     );
   } finally {
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate`, { method: 'POST' })).ok).toBe(true);
     expect((await context.request.put('/api/v1/settings/layout', { data: originalLayout })).ok()).toBeTruthy();
   }
 });
