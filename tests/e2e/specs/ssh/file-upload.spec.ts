@@ -726,7 +726,53 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   await expect(fileManager.locator('.file-manager-path-input input')).toHaveValue(folderPath!);
 
   const filename = 'm11-03e-picker-upload.bin';
-  const payload = Buffer.alloc(768 * 1024 + 123, 0x6d);
+  const largeReadProfile = process.env.NEXUS_E2E_LARGE_UPLOAD_READ_PROFILE === '1';
+  let uploadProfilePageDestroyed = false;
+  const markUploadProfilePageDestroyed = () => {
+    uploadProfilePageDestroyed = true;
+  };
+  page.on('crash', markUploadProfilePageDestroyed);
+  page.on('close', markUploadProfilePageDestroyed);
+  const payload = Buffer.alloc((largeReadProfile ? 16 * 1024 * 1024 : 768 * 1024) + 123, 0x6d);
+  const useFileReader = process.env.NEXUS_E2E_UPLOAD_FILE_READER === '1';
+  await page.evaluate(
+    ({ filename, useFileReader }) => {
+      const originalSlice = Blob.prototype.slice;
+      const originalRead = Blob.prototype.arrayBuffer;
+      const chunks = new WeakSet<Blob>();
+      const reads: Array<{ bytes: number; ms: number }> = [];
+      Blob.prototype.slice = function (...args) {
+        const chunk = originalSlice.apply(this, args);
+        if (this instanceof File && this.name === filename) chunks.add(chunk);
+        return chunk;
+      };
+      Blob.prototype.arrayBuffer = async function () {
+        if (!chunks.has(this)) return originalRead.call(this);
+        const started = performance.now();
+        const result = useFileReader
+          ? await new Promise<ArrayBuffer>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as ArrayBuffer);
+              reader.onerror = () => reject(reader.error);
+              reader.onabort = () => reject(new Error('Profile file read aborted'));
+              reader.readAsArrayBuffer(this);
+            })
+          : await originalRead.call(this);
+        reads.push({ bytes: result.byteLength, ms: performance.now() - started });
+        return result;
+      };
+      Object.assign(window, {
+        __uploadReadProfile: {
+          reads,
+          restore() {
+            Blob.prototype.slice = originalSlice;
+            Blob.prototype.arrayBuffer = originalRead;
+          },
+        },
+      });
+    },
+    { filename, useFileReader },
+  );
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   const uploadSockets = new Set<string>();
@@ -742,7 +788,7 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
     }
   });
   cdp.on('Network.webSocketFrameSent', ({ requestId, response }) => {
-    if (uploadSockets.has(requestId) && response.opcode === 2)
+    if (!largeReadProfile && uploadSockets.has(requestId) && response.opcode === 2)
       dataFrames.push({
         ms: performance.now() - uploadStarted,
         bytes: Buffer.from(response.payloadData, 'base64').length,
@@ -767,7 +813,9 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   expect(listBox).toBeTruthy();
   await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-before-upload.png') });
 
-  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=300`, { method: 'POST' });
+  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${largeReadProfile ? 0 : 300}`, {
+    method: 'POST',
+  });
   expect(delayResponse.ok).toBeTruthy();
   const observedStatuses = new Set<string>();
   try {
@@ -775,7 +823,13 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
     await fileManager.getByRole('button', { name: 'Upload File', exact: true }).click();
     const fileChooser = await fileChooserPromise;
     uploadStarted = performance.now();
-    await fileChooser.setFiles({ name: filename, mimeType: 'application/octet-stream', buffer: payload });
+    if (largeReadProfile) {
+      const localPath = path.join(M11_03E_EVIDENCE_DIR, filename);
+      await writeFile(localPath, payload);
+      await fileChooser.setFiles(localPath);
+    } else {
+      await fileChooser.setFiles({ name: filename, mimeType: 'application/octet-stream', buffer: payload });
+    }
 
     const progressPopup = visibleProgressCenter(page);
     await expect(progressPopup).toBeVisible({ timeout: 10_000 });
@@ -797,10 +851,23 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
 
     await fileManager.getByTitle('Refresh', { exact: true }).click();
     await expect(fileManagerRow(page, filename)).toBeVisible({ timeout: 20_000 });
-    expect(await downloadRemoteFile(page, filename)).toEqual(payload);
-    expect(dataFrames.reduce((sum, frame) => sum + frame.bytes, 0)).toBe(payload.length);
+    if (largeReadProfile) {
+      expect(await readFile(path.join(process.cwd(), '.tmp/ssh-root', folderPath!, filename))).toEqual(payload);
+    } else {
+      expect(await downloadRemoteFile(page, filename)).toEqual(payload);
+      expect(dataFrames.reduce((sum, frame) => sum + frame.bytes, 0)).toBe(payload.length);
+    }
     expect(completedMs).toBeDefined();
-    console.log('[browser upload profile]', JSON.stringify({ bytes: payload.length, dataFrames, completedMs }));
+    const reads = await page.evaluate(
+      () =>
+        (window as typeof window & { __uploadReadProfile: { reads: Array<{ bytes: number; ms: number }> } })
+          .__uploadReadProfile.reads,
+    );
+    expect(reads.reduce((sum, read) => sum + read.bytes, 0)).toBe(payload.length);
+    console.log(
+      '[browser upload profile]',
+      JSON.stringify({ useFileReader, bytes: payload.length, dataFrames, completedMs, reads }),
+    );
 
     const afterMetrics = await fileManagerMetrics(page);
     await expect(progressPopup).toBeHidden({ timeout: 4_000 });
@@ -831,7 +898,25 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
       'utf8',
     );
   } finally {
-    await cdp.detach();
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+    await page
+      .evaluate(() => {
+        const state = window as typeof window & { __uploadReadProfile?: { restore(): void } };
+        state.__uploadReadProfile?.restore();
+        delete state.__uploadReadProfile;
+      })
+      .catch((error) => {
+        // A crashed/closed page no longer retains patched Blob methods. Preserve the
+        // original test failure, but do not conceal cleanup errors on a live page.
+        if (!uploadProfilePageDestroyed && !page.isClosed()) throw error;
+      })
+      .finally(async () => {
+        try {
+          if (!uploadProfilePageDestroyed && !page.isClosed()) await cdp.detach();
+        } finally {
+          await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+          page.off('crash', markUploadProfilePageDestroyed);
+          page.off('close', markUploadProfilePageDestroyed);
+        }
+      });
   }
 });
