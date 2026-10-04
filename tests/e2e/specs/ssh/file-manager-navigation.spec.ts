@@ -572,44 +572,62 @@ test('refreshes and sorts a long remote list while keeping a long filename actio
   expect(beforeMetrics.rowText).toBeNull();
 
   await step('refresh loads the long remote list and sorting preserves the target row', async () => {
-    await fileManager.getByTitle('Refresh', { exact: true }).click();
-    await expect.poll(() => list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
-    await nameSortButton.click();
-    await nameSortButton.click();
-    await expect(nameHeader).toContainText('▲');
+    const directoryDelayMs = process.env.NEXUS_E2E_REFRESH_DIRECTORY_DELAY === '1' ? 60 : 0;
+    expect(
+      (await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=${directoryDelayMs}`, { method: 'POST' })).ok,
+    ).toBe(true);
+    try {
+      const refreshStarted = performance.now();
+      await fileManager.getByTitle('Refresh', { exact: true }).click();
+      await expect.poll(() => list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+      await nameSortButton.click();
+      await nameSortButton.click();
+      await expect(nameHeader).toContainText('▲');
 
-    await list.evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-    });
-    const target = row(page, LONG_FILENAME);
-    await expect(target).toBeVisible({ timeout: 20_000 });
-    const afterMetrics = await fileListMetrics(page, LONG_FILENAME);
-    const viewport = page.viewportSize();
-    expect(viewport).toBeTruthy();
-    expect(afterMetrics.scrollHeight).toBeGreaterThan(afterMetrics.clientHeight as number);
-    expect(afterMetrics.scrollWidth).toBeLessThanOrEqual((afterMetrics.clientWidth as number) + 1);
-    expect(afterMetrics.rowText).toContain(LONG_FILENAME);
-    expect(afterMetrics.nameScrollWidth).toBeGreaterThan(afterMetrics.nameClientWidth as number);
-    expect(afterMetrics.rowTop).toBeGreaterThanOrEqual(0);
-    expect(afterMetrics.rowBottom).toBeLessThanOrEqual(viewport!.height);
+      await list.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      const target = row(page, LONG_FILENAME);
+      await expect(target).toBeVisible({ timeout: 20_000 });
+      const targetReachableMs = performance.now() - refreshStarted;
+      const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay`);
+      expect(delayResponse.ok).toBe(true);
+      const delayMetrics = await delayResponse.json();
+      expect(delayMetrics.sftpDelayedDirectoryOpens).toBe(directoryDelayMs ? 1 : 0);
+      console.log(
+        '[directory refresh profile]',
+        JSON.stringify({ directoryDelayMs, targetReachableMs, delayedOpens: delayMetrics.sftpDelayedDirectoryOpens }),
+      );
+      const afterMetrics = await fileListMetrics(page, LONG_FILENAME);
+      const viewport = page.viewportSize();
+      expect(viewport).toBeTruthy();
+      expect(afterMetrics.scrollHeight).toBeGreaterThan(afterMetrics.clientHeight as number);
+      expect(afterMetrics.scrollWidth).toBeLessThanOrEqual((afterMetrics.clientWidth as number) + 1);
+      expect(afterMetrics.rowText).toContain(LONG_FILENAME);
+      expect(afterMetrics.nameScrollWidth).toBeGreaterThan(afterMetrics.nameClientWidth as number);
+      expect(afterMetrics.rowTop).toBeGreaterThanOrEqual(0);
+      expect(afterMetrics.rowBottom).toBeLessThanOrEqual(viewport!.height);
 
-    await target.click({ button: 'right' });
-    const contextMenu = page.getByRole('menu');
-    await expect(contextMenu).toBeVisible();
-    await expect(contextMenu.getByText('Rename', { exact: true })).toBeVisible();
-    const menuBox = await contextMenu.boundingBox();
-    expect(menuBox).toBeTruthy();
-    expect(menuBox!.x).toBeGreaterThanOrEqual(0);
-    expect(menuBox!.y).toBeGreaterThanOrEqual(0);
-    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport!.width);
-    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height);
-    await page.screenshot({ path: path.join(M11_03A_EVIDENCE_DIR, 'm11-03a-after-menu.png') });
-    await page.keyboard.press('Escape');
-    await writeFile(
-      path.join(M11_03A_EVIDENCE_DIR, 'm11-03a-metrics.json'),
-      JSON.stringify({ before: beforeMetrics, after: afterMetrics, viewport }, null, 2),
-      'utf8',
-    );
+      await target.click({ button: 'right' });
+      const contextMenu = page.getByRole('menu');
+      await expect(contextMenu).toBeVisible();
+      await expect(contextMenu.getByText('Rename', { exact: true })).toBeVisible();
+      const menuBox = await contextMenu.boundingBox();
+      expect(menuBox).toBeTruthy();
+      expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+      expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+      expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport!.width);
+      expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height);
+      await page.screenshot({ path: path.join(M11_03A_EVIDENCE_DIR, 'm11-03a-after-menu.png') });
+      await page.keyboard.press('Escape');
+      await writeFile(
+        path.join(M11_03A_EVIDENCE_DIR, 'm11-03a-metrics.json'),
+        JSON.stringify({ before: beforeMetrics, after: afterMetrics, viewport }, null, 2),
+        'utf8',
+      );
+    } finally {
+      expect((await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+    }
   });
 });
 
