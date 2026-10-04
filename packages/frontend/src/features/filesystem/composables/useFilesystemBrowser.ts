@@ -1,4 +1,4 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
+import { computed, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue';
 import type { FilesystemChannel } from '../ports/filesystem-channel';
 import type { WorkspaceFileSearchEntryDto, WorkspaceRemoteFileEntryDto } from '../model/filesystem';
 
@@ -68,8 +68,10 @@ const compare = (
 
 export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '/'): FilesystemBrowserController {
   const path = ref(initialPath);
-  const entries = ref<WorkspaceRemoteFileEntryDto[]>([]);
-  const searchEntries = ref<WorkspaceFileSearchEntryDto[]>([]);
+  // Remote listings are replaced as snapshots; entries and metadata are not
+  // edited in place. Avoid tracking every property read during full-list sorts.
+  const entries = shallowRef<WorkspaceRemoteFileEntryDto[]>([]);
+  const searchEntries = shallowRef<WorkspaceFileSearchEntryDto[]>([]);
   const searchQuery = ref('');
   const searching = ref(false);
   const searchTruncated = ref(false);
