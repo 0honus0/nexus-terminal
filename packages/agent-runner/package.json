@@ -11,7 +11,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/semver": "7.7.1",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.2"
   },
   "dependencies": {
     "@nexus-terminal/protocol": "workspace:*",
@@ -19,6 +19,6 @@
     "semver": "7.7.2",
     "tar": "catalog:",
     "typescript": "7.0.2",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   }
 }

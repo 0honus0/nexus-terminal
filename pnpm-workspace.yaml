@@ -3,7 +3,7 @@ packages:
   - tests/e2e
 
 catalog:
-  '@types/node': ^26.5.0
+  '@types/node': ^26.6.4
   axios: ^1.20.0
   dompurify: ^3.4.15
   pino: ^9.14.0
