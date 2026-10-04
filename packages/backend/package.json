@@ -2,9 +2,6 @@
   "name": "@nexus-terminal/backend",
   "version": "1.0.2",
   "private": true,
-  "engines": {
-    "node": ">=24"
-  },
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && node -e \"const fs=require('node:fs'); fs.cpSync('src/locales','dist/locales',{recursive:true}); fs.cpSync('src/infrastructure/agent/plugins/frontend-sdk','dist/infrastructure/agent/plugins/frontend-sdk',{recursive:true})\"",

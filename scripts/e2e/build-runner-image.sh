@@ -26,6 +26,7 @@ full_image="$image:latest"
 echo "[E2E runner] building $full_image"
 docker build \
   --pull \
+  --no-cache \
   --build-arg "NODE_VERSION=$node_version" \
   --build-arg "PLAYWRIGHT_VERSION=$playwright_version" \
   --build-arg "PNPM_VERSION=$pnpm_version" \

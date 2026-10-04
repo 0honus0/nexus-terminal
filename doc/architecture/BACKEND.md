@@ -220,7 +220,7 @@ SSH 项目目录由 `AgentProjectDirectories` 与 `agent_project_directories` �
 
 会话按 user/App/Thread 隔离，Root/Subagent 工具上下文由 Run 注入可信 threadId。文件工具的 sessionId composition 将会话绑定进入规范化参数和 operation hash，检查与执行共享同一选择。后台 Job 使用独立 exec channel，SQLite `agent_ssh_jobs` 保存作用域、operation identity、有界输出和状态；启动时将遗留 running 收敛为 unknown，不保存 live handle 或重放命令。Runner 继续独立持有 Workspace Job Journal，不承担 SSH 连接。
 
-- Node.js 24，ES2025，TypeScript 7。
+- Node.js Current，ES2025，TypeScript 7；构建与 CI 跟随最新 Current，项目不声明 Node 24 最低版本。
 - Express 5 HTTP application 与单一 WebSocket upgrade owner。
 - SQLite 持久化，数据库访问由 Infrastructure adapter 实现。
 - SSH/SFTP、Guacamole、通知、认证和 Agent Runner 通过明确 port/adapter 接入。

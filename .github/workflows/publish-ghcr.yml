@@ -99,7 +99,7 @@ jobs:
       - name: Set up pnpm and Node.js for dependency audit
         uses: pnpm/setup@v2
         with:
-          runtime: node@24
+          runtime: node@latest
           install: false
 
       - name: Audit production dependencies
@@ -300,6 +300,7 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          pull: true
           platforms: ${{ needs.prepare.outputs.platforms }}
           push: true
           tags: |
@@ -351,6 +352,7 @@ jobs:
         with:
           context: .
           file: scripts/docker/agent-runner/Dockerfile
+          pull: true
           platforms: ${{ needs.prepare.outputs.platforms }}
           push: true
           tags: |

@@ -1,4 +1,4 @@
-ARG NODE_VERSION=24
+ARG NODE_VERSION=current
 FROM node:${NODE_VERSION}-bookworm-slim
 
 ARG E2E_RUNNER_FINGERPRINT
@@ -18,6 +18,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN npm install --global "pnpm@${PNPM_VERSION}" \
   && pnpm dlx "playwright@${PLAYWRIGHT_VERSION}" install --with-deps --only-shell chromium \
   && apt-get update \
+  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends bzip2 ca-certificates git openssh-client rsync sshpass unzip zip \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /root/.cache

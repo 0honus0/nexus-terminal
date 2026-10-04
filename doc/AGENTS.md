@@ -308,7 +308,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 
 ### 11.2 行为证据与交付
 
-- canonical E2E 使用 Node 24；基础 check/format/build 串行，七个 Playwright 项目按耗时分片（默认 8，手动 6–10），构建统一/Runner 镜像后运行 standalone、core-without-Runner、full deployment smoke。依赖更新触发同一 workflow。
+- canonical E2E 使用最新 Node.js Current；主服务、Runner 服务与第一方 Plugin 构建/CI 跟随 Current，不声明 Node 24 最低版本；Workspace 可选工具包保留独立版本。基础 check/format/build 串行，七个 Playwright 项目按耗时分片（默认 8，手动 6–10），构建统一/Runner 镜像后运行 standalone、core-without-Runner、full deployment smoke。依赖更新触发同一 workflow。
 - 等待真实业务终态，不把按钮、socket 关闭、HTTP 返回视为完成；挂起恢复看 ownership，终端快照先真实 shell 往返。自动清理持续验证剩余记录终态或空态，“取消中”不是完成。
 - UI E2E 用可访问 role/name/label 与真实状态，不恢复生产测试标记；几何/滚动验证不锁定实现文本。
 - 挂起日志物理压缩缓冲不扩大公开历史：read/offset/export 仍限最近 100MiB；分批压缩是摊销优化，不宣称 append 严格 O(1) 或任意输出率不积压，状态仍由 Workspace/Backend owner 持有。

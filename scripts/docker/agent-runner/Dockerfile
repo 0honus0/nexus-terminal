@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-ARG NODE_VERSION=24
+ARG NODE_VERSION=current
 ARG DEBIAN_SUITE=bookworm-slim
 ARG MISE_VERSION=2026.9.5
 ARG MISE_AMD64_SHA256=d71e94e1ed59d4d0ca4ac847fa321d6d6615a8e613e9b468c9fb39f0dddd06d5
@@ -13,6 +13,7 @@ ARG MISE_VERSION
 ARG MISE_AMD64_SHA256
 ARG MISE_ARM64_SHA256
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && case "${TARGETARCH}" in \
@@ -30,6 +31,7 @@ RUN apt-get update \
     && /out/mise --version | awk 'NR == 1 { print $1 }' | grep -Fx "${MISE_VERSION}"
 
 FROM node:${NODE_VERSION}-${DEBIAN_SUITE} AS builder
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
@@ -56,6 +58,7 @@ WORKDIR /app
 # script(1) 负责 Workspace Terminal 的 PTY 分配；tini 只作为容器 PID 1 转发信号并回收孤儿进程。
 # 不引入自编译 native helper；curl/tar/gzip/xz/zstd 等由 mise Tool Pack materializer 解包 Node/Python/Go release 使用。
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
       bsdutils bzip2 ca-certificates curl gzip tar tini unzip xz-utils zstd \
     && rm -rf /var/lib/apt/lists/*

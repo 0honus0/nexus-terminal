@@ -135,7 +135,7 @@ jobs:
       - name: Set up pnpm and Node.js
         uses: pnpm/setup@v2
         with:
-          runtime: node@24
+          runtime: node@latest
           cache: true
           install: false
 
@@ -246,7 +246,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: current
 
       - name: Download E2E spec timings
         uses: actions/download-artifact@v8
@@ -354,7 +354,7 @@ jobs:
       - name: Set up pnpm and Node.js
         uses: pnpm/setup@v2
         with:
-          runtime: node@24
+          runtime: node@latest
           cache: true
           install: false
 
@@ -387,6 +387,7 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          pull: true
           push: false
           load: true
           tags: nexus-terminal:e2e-smoke
@@ -398,6 +399,7 @@ jobs:
         with:
           context: .
           file: scripts/docker/agent-runner/Dockerfile
+          pull: true
           push: false
           load: true
           tags: nexus-agent-runner:e2e-smoke

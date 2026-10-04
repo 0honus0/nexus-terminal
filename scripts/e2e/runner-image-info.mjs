@@ -8,7 +8,7 @@ const repoRoot = path.resolve(scriptDir, '../..');
 const rootPackage = readJson('package.json');
 const e2ePackage = readJson('tests/e2e/package.json');
 
-const nodeVersion = '24';
+const nodeVersion = 'current';
 const pnpmVersion = /^pnpm@(.+)$/.exec(String(rootPackage.packageManager ?? ''))?.[1];
 const playwrightVersion = e2ePackage.devDependencies?.['@playwright/test'];
 
@@ -36,6 +36,9 @@ const definitionFiles = [
 ];
 const hash = crypto.createHash('sha256');
 hash.update(`node=${nodeVersion}\nplaywright=${playwrightVersion}\npnpm=${pnpmVersion}\n`);
+// Refresh the floating Node image and OS packages at least once per UTC week
+// when CI runs, even if the workspace dependency files have not changed.
+hash.update(`refreshWeek=${Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))}\n`);
 for (const relativePath of definitionFiles) {
   hash.update(`file=${relativePath}\n`);
   hash.update(fs.readFileSync(path.join(repoRoot, relativePath)));
