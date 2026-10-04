@@ -12,6 +12,65 @@ import {
   resetTestSshFilesystem,
 } from '../../support/ssh';
 
+test('compare single and repeated refresh requests while retaining new remote entries', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  await connectTestSshFromConnectionsPage(page, await ensureTestSshConnection(context.request));
+  await openConnectedFileManager(page);
+  const manager = page.getByRole('dialog', { name: 'File Manager', exact: true });
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  const pending = new Set<string>();
+  let requests = 0;
+  let peakPending = 0;
+  cdp.on('Network.webSocketFrameSent', ({ response }) => {
+    if (response.opcode !== 1) return;
+    const message = JSON.parse(response.payloadData);
+    if (message.type === 'filesystem.list') {
+      requests++;
+      pending.add(message.requestId);
+      peakPending = Math.max(peakPending, pending.size);
+    }
+  });
+  cdp.on('Network.webSocketFrameReceived', ({ response }) => {
+    if (response.opcode !== 1) return;
+    const message = JSON.parse(response.payloadData);
+    if (message.type === 'response') pending.delete(message.requestId);
+  });
+  const samples = [];
+  try {
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=300`, { method: 'POST' })).ok).toBe(true);
+    for (const clicks of [1, 5]) {
+      for (let sample = 0; sample < 3; sample++) {
+        const filename = `refresh-profile-${clicks}-${sample}.txt`;
+        await writeFile(path.resolve('.tmp/ssh-root', filename), 'refresh fixture');
+        const baseline = requests;
+        peakPending = 0;
+        const start = performance.now();
+        await manager.getByTitle('Refresh', { exact: true }).evaluate((element, count) => {
+          for (let index = 0; index < count; index++) (element as HTMLButtonElement).click();
+        }, clicks);
+        await expect(activeFileManagerList(page).locator(`tr[data-filename="${filename}"]`)).toBeVisible();
+        await expect.poll(() => pending.size).toBe(0);
+        expect(requests - baseline).toBeGreaterThan(0);
+        // The UI navigation queue serializes refreshes; a burst is not a concurrent list window.
+        expect(requests - baseline).toBe(clicks);
+        expect(peakPending).toBe(1);
+        await expect(manager.locator('.file-manager-path-input input')).toHaveValue('/');
+        samples.push({ clicks, sample, requests: requests - baseline, peakPending, ms: performance.now() - start });
+      }
+    }
+    console.log('[repeated refresh profile]', JSON.stringify(samples));
+  } finally {
+    try {
+      await cdp.detach();
+    } finally {
+      expect((await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+    }
+  }
+});
+
 test('profiles real large-directory navigation and sort while retaining bounded accessible rows', async ({
   page,
   context,
