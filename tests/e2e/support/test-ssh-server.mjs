@@ -736,7 +736,7 @@ function attachSftp(session, accept) {
           attrs: attrsFromStats(stats),
         });
       }
-      const handle = registry.add({ type: 'dir', entries: names, sent: false });
+      const handle = registry.add({ type: 'dir', entries: names, offset: 0 });
       sftp.handle(reqid, handle);
     } catch (error) {
       respondError(reqid, error);
@@ -749,13 +749,15 @@ function attachSftp(session, accept) {
       sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid directory handle');
       return;
     }
-    if (state.sent) {
+    if (state.offset >= state.entries.length) {
       sftp.status(reqid, STATUS_CODE.EOF);
       return;
     }
-    state.sent = true;
-    if (state.entries.length === 0) sftp.status(reqid, STATUS_CODE.EOF);
-    else sftp.name(reqid, state.entries);
+    // Real servers split directory listings across NAME packets. Sending the
+    // whole fixture in one packet can exceed the client's 256 KiB packet limit.
+    const entries = state.entries.slice(state.offset, state.offset + 128);
+    state.offset += entries.length;
+    sftp.name(reqid, entries);
   });
 
   sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
