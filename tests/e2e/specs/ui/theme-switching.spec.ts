@@ -775,7 +775,11 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
             response.request().method() === 'GET',
         );
         await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
-        expect((await listRemote).ok()).toBeTruthy();
+        const remoteListResponse = await listRemote;
+        expect(
+          remoteListResponse.ok(),
+          `Remote preset list HTTP ${remoteListResponse.status()}: ${await remoteListResponse.text()}`,
+        ).toBeTruthy();
         await customizer.getByPlaceholder('Search remote themes...', { exact: true }).fill('丝带');
         const remoteRow = customizer.getByRole('listitem').filter({ has: page.getByText('丝带', { exact: true }) });
         await expect(remoteRow).toBeVisible();

@@ -188,6 +188,7 @@ jobs:
 
       - name: Run balanced E2E shard ${{ matrix.shard }}
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           E2E_SPEC_DURATIONS_PATH: test-results/spec-durations.json
           DEBUG: pw:webserver
         shell: bash
