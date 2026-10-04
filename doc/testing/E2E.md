@@ -140,6 +140,8 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
+`specs/mobile/terminal-output-scheduling.spec.ts` defers new animation frames while keeping the page visible and the real SSH transport/timers running, then verifies output consumer credit advances and subsequent display/input recover. This covers the output scheduling fallback, not real phone IME, a fully frozen browser, or OpenCode-specific redraw behavior. `specs/mobile/keyboard-geometry.spec.ts` checks fitted rows, remote resize messages and direct xterm input across keyboard-sized viewport changes; it does not open a real system keyboard.
+
 `specs/agent/event-catchup.spec.ts` exercises the production Agent subscriber with controlled WebSocket events: ordered backlog consumption, duplicate filtering, arrivals while consumption is paused, abort/unsubscribe and reconnect using the consumed cursor. It does not validate real backend durable repository replay or sustained slow-consumer memory bounds.
 
 The editor encoding regression in `specs/ssh/file-preview-editor.spec.ts` checks exact saved UTF-16LE bytes including BOM after selecting LF, not only the success message.

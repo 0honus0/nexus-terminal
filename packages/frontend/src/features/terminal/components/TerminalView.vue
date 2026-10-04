@@ -1069,7 +1069,10 @@
     if (outputFrame !== undefined || outputTimer !== undefined) return;
     if (props.active && document.visibilityState !== 'hidden')
       outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
-    else outputTimer = window.setTimeout(() => flushPendingOutput(), INACTIVE_OUTPUT_BATCH_MS);
+    // A visible mobile page can have animation frames deferred. Do not leave
+    // output parsing and flow-control credit dependent on the next paint.
+    // Flushing cancels both schedules, preventing duplicate batch consumption.
+    outputTimer = window.setTimeout(() => flushPendingOutput(), INACTIVE_OUTPUT_BATCH_MS);
   };
   const handleTerminalOutput = ({ data, consumed }: { data: string | Uint8Array; consumed?: () => void }): void => {
     activatePagedHistoryMode();
