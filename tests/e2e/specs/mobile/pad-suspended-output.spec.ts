@@ -17,71 +17,96 @@ test.use({
   userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
 });
 
-test('wide touch Pad contains downward drags at empty history, history top and alternate screen', async ({
-  page,
-  context,
-}) => {
-  let wireOutput = '';
-  page.on('websocket', (socket) => {
-    if (!socket.url().includes('/ws/workspace')) return;
-    socket.on('framereceived', ({ payload }) => {
-      if (typeof payload !== 'string') wireOutput = (wireOutput + payload.toString('utf8')).slice(-32768);
+for (const recovery of ['touch', 'mouse wheel'] as const) {
+  test(`wide touch Pad contains downward drags and recovers after alternate screen using ${recovery}`, async ({
+    page,
+    context,
+  }) => {
+    let wireOutput = '';
+    page.on('websocket', (socket) => {
+      if (!socket.url().includes('/ws/workspace')) return;
+      socket.on('framereceived', ({ payload }) => {
+        if (typeof payload !== 'string') wireOutput = (wireOutput + payload.toString('utf8')).slice(-32768);
+      });
     });
+    await loginAsInitialAdmin(context.request);
+    await configureSshE2eSettings(context.request);
+    const connectionId = await ensureTestSshConnection(context.request);
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    const terminal = page.locator('.terminal-inner-container');
+    const command = page.locator('.command-bar-command-input');
+    const drag = async (direction = 1) => {
+      expect(await terminal.evaluate((element) => getComputedStyle(element).touchAction)).toBe('none');
+      await terminal.evaluate((element, direction) => {
+        const box = element.getBoundingClientRect();
+        const touch = (offset: number) =>
+          new Touch({
+            identifier: 81,
+            target: element,
+            clientX: box.x + 80,
+            clientY: box.y + 220 + direction * offset,
+          });
+        const start = touch(0);
+        element.dispatchEvent(
+          new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [start], changedTouches: [start] }),
+        );
+        for (const offset of [40, 80, 120, 160]) {
+          const moved = touch(offset);
+          const event = new TouchEvent('touchmove', {
+            bubbles: true,
+            cancelable: true,
+            touches: [moved],
+            changedTouches: [moved],
+          });
+          element.dispatchEvent(event);
+          if (!event.defaultPrevented) throw new Error('Downward terminal drag escaped to the page');
+        }
+        element.dispatchEvent(
+          new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [touch(160)] }),
+        );
+      }, direction);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    };
+    await drag();
+    await command.fill('for ((i=0;i<100;i++)); do printf "PAD_TOP_%03d\\n" "$i"; done');
+    await command.press('Enter');
+    await expect(terminal).toContainText('PAD_TOP_099');
+    for (let i = 0; i < 10; i++) await drag();
+    await expect(terminal).toContainText('PAD_TOP_000');
+    await drag();
+    await command.fill(
+      'printf "\\033[?1049h\\033[2J\\033[HPAD_%s" ALT_SCREEN; while IFS= read -rsn1 key; do [[ "$key" == q ]] && break; done; printf "\\033[?1049l"; printf "PAD_%s\\n" BOUNDARY_OK',
+    );
+    await command.press('Enter');
+    await expect(terminal).toContainText('PAD_ALT_SCREEN');
+    await drag();
+    await expect(terminal).toContainText('PAD_ALT_SCREEN');
+    await command.fill('q');
+    await command.press('Enter');
+    await expect(terminal).not.toContainText('PAD_ALT_SCREEN');
+    await expect.poll(() => wireOutput).toContain('PAD_BOUNDARY_OK');
+    if (recovery === 'touch') {
+      for (let i = 0; i < 10; i++) await drag(-1);
+    } else {
+      await terminal.locator('.xterm-screen').hover();
+      // Wheel pixels are normalized by xterm and browser DPR. Reach the observed
+      // scrollbar boundary rather than assuming one large wheel request does so.
+      await expect
+        .poll(
+          async () => {
+            await page.mouse.wheel(0, 400);
+            return terminal.locator('.scrollbar.vertical').evaluate((scrollbar) => {
+              const slider = scrollbar.querySelector<HTMLElement>('.slider')!;
+              return scrollbar.clientHeight - slider.offsetTop - slider.clientHeight;
+            });
+          },
+          { intervals: [50] },
+        )
+        .toBeLessThanOrEqual(1);
+    }
+    await expect(terminal).toContainText('PAD_BOUNDARY_OK');
   });
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  const connectionId = await ensureTestSshConnection(context.request);
-  await connectTestSshFromConnectionsPage(page, connectionId);
-  const terminal = page.locator('.terminal-inner-container');
-  const command = page.locator('.command-bar-command-input');
-  const drag = async (direction = 1) => {
-    expect(await terminal.evaluate((element) => getComputedStyle(element).touchAction)).toBe('none');
-    await terminal.evaluate((element, direction) => {
-      const box = element.getBoundingClientRect();
-      const touch = (offset: number) =>
-        new Touch({ identifier: 81, target: element, clientX: box.x + 80, clientY: box.y + 220 + direction * offset });
-      const start = touch(0);
-      element.dispatchEvent(
-        new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [start], changedTouches: [start] }),
-      );
-      for (const offset of [40, 80, 120, 160]) {
-        const moved = touch(offset);
-        const event = new TouchEvent('touchmove', {
-          bubbles: true,
-          cancelable: true,
-          touches: [moved],
-          changedTouches: [moved],
-        });
-        element.dispatchEvent(event);
-        if (!event.defaultPrevented) throw new Error('Downward terminal drag escaped to the page');
-      }
-      element.dispatchEvent(
-        new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [touch(160)] }),
-      );
-    }, direction);
-    expect(await page.evaluate(() => window.scrollY)).toBe(0);
-  };
-  await drag();
-  await command.fill('for ((i=0;i<100;i++)); do printf "PAD_TOP_%03d\\n" "$i"; done');
-  await command.press('Enter');
-  await expect(terminal).toContainText('PAD_TOP_099');
-  for (let i = 0; i < 10; i++) await drag();
-  await expect(terminal).toContainText('PAD_TOP_000');
-  await drag();
-  await command.fill(
-    'printf "\\033[?1049h\\033[2J\\033[HPAD_%s" ALT_SCREEN; while IFS= read -rsn1 key; do [[ "$key" == q ]] && break; done; printf "\\033[?1049l"; printf "PAD_%s\\n" BOUNDARY_OK',
-  );
-  await command.press('Enter');
-  await expect(terminal).toContainText('PAD_ALT_SCREEN');
-  await drag();
-  await expect(terminal).toContainText('PAD_ALT_SCREEN');
-  await command.fill('q');
-  await command.press('Enter');
-  await expect(terminal).not.toContainText('PAD_ALT_SCREEN');
-  await expect.poll(() => wireOutput).toContain('PAD_BOUNDARY_OK');
-  for (let i = 0; i < 10; i++) await drag(-1);
-  await expect(terminal).toContainText('PAD_BOUNDARY_OK');
-});
+}
 
 for (const outputKind of ['line logs', 'single line'] as const) {
   test(`wide touch Pad resumes the original shell after real detached ${outputKind} exceed retained history`, async ({
