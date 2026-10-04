@@ -146,6 +146,10 @@ test('marking suspend keeps the UI tab interactive and unmarking keeps the shell
   await command.fill(
     "for ((i=0;i<2000;i++)); do printf 'SNAPSHOT_PROFILE_%04d_abcdefghijklmnopqrstuvwxyz\\n' \"$i\"; done; printf 'SNAPSHOT_%s\\n' PROFILE_DONE",
   );
+  const snapshotProfileLines = process.env.NEXUS_E2E_SMALL_SNAPSHOT_PROFILE === '1' ? 200 : 2000;
+  if (snapshotProfileLines === 200) {
+    await command.fill((await command.inputValue()).replace('i<2000', 'i<200'));
+  }
   await command.press('Enter');
   await expect(terminal.locator('.xterm-rows')).toContainText('SNAPSHOT_PROFILE_DONE');
   const cdp = await context.newCDPSession(page);
@@ -185,7 +189,7 @@ test('marking suspend keeps the UI tab interactive and unmarking keeps the shell
   expect(phaseSamples.map((sample) => sample.phase)).toEqual(['suspend.prepare', 'suspend.commit']);
   console.log(
     '[browser suspend snapshot profile]',
-    JSON.stringify({ requestMs, responseMs, snapshotBytes, phaseSamples }),
+    JSON.stringify({ snapshotProfileLines, requestMs, responseMs, snapshotBytes, phaseSamples }),
   );
   await cdp.detach();
   await expect(activeTab).toBeVisible();
