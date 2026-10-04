@@ -1,4 +1,7 @@
 import { expect, test } from '../../support/fixtures';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import path from 'node:path';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection } from '../../support/ssh';
 import {
@@ -9,6 +12,67 @@ import {
   waitForFilesystemReady,
   waitForJson,
 } from '../../support/ws';
+
+test('profile ZIP completion under remote command delay with exact extracted content', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const workspace = await openWorkspaceSession(request, await ensureTestSshConnection(request));
+  const source = `/zip-profile-${crypto.randomUUID()}.txt`;
+  const content = 'ZIP profile exact content\n'.repeat(4096);
+  const samples = [];
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    await requestWorkspace(workspace.socket, 'filesystem.writeText', { path: source, content });
+    for (const delayMs of [0, 100]) {
+      expect((await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=${delayMs}`, { method: 'POST' })).ok).toBe(true);
+      for (let sample = 0; sample < 3; sample++) {
+        const id = crypto.randomUUID();
+        const destination = `/zip-profile-${id}.zip`;
+        const beforeResponse = await fetch(`${E2E_SSH.controlUrl}/archive/processes`);
+        expect(beforeResponse.ok).toBe(true);
+        const before = await beforeResponse.json();
+        const terminal = waitForJson(
+          workspace.socket,
+          (message) =>
+            message.type === 'transfer.archive' &&
+            message.payload?.requestId === id &&
+            ['completed', 'failed', 'cancelled'].includes(message.payload?.type),
+        );
+        const started = performance.now();
+        expect(
+          await requestWorkspace(
+            workspace.socket,
+            'transfer.compress',
+            { sources: [source], destination, format: 'zip' },
+            id,
+          ),
+        ).toEqual({ started: true });
+        expect((await terminal).payload).toMatchObject({ type: 'completed', path: destination });
+        const completedMs = performance.now() - started;
+        await expect
+          .poll(async () => {
+            const response = await fetch(`${E2E_SSH.controlUrl}/archive/processes`);
+            expect(response.ok).toBe(true);
+            return response.json();
+          })
+          .toEqual({ started: before.started + 1, exited: before.exited + 1 });
+        const extracted = await promisify(execFile)(
+          'unzip',
+          ['-p', path.resolve('.tmp/ssh-root', destination.slice(1))],
+          { maxBuffer: 1024 * 1024 },
+        );
+        expect(extracted.stdout).toBe(content);
+        samples.push({ delayMs, sample, completedMs, sourceBytes: Buffer.byteLength(content) });
+      }
+    }
+    console.log('[ZIP completion profile]', JSON.stringify(samples));
+  } finally {
+    try {
+      expect((await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+    } finally {
+      await closeWebSocket(workspace.socket);
+    }
+  }
+});
 
 test('archive cancellation settles after remote exit and permits a subsequent compression', async ({ request }) => {
   await loginAsInitialAdmin(request);

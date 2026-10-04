@@ -1,10 +1,79 @@
 import { expect, test } from '../../support/fixtures';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import path from 'node:path';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
+import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import { closeWebSocket, openWorkspaceSession, requestWorkspace, waitForFilesystemReady } from '../../support/ws';
 
 const query = (values: Record<string, string | number>): string =>
   new URLSearchParams(Object.entries(values).map(([key, value]) => [key, String(value)])).toString();
+
+test('profile streamed directory ZIP with exact extracted files under READ delay', async ({ request }, testInfo) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const root = path.resolve('.tmp/ssh-root/zip-download-profile');
+  await mkdir(root, { recursive: true });
+  const files = Array.from({ length: 4 }, (_, index) => ({
+    name: `file-${index}.bin`,
+    bytes: Buffer.alloc(256 * 1024, 0x31 + index),
+  }));
+  for (const file of files) await writeFile(path.join(root, file.name), file.bytes);
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId);
+  const control = `${E2E_SSH.controlUrl}/sftp/read-network`;
+  const samples = [];
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    for (const delayMs of [0, 20]) {
+      for (let sample = 0; sample < 3; sample++) {
+        expect((await fetch(`${control}?ms=${delayMs}&bytesPerSecond=0`, { method: 'POST' })).ok).toBe(true);
+        const start = performance.now();
+        const response = await request.get(
+          `/api/v1/sftp/download-directory?${query({ connectionId, sessionId: workspace.workspaceId, remotePath: '/zip-download-profile' })}`,
+        );
+        try {
+          expect(response.status()).toBe(200);
+          const zip = await response.body();
+          const ms = performance.now() - start;
+          const archivePath = testInfo.outputPath(`directory-${delayMs}-${sample}.zip`);
+          await writeFile(archivePath, zip);
+          const entries = await promisify(execFile)('unzip', ['-Z1', archivePath]);
+          expect(entries.stdout.trim().split('\n').sort()).toEqual(files.map((file) => file.name).sort());
+          for (const file of files) {
+            const extracted = await promisify(execFile)('unzip', ['-p', archivePath, file.name], {
+              encoding: 'buffer',
+              maxBuffer: 1024 * 1024,
+            });
+            expect(extracted.stdout).toEqual(file.bytes);
+          }
+          await expect.poll(async () => (await (await fetch(control)).json()).sftpReadPending).toBe(0);
+          const metrics = await (await fetch(control)).json();
+          expect(metrics.sftpReadResponseBytes).toBe(1024 * 1024);
+          samples.push({ delayMs, sample, ms, zipBytes: zip.length, ...metrics });
+        } finally {
+          await response.dispose();
+        }
+      }
+    }
+    await expect
+      .poll(async () => {
+        const response = await fetch(`${E2E_SSH.controlUrl}/sftp/read-handles`);
+        expect(response.ok).toBe(true);
+        const handles = await response.json();
+        return handles.opened - handles.closed;
+      })
+      .toBe(0);
+    console.log('[directory ZIP profile]', JSON.stringify(samples));
+  } finally {
+    try {
+      expect((await fetch(`${control}?ms=0&bytesPerSecond=0`, { method: 'POST' })).ok).toBe(true);
+    } finally {
+      await closeWebSocket(workspace.socket);
+    }
+  }
+});
 
 test('HTTP download ticket, Range, inline file, and directory ZIP work for an active SSH session', async ({
   request,
