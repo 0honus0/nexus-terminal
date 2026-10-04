@@ -144,6 +144,13 @@ test('mobile terminal gates automatic status replies during recovery and answers
   const connectionId = await ensureTestSshConnection(context.request);
   const terminalInputs: string[] = [];
   const rejections: string[] = [];
+  const gateResumeResponse = process.env.NEXUS_E2E_INPUT_RESUME_RESPONSE_GATE === '1';
+  let releaseResponse: (() => void) | undefined;
+  let releaseReplay: (() => void) | undefined;
+  let replayConsumed = false;
+  const recordInputRecovery = (event: string) => {
+    console.log('[input recovery observation]', JSON.stringify({ event, ms: performance.now() }));
+  };
   page.on('console', (message) => {
     if (message.text().includes('Terminal input rejected')) rejections.push(message.text());
   });
@@ -159,27 +166,77 @@ test('mobile terminal gates automatic status replies during recovery and answers
   });
   await page.routeWebSocket('**/ws/workspace', (socket) => {
     const server = socket.connectToServer();
+    let resumeRequestId: string | undefined;
+    let deliveredBytes = 0;
+    let replayEndBytes: number | undefined;
+    const deliver = (message: string | Buffer) => {
+      if (
+        typeof message !== 'string' &&
+        message.length >= 16 &&
+        message.readUInt32BE(0) === 0x4e585731 &&
+        message[5] === 1
+      )
+        deliveredBytes += message.readUInt32BE(12);
+      socket.send(message);
+    };
     server.onMessage((message) => {
-      if (resumes > 0 && typeof message !== 'string' && message.includes(Buffer.from('RECOVERY_QUERY\x1b[5n')))
+      if (typeof message === 'string') {
+        const frame = JSON.parse(message);
+        if (frame.type === 'response' && frame.requestId === resumeRequestId) {
+          recordInputRecovery('resume-response-arrived');
+          if (gateResumeResponse) {
+            releaseResponse = () => deliver(message);
+            return;
+          }
+        }
+      }
+      if (resumes > 0 && typeof message !== 'string' && message.includes(Buffer.from('RECOVERY_QUERY\x1b[5n'))) {
+        recordInputRecovery('replayed-query');
         replayedQueries++;
+      }
       if (holdQuery && typeof message !== 'string' && message.includes(Buffer.from('RECOVERY_QUERY\x1b[5n'))) {
         delayedQuery = message;
         deliverQuery = () => socket.send(message);
         return;
       }
-      socket.send(message);
+      if (
+        !gateResumeResponse &&
+        resumes > 0 &&
+        typeof message !== 'string' &&
+        message.includes(Buffer.from('RECOVERY_QUERY\x1b[5n'))
+      ) {
+        // Control delivery, not reply acceptance: this query must be parsed only after activation.
+        releaseReplay = () => deliver(message);
+        return;
+      }
+      deliver(message);
+      if (resumes > 0 && typeof message !== 'string' && message.includes(Buffer.from('RECOVERY_QUERY\x1b[5n')))
+        replayEndBytes = deliveredBytes;
     });
     socket.onMessage(async (message) => {
       if (typeof message === 'string') {
         const frame = JSON.parse(message);
-        if (frame.type === 'terminal.input') terminalInputs.push(frame.payload.data);
+        if (
+          frame.type === 'terminal.flow' &&
+          replayEndBytes !== undefined &&
+          frame.payload.consumedBytes >= replayEndBytes
+        ) {
+          replayConsumed = true;
+          recordInputRecovery('replay-consumed');
+        }
+        if (frame.type === 'terminal.input') {
+          terminalInputs.push(frame.payload.data);
+          if (frame.payload.data === '\x1b[0n') recordInputRecovery('dsr-reply');
+        }
         if (frame.type === 'workspace.ping' && dropProbe) return;
         if (frame.type === 'workspace.resume') {
+          resumeRequestId = frame.requestId;
           resumes++;
+          recordInputRecovery('resume-request');
           // The old transport is fenced during reconnect. Deliver the captured
           // real output on the replacement transport, not the obsolete socket.
           deliverQuery = () => {
-            if (delayedQuery) socket.send(delayedQuery);
+            if (delayedQuery) deliver(delayedQuery);
           };
           await barrier;
         }
@@ -201,8 +258,10 @@ test('mobile terminal gates automatic status replies during recovery and answers
     await command.fill(marker === 'LIVE_QUERY' ? 'l' : marker === 'RECOVERY_QUERY' ? 'r' : 'a');
     await command.press('Enter');
   };
+  const liveQueryStarted = performance.now();
   await query('LIVE_QUERY');
   await expect.poll(() => terminalInputs.filter((data) => data === '\x1b[0n').length).toBe(1);
+  const liveQueryMs = performance.now() - liveQueryStarted;
   holdQuery = true;
   await query('RECOVERY_QUERY');
   await expect.poll(() => Boolean(delayedQuery)).toBe(true);
@@ -220,22 +279,45 @@ test('mobile terminal gates automatic status replies during recovery and answers
     dropProbe = false;
     release();
   }
+  if (gateResumeResponse) {
+    try {
+      await expect.poll(() => Boolean(releaseResponse) && replayConsumed).toBe(true);
+      await expect(command).toBeDisabled();
+      recordInputRecovery('release-response-after-consumption');
+    } finally {
+      releaseResponse?.();
+    }
+  }
   await expect(command).toBeEnabled();
-  // Resume legitimately replays the server output withheld from the old
-  // transport. Its DSR generates a new reply; this is not cached user input.
+  recordInputRecovery('command-enabled');
+  // The two controlled orders have distinct exact reply contracts. No queued reply
+  // may be emitted for a query already consumed while input was disabled.
   await expect.poll(() => replayedQueries).toBe(1);
-  await expect.poll(() => terminalInputs.filter((data) => data === '\x1b[0n').length).toBe(2);
+  const expectedRepliesBeforeFreshQuery = gateResumeResponse ? 1 : 2;
+  if (!gateResumeResponse) {
+    await expect.poll(() => Boolean(releaseReplay)).toBe(true);
+    recordInputRecovery('release-replay-after-activation');
+    releaseReplay!();
+    await expect.poll(() => terminalInputs.filter((data) => data === '\x1b[0n').length).toBe(2);
+  } else {
+    expect(terminalInputs.filter((data) => data === '\x1b[0n')).toHaveLength(1);
+  }
   // A fresh query and loop exit provide a final processing boundary.
+  const afterQueryStarted = performance.now();
   await query('AFTER_QUERY');
-  await expect.poll(() => terminalInputs.filter((data) => data === '\x1b[0n').length).toBe(3);
+  await expect
+    .poll(() => terminalInputs.filter((data) => data === '\x1b[0n').length)
+    .toBe(expectedRepliesBeforeFreshQuery + 1);
+  const afterQueryMs = performance.now() - afterQueryStarted;
   await expect(terminal).toContainText('AFTER_QUERY');
   expect(rejections).toEqual([]);
   await command.fill('q');
   await command.press('Enter');
   await expect(terminal).toContainText('STATUS_LOOP_EXIT');
-  expect(terminalInputs.filter((data) => data === '\x1b[0n')).toHaveLength(3);
+  expect(terminalInputs.filter((data) => data === '\x1b[0n')).toHaveLength(expectedRepliesBeforeFreshQuery + 1);
   expect(replayedQueries).toBe(1);
   expect(rejections).toEqual([]);
+  console.log('[terminal input recovery profile]', JSON.stringify({ liveQueryMs, afterQueryMs }));
 });
 
 test('foreground probes preserve healthy SSH and resume a half-open transport without a fresh login', async ({

@@ -368,9 +368,10 @@ test('folder upload into an existing directory overwrites only conflicting files
 test('multi-file upload remains usable and byte-complete on moderate-latency links', async ({ page, context }) => {
   await openFileManager(page, context);
 
+  const largeWriteProfile = process.env.NEXUS_E2E_UPLOAD_MULTI_LARGE_WRITE_PROFILE === '1';
   const largeFiles = Array.from({ length: 4 }, (_, index) => ({
     name: `moderate-latency-${index + 1}.bin`,
-    size: 3 * 1024 * 1024,
+    size: (largeWriteProfile ? 10 : 3) * 1024 * 1024,
     fill: 0x20 + index,
   }));
 
@@ -411,7 +412,9 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
         60_000,
       );
       for (const file of largeFiles) {
-        expect((await downloadRemoteFile(page, file.name)).byteLength).toBe(file.size);
+        const content = await downloadRemoteFile(page, file.name);
+        expect(content.byteLength).toBe(file.size);
+        expect(content.equals(Buffer.alloc(file.size, file.fill))).toBe(true);
       }
     });
   } finally {
@@ -796,6 +799,9 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   const payload = Buffer.alloc((largeReadProfile ? 16 * 1024 * 1024 : 768 * 1024) + 123, 0x6d);
   const useFileReader = process.env.NEXUS_E2E_UPLOAD_FILE_READER === '1';
   const profileWriteDelay = process.env.NEXUS_E2E_UPLOAD_BACKPRESSURE_PROFILE === '1' ? 30 : largeReadProfile ? 0 : 300;
+  const writeDelayOverride = process.env.NEXUS_E2E_UPLOAD_WRITE_DELAY_MS;
+  const measuredWriteDelay = writeDelayOverride === undefined ? profileWriteDelay : Number(writeDelayOverride);
+  expect(Number.isInteger(measuredWriteDelay) && measuredWriteDelay >= 0 && measuredWriteDelay <= 750).toBe(true);
   await page.evaluate(() => {
     const originalSend = WebSocket.prototype.send;
     const sockets = new Set<WebSocket>();
@@ -916,7 +922,7 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
   expect(listBox).toBeTruthy();
   await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-before-upload.png') });
 
-  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${profileWriteDelay}`, {
+  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${measuredWriteDelay}`, {
     method: 'POST',
   });
   expect(delayResponse.ok).toBeTruthy();
@@ -975,7 +981,10 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
           }
         ).__uploadBufferProfile.stats,
     );
-    console.log('[upload bufferedAmount profile]', JSON.stringify({ profileWriteDelay, ...bufferStats }));
+    console.log(
+      '[upload bufferedAmount profile]',
+      JSON.stringify({ profileWriteDelay: measuredWriteDelay, ...bufferStats }),
+    );
     const writeStats = await (await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`)).json();
     expect(writeStats.sftpWriteBytes).toBe(payload.length);
     expect(writeStats.sftpPendingWrites).toBe(0);

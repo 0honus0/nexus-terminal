@@ -214,14 +214,22 @@ test('cancelling pipelined remote writes preserves the destination and permits a
   const workspace = await openWorkspaceSession(request, connectionId, `upload-write-cancel-${crypto.randomUUID()}`);
   const destinationPath = '/pipeline-cancel.bin';
   const original = 'Existing destination must survive cancellation.';
-  const payload = Buffer.alloc(2 * 1024 * 1024, 0x5a);
+  const largeWriteProfile = process.env.NEXUS_E2E_UPLOAD_LARGE_CANCEL_PROFILE === '1';
+  const payload = Buffer.alloc((largeWriteProfile ? 20 : 2) * 1024 * 1024, 0x5a);
+  // Keep fixture-control transport independent of long upload/download intervals.
+  // Do not retry failed control requests: cleanup failure remains a test failure.
+  const writeControl = (method: 'GET' | 'POST', delay?: number) =>
+    fetch(`${E2E_SSH.controlUrl}/sftp/write-delay${delay === undefined ? '' : `?ms=${delay}`}`, {
+      method,
+      headers: { Connection: 'close' },
+    });
   let uploadSocket: Awaited<ReturnType<typeof openAuthenticatedWebSocket>> | undefined;
   try {
     await waitForFilesystemReady(workspace.socket);
     await requestWorkspace(workspace.socket, 'filesystem.writeText', { path: destinationPath, content: original });
     for (const cancel of [true, false]) {
       const uploadId = `pipeline-cancel-${crypto.randomUUID()}`;
-      const delay = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${cancel ? 1200 : 0}`, { method: 'POST' });
+      const delay = await writeControl('POST', cancel ? 1200 : 0);
       expect(delay.ok).toBeTruthy();
       const ready = waitForJson(
         workspace.socket,
@@ -260,7 +268,7 @@ test('cancelling pipelined remote writes preserves the destination and permits a
       if (cancel) {
         await expect
           .poll(async () => {
-            const state = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`);
+            const state = await writeControl('GET');
             expect(state.ok).toBeTruthy();
             return (await state.json()).sftpPendingWrites;
           })
@@ -275,7 +283,7 @@ test('cancelling pipelined remote writes preserves the destination and permits a
       uploadSocket = undefined;
       await expect
         .poll(async () => {
-          const state = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`);
+          const state = await writeControl('GET');
           expect(state.ok).toBeTruthy();
           return (await state.json()).sftpPendingWrites;
         })
@@ -295,7 +303,8 @@ test('cancelling pipelined remote writes preserves the destination and permits a
       );
     }
   } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+    const reset = await writeControl('POST', 0);
+    expect(reset.ok).toBeTruthy();
     if (uploadSocket) await closeWebSocket(uploadSocket);
     await closeWebSocket(workspace.socket);
   }
