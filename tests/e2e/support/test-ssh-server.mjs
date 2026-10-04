@@ -45,6 +45,12 @@ let sftpLstatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
 let sftpReadDelayMs = 0;
 let sftpDelayedReadCount = 0;
+let sftpReadBytesPerSecond = 0;
+let sftpReadNextDeliveryAt = 0;
+let sftpReadRequests = 0;
+let sftpReadResponseBytes = 0;
+let sftpReadPending = 0;
+let sftpReadPeakPending = 0;
 let sftpOpenDelayMs = 0;
 let sftpDelayedOpenCount = 0;
 let sftpReadHandlesOpened = 0;
@@ -764,6 +770,9 @@ function attachSftp(session, accept) {
       sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
       return;
     }
+    sftpReadRequests += 1;
+    sftpReadPending += 1;
+    sftpReadPeakPending = Math.max(sftpReadPeakPending, sftpReadPending);
     try {
       if (sftpReadDelayMs > 0) {
         sftpDelayedReadCount += 1;
@@ -771,10 +780,19 @@ function attachSftp(session, accept) {
       }
       const buffer = Buffer.alloc(length);
       const { bytesRead } = await state.fileHandle.read(buffer, 0, length, Number(offset));
+      if (bytesRead > 0 && sftpReadBytesPerSecond > 0) {
+        const deliveryAt =
+          Math.max(performance.now(), sftpReadNextDeliveryAt) + (bytesRead * 1000) / sftpReadBytesPerSecond;
+        sftpReadNextDeliveryAt = deliveryAt;
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, deliveryAt - performance.now())));
+      }
+      sftpReadResponseBytes += bytesRead;
       if (bytesRead === 0) sftp.status(reqid, STATUS_CODE.EOF);
       else sftp.data(reqid, buffer.subarray(0, bytesRead));
     } catch (error) {
       respondError(reqid, error);
+    } finally {
+      sftpReadPending -= 1;
     }
   });
 
@@ -1303,6 +1321,40 @@ const controlServer = http.createServer(async (req, res) => {
         : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpReadDirDelayMs }));
+      return;
+    }
+    if (requestUrl.pathname === '/sftp/read-network' && (req.method === 'POST' || req.method === 'GET')) {
+      if (req.method === 'POST') {
+        if (sftpReadPending > 0) {
+          res.writeHead(409);
+          res.end('Remote reads are still pending');
+          return;
+        }
+        const delay = Number(requestUrl.searchParams.get('ms') || '0');
+        const rate = Number(requestUrl.searchParams.get('bytesPerSecond') || '0');
+        if (!Number.isFinite(delay) || delay < 0 || delay > 10000 || !Number.isFinite(rate) || rate < 0) {
+          res.writeHead(400);
+          res.end('Invalid read network profile');
+          return;
+        }
+        sftpReadDelayMs = Math.round(delay);
+        sftpReadBytesPerSecond = Math.floor(rate);
+        sftpReadNextDeliveryAt = 0;
+        sftpReadRequests = 0;
+        sftpReadResponseBytes = 0;
+        sftpReadPeakPending = 0;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          sftpReadDelayMs,
+          sftpReadBytesPerSecond,
+          sftpReadRequests,
+          sftpReadResponseBytes,
+          sftpReadPending,
+          sftpReadPeakPending,
+        }),
+      );
       return;
     }
     if (requestUrl.pathname === '/sftp/read-delay' && (req.method === 'POST' || req.method === 'GET')) {

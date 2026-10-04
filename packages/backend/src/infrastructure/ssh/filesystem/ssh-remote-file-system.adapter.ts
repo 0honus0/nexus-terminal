@@ -67,8 +67,10 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
     const end = Math.min(metadata.size, range?.end === undefined ? metadata.size : range.end + 1);
     // Bounded, ordered prefetch hides SFTP round-trip latency without buffering
     // the whole file. Short reads are completed before yielding each range.
-    const chunkBytes = 64 * 1024;
-    const concurrency = 16;
+    // ssh2 can split larger reads into serial protocol requests. Keep blocks
+    // below common packet limits while preserving the 1MiB prefetch budget.
+    const chunkBytes = 16 * 1024;
+    const concurrency = 64;
     let closed = false;
     const close = async () => {
       if (closed) return;

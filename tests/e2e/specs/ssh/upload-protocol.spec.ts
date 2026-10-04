@@ -1,4 +1,5 @@
 import { expect, test } from '../../support/fixtures';
+import { createHash } from 'node:crypto';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import {
@@ -86,7 +87,11 @@ test('pipelined upload and HTTP download stay fast under SFTP latency and preser
     expect(response.status()).toBe(200);
     const downloaded = await response.body();
     const downloadMs = performance.now() - downloadStarted;
-    expect(downloaded).toEqual(payload);
+    expect(downloaded.length).toBe(payload.length);
+    expect(createHash('sha256').update(downloaded).digest('hex')).toBe(
+      createHash('sha256').update(payload).digest('hex'),
+    );
+    await response.dispose();
     expect(downloadMs, 'download must prefetch remote reads instead of waiting for every round trip').toBeLessThan(
       8_000,
     );
@@ -115,7 +120,12 @@ test('pipelined upload and HTTP download stay fast under SFTP latency and preser
     expect(outside.headers()['content-range']).toBe(`bytes */${payload.length}`);
     const recovered = await request.get(ticket.url);
     expect(recovered.status()).toBe(200);
-    expect(await recovered.body()).toEqual(payload);
+    const recoveredBytes = await recovered.body();
+    expect(recoveredBytes.length).toBe(payload.length);
+    expect(createHash('sha256').update(recoveredBytes).digest('hex')).toBe(
+      createHash('sha256').update(payload).digest('hex'),
+    );
+    await recovered.dispose();
     await test.info().attach('transfer-throughput', {
       body: JSON.stringify({ bytes: payload.length, sftpDelayMs: 60, uploadMs, downloadMs }, null, 2),
       contentType: 'application/json',
