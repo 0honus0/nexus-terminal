@@ -1,7 +1,7 @@
 {
   "version": 1,
   "specs": {
-    "specs/agent/host.spec.ts": 75685,
+    "specs/agent/host.spec.ts": 81759,
     "specs/agent/preset-plugin.spec.ts": 43268,
     "specs/agent/provider.spec.ts": 310,
     "specs/auth/setup-login.spec.ts": 8206,
@@ -26,9 +26,9 @@
     "specs/mobile/ssh-workspace.spec.ts": 4144,
     "specs/mobile/suspend-resume-ui.spec.ts": 68646,
     "specs/mobile/terminal-touch.spec.ts": 15245,
-    "specs/mobile/touch-advanced.spec.ts": 34855,
+    "specs/mobile/touch-advanced.spec.ts": 37875,
     "specs/mobile/touch-preview-progress.spec.ts": 20711,
-    "specs/mobile/touch-workflows.spec.ts": 22750,
+    "specs/mobile/touch-workflows.spec.ts": 25203,
     "specs/ssh/archive-cancel-recovery.spec.ts": 608,
     "specs/ssh/binary-read-limits.spec.ts": 14888,
     "specs/ssh/command-history-management.spec.ts": 4184,
@@ -39,7 +39,7 @@
     "specs/ssh/docker-manager-ui.spec.ts": 14015,
     "specs/ssh/download-admission.spec.ts": 4694,
     "specs/ssh/download-network-profile.spec.ts": 46317,
-    "specs/ssh/file-document-preview.spec.ts": 36436,
+    "specs/ssh/file-document-preview.spec.ts": 39469,
     "specs/ssh/file-manager-navigation.spec.ts": 28918,
     "specs/ssh/file-preview-editor.spec.ts": 67523,
     "specs/ssh/file-upload-reconnect-stress.spec.ts": 24840,
@@ -64,7 +64,8 @@
     "specs/ssh/suspend-resume.spec.ts": 39572,
     "specs/ssh/terminal-protocol.spec.ts": 1491,
     "specs/ssh/terminal-tools-ui.spec.ts": 4046,
-    "specs/ssh/terminal-ui.spec.ts": 44987,
+    "specs/ssh/terminal-ui.spec.ts": 48972,
+    "specs/ssh/upload-prepare-profile.spec.ts": 13601,
     "specs/ssh/upload-protocol.spec.ts": 22778,
     "specs/ssh/workspace-preferences-runtime.spec.ts": 10174,
     "specs/ui/audit-log-filtering.spec.ts": 8532,
@@ -90,7 +91,7 @@
     "specs/ui/rdp-remoteapp-fullscreen.spec.ts": 17225,
     "specs/ui/ssh-key-management.spec.ts": 7046,
     "specs/ui/system-settings.spec.ts": 23943,
-    "specs/ui/theme-switching.spec.ts": 46179,
+    "specs/ui/theme-switching.spec.ts": 48907,
     "specs/ui/workspace-no-session.spec.ts": 2818,
     "specs/websocket/authenticated-session.spec.ts": 3672
   }
