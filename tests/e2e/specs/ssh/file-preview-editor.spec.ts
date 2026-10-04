@@ -1,4 +1,6 @@
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   E2E_SSH,
@@ -432,7 +434,23 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect
       .poll(async () => await editor.locator('.monaco-editor .view-lines').innerText())
       .toContain('plain-updated-through-editor');
-    await editor.getByRole('button', { name: 'Save', exact: true }).click();
+    const writeDelayMs = process.env.NEXUS_E2E_EDITOR_SAVE_DELAY === '1' ? 60 : 0;
+    expect((await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${writeDelayMs}`, { method: 'POST' })).ok).toBe(
+      true,
+    );
+    try {
+      const started = performance.now();
+      await editor.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect
+        .poll(() => readFile(path.resolve('.tmp/ssh-root/plainfile'), 'utf8'))
+        .toBe('plain-updated-through-editor\n');
+      console.log(
+        '[editor save profile]',
+        JSON.stringify({ writeDelayMs, verifiedSaveMs: performance.now() - started }),
+      );
+    } finally {
+      expect((await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+    }
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
     await expect(editor).toBeHidden();
 
