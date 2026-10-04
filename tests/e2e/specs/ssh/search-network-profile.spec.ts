@@ -39,6 +39,9 @@ test('measure recursive search on wide and deep trees under remote directory lat
           ).ok,
         ).toBeTruthy();
         for (let sample = 0; sample < 3; sample++) {
+          const beforeResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay`);
+          expect(beforeResponse.ok).toBe(true);
+          const before = await beforeResponse.json();
           const start = performance.now();
           const response = await requestWorkspace<{ truncated: boolean; entries: Array<{ relativePath: string }> }>(
             workspace.socket,
@@ -48,7 +51,12 @@ test('measure recursive search on wide and deep trees under remote directory lat
           const ms = performance.now() - start;
           expect(response.truncated).toBe(false);
           expect(response.entries.map((entry) => entry.relativePath).sort()).toEqual([...expected[shape]].sort());
-          results.push({ delay, shape, sample, ms });
+          const afterResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay`);
+          expect(afterResponse.ok).toBe(true);
+          const after = await afterResponse.json();
+          const delayedOpens = after.sftpDelayedDirectoryOpens - before.sftpDelayedDirectoryOpens;
+          expect(delayedOpens).toBe(delay ? (shape === 'skew' ? 26 : 25) : 0);
+          results.push({ delay, shape, sample, ms, delayedOpens });
         }
       }
     }
@@ -84,8 +92,14 @@ test('measure recursive search on wide and deep trees under remote directory lat
       contentType: 'application/json',
     });
   } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/slow-directory?ms=0`, { method: 'POST' });
-    await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=0`, { method: 'POST' });
-    await closeWebSocket(workspace.socket);
+    try {
+      expect((await fetch(`${E2E_SSH.controlUrl}/sftp/slow-directory?ms=0`, { method: 'POST' })).ok).toBe(true);
+    } finally {
+      try {
+        expect((await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+      } finally {
+        await closeWebSocket(workspace.socket);
+      }
+    }
   }
 });
