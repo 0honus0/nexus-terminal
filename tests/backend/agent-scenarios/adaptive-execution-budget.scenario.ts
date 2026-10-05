@@ -389,6 +389,11 @@ export const adaptiveExecutionBudgetScenario = async () => {
           assert.ok(content.includes('"planRevision":2') && content.includes('"remainingModelRequests":2'));
           assert.ok(content.includes('"phase":"finishing"'));
           assert.ok(content.includes(`"currentUnixSeconds":${now}`));
+          assert.ok(
+            request.instructions.some((instruction) =>
+              instruction.includes('Follow the latest user task and its final output format.'),
+            ),
+          );
         },
         events: [],
         error: new Error('PROVIDER_NETWORK_FAILED'),
