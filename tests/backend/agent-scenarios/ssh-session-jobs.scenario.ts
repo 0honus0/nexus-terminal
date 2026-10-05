@@ -11,6 +11,10 @@ import { ExecutionSessionManager } from '../../../packages/backend/src/platform/
 import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 import { createSshSessionTools } from '../../../packages/backend/src/modules/agent/tools/host/ssh-session-tools';
 import { withSshSessionInput } from '../../../packages/backend/src/modules/agent/tools/host/ssh-session-input';
+import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
+import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
+import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
+import type { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
 
 export const sshSessionJobsScenario = async () => {
   const directory = mkdtempSync(join(existsSync('/tmp/opencode') ? '/tmp/opencode' : tmpdir(), 'nexus-ssh-scenario-'));
@@ -111,13 +115,39 @@ export const sshSessionJobsScenario = async () => {
       },
       cryptoHash,
     );
-    const openTool = tools.find((t) => t.descriptor.name === 'ssh_session_open')!;
     const listTool = tools.find((t) => t.descriptor.name === 'ssh_session_list')!;
     const closeTool = tools.find((t) => t.descriptor.name === 'ssh_session_close')!;
-    const opening = await openTool.inspect({ connectionId: 1 }, context, 1);
+    const catalog = new ToolCatalog();
+    catalog.registerContribution({ schemaVersion: 1, id: 'ssh-session-regression', tools });
+    const capabilities = new CapabilityRegistry();
+    const broker: Pick<AppCapabilityBroker, 'authorize'> = {
+      authorize: async (_scope, capability, resource) =>
+        capabilities.allows(
+          capability!,
+          { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['1'] } } },
+          resource?.target,
+        )
+          ? { allowed: true, policyRevision: 1 }
+          : { allowed: false, code: 'APP_CAPABILITY_DENIED', policyRevision: 1 },
+    };
+    const executor = new ToolExecutor(catalog, broker as AppCapabilityBroker);
+    await assert.rejects(
+      () =>
+        executor.inspect(context, {
+          providerCallId: 'denied-session',
+          name: 'ssh_session_open',
+          argumentsJson: '{"connectionId":2}',
+        }),
+      /APP_CAPABILITY_DENIED/,
+    );
+    const opening = await executor.inspect(context, {
+      providerCallId: 'allowed-session',
+      name: 'ssh_session_open',
+      argumentsJson: '{"connectionId":1}',
+    });
     assert.equal(opening.risk, 'control');
     assert.equal(opening.mutation, false);
-    const opened = await openTool.execute(opening, context);
+    const opened = await executor.execute(context, opening);
     const data = opened.data as { session: { sessionId: string } };
     const listing = await listTool.inspect({ connectionId: 1, sessionId: data.session.sessionId }, context, 1);
     assert.equal((await listTool.execute(listing, context)).ok, true);

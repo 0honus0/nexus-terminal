@@ -136,6 +136,7 @@ Agent 实时订阅处理当前协议定义的全部持久事件：回复、取�
 ### Agent SSH 长会话与后台任务
 
 - Agent 工具按功能模块命名：`shell_*`、`ssh_*`、`file_*`、`machine_*`、`workspace_*`、`collaboration_*`、`memory_*`、`browser_*`、`tool_*`、`skill_*`、`plan_*`、`user_*`、`artifact_*`、`acp_*`、`mcp_*`。只接受当前名称，不提供旧工具名别名。
+- SSH 会话入口将 connectionId 转为规范 SSH target 后校验同一 typed grant；会话创建、命令执行与文件操作共享连接授权，未选中或未授权的连接仍拒绝。
 - `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。
 - `ssh_session_list(connectionId, sessionId?)` 查看当前对话内指定目标的连接状态与活动操作数；`ssh_session_close(connectionId, sessionId, force?)` 关闭并移除连接。普通关闭拒绝活动会话；显式 force 按破坏性操作治理，可能中断全部活动命令，不保证远端进程已终止。
 - `shell_execute` 与全部 `file_read/list/search/write/patch/move/delete` 接受仅限 SSH 的可选 `sessionId`。省略时仍每次临时建连后关闭；指定时检查、执行和验证使用已有连接。失效时不自动重连、降级或重放。
