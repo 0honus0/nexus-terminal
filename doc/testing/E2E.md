@@ -142,6 +142,8 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e
 
 ## Regression coverage
 
+Agent task-oriented coverage is planned in [AGENT_TASK_SCENARIOS.md](AGENT_TASK_SCENARIOS.md). Its 81 scenarios are design targets, not a claim that all are implemented or verified.
+
 Agent regression inputs live with executable tests: backend cases in `tests/backend/agent-scenarios`, browser/API cases in `tests/e2e/specs/agent`, and shared mock-model inputs in `tests/e2e/fixtures/agent/regression-inputs.json`. Tests do not parse historical Markdown reports or generated live-run datasets. Raw live-model evidence is retained separately and is not a deterministic pass/fail oracle.
 
 The 2026-10-05 regressions cover fractional memory confidence and file timestamps, file permissions, pre-execution Browser/Workspace rejections, bounded child deadlines, cleanup-safe completion evidence, cancellation settlement, recoverable resource quarantine, cross-tab Thread events, and awaiting-input snapshot restoration. Exact-output tests use a deterministic provider fixture; they do not prove a real model always follows “exactly once” tool instructions. The runtime loop guard bounds repetition but does not infer task completion from a single successful tool result. Real ACP/MCP/plugin services, optional toolchain downloads, extreme-number arithmetic and real-phone animation behavior remain separate environment/quality validation, not resolved product defects.
