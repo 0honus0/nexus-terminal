@@ -243,3 +243,5 @@ Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 Mess
 - Frontend TypeScript check。
 
 模块公开入口、跨 feature 依赖、状态 owner、组件拆分和国际化规则由 [AGENTS.md](../AGENTS.md) 约束 AI 开发与审查。仓库不再用读取源码文本、匹配 import 或统计文件形状的脚本和测试充当架构门禁；用户可见行为通过真实 E2E 路径验证。
+
+Agent `api/agent-events` 的 Run 持久事件投影直接消费 Protocol 的 `AGENT_DURABLE_EVENT_TYPES`，专用事件先执行字段校验，其余规范事件统一产生 snapshot.changed。事件名称只由 Protocol 持有，Frontend 不维护会遗漏新事件的部分白名单；未知类型／版本和非法 payload 仍 fail closed，不前移消费 cursor。

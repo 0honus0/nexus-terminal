@@ -1,6 +1,6 @@
 import {
+  AGENT_DURABLE_EVENT_TYPES,
   AGENT_HOST_EVENT_TYPES,
-  type AgentDurableEventTypeDto,
   type AgentTransientApprovalChangedPayloadDto,
   type AgentTransientMessageDeltaPayloadDto,
   type AgentTransientToolDeltaPayloadDto,
@@ -109,28 +109,7 @@ interface AgentRunRecoveryFailedEvent extends AgentVersionedEventMetadata {
   };
 }
 
-const SNAPSHOT_EVENT_TYPES = [
-  'approval.consumed',
-  'approval.expired',
-  'approval.requested',
-  'approval.superseded',
-  'budget.increase_requested',
-  'budget.increased',
-  'budget.auto_extended',
-  'budget.finishing',
-  'input.appended',
-  'model.aborted',
-  'model.completed',
-  'model.failed',
-  'model.started',
-  'plan.updated',
-  'subagent.cancelled',
-  'subagent.started',
-  'tool.failed',
-  'tool.proposed',
-  'tool.started',
-  'verification.completed',
-] as const satisfies readonly AgentDurableEventTypeDto[];
+const SNAPSHOT_EVENT_TYPES = AGENT_DURABLE_EVENT_TYPES;
 type AgentSnapshotEventType = (typeof SNAPSHOT_EVENT_TYPES)[number];
 
 interface AgentSnapshotChangedEvent extends AgentVersionedEventMetadata {
