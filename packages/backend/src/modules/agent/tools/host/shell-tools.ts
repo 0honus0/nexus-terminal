@@ -198,7 +198,8 @@ const workspaceExecutionResult = (job: WorkspaceJobView, mode: 'foreground' | 'b
   if (mode === 'background' && (job.status === 'pending' || job.status === 'running')) {
     return {
       ok: true,
-      summary: 'Workspace background job accepted by the durable Runner job journal.',
+      summary:
+        'Workspace background job accepted and active. Keep this jobId; do not resubmit to obtain a result. For services, run health checks; for completion, use shell_job_control wait.',
       userSummary: { key: 'agent.conversation.toolSummary.backgroundJobAccepted' },
       data: { jobId: job.jobId, workspaceId: job.workspaceId, generation: job.generation, status: job.status },
       artifactRefs: [],
@@ -317,7 +318,7 @@ const jobControlResult = (
           ? `Workspace job cancellation is not yet confirmed; the durable job is still ${job.status}.`
           : action === 'wait'
             ? `Workspace job is still ${job.status} after the server-side wait window.`
-            : `Workspace job is ${job.status}.`,
+            : `Workspace job is ${job.status}. This is authoritative active state, not failure or missing details. Keep this jobId; verify service health or use bounded wait, rather than starting it again.`,
       userSummary:
         action === 'cancel'
           ? { key: 'agent.conversation.toolSummary.jobCancelPending', params: { stateKey: jobStateKey(job.status) } }
