@@ -319,6 +319,52 @@ export const completionGateScenario = async () => {
       );
     }
 
+    const sshClose = {
+      ...executionEvidence,
+      toolName: 'ssh_session_close',
+      stepIndex: lastStep + 1,
+      inspection: {
+        ...executionEvidence.inspection,
+        toolName: 'ssh_session_close',
+        target: { ...executionEvidence.inspection.target, kind: 'ssh' as const },
+        normalizedArguments: { connectionId: 1, sessionId: 'owned-session', force: false },
+      },
+      result: JSON.parse(successfulResult('Idle SSH session closed', 'verified')) as ToolResult,
+    };
+    assert.equal(
+      completionGateDecision(
+        afterGate,
+        {
+          ...evidenceAfterTest,
+          tools: [...evidenceAfterTest.tools, sshClose],
+        },
+        'Verify SSH commands and close the session.',
+      ).kind,
+      'complete',
+    );
+    assert.equal(
+      completionGateDecision(
+        afterGate,
+        {
+          ...evidenceAfterTest,
+          gateBlocksSinceToolProgress: 0,
+          tools: [
+            ...evidenceAfterTest.tools,
+            {
+              ...sshClose,
+              inspection: {
+                ...sshClose.inspection,
+                normalizedArguments: { ...sshClose.inspection.normalizedArguments, force: true },
+              },
+            },
+          ],
+        },
+        'Verify SSH commands and close the session.',
+      ).kind,
+      'continue',
+      'Force interruption must not preserve stale success evidence',
+    );
+
     const begun = await stateCommit.beginModelStep({
       scope,
       runId: 'completion-run',

@@ -15,16 +15,14 @@ const confirmedSuccess = (result: CompletionEvidenceSnapshot['tools'][number]['r
 const verified = (result: CompletionEvidenceSnapshot['tools'][number]['result']): boolean =>
   confirmedSuccess(result) && result.verification.status === 'verified';
 
-const verifiedWorkspaceCleanup = (item: CompletionEvidenceSnapshot['tools'][number]): boolean => {
+const verifiedResourceCleanup = (item: CompletionEvidenceSnapshot['tools'][number]): boolean => {
   const args = item.inspection.normalizedArguments;
+  if (args === null || Array.isArray(args) || typeof args !== 'object' || !verified(item.result)) return false;
+  if (item.toolName === 'ssh_session_close' && item.inspection.target.kind === 'ssh') return args.force !== true;
   return (
     item.toolName === 'workspace_control' &&
     item.inspection.target.kind === 'workspace' &&
-    args !== null &&
-    !Array.isArray(args) &&
-    typeof args === 'object' &&
-    (args.action === 'stop' || args.action === 'delete') &&
-    verified(item.result)
+    (args.action === 'stop' || args.action === 'delete')
   );
 };
 
@@ -96,7 +94,7 @@ export const completionGateDecision = (
   }
 
   // Confirmed cleanup does not invalidate the test evidence obtained before cleanup.
-  const stateChangingMutations = successfulMutations.filter((item) => !verifiedWorkspaceCleanup(item));
+  const stateChangingMutations = successfulMutations.filter((item) => !verifiedResourceCleanup(item));
   const latestMutationStep = Math.max(-1, ...stateChangingMutations.map((item) => item.stepIndex));
   const requiresExecutionEvidence = EXPLICIT_VERIFICATION_REQUEST.test(objectiveText);
   const verifiedAfterMutation = evidence.tools.filter(
