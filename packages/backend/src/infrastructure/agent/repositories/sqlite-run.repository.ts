@@ -176,7 +176,7 @@ export class SqliteRunRepository
       const historyClause = historyBoundary
         ? `AND (${['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')].join(' OR ')})`
         : '';
-      const [entries, issueRow, pendingInputRequestRow] = await Promise.all([
+      const [entries, issueRow, pendingInputRequestRow, loopPauseRow] = await Promise.all([
         tx.queryAll<EntryRow>(
           `SELECT id, sequence, kind, payload_json, created_at
            FROM ai_thread_entries
@@ -212,10 +212,22 @@ export class SqliteRunRepository
               [row.id, scope.userId, scope.appId],
             )
           : Promise.resolve(null),
+        run.status === 'awaiting_input'
+          ? tx.queryOne<{ last_reason: string; updated_at: number }>(
+              `SELECT last_reason, updated_at FROM agent_loop_guards
+               WHERE run_id = ? AND paused_runtime_id IS NOT NULL AND last_reason IS NOT NULL`,
+              [row.id],
+            )
+          : Promise.resolve(null),
       ]);
       const issuePayload = issueRow ? durableRecord(parseDurableJsonValue(issueRow.payload_json)) : null;
+      const loopPauseReason = loopPauseRow ? durableString(loopPauseRow.last_reason) : null;
       return {
         ...run,
+        loopPause:
+          loopPauseRow && loopPauseReason !== null
+            ? { reason: loopPauseReason, occurredAt: durableInteger(loopPauseRow.updated_at) }
+            : null,
         pendingInputRequest: mapPendingUserInputRequest(pendingInputRequestRow),
         terminalIssue: issueRow
           ? {

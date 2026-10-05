@@ -51,6 +51,11 @@
   }>();
 
   const { t, locale } = useI18n();
+  const loopPause = computed(() =>
+    props.run?.status === 'awaiting_input' && 'loopPause' in props.run
+      ? (props.run as AgentRunSnapshotDto).loopPause
+      : null,
+  );
   const reconciliationNote = ref('');
   const reconciliationResourceReason = (reason: string): string =>
     reason === 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION' ? t('agent.operations.reconciliationLeaseFinalization') : reason;
@@ -550,6 +555,10 @@
             </div>
             <AgentMessageBody :text="streamingText" />
           </div>
+        </div>
+        <div v-if="loopPause" class="mx-auto mb-5 w-full max-w-3xl" role="status" aria-live="polite">
+          <div class="text-xs font-semibold">{{ $t('agent.conversation.loopPauseTitle') }}</div>
+          <div class="mt-1 text-xs text-text-secondary">{{ $t('agent.conversation.loopPauseHint') }}</div>
         </div>
         <div
           v-if="inputRequest"

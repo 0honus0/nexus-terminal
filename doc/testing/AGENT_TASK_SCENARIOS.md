@@ -205,6 +205,12 @@
 
 ### A02 当前执行（未完成）
 
+- Luna 收尾挂起已核实为现有循环保护暂停，而非丢失澄清请求；修复快照与界面缺少明确循环暂停原因的反馈，新增 protocol-owned loopPause 并投影现有 durable guard，不自动继续或完成。定向场景确认暂停原因/时间、scope 隔离与同 Run 新输入恢复后清除暂停投影通过；四项优化按单项验证提交推进，最终改用 gpt-5.6-luna low 真实验收尚未执行。
+- 用户指定换 Luna low：通过公开模型发现选用 `gpt-6-luna`，仅在隔离测试 Provider `3f4b7000-d6d9-4468-b0a5-faf8be24f17f` 添加模型，保留原模型与凭据，配置版本 2，默认及 Run reasoningEffort 均为 low。Provider test ok=true（2602ms）。真实 Run `bad68826-be3f-4365-b6c6-691f31614fc5`，Thread `17e38939-a85c-47bc-8ddf-3b1a9c2f0e1d`，Workspace `943e9bf1-48af-43e0-bd66-ca552e0830a9` generation 1 正确等待注入与修复授权，授权前全树 hash 不变。
+- Luna low 按后续授权仅修改 config.json 的 catalogFile→catalogPath。测试端独立确认 /health、/catalog HTTP 200 且内容正确，数据与其余文件 hash 不变；监听进程 cwd 和父进程链确认属于本轮 Workspace。尚不能标记整体通过：模型反复提交带多余 text 的 argv 参数，首次有效启动遗漏 PORT；成功启动后又重复提交三次同端口启动（EADDRINUSE），并在挂起问题中错误声称未重启、无法取得 Job 状态，实际 ToolResult 已明确 running。停止授权后受管 Job 已 confirmed cancelled，测试端确认 29174 无监听，Run 最终收敛仍待核对；不修改代码或重跑换绿。
+- 最新用户验收口径：不新增 OS 沙箱，必要的系统信息读取不再作为本场景失败项；保留其他 Workspace/Run 授权、项目外写入禁止、最小修改、数据保护和资源收尾要求。继续 A02，不进入 A03。
+- 路径错误反馈修复后已重启隔离测试 Backend。真实 Run `bd958bd8-a30c-4ea6-971c-c3c822c3ff5d`（Thread `97579b39-136d-402b-8548-1972f8bb2e48`）第一轮模型请求即 PROVIDER_HTTP_400，Run failed、无 Tool 或 Workspace 副作用。独立公开 Provider test 接口对同一模型也返回 ok=false/PROVIDER_HTTP_400（190ms）；当前尚不能继续能力验收，不机械新建 Run 重试，不将此失败归因于沙箱或长历史。该 Run 的失败记录保留；尚未修改 Provider 配置或替换模型。
+
 - A01 最新门禁反馈优化已单独提交 `f9b4a840`，相关 10 个 E2E 与检查通过，未推送。现在仅推进 A02。
 - 最新明确方案：Workspace 命令槽位进入 Agent 性能设置，默认 8、范围 1–64，1 为串行；前台／后台共用每 Workspace/generation 额度，修改仅影响新接纳，保留活跃 Job 与文件工具写入互斥。协议统一持有执行期限和额度边界；工具说明提前告知容量拒绝与恢复方式，不猜命令安全性。实现与回归正在验证，尚未提交，不计 A02 完成。
 - A02 真实 Run `2619739f-54d2-42ec-bc08-70162cd492c7`，Thread `64361131-650f-459c-a97e-7185916dc8b2`，Workspace `7f5aca4b-4bf7-4e0f-99d2-13684cc1b46b` generation 1。独立活动 Run 创建后结构化等待注入；项目注入与 hash 基线保存后，只读调查正确识别 catalogFile/catalogPath 冲突，再次 awaiting_input 等修复授权；该时刻全树文件 hash 不变。
@@ -215,5 +221,6 @@
 - Job 工具优化已单独本地提交 `5fed3182`，未推送。优化后真实 A02 Run `09f8987e-d2d0-4169-bf75-0e4715414233`，Thread `6ff91c36-26c8-4732-b285-71b4b8ef8de5`，Workspace `206a3a8c-2d79-4de3-a937-4ee06dfb7883` generation 1 已创建并 running，但后续模型请求以 PROVIDER_HTTP_400 终止，Run failed，尚无 pendingInputRequest，未注入或修复项目。保留失败证据，不重试换绿；下一步核对 Provider 请求边界及该终态 Run 的 Workspace 清理，不放宽跨 Run 授权，不进入 A03。
 - 该 Run 的前置故障已定位：模型连续 file_list `/workspace`，Runner 正确拒绝 WORKSPACE_PATH_FORBIDDEN，但 Backend 仅对 409 解码错误，400 的原始正文包装成异常后退化 MODEL_EXECUTION_FAILED。当前修复 400/409 的有界错误解码并去除异常正文；真实 Runner HTTP 场景验证路径拒绝原码进入 ToolResult，symlink 越界仍拒绝且项目外文件不变。Provider 400 与此故障的因果关系未证明，不据此关闭 Provider 问题；该修复不放宽文件路径门禁。
 - 路径错误传递修复本地送验：check、三包 build、隔离全量格式与 Runner HTTP coding 场景通过；全量场景仅上述 Context 基线失败。准备单独本地提交，无推送或远程验收结论。
+- 路径错误传递修复已本地提交 `901b1468`，未推送。失败 Run 的独立测试 Workspace `206a3a8c-2d79-4de3-a937-4ee06dfb7883` 经管理 API 显式 stop 后确认 succeeded/stopped，再 delete 后确认 succeeded/deleted、retained=false；不复用它执行新 Run，不把 generation 删除当作 persistent project root 已清理。Provider HTTP 400 原始上游正文按现有安全约束未保存，当前日志只能确认状态码，尚不足以判断请求 contract 或上游故障；不凭推测修复 Provider，不重复创建 Run 换绿。
 
 本文件是本轮临时场景计划与进度入口，过程中持续更新，不保留已解决问题的开放状态。全部场景完成（或明确说明实际 contract／环境导致的未覆盖范围）、有效回归进入 `tests/e2e/specs/agent/`，且对应 SHA 的 canonical Actions 验收后，删除本文件和 `E2E.md` 中的入口；长期验证命令与覆盖边界仅保留在 `E2E.md`，不留下完成报告。本条记录的是将来的删除要求，当前尚未删除、尚未全部完成。

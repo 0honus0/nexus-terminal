@@ -294,7 +294,13 @@ export interface AgentPendingUserInputRequestDto {
   requestedAt: number;
 }
 
+export interface AgentRunLoopPauseDto {
+  reason: string;
+  occurredAt: number;
+}
+
 export interface AgentRunSnapshotDto extends AgentRunViewDto {
+  loopPause: AgentRunLoopPauseDto | null;
   terminalIssue: AgentRunTerminalIssueDto | null;
   pendingInputRequest: AgentPendingUserInputRequestDto | null;
   recentEntries: Array<{

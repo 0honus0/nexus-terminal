@@ -1272,6 +1272,8 @@
       "sendEmptyHint": "请先输入内容",
       "sendBusyHint": "正在处理上一条操作，请稍候",
       "clarificationTitle": "需要更多信息",
+      "loopPauseTitle": "循环保护已暂停执行",
+      "loopPauseHint": "重复操作未产生新进展。请发送新的指引以恢复本轮 Run，或停止它。运行中的后台任务不会自动取消。",
       "clarificationHint": "请在下方回复以继续同一个任务。你可以选择选项，或直接在输入框中回答。",
       "clarificationRecommended": "推荐",
       "clarificationTextHint": "请在下方输入框中填写回答。",

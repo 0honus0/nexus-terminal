@@ -248,6 +248,7 @@ export interface RunTerminalIssue {
 }
 
 export interface RunSnapshot extends RunView {
+  loopPause: import('@nexus-terminal/protocol/agent-runs').AgentRunLoopPauseDto | null;
   terminalIssue: RunTerminalIssue | null;
   pendingInputRequest: PendingUserInputRequest | null;
   recentEntries: Array<{

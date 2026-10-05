@@ -210,6 +210,7 @@ export const runDto = (run: RunView): AgentRunViewDto => ({
 
 export const runSnapshotDto = (run: RunSnapshot): AgentRunSnapshotDto => ({
   ...runDto(run),
+  loopPause: run.loopPause,
   terminalIssue:
     run.terminalIssue === null
       ? null

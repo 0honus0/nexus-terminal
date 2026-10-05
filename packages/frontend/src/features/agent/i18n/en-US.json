@@ -1272,6 +1272,8 @@
       "sendEmptyHint": "Type a message first",
       "sendBusyHint": "Waiting for the current operation to finish",
       "clarificationTitle": "More information needed",
+      "loopPauseTitle": "Execution paused by loop protection",
+      "loopPauseHint": "Repeated actions produced no new progress. Send new guidance to resume this Run, or stop it. Running background jobs are not automatically cancelled.",
       "clarificationHint": "Reply below to continue this same run. Choose an option or type your answer in the composer.",
       "clarificationRecommended": "Recommended",
       "clarificationTextHint": "Type your answer in the composer below.",
