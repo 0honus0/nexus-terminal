@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import type { JsonValue, Scope } from '../../../packages/backend/src/modules/agent/agent.types';
-import type { SshShellTargetPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-shell-target.port';
+import { SshShellTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/capabilities/ssh-shell-target.adapter';
+import type { AgentSshSessions } from '../../../packages/backend/src/infrastructure/agent/capabilities/agent-ssh-sessions';
+import type { AgentConnectionResolverPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-resolver.port';
+import { CommandExecutionError } from '../../../packages/backend/src/platform/execution/remote-execution.port';
+import type { ExecutionSession } from '../../../packages/backend/src/platform/execution/execution-session';
 import { ShellCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/shell-capability.service';
 import { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
@@ -111,25 +115,37 @@ export const unifiedShellCapabilityScenario = async () => {
     },
   } as unknown as WorkspaceShellTargetPort;
 
-  const sshShellTarget = {
-    execute: async (
-      _context: ToolContext,
-      connectionId: number,
-      command: string,
-      _timeoutSeconds: number,
-      expectedConfigurationHash: string,
-    ) => {
-      if (sshHashes.get(connectionId) !== expectedConfigurationHash) throw new Error('RESOURCE_CHANGED');
-      sshCalls.push({ connectionId, hash: expectedConfigurationHash, command });
-      return {
-        exitCode: 0,
-        signal: null,
-        stdout: `ssh-${connectionId}-ok\n`,
-        stderr: '',
-        truncated: false,
-      };
-    },
-  } as unknown as SshShellTargetPort;
+  let sshExitCode = 0;
+  let sshSignal: string | undefined;
+  const sshShellTarget = new SshShellTargetAdapter(
+    {
+      get: async (connectionId: number) => ({ type: 'SSH', configurationHash: sshHashes.get(connectionId) }),
+    } as unknown as AgentConnectionResolverPort,
+    {
+      withSession: async (
+        _context: ToolContext,
+        connectionId: number,
+        expectedConfigurationHash: string,
+        work: (session: ExecutionSession) => Promise<unknown>,
+      ) => {
+        if (sshHashes.get(connectionId) !== expectedConfigurationHash) throw new Error('RESOURCE_CHANGED');
+        return work({
+          execute: async ({ command }: { command: string }) => {
+            sshCalls.push({ connectionId, hash: expectedConfigurationHash, command });
+            const result = {
+              exitCode: sshExitCode,
+              signal: sshSignal,
+              stdout: `ssh-${connectionId}-ok\n`,
+              stderr: sshExitCode ? 'EXPECTED_FAILURE\n' : '',
+              truncated: false,
+            };
+            if (sshExitCode !== 0 || sshSignal) throw new CommandExecutionError('SSH execution failed', result);
+            return result;
+          },
+        } as unknown as ExecutionSession);
+      },
+    } as unknown as AgentSshSessions,
+  );
 
   const registry = new CapabilityRegistry();
   let grantScope = registry.parseScope('shell.execute', {
@@ -252,6 +268,26 @@ export const unifiedShellCapabilityScenario = async () => {
     { connectionId: 2, hash: 'ssh-config-two', command: 'printf ssh-two' },
   ]);
 
+  sshExitCode = 7;
+  const nonzeroResult = await executor.executeMutation(context, sshOneInspection);
+  assert.equal(nonzeroResult.ok, false);
+  assert.equal(nonzeroResult.outcome, 'confirmed');
+  assert.deepEqual(nonzeroResult.semantic, {
+    kind: 'execution',
+    target: { target: 'ssh', id: '1' },
+    status: 'failed',
+  });
+  assert.equal((nonzeroResult.data as { exitCode: number }).exitCode, 7);
+  assert.equal((nonzeroResult.data as { stderr: string }).stderr, 'EXPECTED_FAILURE\n');
+  assert.equal(nonzeroResult.verification?.status, 'failed');
+  sshExitCode = -1;
+  await assert.rejects(() => executor.executeMutation(context, sshOneInspection), CommandExecutionError);
+  sshExitCode = 0;
+  sshSignal = 'TERM';
+  await assert.rejects(() => executor.executeMutation(context, sshOneInspection), CommandExecutionError);
+  sshSignal = undefined;
+  assert.equal((await executor.executeMutation(context, sshOneInspection)).ok, true);
+
   for (const [callId, input] of [
     ['workspace-shell-text', { target: 'workspace', id: 'ws-shell', command: { kind: 'shell', text: 'echo invalid' } }],
     ['ssh-argv', { target: 'ssh', id: '1', command: { kind: 'argv', argv: ['echo', 'invalid'] } }],
@@ -310,6 +346,7 @@ export const unifiedShellCapabilityScenario = async () => {
   return [
     { name: 'unified_shell_targets', value: 3, unit: 'targets' },
     { name: 'unified_shell_isolated_results', value: 3, unit: 'results' },
+    { name: 'unified_shell_confirmed_nonzero_and_unknown_results', value: 4, unit: 'cases' },
     { name: 'unified_shell_transport_rejections', value: 3, unit: 'cases' },
     { name: 'unified_shell_scope_rejections', value: 1, unit: 'cases' },
     { name: 'unified_shell_stale_target_rejections', value: 2, unit: 'cases' },

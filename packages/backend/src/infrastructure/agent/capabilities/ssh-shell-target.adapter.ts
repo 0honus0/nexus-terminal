@@ -5,6 +5,7 @@ import type {
   SshShellTargetPort,
 } from '../../../modules/agent/capabilities/ssh-shell-target.port';
 import type { ExecutionSession } from '../../../platform/execution/execution-session';
+import { CommandExecutionError } from '../../../platform/execution/remote-execution.port';
 import type { AgentSshSessions } from './agent-ssh-sessions';
 
 const MAX_SHELL_BYTES = 16 * 1024;
@@ -48,12 +49,25 @@ export class SshShellTargetAdapter implements SshShellTargetPort {
       connectionId,
       async (session) => {
         const remainingMs = Math.max(1, context.deadlineAt * 1000 - Date.now());
-        const result = await session.execute({
-          command,
-          timeoutMs: Math.min(timeoutSeconds * 1000, remainingMs),
-          maxOutputBytes: context.maxOutputBytes,
-          signal: context.signal,
-        });
+        const result = await session
+          .execute({
+            command,
+            timeoutMs: Math.min(timeoutSeconds * 1000, remainingMs),
+            maxOutputBytes: context.maxOutputBytes,
+            signal: context.signal,
+          })
+          .catch((error: unknown) => {
+            if (
+              error instanceof CommandExecutionError &&
+              error.result &&
+              Number.isInteger(error.result.exitCode) &&
+              error.result.exitCode >= 0 &&
+              !error.result.signal
+            ) {
+              return error.result;
+            }
+            throw error;
+          });
         return {
           exitCode: result.exitCode,
           signal: result.signal ?? null,
