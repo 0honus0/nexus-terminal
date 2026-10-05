@@ -384,6 +384,7 @@ export const workspaceCodingToolSurfaceScenario = async () => {
         path: '/workspace/work/http-written.js',
         content: 'console.log(42);\n',
         expectedSha256: null,
+        mode: 0o640,
       });
       assert.equal(written.created, true);
       assert.equal(written.sizeBytes, Buffer.byteLength('console.log(42);\n'));
@@ -394,6 +395,7 @@ export const workspaceCodingToolSurfaceScenario = async () => {
       const stat = await adapter.statWorkspacePath('coding-workspace', 5, '/workspace/work/http-written.js');
       assert.equal(stat.modifiedAt, actualMtime);
       assert.equal(stat.sha256, written.sha256);
+      assert.equal(stat.mode, 0o640, 'Explicit permissions must survive the real Runner HTTP contract');
       const listed = await adapter.listWorkspaceFiles('coding-workspace', 5, {
         path: '/workspace/work',
         maxEntries: 100,

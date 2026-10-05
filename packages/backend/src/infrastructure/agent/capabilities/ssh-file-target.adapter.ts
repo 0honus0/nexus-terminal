@@ -442,10 +442,11 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
             );
             const stream = await filesystem.openWrite(temporary, {
               flags: 'wx',
-              ...(before.mode === null ? {} : { mode: before.mode }),
+              mode: before.mode === null ? 0o600 : before.mode & 0o777,
             });
             stream.end(content);
             await finished(stream);
+            await filesystem.chmod(temporary, before.mode === null ? 0o600 : before.mode & 0o777);
             prepared.push({ before, content, temporary, expectedAfter });
           }
           for (const item of prepared) {
@@ -476,8 +477,11 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     content: Uint8Array,
     expectedSha256: string | null,
     expectedConfigurationHash: string,
+    mode?: number,
   ): Promise<SshFileMutationResult> {
     assertDeadline(context);
+    if (mode !== undefined && (!Number.isSafeInteger(mode) || mode < 0 || mode > 0o777))
+      throw new Error('VALIDATION_FAILED');
     if (!(content instanceof Uint8Array) || content.byteLength > MAX_MUTATION_FILE_BYTES)
       throw new Error('TOOL_INPUT_TOO_LARGE');
     if (expectedSha256 !== null && !/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error('VALIDATION_FAILED');
@@ -495,15 +499,17 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
         );
         if (hardDeniedPath(temporary)) throw new Error('RESOURCE_FORBIDDEN');
         const bytes = Buffer.from(content);
+        const permissions = mode ?? (before.mode === null ? 0o600 : before.mode & 0o777);
         let temporaryCreated = false;
         try {
           const stream = await filesystem.openWrite(temporary, {
             flags: 'wx',
-            ...(before.mode !== null ? { mode: before.mode } : {}),
+            mode: permissions,
           });
           temporaryCreated = true;
           stream.end(bytes);
           await finished(stream);
+          await filesystem.chmod(temporary, permissions);
           assertDeadline(context);
           const current = await this.inspectFileWithFilesystem(context, filesystem, remotePath);
           if ((current.exists ? current.sha256 : null) !== expectedSha256) throw new Error('RESOURCE_CHANGED');
@@ -511,7 +517,13 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
           temporaryCreated = false;
           const after = await this.inspectFileWithFilesystem(context, filesystem, before.resolvedPath);
           const expectedNewHash = createHash('sha256').update(bytes).digest('hex');
-          if (!after.exists || after.sha256 !== expectedNewHash) throw new Error('VERIFICATION_FAILED');
+          if (
+            !after.exists ||
+            after.sha256 !== expectedNewHash ||
+            after.mode === null ||
+            (after.mode & 0o777) !== permissions
+          )
+            throw new Error('VERIFICATION_FAILED');
           return { ...after, bytesWritten: bytes.byteLength };
         } finally {
           if (temporaryCreated) await filesystem.removeFile(temporary, { ignoreMissing: true }).catch(() => undefined);

@@ -257,6 +257,9 @@ export const writeWorkspaceFile = (workRoot: string, request: WorkspaceFileWrite
   if (bytes.byteLength > MAX_SOURCE_FILE_BYTES) throw new Error('WORKSPACE_FILE_TOO_LARGE');
   validateExpectedSha256(request.expectedSha256);
 
+  if (request.mode !== undefined && (!Number.isSafeInteger(request.mode) || request.mode < 0 || request.mode > 0o777))
+    throw new Error('VALIDATION_FAILED');
+
   const parent = hostPathFor(root, path.posix.dirname(logical));
   assertNoSymlink(root, parent, false);
   if (!fs.lstatSync(parent).isDirectory()) throw new Error('WORKSPACE_PATH_INVALID');
@@ -267,13 +270,14 @@ export const writeWorkspaceFile = (workRoot: string, request: WorkspaceFileWrite
 
   const target = hostPathFor(root, logical);
   const temporary = path.join(parent, `.nexus-file-${randomUUID()}.tmp`);
-  const mode = before?.mode ?? 0o600;
+  const mode = request.mode ?? before?.mode ?? 0o600;
   let created = false;
   try {
     const handle = fs.openSync(temporary, 'wx', mode);
     created = true;
     try {
       fs.writeFileSync(handle, bytes);
+      fs.fchmodSync(handle, mode);
       fs.fsyncSync(handle);
     } finally {
       fs.closeSync(handle);
@@ -288,7 +292,8 @@ export const writeWorkspaceFile = (workRoot: string, request: WorkspaceFileWrite
 
   const after = workspacePathState(root, logical);
   const expectedHash = sha256(bytes);
-  if (!after || after.type !== 'file' || after.sha256 !== expectedHash) throw new Error('VERIFICATION_FAILED');
+  if (!after || after.type !== 'file' || after.sha256 !== expectedHash || after.mode !== mode)
+    throw new Error('VERIFICATION_FAILED');
   return {
     path: logical,
     sha256: expectedHash,

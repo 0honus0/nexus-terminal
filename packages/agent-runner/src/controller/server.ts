@@ -396,11 +396,13 @@ export class RunnerControllerServer {
         const workspaceId = decodeURIComponent(codingWriteMatch[1]!);
         const input = asRecord(await body(request));
         if (
-          !hasOnlyKeys(input, ['generation', 'path', 'content', 'expectedSha256']) ||
+          !hasOnlyKeys(input, ['generation', 'path', 'content', 'expectedSha256', 'mode']) ||
           !Number.isSafeInteger(input.generation) ||
           Number(input.generation) < 1 ||
           typeof input.path !== 'string' ||
           typeof input.content !== 'string' ||
+          (input.mode !== undefined &&
+            (!Number.isSafeInteger(input.mode) || Number(input.mode) < 0 || Number(input.mode) > 0o777)) ||
           (input.expectedSha256 !== null && typeof input.expectedSha256 !== 'string')
         ) {
           throw new Error('VALIDATION_FAILED');
@@ -417,6 +419,7 @@ export class RunnerControllerServer {
             path: input.path,
             content: input.content,
             expectedSha256: input.expectedSha256 as string | null,
+            ...(input.mode === undefined ? {} : { mode: Number(input.mode) }),
           }),
         );
         return;

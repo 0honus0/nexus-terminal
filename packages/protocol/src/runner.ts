@@ -158,6 +158,7 @@ export interface WorkspaceFileWriteRequest {
   path: string;
   content: string;
   expectedSha256: string | null;
+  mode?: number;
 }
 export interface WorkspaceFileWriteResult {
   path: string;

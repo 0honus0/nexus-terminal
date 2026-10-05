@@ -248,6 +248,7 @@ export class FileCapabilityService {
     path: string,
     content: string,
     expectedSha256: string | null,
+    mode?: number,
   ): Promise<{ path: string; sha256: string; sizeBytes: number; created: boolean }> {
     if (Buffer.byteLength(content, 'utf8') > MAX_FILE_BYTES) throw new Error('TOOL_INPUT_TOO_LARGE');
     if (target.selector.target === 'workspace') {
@@ -257,6 +258,7 @@ export class FileCapabilityService {
         path,
         content,
         expectedSha256,
+        ...(mode === undefined ? {} : { mode }),
       });
       return { path: result.path, sha256: result.sha256, sizeBytes: result.sizeBytes, created: result.created };
     }
@@ -269,6 +271,7 @@ export class FileCapabilityService {
       Buffer.from(content, 'utf8'),
       expectedSha256,
       target.fingerprint.configurationHash,
+      mode,
     );
     if (!result.sha256 || result.sizeBytes === null) throw new Error('VERIFICATION_FAILED');
     return { path: result.resolvedPath, sha256: result.sha256, sizeBytes: result.sizeBytes, created: !expectedSha256 };

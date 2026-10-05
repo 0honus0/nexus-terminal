@@ -446,7 +446,21 @@ export const unifiedFileCapabilityScenario = async () => {
         query: 'needle',
       });
       assert.equal(((searched.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
-      await invoke('file_write', { target: target.target, id: target.id, path: created, content: 'created\n' });
+      const writeInput = { target: target.target, id: target.id, path: created, content: 'created\n' };
+      await invoke('file_write', writeInput);
+      if (target.target === 'workspace') {
+        assert.equal(statWorkspacePath(workRoot, created).mode, 0o600, 'New files must be private by default');
+        await invoke('file_write', { ...writeInput, mode: 0o640 });
+        assert.equal(statWorkspacePath(workRoot, created).mode, 0o640);
+        await invoke('file_write', { ...writeInput, content: 'replaced\n' });
+        assert.equal(statWorkspacePath(workRoot, created).mode, 0o640, 'Replacement must preserve permissions');
+        await invoke('file_patch', {
+          target: target.target,
+          id: target.id,
+          patch: `--- ${created}\n+++ ${created}\n@@ -1 +1 @@\n-replaced\n+patched\n`,
+        });
+        assert.equal(statWorkspacePath(workRoot, created).mode, 0o640, 'Patching must preserve permissions');
+      }
       const patch = `--- ${source}\n+++ ${source}\n@@ -1,3 +1,3 @@\n-alpha\n+ALPHA\n needle\n omega\n`;
       const patched = await invoke('file_patch', { target: target.target, id: target.id, patch });
       assert.equal(patched.ok, true);
@@ -461,6 +475,30 @@ export const unifiedFileCapabilityScenario = async () => {
     const fileWriteTool = tools.get('file_write');
     const fileReadTool = tools.get('file_read');
     assert.ok(fileWriteTool && fileReadTool);
+    await assert.rejects(
+      () =>
+        fileWriteTool.inspect(
+          { target: 'workspace', id: 'ws-file', path: '/workspace/work/invalid-mode.txt', content: '', mode: 512 },
+          context,
+          7,
+        ),
+      /TOOL_ARGUMENTS_INVALID/,
+    );
+    const privateWrite = await fileWriteTool.inspect(
+      { target: 'workspace', id: 'ws-file', path: '/workspace/work/mode-hash.txt', content: '', mode: 0o600 },
+      context,
+      7,
+    );
+    const sharedWrite = await fileWriteTool.inspect(
+      { target: 'workspace', id: 'ws-file', path: '/workspace/work/mode-hash.txt', content: '', mode: 0o644 },
+      context,
+      7,
+    );
+    assert.notEqual(
+      privateWrite.operationHash,
+      sharedWrite.operationHash,
+      'Changing permissions requires a new approval',
+    );
 
     const frozenWorkspaceWrite = await fileWriteTool.inspect(
       { target: 'workspace', id: 'ws-file', path: '/workspace/work/stale-generation.txt', content: 'must-not-write\n' },

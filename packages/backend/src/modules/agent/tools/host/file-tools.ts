@@ -398,11 +398,16 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
     name: 'file_write',
     version: '1.0.0',
     description:
-      'Atomically create or replace one UTF-8 file on a Workspace or SSH target. Host-resolved hash and metadata preconditions prevent stale writes.',
+      'Atomically create or replace one UTF-8 file on a Workspace or SSH target. New files default to 0600; replacements preserve permissions unless mode is specified as a decimal Unix permission integer (384 = 0600, 420 = 0644). Host-resolved hash and metadata preconditions prevent stale writes.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
-      properties: { ...targetSchema, path: pathSchema, content: { type: 'string', maxLength: MAX_CONTENT_BYTES } },
+      properties: {
+        ...targetSchema,
+        path: pathSchema,
+        content: { type: 'string', maxLength: MAX_CONTENT_BYTES },
+        mode: { type: 'integer', minimum: 0, maximum: 511 },
+      },
       required: ['target', 'id', 'path', 'content'],
     },
     riskClass: 'mutate',
@@ -411,7 +416,7 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
   isAvailable: targetAvailable,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
-    onlyKeys(args, ['target', 'id', 'path', 'content', 'expectedSha256']);
+    onlyKeys(args, ['target', 'id', 'path', 'content', 'expectedSha256', 'mode']);
     const resolved = await files.resolve(context, selectorFrom(args));
     const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
     if (state.type === 'directory') throw new Error('RESOURCE_FORBIDDEN');
@@ -422,6 +427,7 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
       path: state.path,
       content: contentValue(args.content, MAX_CONTENT_BYTES),
       expectedSha256: expected,
+      mode: boundedInteger(args.mode, 0, 0o777, state.mode === null ? 0o600 : state.mode & 0o777),
     });
   },
   execute: async (inspection, context) => {
@@ -433,6 +439,7 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
       stringValue(args.path, MAX_PATH_BYTES),
       contentValue(args.content, MAX_CONTENT_BYTES),
       args.expectedSha256 === null ? null : stringValue(args.expectedSha256, 64),
+      boundedInteger(args.mode, 0, 0o777, 0o600),
     );
     return confirmed(
       `${data.created ? 'Created' : 'Wrote'} ${data.path}.`,
