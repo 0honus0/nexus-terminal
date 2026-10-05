@@ -106,6 +106,31 @@
     'media-src data: blob:',
   ].join('; ');
   const customHtmlBaseStyle = 'html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}';
+  // Notify resize-aware themes inside the opaque-origin sandbox, without
+  // changing their canvas attributes or reloading their animation state.
+  const customHtmlResizeBridge = `<script>(() => {
+    let width = -1, height = -1;
+    const sync = () => {
+      const nextWidth = document.documentElement.clientWidth;
+      const nextHeight = document.documentElement.clientHeight;
+      if (nextWidth === width && nextHeight === height) return;
+      width = nextWidth; height = nextHeight;
+      if (width > 0 && height > 0) window.dispatchEvent(new Event('resize'));
+    };
+    const reset = () => { width = height = -1; sync(); };
+    const observer = new ResizeObserver(sync);
+    observer.observe(document.documentElement);
+    window.addEventListener('message', event => {
+      if (event.source !== window.parent || event.data?.type !== 'nexus-background-geometry') return;
+      if (!event.data.visible) { width = height = -1; return; }
+      sync();
+    });
+    window.addEventListener('pageshow', reset);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reset();
+    });
+    sync();
+  })();<\/script>`;
 
   const sandboxedCustomHtml = computed(() => {
     const html = props.visual?.customHtml;
@@ -117,6 +142,7 @@
       `<meta http-equiv="Content-Security-Policy" content="${customHtmlCsp}">`,
       `<style>${customHtmlBaseStyle}${imageOverride}</style>`,
       html,
+      customHtmlResizeBridge,
     ].join('');
   });
   let lastColumns = 0;
@@ -135,11 +161,21 @@
       const loadWhenSized = () => {
         if (frame.clientWidth > 0 && frame.clientHeight > 0 && frame.getAttribute('srcdoc') !== html)
           frame.srcdoc = html;
+        // Hidden iframes may retain a nonzero internal viewport. The parent
+        // observer supplies the missing visibility transition to the bridge.
+        frame.contentWindow?.postMessage(
+          { type: 'nexus-background-geometry', visible: frame.clientWidth > 0 && frame.clientHeight > 0 },
+          '*',
+        );
       };
       const observer = new ResizeObserver(loadWhenSized);
       observer.observe(frame);
+      frame.addEventListener('load', loadWhenSized);
       loadWhenSized();
-      onCleanup(() => observer.disconnect());
+      onCleanup(() => {
+        observer.disconnect();
+        frame.removeEventListener('load', loadWhenSized);
+      });
     },
     { flush: 'post' },
   );
