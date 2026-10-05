@@ -595,7 +595,7 @@ export const adaptiveExecutionBudgetScenario = async () => {
       JSON.stringify(legacySettings),
       now,
     ]);
-    await db.execute('DELETE FROM migrations WHERE id = 53');
+    await db.execute('DELETE FROM migrations WHERE id >= 53');
     await db.close();
     for (let reopen = 0; reopen < 2; reopen++) {
       const upgradedDb = new DatabaseAdapter({ dataDirectory: directory, filename: 'budget.sqlite', nodeEnv: 'test' });

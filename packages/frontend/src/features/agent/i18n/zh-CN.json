@@ -373,6 +373,8 @@
         }
       },
       "performance": {
+        "workspaceJobs": "每个 Workspace 的命令并发数",
+        "workspaceJobsHint": "默认 8，可设为 1–64；前台和后台共用额度，1 表示串行。修改仅影响新作业，额度满时拒绝、不排队。活跃作业阻止文件工具写入；共享文件的命令需自行按依赖串行执行。",
         "title": "执行与性能",
         "description": "控制同一时刻真正执行的 Agent 与模型请求。降低数值只影响后续调度，不会中断已经运行的任务。",
         "runtimes": "Agent 执行并发",

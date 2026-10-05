@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { WORKSPACE_JOB_LIMITS as runnerJobLimits } from '@nexus-terminal/protocol/runner';
 import { MANAGED_PROCESS_DETACHED, registerManagedProcess, signalManagedProcess } from '../managed-process';
 
 export interface JobResult {
@@ -20,7 +21,6 @@ const MAX_ARGV_ITEMS = 512;
 const MAX_ARG_BYTES = 8 * 1024;
 const MAX_TOTAL_ARG_BYTES = 128 * 1024;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
-const MAX_TIMEOUT_MS = 5 * 60 * 1000;
 
 const completeUtf8Prefix = (value: Buffer): Buffer => {
   if (value.byteLength === 0) return value;
@@ -50,7 +50,7 @@ export class JobRunner {
     argv: readonly string[],
     cwd = '/workspace/work',
     maxBytes = 256 * 1024,
-    timeoutMs = 60_000,
+    timeoutMs: number = runnerJobLimits.defaultExecutionTimeoutMs,
     options: JobRunOptions = {},
   ): Promise<JobResult> {
     if (
@@ -68,7 +68,11 @@ export class JobRunner {
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_OUTPUT_BYTES) {
       throw new Error('JOB_OUTPUT_LIMIT_INVALID');
     }
-    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
+    if (
+      !Number.isSafeInteger(timeoutMs) ||
+      timeoutMs < runnerJobLimits.minExecutionTimeoutMs ||
+      timeoutMs > runnerJobLimits.maxExecutionTimeoutMs
+    ) {
       throw new Error('JOB_TIMEOUT_INVALID');
     }
 

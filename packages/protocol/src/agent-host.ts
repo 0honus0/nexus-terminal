@@ -32,6 +32,7 @@ export interface AgentSettingsDocumentDto {
     fallbackModels: Array<{ providerId: string; modelId: string }>;
   };
   performance: {
+    maxConcurrentWorkspaceJobs: number;
     maxConcurrentRuntimes: number;
     maxConcurrentModelCalls: number | 'auto';
   };

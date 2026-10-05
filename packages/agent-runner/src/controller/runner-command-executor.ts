@@ -6,6 +6,7 @@ import type {
   WorkspaceJobRequest,
 } from '@nexus-terminal/protocol/runner';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
+import { WORKSPACE_JOB_LIMITS as runnerJobLimits } from '@nexus-terminal/protocol/runner';
 import type { WorkspaceRecord } from '../types';
 import { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
@@ -44,7 +45,19 @@ export class RunnerCommandExecutor {
     const now = Math.floor(Date.now() / 1000);
     const record = input as unknown as Record<string, unknown>;
     if (
-      !hasOnlyKeys(record, ['jobId', 'generation', 'deadlineAt', 'argv', 'cwd', 'maxBytes', 'timeoutMs']) ||
+      !hasOnlyKeys(record, [
+        'jobId',
+        'generation',
+        'deadlineAt',
+        'argv',
+        'cwd',
+        'maxBytes',
+        'timeoutMs',
+        'maxConcurrentJobs',
+      ]) ||
+      !Number.isSafeInteger(input.maxConcurrentJobs) ||
+      input.maxConcurrentJobs < 1 ||
+      input.maxConcurrentJobs > runnerJobLimits.maxConcurrentJobs ||
       typeof input.jobId !== 'string' ||
       !/^[A-Za-z0-9-]{8,128}$/.test(input.jobId) ||
       input.generation !== workspace.generation ||
@@ -61,15 +74,25 @@ export class RunnerCommandExecutor {
       input.maxBytes < 1 ||
       input.maxBytes > 1024 * 1024 ||
       !Number.isSafeInteger(input.timeoutMs) ||
-      input.timeoutMs < 1 ||
-      input.timeoutMs > 5 * 60 * 1000
+      input.timeoutMs < runnerJobLimits.minExecutionTimeoutMs ||
+      input.timeoutMs > runnerJobLimits.maxExecutionTimeoutMs
     ) {
       throw new Error('VALIDATION_FAILED');
     }
     const request: WorkspaceJobRequest = { ...input, workspaceId };
     const hash = payloadHash(request);
     const priorJob = this.dependencies.journal.job(request.jobId);
-    if (!priorJob && this.hasActiveWorkspaceJob(workspaceId, request.generation)) {
+    if (
+      !priorJob &&
+      this.dependencies.journal
+        .jobs()
+        .filter(
+          (candidate) =>
+            candidate.workspaceId === workspaceId &&
+            candidate.generation === request.generation &&
+            (candidate.status === 'pending' || candidate.status === 'running'),
+        ).length >= request.maxConcurrentJobs
+    ) {
       throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
     }
     const job = this.dependencies.journal.beginJob(request.jobId, hash, workspaceId, request.generation);

@@ -20,6 +20,7 @@ export const legacySettingsMigrationScenario = async () => {
     `);
     const current = createDefaultAgentSettings();
     const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+    delete (legacy.performance as Record<string, unknown>).maxConcurrentWorkspaceJobs;
     delete (legacy.model as Record<string, unknown>).fallbackModels;
     legacy.safety = { providerPrivateNetworkExceptions: ['legacy.example'] };
     Object.assign(legacy.budget as Record<string, unknown>, {
@@ -45,6 +46,10 @@ export const legacySettingsMigrationScenario = async () => {
     insert.run(1, JSON.stringify(legacy), 7, 100);
     const currentJson = JSON.stringify(current);
     insert.run(2, currentJson, 3, 200);
+    const configured = structuredClone(current);
+    configured.performance.maxConcurrentWorkspaceJobs = 2;
+    const configuredJson = JSON.stringify(configured);
+    insert.run(3, configuredJson, 4, 300);
 
     await runMigrations(db);
     const rows = db
@@ -57,11 +62,13 @@ export const legacySettingsMigrationScenario = async () => {
     }>;
     const upgraded = normalizeRequestedSettings(JSON.parse(rows[0]!.value_json));
     assert.equal(upgraded.budget.maxModelRequests, 37);
+    assert.equal(upgraded.performance.maxConcurrentWorkspaceJobs, 8);
     assert.deepEqual(upgraded.model.fallbackModels, []);
     assert.equal(rows[0]!.revision, 7);
     assert.equal(rows[0]!.updated_at, 100);
     assert.equal(rows[1]!.value_json, currentJson, 'current settings must remain untouched');
     assert.equal(rows[1]!.revision, 3);
+    assert.equal(rows[2]!.value_json, configuredJson, 'existing configured capacity must not be overwritten');
 
     await runMigrations(db);
     const repeated = db.prepare('SELECT value_json FROM agent_settings WHERE user_id = 1').get() as {

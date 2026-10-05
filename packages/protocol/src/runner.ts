@@ -1,4 +1,11 @@
 /** Backend/Runner wire contracts. Durable records and authorization remain local. */
+export const WORKSPACE_JOB_LIMITS = {
+  minExecutionTimeoutMs: 1000,
+  defaultExecutionTimeoutMs: 300000,
+  maxExecutionTimeoutMs: 86400000,
+  defaultConcurrentJobs: 8,
+  maxConcurrentJobs: 64,
+} as const;
 export type WorkspaceKind = 'shell' | 'code' | 'data' | 'browser';
 export type WorkspaceStatus = 'creating' | 'ready' | 'running' | 'stopped' | 'deleted' | 'failed';
 
@@ -76,6 +83,7 @@ export interface RunnerCommandWireResponse {
   error?: unknown;
 }
 export interface WorkspaceJobInput {
+  maxConcurrentJobs: number;
   jobId: string;
   generation: number;
   deadlineAt: number;
@@ -104,6 +112,17 @@ export interface WorkspaceJobView {
   error: string | null;
   createdAt: number;
   completedAt: number | null;
+}
+
+export interface WorkspaceActiveJobsView {
+  workspaceId: string;
+  generation: number;
+  jobs: Array<Pick<WorkspaceJobView, 'jobId' | 'status' | 'createdAt'>>;
+}
+
+export interface WorkspaceJobCapacityView extends WorkspaceActiveJobsView {
+  activeCount: number;
+  capacity: number;
 }
 
 export interface RunnerProjectInstruction {

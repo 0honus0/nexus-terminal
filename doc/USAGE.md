@@ -139,6 +139,12 @@ Agent 实时订阅处理当前协议定义的全部持久事件：回复、取�
 
 ### Agent SSH 长会话与后台任务
 
+Agent 设置的「性能」提供“每个 Workspace 的命令并发数”，默认 8，范围 1–64；1 表示串行。每个 Workspace／generation 的前台与后台 Job 共用额度，额度满返回 `WORKSPACE_JOB_ACTIVE_CONFLICT`，不自动排队。修改设置仅影响后续作业接纳，不终止已运行作业；降低额度后须等待或显式取消已有 Job，不能重试刷屏或脱离作业管理绕过限制。SSH 使用独立 channel，不套用此 Workspace 额度。活跃 Job 仍阻止 Workspace 文件工具的 write／patch／move／delete，允许 read／list／search；并发 Shell 不提供共享文件事务保证，有依赖或重叠写入的命令须串行执行，独立开发任务可使用不同 Workspace 隔离。
+
+Workspace 执行期限由协议统一定义，`timeoutSeconds` 默认 300 秒、范围 1–86400 秒，前台与后台使用同一执行期限契约；长任务使用后台 Job，并通过 `shell_job_control` 有界等待结果。等待窗口与执行期限不同，后台 accepted／running 不等于成功；取消按 Job 独立控制，Workspace stop／restart／delete 回收对应 generation 的全部 Job。
+
+`shell_job_control(action="list", target="workspace", id=WorkspaceID)` 不传 jobId，返回当前授权 Workspace/generation 的活跃 Job、数量和配置额度，不包含命令正文；SSH 暂不支持此 list。前台等待窗口结束后，只要 Runner 明确确认 Job 仍在运行，就返回 pending／running 和 jobId，可继续 wait／cancel，不伪造 unknown；只有无法核对真实状态才报告未知结果。
+
 - Agent 工具按功能模块命名：`shell_*`、`ssh_*`、`file_*`、`machine_*`、`workspace_*`、`collaboration_*`、`memory_*`、`browser_*`、`tool_*`、`skill_*`、`plan_*`、`user_*`、`artifact_*`、`acp_*`、`mcp_*`。只接受当前名称，不提供旧工具名别名。
 - SSH 会话入口将 connectionId 转为规范 SSH target 后校验同一 typed grant；会话创建、命令执行与文件操作共享连接授权，未选中或未授权的连接仍拒绝。
 - `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。

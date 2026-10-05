@@ -56,6 +56,8 @@ Memory repository按created_at/id keyset枚举，service有界limit+1，HTTP返�
 
 RunnerJournal 唯一持有 Runner command/job/workspace 持久化：Node.js 内建 `node:sqlite`，`journal_records(kind,id,payload)` 按记录 UPSERT、`DELETE`，SQLite DELETE rollback journal + synchronous FULL，提交后发布内存变更。普通transition不复制／序列化全历史；compact仅事务删除裁剪记录。恢复校验SQLite及逐记录decode，格式／损坏fail closed保留原库；无旧JSON导入或双轨写入。同步单记录commit仍可能等待磁盘，未承诺event loop完全无阻塞或commit严格O(1)。
 
+Workspace Job 的执行期限与并发边界由 `protocol/runner.ts` 的 `WORKSPACE_JOB_LIMITS` 持有。WorkspaceShellTargetAdapter 从用户有效 Agent settings 读取 `performance.maxConcurrentWorkspaceJobs`，RunnerCommandExecutor 在同步 Journal 接纳边界统计同 generation 的 pending/running Job，再持久化新 Job；满额拒绝、不排队，文件 mutation 仍与活跃 Job 互斥。活动列表使用 `WorkspaceActiveJobsView`，Backend 重检 Run/Runtime/generation 后投影 `WorkspaceJobCapacityView`，不返回命令正文。等待窗口到期不改变 Runner 终态，权威查询仍 active 就返回真实状态与 Job 身份。新增设置通过一次性数据库迁移升级旧持久化记录，运行时 decoder 仅接受完整当前设置。
+
 Model stream cardinality fence：OpenAI adapter indexFor先检查64再分配，多组状态只在admission后写入；Root/Child model owner分别在toolCalls Map新增前检查64/32；Responses collector新part前检查512、tools64，终态batch校验保留。
 
 McpAdapter按integration/version拥有session，配置owner负责disable/remove/closeAll；无aggregate session quota，单连接schema/transport deadline不构成总连接预算。

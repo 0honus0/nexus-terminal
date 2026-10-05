@@ -2,6 +2,7 @@ import type { DatabaseSync as Database } from 'node:sqlite';
 import type { SqliteMigration } from './migration.types';
 import { tableExists, columnExists } from './schema-inspection';
 import { createAgentProjectDirectoriesTableSQL, createAgentSshJobsTableSQL } from '../schema/agent-workspace';
+import { WORKSPACE_JOB_LIMITS } from '@nexus-terminal/protocol/runner';
 
 export const agentHostMigrations: SqliteMigration[] = [
   {
@@ -100,5 +101,18 @@ export const agentHostMigrations: SqliteMigration[] = [
     id: 50,
     name: 'Add conversation SSH project directories',
     sql: createAgentProjectDirectoriesTableSQL,
+  },
+  {
+    id: 54,
+    name: 'Add configurable Workspace Job capacity to persisted Agent settings',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_settings'),
+    sql: `
+      UPDATE agent_settings
+      SET value_json = json_insert(value_json,
+        '$.performance.maxConcurrentWorkspaceJobs', ${WORKSPACE_JOB_LIMITS.defaultConcurrentJobs})
+      WHERE json_extract(value_json, '$.schemaVersion') = 1
+        AND json_type(value_json, '$.performance') = 'object'
+        AND json_type(value_json, '$.performance.maxConcurrentWorkspaceJobs') IS NULL;
+    `,
   },
 ];

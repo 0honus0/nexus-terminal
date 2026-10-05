@@ -1,4 +1,8 @@
-import type { WorkspaceJobInput, WorkspaceBrowserEndpoint } from '@nexus-terminal/protocol/runner';
+import type {
+  WorkspaceJobInput,
+  WorkspaceBrowserEndpoint,
+  WorkspaceActiveJobsView,
+} from '@nexus-terminal/protocol/runner';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import runnerVersion = require('@nexus-terminal/protocol/runner-version.json');
 import type { RunnerCommandWireResponse } from '@nexus-terminal/protocol/runner';
@@ -731,6 +735,26 @@ export class RunnerControllerServer {
         return;
       }
       const jobMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)$/);
+      const activeJobsMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/jobs$/);
+      if (request.method === 'GET' && activeJobsMatch) {
+        const workspaceId = decodeURIComponent(activeJobsMatch[1]!);
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        const generation = Number(url.searchParams.get('generation'));
+        if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
+        if (generation !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        const jobs = this.dependencies.journal
+          .jobs()
+          .filter(
+            (job) =>
+              job.workspaceId === workspaceId &&
+              job.generation === generation &&
+              (job.status === 'pending' || job.status === 'running'),
+          )
+          .map(({ jobId, status, createdAt }) => ({ jobId, status, createdAt }));
+        const view: WorkspaceActiveJobsView = { workspaceId, generation, jobs };
+        json(response, 200, view);
+        return;
+      }
       if (request.method === 'GET' && jobMatch) {
         const job = this.dependencies.journal.job(decodeURIComponent(jobMatch[1]!));
         if (!job) {

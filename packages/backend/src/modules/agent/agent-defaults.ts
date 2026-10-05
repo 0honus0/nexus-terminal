@@ -1,3 +1,5 @@
+import { WORKSPACE_JOB_LIMITS as runnerJobLimits } from '@nexus-terminal/protocol/runner';
+
 export type AgentContextProfile = 'normal' | 'extended';
 
 export interface AgentRunBudgetSnapshot {
@@ -39,6 +41,7 @@ export interface AgentSettingsDocument {
     fallbackModels: Array<{ providerId: string; modelId: string }>;
   };
   performance: {
+    maxConcurrentWorkspaceJobs: number;
     maxConcurrentRuntimes: number;
     maxConcurrentModelCalls: 'auto' | number;
   };
@@ -101,7 +104,11 @@ export const AGENT_DEFAULTS = {
     schemaVersion: 1,
     feature: { enabled: false },
     model: { defaultProviderId: null, defaultModelId: null, fallbackModels: [] },
-    performance: { maxConcurrentRuntimes: 2, maxConcurrentModelCalls: 'auto' },
+    performance: {
+      maxConcurrentRuntimes: 2,
+      maxConcurrentModelCalls: 'auto',
+      maxConcurrentWorkspaceJobs: runnerJobLimits.defaultConcurrentJobs,
+    },
     budget: {
       maxModelRequests: 80,
       maxActiveExecutionSeconds: 1_800,
@@ -373,7 +380,18 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   const defaults = createDefaultAgentSettings();
   const feature = exactRecord(raw, 'feature', ['enabled']);
   const model = exactRecord(raw, 'model', ['defaultProviderId', 'defaultModelId', 'fallbackModels']);
-  const performance = exactRecord(raw, 'performance', ['maxConcurrentRuntimes', 'maxConcurrentModelCalls']);
+  const performance = exactRecord(raw, 'performance', [
+    'maxConcurrentRuntimes',
+    'maxConcurrentModelCalls',
+    'maxConcurrentWorkspaceJobs',
+  ]);
+  if (
+    performance.maxConcurrentWorkspaceJobs !== undefined &&
+    (!Number.isSafeInteger(performance.maxConcurrentWorkspaceJobs) ||
+      Number(performance.maxConcurrentWorkspaceJobs) < 1 ||
+      Number(performance.maxConcurrentWorkspaceJobs) > runnerJobLimits.maxConcurrentJobs)
+  )
+    throw new Error('VALIDATION_FAILED');
   const budget = exactRecord(raw, 'budget', [
     'maxModelRequests',
     'maxActiveExecutionSeconds',
@@ -447,6 +465,11 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         : structuredClone(defaults.model.fallbackModels),
     },
     performance: {
+      maxConcurrentWorkspaceJobs: integer(
+        performance.maxConcurrentWorkspaceJobs,
+        defaults.performance.maxConcurrentWorkspaceJobs,
+        1,
+      ),
       maxConcurrentRuntimes: integer(performance.maxConcurrentRuntimes, defaults.performance.maxConcurrentRuntimes, 1),
       maxConcurrentModelCalls:
         performance.maxConcurrentModelCalls === 'auto'

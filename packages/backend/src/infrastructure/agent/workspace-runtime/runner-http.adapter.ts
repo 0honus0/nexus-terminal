@@ -1,4 +1,5 @@
 import { ToolMutationNotStartedError } from '../../../modules/agent/capabilities/tool-mutation-not-started.error';
+import { WORKSPACE_JOB_LIMITS } from '@nexus-terminal/protocol/runner';
 import type {
   WorkspaceApplyPatchRequest,
   WorkspaceApplyPatchResult,
@@ -16,6 +17,8 @@ import type {
   WorkspaceFileWriteRequest,
   WorkspaceFileWriteResult,
   WorkspaceJobView,
+  WorkspaceActiveJobsView,
+  WorkspaceJobInput,
   WorkspaceRepoMapRequest,
   WorkspaceRepoMapResult,
   WorkspaceSearchRequest,
@@ -495,7 +498,7 @@ export class RunnerHttpAdapter
     if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
     const createdAt = Math.floor(Date.now() / 1000);
     const deadlineAt = createdAt + Math.ceil(call.timeoutMs / 1000) + 15;
-    const request = {
+    const request: WorkspaceJobInput = {
       jobId,
       generation: grant.generation,
       deadlineAt,
@@ -503,6 +506,7 @@ export class RunnerHttpAdapter
       cwd: call.cwd,
       maxBytes: call.maxBytes,
       timeoutMs: call.timeoutMs,
+      maxConcurrentJobs: call.maxConcurrentJobs,
     };
     try {
       return decodeWorkspaceJobView(
@@ -543,16 +547,10 @@ export class RunnerHttpAdapter
     try {
       const terminal = await this.waitJob(current.jobId, waitMs, signal);
       if (terminal.status !== 'pending' && terminal.status !== 'running') return terminal;
-      return {
-        ...terminal,
-        status: 'unknown',
-        result: null,
-        error: 'WORKSPACE_JOB_QUERY_TIMEOUT',
-        completedAt: Math.floor(Date.now() / 1000),
-      };
+      return terminal;
     } catch {
       const final = await this.queryJob(current.jobId).catch(() => null);
-      if (final && final.status !== 'pending' && final.status !== 'running') return final;
+      if (final) return final;
       return {
         ...current,
         status: 'unknown',
@@ -568,6 +566,36 @@ export class RunnerHttpAdapter
     return decodeWorkspaceJobView(
       await this.get(`/v1/jobs/${encodeURIComponent(jobId)}`, signal, { maxResponseBytes: MAX_JOB_RESPONSE_BYTES }),
     );
+  }
+
+  async listActiveJobs(grant: WorkspaceExecutionGrant, signal: AbortSignal): Promise<WorkspaceActiveJobsView> {
+    const raw: unknown = await this.get(
+      `/v1/workspaces/${encodeURIComponent(grant.workspaceId)}/jobs?generation=${grant.generation}`,
+      signal,
+      { maxResponseBytes: MAX_JOB_RESPONSE_BYTES },
+    );
+    if (!raw || typeof raw !== 'object') throw new Error('RUNNER_RESPONSE_INVALID');
+    const value = raw as Record<string, unknown>;
+    if (
+      value.workspaceId !== grant.workspaceId ||
+      value.generation !== grant.generation ||
+      !Array.isArray(value.jobs) ||
+      value.jobs.length > WORKSPACE_JOB_LIMITS.maxConcurrentJobs
+    )
+      throw new Error('RUNNER_RESPONSE_INVALID');
+    const jobs = value.jobs.map((item: unknown) => {
+      if (!item || typeof item !== 'object') throw new Error('RUNNER_RESPONSE_INVALID');
+      const job = item as Record<string, unknown>;
+      if (
+        typeof job.jobId !== 'string' ||
+        !/^job-[a-f0-9]{64}$/.test(job.jobId) ||
+        (job.status !== 'pending' && job.status !== 'running') ||
+        !Number.isSafeInteger(job.createdAt)
+      )
+        throw new Error('RUNNER_RESPONSE_INVALID');
+      return { jobId: job.jobId, status: job.status as 'pending' | 'running', createdAt: Number(job.createdAt) };
+    });
+    return { ...grant, jobs };
   }
 
   async waitJob(jobId: string, timeoutMs: number, signal?: AbortSignal): Promise<WorkspaceJobView> {

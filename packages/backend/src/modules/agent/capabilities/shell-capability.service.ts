@@ -1,4 +1,4 @@
-import type { WorkspaceJobView } from '@nexus-terminal/protocol/runner';
+import type { WorkspaceJobView, WorkspaceJobCapacityView } from '@nexus-terminal/protocol/runner';
 import type { JsonValue } from '../agent.types';
 import type { CryptoHashPort } from '../crypto-hash.port';
 import { hashOperation } from '../operation-hash';
@@ -190,6 +190,12 @@ export class ShellCapabilityService {
       },
       job,
     };
+  }
+
+  async listActiveJobs(context: ToolContext, target: ResolvedAgentTarget): Promise<WorkspaceJobCapacityView> {
+    if (target.selector.target !== 'workspace' || target.workspaceGeneration === undefined)
+      throw new Error('TOOL_ARGUMENTS_INVALID');
+    return this.workspaceShell.listActiveJobs(context, target.selector.id, target.workspaceGeneration);
   }
 
   async sshJob(

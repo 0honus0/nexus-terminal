@@ -8,6 +8,8 @@ import { RunnerControllerServer } from '../../../packages/agent-runner/src/contr
 import { registerShellToolContributions } from '../../../packages/backend/src/bootstrap/agent/tool-contributions';
 import { RunnerHttpAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/runner-http.adapter';
 import { WorkspaceShellTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/workspace-shell-target.adapter';
+import type { AgentSettingsService } from '../../../packages/backend/src/modules/agent/host/agent-settings.service';
+import { createDefaultAgentSettings } from '../../../packages/backend/src/modules/agent/agent-defaults';
 import type { JsonValue } from '../../../packages/backend/src/modules/agent/agent.types';
 import { ShellCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/shell-capability.service';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
@@ -139,6 +141,10 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     queryJob: async () => runningJob,
     waitJob: async () => succeededJob,
     cancelJob: async () => cancelledJob,
+    listActiveJobs: async (grant) => ({
+      ...grant,
+      jobs: [{ jobId: runningJob.jobId, status: 'running', createdAt: runningJob.createdAt }],
+    }),
   };
   const toolCrypto = {
     sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
@@ -243,7 +249,39 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     (await lifecycleExecutor.executeMutation(toolContext, refreshedLifecycle)).verification.status,
     'verified',
   );
-  const workspaceShellTarget = new WorkspaceShellTargetAdapter(toolRepository, toolGateway);
+  const workspaceShellTarget = new WorkspaceShellTargetAdapter(toolRepository, toolGateway, {
+    get: async () => ({ effectiveSettings: createDefaultAgentSettings() }),
+  } as unknown as AgentSettingsService);
+  const capacityView = await workspaceShellTarget.listActiveJobs(
+    toolContext,
+    toolWorkspace.id,
+    toolWorkspace.generation,
+  );
+  assert.equal(capacityView.capacity, 8);
+  assert.equal(capacityView.activeCount, 1);
+  assert.equal(capacityView.jobs[0]?.jobId, runningJob.jobId);
+  await assert.rejects(
+    () =>
+      workspaceShellTarget.listActiveJobs(
+        { ...toolContext, runId: 'other-run' },
+        toolWorkspace.id,
+        toolWorkspace.generation,
+      ),
+    /RESOURCE_FORBIDDEN/,
+  );
+  await assert.rejects(
+    () =>
+      workspaceShellTarget.listActiveJobs(
+        { ...toolContext, agentRuntimeId: 'other-runtime' },
+        toolWorkspace.id,
+        toolWorkspace.generation,
+      ),
+    /RESOURCE_FORBIDDEN/,
+  );
+  await assert.rejects(
+    () => workspaceShellTarget.listActiveJobs(toolContext, toolWorkspace.id, toolWorkspace.generation + 1),
+    /WORKSPACE_GENERATION_CONFLICT/,
+  );
   const shellService = new ShellCapabilityService(shellTargets, workspaceShellTarget, null!, toolCrypto);
   const shellTools = new Map(
     createUnifiedShellTools(shellService, toolCrypto).map((tool) => [tool.descriptor.name, tool]),
@@ -455,6 +493,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
       cwd: '/workspace/work',
       maxBytes: 8 * 1024,
       timeoutMs: 2_000,
+      maxConcurrentJobs: 1,
     });
 
     let queryCalls = 0;
@@ -487,6 +526,41 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     assert.equal(fresh.status, 'succeeded');
     assert.equal(executeCalls, 2, 'A new execution with identical argv must actually execute');
     const foregroundQueryCalls = queryCalls;
+    const originalWait = adapter.waitJob.bind(adapter);
+    adapter.waitJob = async (jobId) => originalQueryJob(jobId);
+    const foregroundRunning = await adapter.invoke(
+      { workspaceId: 'background-workspace', generation: 7 },
+      call('9', ['hold']),
+      new AbortController().signal,
+    );
+    assert.equal(
+      foregroundRunning.status,
+      'running',
+      'confirmed active foreground Job must remain controllable after the wait window',
+    );
+    assert.equal(foregroundRunning.error, null);
+    await adapter.cancelJob(foregroundRunning.jobId, new AbortController().signal);
+    adapter.waitJob = originalWait;
+    const capacityRace = await Promise.allSettled(
+      ['7', '8'].map((char) =>
+        adapter.startJob(
+          { workspaceId: 'background-workspace', generation: 7 },
+          call(char, ['hold']),
+          new AbortController().signal,
+        ),
+      ),
+    );
+    assert.equal(
+      capacityRace.filter((result) => result.status === 'fulfilled').length,
+      1,
+      'simultaneous submissions must not exceed capacity',
+    );
+    const loser = capacityRace.find((result) => result.status === 'rejected');
+    assert.ok(loser && loser.status === 'rejected' && /WORKSPACE_JOB_ACTIVE_CONFLICT/.test(String(loser.reason)));
+    const winner = capacityRace.find((result) => result.status === 'fulfilled');
+    assert.ok(winner && winner.status === 'fulfilled');
+    await adapter.cancelJob(winner.value.jobId, new AbortController().signal);
+    const cancellationBaseline = cancelCalls;
 
     const background = await adapter.startJob(
       { workspaceId: 'background-workspace', generation: 7 },
@@ -494,6 +568,26 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
       new AbortController().signal,
     );
     assert.equal(background.status, 'running', 'background start must return before terminal completion');
+
+    const concurrent = await adapter.startJob(
+      { workspaceId: 'background-workspace', generation: 7 },
+      { ...call('e', ['hold']), maxConcurrentJobs: 2 },
+      new AbortController().signal,
+    );
+    assert.equal(concurrent.status, 'running');
+    const active = await adapter.listActiveJobs(
+      { workspaceId: 'background-workspace', generation: 7 },
+      new AbortController().signal,
+    );
+    assert.deepEqual(active.jobs.map((job) => job.jobId).sort(), [background.jobId, concurrent.jobId].sort());
+    assert.ok(active.jobs.every((job) => job.status === 'running'));
+    const stillRunning = await adapter.waitJob(background.jobId, 1, new AbortController().signal);
+    assert.equal(stillRunning.status, 'running', 'wait expiry must not stop or misclassify the Job');
+    await assert.rejects(
+      () =>
+        adapter.listActiveJobs({ workspaceId: 'background-workspace', generation: 8 }, new AbortController().signal),
+      /WORKSPACE_GENERATION_CONFLICT/,
+    );
 
     await assert.rejects(
       () =>
@@ -503,7 +597,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
           new AbortController().signal,
         ),
       /WORKSPACE_JOB_ACTIVE_CONFLICT/,
-      'one active argv job per Workspace generation must protect the background single-writer boundary',
+      'lowering capacity to one must reject new work without cancelling active jobs',
     );
 
     const patchConflict = await fetch(baseUrl + '/v1/workspaces/background-workspace/coding/apply-patch', {
@@ -524,7 +618,13 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
 
     const cancelled = await adapter.cancelJob(background.jobId, new AbortController().signal);
     assert.equal(cancelled.status, 'cancelled');
-    assert.equal(cancelCalls, 1);
+    assert.equal(cancelCalls, cancellationBaseline + 1);
+    assert.equal(
+      (await adapter.queryJob(concurrent.jobId)).status,
+      'running',
+      'cancelling one Job must not cancel another',
+    );
+    await adapter.cancelJob(concurrent.jobId, new AbortController().signal);
     const cancelledAgain = await adapter.queryJob(background.jobId);
     assert.equal(cancelledAgain.status, 'cancelled', 'cancelled must be durable in the existing Runner job journal');
 

@@ -373,6 +373,8 @@
         }
       },
       "performance": {
+        "workspaceJobs": "Concurrent commands per Workspace",
+        "workspaceJobsHint": "Default 8, range 1–64; foreground and background share capacity. Set 1 for serial execution. Changes affect new jobs only; full capacity rejects without queuing. Active jobs block file-tool writes; serialize commands that depend on or write shared files.",
         "title": "Execution and performance",
         "description": "Controls Agent work and model requests that may execute at the same time. Lower values only affect future scheduling and do not interrupt work already running.",
         "runtimes": "Agent execution concurrency",

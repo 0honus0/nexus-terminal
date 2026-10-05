@@ -1,4 +1,5 @@
-import type { WorkspaceJobView } from '@nexus-terminal/protocol/runner';
+import type { WorkspaceJobView, WorkspaceJobCapacityView } from '@nexus-terminal/protocol/runner';
+import type { AgentSettingsService } from '../../../modules/agent/host/agent-settings.service';
 import type { ToolContext } from '../../../modules/agent/capabilities/tool.types';
 import type { WorkspaceJobCall } from '../../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type { AgentWorkspaceRepositoryPort } from '../../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
@@ -13,19 +14,23 @@ export class WorkspaceShellTargetAdapter implements WorkspaceShellTargetPort {
   constructor(
     private readonly repository: AgentWorkspaceRepositoryPort,
     private readonly gateway: WorkspaceRuntimeGatewayPort,
+    private readonly settings: AgentSettingsService,
   ) {}
 
-  execute(
+  async execute(
     context: ToolContext,
     workspaceId: string,
     generation: number,
-    call: WorkspaceJobCall,
+    call: Omit<WorkspaceJobCall, 'maxConcurrentJobs'>,
     mode: WorkspaceShellMode,
   ): Promise<WorkspaceJobView> {
     const grant = { workspaceId, generation };
+    const maxConcurrentJobs = (await this.settings.get(context.userId)).effectiveSettings.performance
+      .maxConcurrentWorkspaceJobs;
+    const configuredCall = { ...call, maxConcurrentJobs };
     return mode === 'background'
-      ? this.gateway.startJob(grant, call, context.signal)
-      : this.gateway.invoke(grant, call, context.signal);
+      ? this.gateway.startJob(grant, configuredCall, context.signal)
+      : this.gateway.invoke(grant, configuredCall, context.signal);
   }
 
   async resolveOwnedJob(context: ToolContext, workspaceId: string, jobId: string): Promise<WorkspaceJobView> {
@@ -39,6 +44,20 @@ export class WorkspaceShellTargetAdapter implements WorkspaceShellTargetPort {
     }
     if (job.workspaceId !== workspaceId) throw new Error('RESOURCE_FORBIDDEN');
     return job;
+  }
+
+  async listActiveJobs(
+    context: ToolContext,
+    workspaceId: string,
+    generation: number,
+  ): Promise<WorkspaceJobCapacityView> {
+    const workspace = await this.repository.getWorkspace(context, workspaceId);
+    if (!workspace || workspace.runId !== context.runId || workspace.agentRuntimeId !== context.agentRuntimeId)
+      throw new Error('RESOURCE_FORBIDDEN');
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    const view = await this.gateway.listActiveJobs({ workspaceId, generation }, context.signal);
+    const capacity = (await this.settings.get(context.userId)).effectiveSettings.performance.maxConcurrentWorkspaceJobs;
+    return { ...view, activeCount: view.jobs.length, capacity };
   }
 
   async controlJob(

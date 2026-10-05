@@ -1,4 +1,5 @@
 import type { WorkspaceJobView } from '@nexus-terminal/protocol/runner';
+import { WORKSPACE_JOB_LIMITS as runnerJobLimits } from '@nexus-terminal/protocol/runner';
 import type { JsonValue } from '../../agent.types';
 import type { ShellCapabilityService, UnifiedShellCommand } from '../../capabilities/shell-capability.service';
 import type { AgentTargetKind } from '../../capabilities/tool-target.types';
@@ -452,7 +453,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     name: 'shell_execute',
     version: '1.0.0',
     description:
-      'Execute a command on an explicit Workspace or SSH target. Workspace uses argv; SSH uses shell text. Optional SSH sessionId reuses a connection. SSH background mode requires sessionId and returns a jobId; query/wait/cancel with shell_job_control. Background timeout is independent of submission.',
+      'Execute Workspace argv/cwd or SSH shell text. Workspace foreground/background Jobs share configured generation capacity (default 8; 1=serial); full capacity rejects, never queues. Active Jobs block file-tool writes, not reads. Serialize dependent/shared writers; no file isolation. Background returns jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. SSH background requires sessionId. Execution lifetime differs from result wait.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -469,7 +470,12 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
           required: ['kind'],
         },
         cwd: { type: 'string', minLength: 1, maxLength: MAX_CWD_BYTES },
-        timeoutSeconds: { type: 'integer', minimum: 1, maximum: 86400 },
+        timeoutSeconds: {
+          type: 'integer',
+          minimum: runnerJobLimits.minExecutionTimeoutMs / 1000,
+          maximum: runnerJobLimits.maxExecutionTimeoutMs / 1000,
+          description: `Execution lifetime, not the result wait window. Workspace default is ${runnerJobLimits.defaultExecutionTimeoutMs / 1000} seconds.`,
+        },
         sessionId: { type: 'string', minLength: 1, maxLength: 128 },
         mode: { type: 'string', enum: ['foreground', 'background'] },
       },
@@ -492,13 +498,22 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     if (rawMode !== 'foreground' && rawMode !== 'background') throw new Error('TOOL_ARGUMENTS_INVALID');
     const timeoutSeconds = positiveInteger(
       args.timeoutSeconds,
-      selector.target === 'ssh' && rawMode === 'background'
-        ? 3600
-        : Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
+      selector.target === 'workspace'
+        ? runnerJobLimits.defaultExecutionTimeoutMs / 1000
+        : selector.target === 'ssh' && rawMode === 'background'
+          ? 3600
+          : Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
     );
     if (selector.target === 'workspace' && command.kind !== 'argv') throw new Error('TOOL_ARGUMENTS_INVALID');
     if (selector.target === 'ssh' && command.kind !== 'shell') throw new Error('TOOL_ARGUMENTS_INVALID');
-    if (timeoutSeconds > (selector.target === 'ssh' && rawMode === 'background' ? 86400 : 300))
+    if (
+      timeoutSeconds >
+      (selector.target === 'workspace'
+        ? runnerJobLimits.maxExecutionTimeoutMs / 1000
+        : rawMode === 'background'
+          ? 86400
+          : 300)
+    )
       throw new Error('TOOL_ARGUMENTS_INVALID');
     if (selector.target === 'ssh' && rawMode === 'background' && args.sessionId === undefined)
       throw new Error('SSH_SESSION_REQUIRED');
@@ -602,7 +617,7 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     version: '1.0.0',
     modelExposure: 'deferred',
     description:
-      'Inspect, wait for, or cancel a Workspace or SSH background job. SSH jobs belong to the current conversation and use independent channels; lost connections have unknown outcomes and are never replayed.',
+      'Workspace/SSH Job status/wait/cancel; Workspace-only list omits jobId and returns authorized active Jobs/capacity. Wait expiry leaves Jobs running, not failed. Prefer bounded wait to busy-polling; cancel only an authorized Job. SSH disconnect outcomes are unknown, never replayed.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -610,10 +625,10 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
         target: { type: 'string', enum: ['workspace', 'ssh'] },
         id: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
         jobId: { type: 'string', minLength: 1, maxLength: 80 },
-        action: { type: 'string', enum: ['status', 'wait', 'cancel'] },
+        action: { type: 'string', enum: ['list', 'status', 'wait', 'cancel'] },
         waitSeconds: { type: 'integer', minimum: 1, maximum: 300 },
       },
-      required: ['target', 'id', 'jobId', 'action'],
+      required: ['target', 'id', 'action'],
     },
     riskClass: 'control',
     capability: 'shell.execute',
@@ -624,11 +639,17 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'jobId', 'action', 'waitSeconds']);
     const selector = selectorFrom(args);
-    const jobId = stringValue(args.jobId, 80);
-    if (!(selector.target === 'ssh' ? /^ssh-job-[a-f0-9-]{36}$/ : /^job-[a-f0-9]{64}$/).test(jobId))
-      throw new Error('TOOL_ARGUMENTS_INVALID');
     const action = stringValue(args.action, 16);
-    if (action !== 'status' && action !== 'wait' && action !== 'cancel') throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (action !== 'list' && action !== 'status' && action !== 'wait' && action !== 'cancel')
+      throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (action === 'list' && (selector.target !== 'workspace' || args.jobId !== undefined))
+      throw new Error('TOOL_ARGUMENTS_INVALID');
+    const jobId = action === 'list' ? undefined : stringValue(args.jobId, 80);
+    if (
+      jobId !== undefined &&
+      !(selector.target === 'ssh' ? /^ssh-job-[a-f0-9-]{36}$/ : /^job-[a-f0-9]{64}$/).test(jobId)
+    )
+      throw new Error('TOOL_ARGUMENTS_INVALID');
     const waitSeconds =
       action === 'wait'
         ? positiveInteger(
@@ -638,14 +659,14 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
         : undefined;
     if (action !== 'wait' && args.waitSeconds !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
     const resolved =
-      selector.target === 'ssh'
+      selector.target === 'ssh' || action === 'list'
         ? { target: await shell.resolve(context, selector) }
-        : await shell.resolveJob(context, selector, jobId);
-    if (selector.target === 'ssh') await shell.sshJob(context, selector, jobId, 'status');
+        : await shell.resolveJob(context, selector, jobId!);
+    if (selector.target === 'ssh') await shell.sshJob(context, selector, jobId!, 'status');
     const normalizedArguments: JsonValue = {
       target: selector.target,
       id: resolved.target.selector.id,
-      jobId,
+      ...(jobId === undefined ? {} : { jobId }),
       action,
       ...(waitSeconds === undefined ? {} : { waitSeconds }),
     };
@@ -676,6 +697,22 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
   execute: async (inspection, context) => {
     const args = record(inspection.normalizedArguments);
     const target = shell.bindInspectionTarget(inspection.target);
+    if (args.action === 'list') {
+      const data = await shell.listActiveJobs(context, target);
+      return {
+        ok: true,
+        summary: 'Active Workspace Jobs and configured capacity observed. This does not verify command success.',
+        data: { ...data, jobs: data.jobs.map((job) => ({ ...job })) },
+        artifactRefs: [],
+        truncated: false,
+        outcome: 'confirmed',
+        verification: {
+          status: 'unverified',
+          summary: 'Active Jobs have not reached verified terminal results.',
+          evidenceRefs: [],
+        },
+      };
+    }
     const action = stringValue(args.action, 16) as 'status' | 'wait' | 'cancel';
     if (target.selector.target === 'ssh')
       return sshJobResult(

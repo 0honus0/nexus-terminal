@@ -1516,8 +1516,8 @@ test('Agent configuration changes propagate across tabs without overwriting dirt
   const leaderSection = await openPerformanceSettings(page);
   const follower = await context.newPage();
   const followerSection = await openPerformanceSettings(follower);
-  const leaderInput = leaderSection.getByRole('spinbutton');
-  const followerInput = followerSection.getByRole('spinbutton');
+  const leaderInput = leaderSection.getByRole('spinbutton', { name: 'Agent execution concurrency', exact: false });
+  const followerInput = followerSection.getByRole('spinbutton', { name: 'Agent execution concurrency', exact: false });
 
   const currentValue = Number(await leaderInput.inputValue());
   const minValue = Number((await leaderInput.getAttribute('min')) ?? '1');

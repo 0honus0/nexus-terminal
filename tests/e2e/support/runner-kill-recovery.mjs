@@ -131,6 +131,7 @@ const job = {
   cwd: '/workspace/work',
   maxBytes: 1024,
   timeoutMs: 120000,
+  maxConcurrentJobs: 8,
 };
 try {
   await start();

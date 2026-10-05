@@ -203,4 +203,14 @@
 
 ### 临时文档退出条件
 
+### A02 当前执行（未完成）
+
+- A01 最新门禁反馈优化已单独提交 `f9b4a840`，相关 10 个 E2E 与检查通过，未推送。现在仅推进 A02。
+- 最新明确方案：Workspace 命令槽位进入 Agent 性能设置，默认 8、范围 1–64，1 为串行；前台／后台共用每 Workspace/generation 额度，修改仅影响新接纳，保留活跃 Job 与文件工具写入互斥。协议统一持有执行期限和额度边界；工具说明提前告知容量拒绝与恢复方式，不猜命令安全性。实现与回归正在验证，尚未提交，不计 A02 完成。
+- A02 真实 Run `2619739f-54d2-42ec-bc08-70162cd492c7`，Thread `64361131-650f-459c-a97e-7185916dc8b2`，Workspace `7f5aca4b-4bf7-4e0f-99d2-13684cc1b46b` generation 1。独立活动 Run 创建后结构化等待注入；项目注入与 hash 基线保存后，只读调查正确识别 catalogFile/catalogPath 冲突，再次 awaiting_input 等修复授权；该时刻全树文件 hash 不变。
+- 明确授权仅 config.json 键修复、PORT=29173、后台启动及接口验证，验收后挂起等待独立检查与停止授权。测试端确认仅 config.json 变更，数据与其余文件 hash 不变；显式 300 秒后台 Job 期间独立访问 /health、/catalog 均 200，catalog 内容正确。停止授权后旧 Run 已核对 completed；未将其计为 A02 完整通过，因为模型曾访问 /etc/os-release、/proc 与广泛进程扫描，违反该轮项目访问约束，且尚未确认最终资源清理。
+- 原约 60 秒退出不是硬上限：省略 timeout 使用旧默认值，模型的 900／1800／3600 秒参数被 Backend／Runner 旧 300 秒校验拒绝，工具 schema 却允许至 86400 秒。统一协议期限、可配置并发、活动列表、权威 active 状态投影已实现；定向场景验证额度竞争、满额拒绝、降额度不取消、单 Job 取消隔离、list 的 Run/Runtime/generation 边界与等待 running。Runner build 及 Node 运行时协议常量 import 通过；设置迁移保留已有配置并支持重复启动。UI/API E2E 验证默认 8、非法范围拒绝、保存后重载持久化通过。修改尚未提交，A02 优化后真实独立 Run 尚未执行。
+- 全量 Agent 场景仍有 context/tool-exchange 的 CONTEXT_BUDGET_EXCEEDED；已在未修改的 f9b4a840 隔离 worktree 复现同一失败，未提高预算或弱化断言。该既有问题单独保留，当前优化不扩大至 Context 修复。旧 timedOut=true 同时 durable status=succeeded 的分类问题仍未关闭。
+- 本轮送验证据：最终 check、三包 build、隔离 worktree 全量格式、git diff --check 通过；设置保存／范围／重载和跨标签 dirty draft 的 2 个 E2E passed（15.1 秒）。全量场景除上述已复现的 Context 基线失败外均通过；预算迁移反例已修正为清除 53 及之后的迁移标记，真正进入旧版本升级窗口，不修改有效断言。尚无推送授权与候选 SHA canonical Actions，不声明最终验收通过。
+
 本文件是本轮临时场景计划与进度入口，过程中持续更新，不保留已解决问题的开放状态。全部场景完成（或明确说明实际 contract／环境导致的未覆盖范围）、有效回归进入 `tests/e2e/specs/agent/`，且对应 SHA 的 canonical Actions 验收后，删除本文件和 `E2E.md` 中的入口；长期验证命令与覆盖边界仅保留在 `E2E.md`，不留下完成报告。本条记录的是将来的删除要求，当前尚未删除、尚未全部完成。
