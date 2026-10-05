@@ -11,7 +11,11 @@ export class PolicyService {
       return { action: 'deny', policyRevision: currentPolicyRevision, reason: 'POLICY_REVISION_CONFLICT' };
     }
     if (inspection.risk === 'forbidden') {
-      return { action: 'deny', policyRevision: currentPolicyRevision, reason: 'RESOURCE_FORBIDDEN' };
+      return {
+        action: 'deny',
+        policyRevision: currentPolicyRevision,
+        reason: inspection.rejectionCode ?? 'RESOURCE_FORBIDDEN',
+      };
     }
     if (!inspection.mutation && (inspection.risk === 'read' || inspection.risk === 'control')) {
       return { action: 'allow', policyRevision: currentPolicyRevision };

@@ -47,6 +47,7 @@ export const rejectedToolInspection = (run: RunView, proposal: ToolProposal, fai
     },
     resourceKeys: [],
     risk: 'forbidden',
+    rejectionCode: failureCode,
     mutation: false,
     operationHash,
     operationHashVersion: 1,

@@ -29,6 +29,7 @@ export interface ToolInspection {
   target: ToolTargetFingerprint;
   resourceKeys: string[];
   risk: ToolRisk;
+  rejectionCode?: string;
   mutation: boolean;
   operationHash: string;
   operationHashVersion: 1;

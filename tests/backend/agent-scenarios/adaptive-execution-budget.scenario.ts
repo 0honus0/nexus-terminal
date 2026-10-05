@@ -16,6 +16,8 @@ import { SkillRegistry } from '../../../packages/backend/src/modules/agent/ai/sk
 import { ProviderService } from '../../../packages/backend/src/modules/agent/ai/provider.service';
 import { ModelStepRunner } from '../../../packages/backend/src/modules/agent/runtime/execution/model-step-runner';
 import { NativeAgentBackend } from '../../../packages/backend/src/modules/agent/runtime/execution/native-agent-backend';
+import { ToolCallRunner } from '../../../packages/backend/src/modules/agent/runtime/execution/tool-call-runner';
+import { PolicyService } from '../../../packages/backend/src/modules/agent/capabilities/policy.service';
 import type { ToolInspection, ToolResult } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 import type { RunView } from '../../../packages/backend/src/modules/agent/runtime/runs/run.types';
 import { clock, emptyModelContinuations, scope } from './scenario-fixtures';
@@ -314,6 +316,63 @@ export const adaptiveExecutionBudgetScenario = async () => {
       null!,
     );
     const successful = await create(3, 40);
+    for (const rejectionCode of ['TOOL_ARGUMENTS_INVALID', 'APP_CAPABILITY_DENIED', 'RESOURCE_FORBIDDEN']) {
+      const rejected = await create(10, 40);
+      const model = new ScriptedLanguageModel([
+        {
+          events: [
+            { type: 'tool.delta', index: 0, id: 'rejected-call', name: 'scenario_read', argumentsDelta: '{}' },
+            { type: 'completed', finishReason: 'tool-calls' },
+          ],
+        },
+        {
+          assertRequest: (request) => {
+            const results = request.messages.filter((message) => message.role === 'tool');
+            assert.equal(results.length, 1);
+            assert.ok(results[0]!.content.includes(`\"errorCode\":\"${rejectionCode}\"`));
+          },
+          events: [
+            { type: 'message.delta', text: 'Tool rejected; no execution claimed.' },
+            { type: 'completed', finishReason: 'stop' },
+          ],
+        },
+      ]);
+      const calls = new ToolCallRunner(null!, null!, new PolicyService(), null!, null!);
+      calls.schemas = () => [];
+      calls.inspect = async () => {
+        throw new Error(rejectionCode);
+      };
+      const execution = new NativeAgentBackend(
+        runs,
+        { listDelegations: async () => [] } as never,
+        commit,
+        new ModelStepRunner(
+          new ProviderService(new StaticProviderRepository(benchmarkProvider), model, clock),
+          context,
+          model,
+          new ScenarioModelCallLimiter(),
+          clock,
+        ),
+        calls,
+        clock,
+      );
+      for await (const _event of execution.execute(
+        (await runs.snapshot(scope, rejected.run.id))!,
+        new AbortController().signal,
+      )) {
+        /* Drain real durable proposal/rejection lifecycle. */
+      }
+      const settled = (await runs.snapshot(scope, rejected.run.id))!;
+      assert.equal(settled.usage.toolExecutions, 0, 'rejected proposals never consume started-tool budget');
+      assert.equal(settled.status, 'completed_unverified');
+      const rows = await db.queryAll<{ inspection_json: string }>(
+        'SELECT inspection_json FROM agent_tool_calls WHERE run_id = ?',
+        [rejected.run.id],
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(JSON.parse(rows[0]!.inspection_json).rejectionCode, rejectionCode);
+      model.assertConsumed();
+    }
     let successfulRun = await compact(successful.run, successful.runtimeId);
     successfulRun = await observe(successfulRun, successful.runtimeId);
     const successfulModel = new ScriptedLanguageModel([

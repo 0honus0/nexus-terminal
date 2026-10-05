@@ -433,6 +433,7 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     'target',
     'resourceKeys',
     'risk',
+    'rejectionCode',
     'mutation',
     'operationHash',
     'operationHashVersion',
@@ -442,6 +443,14 @@ export const parseToolInspection = (raw: string): ToolInspection => {
   ]);
   if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(record.risk))) return invalid();
   if (record.operationHashVersion !== 1) return invalid();
+  if (
+    record.rejectionCode !== undefined &&
+    (record.risk !== 'forbidden' ||
+      record.mutation !== false ||
+      typeof record.rejectionCode !== 'string' ||
+      !/^[A-Z][A-Z0-9_]+$/.test(record.rejectionCode))
+  )
+    return invalid();
   const target = durableRecord(record.target);
   assertDurableKeys(target, [
     'kind',
@@ -497,6 +506,7 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     } as ToolInspection['target'],
     resourceKeys: decodeDurableStringArray(record.resourceKeys, 256),
     risk: record.risk as ToolInspection['risk'],
+    ...(record.rejectionCode === undefined ? {} : { rejectionCode: durableString(record.rejectionCode) as string }),
     mutation: durableBoolean(record.mutation),
     operationHash: durableString(record.operationHash) as string,
     operationHashVersion: 1,

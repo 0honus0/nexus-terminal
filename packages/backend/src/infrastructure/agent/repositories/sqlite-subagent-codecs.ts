@@ -352,6 +352,7 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     'target',
     'resourceKeys',
     'risk',
+    'rejectionCode',
     'mutation',
     'operationHash',
     'operationHashVersion',
@@ -362,6 +363,14 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
   if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(record.risk)))
     return invalidDurableState();
   if (record.operationHashVersion !== 1) return invalidDurableState();
+  if (
+    record.rejectionCode !== undefined &&
+    (record.risk !== 'forbidden' ||
+      record.mutation !== false ||
+      typeof record.rejectionCode !== 'string' ||
+      !/^[A-Z][A-Z0-9_]+$/.test(record.rejectionCode))
+  )
+    return invalidDurableState();
   const target = recordValue(record.target);
   assertRecordKeys(target, [
     'kind',
@@ -416,6 +425,7 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     } as RuntimeToolWorkView['inspection']['target'],
     resourceKeys: decodeStringArray(record.resourceKeys, 256),
     risk: record.risk as RuntimeToolWorkView['inspection']['risk'],
+    ...(record.rejectionCode === undefined ? {} : { rejectionCode: stringValue(record.rejectionCode) }),
     mutation: booleanValue(record.mutation),
     operationHash: stringValue(record.operationHash),
     operationHashVersion: 1,

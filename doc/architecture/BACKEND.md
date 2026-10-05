@@ -441,3 +441,5 @@ Native 在既有工具 proposal batch 结算后、下次模型 admission 前评�
 finishing 禁止新工具／委派。安全 checkpoint callback 使用 `execution_limit` 强制保存；最终 model summary 或确定性 partial report 与终态持久化，子 work 取消、活动 attempt 收敛，未确认 mutation／lease 隔离继续保留。Post-commit observer 中止 Child scheduler 与回收 Run-owned Browser。CheckpointService 拒绝 finishing／耗尽源，合法 continuation 在 createRun transaction 继承父级 usage 和 active seconds，不能重置保险丝。
 
 迁移 #53 将设置、应用策略、委派和旧 Run 数据一次性转换为当前字段；模型请求数从持久 attempt 重建，工具数从实际 started Tool 重建。历史 Run 的旧限额作为保守冻结 ceiling，启动恢复仍由既有 recovery owner 收敛非终态，不在 migration 伪造完成事件或重放工作。公开 API 和 decoder 不接受旧字段。
+
+工具预检查失败由 Root 与子 Agent 的合成 forbidden inspection 保存 rejectionCode，持久 decoder 校验其只能用于未执行的拒绝项。PolicyService 保持 deny 并传递该码，使回放后的 ledger 与模型结果仍能区分参数、授权和资源错误。

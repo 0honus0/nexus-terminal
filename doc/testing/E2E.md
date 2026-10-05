@@ -382,3 +382,5 @@ When adding, moving, grouping, or optimizing tests, follow [AGENTS.md](../AGENTS
 `specs/ssh/upload-protocol.spec.ts` includes an 8MiB upload/download latency regression with 60ms SFTP read/write delay, completion-time budgets, byte equality and an unaligned HTTP Range. Timing attachments record actual durations; this is a pipeline regression check, not a real-network bandwidth guarantee. The new case has not yet been verified successfully because the local E2E environment had an occupied service port.
 
 Run-channel durable replay regression consumes every current Protocol event through the production Frontend projector, then forces a disconnect and verifies resumption from the consumed cursor with duplicate suppression. Dedicated events use valid typed payloads; other known events invalidate snapshots. Live CDP validation additionally replays the actual Runner-task backlog from the real Backend. This covers event contract completeness, not every payload semantic or arbitrary future protocol versions.
+
+Agent 自适应预算场景同时验证真实 durable proposal/rejection/model continuation：检查失败的原始错误码跨持久化传给模型，拒绝调用的 toolExecutions 保持零。
