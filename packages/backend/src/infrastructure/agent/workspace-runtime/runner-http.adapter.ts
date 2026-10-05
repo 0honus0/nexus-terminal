@@ -1,3 +1,4 @@
+import { ToolMutationNotStartedError } from '../../../modules/agent/capabilities/tool-mutation-not-started.error';
 import type {
   WorkspaceApplyPatchRequest,
   WorkspaceApplyPatchResult,
@@ -763,6 +764,7 @@ export class RunnerHttpAdapter
             if (response.status === 409) {
               try {
                 const code = decodeErrorCode(parseRunnerJson(text));
+                if (code === 'WORKSPACE_JOB_ACTIVE_CONFLICT') throw new ToolMutationNotStartedError(code);
                 if (code) throw new Error(code);
               } catch (error) {
                 if (error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message)) throw error;

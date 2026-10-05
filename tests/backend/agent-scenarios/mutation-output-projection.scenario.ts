@@ -13,6 +13,7 @@ import type {
 import { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
 import type { MutationLeaseGuardHandle } from '../../../packages/backend/src/modules/agent/runtime/execution/mutation-lease-guard.port';
 import { ToolCallRunner } from '../../../packages/backend/src/modules/agent/runtime/execution/tool-call-runner';
+import { ToolMutationNotStartedError } from '../../../packages/backend/src/modules/agent/capabilities/tool-mutation-not-started.error';
 
 export const mutationOutputProjectionScenario = async () => {
   const catalog = new ToolCatalog();
@@ -115,10 +116,17 @@ export const mutationOutputProjectionScenario = async () => {
     largeTool('scenario_acp_mutation', 'acp'),
     largeTool('scenario_workspace_mutation', 'workspace'),
   ];
+  const rejectionTools = ['BROWSER_URL_DENIED', 'WORKSPACE_JOB_ACTIVE_CONFLICT'].map((code): AgentTool => ({
+    ...interruptedTool,
+    descriptor: { ...interruptedTool.descriptor, name: `scenario_rejected_${code}` },
+    execute: async () => {
+      throw new ToolMutationNotStartedError(code);
+    },
+  }));
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.output-projection',
-    tools: [...transportTools, interruptedTool],
+    tools: [...transportTools, interruptedTool, ...rejectionTools],
   });
 
   for (const tool of transportTools) {
@@ -152,6 +160,13 @@ export const mutationOutputProjectionScenario = async () => {
   assert.equal(interrupted.outcome, 'unknown');
   assert.equal(interrupted.errorCode, 'ECONNRESET');
   assert.equal(executionCounts.get(interruptedToolName), 1);
+  for (const tool of rejectionTools) {
+    const rejected = await runner.executeMutation(noopLease, context, inspectionFor(tool.descriptor.name));
+    assert.equal(rejected.outcome, 'confirmed');
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.verification.status, 'failed');
+    assert.equal(rejected.errorCode, tool.descriptor.name.replace('scenario_rejected_', ''));
+  }
 
   return [
     { name: 'large_confirmed_mutations', value: transportTools.length, unit: 'tools' },

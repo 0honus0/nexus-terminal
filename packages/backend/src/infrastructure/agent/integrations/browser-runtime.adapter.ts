@@ -11,6 +11,7 @@ import puppeteer, {
   type Page,
 } from 'puppeteer-core';
 import WebSocket, { type RawData } from 'ws';
+import { ToolMutationNotStartedError } from '../../../modules/agent/capabilities/tool-mutation-not-started.error';
 import type {
   BrowserEndpointSetting,
   BrowserConsoleEntry,
@@ -621,7 +622,8 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     signal: AbortSignal,
   ): Promise<BrowserPostActionView> {
     const active = this.requireSession(sessionId);
-    if (!urlAllowed(value, active.target.allowedUrlPatterns)) throw new Error('BROWSER_URL_DENIED');
+    if (!urlAllowed(value, active.target.allowedUrlPatterns))
+      throw new ToolMutationNotStartedError('BROWSER_URL_DENIED');
     if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
     const beforeUrl = active.page.url();
     await active.page.goto(value, { waitUntil: 'domcontentloaded', timeout: PROTOCOL_TIMEOUT_MS });
