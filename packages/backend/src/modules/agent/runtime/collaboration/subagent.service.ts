@@ -12,6 +12,7 @@ import type { DelegationRepositoryPort, RuntimeParticipantRepositoryPort } from 
 import type { DelegationView, DependencyMode, JoinResult, SubagentProfile } from './subagent.types';
 import type { SubagentPolicyService } from './subagent-policy';
 import type { AgentEventHub } from '../events/event-hub';
+import { remainingExecutionSeconds } from '../execution/runtime-progress';
 
 const MAX_OBJECTIVE_BYTES = 16 * 1024;
 const MAX_CONSTRAINTS = 32;
@@ -117,6 +118,11 @@ export class SubagentService {
     if (!['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input'].includes(run.status))
       throw new Error('RUN_NOT_ACTIVE');
     const parentDelegation = allDelegations.find((delegation) => delegation.childRuntimeId === parentRuntimeId) ?? null;
+    const deadlineCeiling = Math.min(
+      now + remainingExecutionSeconds(run, now),
+      parentDelegation?.deadlineAt ?? Number.MAX_SAFE_INTEGER,
+    );
+    if (input.deadlineAt > deadlineCeiling) throw new Error('VALIDATION_FAILED');
     const depth = (parentDelegation?.depth ?? 0) + 1;
     if (depth > settings.policy.maxDelegationDepth) throw new Error('DELEGATION_DEPTH_EXCEEDED');
     const profile = settings.policy.profiles.find((candidate) => candidate.id === input.profileId);

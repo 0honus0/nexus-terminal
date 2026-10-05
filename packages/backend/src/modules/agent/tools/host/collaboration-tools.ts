@@ -95,7 +95,7 @@ const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): A
     name: 'collaboration_subagent_delegate',
     version: '1',
     description:
-      'Create a bounded child agent for a specific objective using a configured Subagent profile. The caller identity and parent runtime are bound by Nexus.',
+      'Create a bounded child agent for a specific objective using a configured Subagent profile. Compute deadlineAt from currentUnixSeconds in the server execution progress plus the requested duration. It must not exceed remainingActiveExecutionCeilingSeconds or the parent delegation deadline. Never guess the clock or use a distant sentinel date. The caller identity and parent runtime are bound by Nexus.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

@@ -18,6 +18,10 @@ import { ModelStepRunner } from '../../../packages/backend/src/modules/agent/run
 import { NativeAgentBackend } from '../../../packages/backend/src/modules/agent/runtime/execution/native-agent-backend';
 import { ToolCallRunner } from '../../../packages/backend/src/modules/agent/runtime/execution/tool-call-runner';
 import { PolicyService } from '../../../packages/backend/src/modules/agent/capabilities/policy.service';
+import { SqliteSubagentRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-subagent.repository';
+import { SubagentService } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent.service';
+import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
+import { AgentEventHub } from '../../../packages/backend/src/modules/agent/runtime/events/event-hub';
 import type { ToolInspection, ToolResult } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 import type { RunView } from '../../../packages/backend/src/modules/agent/runtime/runs/run.types';
 import { clock, emptyModelContinuations, scope } from './scenario-fixtures';
@@ -208,6 +212,87 @@ export const adaptiveExecutionBudgetScenario = async () => {
       [scope.appId, now, now],
     );
 
+    const deadlineRun = await create();
+    const participants = new SqliteSubagentRepository(db);
+    const deadlineService = new SubagentService(
+      participants,
+      participants,
+      runs,
+      {
+        get: async () => ({
+          policy: {
+            maxDelegationDepth: 2,
+            profiles: [
+              {
+                id: 'deadline-fixture',
+                role: 'Bounded review',
+                defaultModel: null,
+                allowedModels: [deadlineRun.run.definition.model],
+                capabilities: [],
+                peerMessaging: 'parent-child',
+                mutationMode: 'read-only',
+                maxModelRequests: 3,
+                failureMode: 'isolate',
+              },
+            ],
+          },
+        }),
+      } as never,
+      new ProviderService(new StaticProviderRepository(benchmarkProvider), new ScriptedLanguageModel([]), clock),
+      { list: async () => [] } as never,
+      new CapabilityRegistry(),
+      new AgentEventHub(),
+      clock,
+    );
+    const deadlineInput = {
+      profileId: 'deadline-fixture',
+      objective: 'Return 42.',
+      constraints: [],
+      inputArtifactRefs: [],
+      maxModelRequests: 3,
+      deadlineAt: now + 90,
+      completionCriteria: ['Return 42.'],
+      dependsOn: [],
+      dependencyMode: 'success',
+    };
+    await assert.rejects(
+      () =>
+        deadlineService.create(
+          scope,
+          deadlineRun.run.id,
+          deadlineRun.runtimeId,
+          { ...deadlineInput, deadlineAt: 4_102_444_800 },
+          randomUUID(),
+        ),
+      /VALIDATION_FAILED/,
+    );
+    assert.equal((await participants.listDelegations(scope, deadlineRun.run.id)).length, 0);
+    const deadlineKey = randomUUID();
+    const child = await deadlineService.create(
+      scope,
+      deadlineRun.run.id,
+      deadlineRun.runtimeId,
+      deadlineInput,
+      deadlineKey,
+    );
+    assert.equal(child.deadlineAt, now + 90);
+    assert.equal(
+      (await deadlineService.create(scope, deadlineRun.run.id, deadlineRun.runtimeId, deadlineInput, deadlineKey)).id,
+      child.id,
+    );
+    await assert.rejects(
+      () =>
+        deadlineService.create(
+          scope,
+          deadlineRun.run.id,
+          child.childRuntimeId,
+          { ...deadlineInput, deadlineAt: now + 120 },
+          randomUUID(),
+        ),
+      /VALIDATION_FAILED/,
+    );
+    assert.equal((await participants.listDelegations(scope, deadlineRun.run.id)).length, 1);
+
     const progressive = await create();
     let run = progressive.run;
     for (let index = 0; index < 7; index++) run = await compact(run, progressive.runtimeId);
@@ -303,6 +388,7 @@ export const adaptiveExecutionBudgetScenario = async () => {
           assert.ok(content.includes('Verify the new deployment') && content.includes('Verify deployment'));
           assert.ok(content.includes('"planRevision":2') && content.includes('"remainingModelRequests":2'));
           assert.ok(content.includes('"phase":"finishing"'));
+          assert.ok(content.includes(`"currentUnixSeconds":${now}`));
         },
         events: [],
         error: new Error('PROVIDER_NETWORK_FAILED'),

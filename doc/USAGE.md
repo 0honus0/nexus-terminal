@@ -330,6 +330,8 @@ Plugin Frontend 的静态代码和 SDK 可匿名获取并使用公开 immutable 
 
 Plugin 包在本部署以 `appId + version` 表示全局不可变身份；同名同版本的不同内容不能并存，换 publisher 不会获得独立 namespace。修改包内容须发布新版本或使用不同 App ID。verify 会登记版本元数据，尚无 verified-only 版本自动回收；该行为不代表支持多用户私有同名插件。
 
+Root／Child 的执行进度投影提供服务器 currentUnixSeconds 和剩余活动执行硬预算秒数。Subagent deadlineAt 必须按该时间加所需时长计算，不能超过 Root 剩余硬预算或父委派截止时间；远期占位时间会在创建前拒绝。
+
 Browser 导航在执行前被 URL 策略拒绝，以及 Runner 因活动 Job 拒绝文件操作时，工具返回已确认失败并保留精确错误码，模型可调整后继续；此类明确未执行的拒绝不会触发未知副作用隔离。网络中断、执行后的策略失败、lease 丢失仍需核对真实结果。
 
 完成判定保留已验证测试结果：测试成功后，经 Runner 确认完成的 Workspace stop／delete，或 SSH 空闲会话的普通 close，不会使先前的测试证据失效。后续文件修改、restart、SSH force close 等操作仍需重新验证；Job 仅已接受或正在运行不算测试通过。
