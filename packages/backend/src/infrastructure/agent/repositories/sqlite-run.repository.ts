@@ -477,9 +477,23 @@ export class SqliteRunRepository
       `SELECT t.id AS tool_call_id, t.provider_call_id
        FROM agent_tool_calls t
        JOIN agent_runs r ON r.id = t.run_id
+       JOIN agent_steps original_step ON original_step.id = t.step_id AND original_step.run_id = t.run_id
        WHERE t.run_id = ? AND r.user_id = ? AND r.app_id = ?
          AND t.operation_hash = ? AND t.status = 'succeeded' AND t.risk <> 'read'
-       ORDER BY t.completed_at, t.created_at, t.id LIMIT 1`,
+         AND json_extract(t.inspection_json, '$.mutation') = 1
+         AND NOT EXISTS (
+           SELECT 1 FROM agent_tool_calls later
+           JOIN agent_steps later_step ON later_step.id = later.step_id AND later_step.run_id = later.run_id
+           WHERE later.run_id = t.run_id AND later.status = 'succeeded'
+             AND json_extract(later.inspection_json, '$.mutation') = 1
+             AND later_step.step_index > original_step.step_index
+             AND EXISTS (
+               SELECT 1 FROM json_each(t.inspection_json, '$.resourceKeys') original_resource
+               JOIN json_each(later.inspection_json, '$.resourceKeys') later_resource
+                 ON original_resource.value = later_resource.value
+             )
+         )
+       ORDER BY original_step.step_index DESC, t.completed_at DESC, t.id DESC LIMIT 1`,
       [runId, scope.userId, scope.appId, operationHash],
     );
     return row ? { toolCallId: row.tool_call_id, providerCallId: row.provider_call_id } : null;
