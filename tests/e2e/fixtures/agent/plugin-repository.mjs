@@ -26,7 +26,7 @@ else {
   fs.writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }));
 }
 
-const buildPackage = (appId, version) => {
+const buildPackage = (appId, version, sourceAppId = appId) => {
   const packageName = `${appId}-${version}.tar`;
   const packagePath = path.join(temp, packageName);
   const metadata = JSON.parse(
@@ -34,7 +34,7 @@ const buildPackage = (appId, version) => {
       process.execPath,
       [
         path.join(current, 'build-plugin-package.mjs'),
-        path.join(current, `plugin-source/${appId}`),
+        path.join(current, `plugin-source/${sourceAppId}`),
         packagePath,
         keyPath,
       ],
@@ -54,6 +54,9 @@ const packages = [
     description: 'Signed E2E first-party frontend/backend/runner target fixture.',
   },
   { ...buildPackage('nexus.custom-surface', '1.0.0'), description: 'E2E-only focused Custom App Surface SDK fixture.' },
+  { ...buildPackage('nexus.intent-peer', '1.0.0'), description: 'E2E-only AppIntent receiver fixture.' },
+  { ...buildPackage('nexus.upgrade', '1.0.0', 'nexus.upgrade-v1'), description: 'E2E-only Plugin upgrade v1 fixture.' },
+  { ...buildPackage('nexus.upgrade', '2.0.0', 'nexus.upgrade-v2'), description: 'E2E-only Plugin upgrade v2 fixture.' },
 ];
 const publisher = packages[0].metadata;
 
