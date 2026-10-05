@@ -330,6 +330,8 @@ Plugin Frontend 的静态代码和 SDK 可匿名获取并使用公开 immutable 
 
 Plugin 包在本部署以 `appId + version` 表示全局不可变身份；同名同版本的不同内容不能并存，换 publisher 不会获得独立 namespace。修改包内容须发布新版本或使用不同 App ID。verify 会登记版本元数据，尚无 verified-only 版本自动回收；该行为不代表支持多用户私有同名插件。
 
+Memory 候选的 confidence 接受 0 到 1 的有限小数（如 0.5、0.8）；工具检查和操作哈希保留原始数值，不要求整数。候选仍须用户审核发布后才进入 Recall。
+
 Memory 管理和跨 App 导入来源可逐页加载更早记录，每页最多 200 条，按创建时间／ID 倒序；审核更新不改变分页排序。重新加载从首页开始，分页不是跨请求一致性快照。revoked／expired 历史仍保留，不自动物理删除，当前没有 Memory 总量硬配额，Recall 限制不等于存储容量限制。
 
 单用户 Agent Root／Subagent 共享 Runtime 并发预算；预算满时 queued Run 等待释放，不因切换 App 额外获得槽位。Root 按 App 轮转，但不承诺优先级、严格无饥饿或跨用户公平调度；created Run 的全局 admission 仍独立生效。

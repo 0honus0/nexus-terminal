@@ -2,7 +2,10 @@ import type { JsonValue } from './agent.types';
 import type { CryptoHashPort } from './crypto-hash.port';
 
 const assertJsonValue = (value: JsonValue): void => {
-  if (typeof value === 'number' && (!Number.isFinite(value) || !Number.isSafeInteger(value)))
+  if (
+    typeof value === 'number' &&
+    (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value)))
+  )
     throw new Error('VALIDATION_FAILED');
   if (typeof value === 'string' && /[\uD800-\uDFFF]/u.test(value)) {
     for (let index = 0; index < value.length; index += 1) {

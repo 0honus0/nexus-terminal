@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +15,8 @@ import { RecallService } from '../../../packages/backend/src/modules/agent/ai/re
 import { MemoryService } from '../../../packages/backend/src/modules/agent/ai/memory.service';
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
 import { validateManifest } from '../../../packages/backend/src/modules/agent/host/app-manifest-validator';
+import { createMemoryProposeTool } from '../../../packages/backend/src/modules/agent/tools/host/collaboration-tools';
+import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 
 export const memoryProductClosureScenario = async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-memory-product-'));
@@ -86,12 +89,36 @@ export const memoryProductClosureScenario = async () => {
       });
     }
 
-    const candidate = await memories.propose(sourceScope, {
+    const tool = createMemoryProposeTool(memories, {
+      sha256Utf8: (text) => createHash('sha256').update(text).digest('hex'),
+    });
+    const context: ToolContext = {
+      ...sourceScope,
+      actor: { kind: 'user', userId: sourceScope.userId },
+      runId: 'memory-run',
+      agentRuntimeId: 'memory-runtime',
+      connectionIds: [],
+      environment: null,
+      stepId: 'memory-step',
+      signal: new AbortController().signal,
+      deadlineAt: memoryNow + 60,
+      maxOutputBytes: 4096,
+      inputRevision: 1,
+    };
+    const input = {
       content: 'candidate zebra recall token',
       sourceRefs: { kind: 'scenario', runId: 'memory-run' },
       confidence: 0.8,
       expiresAt: null,
-    });
+    };
+    const inspection = await tool.inspect(input, context, 1);
+    const halfConfidence = await tool.inspect({ ...input, confidence: 0.5 }, context, 1);
+    assert.notEqual(inspection.operationHash, halfConfidence.operationHash);
+    const proposal = await tool.execute(inspection, context);
+    assert.equal(proposal.ok, true);
+    const candidate = await memoryRepository.get(sourceScope, (proposal.data as { id: string }).id);
+    assert.ok(candidate);
+    assert.equal(candidate.confidence, 0.8);
     assert.equal(
       (await recall.recall(sourceScope, 'zebra', 5, 4096)).length,
       0,

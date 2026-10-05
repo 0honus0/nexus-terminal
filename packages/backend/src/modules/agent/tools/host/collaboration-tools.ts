@@ -395,7 +395,7 @@ const compareAndSetFactTool = (facts: SharedFactsService, cryptoHash: CryptoHash
   },
 });
 
-const proposeMemoryTool = (memories: MemoryService, cryptoHash: CryptoHashPort): AgentTool => ({
+export const createMemoryProposeTool = (memories: MemoryService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
     name: 'memory_propose',
     version: '1',
@@ -442,5 +442,5 @@ export const createCollaborationTools = (
   consumeMessagesTool(mailbox, cryptoHash),
   getFactTool(facts, cryptoHash),
   compareAndSetFactTool(facts, cryptoHash),
-  proposeMemoryTool(memories, cryptoHash),
+  createMemoryProposeTool(memories, cryptoHash),
 ];
