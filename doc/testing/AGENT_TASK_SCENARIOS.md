@@ -6,6 +6,7 @@
 
 - 每个场景包含自然语言目标、隔离环境、资源约束、独立验收和模块参与断言。不给模型固定工具顺序，允许合理的不同实现路径。
 - 真实模型能力测试与确定性 Provider 机制回归分别统计；协议 fixture 通过不等于真实外部服务通过。
+- 本地可用于开发、真实任务运行和复现，可调整隔离测试环境；最终验收以候选提交精确 SHA 对应的 GitHub Actions 结果为准。真实模型用例若缺少 Provider 凭据或运行配置，必须明确报告未验收，不能回退到模拟模型后声称能力通过。凭据仅通过环境／CI secrets 注入，不提交、不打印。
 - 服务只部署到授权的隔离测试资源，不操作真实部署服务器。未知副作用先核对，不自动重复执行。
 - 测试端检查实际 HTTP、进程、文件 hash／权限、数据、durable 状态和 Artifact；不只检查最终回答中的“完成”。
 - Skill、MCP、Subagent、Browser 等目标模块必须有实际调用／状态断言，不能用模型提及名称冒充覆盖。
@@ -161,3 +162,37 @@
 2026-10-05 起点：现有 `functional-regressions.spec.ts`、`host.spec.ts`、`coverage-gaps.spec.ts`、`preset-plugin.spec.ts`、`event-catchup.spec.ts` 提供部分机制覆盖，但尚不能视为上述全部任务型覆盖。此前 83 个后端场景、相关 27 个 Agent E2E 通过，不等于 81 个能力任务已通过。真实 CDP 浏览器在设计时未连接，真实模型任务验收尚未开始。
 
 每个场景落地后，在本节记录 ID、用例位置、真实／fixture 模式及验证结果；不以文档条目代替可执行测试。
+
+### 首批执行状态
+
+- A01/A02：已准备 `tests/e2e/fixtures/agent/task-projects/startup-failure/`，包含项目规则、无外部依赖的服务、配置键错误及必须保留的业务数据。A01 只读调查；A02 修复配置并启动，由测试端独立检查两个接口和数据 hash。尚未纳入已通过覆盖。
+- CDP `172.30.30.11:9223` 可连接指定测试页；首次检查 Provider、Workspace、Settings 请求均为 HTTP 502，本机测试 Backend/Frontend 端口未监听。该次真实任务被前置条件阻塞，不计 Agent 缺陷。后续获准调整本地隔离测试环境，最终由 Actions 验收，不操作部署服务器。
+
+### 当前进度与接续入口（2026-10-05）
+
+- 执行分工：本机连接真实模型 API 运行能力任务；Actions 模拟外部 API／模型响应，但真实执行产品状态流转、隔离服务及文件副作用。真实能力结论来自本机任务，最终回归交付以精确提交 SHA 的 canonical Actions 为准；缺少任何一层均不得标记完整验收。
+- Git 已 fetch 核对：远程 dev 为 `4daf981e`，本地文档提交为 `a5c6fc21`，仅 ahead 1，不是 ahead 18。原先 18 个提交已经在远程历史中，本轮没有删除／撤销它们。当前未提交内容为本计划更新及 startup-failure fixture。
+- 已有基线：`functional-regressions.spec.ts` 和 `coverage-gaps.spec.ts` 本地 12 passed（12.3 秒）；属于模拟 Provider 机制回归，不计新增任务能力完成。
+- 本地环境：已完成 frozen-lockfile 依赖安装，恢复测试 Backend 3001 和 Frontend 9998；现有数据库未重置。CDP 页面 API 已恢复，Runner availability 为 available/native/logical。真实 Provider 配置及 Workspace catalog 可读取；凭据不进入文档或 fixture。
+- startup-failure fixture 已验证能触发 `CONFIG_CATALOG_PATH_INVALID`；尚未由 Agent 完成修复。其故障是 config.json 使用 catalogFile，而应用校验 catalogPath；不能通过移除校验或改业务数据“修复”。
+- A01/A02 前置 Run：`0b6601dd-dc5f-40b6-8207-693b2f1296c8`，Thread `8e3ee4fd-6748-42a0-8ef5-3f58f35815ac`。真实模型已创建并启动本轮 Workspace `fefdce7b-1b2a-4fdd-896c-311fe91353d7`（generation 1），更新 Plan，进入 awaiting_input。结构化请求 `beadf623-a784-40fc-8234-91b6c92b2bda` 等待项目来源、目标、边界和准备确认；前置期间无项目写入／应用运行。此结果只是前置准备，不是 A01/A02 通过。
+- 下一步：向上述独立 Workspace 注入 fixture，测试端保存文件 hash 基线；回答只读接手目标，观察真实调查并核对文件不变（A01）；随后授权修复启动并验收两接口、数据 hash、改动范围与停止／清理（A02）；将有效输入与工具过程脱敏、最小化后直接进入 Agent E2E。不新增报告解析器或独立实测数据集。
+- 剩余场景：A01 本地真实任务与新增回归已通过，检查／提交及远程验收见后续状态；A02 暂停，A03–A08、B–K 未开始。无新增生产修复或本轮远程 Actions 验收，不得推断整体完成。
+- A01 首次运行结果：模型完成了有事实依据的只读报告，正确指出 catalogFile/catalogPath 不匹配；数据、规则、README、配置经测试端核对字节未变。但模型将未来未授权修复加入 blocked Plan，最终两次提交报告均被 Completion Gate 拒绝，Run 以 `COMPLETION_GATE_UNSATISFIED` failed。因此 A01 **未通过**，不把报告正确当作完整成功。下一步将“本次只读任务完成／未来修复未授权”的边界转成回归，核对是否需改善模型指令或完成语义，不能直接放行未完成 Plan。两个 `RUN_PLAN_INVALID` 为模型提交不合法 Plan 后自行修正；调查期出现 `long_window_no_progress`，尚待核对是否误报，不声称已修复。
+- 本轮 `pnpm run check` 已通过；格式、完整构建和远程 Actions 尚未验收。
+- 已将首次 A01 观察转为 `functional-regressions.spec.ts` 的模拟回归：故意提交已完成只读报告＋blocked 未来修复 Plan，独立断言 Completion Gate 确实拒绝；模拟模型随后取消未授权的未来项，验证无需执行修复即可结算当前任务。相关本地 8 passed（12.9 秒）。该用例验证安全边界及可恢复路径，不冒充再次真实 A01 通过。当前未改生产 Completion Gate，不放宽未完成 Plan 判据。
+- A02 已提交真实任务 Run `7a486251-dc18-4e03-8f1b-7c2cca0f0aca`，使用同一 Thread，指定原 Workspace、仅修改必要配置，端口 29173，数据保留，交付运行服务供独立验收。若跨 Run 授权拒绝则如实记阻塞，不以新副本冒充；结果尚待完成。
+- A02 首次前置检查实际返回 `RESOURCE_FORBIDDEN`：旧 Workspace 的 Run/Runtime 绑定不允许新 Run 文件操作。属于当前授权 contract／测试前置设计问题，不能通过放宽跨 Run 权限修复。后续 A02 必须在其自己的活动 Run 中准备 fixture 再继续；这一轮用于确认如实报告阻塞，无服务部署成功结论。
+- A02 独立前置已发起：Run `2f6c44a5-2fae-4ad7-b1d0-84fa3138292e`，Thread `3b394919-504d-4e85-9038-d439d3a8b98f`，等待其创建本 Run Workspace 并结构化挂起，再由测试端注入 fixture；原两个 Run 与 Workspace 不得误当此任务资源。
+- 当前修改文件的 Prettier 检查与 `git diff --check` 通过。主目录全量 format 检查失败原因包含 ignored 的 `tests/agent-functional/` 原始资料；不得格式化或删除原始资料换绿，提交前需在不包含这些本地资料的隔离工作区完成全量检查。尚未提交本轮改动。
+- 串行执行规则：每个场景完成真实运行、观察／必要修复、有效 E2E、本地检查和进度更新后，单独创建本地提交，再开始下一个。不得提前推进；推送仍需明确授权，canonical Actions 待验收不冒称已通过。
+- A02 暂停：独立前置 Run `2f6c44a5-2fae-4ad7-b1d0-84fa3138292e` 已确认 cancelled；旧 Workspace 尝试 Run `7a486251-dc18-4e03-8f1b-7c2cca0f0aca` 为 completed_unverified，仅报告授权阻塞，不计 A02 完成。A01 提交前不再推进 A02。
+- A01 再次真实验证：独立 Run `2053d188-061e-4d20-86ee-a39a52af802c`、Thread `1e18e54a-ed0f-41af-a085-3136dc9e6d7d`、Workspace `0e07b929-4069-45bf-b2bb-7d9ec61e008c`。将目标明确为当前只读报告、修复属于另一个任务；Run completed、Plan 全部 completed。报告正确说明 node server.mjs、PORT、catalogPath/catalogFile 不匹配及两个接口未验证。测试端递归核对项目目录项和每个文件字节全部不变。未修改生产完成判据，首次失败仍作为边界反例保留，不声称模型在模糊任务边界下必然成功。
+- A01 任务回归位于 `functional-regressions.spec.ts`，Actions 模拟模型响应，通过 SSH fixture 实际读取六个项目文件；断言实际读取结果、SHA、报告配置／启动字段、无额外工具执行及文件不变。明确标为模拟模型／SSH 目标，不冒充远程 Workspace 覆盖。首次 E2E 错用 plan 模式造成没有 durable Plan 的完成拒绝，已修正为与真实任务一致的 execute 模式；不是放宽只读判据。相关 9 个 E2E 本地通过，远程 Actions 尚未送验。
+- A01 提交前隔离工作区 check／全量 format／三包 build 全部通过；相关 E2E 9 passed（14.9 秒），真实任务 completed，Ledger 核对无 shell_execute 或文件 mutation，项目树与文件字节不变。A01 本地实施完成，准备单独提交；canonical Actions 尚未送验，不标记远程通过。
+- A01 首次失败根因：模型将未授权的未来修复纳入当前 blocked Plan，且完成门禁反馈后未取消该项或结构化挂起，再次交付导致失败。安全门禁按契约拒绝，并非读取失败；本轮没有修改生产门禁，也不声称修复所有模型任务划分错误。
+- A02 接续设计：同一 Thread 可继续任务。若要在同一 Workspace 修复，优先同一活动 Run 完成只读调查后通过 user_input_request 等待授权，回答后继续；已结束 Run 不直接复用旧 Workspace 授权。A01 独立只读交付已结束，A02 用独立 Run 验证“调查→结构化授权→修复→独立验收”，不放宽跨 Run 权限。
+
+### 临时文档退出条件
+
+本文件是本轮临时场景计划与进度入口，过程中持续更新，不保留已解决问题的开放状态。全部场景完成（或明确说明实际 contract／环境导致的未覆盖范围）、有效回归进入 `tests/e2e/specs/agent/`，且对应 SHA 的 canonical Actions 验收后，删除本文件和 `E2E.md` 中的入口；长期验证命令与覆盖边界仅保留在 `E2E.md`，不留下完成报告。本条记录的是将来的删除要求，当前尚未删除、尚未全部完成。

@@ -261,6 +261,99 @@ const server = http.createServer(async (request, response) => {
     }
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
+  const handover = latestUserText.match(/E2E_TASK_A01_READONLY connection=(\d+)/);
+  if (handover) {
+    const files = ['AGENTS.md', 'README.md', 'package.json', 'config.json', 'server.mjs', 'data/catalog.json'];
+    const results = files.map((_, index) =>
+      messages.find((message) => message.role === 'tool' && message.tool_call_id === `call_task_readonly_${index}`),
+    );
+    if (results.some((result) => !result)) {
+      regressionResponse(
+        response,
+        {
+          tool_calls: files.map((file, index) => ({
+            index,
+            id: `call_task_readonly_${index}`,
+            type: 'function',
+            function: {
+              name: 'file_read',
+              arguments: JSON.stringify({ target: 'ssh', id: handover[1], path: `/task-a01/${file}` }),
+            },
+          })),
+        },
+        'tool_calls',
+      );
+    } else {
+      const reads = results.map((result) => JSON.parse(result.content));
+      if (reads.some((read) => !read.ok || typeof read.data?.content !== 'string')) {
+        regressionResponse(response, { content: 'Read-only handover blocked: project evidence is unavailable.' });
+      } else {
+        const config = JSON.parse(reads[3].data.content);
+        const pkg = JSON.parse(reads[2].data.content);
+        const code = reads[4].data.content;
+        regressionResponse(response, {
+          content: JSON.stringify({
+            start: pkg.scripts.start,
+            configKey: code.includes('config.catalogPath') ? 'catalogPath' : null,
+            configuredKey: Object.keys(config)[0],
+            requiredEnvironment: 'PORT',
+            interfaces: ['/health', '/catalog'],
+            serviceStarted: false,
+            files: files.map((file, index) => ({ path: `/task-a01/${file}`, sha256: reads[index].data.sha256 })),
+          }),
+        });
+      }
+    }
+    return;
+  }
+  if (latestUserText.includes('E2E_TASK_READONLY_FUTURE_REPAIR')) {
+    const proposed = messages.some(
+      (message) => message.role === 'tool' && message.tool_call_id === 'call_task_future_plan',
+    );
+    const corrected = messages.some(
+      (message) => message.role === 'tool' && message.tool_call_id === 'call_task_cancel_future',
+    );
+    const gateBlocked = serializedMessages.includes('Completion gate blocked: the durable Run plan');
+    if (!proposed || (gateBlocked && !corrected)) {
+      const correcting = proposed && gateBlocked;
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: correcting ? 'call_task_cancel_future' : 'call_task_future_plan',
+              type: 'function',
+              function: {
+                name: 'plan_update',
+                arguments: JSON.stringify({
+                  items: [
+                    {
+                      id: 'readonly-report',
+                      title: 'Report current project startup requirements',
+                      status: 'completed',
+                    },
+                    {
+                      id: 'future-repair',
+                      title: 'Repair only after a separate user authorization',
+                      status: correcting ? 'cancelled' : 'blocked',
+                      dependsOn: ['readonly-report'],
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+    } else {
+      regressionResponse(response, {
+        content: 'Read-only report delivered. Future repair is not authorized and was not executed.',
+      });
+    }
+    return;
+  }
   if (outputCase) {
     regressionResponse(response, { content: outputCase.expected });
     return;
