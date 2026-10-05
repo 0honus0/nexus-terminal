@@ -10,7 +10,7 @@ import type { AgentTargetResolver, ResolvedAgentTarget } from './target-resolver
 import type { AgentTargetSelector, ToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext, ToolPrecondition } from './tool.types';
 
-export type UnifiedShellCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; text: string };
+export type UnifiedShellCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; shellScript: string };
 export type UnifiedShellMode = 'foreground' | 'background';
 
 export interface UnifiedShellExecutionRequest {
@@ -116,7 +116,7 @@ export class ShellCapabilityService {
         connectionId,
         target.fingerprint.configurationHash,
         context.sshSessionId,
-        request.command.text,
+        request.command.shellScript,
         request.timeoutSeconds,
         request.operationHash,
       );
@@ -125,7 +125,7 @@ export class ShellCapabilityService {
     const result = await this.sshShell.execute(
       context,
       connectionId,
-      request.command.text,
+      request.command.shellScript,
       request.timeoutSeconds,
       target.fingerprint.configurationHash,
     );

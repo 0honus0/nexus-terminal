@@ -228,7 +228,7 @@ export const unifiedShellCapabilityScenario = async () => {
     proposal('ssh-one-exec', {
       target: 'ssh',
       id: '1',
-      command: { kind: 'shell', text: 'printf ssh-one' },
+      command: { kind: 'shell', shellScript: 'printf ssh-one' },
       mode: 'foreground',
     }),
   );
@@ -237,7 +237,7 @@ export const unifiedShellCapabilityScenario = async () => {
     proposal('ssh-two-exec', {
       target: 'ssh',
       id: '2',
-      command: { kind: 'shell', text: 'printf ssh-two' },
+      command: { kind: 'shell', shellScript: 'printf ssh-two' },
       mode: 'foreground',
     }),
   );
@@ -301,9 +301,16 @@ export const unifiedShellCapabilityScenario = async () => {
   assert.equal((await executor.executeMutation(context, sshOneInspection)).ok, true);
 
   for (const [callId, input] of [
-    ['workspace-shell-text', { target: 'workspace', id: 'ws-shell', command: { kind: 'shell', text: 'echo invalid' } }],
+    [
+      'workspace-shell-script',
+      { target: 'workspace', id: 'ws-shell', command: { kind: 'shell', shellScript: 'echo invalid' } },
+    ],
+    ['retired-shell-text', { target: 'ssh', id: '1', command: { kind: 'shell', text: 'echo invalid' } }],
     ['ssh-argv', { target: 'ssh', id: '1', command: { kind: 'argv', argv: ['echo', 'invalid'] } }],
-    ['ssh-background', { target: 'ssh', id: '1', command: { kind: 'shell', text: 'sleep 1' }, mode: 'background' }],
+    [
+      'ssh-background',
+      { target: 'ssh', id: '1', command: { kind: 'shell', shellScript: 'sleep 1' }, mode: 'background' },
+    ],
   ] as const) {
     await assert.rejects(
       () => executor.inspect(context, proposal(callId, input as unknown as Record<string, JsonValue>)),
@@ -322,7 +329,7 @@ export const unifiedShellCapabilityScenario = async () => {
         proposal('ssh-two-denied', {
           target: 'ssh',
           id: '2',
-          command: { kind: 'shell', text: 'printf denied' },
+          command: { kind: 'shell', shellScript: 'printf denied' },
         }),
       ),
     /APP_CAPABILITY_DENIED/,
@@ -349,7 +356,7 @@ export const unifiedShellCapabilityScenario = async () => {
     proposal('stale-ssh', {
       target: 'ssh',
       id: '1',
-      command: { kind: 'shell', text: 'printf stale' },
+      command: { kind: 'shell', shellScript: 'printf stale' },
     }),
   );
   sshHashes.set(1, 'ssh-config-one-v2');

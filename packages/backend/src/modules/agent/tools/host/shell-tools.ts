@@ -116,14 +116,14 @@ const argvValue = (value: JsonValue | undefined): string[] => {
 
 const commandValue = (value: JsonValue | undefined): UnifiedShellCommand => {
   const command = record(value as JsonValue);
-  onlyKeys(command, ['kind', 'argv', 'text']);
+  onlyKeys(command, ['kind', 'argv', 'shellScript']);
   if (command.kind === 'argv') {
-    if (command.text !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (command.shellScript !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
     return { kind: 'argv', argv: argvValue(command.argv) };
   }
   if (command.kind === 'shell') {
     if (command.argv !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
-    return { kind: 'shell', text: stringValue(command.text, MAX_SHELL_BYTES) };
+    return { kind: 'shell', shellScript: stringValue(command.shellScript, MAX_SHELL_BYTES) };
   }
   throw new Error('TOOL_ARGUMENTS_INVALID');
 };
@@ -453,7 +453,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     name: 'shell_execute',
     version: '1.0.0',
     description:
-      'Execute Workspace argv/cwd or SSH shell text. Workspace foreground/background Jobs share configured generation capacity (default 8; 1=serial); full capacity rejects, never queues. Active Jobs block file-tool writes, not reads. Serialize dependent/shared writers; no file isolation. Background returns jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. SSH background requires sessionId. Execution lifetime differs from result wait.',
+      'Execute Workspace argv/cwd or SSH shellScript (executable script, not a display title). Workspace foreground/background Jobs share configured generation capacity (default 8; 1=serial); full capacity rejects, never queues. Active Jobs block file-tool writes, not reads. Serialize dependent/shared writers; no file isolation. Background returns jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. SSH background requires sessionId. Execution lifetime differs from result wait.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -465,7 +465,13 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
           properties: {
             kind: { type: 'string', enum: ['argv', 'shell'] },
             argv: { type: 'array', minItems: 1, maxItems: MAX_ARGV_ITEMS, items: { type: 'string' } },
-            text: { type: 'string', minLength: 1, maxLength: MAX_SHELL_BYTES },
+            shellScript: {
+              type: 'string',
+              minLength: 1,
+              maxLength: MAX_SHELL_BYTES,
+              description:
+                'Executable SSH shell script, not a display title; use with kind=shell. Workspace uses argv instead.',
+            },
           },
           required: ['kind'],
         },
@@ -535,7 +541,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
       ...(args.sessionId === undefined ? {} : { sessionId: args.sessionId }),
       ...(cwd === undefined ? {} : { cwd }),
     };
-    const risk = command.kind === 'shell' ? shellRisk(command.text) : 'mutate';
+    const risk = command.kind === 'shell' ? shellRisk(command.shellScript) : 'mutate';
     return {
       toolName: 'shell_execute',
       toolVersion: '1.0.0',

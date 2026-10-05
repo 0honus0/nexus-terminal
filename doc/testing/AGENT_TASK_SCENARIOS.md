@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- 第一项循环暂停反馈已本地提交 `d90daa72`，check、隔离全量 format、diff check 与定向恢复场景通过，未推送。用户要求第二项改字段名而非新增 Schema 互斥：SSH command.text 改为 command.shellScript，明确为执行脚本，Workspace argv 保持不变；执行/风险检查/模拟 Provider/场景与需求规则同步，无旧字段别名。定向场景覆盖新字段实际执行及旧 text 拒绝，check 通过。
 - Luna 收尾挂起已核实为现有循环保护暂停，而非丢失澄清请求；修复快照与界面缺少明确循环暂停原因的反馈，新增 protocol-owned loopPause 并投影现有 durable guard，不自动继续或完成。定向场景确认暂停原因/时间、scope 隔离与同 Run 新输入恢复后清除暂停投影通过；四项优化按单项验证提交推进，最终改用 gpt-5.6-luna low 真实验收尚未执行。
 - 用户指定换 Luna low：通过公开模型发现选用 `gpt-6-luna`，仅在隔离测试 Provider `3f4b7000-d6d9-4468-b0a5-faf8be24f17f` 添加模型，保留原模型与凭据，配置版本 2，默认及 Run reasoningEffort 均为 low。Provider test ok=true（2602ms）。真实 Run `bad68826-be3f-4365-b6c6-691f31614fc5`，Thread `17e38939-a85c-47bc-8ddf-3b1a9c2f0e1d`，Workspace `943e9bf1-48af-43e0-bd66-ca552e0830a9` generation 1 正确等待注入与修复授权，授权前全树 hash 不变。
 - Luna low 按后续授权仅修改 config.json 的 catalogFile→catalogPath。测试端独立确认 /health、/catalog HTTP 200 且内容正确，数据与其余文件 hash 不变；监听进程 cwd 和父进程链确认属于本轮 Workspace。尚不能标记整体通过：模型反复提交带多余 text 的 argv 参数，首次有效启动遗漏 PORT；成功启动后又重复提交三次同端口启动（EADDRINUSE），并在挂起问题中错误声称未重启、无法取得 Job 状态，实际 ToolResult 已明确 running。停止授权后受管 Job 已 confirmed cancelled，测试端确认 29174 无监听，Run 最终收敛仍待核对；不修改代码或重跑换绿。

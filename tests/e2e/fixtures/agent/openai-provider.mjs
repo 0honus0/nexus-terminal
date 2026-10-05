@@ -797,7 +797,7 @@ const server = http.createServer(async (request, response) => {
                     arguments: JSON.stringify({
                       target: 'ssh',
                       id: connection[1],
-                      command: { kind: 'shell', text: 'printf browser-approval-e2e' },
+                      command: { kind: 'shell', shellScript: 'printf browser-approval-e2e' },
                       mode: 'foreground',
                       timeoutSeconds: 10,
                     }),
@@ -1123,7 +1123,7 @@ const server = http.createServer(async (request, response) => {
                   arguments: JSON.stringify({
                     target: 'ssh',
                     id: String(Number(approvalConnection[1])),
-                    command: { kind: 'shell', text: 'printf approval-e2e' },
+                    command: { kind: 'shell', shellScript: 'printf approval-e2e' },
                     mode: 'foreground',
                     timeoutSeconds: 10,
                   }),
@@ -1149,7 +1149,7 @@ const server = http.createServer(async (request, response) => {
     const mutationArguments = JSON.stringify({
       target: 'ssh',
       id: String(connectionId),
-      command: { kind: 'shell', text: "printf 'duplicate-e2e\\n' >> duplicate-proof.txt" },
+      command: { kind: 'shell', shellScript: "printf 'duplicate-e2e\\n' >> duplicate-proof.txt" },
       mode: 'foreground',
       timeoutSeconds: 10,
     });
