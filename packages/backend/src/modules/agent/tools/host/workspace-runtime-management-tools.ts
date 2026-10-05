@@ -87,6 +87,7 @@ const operation = (
   resourceKeys: string[],
   preconditions: ToolPrecondition[],
   policyRevision: number,
+  toolVersion = '1.0.0',
 ): string =>
   hashOperation(
     {
@@ -97,7 +98,7 @@ const operation = (
         runId: context.runId,
         agentRuntimeId: context.agentRuntimeId,
       },
-      tool: { name: toolName, version: '1.0.0' },
+      tool: { name: toolName, version: toolVersion },
       target: {
         kind: target.kind,
         targetIdentity: target.targetIdentity,
@@ -152,12 +153,7 @@ export const createWorkspaceCreateTool = (
     ) {
       throw new Error('WORKSPACE_EXISTS');
     }
-    const normalizedArguments: JsonValue = {
-      recipeId: environment.recipeId,
-      recipeRevision: environment.recipeRevision,
-      runtimeDigest: environment.runtimeDigest,
-      catalogRevision: environment.catalogRevision,
-    };
+    const normalizedArguments: JsonValue = {};
     const target = workspaceTarget(cryptoHash, {
       runId: context.runId,
       agentRuntimeId: context.agentRuntimeId,
@@ -183,7 +179,7 @@ export const createWorkspaceCreateTool = (
     ];
     return {
       toolName: 'workspace_create',
-      toolVersion: '1.0.0',
+      toolVersion: '2.0.0',
       normalizedArguments,
       target,
       resourceKeys,
@@ -198,6 +194,7 @@ export const createWorkspaceCreateTool = (
         resourceKeys,
         preconditions,
         policyRevision,
+        '2.0.0',
       ),
       operationHashVersion: 1,
       preconditions,
@@ -217,8 +214,10 @@ export const createWorkspaceCreateTool = (
       inspection.operationHash,
       environment.catalogRevision,
       environment,
+      true,
     );
     const ready = workspace.status === 'ready';
+    const terminal = ready || workspace.status === 'failed';
     return {
       ok: ready,
       summary: ready ? 'Workspace provisioned and ready.' : `Workspace is ${workspace.status}.`,
@@ -236,12 +235,15 @@ export const createWorkspaceCreateTool = (
       },
       artifactRefs: [],
       truncated: false,
-      outcome: 'confirmed',
+      outcome: terminal ? 'confirmed' : 'unknown',
+      ...(terminal ? {} : { errorCode: 'WORKSPACE_PROVISION_UNCONFIRMED' }),
       verification: {
-        status: ready ? 'verified' : 'failed',
+        status: ready ? 'verified' : terminal ? 'failed' : 'unverified',
         summary: ready
           ? 'Runner confirmed provisioning and the Workspace is ready to start.'
-          : 'Runner returned a terminal provisioning result that was not ready.',
+          : terminal
+            ? 'Runner returned a terminal provisioning result that was not ready.'
+            : 'Runner has not confirmed a terminal provisioning result.',
         evidenceRefs: [],
       },
     };
@@ -255,7 +257,7 @@ export const createWorkspaceControlTool = (
 ): AgentTool => ({
   descriptor: {
     name: 'workspace_control',
-    version: '1.0.0',
+    version: '2.0.0',
     description: 'Start, stop, restart, or delete one Nexus Agent Workspace generation. Requires user approval.',
     inputSchema: {
       type: 'object',
@@ -284,8 +286,6 @@ export const createWorkspaceControlTool = (
     const normalizedArguments: JsonValue = {
       workspaceId,
       action,
-      expectedVersion: workspace.version,
-      generation: workspace.generation,
     };
     const target = workspaceTarget(cryptoHash, {
       workspaceId,
@@ -311,7 +311,7 @@ export const createWorkspaceControlTool = (
     ];
     return {
       toolName: 'workspace_control',
-      toolVersion: '1.0.0',
+      toolVersion: '2.0.0',
       normalizedArguments,
       target,
       resourceKeys,
@@ -326,6 +326,7 @@ export const createWorkspaceControlTool = (
         resourceKeys,
         preconditions,
         policyRevision,
+        '2.0.0',
       ),
       operationHashVersion: 1,
       preconditions,
@@ -337,7 +338,10 @@ export const createWorkspaceControlTool = (
     const args = record(inspection.normalizedArguments);
     const workspaceId = stringValue(args.workspaceId, 128);
     const action = stringValue(args.action, 32) as 'start' | 'stop' | 'restart' | 'delete';
-    const command = await runtime.action(context, workspaceId, action, positiveInteger(args.expectedVersion));
+    const observed = record(
+      inspection.preconditions.find((item) => item.kind === 'workspaceGeneration')!.observedValue,
+    );
+    const command = await runtime.action(context, workspaceId, action, positiveInteger(observed.version), true);
     const confirmed = command.status === 'succeeded' || command.status === 'failed';
     return {
       ok: command.status === 'succeeded',

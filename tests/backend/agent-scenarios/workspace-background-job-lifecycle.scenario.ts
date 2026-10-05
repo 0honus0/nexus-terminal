@@ -11,6 +11,13 @@ import { WorkspaceShellTargetAdapter } from '../../../packages/backend/src/infra
 import type { JsonValue } from '../../../packages/backend/src/modules/agent/agent.types';
 import { ShellCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/shell-capability.service';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
+import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
+import type { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
+import {
+  createWorkspaceCreateTool,
+  createWorkspaceControlTool,
+} from '../../../packages/backend/src/modules/agent/tools/host/workspace-runtime-management-tools';
+import type { WorkspaceRuntimeService } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.service';
 import { modelFacingToolSchemas } from '../../../packages/backend/src/modules/agent/capabilities/tool-model-surface';
 import { PolicyService } from '../../../packages/backend/src/modules/agent/capabilities/policy.service';
 import { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
@@ -156,6 +163,67 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     inputRevision: 2,
   };
   const shellTargets = new AgentTargetResolver(toolRepository, null!, toolCrypto);
+  let created = false;
+  const createRepository = {
+    listWorkspaces: async () => (created ? [toolWorkspace] : []),
+  } as unknown as AgentWorkspaceRepositoryPort;
+  const createRuntime = {
+    createWorkspace: async (...args: Parameters<WorkspaceRuntimeService['createWorkspace']>) => {
+      assert.deepEqual(args[7], toolContext.environment, 'creation must execute the frozen environment');
+      assert.equal(args[8], true, 'model tools must await terminal provisioning');
+      created = true;
+      return { ...toolWorkspace, status: 'ready' as const };
+    },
+  } as unknown as WorkspaceRuntimeService;
+  const createCatalog = new ToolCatalog();
+  createCatalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.workspace-create',
+    tools: [createWorkspaceCreateTool(createRuntime, createRepository, toolCrypto)],
+  });
+  const createExecutor = new ToolExecutor(createCatalog, {
+    authorize: async () => ({ allowed: true, policyRevision: 7 }),
+  } as unknown as AppCapabilityBroker);
+  const createInspection = await createExecutor.inspect(toolContext, {
+    providerCallId: 'create-empty-arguments',
+    name: 'workspace_create',
+    argumentsJson: '{}',
+  });
+  const refreshedCreate = await createExecutor.refreshInspection(toolContext, createInspection);
+  assert.equal(refreshedCreate.operationHash, createInspection.operationHash);
+  assert.equal(new PolicyService().decide(refreshedCreate, 7).action, 'requireApproval');
+  const createdResult = await createExecutor.executeMutation(toolContext, refreshedCreate);
+  assert.equal(createdResult.ok, true);
+  assert.equal(createdResult.outcome, 'confirmed');
+  assert.equal(createdResult.verification.status, 'verified');
+  await assert.rejects(() => createExecutor.refreshInspection(toolContext, refreshedCreate), /WORKSPACE_EXISTS/);
+  const lifecycleRuntime = {
+    action: async (...args: Parameters<WorkspaceRuntimeService['action']>) => {
+      assert.equal(args[3], toolWorkspace.version);
+      assert.equal(args[4], true, 'model tools must await terminal lifecycle execution');
+      return { id: 'lifecycle-command', generation: toolWorkspace.generation, status: 'succeeded' };
+    },
+  } as unknown as WorkspaceRuntimeService;
+  const lifecycleCatalog = new ToolCatalog();
+  lifecycleCatalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.workspace-control',
+    tools: [createWorkspaceControlTool(lifecycleRuntime, toolRepository, toolCrypto)],
+  });
+  const lifecycleExecutor = new ToolExecutor(lifecycleCatalog, {
+    authorize: async () => ({ allowed: true, policyRevision: 7 }),
+  } as unknown as AppCapabilityBroker);
+  const lifecycleInspection = await lifecycleExecutor.inspect(toolContext, {
+    providerCallId: 'control-public-arguments',
+    name: 'workspace_control',
+    argumentsJson: JSON.stringify({ workspaceId: toolWorkspace.id, action: 'stop' }),
+  });
+  const refreshedLifecycle = await lifecycleExecutor.refreshInspection(toolContext, lifecycleInspection);
+  assert.equal(refreshedLifecycle.operationHash, lifecycleInspection.operationHash);
+  assert.equal(
+    (await lifecycleExecutor.executeMutation(toolContext, refreshedLifecycle)).verification.status,
+    'verified',
+  );
   const workspaceShellTarget = new WorkspaceShellTargetAdapter(toolRepository, toolGateway);
   const shellService = new ShellCapabilityService(shellTargets, workspaceShellTarget, null!, toolCrypto);
   const shellTools = new Map(

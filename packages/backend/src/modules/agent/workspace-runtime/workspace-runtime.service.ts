@@ -320,6 +320,7 @@ export class WorkspaceRuntimeService {
     idempotencyKey: string,
     expectedCatalogRevision?: string,
     frozenProfile?: WorkspaceProfileView,
+    waitForTerminal = false,
   ): Promise<AgentWorkspaceView> {
     if (!idempotencyKey || (!frozenProfile && (!spec || typeof spec !== 'object')))
       throw new Error('VALIDATION_FAILED');
@@ -373,10 +374,10 @@ export class WorkspaceRuntimeService {
       workspace.id,
       workspace.generation,
       this.runnerProvisionPayload(workspace),
+      true,
+      waitForTerminal,
     );
-    if (provision.status === 'succeeded') {
-      workspace = (await this.repository.getWorkspace(scope, workspace.id)) ?? workspace;
-    }
+    workspace = (await this.repository.getWorkspace(scope, workspace.id)) ?? workspace;
     logger.info(
       {
         userId: scope.userId,
