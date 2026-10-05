@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- 四项本地提交：`d90daa72`、`f27412bd`、`6d0fd730`、`bb91686a`，check/隔离全量 format/定向场景与三包 build 通过。5.6 Luna low Provider test 通过（2852ms）；Run `720beedc-2419-4023-bf6e-e7f923aa5327` 在 workspace_create 被 WORKSPACE_LIMIT_EXCEEDED 拒绝，未创建 Workspace 或注入项目，因错误 unknown 分类 interrupted。已定位 repository 容量检查在持久创建和 Runner 副作用前，改为明确未执行错误；定向真实数据库场景证明无新 Workspace/command 记录，不改容量或未知副作用安全门禁。仅核对并显式停止本轮遗留 A01/A02 三个已知测试 Workspace，不扩大清理范围。
 - 第三项已提交 `6d0fd730`。第四项参数校验反馈仅输出有界 Schema keyword、未执行和纠正指引，不回显输入；现有循环 warning 按原因给出下一步，不改变阈值、安全门禁或并发。定向场景证明旧字段拒绝包含可用纠正信息、canary 不泄漏且无 SSH 副作用；循环暂停/恢复场景通过。真实模型是否仍重复需后续验收。
 - 第二项字段重命名已本地提交 `f27412bd`，无兼容别名；第三项后台接纳与 running 反馈明确保留 jobId、健康检查/有界 wait、不重提启动获取结果，不按命令去重或限制并发。真实 Runner 生命周期场景与 check 通过；模型行为是否改善留待 5.6 Luna low 验证，不据提示文案声明重复启动已完全解决。
 - 第一项循环暂停反馈已本地提交 `d90daa72`，check、隔离全量 format、diff check 与定向恢复场景通过，未推送。用户要求第二项改字段名而非新增 Schema 互斥：SSH command.text 改为 command.shellScript，明确为执行脚本，Workspace argv 保持不变；执行/风险检查/模拟 Provider/场景与需求规则同步，无旧字段别名。定向场景覆盖新字段实际执行及旧 text 拒绝，check 通过。

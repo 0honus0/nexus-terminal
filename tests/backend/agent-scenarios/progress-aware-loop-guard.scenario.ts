@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { SqliteStateCommitAdapter } from '../../../packages/backend/src/infrastructure/agent/runtime/sqlite-state-commit.adapter';
 import { SqliteRunRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-run.repository';
+import { SqliteWorkspaceRepository } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/sqlite-workspace.repository';
+import { ToolMutationNotStartedError } from '../../../packages/backend/src/modules/agent/capabilities/tool-mutation-not-started.error';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
 import type { Scope } from '../../../packages/backend/src/modules/agent/agent.types';
 import { freezeRunContextPolicy } from '../../../packages/backend/src/modules/agent/runtime/runs/run-budget-policy';
@@ -289,6 +291,52 @@ export const progressAwareLoopGuardScenario = async () => {
       last_reason: 'repeated_stable_observation',
       paused_runtime_id: runtimeId,
     });
+
+    const workspaces = new SqliteWorkspaceRepository(db);
+    const workspaceRecord = {
+      scope: scenarioScope,
+      id: 'capacity-existing-workspace',
+      commandId: 'capacity-create-command',
+      idempotencyKey: 'capacity-create-key',
+      requestHash: 'capacity-create-hash',
+      runId,
+      agentRuntimeId: runtimeId,
+      retained: false,
+      maxActiveWorkspaces: 1,
+      generation: 1,
+      createdAt: now + 40,
+      profile: {
+        kind: 'code' as const,
+        recipeId: 'scenario-code',
+        recipeRevision: '1',
+        runtimeDigest: 'runtime',
+        catalogRevision: 'catalog',
+        toolchain: [],
+        runnerPlugins: [],
+        acpProfiles: [],
+        browserTarget: null,
+      },
+    };
+    await workspaces.createWorkspace(workspaceRecord);
+    await db.execute(
+      `INSERT INTO agent_runtimes (id, run_id, participant_id, backend_kind, model_ref_json, status,
+       schedule_state, consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES ('capacity-other-runtime', ?, 'capacity-other', 'native', ?, 'running', 'runnable', 0, 'owner', ?, ?)`,
+      [runId, modelRef, now, now],
+    );
+    await assert.rejects(
+      () =>
+        workspaces.createWorkspace({
+          ...workspaceRecord,
+          id: 'capacity-rejected-workspace',
+          commandId: 'capacity-rejected-command',
+          idempotencyKey: 'capacity-rejected-key',
+          agentRuntimeId: 'capacity-other-runtime',
+        }),
+      (error: unknown) => error instanceof ToolMutationNotStartedError && error.message === 'WORKSPACE_LIMIT_EXCEEDED',
+    );
+    assert.equal(await workspaces.getWorkspace(scenarioScope, 'capacity-rejected-workspace'), null);
+    assert.equal(await db.queryOne('SELECT id FROM agent_commands WHERE id = ?', ['capacity-rejected-command']), null);
 
     return [
       { name: 'warnings_before_pause', value: warningTransitions, unit: 'warnings' },

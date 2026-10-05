@@ -1,4 +1,5 @@
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
+import { ToolMutationNotStartedError } from '../../../modules/agent/capabilities/tool-mutation-not-started.error';
 import { canonicalize } from '../../../modules/agent/operation-hash';
 import type {
   AgentWorkspaceRepositoryPort,
@@ -166,7 +167,8 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
         "SELECT COUNT(*) AS total FROM agent_workspaces WHERE user_id=? AND status NOT IN ('deleted','failed')",
         [record.scope.userId],
       );
-      if ((active?.total ?? 0) >= record.maxActiveWorkspaces) throw new Error('WORKSPACE_LIMIT_EXCEEDED');
+      if ((active?.total ?? 0) >= record.maxActiveWorkspaces)
+        throw new ToolMutationNotStartedError('WORKSPACE_LIMIT_EXCEEDED');
 
       await tx.execute(
         `INSERT INTO agent_commands
