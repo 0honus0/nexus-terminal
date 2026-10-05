@@ -315,7 +315,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
   delete missingModeArguments.mode;
   await assert.rejects(
     () => executeTool.execute({ ...backgroundInspection, normalizedArguments: missingModeArguments }, toolContext),
-    /TOOL_ARGUMENTS_INVALID/,
+    /SHELL_STRING_INVALID/,
     'durable argv inspections without the canonical mode field must fail closed',
   );
 

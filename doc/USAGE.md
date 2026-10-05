@@ -151,7 +151,7 @@ Workspace 文件工具的非法路径或越界读取由 Runner 拒绝，模型�
 - SSH 会话入口将 connectionId 转为规范 SSH target 后校验同一 typed grant；会话创建、命令执行与文件操作共享连接授权，未选中或未授权的连接仍拒绝。
 - `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。
 - `ssh_session_list(connectionId, sessionId?)` 查看当前对话内指定目标的连接状态与活动操作数；`ssh_session_close(connectionId, sessionId, force?)` 关闭并移除连接。普通关闭拒绝活动会话；显式 force 按破坏性操作治理，可能中断全部活动命令，不保证远端进程已终止。
-- `shell_execute` 的 command 在 Workspace 使用 `{kind:"argv",argv:[可执行文件,参数...]}`，SSH 使用 `{kind:"shell",shellScript:"待执行脚本"}`；shellScript 是命令正文，不是展示标题，不接受旧 text 字段。`shell_execute` 与全部 `file_read/list/search/write/patch/move/delete` 接受仅限 SSH 的可选 `sessionId`。省略时仍每次临时建连后关闭；指定时检查、执行和验证使用已有连接。失效时不自动重连、降级或重放。
+- `shell_execute` 的 command 在 Workspace 和 SSH 均可使用 `{kind:"argv",argv:[可执行文件,参数...]}` 或 `{kind:"shell",shellScript:"待执行脚本"}`，支持可选 cwd。argv 适合单命令和字面参数，SSH 会逐参数安全引用；shellScript 支持管道、变量、条件和重定向，Workspace 使用 /bin/sh -c，SSH 使用远端命令 Shell。shellScript 是命令正文，不是展示标题，不接受旧 text 字段。必要环境变量可用 argv 的 env 命令或脚本显式传入。`shell_execute` 与全部 `file_read/list/search/write/patch/move/delete` 接受仅限 SSH 的可选 `sessionId`。省略时仍每次临时建连后关闭；指定时检查、执行和验证使用已有连接。失效时不自动重连、降级或重放。
 - 同一用户、应用和对话的 Root/Subagent 可以显式共享会话，但仍须有当前目标授权；跨用户、应用、对话禁止访问。命令各自使用独立 exec channel，文件使用独立句柄，不向其他任务插入输入，不继承前一命令的工作目录或环境变量；远端共享文件和服务仍可能相互影响。
 - Workspace 后台 Job 接纳及 running 状态反馈明确要求保留 jobId，不以重提命令获取结果；服务验收使用健康检查，等待终态使用有界 wait。running 是权威活跃状态而非失败或状态缺失，不改变正常并发与执行身份。
 - Workspace 创建达到用户容量上限时，在创建记录与 Runner 调用前明确拒绝，工具结果为已确认未执行，不作为未知副作用隔离；需显式清理不再使用的 Workspace 后再继续。

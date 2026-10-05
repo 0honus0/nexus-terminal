@@ -65,52 +65,80 @@ const MAX_TOTAL_ARG_BYTES = 64 * 1024;
 const MAX_SHELL_BYTES = 32 * 1024;
 const MAX_CWD_BYTES = 4096;
 
+function invalidArgument(code: string, detail: string): never {
+  throw new Error(code, { cause: new Error(`${detail} No command was executed.`) });
+}
+
 const record = (value: JsonValue): Record<string, JsonValue> => {
-  if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (!value || Array.isArray(value) || typeof value !== 'object')
+    invalidArgument('SHELL_OBJECT_REQUIRED', 'Tool arguments and command must be JSON objects.');
   return value as Record<string, JsonValue>;
 };
 
 const onlyKeys = (value: Record<string, JsonValue>, allowed: readonly string[]): void => {
   const keys = new Set(allowed);
-  if (Object.keys(value).some((key) => !keys.has(key))) throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (Object.keys(value).some((key) => !keys.has(key)))
+    invalidArgument('SHELL_UNKNOWN_FIELD', `Only these fields are accepted here: ${allowed.join(', ')}.`);
 };
 
-const stringValue = (value: JsonValue | undefined, maxBytes: number): string => {
+const stringValue = (value: JsonValue | undefined, maxBytes: number, field = 'string field'): string => {
   if (typeof value !== 'string' || !value || value.includes('\0') || Buffer.byteLength(value, 'utf8') > maxBytes) {
-    throw new Error('TOOL_ARGUMENTS_INVALID');
+    invalidArgument(
+      'SHELL_STRING_INVALID',
+      `${field} must be a non-empty string without NUL, at most ${maxBytes} UTF-8 bytes.`,
+    );
   }
   return value;
 };
 
 const targetKind = (value: JsonValue | undefined): AgentTargetKind => {
-  if (value !== 'workspace' && value !== 'ssh') throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (value !== 'workspace' && value !== 'ssh')
+    invalidArgument(
+      'SHELL_TARGET_INVALID',
+      'target must be workspace or ssh. Both accept argv and shellScript commands.',
+    );
   return value;
 };
 
 const selectorFrom = (args: Record<string, JsonValue>) => ({
   target: targetKind(args.target),
-  id: stringValue(args.id, MAX_ID_BYTES),
+  id: stringValue(args.id, MAX_ID_BYTES, 'id'),
 });
 
 const positiveInteger = (value: JsonValue | undefined, fallback?: number): number => {
   if (value === undefined && fallback !== undefined) return fallback;
-  if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (!Number.isSafeInteger(value) || Number(value) < 1)
+    invalidArgument(
+      'SHELL_POSITIVE_INTEGER_REQUIRED',
+      'timeoutSeconds/waitSeconds must be a positive safe integer in seconds.',
+    );
   return Number(value);
 };
 
 const argvValue = (value: JsonValue | undefined): string[] => {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_ARGV_ITEMS) {
-    throw new Error('TOOL_ARGUMENTS_INVALID');
+    invalidArgument('SHELL_ARGV_COUNT_INVALID', `command.argv must contain 1 to ${MAX_ARGV_ITEMS} strings.`);
   }
   let total = 0;
   const argv = value.map((item) => {
-    if (typeof item !== 'string' || item.includes('\0')) throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (typeof item !== 'string' || item.includes('\0'))
+      invalidArgument('SHELL_ARGV_ITEM_INVALID', 'Each command.argv item must be a string without NUL.');
     const bytes = Buffer.byteLength(item, 'utf8');
-    if (bytes > MAX_ARG_BYTES) throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (bytes > MAX_ARG_BYTES)
+      invalidArgument(
+        'SHELL_ARGV_ITEM_TOO_LARGE',
+        `Each command.argv item must be at most ${MAX_ARG_BYTES} UTF-8 bytes.`,
+      );
     total += bytes;
     return item;
   });
-  if (total > MAX_TOTAL_ARG_BYTES) throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (total > MAX_TOTAL_ARG_BYTES)
+    invalidArgument(
+      'SHELL_ARGV_TOO_LARGE',
+      `Combined command.argv must be at most ${MAX_TOTAL_ARG_BYTES} UTF-8 bytes.`,
+    );
+  if (!argv[0])
+    invalidArgument('SHELL_EXECUTABLE_EMPTY', 'command.argv[0] must be a non-empty executable name or path.');
   return argv;
 };
 
@@ -118,14 +146,25 @@ const commandValue = (value: JsonValue | undefined): UnifiedShellCommand => {
   const command = record(value as JsonValue);
   onlyKeys(command, ['kind', 'argv', 'shellScript']);
   if (command.kind === 'argv') {
-    if (command.shellScript !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (command.shellScript !== undefined)
+      invalidArgument(
+        'SHELL_COMMAND_FIELDS_CONFLICT',
+        'kind=argv accepts argv, not shellScript; select one command form.',
+      );
     return { kind: 'argv', argv: argvValue(command.argv) };
   }
   if (command.kind === 'shell') {
-    if (command.argv !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
-    return { kind: 'shell', shellScript: stringValue(command.shellScript, MAX_SHELL_BYTES) };
+    if (command.argv !== undefined)
+      invalidArgument(
+        'SHELL_COMMAND_FIELDS_CONFLICT',
+        'kind=shell accepts shellScript, not argv; select one command form.',
+      );
+    return { kind: 'shell', shellScript: stringValue(command.shellScript, MAX_SHELL_BYTES, 'command.shellScript') };
   }
-  throw new Error('TOOL_ARGUMENTS_INVALID');
+  return invalidArgument(
+    'SHELL_COMMAND_KIND_INVALID',
+    'command.kind must be argv or shell; both forms work on Workspace and SSH.',
+  );
 };
 
 const shellRisk = (command: string): 'mutate' | 'destructive' | 'forbidden' => {
@@ -454,7 +493,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     name: 'shell_execute',
     version: '1.0.0',
     description:
-      'Execute Workspace argv/cwd or SSH shellScript (executable script, not a display title). Workspace foreground/background Jobs share configured generation capacity (default 8; 1=serial); full capacity rejects, never queues. Active Jobs block file-tool writes, not reads. Serialize dependent/shared writers; no file isolation. Background returns jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. SSH background requires sessionId. Execution lifetime differs from result wait.',
+      'Execute argv or shellScript on either Workspace or SSH, with optional cwd. argv preserves literal argument boundaries (SSH safely quotes for its remote shell); shellScript is executable source, not a title (Workspace /bin/sh -c). Pass required environment variables via argv=[env,KEY=value,executable,...] or shellScript. Workspace foreground/background Jobs share configured generation capacity (default 8; 1=serial); full capacity rejects, never queues. Active Jobs block file-tool writes, not reads. Serialize dependent/shared writers; no file isolation. Background returns jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. SSH background requires sessionId. Execution lifetime differs from result wait.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -471,7 +510,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
               minLength: 1,
               maxLength: MAX_SHELL_BYTES,
               description:
-                'Executable SSH shell script, not a display title; use with kind=shell. Workspace uses argv instead.',
+                'Executable shell script, not a display title; use with kind=shell on either Workspace or SSH. Workspace executes /bin/sh -c; SSH uses its remote command shell.',
             },
           },
           required: ['kind'],
@@ -501,8 +540,9 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     const command = commandValue(args.command);
     const resolved = await shell.resolve(context, selector);
     await shell.inspectSshSession(sessionContext, resolved);
-    const rawMode = args.mode === undefined ? 'foreground' : stringValue(args.mode, 16);
-    if (rawMode !== 'foreground' && rawMode !== 'background') throw new Error('TOOL_ARGUMENTS_INVALID');
+    const rawMode = args.mode === undefined ? 'foreground' : stringValue(args.mode, 16, 'mode');
+    if (rawMode !== 'foreground' && rawMode !== 'background')
+      invalidArgument('SHELL_MODE_INVALID', 'mode must be foreground or background.');
     const timeoutSeconds = positiveInteger(
       args.timeoutSeconds,
       selector.target === 'workspace'
@@ -511,8 +551,6 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
           ? 3600
           : Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
     );
-    if (selector.target === 'workspace' && command.kind !== 'argv') throw new Error('TOOL_ARGUMENTS_INVALID');
-    if (selector.target === 'ssh' && command.kind !== 'shell') throw new Error('TOOL_ARGUMENTS_INVALID');
     if (
       timeoutSeconds >
       (selector.target === 'workspace'
@@ -521,18 +559,18 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
           ? 86400
           : 300)
     )
-      throw new Error('TOOL_ARGUMENTS_INVALID');
+      invalidArgument(
+        'SHELL_TIMEOUT_EXCEEDED',
+        `timeoutSeconds exceeds the execution limit: ${selector.target === 'workspace' ? runnerJobLimits.maxExecutionTimeoutMs / 1000 : rawMode === 'background' ? 86400 : 300} seconds for this target/mode.`,
+      );
     if (selector.target === 'ssh' && rawMode === 'background' && args.sessionId === undefined)
       throw new Error('SSH_SESSION_REQUIRED');
-    if (selector.target === 'ssh' && args.cwd !== undefined) {
-      throw new Error('TOOL_ARGUMENTS_INVALID');
-    }
     const cwd =
-      selector.target === 'workspace'
-        ? args.cwd === undefined
+      args.cwd === undefined
+        ? selector.target === 'workspace'
           ? '/workspace/work'
-          : stringValue(args.cwd, MAX_CWD_BYTES)
-        : undefined;
+          : undefined
+        : stringValue(args.cwd, MAX_CWD_BYTES, 'cwd');
     const normalizedArguments: JsonValue = {
       target: resolved.selector.target,
       id: resolved.selector.id,

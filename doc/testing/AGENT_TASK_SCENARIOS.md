@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- 5.6 Luna low Run `1d065c16-081c-44ce-bdf3-ad98b9190edf` 已真实 completed：授权前文件全树 hash 不变，仅 config.json 键名修复；测试端独立验证 /health、/catalog 200 且内容正确、数据和其余文件 hash 不变、监听进程 cwd 属于本轮 Workspace；停止授权后 Job cancelled，独立 ss 确认 29175 无监听。保留一次漏传 PORT 的失败后纠正；原先将 Workspace Shell 脚本拒绝归为模型误用不准确，属于工具设计缺口。用户要求修复后，两目标均支持 argv/shellScript 与可选 cwd；Workspace 脚本仍通过受管 /bin/sh -c Job，SSH argv/cwd 安全引用，不伪造原生 argv transport。Shell 参数错误细分并带字段约束说明，Schema 反馈提供声明路径、不回显用户值。定向验证覆盖字面参数引用、脚本管道、危险命令门禁与 Job 生命周期；check 通过。此前隔离端口 SSH 插件 E2E 通过，但本次新双形式修改尚未获得真实模型或 canonical Actions 验收，不进入 A03。
 - 四项本地提交：`d90daa72`、`f27412bd`、`6d0fd730`、`bb91686a`，check/隔离全量 format/定向场景与三包 build 通过。5.6 Luna low Provider test 通过（2852ms）；Run `720beedc-2419-4023-bf6e-e7f923aa5327` 在 workspace_create 被 WORKSPACE_LIMIT_EXCEEDED 拒绝，未创建 Workspace 或注入项目，因错误 unknown 分类 interrupted。已定位 repository 容量检查在持久创建和 Runner 副作用前，改为明确未执行错误；定向真实数据库场景证明无新 Workspace/command 记录，不改容量或未知副作用安全门禁。仅核对并显式停止本轮遗留 A01/A02 三个已知测试 Workspace，不扩大清理范围。
 - 第三项已提交 `6d0fd730`。第四项参数校验反馈仅输出有界 Schema keyword、未执行和纠正指引，不回显输入；现有循环 warning 按原因给出下一步，不改变阈值、安全门禁或并发。定向场景证明旧字段拒绝包含可用纠正信息、canary 不泄漏且无 SSH 副作用；循环暂停/恢复场景通过。真实模型是否仍重复需后续验收。
 - 第二项字段重命名已本地提交 `f27412bd`，无兼容别名；第三项后台接纳与 running 反馈明确保留 jobId、健康检查/有界 wait、不重提启动获取结果，不按命令去重或限制并发。真实 Runner 生命周期场景与 check 通过；模型行为是否改善留待 5.6 Luna low 验证，不据提示文案声明重复启动已完全解决。

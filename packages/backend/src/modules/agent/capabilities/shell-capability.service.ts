@@ -13,6 +13,10 @@ import type { ToolContext, ToolPrecondition } from './tool.types';
 export type UnifiedShellCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; shellScript: string };
 export type UnifiedShellMode = 'foreground' | 'background';
 
+// SSH exec transports shell source, not a native argv vector. Quote every argument
+// independently so shell operators, substitutions and whitespace remain literal.
+const quoteShellArgument = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+
 export interface UnifiedShellExecutionRequest {
   command: UnifiedShellCommand;
   cwd?: string;
@@ -90,12 +94,11 @@ export class ShellCapabilityService {
     request: UnifiedShellExecutionRequest,
   ): Promise<UnifiedShellExecutionView> {
     if (target.selector.target === 'workspace') {
-      if (request.command.kind !== 'argv') throw new Error('TOOL_ARGUMENTS_INVALID');
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
       const call = {
         executionId: this.executionId(context, target),
-        argv: request.command.argv,
+        argv: request.command.kind === 'argv' ? request.command.argv : ['/bin/sh', '-c', request.command.shellScript],
         cwd: request.cwd ?? '/workspace/work',
         maxBytes: Math.max(1, Math.min(512 * 1024, Math.floor(context.maxOutputBytes / 2))),
         timeoutMs: request.timeoutSeconds * 1000,
@@ -104,9 +107,11 @@ export class ShellCapabilityService {
       return { target: target.selector, status: job.status, job, error: job.error };
     }
 
-    if (request.command.kind !== 'shell' || request.cwd !== undefined) {
-      throw new Error('TOOL_ARGUMENTS_INVALID');
-    }
+    const source =
+      request.command.kind === 'shell'
+        ? request.command.shellScript
+        : `exec ${request.command.argv.map(quoteShellArgument).join(' ')}`;
+    const shellScript = request.cwd === undefined ? source : `cd ${quoteShellArgument(request.cwd)} &&\n${source}`;
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     if (request.mode === 'background') {
@@ -116,7 +121,7 @@ export class ShellCapabilityService {
         connectionId,
         target.fingerprint.configurationHash,
         context.sshSessionId,
-        request.command.shellScript,
+        shellScript,
         request.timeoutSeconds,
         request.operationHash,
       );
@@ -125,7 +130,7 @@ export class ShellCapabilityService {
     const result = await this.sshShell.execute(
       context,
       connectionId,
-      request.command.shellScript,
+      shellScript,
       request.timeoutSeconds,
       target.fingerprint.configurationHash,
     );

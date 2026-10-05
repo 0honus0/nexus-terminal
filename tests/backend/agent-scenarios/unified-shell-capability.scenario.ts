@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import type { JsonValue, Scope } from '../../../packages/backend/src/modules/agent/agent.types';
 import { SshShellTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/capabilities/ssh-shell-target.adapter';
@@ -326,13 +327,77 @@ export const unifiedShellCapabilityScenario = async () => {
   );
   assert.equal(sshCalls.length, beforeInvalid);
 
+  const workspaceScript = 'printf "%s" "pipeline" | cat';
+  const workspaceScriptInspection = await executor.inspect(
+    context,
+    proposal('workspace-script', {
+      target: 'workspace',
+      id: 'ws-shell',
+      command: { kind: 'shell', shellScript: workspaceScript },
+    }),
+  );
+  await executor.executeMutation(context, workspaceScriptInspection);
+  assert.deepEqual(workspaceCalls.at(-1)?.argv, ['/bin/sh', '-c', workspaceScript]);
+  assert.equal(execFileSync('/bin/sh', ['-c', workspaceScript], { encoding: 'utf8' }), 'pipeline');
+  const destructiveScript = await executor.inspect(
+    context,
+    proposal('workspace-destructive-script', {
+      target: 'workspace',
+      id: 'ws-shell',
+      command: { kind: 'shell', shellScript: 'rm -rf scratch' },
+    }),
+  );
+  assert.equal(destructiveScript.risk, 'destructive');
+  await assert.rejects(
+    () =>
+      executor.inspect(
+        context,
+        proposal('workspace-forbidden-script', {
+          target: 'workspace',
+          id: 'ws-shell',
+          command: { kind: 'shell', shellScript: 'rm -rf /' },
+        }),
+      ),
+    /RESOURCE_FORBIDDEN/,
+  );
+  const literalArguments = ['', 'with spaces', "single'quote", '$(printf injected)', '; echo injected', '\n', '中文'];
+  const sshArgvInspection = await executor.inspect(
+    context,
+    proposal('ssh-argv', {
+      target: 'ssh',
+      id: '1',
+      cwd: '/tmp',
+      command: { kind: 'argv', argv: ['printf', '%s\\n', ...literalArguments] },
+    }),
+  );
+  await executor.executeMutation(context, sshArgvInspection);
+  assert.equal(
+    execFileSync('/bin/sh', ['-c', sshCalls.at(-1)!.command], { encoding: 'utf8' }),
+    literalArguments.join('\n') + '\n',
+  );
+  await assert.rejects(
+    () =>
+      executor.inspect(
+        context,
+        proposal('empty-executable', {
+          target: 'workspace',
+          id: 'ws-shell',
+          command: { kind: 'argv', argv: [''] },
+        }),
+      ),
+    (error: unknown) => {
+      const result = failedToolResult(error, {
+        fallbackCode: 'INVALID',
+        summaryPrefix: 'Rejected',
+        verificationSummary: 'Not executed.',
+      });
+      assert.equal(result.errorCode, 'SHELL_EXECUTABLE_EMPTY');
+      assert.match(result.summary, /command.argv\[0\]/);
+      return true;
+    },
+  );
   for (const [callId, input] of [
-    [
-      'workspace-shell-script',
-      { target: 'workspace', id: 'ws-shell', command: { kind: 'shell', shellScript: 'echo invalid' } },
-    ],
     ['retired-shell-text', { target: 'ssh', id: '1', command: { kind: 'shell', text: 'echo invalid' } }],
-    ['ssh-argv', { target: 'ssh', id: '1', command: { kind: 'argv', argv: ['echo', 'invalid'] } }],
     [
       'ssh-background',
       { target: 'ssh', id: '1', command: { kind: 'shell', shellScript: 'sleep 1' }, mode: 'background' },
