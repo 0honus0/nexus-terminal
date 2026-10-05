@@ -184,13 +184,12 @@ test('read-only delivery cannot bypass an unfinished future repair plan and can 
     'E2E_TASK_READONLY_FUTURE_REPAIR: deliver only a read-only report; future repair needs separate authorization.',
   );
   expect(result.text).toBe('Read-only report delivered. Future repair is not authorized and was not executed.');
-  expect(
-    result.ledger.some(
-      (entry) =>
-        entry.kind === 'system_notice' &&
-        (entry.payload as { reasonCode?: string }).reasonCode === 'COMPLETION_PLAN_INCOMPLETE',
-    ),
-  ).toBe(true);
+  const gateNotices = result.ledger.filter(
+    (entry) =>
+      entry.kind === 'system_notice' &&
+      (entry.payload as { reasonCode?: string }).reasonCode === 'COMPLETION_PLAN_INCOMPLETE',
+  );
+  expect(gateNotices).toHaveLength(1);
   expect(result.run.plan.items).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ id: 'readonly-report', status: 'completed' }),
@@ -199,6 +198,72 @@ test('read-only delivery cannot bypass an unfinished future repair plan and can 
   );
   expect(result.run.usage.toolExecutions).toBe(2);
   expect(result.run.needsReconciliation).toBe(false);
+});
+
+test('unfinished current work recovers from the completion gate by suspending for input, not cancelling required work', async ({
+  request,
+}) => {
+  const context = await prepare(request);
+  const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
+    data: {
+      schemaVersion: 1,
+      threadId: context.threadId,
+      input: {
+        text: 'E2E_TASK_GATE_INPUT_RECOVERY: ask me to choose a report format before delivering it.',
+        artifactRefs: [],
+      },
+      agentDefinitionId: 'agent.default',
+      model: context.model,
+      approvalMode: 'full_access',
+      executionMode: 'execute',
+      connectionIds: [],
+    },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  const id = (await created.json()).data.id;
+  const readRun = async () => (await (await request.get(`/api/v1/apps/nexus.agent/runs/${id}`)).json()).data;
+  await expect.poll(async () => (await readRun()).status, { timeout: 30_000 }).toBe('awaiting_input');
+  const paused = await readRun();
+  expect(paused.pendingInputRequest.questions).toEqual([
+    expect.objectContaining({ id: 'report_format', kind: 'text' }),
+  ]);
+  expect(paused.plan.items).toEqual([expect.objectContaining({ id: 'report-format', status: 'blocked' })]);
+  expect(paused.usage.toolExecutions).toBe(2);
+  const answered = await request.post(`/api/v1/apps/nexus.agent/runs/${id}/inputs`, {
+    headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
+    data: { schemaVersion: 1, expectedVersion: paused.version, text: 'report_format: concise', artifactRefs: [] },
+  });
+  expect(answered.status(), await answered.text()).toBe(202);
+  await expect.poll(async () => (await readRun()).status, { timeout: 30_000 }).toMatch(/^completed/);
+  const resumed = await readRun();
+  expect(resumed.id).toBe(id);
+  expect(resumed.pendingInputRequest).toBeNull();
+  expect(resumed.plan.items).toEqual([expect.objectContaining({ id: 'report-format', status: 'completed' })]);
+  expect(resumed.usage.toolExecutions).toBe(3);
+  expect(resumed.needsReconciliation).toBe(false);
+  const ledger = (
+    await (await request.get(`/api/v1/apps/nexus.agent/threads/${context.threadId}/entries?limit=100`)).json()
+  ).data.items;
+  expect(
+    ledger.filter(
+      (entry: { kind: string; payload: { reasonCode?: string } }) =>
+        entry.kind === 'system_notice' && entry.payload.reasonCode === 'COMPLETION_PLAN_INCOMPLETE',
+    ),
+  ).toHaveLength(1);
+  expect(
+    ledger
+      .filter((entry: { kind: string }) => entry.kind === 'tool_result')
+      .map((entry: { payload: { text: string } }) => JSON.parse(entry.payload.text).ok),
+  ).toEqual([true, true, true]);
+  expect(
+    ledger
+      .filter(
+        (entry: { kind: string; payload: { text?: string } }) =>
+          entry.kind === 'assistant_message' && entry.payload.text,
+      )
+      .at(-1).payload.text,
+  ).toBe('Report format: concise.');
 });
 
 test('recorded JSON and marker cases preserve exact output through a later task in the same thread', async ({

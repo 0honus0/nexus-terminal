@@ -72,7 +72,7 @@ export const completionGateDecision = (
     return repeatedGateFailure(
       evidence,
       'COMPLETION_PLAN_INCOMPLETE',
-      `Completion gate blocked: the durable Run plan still has unfinished item(s): ${ids}. Finish, cancel, or update those items before completing the Run.`,
+      `Completion gate blocked: the durable Run plan still has unfinished item(s): ${ids}. Reconcile each item with the current user-requested deliverable: continue authorized current work; cancel only out-of-scope future work and describe it as an optional next step; or call user_input_request and suspend if current work needs user authorization or clarification. A blocked Plan item is not a pending user-input request. Do not mark unexecuted work completed, infer authorization, or cancel required work merely to pass this gate. Do not submit a final response while current work is pending.`,
     );
   }
 

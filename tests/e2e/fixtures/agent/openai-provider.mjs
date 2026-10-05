@@ -306,6 +306,73 @@ const server = http.createServer(async (request, response) => {
     }
     return;
   }
+  if (serializedMessages.includes('E2E_TASK_GATE_INPUT_RECOVERY')) {
+    const proposed = messages.some(
+      (message) => message.role === 'tool' && message.tool_call_id === 'call_gate_input_plan',
+    );
+    const requested = messages.some(
+      (message) => message.role === 'tool' && message.tool_call_id === 'call_gate_input_request',
+    );
+    const settled = messages.some(
+      (message) => message.role === 'tool' && message.tool_call_id === 'call_gate_input_settle',
+    );
+    const answered = messages.some(
+      (message) => message.role === 'user' && String(message.content ?? '').includes('report_format: concise'),
+    );
+    const gateBlocked = messages.some(
+      (message) => message.role === 'system' && String(message.content ?? '').includes('Completion gate blocked:'),
+    );
+    if (!proposed || (requested && answered && !settled)) {
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: proposed ? 'call_gate_input_settle' : 'call_gate_input_plan',
+              type: 'function',
+              function: {
+                name: 'plan_update',
+                arguments: JSON.stringify({
+                  items: [
+                    {
+                      id: 'report-format',
+                      title: 'Ask the user to choose the current report format',
+                      status: proposed ? 'completed' : 'blocked',
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+    } else if (gateBlocked && !requested) {
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_gate_input_request',
+              type: 'function',
+              function: {
+                name: 'user_input_request',
+                arguments: JSON.stringify({
+                  questions: [{ id: 'report_format', prompt: 'Choose the report format', kind: 'text' }],
+                }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+    } else {
+      regressionResponse(response, { content: settled ? 'Report format: concise.' : 'Report format is pending.' });
+    }
+    return;
+  }
   if (latestUserText.includes('E2E_TASK_READONLY_FUTURE_REPAIR')) {
     const proposed = messages.some(
       (message) => message.role === 'tool' && message.tool_call_id === 'call_task_future_plan',
@@ -313,7 +380,9 @@ const server = http.createServer(async (request, response) => {
     const corrected = messages.some(
       (message) => message.role === 'tool' && message.tool_call_id === 'call_task_cancel_future',
     );
-    const gateBlocked = serializedMessages.includes('Completion gate blocked: the durable Run plan');
+    const gateBlocked = messages.some(
+      (message) => message.role === 'system' && String(message.content ?? '').includes('Completion gate blocked:'),
+    );
     if (!proposed || (gateBlocked && !corrected)) {
       const correcting = proposed && gateBlocked;
       regressionResponse(

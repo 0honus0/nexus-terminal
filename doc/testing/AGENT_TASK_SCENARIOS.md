@@ -176,8 +176,8 @@
 - 本地环境：已完成 frozen-lockfile 依赖安装，恢复测试 Backend 3001 和 Frontend 9998；现有数据库未重置。CDP 页面 API 已恢复，Runner availability 为 available/native/logical。真实 Provider 配置及 Workspace catalog 可读取；凭据不进入文档或 fixture。
 - startup-failure fixture 已验证能触发 `CONFIG_CATALOG_PATH_INVALID`；尚未由 Agent 完成修复。其故障是 config.json 使用 catalogFile，而应用校验 catalogPath；不能通过移除校验或改业务数据“修复”。
 - A01/A02 前置 Run：`0b6601dd-dc5f-40b6-8207-693b2f1296c8`，Thread `8e3ee4fd-6748-42a0-8ef5-3f58f35815ac`。真实模型已创建并启动本轮 Workspace `fefdce7b-1b2a-4fdd-896c-311fe91353d7`（generation 1），更新 Plan，进入 awaiting_input。结构化请求 `beadf623-a784-40fc-8234-91b6c92b2bda` 等待项目来源、目标、边界和准备确认；前置期间无项目写入／应用运行。此结果只是前置准备，不是 A01/A02 通过。
-- 下一步：向上述独立 Workspace 注入 fixture，测试端保存文件 hash 基线；回答只读接手目标，观察真实调查并核对文件不变（A01）；随后授权修复启动并验收两接口、数据 hash、改动范围与停止／清理（A02）；将有效输入与工具过程脱敏、最小化后直接进入 Agent E2E。不新增报告解析器或独立实测数据集。
-- 剩余场景：A01 本地真实任务与新增回归已通过，检查／提交及远程验收见后续状态；A02 暂停，A03–A08、B–K 未开始。无新增生产修复或本轮远程 Actions 验收，不得推断整体完成。
+- 当前接续：A01 回归与生产范围指令已分别提交 `1b99bc79`、`1bc2b067`，真实原始表达验证通过；本轮补强门禁恢复反馈，检查通过后单独提交再继续 A02。历史 Workspace 不复用为新 Run 授权目标。不新增报告解析器或独立实测数据集。
+- 剩余场景：A01 本地真实任务与回归已通过，生产修复及最新优化见后续状态；A02 暂停，A03–A08、B–K 未开始。本轮远程 Actions 未送验，不得推断整体完成。
 - A01 首次运行结果：模型完成了有事实依据的只读报告，正确指出 catalogFile/catalogPath 不匹配；数据、规则、README、配置经测试端核对字节未变。但模型将未来未授权修复加入 blocked Plan，最终两次提交报告均被 Completion Gate 拒绝，Run 以 `COMPLETION_GATE_UNSATISFIED` failed。因此 A01 **未通过**，不把报告正确当作完整成功。下一步将“本次只读任务完成／未来修复未授权”的边界转成回归，核对是否需改善模型指令或完成语义，不能直接放行未完成 Plan。两个 `RUN_PLAN_INVALID` 为模型提交不合法 Plan 后自行修正；调查期出现 `long_window_no_progress`，尚待核对是否误报，不声称已修复。
 - 本轮 `pnpm run check` 已通过；格式、完整构建和远程 Actions 尚未验收。
 - 已将首次 A01 观察转为 `functional-regressions.spec.ts` 的模拟回归：故意提交已完成只读报告＋blocked 未来修复 Plan，独立断言 Completion Gate 确实拒绝；模拟模型随后取消未授权的未来项，验证无需执行修复即可结算当前任务。相关本地 8 passed（12.9 秒）。该用例验证安全边界及可恢复路径，不冒充再次真实 A01 通过。当前未改生产 Completion Gate，不放宽未完成 Plan 判据。
@@ -197,6 +197,9 @@
 - 修复后原始失败表达真实验证：Run `062cdb3b-7cd1-488a-bfe2-4341b4139b92`、Thread `181440ea-7272-4500-9456-7607d2ad944f`、Workspace `67a5b776-843f-4440-a138-078aaf0b3e55`。未追加“修复属于另一个任务”等测试提示，按首次原文“先完成分析报告，然后等待新的修复授权”运行，结果 completed；模型将未来授权项 cancelled 并在报告说明后续步骤。递归文件核对全部字节／目录项不变。相关 9 个 E2E 在修改后的 Backend 下通过，主目录 check 通过；待隔离全量格式／构建后单独提交修复，远程仍未验收。
 - 本次前置环境曾触发 WORKSPACE_LIMIT_EXCEEDED 并被标为未知结果；该 Run 未创建 Workspace，未盲目重放。已通过公开管理 API 删除本轮三个已结束测试 Workspace 并确认 deleted 后重新准备，不操作其他资源。该错误分类作为后续待调查观察，不计 A01 指令缺陷，也未声称修复。
 - A01 修复提交前最终检查：含生产指令修复的隔离工作区 check、全量 format、三包 build 全部通过；本地真实原始表达与 9 个相关 E2E 通过。单独提交此修复后方可继续 A02；canonical Actions 未推送／未验收，仍是交付缺口。
+- A01 当前优化：未完成 Plan 的门禁反馈明确区分继续已授权工作、仅取消范围外未来建议、user_input_request 挂起等待当前任务输入；禁止伪造完成或为过门禁取消必要工作。不改变拒绝判据、状态转换或资源授权。补充模拟模型 E2E，验证实际门禁拒绝→blocked 保留→awaiting_input→用户回答→同 Run completed；现有未来项取消回归保留。断言公开 reasonCode、Plan、输入请求、Ledger 和工具执行结果，不锁定提示词措辞。测试首次漏 Idempotency-Key 已修正；改用 reasonCode 驱动模拟后发现模型上下文仅投影 notice 文本、不含该字段，已改为识别门禁消息类别，不修改生产 Context。真实模型原始表达证据沿用 `1bc2b067` 验证，本轮不冒充新增真实模型验证；最终回归结果与本地提交随后记录，A02 仍暂停。
+
+- A01 门禁反馈优化最终本地验收：相关 10 个 E2E passed（14.9 秒）；最终测试文件在隔离工作区 check／全量格式通过，生产代码及 USAGE 的三包 build 已通过，git diff --check 通过。准备单独提交；未推送、无对应 SHA canonical Actions，不标记远程验收通过。此次未验证已结束 Run 的 Workspace 接续，不扩大权限或声称该路径已解决。
 
 ### 临时文档退出条件
 
