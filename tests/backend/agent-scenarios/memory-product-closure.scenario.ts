@@ -16,7 +16,13 @@ import { MemoryService } from '../../../packages/backend/src/modules/agent/ai/me
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
 import { validateManifest } from '../../../packages/backend/src/modules/agent/host/app-manifest-validator';
 import { createMemoryProposeTool } from '../../../packages/backend/src/modules/agent/tools/host/collaboration-tools';
-import functionalData from '../../agent-functional/RESUME_DATASET.json';
+const memoryProposals = [0, 0.5, 0.8, 1].map((confidence) => ({
+  id: `memory-confidence-${confidence}`,
+  content: `regression memory confidence ${confidence}`,
+  sourceRefs: { kind: 'regression' },
+  confidence,
+  expiresAt: null,
+}));
 import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 
 export const memoryProductClosureScenario = async () => {
@@ -120,7 +126,7 @@ export const memoryProductClosureScenario = async () => {
     const candidate = await memoryRepository.get(sourceScope, (proposal.data as { id: string }).id);
     assert.ok(candidate);
     assert.equal(candidate.confidence, 0.8);
-    for (const fixture of functionalData.regressionInputs.memoryProposals) {
+    for (const fixture of memoryProposals) {
       const { id: _id, ...argumentsValue } = fixture;
       const checked = await tool.inspect(argumentsValue, context, 1);
       const submitted = await tool.execute(checked, context);

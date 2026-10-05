@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import functionalData from '../../agent-functional/RESUME_DATASET.json';
+const filePermissions = [
+  { id: 'private-default', mode: null, expectedMode: 0o600 },
+  { id: 'explicit-private', mode: 0o600, expectedMode: 0o600 },
+  { id: 'explicit-group-readable', mode: 0o640, expectedMode: 0o640 },
+  { id: 'explicit-world-readable', mode: 0o644, expectedMode: 0o644 },
+];
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -474,7 +479,7 @@ export const unifiedFileCapabilityScenario = async () => {
     }
 
     const fileWriteTool = tools.get('file_write');
-    for (const fixture of functionalData.regressionInputs.filePermissions) {
+    for (const fixture of filePermissions) {
       const file = `/workspace/work/${fixture.id}.txt`;
       await invoke('file_write', {
         target: 'workspace',

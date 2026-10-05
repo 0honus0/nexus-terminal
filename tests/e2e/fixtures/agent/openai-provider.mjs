@@ -1,5 +1,5 @@
 import http from 'node:http';
-import functionalData from '../../../agent-functional/RESUME_DATASET.json' with { type: 'json' };
+import regressionInputs from './regression-inputs.json' with { type: 'json' };
 
 const host = '127.0.0.1';
 const port = Number(process.env.NEXUS_E2E_OPENAI_PROVIDER_PORT || 29091);
@@ -260,50 +260,25 @@ const server = http.createServer(async (request, response) => {
       return;
     }
   }
-  const outputCase = functionalData.regressionInputs.modelOutputs.find((fixture) =>
-    latestUserText.includes(fixture.marker),
-  );
+  const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
   if (outputCase) {
     regressionResponse(response, { content: outputCase.expected });
     return;
   }
-  const memoryCase = functionalData.regressionInputs.memoryProposals.find((fixture) =>
+  const memoryCase = regressionInputs.memoryProposals.find((fixture) =>
     latestUserText.includes(`E2E_REGRESSION_${fixture.id}:`),
   );
   const deadlineCase = latestUserText.includes('E2E_REGRESSION_DEADLINE_SENTINEL');
-  if (memoryCase || deadlineCase) {
-    const callId = 'call_e2e_regression';
+  const clarificationCase = serializedMessages.includes('E2E_REGRESSION_CLARIFICATION_UI');
+  if (clarificationCase) {
+    const callId = 'call_e2e_clarification';
     const received = messages.find((message) => message.role === 'tool' && message.tool_call_id === callId);
-    if (received) {
-      const result = JSON.parse(received.content);
-      regressionResponse(response, {
-        content: JSON.stringify(
-          memoryCase
-            ? {
-                id: result.data?.id,
-                confidence: result.data?.confidence,
-                status: result.data?.status,
-                errorCode: result.errorCode,
-              }
-            : { errorCode: result.errorCode },
-        ),
-      });
-    } else {
-      const { id: _id, ...memoryArguments } = memoryCase ?? {};
-      const args = memoryCase
-        ? memoryArguments
-        : {
-            profileId: 'regression-deadline',
-            objective: 'Return 42.',
-            constraints: [],
-            inputArtifactRefs: [],
-            maxModelRequests: 3,
-            deadlineAt: functionalData.regressionInputs.deadlines.rejectedSentinel,
-            completionCriteria: ['Return 42.'],
-            dependsOn: [],
-            dependencyMode: 'success',
-            idempotencyKey: '11111111-1111-4111-8111-111111111111',
-          };
+    const answered = messages.some(
+      (message) => message.role === 'user' && String(message.content ?? '').includes('deployment_color: green'),
+    );
+    if (received && answered) {
+      regressionResponse(response, { content: 'CHOSEN:green' });
+    } else if (!received) {
       regressionResponse(
         response,
         {
@@ -313,7 +288,125 @@ const server = http.createServer(async (request, response) => {
               id: callId,
               type: 'function',
               function: {
-                name: memoryCase ? 'memory_propose' : 'collaboration_subagent_delegate',
+                name: 'user_input_request',
+                arguments: JSON.stringify({
+                  questions: [
+                    {
+                      id: 'deployment_color',
+                      prompt: 'Choose deployment color',
+                      kind: 'choice',
+                      choices: [
+                        { value: 'blue', label: 'Blue' },
+                        { value: 'green', label: 'Green' },
+                      ],
+                      recommendedChoice: 'green',
+                      context: 'This is required to continue.',
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+    } else {
+      regressionResponse(response, { content: 'WAITING_FOR_ANSWER' });
+    }
+    return;
+  }
+  if (memoryCase) {
+    const searchCallId = 'call_e2e_memory_search';
+    const invokeCallId = 'call_e2e_memory_invoke';
+    const searchResultMessage = messages.find(
+      (message) => message.role === 'tool' && message.tool_call_id === searchCallId,
+    );
+    const invokeResultMessage = messages.find(
+      (message) => message.role === 'tool' && message.tool_call_id === invokeCallId,
+    );
+    if (invokeResultMessage) {
+      const result = JSON.parse(invokeResultMessage.content);
+      regressionResponse(response, {
+        content: JSON.stringify({
+          id: result.data?.id,
+          confidence: result.data?.confidence,
+          status: result.data?.status,
+          errorCode: result.errorCode,
+        }),
+      });
+    } else if (searchResultMessage) {
+      const searchResult = JSON.parse(searchResultMessage.content);
+      const handle = searchResult.data?.matches?.[0]?.handle;
+      const { id: _id, ...memoryArguments } = memoryCase;
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: invokeCallId,
+              type: 'function',
+              function: {
+                name: 'tool_invoke',
+                arguments: JSON.stringify({ handle, arguments: memoryArguments }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+    } else {
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: searchCallId,
+              type: 'function',
+              function: {
+                name: 'tool_search',
+                arguments: JSON.stringify({ query: 'memory_propose', limit: 1 }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+    }
+    return;
+  }
+  if (deadlineCase) {
+    const callId = 'call_e2e_regression';
+    const received = messages.find((message) => message.role === 'tool' && message.tool_call_id === callId);
+    if (received) {
+      const result = JSON.parse(received.content);
+      regressionResponse(response, {
+        content: JSON.stringify({ errorCode: result.errorCode }),
+      });
+    } else {
+      const args = {
+        profileId: 'regression-deadline',
+        objective: 'Return 42.',
+        constraints: [],
+        inputArtifactRefs: [],
+        maxModelRequests: 3,
+        deadlineAt: regressionInputs.deadlines.rejectedSentinel,
+        completionCriteria: ['Return 42.'],
+        dependsOn: [],
+        dependencyMode: 'success',
+        idempotencyKey: '11111111-1111-4111-8111-111111111111',
+      };
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: callId,
+              type: 'function',
+              function: {
+                name: 'collaboration_subagent_delegate',
                 arguments: JSON.stringify(args),
               },
             },

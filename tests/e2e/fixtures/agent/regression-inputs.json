@@ -1,0 +1,47 @@
+{
+  "modelOutputs": [
+    {
+      "id": "exact-json",
+      "marker": "E2E_REGRESSION_EXACT_JSON",
+      "input": "只输出原始JSON {\"marker\":\"E2E_REGRESSION_EXACT_JSON\",\"sum\":42,\"items\":[\"中文\",\"hello\"]}，不要工具、围栏或解释。",
+      "expected": "{\"marker\":\"E2E_REGRESSION_EXACT_JSON\",\"sum\":42,\"items\":[\"中文\",\"hello\"]}"
+    },
+    {
+      "id": "latest-marker",
+      "marker": "E2E_REGRESSION_LATEST_MARKER",
+      "input": "新任务替代前一轮输出要求：只输出 E2E_REGRESSION_LATEST_MARKER，不调用工具，不解释。",
+      "expected": "E2E_REGRESSION_LATEST_MARKER"
+    }
+  ],
+  "memoryProposals": [
+    {
+      "id": "memory-confidence-0",
+      "content": "regression memory confidence 0",
+      "sourceRefs": { "kind": "regression" },
+      "confidence": 0,
+      "expiresAt": null
+    },
+    {
+      "id": "memory-confidence-0.5",
+      "content": "regression memory confidence 0.5",
+      "sourceRefs": { "kind": "regression" },
+      "confidence": 0.5,
+      "expiresAt": null
+    },
+    {
+      "id": "memory-confidence-0.8",
+      "content": "regression memory confidence 0.8",
+      "sourceRefs": { "kind": "regression" },
+      "confidence": 0.8,
+      "expiresAt": null
+    },
+    {
+      "id": "memory-confidence-1",
+      "content": "regression memory confidence 1",
+      "sourceRefs": { "kind": "regression" },
+      "confidence": 1,
+      "expiresAt": null
+    }
+  ],
+  "deadlines": { "rejectedSentinel": 4102444800 }
+}

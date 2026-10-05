@@ -1459,6 +1459,7 @@ test('Agent WebSocket replays durable Host events after a disconnect', async ({ 
 test('Agent Host event stream elects one cross-tab leader', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await enableAgentWithRecommendedNexusAgent(context.request);
+  const csrf = await csrfToken(context.request);
 
   const leaderSocketPromise = page.waitForEvent('websocket', {
     predicate: (socket) => new URL(socket.url()).pathname === '/ws/agent',
@@ -1473,8 +1474,19 @@ test('Agent Host event stream elects one cross-tab leader', async ({ page, conte
     if (new URL(socket.url()).pathname === '/ws/agent') followerSockets += 1;
   });
   await follower.goto('/connections');
+  await expect(follower.getByRole('button', { name: 'Open Agent', exact: true })).toBeVisible();
+  await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  await expect(follower.locator('section[aria-label="Agent"]')).toBeVisible();
   await follower.waitForTimeout(750);
   expect(followerSockets).toBe(0);
+
+  const externalThreadTitle = `E2E Cross-tab Thread ${Date.now()}`;
+  const createdThread = await context.request.post('/api/v1/apps/nexus.agent/threads', {
+    headers: { 'X-Nexus-CSRF': csrf },
+    data: { title: externalThreadTitle },
+  });
+  expect(createdThread.status(), await createdThread.text()).toBe(201);
+  await expect(follower.getByText(externalThreadTitle, { exact: true })).toBeVisible();
 
   await page.close();
   await expect.poll(() => followerSockets, { timeout: 10_000 }).toBe(1);

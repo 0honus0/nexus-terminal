@@ -165,15 +165,21 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
   };
   const shellTargets = new AgentTargetResolver(toolRepository, null!, toolCrypto);
   let created = false;
+  let deletedAfterCreate = false;
   const createRepository = {
-    listWorkspaces: async () => (created ? [toolWorkspace] : []),
+    listWorkspaces: async () =>
+      created ? [{ ...toolWorkspace, status: deletedAfterCreate ? ('deleted' as const) : toolWorkspace.status }] : [],
   } as unknown as AgentWorkspaceRepositoryPort;
   const createRuntime = {
-    createWorkspace: async (...args: Parameters<WorkspaceRuntimeService['createWorkspace']>) => {
+    createWorkspaceWithReplay: async (...args: Parameters<WorkspaceRuntimeService['createWorkspaceWithReplay']>) => {
       assert.deepEqual(args[7], toolContext.environment, 'creation must execute the frozen environment');
       assert.equal(args[8], true, 'model tools must await terminal provisioning');
+      if (created) {
+        assert.equal(deletedAfterCreate, true, 'only a deleted Workspace may reach the idempotent replay path');
+        return { workspace: { ...toolWorkspace, status: 'deleted' as const }, replayed: true };
+      }
       created = true;
-      return { ...toolWorkspace, status: 'ready' as const };
+      return { workspace: { ...toolWorkspace, status: 'ready' as const }, replayed: false };
     },
   } as unknown as WorkspaceRuntimeService;
   const createCatalog = new ToolCatalog();
@@ -198,6 +204,18 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
   assert.equal(createdResult.outcome, 'confirmed');
   assert.equal(createdResult.verification.status, 'verified');
   await assert.rejects(() => createExecutor.refreshInspection(toolContext, refreshedCreate), /WORKSPACE_EXISTS/);
+  deletedAfterCreate = true;
+  const replayInspection = await createExecutor.inspect(toolContext, {
+    providerCallId: 'create-idempotent-replay-after-delete',
+    name: 'workspace_create',
+    argumentsJson: '{}',
+  });
+  assert.equal(replayInspection.operationHash, createInspection.operationHash);
+  const replayResult = await createExecutor.executeMutation(toolContext, replayInspection);
+  assert.equal(replayResult.ok, false);
+  assert.equal(replayResult.outcome, 'confirmed');
+  assert.equal(replayResult.errorCode, 'WORKSPACE_CREATE_REPLAYED');
+  assert.equal(replayResult.verification.status, 'failed');
   const lifecycleRuntime = {
     action: async (...args: Parameters<WorkspaceRuntimeService['action']>) => {
       assert.equal(args[3], toolWorkspace.version);

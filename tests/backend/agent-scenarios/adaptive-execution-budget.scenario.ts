@@ -22,7 +22,7 @@ import { SqliteSubagentRepository } from '../../../packages/backend/src/infrastr
 import { SubagentService } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent.service';
 import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
 import { AgentEventHub } from '../../../packages/backend/src/modules/agent/runtime/events/event-hub';
-import functionalData from '../../agent-functional/RESUME_DATASET.json';
+const deadlines = { allowedSeconds: 90, rejectedSentinel: 4102444800, rejectedChildSeconds: 120 };
 import type { ToolInspection, ToolResult } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 import type { RunView } from '../../../packages/backend/src/modules/agent/runtime/runs/run.types';
 import { clock, emptyModelContinuations, scope } from './scenario-fixtures';
@@ -251,7 +251,7 @@ export const adaptiveExecutionBudgetScenario = async () => {
       constraints: [],
       inputArtifactRefs: [],
       maxModelRequests: 3,
-      deadlineAt: now + functionalData.regressionInputs.deadlines.allowedSeconds,
+      deadlineAt: now + deadlines.allowedSeconds,
       completionCriteria: ['Return 42.'],
       dependsOn: [],
       dependencyMode: 'success',
@@ -262,7 +262,7 @@ export const adaptiveExecutionBudgetScenario = async () => {
           scope,
           deadlineRun.run.id,
           deadlineRun.runtimeId,
-          { ...deadlineInput, deadlineAt: functionalData.regressionInputs.deadlines.rejectedSentinel },
+          { ...deadlineInput, deadlineAt: deadlines.rejectedSentinel },
           randomUUID(),
         ),
       /VALIDATION_FAILED/,
@@ -276,7 +276,7 @@ export const adaptiveExecutionBudgetScenario = async () => {
       deadlineInput,
       deadlineKey,
     );
-    assert.equal(child.deadlineAt, now + functionalData.regressionInputs.deadlines.allowedSeconds);
+    assert.equal(child.deadlineAt, now + deadlines.allowedSeconds);
     assert.equal(
       (await deadlineService.create(scope, deadlineRun.run.id, deadlineRun.runtimeId, deadlineInput, deadlineKey)).id,
       child.id,
@@ -287,7 +287,7 @@ export const adaptiveExecutionBudgetScenario = async () => {
           scope,
           deadlineRun.run.id,
           child.childRuntimeId,
-          { ...deadlineInput, deadlineAt: now + functionalData.regressionInputs.deadlines.rejectedChildSeconds },
+          { ...deadlineInput, deadlineAt: now + deadlines.rejectedChildSeconds },
           randomUUID(),
         ),
       /VALIDATION_FAILED/,

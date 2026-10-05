@@ -14,7 +14,6 @@ import { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent
 import type { MutationLeaseGuardHandle } from '../../../packages/backend/src/modules/agent/runtime/execution/mutation-lease-guard.port';
 import { ToolCallRunner } from '../../../packages/backend/src/modules/agent/runtime/execution/tool-call-runner';
 import { ToolMutationNotStartedError } from '../../../packages/backend/src/modules/agent/capabilities/tool-mutation-not-started.error';
-import functionalData from '../../agent-functional/RESUME_DATASET.json';
 
 export const mutationOutputProjectionScenario = async () => {
   const catalog = new ToolCatalog();
@@ -117,7 +116,7 @@ export const mutationOutputProjectionScenario = async () => {
     largeTool('scenario_acp_mutation', 'acp'),
     largeTool('scenario_workspace_mutation', 'workspace'),
   ];
-  const rejectionTools = functionalData.regressionInputs.preExecutionRejections.map((code): AgentTool => ({
+  const rejectionTools = ['BROWSER_URL_DENIED', 'WORKSPACE_JOB_ACTIVE_CONFLICT'].map((code): AgentTool => ({
     ...interruptedTool,
     descriptor: { ...interruptedTool.descriptor, name: `scenario_rejected_${code}` },
     execute: async () => {

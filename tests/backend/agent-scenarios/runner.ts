@@ -33,6 +33,7 @@ import { subagentMailboxTtlScenario } from './subagent-mailbox-ttl.scenario';
 import { progressAwareLoopGuardScenario } from './progress-aware-loop-guard.scenario';
 import { appDisableScopeScenario } from './app-disable-scope.scenario';
 import { confirmedMutationLeaseFinalizationScenario } from './confirmed-mutation-lease-finalization.scenario';
+import { cancelRunningToolSettleScenario } from './cancel-running-tool-settle.scenario';
 import { mcpProtocolSurfaceScenario } from './mcp-protocol-surface.scenario';
 import { integrationHealthRetryScenario } from './integration-health-retry.scenario';
 import { idempotencyTtlScenario } from './idempotency-ttl.scenario';
@@ -151,6 +152,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/subagent-profile-strategy', subagentProfileStrategyScenario],
   ['runtime/subagent-governed-mutation', subagentGovernedMutationScenario],
   ['runtime/confirmed-mutation-lease-finalization', confirmedMutationLeaseFinalizationScenario],
+  ['runtime/cancel-running-tool-settle', cancelRunningToolSettleScenario],
   ['runtime/mutation-output-projection', mutationOutputProjectionScenario],
   ['storage/artifact-lifecycle-settings', artifactLifecycleSettingsScenario],
   ['recovery/checkpoint-workspace-evidence', checkpointWorkspaceEvidenceScenario],
