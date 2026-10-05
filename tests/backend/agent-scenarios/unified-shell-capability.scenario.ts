@@ -15,6 +15,7 @@ import { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent
 import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
 import { createUnifiedShellTools } from '../../../packages/backend/src/modules/agent/tools/host/shell-tools';
 import type { WorkspaceShellTargetPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-shell-target.port';
+import { failedToolResult } from '../../../packages/backend/src/modules/agent/runtime/execution/execution-errors';
 
 export const unifiedShellCapabilityScenario = async () => {
   let workspaceGeneration = 3;
@@ -299,6 +300,31 @@ export const unifiedShellCapabilityScenario = async () => {
   await assert.rejects(() => executor.executeMutation(context, sshOneInspection), CommandExecutionError);
   sshSignal = undefined;
   assert.equal((await executor.executeMutation(context, sshOneInspection)).ok, true);
+  const beforeInvalid = sshCalls.length;
+  await assert.rejects(
+    () =>
+      executor.inspect(
+        context,
+        proposal('invalid-field-feedback', {
+          target: 'ssh',
+          id: '1',
+          command: { kind: 'shell', text: 'private-command-canary' },
+        }),
+      ),
+    (error: unknown) => {
+      const result = failedToolResult(error, {
+        fallbackCode: 'MODEL_TOOL_CALL_INVALID',
+        summaryPrefix: 'Rejected',
+        verificationSummary: 'Not executed.',
+      });
+      assert.equal(result.errorCode, 'TOOL_ARGUMENTS_INVALID');
+      assert.match(result.summary, /additionalProperties/);
+      assert.match(result.summary, /not executed/);
+      assert.ok(!JSON.stringify(result).includes('private-command-canary'));
+      return true;
+    },
+  );
+  assert.equal(sshCalls.length, beforeInvalid);
 
   for (const [callId, input] of [
     [

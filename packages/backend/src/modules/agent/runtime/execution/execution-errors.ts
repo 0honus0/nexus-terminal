@@ -17,6 +17,8 @@ export const executionErrorCode = (error: unknown, fallbackCode: string): string
 };
 
 const ERROR_DETAILS: Readonly<Record<string, string>> = {
+  TOOL_ARGUMENTS_INVALID:
+    'Arguments are invalid; no operation was executed. Check the tool schema and target-specific fields before retrying. shell_execute uses Workspace kind=argv/argv or SSH kind=shell/shellScript; neither command field is a display title.',
   ABORTED: 'The operation was interrupted before it completed.',
   LEASE_CONFLICT: 'Another active operation currently holds the required resource lease.',
   LEASE_LOST: 'The resource lease was lost while the operation was still in progress.',
