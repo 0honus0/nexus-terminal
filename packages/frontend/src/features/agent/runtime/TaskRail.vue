@@ -67,8 +67,8 @@
     resumeCheckpoint: [snapshot: AgentRunViewDto | AgentRunSnapshotDto, checkpoint: AgentCheckpointViewDto];
     increaseBudget: [
       increase: Partial<{
-        maxRunSteps: number;
-        maxActiveExecutionSeconds: number;
+        maxSubagentMessages: number;
+        maxSubagentMessageBytes: number;
       }>,
     ];
   }>();
@@ -267,22 +267,31 @@
   });
   const targetLabel = (id: number): string => targetLabels.value.get(id) ?? `#${id}`;
 
+  const canIncreaseMailbox = computed(() =>
+    Boolean(
+      props.current &&
+      props.hardLimits &&
+      (props.current.budget.maxSubagentMessages < props.hardLimits.maxSubagentMessagesPerRun ||
+        props.current.budget.maxSubagentMessageBytes < props.hardLimits.maxSubagentMessageBytesPerRun),
+    ),
+  );
+
   const increase = (): void => {
     const run = props.current;
     const hard = props.hardLimits;
     if (!run || !hard) return;
     const next: Partial<{
-      maxRunSteps: number;
-      maxActiveExecutionSeconds: number;
+      maxSubagentMessages: number;
+      maxSubagentMessageBytes: number;
     }> = {};
     const raise = (current: number, ceiling: number): number | undefined => {
       if (current >= ceiling) return undefined;
       return Math.min(ceiling, Math.max(current + 1, Math.ceil(current * 1.5)));
     };
-    const steps = raise(run.budget.maxRunSteps, hard.maxRunSteps);
-    const seconds = raise(run.budget.maxActiveExecutionSeconds, hard.maxActiveExecutionSeconds);
-    if (steps !== undefined) next.maxRunSteps = steps;
-    if (seconds !== undefined) next.maxActiveExecutionSeconds = seconds;
+    const messages = raise(run.budget.maxSubagentMessages, hard.maxSubagentMessagesPerRun);
+    const bytes = raise(run.budget.maxSubagentMessageBytes, hard.maxSubagentMessageBytesPerRun);
+    if (messages !== undefined) next.maxSubagentMessages = messages;
+    if (bytes !== undefined) next.maxSubagentMessageBytes = bytes;
     if (Object.keys(next).length) emit('increaseBudget', next);
   };
 </script>
@@ -380,8 +389,8 @@
 
           <div class="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5 text-[11px]">
             <div class="rounded-lg border border-border/40 bg-background/50 p-2">
-              <div class="text-text-secondary">{{ $t('agent.tasks.steps') }}</div>
-              <div class="mt-0.5 font-mono font-medium text-foreground">{{ detailSnapshot.usage.steps }}</div>
+              <div class="text-text-secondary">{{ $t('agent.tasks.modelRequests') }}</div>
+              <div class="mt-0.5 font-mono font-medium text-foreground">{{ detailSnapshot.usage.modelRequests }}</div>
             </div>
             <div class="rounded-lg border border-border/40 bg-background/50 p-2">
               <div class="text-text-secondary">{{ $t('agent.tasks.tokens') }}</div>
@@ -707,9 +716,20 @@
                   </div>
                   <div>
                     <div class="mb-1 flex items-center justify-between text-[11px] text-text-secondary">
-                      <span class="font-medium">{{ $t('agent.tasks.steps') }}</span>
-                      <span class="font-mono">{{ current.usage.steps }} / {{ current.budget.maxRunSteps }}</span>
+                      <span class="font-medium">{{ $t('agent.tasks.modelRequests') }}</span>
+                      <span class="font-mono"
+                        >{{ current.usage.modelRequests }} / {{ current.budget.maxModelRequests }}</span
+                      >
                     </div>
+                  </div>
+                  <div class="flex justify-between text-[11px] text-text-secondary">
+                    <span>{{ $t('agent.tasks.toolExecutions') }}</span>
+                    <span class="font-mono"
+                      >{{ current.usage.toolExecutions }} / {{ current.budget.maxToolExecutions }}</span
+                    >
+                  </div>
+                  <div v-if="current.budget.phase === 'finishing'" class="text-xs text-warning">
+                    {{ $t('agent.tasks.finishing') }} · {{ $t(`agent.tasks.stopReasons.${current.budget.stopReason}`) }}
                   </div>
                   <div class="grid grid-cols-2 gap-2 text-[11px]">
                     <div class="rounded-lg border border-border/40 bg-background/50 px-2 py-1.5">
@@ -820,7 +840,7 @@
                   v-if="current.status === 'awaiting_budget'"
                   type="button"
                   class="mt-3 w-full rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  :disabled="busy || !hardLimits"
+                  :disabled="busy || !hardLimits || !canIncreaseMailbox"
                   @click="increase"
                 >
                   {{ $t('agent.tasks.increaseBudget') }}
@@ -976,7 +996,7 @@
                       $t(`agent.tasks.runStatus.${item.status}`)
                     }}</span>
                     <span class="mt-0.5 block truncate text-[11px] text-text-secondary">
-                      {{ item.definition.model.modelId }} · {{ item.usage.steps }}
+                      {{ item.definition.model.modelId }} · {{ item.usage.modelRequests }}
                     </span>
                   </span>
                   <i class="fa-solid fa-chevron-right text-[8px] text-text-secondary" aria-hidden="true"></i>

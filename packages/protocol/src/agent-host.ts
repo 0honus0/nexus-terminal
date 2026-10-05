@@ -4,7 +4,8 @@ export type AgentContextProfileDto = 'normal' | 'extended';
 export type AgentAvailabilityStateDto = 'disabled' | 'enabling' | 'enabled' | 'degraded' | 'unavailable';
 
 export interface AgentHardLimitsDto {
-  maxRunSteps: number;
+  maxToolExecutions: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
@@ -35,7 +36,7 @@ export interface AgentSettingsDocumentDto {
     maxConcurrentModelCalls: number | 'auto';
   };
   budget: {
-    maxRunSteps: number;
+    maxModelRequests: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -221,7 +222,9 @@ export interface AgentAppGrantReplaceRequestDto {
 }
 
 export interface AgentExecutionPolicyOverridesDto {
-  maxRunSteps?: number;
+  maxModelRequests?: number;
+  maxAutoModelRequests?: number;
+  maxAutoActiveExecutionSeconds?: number;
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
   maxToolOutputBytes?: number;
@@ -234,7 +237,9 @@ export interface AgentExecutionPolicyOverridesDto {
 }
 
 export interface AgentExecutionPolicyEffectiveDto {
-  maxRunSteps: number;
+  maxAutoModelRequests: number;
+  maxAutoActiveExecutionSeconds: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;

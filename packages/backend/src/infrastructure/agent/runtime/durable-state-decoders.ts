@@ -100,7 +100,14 @@ export const parseRunBudget = (raw: string): RunBudget => {
   const record = durableRecord(parseDurableJson(raw));
   assertDurableKeys(record, [
     'contextPolicy',
-    'maxRunSteps',
+    'maxModelRequests',
+    'modelRequestCeiling',
+    'activeExecutionCeilingSeconds',
+    'maxToolExecutions',
+    'phase',
+    'stopReason',
+    'extensionCount',
+    'progressSequence',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -111,6 +118,13 @@ export const parseRunBudget = (raw: string): RunBudget => {
     'contextCompactionMode',
     'revision',
   ]);
+  if (
+    !['executing', 'finishing'].includes(String(record.phase)) ||
+    ![null, 'model_request_limit', 'active_time_limit', 'tool_execution_limit', 'no_progress'].some(
+      (value) => value === record.stopReason,
+    )
+  )
+    throw new Error('AGENT_DURABLE_STATE_INVALID');
   const compactionMode = record.contextCompactionMode;
   if (!['aggressive', 'balanced', 'conservative'].includes(String(compactionMode))) return invalid();
   const contextPolicy = durableRecord(record.contextPolicy);
@@ -132,7 +146,14 @@ export const parseRunBudget = (raw: string): RunBudget => {
       softPressurePercent,
       toolOutputFloorPercent,
     },
-    maxRunSteps: durableInteger(record.maxRunSteps, 1),
+    maxModelRequests: durableInteger(record.maxModelRequests, 1),
+    modelRequestCeiling: durableInteger(record.modelRequestCeiling, 1),
+    activeExecutionCeilingSeconds: durableInteger(record.activeExecutionCeilingSeconds, 1),
+    maxToolExecutions: durableInteger(record.maxToolExecutions, 1),
+    phase: record.phase as RunBudget['phase'],
+    stopReason: record.stopReason as RunBudget['stopReason'],
+    extensionCount: durableInteger(record.extensionCount),
+    progressSequence: durableInteger(record.progressSequence),
     maxActiveExecutionSeconds: durableInteger(record.maxActiveExecutionSeconds, 1),
     toolTimeoutSeconds: durableInteger(record.toolTimeoutSeconds, 1),
     maxToolOutputBytes: durableInteger(record.maxToolOutputBytes, 1),
@@ -156,13 +177,24 @@ const decodeRunContextModel = (value: unknown): ModelRef => {
 
 export const parseRunUsage = (raw: string): RunUsage => {
   const record = durableRecord(parseDurableJson(raw));
+  assertDurableKeys(record, [
+    'inputTokens',
+    'outputTokens',
+    'cachedInputTokens',
+    'modelRequests',
+    'toolExecutions',
+    'subagentMessages',
+    'subagentMessageBytes',
+    'context',
+  ]);
   const context = record.context === undefined ? null : durableRecord(record.context);
   if (context && !['estimated', 'anchored_estimate', 'provider'].includes(String(context.source))) return invalid();
   return {
     inputTokens: durableInteger(record.inputTokens),
     outputTokens: durableInteger(record.outputTokens),
     cachedInputTokens: durableInteger(record.cachedInputTokens),
-    steps: durableInteger(record.steps),
+    modelRequests: durableInteger(record.modelRequests),
+    toolExecutions: durableInteger(record.toolExecutions),
     subagentMessages: durableInteger(record.subagentMessages),
     subagentMessageBytes: durableInteger(record.subagentMessageBytes),
     ...(context === null

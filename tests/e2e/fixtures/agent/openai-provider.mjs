@@ -645,7 +645,7 @@ const server = http.createServer(async (request, response) => {
                       : 'E2E_CHILD_MULTI_TOOL_BATCH Validate one child assistant turn with two durable tool calls.',
                     constraints: ['Use only the offered read/control tools.'],
                     inputArtifactRefs: [],
-                    maxSteps: 8,
+                    maxModelRequests: 8,
                     deadlineAt: Math.floor(Date.now() / 1000) + 120,
                     completionCriteria: ['Return CHILD_BATCH_OK after both tool results are present.'],
                     dependsOn: [],

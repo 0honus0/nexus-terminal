@@ -28,7 +28,15 @@ export const subagentMailboxTtlScenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxRunSteps: 100,
+    modelRequestCeiling: 100,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
@@ -58,7 +66,8 @@ export const subagentMailboxTtlScenario = async () => {
     inputTokens: 0,
     outputTokens: 0,
     cachedInputTokens: 0,
-    steps: 0,
+    toolExecutions: 0,
+    modelRequests: 0,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   });
@@ -124,7 +133,7 @@ export const subagentMailboxTtlScenario = async () => {
       `INSERT INTO agent_delegations
         (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
-         dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
+         dependency_mode, status, depth, failure_mode, max_model_requests, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'default', '[]', 'parent-child', ?, 'Process mailbox messages.', '[]', '[]', '[]',
                'settled', 'running', 1, 'isolate', 20, 'mailbox-ttl-delegation-key', 'mailbox-ttl-delegation-hash',
@@ -174,11 +183,23 @@ export const subagentMailboxTtlScenario = async () => {
           inputTokens: 0,
           outputTokens: 0,
           cachedInputTokens: 0,
-          steps: 0,
+          toolExecutions: 0,
+          modelRequests: 0,
           subagentMessages: 2,
           subagentMessageBytes: 64,
         },
-        budget: { maxRunSteps: 100, maxToolOutputBytes: 1_048_576, contextPolicy: freezeRunContextPolicy('normal') },
+        budget: {
+          modelRequestCeiling: 100,
+          activeExecutionCeilingSeconds: 7200,
+          maxToolExecutions: 4000,
+          phase: 'executing',
+          stopReason: null,
+          extensionCount: 0,
+          progressSequence: 0,
+          maxModelRequests: 100,
+          maxToolOutputBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
+        },
         definition: { environment: null },
       } as unknown as RunView,
     );

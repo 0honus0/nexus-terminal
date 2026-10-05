@@ -36,11 +36,11 @@ interface RestartMutationLeaseRow {
  * quarantine records before the caller may set needs_reconciliation. A mutation Tool that never
  * activated its lease is safe to cancel like other not-yet-executed work.
  */
-const settleInterruptedRunChildren = async (
+export const settleInterruptedRunChildren = async (
   tx: RelationalDatabase,
   row: RunRow,
   now: number,
-  reason: 'backend_restart' | 'app_disabled',
+  reason: 'backend_restart' | 'app_disabled' | 'execution_limit',
 ): Promise<{ needsReconciliation: boolean }> => {
   const mutationLeases = await tx.queryAll<RestartMutationLeaseRow>(
     `SELECT l.id, l.resource_key, l.owner_type, l.owner_id, l.fence, l.expires_at, l.operation_id,
@@ -93,7 +93,11 @@ const settleInterruptedRunChildren = async (
         lease.tool_call_id,
         lease.owner_type,
         lease.owner_id,
-        reason === 'backend_restart' ? 'BACKEND_RESTART_DURING_MUTATION' : 'APP_DISABLED_DURING_MUTATION',
+        reason === 'execution_limit'
+          ? 'EXECUTION_LIMIT_DURING_MUTATION'
+          : reason === 'backend_restart'
+            ? 'BACKEND_RESTART_DURING_MUTATION'
+            : 'APP_DISABLED_DURING_MUTATION',
         evidence,
         now,
       ],
@@ -116,7 +120,15 @@ const settleInterruptedRunChildren = async (
      SET status = 'aborted', error_code = COALESCE(error_code, ?), completed_at = COALESCE(completed_at, ?)
      WHERE step_id IN (SELECT id FROM agent_steps WHERE run_id = ? AND kind = 'model')
        AND status IN ('planned','reserved','streaming')`,
-    [reason === 'backend_restart' ? 'BACKEND_RESTART' : 'APP_DISABLED', now, row.id],
+    [
+      reason === 'execution_limit'
+        ? 'RUN_EXECUTION_LIMIT'
+        : reason === 'backend_restart'
+          ? 'BACKEND_RESTART'
+          : 'APP_DISABLED',
+      now,
+      row.id,
+    ],
   );
 
   // Tool calls backed by quarantine remain explicitly reconciling. Every other non-terminal Tool

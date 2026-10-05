@@ -8,7 +8,9 @@ import { AGENT_EXECUTION_POLICY_STORAGE_KEY } from './app-storage-ownership';
 export type ContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
 
 export interface AgentExecutionPolicyOverrides {
-  maxRunSteps?: number;
+  maxModelRequests?: number;
+  maxAutoModelRequests?: number;
+  maxAutoActiveExecutionSeconds?: number;
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
   maxToolOutputBytes?: number;
@@ -21,7 +23,9 @@ export interface AgentExecutionPolicyOverrides {
 }
 
 export interface AgentExecutionPolicyEffective {
-  maxRunSteps: number;
+  maxAutoModelRequests: number;
+  maxAutoActiveExecutionSeconds: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
@@ -46,7 +50,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 
 const defaultsFrom = (settings: AgentSettingsView): AgentExecutionPolicyEffective => ({
-  maxRunSteps: settings.effectiveSettings.budget.maxRunSteps,
+  maxModelRequests: settings.effectiveSettings.budget.maxModelRequests,
+  maxAutoModelRequests: settings.hardLimits.maxModelRequests,
+  maxAutoActiveExecutionSeconds: settings.hardLimits.maxActiveExecutionSeconds,
   maxActiveExecutionSeconds: settings.effectiveSettings.budget.maxActiveExecutionSeconds,
   toolTimeoutSeconds: settings.effectiveSettings.budget.toolTimeoutSeconds,
   maxToolOutputBytes: settings.effectiveSettings.budget.maxToolOutputBytes,
@@ -61,7 +67,9 @@ const defaultsFrom = (settings: AgentSettingsView): AgentExecutionPolicyEffectiv
 const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
-    'maxRunSteps',
+    'maxModelRequests',
+    'maxAutoModelRequests',
+    'maxAutoActiveExecutionSeconds',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -75,7 +83,9 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   const result: AgentExecutionPolicyOverrides = {};
   for (const key of [
-    'maxRunSteps',
+    'maxModelRequests',
+    'maxAutoModelRequests',
+    'maxAutoActiveExecutionSeconds',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -109,7 +119,9 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
 const assertWithinHardLimits = (overrides: AgentExecutionPolicyOverrides, settings: AgentSettingsView): void => {
   const hard = settings.hardLimits;
   const pairs: Array<[keyof AgentExecutionPolicyOverrides, number]> = [
-    ['maxRunSteps', hard.maxRunSteps],
+    ['maxModelRequests', hard.maxModelRequests],
+    ['maxAutoModelRequests', hard.maxModelRequests],
+    ['maxAutoActiveExecutionSeconds', hard.maxActiveExecutionSeconds],
     ['maxActiveExecutionSeconds', hard.maxActiveExecutionSeconds],
     ['toolTimeoutSeconds', hard.toolTimeoutSeconds],
     ['maxToolOutputBytes', hard.maxToolOutputBytes],

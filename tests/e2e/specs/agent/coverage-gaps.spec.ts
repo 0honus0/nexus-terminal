@@ -143,15 +143,15 @@ test('Hard Limit preview and confirm commit exactly once through the public Agen
   const before = (
     (await beforeResponse.json()) as Envelope<{
       revision: number;
-      hardLimits: { maxRunSteps: number };
+      hardLimits: { maxModelRequests: number };
     }>
   ).data;
 
-  const proposedMaxRunSteps = before.hardLimits.maxRunSteps + 1;
+  const proposedMaxRunSteps = before.hardLimits.maxModelRequests + 1;
   const previewResponse = await request.post('/api/v1/agent/settings/hard-limits/preview', {
     headers,
     data: {
-      proposed: { maxRunSteps: proposedMaxRunSteps },
+      proposed: { maxModelRequests: proposedMaxRunSteps },
       expectedVersion: before.revision,
     },
   });
@@ -160,8 +160,8 @@ test('Hard Limit preview and confirm commit exactly once through the public Agen
     (await previewResponse.json()) as Envelope<{
       confirmationId: string;
       expectedVersion: number;
-      current: { maxRunSteps: number };
-      proposed: { maxRunSteps: number };
+      current: { maxModelRequests: number };
+      proposed: { maxModelRequests: number };
       impact: {
         changes: Array<{ key: string; current: number; proposed: number; direction: string }>;
         hasIncrease: boolean;
@@ -171,14 +171,14 @@ test('Hard Limit preview and confirm commit exactly once through the public Agen
   ).data;
   expect(preview).toMatchObject({
     expectedVersion: before.revision,
-    current: { maxRunSteps: before.hardLimits.maxRunSteps },
-    proposed: { maxRunSteps: proposedMaxRunSteps },
+    current: { maxModelRequests: before.hardLimits.maxModelRequests },
+    proposed: { maxModelRequests: proposedMaxRunSteps },
     impact: {
       hasIncrease: true,
       changes: [
         {
-          key: 'maxRunSteps',
-          current: before.hardLimits.maxRunSteps,
+          key: 'maxModelRequests',
+          current: before.hardLimits.maxModelRequests,
           proposed: proposedMaxRunSteps,
           direction: 'increase',
         },
@@ -196,11 +196,11 @@ test('Hard Limit preview and confirm commit exactly once through the public Agen
   const confirmed = (
     (await confirmedResponse.json()) as Envelope<{
       revision: number;
-      hardLimits: { maxRunSteps: number };
+      hardLimits: { maxModelRequests: number };
     }>
   ).data;
   expect(confirmed.revision).toBe(before.revision + 1);
-  expect(confirmed.hardLimits.maxRunSteps).toBe(proposedMaxRunSteps);
+  expect(confirmed.hardLimits.maxModelRequests).toBe(proposedMaxRunSteps);
 
   const replay = await request.post('/api/v1/agent/settings/hard-limits/confirm', {
     headers,
@@ -220,7 +220,7 @@ test('per-App execution policy persists overrides and rejects stale or over-limi
   expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
   const settings = (
     (await settingsResponse.json()) as Envelope<{
-      hardLimits: { maxRunSteps: number };
+      hardLimits: { maxModelRequests: number };
     }>
   ).data;
 
@@ -230,7 +230,7 @@ test('per-App execution policy persists overrides and rejects stale or over-limi
     (await beforeResponse.json()) as Envelope<{
       version: number;
       overrides: Record<string, unknown>;
-      effective: { maxRunSteps: number; contextCompactionMode: string; contextProfile: string };
+      effective: { maxModelRequests: number; contextCompactionMode: string; contextProfile: string };
     }>
   ).data;
   expect(before.version).toBe(0);
@@ -240,7 +240,7 @@ test('per-App execution policy persists overrides and rejects stale or over-limi
     headers,
     data: {
       overrides: {
-        maxRunSteps: Math.min(3, settings.hardLimits.maxRunSteps),
+        maxModelRequests: Math.min(3, settings.hardLimits.maxModelRequests),
         contextCompactionMode: 'aggressive',
         contextProfile: 'extended',
       },
@@ -251,13 +251,13 @@ test('per-App execution policy persists overrides and rejects stale or over-limi
   const saved = (
     (await savedResponse.json()) as Envelope<{
       version: number;
-      overrides: { maxRunSteps: number; contextCompactionMode: string; contextProfile: string };
-      effective: { maxRunSteps: number; contextCompactionMode: string; contextProfile: string };
+      overrides: { maxModelRequests: number; contextCompactionMode: string; contextProfile: string };
+      effective: { maxModelRequests: number; contextCompactionMode: string; contextProfile: string };
     }>
   ).data;
   expect(saved.version).toBe(1);
   expect(saved.overrides).toMatchObject({
-    maxRunSteps: Math.min(3, settings.hardLimits.maxRunSteps),
+    maxModelRequests: Math.min(3, settings.hardLimits.maxModelRequests),
     contextCompactionMode: 'aggressive',
     contextProfile: 'extended',
   });
@@ -273,7 +273,7 @@ test('per-App execution policy persists overrides and rejects stale or over-limi
   const overLimit = await request.put('/api/v1/agent/apps/nexus.agent/execution-policy', {
     headers,
     data: {
-      overrides: { maxRunSteps: settings.hardLimits.maxRunSteps + 1 },
+      overrides: { maxModelRequests: settings.hardLimits.maxModelRequests + 1 },
       expectedVersion: saved.version,
     },
   });

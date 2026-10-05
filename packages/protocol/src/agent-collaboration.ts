@@ -22,7 +22,7 @@ export interface AgentSubagentProfileDto {
   capabilities: AgentCapabilityDto[];
   peerMessaging: AgentSubagentPeerMessagingDto;
   mutationMode: AgentSubagentMutationModeDto;
-  maxSteps: number;
+  maxModelRequests: number;
   failureMode: AgentSubagentFailureModeDto;
 }
 
@@ -33,7 +33,7 @@ export interface AgentSubagentProfileTemplateDto {
   capabilities: AgentCapabilityDto[];
   peerMessaging: AgentSubagentPeerMessagingDto;
   mutationMode: AgentSubagentMutationModeDto;
-  maxSteps: number;
+  maxModelRequests: number;
   failureMode: AgentSubagentFailureModeDto;
 }
 
@@ -59,7 +59,7 @@ export interface AgentSubagentCreateRequestDto {
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];
-  maxSteps: number;
+  maxModelRequests: number;
   deadlineAt: number;
   completionCriteria: string[];
   dependsOn: string[];
@@ -87,8 +87,8 @@ export interface AgentSubagentViewDto {
   status: AgentSubagentStatusDto;
   depth: number;
   failureMode: AgentSubagentFailureModeDto;
-  budget: { maxSteps: number };
-  usage: { tokens: number; steps: number };
+  budget: { maxModelRequests: number };
+  usage: { tokens: number; modelRequests: number };
   result: AgentJsonValueDto | null;
   evidenceRefs: string[];
   deadlineAt: number;

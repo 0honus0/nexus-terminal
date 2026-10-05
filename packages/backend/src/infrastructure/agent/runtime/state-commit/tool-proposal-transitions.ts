@@ -303,7 +303,6 @@ export const commitToolProposalBatchTransition = async (
       inputTokens: command.inputTokens,
       outputTokens: command.outputTokens,
       cachedInputTokens: command.cachedInputTokens,
-      steps: 1,
     }),
     command.inputTokens,
     command.estimatedUsage,

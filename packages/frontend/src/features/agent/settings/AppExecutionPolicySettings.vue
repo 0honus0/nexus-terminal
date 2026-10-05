@@ -117,7 +117,9 @@
     type: QuantityType;
   }
   const fields: FieldMeta[] = [
-    { key: 'maxRunSteps', type: 'number' },
+    { key: 'maxModelRequests', type: 'number' },
+    { key: 'maxAutoModelRequests', type: 'number' },
+    { key: 'maxAutoActiveExecutionSeconds', type: 'seconds' },
     { key: 'maxActiveExecutionSeconds', type: 'seconds' },
     { key: 'toolTimeoutSeconds', type: 'seconds' },
     { key: 'maxToolOutputBytes', type: 'bytes' },

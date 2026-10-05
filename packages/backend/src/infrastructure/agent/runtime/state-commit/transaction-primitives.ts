@@ -56,7 +56,8 @@ export const emptyUsage = (): RunUsage => ({
   inputTokens: 0,
   outputTokens: 0,
   cachedInputTokens: 0,
-  steps: 0,
+  modelRequests: 0,
+  toolExecutions: 0,
   subagentMessages: 0,
   subagentMessageBytes: 0,
 });
@@ -67,7 +68,8 @@ export const usageWithDelta = (
     inputTokens?: number | null;
     outputTokens?: number | null;
     cachedInputTokens?: number | null;
-    steps?: number;
+    modelRequests?: number;
+    toolExecutions?: number;
   },
 ): RunUsage => {
   const current = parseRunUsage(row.usage_json);
@@ -76,7 +78,8 @@ export const usageWithDelta = (
     inputTokens: current.inputTokens + (delta.inputTokens ?? 0),
     outputTokens: current.outputTokens + (delta.outputTokens ?? 0),
     cachedInputTokens: current.cachedInputTokens + (delta.cachedInputTokens ?? 0),
-    steps: current.steps + (delta.steps ?? 0),
+    modelRequests: current.modelRequests + (delta.modelRequests ?? 0),
+    toolExecutions: current.toolExecutions + (delta.toolExecutions ?? 0),
     subagentMessages: current.subagentMessages ?? 0,
     subagentMessageBytes: current.subagentMessageBytes ?? 0,
   };

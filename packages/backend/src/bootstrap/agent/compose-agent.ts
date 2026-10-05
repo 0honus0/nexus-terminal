@@ -276,8 +276,10 @@ export const composeAgent = ({
   );
   const context = new ContextService(conversations, recall, skills, modelContinuations, artifacts, contextCheckpoints);
   const notificationBridge = new AgentNotificationBridge(notifications, conversationRepository);
+  let subagentScheduler: SubagentScheduler | null = null;
   const stateCommit = new SqliteStateCommitAdapter(database, (run, events) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      subagentScheduler?.cancel(run.id);
       void browserGateway
         .closeRun(run.id)
         .catch((error) => logger.warn({ err: error, runId: run.id }, 'Terminal Run browser cleanup failed'));
@@ -301,7 +303,6 @@ export const composeAgent = ({
   const schedulerExecution: SchedulerWorkExecutionPort = subagentRepository;
   const sharedFactRepository: SharedFactRepositoryPort = subagentRepository;
   const subagentPolicy = new SubagentPolicyService(appStorage, settings, providers);
-  let subagentScheduler: SubagentScheduler | null = null;
   const mailbox = new MailboxService(
     mailboxRepository,
     runtimeParticipants,
@@ -495,11 +496,18 @@ export const composeAgent = ({
       };
     },
   };
-  const modelSteps = new ModelStepRunner(providers, context, languageModel, modelCalls, projectInstructionSource);
+  const modelSteps = new ModelStepRunner(
+    providers,
+    context,
+    languageModel,
+    modelCalls,
+    systemClock,
+    projectInstructionSource,
+  );
   const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
   let recordRecoverySafePoint: (
     run: Parameters<AgentScheduler['enqueue']>[0],
-    reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed',
+    reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'execution_limit',
   ) => Promise<void> = async () => undefined;
   const nativeBackend = new NativeAgentBackend(
     runRepository,

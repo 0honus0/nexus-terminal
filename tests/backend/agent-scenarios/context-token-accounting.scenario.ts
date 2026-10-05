@@ -138,8 +138,8 @@ export const contextTokenAccountingScenario = async () => {
     status: 'running',
     depth: 1,
     failureMode: 'isolate',
-    budget: { maxSteps: 8 },
-    usage: { tokens: 0, steps: 0 },
+    budget: { maxModelRequests: 8 },
+    usage: { tokens: 0, modelRequests: 0 },
     result: null,
     evidenceRefs: [],
     deadlineAt: 1_900_000_000,
@@ -154,11 +154,23 @@ export const contextTokenAccountingScenario = async () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
-      steps: 0,
+      toolExecutions: 0,
+      modelRequests: 0,
       subagentMessages: 0,
       subagentMessageBytes: 0,
     },
-    budget: { maxRunSteps: 32, maxToolOutputBytes: 65_536, contextPolicy: freezeRunContextPolicy('normal') },
+    budget: {
+      modelRequestCeiling: 32,
+      activeExecutionCeilingSeconds: 7200,
+      maxToolExecutions: 4000,
+      phase: 'executing',
+      stopReason: null,
+      extensionCount: 0,
+      progressSequence: 0,
+      maxModelRequests: 32,
+      maxToolOutputBytes: 65_536,
+      contextPolicy: freezeRunContextPolicy('normal'),
+    },
     definition: { environment: null },
   } as unknown as RunView;
   const subagentModel = {
@@ -216,7 +228,15 @@ export const contextTokenAccountingScenario = async () => {
   };
   const fallbackCapabilities = { ...primaryCapabilities, contextWindow: 32_768 };
   const budget = JSON.stringify({
-    maxRunSteps: 16,
+    modelRequestCeiling: 16,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 16,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
@@ -246,7 +266,8 @@ export const contextTokenAccountingScenario = async () => {
     inputTokens: 1_000,
     outputTokens: 100,
     cachedInputTokens: 250,
-    steps: 2,
+    toolExecutions: 0,
+    modelRequests: 2,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   });

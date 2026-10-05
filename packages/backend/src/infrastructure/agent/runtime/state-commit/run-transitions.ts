@@ -114,6 +114,13 @@ export const createRunTransition = async (
     ],
   );
 
+  const source = command.parentRunId
+    ? await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`, [
+        command.parentRunId,
+        command.scope.userId,
+        command.scope.appId,
+      ])
+    : null;
   const inputSequence = thread.next_sequence;
   await tx.execute(
     `INSERT INTO agent_runs (
@@ -123,7 +130,7 @@ export const createRunTransition = async (
       active_execution_seconds, active_execution_started_at, executing_runtime_count,
       next_event_sequence, consumed_input_sequence, input_revision, version,
       created_at, started_at, completed_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, 'created', 'unknown', ?, ?, ?, 'not_started', 0, ?, ?, ?, ?, 0, NULL, 0, 2, 0, 1, 1, ?, NULL, NULL, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, 'created', 'unknown', ?, ?, ?, 'not_started', 0, ?, ?, ?, ?, ?, NULL, 0, 2, 0, 1, 1, ?, NULL, NULL, ?)`,
     [
       command.runId,
       command.scope.userId,
@@ -136,7 +143,8 @@ export const createRunTransition = async (
       JSON.stringify(command.budget),
       JSON.stringify(command.definition),
       JSON.stringify(command.initialPlan ?? { schemaVersion: 1, revision: 0, items: [] }),
-      JSON.stringify(emptyUsage()),
+      source ? source.usage_json : JSON.stringify(emptyUsage()),
+      source ? source.active_execution_seconds : 0,
       command.now,
       command.now,
     ],

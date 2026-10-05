@@ -1,3 +1,4 @@
+import { reserveToolExecutions } from './execution-budget-transitions';
 import { randomUUID } from 'node:crypto';
 import type { ToolResult } from '../../../../modules/agent/capabilities/tool.types';
 import type {
@@ -126,6 +127,7 @@ export const beginMutationToolTransition = async (
     [command.runId, command.scope.userId, command.scope.appId],
   );
   if (!row) throw new Error('NOT_FOUND');
+  await reserveToolExecutions(tx, row, 1, command.now);
   if (row.version < command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
   if (row.input_revision !== command.expectedInputRevision) throw new Error('APPROVAL_STALE');
   const app = await tx.queryOne<{ policy_revision: number }>(
@@ -265,7 +267,7 @@ export const settleMutationToolTransition = async (
     );
   }
   const committedEvents = await appendEvents(tx, row, events, command.now);
-  const mergedUsage = usageWithDelta(row, { steps: 1 });
+  const mergedUsage = usageWithDelta(row, {});
   const updatedRow = await patchRun(
     tx,
     row,

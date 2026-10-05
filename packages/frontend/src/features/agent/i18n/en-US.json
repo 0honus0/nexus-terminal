@@ -298,17 +298,17 @@
           "concurrencyDesc": "Limits concurrent runs, active workspaces, and subagent delegation depth",
           "extra": "Additional System Limits",
           "extraDesc": "Other instance-level policy parameters",
-          "execution": "Execution Step Limit",
-          "executionDesc": "Caps the maximum number of model/tool loop steps per Run"
+          "execution": "Model request hard ceiling",
+          "executionDesc": "Cumulative requests across all runtimes, including failures, retries, compaction and reserved final reporting"
         },
         "fields": {
-          "maxRunSteps": {
-            "label": "Hard Max Run Steps",
-            "hint": "Maximum thinking and tool execution loop steps allowed per run"
+          "maxModelRequests": {
+            "label": "Model request hard ceiling",
+            "hint": "Cumulative requests across all runtimes, including failures, retries, compaction and reserved final reporting"
           },
           "maxActiveExecutionSeconds": {
             "label": "Max Active Execution Time",
-            "hint": "Maximum continuous execution duration before auto-cancellation"
+            "hint": "Cumulative active execution ceiling; ends with a partial result when reached"
           },
           "toolTimeoutSeconds": {
             "label": "Tool Execution Timeout",
@@ -365,6 +365,10 @@
           "maxActiveWorkspaces": {
             "label": "Max Active Workspaces",
             "hint": "Maximum number of concurrent workspace containers or directories"
+          },
+          "maxToolExecutions": {
+            "label": "Tool executions",
+            "hint": "Cumulative tools actually started, including failed executions"
           }
         }
       },
@@ -389,17 +393,17 @@
         "presetBalanced": "Balanced",
         "presetBalancedDesc": "Recommended defaults balancing reasoning depth, multi-step actions, and resources",
         "presetDeep": "Deep Work",
-        "presetDeepDesc": "High steps and long timeouts, best for complex refactoring and large codebases",
+        "presetDeepDesc": "More model requests and execution time for complex tasks",
         "presetCustom": "Custom",
         "presetCustomDesc": "Manually tune all underlying parameters with complete control",
         "customBadge": "Customized",
         "recommendedBadge": "Recommended",
         "saveSuccess": "Budget & context settings saved successfully",
         "fields": {
-          "maxRunSteps": "Max Execution Steps",
-          "maxRunStepsHint": "Maximum tool actions and reasoning turns per run",
-          "maxActiveExecutionSeconds": "Execution Timeout (sec)",
-          "maxActiveExecutionSecondsHint": "Maximum active wall-clock execution time",
+          "maxModelRequests": "Initial model request allowance",
+          "maxModelRequestsHint": "Shared by Root, children, retries and compaction; automatically extends within the app ceiling when fresh execution evidence supports progress",
+          "maxActiveExecutionSeconds": "Initial active execution allowance",
+          "maxActiveExecutionSecondsHint": "Shared by Root, children, retries and compaction; automatically extends within the app ceiling when fresh execution evidence supports progress",
           "toolTimeoutSeconds": "Tool Timeout (sec)",
           "toolTimeoutSecondsHint": "Timeout for individual tool executions",
           "maxToolOutputBytes": "Tool Output Truncation (Bytes)",
@@ -412,14 +416,14 @@
         "readyNotice": "The current configuration is ready and will apply to the next Run.",
         "modelCapabilityNotice": "Per-call context and output limits come directly from the Provider/Registry model capabilities. These settings only govern total Run and tool-resource budgets.",
         "groups": {
-          "steps": "Execution step fuse",
           "timeControl": "Execution and timeout control",
-          "toolsData": "Tool truncation and context recall"
+          "toolsData": "Tool truncation and context recall",
+          "modelRequests": "Initial model request allowance"
         },
-        "presetSteps": "{steps} steps · {minutes} min",
         "customTuning": "Custom tuning",
         "effective": "Effective: {value}",
-        "unsavedChanges": "Budget changes are not saved yet"
+        "unsavedChanges": "Budget changes are not saved yet",
+        "presetRequests": "{requests} requests · {minutes} min"
       },
       "quantity": {
         "placeholderBytes": "e.g. 10M, 500K",
@@ -771,7 +775,7 @@
         "profileId": "Profile ID",
         "role": "Role",
         "defaultModel": "Default model",
-        "maxSteps": "Maximum steps",
+        "maxModelRequests": "Model requests",
         "peerMessaging": "Peer messaging",
         "peerParentChild": "Parent and child only",
         "peerSameRun": "Any authorized peer in the same Run",
@@ -971,8 +975,8 @@
           "conservative": "Conservative"
         },
         "fields": {
-          "maxRunSteps": "Run step fuse",
-          "maxActiveExecutionSeconds": "Active execution limit",
+          "maxModelRequests": "Initial model request allowance",
+          "maxActiveExecutionSeconds": "Initial active execution allowance",
           "toolTimeoutSeconds": "Tool timeout",
           "maxToolOutputBytes": "Model-visible tool output",
           "maxRecallItems": "Recall items",
@@ -980,7 +984,9 @@
           "maxSubagentMessages": "Subagent messages",
           "maxSubagentMessageBytes": "Subagent message bytes",
           "contextCompactionMode": "Dynamic context compaction",
-          "contextProfile": "Context window profile"
+          "contextProfile": "Context window profile",
+          "maxAutoModelRequests": "Automatic request ceiling",
+          "maxAutoActiveExecutionSeconds": "Automatic active time ceiling (seconds)"
         },
         "profileHint": "Normal keeps more context headroom; Extended uses more of the model window. Neither profile relaxes Hard Limits.",
         "profileInherited": "Inherited: {value}",
@@ -1558,10 +1564,9 @@
         "anchored_estimate": "Provider-anchored estimate",
         "provider": "Provider measured"
       },
-      "steps": "Steps",
       "activeTime": "Active time",
       "verification": "Verification",
-      "increaseBudget": "Increase run budget",
+      "increaseBudget": "Increase messaging allowance",
       "plan": "Plan",
       "planStatus": {
         "pending": "Pending",
@@ -1621,7 +1626,16 @@
       "tokenBreakdown": "In {input} · Out {output} · Cached {cached}",
       "dragCardHint": "Drag or press ↑/↓ to reorder",
       "resetCardOrder": "Reset card order",
-      "showOlderRuns": "Show older runs ({count} more)"
+      "showOlderRuns": "Show older runs ({count} more)",
+      "modelRequests": "Model requests",
+      "toolExecutions": "Tool executions",
+      "finishing": "Saving results and finishing",
+      "stopReasons": {
+        "model_request_limit": "Model request ceiling",
+        "active_time_limit": "Active execution time ceiling",
+        "tool_execution_limit": "Tool execution ceiling",
+        "no_progress": "No fresh progress evidence"
+      }
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",
@@ -1704,7 +1718,6 @@
       "description": "Public collaboration state only. Private child prompts and model context are not shown here.",
       "empty": "No child delegations for this run.",
       "depth": "Depth {value}",
-      "steps": "Steps {used}/{max}",
       "cancel": "Cancel child",
       "messages": "Mailbox exchange",
       "noMessages": "No public messages for this child.",
@@ -1721,7 +1734,8 @@
         "isolate": "Isolated failures",
         "failFast": "Fail fast"
       },
-      "profileLabel": "Profile {id}"
+      "profileLabel": "Profile {id}",
+      "modelRequests": "Model requests {used}/{max}"
     },
     "approvals": {
       "title": "Operation requires approval",

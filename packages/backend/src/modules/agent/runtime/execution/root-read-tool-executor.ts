@@ -81,7 +81,7 @@ export class RootReadToolExecutor {
   selectWave(snapshot: RunSnapshot, pendingTools: readonly PendingRootTool[]): PendingRootTool[] {
     const first = pendingTools[0];
     if (!first || first.status !== 'proposed' || first.inspection.mutation) return first ? [first] : [];
-    const remainingToolSteps = Math.max(0, snapshot.budget.maxRunSteps - snapshot.usage.steps);
+    const remainingToolSteps = Math.max(0, snapshot.budget.maxToolExecutions - snapshot.usage.toolExecutions);
     const limit = Math.min(MAX_PARALLEL_READ_TOOLS, remainingToolSteps);
     if (limit <= 1 || first.inspection.risk !== 'read') return [first];
     const availability = {

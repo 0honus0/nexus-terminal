@@ -14,7 +14,7 @@ import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
 import { rejectedRootToolResult, rootToolContext } from './root-tool-execution-common';
 import { ToolCallRunner } from './tool-call-runner';
 
-const usageWithToolStep = (base: RunUsage): RunUsage => ({ ...base, steps: base.steps + 1 });
+const usageWithToolStep = (base: RunUsage): RunUsage => ({ ...base, modelRequests: base.modelRequests });
 const errorCode = (error: unknown): string => executionErrorCode(error, 'MODEL_EXECUTION_FAILED');
 
 const mutationLeaseFailureReason = (error: unknown, code: string, resourceKeys: readonly string[]): string => {
@@ -56,8 +56,8 @@ export class RootMutationExecutionAdapter {
       toolCallId: pending.toolCallId,
       approvalId: pending.approvalId,
       expectedRunVersion: snapshot.version,
-      reason: 'The Run step budget was exhausted before this approved mutation could execute.',
-      errorCode: 'RUN_STEP_BUDGET_EXHAUSTED',
+      reason: 'The Run execution allowance was exhausted before this approved mutation could execute.',
+      errorCode: 'RUN_EXECUTION_LIMIT',
       details: { phase: 'budget', resourceKeys: pending.inspection.resourceKeys },
       now: this.clock.nowUnixSeconds(),
     });

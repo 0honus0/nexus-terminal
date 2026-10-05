@@ -177,7 +177,7 @@ export const agentDefinitionCapabilityContractScenario = async () => {
     requestedSettings: { model: { fallbackModels: [] as Array<{ providerId: string; modelId: string }> } },
     effectiveSettings: { feature: { enabled: true } },
     hardLimits: {
-      maxRunSteps: 1_000,
+      maxModelRequests: 1_000,
       maxActiveExecutionSeconds: 86_400,
       toolTimeoutSeconds: 600,
       maxToolOutputBytes: 16 * 1024 * 1024,
@@ -197,7 +197,7 @@ export const agentDefinitionCapabilityContractScenario = async () => {
   const executionPolicy = {
     version: 1,
     effective: {
-      maxRunSteps: 100,
+      maxModelRequests: 100,
       maxActiveExecutionSeconds: 3_600,
       toolTimeoutSeconds: 120,
       maxToolOutputBytes: 1_048_576,
@@ -228,7 +228,8 @@ export const agentDefinitionCapabilityContractScenario = async () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
-      steps: 0,
+      toolExecutions: 0,
+      modelRequests: 0,
       subagentMessages: 0,
       subagentMessageBytes: 0,
     },

@@ -8,7 +8,7 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['file.read', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
-    maxSteps: 12,
+    maxModelRequests: 12,
     failureMode: 'isolate',
   },
   {
@@ -18,7 +18,7 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['integration.mcp.read', 'browser.read', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
-    maxSteps: 12,
+    maxModelRequests: 12,
     failureMode: 'isolate',
   },
   {
@@ -28,7 +28,7 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['file.read', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
-    maxSteps: 12,
+    maxModelRequests: 12,
     failureMode: 'isolate',
   },
   {
@@ -38,7 +38,7 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['file.read', 'integration.mcp.read', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
-    maxSteps: 16,
+    maxModelRequests: 16,
     failureMode: 'isolate',
   },
   {
@@ -49,14 +49,14 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['file.read', 'file.write', 'file.delete', 'shell.execute', 'workspace.manage', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'governed',
-    maxSteps: 24,
+    maxModelRequests: 24,
     failureMode: 'isolate',
   },
 ] as const;
 
-export const builtInSubagentProfileTemplates = (maxSteps: number): SubagentProfileTemplate[] =>
+export const builtInSubagentProfileTemplates = (maxModelRequests: number): SubagentProfileTemplate[] =>
   templates.map((template) => ({
     ...template,
     capabilities: [...template.capabilities],
-    maxSteps: Math.min(template.maxSteps, maxSteps),
+    maxModelRequests: Math.min(template.maxModelRequests, maxModelRequests),
   }));

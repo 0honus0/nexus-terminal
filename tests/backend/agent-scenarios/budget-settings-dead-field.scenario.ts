@@ -15,7 +15,7 @@ import { AgentExecutionPolicyService } from '../../../packages/backend/src/modul
 import { freezeRunContextPolicy } from '../../../packages/backend/src/modules/agent/runtime/runs/run-budget-policy';
 
 export const budgetSettingsDeadFieldScenario = async () => {
-  const deadSettingsKeys = ['maxContextTokens', 'maxOutputTokens', 'maxRawToolBytes'] as const;
+  const deadSettingsKeys = ['maxContextTokens', 'maxOutputTokens', 'maxRawToolBytes', 'maxRunSteps'] as const;
   const assertDeadSettingsAbsent = (value: unknown, label: string): void => {
     assert.ok(value && typeof value === 'object' && !Array.isArray(value), `${label} must be an object`);
     const settings = value as Record<string, unknown>;
@@ -97,7 +97,7 @@ export const budgetSettingsDeadFieldScenario = async () => {
       key: 'agent.execution-policy.v1',
       value: {
         schemaVersion: 1,
-        overrides: { maxRunSteps: 42, maxRawToolBytes: 777 },
+        overrides: { maxModelRequests: 42, maxRawToolBytes: 777 },
       } as JsonValue,
       bytes: 1,
       version: 1,
@@ -122,16 +122,16 @@ export const budgetSettingsDeadFieldScenario = async () => {
     );
     storedPolicy = {
       ...storedPolicy,
-      value: { schemaVersion: 1, overrides: { maxRunSteps: 42 } } as JsonValue,
+      value: { schemaVersion: 1, overrides: { maxModelRequests: 42 } } as JsonValue,
     };
     const currentPolicy = await executionPolicies.get({ userId: 1, appId: 'scenario-app' });
-    assert.equal(currentPolicy.effective.maxRunSteps, 42);
+    assert.equal(currentPolicy.effective.maxModelRequests, 42);
     await assert.rejects(
       () => executionPolicies.replace({ userId: 1, appId: 'scenario-app' }, { maxRawToolBytes: 999 }, 1),
       /VALIDATION_FAILED/,
       'new app execution policy writes must reject maxRawToolBytes',
     );
-    await executionPolicies.replace({ userId: 1, appId: 'scenario-app' }, { maxRunSteps: 43 }, 1);
+    await executionPolicies.replace({ userId: 1, appId: 'scenario-app' }, { maxModelRequests: 43 }, 1);
     const persistedPolicyOverrides = (storedPolicy.value as { overrides?: Record<string, unknown> }).overrides ?? {};
     assert.equal(
       'maxRawToolBytes' in persistedPolicyOverrides,
@@ -140,9 +140,17 @@ export const budgetSettingsDeadFieldScenario = async () => {
     );
 
     const legacyRunBudget = {
+      modelRequestCeiling: 80,
+      activeExecutionCeilingSeconds: 7200,
+      maxToolExecutions: 4000,
+      phase: 'executing',
+      stopReason: null,
+      extensionCount: 0,
+      progressSequence: 0,
+
       maxContextTokens: 16_384,
       maxOutputTokens: 4_096,
-      maxRunSteps: 80,
+      maxModelRequests: 80,
       maxActiveExecutionSeconds: 1_800,
       toolTimeoutSeconds: 60,
       maxToolOutputBytes: 65_536,

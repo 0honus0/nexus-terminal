@@ -20,7 +20,8 @@ export const completionGateScenario = async () => {
     inputTokens: 20,
     outputTokens: 10,
     cachedInputTokens: 0,
-    steps: 2,
+    toolExecutions: 0,
+    modelRequests: 2,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   };
@@ -92,7 +93,15 @@ export const completionGateScenario = async () => {
       [
         now,
         JSON.stringify({
-          maxRunSteps: 100,
+          modelRequestCeiling: 100,
+          activeExecutionCeilingSeconds: 7200,
+          maxToolExecutions: 4000,
+          phase: 'executing',
+          stopReason: null,
+          extensionCount: 0,
+          progressSequence: 0,
+
+          maxModelRequests: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
           maxToolOutputBytes: 1_048_576,

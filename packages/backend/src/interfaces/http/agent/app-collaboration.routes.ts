@@ -85,7 +85,7 @@ const profileDtoInput = (value: unknown): AgentSubagentProfileDto => {
     'capabilities',
     'peerMessaging',
     'mutationMode',
-    'maxSteps',
+    'maxModelRequests',
     'failureMode',
   ]);
   if (
@@ -103,8 +103,8 @@ const profileDtoInput = (value: unknown): AgentSubagentProfileDto => {
     body.capabilities.some((capability) => typeof capability !== 'string' || !capabilitySet.has(capability)) ||
     (body.peerMessaging !== 'parent-child' && body.peerMessaging !== 'same-run') ||
     (body.mutationMode !== 'read-only' && body.mutationMode !== 'governed') ||
-    !Number.isSafeInteger(body.maxSteps) ||
-    Number(body.maxSteps) < 1 ||
+    !Number.isSafeInteger(body.maxModelRequests) ||
+    Number(body.maxModelRequests) < 1 ||
     (body.failureMode !== 'isolate' && body.failureMode !== 'failFast')
   ) {
     throw new Error('VALIDATION_FAILED');
@@ -117,7 +117,7 @@ const profileDtoInput = (value: unknown): AgentSubagentProfileDto => {
     capabilities: [...new Set(body.capabilities)] as AgentSubagentProfileDto['capabilities'],
     peerMessaging: body.peerMessaging,
     mutationMode: body.mutationMode,
-    maxSteps: Number(body.maxSteps),
+    maxModelRequests: Number(body.maxModelRequests),
     failureMode: body.failureMode,
   };
 };
@@ -148,7 +148,7 @@ const subagentCreateRequest = (value: unknown): AgentSubagentCreateRequestDto =>
     'objective',
     'constraints',
     'inputArtifactRefs',
-    'maxSteps',
+    'maxModelRequests',
     'deadlineAt',
     'completionCriteria',
     'dependsOn',
@@ -158,8 +158,8 @@ const subagentCreateRequest = (value: unknown): AgentSubagentCreateRequestDto =>
     !nonEmpty(body.parentRuntimeId) ||
     !nonEmpty(body.profileId) ||
     !nonEmpty(body.objective) ||
-    !Number.isSafeInteger(body.maxSteps) ||
-    Number(body.maxSteps) < 1 ||
+    !Number.isSafeInteger(body.maxModelRequests) ||
+    Number(body.maxModelRequests) < 1 ||
     !Number.isSafeInteger(body.deadlineAt) ||
     (body.dependencyMode !== 'success' && body.dependencyMode !== 'settled')
   ) {
@@ -171,7 +171,7 @@ const subagentCreateRequest = (value: unknown): AgentSubagentCreateRequestDto =>
     objective: body.objective,
     constraints: stringArray(body.constraints),
     inputArtifactRefs: stringArray(body.inputArtifactRefs),
-    maxSteps: Number(body.maxSteps),
+    maxModelRequests: Number(body.maxModelRequests),
     deadlineAt: Number(body.deadlineAt),
     completionCriteria: stringArray(body.completionCriteria),
     dependsOn: stringArray(body.dependsOn),

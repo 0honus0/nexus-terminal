@@ -38,7 +38,15 @@ export const subagentClaimedCancellationScenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxRunSteps: 100,
+    modelRequestCeiling: 100,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
@@ -68,7 +76,8 @@ export const subagentClaimedCancellationScenario = async () => {
     inputTokens: 0,
     outputTokens: 0,
     cachedInputTokens: 0,
-    steps: 0,
+    toolExecutions: 0,
+    modelRequests: 0,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   });
@@ -122,7 +131,7 @@ export const subagentClaimedCancellationScenario = async () => {
       `INSERT INTO agent_delegations
         (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
-         dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
+         dependency_mode, status, depth, failure_mode, max_model_requests, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at, completed_at)
        VALUES (?, ?, 'subagent-root-runtime', ?, 'default', '[]', 'parent-child', ?, ?, '[]', '[]', '[]',
                'settled', ?, 1, 'isolate', 10, ?, ?, ?, 1, ?, ?, ?)`,
@@ -269,7 +278,7 @@ export const subagentClaimedCancellationScenario = async () => {
       now,
     };
     const settled = await commit.settleSubagentModelStep(summaryCommand);
-    assert.equal(settled.run.usage.steps, 1);
+    assert.equal(settled.run.usage.modelRequests, 1);
     assert.equal(settled.run.usage.inputTokens, 100);
     assert.equal((await repository.delegation(scope, runId, summaryChild.delegationId))?.status, 'running');
     assert.equal((await repository.delegation(scope, runId, summaryChild.delegationId))?.usage.tokens, 120);
@@ -302,7 +311,7 @@ export const subagentClaimedCancellationScenario = async () => {
     });
 
     const orchestrated = await insertChild('context-orchestration', { workStatus: 'claimed', ownerEpoch: 9 });
-    await db.execute(`UPDATE agent_delegations SET model_ref_json = ?, max_steps = 24 WHERE id = ?`, [
+    await db.execute(`UPDATE agent_delegations SET model_ref_json = ?, max_model_requests = 24 WHERE id = ?`, [
       JSON.stringify({
         ...JSON.parse(modelRef),
         modelCapabilities: { ...SCENARIO_MODEL_CAPABILITIES, contextWindow: 4096, maxOutputTokens: 512 },
@@ -433,7 +442,7 @@ export const subagentClaimedCancellationScenario = async () => {
     assert.equal(visibleDeltas, 1, 'private summary text must not be shown as a child reply');
     const finishedChild = (await repository.delegation(scope, runId, orchestrated.delegationId))!;
     assert.equal(finishedChild.status, 'completed');
-    assert.equal(finishedChild.usage.steps, privateCalls + 1);
+    assert.equal(finishedChild.usage.modelRequests, privateCalls + 1);
     assert.equal(finishedChild.usage.tokens, (privateCalls + 1) * 240);
     assert.equal((await repository.runtime(scope, runId, orchestrated.runtimeId))?.consumedMailboxSequence, 19);
 
@@ -578,7 +587,7 @@ export const subagentClaimedCancellationScenario = async () => {
       summaryFailure = mode;
       requestController = new AbortController();
       const child = await insertChild(`summary-${mode}`, { workStatus: 'claimed', ownerEpoch: 9 });
-      await db.execute(`UPDATE agent_delegations SET model_ref_json = ?, max_steps = 24 WHERE id = ?`, [
+      await db.execute(`UPDATE agent_delegations SET model_ref_json = ?, max_model_requests = 24 WHERE id = ?`, [
         JSON.stringify({
           ...JSON.parse(modelRef),
           modelCapabilities: { ...SCENARIO_MODEL_CAPABILITIES, contextWindow: 4096, maxOutputTokens: 512 },
@@ -620,7 +629,7 @@ export const subagentClaimedCancellationScenario = async () => {
       const failed = (await repository.delegation(scope, runId, child.delegationId))!;
       assert.equal(failed.status, mode === 'cancel' ? 'cancelled' : 'failed');
       assert.equal(failed.usage.tokens, 240, 'failed summary usage must still settle once');
-      assert.equal(failed.usage.steps, 1);
+      assert.equal(failed.usage.modelRequests, 1);
       assert.doesNotMatch(
         JSON.stringify(failed.result),
         /EARLY_PARENT_CONSTRAINT/,

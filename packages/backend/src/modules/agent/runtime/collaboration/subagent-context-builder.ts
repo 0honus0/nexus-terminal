@@ -1,3 +1,4 @@
+import { runtimeProgressContext } from '../execution/runtime-progress';
 import path from 'node:path';
 import type { ClockPort, Scope } from '../../agent.types';
 import { ArtifactService } from '../../ai/artifact.service';
@@ -192,9 +193,11 @@ export class SubagentContextBuilder {
     const continuationByStep = new Map(continuationViews.map((view) => [view.modelStepId, view.continuation] as const));
     const offeredTools = this.toolSchemas(scope, delegation, model, run);
     const toolMode: 'auto' | 'none' =
+      run.budget.phase !== 'finishing' &&
+      run.usage.toolExecutions < run.budget.maxToolExecutions &&
       offeredTools.length > 0 &&
-      delegation.usage.steps + 2 <= delegation.budget.maxSteps &&
-      run.usage.steps + 2 <= run.budget.maxRunSteps
+      delegation.usage.modelRequests + 2 <= delegation.budget.maxModelRequests &&
+      run.usage.modelRequests + 2 <= run.budget.maxModelRequests
         ? 'auto'
         : 'none';
     const reservedOutputTokens = Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1));
@@ -256,7 +259,12 @@ export class SubagentContextBuilder {
           chronology.push(...exchange.messages.slice(1));
         }
       }
-      projection.messages.splice(1, 0, ...chronology);
+      projection.messages.splice(
+        1,
+        0,
+        { role: 'user', content: runtimeProgressContext(run, this.clock.nowUnixSeconds(), delegation) },
+        ...chronology,
+      );
       return projection;
     };
 

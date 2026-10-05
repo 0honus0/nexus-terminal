@@ -222,8 +222,8 @@ export const toolResultProjectionScenario = async () => {
     status: 'running',
     depth: 1,
     failureMode: 'isolate',
-    budget: { maxSteps: 8 },
-    usage: { tokens: 0, steps: 0 },
+    budget: { maxModelRequests: 8 },
+    usage: { tokens: 0, modelRequests: 0 },
     result: null,
     evidenceRefs: [],
     deadlineAt: 1_900_000_000,
@@ -238,11 +238,23 @@ export const toolResultProjectionScenario = async () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
-      steps: 0,
+      toolExecutions: 0,
+      modelRequests: 0,
       subagentMessages: 0,
       subagentMessageBytes: 0,
     },
-    budget: { maxRunSteps: 32, maxToolOutputBytes: maxModelBytes, contextPolicy: freezeRunContextPolicy('normal') },
+    budget: {
+      modelRequestCeiling: 32,
+      activeExecutionCeilingSeconds: 7200,
+      maxToolExecutions: 4000,
+      phase: 'executing',
+      stopReason: null,
+      extensionCount: 0,
+      progressSequence: 0,
+      maxModelRequests: 32,
+      maxToolOutputBytes: maxModelBytes,
+      contextPolicy: freezeRunContextPolicy('normal'),
+    },
     definition: { environment: null },
   } as unknown as RunView;
   const childPrepared = await childBuilder.prepare(
@@ -286,7 +298,15 @@ export const toolResultProjectionScenario = async () => {
   const stateCommit = new SqliteStateCommitAdapter(db);
   const now = 1_801_060_000;
   const budget = JSON.stringify({
-    maxRunSteps: 32,
+    modelRequestCeiling: 32,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 32,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: maxModelBytes,
@@ -316,7 +336,8 @@ export const toolResultProjectionScenario = async () => {
     inputTokens: 0,
     outputTokens: 0,
     cachedInputTokens: 0,
-    steps: 0,
+    toolExecutions: 0,
+    modelRequests: 0,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   });

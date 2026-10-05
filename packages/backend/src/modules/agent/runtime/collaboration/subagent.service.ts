@@ -39,7 +39,7 @@ interface ParsedRequest {
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];
-  maxSteps: number;
+  maxModelRequests: number;
   deadlineAt: number;
   completionCriteria: string[];
   dependsOn: string[];
@@ -53,7 +53,7 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
     'objective',
     'constraints',
     'inputArtifactRefs',
-    'maxSteps',
+    'maxModelRequests',
     'deadlineAt',
     'completionCriteria',
     'dependsOn',
@@ -62,7 +62,7 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (!nonEmpty(raw.profileId, 64) || !nonEmpty(raw.objective, MAX_OBJECTIVE_BYTES))
     throw new Error('VALIDATION_FAILED');
-  if (!positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
+  if (!positiveInteger(raw.maxModelRequests)) throw new Error('VALIDATION_FAILED');
   if (!Number.isSafeInteger(raw.deadlineAt) || (raw.deadlineAt as number) <= now) throw new Error('VALIDATION_FAILED');
   if (!['success', 'settled'].includes(String(raw.dependencyMode))) throw new Error('VALIDATION_FAILED');
   return {
@@ -70,7 +70,7 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
     objective: raw.objective.trim(),
     constraints: stringArray(raw.constraints, MAX_CONSTRAINTS, MAX_CONSTRAINT_BYTES),
     inputArtifactRefs: stringArray(raw.inputArtifactRefs, MAX_ARTIFACT_REFS, 256),
-    maxSteps: raw.maxSteps,
+    maxModelRequests: raw.maxModelRequests,
     deadlineAt: raw.deadlineAt as number,
     completionCriteria: stringArray(raw.completionCriteria, MAX_CRITERIA, MAX_CONSTRAINT_BYTES),
     dependsOn: stringArray(raw.dependsOn, MAX_DEPENDENCIES, 128),
@@ -154,7 +154,7 @@ export class SubagentService {
       objective: input.objective,
       constraints: input.constraints,
       inputArtifactRefs: input.inputArtifactRefs,
-      maxSteps: Math.min(input.maxSteps, profile.maxSteps),
+      maxModelRequests: Math.min(input.maxModelRequests, profile.maxModelRequests),
       deadlineAt: input.deadlineAt,
       completionCriteria: input.completionCriteria,
       dependsOn: input.dependsOn,
@@ -189,7 +189,7 @@ export class SubagentService {
       dependsOn: input.dependsOn,
       depth,
       failureMode: profile.failureMode,
-      maxSteps: Math.min(input.maxSteps, profile.maxSteps),
+      maxModelRequests: Math.min(input.maxModelRequests, profile.maxModelRequests),
       idempotencyKey: key,
       requestHash: requestHash(1, payload),
       deadlineAt: input.deadlineAt,

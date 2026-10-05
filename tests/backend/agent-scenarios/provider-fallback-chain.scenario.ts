@@ -135,7 +135,15 @@ export const providerFallbackChainScenario = async () => {
         threadId,
         now,
         JSON.stringify({
-          maxRunSteps: 20,
+          modelRequestCeiling: 20,
+          activeExecutionCeilingSeconds: 7200,
+          maxToolExecutions: 4000,
+          phase: 'executing',
+          stopReason: null,
+          extensionCount: 0,
+          progressSequence: 0,
+
+          maxModelRequests: 20,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
           maxToolOutputBytes: 1_048_576,
@@ -167,7 +175,8 @@ export const providerFallbackChainScenario = async () => {
           inputTokens: 0,
           outputTokens: 0,
           cachedInputTokens: 0,
-          steps: 0,
+          toolExecutions: 0,
+          modelRequests: 0,
           subagentMessages: 0,
           subagentMessageBytes: 0,
         }),
@@ -242,7 +251,7 @@ export const providerFallbackChainScenario = async () => {
       scriptedModel,
       clock,
     );
-    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter());
+    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter(), clock);
     const snapshot = await repository.snapshot(scope, runId);
     assert.ok(snapshot, 'fallback fixture run must exist');
     assert.equal(

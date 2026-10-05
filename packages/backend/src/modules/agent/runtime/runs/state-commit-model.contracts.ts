@@ -261,23 +261,6 @@ export interface ChangeModelRouteResult extends RetryModelStepResult {
   previousAttemptId: string;
 }
 
-export interface PauseModelStepForBudgetCommand {
-  scope: Scope;
-  runId: string;
-  runtimeId: string;
-  stepId: string;
-  attemptId: string;
-  expectedRunVersion: number;
-  usage: RunUsage;
-  inputTokens?: number;
-  outputTokens?: number;
-  cachedInputTokens?: number;
-  estimatedUsage?: boolean;
-  errorCode: string;
-  budgetReason: JsonValue;
-  now: number;
-}
-
 export interface SettleModelStepCommand {
   scope: Scope;
   runId: string;
@@ -296,7 +279,7 @@ export interface SettleModelStepCommand {
   providerContinuation?: ModelProviderContinuation;
   errorCode?: string;
   verificationSummary?: string;
-  terminalStatus: 'completed' | 'completed_unverified' | 'failed' | 'cancelled';
+  terminalStatus: 'completed' | 'completed_unverified' | 'failed' | 'cancelled' | 'interrupted';
   now: number;
 }
 

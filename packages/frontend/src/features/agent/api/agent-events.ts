@@ -116,6 +116,8 @@ const SNAPSHOT_EVENT_TYPES = [
   'approval.superseded',
   'budget.increase_requested',
   'budget.increased',
+  'budget.auto_extended',
+  'budget.finishing',
   'input.appended',
   'model.aborted',
   'model.completed',

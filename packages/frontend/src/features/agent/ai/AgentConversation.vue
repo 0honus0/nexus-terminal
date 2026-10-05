@@ -780,7 +780,7 @@
           <span
             v-if="showRunTokens"
             class="agent-token-status inline-flex h-6 items-center gap-1.5 rounded-lg border border-border/55 bg-background/50 px-2 text-[11px] text-text-secondary select-none"
-            :title="`${$t('agent.tasks.totalTokens')}: ${totalRunTokens} · input ${run?.usage.inputTokens} · output ${run?.usage.outputTokens} · cache ${runCacheRate}% · steps ${run?.usage.steps}`"
+            :title="`${$t('agent.tasks.totalTokens')}: ${totalRunTokens} · input ${run?.usage.inputTokens} · output ${run?.usage.outputTokens} · cache ${runCacheRate}% · ${$t('agent.tasks.modelRequests')} ${run?.usage.modelRequests} · ${$t('agent.tasks.toolExecutions')} ${run?.usage.toolExecutions}`"
           >
             <i class="fa-solid fa-chart-simple text-[8px] text-text-secondary/70" aria-hidden="true"></i>
             <strong class="font-mono font-medium text-foreground/80">{{ formatTokens(totalRunTokens) }}</strong>

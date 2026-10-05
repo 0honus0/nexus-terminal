@@ -436,6 +436,7 @@ export const projectInstructionsContextScenario = async () => {
     contextService([]),
     auditModel,
     new ScenarioModelCallLimiter(),
+    clock,
     {
       load: async (_scope, _runId, _runtimeId, targets) => {
         capturedTargets = [...targets];
@@ -497,6 +498,7 @@ export const projectInstructionsContextScenario = async () => {
     contextService([]),
     auditModel,
     new ScenarioModelCallLimiter(),
+    clock,
     {
       load: async (_scope, _runId, _runtimeId, targetDirectories) => {
         capturedTargets = [...targetDirectories];
@@ -535,6 +537,7 @@ export const projectInstructionsContextScenario = async () => {
     contextService([]),
     auditModel,
     new ScenarioModelCallLimiter(),
+    clock,
     {
       load: async () => {
         throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
@@ -564,6 +567,7 @@ export const projectInstructionsContextScenario = async () => {
     contextService([]),
     auditModel,
     new ScenarioModelCallLimiter(),
+    clock,
     {
       load: async (_scope, _runId, _runtimeId, _targets, _signal, context) => {
         assert.equal(context?.threadId, remoteSnapshot.threadId);

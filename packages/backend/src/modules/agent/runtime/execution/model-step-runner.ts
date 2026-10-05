@@ -1,3 +1,5 @@
+import type { ClockPort } from '../../agent.types';
+import { runtimeProgressContext, activeExecutionSeconds } from './runtime-progress';
 import type { AgentModelAttemptIdentityDto } from '@nexus-terminal/protocol/agent-events';
 import path from 'node:path';
 import type { ContextPlan } from '../../ai/context.types';
@@ -188,7 +190,10 @@ export class ModelStepRunner {
     let usage: TokenUsage | undefined;
     let finishReason: ModelFinishReason | null = null;
     let error: unknown;
-    const remainingSeconds = Math.max(1, snapshot.budget.maxActiveExecutionSeconds - snapshot.activeExecutionSeconds);
+    const remainingSeconds = Math.max(
+      1,
+      snapshot.budget.activeExecutionCeilingSeconds - activeExecutionSeconds(snapshot, this.clock.nowUnixSeconds()),
+    );
     const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(remainingSeconds * 1000)]);
     let checkpoint;
     let requested = false;
@@ -246,6 +251,7 @@ export class ModelStepRunner {
     private readonly context: ContextService,
     private readonly modelPort: LanguageModelPort,
     private readonly modelCalls: ModelCallLimiter,
+    private readonly clock: ClockPort,
     private readonly projectInstructionSource: ProjectInstructionSourcePort | null = null,
   ) {}
 
@@ -374,6 +380,7 @@ export class ModelStepRunner {
           }
         : {}),
       runScopeContext: [
+        runtimeProgressContext(snapshot, this.clock.nowUnixSeconds()),
         `Selected SSH connection IDs for this Run: ${
           snapshot.definition.connectionIds.length > 0 ? snapshot.definition.connectionIds.join(', ') : 'none'
         }.`,
@@ -403,6 +410,11 @@ export class ModelStepRunner {
     toolMode: 'auto' | 'none' = 'auto',
     route?: { model: ModelRef; capabilities?: ModelCapabilitySnapshot },
   ): AsyncGenerator<BackendSignal, ModelAttemptResult> {
+    const remainingSeconds = Math.max(
+      1,
+      snapshot.budget.activeExecutionCeilingSeconds - activeExecutionSeconds(snapshot, this.clock.nowUnixSeconds()),
+    );
+    signal = AbortSignal.any([signal, AbortSignal.timeout(remainingSeconds * 1000)]);
     const modelRef = route?.model ?? snapshot.definition.model;
     const capabilitySnapshot = route?.capabilities ?? snapshot.definition.modelCapabilities;
     const toolCalls = new Map<number, ModelToolCall>();

@@ -56,7 +56,7 @@ const parseProfile = (raw: unknown): SubagentProfile => {
     'capabilities',
     'peerMessaging',
     'mutationMode',
-    'maxSteps',
+    'maxModelRequests',
     'failureMode',
   ]);
   if (Object.keys(raw).length !== allowed.size || Object.keys(raw).some((key) => !allowed.has(key))) {
@@ -89,7 +89,7 @@ const parseProfile = (raw: unknown): SubagentProfile => {
   if (!['parent-child', 'same-run'].includes(String(raw.peerMessaging))) throw new Error('VALIDATION_FAILED');
   const mutationMode = String(raw.mutationMode);
   if (!['read-only', 'governed'].includes(mutationMode)) throw new Error('VALIDATION_FAILED');
-  if (!positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
+  if (!positiveInteger(raw.maxModelRequests)) throw new Error('VALIDATION_FAILED');
   if (!['isolate', 'failFast'].includes(String(raw.failureMode))) throw new Error('VALIDATION_FAILED');
   return {
     id: raw.id.trim(),
@@ -99,7 +99,7 @@ const parseProfile = (raw: unknown): SubagentProfile => {
     capabilities,
     peerMessaging: raw.peerMessaging as PeerMessaging,
     mutationMode: mutationMode as SubagentProfile['mutationMode'],
-    maxSteps: raw.maxSteps,
+    maxModelRequests: raw.maxModelRequests,
     failureMode: raw.failureMode as SubagentFailureMode,
   };
 };
@@ -134,7 +134,7 @@ export class SubagentPolicyService {
         maxMessageBytesPerRun: settings.effectiveSettings.subagents.maxSubagentMessageBytesPerRun,
         profiles,
       },
-      templates: builtInSubagentProfileTemplates(settings.effectiveSettings.hardLimits.maxRunSteps),
+      templates: builtInSubagentProfileTemplates(settings.effectiveSettings.hardLimits.maxModelRequests),
       version: stored?.version ?? 0,
     };
   }
@@ -144,7 +144,7 @@ export class SubagentPolicyService {
     const profiles = parseProfiles(raw);
     const settings = await this.settings.get(scope.userId);
     for (const profile of profiles) {
-      if (profile.maxSteps > settings.effectiveSettings.hardLimits.maxRunSteps) {
+      if (profile.maxModelRequests > settings.effectiveSettings.hardLimits.maxModelRequests) {
         throw new Error('SUBAGENT_PROFILE_HARD_LIMIT_EXCEEDED');
       }
       for (const model of profile.allowedModels) await this.assertModel(scope.userId, model);
@@ -166,7 +166,7 @@ export class SubagentPolicyService {
     };
     return {
       policy,
-      templates: builtInSubagentProfileTemplates(currentSettings.effectiveSettings.hardLimits.maxRunSteps),
+      templates: builtInSubagentProfileTemplates(currentSettings.effectiveSettings.hardLimits.maxModelRequests),
       version: stored.version,
     };
   }

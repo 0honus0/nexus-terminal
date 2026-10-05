@@ -1,3 +1,4 @@
+import { adaptiveExecutionBudgetScenario } from './adaptive-execution-budget.scenario';
 import { performance } from 'node:perf_hooks';
 
 import { artifactSingleDeleteProductScenario } from './artifact-single-delete-product.scenario';
@@ -142,6 +143,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/restart-recovery-closure', restartRecoveryScenario],
   ['runtime/app-disable-scope-closure', appDisableScopeScenario],
   ['runtime/read-tool-batch-authority', readToolBatchAuthorityScenario],
+  ['runtime/adaptive-execution-budget', adaptiveExecutionBudgetScenario],
   ['runtime/subagent-claimed-cancellation', subagentClaimedCancellationScenario],
   ['runtime/subagent-fail-fast-cancellation', failFastSiblingCancellationScenario],
   ['runtime/nested-join-durable-wake', nestedJoinDurableWakeScenario],

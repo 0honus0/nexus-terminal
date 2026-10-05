@@ -197,7 +197,12 @@ export const parseResumeRunRequest = (body: unknown): AgentRunResumeFieldsDto =>
 const parseBudgetIncrease = (value: unknown): AgentRunBudgetIncreaseDto => {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ['maxRunSteps', 'maxActiveExecutionSeconds', 'maxSubagentMessages', 'maxSubagentMessageBytes'])
+    !hasOnlyKeys(value, [
+      'maxModelRequests',
+      'maxActiveExecutionSeconds',
+      'maxSubagentMessages',
+      'maxSubagentMessageBytes',
+    ])
   ) {
     throw new Error('VALIDATION_FAILED');
   }

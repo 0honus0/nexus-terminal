@@ -118,7 +118,6 @@ export const completeCompactionStepTransition = async (
         inputTokens: command.inputTokens,
         outputTokens: command.outputTokens,
         cachedInputTokens: command.cachedInputTokens,
-        steps: 1,
       }),
     },
     events.length,

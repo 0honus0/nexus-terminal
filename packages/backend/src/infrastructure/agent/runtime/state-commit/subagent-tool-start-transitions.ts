@@ -1,3 +1,4 @@
+import { reserveToolExecutions } from './execution-budget-transitions';
 import { randomUUID } from 'node:crypto';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
 import type {
@@ -13,7 +14,7 @@ import { governedSubagentWorkspaceMutation } from '../../../../modules/agent/run
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS } from '../../repositories/sqlite-run.mapper';
 import type { RunRow } from '../../repositories/sqlite-run.mapper';
-import { parseRunBudget, parseRunUsage, parseToolInspection } from '../durable-state-decoders';
+import { parseRunBudget, parseToolInspection } from '../durable-state-decoders';
 import { allocateHostEvent, appendEvents, summaryPayload, usageWithDelta } from './transaction-primitives';
 
 export const commitSubagentToolProposalBatchTransition = async (
@@ -47,11 +48,11 @@ export const commitSubagentToolProposalBatchTransition = async (
   const delegation = await tx.queryOne<{
     status: string;
     child_runtime_id: string;
-    used_steps: number;
-    max_steps: number;
+    used_model_requests: number;
+    max_model_requests: number;
     deadline_at: number;
   }>(
-    `SELECT status, child_runtime_id, used_steps, max_steps, deadline_at
+    `SELECT status, child_runtime_id, used_model_requests, max_model_requests, deadline_at
      FROM agent_delegations WHERE id = ? AND run_id = ?`,
     [command.delegationId, command.runId],
   );
@@ -59,12 +60,7 @@ export const commitSubagentToolProposalBatchTransition = async (
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
   const tokenDelta = command.inputTokens + command.outputTokens;
-  if (delegation.used_steps + command.items.length > delegation.max_steps) {
-    throw new Error('DELEGATION_BUDGET_EXCEEDED');
-  }
-  const runUsage = parseRunUsage(row.usage_json);
   const runBudget = parseRunBudget(row.budget_json);
-  if (runUsage.steps + command.items.length > runBudget.maxRunSteps) throw new Error('RUN_BUDGET_EXCEEDED');
   const step = await tx.queryOne<{ status: string }>(
     `SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'model'`,
     [command.modelStepId, command.runId, command.runtimeId],
@@ -152,10 +148,10 @@ export const commitSubagentToolProposalBatchTransition = async (
     resultItems.push({ providerCallId: item.providerCallId, toolCallId: item.toolCallId, toolStepId });
   }
   const delegationChanged = await tx.execute(
-    `UPDATE agent_delegations SET used_tokens = used_tokens + ?, used_steps = used_steps + ?,
+    `UPDATE agent_delegations SET used_tokens = used_tokens + ?,
      version = version + 1, updated_at = ?
-     WHERE id = ? AND run_id = ? AND status = 'running' AND used_steps + ? <= max_steps`,
-    [tokenDelta, command.items.length, command.now, command.delegationId, command.runId, command.items.length],
+     WHERE id = ? AND run_id = ? AND status = 'running' `,
+    [tokenDelta, command.now, command.delegationId, command.runId],
   );
   if (delegationChanged.changes !== 1) throw new Error('DELEGATION_BUDGET_EXCEEDED');
   const runtimeChanged = await tx.execute(
@@ -308,6 +304,7 @@ export const beginSubagentMutationToolTransition = async (
     [command.runId, command.scope.userId, command.scope.appId],
   );
   if (!row) throw new Error('NOT_FOUND');
+  await reserveToolExecutions(tx, row, 1, command.now);
   if (row.status !== 'running') throw new Error('RUN_NOT_SCHEDULABLE');
   if (mapRunRow(row).definition.executionMode === 'plan') throw new Error('PLAN_MODE_TOOL_FORBIDDEN');
   if (row.input_revision !== command.expectedInputRevision) throw new Error('APPROVAL_STALE');
@@ -460,6 +457,7 @@ export const beginSubagentToolTransition = async (
     [command.runId, command.scope.userId, command.scope.appId],
   );
   if (!row) throw new Error('NOT_FOUND');
+  await reserveToolExecutions(tx, row, 1, command.now);
   if (row.status !== 'running') throw new Error('RUN_NOT_SCHEDULABLE');
   const work = await tx.queryOne<{ status: string; owner_epoch: number | null }>(
     `SELECT status, owner_epoch FROM agent_scheduler_work

@@ -12,7 +12,15 @@ import { SCENARIO_MODEL_CAPABILITIES } from './scenario-fixtures';
 
 export const durableBoundaryDecodeScenario = async () => {
   const budget = {
-    maxRunSteps: 100,
+    modelRequestCeiling: 100,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 65_536,
@@ -28,7 +36,8 @@ export const durableBoundaryDecodeScenario = async () => {
     inputTokens: 10,
     outputTokens: 2,
     cachedInputTokens: 4,
-    steps: 1,
+    toolExecutions: 0,
+    modelRequests: 1,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   };
@@ -83,7 +92,7 @@ export const durableBoundaryDecodeScenario = async () => {
   assert.deepEqual(parseToolResult(JSON.stringify(result)), result);
 
   const rejected = [
-    () => parseRunUsage(JSON.stringify({ ...usage, steps: undefined })),
+    () => parseRunUsage(JSON.stringify({ ...usage, modelRequests: undefined })),
     () => parseRunBudget(JSON.stringify({ ...budget, maxContextTokens: '8192' })),
     () => decodeDurableJsonValue(Array.from({ length: 16_385 }, () => 0)),
     () => parseToolResult(JSON.stringify({ ...result, outcome: 'maybe' })),

@@ -377,7 +377,7 @@ Backend 持有用户、App、Thread、Run、Ledger、Plan、approval、lease、a
 
 Context checkpoint 由 `modules/agent/ai/context-checkpoint.service.ts` 规划可见 Ledger prefix 和模型输入，采用 `context-checkpoint-v2`／`semantic-handoff-v1`。已验证旧摘要与新增历史按窗口分批合并，历史序列以 JSON 数据送入模型，不投影为可执行 Tool call，不按关键词、首尾样本或固定字符截断。Context 保留有界近期完整 causal groups，并以低权威 user 历史交接数据投影有效摘要；content 和 generator 纳入 context lineage。
 
-`NativeAgentBackend` 在正式推理前执行独立 compaction model step，`ModelStepRunner` 复用冻结 route、ModelCallLimiter、取消、重试和 Run step/time 预算；摘要没有 Tool、普通回复 delta 或助手 Ledger。`state-commit/compaction-transitions.ts` 在 Adapter 事务内重新校验 source hash、visibility、输入／Goal revision，原子更新 checkpoint、attempt、usage、执行时间与事件，不消费输入，不覆盖主推理 context usage。每批重新 compose 后继续压缩；空／截断／超预算／不缩小结果、来源变化与取消不发布摘要，失败不静默降级为只删历史。超过单批窗口的单条记录明确报错；原始 Ledger 保留。迁移 #51 清理旧策略派生摘要，不改原始历史。
+`NativeAgentBackend` 在正式推理前执行独立 compaction model step，`ModelStepRunner` 复用冻结 route、ModelCallLimiter、取消、重试和 Run model-request/time 预算；摘要没有 Tool、普通回复 delta 或助手 Ledger。`state-commit/compaction-transitions.ts` 在 Adapter 事务内重新校验 source hash、visibility、输入／Goal revision，原子更新 checkpoint、attempt、usage、执行时间与事件，不消费输入，不覆盖主推理 context usage。每批重新 compose 后继续压缩；空／截断／超预算／不缩小结果、来源变化与取消不发布摘要，失败不静默降级为只删历史。超过单批窗口的单条记录明确报错；原始 Ledger 保留。迁移 #51 清理旧策略派生摘要，不改原始历史。
 
 `SqliteStateCommitAdapter` 持有事务入口与提交后观察；恢复／App 禁用的 durable 转换位于 `infrastructure/agent/runtime/state-commit/recovery-transitions.ts`，与其他 transition 一样接收当前事务。Quarantine、子状态、审批、Run、事件与 Host summary 必须同事务收敛，不将 SQL 拆到事务外的 Recovery service。历史 restart 候选查询保持在提交和通知之后，不复用旧执行 stack。
 
@@ -429,3 +429,15 @@ Bootstrap 注册 process、database、Runner、provider、plugin 和 transport �
 - Agent deterministic scenarios 位于 `tests/backend/agent-scenarios/`。
 - 用户可达 HTTP/WebSocket/SSH/Agent 行为由 `tests/e2e/` 验证。
 - Canonical workflow 保留 production-style Docker smoke。
+
+### 自适应执行预算与当前进度
+
+`runtime/execution/runtime-progress.ts` 从最新 Run／Delegation 构造必需控制上下文，投影 Goal／Plan revision、项目状态／证据、验证与 reconciliation、计数和剩余额度，数据不提升为授权。Root prepare 与 Child context 每次重建都注入；有限窗口仍由 Context owner 规划，不能用可选历史截断悄悄丢失资源指令。
+
+`state-commit/execution-budget-transitions.ts` 在同一 SQLite transaction 内校验并预留全 Run 模型请求和工具执行。每个新 attempt（包括摘要、retry、route fallback）在开始时计数，settle 只累加 token；实际开始的工具计独立 `toolExecutions`。Child 保留本地请求上限，并为 Root 留最多两个请求。各模型／工具 deadline 按尚在进行的活动时间扣减，不等待 settle 才发现时间耗尽。
+
+Native 在既有工具 proposal batch 结算后、下次模型 admission 前评估额度；Child model work 在请求前刷新同一预算。进展读取上次扩展 event cursor 后最多 32 条工具终态，要求新成功数据或证据，排除相同 operation／data／verification 的旧记录、连续三次失败及 loop warning。仅增长受压维度，1.5 倍且冻结 ceiling 截断，revision／cursor／事件／Host projection 同事务提交；该有界启发式不是成功证明，hard ceiling 是最终资源边界。
+
+finishing 禁止新工具／委派。安全 checkpoint callback 使用 `execution_limit` 强制保存；最终 model summary 或确定性 partial report 与终态持久化，子 work 取消、活动 attempt 收敛，未确认 mutation／lease 隔离继续保留。Post-commit observer 中止 Child scheduler 与回收 Run-owned Browser。CheckpointService 拒绝 finishing／耗尽源，合法 continuation 在 createRun transaction 继承父级 usage 和 active seconds，不能重置保险丝。
+
+迁移 #53 将设置、应用策略、委派和旧 Run 数据一次性转换为当前字段；模型请求数从持久 attempt 重建，工具数从实际 started Tool 重建。历史 Run 的旧限额作为保守冻结 ceiling，启动恢复仍由既有 recovery owner 收敛非终态，不在 migration 伪造完成事件或重放工作。公开 API 和 decoder 不接受旧字段。

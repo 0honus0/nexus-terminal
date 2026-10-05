@@ -467,16 +467,16 @@ const installAndRunNexusAgent = async (
         await expect.poll(contexts).toEqual(baseline);
       }
     });
-    for (const cancelBudgetWait of [false, true])
+    for (const cancelExpandedRun of [false, true])
       await step(
-        `budget waiting ${cancelBudgetWait ? 'cancellation reclaims' : 'resumption preserves'} the opened context`,
+        `automatic budget extension ${cancelExpandedRun ? 'cancellation reclaims' : 'preserves'} the opened context`,
         async () => {
           const settingsResponse = await request.get('/api/v1/agent/settings');
           expect(settingsResponse.ok()).toBeTruthy();
           const original = (await settingsResponse.json()).data;
           const limited = await request.patch('/api/v1/agent/settings', {
             headers,
-            data: { expectedVersion: original.revision, patch: { budget: { maxRunSteps: 3 } } },
+            data: { expectedVersion: original.revision, patch: { budget: { maxModelRequests: 3 } } },
           });
           expect(limited.ok(), await limited.text()).toBeTruthy();
           let budgetRunId = '';
@@ -489,37 +489,32 @@ const installAndRunNexusAgent = async (
               expect(response.ok()).toBeTruthy();
               return (await response.json()).data;
             };
-            await expect.poll(async () => (await readRun()).status).toBe('awaiting_budget');
+            await expect.poll(async () => (await readRun()).budget.extensionCount).toBeGreaterThan(0);
             const waiting = await readRun();
             const liveContexts = await contexts();
             expect(liveContexts).toHaveLength(baseline.length + 1);
-            expect(waiting.budget.maxRunSteps).toBe(3);
-            expect(waiting.usage.steps).toBe(3);
-            if (cancelBudgetWait) {
+            expect(waiting.status).toBe('running');
+            expect(waiting.budget.maxModelRequests).toBeGreaterThan(3);
+            expect(waiting.budget.maxModelRequests).toBeLessThanOrEqual(waiting.budget.modelRequestCeiling);
+            if (cancelExpandedRun) {
               await cancelRunForCleanup(request, budgetRunId);
               expect((await waitForTerminalRun(request, budgetRunId)).status).toBe('cancelled');
               await expect.poll(contexts).toEqual(baseline);
               const late = await request.post(`/api/v1/apps/nexus.agent/runs/${budgetRunId}/budget`, {
                 headers: { ...headers, 'Idempotency-Key': randomUUID() },
-                data: { schemaVersion: 1, expectedVersion: waiting.version, increase: { maxRunSteps: 6 } },
+                data: { schemaVersion: 1, expectedVersion: waiting.version, increase: { maxSubagentMessages: 100 } },
               });
               expect(late.status()).toBe(409);
               const cancelled = await readRun();
               const currentVersionIncrease = await request.post(`/api/v1/apps/nexus.agent/runs/${budgetRunId}/budget`, {
                 headers: { ...headers, 'Idempotency-Key': randomUUID() },
-                data: { schemaVersion: 1, expectedVersion: cancelled.version, increase: { maxRunSteps: 6 } },
+                data: { schemaVersion: 1, expectedVersion: cancelled.version, increase: { maxSubagentMessages: 100 } },
               });
               expect(currentVersionIncrease.status()).toBe(409);
               expect((await readRun()).status).toBe('cancelled');
               expect(await contexts()).toEqual(baseline);
               return;
             }
-            const increased = await request.post(`/api/v1/apps/nexus.agent/runs/${budgetRunId}/budget`, {
-              headers: { ...headers, 'Idempotency-Key': randomUUID() },
-              data: { schemaVersion: 1, expectedVersion: waiting.version, increase: { maxRunSteps: 6 } },
-            });
-            expect(increased.ok(), await increased.text()).toBeTruthy();
-            await expect.poll(async () => (await readRun()).status).toBe('running');
             expect(await contexts()).toEqual(liveContexts);
             const released = await fetch(`${E2E_URLS.openAiProviderOrigin}/browser-lifecycle/release`, {
               method: 'POST',
@@ -540,7 +535,7 @@ const installAndRunNexusAgent = async (
               headers,
               data: {
                 expectedVersion: current.revision,
-                patch: { budget: { maxRunSteps: original.effectiveSettings.budget.maxRunSteps } },
+                patch: { budget: { maxModelRequests: original.effectiveSettings.budget.maxModelRequests } },
               },
             });
             expect(restored.ok(), await restored.text()).toBeTruthy();
@@ -899,7 +894,7 @@ const installAndRunNexusAgent = async (
             capabilities: ['browser.read'],
             peerMessaging: 'parent-child',
             mutationMode: 'read-only',
-            maxSteps: 8,
+            maxModelRequests: 8,
             failureMode: 'isolate',
           },
         ],

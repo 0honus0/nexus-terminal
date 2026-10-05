@@ -9,6 +9,8 @@ export const AGENT_DURABLE_EVENT_TYPES = [
   'approval.superseded',
   'budget.increase_requested',
   'budget.increased',
+  'budget.auto_extended',
+  'budget.finishing',
   'completion.gate_blocked',
   'goal.updated',
   'input.appended',

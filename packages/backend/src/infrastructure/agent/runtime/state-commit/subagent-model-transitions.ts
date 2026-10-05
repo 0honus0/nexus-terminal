@@ -1,3 +1,4 @@
+import { assertModelAdmission } from './execution-budget-transitions';
 import { randomUUID } from 'node:crypto';
 import { AGENT_DEFAULTS } from '../../../../modules/agent/agent-defaults';
 import { durableRecord, parseDurableJson } from '../durable-state-decoders';
@@ -47,11 +48,11 @@ export const beginSubagentModelStepTransition = async (
   const delegation = await tx.queryOne<{
     status: string;
     child_runtime_id: string;
-    max_steps: number;
-    used_steps: number;
+    max_model_requests: number;
+    used_model_requests: number;
     deadline_at: number;
   }>(
-    `SELECT status, child_runtime_id, max_steps, used_steps, deadline_at
+    `SELECT status, child_runtime_id, max_model_requests, used_model_requests, deadline_at
      FROM agent_delegations WHERE id = ? AND run_id = ?`,
     [command.delegationId, command.runId],
   );
@@ -63,7 +64,7 @@ export const beginSubagentModelStepTransition = async (
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
   if (delegation.deadline_at <= command.now) throw new Error('DELEGATION_DEADLINE_EXCEEDED');
-  if (delegation.used_steps >= delegation.max_steps) throw new Error('DELEGATION_BUDGET_EXCEEDED');
+  if (delegation.used_model_requests >= delegation.max_model_requests) throw new Error('DELEGATION_BUDGET_EXCEEDED');
   const work = await tx.queryOne<{ status: string; owner_epoch: number | null }>(
     `SELECT status, owner_epoch FROM agent_scheduler_work
      WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'model_step'`,
@@ -72,13 +73,8 @@ export const beginSubagentModelStepTransition = async (
   if (!work || work.status !== 'claimed' || work.owner_epoch !== command.ownerEpoch) {
     throw new Error('SCHEDULER_WORK_STALE');
   }
-  const budget = parseRunBudget(row.budget_json);
+  assertModelAdmission(row, command.now, true);
   const usage = parseRunUsage(row.usage_json);
-  if (usage.steps >= budget.maxRunSteps) throw new Error('RUN_BUDGET_EXCEEDED');
-  const activeSeconds =
-    row.active_execution_seconds +
-    (row.active_execution_started_at === null ? 0 : Math.max(0, command.now - row.active_execution_started_at));
-  if (activeSeconds >= budget.maxActiveExecutionSeconds) throw new Error('RUN_BUDGET_EXCEEDED');
   const previous = await tx.queryOne<{ max_index: number | null }>(
     'SELECT MAX(step_index) AS max_index FROM agent_steps WHERE run_id = ?',
     [command.runId],
@@ -113,9 +109,9 @@ export const beginSubagentModelStepTransition = async (
     [command.now, command.runtimeId, command.runId],
   );
   const delegationChanged = await tx.execute(
-    `UPDATE agent_delegations SET status = 'running', used_steps = used_steps + 1,
+    `UPDATE agent_delegations SET status = 'running', used_model_requests = used_model_requests + 1,
      version = version + 1, updated_at = ?
-     WHERE id = ? AND run_id = ? AND status IN ('queued','running','waiting') AND used_steps < max_steps`,
+     WHERE id = ? AND run_id = ? AND status IN ('queued','running','waiting') AND used_model_requests < max_model_requests`,
     [command.now, command.delegationId, command.runId],
   );
   if (runtimeChanged.changes !== 1 || delegationChanged.changes !== 1) throw new Error('DELEGATION_STATE_CONFLICT');
@@ -136,7 +132,7 @@ export const beginSubagentModelStepTransition = async (
     },
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
-  const nextUsage: RunUsage = { ...usage, steps: usage.steps + 1 };
+  const nextUsage: RunUsage = { ...usage, modelRequests: usage.modelRequests + 1 };
   const changedRun = await tx.execute(
     `UPDATE agent_runs SET usage_json = ?,
        active_execution_started_at = CASE WHEN executing_runtime_count = 0 THEN ? ELSE active_execution_started_at END,
@@ -394,8 +390,8 @@ export const settleSubagentModelStepTransition = async (
   const cancelling = row.status === 'cancelling';
   const retry = command.retry && !cancelling && row.status === 'running' ? command.retry : undefined;
   if (retry) {
-    const limits = await tx.queryOne<{ used_steps: number; max_steps: number; deadline_at: number }>(
-      'SELECT used_steps, max_steps, deadline_at FROM agent_delegations WHERE id = ?',
+    const limits = await tx.queryOne<{ used_model_requests: number; max_model_requests: number; deadline_at: number }>(
+      'SELECT used_model_requests, max_model_requests, deadline_at FROM agent_delegations WHERE id = ?',
       [command.delegationId],
     );
     const currentWork = await tx.queryOne<{ payload_json: string; deadline_at: number }>(
@@ -414,8 +410,8 @@ export const settleSubagentModelStepTransition = async (
       !Number.isSafeInteger(retry.notBefore) ||
       retry.notBefore <= command.now ||
       retry.notBefore >= Math.min(limits.deadline_at, currentWork.deadline_at) ||
-      limits.used_steps >= limits.max_steps ||
-      parseRunUsage(row.usage_json).steps >= parseRunBudget(row.budget_json).maxRunSteps ||
+      limits.used_model_requests >= limits.max_model_requests ||
+      parseRunUsage(row.usage_json).modelRequests >= parseRunBudget(row.budget_json).maxModelRequests ||
       !shouldRetryModel(new Error(command.errorCode), currentIndex, new AbortController().signal)
     )
       throw new Error('MODEL_RETRY_INVALID');
@@ -520,7 +516,7 @@ export const settleSubagentModelStepTransition = async (
     inputTokens: currentUsage.inputTokens + command.inputTokens,
     outputTokens: currentUsage.outputTokens + command.outputTokens,
     cachedInputTokens: currentUsage.cachedInputTokens + command.cachedInputTokens,
-    steps: currentUsage.steps,
+    modelRequests: currentUsage.modelRequests,
     subagentMessages: currentUsage.subagentMessages,
     subagentMessageBytes: currentUsage.subagentMessageBytes,
   };

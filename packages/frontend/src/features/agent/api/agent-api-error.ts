@@ -83,7 +83,7 @@ const classifyAgentApiError = (code: string): AgentApiErrorCategory | null => {
 const agentErrorTable: ReadonlyArray<readonly [RegExp, AgentApiErrorCategory]> = [
   [/(?:AUTH_FAILED|UNAUTHORIZED|CREDENTIAL_STALE)$/, 'authentication'],
   [/(?:FORBIDDEN|DENIED|UNTRUSTED|NOT_AUTHORIZED)$/, 'forbidden'],
-  [/(?:QUOTA_EXCEEDED|LIMIT_EXCEEDED|BUDGET_EXCEEDED|HARD_LIMIT_EXCEEDED)$/, 'quota'],
+  [/(?:QUOTA_EXCEEDED|LIMIT_EXCEEDED|BUDGET_EXCEEDED|HARD_LIMIT_EXCEEDED|RUN_EXECUTION_LIMIT)$/, 'quota'],
   [/(?:TOO_LARGE|PAYLOAD_TOO_LARGE|ARCHIVE_TOO_MANY_FILES)$/, 'tooLarge'],
   [/(?:TIMEOUT|DEADLINE_EXCEEDED)$/, 'timeout'],
   [/(?:BUSY|QUEUE_FULL|IN_PROGRESS)$/, 'busy'],

@@ -48,7 +48,7 @@ export interface CreateDelegationRecord {
   dependsOn: string[];
   depth: number;
   failureMode: SubagentFailureMode;
-  maxSteps: number;
+  maxModelRequests: number;
   idempotencyKey: string;
   requestHash: string;
   deadlineAt: number;

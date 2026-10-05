@@ -1,3 +1,4 @@
+import { remainingExecutionSeconds } from '../execution/runtime-progress';
 import { isDeepStrictEqual } from 'node:util';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
@@ -503,7 +504,11 @@ export class SubagentToolStepExecutor {
       environment: run.definition.environment ?? null,
       stepId,
       signal,
-      deadlineAt: Math.min(delegationDeadlineAt, this.clock.nowUnixSeconds() + run.budget.toolTimeoutSeconds),
+      deadlineAt: Math.min(
+        delegationDeadlineAt,
+        this.clock.nowUnixSeconds() +
+          Math.min(run.budget.toolTimeoutSeconds, remainingExecutionSeconds(run, this.clock.nowUnixSeconds())),
+      ),
       maxOutputBytes: run.budget.maxToolOutputBytes,
       inputRevision: run.inputRevision,
     };

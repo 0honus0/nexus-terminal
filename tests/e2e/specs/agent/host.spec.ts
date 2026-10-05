@@ -78,7 +78,9 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
 
   await page.mouse.move(initial!.x + initial!.width / 2, initial!.y + initial!.height / 2);
   await page.mouse.down();
-  await page.mouse.move(initial!.x + initial!.width / 2 - 90, initial!.y + initial!.height / 2 - 80, { steps: 4 });
+  await page.mouse.move(initial!.x + initial!.width / 2 - 90, initial!.y + initial!.height / 2 - 80, {
+    modelRequests: 4,
+  });
   await page.mouse.up();
 
   const moved = await launcher.boundingBox();
@@ -114,7 +116,7 @@ test('Agent launcher docks on either edge, restores its side and expands on focu
     const width = await page.evaluate(() => document.documentElement.clientWidth);
     await page.mouse.move(initial.x + initial.width / 2, initial.y + initial.height / 2);
     await page.mouse.down();
-    await page.mouse.move(side === 'left' ? 22 : width - 22, initial.y + initial.height / 2 - 40, { steps: 5 });
+    await page.mouse.move(side === 'left' ? 22 : width - 22, initial.y + initial.height / 2 - 40, { modelRequests: 5 });
     await page.mouse.up();
     await page.mouse.move(width / 2, 50);
     await expect(hub).toHaveCount(0);
@@ -262,7 +264,7 @@ test('Agent Hub resizing keeps its current center and its bottom-right handle fo
     const y = box!.y + box!.height / 2;
     await page.mouse.move(x, y);
     await page.mouse.down();
-    await page.mouse.move(x + dx, y + dy, { steps: 8 });
+    await page.mouse.move(x + dx, y + dy, { modelRequests: 8 });
     await page.mouse.up();
   };
   const expectCenteredSize = async (before: Awaited<ReturnType<typeof bounds>>, dw: number, dh: number) => {
@@ -289,7 +291,7 @@ test('Agent Hub resizing keeps its current center and its bottom-right handle fo
   const headerY = headerBox!.y + headerBox!.height / 2;
   await page.mouse.move(headerX, headerY);
   await page.mouse.down();
-  await page.mouse.move(headerX + 40, headerY + 60, { steps: 8 });
+  await page.mouse.move(headerX + 40, headerY + 60, { modelRequests: 8 });
   await page.mouse.up();
   await expect.poll(async () => (await bounds()).x).toBeCloseTo(shrunk.x + 40, 0);
   const moved = await bounds();

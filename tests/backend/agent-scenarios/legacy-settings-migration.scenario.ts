@@ -38,7 +38,7 @@ export const legacySettingsMigrationScenario = async () => {
       workspaceIdleTtlSeconds: 600,
     });
     (legacy.workspaceRuntime as Record<string, unknown>).workspaceIdleTtlSeconds = 600;
-    (legacy.budget as Record<string, unknown>).maxRunSteps = 37;
+    (legacy.budget as Record<string, unknown>).maxModelRequests = 37;
     assert.throws(() => normalizeRequestedSettings(legacy), /VALIDATION_FAILED/);
 
     const insert = db.prepare('INSERT INTO agent_settings VALUES (?, ?, ?, ?)');
@@ -56,7 +56,7 @@ export const legacySettingsMigrationScenario = async () => {
       updated_at: number;
     }>;
     const upgraded = normalizeRequestedSettings(JSON.parse(rows[0]!.value_json));
-    assert.equal(upgraded.budget.maxRunSteps, 37);
+    assert.equal(upgraded.budget.maxModelRequests, 37);
     assert.deepEqual(upgraded.model.fallbackModels, []);
     assert.equal(rows[0]!.revision, 7);
     assert.equal(rows[0]!.updated_at, 100);

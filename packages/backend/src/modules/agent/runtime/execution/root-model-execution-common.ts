@@ -57,10 +57,12 @@ export const rejectedToolInspection = (run: RunView, proposal: ToolProposal, fai
 };
 
 export const usageWithModel = (base: RunUsage, delta: TokenUsage): RunUsage => ({
+  ...base,
   inputTokens: base.inputTokens + delta.inputTokens,
   outputTokens: base.outputTokens + delta.outputTokens,
   cachedInputTokens: base.cachedInputTokens + delta.cachedInputTokens,
-  steps: base.steps + 1,
+  modelRequests: base.modelRequests,
+  toolExecutions: base.toolExecutions,
   subagentMessages: base.subagentMessages,
   subagentMessageBytes: base.subagentMessageBytes,
 });
@@ -69,7 +71,8 @@ export const usageWithAttempt = (base: RunUsage, delta: TokenUsage): RunUsage =>
   inputTokens: base.inputTokens + delta.inputTokens,
   outputTokens: base.outputTokens + delta.outputTokens,
   cachedInputTokens: base.cachedInputTokens + delta.cachedInputTokens,
-  steps: base.steps,
+  modelRequests: base.modelRequests,
+  toolExecutions: base.toolExecutions,
   subagentMessages: base.subagentMessages,
   subagentMessageBytes: base.subagentMessageBytes,
 });

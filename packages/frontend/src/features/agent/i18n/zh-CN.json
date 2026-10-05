@@ -298,17 +298,17 @@
           "concurrencyDesc": "限制并发任务、活跃工作区与子代理委托深度",
           "extra": "其他系统级限制",
           "extraDesc": "其他扩展策略参数",
-          "execution": "执行步数限制",
-          "executionDesc": "限制单个 Run 最多可执行的模型/工具循环步数"
+          "execution": "模型请求硬上限",
+          "executionDesc": "所有运行单元共享的累计请求保险丝；包含失败请求、重试和压缩，收尾额度也包含在内"
         },
         "fields": {
-          "maxRunSteps": {
-            "label": "单次 Run 最大步数",
-            "hint": "单次任务允许循环执行工具与模型思考的最大步数"
+          "maxModelRequests": {
+            "label": "模型请求硬上限",
+            "hint": "所有运行单元共享的累计请求保险丝；包含失败请求、重试和压缩，收尾额度也包含在内"
           },
           "maxActiveExecutionSeconds": {
             "label": "任务最大执行时长",
-            "hint": "单次任务执行的最长持续时间，超时将自动取消"
+            "hint": "累计活动执行时间上限；接近上限时收尾并保留部分结果"
           },
           "toolTimeoutSeconds": {
             "label": "单工具调用超时",
@@ -365,6 +365,10 @@
           "maxActiveWorkspaces": {
             "label": "最大活跃工作区数",
             "hint": "系统同时保活的代码工作区容器或目录数"
+          },
+          "maxToolExecutions": {
+            "label": "工具执行",
+            "hint": "实际启动的工具累计上限，失败执行同样计入"
           }
         }
       },
@@ -389,17 +393,17 @@
         "presetBalanced": "标准均衡",
         "presetBalancedDesc": "推荐配置，兼顾推理质量、多步执行与资源控制",
         "presetDeep": "深度探索",
-        "presetDeepDesc": "高步数长超时，适合复杂重构与深层次调试",
+        "presetDeepDesc": "更多模型请求和执行时间，适合复杂任务",
         "presetCustom": "自定义微调",
         "presetCustomDesc": "按需自由配置各项底层参数，完全掌控执行上限",
         "customBadge": "已自定义",
         "recommendedBadge": "推荐",
         "saveSuccess": "预算与上下文配置已保存",
         "fields": {
-          "maxRunSteps": "最大执行步数",
-          "maxRunStepsHint": "单个 Run 允许执行的工具调用与思考最大步数",
-          "maxActiveExecutionSeconds": "执行超时时间 (秒)",
-          "maxActiveExecutionSecondsHint": "单次 Run 活跃执行的最长持续时间",
+          "maxModelRequests": "初始模型请求额度",
+          "maxModelRequestsHint": "Root、子 Agent、重试和压缩共享；有新增进展证据时在应用上限内自动扩容",
+          "maxActiveExecutionSeconds": "初始活动执行额度",
+          "maxActiveExecutionSecondsHint": "Root、子 Agent、重试和压缩共享；有新增进展证据时在应用上限内自动扩容",
           "toolTimeoutSeconds": "单工具超时 (秒)",
           "toolTimeoutSecondsHint": "单个工具调用的执行超时时限",
           "maxToolOutputBytes": "工具输出截断 (字节)",
@@ -412,14 +416,14 @@
         "readyNotice": "当前配置已就绪，将在下一次 Run 执行时生效",
         "modelCapabilityNotice": "模型单次上下文与最大输出直接使用 Provider/Registry 声明的物理能力；这里仅控制整个 Run 的总预算与工具资源。",
         "groups": {
-          "steps": "执行步数保险丝",
           "timeControl": "执行与超时控制",
-          "toolsData": "工具截断与上下文记忆"
+          "toolsData": "工具截断与上下文记忆",
+          "modelRequests": "初始模型请求额度"
         },
-        "presetSteps": "{steps} 步 · {minutes} min",
         "customTuning": "自定义微调",
         "effective": "有效: {value}",
-        "unsavedChanges": "有尚未保存的预算变更"
+        "unsavedChanges": "有尚未保存的预算变更",
+        "presetRequests": "{requests} 次请求 · {minutes} min"
       },
       "quantity": {
         "placeholderBytes": "例: 10M, 500K",
@@ -771,7 +775,7 @@
         "profileId": "配置档 ID",
         "role": "角色",
         "defaultModel": "默认模型",
-        "maxSteps": "最大步骤",
+        "maxModelRequests": "模型请求",
         "peerMessaging": "同伴通信",
         "peerParentChild": "仅父子 Agent",
         "peerSameRun": "同一 Run 内已授权同伴",
@@ -971,8 +975,8 @@
           "conservative": "保守压缩"
         },
         "fields": {
-          "maxRunSteps": "Run 最大步骤保险丝",
-          "maxActiveExecutionSeconds": "最长活跃执行时间",
+          "maxModelRequests": "初始模型请求额度",
+          "maxActiveExecutionSeconds": "初始活动执行额度",
           "toolTimeoutSeconds": "单工具超时",
           "maxToolOutputBytes": "模型可见工具输出",
           "maxRecallItems": "Recall 条目数",
@@ -980,7 +984,9 @@
           "maxSubagentMessages": "Subagent 消息总数",
           "maxSubagentMessageBytes": "Subagent 消息总容量",
           "contextCompactionMode": "上下文动态压缩策略",
-          "contextProfile": "上下文窗口策略"
+          "contextProfile": "上下文窗口策略",
+          "maxAutoModelRequests": "自动续跑请求上限",
+          "maxAutoActiveExecutionSeconds": "自动续跑时间上限（秒）"
         },
         "profileHint": "Normal 保留更多上下文安全余量；Extended 使用更多模型窗口。两者都不会放宽硬性限制。",
         "profileInherited": "继承：{value}",
@@ -1558,10 +1564,9 @@
         "anchored_estimate": "Provider 锚定估算",
         "provider": "Provider 实测"
       },
-      "steps": "步骤",
       "activeTime": "执行时间",
       "verification": "验证",
-      "increaseBudget": "增加本次 Run 预算",
+      "increaseBudget": "增加通信额度",
       "plan": "计划",
       "planStatus": {
         "pending": "待执行",
@@ -1621,7 +1626,16 @@
       "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}",
       "dragCardHint": "拖动或按 ↑/↓ 调整卡片顺序",
       "resetCardOrder": "重置卡片顺序",
-      "showOlderRuns": "显示更早的 Run（还有 {count} 条）"
+      "showOlderRuns": "显示更早的 Run（还有 {count} 条）",
+      "modelRequests": "模型请求",
+      "toolExecutions": "工具执行",
+      "finishing": "正在保存结果并收尾",
+      "stopReasons": {
+        "model_request_limit": "模型请求上限",
+        "active_time_limit": "活跃执行时间上限",
+        "tool_execution_limit": "工具执行上限",
+        "no_progress": "缺少新增进展证据"
+      }
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",
@@ -1704,7 +1718,6 @@
       "description": "这里只显示公开协作状态，不展示子 Agent 的私有提示词或模型上下文。",
       "empty": "此 Run 尚无子 Agent 委派。",
       "depth": "深度 {value}",
-      "steps": "步骤 {used}/{max}",
       "cancel": "取消子 Agent",
       "messages": "Mailbox 交换",
       "noMessages": "此子 Agent 暂无公开消息。",
@@ -1721,7 +1734,8 @@
         "isolate": "失败仅影响自身",
         "failFast": "失败即中止同级"
       },
-      "profileLabel": "配置档 {id}"
+      "profileLabel": "配置档 {id}",
+      "modelRequests": "模型请求 {used}/{max}"
     },
     "approvals": {
       "title": "需要批准的操作",

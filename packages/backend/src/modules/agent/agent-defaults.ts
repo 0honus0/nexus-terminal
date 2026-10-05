@@ -1,7 +1,7 @@
 export type AgentContextProfile = 'normal' | 'extended';
 
 export interface AgentRunBudgetSnapshot {
-  maxRunSteps: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
 }
 
@@ -43,7 +43,7 @@ export interface AgentSettingsDocument {
     maxConcurrentModelCalls: 'auto' | number;
   };
   budget: {
-    maxRunSteps: number;
+    maxModelRequests: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -51,7 +51,8 @@ export interface AgentSettingsDocument {
     maxRecallBytes: number;
   };
   hardLimits: {
-    maxRunSteps: number;
+    maxModelRequests: number;
+    maxToolExecutions: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -102,7 +103,7 @@ export const AGENT_DEFAULTS = {
     model: { defaultProviderId: null, defaultModelId: null, fallbackModels: [] },
     performance: { maxConcurrentRuntimes: 2, maxConcurrentModelCalls: 'auto' },
     budget: {
-      maxRunSteps: 80,
+      maxModelRequests: 80,
       maxActiveExecutionSeconds: 1_800,
       toolTimeoutSeconds: 60,
       maxToolOutputBytes: 65_536,
@@ -110,7 +111,8 @@ export const AGENT_DEFAULTS = {
       maxRecallBytes: 8_192,
     },
     hardLimits: {
-      maxRunSteps: 400,
+      maxModelRequests: 400,
+      maxToolExecutions: 4000,
       maxActiveExecutionSeconds: 7_200,
       toolTimeoutSeconds: 300,
       maxToolOutputBytes: 262_144,
@@ -373,7 +375,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   const model = exactRecord(raw, 'model', ['defaultProviderId', 'defaultModelId', 'fallbackModels']);
   const performance = exactRecord(raw, 'performance', ['maxConcurrentRuntimes', 'maxConcurrentModelCalls']);
   const budget = exactRecord(raw, 'budget', [
-    'maxRunSteps',
+    'maxModelRequests',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -381,7 +383,8 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'maxRecallBytes',
   ]);
   const hardLimits = exactRecord(raw, 'hardLimits', [
-    'maxRunSteps',
+    'maxModelRequests',
+    'maxToolExecutions',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -451,7 +454,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
           : integer(performance.maxConcurrentModelCalls, defaults.performance.maxConcurrentRuntimes, 1),
     },
     budget: {
-      maxRunSteps: integer(budget.maxRunSteps, defaults.budget.maxRunSteps, 1),
+      maxModelRequests: integer(budget.maxModelRequests, defaults.budget.maxModelRequests, 1),
       maxActiveExecutionSeconds: integer(
         budget.maxActiveExecutionSeconds,
         defaults.budget.maxActiveExecutionSeconds,
@@ -463,7 +466,8 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       maxRecallBytes: integer(budget.maxRecallBytes, defaults.budget.maxRecallBytes, 1),
     },
     hardLimits: {
-      maxRunSteps: integer(hardLimits.maxRunSteps, defaults.hardLimits.maxRunSteps, 1),
+      maxModelRequests: integer(hardLimits.maxModelRequests, defaults.hardLimits.maxModelRequests, 1),
+      maxToolExecutions: integer(hardLimits.maxToolExecutions, defaults.hardLimits.maxToolExecutions, 1),
       maxActiveExecutionSeconds: integer(
         hardLimits.maxActiveExecutionSeconds,
         defaults.hardLimits.maxActiveExecutionSeconds,
@@ -556,7 +560,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   }
 
   const cappedPairs: Array<[keyof AgentSettingsDocument['budget'], keyof AgentSettingsDocument['hardLimits']]> = [
-    ['maxRunSteps', 'maxRunSteps'],
+    ['maxModelRequests', 'maxModelRequests'],
     ['maxActiveExecutionSeconds', 'maxActiveExecutionSeconds'],
     ['toolTimeoutSeconds', 'toolTimeoutSeconds'],
     ['maxToolOutputBytes', 'maxToolOutputBytes'],
@@ -613,6 +617,6 @@ export const normalizeRequestedSettings = (raw: unknown): AgentSettingsDocument 
 export const validateSettings = (raw: unknown): AgentSettingsDocument => normalizeSettings(raw, true);
 
 export const snapshotBudget = (settings: AgentSettingsDocument): AgentRunBudgetSnapshot => ({
-  maxRunSteps: settings.budget.maxRunSteps,
+  maxModelRequests: settings.budget.maxModelRequests,
   maxActiveExecutionSeconds: settings.budget.maxActiveExecutionSeconds,
 });

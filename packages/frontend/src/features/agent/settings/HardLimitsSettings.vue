@@ -47,7 +47,7 @@
   const fieldGroups: Array<{ id: string; keys: HardLimitKey[] }> = [
     {
       id: 'execution',
-      keys: ['maxRunSteps'],
+      keys: ['maxModelRequests', 'maxToolExecutions'],
     },
     {
       id: 'timeouts',

@@ -22,15 +22,20 @@ import type { CheckpointRecoveryCommitPort } from '../runs/state-commit.port';
 import { runModelRoutes, sameModelRef } from '../runs/model-routes';
 import { TERMINAL_RUN_STATUSES, type RunBudget, type RunDefinitionSnapshot, type RunView } from '../runs/run.types';
 
-export type RecoverySafePointReason = 'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'restart_recapture';
+export type RecoverySafePointReason =
+  'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'execution_limit' | 'restart_recapture';
 
 const RECOVERY_CHECKPOINT_MIN_INTERVAL_SECONDS = 30;
 
 const clampBudget = (source: RunBudget, settings: Awaited<ReturnType<AgentSettingsService['get']>>): RunBudget => {
   const hard = settings.hardLimits;
   return {
+    ...source,
+    modelRequestCeiling: Math.min(source.modelRequestCeiling, hard.maxModelRequests),
+    activeExecutionCeilingSeconds: Math.min(source.activeExecutionCeilingSeconds, hard.maxActiveExecutionSeconds),
+    maxToolExecutions: Math.min(source.maxToolExecutions, hard.maxToolExecutions),
     contextPolicy: { ...source.contextPolicy },
-    maxRunSteps: Math.min(source.maxRunSteps, hard.maxRunSteps),
+    maxModelRequests: Math.min(source.maxModelRequests, hard.maxModelRequests),
     maxActiveExecutionSeconds: Math.min(source.maxActiveExecutionSeconds, hard.maxActiveExecutionSeconds),
     toolTimeoutSeconds: Math.min(source.toolTimeoutSeconds, hard.toolTimeoutSeconds),
     maxToolOutputBytes: Math.min(source.maxToolOutputBytes, hard.maxToolOutputBytes),
@@ -112,7 +117,7 @@ export class CheckpointService {
   async recordSafePoint(
     run: RunView,
     reason: RecoverySafePointReason,
-    force = reason === 'mutation_confirmed' || reason === 'restart_recapture',
+    force = reason === 'execution_limit' || reason === 'mutation_confirmed' || reason === 'restart_recapture',
   ): Promise<CheckpointView | null> {
     const scope = { userId: run.userId, appId: run.appId };
     try {
@@ -305,6 +310,13 @@ export class CheckpointService {
     reasons.push(...checkpointRecoveryReasons(checkpoint));
     if (run.version !== expectedVersion) reasons.push('STATE_CONFLICT');
     if (!TERMINAL_RUN_STATUSES.has(run.status)) reasons.push('RUN_RESUME_SOURCE_NOT_TERMINAL');
+    if (
+      run.budget.phase === 'finishing' ||
+      run.usage.modelRequests >= run.budget.modelRequestCeiling ||
+      run.usage.toolExecutions >= run.budget.maxToolExecutions ||
+      run.activeExecutionSeconds >= run.budget.activeExecutionCeilingSeconds
+    )
+      reasons.push('RUN_EXECUTION_LIMIT');
     if (run.needsReconciliation) reasons.push('RECONCILIATION_REQUIRED');
     const [app, currentSettings] = await Promise.all([this.lifecycle.get(scope), this.settings.get(scope.userId)]);
     const definition = this.definitions.require(scope.appId, app.activeVersion, run.definition.agentDefinitionId);
@@ -623,7 +635,7 @@ export class CheckpointService {
     if (missingRequiredModelCapabilities(requirements, capabilities).length > 0) {
       throw new Error('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED');
     }
-    const budget = clampBudget(source.budget, settings);
+    const budget = { ...clampBudget(source.budget, settings), progressSequence: 0 };
     const workspaceManifests =
       validation.checkpoint.snapshot.workspaceArtifactManifestRefs.length === 0
         ? []

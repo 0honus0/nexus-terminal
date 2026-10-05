@@ -298,17 +298,17 @@
           "concurrencyDesc": "並列タスク数、有効なワークスペース、サブエージェント委譲深度を制限します",
           "extra": "その他のシステム制限",
           "extraDesc": "その他の拡張ポリシーパラメータ",
-          "execution": "実行ステップ上限",
-          "executionDesc": "1 Run あたりのモデル/ツールループの最大ステップ数を制限します"
+          "execution": "モデルリクエスト上限",
+          "executionDesc": "失敗・再試行・圧縮・最終報告の予約枠を含む全ランタイムの累計上限"
         },
         "fields": {
-          "maxRunSteps": {
-            "label": "Run 最大ステップ数",
-            "hint": "1 回の Run で許可される思考・ツール実行ループの最大回数"
+          "maxModelRequests": {
+            "label": "モデルリクエスト上限",
+            "hint": "失敗・再試行・圧縮・最終報告の予約枠を含む全ランタイムの累計上限"
           },
           "maxActiveExecutionSeconds": {
             "label": "タスク最長実行時間",
-            "hint": "タスクが継続実行可能な最長秒数 (タイムアウトで自動キャンセル)"
+            "hint": "累積の実行時間上限。上限に近づくと部分結果を保存して終了します"
           },
           "toolTimeoutSeconds": {
             "label": "ツール実行タイムアウト",
@@ -365,6 +365,10 @@
           "maxActiveWorkspaces": {
             "label": "最大アクティブワークスペース数",
             "hint": "同時に維持されるワークスペースの最大数"
+          },
+          "maxToolExecutions": {
+            "label": "ツール実行",
+            "hint": "失敗を含む実際に開始したツール実行の累計上限"
           }
         }
       },
@@ -389,17 +393,17 @@
         "presetBalanced": "標準バランス",
         "presetBalancedDesc": "推奨構成。推論の質・複数ステップ実行・リソースのバランスを両立",
         "presetDeep": "ディープワーク",
-        "presetDeepDesc": "ステップ数とタイムアウトに余裕を持たせ、複雑なリファクタリングに最適",
+        "presetDeepDesc": "複雑なタスク向けにモデルリクエストと実行時間を増やします",
         "presetCustom": "カスタム微調整",
         "presetCustomDesc": "すべてのパラメータを手動で自由にカスタマイズします",
         "customBadge": "カスタム",
         "recommendedBadge": "推奨",
         "saveSuccess": "予算とコンテキスト設定を保存しました",
         "fields": {
-          "maxRunSteps": "最大実行ステップ数",
-          "maxRunStepsHint": "1回の Run で許可される最大ツール呼び出し・推論ステップ数",
-          "maxActiveExecutionSeconds": "実行タイムアウト (秒)",
-          "maxActiveExecutionSecondsHint": "Run のアクティブ実行の最长継続時間",
+          "maxModelRequests": "初期モデルリクエスト枠",
+          "maxModelRequestsHint": "Root・子エージェント・再試行・圧縮で共有し、新しい進捗の根拠があればアプリ上限内で自動拡張",
+          "maxActiveExecutionSeconds": "初期実行時間枠",
+          "maxActiveExecutionSecondsHint": "Root・子エージェント・再試行・圧縮で共有し、新しい進捗の根拠があればアプリ上限内で自動拡張",
           "toolTimeoutSeconds": "単一ツールタイムアウト (秒)",
           "toolTimeoutSecondsHint": "個別ツール実行のタイムアウト制限",
           "maxToolOutputBytes": "ツール出力切り詰め (バイト)",
@@ -412,14 +416,14 @@
         "readyNotice": "現在の設定は準備済みで、次回の Run から適用されます。",
         "modelCapabilityNotice": "1 回のコンテキストと最大出力は Provider/Registry の物理モデル能力をそのまま使用します。ここでは Run 全体とツール資源の予算だけを制御します。",
         "groups": {
-          "steps": "実行ステップのヒューズ",
           "timeControl": "実行とタイムアウト制御",
-          "toolsData": "ツール切り詰めとコンテキスト記憶"
+          "toolsData": "ツール切り詰めとコンテキスト記憶",
+          "modelRequests": "初期モデルリクエスト枠"
         },
-        "presetSteps": "{steps} ステップ · {minutes} min",
         "customTuning": "カスタム調整",
         "effective": "有効: {value}",
-        "unsavedChanges": "保存されていない予算変更があります"
+        "unsavedChanges": "保存されていない予算変更があります",
+        "presetRequests": "{requests} リクエスト · {minutes} min"
       },
       "quantity": {
         "placeholderBytes": "例: 10M, 500K",
@@ -771,7 +775,7 @@
         "profileId": "プロファイル ID",
         "role": "役割",
         "defaultModel": "既定モデル",
-        "maxSteps": "最大ステップ",
+        "maxModelRequests": "モデルリクエスト",
         "peerMessaging": "ピア間メッセージング",
         "peerParentChild": "親子 Agent のみ",
         "peerSameRun": "同じ Run の許可済み peer",
@@ -971,8 +975,8 @@
           "conservative": "保守的"
         },
         "fields": {
-          "maxRunSteps": "Run 最大ステップ保険",
-          "maxActiveExecutionSeconds": "最大アクティブ実行時間",
+          "maxModelRequests": "初期モデルリクエスト枠",
+          "maxActiveExecutionSeconds": "初期実行時間枠",
           "toolTimeoutSeconds": "ツールタイムアウト",
           "maxToolOutputBytes": "モデル可視ツール出力",
           "maxRecallItems": "Recall 件数",
@@ -980,7 +984,9 @@
           "maxSubagentMessages": "Subagent メッセージ数",
           "maxSubagentMessageBytes": "Subagent メッセージ容量",
           "contextCompactionMode": "動的コンテキスト圧縮",
-          "contextProfile": "コンテキスト window プロファイル"
+          "contextProfile": "コンテキスト window プロファイル",
+          "maxAutoModelRequests": "自動継続リクエスト上限",
+          "maxAutoActiveExecutionSeconds": "自動継続実行時間上限（秒）"
         },
         "profileHint": "Normal はコンテキスト余裕を多く確保し、Extended はモデル window をより広く使用します。どちらもハードリミットは緩和しません。",
         "profileInherited": "継承: {value}",
@@ -1558,10 +1564,9 @@
         "anchored_estimate": "Provider アンカー推定",
         "provider": "Provider 実測"
       },
-      "steps": "ステップ",
       "activeTime": "実行時間",
       "verification": "検証",
-      "increaseBudget": "Run 予算を増やす",
+      "increaseBudget": "通信枠を増やす",
       "plan": "計画",
       "planStatus": {
         "pending": "保留",
@@ -1621,7 +1626,16 @@
       "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}",
       "dragCardHint": "ドラッグまたは ↑/↓ で並べ替え",
       "resetCardOrder": "カード順をリセット",
-      "showOlderRuns": "以前の Run を表示（残り {count} 件）"
+      "showOlderRuns": "以前の Run を表示（残り {count} 件）",
+      "modelRequests": "モデルリクエスト",
+      "toolExecutions": "ツール実行",
+      "finishing": "結果を保存して終了中",
+      "stopReasons": {
+        "model_request_limit": "モデルリクエスト上限",
+        "active_time_limit": "アクティブ実行時間上限",
+        "tool_execution_limit": "ツール実行上限",
+        "no_progress": "新しい進捗の根拠がない"
+      }
     },
     "workspaceRuntime": {
       "title": "Workspace 開発環境",
@@ -1704,7 +1718,6 @@
       "description": "公開コラボレーション状態のみを表示します。子 Agent の非公開プロンプトやモデル文脈は表示しません。",
       "empty": "この Run には子 Agent の委任がありません。",
       "depth": "深さ {value}",
-      "steps": "ステップ {used}/{max}",
       "cancel": "子 Agent をキャンセル",
       "messages": "Mailbox 交換",
       "noMessages": "この子 Agent の公開メッセージはありません。",
@@ -1721,7 +1734,8 @@
         "isolate": "失敗は自身のみ",
         "failFast": "失敗時に即時中止"
       },
-      "profileLabel": "プロファイル {id}"
+      "profileLabel": "プロファイル {id}",
+      "modelRequests": "モデルリクエスト {used}/{max}"
     },
     "approvals": {
       "title": "操作の承認が必要です",

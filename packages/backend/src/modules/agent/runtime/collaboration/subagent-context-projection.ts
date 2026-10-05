@@ -26,7 +26,7 @@ export const projectSubagentCollaborationContext = (
   const profileViews = profiles.slice(0, MAX_PROFILE_MANIFEST).map((profile) => ({
     id: profile.id,
     role: boundedUtf8(profile.role, 256),
-    maxSteps: profile.maxSteps,
+    maxModelRequests: profile.maxModelRequests,
     peerMessaging: profile.peerMessaging,
     mutationMode: profile.mutationMode,
     failureMode: profile.failureMode,
@@ -37,7 +37,7 @@ export const projectSubagentCollaborationContext = (
     id: template.id,
     role: boundedUtf8(template.role, 192),
     delegationHint: boundedUtf8(template.delegationHint, 256),
-    maxSteps: template.maxSteps,
+    maxModelRequests: template.maxModelRequests,
     capabilities: template.capabilities.slice(0, MAX_CAPABILITIES_PER_PROFILE),
     mutationMode: template.mutationMode,
     presetOnly: true,

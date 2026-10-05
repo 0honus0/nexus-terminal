@@ -35,7 +35,7 @@ const profileDto = (profile: SettingsView['policy']['profiles'][number]) => ({
   capabilities: [...profile.capabilities],
   peerMessaging: profile.peerMessaging,
   mutationMode: profile.mutationMode,
-  maxSteps: profile.maxSteps,
+  maxModelRequests: profile.maxModelRequests,
   failureMode: profile.failureMode,
 });
 
@@ -53,7 +53,7 @@ export const subagentSettingsDto = (view: SettingsView): AgentSubagentSettingsVi
     capabilities: [...template.capabilities],
     peerMessaging: template.peerMessaging,
     mutationMode: template.mutationMode,
-    maxSteps: template.maxSteps,
+    maxModelRequests: template.maxModelRequests,
     failureMode: template.failureMode,
   })),
   version: view.version,
@@ -95,8 +95,8 @@ export const subagentDto = (delegation: Delegation): AgentSubagentViewDto => ({
   status: delegation.status,
   depth: delegation.depth,
   failureMode: delegation.failureMode,
-  budget: { maxSteps: delegation.budget.maxSteps },
-  usage: { tokens: delegation.usage.tokens, steps: delegation.usage.steps },
+  budget: { maxModelRequests: delegation.budget.maxModelRequests },
+  usage: { tokens: delegation.usage.tokens, modelRequests: delegation.usage.modelRequests },
   result: delegation.result,
   evidenceRefs: [...delegation.evidenceRefs],
   deadlineAt: delegation.deadlineAt,

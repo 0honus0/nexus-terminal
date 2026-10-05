@@ -45,7 +45,7 @@ export class RootToolExecutionCoordinator {
     const first = pendingTools[0];
     if (!first) return 'continue';
 
-    if (snapshot.usage.steps >= snapshot.budget.maxRunSteps) {
+    if (snapshot.budget.phase === 'finishing' || snapshot.usage.toolExecutions >= snapshot.budget.maxToolExecutions) {
       if (first.status === 'ready') {
         yield* this.mutations.supersedeForBudget(snapshot, first);
       } else {
@@ -53,8 +53,8 @@ export class RootToolExecutionCoordinator {
           snapshot,
           first,
           rejectedRootToolResult(
-            'RUN_STEP_BUDGET_EXHAUSTED',
-            'The Run step budget was exhausted before this queued tool call could execute.',
+            'RUN_EXECUTION_LIMIT',
+            'The Run is finishing or its tool execution limit was reached before this queued tool call could execute.',
           ),
         );
       }

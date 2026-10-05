@@ -385,7 +385,7 @@ export const durableContextCheckpointScenario = async () => {
     legacyDb.exec(`INSERT INTO ai_threads (id) VALUES ('retired-checkpoint-thread');
       INSERT INTO ai_context_checkpoints (id, thread_id, visibility_hash, visibility_json, from_sequence, to_sequence, source_hash, strategy_version, generator_json, source_tokens, summary_tokens, content, created_at)
       VALUES ('retired-checkpoint', 'retired-checkpoint-thread', 'visibility', '{"kind":"thread_prefix"}', 1, 1, 'source', 'context-checkpoint-v1', '{"kind":"deterministic","version":"deterministic-summary-v2"}', 100, 20, 'retired derived summary', 1);
-      DELETE FROM migrations WHERE id = 51;`);
+      DELETE FROM migrations WHERE id >= 51;`);
     await runMigrations(legacyDb);
     assert.equal(
       (legacyDb.prepare('SELECT COUNT(*) AS count FROM ai_context_checkpoints').get() as { count: number }).count,

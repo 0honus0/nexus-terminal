@@ -1,3 +1,4 @@
+import { partialExecutionReport } from './runtime-progress';
 import { randomUUID } from 'node:crypto';
 import type { ModelFinishReason, ModelProviderContinuation, TokenUsage } from '../../ai/model.types';
 import type { ClockPort } from '../../agent.types';
@@ -42,7 +43,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     private readonly clock: ClockPort,
     private readonly recoverySafePoint: (
       run: RunView,
-      reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed',
+      reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'execution_limit',
     ) => Promise<void> = async () => undefined,
     private readonly subagentPolicy: Pick<SubagentPolicyService, 'get'> | null = null,
   ) {
@@ -87,6 +88,18 @@ export class NativeAgentBackend implements AgentBackendPort {
         return;
       }
 
+      const latest = await this.repository.snapshot(scope, initial.id);
+      if (
+        latest &&
+        ['created', 'running'].includes(latest.status) &&
+        (latest.budget.phase === 'finishing' || errorCode(error) === 'RUN_BUDGET_EXCEEDED')
+      ) {
+        const stopped = await this.lifecycle.stopAtSafeBoundary(latest, errorCode(error));
+        await this.recoverySafePoint(stopped.run, 'execution_limit');
+        yield { type: 'durable', runId: stopped.run.id, cursor: stopped.eventCursor };
+        yield { type: 'settled', run: stopped.run };
+        return;
+      }
       const stableErrorCode = logErrorCode(error, errorCode(error));
       logger.warn(
         {
@@ -121,7 +134,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     let compactionAttemptIndex = 1;
 
     while (true) {
-      const snapshot = await this.repository.snapshot(scope, initial.id);
+      let snapshot = await this.repository.snapshot(scope, initial.id);
       if (!snapshot) throw new Error('NOT_FOUND');
       if (!['created', 'running'].includes(snapshot.status)) return;
 
@@ -140,9 +153,30 @@ export class NativeAgentBackend implements AgentBackendPort {
         continue;
       }
 
-      await this.recoverySafePoint(snapshot, 'model_boundary');
+      // Settle the already admitted proposal before judging whether it produced progress.
+      const advanced = await this.stateCommit.advanceExecutionBudget({
+        scope,
+        runId: initial.id,
+        now: this.clock.nowUnixSeconds(),
+      });
+      if (advanced.committedEvents.length) yield { type: 'durable', runId: initial.id, cursor: advanced.eventCursor };
+      snapshot = await this.repository.snapshot(scope, initial.id);
+      if (!snapshot) throw new Error('NOT_FOUND');
+      if (!['created', 'running'].includes(snapshot.status)) return;
 
-      const remainingSteps = snapshot.budget.maxRunSteps - snapshot.usage.steps;
+      await this.recoverySafePoint(
+        snapshot,
+        snapshot.budget.phase === 'finishing' ? 'execution_limit' : 'model_boundary',
+      );
+
+      const budgetStop = await this.lifecycle.reserveModelBudget(snapshot);
+      if (budgetStop) {
+        await this.recoverySafePoint(budgetStop.run, 'execution_limit');
+        yield { type: 'durable', runId: snapshot.id, cursor: budgetStop.eventCursor };
+        yield { type: 'settled', run: budgetStop.run };
+        return;
+      }
+      const remainingModelRequests = snapshot.budget.maxModelRequests - snapshot.usage.modelRequests;
       const executionMode = snapshot.definition.executionMode;
       const offeredTools = this.toolCalls.schemas(
         scope,
@@ -152,7 +186,8 @@ export class NativeAgentBackend implements AgentBackendPort {
         },
         executionMode,
       );
-      const toolMode: 'auto' | 'none' = remainingSteps >= 2 ? 'auto' : 'none';
+      const toolMode: 'auto' | 'none' =
+        snapshot.budget.phase === 'executing' && remainingModelRequests >= 2 ? 'auto' : 'none';
       const projectionRunIds = [
         snapshot.id,
         ...Object.keys(snapshot.definition.contextBoundary?.runThrough ?? {}),
@@ -189,6 +224,13 @@ export class NativeAgentBackend implements AgentBackendPort {
         );
       } catch (error) {
         const code = errorCode(error);
+        if (snapshot.budget.phase === 'finishing') {
+          const stopped = await this.lifecycle.stopAtSafeBoundary(snapshot, code);
+          await this.recoverySafePoint(stopped.run, 'execution_limit');
+          yield { type: 'durable', runId: snapshot.id, cursor: stopped.eventCursor };
+          yield { type: 'settled', run: stopped.run };
+          return;
+        }
         if (
           code !== 'PROVIDER_CONFIGURATION_STALE' &&
           code !== 'MODEL_NOT_FOUND' &&
@@ -277,8 +319,8 @@ export class NativeAgentBackend implements AgentBackendPort {
           threadId: snapshot.threadId,
           runVersion: snapshot.version,
           inputRevision: snapshot.inputRevision,
-          usageSteps: snapshot.usage.steps,
-          remainingSteps,
+          usedModelRequests: snapshot.usage.modelRequests,
+          remainingModelRequests,
           modelId: model.id,
           reasoningEffort: snapshot.definition.reasoningEffort ?? null,
           toolMode,
@@ -382,27 +424,7 @@ export class NativeAgentBackend implements AgentBackendPort {
             } satisfies TokenUsage);
           const usageAfterFailed = usageWithAttempt(currentRun.usage, failedUsage);
           const budgetReason = this.lifecycle.retryBudgetReason(currentRun, usageAfterFailed);
-          if (budgetReason) {
-            const paused = await this.stateCommit.pauseModelStepForBudget({
-              scope,
-              runId: snapshot.id,
-              runtimeId,
-              stepId: begun.stepId,
-              attemptId: currentAttemptId,
-              expectedRunVersion: currentRun.version,
-              usage: usageAfterFailed,
-              inputTokens: failedUsage.inputTokens,
-              outputTokens: failedUsage.outputTokens,
-              cachedInputTokens: failedUsage.cachedInputTokens,
-              estimatedUsage: usage === undefined,
-              errorCode: errorCode(attemptError),
-              budgetReason,
-              now: this.clock.nowUnixSeconds(),
-            });
-            yield { type: 'durable', runId: snapshot.id, cursor: paused.eventCursor };
-            yield { type: 'settled', run: paused.run };
-            return;
-          }
+          if (budgetReason) throw new Error('RUN_EXECUTION_LIMIT');
 
           if (this.modelSteps.shouldRetry(attemptError, routeAttemptIndex, signal)) {
             const nextAttemptIndex = currentAttemptIndex + 1;
@@ -496,6 +518,31 @@ export class NativeAgentBackend implements AgentBackendPort {
 
         if (finishDisposition.kind === 'complete') {
           if (finishReason === null) throw new Error('MODEL_FINISH_REASON_MISSING');
+          if (snapshot.budget.phase === 'finishing') {
+            const settled = await this.stateCommit.settleModelStep({
+              scope,
+              runId: snapshot.id,
+              runtimeId,
+              stepId: begun.stepId,
+              attemptId: currentAttemptId,
+              expectedRunVersion: currentRun.version,
+              assistantEntryId: randomUUID(),
+              assistantText: text || partialExecutionReport(currentRun, this.clock.nowUnixSeconds()),
+              usage: afterModelUsage,
+              inputTokens: settledUsage.inputTokens,
+              outputTokens: settledUsage.outputTokens,
+              cachedInputTokens: settledUsage.cachedInputTokens,
+              estimatedUsage: usage === undefined,
+              finishReason,
+              terminalStatus: 'interrupted',
+              errorCode: 'RUN_EXECUTION_LIMIT',
+              now: this.clock.nowUnixSeconds(),
+            });
+            await this.recoverySafePoint(settled.run, 'execution_limit');
+            yield { type: 'durable', runId: snapshot.id, cursor: settled.eventCursor };
+            yield { type: 'settled', run: settled.run };
+            return;
+          }
           const activeChildren = (await this.delegations.listDelegations(scope, snapshot.id, runtimeId, 100)).filter(
             (delegation) => !['completed', 'failed', 'cancelled'].includes(delegation.status),
           );
@@ -586,7 +633,7 @@ export class NativeAgentBackend implements AgentBackendPort {
               inputTokens: settledUsage.inputTokens,
               outputTokens: settledUsage.outputTokens,
               cachedInputTokens: settledUsage.cachedInputTokens,
-              totalSteps: settled.run.usage.steps,
+              totalModelRequests: settled.run.usage.modelRequests,
             },
             'Agent run settled after model response',
           );
@@ -768,6 +815,11 @@ export class NativeAgentBackend implements AgentBackendPort {
             outputTokens: text ? estimateTokens(text) : 0,
             cachedInputTokens: 0,
           } satisfies TokenUsage);
+        const resourceStop =
+          snapshot.budget.phase === 'finishing' ||
+          errorCode(error) === 'RUN_EXECUTION_LIMIT' ||
+          errorCode(error) === 'RUN_BUDGET_EXCEEDED' ||
+          this.lifecycle.retryBudgetReason(currentRun, currentRun.usage) !== null;
         const settled = await this.stateCommit.settleModelStep({
           scope,
           runId: snapshot.id,
@@ -780,17 +832,18 @@ export class NativeAgentBackend implements AgentBackendPort {
           outputTokens: failedUsage.outputTokens,
           cachedInputTokens: failedUsage.cachedInputTokens,
           estimatedUsage: usage === undefined,
-          ...(text
+          ...(text || resourceStop
             ? {
                 assistantEntryId: randomUUID(),
-                assistantText: text,
+                assistantText: resourceStop ? partialExecutionReport(currentRun, this.clock.nowUnixSeconds()) : text,
               }
             : {}),
           finishReason,
-          errorCode: cancelled ? 'CANCELLED' : errorCode(error),
-          terminalStatus: cancelled ? 'cancelled' : 'failed',
+          errorCode: cancelled ? 'CANCELLED' : resourceStop ? 'RUN_EXECUTION_LIMIT' : errorCode(error),
+          terminalStatus: cancelled ? 'cancelled' : resourceStop ? 'interrupted' : 'failed',
           now: this.clock.nowUnixSeconds(),
         });
+        if (resourceStop) await this.recoverySafePoint(settled.run, 'execution_limit');
         yield { type: 'durable', runId: snapshot.id, cursor: settled.eventCursor };
         yield { type: 'settled', run: settled.run };
         return;

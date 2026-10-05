@@ -62,8 +62,21 @@ const runBudgetFrom = (
   policy: AgentExecutionPolicyView,
 ): RunBudget => ({
   contextPolicy: freezeRunContextPolicy(policy.effective.contextProfile),
-  maxRunSteps: policy.effective.maxRunSteps,
-  maxActiveExecutionSeconds: policy.effective.maxActiveExecutionSeconds,
+  maxModelRequests: Math.min(policy.effective.maxModelRequests, policy.effective.maxAutoModelRequests),
+  modelRequestCeiling: Math.min(settings.hardLimits.maxModelRequests, policy.effective.maxAutoModelRequests),
+  activeExecutionCeilingSeconds: Math.min(
+    settings.hardLimits.maxActiveExecutionSeconds,
+    policy.effective.maxAutoActiveExecutionSeconds,
+  ),
+  maxToolExecutions: settings.hardLimits.maxToolExecutions,
+  phase: 'executing',
+  stopReason: null,
+  extensionCount: 0,
+  progressSequence: 0,
+  maxActiveExecutionSeconds: Math.min(
+    policy.effective.maxActiveExecutionSeconds,
+    policy.effective.maxAutoActiveExecutionSeconds,
+  ),
   toolTimeoutSeconds: policy.effective.toolTimeoutSeconds,
   maxToolOutputBytes: policy.effective.maxToolOutputBytes,
   maxRecallItems: policy.effective.maxRecallItems,
@@ -81,21 +94,13 @@ const increasedBudget = (
 ): RunBudget => {
   const raw: unknown = rawIncrease;
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
-  const allowed = new Set([
-    'maxRunSteps',
-    'maxActiveExecutionSeconds',
-    'maxSubagentMessages',
-    'maxSubagentMessageBytes',
-  ]);
+  const allowed = new Set(['maxSubagentMessages', 'maxSubagentMessageBytes']);
   if (Object.keys(raw).length === 0 || Object.keys(raw).some((key) => !allowed.has(key))) {
     throw new Error('VALIDATION_FAILED');
   }
   const next: RunBudget = { ...current };
   let changed = false;
-  const raiseNumber = (
-    key: 'maxRunSteps' | 'maxActiveExecutionSeconds' | 'maxSubagentMessages' | 'maxSubagentMessageBytes',
-    hardLimit: number,
-  ): void => {
+  const raiseNumber = (key: 'maxSubagentMessages' | 'maxSubagentMessageBytes', hardLimit: number): void => {
     if (!(key in raw)) return;
     const target = raw[key];
     if (typeof target !== 'number' || !Number.isSafeInteger(target) || target < 1) {
@@ -106,8 +111,6 @@ const increasedBudget = (
     next[key] = target;
     changed = true;
   };
-  raiseNumber('maxRunSteps', hardLimits.maxRunSteps);
-  raiseNumber('maxActiveExecutionSeconds', hardLimits.maxActiveExecutionSeconds);
   raiseNumber('maxSubagentMessages', hardLimits.maxSubagentMessagesPerRun);
   raiseNumber('maxSubagentMessageBytes', hardLimits.maxSubagentMessageBytesPerRun);
 
@@ -390,7 +393,7 @@ export class RunService {
         connectionCount: connectionIds.length,
         artifactCount: input.artifactRefs.length,
         inputBytes: Buffer.byteLength(input.text, 'utf8'),
-        maxRunSteps: budget.maxRunSteps,
+        maxModelRequests: budget.maxModelRequests,
         maxOutputTokens: model.maxOutputTokens,
       },
       'Agent Run create committed',
@@ -595,10 +598,6 @@ export class RunService {
     if (app.desiredState !== 'enabled') throw new Error('AGENT_APP_DISABLED');
     const budget = increasedBudget(current.budget, increase, settings.hardLimits);
     const normalizedIncrease: JsonValue = {
-      ...(increase.maxRunSteps === undefined ? {} : { maxRunSteps: increase.maxRunSteps }),
-      ...(increase.maxActiveExecutionSeconds === undefined
-        ? {}
-        : { maxActiveExecutionSeconds: increase.maxActiveExecutionSeconds }),
       ...(increase.maxSubagentMessages === undefined ? {} : { maxSubagentMessages: increase.maxSubagentMessages }),
       ...(increase.maxSubagentMessageBytes === undefined
         ? {}

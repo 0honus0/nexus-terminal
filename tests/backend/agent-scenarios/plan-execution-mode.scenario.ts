@@ -203,7 +203,13 @@ export const planExecutionModeScenario = async () => {
     },
   ]);
   const providers = new ProviderService(new StaticProviderRepository(benchmarkProvider), scriptedModel, clock);
-  const modelRunner = new ModelStepRunner(providers, modelContext, scriptedModel, new ScenarioModelCallLimiter());
+  const modelRunner = new ModelStepRunner(
+    providers,
+    modelContext,
+    scriptedModel,
+    new ScenarioModelCallLimiter(),
+    clock,
+  );
   const prepared = await modelRunner.prepare(snapshot, scope, planSchemas, {});
   const modelResult = await collectBackendSignals(
     modelRunner.runAttempt(
@@ -286,6 +292,7 @@ export const planExecutionModeScenario = async () => {
         revision: 1,
         requestedSettings: { model: { fallbackModels: [] } },
         effectiveSettings: { feature: { enabled: true } },
+        hardLimits: { maxModelRequests: 400, maxActiveExecutionSeconds: 7200, maxToolExecutions: 4000 },
       }),
     } as never,
     {
@@ -302,7 +309,9 @@ export const planExecutionModeScenario = async () => {
       get: async () => ({
         version: 1,
         effective: {
-          maxRunSteps: 100,
+          maxModelRequests: 100,
+          maxAutoModelRequests: 400,
+          maxAutoActiveExecutionSeconds: 7200,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
           maxToolOutputBytes: 1_048_576,

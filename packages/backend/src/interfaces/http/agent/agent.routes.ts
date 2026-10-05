@@ -154,7 +154,8 @@ const settingsPatchRequest = (value: unknown): AgentSettingsPatchRequestDto => {
 };
 
 const hardLimitKeys = [
-  'maxRunSteps',
+  'maxModelRequests',
+  'maxToolExecutions',
   'maxActiveExecutionSeconds',
   'toolTimeoutSeconds',
   'maxToolOutputBytes',

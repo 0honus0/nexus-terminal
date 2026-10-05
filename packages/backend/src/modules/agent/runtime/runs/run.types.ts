@@ -104,7 +104,14 @@ export interface RunContextPolicy {
 
 export interface RunBudget {
   contextPolicy: RunContextPolicy;
-  maxRunSteps: number;
+  modelRequestCeiling: number;
+  activeExecutionCeilingSeconds: number;
+  maxToolExecutions: number;
+  phase: 'executing' | 'finishing';
+  stopReason: 'model_request_limit' | 'active_time_limit' | 'tool_execution_limit' | 'no_progress' | null;
+  extensionCount: number;
+  progressSequence: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
@@ -117,8 +124,6 @@ export interface RunBudget {
 }
 
 export interface RunBudgetIncrease {
-  maxRunSteps?: number;
-  maxActiveExecutionSeconds?: number;
   maxSubagentMessages?: number;
   maxSubagentMessageBytes?: number;
 }
@@ -138,7 +143,8 @@ export interface RunUsage {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
-  steps: number;
+  modelRequests: number;
+  toolExecutions: number;
   subagentMessages: number;
   subagentMessageBytes: number;
   context?: RunContextUsage;
