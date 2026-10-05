@@ -62,6 +62,11 @@ const integerValue = (value: unknown, minimum = 0): number => {
   return Number(value);
 };
 
+const timestampValue = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw protocolError();
+  return value;
+};
+
 const booleanValue = (value: unknown): boolean => {
   if (typeof value !== 'boolean') throw protocolError();
   return value;
@@ -295,7 +300,7 @@ export const decodeWorkspaceFileStat = (value: unknown): WorkspaceFileStatResult
     exists: booleanValue(record.exists),
     type: record.type,
     sizeBytes: nullableInteger(record.sizeBytes),
-    modifiedAt: nullableInteger(record.modifiedAt),
+    modifiedAt: record.modifiedAt === null ? null : timestampValue(record.modifiedAt),
     mode: nullableInteger(record.mode),
     sha256: digest,
   };
@@ -309,7 +314,7 @@ export const decodeWorkspaceFileWrite = (value: unknown): WorkspaceFileWriteResu
     path: stringValue(record.path) as string,
     sha256: digest,
     sizeBytes: integerValue(record.sizeBytes),
-    modifiedAt: integerValue(record.modifiedAt),
+    modifiedAt: timestampValue(record.modifiedAt),
     created: booleanValue(record.created),
   };
 };
@@ -327,7 +332,7 @@ export const decodeWorkspaceFileList = (value: unknown): WorkspaceFileListResult
         path: stringValue(entry.path) as string,
         type: entry.type,
         sizeBytes: integerValue(entry.sizeBytes),
-        modifiedAt: integerValue(entry.modifiedAt),
+        modifiedAt: timestampValue(entry.modifiedAt),
       };
     }),
     truncated: booleanValue(record.truncated),

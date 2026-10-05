@@ -8,6 +8,8 @@ import {
   readWorkspaceFile,
   searchWorkspace,
   statWorkspacePath,
+  writeWorkspaceFile,
+  listWorkspaceFiles,
 } from '../../../packages/agent-runner/src/controller/workspace-coding-files';
 import { RunnerJournal } from '../../../packages/agent-runner/src/controller/journal';
 import { RunnerControllerServer } from '../../../packages/agent-runner/src/controller/server';
@@ -337,6 +339,12 @@ export const workspaceCodingToolSurfaceScenario = async () => {
       token: 'coding-token',
       journal: httpJournal,
       runtimeEngine: {
+        statWorkspacePath: (_id: string, _generation: number, logicalPath: string) =>
+          statWorkspacePath(workRoot, logicalPath),
+        writeWorkspaceFile: (_id: string, _generation: number, request: Parameters<typeof writeWorkspaceFile>[1]) =>
+          writeWorkspaceFile(workRoot, request),
+        listWorkspaceFiles: (_id: string, _generation: number, request: Parameters<typeof listWorkspaceFiles>[1]) =>
+          listWorkspaceFiles(workRoot, request),
         readWorkspaceFile: (
           _workspaceId: string,
           _generation: number,
@@ -372,6 +380,26 @@ export const workspaceCodingToolSurfaceScenario = async () => {
         });
       });
       const adapter = new RunnerHttpAdapter(baseUrl, 'coding-token');
+      const written = await adapter.writeWorkspaceFile('coding-workspace', 5, {
+        path: '/workspace/work/http-written.js',
+        content: 'console.log(42);\n',
+        expectedSha256: null,
+      });
+      assert.equal(written.created, true);
+      assert.equal(written.sizeBytes, Buffer.byteLength('console.log(42);\n'));
+      const writtenPath = path.join(workRoot, 'http-written.js');
+      fs.utimesSync(writtenPath, 1_800_000_000.123456, 1_800_000_000.123456);
+      const actualMtime = fs.statSync(writtenPath).mtimeMs;
+      assert.equal(Number.isInteger(actualMtime), false, 'fixture must exercise fractional filesystem milliseconds');
+      const stat = await adapter.statWorkspacePath('coding-workspace', 5, '/workspace/work/http-written.js');
+      assert.equal(stat.modifiedAt, actualMtime);
+      assert.equal(stat.sha256, written.sha256);
+      const listed = await adapter.listWorkspaceFiles('coding-workspace', 5, {
+        path: '/workspace/work',
+        maxEntries: 100,
+      });
+      assert.equal(listed.entries.find((entry) => entry.name === 'http-written.js')?.modifiedAt, actualMtime);
+      httpCodecCases += 3;
       const httpRead = await adapter.readWorkspaceFile('coding-workspace', 5, {
         path: '/workspace/work/src/example.ts',
         startLine: 2,
