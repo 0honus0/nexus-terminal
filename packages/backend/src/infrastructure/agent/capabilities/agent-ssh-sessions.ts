@@ -359,6 +359,21 @@ export class AgentSshSessions implements AgentSshSessionPort {
     return this.output(job);
   }
 
+  async listJobs(
+    context: ToolContext,
+    connectionId: number,
+  ): Promise<{ jobId: string; status: SshJobView['status']; createdAt: number }[]> {
+    assertActive(context);
+    await this.check(context, connectionId);
+    if (!context.threadId || !(await this.validateOwner(context, context.threadId, connectionId)))
+      throw new Error('RESOURCE_FORBIDDEN');
+    const rows = await this.database.queryAll<{ job_id: string; status: SshJobView['status']; created_at: number }>(
+      "SELECT job_id,status,created_at FROM agent_ssh_jobs WHERE user_id=? AND app_id=? AND thread_id=? AND connection_id=? AND status='running' ORDER BY created_at,job_id",
+      [context.userId, context.appId, context.threadId, connectionId],
+    );
+    return rows.map((row) => ({ jobId: row.job_id, status: row.status, createdAt: row.created_at }));
+  }
+
   async job(
     context: ToolContext,
     connectionId: number,

@@ -154,6 +154,7 @@ Workspace 文件工具的非法路径或越界读取由 Runner 拒绝，模型�
 - `shell_execute` 的 command 在 Workspace 和 SSH 均可使用 `{kind:"argv",argv:[可执行文件,参数...]}` 或 `{kind:"shell",shellScript:"待执行脚本"}`，支持可选 cwd。argv 适合单命令和字面参数，SSH 会逐参数安全引用；shellScript 支持管道、变量、条件和重定向，Workspace 使用 /bin/sh -c，SSH 使用远端命令 Shell。shellScript 是命令正文，不是展示标题，不接受旧 text 字段。必要环境变量可用 argv 的 env 命令或脚本显式传入。`shell_execute` 与全部 `file_read/list/search/write/patch/move/delete` 接受仅限 SSH 的可选 `sessionId`。省略时仍每次临时建连后关闭；指定时检查、执行和验证使用已有连接。失效时不自动重连、降级或重放。
 - 同一用户、应用和对话的 Root/Subagent 可以显式共享会话，但仍须有当前目标授权；跨用户、应用、对话禁止访问。命令各自使用独立 exec channel，文件使用独立句柄，不向其他任务插入输入，不继承前一命令的工作目录或环境变量；远端共享文件和服务仍可能相互影响。
 - Workspace 后台 Job 接纳及 running 状态反馈明确要求保留 jobId，不以重提命令获取结果；服务验收使用健康检查，等待终态使用有界 wait。running 是权威活跃状态而非失败或状态缺失，不改变正常并发与执行身份。
+- `shell_job_control(action="list")` 在 Workspace 和 SSH 均可用，省略 jobId；Workspace 返回本 generation 的活跃任务及并发容量，SSH 仅列出当前 user/App/Thread/connection 的活跃受管 Job，不列出其他线程或远端任意进程。
 - Workspace 创建达到用户容量上限时，在创建记录与 Runner 调用前明确拒绝，工具结果为已确认未执行，不作为未知副作用隔离；需显式清理不再使用的 Workspace 后再继续。
 - 工具参数拒绝说明本次未执行，并提示按 Schema 与目标类型纠正后再尝试；反馈不回显参数值。循环警告按失败重复、稳定观察重复或其他无进展行为给出调整指引，不自动重放操作或停止端口占用者。
 - SSH `shell_execute(mode="background", sessionId=...)` 返回 `jobId`，任务继续运行；使用 `shell_job_control(target="ssh", id=连接ID, jobId, action="status/wait/cancel")` 查看有界输出、等待或取消。后台任务 timeoutSeconds 默认 3600 秒、最多 86400 秒，独立于提交工具期限；前台仍最多 300 秒且受工具预算约束。后台任务运行时不进行空闲回收，每用户最多 32 个活动任务。

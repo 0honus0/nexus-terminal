@@ -197,7 +197,18 @@ export class ShellCapabilityService {
     };
   }
 
-  async listActiveJobs(context: ToolContext, target: ResolvedAgentTarget): Promise<WorkspaceJobCapacityView> {
+  async listActiveJobs(
+    context: ToolContext,
+    target: ResolvedAgentTarget,
+  ): Promise<
+    | WorkspaceJobCapacityView
+    | { activeCount: number; jobs: { jobId: string; status: SshJobView['status']; createdAt: number }[] }
+  > {
+    if (target.selector.target === 'ssh') {
+      if (!this.sshSessions || target.connectionId === undefined) throw new Error('SSH_SESSION_NOT_FOUND');
+      const jobs = await this.sshSessions.listJobs(context, target.connectionId);
+      return { activeCount: jobs.length, jobs };
+    }
     if (target.selector.target !== 'workspace' || target.workspaceGeneration === undefined)
       throw new Error('TOOL_ARGUMENTS_INVALID');
     return this.workspaceShell.listActiveJobs(context, target.selector.id, target.workspaceGeneration);

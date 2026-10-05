@@ -662,7 +662,7 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     version: '1.0.0',
     modelExposure: 'deferred',
     description:
-      'Workspace/SSH Job status/wait/cancel; Workspace-only list omits jobId and returns authorized active Jobs/capacity. Wait expiry leaves Jobs running, not failed. Prefer bounded wait to busy-polling; cancel only an authorized Job. SSH disconnect outcomes are unknown, never replayed.',
+      'Workspace/SSH Job list/status/wait/cancel; list omits jobId and returns authorized active Jobs (Workspace adds generation capacity; SSH is scoped to this Thread/connection). Wait expiry leaves Jobs running, not failed. Prefer bounded wait to busy-polling; cancel only an authorized Job. SSH disconnect outcomes are unknown, never replayed.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -686,15 +686,21 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     const selector = selectorFrom(args);
     const action = stringValue(args.action, 16);
     if (action !== 'list' && action !== 'status' && action !== 'wait' && action !== 'cancel')
-      throw new Error('TOOL_ARGUMENTS_INVALID');
-    if (action === 'list' && (selector.target !== 'workspace' || args.jobId !== undefined))
-      throw new Error('TOOL_ARGUMENTS_INVALID');
+      invalidArgument('SHELL_JOB_ACTION_INVALID', 'action must be list, status, wait or cancel.');
+    if (action === 'list' && args.jobId !== undefined)
+      invalidArgument(
+        'SHELL_JOB_LIST_FIELDS_CONFLICT',
+        'list returns authorized active jobs on either target; omit jobId.',
+      );
     const jobId = action === 'list' ? undefined : stringValue(args.jobId, 80);
     if (
       jobId !== undefined &&
       !(selector.target === 'ssh' ? /^ssh-job-[a-f0-9-]{36}$/ : /^job-[a-f0-9]{64}$/).test(jobId)
     )
-      throw new Error('TOOL_ARGUMENTS_INVALID');
+      invalidArgument(
+        'SHELL_JOB_ID_INVALID',
+        'jobId must be the exact ID returned by shell_execute for this target (SSH ssh-job-UUID; Workspace job-64-hex).',
+      );
     const waitSeconds =
       action === 'wait'
         ? positiveInteger(
@@ -702,12 +708,13 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
             Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
           )
         : undefined;
-    if (action !== 'wait' && args.waitSeconds !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (action !== 'wait' && args.waitSeconds !== undefined)
+      invalidArgument('SHELL_JOB_WAIT_FIELDS_CONFLICT', 'waitSeconds is accepted only with action=wait.');
     const resolved =
       selector.target === 'ssh' || action === 'list'
         ? { target: await shell.resolve(context, selector) }
         : await shell.resolveJob(context, selector, jobId!);
-    if (selector.target === 'ssh') await shell.sshJob(context, selector, jobId!, 'status');
+    if (selector.target === 'ssh' && action !== 'list') await shell.sshJob(context, selector, jobId!, 'status');
     const normalizedArguments: JsonValue = {
       target: selector.target,
       id: resolved.target.selector.id,
@@ -746,7 +753,8 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
       const data = await shell.listActiveJobs(context, target);
       return {
         ok: true,
-        summary: 'Active Workspace Jobs and configured capacity observed. This does not verify command success.',
+        summary:
+          'Authorized active Jobs observed. Workspace also reports generation capacity; SSH lists this Thread/connection only, not a Workspace capacity. This does not verify command success.',
         data: { ...data, jobs: data.jobs.map((job) => ({ ...job })) },
         artifactRefs: [],
         truncated: false,

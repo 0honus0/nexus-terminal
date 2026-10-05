@@ -174,6 +174,12 @@ export const sshSessionJobsScenario = async () => {
     const persistent = await sessions.open(context, 1, hash, 0);
     const scoped = { ...context, sshSessionId: persistent.sessionId };
     const job = await sessions.startJob(scoped, 1, hash, persistent.sessionId, 'hold-one', 600, 'operation-one');
+    assert.deepEqual(
+      (await sessions.listJobs(scoped, 1)).map((job) => job.jobId),
+      [job.jobId],
+    );
+    assert.deepEqual(await sessions.listJobs({ ...scoped, appId: 'other-app' }, 1), []);
+    assert.deepEqual(await sessions.listJobs({ ...scoped, threadId: 'other-thread' }, 1), []);
     assert.equal(job.status, 'running');
     const other = await sessions.withSession(
       { ...scoped, runId: 'run-two', agentRuntimeId: 'child-two' },
@@ -198,6 +204,7 @@ export const sshSessionJobsScenario = async () => {
     );
     pending.get('hold-one')!();
     const completed = await sessions.job(scoped, 1, job.jobId, 'wait', 5);
+    assert.deepEqual(await sessions.listJobs(scoped, 1), []);
     assert.equal(completed.status, 'succeeded');
     assert.equal(completed.result.stdout, 'hold-one');
     await assert.rejects(() => sessions.job({ ...scoped, appId: 'other-app' }, 1, job.jobId, 'status'), /NOT_FOUND/);

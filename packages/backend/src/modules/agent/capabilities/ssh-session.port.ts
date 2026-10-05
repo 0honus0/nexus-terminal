@@ -29,6 +29,10 @@ export interface AgentSshSessionView {
 }
 
 export interface AgentSshSessionPort {
+  listJobs(
+    context: ToolContext,
+    connectionId: number,
+  ): Promise<{ jobId: string; status: SshJobView['status']; createdAt: number }[]>;
   open(
     context: ToolContext,
     connectionId: number,
