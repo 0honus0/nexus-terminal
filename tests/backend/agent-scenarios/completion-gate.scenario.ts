@@ -276,6 +276,49 @@ export const completionGateScenario = async () => {
       summary: 'Verified execution evidence satisfied the requested completion check.',
     });
 
+    const executionEvidence = evidenceAfterTest.tools.find((item) => item.result.semantic?.kind === 'execution');
+    assert.ok(executionEvidence);
+    const lastStep = Math.max(...evidenceAfterTest.tools.map((item) => item.stepIndex));
+    for (const action of ['stop', 'delete']) {
+      const cleanup = {
+        ...executionEvidence,
+        toolName: 'workspace_control',
+        stepIndex: lastStep + 1,
+        inspection: {
+          ...executionEvidence.inspection,
+          toolName: 'workspace_control',
+          normalizedArguments: { workspaceId: 'gate-workspace', action },
+        },
+        result: JSON.parse(successfulResult('Cleanup terminal confirmed', 'verified')) as ToolResult,
+      };
+      const afterCleanup = { ...evidenceAfterTest, tools: [...evidenceAfterTest.tools, cleanup] };
+      assert.equal(
+        completionGateDecision(afterGate, afterCleanup, 'Run tests and clean up the Workspace.').kind,
+        'complete',
+      );
+      assert.equal(
+        completionGateDecision(
+          afterGate,
+          {
+            ...afterCleanup,
+            tools: [
+              ...afterCleanup.tools,
+              {
+                ...cleanup,
+                toolName: 'file_write',
+                stepIndex: lastStep + 2,
+                inspection: { ...cleanup.inspection, toolName: 'file_write' },
+              },
+            ],
+            gateBlocksSinceToolProgress: 0,
+          },
+          'Run tests and clean up the Workspace.',
+        ).kind,
+        'continue',
+        'A later content mutation still invalidates old test evidence',
+      );
+    }
+
     const begun = await stateCommit.beginModelStep({
       scope,
       runId: 'completion-run',

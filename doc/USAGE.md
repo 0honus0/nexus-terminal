@@ -330,6 +330,8 @@ Plugin Frontend 的静态代码和 SDK 可匿名获取并使用公开 immutable 
 
 Plugin 包在本部署以 `appId + version` 表示全局不可变身份；同名同版本的不同内容不能并存，换 publisher 不会获得独立 namespace。修改包内容须发布新版本或使用不同 App ID。verify 会登记版本元数据，尚无 verified-only 版本自动回收；该行为不代表支持多用户私有同名插件。
 
+完成判定保留已验证测试结果：测试成功后，经 Runner 确认完成的 Workspace stop／delete 清理不会要求在已删除环境中重跑测试。后续文件修改、restart 等改变运行内容的操作仍需重新验证；Job 仅已接受或正在运行不算测试通过。
+
 Agent 的 file_write 在 SSH／Workspace 上新建文件默认使用 0600，覆盖及补丁保留现有权限。可用 mode 指定 0 到 511 的十进制 Unix 权限（384 为 0600、420 为 0644）；权限属于审批操作哈希的一部分，并在写入后验证。
 
 Memory 候选的 confidence 接受 0 到 1 的有限小数（如 0.5、0.8）；工具检查和操作哈希保留原始数值，不要求整数。候选仍须用户审核发布后才进入 Recall。
