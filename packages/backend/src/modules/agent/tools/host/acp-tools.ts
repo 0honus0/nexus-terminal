@@ -13,6 +13,8 @@ import { hashOperation } from '../../operation-hash';
 import type { AcpPermissionRequestPort } from '../../runtime/approvals/acp-permission-broker';
 import { isAgentUuid } from '../../uuid';
 import type { AgentWorkspaceRepositoryPort } from '../../workspace-runtime/workspace-runtime.repository.port';
+import type { AgentTargetResolver } from '../../capabilities/target-resolver';
+import type { AcpByteTransport } from '../../ai/integrations.types';
 
 const MAX_PROMPT_BYTES = 32 * 1024;
 const MAX_CWD_BYTES = 4096;
@@ -43,7 +45,8 @@ const currentIntegration = async (
   const integration = await repository.get(context, integrationId);
   if (!integration || integration.kind !== 'acp') throw new Error('INTEGRATION_NOT_FOUND');
   if (!integration.enabled) throw new Error('INTEGRATION_DISABLED');
-  if (integration.configuration.transport !== 'workspace-profile') throw new Error('INTEGRATION_KIND_MISMATCH');
+  if (integration.configuration.transport !== 'workspace-profile' && integration.configuration.transport !== 'ssh')
+    throw new Error('INTEGRATION_KIND_MISMATCH');
   return integration as IntegrationView & { kind: 'acp'; configuration: AcpIntegrationConfiguration };
 };
 
@@ -53,34 +56,111 @@ export const createAcpExecuteTool = (
   runtime: AcpRuntimePort,
   cryptoHash: CryptoHashPort,
   permissionRequests: AcpPermissionRequestPort,
+  ssh?: {
+    targets: AgentTargetResolver;
+    open(
+      context: ToolContext,
+      connectionId: number,
+      configurationHash: string,
+      argv: string[],
+      cwd: string,
+    ): Promise<AcpByteTransport>;
+  },
 ): AgentTool => ({
   descriptor: {
     name: 'acp_execute',
     version: '1.0.0',
     description:
-      'Run one approved ACP prompt through an ACP backend frozen into an already-running Workspace generation. ACP runs as a native Runner child process in the single-user trust model, so Nexus does not claim per-process read-only filesystem or network sandboxing; ACP-side sensitive-operation permission requests still fail closed at the Nexus protocol boundary.',
+      'Run one approved ACP prompt on Workspace or SSH using target/id and a matching configured integration. Workspace uses a frozen ACP profile; SSH starts configured argv in an independent non-PTY channel. Optional cwd selects the session directory. Neither is an OS sandbox; inner sensitive-operation permission requests go through Nexus approval independently. SSH disconnects are not replayed.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
         integrationId: { type: 'string', minLength: 36, maxLength: 36 },
         workspaceId: { type: 'string', minLength: 1, maxLength: 128 },
+        target: { type: 'string', enum: ['workspace', 'ssh'] },
+        id: { type: 'string', minLength: 1, maxLength: 128 },
         prompt: { type: 'string', minLength: 1, maxLength: MAX_PROMPT_BYTES },
         cwd: { type: 'string', minLength: 1, maxLength: MAX_CWD_BYTES },
       },
-      required: ['integrationId', 'workspaceId', 'prompt'],
+      required: ['integrationId', 'prompt'],
     },
     riskClass: 'mutate',
     capability: 'integration.acp.invoke',
   },
-  isAvailable: ({ environment }) => environment !== null,
+  isAvailable: ({ environment, connectionIds }) => environment !== null || (connectionIds?.length ?? 0) > 0,
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = object(input);
     const integrationId = string(args.integrationId, 64);
-    const workspaceId = string(args.workspaceId, 128);
+    const configured = await currentIntegration(integrations, context, integrationId);
+    if (configured.configuration.transport === 'ssh') {
+      if (!ssh) throw new Error('ACP_SSH_TRANSPORT_NOT_CONFIGURED');
+      if (args.target !== 'ssh' || args.workspaceId !== undefined) throw new Error('ACP_TARGET_CONFIGURATION_MISMATCH');
+      const id = string(args.id, 128);
+      const binding = await ssh.targets.resolve(context, { target: 'ssh', id });
+      const cwd = args.cwd === undefined ? configured.configuration.cwd! : string(args.cwd, MAX_CWD_BYTES);
+      if (!cwd.startsWith('/')) throw new Error('ACP_SSH_CWD_INVALID');
+      const normalizedArguments: JsonValue = {
+        integrationId,
+        integrationVersion: configured.version,
+        target: 'ssh',
+        id,
+        cwd,
+        prompt: string(args.prompt, MAX_PROMPT_BYTES),
+      };
+      const configurationHash = hashOperation(
+        {
+          integration: configured.configuration as unknown as JsonValue,
+          version: configured.version,
+          connectionHash: binding.fingerprint.configurationHash,
+        },
+        cryptoHash,
+      );
+      const target: ToolInspection['target'] = {
+        ...binding.fingerprint,
+        configurationHash: binding.fingerprint.configurationHash,
+        integrationId,
+      };
+      return {
+        toolName: 'acp_execute',
+        toolVersion: '1.0.0',
+        normalizedArguments,
+        target,
+        resourceKeys: [...binding.resourceKeys, `integration:acp:${integrationId}`],
+        risk: 'mutate',
+        mutation: true,
+        operationHash: hashOperation(
+          {
+            arguments: normalizedArguments,
+            configurationHash,
+            runId: context.runId,
+            runtimeId: context.agentRuntimeId,
+            policyRevision,
+            inputRevision: context.inputRevision,
+          },
+          cryptoHash,
+        ),
+        operationHashVersion: 1,
+        preconditions: [
+          ...binding.preconditions,
+          { kind: 'metadata', key: `integration:${integrationId}:version`, observedValue: configured.version },
+        ],
+        policyRevision,
+        inputRevision: context.inputRevision,
+      };
+    }
+    if (args.target !== undefined && args.target !== 'workspace') throw new Error('ACP_TARGET_CONFIGURATION_MISMATCH');
+    if (args.workspaceId !== undefined && args.id !== undefined && args.workspaceId !== args.id)
+      throw new Error('ACP_TARGET_ID_CONFLICT');
+    const workspaceId = string(args.workspaceId ?? args.id, 128);
     const prompt = string(args.prompt, MAX_PROMPT_BYTES);
     const cwd = args.cwd === undefined ? '/workspace/work' : string(args.cwd, MAX_CWD_BYTES);
-    if (cwd !== '/workspace' && !cwd.startsWith('/workspace/')) throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (cwd !== '/workspace' && !cwd.startsWith('/workspace/'))
+      throw new Error('ACP_CWD_OUTSIDE_WORKSPACE', {
+        cause: new Error(
+          'ACP cwd must be /workspace or a path beneath it, for the configured Runner profile. No ACP process was started.',
+        ),
+      });
 
     const [integration, workspace] = await Promise.all([
       currentIntegration(integrations, context, integrationId),
@@ -190,6 +270,51 @@ export const createAcpExecuteTool = (
   execute: async (inspection, context): Promise<ToolResult> => {
     const args = object(inspection.normalizedArguments);
     const integrationId = string(args.integrationId, 64);
+    if (args.target === 'ssh') {
+      if (!ssh) throw new Error('ACP_SSH_TRANSPORT_NOT_CONFIGURED');
+      const integration = await currentIntegration(integrations, context, integrationId);
+      if (integration.version !== Number(args.integrationVersion) || integration.configuration.transport !== 'ssh')
+        throw new Error('RESOURCE_CHANGED');
+      const binding = await ssh.targets.resolve(context, { target: 'ssh', id: string(args.id, 128) });
+      if (binding.fingerprint.configurationHash !== inspection.target.configurationHash)
+        throw new Error('RESOURCE_CHANGED');
+      const cwd = string(args.cwd, MAX_CWD_BYTES);
+      const result = await runtime.execute(
+        integration,
+        {
+          workspaceId: '',
+          generation: 0,
+          cwd,
+          prompt: string(args.prompt, MAX_PROMPT_BYTES),
+          maxOutputBytes: context.maxOutputBytes,
+        },
+        {
+          signal: context.signal,
+          openTransport: () =>
+            ssh.open(
+              context,
+              binding.connectionId!,
+              binding.fingerprint.configurationHash,
+              integration.configuration.argv!,
+              cwd,
+            ),
+          requestPermission: (request) => permissionRequests.request(context, inspection, request),
+        },
+      );
+      return {
+        ok: true,
+        summary: `ACP execution completed (${result.stopReason}).`,
+        data: { text: result.text, stopReason: result.stopReason },
+        artifactRefs: [],
+        truncated: false,
+        outcome: 'confirmed',
+        verification: {
+          status: 'unverified',
+          summary: 'ACP protocol completed; output is not independent verification of external facts.',
+          evidenceRefs: [],
+        },
+      };
+    }
     const workspaceId = string(args.workspaceId, 128);
     const generation = Number(args.generation);
     const expectedIntegrationVersion = Number(args.integrationVersion);

@@ -879,6 +879,9 @@
         "mcpEndpointHint": "SSE または Streamable HTTP エンドポイントに対応"
       },
       "acpRuntime": {
+        "transport": "実行対象の種類",
+        "sshArgv": "SSH 起動引数（JSON 配列、環境変数は env で指定）",
+        "sshCwd": "SSH 作業ディレクトリ（絶対パス）",
         "title": "ACP",
         "description": "Workspace 内で起動できる ACP プロセス Profile と、Nexus Agent が呼び出す ACP Integration を設定します。ACP プロセスは凍結済み Workspace generation/runtime profile に固定されますが、単一ユーザー native Runner ではプロセス単位の読み取り専用・ネットワーク sandbox を保証しません。",
         "addProfile": "プロファイル追加",

@@ -53,7 +53,7 @@
   );
 
   const acpConfiguration = (integration: AgentIntegrationViewDto): AgentAcpIntegrationConfigurationDto => {
-    if (integration.kind !== 'acp' || integration.configuration.transport !== 'workspace-profile') {
+    if (integration.kind !== 'acp' || !['workspace-profile', 'ssh'].includes(integration.configuration.transport)) {
       throw new Error('ACP_INTEGRATION_INVALID');
     }
     return integration.configuration as AgentAcpIntegrationConfigurationDto;
@@ -253,6 +253,9 @@
   const integrationForm = reactive({
     displayName: '',
     profileId: '',
+    transport: 'workspace-profile' as 'workspace-profile' | 'ssh',
+    argv: '["agent", "--acp"]',
+    cwd: '/tmp',
     enabled: true,
   });
   let pendingIntegrationCreateIdentity: { fingerprint: string; idempotencyKey: string } | null = null;
@@ -260,6 +263,7 @@
   const openAddIntegrationModal = (): void => {
     pendingIntegrationCreateIdentity = null;
     integrationForm.displayName = '';
+    integrationForm.transport = 'workspace-profile';
     integrationForm.profileId = configuredProfiles.value[0]?.id ?? '';
     integrationForm.enabled = true;
     integrationModalError.value = '';
@@ -268,7 +272,7 @@
 
   const submitAddIntegration = async (): Promise<void> => {
     const name = integrationForm.displayName.trim();
-    const pid = integrationForm.profileId.trim();
+    const pid = integrationForm.transport === 'ssh' ? 'ssh-acp' : integrationForm.profileId.trim();
     if (!name || !pid) return;
 
     await run(
@@ -278,9 +282,12 @@
           kind: 'acp' as const,
           configuration: {
             displayName: name,
-            transport: 'workspace-profile' as const,
+            transport: integrationForm.transport,
             profileId: pid,
             protocolVersion: '1' as const,
+            ...(integrationForm.transport === 'ssh'
+              ? { argv: JSON.parse(integrationForm.argv) as string[], cwd: integrationForm.cwd.trim() }
+              : {}),
           },
           enabled: integrationForm.enabled,
         };
@@ -522,8 +529,7 @@
             appearance="soft"
             tone="neutral"
             type="button"
-            :disabled="integrationDisabled || configuredProfiles.length === 0"
-            :title="configuredProfiles.length === 0 ? $t('agent.settings.acpRuntime.saveProfileFirst') : undefined"
+            :disabled="integrationDisabled"
             class="w-[88px]"
             @click="openAddIntegrationModal"
           >
@@ -593,6 +599,7 @@
               class="flex flex-wrap items-center justify-end gap-2 pt-2 lg:pt-0 border-t border-border/40 lg:border-0"
             >
               <UiSelect
+                v-if="acpConfiguration(integration).transport === 'workspace-profile'"
                 density="compact"
                 :disabled="integrationDisabled"
                 :model-value="acpConfiguration(integration).profileId"
@@ -600,6 +607,9 @@
                 class="w-36"
                 @update:model-value="(value: unknown) => changeIntegrationProfile(integration, String(value))"
               />
+              <span v-else class="font-mono text-xs text-text-secondary"
+                >SSH · {{ acpConfiguration(integration).cwd }}</span
+              >
               <div
                 class="flex items-center gap-2 rounded-xl border border-border/70 bg-header/25 px-2.5 py-1 text-xs text-foreground select-none"
               >
@@ -629,7 +639,7 @@
         <!-- 底部轻量新增按钮 -->
         <button
           type="button"
-          :disabled="integrationDisabled || configuredProfiles.length === 0"
+          :disabled="integrationDisabled"
           class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-primary/5 hover:border-primary/45 py-2.5 text-xs text-text-secondary hover:text-primary transition-colors duration-200 cursor-pointer select-none disabled:pointer-events-none disabled:opacity-40"
           @click="openAddIntegrationModal"
         >
@@ -809,6 +819,28 @@
             </label>
 
             <label class="block">
+              <span class="mb-1 block text-xs font-medium text-foreground">{{
+                $t('agent.settings.acpRuntime.transport')
+              }}</span>
+              <UiSelect
+                v-model="integrationForm.transport"
+                :options="[
+                  { value: 'workspace-profile', label: 'Workspace' },
+                  { value: 'ssh', label: 'SSH' },
+                ]"
+              />
+            </label>
+            <label v-if="integrationForm.transport === 'ssh'" class="block">
+              <span class="mb-1 block text-xs font-medium text-foreground">{{
+                $t('agent.settings.acpRuntime.sshArgv')
+              }}</span>
+              <input v-model="integrationForm.argv" class="w-full rounded-lg border border-border bg-background p-2" />
+              <span class="mb-1 block text-xs font-medium text-foreground">{{
+                $t('agent.settings.acpRuntime.sshCwd')
+              }}</span>
+              <input v-model="integrationForm.cwd" class="w-full rounded-lg border border-border bg-background p-2" />
+            </label>
+            <label v-if="integrationForm.transport === 'workspace-profile'" class="block">
               <span class="mb-1 block text-xs font-medium text-foreground">
                 {{ $t('agent.settings.acpRuntime.integrationProfile') }} <span class="text-error">*</span>
               </span>
@@ -858,7 +890,11 @@
             appearance="solid"
             tone="primary"
             type="button"
-            :disabled="integrationDisabled || !integrationForm.displayName.trim() || !integrationForm.profileId.trim()"
+            :disabled="
+              integrationDisabled ||
+              !integrationForm.displayName.trim() ||
+              (integrationForm.transport === 'workspace-profile' && !integrationForm.profileId.trim())
+            "
             @click="submitAddIntegration"
           >
             <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>

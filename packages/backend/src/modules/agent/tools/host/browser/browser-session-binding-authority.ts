@@ -47,7 +47,12 @@ export class BrowserSessionBindingAuthority {
   async createBinding(context: ToolContext, args: Record<string, JsonValue>): Promise<ResolvedBrowserBinding> {
     const hasWorkspace = args.workspaceId !== undefined;
     const hasTarget = args.targetId !== undefined;
-    if (hasWorkspace === hasTarget) throw new Error('TOOL_ARGUMENTS_INVALID');
+    if (hasWorkspace === hasTarget)
+      throw new Error('BROWSER_TARGET_SELECTION_CONFLICT', {
+        cause: new Error(
+          'Select exactly one browser binding: workspaceId or configured targetId. Both or neither cannot identify a browser endpoint.',
+        ),
+      });
     return hasWorkspace
       ? this.workspaceBinding(context, browserToolString(args.workspaceId, MAX_ID_BYTES))
       : this.standaloneBinding(context, browserToolString(args.targetId, MAX_ID_BYTES));

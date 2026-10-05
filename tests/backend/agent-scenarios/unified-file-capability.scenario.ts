@@ -431,7 +431,7 @@ export const unifiedFileCapabilityScenario = async () => {
           context,
           7,
         ),
-      /TOOL_ARGUMENTS_INVALID/,
+      /SSH_SESSION_TARGET_MISMATCH/,
     );
     for (const target of [
       { target: 'workspace' as const, id: 'ws-file', root: '/workspace/work' },

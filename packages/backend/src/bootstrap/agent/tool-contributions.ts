@@ -190,6 +190,7 @@ export const registerRuntimeToolContributions = ({
 };
 
 export interface AcpToolContributionOptions {
+  ssh?: Parameters<typeof createAcpExecuteTool>[5];
   catalog: ToolCatalog;
   repository: IntegrationRepositoryPort;
   workspaces: AgentWorkspaceRepositoryPort;
@@ -205,11 +206,12 @@ export const registerAcpToolContribution = ({
   runtime,
   cryptoHash,
   permissionRequests,
+  ssh,
 }: AcpToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'integration.acp.invoke',
-    tools: [createAcpExecuteTool(repository, workspaces, runtime, cryptoHash, permissionRequests)],
+    tools: [createAcpExecuteTool(repository, workspaces, runtime, cryptoHash, permissionRequests, ssh)],
   });
 };
 

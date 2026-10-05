@@ -14,7 +14,10 @@ const MAX_PROMPT_BYTES = 32 * 1024;
 const MAX_UPDATE_BYTES = 256 * 1024;
 
 const acpConfig = (integration: IntegrationView): AcpIntegrationConfiguration => {
-  if (integration.kind !== 'acp' || integration.configuration.transport !== 'workspace-profile') {
+  if (
+    integration.kind !== 'acp' ||
+    (integration.configuration.transport !== 'workspace-profile' && integration.configuration.transport !== 'ssh')
+  ) {
     throw new Error('INTEGRATION_KIND_MISMATCH');
   }
   if (integration.configuration.protocolVersion !== String(PROTOCOL_VERSION)) {
@@ -44,10 +47,11 @@ const textChunk = (update: unknown): string => {
   return block.type === 'text' && typeof block.text === 'string' ? block.text : '';
 };
 
-const assertRequest = (request: AcpExecutionRequest): void => {
+const assertRequest = (request: AcpExecutionRequest, ssh: boolean): void => {
   if (
-    !request.cwd.startsWith('/workspace') ||
-    (request.cwd !== '/workspace' && !request.cwd.startsWith('/workspace/')) ||
+    (!ssh && request.cwd !== '/workspace' && !request.cwd.startsWith('/workspace/')) ||
+    !request.cwd.startsWith('/') ||
+    request.cwd.includes('\0') ||
     !request.prompt.trim() ||
     Buffer.byteLength(request.prompt, 'utf8') > MAX_PROMPT_BYTES ||
     !Number.isSafeInteger(request.maxOutputBytes) ||
@@ -72,13 +76,17 @@ export class AcpAdapter implements AcpRuntimePort {
     request: AcpExecutionRequest,
     context: AcpExecutionContext,
   ): Promise<AcpExecutionResult> {
-    assertRequest(request);
-    if (context.signal.aborted) throw context.signal.reason ?? new Error('ABORTED');
     const config = acpConfig(integration);
-    const transport = await this.transports.open(
-      { workspaceId: request.workspaceId, generation: request.generation, profileId: config.profileId },
-      context.signal,
-    );
+    assertRequest(request, config.transport === 'ssh');
+    if (context.signal.aborted) throw context.signal.reason ?? new Error('ABORTED');
+    if (config.transport === 'ssh' && !context.openTransport) throw new Error('ACP_SSH_TRANSPORT_NOT_CONFIGURED');
+    const transport =
+      config.transport === 'ssh'
+        ? await context.openTransport!()
+        : await this.transports.open(
+            { workspaceId: request.workspaceId, generation: request.generation, profileId: config.profileId },
+            context.signal,
+          );
     const onAbort = () => void transport.close().catch(() => undefined);
     context.signal.addEventListener('abort', onAbort, { once: true });
 

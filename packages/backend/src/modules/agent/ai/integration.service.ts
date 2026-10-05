@@ -94,22 +94,38 @@ const validateMcp = async (raw: unknown, outbound: OutboundPolicyPort): Promise<
 
 const validateAcp = (raw: unknown): AcpIntegrationConfiguration => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
-  const allowed = new Set(['displayName', 'transport', 'profileId', 'protocolVersion']);
+  const allowed = new Set(['displayName', 'transport', 'profileId', 'protocolVersion', 'argv', 'cwd']);
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (
     !nonEmpty(raw.displayName, 256) ||
-    raw.transport !== 'workspace-profile' ||
+    (raw.transport !== 'workspace-profile' && raw.transport !== 'ssh') ||
     !nonEmpty(raw.profileId, 128) ||
     !/^[a-z][a-z0-9_.-]{0,127}$/.test(raw.profileId) ||
     raw.protocolVersion !== '1'
   ) {
     throw new Error('VALIDATION_FAILED');
   }
+  if (raw.transport === 'ssh') {
+    if (
+      !Array.isArray(raw.argv) ||
+      raw.argv.length < 1 ||
+      raw.argv.length > 128 ||
+      raw.argv.some((arg) => typeof arg !== 'string' || arg.includes('\0') || Buffer.byteLength(arg, 'utf8') > 8192) ||
+      !raw.argv[0] ||
+      Buffer.byteLength(JSON.stringify(raw.argv), 'utf8') > 65536 ||
+      !nonEmpty(raw.cwd, 4096) ||
+      !raw.cwd.startsWith('/') ||
+      raw.cwd.includes('\0')
+    )
+      throw new Error('ACP_SSH_CONFIGURATION_INVALID');
+  } else if (raw.argv !== undefined || raw.cwd !== undefined)
+    throw new Error('ACP_WORKSPACE_CONFIGURATION_FIELDS_CONFLICT');
   return {
     displayName: raw.displayName.trim(),
-    transport: 'workspace-profile',
+    transport: raw.transport,
     profileId: raw.profileId,
     protocolVersion: '1',
+    ...(raw.transport === 'ssh' ? { argv: raw.argv as string[], cwd: raw.cwd as string } : {}),
   };
 };
 

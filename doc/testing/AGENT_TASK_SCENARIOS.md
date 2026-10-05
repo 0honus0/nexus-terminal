@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- parity 后续：`bd6a571f` 已提交 glob 与错误改进。SSH ACP 已接通配置/协议 DTO、设置创建入口、target/id 工具、独立非 PTY byte transport 和现有 ACP v1 permission callback。定向场景覆盖 SSH 内层拒绝走 broker、配置版本变化拒绝、目标匹配、字节流转发、断连具体错误、幂等 close；check 通过。尚未真实 SSH ACP 程序/E2E 验收，代码导航的 SSH 后端仍未完成；不能据此宣布所有 Workspace/SSH 能力完全一致。
 - parity 第一项已本地提交 `72a01dab`；第二项将 SSH glob 改为 Node matchesGlob，Workspace 显式 glob 走同一语义的有界读取搜索，避免 rg glob/自定义 glob 差异；保留非 glob 查询 rg 路径和资源界限。统一文件场景覆盖 `{a,b}.txt` 搜索通过；错误反馈继续细化中。
 - 后续 parity 修复第一项：SSH 补齐 shell_job_control list，底层查询按 user/App/Thread/connection 隔离，仅返回 running Job，不伪造 Workspace generation 容量；已有 SSH 后台 start/status/wait/cancel 保留。真实 SQLite SSH 生命周期场景覆盖活跃列表、其他 App/Thread 不可见及终态移出，check 通过。其余搜索/错误细化仍在逐项处理，代码导航与 ACP 的 SSH 实现尚未完成。
 - `d2f7fb31` 已本地提交，未推送。后续工具静态排查：① shell_job_control 的 list 明确拒绝 SSH，AgentSshSessionPort 也没有 Job 列表入口；属于类似统一工具能力缺口，补齐时必须保留 SSH user/App/Thread/connection 授权，不直接暴露进程或其他会话任务。② file_search 两目标都支持，但 SSH 自定义 glob 仅处理 */**/?，Workspace 使用 rg glob 或 Node matchesGlob；例如 `{a,b}.ts` 在 SSH 被当成字面花括号，与 Workspace 不一致，尚未做定向运行复现。③ 文件读写/patch/move/delete 未发现按目标禁用同一操作；patch 两目标均限制已有文本文件修改，创建/删除/重命名应走对应文件工具。④ 泛化错误仍存在：file_read/list 将不存在与类型不符合并 NOT_FOUND；file_patch 将二进制/创建/删除/重命名/重复路径合并 FILE_PATCH_UNSUPPORTED；artifact_read 模式字段冲突、workspace_code_query 位置字段组合、browser snapshotId/nodeRef 成对要求均只返回 TOOL_ARGUMENTS_INVALID，缺少具体纠正信息。Workspace repo_map/code_query 与 ACP 仅接 Runner 能力，属于尚未实现 SSH 后端，不等于当前直接移除 target 校验即可安全支持。SSH sessionId、Run/Runtime/generation 归属及 Browser snapshot 绑定是必要身份边界，不能机械取消。此轮仅排查记录，未扩大实现修改范围。

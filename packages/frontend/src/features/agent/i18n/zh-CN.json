@@ -879,6 +879,9 @@
         "mcpEndpointHint": "支持 SSE 或 Streamable HTTP 端点"
       },
       "acpRuntime": {
+        "transport": "执行目标类型",
+        "sshArgv": "SSH 启动参数（JSON 数组；环境变量可通过 env 传入）",
+        "sshCwd": "SSH 工作目录（绝对路径）",
         "title": "ACP",
         "description": "配置 Workspace 内可启动的 ACP 进程 Profile，以及 Nexus Agent 可调用的 ACP Integration。ACP 进程绑定冻结的 Workspace generation/runtime profile，但在单用户 native Runner 中不再声明只读挂载或网络沙箱。",
         "addProfile": "添加配置",

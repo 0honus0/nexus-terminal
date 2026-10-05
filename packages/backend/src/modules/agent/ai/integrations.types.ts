@@ -14,8 +14,10 @@ export interface McpIntegrationConfiguration {
 
 export interface AcpIntegrationConfiguration {
   displayName: string;
-  transport: 'workspace-profile';
+  transport: 'workspace-profile' | 'ssh';
   profileId: string;
+  argv?: string[];
+  cwd?: string;
   protocolVersion: '1';
 }
 
@@ -182,6 +184,7 @@ export interface AcpExecutionRequest {
 }
 
 export interface AcpExecutionContext {
+  openTransport?(): Promise<AcpByteTransport>;
   signal: AbortSignal;
   requestPermission(request: AcpPermissionRequest): Promise<'allow_once' | 'reject_once'>;
   onUpdate?(update: JsonValue): void;

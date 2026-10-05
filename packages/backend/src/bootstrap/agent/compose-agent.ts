@@ -26,6 +26,7 @@ import { SqliteModelContinuationRepository } from '../../infrastructure/agent/re
 import { InstalledPluginSkillSourceAdapter } from '../../infrastructure/agent/plugins/installed-plugin-skill-source.adapter';
 import { McpAdapter } from '../../infrastructure/agent/integrations/mcp.adapter';
 import { AcpAdapter } from '../../infrastructure/agent/integrations/acp.adapter';
+import { SshAcpTransport } from '../../infrastructure/agent/integrations/ssh-acp-transport';
 import { OutboundPolicyAdapter } from '../../infrastructure/agent/providers/outbound-policy.adapter';
 import { SqliteIntegrationRepository } from '../../infrastructure/agent/repositories/sqlite-integration.repository';
 import { SqliteRecallRepository } from '../../infrastructure/agent/repositories/sqlite-recall.repository';
@@ -416,6 +417,11 @@ export const composeAgent = ({
     runtime: acpRuntime,
     cryptoHash,
     permissionRequests: acpPermissions,
+    ssh: {
+      targets,
+      open: (context, connectionId, hash, argv, cwd) =>
+        new SshAcpTransport(connectionResolver, executionSessions).open(context, connectionId, hash, argv, cwd),
+    },
   });
   registerBrowserToolContribution({
     catalog: toolCatalog,

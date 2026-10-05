@@ -291,7 +291,7 @@ export const createFileSearchTool = (files: FileCapabilityService, cryptoHash: C
     name: 'file_search',
     version: '1.0.0',
     description:
-      'Search bounded UTF-8 text on a Workspace or SSH target. query is a JavaScript Unicode regular expression. Explicit glob uses Node glob syntax on both targets, matching a relative path or basename (including brace alternatives). Results remain bounded.',
+      'Search bounded UTF-8 text on a Workspace or SSH target. query is a regular expression; use syntax shared by JavaScript Unicode regex and ripgrep. Explicit glob uses Node glob syntax on both targets, matching a relative path or basename (including brace alternatives). Results remain bounded.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

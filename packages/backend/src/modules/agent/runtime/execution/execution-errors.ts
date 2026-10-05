@@ -17,6 +17,23 @@ export const executionErrorCode = (error: unknown, fallbackCode: string): string
 };
 
 const ERROR_DETAILS: Readonly<Record<string, string>> = {
+  ACP_TARGET_CONFIGURATION_MISMATCH:
+    'The selected target must match the ACP integration transport: SSH needs target=ssh/id; Workspace needs target=workspace/id or workspaceId. Configure a matching integration first.',
+  ACP_TARGET_ID_CONFLICT: 'id and workspaceId identify different Workspaces; supply one ID or make them equal.',
+  ACP_SSH_CWD_INVALID: 'SSH ACP cwd must be an absolute remote directory path.',
+  ACP_SSH_CONFIGURATION_INVALID:
+    'SSH ACP configuration requires non-empty argv (1–128 strings, executable first) and an absolute cwd; NUL and oversized fields are rejected.',
+  ACP_SSH_TRANSPORT_NOT_CONFIGURED: 'The SSH ACP transport is not available; no remote ACP process was started.',
+  ACP_SSH_DISCONNECTED:
+    'The dedicated SSH ACP connection closed. The remote operation outcome cannot be proven; do not automatically replay the prompt.',
+  ACP_SSH_PROCESS_EXIT:
+    'The remote ACP process exited without a clean zero exit; verify its executable, arguments, dependencies and working directory.',
+  ACP_SSH_CHANNEL_ERROR:
+    'The dedicated SSH ACP command channel failed; do not infer successful completion or automatically replay.',
+  ACP_SSH_STREAM_OVERFLOW:
+    'ACP output exceeded the bounded unread stream buffer; the channel was terminated, not silently truncated.',
+  ACP_SSH_WRITE_FAILED:
+    'ACP protocol input could not be written to the remote process; verify channel state before further action.',
   FILE_PATCH_BINARY_UNSUPPORTED: 'file_patch edits UTF-8 text only; binary patch content is unsupported.',
   FILE_PATCH_CREATE_UNSUPPORTED: 'file_patch cannot create files; use file_write with content.',
   FILE_PATCH_DELETE_UNSUPPORTED: 'file_patch cannot delete files; use file_delete with explicit authorization.',

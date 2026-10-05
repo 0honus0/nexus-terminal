@@ -9,6 +9,10 @@ import type {
   IntegrationView,
 } from '../../../packages/backend/src/modules/agent/ai/integrations.types';
 import { createAcpExecuteTool } from '../../../packages/backend/src/modules/agent/tools/host/acp-tools';
+import type { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
+import { SshAcpTransport } from '../../../packages/backend/src/infrastructure/agent/integrations/ssh-acp-transport';
+import type { ExecutionSessionManager } from '../../../packages/backend/src/platform/execution/execution-session-manager';
+import type { AgentConnectionResolverPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-resolver.port';
 
 export const acpInnerPermissionScenario = async () => {
   const scope: Scope = { userId: 1, appId: 'acp-inner-permission-app' };
@@ -144,6 +148,144 @@ export const acpInnerPermissionScenario = async () => {
     decisions,
     ['allow_once'],
     'an explicit user-approved ACP inner action must resume the original ACP permission request',
+  );
+
+  const sshIntegration: IntegrationView = {
+    ...integration,
+    configuration: {
+      displayName: 'SSH ACP',
+      transport: 'ssh',
+      profileId: 'ssh-acp',
+      protocolVersion: '1',
+      argv: ['agent', '--acp'],
+      cwd: '/srv/project',
+    },
+  };
+  let stdout: ((bytes: Uint8Array) => void) | undefined;
+  let disconnected: (() => void) | undefined;
+  let startedCommand = '';
+  let terminated = 0;
+  let closed = 0;
+  const transportFixture = new SshAcpTransport(
+    {
+      resolve: async () => ({}),
+      get: async () => ({ configurationHash: 'ssh-config' }),
+    } as unknown as AgentConnectionResolverPort,
+    {
+      connect: async () => ({
+        id: 'ssh-acp-fixture',
+        onTransportClose: (listener: () => void) => {
+          disconnected = listener;
+          return () => {};
+        },
+        startCommand: async (request: { command: string; pty: boolean }) => {
+          assert.equal(request.pty, false);
+          startedCommand = request.command;
+          return {
+            write: () => true,
+            onStdout: (listener: (bytes: Uint8Array) => void) => {
+              stdout = listener;
+              return () => {};
+            },
+            onError: () => () => {},
+            onClose: () => () => {},
+            terminate: async () => {
+              terminated++;
+            },
+          };
+        },
+      }),
+      close: async () => {
+        closed++;
+      },
+    } as unknown as ExecutionSessionManager,
+  );
+  const byteTransport = await transportFixture.open(
+    { ...context, deadlineAt: Math.floor(Date.now() / 1000) + 60 },
+    1,
+    'ssh-config',
+    ['agent', "argument'quote", '$(not-run)'],
+    '/srv/project',
+  );
+  assert.match(startedCommand, /exec 'agent'/);
+  assert.ok(startedCommand.includes("'$(not-run)'"));
+  const reader = byteTransport.readable.getReader();
+  stdout!(new TextEncoder().encode('{"jsonrpc":"2.0"}\n'));
+  assert.equal(new TextDecoder().decode((await reader.read()).value), '{"jsonrpc":"2.0"}\n');
+  disconnected!();
+  await assert.rejects(() => reader.read(), /ACP_SSH_DISCONNECTED/);
+  await Promise.all([byteTransport.close(), byteTransport.close()]);
+  assert.equal(terminated, 1);
+  assert.equal(closed, 1);
+  let sshPermissionRequests = 0;
+  const sshTool = createAcpExecuteTool(
+    { get: async () => sshIntegration } as unknown as IntegrationRepositoryPort,
+    workspaces,
+    {
+      execute: async (_integration, request, execution) => {
+        assert.equal(request.cwd, '/srv/project');
+        assert.ok(execution.openTransport);
+        assert.equal(
+          await execution.requestPermission({
+            sessionId: 'ssh-session',
+            toolCallId: 'ssh-inner',
+            title: 'edit',
+            kind: 'edit',
+            rawInput: null,
+          }),
+          'reject_once',
+        );
+        return { text: 'SSH complete', stopReason: 'end_turn' };
+      },
+    },
+    { sha256Utf8: (value) => createHash('sha256').update(value).digest('hex') },
+    {
+      request: async () => {
+        sshPermissionRequests++;
+        return 'reject_once';
+      },
+    },
+    {
+      targets: {
+        resolve: async (_context: ToolContext, selector: { id: string }) => {
+          assert.equal(selector.id, '1');
+          return {
+            selector: { target: 'ssh', id: '1' },
+            connectionId: 1,
+            resourceKeys: ['connection:1'],
+            preconditions: [],
+            fingerprint: {
+              kind: 'ssh',
+              target: 'ssh',
+              id: '1',
+              connectionId: 1,
+              targetIdentity: 'ssh:1',
+              endpoint: 'fixture',
+              loginUser: 'fixture',
+              configurationHash: 'ssh-config',
+            },
+          };
+        },
+      } as unknown as AgentTargetResolver,
+      open: async () => {
+        throw new Error('Transport fixture not invoked by mocked runtime');
+      },
+    },
+  );
+  const sshInspection = await sshTool.inspect(
+    { integrationId, target: 'ssh', id: '1', prompt: 'inspect' },
+    { ...context, connectionIds: [1] },
+    1,
+  );
+  assert.ok(sshInspection.resourceKeys.includes('connection:1'));
+  const sshResult = await sshTool.execute(sshInspection, { ...context, connectionIds: [1] });
+  assert.equal(sshResult.ok, true);
+  assert.equal(sshPermissionRequests, 1);
+  sshIntegration.version++;
+  await assert.rejects(() => sshTool.execute(sshInspection, context), /RESOURCE_CHANGED/);
+  await assert.rejects(
+    () => sshTool.inspect({ integrationId, workspaceId, prompt: 'inspect' }, context, 1),
+    /ACP_TARGET_CONFIGURATION_MISMATCH/,
   );
 
   return [

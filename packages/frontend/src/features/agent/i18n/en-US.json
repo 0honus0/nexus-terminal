@@ -879,6 +879,9 @@
         "mcpEndpointHint": "Supports SSE or Streamable HTTP endpoints"
       },
       "acpRuntime": {
+        "transport": "Execution target type",
+        "sshArgv": "SSH argv (JSON array; use env for environment variables)",
+        "sshCwd": "SSH working directory (absolute path)",
         "title": "ACP",
         "description": "Configure ACP process profiles that may run inside Workspaces and ACP integrations exposed to Nexus Agent. ACP processes are bound to the frozen Workspace generation/runtime profile; the single-user native Runner does not claim per-process read-only or network sandboxing.",
         "addProfile": "Add profile",
