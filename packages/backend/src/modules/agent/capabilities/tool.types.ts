@@ -45,6 +45,7 @@ export interface ToolAvailabilityContext {
 
 export interface ToolContext extends Scope {
   actor: Actor;
+  participantKind?: 'root' | 'subagent';
   runId: string;
   threadId?: string;
   sshSessionId?: string;

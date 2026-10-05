@@ -13,6 +13,7 @@ export const createProjectDirectoryTools = (
     descriptor: {
       name: `project_directory_${action}`,
       version: '1.0.0',
+      modelExposure: 'deferred',
       description: `${action} a conversation-owned SSH project directory. Bind an absolute directory before working on a remote project; AGENTS.md and AGENT.md (case-insensitive) are loaded as scoped project guidance. This does not change shell cwd or grant permissions.`,
       inputSchema: {
         type: 'object',

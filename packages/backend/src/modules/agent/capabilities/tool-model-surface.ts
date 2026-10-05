@@ -6,17 +6,33 @@ import type { ToolAvailabilityContext, ToolContext, ToolDescriptor, ToolProposal
 export const TOOL_SEARCH_NAME = 'tool_search';
 export const TOOL_INVOKE_NAME = 'tool_invoke';
 
-const DEFERRED_HANDLE_PREFIX = 'mcp1.';
+const DEFERRED_HANDLE_PREFIX = 'tool1.';
 const MAX_ROUTER_ARGUMENT_BYTES = 32 * 1024;
 
 export const isDeferredToolDescriptor = (descriptor: ToolDescriptor): boolean =>
-  descriptor.modelExposure === 'deferred' &&
+  descriptor.modelExposure === 'deferred';
+
+export const isDeferredMcpToolDescriptor = (descriptor: ToolDescriptor): boolean =>
+  isDeferredToolDescriptor(descriptor) &&
   (descriptor.capability === 'integration.mcp.read' || descriptor.capability === 'integration.mcp.invoke');
+
+const isDeferredForSurface = (descriptor: ToolDescriptor, surface: 'root' | 'subagent'): boolean =>
+  surface === 'subagent' ? isDeferredMcpToolDescriptor(descriptor) : isDeferredToolDescriptor(descriptor);
+
+const isPlanVisibleDeferredNative = (
+  descriptor: ToolDescriptor,
+  surface: 'root' | 'subagent',
+  executionMode: 'execute' | 'plan',
+): boolean =>
+  surface === 'root' &&
+  executionMode === 'plan' &&
+  !isDeferredMcpToolDescriptor(descriptor) &&
+  (descriptor.riskClass === 'read' || descriptor.riskClass === 'control');
 
 export const TOOL_INVOKE_SCHEMA: CatalogToolSchema = {
   name: TOOL_INVOKE_NAME,
   description:
-    'Invoke one deferred MCP capability using a handle returned by tool_search. This includes remote Tools and bounded Resource/Prompt discovery/read surfaces. The handle is version-bound; stale or unknown handles fail closed. Arguments are validated against the authoritative Tool schema before inspection/execution.',
+    'Invoke one deferred Tool using a handle returned by tool_search. The handle is version-bound; stale or unknown handles fail closed. Arguments are validated against the authoritative Tool schema before inspection/execution.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -90,10 +106,16 @@ export const resolveDeferredToolProposal = (
   catalog: ToolCatalog,
   context: ToolContext,
   proposal: ToolProposal,
+  executionMode: 'execute' | 'plan' = 'execute',
 ): ToolProposal => {
+  const surface = context.participantKind === 'subagent' ? 'subagent' : 'root';
   if (proposal.name !== TOOL_INVOKE_NAME) {
     try {
-      if (isDeferredToolDescriptor(catalog.require(proposal.name, context).descriptor)) {
+      const descriptor = catalog.require(proposal.name, context).descriptor;
+      if (
+        isDeferredForSurface(descriptor, surface) &&
+        !isPlanVisibleDeferredNative(descriptor, surface, executionMode)
+      ) {
         throw new Error('MODEL_TOOL_CALL_INVALID');
       }
     } catch (error) {
@@ -101,12 +123,13 @@ export const resolveDeferredToolProposal = (
     }
     return proposal;
   }
+  if (executionMode === 'plan') throw new Error('MODEL_TOOL_CALL_INVALID');
   const routed = routerArguments(proposal.argumentsJson);
   const decoded = decodeDeferredHandle(routed.handle);
   const descriptor = catalog
     .list(context, { environment: context.environment, connectionIds: context.connectionIds })
     .find((candidate) => candidate.name === decoded.name);
-  if (!descriptor || !isDeferredToolDescriptor(descriptor) || descriptor.version !== decoded.version) {
+  if (!descriptor || !isDeferredForSurface(descriptor, surface) || descriptor.version !== decoded.version) {
     throw new Error('RESOURCE_CHANGED');
   }
   return {
@@ -121,11 +144,15 @@ export const modelFacingToolSchemas = (
   scope: Scope,
   availability: ToolAvailabilityContext | undefined,
   executionMode: 'execute' | 'plan',
+  surface: 'root' | 'subagent' = 'root',
 ): CatalogToolSchema[] => {
   const descriptors = catalog.list(scope, availability);
-  const deferred = descriptors.filter(isDeferredToolDescriptor);
+  const deferred = descriptors.filter((descriptor) => isDeferredForSurface(descriptor, surface));
   const direct = descriptors
-    .filter((descriptor) => !isDeferredToolDescriptor(descriptor))
+    .filter((descriptor) => {
+      if (!isDeferredForSurface(descriptor, surface)) return true;
+      return isPlanVisibleDeferredNative(descriptor, surface, executionMode);
+    })
     .filter((descriptor) => {
       if (descriptor.name === TOOL_SEARCH_NAME) return executionMode === 'execute' && deferred.length > 0;
       if (executionMode === 'execute') return true;

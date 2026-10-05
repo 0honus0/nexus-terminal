@@ -263,6 +263,7 @@ export class ModelStepRunner {
     collaborationContext?: string,
     route?: { model: ModelRef; capabilities?: ModelCapabilitySnapshot },
     runtimeId?: string,
+    options?: { rawHistoryFallback?: boolean },
   ): Promise<PreparedModelStep> {
     const modelRef = route?.model ?? snapshot.definition.model;
     const capabilitySnapshot = route?.capabilities ?? snapshot.definition.modelCapabilities;
@@ -398,6 +399,7 @@ export class ModelStepRunner {
       maxRecallBytes: snapshot.budget.maxRecallBytes,
       tools,
       ...(usageAnchor ? { usageAnchor } : {}),
+      ...(options?.rawHistoryFallback ? { rawHistoryFallback: true } : {}),
     });
     return { model, contextPlan };
   }

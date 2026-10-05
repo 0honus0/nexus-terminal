@@ -386,8 +386,8 @@ export class SubagentContextBuilder {
     }
   }
 
-  resolveProposal(context: ToolContext, proposal: ToolProposal): ToolProposal {
-    return resolveDeferredToolProposal(this.toolCatalog, context, proposal);
+  resolveProposal(context: ToolContext, proposal: ToolProposal, executionMode: 'execute' | 'plan'): ToolProposal {
+    return resolveDeferredToolProposal(this.toolCatalog, context, proposal, executionMode);
   }
 
   allowsInspection(scope: Scope, delegation: DelegationView, inspection: ToolInspection): boolean {
@@ -552,13 +552,18 @@ export class SubagentContextBuilder {
     const hasDeferred = descriptors.some(
       (descriptor) => allowed.has(descriptor.name) && isDeferredToolDescriptor(descriptor),
     );
-    return modelFacingToolSchemas(this.toolCatalog, scope, availability, run.definition.executionMode).filter(
-      (schema) =>
-        schema.name === TOOL_INVOKE_NAME
-          ? hasDeferred && allowed.has(TOOL_SEARCH_NAME)
-          : schema.name === TOOL_SEARCH_NAME
-            ? hasDeferred && allowed.has(schema.name)
-            : allowed.has(schema.name),
+    return modelFacingToolSchemas(
+      this.toolCatalog,
+      scope,
+      availability,
+      run.definition.executionMode,
+      'subagent',
+    ).filter((schema) =>
+      schema.name === TOOL_INVOKE_NAME
+        ? hasDeferred && allowed.has(TOOL_SEARCH_NAME)
+        : schema.name === TOOL_SEARCH_NAME
+          ? hasDeferred && allowed.has(schema.name)
+          : allowed.has(schema.name),
     );
   }
 }

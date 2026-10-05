@@ -32,7 +32,7 @@ export class RootToolExecutionCoordinator {
     this.reads = new RootReadToolExecutor(repository, stateCommit, toolCalls, clock, (run) =>
       recoverySafePoint(run, 'read_batch'),
     );
-    this.mutations = new RootMutationExecutionAdapter(repository, stateCommit, toolCalls, clock, (run) =>
+    this.mutations = new RootMutationExecutionAdapter(stateCommit, toolCalls, clock, (run) =>
       recoverySafePoint(run, 'mutation_confirmed'),
     );
   }

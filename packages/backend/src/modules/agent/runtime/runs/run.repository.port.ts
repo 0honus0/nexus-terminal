@@ -27,11 +27,6 @@ export interface PendingRootTool {
   inspection: ToolInspection;
 }
 
-export interface ConfirmedMutationTool {
-  toolCallId: string;
-  providerCallId: string;
-}
-
 export interface PendingToolInputContinuation {
   requestId: string;
   continuation: JsonValue;
@@ -92,7 +87,6 @@ export interface RunExecutionReaderPort extends RunSnapshotReaderPort, RunInputR
     runId: string,
     toolCallId: string,
   ): Promise<PendingToolInputContinuation | null>;
-  confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null>;
   completionEvidence(scope: Scope, runId: string): Promise<CompletionEvidenceSnapshot>;
 }
 

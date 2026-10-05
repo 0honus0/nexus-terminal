@@ -157,6 +157,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     connectionIds: [],
     environment: toolWorkspace.profile,
     stepId: 'background-step',
+    toolCallId: 'background-call',
     signal: new AbortController().signal,
     deadlineAt: 1_800_500_000,
     maxOutputBytes: 64 * 1024,
@@ -359,6 +360,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
       reject: (error: Error) => void;
     }
   >();
+  let executeCalls = 0;
   let cancelCalls = 0;
   let patchCalls = 0;
   const runtimeEngine = {
@@ -371,6 +373,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
         truncated: boolean;
         timedOut: boolean;
       }>((resolve, reject) => {
+        executeCalls += 1;
         pending.set(request.jobId, { resolve, reject });
         if (request.argv[0] === 'complete-later') {
           setTimeout(() => {
@@ -429,7 +432,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     });
     const adapter = new RunnerHttpAdapter(baseUrl, 'background-token');
     const call = (operationChar: string, argv: string[]) => ({
-      operationHash: 'v1:' + operationChar.repeat(64),
+      executionId: 'v1:' + operationChar.repeat(64),
       argv,
       cwd: '/workspace/work',
       maxBytes: 8 * 1024,
@@ -450,6 +453,21 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     assert.equal(foreground.status, 'succeeded');
     assert.equal(foreground.result?.stdout, 'done\n');
     assert.equal(queryCalls, 0, 'foreground invoke must use Runner server-side wait instead of Backend GET polling');
+    const replay = await adapter.invoke(
+      { workspaceId: 'background-workspace', generation: 7 },
+      call('a', ['complete-later']),
+      new AbortController().signal,
+    );
+    assert.equal(replay.jobId, foreground.jobId);
+    assert.equal(executeCalls, 1, 'Replaying a durable execution must not start the process twice');
+    const fresh = await adapter.invoke(
+      { workspaceId: 'background-workspace', generation: 7 },
+      call('f', ['complete-later']),
+      new AbortController().signal,
+    );
+    assert.notEqual(fresh.jobId, foreground.jobId);
+    assert.equal(fresh.status, 'succeeded');
+    assert.equal(executeCalls, 2, 'A new execution with identical argv must actually execute');
     const foregroundQueryCalls = queryCalls;
 
     const background = await adapter.startJob(

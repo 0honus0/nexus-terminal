@@ -102,7 +102,7 @@ export class ToolCallRunner {
     executionMode: RunExecutionMode = 'execute',
   ): Promise<ResolvedInspectedToolCall> {
     try {
-      const resolvedProposal = resolveDeferredToolProposal(this.catalog, context, proposal);
+      const resolvedProposal = resolveDeferredToolProposal(this.catalog, context, proposal, executionMode);
       if (executionMode === 'plan') {
         const descriptor = this.catalog.require(resolvedProposal.name, context).descriptor;
         if (descriptor.riskClass !== 'read' && descriptor.riskClass !== 'control') {

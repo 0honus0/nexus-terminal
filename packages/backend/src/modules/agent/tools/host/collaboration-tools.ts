@@ -399,6 +399,7 @@ export const createMemoryProposeTool = (memories: MemoryService, cryptoHash: Cry
   descriptor: {
     name: 'memory_propose',
     version: '1',
+    modelExposure: 'deferred',
     description:
       'Submit a memory candidate for user review. Candidates are not recalled until the user explicitly publishes them.',
     inputSchema: {

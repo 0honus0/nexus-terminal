@@ -169,6 +169,63 @@ export const durableContextCheckpointScenario = async () => {
   );
   assertValidToolExchange(plan.messages);
 
+  const rawFallbackHistory = Array.from({ length: 12 }, (_, index) =>
+    entry(index + 1, index % 2 === 0 ? 'user_input' : 'assistant_message', {
+      text:
+        (index === 0
+          ? 'RAW_FALLBACK_OLDEST: preserve this short historical constraint exactly. '
+          : 'Routine bounded history ' + index + '. ') + 'working context '.repeat(20),
+    }),
+  );
+  const rawFallbackContext = contextService(rawFallbackHistory);
+  const rawFallbackRequest = {
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Proceed with the current task.',
+    modelContextWindow: 4_096,
+    maxContextTokens: 3_000,
+    softContextTokens: 256,
+    reservedOutputTokens: 256,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    compactionMode: 'balanced' as const,
+    tools: [],
+  };
+  const summaryPreferred = await rawFallbackContext.compose(rawFallbackRequest);
+  assert.ok(
+    summaryPreferred.checkpointGeneration,
+    'soft pressure should normally request a semantic checkpoint before dropping older Ledger history',
+  );
+  const rawFallback = await rawFallbackContext.compose({ ...rawFallbackRequest, rawHistoryFallback: true });
+  assert.equal(rawFallback.checkpointGeneration, undefined);
+  assert.equal(rawFallback.compacted, false);
+  assert.match(JSON.stringify(rawFallback.messages), /RAW_FALLBACK_OLDEST/);
+  assert.equal(
+    rawFallback.droppedSections.some((section) => section.startsWith('ledger:')),
+    false,
+    'no-savings fallback may continue only with the complete raw Ledger page',
+  );
+
+  const oversizedRawFallback = contextService(
+    Array.from({ length: 24 }, (_, index) =>
+      entry(index + 1, index % 2 === 0 ? 'user_input' : 'assistant_message', {
+        text: 'RAW_FALLBACK_PRESSURE_' + index + ' ' + 'bounded history '.repeat(90),
+      }),
+    ),
+  );
+  await assert.rejects(
+    oversizedRawFallback.compose({
+      ...rawFallbackRequest,
+      maxContextTokens: 900,
+      softContextTokens: 700,
+      reservedOutputTokens: 128,
+      rawHistoryFallback: true,
+    }),
+    /CONTEXT_COMPACTION_NO_SAVINGS/,
+    'no-savings fallback must fail when complete raw history cannot fit the hard Context budget',
+  );
+
   const fallbackRepository = new StaticConversationRepository(history);
   const fallbackConversations = new ConversationService(fallbackRepository, clock, null!, null!);
   const failingCheckpoints = new ContextCheckpointService(

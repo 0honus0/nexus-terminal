@@ -43,6 +43,7 @@ export interface ContextRequest {
   maxRecallBytes: number;
   tools?: ModelToolSchema[];
   usageAnchor?: ContextUsageAnchor;
+  rawHistoryFallback?: boolean;
 }
 
 export interface ContextSourceRange {

@@ -5,7 +5,7 @@ export interface WorkspaceExecutionGrant {
 }
 
 export interface WorkspaceJobCall {
-  operationHash: string;
+  executionId: string;
   argv: string[];
   cwd: string;
   maxBytes: number;

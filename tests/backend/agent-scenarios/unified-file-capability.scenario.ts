@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import functionalData from '../../agent-functional/RESUME_DATASET.json';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -473,6 +474,21 @@ export const unifiedFileCapabilityScenario = async () => {
     }
 
     const fileWriteTool = tools.get('file_write');
+    for (const fixture of functionalData.regressionInputs.filePermissions) {
+      const file = `/workspace/work/${fixture.id}.txt`;
+      await invoke('file_write', {
+        target: 'workspace',
+        id: 'ws-file',
+        path: file,
+        content: fixture.id,
+        ...(fixture.mode === null ? {} : { mode: fixture.mode }),
+      });
+      assert.equal(statWorkspacePath(workRoot, file).mode, fixture.expectedMode);
+      await invoke('file_write', { target: 'workspace', id: 'ws-file', path: file, content: `${fixture.id}-updated` });
+      assert.equal(statWorkspacePath(workRoot, file).mode, fixture.expectedMode);
+      await invoke('file_delete', { target: 'workspace', id: 'ws-file', path: file });
+      assert.equal(statWorkspacePath(workRoot, file).exists, false);
+    }
     const fileReadTool = tools.get('file_read');
     assert.ok(fileWriteTool && fileReadTool);
     await assert.rejects(

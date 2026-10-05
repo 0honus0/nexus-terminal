@@ -6,7 +6,6 @@ import type { ToolPolicyDecision } from '../../capabilities/policy.service';
 import type { ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import { TOOL_APPROVAL_TTL_SECONDS } from '../approvals/approval-policy';
 import { requestHash } from '../runs/idempotency';
-import type { RunExecutionReaderPort } from '../runs/run.repository.port';
 import type { StateCommitPort, StateCommitResult } from '../runs/state-commit.port';
 import type { RunView } from '../runs/run.types';
 import { executionErrorCode } from './execution-errors';
@@ -34,19 +33,17 @@ export interface GovernedMutationIdentity {
 }
 
 export interface GovernedMutationFailure {
-  phase: 'reinspect' | 'approval_refresh' | 'duplicate_guard' | 'lease_acquire';
+  phase: 'reinspect' | 'approval_refresh' | 'lease_acquire';
   error: unknown;
   errorCode: string;
   inspection: ToolInspection;
   previousInspection: ToolInspection;
-  duplicate?: { toolCallId: string; providerCallId: string };
 }
 
 export interface GovernedMutationHooks {
   context(run: RunView, signal: AbortSignal, toolCallId?: string): ToolContext;
   validateInspection(inspection: ToolInspection, decision: ToolPolicyDecision): Error | null;
   failedResult(error: unknown): ToolResult;
-  duplicateResult(): ToolResult;
   rejectProposed(run: RunView, inspection: ToolInspection, result: ToolResult): Promise<StateCommitResult>;
   rejectReady(run: RunView, failure: GovernedMutationFailure): Promise<StateCommitResult>;
   begin(run: RunView, approvalId: string, inspection: ToolInspection): Promise<StateCommitResult>;
@@ -96,7 +93,6 @@ type GovernedMutationCommitPort = Pick<
 
 export class GovernedMutationExecutor {
   constructor(
-    private readonly runs: Pick<RunExecutionReaderPort, 'confirmedMutation'>,
     private readonly stateCommit: GovernedMutationCommitPort,
     private readonly toolCalls: ToolCallRunner,
     private readonly now: () => number,
@@ -136,12 +132,6 @@ export class GovernedMutationExecutor {
       });
       activeRun = refreshed.run;
       await request.hooks.onCommit(refreshed, 'inspection_refreshed');
-    }
-
-    const duplicate = await this.runs.confirmedMutation(request.scope, request.runId, inspection.operationHash);
-    if (duplicate && duplicate.toolCallId !== request.toolCallId) {
-      const rejected = await request.hooks.rejectProposed(activeRun, inspection, request.hooks.duplicateResult());
-      return { status: 'rejected', run: rejected.run, inspection };
     }
 
     const approvalId = randomUUID();
@@ -222,18 +212,6 @@ export class GovernedMutationExecutor {
         errorCode: validationError ? executionErrorCode(error, 'APPROVAL_STALE') : 'APPROVAL_STALE',
         inspection,
         previousInspection: request.inspection,
-      });
-    }
-
-    const duplicate = await this.runs.confirmedMutation(request.scope, request.runId, inspection.operationHash);
-    if (duplicate && duplicate.toolCallId !== request.toolCallId) {
-      return this.rejectReady(request, {
-        phase: 'duplicate_guard',
-        error: new Error('MUTATION_ALREADY_CONFIRMED'),
-        errorCode: 'MUTATION_ALREADY_CONFIRMED',
-        inspection,
-        previousInspection: request.inspection,
-        duplicate,
       });
     }
 

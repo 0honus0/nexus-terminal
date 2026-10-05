@@ -132,6 +132,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     const scope = { userId: initial.userId, appId: initial.appId };
     const runtimeId = await this.repository.rootRuntimeId(scope, initial.id);
     let compactionAttemptIndex = 1;
+    let rawHistoryFallback = false;
 
     while (true) {
       let snapshot = await this.repository.snapshot(scope, initial.id);
@@ -211,6 +212,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       );
       if (routeIndex < 0) routeIndex = 0;
       let activeRoute = frozenRoutes[routeIndex]!;
+      const preparedWithRawHistoryFallback = rawHistoryFallback;
       let preparedModelStep;
       try {
         preparedModelStep = await this.modelSteps.prepare(
@@ -221,6 +223,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           collaborationContext,
           { model: activeRoute.model, capabilities: activeRoute.modelCapabilities },
           runtimeId,
+          { rawHistoryFallback: preparedWithRawHistoryFallback },
         );
       } catch (error) {
         const code = errorCode(error);
@@ -230,6 +233,11 @@ export class NativeAgentBackend implements AgentBackendPort {
           yield { type: 'durable', runId: snapshot.id, cursor: stopped.eventCursor };
           yield { type: 'settled', run: stopped.run };
           return;
+        }
+        if (code === 'CONTEXT_COMPACTION_PROJECTION_TOO_LARGE' && !preparedWithRawHistoryFallback) {
+          rawHistoryFallback = true;
+          compactionAttemptIndex = 1;
+          continue;
         }
         if (
           code !== 'PROVIDER_CONFIGURATION_STALE' &&
@@ -300,6 +308,11 @@ export class NativeAgentBackend implements AgentBackendPort {
           return;
         }
         if (result.error) {
+          if (errorCode(result.error) === 'CONTEXT_COMPACTION_NO_SAVINGS') {
+            rawHistoryFallback = true;
+            compactionAttemptIndex = 1;
+            continue;
+          }
           if (this.modelSteps.shouldRetry(result.error, compactionAttemptIndex, signal)) {
             compactionAttemptIndex += 1;
             await this.modelSteps.waitBeforeRetry(result.error, compactionAttemptIndex, signal);
@@ -313,6 +326,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         compactionAttemptIndex = 1;
         continue;
       }
+      rawHistoryFallback = false;
       logger.debug(
         {
           runId: snapshot.id,
@@ -465,6 +479,7 @@ export class NativeAgentBackend implements AgentBackendPort {
             collaborationContext,
             { model: nextRoute.model, capabilities: nextRoute.modelCapabilities },
             runtimeId,
+            { rawHistoryFallback: preparedWithRawHistoryFallback },
           );
           if (nextPrepared.contextPlan.checkpointGeneration) throw new Error('CONTEXT_COMPACTION_ROUTE_CAPACITY');
           const changed = await this.stateCommit.changeModelRoute({

@@ -113,6 +113,7 @@ export const createBrowserInteractionTools = (
     descriptor: {
       name: 'browser_scroll',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Scroll the current Browser page by bounded CSS-pixel deltas and return lightweight post-action state.',
       inputSchema: {
@@ -171,6 +172,7 @@ export const createBrowserInteractionTools = (
     descriptor: {
       name: 'browser_press',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Press a bounded keyboard key or shortcut at page level or on an opaque nodeRef, then return lightweight post-action state.',
       inputSchema: {
@@ -255,6 +257,7 @@ export const createBrowserInteractionTools = (
     descriptor: {
       name: 'browser_back',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description: 'Navigate one history entry back and return lightweight post-action state.',
       inputSchema: {
         type: 'object',
@@ -301,6 +304,7 @@ export const createBrowserInteractionTools = (
     descriptor: {
       name: 'browser_select',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Select one or more option values on an opaque select nodeRef from the latest Browser snapshot and return post-action state.',
       inputSchema: {

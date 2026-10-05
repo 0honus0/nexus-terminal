@@ -364,12 +364,12 @@ const installAndRunNexusAgent = async (
     });
     expect(thread.status()).toBe(201);
     const browserThreadId = (await thread.json()).data.id;
-    const createBrowserRun = (approval = false) =>
+    const createBrowserRun = (approval = false, threadId = browserThreadId) =>
       request.post('/api/v1/apps/nexus.agent/runs', {
         headers: { ...headers, 'Idempotency-Key': randomUUID() },
         data: {
           schemaVersion: 1,
-          threadId: browserThreadId,
+          threadId,
           input: {
             text: `E2E_BROWSER_LIFECYCLE ${randomUUID()}${approval ? ` E2E_BROWSER_APPROVAL=${connectionId}` : ''}`,
             artifactRefs: [],
@@ -476,12 +476,17 @@ const installAndRunNexusAgent = async (
           const original = (await settingsResponse.json()).data;
           const limited = await request.patch('/api/v1/agent/settings', {
             headers,
-            data: { expectedVersion: original.revision, patch: { budget: { maxModelRequests: 3 } } },
+            data: { expectedVersion: original.revision, patch: { budget: { maxModelRequests: 2 } } },
           });
           expect(limited.ok(), await limited.text()).toBeTruthy();
           let budgetRunId = '';
           try {
-            const created = await createBrowserRun();
+            const isolatedThread = await request.post('/api/v1/apps/nexus.agent/threads', {
+              headers,
+              data: { title: `Browser budget extension E2E ${cancelExpandedRun ? 'cancel' : 'preserve'}` },
+            });
+            expect(isolatedThread.status()).toBe(201);
+            const created = await createBrowserRun(false, (await isolatedThread.json()).data.id);
             expect(created.status(), await created.text()).toBe(201);
             budgetRunId = (await created.json()).data.id;
             const readRun = async () => {
@@ -494,7 +499,7 @@ const installAndRunNexusAgent = async (
             const liveContexts = await contexts();
             expect(liveContexts).toHaveLength(baseline.length + 1);
             expect(waiting.status).toBe('running');
-            expect(waiting.budget.maxModelRequests).toBeGreaterThan(3);
+            expect(waiting.budget.maxModelRequests).toBeGreaterThan(2);
             expect(waiting.budget.maxModelRequests).toBeLessThanOrEqual(waiting.budget.modelRequestCeiling);
             if (cancelExpandedRun) {
               await cancelRunForCleanup(request, budgetRunId);
@@ -1140,10 +1145,10 @@ const installAndRunNexusAgent = async (
     expect(serialized).toContain('nexus-e2e-seed');
   });
 
-  await step('a confirmed mutation is not executed twice when the model repeats the identical proposal', async () => {
+  await step('distinct tool calls execute identical commands as separate intentional operations', async () => {
     const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
       headers,
-      data: { title: 'Duplicate mutation guard E2E thread' },
+      data: { title: 'Distinct mutation calls E2E thread' },
     });
     expect(thread.status(), await thread.text()).toBe(201);
     const duplicateThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
@@ -1153,7 +1158,7 @@ const installAndRunNexusAgent = async (
         schemaVersion: 1,
         threadId: duplicateThreadId,
         input: {
-          text: `E2E_DUPLICATE_MUTATION_CONNECTION_ID=${connectionId} Execute the bounded mutation once, then detect the provider's duplicate proposal.`,
+          text: `E2E_DUPLICATE_MUTATION_CONNECTION_ID=${connectionId} Execute the bounded mutation twice with distinct tool call identities.`,
           artifactRefs: [],
         },
         agentDefinitionId: 'agent.default',
@@ -1171,7 +1176,7 @@ const installAndRunNexusAgent = async (
     const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${duplicateThreadId}/entries?limit=50`);
     expect(ledger.ok(), await ledger.text()).toBeTruthy();
     const serialized = JSON.stringify(await ledger.json());
-    expect(serialized).toContain('MUTATION_ALREADY_CONFIRMED');
+    expect(serialized).not.toContain('MUTATION_ALREADY_CONFIRMED');
     expect(serialized).toContain('duplicate-e2e');
   });
 

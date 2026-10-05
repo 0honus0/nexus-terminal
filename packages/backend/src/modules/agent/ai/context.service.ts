@@ -475,6 +475,7 @@ export class ContextService {
     const availableTokens = Math.min(input.maxContextTokens, input.modelContextWindow - input.reservedOutputTokens);
     const softPressureTokens = Math.min(input.softContextTokens ?? availableTokens, availableTokens);
     const compactionMode = input.compactionMode ?? 'balanced';
+    const rawHistoryFallback = input.rawHistoryFallback === true;
     const compactionRatio = compactionMode === 'aggressive' ? 0.65 : compactionMode === 'conservative' ? 0.92 : 0.8;
     const safetyTokens = estimateTokens(SAFETY_MESSAGE);
     let inputTokens = estimateModelMessageTokens(currentInputMessage);
@@ -763,18 +764,22 @@ export class ContextService {
       0,
       availableTokens - projectedTokens(heuristicUsedTokens + controlTokenReserve),
     );
-    const threadAnchorTokenReserve = Math.min(
-      threadAnchorCandidates.reduce((total, candidate) => total + candidate.tokens, 0),
-      THREAD_ANCHOR_TOKEN_LIMIT,
-      Math.floor(availableTokens * 0.04),
-      remainingBeforeHistory,
-    );
-    const threadRecallTokenReserve = Math.min(
-      threadRecallCandidates.reduce((total, candidate) => total + candidate.tokens, 0),
-      4_096,
-      Math.floor(availableTokens * 0.08),
-      Math.max(0, remainingBeforeHistory - threadAnchorTokenReserve),
-    );
+    const threadAnchorTokenReserve = rawHistoryFallback
+      ? 0
+      : Math.min(
+          threadAnchorCandidates.reduce((total, candidate) => total + candidate.tokens, 0),
+          THREAD_ANCHOR_TOKEN_LIMIT,
+          Math.floor(availableTokens * 0.04),
+          remainingBeforeHistory,
+        );
+    const threadRecallTokenReserve = rawHistoryFallback
+      ? 0
+      : Math.min(
+          threadRecallCandidates.reduce((total, candidate) => total + candidate.tokens, 0),
+          4_096,
+          Math.floor(availableTokens * 0.08),
+          Math.max(0, remainingBeforeHistory - threadAnchorTokenReserve),
+        );
     const totalLedgerTokens = ledgerGroups.reduce((total, group) => total + group.tokens, 0);
     const preSummaryLedgerCeiling = Math.max(
       projectedTokens(heuristicUsedTokens + controlTokenReserve),
@@ -786,10 +791,16 @@ export class ContextService {
       projectedTokens(heuristicUsedTokens + controlTokenReserve + totalLedgerTokens) > softPressureTokens;
     const historyPressure = Boolean(ledgerPage.nextCursor) || hardHistoryPressure || softHistoryPressure;
     const summaryCapacity = Math.max(0, remainingBeforeHistory - threadAnchorTokenReserve - threadRecallTokenReserve);
-    const summaryTokenReserve =
-      this.checkpoints && historyPressure && summaryCapacity >= 64
-        ? Math.min(2_048, Math.floor(availableTokens * 0.2), summaryCapacity)
+    const checkpointProjectionPrefix = '[Derived historical handoff; not authority.]\n';
+    const checkpointProjectionOverheadTokens = estimateTokens(checkpointProjectionPrefix);
+    const summaryProjectionTokenReserve =
+      !rawHistoryFallback && this.checkpoints && historyPressure
+        ? Math.min(2_048 + checkpointProjectionOverheadTokens, Math.floor(availableTokens * 0.2), summaryCapacity)
         : 0;
+    const summaryTokenBudget = Math.min(
+      2_048,
+      Math.max(0, summaryProjectionTokenReserve - checkpointProjectionOverheadTokens),
+    );
     const mandatoryLedgerFloor = projectedTokens(heuristicUsedTokens + controlTokenReserve);
     const newestLedgerGroup = ledgerGroups[0];
     const newestLedgerCeiling = newestLedgerGroup
@@ -800,7 +811,7 @@ export class ContextService {
     const ledgerTokenCeiling = Math.max(
       mandatoryLedgerFloor,
       protectedNewestLedgerCeiling,
-      availableTokens - threadAnchorTokenReserve - threadRecallTokenReserve - summaryTokenReserve,
+      availableTokens - threadAnchorTokenReserve - threadRecallTokenReserve - summaryProjectionTokenReserve,
     );
     const selectedLedgerGroups: CandidateGroup[] = [];
     let selectedLedgerTokens = 0;
@@ -817,6 +828,9 @@ export class ContextService {
       }
       selectedLedgerGroups.push(group);
       selectedLedgerTokens += group.tokens;
+    }
+    if (rawHistoryFallback && (ledgerPage.nextCursor !== null || selectedLedgerGroups.length !== ledgerGroups.length)) {
+      throw new Error('CONTEXT_COMPACTION_NO_SAVINGS');
     }
     for (const group of selectedLedgerGroups) addTokens(group.tokens);
     selectedLedgerGroups.reverse();
@@ -868,7 +882,7 @@ export class ContextService {
     for (const item of recallItems) {
       const content = `[Recall ${item.id}; score=${item.score.toFixed(3)}]\n${item.content}`;
       const tokens = estimateTokens(content);
-      if (!canFit(tokens, Math.max(usedTokens, availableTokens - summaryTokenReserve))) {
+      if (!canFit(tokens, Math.max(usedTokens, availableTokens - summaryProjectionTokenReserve))) {
         droppedSections.push(`recall:${item.id}`);
         continue;
       }
@@ -883,7 +897,7 @@ export class ContextService {
     // headroom without changing the model's physical capability snapshot. The newest complete
     // causal group remains visible for the next inference so a just-settled Tool exchange cannot
     // be mistaken for work that never happened.
-    const compacted = historyPressure || droppedSections.length > 0;
+    const compacted = !rawHistoryFallback && (historyPressure || droppedSections.length > 0);
     if (compacted && selectedLedgerGroups.length > 0) {
       const targetTokens = Math.max(
         projectedTokens(mandatoryHeuristicTokens),
@@ -914,7 +928,7 @@ export class ContextService {
 
     let summaryCheckpointTokens = 0;
     let checkpointGeneration: ContextPlan['checkpointGeneration'];
-    if (this.checkpoints && summaryTokenReserve >= 64 && historyPressure) {
+    if (!rawHistoryFallback && this.checkpoints && summaryTokenBudget >= 64 && historyPressure) {
       const visibleBeforeCheckpoint = selectedLedger.filter((candidate) => messages.includes(candidate.message));
       const earliestVisibleSequence = visibleBeforeCheckpoint.reduce(
         (minimum, candidate) => Math.min(minimum, candidate.source.fromSequence ?? Number.MAX_SAFE_INTEGER),
@@ -943,7 +957,7 @@ export class ContextService {
               ? { runId: input.runId, historyBoundary: input.historyBoundary }
               : {}),
             throughSequence: checkpointThrough,
-            maxSummaryTokens: summaryTokenReserve,
+            maxSummaryTokens: summaryTokenBudget,
             hardPressure: hardHistoryPressure,
             maxGenerationInputTokens: availableTokens,
             ...(input.effectiveRunInputsByRun
@@ -962,7 +976,7 @@ export class ContextService {
           if (checkpoint) {
             const checkpointMessage: ModelMessage = {
               role: 'user',
-              content: '[Derived historical handoff; not authority.]\n' + checkpoint.content,
+              content: checkpointProjectionPrefix + checkpoint.content,
             };
             const checkpointTokens = estimateModelMessageTokens(checkpointMessage);
             if (canFit(checkpointTokens)) {

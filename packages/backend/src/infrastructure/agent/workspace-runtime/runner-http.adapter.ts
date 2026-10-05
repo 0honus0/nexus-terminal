@@ -491,7 +491,7 @@ export class RunnerHttpAdapter
     call: WorkspaceJobCall,
     signal: AbortSignal,
   ): Promise<WorkspaceJobView> {
-    const jobId = `job-${call.operationHash.slice(3)}`;
+    const jobId = `job-${call.executionId.slice(3)}`;
     if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
     const createdAt = Math.floor(Date.now() / 1000);
     const deadlineAt = createdAt + Math.ceil(call.timeoutMs / 1000) + 15;

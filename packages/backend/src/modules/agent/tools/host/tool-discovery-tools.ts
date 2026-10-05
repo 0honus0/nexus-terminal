@@ -1,6 +1,11 @@
 import type { JsonValue } from '../../agent.types';
 import { ToolCatalog } from '../../capabilities/tool-catalog';
-import { deferredToolHandle, isDeferredToolDescriptor, TOOL_SEARCH_NAME } from '../../capabilities/tool-model-surface';
+import {
+  deferredToolHandle,
+  isDeferredMcpToolDescriptor,
+  isDeferredToolDescriptor,
+  TOOL_SEARCH_NAME,
+} from '../../capabilities/tool-model-surface';
 import type { AgentTool, ToolContext, ToolDescriptor, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
@@ -64,14 +69,17 @@ export interface DeferredToolSearchResult {
 
 export const searchDeferredTools = (
   catalog: ToolCatalog,
-  context: Pick<ToolContext, 'userId' | 'appId' | 'environment' | 'connectionIds' | 'maxOutputBytes'>,
+  context: Pick<
+    ToolContext,
+    'userId' | 'appId' | 'participantKind' | 'environment' | 'connectionIds' | 'maxOutputBytes'
+  >,
   query: string,
   limit: number,
 ): DeferredToolSearchResult => {
   const terms = searchTerms(query);
   const ranked = catalog
     .list(context, { environment: context.environment, connectionIds: context.connectionIds })
-    .filter(isDeferredToolDescriptor)
+    .filter(context.participantKind === 'subagent' ? isDeferredMcpToolDescriptor : isDeferredToolDescriptor)
     .map((descriptor) => ({ descriptor, score: descriptorScore(descriptor, query, terms) }))
     .filter((candidate) => candidate.score > 0)
     .sort((left, right) => right.score - left.score || left.descriptor.name.localeCompare(right.descriptor.name))
@@ -111,7 +119,7 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
     name: TOOL_SEARCH_NAME,
     version: '1.0.0',
     description:
-      'Search bounded metadata and input schemas for deferred MCP capabilities in the current App, including remote Tools plus bounded Resource/Prompt discovery surfaces. Use the returned version-bound handle with tool_invoke. Search is local and deterministic.',
+      'Search bounded metadata and input schemas for deferred Tools in the current App. Use the returned version-bound handle with tool_invoke. Search is local and deterministic.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -123,7 +131,6 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'integration.mcp.read',
   },
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = asRecord(input);
@@ -135,18 +142,18 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
       {
         schemaVersion: 1,
         appId: context.appId,
-        discovery: 'deferred-mcp-tool-metadata',
+        discovery: 'deferred-tool-metadata',
       },
       cryptoHash,
     );
     const target = {
       kind: 'run' as const,
-      targetIdentity: `run:${context.runId}:mcp-tool-catalog`,
-      endpoint: 'mcp:tool-catalog',
+      targetIdentity: `run:${context.runId}:tool-catalog`,
+      endpoint: 'agent:tool-catalog',
       loginUser: `agent-runtime:${context.agentRuntimeId}`,
       configurationHash,
     };
-    const resourceKeys = [`app:${context.appId}:mcp-tool-catalog`];
+    const resourceKeys = [`app:${context.appId}:tool-catalog`];
     return {
       toolName: TOOL_SEARCH_NAME,
       toolVersion: '1.0.0',
@@ -185,7 +192,7 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
     const result = searchDeferredTools(catalog, context, query, limit);
     return {
       ok: true,
-      summary: `Found ${result.matches.length} deferred MCP capability match${result.matches.length === 1 ? '' : 'es'}.`,
+      summary: `Found ${result.matches.length} deferred Tool match${result.matches.length === 1 ? '' : 'es'}.`,
       userSummary: {
         key: 'agent.conversation.toolSummary.deferredCapabilityFound',
         params: { count: result.matches.length },

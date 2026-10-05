@@ -448,6 +448,7 @@ export class SubagentModelStepExecutor {
             proposal = this.contextBuilder.resolveProposal(
               this.toolContext(begun.run, work.agentRuntimeId, begun.stepId, signal, delegation.deadlineAt),
               proposal,
+              begun.run.definition.executionMode,
             );
             if (!this.contextBuilder.allowsProposal(scope, delegation, proposal))
               throw new Error('SUBAGENT_TOOL_NOT_ALLOWED');
@@ -625,6 +626,7 @@ export class SubagentModelStepExecutor {
     return {
       userId: run.userId,
       appId: run.appId,
+      participantKind: 'subagent',
       actor: {
         kind: 'agent',
         userId: run.userId,

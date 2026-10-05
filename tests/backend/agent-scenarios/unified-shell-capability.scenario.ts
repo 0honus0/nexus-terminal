@@ -23,6 +23,7 @@ export const unifiedShellCapabilityScenario = async () => {
     [2, 'ssh-config-two'],
   ]);
   const workspaceCalls: Array<{ workspaceId: string; generation: number; argv: string[] }> = [];
+  const executionIds: string[] = [];
   const sshCalls: Array<{ connectionId: number; hash: string; command: string }> = [];
   const cryptoHash = {
     sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
@@ -87,13 +88,14 @@ export const unifiedShellCapabilityScenario = async () => {
       _context: ToolContext,
       workspaceId: string,
       generation: number,
-      call: { argv: string[]; cwd: string },
+      call: { argv: string[]; cwd: string; executionId: string },
       mode: 'foreground' | 'background',
     ) => {
       if (mode !== 'foreground') throw new Error('UNEXPECTED_BACKGROUND_JOB');
       if (workspaceId !== 'ws-shell' || generation !== workspaceGeneration) {
         throw new Error('WORKSPACE_GENERATION_CONFLICT');
       }
+      executionIds.push(call.executionId);
       workspaceCalls.push({ workspaceId, generation, argv: [...call.argv] });
       return {
         jobId: 'job-' + 'b'.repeat(64),
@@ -200,6 +202,7 @@ export const unifiedShellCapabilityScenario = async () => {
       browserTarget: null,
     },
     stepId: 'shell-step',
+    toolCallId: 'shell-call',
     signal: new AbortController().signal,
     deadlineAt: Math.floor(Date.now() / 1000) + 60,
     maxOutputBytes: 128 * 1024,
@@ -267,6 +270,15 @@ export const unifiedShellCapabilityScenario = async () => {
     { connectionId: 1, hash: 'ssh-config-one', command: 'printf ssh-one' },
     { connectionId: 2, hash: 'ssh-config-two', command: 'printf ssh-two' },
   ]);
+
+  await executor.executeMutation(context, workspaceInspection);
+  await executor.executeMutation({ ...context, toolCallId: 'fresh-shell-call' }, workspaceInspection);
+  assert.equal(executionIds[0], executionIds[1], 'Same durable call retains execution identity');
+  assert.notEqual(
+    executionIds[0],
+    executionIds[2],
+    'New durable call changes identity even with identical approval hash',
+  );
 
   sshExitCode = 7;
   const nonzeroResult = await executor.executeMutation(context, sshOneInspection);

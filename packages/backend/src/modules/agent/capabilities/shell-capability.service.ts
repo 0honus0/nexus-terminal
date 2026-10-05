@@ -94,7 +94,7 @@ export class ShellCapabilityService {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
       const call = {
-        operationHash: request.operationHash,
+        executionId: this.executionId(context, target),
         argv: request.command.argv,
         cwd: request.cwd ?? '/workspace/work',
         maxBytes: Math.max(1, Math.min(512 * 1024, Math.floor(context.maxOutputBytes / 2))),
@@ -135,6 +135,25 @@ export class ShellCapabilityService {
       result: { ...result, timedOut: false },
       error: null,
     };
+  }
+
+  private executionId(context: ToolContext, target: ResolvedAgentTarget): string {
+    if (!context.runId || !context.agentRuntimeId || !context.toolCallId) throw new Error('TOOL_STATE_CONFLICT');
+    return hashOperation(
+      {
+        schemaVersion: 1,
+        runId: context.runId,
+        runtimeId: context.agentRuntimeId,
+        toolCallId: context.toolCallId,
+        target: {
+          kind: target.fingerprint.kind,
+          id: target.fingerprint.id,
+          configurationHash: target.fingerprint.configurationHash,
+          generation: target.workspaceGeneration ?? null,
+        },
+      },
+      this.cryptoHash,
+    );
   }
 
   async resolveJob(context: ToolContext, selector: AgentTargetSelector, jobId: string): Promise<ResolvedShellJob> {

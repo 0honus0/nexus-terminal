@@ -16,6 +16,7 @@ import { MemoryService } from '../../../packages/backend/src/modules/agent/ai/me
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
 import { validateManifest } from '../../../packages/backend/src/modules/agent/host/app-manifest-validator';
 import { createMemoryProposeTool } from '../../../packages/backend/src/modules/agent/tools/host/collaboration-tools';
+import functionalData from '../../agent-functional/RESUME_DATASET.json';
 import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 
 export const memoryProductClosureScenario = async () => {
@@ -119,6 +120,17 @@ export const memoryProductClosureScenario = async () => {
     const candidate = await memoryRepository.get(sourceScope, (proposal.data as { id: string }).id);
     assert.ok(candidate);
     assert.equal(candidate.confidence, 0.8);
+    for (const fixture of functionalData.regressionInputs.memoryProposals) {
+      const { id: _id, ...argumentsValue } = fixture;
+      const checked = await tool.inspect(argumentsValue, context, 1);
+      const submitted = await tool.execute(checked, context);
+      assert.equal(submitted.ok, true);
+      const stored = await memoryRepository.get(sourceScope, (submitted.data as { id: string }).id);
+      assert.ok(stored);
+      assert.equal(stored.confidence, fixture.confidence);
+      assert.equal(stored.status, 'candidate');
+      await memories.review(sourceScope, stored.id, { decision: 'reject', expectedVersion: stored.version });
+    }
     assert.equal(
       (await recall.recall(sourceScope, 'zebra', 5, 4096)).length,
       0,

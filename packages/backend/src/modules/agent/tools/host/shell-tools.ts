@@ -600,6 +600,7 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
   descriptor: {
     name: 'shell_job_control',
     version: '1.0.0',
+    modelExposure: 'deferred',
     description:
       'Inspect, wait for, or cancel a Workspace or SSH background job. SSH jobs belong to the current conversation and use independent channels; lost connections have unknown outcomes and are never replayed.',
     inputSchema: {

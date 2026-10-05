@@ -6,7 +6,7 @@ import { executionErrorCode, failedToolResult as buildFailedToolResult } from '.
 import { GovernedMutationExecutor, type GovernedMutationHooks } from '../execution/governed-mutation-executor';
 import { toolLeaseTtlSeconds } from '../execution/tool-lease-policy';
 import type { ToolCallRunner } from '../execution/tool-call-runner';
-import type { RunExecutionReaderPort, RunSnapshotReaderPort } from '../runs/run.repository.port';
+import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { CollaborationCommitPort, StateCommitResult } from '../runs/state-commit.port';
 import type { RunView } from '../runs/run.types';
 import type { AgentEventHub } from '../events/event-hub';
@@ -58,7 +58,7 @@ export class SubagentToolStepExecutor {
     private readonly work: SchedulerWorkExecutionPort,
     private readonly delegations: DelegationCancellationPort,
     private readonly runtimes: RuntimeParticipantRepositoryPort,
-    private readonly runs: RunSnapshotReaderPort & Pick<RunExecutionReaderPort, 'confirmedMutation'>,
+    private readonly runs: RunSnapshotReaderPort,
     private readonly stateCommit: CollaborationCommitPort,
     private readonly contextBuilder: SubagentContextBuilder,
     private readonly toolCalls: ToolCallRunner,
@@ -68,9 +68,7 @@ export class SubagentToolStepExecutor {
     private readonly recoverySafePoint: (run: RunView, reason: 'mutation_confirmed') => Promise<void> = async () =>
       undefined,
   ) {
-    this.governedMutations = new GovernedMutationExecutor(runs, stateCommit, toolCalls, () =>
-      this.clock.nowUnixSeconds(),
-    );
+    this.governedMutations = new GovernedMutationExecutor(stateCommit, toolCalls, () => this.clock.nowUnixSeconds());
   }
 
   async execute(scope: Scope, work: SchedulerWorkView, ownerEpoch: number, signal: AbortSignal): Promise<void> {
@@ -349,7 +347,6 @@ export class SubagentToolStepExecutor {
         );
       },
       failedResult: (error) => failedToolResult(error),
-      duplicateResult: () => failedToolResult(new Error('MUTATION_ALREADY_CONFIRMED')),
       rejectProposed: (_run, inspection, result) =>
         this.settleChildMutationWithoutExecution(
           scope,
@@ -489,6 +486,7 @@ export class SubagentToolStepExecutor {
     return {
       userId: run.userId,
       appId: run.appId,
+      participantKind: 'subagent',
       actor: {
         kind: 'agent',
         userId: run.userId,

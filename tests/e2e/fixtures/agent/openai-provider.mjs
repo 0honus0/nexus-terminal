@@ -1,4 +1,5 @@
 import http from 'node:http';
+import functionalData from '../../../agent-functional/RESUME_DATASET.json' with { type: 'json' };
 
 const host = '127.0.0.1';
 const port = Number(process.env.NEXUS_E2E_OPENAI_PROVIDER_PORT || 29091);
@@ -22,6 +23,18 @@ const sendSse = (response, value) => {
     ? { ...value, choices: value.choices.map((choice, index) => ({ index, ...choice })) }
     : value;
   response.write(`data: ${JSON.stringify(payload)}\n\n`);
+};
+
+const regressionResponse = (response, delta, finishReason = 'stop') => {
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-store',
+    Connection: 'keep-alive',
+  });
+  sendSse(response, { choices: [{ delta, finish_reason: null }] });
+  sendSse(response, { choices: [], usage: { prompt_tokens: 10, completion_tokens: 8 } });
+  sendSse(response, { choices: [{ delta: {}, finish_reason: finishReason }] });
+  response.end('data: [DONE]\n\n');
 };
 
 const server = http.createServer(async (request, response) => {
@@ -246,6 +259,70 @@ const server = http.createServer(async (request, response) => {
       );
       return;
     }
+  }
+  const outputCase = functionalData.regressionInputs.modelOutputs.find((fixture) =>
+    latestUserText.includes(fixture.marker),
+  );
+  if (outputCase) {
+    regressionResponse(response, { content: outputCase.expected });
+    return;
+  }
+  const memoryCase = functionalData.regressionInputs.memoryProposals.find((fixture) =>
+    latestUserText.includes(`E2E_REGRESSION_${fixture.id}:`),
+  );
+  const deadlineCase = latestUserText.includes('E2E_REGRESSION_DEADLINE_SENTINEL');
+  if (memoryCase || deadlineCase) {
+    const callId = 'call_e2e_regression';
+    const received = messages.find((message) => message.role === 'tool' && message.tool_call_id === callId);
+    if (received) {
+      const result = JSON.parse(received.content);
+      regressionResponse(response, {
+        content: JSON.stringify(
+          memoryCase
+            ? {
+                id: result.data?.id,
+                confidence: result.data?.confidence,
+                status: result.data?.status,
+                errorCode: result.errorCode,
+              }
+            : { errorCode: result.errorCode },
+        ),
+      });
+    } else {
+      const { id: _id, ...memoryArguments } = memoryCase ?? {};
+      const args = memoryCase
+        ? memoryArguments
+        : {
+            profileId: 'regression-deadline',
+            objective: 'Return 42.',
+            constraints: [],
+            inputArtifactRefs: [],
+            maxModelRequests: 3,
+            deadlineAt: functionalData.regressionInputs.deadlines.rejectedSentinel,
+            completionCriteria: ['Return 42.'],
+            dependsOn: [],
+            dependencyMode: 'success',
+            idempotencyKey: '11111111-1111-4111-8111-111111111111',
+          };
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: callId,
+              type: 'function',
+              function: {
+                name: memoryCase ? 'memory_propose' : 'collaboration_subagent_delegate',
+                arguments: JSON.stringify(args),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+    }
+    return;
   }
   const expectedSkill = latestUserText.includes('E2E_EXPECT_DEVELOPER_SKILL')
     ? { id: 'nexus.agent.developer', name: 'developer', bodyMarker: 'Prefer a Nexus Workspace Runtime' }
@@ -854,11 +931,6 @@ const server = http.createServer(async (request, response) => {
       sendToolCall('call_e2e_duplicate_second', 'shell_execute', mutationArguments);
       return;
     }
-    if (!JSON.stringify(duplicateMutationSecondResult).includes('MUTATION_ALREADY_CONFIRMED')) {
-      response.writeHead(422, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ error: { message: 'Duplicate mutation was not blocked by the runtime' } }));
-      return;
-    }
     if (!duplicateMutationReadResult) {
       sendToolCall(
         'call_e2e_duplicate_read',
@@ -875,12 +947,12 @@ const server = http.createServer(async (request, response) => {
     }
     const readSerialized = JSON.stringify(duplicateMutationReadResult);
     const markerCount = readSerialized.split('duplicate-e2e').length - 1;
-    if (markerCount !== 1) {
+    if (markerCount !== 2) {
       response.writeHead(422, { 'Content-Type': 'application/json' });
       response.end(
         JSON.stringify({
           error: {
-            message: `Duplicate mutation side effect count mismatch: expected 1 marker, received ${markerCount}`,
+            message: `Duplicate mutation side effect count mismatch: expected 2 markers, received ${markerCount}`,
           },
         }),
       );

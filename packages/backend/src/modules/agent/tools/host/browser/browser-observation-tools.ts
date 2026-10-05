@@ -83,6 +83,7 @@ export const createBrowserObservationTools = (
     descriptor: {
       name: 'browser_screenshot_capture',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Capture the current Browser viewport as a bounded PNG Artifact for on-demand visual inspection. Use semantic browser_snapshot_read by default and call this only when page pixels are needed.',
       inputSchema: {
@@ -186,6 +187,7 @@ export const createBrowserObservationTools = (
     descriptor: {
       name: 'browser_console_read',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Read a bounded cursor-based slice of Browser console output. This is read-only and does not expose JavaScript evaluation.',
       inputSchema: {

@@ -517,7 +517,7 @@ export const subagentGovernedMutationScenario = async () => {
     null!,
     null!,
     null!,
-    { confirmedMutation: async () => null } as never,
+    {} as never,
     stateCommit as never,
     null!,
     toolRunner,

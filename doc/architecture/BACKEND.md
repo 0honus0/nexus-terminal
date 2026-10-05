@@ -300,6 +300,8 @@ Input／Goal／pending-input transition 的 streaming 检测以 `agent_runtimes.
 
 Root／Child 共用 `model-retry-policy` 的瞬态分类、次数与退避。Child 失败 Model attempt settle 同事务计 usage、结束旧 work、保持 delegation runnable 并 enqueue versioned retry work（notBefore／原 deadline／retryAttemptIndex）；下一次调用仍冻结模型、limiter 与预算。StateCommit 验证 retry 次数、错误与剩余预算，取消优先，失败 partial output 不提交 proposal／checkpoint、不消费 inbox。重启沿用 interrupted 收敛，不重放遗留请求。
 
+Root Tool model surface 以 `ToolCatalog` 为唯一 authoritative catalog，并复用既有 `modelExposure=deferred` 机制做 progressive disclosure。execute 时低频原生 Tool 与 MCP Tool 从直接 schema 集移除，Host `tool_search` 对当前 scope/availability 搜索 deferred descriptors，并生成绑定 name/version 的 `tool1.*` handle；`tool_invoke` 只负责解析该 handle，解析出的实际 descriptor 随后继续进入 `ToolCallRunner` 的 capability、policy、approval、stale/version 检查，不建立第二执行或授权 owner。Root plan 不开放 discovery mutation router，而是直接保留当前可用的原生 read/control deferred Tool，避免工具面优化削弱非变更调查路径。
+
 Child tool surface 复用 `modelFacingToolSchemas`，以 grants／risk 过滤 direct 与 deferred router；模型 proposal 在 `SubagentContextBuilder.resolveProposal` 复用 `resolveDeferredToolProposal`，随后按解析出的实际 Tool 校验 delegation grants 再 inspect。没有第二 handle、catalog 或授权 owner，MCP mutation 不因 router 开放而越过 Workspace-only Child mutation policy。
 
 Child plan-mode guard 分布在 schema（只读／control）、model proposal inspection（mutation 拒绝结果）、Tool executor 与 StateCommit mutation begin（副作用和审批消费前 fail closed）；Run executionMode 不因 delegation grants 或 full_access 被放宽。
@@ -377,7 +379,7 @@ Backend 持有用户、App、Thread、Run、Ledger、Plan、approval、lease、a
 
 Context checkpoint 由 `modules/agent/ai/context-checkpoint.service.ts` 规划可见 Ledger prefix 和模型输入，采用 `context-checkpoint-v2`／`semantic-handoff-v1`。已验证旧摘要与新增历史按窗口分批合并，历史序列以 JSON 数据送入模型，不投影为可执行 Tool call，不按关键词、首尾样本或固定字符截断。Context 保留有界近期完整 causal groups，并以低权威 user 历史交接数据投影有效摘要；content 和 generator 纳入 context lineage。
 
-`NativeAgentBackend` 在正式推理前执行独立 compaction model step，`ModelStepRunner` 复用冻结 route、ModelCallLimiter、取消、重试和 Run model-request/time 预算；摘要没有 Tool、普通回复 delta 或助手 Ledger。`state-commit/compaction-transitions.ts` 在 Adapter 事务内重新校验 source hash、visibility、输入／Goal revision，原子更新 checkpoint、attempt、usage、执行时间与事件，不消费输入，不覆盖主推理 context usage。每批重新 compose 后继续压缩；空／截断／超预算／不缩小结果、来源变化与取消不发布摘要，失败不静默降级为只删历史。超过单批窗口的单条记录明确报错；原始 Ledger 保留。迁移 #51 清理旧策略派生摘要，不改原始历史。
+`NativeAgentBackend` 在正式推理前执行独立 compaction model step，`ModelStepRunner` 复用冻结 route、ModelCallLimiter、取消、重试和 Run model-request/time 预算；摘要没有 Tool、普通回复 delta 或助手 Ledger。`state-commit/compaction-transitions.ts` 在 Adapter 事务内重新校验 source hash、visibility、输入／Goal revision，原子更新 checkpoint、attempt、usage、执行时间与事件，不消费输入，不覆盖主推理 context usage。每批重新 compose 后继续压缩；空／截断／超预算／来源变化与取消不发布摘要。若模型生成的摘要没有实际缩小历史，或既有 checkpoint 与必须保留的最新完整 causal group 无法同时落入规划后的摘要预留，Root 只允许重新 compose 一次完整原始 Ledger：完整历史能落入当前硬 context budget 时直接继续，放不下时仍明确失败，不允许以 drop-only 历史掩盖压缩失败。超过单批窗口的单条记录明确报错；原始 Ledger 保留。迁移 #51 清理旧策略派生摘要，不改原始历史。
 
 `SqliteStateCommitAdapter` 持有事务入口与提交后观察；恢复／App 禁用的 durable 转换位于 `infrastructure/agent/runtime/state-commit/recovery-transitions.ts`，与其他 transition 一样接收当前事务。Quarantine、子状态、审批、Run、事件与 Host summary 必须同事务收敛，不将 SQL 拆到事务外的 Recovery service。历史 restart 候选查询保持在提交和通知之后，不复用旧执行 stack。
 
@@ -443,3 +445,5 @@ finishing 禁止新工具／委派。安全 checkpoint callback 使用 `executio
 迁移 #53 将设置、应用策略、委派和旧 Run 数据一次性转换为当前字段；模型请求数从持久 attempt 重建，工具数从实际 started Tool 重建。历史 Run 的旧限额作为保守冻结 ceiling，启动恢复仍由既有 recovery owner 收敛非终态，不在 migration 伪造完成事件或重放工作。公开 API 和 decoder 不接受旧字段。
 
 工具预检查失败由 Root 与子 Agent 的合成 forbidden inspection 保存 rejectionCode，持久 decoder 校验其只能用于未执行的拒绝项。PolicyService 保持 deny 并传递该码，使回放后的 ledger 与模型结果仍能区分参数、授权和资源错误。
+
+Agent mutation execution 使用 durable ToolCall 而非 approval operation hash 区分一次执行。GovernedMutationExecutor 只负责复核、审批、lease、执行和结算，不查询相同参数的历史调用来拒绝新调用。ShellCapabilityService 以 Run／Runtime／ToolCall／冻结 target 派生 Workspace executionId，RunnerHttpAdapter 映射为稳定 Job ID；重放相同调用复用 Journal，独立调用允许相同 argv 再次执行。StateCommit 的进度循环检测与共享 RunBudget 负责无进展和绝对上限，unknown outcome 仍须 reconciliation。

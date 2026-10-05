@@ -14,6 +14,7 @@ export const createSshSessionTools = (
     descriptor: {
       name: `ssh_session_${action}`,
       version: '1.0.0',
+      modelExposure: 'deferred',
       description:
         action === 'open'
           ? 'Open a conversation-owned SSH connection for multiple independent commands and file operations. Default idle expiry is 1800 seconds; 0 disables idle expiry. No persistent shell state.'

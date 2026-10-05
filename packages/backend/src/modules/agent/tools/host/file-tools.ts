@@ -531,6 +531,7 @@ export const createFileMoveTool = (files: FileCapabilityService, cryptoHash: Cry
   descriptor: {
     name: 'file_move',
     version: '1.0.0',
+    modelExposure: 'deferred',
     description:
       'Move or rename one file or directory on a Workspace or SSH target. Source and destination metadata are frozen during inspection.',
     inputSchema: {
@@ -599,6 +600,7 @@ export const createFileDeleteTool = (files: FileCapabilityService, cryptoHash: C
   descriptor: {
     name: 'file_delete',
     version: '1.0.0',
+    modelExposure: 'deferred',
     description:
       'Delete one file or directory on a Workspace or SSH target. Recursive directory deletion is explicit and destructive.',
     inputSchema: {

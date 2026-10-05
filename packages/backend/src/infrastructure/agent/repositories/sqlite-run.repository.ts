@@ -17,7 +17,6 @@ import type {
 import { normalizeUserInputQuestions } from '../../../modules/agent/runtime/runs/user-input-request';
 import type {
   CompletionEvidenceSnapshot,
-  ConfirmedMutationTool,
   HostCursorReaderPort,
   PendingRootTool,
   PendingToolInputContinuation,
@@ -221,7 +220,12 @@ export class SqliteRunRepository
         terminalIssue: issueRow
           ? {
               eventType: issueRow.type,
-              errorCode: typeof issuePayload?.errorCode === 'string' ? issuePayload.errorCode : null,
+              errorCode:
+                typeof issuePayload?.errorCode === 'string'
+                  ? issuePayload.errorCode
+                  : typeof issuePayload?.code === 'string'
+                    ? issuePayload.code
+                    : null,
               reason:
                 typeof issuePayload?.reason === 'string'
                   ? issuePayload.reason
@@ -470,33 +474,6 @@ export class SqliteRunRepository
       continuation: parseDurableJsonValue(row.continuation_json),
       answerText,
     };
-  }
-
-  async confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null> {
-    const row = await this.db.queryOne<{ tool_call_id: string; provider_call_id: string }>(
-      `SELECT t.id AS tool_call_id, t.provider_call_id
-       FROM agent_tool_calls t
-       JOIN agent_runs r ON r.id = t.run_id
-       JOIN agent_steps original_step ON original_step.id = t.step_id AND original_step.run_id = t.run_id
-       WHERE t.run_id = ? AND r.user_id = ? AND r.app_id = ?
-         AND t.operation_hash = ? AND t.status = 'succeeded' AND t.risk <> 'read'
-         AND json_extract(t.inspection_json, '$.mutation') = 1
-         AND NOT EXISTS (
-           SELECT 1 FROM agent_tool_calls later
-           JOIN agent_steps later_step ON later_step.id = later.step_id AND later_step.run_id = later.run_id
-           WHERE later.run_id = t.run_id AND later.status = 'succeeded'
-             AND json_extract(later.inspection_json, '$.mutation') = 1
-             AND later_step.step_index > original_step.step_index
-             AND EXISTS (
-               SELECT 1 FROM json_each(t.inspection_json, '$.resourceKeys') original_resource
-               JOIN json_each(later.inspection_json, '$.resourceKeys') later_resource
-                 ON original_resource.value = later_resource.value
-             )
-         )
-       ORDER BY original_step.step_index DESC, t.completed_at DESC, t.id DESC LIMIT 1`,
-      [runId, scope.userId, scope.appId, operationHash],
-    );
-    return row ? { toolCallId: row.tool_call_id, providerCallId: row.provider_call_id } : null;
   }
 
   async completionEvidence(scope: Scope, runId: string): Promise<CompletionEvidenceSnapshot> {
