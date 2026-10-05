@@ -322,6 +322,31 @@ export class WorkspaceRuntimeService {
     frozenProfile?: WorkspaceProfileView,
     waitForTerminal = false,
   ): Promise<AgentWorkspaceView> {
+    const result = await this.createWorkspaceWithReplay(
+      scope,
+      runId,
+      agentRuntimeId,
+      spec,
+      retained,
+      idempotencyKey,
+      expectedCatalogRevision,
+      frozenProfile,
+      waitForTerminal,
+    );
+    return result.workspace;
+  }
+
+  async createWorkspaceWithReplay(
+    scope: Scope,
+    runId: string,
+    agentRuntimeId: string,
+    spec: AgentWorkspaceCreateSpec | null,
+    retained: boolean,
+    idempotencyKey: string,
+    expectedCatalogRevision?: string,
+    frozenProfile?: WorkspaceProfileView,
+    waitForTerminal = false,
+  ): Promise<{ workspace: AgentWorkspaceView; replayed: boolean }> {
     if (!idempotencyKey || (!frozenProfile && (!spec || typeof spec !== 'object')))
       throw new Error('VALIDATION_FAILED');
     await this.assertExecutionEnabled(scope);
@@ -339,7 +364,7 @@ export class WorkspaceRuntimeService {
       this.cryptoHash,
     );
     const replay = await this.repository.replayCreate(scope, idempotencyKey, requestHash, this.now());
-    if (replay) return replay;
+    if (replay) return { workspace: replay, replayed: true };
     const settings = await this.settings.get(scope.userId);
     const workspaceSettings = settings.effectiveSettings.workspaceRuntime;
     let profile: WorkspaceProfileView;
@@ -394,7 +419,7 @@ export class WorkspaceRuntimeService {
       },
       'Agent Workspace created',
     );
-    return workspace;
+    return { workspace, replayed: false };
   }
 
   async action(

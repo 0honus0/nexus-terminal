@@ -205,7 +205,7 @@ export const createWorkspaceCreateTool = (
   execute: async (inspection, context): Promise<ToolResult> => {
     const environment = context.environment;
     if (!environment) throw new Error('RUN_ENVIRONMENT_NOT_CONFIGURED');
-    const workspace = await runtime.createWorkspace(
+    const { workspace, replayed } = await runtime.createWorkspaceWithReplay(
       context,
       context.runId,
       context.agentRuntimeId,
@@ -218,9 +218,17 @@ export const createWorkspaceCreateTool = (
     );
     const ready = workspace.status === 'ready';
     const terminal = ready || workspace.status === 'failed';
+    const confirmed = replayed || terminal;
+    const replayedNonReady = replayed && !ready;
     return {
       ok: ready,
-      summary: ready ? 'Workspace provisioned and ready.' : `Workspace is ${workspace.status}.`,
+      summary: ready
+        ? replayed
+          ? 'Workspace creation replay confirmed the existing Workspace is ready.'
+          : 'Workspace provisioned and ready.'
+        : replayed
+          ? `Workspace creation was already applied; current Workspace is ${workspace.status}.`
+          : `Workspace is ${workspace.status}.`,
       userSummary: ready
         ? { key: 'agent.conversation.toolSummary.workspaceProvisioned' }
         : {
@@ -235,15 +243,23 @@ export const createWorkspaceCreateTool = (
       },
       artifactRefs: [],
       truncated: false,
-      outcome: terminal ? 'confirmed' : 'unknown',
-      ...(terminal ? {} : { errorCode: 'WORKSPACE_PROVISION_UNCONFIRMED' }),
+      outcome: confirmed ? 'confirmed' : 'unknown',
+      ...(replayedNonReady
+        ? { errorCode: 'WORKSPACE_CREATE_REPLAYED' }
+        : confirmed
+          ? {}
+          : { errorCode: 'WORKSPACE_PROVISION_UNCONFIRMED' }),
       verification: {
-        status: ready ? 'verified' : terminal ? 'failed' : 'unverified',
+        status: ready ? 'verified' : confirmed ? 'failed' : 'unverified',
         summary: ready
-          ? 'Runner confirmed provisioning and the Workspace is ready to start.'
-          : terminal
-            ? 'Runner returned a terminal provisioning result that was not ready.'
-            : 'Runner has not confirmed a terminal provisioning result.',
+          ? replayed
+            ? 'The idempotent create replay resolved to an existing ready Workspace.'
+            : 'Runner confirmed provisioning and the Workspace is ready to start.'
+          : replayed
+            ? `The idempotent create replay resolved to a Workspace already in ${workspace.status} state; no new provisioning was dispatched.`
+            : terminal
+              ? 'Runner returned a terminal provisioning result that was not ready.'
+              : 'Runner has not confirmed a terminal provisioning result.',
         evidenceRefs: [],
       },
     };

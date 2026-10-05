@@ -307,7 +307,12 @@ export const cancelRunTransition = async (
   let committedEvents: RunEvent[] = [];
   if (NON_TERMINAL.has(row.status)) {
     accepted = true;
-    const immediate = row.executing_runtime_count === 0 || (row.status !== 'running' && row.status !== 'cancelling');
+    const runningTool = await tx.queryOne<{ id: string }>(
+      `SELECT id FROM agent_tool_calls WHERE run_id = ? AND status = 'running' LIMIT 1`,
+      [row.id],
+    );
+    const immediate =
+      (row.executing_runtime_count === 0 && !runningTool) || (row.status !== 'running' && row.status !== 'cancelling');
     const nextStatus: RunStatus = immediate ? 'cancelled' : 'cancelling';
     const unresolvedTools = await tx.queryAll<{
       id: string;
@@ -555,7 +560,6 @@ export const resolveRunReconciliationTransition = async (
   );
   if (!row) throw new Error('NOT_FOUND');
   if (row.version !== command.expectedRunVersion) throw new Error('STATE_CONFLICT');
-  if (row.needs_reconciliation !== 1) throw new Error('RECONCILIATION_NOT_REQUIRED');
 
   const current = await tx.queryAll<{
     resource_key: string;
@@ -571,6 +575,7 @@ export const resolveRunReconciliationTransition = async (
      ORDER BY q.resource_key`,
     [row.id],
   );
+  if (row.needs_reconciliation !== 1 && current.length === 0) throw new Error('RECONCILIATION_NOT_REQUIRED');
   const requested = [...command.resources].sort((a, b) => a.resourceKey.localeCompare(b.resourceKey));
   if (
     current.length === 0 ||

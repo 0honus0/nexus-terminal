@@ -284,7 +284,7 @@ export class SqliteRunRepository
     );
     return {
       runId,
-      required: run.needs_reconciliation === 1,
+      required: run.needs_reconciliation === 1 || resources.length > 0,
       resources: resources.map((row) => ({
         resourceKey: row.resource_key,
         toolCallId: row.tool_call_id,

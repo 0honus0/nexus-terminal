@@ -1101,8 +1101,7 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
           'Agent UI background Run refresh deferred',
         );
       });
-      const active =
-        selectedRun && !isAgentRunNonTerminal(selectedRun.status) ? await facade.getRun(selectedRun.id) : selectedRun;
+      const active = selectedRun ? await facade.getRun(selectedRun.id) : null;
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       run.value = active;
       if (active) rememberThreadRun(active);
