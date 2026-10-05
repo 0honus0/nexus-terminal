@@ -29,6 +29,7 @@ import { createUnifiedFileTools } from '../../../packages/backend/src/modules/ag
 import type { AgentWorkspaceRepositoryPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { WorkspaceFileTargetPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-file-target.port';
 import { scope } from './scenario-fixtures';
+import { failedToolResult } from '../../../packages/backend/src/modules/agent/runtime/execution/execution-errors';
 
 export const workspaceCodingToolSurfaceScenario = async () => {
   const catalog = new ToolCatalog();
@@ -380,6 +381,26 @@ export const workspaceCodingToolSurfaceScenario = async () => {
         });
       });
       const adapter = new RunnerHttpAdapter(baseUrl, 'coding-token');
+      await assert.rejects(
+        () => adapter.statWorkspacePath('coding-workspace', 5, '/workspace'),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.message, 'WORKSPACE_PATH_FORBIDDEN');
+          const result = failedToolResult(error, {
+            fallbackCode: 'MODEL_EXECUTION_FAILED',
+            summaryPrefix: 'Tool call rejected before execution',
+            verificationSummary: 'The tool call was not executed.',
+          });
+          assert.equal(result.errorCode, 'WORKSPACE_PATH_FORBIDDEN');
+          assert.equal(result.ok, false);
+          return true;
+        },
+      );
+      await assert.rejects(
+        () => adapter.readWorkspaceFile('coding-workspace', 5, { path: '/workspace/work/src/linked.txt' }),
+        (error: unknown) => error instanceof Error && error.message === 'WORKSPACE_PATH_FORBIDDEN',
+      );
+      assert.equal(fs.readFileSync(path.join(directory, 'outside.txt'), 'utf8'), 'outside\n');
       const written = await adapter.writeWorkspaceFile('coding-workspace', 5, {
         path: '/workspace/work/http-written.js',
         content: 'console.log(42);\n',

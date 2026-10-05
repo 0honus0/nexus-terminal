@@ -788,8 +788,29 @@ export class RunnerHttpAdapter
             redirect: 'error',
           });
           if (!response.ok) {
-            const text = (await response.text()).slice(0, 4096);
-            if (response.status === 409) {
+            const reader = response.body?.getReader();
+            const chunks: Uint8Array[] = [];
+            let bytes = 0;
+            let bounded = true;
+            try {
+              if (reader) {
+                while (true) {
+                  const chunk = await reader.read();
+                  if (chunk.done) break;
+                  bytes += chunk.value.byteLength;
+                  if (bytes > 4096) {
+                    bounded = false;
+                    await reader.cancel();
+                    break;
+                  }
+                  chunks.push(chunk.value);
+                }
+              }
+            } finally {
+              reader?.releaseLock();
+            }
+            const text = bounded ? Buffer.concat(chunks).toString('utf8') : '';
+            if (response.status === 400 || response.status === 409) {
               try {
                 const code = decodeErrorCode(parseRunnerJson(text));
                 if (code === 'WORKSPACE_JOB_ACTIVE_CONFLICT') throw new ToolMutationNotStartedError(code);
@@ -801,7 +822,7 @@ export class RunnerHttpAdapter
             throw new Error(
               response.status === 401 || response.status === 403
                 ? 'WORKSPACE_RUNTIME_AUTH_FAILED'
-                : `WORKSPACE_RUNTIME_HTTP_${response.status}${text ? `:${text}` : ''}`,
+                : `WORKSPACE_RUNTIME_HTTP_${response.status}`,
             );
           }
           const maxResponseBytes = limits.maxResponseBytes ?? MAX_RESPONSE_BYTES;

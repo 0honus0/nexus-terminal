@@ -145,6 +145,8 @@ Workspace 执行期限由协议统一定义，`timeoutSeconds` 默认 300 秒、
 
 `shell_job_control(action="list", target="workspace", id=WorkspaceID)` 不传 jobId，返回当前授权 Workspace/generation 的活跃 Job、数量和配置额度，不包含命令正文；SSH 暂不支持此 list。前台等待窗口结束后，只要 Runner 明确确认 Job 仍在运行，就返回 pending／running 和 jobId，可继续 wait／cancel，不伪造 unknown；只有无法核对真实状态才报告未知结果。
 
+Workspace 文件工具的非法路径或越界读取由 Runner 拒绝，模型收到明确的 `WORKSPACE_PATH_INVALID`／`WORKSPACE_PATH_FORBIDDEN` 等错误码，不退化为通用模型执行失败；错误不会授权读取项目外路径。无法解析的 Runner 错误只保留 HTTP 状态分类，不将上游正文作为模型反馈或日志内容。
+
 - Agent 工具按功能模块命名：`shell_*`、`ssh_*`、`file_*`、`machine_*`、`workspace_*`、`collaboration_*`、`memory_*`、`browser_*`、`tool_*`、`skill_*`、`plan_*`、`user_*`、`artifact_*`、`acp_*`、`mcp_*`。只接受当前名称，不提供旧工具名别名。
 - SSH 会话入口将 connectionId 转为规范 SSH target 后校验同一 typed grant；会话创建、命令执行与文件操作共享连接授权，未选中或未授权的连接仍拒绝。
 - `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。

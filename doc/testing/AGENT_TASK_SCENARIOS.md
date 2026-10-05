@@ -212,5 +212,8 @@
 - 原约 60 秒退出不是硬上限：省略 timeout 使用旧默认值，模型的 900／1800／3600 秒参数被 Backend／Runner 旧 300 秒校验拒绝，工具 schema 却允许至 86400 秒。统一协议期限、可配置并发、活动列表、权威 active 状态投影已实现；定向场景验证额度竞争、满额拒绝、降额度不取消、单 Job 取消隔离、list 的 Run/Runtime/generation 边界与等待 running。Runner build 及 Node 运行时协议常量 import 通过；设置迁移保留已有配置并支持重复启动。UI/API E2E 验证默认 8、非法范围拒绝、保存后重载持久化通过。修改尚未提交，A02 优化后真实独立 Run 尚未执行。
 - 全量 Agent 场景仍有 context/tool-exchange 的 CONTEXT_BUDGET_EXCEEDED；已在未修改的 f9b4a840 隔离 worktree 复现同一失败，未提高预算或弱化断言。该既有问题单独保留，当前优化不扩大至 Context 修复。旧 timedOut=true 同时 durable status=succeeded 的分类问题仍未关闭。
 - 本轮送验证据：最终 check、三包 build、隔离 worktree 全量格式、git diff --check 通过；设置保存／范围／重载和跨标签 dirty draft 的 2 个 E2E passed（15.1 秒）。全量场景除上述已复现的 Context 基线失败外均通过；预算迁移反例已修正为清除 53 及之后的迁移标记，真正进入旧版本升级窗口，不修改有效断言。尚无推送授权与候选 SHA canonical Actions，不声明最终验收通过。
+- Job 工具优化已单独本地提交 `5fed3182`，未推送。优化后真实 A02 Run `09f8987e-d2d0-4169-bf75-0e4715414233`，Thread `6ff91c36-26c8-4732-b285-71b4b8ef8de5`，Workspace `206a3a8c-2d79-4de3-a937-4ee06dfb7883` generation 1 已创建并 running，但后续模型请求以 PROVIDER_HTTP_400 终止，Run failed，尚无 pendingInputRequest，未注入或修复项目。保留失败证据，不重试换绿；下一步核对 Provider 请求边界及该终态 Run 的 Workspace 清理，不放宽跨 Run 授权，不进入 A03。
+- 该 Run 的前置故障已定位：模型连续 file_list `/workspace`，Runner 正确拒绝 WORKSPACE_PATH_FORBIDDEN，但 Backend 仅对 409 解码错误，400 的原始正文包装成异常后退化 MODEL_EXECUTION_FAILED。当前修复 400/409 的有界错误解码并去除异常正文；真实 Runner HTTP 场景验证路径拒绝原码进入 ToolResult，symlink 越界仍拒绝且项目外文件不变。Provider 400 与此故障的因果关系未证明，不据此关闭 Provider 问题；该修复不放宽文件路径门禁。
+- 路径错误传递修复本地送验：check、三包 build、隔离全量格式与 Runner HTTP coding 场景通过；全量场景仅上述 Context 基线失败。准备单独本地提交，无推送或远程验收结论。
 
 本文件是本轮临时场景计划与进度入口，过程中持续更新，不保留已解决问题的开放状态。全部场景完成（或明确说明实际 contract／环境导致的未覆盖范围）、有效回归进入 `tests/e2e/specs/agent/`，且对应 SHA 的 canonical Actions 验收后，删除本文件和 `E2E.md` 中的入口；长期验证命令与覆盖边界仅保留在 `E2E.md`，不留下完成报告。本条记录的是将来的删除要求，当前尚未删除、尚未全部完成。
