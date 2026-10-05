@@ -445,6 +445,14 @@ export const unifiedFileCapabilityScenario = async () => {
       assert.match(String((read.data as Record<string, JsonValue>).content), /needle/);
       const listed = await invoke('file_list', { target: target.target, id: target.id, path: target.root });
       assert.equal(listed.ok, true);
+      await assert.rejects(
+        () => invoke('file_read', { target: target.target, id: target.id, path: target.root }),
+        /FILE_READ_REQUIRES_FILE/,
+      );
+      await assert.rejects(
+        () => invoke('file_list', { target: target.target, id: target.id, path: source }),
+        /FILE_LIST_REQUIRES_DIRECTORY/,
+      );
       const searched = await invoke('file_search', {
         target: target.target,
         id: target.id,
@@ -452,6 +460,16 @@ export const unifiedFileCapabilityScenario = async () => {
         query: 'needle',
       });
       assert.equal(((searched.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
+      if (target.target === 'workspace') {
+        const globSearch = await invoke('file_search', {
+          target: target.target,
+          id: target.id,
+          path: target.root,
+          query: 'needle',
+          glob: '{a,b}.txt',
+        });
+        assert.equal(((globSearch.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
+      }
       const writeInput = { target: target.target, id: target.id, path: created, content: 'created\n' };
       await invoke('file_write', writeInput);
       if (target.target === 'workspace') {

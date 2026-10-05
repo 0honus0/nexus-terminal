@@ -346,29 +346,20 @@ export class FileCapabilityService {
     const changes: PreparedPatchChange[] = [];
     const seen = new Set<string>();
     for (const patchSpec of patches) {
-      if (
-        patchSpec.isBinary ||
-        patchSpec.isCreate ||
-        patchSpec.isDelete ||
-        patchSpec.isRename ||
-        patchSpec.isCopy ||
-        patchSpec.hunks.length < 1
-      ) {
-        throw new Error('FILE_PATCH_UNSUPPORTED');
-      }
+      if (patchSpec.isBinary) throw new Error('FILE_PATCH_BINARY_UNSUPPORTED');
+      if (patchSpec.isCreate) throw new Error('FILE_PATCH_CREATE_UNSUPPORTED');
+      if (patchSpec.isDelete) throw new Error('FILE_PATCH_DELETE_UNSUPPORTED');
+      if (patchSpec.isRename || patchSpec.isCopy) throw new Error('FILE_PATCH_RENAME_UNSUPPORTED');
+      if (patchSpec.hunks.length < 1) throw new Error('FILE_PATCH_HUNKS_REQUIRED');
       const oldPath = patchPath(patchSpec.oldFileName);
       const newPath = patchPath(patchSpec.newFileName);
       const oldState = await this.stat(context, target, oldPath);
       const newState = await this.stat(context, target, newPath);
-      if (
-        !oldState.exists ||
-        oldState.type !== 'file' ||
-        !oldState.sha256 ||
-        oldState.path !== newState.path ||
-        seen.has(oldState.path)
-      ) {
-        throw new Error('FILE_PATCH_UNSUPPORTED');
-      }
+      if (!oldState.exists) throw new Error('FILE_NOT_FOUND');
+      if (oldState.type !== 'file') throw new Error('FILE_PATCH_REQUIRES_FILE');
+      if (!oldState.sha256) throw new Error('FILE_HASH_UNAVAILABLE');
+      if (oldState.path !== newState.path) throw new Error('FILE_PATCH_RENAME_UNSUPPORTED');
+      if (seen.has(oldState.path)) throw new Error('FILE_PATCH_DUPLICATE_PATH');
       seen.add(oldState.path);
       if (expectedFiles && expectedFiles.get(oldState.path) !== oldState.sha256) throw new Error('RESOURCE_CHANGED');
       const source = await this.readWholeText(context, target, oldState);

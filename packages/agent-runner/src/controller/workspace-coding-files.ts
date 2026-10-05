@@ -631,7 +631,10 @@ export const searchWorkspace = (workRoot: string, request: WorkspaceSearchReques
   }
   compileSearch(request.query);
   const logical = normalizeLogicalPath(request.path);
-  return searchWithRipgrep(root, logical, request) ?? fallbackSearch(root, logical, request);
+  // Explicit globs share Node matching semantics with SSH, not rg glob rules.
+  return request.glob
+    ? fallbackSearch(root, logical, request)
+    : (searchWithRipgrep(root, logical, request) ?? fallbackSearch(root, logical, request));
 };
 
 const normalizePatchFileName = (value: string | undefined): string => {

@@ -201,7 +201,7 @@ export const createBrowserInteractionTools = (
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
       const hasSnapshot = args.snapshotId !== undefined;
       const hasNode = args.nodeRef !== undefined;
-      if (hasSnapshot !== hasNode) throw new Error('TOOL_ARGUMENTS_INVALID');
+      if (hasSnapshot !== hasNode) throw new Error('BROWSER_NODE_SNAPSHOT_PAIR_REQUIRED');
       const { binding } = await authority.session(context, sessionId);
       const modifiers =
         args.modifiers === undefined ? [] : stringArray(args.modifiers, { minItems: 0, maxItems: 4, maxBytes: 16 });

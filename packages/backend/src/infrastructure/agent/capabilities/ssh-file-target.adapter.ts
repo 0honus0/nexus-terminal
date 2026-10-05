@@ -101,22 +101,12 @@ const decodeUtf8Prefix = (bytes: Uint8Array): { content: string; bytesRead: numb
   throw new Error('REMOTE_FILE_NOT_TEXT');
 };
 
-const globRegex = (glob: string | undefined): RegExp | null => {
+const globRegex = (glob: string | undefined): { test(value: string): boolean } | null => {
   if (glob === undefined) return null;
-  if (!glob || glob.length > 512 || glob.includes('\\0')) throw new Error('VALIDATION_FAILED');
-  let source = '^';
-  for (let index = 0; index < glob.length; index += 1) {
-    const char = glob[index]!;
-    if (char === '*') {
-      if (glob[index + 1] === '*') {
-        source += '.*';
-        index += 1;
-      } else source += '[^/]*';
-    } else if (char === '?') source += '[^/]';
-    else source += char.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
-  }
-  source += '$';
-  return new RegExp(source, 'u');
+  if (!glob || glob.length > 512 || glob.includes('\0')) throw new Error('VALIDATION_FAILED');
+  return {
+    test: (value) => path.posix.matchesGlob(value, glob) || path.posix.matchesGlob(path.posix.basename(value), glob),
+  };
 };
 
 export class SshFileTargetAdapter implements SshFileTargetPort {

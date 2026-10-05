@@ -263,13 +263,13 @@ export const createWorkspaceCodeIntelTool = (
     const selector = workspaceSelector(args);
     const action = stringValue(args.action, 32);
     if (!['symbols', 'definition', 'references', 'diagnostics'].includes(action))
-      throw new Error('TOOL_ARGUMENTS_INVALID');
+      throw new Error('CODE_QUERY_ACTION_INVALID');
     const path = stringValue(args.path, MAX_PATH_BYTES);
     const line = optionalInteger(args.line, { minimum: 1, maximum: 10_000_000 });
     const column = optionalInteger(args.column, { minimum: 1, maximum: 10_000_000 });
     const needsPosition = action === 'definition' || action === 'references';
     if (needsPosition ? line === undefined || column === undefined : line !== undefined || column !== undefined) {
-      throw new Error('TOOL_ARGUMENTS_INVALID');
+      throw new Error(needsPosition ? 'CODE_QUERY_POSITION_REQUIRED' : 'CODE_QUERY_POSITION_UNSUPPORTED');
     }
     const maxResults = optionalInteger(args.maxResults, { minimum: 1, maximum: 100, fallback: 50 })!;
     const maxBytes = optionalInteger(args.maxBytes, { minimum: 1024, maximum: 64 * 1024, fallback: 24 * 1024 })!;

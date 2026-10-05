@@ -206,7 +206,9 @@ export const createFileReadTool = (files: FileCapabilityService, cryptoHash: Cry
     onlyKeys(args, ['target', 'id', 'path', 'offsetBytes', 'maxBytes']);
     const resolved = await files.resolve(context, selectorFrom(args));
     const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
-    if (!state.exists || state.type !== 'file' || !state.sha256) throw new Error('NOT_FOUND');
+    if (!state.exists) throw new Error('FILE_NOT_FOUND');
+    if (state.type !== 'file') throw new Error('FILE_READ_REQUIRES_FILE');
+    if (!state.sha256) throw new Error('FILE_HASH_UNAVAILABLE');
     return readInspection(files, cryptoHash, 'file_read', args, context, policyRevision, state, {
       target: resolved.selector.target,
       id: resolved.selector.id,
@@ -256,7 +258,8 @@ export const createFileListTool = (files: FileCapabilityService, cryptoHash: Cry
     onlyKeys(args, ['target', 'id', 'path', 'maxEntries']);
     const resolved = await files.resolve(context, selectorFrom(args));
     const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
-    if (!state.exists || state.type !== 'directory') throw new Error('NOT_FOUND');
+    if (!state.exists) throw new Error('FILE_NOT_FOUND');
+    if (state.type !== 'directory') throw new Error('FILE_LIST_REQUIRES_DIRECTORY');
     return readInspection(files, cryptoHash, 'file_list', args, context, policyRevision, state, {
       target: resolved.selector.target,
       id: resolved.selector.id,
@@ -287,7 +290,8 @@ export const createFileSearchTool = (files: FileCapabilityService, cryptoHash: C
   descriptor: {
     name: 'file_search',
     version: '1.0.0',
-    description: 'Search bounded UTF-8 text on a Workspace or SSH target using the same target + id schema.',
+    description:
+      'Search bounded UTF-8 text on a Workspace or SSH target. query is a JavaScript Unicode regular expression. Explicit glob uses Node glob syntax on both targets, matching a relative path or basename (including brace alternatives). Results remain bounded.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

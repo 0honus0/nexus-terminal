@@ -94,11 +94,12 @@ export const createArtifactReadTool = (artifacts: ArtifactService, cryptoHash: C
         args.startByte !== undefined ||
         args.maxBytes !== undefined
       ) {
-        throw new Error('TOOL_ARGUMENTS_INVALID');
+        throw new Error('ARTIFACT_METADATA_RANGE_UNSUPPORTED');
       }
       normalizedArguments = { artifactId: args.artifactId, mode: 'metadata' };
     } else if (args.mode === 'text') {
-      if (args.startByte !== undefined || args.maxBytes !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
+      if (args.startByte !== undefined || args.maxBytes !== undefined)
+        throw new Error('ARTIFACT_TEXT_BYTE_RANGE_CONFLICT');
       normalizedArguments = {
         artifactId: args.artifactId,
         mode: 'text',
@@ -106,7 +107,8 @@ export const createArtifactReadTool = (artifacts: ArtifactService, cryptoHash: C
         lineCount: integer(args.lineCount, 100, 1, 200),
       };
     } else {
-      if (args.startLine !== undefined || args.lineCount !== undefined) throw new Error('TOOL_ARGUMENTS_INVALID');
+      if (args.startLine !== undefined || args.lineCount !== undefined)
+        throw new Error('ARTIFACT_BYTES_LINE_RANGE_CONFLICT');
       normalizedArguments = {
         artifactId: args.artifactId,
         mode: 'bytes',

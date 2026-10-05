@@ -17,6 +17,34 @@ export const executionErrorCode = (error: unknown, fallbackCode: string): string
 };
 
 const ERROR_DETAILS: Readonly<Record<string, string>> = {
+  FILE_PATCH_BINARY_UNSUPPORTED: 'file_patch edits UTF-8 text only; binary patch content is unsupported.',
+  FILE_PATCH_CREATE_UNSUPPORTED: 'file_patch cannot create files; use file_write with content.',
+  FILE_PATCH_DELETE_UNSUPPORTED: 'file_patch cannot delete files; use file_delete with explicit authorization.',
+  FILE_PATCH_RENAME_UNSUPPORTED: 'file_patch must keep the same old/new path; use file_move for renaming.',
+  FILE_PATCH_HUNKS_REQUIRED: 'Each file entry must include at least one unified diff hunk.',
+  FILE_PATCH_REQUIRES_FILE: 'file_patch requires an existing regular file, not a directory.',
+  FILE_PATCH_DUPLICATE_PATH:
+    'Each resolved file path may appear only once in a patch; combine its hunks into one file entry.',
+  FILE_NOT_FOUND: 'The requested filesystem path does not exist; verify its parent directory with file_list.',
+  FILE_READ_REQUIRES_FILE: 'file_read requires a regular file, not a directory; use file_list for directories.',
+  FILE_LIST_REQUIRES_DIRECTORY: 'file_list requires a directory; use file_read for regular files.',
+  FILE_HASH_UNAVAILABLE: 'A content SHA-256 could not be confirmed; do not use this result as write authorization.',
+  ARTIFACT_METADATA_RANGE_UNSUPPORTED:
+    'metadata accepts no line or byte range fields; omit startLine, lineCount, startByte and maxBytes.',
+  ARTIFACT_TEXT_BYTE_RANGE_CONFLICT:
+    'text accepts startLine/lineCount, not startByte/maxBytes; use bytes for byte ranges.',
+  ARTIFACT_BYTES_LINE_RANGE_CONFLICT:
+    'bytes accepts startByte/maxBytes, not startLine/lineCount; use text for line ranges.',
+  CODE_QUERY_ACTION_INVALID: 'action must be symbols, definition, references or diagnostics.',
+  CODE_QUERY_POSITION_REQUIRED: 'definition and references require both line and column (1-based).',
+  CODE_QUERY_POSITION_UNSUPPORTED: 'symbols and diagnostics do not accept line or column; omit both fields.',
+  BROWSER_NODE_SNAPSHOT_PAIR_REQUIRED:
+    'Provide snapshotId and nodeRef together, or omit both for session-wide key input.',
+  FILE_PATCH_UNSUPPORTED:
+    'Only text edits of existing regular files are supported. Use file_write for creation, file_delete for deletion, file_move for renaming; duplicate paths and binary changes are not supported.',
+  FILE_PATCH_INVALID: 'Provide a valid unified diff with 1 to 16 file entries and exact hunk locations.',
+  FILE_PATCH_CONTEXT_MISMATCH:
+    'Patch context does not match the current file at the declared line; read the current content and regenerate an exact diff. Fuzzy matching is disabled.',
   TOOL_ARGUMENTS_INVALID:
     'Arguments are invalid; no operation was executed. Check the declared schema before retrying. shell_execute accepts kind=argv/argv or kind=shell/shellScript on both Workspace and SSH; neither command field is a display title.',
   ABORTED: 'The operation was interrupted before it completed.',
