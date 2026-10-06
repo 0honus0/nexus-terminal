@@ -20,6 +20,7 @@ export const E2E_PORTS = {
   openAiProvider: parsePort('NEXUS_E2E_OPENAI_PROVIDER_PORT', 29091),
   browserControl: parsePort('NEXUS_E2E_BROWSER_CONTROL_PORT', 29093),
   browserCdp: parsePort('NEXUS_E2E_BROWSER_CDP_PORT', 29094),
+  agentRunner: parsePort('NEXUS_E2E_AGENT_RUNNER_PORT', 29095),
 } as const;
 
 export const E2E_URLS = {

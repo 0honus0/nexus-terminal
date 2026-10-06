@@ -65,7 +65,10 @@ const execute = async (
   request: APIRequestContext,
   context: Awaited<ReturnType<typeof prepare>>,
   text: string,
-  options: { connectionIds: number[] } = { connectionIds: [] },
+  options: {
+    connectionIds: number[];
+    environment?: { recipeId: string; versions: Record<string, string>; catalogRevision: string };
+  } = { connectionIds: [] },
 ) => {
   const created = await request.post('/api/v1/apps/nexus.agent/runs', {
     headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
@@ -78,6 +81,7 @@ const execute = async (
       approvalMode: 'full_access',
       executionMode: 'execute',
       connectionIds: options.connectionIds,
+      ...(options.environment ? { environment: options.environment } : {}),
     },
   });
   expect(created.status(), await created.text()).toBe(201);
@@ -97,6 +101,98 @@ const execute = async (
   expect(textResult).toBeDefined();
   return { run, ledger, text: textResult! };
 };
+
+test('A06 frozen environment rejects overrides and stale Catalog then executes a real Workspace Job', async ({
+  request,
+}) => {
+  const context = await prepare(request);
+  const catalog = (await (await request.get('/api/v1/agent/workspace-runtime/catalog')).json()).data;
+  const environment = { recipeId: 'workspace-dev', versions: { 'base-tools': '1' }, catalogRevision: catalog.revision };
+  const settings = (await (await request.get('/api/v1/agent/settings')).json()).data;
+  const configured = await request.patch('/api/v1/agent/settings', {
+    headers: context.headers,
+    data: {
+      expectedVersion: settings.revision,
+      patch: {
+        workspaceRuntime: {
+          enabledRecipeIds: ['workspace-dev'],
+          toolVersions: { 'base-tools': { enabledVersionIds: ['1'], defaultVersionId: '1' } },
+        },
+      },
+    },
+  });
+  expect(configured.ok(), await configured.text()).toBe(true);
+  const stale = await request.post('/api/v1/apps/nexus.agent/runs', {
+    headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
+    data: {
+      schemaVersion: 1,
+      threadId: context.threadId,
+      input: { text: 'E2E_FROZEN_ENVIRONMENT', artifactRefs: [] },
+      agentDefinitionId: 'agent.default',
+      model: context.model,
+      approvalMode: 'full_access',
+      executionMode: 'execute',
+      connectionIds: [],
+      environment: { ...environment, catalogRevision: 'stale-catalog' },
+    },
+  });
+  expect(stale.status()).toBe(409);
+  expect((await stale.json()).error.code).toBe('CATALOG_REVISION_CONFLICT');
+  const result = await execute(request, context, 'E2E_FROZEN_ENVIRONMENT', { connectionIds: [], environment });
+  const results = result.ledger
+    .filter((entry) => entry.kind === 'tool_result')
+    .map((entry) => JSON.parse(entry.payload.text!));
+  expect(results[0]).toMatchObject({ ok: false, errorCode: 'TOOL_ARGUMENTS_INVALID' });
+  const created = results.find((item) => item.data?.recipeId);
+  expect(created).toMatchObject({ ok: true, data: { recipeId: 'workspace-dev', generation: 1, status: 'ready' } });
+  const id = created.data.workspaceId;
+  const workspacePath = `/api/v1/apps/nexus.agent/workspaces/${id}`;
+  try {
+    const workspace = (await (await request.get(workspacePath)).json()).data;
+    expect(workspace).toMatchObject({ runId: result.run.id, generation: 1, status: 'stopped' });
+    expect(workspace.profile).toEqual(result.run.definition.environment);
+    expect(workspace.profile.toolchain).toEqual([{ familyId: 'base-tools', versionId: '1' }]);
+    const execution = results.find((item) => item.data?.jobId);
+    expect(execution).toMatchObject({ ok: true, verification: { status: 'verified' } });
+    const jobResponse = await fetch(
+      `http://127.0.0.1:${process.env.NEXUS_E2E_AGENT_RUNNER_PORT ?? '29095'}/v1/jobs/${execution.data.jobId}`,
+      {
+        headers: {
+          Authorization: 'Bearer e2e-isolated-runner-token-not-for-production-00000000',
+          'X-Nexus-Agent-Protocol': '2026-09-13',
+        },
+      },
+    );
+    expect(jobResponse.ok).toBe(true);
+    const job = await jobResponse.json();
+    expect(job).toMatchObject({
+      workspaceId: id,
+      generation: 1,
+      status: 'succeeded',
+      result: { exitCode: 0, timedOut: false },
+    });
+    expect(job.result.stdout).toContain('frozen-environment-ready\n');
+    const cwd = job.result.stdout.trim().split('\n').at(-1);
+    expect(cwd).toContain(`/runtime/workspaces/${id}/core/workspace/work`);
+    expect(await readdir(cwd)).toEqual([]);
+  } finally {
+    const workspace = (await (await request.get(workspacePath)).json()).data;
+    const deleted = await request.post(workspacePath + '/actions', {
+      headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
+      data: { schemaVersion: 1, expectedVersion: workspace.version, action: 'delete' },
+    });
+    expect(deleted.status()).toBe(202);
+    const command = (await deleted.json()).data;
+    await expect
+      .poll(
+        async () =>
+          (await (await request.get(`/api/v1/apps/nexus.agent/workspace-runtime/commands/${command.id}`)).json()).data
+            .status,
+      )
+      .toBe('succeeded');
+    expect((await (await request.get(workspacePath)).json()).data.status).toBe('deleted');
+  }
+});
 
 for (const useOperationsSkill of [false, true]) {
   test(`${useOperationsSkill ? 'A05 signed Operations Skill' : 'A04 bounded API'} deployment has real endpoints and expires without detached processes`, async ({

@@ -51,6 +51,8 @@ const backendEnv: Record<string, string> = {
   NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL: `${E2E_URLS.pluginRepositoryOrigin}/official-catalog.json`,
   NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: e2ePluginPublisherKeyId,
   NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: e2ePluginPublicKeyPem,
+  NEXUS_AGENT_RUNNER_URL: `http://127.0.0.1:${E2E_PORTS.agentRunner}`,
+  NEXUS_AGENT_RUNNER_TOKEN: 'e2e-isolated-runner-token-not-for-production-00000000',
 };
 
 export default defineConfig({
@@ -111,6 +113,16 @@ export default defineConfig({
     },
   ],
   webServer: [
+    {
+      command: 'node fixtures/agent/workspace-runner.mjs',
+      cwd: e2eRoot,
+      env: inheritedEnv,
+      url: `http://127.0.0.1:${E2E_PORTS.agentRunner + 1}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
     {
       command: 'node support/test-browser-server.mjs',
       cwd: e2eRoot,

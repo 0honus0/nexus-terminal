@@ -262,6 +262,70 @@ const server = http.createServer(async (request, response) => {
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
   const fileLifecycle = latestUserText.match(/E2E_FILE_LIFECYCLE connection=(\d+)/);
+  if (latestUserText.includes('E2E_FROZEN_ENVIRONMENT')) {
+    const data = (id) => {
+      const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const steps = [
+      ['env_override', 'workspace_create', { recipeId: 'workspace-browser', versions: { node: '22.23.2' } }],
+      ['env_create', 'workspace_create', {}],
+      [
+        'env_start',
+        'workspace_control',
+        () => ({
+          workspaceId: data('env_create').data.workspaceId,
+          action: 'start',
+        }),
+      ],
+      [
+        'env_execute',
+        'shell_execute',
+        () => ({
+          target: 'workspace',
+          id: data('env_create').data.workspaceId,
+          command: { kind: 'argv', argv: ['/bin/sh', '-c', 'printf "frozen-environment-ready\\n"; pwd'] },
+          cwd: '/workspace/work',
+        }),
+      ],
+      [
+        'env_stop',
+        'workspace_control',
+        () => ({
+          workspaceId: data('env_create').data.workspaceId,
+          action: 'stop',
+        }),
+      ],
+    ];
+    for (const [id, name, args] of steps) {
+      const result = data(id);
+      if (result && !result.ok && id !== 'env_override') {
+        regressionResponse(response, { content: 'Environment task failed; inspect durable evidence.' });
+        return;
+      }
+      if (!result) {
+        regressionResponse(
+          response,
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id,
+                type: 'function',
+                function: { name, arguments: JSON.stringify(typeof args === 'function' ? args() : args) },
+              },
+            ],
+          },
+          'tool_calls',
+        );
+        return;
+      }
+    }
+    regressionResponse(response, {
+      content: `Frozen environment executed and stopped; workspace=${data('env_create').data.workspaceId}; job=${data('env_execute').data.jobId}.`,
+    });
+    return;
+  }
   const deployApi = latestUserText.match(/E2E_DEPLOY_API connection=(\d+) port=(\d+)/);
   if (deployApi) {
     const useOperationsSkill = latestUserText.includes('E2E_OPERATIONS_SKILL');
