@@ -500,7 +500,7 @@ const searchWithJavaScript = (
   const events: SearchEvent[] = [];
   let matchCount = 0;
   outer: for (const file of files) {
-    const relative = path.relative(root, file).split(path.sep).join('/');
+    const relative = stat.isDirectory() ? path.relative(target, file).split(path.sep).join('/') : path.basename(file);
     if (
       request.glob &&
       !path.matchesGlob(relative, request.glob) &&

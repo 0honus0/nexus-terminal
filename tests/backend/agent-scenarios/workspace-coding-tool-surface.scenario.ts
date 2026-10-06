@@ -169,6 +169,22 @@ export const workspaceCodingToolSurfaceScenario = async () => {
     assert.deepEqual(hiddenSearch.matches[1]?.before, ['needle here']);
     assert.deepEqual(hiddenSearch.matches[1]?.after, ['needle here']);
     assert.throws(() => searchWorkspace(workRoot, { ...regexRequest, query: '[' }), /WORKSPACE_SEARCH_INVALID/);
+    const nestedDirectory = path.join(workRoot, 'src', 'nested');
+    fs.mkdirSync(nestedDirectory);
+    fs.writeFileSync(path.join(nestedDirectory, 'scope.ts'), 'needle here\n', 'utf8');
+    const scopedGlob = searchWorkspace(workRoot, { ...regexRequest, glob: 'nested/*.ts' });
+    assert.deepEqual(
+      scopedGlob.matches.map((match) => match.path),
+      ['/workspace/work/src/nested/scope.ts'],
+    );
+    const projectRelativeGlob = searchWorkspace(workRoot, { ...regexRequest, glob: 'src/nested/*.ts' });
+    assert.equal(projectRelativeGlob.matches.length, 0, 'glob is relative to the search directory, not the project');
+    const fileGlob = searchWorkspace(workRoot, {
+      ...regexRequest,
+      path: '/workspace/work/src/nested/scope.ts',
+      glob: 'scope.ts',
+    });
+    assert.equal(fileGlob.matches.length, 1, 'a single-file search matches its basename');
 
     const beforeHash = read.sha256;
     const patchText = [
