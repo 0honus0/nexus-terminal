@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import regressionInputs from '../../fixtures/agent/regression-inputs.json';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
@@ -59,7 +59,12 @@ const prepare = async (request: APIRequestContext) => {
   };
 };
 
-const execute = async (request: APIRequestContext, context: Awaited<ReturnType<typeof prepare>>, text: string) => {
+const execute = async (
+  request: APIRequestContext,
+  context: Awaited<ReturnType<typeof prepare>>,
+  text: string,
+  options: { connectionIds: number[] } = { connectionIds: [] },
+) => {
   const created = await request.post('/api/v1/apps/nexus.agent/runs', {
     headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
     data: {
@@ -70,7 +75,7 @@ const execute = async (request: APIRequestContext, context: Awaited<ReturnType<t
       model: context.model,
       approvalMode: 'full_access',
       executionMode: 'execute',
-      connectionIds: [],
+      connectionIds: options.connectionIds,
     },
   });
   expect(created.status(), await created.text()).toBe(201);
@@ -90,6 +95,40 @@ const execute = async (request: APIRequestContext, context: Awaited<ReturnType<t
   expect(textResult).toBeDefined();
   return { run, ledger, text: textResult! };
 };
+
+test('SSH file search scans beyond former file and cumulative byte caps', async ({ request }) => {
+  const context = await prepare(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const project = path.resolve(__dirname, '../../.tmp/ssh-root/search-scan');
+  await mkdir(project);
+  try {
+    for (let index = 0; index < 2_001; index++)
+      await writeFile(path.join(project, `a-${String(index).padStart(4, '0')}.txt`), 'nothing\n');
+    const chunk = 'x'.repeat(1024 * 1024 - 1) + '\n';
+    for (let index = 0; index < 17; index++) await writeFile(path.join(project, `b-${index}.txt`), chunk);
+    await writeFile(path.join(project, 'z-sentinel.txt'), 'SCAN_SENTINEL\n');
+    const result = await execute(request, context, `E2E_SEARCH_SCAN connection=${connectionId}`, {
+      connectionIds: [connectionId],
+    });
+    expect(result.run.status).toMatch(/^completed/);
+    const searchResults = result.ledger
+      .filter((entry) => entry.kind === 'tool_result')
+      .map((entry) => JSON.parse(entry.payload.text!));
+    expect(searchResults).toHaveLength(1);
+    expect(searchResults[0]).toMatchObject({
+      ok: true,
+      data: {
+        scannedFiles: 2019,
+        truncated: false,
+        matches: [{ path: '/search-scan/z-sentinel.txt', line: 1, text: 'SCAN_SENTINEL' }],
+      },
+    });
+    expect(searchResults[0].data.scannedBytes).toBeGreaterThan(16 * 1024 * 1024);
+    expect(await readFile(path.join(project, 'z-sentinel.txt'), 'utf8')).toBe('SCAN_SENTINEL\n');
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
 
 test('A01 read-only project handover reads real files without repairing or starting the application (simulated model, SSH target)', async ({
   request,

@@ -262,6 +262,37 @@ const server = http.createServer(async (request, response) => {
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
   const handover = latestUserText.match(/E2E_TASK_A01_READONLY connection=(\d+)/);
+  const searchScan = latestUserText.match(/E2E_SEARCH_SCAN connection=(\d+)/);
+  if (searchScan) {
+    const result = messages.find((message) => message.role === 'tool' && message.tool_call_id === 'call_search_scan');
+    if (!result) {
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_search_scan',
+              type: 'function',
+              function: {
+                name: 'file_search',
+                arguments: JSON.stringify({
+                  target: 'ssh',
+                  id: searchScan[1],
+                  path: '/search-scan',
+                  query: 'SCAN_SENTINEL',
+                  maxResults: 10,
+                  contextLines: 0,
+                }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+    } else regressionResponse(response, { content: 'Search finished; use the persisted tool result as evidence.' });
+    return;
+  }
   if (handover) {
     const files = ['AGENTS.md', 'README.md', 'package.json', 'config.json', 'server.mjs', 'data/catalog.json'];
     const results = files.map((_, index) =>
