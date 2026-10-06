@@ -262,8 +262,37 @@ const server = http.createServer(async (request, response) => {
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
   const handover = latestUserText.match(/E2E_TASK_A01_READONLY connection=(\d+)/);
-  const searchScan = latestUserText.match(/E2E_SEARCH_SCAN connection=(\d+)/);
+  const searchScan = latestUserText.match(/E2E_SEARCH_SCAN connection=(\d+)( persistent)?/);
   if (searchScan) {
+    let sessionId;
+    const toolData = (id) => {
+      const message = messages.find((message) => message.role === 'tool' && message.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const call = (id, name, args) =>
+      regressionResponse(
+        response,
+        {
+          tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }],
+        },
+        'tool_calls',
+      );
+    if (searchScan[2]) {
+      const discovered = toolData('call_search_session_discover');
+      if (!discovered) {
+        call('call_search_session_discover', 'tool_search', { query: 'ssh_session_open', limit: 1 });
+        return;
+      }
+      const opened = toolData('call_search_session_open');
+      if (!opened) {
+        call('call_search_session_open', 'tool_invoke', {
+          handle: discovered.data.matches[0].handle,
+          arguments: { connectionId: Number(searchScan[1]), idleTimeoutSeconds: 0 },
+        });
+        return;
+      }
+      sessionId = opened.data.session.sessionId;
+    }
     const result = messages.find((message) => message.role === 'tool' && message.tool_call_id === 'call_search_scan');
     if (!result) {
       regressionResponse(
@@ -283,6 +312,7 @@ const server = http.createServer(async (request, response) => {
                   query: 'SCAN_SENTINEL',
                   maxResults: 10,
                   contextLines: 0,
+                  ...(sessionId ? { sessionId } : {}),
                 }),
               },
             },
