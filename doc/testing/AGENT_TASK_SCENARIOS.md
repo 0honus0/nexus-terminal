@@ -203,12 +203,14 @@
 
 ### 临时文档退出条件
 
-### 前端 E2E 入口整改（本地闭环，canonical Actions 未验收）
+### 前端 E2E 入口整改（本地闭环，canonical Actions 失败）
 
 - functional-regressions全部23项已经前端配置测试Provider、创建/发送任务并查看结果；mock仅返回模型数据，工具由产品真实执行。取消、恢复输入、Memory发布/撤销与stale Catalog反例也走前端；API/文件/进程检查独立核对状态与副作用，不替代任务入口。首次定位/权限/状态等待失败均保留日志，未放宽有效断言或timeout。
 - preset-plugin及SSH ACP设置回归已迁移前端Provider/Composer任务入口，共享fixture位于tests/e2e/fixtures/agent/task-ui.ts；Provider contract与fallback设置用例也从前端创建Provider。测试源码不直接操作CDP；触摸拖动用Pointer事件，实际打开用Playwright触摸输入。取消/goal/interrupt及新建Thread迁移后，最终完整Agent项目66项通过（9.9分钟，/tmp/opencode/frontend-agent-delivery-final.log）。公开API恶意/旧版本/晚到请求、协议contract与失败收尾保留，不以它们代替前端任务。第三方ACP及Workspace ACP剩余验收仍暂跳过、不计通过。
 - 最终check、三包build、任务E2E类型检查、已跟踪文件及新增fixture格式、git diff --check通过；format:all:check仍仅被tests/agent-functional/中84个原始资料文件阻断，资料未修改/删除/提交。会话身份与搜索断言按真实Thread ID及可操作按钮定位，排除布局占位行，不降低搜索过滤或资源回收判据。当前本地结果不代替推送SHA的canonical Actions与三项Docker smoke验收。
-- B02真实Run a647b082-476f-4412-bc91-8ebd53187e9b已completed/verified；独立确认仅上游socket配置最小修复、其他文件字节保留、直接上游和经网关HTTP验证通过、PID/socket消失及Workspace stop/delete终态。证据/tmp/opencode/b02-{input,waiting,project,result,independent,cleanup}.json。新前端回归与完整functional-regressions23项通过，B02本地闭环；canonical Actions未验收。本轮结束于B02，不进入B03，不部署线上。
+- 提交9b71b15a（任务入口/B02）及744a8446（其余前端入口）已推送origin/dev。精确SHA 744a8446f5710cd23bbb567ef1013f330e7acdd0的[canonical E2E](https://github.com/0honus0/nexus-terminal/actions/runs/37477954902)已结束，结论failure：Checks/format/build与Runner镜像准备通过；Playwright分片1/2/4/6/8通过，3/5/7失败；Docker smoke在standalone Runner步骤失败，其余两项不能计通过。截图/耗时更新作业skipped，不计完成。
+- 远程开放阻塞：分片5中A04/A05/B01/B02独立端口检查报spawnSync ss ENOENT；之后SSH fixture控制端出现SocketError/ECONNREFUSED 127.0.0.1:22223，多项后续用例失败。分片7的两个preset-plugin用例均超过CI既有120秒整体截止；本地通过不能覆盖此失败，须调查用例拆分与具体耗时窗口，不扩大timeout换绿。分片3的SSH Connect All用例在命令输入不可见时fill超时。standalone Runner smoke报native runtime availability probe failed: {}。以上为日志观察，不认定全部根因；失败日志已核对，尚未修复或重跑，本轮文档刷新不扩大开发范围。
+- B02真实Run a647b082-476f-4412-bc91-8ebd53187e9b已completed/verified；独立确认仅上游socket配置最小修复、其他文件字节保留、直接上游和经网关HTTP验证通过、PID/socket消失及Workspace stop/delete终态。证据/tmp/opencode/b02-{input,waiting,project,result,independent,cleanup}.json。新前端回归与完整functional-regressions23项本地通过，B02本地闭环；上述canonical分片5的B02因ss缺失失败，远程验收未通过。本轮结束于B02，不进入B03，不部署线上。
 
 ### B01 本地闭环（接口500/数据保留，canonical Actions 未验收）
 
