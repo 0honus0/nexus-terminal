@@ -203,9 +203,11 @@
 
 ### 临时文档退出条件
 
-### A03 当前执行（真实任务通过，确定性回归待补）
+### A03 本地闭环（canonical Actions 未验收）
 
-- 真实Luna low Run e6f51f95-8c6f-4dd6-94dc-ce458008280c／Thread db23dfa7-16a2-4bb1-94c2-f2158f3e1cad 已completed／verified且无reconciliation。独立Workspace21f252a8-0389-4fc4-a13e-d8d6993c549b内注入build-failure fixture：生产模块导出totalPrices、原build.mjs／verify.mjs要求totalPrice，原构建实际失败。授权仅生产源文件最小修复，模型修正导出；独立全树SHA确认只src/catalog.mjs变化、精确单名称替换，build.mjs／verify.mjs／package.json／业务数据原字节保留，未安装依赖。独立重新执行原npm run build及npm test均0退出。随后stop／delete命令succeeded，Workspace最终deleted。证据 /tmp/opencode/a03-{input,baseline,result,independent,cleanup}.json。fixture现纳入tests/e2e/fixtures/agent/task-projects/build-failure，确定性生产Run回归尚待补，不声明canonical交付通过；A04未开始，ACP仍暂跳过。
+- A03确定性生产回归补齐：模拟Provider仅发出调用，生产SSH Run实际执行原构建并非零失败→严格patch仅修生产导出→原npm run build／npm test零退出→数据读取；测试端独立核对最终完整目录、所有文件原字节以及唯一精确生产改动，Run completed且无reconciliation。完整functional-regressions 16项E2E通过；首次全树断言发现fixture改名遗留空test目录，已仅删除空目录、不放宽断言。结合上述真实模型Workspace最小修复和独立原命令验收，A03本地关闭；不是canonical Actions或完整双目标工具验收。A04尚未开始，ACP仍暂跳过。
+
+- 真实Luna low Run e6f51f95-8c6f-4dd6-94dc-ce458008280c／Thread db23dfa7-16a2-4bb1-94c2-f2158f3e1cad 已completed／verified且无reconciliation。独立Workspace21f252a8-0389-4fc4-a13e-d8d6993c549b内注入build-failure fixture：生产模块导出totalPrices、原build.mjs／verify.mjs要求totalPrice，原构建实际失败。授权仅生产源文件最小修复，模型修正导出；独立全树SHA确认只src/catalog.mjs变化、精确单名称替换，build.mjs／verify.mjs／package.json／业务数据原字节保留，未安装依赖。独立重新执行原npm run build及npm test均0退出。随后stop／delete命令succeeded，Workspace最终deleted。证据 /tmp/opencode/a03-{input,baseline,result,independent,cleanup}.json。fixture现纳入tests/e2e/fixtures/agent/task-projects/build-failure，确定性回归见上项；不声明canonical交付通过。
 
 ### A02 本地闭环（canonical Actions 未验收）
 

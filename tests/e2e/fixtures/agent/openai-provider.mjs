@@ -262,6 +262,59 @@ const server = http.createServer(async (request, response) => {
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
   const fileLifecycle = latestUserText.match(/E2E_FILE_LIFECYCLE connection=(\d+)/);
+  const buildRepair = latestUserText.match(/E2E_BUILD_REPAIR connection=(\d+)/);
+  if (buildRepair) {
+    const selector = { target: 'ssh', id: buildRepair[1] };
+    const data = (id) => {
+      const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const steps = [
+      ['build_source', 'file_read', { ...selector, path: '/build-repair/src/catalog.mjs' }],
+      [
+        'build_before',
+        'shell_execute',
+        { ...selector, command: { kind: 'shell', shellScript: 'cd "$NEXUS_E2E_ROOT/build-repair" && npm run build' } },
+      ],
+      [
+        'build_patch',
+        'file_patch',
+        {
+          ...selector,
+          patch:
+            '--- /build-repair/src/catalog.mjs\n+++ /build-repair/src/catalog.mjs\n@@ -1,3 +1,3 @@\n-export const totalPrices = (items) => {\n+export const totalPrice = (items) => {\n   return items.reduce((sum, item) => sum + item.price * item.quantity, 0);\n };\n',
+        },
+      ],
+      [
+        'build_after',
+        'shell_execute',
+        {
+          ...selector,
+          command: { kind: 'shell', shellScript: 'cd "$NEXUS_E2E_ROOT/build-repair" && npm run build && npm test' },
+        },
+      ],
+      ['build_preserved', 'file_read', { ...selector, path: '/build-repair/data/catalog.json' }],
+    ];
+    for (const [id, name, args] of steps) {
+      const result = data(id);
+      if (result && !result.ok && id !== 'build_before') {
+        regressionResponse(response, { content: 'Build repair failed; inspect durable evidence.' });
+        return;
+      }
+      if (!result) {
+        regressionResponse(
+          response,
+          { tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] },
+          'tool_calls',
+        );
+        return;
+      }
+    }
+    regressionResponse(response, {
+      content: 'Build repair verified; independently compare the original files and validation commands.',
+    });
+    return;
+  }
   if (fileLifecycle) {
     const data = (id) => {
       const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);

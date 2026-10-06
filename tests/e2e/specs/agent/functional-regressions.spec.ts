@@ -96,6 +96,48 @@ const execute = async (
   return { run, ledger, text: textResult! };
 };
 
+test('A03 build repair preserves original validation and data through a production SSH Run', async ({ request }) => {
+  const context = await prepare(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const fixture = path.resolve(__dirname, '../../fixtures/agent/task-projects/build-failure');
+  const project = path.resolve(__dirname, '../../.tmp/ssh-root/build-repair');
+  const files = ['AGENTS.md', 'build.mjs', 'verify.mjs', 'package.json', 'data/catalog.json', 'src/catalog.mjs'];
+  const baseline = await Promise.all(files.map((file) => readFile(path.join(fixture, file), 'utf8')));
+  await cp(fixture, project, { recursive: true });
+  try {
+    const result = await execute(request, context, `E2E_BUILD_REPAIR connection=${connectionId}`, {
+      connectionIds: [connectionId],
+    });
+    expect(result.run.status).toBe('completed');
+    expect(result.run.needsReconciliation).toBe(false);
+    const results = result.ledger
+      .filter((entry) => entry.kind === 'tool_result')
+      .map((entry) => JSON.parse(entry.payload.text!));
+    expect(results).toHaveLength(5);
+    expect(results[1]).toMatchObject({ ok: false, data: { exitCode: 1 }, verification: { status: 'failed' } });
+    expect(results[1].data.stderr).toContain("does not provide an export named 'totalPrice'");
+    expect(results[2]).toMatchObject({
+      ok: true,
+      data: { additions: 1, deletions: 1 },
+      verification: { status: 'verified' },
+    });
+    expect(results[3]).toMatchObject({ ok: true, data: { exitCode: 0 }, verification: { status: 'verified' } });
+    expect(results[3].data.stdout).toContain('Catalog build passed.');
+    expect(results[3].data.stdout).toContain('Catalog verification passed.');
+    expect(results[4].data.sha256).toBe(createHash('sha256').update(baseline[4]!).digest('hex'));
+    expect(await readdir(project)).toEqual(['AGENTS.md', 'build.mjs', 'data', 'package.json', 'src', 'verify.mjs']);
+    expect(await readdir(path.join(project, 'src'))).toEqual(['catalog.mjs']);
+    expect(await readdir(path.join(project, 'data'))).toEqual(['catalog.json']);
+    for (const [index, file] of files.entries()) {
+      const expected =
+        file === 'src/catalog.mjs' ? baseline[index]!.replace('totalPrices', 'totalPrice') : baseline[index]!;
+      expect(await readFile(path.join(project, file), 'utf8')).toBe(expected);
+    }
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test('SSH file mutation lifecycle verifies strict patch, move, delete and preserved data through a Run', async ({
   request,
 }) => {

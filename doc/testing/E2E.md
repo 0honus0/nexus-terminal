@@ -4,7 +4,7 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
-`fixtures/agent/task-projects/build-failure` is a dependency-free build-repair input: the production export name mismatches the original build and verification consumers. Independent acceptance must preserve those consumers, package scripts and business data, change only the production source export, and actually rerun both original commands. Fixture preparation alone does not constitute deterministic production Run coverage.
+`fixtures/agent/task-projects/build-failure` is a dependency-free build-repair input: the production export name mismatches the original build and verification consumers. `agent/functional-regressions.spec.ts` executes the failure, strict patch and original build/verification through a production SSH Run with a scripted provider. It independently compares the final file tree and every preserved file, asserting the exact production source edit, zero exits and data hash. This SSH coverage and real-model Workspace evidence are distinct; fixture preparation alone does not establish transport parity.
 
 `workspace-background-job-lifecycle.scenario.ts` exercises Runner HTTP and the SQLite Job journal with controlled runtime results: nonzero exit and zero-exit-with-timeout must persist as failed, retain diagnostic output, survive queries and replay without another execution, and project failed verification through foreground execution and Job status. Controlled runtime results validate settlement, not native process timeout enforcement.
 
