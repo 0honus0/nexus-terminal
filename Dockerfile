@@ -7,6 +7,7 @@ WORKDIR /build
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY scripts/patches ./scripts/patches
 COPY packages/protocol/package.json ./packages/protocol/package.json
+COPY packages/code-intelligence/package.json ./packages/code-intelligence/package.json
 RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")" \
     && npm install --global "pnpm@${PNPM_VERSION}"
 
@@ -19,8 +20,11 @@ COPY packages/protocol/src ./packages/protocol/src
 COPY packages/protocol/tsconfig.runtime.json ./packages/protocol/tsconfig.runtime.json
 COPY packages/backend/src ./packages/backend/src
 COPY packages/backend/tsconfig.json ./packages/backend/tsconfig.json
+COPY packages/code-intelligence/src ./packages/code-intelligence/src
+COPY packages/code-intelligence/tsconfig.json ./packages/code-intelligence/tsconfig.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm --filter @nexus-terminal/backend build \
+    pnpm --filter @nexus-terminal/code-intelligence build \
+    && pnpm --filter @nexus-terminal/backend build \
     && pnpm --filter @nexus-terminal/backend exec tsc -p ../protocol/tsconfig.runtime.json \
     && node -e "const fs=require('node:fs'); const path='packages/protocol/package.json'; const manifest=JSON.parse(fs.readFileSync(path,'utf8')); for (const target of Object.values(manifest.exports ?? {})) { if (target && typeof target === 'object' && typeof target.default?.startsWith('./src/') && target.default.endsWith('.ts')) target.default='./dist/'+target.default.slice(6,-3)+'.js'; } fs.writeFileSync(path, JSON.stringify(manifest, null, 2)+'\\n');" \
     && pnpm --filter @nexus-terminal/backend --prod deploy /out/backend

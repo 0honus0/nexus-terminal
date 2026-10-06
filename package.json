@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm run build:backend && pnpm run build:frontend && pnpm run build:agent-runner",
-    "build:backend": "pnpm --filter @nexus-terminal/backend build",
+    "build:backend": "pnpm --filter @nexus-terminal/code-intelligence build && pnpm --filter @nexus-terminal/backend build",
     "build:frontend": "pnpm --filter @nexus-terminal/frontend build",
     "docker:build": "scripts/build/build.sh docker",
     "docker:save": "scripts/build/build.sh docker-save",
@@ -23,12 +23,12 @@
     "format:check": "node scripts/format/changed.mjs --check",
     "format:all": "prettier --write \"{packages,tests,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" package.json",
     "format:all:check": "prettier --check \"{packages,tests,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" package.json",
-    "build:agent-runner": "pnpm --filter @nexus-terminal/agent-runner build",
+    "build:agent-runner": "pnpm --filter @nexus-terminal/code-intelligence build && pnpm --filter @nexus-terminal/agent-runner build",
     "perf:database-runtime": "pnpm --filter @nexus-terminal/backend exec tsx ../../scripts/backend/perf/database-runtime-benchmark.ts",
     "check": "node scripts/checks/run-all.mjs",
     "lint": "pnpm run lint:frontend && pnpm run lint:agent",
     "lint:frontend": "eslint packages/frontend/src",
-    "lint:agent": "eslint packages/backend/src/modules/agent packages/backend/src/infrastructure/agent packages/backend/src/interfaces/http/agent packages/backend/src/interfaces/websocket/agent*.ts packages/agent-runner/src tests/backend/agent-scenarios"
+    "lint:agent": "eslint packages/backend/src/modules/agent packages/backend/src/infrastructure/agent packages/backend/src/interfaces/http/agent packages/backend/src/interfaces/websocket/agent*.ts packages/agent-runner/src packages/code-intelligence/src tests/backend/agent-scenarios"
   },
   "repository": {
     "type": "git",

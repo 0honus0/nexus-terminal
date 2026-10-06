@@ -23,6 +23,7 @@ import { workspaceRepoMapCodeIntelScenario } from './workspace-repo-map-code-int
 import { workspaceBackgroundJobLifecycleScenario } from './workspace-background-job-lifecycle.scenario';
 import { agentDefinitionCapabilityContractScenario } from './agent-definition-capability-contract.scenario';
 import { workspaceCodingToolSurfaceScenario } from './workspace-coding-tool-surface.scenario';
+import { codeIntelligenceSnapshotScenario } from './code-intelligence-snapshot.scenario';
 import { nestedJoinDurableWakeScenario } from './nested-join-durable-wake.scenario';
 import { userInputClarificationScenario } from './user-input-clarification.scenario';
 import { mcpInputRequiredDurableLifecycleScenario } from './mcp-input-required-durable-lifecycle.scenario';
@@ -111,6 +112,7 @@ const scenarios = new Map<string, Scenario>([
   ['context/token-accounting', contextTokenAccountingScenario],
   ['context/project-instructions', projectInstructionsContextScenario],
   ['workspace/coding-tool-surface', workspaceCodingToolSurfaceScenario],
+  ['workspace/code-intelligence-snapshot', codeIntelligenceSnapshotScenario],
   ['file/unified-targets', unifiedFileCapabilityScenario],
   ['shell/unified-targets', unifiedShellCapabilityScenario],
   ['ssh/session-jobs', sshSessionJobsScenario],

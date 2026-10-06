@@ -7,6 +7,7 @@ const checks = [
   ['Agent ESLint', ['run', 'lint:agent']],
   ['Frontend type check', ['--filter', '@nexus-terminal/frontend', 'exec', 'vue-tsc', '--noEmit']],
   ['Backend type check', ['--filter', '@nexus-terminal/backend', 'exec', 'tsc', '--noEmit']],
+  ['Code intelligence type check', ['--filter', '@nexus-terminal/code-intelligence', 'exec', 'tsc', '--noEmit']],
   ['Agent Runner type check', ['--filter', '@nexus-terminal/agent-runner', 'exec', 'tsc', '--noEmit']],
 ];
 

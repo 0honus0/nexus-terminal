@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- SSH 语义导航基础完成但工具入口未接通：现有 Runner TypeScript 原生引擎抽为 code-intelligence 共享包，Runner 保留原导出；新增只读内存快照输入、所有虚拟 FS 读取均明确返回存在/不存在，不回退 Backend 原生文件，禁止写入。真实 TypeScript 跨文件 definition/references 回归排除同名无关符号、校验源 hash、repo_map、缺失/越界路径、快照截断传播通过；现有 Workspace coding-tool-surface 回归/check/全包 build 通过。同步构建/Docker manifests/锁文件与 lint/typecheck；尚未验收 Docker 镜像构建。SSH/SFTP 快照授权、生产工具双目标路由和 E2E 仍待实现，不能宣布 SSH 语义导航已支持，A03 未开始。
 - SFTP 打开中取消真实协议窗口通过：服务端暂不接受 subsystem，确认 opening 屏障后 abort，客户端在服务端仍未接受时拒绝操作并保留原取消原因；长会话 ready，再释放 subsystem，晚到 channel 关闭，后续命令仍复用原认证。与 READ 取消及 LSTAT deadline 同一真实 loopback SSH 回归覆盖，不新增 timeout 或机械重跑。语义导航与 ACP 完整链仍未闭环，A03 未开始。
 - SSH 文件 lease 错误归因与期限回归通过：取消保留原 AbortSignal.reason；deadline 打断远端挂住的 LSTAT 后报告 TOOL_TIMEOUT，不以 SFTP_CHANNEL_CLOSED 掩盖根因。真实 loopback SSH metadata 屏障独立确认已开始 I/O，期限后长会话 ready、并行 Job running；READ 取消断言原 reason 身份一致。
 - 长会话搜索取消产品 E2E 补齐：模拟 Provider 仅通过 tool_search/tool_invoke 提出打开显式会话及 file_search，生产 Agent→SSH/SFTP 在 READ 屏障 pending>0 后取消 Run；临时/显式两变体均在屏障未释放时 cancelled、pending=0，新独立请求正常命中。长连接保留及并行 Job 存活由真实 loopback SSH 回归独立断言，不以模型声明替代。仍未开始 A03。
