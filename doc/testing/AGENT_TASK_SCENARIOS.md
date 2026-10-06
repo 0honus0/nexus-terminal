@@ -203,6 +203,11 @@
 
 ### 临时文档退出条件
 
+### A07 当前执行（隔离浏览器页面/截图，未闭环）
+
+- 真实Luna low Run1cfa6e17-2d3b-415e-848d-fb5b755dddb1／Threadef66ea30-97d6-49d7-84d5-56fac60a9005 completed／verified、无reconciliation；独立Chromium target a07-isolated，不连接用户浏览器。实际session open→navigate→snapshot初始Not deployed→click一次Deploy fixture-v1→snapshot Deployed fixture-v1→发现/调用截图工具→close。页面是已部署的隔离fixture，按钮只变更该fixture状态，不代表线上发布。
+- 测试端独立GET state确认deployed=true/deployments=1/release=fixture-v1；截图Artifactee0f98f9-2762-43ed-8e26-65ecce1f24cd认证下载200/image/png，11574字节、800×600、SHA256 4c38f105b495f632290a8468d8bf6b71e748ea0ca528522b509e63198a5f3d66与工具返回匹配，context回到空集。观察脚本首次误取顶层hash，按data.artifact.sha256修正，未重复操作。临时Browser target已移除且保留其他配置，两个自有fixture进程收到SIGTERM并完成；截图保留作真实E2E证据，不新增人工image review流程。证据/tmp/opencode/a07-{browser-settings-before,baseline,input,result,independent,cleanup}.json及a07-screenshot.png。确定性Browser交互/Artifact链和有效反例仍待补，A07未闭环，A08未开始，ACP继续暂跳过。
+
 ### A06 本地闭环（指定 Node 工具环境，canonical Actions 未验收）
 
 - 确定性生产Run环境冻结回归已补齐：隔离真实Runner、公开Settings启用recipe，旧Catalog创建Run返回409/CATALOG_REVISION_CONFLICT，模型传recipe/versions覆盖workspace_create返回TOOL_ARGUMENTS_INVALID；正常创建使用冻结base-tools profile，与Run环境完整一致、generation1，真实Job succeeded/exitCode0/cwd归属及项目未写入，Agent stop后管理delete命令succeeded/Workspace deleted。完整functional-regressions19项、check通过，最终cwd加强断言的A06聚焦回归通过；该回归不将宿主Node当指定pack，Node24.21.0实际安装/版本见真实证据。初始harness缺tsx、seed禁用recipe及误用deferred搜索均为测试前置/Provider错误，日志保留；一次外层命令超时的孤立E2E Runner已按进程身份收尾，harness改用直接Node子进程以正常退出回收。结合下述真实Run，A06本地关闭；A07可开始，canonical Actions未验收。
