@@ -300,6 +300,7 @@ export const createWorkspaceControlTool = (
     if (workspace.runId !== context.runId || workspace.agentRuntimeId !== context.agentRuntimeId) {
       throw new Error('RESOURCE_FORBIDDEN');
     }
+    if (action === 'start' && workspace.status === 'running') throw new Error('WORKSPACE_ALREADY_RUNNING');
     const normalizedArguments: JsonValue = {
       workspaceId,
       action,

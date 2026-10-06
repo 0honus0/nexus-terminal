@@ -244,6 +244,15 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     argumentsJson: JSON.stringify({ workspaceId: toolWorkspace.id, action: 'stop' }),
   });
   const refreshedLifecycle = await lifecycleExecutor.refreshInspection(toolContext, lifecycleInspection);
+  await assert.rejects(
+    () =>
+      lifecycleExecutor.inspect(toolContext, {
+        providerCallId: 'control-already-running',
+        name: 'workspace_control',
+        argumentsJson: JSON.stringify({ workspaceId: toolWorkspace.id, action: 'start' }),
+      }),
+    /WORKSPACE_ALREADY_RUNNING/,
+  );
   for (const deniedContext of [
     { ...toolContext, runId: 'other-run' },
     { ...toolContext, agentRuntimeId: 'other-runtime' },
