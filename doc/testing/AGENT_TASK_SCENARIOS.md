@@ -203,6 +203,11 @@
 
 ### 临时文档退出条件
 
+### A05 当前执行（Operations Skill，未闭环）
+
+- 本地已安装签名Skill只有Operations/Developer，无专用部署Skill；本轮验证Operations的先只读核对、授权边界、变更后权威状态复核，不声称Skill自带目录/端口或专用部署流程。真实Luna low Runbc095f62-2ecb-40e6-839f-b777e3f4c223／Threadd62f6622-c6f1-4d90-bf6b-d2565640e897实际skill_search发现并skill_read加载nexus.agent.operations，再创建/start Workspaceaf5e229a-0e54-4373-bc87-d5897fa1cdfb。暂不授权阶段只读调查后再次awaiting_input，独立全树SHA不变、29181无监听；前置一次澄清参数拒绝未执行，原证据保留。
+- 同Run明确授权后原样部署，Job660秒、PID243501/PORT29181，独立两接口200及正确内容、全树SHA、cwd/PORT/Job归属通过；最终completed／verified、无reconciliation。交付报告实际Skill加载、Job重读、接口和数据证据及用户管理收尾边界；未改文件或安装依赖。独立观察器实际采样600秒后按管理API stop/delete确认命令/Workspace/PID/端口，仍在运行，不能提前算10分钟或收尾通过。证据/tmp/opencode/a05-{input,preparation,baseline,readonly,result,independent,delivery}.json；确定性Skill→生产Run部署回归仍待补，A05未闭环、A06未开始，ACP仍暂跳过。
+
 ### A04 本地闭环（canonical Actions 未验收）
 
 - A04确定性生产Run部署回归补齐：模拟Provider只发真实工具调用，生产SSH长会话/独立channel/受管后台Job启动真实API（15秒有界期限），检查Job身份与running/unverified，不伪造副作用；测试端独立两接口200与内容、原项目文件字节、监听PID/cwd/PORT归属，期限后端口关闭及PID消失。完整functional-regressions17项通过。此短时SSH到期回归不证明SSH取消必然终止远端，也不替代Workspace管理收尾。结合最新真实Luna Workspace交付、实际600.531秒采样、数据保护及管理API stop/delete终态证据和HTTP反例场景，A04本地关闭；历史失败不删除，不代表双目标全部能力或canonical Actions验收。A05可开始，ACP仍暂跳过；一般生命周期变化绕过loop guard风险仍未关闭。
