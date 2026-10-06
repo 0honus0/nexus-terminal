@@ -19,7 +19,9 @@ export const executionErrorCode = (error: unknown, fallbackCode: string): string
 const ERROR_DETAILS: Readonly<Record<string, string>> = {
   ACP_TARGET_CONFIGURATION_MISMATCH:
     'The selected target must match the ACP integration transport: SSH needs target=ssh/id; Workspace needs target=workspace/id or workspaceId. Configure a matching integration first.',
-  ACP_TARGET_ID_CONFLICT: 'id and workspaceId identify different Workspaces; supply one ID or make them equal.',
+  ACP_ARGUMENT_FIELD_UNSUPPORTED:
+    'Use only integrationId, target, id, prompt and optional cwd; workspaceId is not accepted.',
+  ACP_TARGET_REQUIRED: 'Provide target as workspace or ssh and its explicit id. No ACP process was started.',
   ACP_SSH_CWD_INVALID: 'SSH ACP cwd must be an absolute remote directory path.',
   ACP_SSH_CONFIGURATION_INVALID:
     'SSH ACP configuration requires non-empty argv (1–128 strings, executable first) and an absolute cwd; NUL and oversized fields are rejected.',

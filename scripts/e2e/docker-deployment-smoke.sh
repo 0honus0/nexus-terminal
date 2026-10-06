@@ -714,7 +714,7 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
     inputRevision: 1,
   };
   const inspection = await tool.inspect(
-    { integrationId, workspaceId, prompt: 'run ACP live smoke', cwd: '/workspace/work' },
+    { integrationId, target: 'workspace', id: workspaceId, prompt: 'run ACP live smoke', cwd: '/workspace/work' },
     context,
     1,
   );

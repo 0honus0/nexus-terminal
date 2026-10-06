@@ -77,13 +77,12 @@ export const createAcpExecuteTool = (
       additionalProperties: false,
       properties: {
         integrationId: { type: 'string', minLength: 36, maxLength: 36 },
-        workspaceId: { type: 'string', minLength: 1, maxLength: 128 },
         target: { type: 'string', enum: ['workspace', 'ssh'] },
         id: { type: 'string', minLength: 1, maxLength: 128 },
         prompt: { type: 'string', minLength: 1, maxLength: MAX_PROMPT_BYTES },
         cwd: { type: 'string', minLength: 1, maxLength: MAX_CWD_BYTES },
       },
-      required: ['integrationId', 'prompt'],
+      required: ['integrationId', 'target', 'id', 'prompt'],
     },
     riskClass: 'mutate',
     capability: 'integration.acp.invoke',
@@ -91,12 +90,15 @@ export const createAcpExecuteTool = (
   isAvailable: ({ environment, connectionIds }) => environment !== null || (connectionIds?.length ?? 0) > 0,
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = object(input);
+    if (Object.keys(args).some((key) => !['integrationId', 'target', 'id', 'prompt', 'cwd'].includes(key)))
+      throw new Error('ACP_ARGUMENT_FIELD_UNSUPPORTED');
+    if (args.target !== 'workspace' && args.target !== 'ssh') throw new Error('ACP_TARGET_REQUIRED');
+    const id = string(args.id, 128);
     const integrationId = string(args.integrationId, 64);
     const configured = await currentIntegration(integrations, context, integrationId);
     if (configured.configuration.transport === 'ssh') {
       if (!ssh) throw new Error('ACP_SSH_TRANSPORT_NOT_CONFIGURED');
-      if (args.target !== 'ssh' || args.workspaceId !== undefined) throw new Error('ACP_TARGET_CONFIGURATION_MISMATCH');
-      const id = string(args.id, 128);
+      if (args.target !== 'ssh') throw new Error('ACP_TARGET_CONFIGURATION_MISMATCH');
       const binding = await ssh.targets.resolve(context, { target: 'ssh', id });
       const cwd = args.cwd === undefined ? configured.configuration.cwd! : string(args.cwd, MAX_CWD_BYTES);
       if (!cwd.startsWith('/')) throw new Error('ACP_SSH_CWD_INVALID');
@@ -149,10 +151,8 @@ export const createAcpExecuteTool = (
         inputRevision: context.inputRevision,
       };
     }
-    if (args.target !== undefined && args.target !== 'workspace') throw new Error('ACP_TARGET_CONFIGURATION_MISMATCH');
-    if (args.workspaceId !== undefined && args.id !== undefined && args.workspaceId !== args.id)
-      throw new Error('ACP_TARGET_ID_CONFLICT');
-    const workspaceId = string(args.workspaceId ?? args.id, 128);
+    if (args.target !== 'workspace') throw new Error('ACP_TARGET_CONFIGURATION_MISMATCH');
+    const workspaceId = id;
     const prompt = string(args.prompt, MAX_PROMPT_BYTES);
     const cwd = args.cwd === undefined ? '/workspace/work' : string(args.cwd, MAX_CWD_BYTES);
     if (cwd !== '/workspace' && !cwd.startsWith('/workspace/'))
@@ -194,7 +194,8 @@ export const createAcpExecuteTool = (
     const normalizedArguments: JsonValue = {
       integrationId,
       integrationVersion: integration.version,
-      workspaceId,
+      target: 'workspace',
+      id: workspaceId,
       generation: workspace.generation,
       profileId,
       profileRevision: profile.profileRevision,
@@ -315,7 +316,8 @@ export const createAcpExecuteTool = (
         },
       };
     }
-    const workspaceId = string(args.workspaceId, 128);
+    if (args.target !== 'workspace') throw new Error('ACP_TARGET_REQUIRED');
+    const workspaceId = string(args.id, 128);
     const generation = Number(args.generation);
     const expectedIntegrationVersion = Number(args.integrationVersion);
     const profileId = string(args.profileId, 128);

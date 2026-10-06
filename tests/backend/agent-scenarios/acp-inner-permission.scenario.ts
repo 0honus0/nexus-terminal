@@ -102,7 +102,8 @@ export const acpInnerPermissionScenario = async () => {
     normalizedArguments: {
       integrationId,
       integrationVersion: 1,
-      workspaceId,
+      target: 'workspace',
+      id: workspaceId,
       generation: 1,
       profileId: 'scenario-acp-profile',
       profileRevision: 1,
@@ -144,6 +145,23 @@ export const acpInnerPermissionScenario = async () => {
     inputRevision: 1,
   };
 
+  const canonical = await tool.inspect(
+    { integrationId, target: 'workspace', id: workspaceId, prompt: 'inspect' },
+    context,
+    1,
+  );
+  assert.equal((canonical.normalizedArguments as Record<string, unknown>).target, 'workspace');
+  assert.equal((canonical.normalizedArguments as Record<string, unknown>).id, workspaceId);
+  assert.equal('workspaceId' in (canonical.normalizedArguments as Record<string, unknown>), false);
+  await assert.rejects(
+    () => tool.inspect({ integrationId, workspaceId, prompt: 'legacy' }, context, 1),
+    /ACP_ARGUMENT_FIELD_UNSUPPORTED/,
+  );
+  await assert.rejects(
+    () => tool.inspect({ integrationId, id: workspaceId, prompt: 'missing target' }, context, 1),
+    /ACP_TARGET_REQUIRED/,
+  );
+  assert.equal(permissionRequests, 0);
   await tool.execute(inspection, context);
   assert.deepEqual(
     decisions,
@@ -419,7 +437,7 @@ export const acpInnerPermissionScenario = async () => {
   sshIntegration.version++;
   await assert.rejects(() => sshTool.execute(sshInspection, context), /RESOURCE_CHANGED/);
   await assert.rejects(
-    () => sshTool.inspect({ integrationId, workspaceId, prompt: 'inspect' }, context, 1),
+    () => sshTool.inspect({ integrationId, target: 'workspace', id: workspaceId, prompt: 'inspect' }, context, 1),
     /ACP_TARGET_CONFIGURATION_MISMATCH/,
   );
 
