@@ -203,6 +203,11 @@
 
 ### 临时文档退出条件
 
+### A06 当前执行（指定 Node 工具环境，未闭环）
+
+- 隔离测试Runner初始只有base-tools:1；Node24.21.0首次安装命令e1c0c367-08cd-4235-87c5-44860d3824d9因mise缺失failed，未把202算成功。按仓库固定mise2026.9.5 SHA-256校验后只配置/重启隔离Runner，不改宿主工具或线上服务；安装命令2d91637e-ec7a-4f96-af8f-4e7d425cbd8b首次unknown/WORKSPACE_RUNTIME_TIMEOUT，未重放，查询同命令最终succeeded，Catalog确认installed。
+- 真实Luna low Run17ae1632-0ec2-45e9-937f-129c8fbd237c／Thread5cc475a9-5c3e-499a-850f-134707368e40 completed／verified、无reconciliation；冻结workspace-dev recipe2/catalog2026-09-30.2及base-tools:1、node:24.21.0。独立核对Workspace033fb536-aa37-4d24-8235-d72b0f1d2e5d generation1/profile与Run环境完整一致，真实Job succeeded/exitCode0，实际execPath位于隔离pack目录且二进制版本v24.21.0，项目目录为空；Agent stop成功，管理delete命令succeeded/Workspace deleted。观察脚本首次查错Host命令路由，随后改查App路由确认同一命令，未重放mutation。证据/tmp/opencode/a06-{catalog,install,install-accepted,install-mise,settled-command,settled-catalog,input,result,independent,cleanup}.json；确定性环境冻结/版本及反例回归仍待补，A06未闭环，A07未开始，ACP仍暂跳过。
+
 ### A05 本地闭环（Operations Skill，canonical Actions 未验收）
 
 - 确定性Skill→生产Run部署回归已补齐并实际通过：模拟Provider先skill_search/skill_read发现并加载签名Operations，测试断言正文约束及verified且读取早于启动；随后生产SSH受管Job启动真实API，独立接口/业务数据/项目字节/PID/cwd/PORT及到期端口关闭、PID消失通过。完整functional-regressions18项通过，不声明模拟Provider证明自主理解专用部署Skill，也不代替真实模型未授权只读证据；结合下述真实观察及管理收尾，A05本地关闭，canonical Actions未验收。
