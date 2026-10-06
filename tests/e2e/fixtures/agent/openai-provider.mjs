@@ -262,6 +262,88 @@ const server = http.createServer(async (request, response) => {
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
   const fileLifecycle = latestUserText.match(/E2E_FILE_LIFECYCLE connection=(\d+)/);
+  const deployApi = latestUserText.match(/E2E_DEPLOY_API connection=(\d+) port=(\d+)/);
+  if (deployApi) {
+    const selector = { target: 'ssh', id: deployApi[1] };
+    const data = (id) => {
+      const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const steps = [
+      ['deploy_session_discover', 'tool_search', { query: 'ssh_session_open', limit: 1 }],
+      [
+        'deploy_session_open',
+        'tool_invoke',
+        () => ({
+          handle: data('deploy_session_discover').data.matches[0].handle,
+          arguments: { connectionId: Number(deployApi[1]), idleTimeoutSeconds: 0 },
+        }),
+      ],
+      [
+        'deploy_launch',
+        'shell_execute',
+        () => ({
+          ...selector,
+          sessionId: data('deploy_session_open').data.session.sessionId,
+          mode: 'background',
+          timeoutSeconds: 15,
+          command: {
+            kind: 'shell',
+            shellScript: `cd "$NEXUS_E2E_ROOT/deploy-api" && exec env PORT=${deployApi[2]} node server.mjs`,
+          },
+        }),
+      ],
+      [
+        'deploy_health',
+        'shell_execute',
+        {
+          ...selector,
+          timeoutSeconds: 10,
+          command: {
+            kind: 'shell',
+            shellScript: `node --input-type=module -e 'const end=Date.now()+5000;for(;;){try{for(const path of ["health","catalog"]){const r=await fetch("http://127.0.0.1:${deployApi[2]}/"+path);if(!r.ok)throw Error("HTTP_"+r.status);console.log(path+"="+await r.text())}break}catch(e){if(Date.now()>=end)throw e;await new Promise(r=>setTimeout(r,50))}}'`,
+          },
+        },
+      ],
+      ['deploy_job_discover', 'tool_search', { query: 'shell_job_control', limit: 1 }],
+      [
+        'deploy_status',
+        'tool_invoke',
+        () => ({
+          handle: data('deploy_job_discover').data.matches[0].handle,
+          arguments: { ...selector, action: 'status', jobId: data('deploy_launch').data.jobId },
+        }),
+      ],
+    ];
+    for (const [id, name, args] of steps) {
+      const result = data(id);
+      if (result && !result.ok) {
+        regressionResponse(response, { content: 'Deployment failed; inspect durable evidence.' });
+        return;
+      }
+      if (!result) {
+        regressionResponse(
+          response,
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id,
+                type: 'function',
+                function: { name, arguments: JSON.stringify(typeof args === 'function' ? args() : args) },
+              },
+            ],
+          },
+          'tool_calls',
+        );
+        return;
+      }
+    }
+    regressionResponse(response, {
+      content: `Bounded API available at http://127.0.0.1:${deployApi[2]}; job=${data('deploy_launch').data.jobId}; execution lifetime=15 seconds, not indefinite. SSH cancel is scoped to this Thread/connection and does not guarantee remote termination.`,
+    });
+    return;
+  }
   const buildRepair = latestUserText.match(/E2E_BUILD_REPAIR connection=(\d+)/);
   if (buildRepair) {
     const selector = { target: 'ssh', id: buildRepair[1] };

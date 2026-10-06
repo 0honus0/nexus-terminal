@@ -203,9 +203,11 @@
 
 ### 临时文档退出条件
 
-### A04 当前执行（交付说明反例，未闭环）
+### A04 本地闭环（canonical Actions 未验收）
 
-- 最新字段映射修复后真实复验Run4c21c427-0f52-46dd-a115-2a4d819bc5a9／Thread92331992-a608-453c-8876-dd0f82155839已completed／verified、无reconciliation。Workspace20c3bbc7-60e2-40f4-b03a-30cd1436cbdf、后台Job900秒、PID239849/PORT29180，独立接口/全树SHA/cwd/PORT/Job归属通过。交付明确actions响应data.id→命令查询、具体管理路径、数字版本、CSRF/幂等、command succeeded及Workspace stopped核对，未再混用Agent工具权限。独立观察/收尾已确认：61次接口采样跨越600.531秒（启动后33–633秒），两接口始终返回正确内容，数据原hash保留；消费userCleanup具体路径执行管理API stop/delete，两个命令均succeeded，分别确认stopped/deleted，最终PID239849消失、29180无监听。真实任务验收与资源收尾通过，不将周期采样声称无间断监控。证据/tmp/opencode/a04-final-{input,preparation,baseline,result,independent,delivery,observations,settled,cleanup}.json。A04仍未闭环，确定性生产Run部署回归仍待补；A05未开始，ACP继续暂跳过。
+- A04确定性生产Run部署回归补齐：模拟Provider只发真实工具调用，生产SSH长会话/独立channel/受管后台Job启动真实API（15秒有界期限），检查Job身份与running/unverified，不伪造副作用；测试端独立两接口200与内容、原项目文件字节、监听PID/cwd/PORT归属，期限后端口关闭及PID消失。完整functional-regressions17项通过。此短时SSH到期回归不证明SSH取消必然终止远端，也不替代Workspace管理收尾。结合最新真实Luna Workspace交付、实际600.531秒采样、数据保护及管理API stop/delete终态证据和HTTP反例场景，A04本地关闭；历史失败不删除，不代表双目标全部能力或canonical Actions验收。A05可开始，ACP仍暂跳过；一般生命周期变化绕过loop guard风险仍未关闭。
+
+- 最新字段映射修复后真实复验Run4c21c427-0f52-46dd-a115-2a4d819bc5a9／Thread92331992-a608-453c-8876-dd0f82155839已completed／verified、无reconciliation。Workspace20c3bbc7-60e2-40f4-b03a-30cd1436cbdf、后台Job900秒、PID239849/PORT29180，独立接口/全树SHA/cwd/PORT/Job归属通过。交付明确actions响应data.id→命令查询、具体管理路径、数字版本、CSRF/幂等、command succeeded及Workspace stopped核对，未再混用Agent工具权限。独立观察/收尾已确认：61次接口采样跨越600.531秒（启动后33–633秒），两接口始终返回正确内容，数据原hash保留；消费userCleanup具体路径执行管理API stop/delete，两个命令均succeeded，分别确认stopped/deleted，最终PID239849消失、29180无监听。真实任务验收与资源收尾通过，不将周期采样声称无间断监控。证据/tmp/opencode/a04-final-{input,preparation,baseline,result,independent,delivery,observations,settled,cleanup}.json。确定性回归与本地闭环见上项，canonical Actions未验收。
 
 - 最新生命周期复验独立观察/收尾已确认：51次接口采样覆盖启动后106–606秒，末次正常；管理API stop/delete均succeeded，分别确认stopped/deleted，最终PID236823消失、29179无监听。证据/tmp/opencode/a04-lifecycle-{observations,cleanup}.json；不声称从启动起连续10分钟采样。交付data.id映射反例仍保留，不计A04通过。
 - 新增workspace/cleanup-http-handoff场景实际启动生产HTTP router并运行鉴权/CSRF/请求解析/DTO：错误CSRF、字符串版本、旧版本均不派发生命周期操作；actions返回data.id而非commandId；受控结算屏障确认202/running/stopping/deleting不是最终成功，随后查询command succeeded与Workspace stopped/deleted。这是受控facade的HTTP交接contract回归，不冒充真实Runner收尾或生产Run部署回归；最终真实模型复验及确定性部署回归仍待补。
