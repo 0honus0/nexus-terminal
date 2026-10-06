@@ -22,8 +22,6 @@ import { isRemoteFileMissingError, type RemoteFileSystem } from '../../../platfo
 
 const MAX_FILE_READ_BYTES = 1024 * 1024;
 const MAX_MUTATION_FILE_BYTES = 16 * 1024 * 1024;
-const MAX_SEARCH_FILES = 2_000;
-const MAX_SEARCH_BYTES = 16 * 1024 * 1024;
 const MAX_SEARCH_FILE_BYTES = 1024 * 1024;
 const MAX_SEARCH_LINE_BYTES = 4 * 1024;
 const MAX_RECURSIVE_DELETE_ENTRIES = 10_000;
@@ -209,21 +207,17 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
         const matches: SshFileSearchResult['matches'] = [];
         let scannedFiles = 0;
         let scannedBytes = 0;
-        let visitedEntries = 0;
         let outputBytes = 2;
         let truncated = false;
         while (queue.length > 0 && !truncated) {
+          assertDeadline(context);
           const currentPath = queue.shift()!;
           const current = await this.inspectPathWithFilesystem(context, filesystem, currentPath);
           if (!current.exists) continue;
           if (current.type === 'directory') {
             const entries = await filesystem.readDirectory(current.resolvedPath);
             for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-              visitedEntries += 1;
-              if (visitedEntries > MAX_RECURSIVE_DELETE_ENTRIES) {
-                truncated = true;
-                break;
-              }
+              assertDeadline(context);
               if (entry.metadata.isSymbolicLink || (!entry.metadata.isFile && !entry.metadata.isDirectory)) continue;
               const child = normalizeRemotePath(path.posix.join(current.resolvedPath, entry.name));
               if (hardDeniedPath(child)) continue;
@@ -231,19 +225,12 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
             }
             continue;
           }
-          if (scannedFiles >= MAX_SEARCH_FILES || scannedBytes >= MAX_SEARCH_BYTES) {
-            truncated = true;
-            break;
-          }
           const relative =
             root.type === 'directory'
               ? path.posix.relative(root.resolvedPath, current.resolvedPath)
               : path.posix.basename(current.resolvedPath);
           if (glob && !glob.test(relative)) continue;
-          if (
-            (current.sizeBytes ?? 0) > MAX_SEARCH_FILE_BYTES ||
-            scannedBytes + (current.sizeBytes ?? 0) > MAX_SEARCH_BYTES
-          ) {
+          if ((current.sizeBytes ?? 0) > MAX_SEARCH_FILE_BYTES) {
             truncated = true;
             continue;
           }

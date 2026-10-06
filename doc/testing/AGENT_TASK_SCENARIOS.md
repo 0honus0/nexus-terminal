@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- 按用户明确选择取消扫描上限：Workspace/SSH 删除目录项数、扫描文件数及累计扫描字节限制，保留结果数量/输出大小/单文件读取边界。未提交的 10,000 目录项限制已撤销；Workspace 改为 opendir + generator 按需遍历，不先收集完整文件列表，提前结束仍 finally 关闭目录。真实文件反例验证 10,001 空目录、2,001 文件、17 MiB 累计扫描不再因旧扫描额度截断。SSH 循环每目录项/路径检查 deadline/abort；尚未完成真实 SSH 大树验收，不宣称全面 parity 完成。
 - 搜索 glob scope 修复：Workspace 子目录搜索曾按项目根目录匹配 glob，SSH 按搜索目录，导致 nested/*.ts 漏匹配；现两端均按搜索目录相对路径或 basename，单文件按 basename。补真实文件场景验证子目录命中、错误的项目相对 glob 不命中和单文件匹配；此项不代表遍历/限额/SSH 代码导航整体 parity 完成。
 - 文件搜索正则 parity：Workspace 不再按 rg 安装状态切换引擎，统一逐行 JavaScript Unicode 正则，Runner engine contract 改为 javascript 并同步 HTTP decoder；移除 rg 解析/执行残骸，tool 描述与 USAGE 同步。同时修复相邻多个匹配产生重复 context 行。真实文件/Runner HTTP 场景覆盖无 PATH、lookbehind 首匹配列、隐藏文件、连续匹配上下文去重、非法表达式及原安全/限额回归。此项只关闭正则引擎差异；扫描范围/顺序/限额与 SSH 代码导航仍未宣布全面一致。
 - 真实 loopback SSH ACP 回归补齐故障窗口：服务端实际收到 session/prompt 后屏障停住、不发送回复，再由客户端 abort 或服务端关闭连接；断言执行分别拒绝 ABORTED/ACP_SSH_DISCONNECTED、双方 channel/连接关闭、仅一次连接且不重放，之后独立正常请求完成。该测试覆盖生产 SSH transport + ACP adapter/SDK，不是第三方 ACP 二进制、UI→Run 整链或代码导航验收。

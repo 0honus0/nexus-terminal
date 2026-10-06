@@ -29,8 +29,6 @@ const MAX_READ_BYTES = 64 * 1024;
 const MAX_READ_LINES = 1_000;
 const MAX_SEARCH_RESULTS = 100;
 const MAX_SEARCH_CONTEXT_LINES = 5;
-const MAX_SEARCH_FILES = 2_000;
-const MAX_SEARCH_BYTES = 16 * 1024 * 1024;
 const MAX_SEARCH_LINE_BYTES = 4 * 1024;
 const MAX_PATCH_FILES = 16;
 const MAX_PATCH_BYTES = 30 * 1024;
@@ -471,35 +469,39 @@ const searchWithJavaScript = (
   const expression = compileSearch(request.query);
   const target = hostPathFor(root, logical);
   assertNoSymlink(root, target, false);
-  const files: string[] = [];
   let scannedFiles = 0;
   let scannedBytes = 0;
   let truncated = false;
   const stat = fs.lstatSync(target);
   if (stat.isSymbolicLink()) throw new Error('WORKSPACE_PATH_FORBIDDEN');
-  if (stat.isFile()) files.push(target);
-  else if (!stat.isDirectory()) throw new Error('WORKSPACE_PATH_INVALID');
-  else {
+  if (!stat.isFile() && !stat.isDirectory()) throw new Error('WORKSPACE_PATH_INVALID');
+  function* sourceFiles(): Generator<string> {
+    if (stat.isFile()) {
+      yield target;
+      return;
+    }
     const stack = [target];
-    while (stack.length && files.length < MAX_SEARCH_FILES) {
+    while (stack.length) {
       const directory = stack.pop()!;
-      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        if (entry.name === '.git') continue;
-        const candidate = path.join(directory, entry.name);
-        if (entry.isSymbolicLink()) continue;
-        if (entry.isDirectory()) stack.push(candidate);
-        else if (entry.isFile()) files.push(candidate);
-        if (files.length >= MAX_SEARCH_FILES) {
-          truncated = true;
-          break;
+      const handle = fs.opendirSync(directory);
+      try {
+        let entry: fs.Dirent | null;
+        while ((entry = handle.readSync()) !== null) {
+          if (entry.name === '.git') continue;
+          const candidate = path.join(directory, entry.name);
+          if (entry.isSymbolicLink()) continue;
+          if (entry.isDirectory()) stack.push(candidate);
+          else if (entry.isFile()) yield candidate;
         }
+      } finally {
+        handle.closeSync();
       }
     }
   }
 
   const events: SearchEvent[] = [];
   let matchCount = 0;
-  outer: for (const file of files) {
+  outer: for (const file of sourceFiles()) {
     const relative = stat.isDirectory() ? path.relative(target, file).split(path.sep).join('/') : path.basename(file);
     if (
       request.glob &&
@@ -510,10 +512,6 @@ const searchWithJavaScript = (
     }
     const fileStat = fs.lstatSync(file);
     if (!fileStat.isFile() || fileStat.isSymbolicLink() || fileStat.size > MAX_SOURCE_FILE_BYTES) continue;
-    if (scannedBytes + fileStat.size > MAX_SEARCH_BYTES) {
-      truncated = true;
-      break;
-    }
     const raw = fs.readFileSync(file);
     let decoded: string;
     try {
@@ -725,8 +723,6 @@ export const WORKSPACE_CODING_LIMITS = {
   maxReadLines: MAX_READ_LINES,
   maxSearchResults: MAX_SEARCH_RESULTS,
   maxSearchContextLines: MAX_SEARCH_CONTEXT_LINES,
-  maxSearchFiles: MAX_SEARCH_FILES,
-  maxSearchBytes: MAX_SEARCH_BYTES,
   maxPatchFiles: MAX_PATCH_FILES,
   maxPatchBytes: MAX_PATCH_BYTES,
 } as const;

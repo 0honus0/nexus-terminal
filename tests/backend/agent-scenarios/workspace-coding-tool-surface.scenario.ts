@@ -185,6 +185,26 @@ export const workspaceCodingToolSurfaceScenario = async () => {
       glob: 'scope.ts',
     });
     assert.equal(fileGlob.matches.length, 1, 'a single-file search matches its basename');
+    const directoryFlood = path.join(workRoot, 'directory-flood');
+    fs.mkdirSync(directoryFlood);
+    for (let index = 0; index < 10_001; index++) fs.mkdirSync(path.join(directoryFlood, String(index)));
+    const boundedTraversal = searchWorkspace(workRoot, { ...regexRequest, path: '/workspace/work/directory-flood' });
+    assert.equal(boundedTraversal.truncated, false, 'empty directories must not truncate the search');
+    assert.equal(boundedTraversal.scannedFiles, 0);
+    assert.deepEqual(boundedTraversal.matches, []);
+    const manyFiles = path.join(workRoot, 'many-files');
+    fs.mkdirSync(manyFiles);
+    for (let index = 0; index < 2_001; index++) fs.writeFileSync(path.join(manyFiles, `${index}.txt`), 'no match\n');
+    const allFiles = searchWorkspace(workRoot, { ...regexRequest, path: '/workspace/work/many-files' });
+    assert.equal(allFiles.scannedFiles, 2_001);
+    assert.equal(allFiles.truncated, false);
+    const manyBytes = path.join(workRoot, 'many-bytes');
+    fs.mkdirSync(manyBytes);
+    for (let index = 0; index < 17; index++)
+      fs.writeFileSync(path.join(manyBytes, `${index}.txt`), 'x'.repeat(1024 * 1024));
+    const allBytes = searchWorkspace(workRoot, { ...regexRequest, path: '/workspace/work/many-bytes' });
+    assert.equal(allBytes.scannedBytes, 17 * 1024 * 1024);
+    assert.equal(allBytes.truncated, false);
 
     const beforeHash = read.sha256;
     const patchText = [
