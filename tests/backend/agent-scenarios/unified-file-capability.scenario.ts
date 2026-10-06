@@ -34,6 +34,7 @@ import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/
 import { createUnifiedFileTools } from '../../../packages/backend/src/modules/agent/tools/host/file-tools';
 import type { AgentWorkspaceRepositoryPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { WorkspaceRuntimeControllerPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime-controller.port';
+import { failedToolResult } from '../../../packages/backend/src/modules/agent/runtime/execution/execution-errors';
 
 export const unifiedFileCapabilityScenario = async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-unified-file-'));
@@ -440,6 +441,45 @@ export const unifiedFileCapabilityScenario = async () => {
       const source = `${target.root}/a.txt`;
       const created = `${target.root}/created.txt`;
       const moved = `${target.root}/moved.txt`;
+      const missing = `${target.root}/missing.txt`;
+      const beforeState = target.target === 'workspace' ? statWorkspacePath(workRoot, source) : inspectSsh(source);
+      for (const fixture of [
+        {
+          name: 'file_write',
+          args: { path: target.root, content: 'must-not-write' },
+          code: 'FILE_WRITE_REQUIRES_FILE',
+        },
+        { name: 'file_move', args: { path: missing, destinationPath: moved }, code: 'FILE_NOT_FOUND' },
+        { name: 'file_move', args: { path: source, destinationPath: source }, code: 'FILE_MOVE_SAME_PATH' },
+        {
+          name: 'file_move',
+          args: { path: source, destinationPath: target.root },
+          code: 'FILE_MOVE_DESTINATION_EXISTS',
+        },
+        { name: 'file_delete', args: { path: missing }, code: 'FILE_NOT_FOUND' },
+      ]) {
+        await assert.rejects(
+          () => invoke(fixture.name, { target: target.target, id: target.id, ...fixture.args } as JsonValue),
+          (error: unknown) => {
+            const result = failedToolResult(error, {
+              fallbackCode: 'TOOL_ARGUMENTS_INVALID',
+              summaryPrefix: 'Rejected',
+              verificationSummary: 'Not executed.',
+            });
+            assert.equal(result.errorCode, fixture.code);
+            assert.equal(result.ok, false);
+            assert.equal(result.verification.status, 'failed');
+            assert.equal(result.summary.includes(source), false, 'Correction details must not echo input paths');
+            return true;
+          },
+        );
+      }
+      const afterState = target.target === 'workspace' ? statWorkspacePath(workRoot, source) : inspectSsh(source);
+      assert.deepEqual(
+        afterState,
+        beforeState,
+        'Rejected operations must preserve the original file identity and hash',
+      );
       const read = await invoke('file_read', { target: target.target, id: target.id, path: source });
       assert.equal(read.ok, true);
       assert.match(String((read.data as Record<string, JsonValue>).content), /needle/);

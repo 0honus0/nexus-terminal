@@ -423,7 +423,7 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
     onlyKeys(args, ['target', 'id', 'path', 'content', 'expectedSha256', 'mode']);
     const resolved = await files.resolve(context, selectorFrom(args));
     const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
-    if (state.type === 'directory') throw new Error('RESOURCE_FORBIDDEN');
+    if (state.type === 'directory') throw new Error('FILE_WRITE_REQUIRES_FILE');
     const expected = expectedSha256(args, state.sha256);
     return mutationInspection(files, cryptoHash, 'file_write', 'mutate', args, context, policyRevision, [state], {
       target: resolved.selector.target,
@@ -556,8 +556,9 @@ export const createFileMoveTool = (files: FileCapabilityService, cryptoHash: Cry
       files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES)),
       files.stat(context, resolved, stringValue(args.destinationPath, MAX_PATH_BYTES)),
     ]);
-    if (!source.exists || source.type === null || destination.exists || source.path === destination.path)
-      throw new Error('RESOURCE_CHANGED');
+    if (!source.exists || source.type === null) throw new Error('FILE_NOT_FOUND');
+    if (source.path === destination.path) throw new Error('FILE_MOVE_SAME_PATH');
+    if (destination.exists) throw new Error('FILE_MOVE_DESTINATION_EXISTS');
     const expected = expectedSha256(args, source.type === 'file' ? source.sha256 : null);
     return mutationInspection(
       files,
@@ -622,7 +623,7 @@ export const createFileDeleteTool = (files: FileCapabilityService, cryptoHash: C
     onlyKeys(args, ['target', 'id', 'path', 'recursive', 'expectedSha256']);
     const resolved = await files.resolve(context, selectorFrom(args));
     const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
-    if (!state.exists || state.type === null) throw new Error('NOT_FOUND');
+    if (!state.exists || state.type === null) throw new Error('FILE_NOT_FOUND');
     const expected = expectedSha256(args, state.type === 'file' ? state.sha256 : null);
     return mutationInspection(files, cryptoHash, 'file_delete', 'destructive', args, context, policyRevision, [state], {
       target: resolved.selector.target,

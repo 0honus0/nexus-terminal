@@ -46,6 +46,10 @@ const ERROR_DETAILS: Readonly<Record<string, string>> = {
     'Each resolved file path may appear only once in a patch; combine its hunks into one file entry.',
   FILE_NOT_FOUND: 'The requested filesystem path does not exist; verify its parent directory with file_list.',
   FILE_READ_REQUIRES_FILE: 'file_read requires a regular file, not a directory; use file_list for directories.',
+  FILE_WRITE_REQUIRES_FILE: 'file_write cannot replace a directory; select a file path inside the intended directory.',
+  FILE_MOVE_SAME_PATH: 'Source and destination resolve to the same path; choose a different destination.',
+  FILE_MOVE_DESTINATION_EXISTS:
+    'The move destination already exists; choose an unused destination. No existing destination was overwritten.',
   FILE_LIST_REQUIRES_DIRECTORY: 'file_list requires a directory; use file_read for regular files.',
   FILE_HASH_UNAVAILABLE: 'A content SHA-256 could not be confirmed; do not use this result as write authorization.',
   ARTIFACT_METADATA_RANGE_UNSUPPORTED:
