@@ -156,13 +156,17 @@ test('Connect All waits for each Workspace binding before mounted file managers 
     const firstTab = tabs.filter({ hasText: `${prefix} A` });
     const secondTab = tabs.filter({ hasText: `${prefix} B` });
     await firstTab.click();
-    const commandInput = page.locator('.command-bar-command-input').filter({ visible: true });
+    await expect(firstTab).toHaveAttribute('aria-selected', 'true');
+    const commandInput = page.locator('.command-bar-command-input:visible').first();
+    await expect(commandInput).toBeEnabled();
     await commandInput.fill('for i in $(seq 1 80); do echo NEXUS_BACKGROUND_BATCH_$i; sleep 0.03; done');
     await commandInput.press('Enter');
     await page.waitForTimeout(120);
     await secondTab.click();
+    await expect(secondTab).toHaveAttribute('aria-selected', 'true');
     await page.waitForTimeout(2_800);
     await firstTab.click();
+    await expect(firstTab).toHaveAttribute('aria-selected', 'true');
     await expect
       .poll(() => page.locator('.terminal-inner-container:visible .xterm-rows').innerText(), { timeout: 10_000 })
       .toContain('NEXUS_BACKGROUND_BATCH_80');

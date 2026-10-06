@@ -28,6 +28,11 @@
       "types": "./src/connections.ts",
       "default": "./src/connections.ts"
     },
+    "./runner": {
+      "types": "./src/runner.ts",
+      "require": "./runtime/runner.cjs",
+      "default": "./src/runner.ts"
+    },
     "./runner-version.json": "./src/runner-version.json",
     "./*": {
       "types": "./src/*.ts",

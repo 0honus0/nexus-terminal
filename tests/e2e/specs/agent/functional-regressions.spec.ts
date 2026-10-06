@@ -23,6 +23,46 @@ const test = baseTest.extend<{ _taskPage: void }>({
 });
 test.use({ actionTimeout: 10_000 });
 
+const listenerPid = async (port: number): Promise<number | null> => {
+  const localAddress = `0100007F:${port.toString(16).toUpperCase().padStart(4, '0')}`;
+  const tcp = await readFile('/proc/net/tcp', 'utf8');
+  const inode = tcp
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/))
+    .find((fields) => fields[1] === localAddress && fields[3] === '0A')?.[9];
+  if (!inode) return null;
+
+  for (const entry of await readdir('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    let descriptors: string[];
+    try {
+      descriptors = await readdir(`/proc/${entry}/fd`);
+    } catch {
+      continue;
+    }
+    for (const descriptor of descriptors) {
+      try {
+        if ((await readlink(`/proc/${entry}/fd/${descriptor}`)) === `socket:[${inode}]`) return Number(entry);
+      } catch {
+        // The process may close a descriptor while /proc is being inspected.
+      }
+    }
+  }
+  return null;
+};
+
+const tcpPortOpen = (port: number): Promise<boolean> =>
+  new Promise((resolve) => {
+    const socket = net.connect({ host: '127.0.0.1', port });
+    const finish = (open: boolean) => {
+      socket.destroy();
+      resolve(open);
+    };
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.setTimeout(1_000, () => finish(false));
+  });
+
 const prepare = async (request: APIRequestContext) => {
   const page = taskPages.get(request)!;
   await loginAsInitialAdmin(request);
@@ -448,10 +488,8 @@ for (const useOperationsSkill of [false, true]) {
       const catalog = await fetch(`http://127.0.0.1:${port}/catalog`);
       expect(catalog.status).toBe(200);
       expect(await catalog.json()).toEqual(JSON.parse(baseline.get('data/catalog.json')!.toString()));
-      const listener = execFileSync('ss', ['-ltnp', `sport = :${port}`], { encoding: 'utf8' });
-      expect(listener).toContain(`127.0.0.1:${port}`);
-      const pid = listener.match(/pid=(\d+)/)?.[1];
-      expect(pid).toBeDefined();
+      const pid = await listenerPid(port);
+      expect(pid).not.toBeNull();
       expect(await readlink(`/proc/${pid}/cwd`)).toBe(project);
       expect((await readFile(`/proc/${pid}/environ`, 'utf8')).split('\0')).toContain(`PORT=${port}`);
       for (const [file, bytes] of baseline) expect(await readFile(path.join(project, file))).toEqual(bytes);
@@ -543,9 +581,7 @@ test('B02 frontend task repairs gateway 502 without bypassing upstream routing',
       const identity = JSON.parse(output.split('\n').find((line: string) => line.startsWith('{"serverPid":')));
       await expect(readFile(`/proc/${identity.serverPid}/cmdline`)).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(readFile(identity.socket)).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(execFileSync('ss', ['-ltnp', `sport = :${identity.port}`], { encoding: 'utf8' })).not.toContain(
-        `127.0.0.1:${identity.port}`,
-      );
+      expect(await tcpPortOpen(identity.port)).toBe(false);
     }
     for (const [file, bytes] of baseline)
       expect(await readFile(path.join(project, file))).toEqual(
@@ -597,9 +633,7 @@ test('B01 API 500 repair correlates request and source then preserves data and o
       expect(identity).toBeDefined();
       const { serverPid, port } = JSON.parse(identity);
       await expect(readFile(`/proc/${serverPid}/cmdline`)).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(execFileSync('ss', ['-ltnp', `sport = :${port}`], { encoding: 'utf8' })).not.toContain(
-        `127.0.0.1:${port}`,
-      );
+      expect(await tcpPortOpen(port)).toBe(false);
     }
     for (const [file, bytes] of baseline) {
       const expected =

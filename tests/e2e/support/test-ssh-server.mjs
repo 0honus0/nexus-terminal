@@ -684,12 +684,17 @@ function attachSftp(session, accept) {
   const channelToken = Symbol('sftp-channel');
   activeSftpChannels.add(channelToken);
   openedSftpChannels += 1;
-  const detachChannel = () => activeSftpChannels.delete(channelToken);
+  let channelClosed = false;
+  const detachChannel = () => {
+    channelClosed = true;
+    activeSftpChannels.delete(channelToken);
+  };
   sftp.once('end', detachChannel);
   sftp.once('close', detachChannel);
   const registry = createHandleRegistry();
 
   const respondError = (reqid, error) => {
+    if (channelClosed) return;
     sftp.status(reqid, statusForError(error), error?.message || 'SFTP test server failure');
   };
 
@@ -823,12 +828,13 @@ function attachSftp(session, accept) {
           sftpReadWaiters.add(release);
           sftp.once('close', release);
         });
-        if (sftp.destroyed) return;
+        if (channelClosed) return;
       }
       if (sftpReadDelayMs > 0) {
         sftpDelayedReadCount += 1;
         await new Promise((resolve) => setTimeout(resolve, sftpReadDelayMs));
       }
+      if (channelClosed) return;
       const buffer = Buffer.alloc(length);
       const { bytesRead } = await state.fileHandle.read(buffer, 0, length, Number(offset));
       if (bytesRead > 0 && sftpReadBytesPerSecond > 0) {
@@ -837,6 +843,7 @@ function attachSftp(session, accept) {
         sftpReadNextDeliveryAt = deliveryAt;
         await new Promise((resolve) => setTimeout(resolve, Math.max(0, deliveryAt - performance.now())));
       }
+      if (channelClosed) return;
       sftpReadResponseBytes += bytesRead;
       if (bytesRead === 0) sftp.status(reqid, STATUS_CODE.EOF);
       else sftp.data(reqid, buffer.subarray(0, bytesRead));
