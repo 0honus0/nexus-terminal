@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- 工具统一收尾继续：确认搜索单文件边界 Workspace 8 MiB/SSH 1 MiB 不一致，SSH 将跳过超大文件与输出满混用 truncated 导致提前停止。统一搜索单文件 1 MiB，不改普通 file_read；分开输出满与扫描不完整状态，跳过超大文件后继续。Workspace 真实文件场景和 SSH 产品 E2E 增加超大文件 + 后续 sentinel 反例，预期 truncated=true 且仍命中。工具统一未全部完成，A03 未开始。
 - 搜索取消真实 E2E 发现并修复：临时 SSH 仅 work finally 关闭，远端挂住 READ 时 Run 保持 cancelling；增加 abort 立即关闭临时会话，但 positioned reader Promise 未监听 channel close 仍挂住，现读操作监听 end/close 并清理 listener，关闭后的 reader close 不再发请求。真实 SFTP READ 屏障确认 pending>0 后取消，Run cancelled、屏障仍开启但 pending=0，再独立新请求命中。首次测试漏 schemaVersion 已修正；恢复使用独立 Thread 避免模拟模型复用旧 toolCall fixture。显式长会话取消未由本例验收。
 - SSH 搜索扫描额度 E2E 进一步覆盖旧 10,000 目录项边界：真实目录中加入 10,001 个指向 sentinel 的符号链接，生产 SFTP 需跳过这些项、不跟随链接，仍扫描 2,019 个真实文件并命中排序靠后的唯一 sentinel；原结果数量与未截断断言保持。该反例覆盖目录项计数，不等于 10,001 个嵌套目录或扫描中取消已验收。
 - 取消搜索扫描上限的 SSH 产品 E2E 已补齐：模拟模型仅提出 file_search，生产 Agent/SSH/SFTP 实际扫描 2,019 个真实文件、超过 16 MiB 内容，独立断言持久化工具结果命中排序靠后 sentinel、scannedFiles/scannedBytes 与 truncated=false，真实文件内容未改且测试目录 finally 清理。该证据关闭旧文件数/累计字节扫描额度回归缺口；尚不覆盖 SSH 10,001 目录项大树或扫描中取消，不代替语义代码导航验收。

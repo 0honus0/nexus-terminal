@@ -205,6 +205,14 @@ export const workspaceCodingToolSurfaceScenario = async () => {
     const allBytes = searchWorkspace(workRoot, { ...regexRequest, path: '/workspace/work/many-bytes' });
     assert.equal(allBytes.scannedBytes, 17 * 1024 * 1024);
     assert.equal(allBytes.truncated, false);
+    fs.writeFileSync(path.join(manyBytes, 'oversized.txt'), 'x'.repeat(1024 * 1024 + 1));
+    fs.writeFileSync(path.join(manyBytes, 'sentinel.txt'), 'needle here\n');
+    const skippedLarge = searchWorkspace(workRoot, { ...regexRequest, path: '/workspace/work/many-bytes' });
+    assert.equal(skippedLarge.truncated, true);
+    assert.deepEqual(
+      skippedLarge.matches.map((match) => match.path),
+      ['/workspace/work/many-bytes/sentinel.txt'],
+    );
 
     const beforeHash = read.sha256;
     const patchText = [

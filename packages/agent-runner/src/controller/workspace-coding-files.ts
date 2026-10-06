@@ -29,6 +29,7 @@ const MAX_READ_BYTES = 64 * 1024;
 const MAX_READ_LINES = 1_000;
 const MAX_SEARCH_RESULTS = 100;
 const MAX_SEARCH_CONTEXT_LINES = 5;
+const MAX_SEARCH_FILE_BYTES = 1024 * 1024;
 const MAX_SEARCH_LINE_BYTES = 4 * 1024;
 const MAX_PATCH_FILES = 16;
 const MAX_PATCH_BYTES = 30 * 1024;
@@ -511,7 +512,11 @@ const searchWithJavaScript = (
       continue;
     }
     const fileStat = fs.lstatSync(file);
-    if (!fileStat.isFile() || fileStat.isSymbolicLink() || fileStat.size > MAX_SOURCE_FILE_BYTES) continue;
+    if (!fileStat.isFile() || fileStat.isSymbolicLink()) continue;
+    if (fileStat.size > MAX_SEARCH_FILE_BYTES) {
+      truncated = true;
+      continue;
+    }
     const raw = fs.readFileSync(file);
     let decoded: string;
     try {

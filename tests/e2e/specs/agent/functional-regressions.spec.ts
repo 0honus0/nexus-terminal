@@ -150,7 +150,7 @@ test('SSH file search cancellation closes a held SFTP read and permits a new req
   }
 });
 
-test('SSH file search scans beyond former entry, file and cumulative byte caps without following symlinks', async ({
+test('SSH file search passes former scan caps and continues after oversized files without following symlinks', async ({
   request,
 }) => {
   const context = await prepare(request);
@@ -162,6 +162,7 @@ test('SSH file search scans beyond former entry, file and cumulative byte caps w
       await writeFile(path.join(project, `a-${String(index).padStart(4, '0')}.txt`), 'nothing\n');
     const chunk = 'x'.repeat(1024 * 1024 - 1) + '\n';
     for (let index = 0; index < 17; index++) await writeFile(path.join(project, `b-${index}.txt`), chunk);
+    await writeFile(path.join(project, 'b-oversized.txt'), 'x'.repeat(1024 * 1024 + 1));
     for (let index = 0; index < 10_001; index++)
       await symlink('z-sentinel.txt', path.join(project, `c-link-${String(index).padStart(5, '0')}`));
     await writeFile(path.join(project, 'z-sentinel.txt'), 'SCAN_SENTINEL\n');
@@ -177,7 +178,7 @@ test('SSH file search scans beyond former entry, file and cumulative byte caps w
       ok: true,
       data: {
         scannedFiles: 2019,
-        truncated: false,
+        truncated: true,
         matches: [{ path: '/search-scan/z-sentinel.txt', line: 1, text: 'SCAN_SENTINEL' }],
       },
     });

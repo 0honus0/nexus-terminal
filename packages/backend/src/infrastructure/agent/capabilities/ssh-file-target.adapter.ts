@@ -209,7 +209,8 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
         let scannedBytes = 0;
         let outputBytes = 2;
         let truncated = false;
-        while (queue.length > 0 && !truncated) {
+        let outputFull = false;
+        while (queue.length > 0 && !outputFull) {
           assertDeadline(context);
           const currentPath = queue.shift()!;
           const current = await this.inspectPathWithFilesystem(context, filesystem, currentPath);
@@ -275,6 +276,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
             const candidateBytes = Buffer.byteLength(JSON.stringify(candidate), 'utf8') + (matches.length > 0 ? 1 : 0);
             if (matches.length >= request.maxResults || outputBytes + candidateBytes > request.maxOutputBytes) {
               truncated = true;
+              outputFull = true;
               break;
             }
             matches.push(candidate);
