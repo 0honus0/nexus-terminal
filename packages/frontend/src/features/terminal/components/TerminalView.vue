@@ -92,6 +92,7 @@
     props.visual?.backgroundImageUrl ? { backgroundImage: `url(${props.visual.backgroundImageUrl})` } : {},
   );
   const terminalStyle = computed(() => ({
+    backgroundColor: hasVisualBackground.value ? 'transparent' : props.theme?.background,
     '--terminal-stroke-width': `${props.visual?.textStroke?.width ?? 0}px`,
     '--terminal-stroke-color': props.visual?.textStroke?.color ?? 'transparent',
     '--terminal-shadow': `${props.visual?.textShadow?.offsetX ?? 0}px ${props.visual?.textShadow?.offsetY ?? 0}px ${props.visual?.textShadow?.blur ?? 0}px ${props.visual?.textShadow?.color ?? 'transparent'}`,

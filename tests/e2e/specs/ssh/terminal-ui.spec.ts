@@ -11,6 +11,65 @@ import {
 import { step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
 
+test('terminal theme fills the whole mobile surface beyond the fixed xterm rows', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const originalResponse = await context.request.get('/api/v1/appearance');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = await originalResponse.json();
+  const themes = await context.request.get('/api/v1/terminal-themes');
+  expect(themes.ok()).toBeTruthy();
+  const theme = (await themes.json()).find((candidate: { name: string }) => candidate.name === 'Monokai Classic');
+  expect(theme).toBeTruthy();
+  try {
+    expect(
+      (
+        await context.request.put('/api/v1/appearance', {
+          data: {
+            activeTerminalThemeId: theme.id,
+            terminalBackgroundEnabled: true,
+            terminalBackgroundImage: null,
+            terminalCustomHtml: '',
+          },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const connectionId = await ensureTestSshConnection(context.request);
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    const terminal = page.locator('[data-font-size]:visible');
+    await expect(terminal).toBeVisible();
+    await expect
+      .poll(() => terminal.evaluate((element) => getComputedStyle(element).backgroundColor))
+      .toBe('rgb(39, 40, 34)');
+    await expect(terminal.locator('.terminal-background-image')).toHaveCount(0);
+    await expect(terminal.locator('.terminal-custom-html')).toHaveCount(0);
+    const geometry = await terminal.evaluate((element) => {
+      const wrapper = element.getBoundingClientRect();
+      const screen = element.querySelector('.xterm-screen')!.getBoundingClientRect();
+      return { wrapperHeight: wrapper.height, screenHeight: screen.height };
+    });
+    expect(geometry.wrapperHeight).toBeGreaterThan(geometry.screenHeight);
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect
+      .poll(() => terminal.evaluate((element) => getComputedStyle(element).backgroundColor))
+      .toBe('rgb(39, 40, 34)');
+  } finally {
+    expect(
+      (
+        await context.request.put('/api/v1/appearance', {
+          data: {
+            activeTerminalThemeId: original.activeTerminalThemeId,
+            terminalBackgroundEnabled: original.terminalBackgroundEnabled,
+            terminalBackgroundImage: original.terminalBackgroundImage ?? null,
+            terminalCustomHtml: original.terminalCustomHtml ?? '',
+          },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+});
+
 test('focus configurator records distinct shortcuts and contains narrow viewport content', async ({
   page,
   context,
