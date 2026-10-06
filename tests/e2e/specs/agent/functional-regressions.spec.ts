@@ -5,13 +5,28 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import net from 'node:net';
 import regressionInputs from '../../fixtures/agent/regression-inputs.json';
-import { expect, test, type APIRequestContext } from '../../support/fixtures';
+import { expect, test as baseTest, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_URLS } from '../../support/test-env';
 import { ensureTestSshConnection } from '../../support/ssh';
 
+const taskPages = new WeakMap<APIRequestContext, Page>();
+const test = baseTest.extend<{ _taskPage: void }>({
+  _taskPage: [
+    async ({ page, request, context }, use) => {
+      taskPages.set(request, page);
+      taskPages.set(context.request, page);
+      await use();
+    },
+    { auto: true },
+  ],
+});
+test.use({ actionTimeout: 10_000 });
+
 const prepare = async (request: APIRequestContext) => {
+  const page = taskPages.get(request)!;
   await loginAsInitialAdmin(request);
+  if (request !== page.request) await loginAsInitialAdmin(page.request);
   const csrf = (await (await request.get('/api/v1/agent/security/csrf')).json()).data.token;
   const headers = { 'X-Nexus-CSRF': csrf };
   const installed = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', { headers, data: {} });
@@ -35,33 +50,45 @@ const prepare = async (request: APIRequestContext) => {
     });
     expect(active.ok(), await active.text()).toBeTruthy();
   }
-  const provider = await request.post('/api/v1/agent/ai/providers', {
-    headers,
-    data: {
-      kind: 'openai-compatible',
-      displayName: 'Functional regression fixture',
-      baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
-      protocol: 'chat-completions',
-      credential: 'e2e-provider-secret',
-      enabled: true,
-      models: [{ id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true }],
-    },
-  });
-  expect(provider.status(), await provider.text()).toBe(201);
+  await page.goto('/settings?tab=agent');
+  await page.getByRole('button', { name: 'Add provider', exact: true }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Add Model Provider', exact: true });
+  const providerName = `Functional regression ${randomUUID()}`;
+  await dialog.getByLabel('Display name', { exact: false }).first().fill(providerName);
+  await dialog
+    .getByLabel('Base URL', { exact: false })
+    .first()
+    .fill(E2E_URLS.openAiProviderOrigin + '/v1');
+  await dialog.getByLabel('Credential', { exact: false }).first().fill('e2e-provider-secret');
+  await dialog.getByRole('textbox', { name: 'Model ID *', exact: true }).fill('e2e-model');
+  await dialog.getByLabel('Context window', { exact: false }).first().fill('8192');
+  await dialog.getByLabel('Maximum output tokens', { exact: false }).first().fill('128');
+  const providerResponse = page.waitForResponse(
+    (response) => response.url().endsWith('/agent/ai/providers') && response.request().method() === 'POST',
+  );
+  await dialog.getByRole('button', { name: 'Save & Add', exact: true }).click();
+  const provider = await providerResponse;
+  expect(provider.status()).toBe(201);
   const configured = (await provider.json()).data;
-  const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-    headers,
-    data: { title: 'Data-driven functional regression' },
-  });
-  expect(thread.status(), await thread.text()).toBe(201);
+  await expect(dialog).toHaveCount(0);
+  await page.goto('/connections');
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  const threadResponse = page.waitForResponse(
+    (response) => response.url().endsWith('/apps/nexus.agent/threads') && response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  const thread = await threadResponse;
+  expect(thread.status()).toBe(201);
   return {
+    page,
+    providerName,
     headers,
     threadId: (await thread.json()).data.id as string,
     model: { providerId: configured.id, modelId: 'e2e-model', configurationVersion: configured.version },
   };
 };
 
-const execute = async (
+const startTask = async (
   request: APIRequestContext,
   context: Awaited<ReturnType<typeof prepare>>,
   text: string,
@@ -69,23 +96,63 @@ const execute = async (
     connectionIds: number[];
     environment?: { recipeId: string; versions: Record<string, string>; catalogRevision: string };
     executionMode?: 'plan' | 'execute';
+    expectedStatus?: number;
   } = { connectionIds: [] },
 ) => {
-  const created = await request.post('/api/v1/apps/nexus.agent/runs', {
-    headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
-    data: {
-      schemaVersion: 1,
-      threadId: context.threadId,
-      input: { text, artifactRefs: [] },
-      agentDefinitionId: 'agent.default',
-      model: context.model,
-      approvalMode: 'full_access',
-      executionMode: options.executionMode ?? 'execute',
-      connectionIds: options.connectionIds,
-      ...(options.environment ? { environment: options.environment } : {}),
-    },
-  });
-  expect(created.status(), await created.text()).toBe(201);
+  const page = context.page;
+  // Test targets may be provisioned after Hub initialization; reload the public projection.
+  await page.reload();
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  await page
+    .getByRole('button')
+    .filter({ hasText: `#${context.threadId.slice(-6)}` })
+    .click();
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Environment', exact: true })
+    .getByRole('button')
+    .filter({ hasText: options.environment?.recipeId ?? 'Native Host' })
+    .click();
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Model', exact: true })
+    .getByRole('button')
+    .filter({ hasText: context.providerName })
+    .click();
+  await page.getByRole('button', { name: 'Approval mode', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Approval mode', exact: true })
+    .getByRole('button', { name: /Full access/ })
+    .click();
+  await page.getByRole('button', { name: 'Execution mode', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Execution mode', exact: true })
+    .getByRole('button', { name: options.executionMode === 'plan' ? /^Plan only/ : /^Execute/ })
+    .click();
+  if (options.connectionIds.length) {
+    await page.getByRole('button', { name: 'SSH Hosts', exact: true }).click();
+    const selection = page.getByRole('dialog', { name: 'SSH Hosts', exact: true }).getByRole('checkbox');
+    if (!(await selection.isChecked())) await selection.check();
+    await page.getByRole('button', { name: 'SSH Hosts', exact: true }).click();
+  }
+  await page.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...').fill(text);
+  const response = page.waitForResponse(
+    (item) => item.url().endsWith('/apps/nexus.agent/runs') && item.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const created = await response;
+  expect(created.status()).toBe(options.expectedStatus ?? 201);
+  return created;
+};
+
+const execute = async (
+  request: APIRequestContext,
+  context: Awaited<ReturnType<typeof prepare>>,
+  text: string,
+  options: Parameters<typeof startTask>[3] = { connectionIds: [] },
+) => {
+  const page = context.page;
+  const created = await startTask(request, context, text, options);
   const id = (await created.json()).data.id as string;
   await expect
     .poll(async () => (await (await request.get(`/api/v1/apps/nexus.agent/runs/${id}`)).json()).data.status, {
@@ -100,6 +167,7 @@ const execute = async (
   const textResult = ledger.filter((entry) => entry.kind === 'assistant_message' && entry.payload.text).at(-1)
     ?.payload.text;
   expect(textResult).toBeDefined();
+  await expect(page.getByText(textResult!, { exact: true }).last()).toBeVisible();
   return { run, ledger, text: textResult! };
 };
 
@@ -244,22 +312,25 @@ test('A06 frozen environment rejects overrides and stale Catalog then executes a
     },
   });
   expect(configured.ok(), await configured.text()).toBe(true);
-  const stale = await request.post('/api/v1/apps/nexus.agent/runs', {
-    headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
-    data: {
-      schemaVersion: 1,
-      threadId: context.threadId,
-      input: { text: 'E2E_FROZEN_ENVIRONMENT', artifactRefs: [] },
-      agentDefinitionId: 'agent.default',
-      model: context.model,
-      approvalMode: 'full_access',
-      executionMode: 'execute',
-      connectionIds: [],
-      environment: { ...environment, catalogRevision: 'stale-catalog' },
+  await context.page.route(
+    '**/api/v1/apps/nexus.agent/runs',
+    async (route) => {
+      const body = route.request().postDataJSON();
+      await route.continue({
+        postData: JSON.stringify({ ...body, environment: { ...body.environment, catalogRevision: 'stale-catalog' } }),
+      });
     },
+    { times: 1 },
+  );
+  const stale = await startTask(request, context, 'E2E_FROZEN_ENVIRONMENT', {
+    connectionIds: [],
+    environment,
+    expectedStatus: 409,
   });
   expect(stale.status()).toBe(409);
   expect((await stale.json()).error.code).toBe('CATALOG_REVISION_CONFLICT');
+  await expect(context.page.getByRole('alert')).toContainText('This Agent resource changed. Refresh and try again.');
+  await context.page.getByRole('button', { name: 'Resync', exact: true }).click();
   const result = await execute(request, context, 'E2E_FROZEN_ENVIRONMENT', { connectionIds: [], environment });
   const results = result.ledger
     .filter((entry) => entry.kind === 'tool_result')
@@ -427,6 +498,66 @@ for (const useOperationsSkill of [false, true]) {
     }
   });
 }
+
+test('B02 frontend task repairs gateway 502 without bypassing upstream routing', async ({ page, context }) => {
+  const prepared = await prepare(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  const fixture = path.resolve(__dirname, '../../fixtures/agent/task-projects/gateway-502');
+  const project = path.resolve(__dirname, '../../.tmp/ssh-root/gateway-502');
+  const files = ['AGENTS.md', 'package.json', 'verify.mjs', 'server.mjs', 'config.json', 'data/catalog.json'];
+  const baseline = new Map(
+    await Promise.all(files.map(async (file) => [file, await readFile(path.join(fixture, file))] as const)),
+  );
+  await cp(fixture, project, { recursive: true });
+  try {
+    const response = await startTask(context.request, prepared, `E2E_GATEWAY_502 connection=${connectionId}`, {
+      connectionIds: [connectionId],
+    });
+    expect(response.status()).toBe(201);
+    const runId = (await response.json()).data.id;
+    await expect(
+      page.getByText(
+        'Gateway 502 repaired: direct upstream and gateway checks passed; only upstream configuration changed.',
+        { exact: true },
+      ),
+    ).toBeVisible({ timeout: 30_000 });
+    const run = (await (await context.request.get(`/api/v1/apps/nexus.agent/runs/${runId}`)).json()).data;
+    expect(run.status).toBe('completed');
+    expect(run.needsReconciliation).toBe(false);
+    expect(run.definition.connectionIds).toContain(connectionId);
+    const ledger = (
+      await (
+        await context.request.get(`/api/v1/apps/nexus.agent/threads/${prepared.threadId}/entries?limit=100`)
+      ).json()
+    ).data.items;
+    const results = ledger
+      .filter((entry: { kind: string }) => entry.kind === 'tool_result')
+      .map((entry: { payload: { text: string } }) => JSON.parse(entry.payload.text));
+    expect(results).toHaveLength(4);
+    expect(results[1]).toMatchObject({ ok: false, data: { exitCode: 1 } });
+    expect(results[1].data.stdout).toContain('"directUpstream":{"status":200');
+    expect(results[1].data.stdout).toContain('"requestId":"b02-health","status":502');
+    expect(results[1].data.stderr).toContain('"upstreamSocket":"./upstream-wrong.sock","code":"ENOENT"');
+    expect(results[3]).toMatchObject({ ok: true, data: { exitCode: 0 }, verification: { status: 'verified' } });
+    for (const output of [results[1].data.stdout, results[3].data.stdout]) {
+      const identity = JSON.parse(output.split('\n').find((line: string) => line.startsWith('{"serverPid":')));
+      await expect(readFile(`/proc/${identity.serverPid}/cmdline`)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(readFile(identity.socket)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(execFileSync('ss', ['-ltnp', `sport = :${identity.port}`], { encoding: 'utf8' })).not.toContain(
+        `127.0.0.1:${identity.port}`,
+      );
+    }
+    for (const [file, bytes] of baseline)
+      expect(await readFile(path.join(project, file))).toEqual(
+        file === 'config.json' ? Buffer.from(bytes.toString().replace('upstream-wrong.sock', 'upstream.sock')) : bytes,
+      );
+    expect(execFileSync(process.execPath, ['verify.mjs'], { cwd: project, encoding: 'utf8' })).toContain(
+      'Direct upstream and gateway health/catalog/404 verified',
+    );
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
 
 test('B01 API 500 repair correlates request and source then preserves data and original HTTP checks', async ({
   request,
@@ -604,31 +735,16 @@ for (const persistent of [false, true]) {
     const hold = `${E2E_URLS.sshControlOrigin}/sftp/read-hold`;
     try {
       expect((await request.post(`${hold}?blocked=1`)).ok()).toBeTruthy();
-      const created = await request.post('/api/v1/apps/nexus.agent/runs', {
-        headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
-        data: {
-          schemaVersion: 1,
-          threadId: context.threadId,
-          input: {
-            text: `E2E_SEARCH_SCAN connection=${connectionId}${persistent ? ' persistent' : ''}`,
-            artifactRefs: [],
-          },
-          agentDefinitionId: 'agent.default',
-          model: context.model,
-          approvalMode: 'full_access',
-          executionMode: 'execute',
-          connectionIds: [connectionId],
-        },
-      });
-      expect(created.status(), await created.text()).toBe(201);
+      const created = await startTask(
+        request,
+        context,
+        `E2E_SEARCH_SCAN connection=${connectionId}${persistent ? ' persistent' : ''}`,
+        { connectionIds: [connectionId] },
+      );
       const id = (await created.json()).data.id;
       await expect.poll(async () => (await (await request.get(hold)).json()).pending).toBeGreaterThan(0);
-      const run = (await (await request.get(`/api/v1/apps/nexus.agent/runs/${id}`)).json()).data;
-      const cancelled = await request.post(`/api/v1/apps/nexus.agent/runs/${id}/cancel`, {
-        headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
-        data: { schemaVersion: 1, expectedVersion: run.version },
-      });
-      expect(cancelled.ok(), await cancelled.text()).toBeTruthy();
+      await context.page.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...').fill('/stop');
+      await context.page.getByRole('button', { name: 'Send', exact: true }).click();
       await expect
         .poll(async () => (await (await request.get(`/api/v1/apps/nexus.agent/runs/${id}`)).json()).data.status)
         .toBe('cancelled');
@@ -742,23 +858,12 @@ test('A01 read-only project handover reads real files without repairing or start
           .digest('hex'),
       ),
     );
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
-      headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
-      data: {
-        schemaVersion: 1,
-        threadId: context.threadId,
-        input: {
-          text: `E2E_TASK_A01_READONLY connection=${connectionId}: 接手 /task-a01 项目，说明启动方式、配置要求和启动风险；只读，不修改、不安装、不运行应用。修复属于另一个任务。`,
-          artifactRefs: [],
-        },
-        agentDefinitionId: 'agent.default',
-        model: context.model,
-        approvalMode: 'full_access',
-        executionMode: 'execute',
-        connectionIds: [connectionId],
-      },
-    });
-    expect(created.status(), await created.text()).toBe(201);
+    const created = await startTask(
+      request,
+      context,
+      `E2E_TASK_A01_READONLY connection=${connectionId}: 接手 /task-a01 项目，说明启动方式、配置要求和启动风险；只读，不修改、不安装、不运行应用。修复属于另一个任务。`,
+      { connectionIds: [connectionId] },
+    );
     const id = (await created.json()).data.id;
     await expect
       .poll(async () => (await (await request.get(`/api/v1/apps/nexus.agent/runs/${id}`)).json()).data.status, {
@@ -778,6 +883,7 @@ test('A01 read-only project handover reads real files without repairing or start
         )
         .at(-1).payload.text,
     );
+    await expect(context.page.getByText('catalogPath', { exact: false }).last()).toBeVisible();
     expect(report).toMatchObject({
       start: 'node server.mjs',
       configKey: 'catalogPath',
@@ -837,23 +943,11 @@ test('unfinished current work recovers from the completion gate by suspending fo
   request,
 }) => {
   const context = await prepare(request);
-  const created = await request.post('/api/v1/apps/nexus.agent/runs', {
-    headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
-    data: {
-      schemaVersion: 1,
-      threadId: context.threadId,
-      input: {
-        text: 'E2E_TASK_GATE_INPUT_RECOVERY: ask me to choose a report format before delivering it.',
-        artifactRefs: [],
-      },
-      agentDefinitionId: 'agent.default',
-      model: context.model,
-      approvalMode: 'full_access',
-      executionMode: 'execute',
-      connectionIds: [],
-    },
-  });
-  expect(created.status(), await created.text()).toBe(201);
+  const created = await startTask(
+    request,
+    context,
+    'E2E_TASK_GATE_INPUT_RECOVERY: ask me to choose a report format before delivering it.',
+  );
   const id = (await created.json()).data.id;
   const readRun = async () => (await (await request.get(`/api/v1/apps/nexus.agent/runs/${id}`)).json()).data;
   await expect.poll(async () => (await readRun()).status, { timeout: 30_000 }).toBe('awaiting_input');
@@ -863,11 +957,8 @@ test('unfinished current work recovers from the completion gate by suspending fo
   ]);
   expect(paused.plan.items).toEqual([expect.objectContaining({ id: 'report-format', status: 'blocked' })]);
   expect(paused.usage.toolExecutions).toBe(2);
-  const answered = await request.post(`/api/v1/apps/nexus.agent/runs/${id}/inputs`, {
-    headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
-    data: { schemaVersion: 1, expectedVersion: paused.version, text: 'report_format: concise', artifactRefs: [] },
-  });
-  expect(answered.status(), await answered.text()).toBe(202);
+  await context.page.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...').fill('report_format: concise');
+  await context.page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(async () => (await readRun()).status, { timeout: 30_000 }).toMatch(/^completed/);
   const resumed = await readRun();
   expect(resumed.id).toBe(id);
@@ -934,22 +1025,43 @@ for (const fixture of regressionInputs.memoryProposals) {
       data: { id: candidate.id, confidence: fixture.confidence },
     });
     const endpoint = `/api/v1/apps/nexus.agent/memories/${candidate.id}/review`;
-    const published = await request.post(endpoint, {
-      headers: context.headers,
-      data: { decision: 'publish', expectedVersion: 1 },
-    });
+    const page = context.page;
+    await page.goto('/settings?tab=agent');
+    await page.getByRole('button', { name: 'Safety and system', exact: true }).click();
+    const memorySection = page
+      .getByRole('heading', { name: 'Memory review & publishing', exact: true })
+      .locator('xpath=ancestor::section[1]');
+    const publishedResponse = page.waitForResponse(
+      (response) => response.url().endsWith(endpoint) && response.request().method() === 'POST',
+    );
+    await memorySection.getByRole('button', { name: 'Publish', exact: true }).click();
+    const published = await publishedResponse;
     expect(published.ok(), await published.text()).toBeTruthy();
     expect((await published.json()).data).toMatchObject({ status: 'published', version: 2 });
-    const stale = await request.post(endpoint, {
-      headers: context.headers,
-      data: { decision: 'revoke', expectedVersion: 1 },
-    });
+    // Inject a stale client revision while still exercising the UI request/error/reload path.
+    await page.route(
+      '**' + endpoint,
+      async (route) => {
+        const body = route.request().postDataJSON();
+        await route.continue({ postData: JSON.stringify({ ...body, expectedVersion: 1 }) });
+      },
+      { times: 1 },
+    );
+    const staleResponse = page.waitForResponse(
+      (response) => response.url().endsWith(endpoint) && response.request().method() === 'POST',
+    );
+    await memorySection.getByRole('button', { name: 'Revoke', exact: true }).click();
+    const stale = await staleResponse;
     expect(stale.status(), await stale.text()).toBe(409);
     expect((await stale.json()).error.code).toBe('MEMORY_VERSION_CONFLICT');
-    const revoked = await request.post(endpoint, {
-      headers: context.headers,
-      data: { decision: 'revoke', expectedVersion: 2 },
-    });
+    await expect(
+      page.getByText('This Memory changed elsewhere. The authoritative version has been reloaded.', { exact: true }),
+    ).toBeVisible();
+    const revokedResponse = page.waitForResponse(
+      (response) => response.url().endsWith(endpoint) && response.request().method() === 'POST',
+    );
+    await memorySection.getByRole('button', { name: 'Revoke', exact: true }).click();
+    const revoked = await revokedResponse;
     expect(revoked.ok(), await revoked.text()).toBeTruthy();
     expect((await revoked.json()).data).toMatchObject({ status: 'revoked', version: 3 });
     const recallable = (await (await request.get('/api/v1/apps/nexus.agent/memories?status=published')).json()).data
@@ -976,20 +1088,7 @@ test('recorded distant deadline rejection returns a precise tool failure without
 
 test('selecting an awaiting-input Run restores its structured clarification snapshot', async ({ page, context }) => {
   const prepared = await prepare(context.request);
-  const created = await context.request.post('/api/v1/apps/nexus.agent/runs', {
-    headers: { ...prepared.headers, 'Idempotency-Key': randomUUID() },
-    data: {
-      schemaVersion: 1,
-      threadId: prepared.threadId,
-      input: { text: 'E2E_REGRESSION_CLARIFICATION_UI', artifactRefs: [] },
-      agentDefinitionId: 'agent.default',
-      model: prepared.model,
-      approvalMode: 'full_access',
-      executionMode: 'execute',
-      connectionIds: [],
-    },
-  });
-  expect(created.status(), await created.text()).toBe(201);
+  const created = await startTask(context.request, prepared, 'E2E_REGRESSION_CLARIFICATION_UI');
   const runId = (await created.json()).data.id as string;
   await expect
     .poll(
@@ -1000,7 +1099,7 @@ test('selecting an awaiting-input Run restores its structured clarification snap
 
   await page.goto('/connections');
   await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-  await page.getByText('Data-driven functional regression', { exact: true }).first().click();
+  await page.getByText('E2E_REGRESSION_CLARIFICATION_UI', { exact: true }).first().click();
   await expect(page.getByText('Choose deployment color', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Green/ }).click();
   await expect(page.locator('#agent-composer')).toHaveValue('deployment_color: green');

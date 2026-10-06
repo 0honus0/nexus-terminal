@@ -540,6 +540,55 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   const buildRepair = latestUserText.match(/E2E_BUILD_REPAIR connection=(\d+)/);
+  const gatewayRepair = latestUserText.match(/E2E_GATEWAY_502 connection=(\d+)/);
+  if (gatewayRepair) {
+    const selector = { target: 'ssh', id: gatewayRepair[1] };
+    const data = (id) => {
+      const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const steps = [
+      ['gateway_config', 'file_read', { ...selector, path: '/gateway-502/config.json' }],
+      [
+        'gateway_before',
+        'shell_execute',
+        { ...selector, command: { kind: 'shell', shellScript: 'cd "$NEXUS_E2E_ROOT/gateway-502" && npm test' } },
+      ],
+      [
+        'gateway_patch',
+        'file_patch',
+        {
+          ...selector,
+          patch:
+            '--- /gateway-502/config.json\n+++ /gateway-502/config.json\n@@ -1,3 +1,3 @@\n {\n-  "upstreamSocket": "./upstream-wrong.sock"\n+  "upstreamSocket": "./upstream.sock"\n }\n',
+        },
+      ],
+      [
+        'gateway_after',
+        'shell_execute',
+        { ...selector, command: { kind: 'shell', shellScript: 'cd "$NEXUS_E2E_ROOT/gateway-502" && npm test' } },
+      ],
+    ];
+    for (const [id, name, args] of steps) {
+      const result = data(id);
+      if (result && !result.ok && id !== 'gateway_before') {
+        regressionResponse(response, { content: 'Gateway repair failed; inspect evidence.' });
+        return;
+      }
+      if (!result) {
+        regressionResponse(
+          response,
+          { tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] },
+          'tool_calls',
+        );
+        return;
+      }
+    }
+    regressionResponse(response, {
+      content: 'Gateway 502 repaired: direct upstream and gateway checks passed; only upstream configuration changed.',
+    });
+    return;
+  }
   const apiRepair = latestUserText.match(/E2E_API_500_REPAIR connection=(\d+)/);
   if (apiRepair) {
     const selector = { target: 'ssh', id: apiRepair[1] };

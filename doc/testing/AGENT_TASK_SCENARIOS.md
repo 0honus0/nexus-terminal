@@ -203,6 +203,12 @@
 
 ### 临时文档退出条件
 
+### 前端 E2E 入口迁移（当前进行，优先于后续场景）
+
+- functional-regressions全部23项已经前端配置测试Provider、创建/发送任务并查看结果；mock仅返回模型数据，工具由产品真实执行。取消、恢复输入、Memory发布/撤销与stale Catalog反例也走前端；API/文件/进程检查独立核对状态与副作用，不替代任务入口。首次定位/权限/状态等待失败均保留日志，未放宽有效断言或timeout。
+- preset-plugin及SSH ACP设置回归已迁移前端Provider/Composer任务入口，共享fixture位于tests/e2e/fixtures/agent/task-ui.ts；Provider contract与fallback设置用例也从前端创建Provider。测试源码不直接操作CDP；触摸拖动用Pointer事件，实际打开用Playwright触摸输入。取消/goal/interrupt及新建Thread迁移后的最终Agent整组验证进行中，尚不计整改完成。公开API恶意/旧版本/晚到请求等独立反例保留，不以它们代替前端任务。
+- B02真实Run a647b082-476f-4412-bc91-8ebd53187e9b已completed/verified；独立确认仅上游socket配置最小修复、其他文件字节保留、直接上游和经网关HTTP验证通过、PID/socket消失及Workspace stop/delete终态。证据/tmp/opencode/b02-{input,waiting,project,result,independent,cleanup}.json。新前端回归与完整functional-regressions23项通过，B02本地闭环；canonical Actions未验收。本轮结束于B02，不进入B03，不部署线上。
+
 ### B01 本地闭环（接口500/数据保留，canonical Actions 未验收）
 
 - 真实Luna low Run8792367f-a039-4f7e-af4b-720cbb2e1def／Thread28fae655-24b0-4db7-9bdc-e8c44508ee84，实际创建Workspace027574a4-8be9-4bc2-b4d5-4d137c7738af并等待注入；关联b01-request-one的HTTP500、/catalog日志及server.mjs:14，确认products/items字段不一致。仅生产源码catalog.products.map→catalog.items.map；completed/verified、无reconciliation。独立逐字节保护AGENTS.md/package.json/verify.mjs/data/catalog.json，原HTTP health/两次catalog/404检查通过。调查命令exit13/1及两次无效patch均保留，后续file_write按真实字节最小修复；未削弱检查。认证管理stop/delete命令succeeded及stopped→deleted确认，首次观察者误用Workspace路由404后按公开路径纠正。证据/tmp/opencode/b01-{input,waiting,result,independent,cleanup}.json与b01-fixture-before.log。
