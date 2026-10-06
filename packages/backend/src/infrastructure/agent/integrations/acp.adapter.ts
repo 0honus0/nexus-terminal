@@ -127,8 +127,14 @@ export class AcpAdapter implements AcpRuntimePort {
       });
 
     try {
-      return await app.connectWith(ndJsonStream(transport.writable, transport.readable), async (agent) =>
-        agent.buildSession(request.cwd).withSession(async (session) => {
+      return await app.connectWith(ndJsonStream(transport.writable, transport.readable), async (agent) => {
+        const initialized = await agent.request(methods.agent.initialize, {
+          protocolVersion: PROTOCOL_VERSION,
+          clientCapabilities: {},
+          clientInfo: { name: 'nexus-terminal', version: '1' },
+        });
+        if (initialized.protocolVersion !== PROTOCOL_VERSION) throw new Error('ACP_PROTOCOL_VERSION_UNSUPPORTED');
+        return agent.buildSession(request.cwd).withSession(async (session) => {
           const prompt = session.prompt(request.prompt);
           let output = '';
           let stopReason = 'unknown';
@@ -151,8 +157,8 @@ export class AcpAdapter implements AcpRuntimePort {
           const response = await prompt;
           if (response.stopReason !== stopReason) throw new Error('ACP_PROTOCOL_STATE_INVALID');
           return { text: output, stopReason };
-        }),
-      );
+        });
+      });
     } finally {
       context.signal.removeEventListener('abort', onAbort);
       await transport.close().catch(() => undefined);

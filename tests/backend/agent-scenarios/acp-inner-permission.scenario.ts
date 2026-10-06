@@ -11,6 +11,7 @@ import type {
 import { createAcpExecuteTool } from '../../../packages/backend/src/modules/agent/tools/host/acp-tools';
 import type { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
 import { SshAcpTransport } from '../../../packages/backend/src/infrastructure/agent/integrations/ssh-acp-transport';
+import { AcpAdapter } from '../../../packages/backend/src/infrastructure/agent/integrations/acp.adapter';
 import type { ExecutionSessionManager } from '../../../packages/backend/src/platform/execution/execution-session-manager';
 import type { AgentConnectionResolverPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-resolver.port';
 
@@ -243,6 +244,74 @@ export const acpInnerPermissionScenario = async () => {
   await assert.rejects(() => overflowTransport.readable.getReader().read(), /ACP_SSH_STREAM_OVERFLOW/);
   await overflowTransport.close();
   let sshPermissionRequests = 0;
+  let protocolController: ReadableStreamDefaultController<Uint8Array>;
+  let protocolClosed = 0;
+  const protocolMethods: string[] = [];
+  const protocolReadable = new ReadableStream<Uint8Array>({
+    start(controller) {
+      protocolController = controller;
+    },
+  });
+  const send = (value: unknown) => protocolController.enqueue(new TextEncoder().encode(JSON.stringify(value) + '\n'));
+  const adapter = new AcpAdapter({
+    open: async () => {
+      throw new Error('SSH must not open Workspace transport');
+    },
+  });
+  const protocolResult = await adapter.execute(
+    sshIntegration,
+    { workspaceId: '', generation: 0, cwd: '/srv/project', prompt: 'fixture prompt', maxOutputBytes: 4096 },
+    {
+      signal: context.signal,
+      requestPermission: async () => 'reject_once',
+      openTransport: async () => ({
+        readable: protocolReadable,
+        writable: new WritableStream<Uint8Array>({
+          write(bytes) {
+            for (const line of new TextDecoder().decode(bytes).trim().split('\n')) {
+              const request = JSON.parse(line);
+              protocolMethods.push(request.method);
+              if (request.method === 'initialize')
+                send({
+                  jsonrpc: '2.0',
+                  id: request.id,
+                  result: { protocolVersion: 1, agentCapabilities: {}, agentInfo: { name: 'fixture', version: '1' } },
+                });
+              else if (request.method === 'session/new')
+                send({ jsonrpc: '2.0', id: request.id, result: { sessionId: 'fixture-session' } });
+              else if (request.method === 'session/prompt') {
+                send({
+                  jsonrpc: '2.0',
+                  method: 'session/update',
+                  params: {
+                    sessionId: 'fixture-session',
+                    update: {
+                      sessionUpdate: 'agent_message_chunk',
+                      content: { type: 'text', text: 'protocol fixture complete' },
+                    },
+                  },
+                });
+                send({ jsonrpc: '2.0', id: request.id, result: { stopReason: 'end_turn' } });
+              }
+            }
+          },
+        }),
+        close: async () => {
+          protocolClosed++;
+          protocolController.close();
+        },
+      }),
+    },
+  );
+  assert.equal(protocolResult.text, 'protocol fixture complete');
+  assert.equal(protocolResult.stopReason, 'end_turn');
+  assert.equal(protocolClosed, 1);
+  assert.ok(
+    protocolMethods.includes('initialize') &&
+      protocolMethods.includes('session/new') &&
+      protocolMethods.includes('session/prompt'),
+    JSON.stringify(protocolMethods),
+  );
   const sshTool = createAcpExecuteTool(
     { get: async () => sshIntegration } as unknown as IntegrationRepositoryPort,
     workspaces,

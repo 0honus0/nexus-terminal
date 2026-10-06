@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- ACP 取消修复已提交 `77487c16`。进一步运行实际 SDK + NDJSON 协议 fixture 发现 AcpAdapter 未发送 initialize，只有 session/new/prompt；现补 initialize 和协商版本检查，对 Workspace/SSH 同时生效。协议 fixture 验证 initialize→new→prompt、真实 SDK chunk/stop 处理及 close 一次，check 通过；不是实际 SSH 服务或远端 ACP 二进制 E2E。
 - 2026-10-06 继续 SSH ACP 验证发现取消时 transport.close 只关闭 channel 未结束 readable，可能挂住协议 nextUpdate；现改为 close/abort 明确结束读取（ABORTED/ACP_SSH_TRANSPORT_CLOSED），单块输出超过剩余缓冲也直接拒绝，terminate promise 异常不产生未处理 rejection。定向场景验证未完成 read 在 abort 后拒绝、channel/session 收尾一次、超大 chunk 拒绝；check 通过。尚不是完整真实 SSH ACP E2E，代码导航 parity 仍未完成。
 - parity 后续：`bd6a571f` 已提交 glob 与错误改进。SSH ACP 已接通配置/协议 DTO、设置创建入口、target/id 工具、独立非 PTY byte transport 和现有 ACP v1 permission callback。定向场景覆盖 SSH 内层拒绝走 broker、配置版本变化拒绝、目标匹配、字节流转发、断连具体错误、幂等 close；check 通过。尚未真实 SSH ACP 程序/E2E 验收，代码导航的 SSH 后端仍未完成；不能据此宣布所有 Workspace/SSH 能力完全一致。
 - parity 第一项已本地提交 `72a01dab`；第二项将 SSH glob 改为 Node matchesGlob，Workspace 显式 glob 走同一语义的有界读取搜索，避免 rg glob/自定义 glob 差异；保留非 glob 查询 rg 路径和资源界限。统一文件场景覆盖 `{a,b}.txt` 搜索通过；错误反馈继续细化中。
